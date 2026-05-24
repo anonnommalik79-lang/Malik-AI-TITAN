@@ -1,23 +1,33 @@
-# MALIK AI V6.5 TITAN — Coming Soon Site
+# MALIK AI V6.5 TITAN
 
-Готовый статический сайт для нового домена.
+Pre-launch website for MALIK AI — an AI platform from Kazakhstan.
 
-## Файлы
-- `index.html` — весь сайт: дизайн, таймер, секции, форма waitlist, анимации.
-- `assets/malik-ai-v65-titan-hero.png` — главный hero background.
+## Main positioning
 
-## Как открыть локально
-Просто открой `index.html` в браузере.
+**One prompt → product.**  
+MALIK AI is designed to help users generate code, websites, images, videos and intelligent answers in one AI workspace.
 
-## Как залить
-Можно загрузить содержимое папки на любой статический хостинг:
-- GitHub Pages
-- Render Static Site
-- Cloudflare Pages
-- обычный shared hosting
+## Stage
 
-## Таймер
-Таймер считает до `2026-06-01T00:00:00+05:00` — время Алматы.
+MVP / Pre-launch. Early Access planned for June 1.
 
-## Waitlist
-Форма пока сохраняет email в localStorage браузера. Backend не нужен.
+## Added investor/media kit
+
+- `pitch.html` — investor one-pager / pitch deck page
+- `press.html` — press kit for media and startup platforms
+- `robots.txt` — Google crawling file
+- `sitemap.xml` — SEO sitemap for the main pages
+
+## Deployment
+
+The project is static. Run locally:
+
+```bash
+python -m http.server 3000
+```
+
+Then open:
+
+```text
+http://localhost:3000
+```
