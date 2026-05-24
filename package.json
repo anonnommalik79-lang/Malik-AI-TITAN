@@ -1,8 +1,8 @@
 {
+  "name": "malik-ai-v65-titan-god-release",
+  "version": "1.0.0",
+  "private": true,
   "scripts": {
     "start": "python -m http.server 3000"
-  },
-  "name": "malik-ai-v65-titan-coming-soon",
-  "version": "1.0.0",
-  "private": true
+  }
 }
