@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="bgGlow" cx="62%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#123d66" stop-opacity=".42"/>
+      <stop offset=".28" stop-color="#15143d" stop-opacity=".62"/>
+      <stop offset=".72" stop-color="#020713"/>
+      <stop offset="1" stop-color="#01030a"/>
+    </radialGradient>
+    <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff43ff"/>
+      <stop offset=".45" stop-color="#7b6cff"/>
+      <stop offset="1" stop-color="#21d6ff"/>
+    </linearGradient>
+    <linearGradient id="cyanPurple" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1de6ff"/>
+      <stop offset=".5" stop-color="#2778ff"/>
+      <stop offset="1" stop-color="#ff29ff"/>
+    </linearGradient>
+    <linearGradient id="dragonSkin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0be6ff" stop-opacity=".86"/>
+      <stop offset=".25" stop-color="#083258" stop-opacity=".68"/>
+      <stop offset=".56" stop-color="#1a0732" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#ea2aff" stop-opacity=".62"/>
+    </linearGradient>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="hardGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 .8 0 0 0  0 0 1.3 0 0  0 0 0 1 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <pattern id="stars" width="92" height="92" patternUnits="userSpaceOnUse">
+      <circle cx="9" cy="18" r="1.2" fill="#46dfff" opacity=".65"/>
+      <circle cx="73" cy="34" r="1.4" fill="#d742ff" opacity=".62"/>
+      <circle cx="41" cy="70" r=".9" fill="#88ecff" opacity=".5"/>
+      <circle cx="86" cy="80" r=".7" fill="#fff" opacity=".42"/>
+    </pattern>
+    <pattern id="circuit" width="120" height="120" patternUnits="userSpaceOnUse">
+      <path d="M0 58h38l16-16h28M72 84h22l16 16h10M20 12h26l18 18h54" fill="none" stroke="#bf2cff" stroke-opacity=".38" stroke-width="2"/>
+      <path d="M12 96h34l15-15h33M65 18h24l18-18" fill="none" stroke="#1edcff" stroke-opacity=".32" stroke-width="2"/>
+      <circle cx="38" cy="58" r="3" fill="#23dfff" opacity=".62"/>
+      <circle cx="82" cy="42" r="3" fill="#e03cff" opacity=".58"/>
+    </pattern>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#01030a"/>
+  <rect width="1920" height="1080" fill="url(#bgGlow)"/>
+  <rect width="1920" height="1080" fill="url(#stars)" opacity=".85"/>
+  <rect x="-160" y="260" width="760" height="610" fill="url(#circuit)" opacity=".42"/>
+  <rect x="1140" y="0" width="780" height="780" fill="url(#circuit)" opacity=".25" transform="rotate(13 1530 380)"/>
+  <path d="M0 437c170 6 248 28 352 15 98-12 140-55 242-51" fill="none" stroke="#b226ff" stroke-width="2" opacity=".65" filter="url(#softGlow)"/>
+  <path d="M0 626c210 22 402 8 566-76" fill="none" stroke="#18d9ff" stroke-width="2" opacity=".42"/>
+
+  <g transform="translate(845 100)">
+    <path d="M445 102c192-12 338 18 476 95 91 51 166 103 260 112-50 39-97 78-142 120 113 31 225 83 335 158-213-2-410-53-586-151-62 61-149 101-259 120-129 22-245 4-348-57-67-39-138-61-211-68 70-53 142-92 216-118-38-25-78-46-119-61 111-64 237-114 378-150Z" fill="url(#dragonSkin)" opacity=".62" filter="url(#hardGlow)"/>
+    <path d="M271 330c-68 38-117 81-151 129 143 14 258 60 354 139 108 88 241 137 395 147 144 10 291-13 442-69-169-39-324-100-464-182-83 66-196 93-338 79-96-10-172-38-228-84-50-42-106-61-168-57" fill="#081020" fill-opacity=".72" stroke="#20d8ff" stroke-opacity=".36" stroke-width="2"/>
+    <path d="M284 325c92-76 199-129 320-160 130-33 262-30 394 7" fill="none" stroke="#27dcff" stroke-width="6" stroke-opacity=".55"/>
+    <path d="M224 434c183 25 320 75 412 151 117 97 276 126 477 88" fill="none" stroke="#d733ff" stroke-width="7" stroke-opacity=".5"/>
+    <path d="M606 166c-57-40-114-74-173-103 107 8 204 36 292 84-39-48-58-92-57-132 73 41 136 93 190 154 49-27 105-51 168-72-32 68-78 121-137 160" fill="none" stroke="#25dfff" stroke-width="8" stroke-opacity=".7" filter="url(#softGlow)"/>
+    <path d="M168 474c-73 17-128 33-165 48 68 15 133 20 195 15" fill="none" stroke="#f73dff" stroke-width="5" stroke-opacity=".72"/>
+    <path d="M1170 308c88-34 171-81 250-142-24 69-66 124-126 165" fill="#35dfff" opacity=".5" filter="url(#softGlow)"/>
+    <ellipse cx="596" cy="410" rx="28" ry="18" fill="#ff5cff" filter="url(#hardGlow)"/>
+    <circle cx="596" cy="410" r="8" fill="#fff"/>
+    <path d="M134 492c50 31 105 52 165 62-28 12-54 27-78 44-48-25-83-59-105-101Z" fill="#fff" fill-opacity=".75" filter="url(#softGlow)"/>
+    <path d="M183 522c26 23 61 38 105 47-36 20-73 41-111 65-8-37-6-75 6-112Z" fill="#ef58ff" fill-opacity=".76" filter="url(#hardGlow)"/>
+    <g fill="none" stroke-linecap="round" filter="url(#softGlow)">
+      <path d="M424 98c31-34 58-67 80-98" stroke="#35e1ff" stroke-width="5"/>
+      <path d="M478 94c42-37 76-72 102-105" stroke="#8f49ff" stroke-width="5"/>
+      <path d="M536 105c60-45 104-84 133-116" stroke="#21d9ff" stroke-width="5"/>
+      <path d="M602 126c83-50 146-89 189-118" stroke="#d637ff" stroke-width="5"/>
+      <path d="M675 146c102-48 186-86 251-113" stroke="#24dfff" stroke-width="6"/>
+      <path d="M751 176c117-45 217-80 301-105" stroke="#b92cff" stroke-width="5"/>
+      <path d="M842 216c133-38 250-64 351-79" stroke="#34dfff" stroke-width="6"/>
+    </g>
+    <g opacity=".78" fill="none" stroke-width="3">
+      <path d="M206 425 462 295 602 407 833 204 1129 517" stroke="#1fe1ff"/>
+      <path d="M306 346 742 590 996 327 1248 504" stroke="#d336ff"/>
+      <path d="M445 245 524 720" stroke="#2bddff" opacity=".42"/>
+      <path d="M827 246 795 735" stroke="#ee40ff" opacity=".42"/>
+    </g>
+  </g>
+
+  <rect width="1920" height="1080" fill="none" stroke="#ffffff" stroke-opacity=".04" stroke-width="18"/>
+  <rect width="1920" height="1080" fill="url(#bgGlow)" opacity=".16"/>
+</svg>

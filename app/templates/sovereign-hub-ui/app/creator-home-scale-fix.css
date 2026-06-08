@@ -1,0 +1,14 @@
+﻿@media (min-width:1024px){
+  .malik-dashboard-shell main main.relative.z-10{max-width:1060px!important;padding-top:28px!important;padding-left:34px!important;padding-right:34px!important;padding-bottom:150px!important;}
+  .malik-dashboard-shell main main.relative.z-10>section:nth-of-type(1){max-width:850px!important;}
+  .malik-dashboard-shell main main.relative.z-10 h1{margin-top:22px!important;max-width:940px!important;font-size:clamp(42px,4.2vw,58px)!important;line-height:1.04!important;letter-spacing:-.055em!important;}
+  .malik-dashboard-shell main main.relative.z-10 h1+p{margin-top:16px!important;max-width:710px!important;font-size:14px!important;line-height:1.65!important;}
+  .malik-dashboard-shell main main.relative.z-10>section:nth-of-type(2){margin-top:36px!important;max-width:910px!important;gap:14px!important;}
+  .malik-dashboard-shell main main.relative.z-10>section:nth-of-type(3){margin-top:20px!important;max-width:1000px!important;padding:16px!important;border-radius:24px!important;}
+  .malik-dashboard-shell main main.relative.z-10>section:nth-of-type(4){margin-top:18px!important;max-width:1000px!important;gap:12px!important;}
+  .malik-dashboard-shell main main.relative.z-10>section:nth-of-type(5){margin-top:18px!important;max-width:1000px!important;gap:16px!important;}
+  .malik-dashboard-shell main main.relative.z-10>section:nth-of-type(5)>button{min-height:98px!important;padding:20px!important;border-radius:22px!important;}
+  .malik-dashboard-shell main::after{bottom:-218px!important;height:330px!important;}
+}
+@media (max-height:820px) and (min-width:1024px){.malik-dashboard-shell main main.relative.z-10{padding-top:22px!important;padding-bottom:120px!important}.malik-dashboard-shell main main.relative.z-10 h1{font-size:clamp(38px,3.7vw,52px)!important}.malik-dashboard-shell main main.relative.z-10>section:nth-of-type(2){margin-top:26px!important}}
+

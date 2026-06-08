@@ -1,0 +1,303 @@
+.malik-space-x,
+.malik-space-x * {
+  box-sizing: border-box;
+}
+
+.malik-space-x {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  isolation: isolate;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 112%, rgba(30, 110, 255, .22), transparent 40%),
+    radial-gradient(circle at 78% 18%, rgba(50, 210, 255, .075), transparent 28%),
+    radial-gradient(circle at 18% 22%, rgba(130, 80, 255, .070), transparent 28%),
+    linear-gradient(180deg, #000107 0%, #010412 48%, #00020a 100%);
+}
+
+.malik-space-x--clean { opacity: .86; }
+.malik-space-x--nasa { opacity: .94; }
+.malik-space-x--titan { opacity: 1; }
+.malik-space-x--omega { opacity: 1; }
+
+.malik-space-x__void,
+.malik-space-x__nebula-a,
+.malik-space-x__nebula-b,
+.malik-space-x__canvas,
+.malik-space-x__orbital,
+.malik-space-x__fleet,
+.malik-space-x__horizon,
+.malik-space-x__asteroids,
+.malik-space-x__grain,
+.malik-space-x__cinema-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.malik-space-x__void {
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 42% at 50% 86%, rgba(52, 122, 255, .13), transparent 60%),
+    radial-gradient(ellipse 40% 32% at 76% 34%, rgba(75, 200, 255, .08), transparent 72%),
+    radial-gradient(ellipse 42% 38% at 14% 68%, rgba(140, 90, 255, .06), transparent 78%);
+}
+
+.malik-space-x__nebula-a,
+.malik-space-x__nebula-b {
+  z-index: 1;
+  mix-blend-mode: screen;
+  filter: blur(22px);
+  opacity: .42;
+}
+
+.malik-space-x__nebula-a {
+  background: conic-gradient(from 210deg at 62% 60%, transparent, rgba(64, 145, 255, .16), transparent, rgba(155, 92, 255, .11), transparent);
+  animation: malikXNebulaA 31s ease-in-out infinite;
+}
+
+.malik-space-x__nebula-b {
+  background: radial-gradient(ellipse at 22% 74%, rgba(34, 211, 238, .10), transparent 60%),
+              radial-gradient(ellipse at 86% 70%, rgba(168, 85, 247, .10), transparent 64%);
+  animation: malikXNebulaB 37s ease-in-out infinite;
+}
+
+.malik-space-x__canvas {
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+}
+
+.malik-space-x__orbital {
+  z-index: 4;
+}
+
+.malik-space-x__ring {
+  position: absolute;
+  left: 50%;
+  bottom: 5%;
+  width: min(1620px, 118vw);
+  height: 360px;
+  transform: translateX(-50%) rotate(var(--r));
+  border-radius: 50%;
+  border-top: 1px solid rgba(125, 211, 252, var(--a));
+  opacity: .76;
+}
+
+.malik-space-x__ring--a { --r: -4deg; --a: .22; bottom: 8%; }
+.malik-space-x__ring--b { --r: 7deg; --a: .15; width: min(1280px, 94vw); bottom: 18%; }
+.malik-space-x__ring--c { --r: -15deg; --a: .10; width: min(950px, 74vw); bottom: 29%; }
+.malik-space-x__ring--d { --r: 18deg; --a: .07; width: min(760px, 62vw); bottom: 38%; }
+
+.malik-space-x__pulse {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(125, 235, 255, .95);
+  box-shadow: 0 0 12px rgba(125, 235, 255, .95), 0 0 38px rgba(65, 160, 255, .45);
+}
+
+.malik-space-x__pulse--a { left: 18%; bottom: 27%; animation: malikXPulseA 9s ease-in-out infinite; }
+.malik-space-x__pulse--b { right: 16%; bottom: 42%; animation: malikXPulseB 11s ease-in-out infinite; }
+.malik-space-x__pulse--c { left: 54%; bottom: 34%; animation: malikXPulseC 13s ease-in-out infinite; }
+
+.malik-space-x__scan {
+  position: absolute;
+  left: 8%;
+  width: 84%;
+  height: 1px;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(100, 220, 255, .32), transparent);
+}
+
+.malik-space-x__scan--a { top: 22%; animation: malikXScan 8s linear infinite 1s; }
+.malik-space-x__scan--b { top: 54%; animation: malikXScan 11s linear infinite 4s; }
+.malik-space-x__scan--c { top: 76%; animation: malikXScan 14s linear infinite 7s; }
+
+.malik-space-x__asteroids {
+  z-index: 5;
+}
+
+.malik-space-x-rock {
+  position: absolute;
+  width: var(--s, 8px);
+  height: var(--s, 8px);
+  border-radius: 38% 62% 45% 55%;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 214, 170, .68), rgba(140, 93, 65, .30) 45%, rgba(40, 30, 24, .10) 100%);
+  box-shadow: 0 0 10px rgba(255, 160, 80, .12);
+  opacity: .34;
+  will-change: transform, opacity;
+}
+
+.malik-space-x-rock--1 { --s: 9px; left: 105%; top: 29%; animation: malikRockA 42s linear infinite 0s; }
+.malik-space-x-rock--2 { --s: 5px; left: -8%; top: 38%; animation: malikRockB 50s linear infinite 5s; }
+.malik-space-x-rock--3 { --s: 12px; left: 110%; top: 64%; animation: malikRockA 58s linear infinite 8s; }
+.malik-space-x-rock--4 { --s: 7px; left: -12%; top: 74%; animation: malikRockB 46s linear infinite 2s; }
+.malik-space-x-rock--5 { --s: 10px; left: 92%; top: 18%; animation: malikRockC 60s linear infinite 12s; }
+.malik-space-x-rock--6 { --s: 6px; left: 70%; top: 88%; animation: malikRockC 52s linear infinite 16s; }
+.malik-space-x-rock--7 { --s: 8px; left: 101%; top: 42%; animation: malikRockA 55s linear infinite 22s; }
+.malik-space-x-rock--8 { --s: 5px; left: -9%; top: 55%; animation: malikRockB 62s linear infinite 18s; }
+.malik-space-x-rock--9 { --s: 11px; left: 112%; top: 82%; animation: malikRockA 66s linear infinite 11s; }
+.malik-space-x-rock--10 { --s: 6px; left: 30%; top: 4%; animation: malikRockC 64s linear infinite 21s; }
+.malik-space-x-rock--11 { --s: 8px; left: 105%; top: 23%; animation: malikRockA 48s linear infinite 28s; }
+.malik-space-x-rock--12 { --s: 6px; left: -10%; top: 31%; animation: malikRockB 58s linear infinite 31s; }
+.malik-space-x-rock--13 { --s: 10px; left: 60%; top: 6%; animation: malikRockC 72s linear infinite 34s; }
+.malik-space-x-rock--14 { --s: 5px; left: 102%; top: 50%; animation: malikRockA 70s linear infinite 37s; }
+
+.malik-space-x__fleet {
+  z-index: 6;
+}
+
+.malik-space-x-ship {
+  position: absolute;
+  display: block;
+  width: clamp(42px, 4vw, 82px);
+  height: clamp(42px, 4vw, 82px);
+  opacity: .72;
+  filter: drop-shadow(0 0 12px rgba(125, 211, 252, .34)) drop-shadow(0 0 34px rgba(59, 130, 246, .18));
+  will-change: transform, opacity;
+}
+
+.malik-space-x-ship img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.malik-space-x-ship i {
+  position: absolute;
+  top: 25%;
+  right: 18%;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #8cf0ff;
+  box-shadow: 0 0 8px #8cf0ff, 0 0 28px rgba(140, 240, 255, .38);
+  animation: malikXBeacon 3.4s ease-in-out infinite;
+}
+
+/* Fine-tuned: decorative ships/icons moved slightly lower so they do not crowd the top hero area. */
+.malik-space-x-ship--1 { left: 112%; top: 24%; animation: malikXShipA 40s linear infinite; }
+.malik-space-x-ship--2 { left: -14%; top: 64%; opacity: .52; animation: malikXShipB 54s linear infinite 6s; }
+.malik-space-x-ship--3 { left: 106%; top: 44%; opacity: .44; animation: malikXShipC 66s linear infinite 12s; }
+.malik-space-x-ship--4 { left: -18%; top: 31%; opacity: .34; animation: malikXShipD 74s linear infinite 20s; }
+.malik-space-x-ship--5 { left: 102%; top: 80%; opacity: .38; animation: malikXShipE 82s linear infinite 26s; }
+
+.malik-space-x__horizon {
+  z-index: 7;
+}
+
+.malik-space-x__planet {
+  position: absolute;
+  left: 50%;
+  bottom: -230px;
+  width: min(1780px, 128vw);
+  height: 440px;
+  transform: translateX(-50%);
+  border-radius: 50% 50% 0 0;
+  background: radial-gradient(ellipse at center, rgba(62, 142, 255, .34), rgba(31, 78, 170, .15) 42%, transparent 76%);
+  border-top: 1px solid rgba(168, 225, 255, .72);
+  box-shadow:
+    0 -1px 30px rgba(125, 211, 252, .72),
+    0 -20px 100px rgba(59, 130, 246, .30),
+    0 -46px 190px rgba(99, 102, 241, .20);
+}
+
+.malik-space-x__atmosphere-line {
+  position: absolute;
+  left: 50%;
+  bottom: 13%;
+  width: min(1320px, 90vw);
+  height: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, rgba(147, 197, 253, .86), rgba(216, 180, 254, .56), transparent);
+  box-shadow: 0 0 32px rgba(147,197,253,.80), 0 0 90px rgba(99,102,241,.32);
+}
+
+.malik-space-x__ion-blue {
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  width: min(1250px, 90vw);
+  height: 280px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: radial-gradient(ellipse at center, rgba(80, 190, 255, .30), rgba(100, 72, 255, .13) 40%, transparent 73%);
+  filter: blur(19px);
+  opacity: .95;
+  animation: malikXIon 8s ease-in-out infinite;
+}
+
+.malik-space-x__aurora {
+  position: absolute;
+  bottom: 13%;
+  width: min(760px, 56vw);
+  height: 145px;
+  border-radius: 999px;
+  filter: blur(26px);
+  mix-blend-mode: screen;
+  opacity: .34;
+}
+
+.malik-space-x__aurora--a { left: 8%; background: radial-gradient(ellipse at center, rgba(45, 212, 191, .36), transparent 72%); animation: malikXAuroraA 13s ease-in-out infinite; }
+.malik-space-x__aurora--b { right: 7%; background: radial-gradient(ellipse at center, rgba(168, 85, 247, .32), transparent 72%); animation: malikXAuroraB 15s ease-in-out infinite; }
+.malik-space-x__aurora--c { left: 34%; background: radial-gradient(ellipse at center, rgba(96, 165, 250, .24), transparent 72%); animation: malikXAuroraC 18s ease-in-out infinite; }
+
+.malik-space-x__grain {
+  z-index: 8;
+  opacity: .13;
+  background-image: url("/space-v9999999x/noise-x.svg");
+  background-size: 220px 220px;
+  mix-blend-mode: screen;
+}
+
+.malik-space-x__cinema-vignette {
+  z-index: 9;
+  background:
+    radial-gradient(circle at center, transparent 0%, transparent 55%, rgba(0,0,0,.60) 100%),
+    linear-gradient(180deg, rgba(0,0,0,.46), transparent 19%, transparent 72%, rgba(0,0,0,.54));
+}
+
+@keyframes malikXNebulaA { 0%,100% { transform: translate3d(-1%,0,0) scale(1); opacity:.38; } 50% { transform: translate3d(1.5%,-1%,0) scale(1.06); opacity:.62; } }
+@keyframes malikXNebulaB { 0%,100% { transform: translate3d(1%,1%,0) scale(1); opacity:.30; } 50% { transform: translate3d(-1%,-1%,0) scale(1.08); opacity:.52; } }
+@keyframes malikXPulseA { 0%,100% { transform: translate3d(0,0,0) scale(.75); opacity:.25; } 50% { transform: translate3d(36vw,-10vh,0) scale(1.2); opacity:1; } }
+@keyframes malikXPulseB { 0%,100% { transform: translate3d(0,0,0) scale(.75); opacity:.25; } 50% { transform: translate3d(-32vw,12vh,0) scale(1.2); opacity:.9; } }
+@keyframes malikXPulseC { 0%,100% { transform: translate3d(0,0,0) scale(.65); opacity:.18; } 50% { transform: translate3d(18vw,-20vh,0) scale(1.1); opacity:.75; } }
+@keyframes malikXScan { 0%,88% { opacity:0; transform:translateY(0); } 92% { opacity:.42; } 100% { opacity:0; transform:translateY(140px); } }
+@keyframes malikXBeacon { 0%,100% { opacity:.25; transform:scale(.7); } 50% { opacity:1; transform:scale(1.25); } }
+
+@keyframes malikRockA { 0% { transform: translate3d(0,0,0) rotate(0deg); } 100% { transform: translate3d(-130vw,28vh,0) rotate(720deg); } }
+@keyframes malikRockB { 0% { transform: translate3d(0,0,0) rotate(0deg); } 100% { transform: translate3d(132vw,-28vh,0) rotate(-620deg); } }
+@keyframes malikRockC { 0% { transform: translate3d(0,0,0) rotate(0deg); } 100% { transform: translate3d(-42vw,120vh,0) rotate(520deg); } }
+
+@keyframes malikXShipA { 0% { transform: translate3d(0,0,0) rotate(-12deg); } 100% { transform: translate3d(-134vw,30vh,0) rotate(8deg); } }
+@keyframes malikXShipB { 0% { transform: translate3d(0,0,0) rotate(18deg) scale(.82); } 100% { transform: translate3d(128vw,-36vh,0) rotate(-20deg) scale(.82); } }
+@keyframes malikXShipC { 0% { transform: translate3d(0,0,0) rotate(-36deg) scale(.7); } 100% { transform: translate3d(-126vw,16vh,0) rotate(-4deg) scale(.7); } }
+@keyframes malikXShipD { 0% { transform: translate3d(0,0,0) rotate(24deg) scale(.58); } 100% { transform: translate3d(134vw,28vh,0) rotate(44deg) scale(.58); } }
+@keyframes malikXShipE { 0% { transform: translate3d(0,0,0) rotate(-18deg) scale(.64); } 100% { transform: translate3d(-124vw,-22vh,0) rotate(26deg) scale(.64); } }
+
+@keyframes malikXIon { 0%,100% { opacity:.62; transform:translateX(-50%) scaleX(.98); } 50% { opacity:1; transform:translateX(-50%) scaleX(1.045); } }
+@keyframes malikXAuroraA { 0%,100% { opacity:.20; transform:translateX(-3%) scaleX(.92); } 50% { opacity:.46; transform:translateX(8%) scaleX(1.08); } }
+@keyframes malikXAuroraB { 0%,100% { opacity:.18; transform:translateX(5%) scaleX(.95); } 50% { opacity:.42; transform:translateX(-7%) scaleX(1.1); } }
+@keyframes malikXAuroraC { 0%,100% { opacity:.12; transform:translateX(-4%) scaleX(.9); } 50% { opacity:.34; transform:translateX(5%) scaleX(1.1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .malik-space-x *,
+  .malik-space-x *::before,
+  .malik-space-x *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .malik-space-x-ship { width: 42px; height: 42px; }
+  .malik-space-x__planet { bottom: -250px; width: 160vw; }
+  .malik-space-x-rock { opacity: .22; }
+}

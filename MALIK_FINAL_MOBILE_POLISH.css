@@ -1,0 +1,112 @@
+/* MALIK FINAL QA POLISH — small safe additions only */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  text-rendering: optimizeLegibility;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+[data-toolbar],
+.top-toolbar,
+.toolbar,
+.dashboard-toolbar,
+.command-toolbar {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.message-content,
+.message-bubble,
+.ai-message,
+.assistant-message,
+.user-message {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+pre,
+code {
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  [data-toolbar],
+  .top-toolbar,
+  .toolbar,
+  .dashboard-toolbar,
+  .command-toolbar {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  [data-toolbar]::-webkit-scrollbar,
+  .top-toolbar::-webkit-scrollbar,
+  .toolbar::-webkit-scrollbar,
+  .dashboard-toolbar::-webkit-scrollbar,
+  .command-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-toolbar] > *,
+  .top-toolbar > *,
+  .toolbar > *,
+  .dashboard-toolbar > *,
+  .command-toolbar > * {
+    flex-shrink: 0 !important;
+  }
+
+  .message-content pre,
+  pre {
+    max-width: 88vw !important;
+    overflow-x: auto !important;
+  }
+
+  [data-composer],
+  .chat-composer,
+  .bottom-composer,
+  .prompt-composer {
+    max-height: 34dvh !important;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 8px) !important;
+  }
+
+  [data-composer] textarea,
+  .chat-composer textarea,
+  .bottom-composer textarea,
+  .prompt-composer textarea {
+    max-height: 112px !important;
+  }
+
+  [data-mobile-heavy],
+  .particles,
+  .animated-gradient,
+  .heavy-glow,
+  .radial-glow,
+  .orb {
+    animation: none !important;
+    opacity: 0.3 !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

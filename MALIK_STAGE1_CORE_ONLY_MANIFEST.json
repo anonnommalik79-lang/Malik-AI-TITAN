@@ -1,0 +1,17 @@
+{
+  "name": "MALIK_STAGE1_CORE_ONLY",
+  "stage": 1,
+  "touchesOnly": [
+    "app/templates/sovereign-hub-ui/lib/ai",
+    "app/templates/sovereign-hub-ui/app/_disabled_api_stage1",
+    ".env.stage1.example",
+    "docs/malik_stage1_core_only"
+  ],
+  "doesNotTouch": [
+    "dashboard.tsx",
+    "sidebar.tsx",
+    "image/video/project/database stages"
+  ],
+  "activeApiRoute": false,
+  "reason": "Keep build successful before enabling API routes in static export setup."
+}

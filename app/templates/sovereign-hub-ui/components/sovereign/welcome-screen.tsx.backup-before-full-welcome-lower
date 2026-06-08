@@ -1,0 +1,279 @@
+"use client"
+
+import { useState, type ReactNode } from "react"
+import { cn } from "@/lib/utils"
+import { MalikSpaceV9999999X } from "@/components/sovereign/chat-space-v9999999x"
+import {
+  ArrowRight,
+  Bell,
+  CircleCheck,
+  Code2,
+  Crown,
+  Film,
+  Grid3X3,
+  Hexagon,
+  Image,
+  Layout,
+  Link2,
+  Network,
+  PanelLeft,
+  Rocket,
+  Search,
+  Sparkles,
+  Terminal,
+  Wand2,
+  Workflow,
+  Zap,
+} from "lucide-react"
+
+interface WelcomeScreenProps {
+  onSubmit: (prompt: string) => void
+  isLoading?: boolean
+  onOpenCodex?: () => void
+  onOpenTemplates?: () => void
+  onOpenPhoto?: () => void
+  onOpenVideo?: () => void
+  onOpenWebsite?: () => void
+  onOpenCode?: () => void
+  onOpenBilling?: () => void
+  onOpenCanvas?: () => void
+  onOpenCommandCenter?: () => void
+  onOpenSupport?: () => void
+}
+
+function Logo({ className }: { className?: string }) {
+  return (
+    <span className={cn("creator-logo", className)}>
+      <svg viewBox="0 0 44 44" aria-hidden="true">
+        <rect width="44" height="44" rx="12" fill="white" />
+        <path d="M9 29 L22 15 L22 29 Z" fill="#03040a" />
+        <path d="M24 15 H38 L24 29 Z" fill="#03040a" />
+      </svg>
+    </span>
+  )
+}
+
+function Backdrop() {
+  return (
+    <>
+      <div className="creator-space-bg creator-space-base" />
+      <div className="creator-starfield starfield-layer" />
+      <div className="creator-nasa-starfield" />
+      <div className="creator-grid-layer" />
+      <div className="creator-orbits creator-orbit creator-orbit-one" />
+      <div className="creator-orbits creator-orbit creator-orbit-two" />
+      <div className="creator-orbits creator-orbit creator-orbit-three" />
+      <div className="creator-orbital-satellite creator-satellite-one"><span /></div>
+      <div className="creator-orbital-satellite creator-satellite-two"><span /></div>
+      <div className="creator-light-streak creator-light-streak-one" />
+      <div className="creator-light-streak creator-light-streak-two" />
+      <div className="creator-light-streak creator-light-streak-three" />
+      <div className="creator-space-comet creator-comet-one" />
+      <div className="creator-space-comet creator-comet-two" />
+      <div className="creator-space-comet creator-comet-three" />
+      <div className="creator-planet-body" />
+      <div className="creator-planet-horizon" />
+    </>
+  )
+}
+
+function Topbar(props: WelcomeScreenProps) {
+  const pills = [
+    ["Malik AI planning", <Sparkles key="i" />, undefined],
+    ["High Speed queue", <Zap key="i" />, undefined],
+    ["Malik Ask", <Search key="i" />, props.onOpenSupport],
+    ["Ctrl+K Search", <Search key="i" />, props.onOpenCommandCenter],
+    ["API 2.0", <Rocket key="i" />, undefined],
+    ["Create all flow", <Wand2 key="i" />, undefined],
+    ["Deploy", <Rocket key="i" />, undefined],
+    ["Malik Codex", <Terminal key="i" />, props.onOpenCodex],
+    ["Creator Mode: ON", <Sparkles key="i" />, undefined],
+  ] as const
+
+  return (
+    <div className="creator-topbar">
+      <div className="creator-topbar-pills">
+        {pills.map(([label, icon, action]) => (
+          <button key={label} type="button" onClick={action} className="creator-topbar-pill">
+            {icon}
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="creator-topbar-actions">
+        <button type="button" className="creator-icon-button" aria-label="Notifications">
+          <Bell />
+          <span />
+        </button>
+        <button type="button" onClick={props.onOpenBilling} className="creator-credit-button">
+          <Crown />
+          <span>4,460</span>
+        </button>
+        <span className="creator-avatar">M</span>
+      </div>
+    </div>
+  )
+}
+
+function GlassButton({ children, onClick }: { children: ReactNode; onClick?: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="creator-chip">
+      {children}
+    </button>
+  )
+}
+
+export function WelcomeScreen(props: WelcomeScreenProps) {
+  const [prompt, setPrompt] = useState("")
+
+  const submit = () => {
+    const text = prompt.trim()
+    if (!text || props.isLoading) return
+    props.onSubmit(text)
+    setPrompt("")
+  }
+
+  const stats = [
+    ["CREATOR ROUTES", "12+", "Активных направлений", <Network key="i" />],
+    ["CANVAS READY", "100%", "Генерация без шаблонов", <CircleCheck key="i" />],
+    ["MEDIA FLOW", "Live", "Реальное время", <Workflow key="i" />],
+    ["RENDER GUARD", "On", "Без сбоев", <Hexagon key="i" />],
+  ] as const
+
+  const cards = [
+    ["Photo Studio", "AI image flow", <Image key="i" />, props.onOpenPhoto, "cyan"],
+    ["Video Studio", "Cinematic creator", <Film key="i" />, props.onOpenVideo, "blue"],
+    ["Website Builder", "Insert premium prompt", <Layout key="i" />, props.onOpenWebsite, "sky"],
+    ["Code Generator", "Switch to code creation", <Code2 key="i" />, props.onOpenCode, "cyan"],
+    ["Templates", "Open gallery", <Grid3X3 key="i" />, props.onOpenTemplates, "violet"],
+    ["Malik Codex", "Open agent cockpit", <Terminal key="i" />, props.onOpenCodex, "purple"],
+  ] as const
+
+  return (
+    <div className="creator-home-shell relative isolate overflow-hidden malik-welcome-v9999999x">
+      <MalikSpaceV9999999X active={true} mode="omega" />
+      <div className="malik-welcome-legacy-bg">
+        <Backdrop />
+      </div>
+      <div className="relative z-10">
+        <Topbar {...props} />
+
+        <main className="creator-home-main">
+        <section className="creator-hero">
+          <Logo />
+          <p className="creator-brand">MALIK AI</p>
+          <p className="creator-powered malik-center-brand-lower">POWERED BY SOVEREIGN</p>
+          <div className="creator-badge">
+            <Sparkles />
+            <span>MALIK AI SOVEREIGN CREATOR HOME</span>
+          </div>
+          <h1 className="creator-title">
+            <span>Создай продукт или сайт</span>
+            <span>фото, видео, код — одним запросом</span>
+          </h1>
+          <p className="creator-subtitle">
+            Один промпт превращает идею в сайт, код, фото, видео, саунды и многое другое — без шаблонов, плагинов и бесконечных рутин.
+          </p>
+        </section>
+
+        <section className="creator-stats" aria-label="Creator stats">
+          {stats.map(([label, value, detail, icon]) => (
+            <div key={label} className="creator-stat-card">
+              <div className="creator-card-icon">{icon}</div>
+              <div>
+                <p>{label}</p>
+                <strong>{value}</strong>
+                <span>{detail}</span>
+              </div>
+            </div>
+          ))}
+        </section>
+
+        <section className="creator-prompt">
+          <textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault()
+                submit()
+              }
+            }}
+            rows={1}
+            placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."
+          />
+          <div className="creator-prompt-actions creator-prompt-toolbar">
+            <div className="creator-prompt-tools">
+              <button type="button" className="creator-square-button" aria-label="Add image">
+                <Image />
+              </button>
+              <button type="button" className="creator-square-button" aria-label="Attach link">
+                <Link2 />
+              </button>
+              <button type="button" onClick={() => setPrompt(`Сделай как premium Malik AI: ${prompt || "AI product"}`)} className="creator-tool-button creator-tool-enhance">
+                <Wand2 />
+                <span>Enhance</span>
+              </button>
+              <button type="button" onClick={props.onOpenCanvas} className="creator-tool-button creator-tool-canvas">
+                <PanelLeft />
+                <span>Canvas</span>
+              </button>
+            </div>
+            <button type="button" onClick={submit} disabled={!prompt.trim() || props.isLoading} className="creator-submit-button">
+              <span>{props.isLoading ? "Генерация..." : "Отправить"}</span>
+              <ArrowRight />
+            </button>
+          </div>
+        </section>
+
+        <section className="creator-chip-row creator-chips" aria-label="Prompt presets">
+          <GlassButton onClick={() => setPrompt("Создай Premium SaaS dashboard")}>
+            <Crown />
+            <span>Premium SaaS</span>
+          </GlassButton>
+          <GlassButton onClick={() => setPrompt("Создай landing page")}>
+            <Rocket />
+            <span>Landing page</span>
+          </GlassButton>
+          <GlassButton onClick={() => setPrompt("Создай React component")}>
+            <Sparkles />
+            <span>React component</span>
+          </GlassButton>
+          <GlassButton onClick={() => setPrompt("Создай dashboard")}>
+            <Grid3X3 />
+            <span>Dashboard</span>
+          </GlassButton>
+          <GlassButton onClick={() => setPrompt("Создай photo gallery")}>
+            <Image />
+            <span>Photo gallery</span>
+          </GlassButton>
+          <GlassButton onClick={() => setPrompt("Создай video studio")}>
+            <Film />
+            <span>Video studio</span>
+          </GlassButton>
+        </section>
+
+        <section className="creator-feature-grid" aria-label="Creator engines">
+          {cards.map(([title, detail, icon, action, tone]) => (
+            <button key={title} type="button" onClick={action} className={cn("creator-feature-card", `creator-feature-card-${tone}`)}>
+              <span className="creator-feature-glow" />
+              <span className="creator-feature-icon">{icon}</span>
+              <span className="creator-feature-copy">
+                <strong>{title}</strong>
+                <span>{detail}</span>
+              </span>
+              <ArrowRight className="creator-feature-arrow" />
+            </button>
+          ))}
+        </section>
+        </main>
+      </div>
+    </div>
+  )
+}
+
+export default WelcomeScreen
+
+
+
+

@@ -1,0 +1,13 @@
+{
+  "pack": "MALIK_FINAL_INTELLIGENCE_PACK_90",
+  "fileCount": 90,
+  "createdFor": "MALIK AI Sovereign",
+  "safe": true,
+  "notes": [
+    "New files only",
+    "Dashboard integration patch included",
+    "No secrets",
+    "No dynamic Next API routes",
+    "Render-safe additive modules"
+  ]
+}

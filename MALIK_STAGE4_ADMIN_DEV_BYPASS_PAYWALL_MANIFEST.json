@@ -1,0 +1,13 @@
+{
+  "name": "MALIK_STAGE4_ADMIN_DEV_BYPASS_PAYWALL",
+  "fixes": [
+    "admin owner bypass",
+    "dev/local bypass",
+    "production limits preserved",
+    "backend-side limits status routes",
+    "usage bypass badge"
+  ],
+  "safe": true,
+  "doesNotDisableSubscriptions": true,
+  "secretsExposed": false
+}

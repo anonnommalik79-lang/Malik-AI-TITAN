@@ -1,0 +1,164 @@
+.sovereign-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: #00030a;
+  isolation: isolate;
+}
+
+body:has(.sovereign-bg)::before,
+body:has(.sovereign-bg)::after,
+#malik-root .malik-dashboard-shell main:has(.sovereign-bg)::before,
+#malik-root .malik-dashboard-shell main:has(.sovereign-bg)::after {
+  content: none !important;
+  display: none !important;
+}
+
+#malik-root .malik-dashboard-shell main > .sovereign-bg {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+}
+
+.sovereign-bg__base,
+.sovereign-bg__aura,
+.sovereign-bg__ribbons,
+.sovereign-bg__readability {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.sovereign-bg__base {
+  background:
+    radial-gradient(circle at 50% 38%, rgba(30, 90, 255, .16), transparent 45%),
+    linear-gradient(180deg, #000207 0%, #00040b 54%, #000207 100%);
+}
+
+.sovereign-bg__aura {
+  inset: 10% 12%;
+  width: auto;
+  height: auto;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(30, 90, 255, .12), rgba(2, 24, 66, .05) 38%, transparent 70%);
+  filter: blur(18px);
+  animation: sovereignAuraPulse 18s ease-in-out infinite alternate;
+}
+
+.sovereign-bg__ribbons {
+  overflow: visible;
+}
+
+.sovereign-bg__flow {
+  will-change: transform, opacity;
+  filter: drop-shadow(0 0 8px rgba(0, 119, 255, .42));
+}
+
+.sovereign-bg__flow--top {
+  transform-origin: center top;
+  animation: sovereignFlowTop 18s ease-in-out infinite alternate;
+}
+
+.sovereign-bg__flow--bottom {
+  transform-origin: center bottom;
+  animation: sovereignFlowBottom 22s ease-in-out infinite alternate;
+}
+
+.sovereign-bg__flow--lower {
+  transform-origin: center bottom;
+  opacity: .72;
+  animation: sovereignFlowLower 16s ease-in-out infinite alternate;
+}
+
+.sovereign-bg__blur-line,
+.sovereign-bg__soft-line,
+.sovereign-bg__core-line,
+.sovereign-bg__hair-line {
+  fill: none;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.sovereign-bg__blur-line {
+  stroke: url("#sovereign-blue-soft");
+  stroke-width: 13;
+  opacity: .56;
+  filter: url("#sovereign-soft-glow");
+}
+
+.sovereign-bg__soft-line {
+  stroke: url("#sovereign-blue-soft");
+  stroke-width: 4.5;
+  opacity: .84;
+  filter: url("#sovereign-line-glow");
+}
+
+.sovereign-bg__core-line {
+  stroke: url("#sovereign-blue-line");
+  stroke-width: 1.5;
+  opacity: .98;
+  filter: url("#sovereign-line-glow");
+}
+
+.sovereign-bg__hair-line {
+  stroke: url("#sovereign-blue-line");
+  stroke-width: .8;
+  opacity: .68;
+}
+
+.sovereign-bg__readability {
+  z-index: 2;
+  background:
+    radial-gradient(ellipse at 50% 52%, rgba(0, 3, 10, .05) 0%, rgba(0, 3, 10, .08) 42%, rgba(0, 3, 10, .15) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, .06), transparent 26%, transparent 76%, rgba(0, 0, 0, .04));
+}
+
+@keyframes sovereignAuraPulse {
+  0%, 100% { opacity: .55; transform: scale(1); }
+  50% { opacity: .8; transform: scale(1.04); }
+}
+
+@keyframes sovereignFlowTop {
+  0% { opacity: .78; transform: translate3d(-40px, 0, 0); }
+  50% { opacity: 1; }
+  100% { opacity: .86; transform: translate3d(50px, 8px, 0); }
+}
+
+@keyframes sovereignFlowBottom {
+  0% { opacity: .74; transform: translate3d(50px, 0, 0); }
+  50% { opacity: .98; }
+  100% { opacity: .82; transform: translate3d(-60px, -6px, 0); }
+}
+
+@keyframes sovereignFlowLower {
+  0% { opacity: .42; transform: translate3d(-34px, 4px, 0); }
+  100% { opacity: .68; transform: translate3d(42px, -8px, 0); }
+}
+
+@media (max-width: 767px) {
+  .sovereign-bg__aura {
+    filter: blur(16px);
+  }
+
+  .sovereign-bg__flow--lower {
+    display: none;
+  }
+
+  .sovereign-bg__blur-line {
+    opacity: .32;
+  }
+
+  .sovereign-bg__flow {
+    filter: drop-shadow(0 0 5px rgba(0, 119, 255, .28));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sovereign-bg * {
+    animation: none !important;
+  }
+}

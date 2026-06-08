@@ -1,0 +1,15 @@
+{
+  "name": "malik-ai-ultra-v5-vercel-root",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd app/templates/sovereign-hub-ui && npm run clean && npm run build",
+    "install:frontend": "cd app/templates/sovereign-hub-ui && npm install --legacy-peer-deps"
+  },
+  "dependencies": {
+    "next": "16.2.4",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {}
+}

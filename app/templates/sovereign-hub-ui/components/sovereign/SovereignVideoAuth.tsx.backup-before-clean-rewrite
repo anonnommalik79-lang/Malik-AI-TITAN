@@ -1,0 +1,1549 @@
+"use client";
+
+import React, { FormEvent, useCallback, useRef, useState, useEffect } from "react";
+
+type Provider = "email" | "google" | "github" | "apple" | "microsoft" | "guest";
+
+const IMAGE_SRC = "/images/titan-auth-bg.jpg";
+const ICON_SRC = "/icon.svg";
+
+function sovereignWriteAuthSession(provider: "guest" | "google" | "github" | "apple" | "microsoft" | "email" = "guest") {
+  if (typeof window === "undefined") return;
+
+  const now = new Date().toISOString();
+  const isGuest = provider === "guest";
+  const email = isGuest ? "guest@malik.ai" : `${provider}@malik.ai`;
+  const name = isGuest ? "�����" : provider;
+
+  const user = {
+    id: isGuest ? "guest-user" : email,
+    uid: isGuest ? "guest-user" : email,
+    name,
+    username: name,
+    email,
+    avatar: "",
+    provider,
+    role: "user",
+    isAdmin: false,
+    isGuest,
+    authenticated: true,
+    loggedIn: true,
+    createdAt: now,
+    lastLoginAt: now,
+  };
+
+  const session = {
+    ok: true,
+    user,
+    mode: isGuest ? "guest" : "oauth",
+    provider,
+    authenticated: true,
+    isAuthenticated: true,
+    loggedIn: true,
+    accessToken: isGuest ? "guest-local-access" : "oauth-local-access",
+    refreshToken: isGuest ? "guest-local-refresh" : "oauth-local-refresh",
+    createdAt: now,
+    lastLoginAt: now,
+  };
+
+  const userJson = JSON.stringify(user);
+  const sessionJson = JSON.stringify(session);
+
+  const entries: Array<[string, string]> = [
+    ["malik_auth_mode", provider],
+    ["malik_user_name", name],
+    ["malik_user_email", email],
+    ["malik_user_avatar", ""],
+    ["malik_last_login_at", now],
+    ["malik_user", userJson],
+    ["malik_session", sessionJson],
+    ["malik_auth_snapshot", sessionJson],
+    ["malik_ai_user", userJson],
+    ["malik_ai_session", sessionJson],
+    ["malik_is_authenticated", "true"],
+    ["malik_guest_unlocked", isGuest ? "true" : "false"],
+    ["sovereign_user", userJson],
+    ["sovereign_session", sessionJson],
+    ["sovereign_auth_user", userJson],
+    ["sovereign_auth_session", sessionJson],
+    ["sovereign_v7_auth", sessionJson],
+    ["sovereign_authenticated", "true"],
+    ["auth_user", userJson],
+    ["auth_session", sessionJson],
+    ["isAuthenticated", "true"],
+    ["authenticated", "true"],
+  ];
+
+  for (const [key, value] of entries) {
+    try {
+      window.localStorage.setItem(key, value);
+      window.sessionStorage.setItem(key, value);
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  try {
+    document.cookie = `malik_auth_mode=${encodeURIComponent(provider)}; path=/; max-age=2592000; SameSite=Lax`;
+    document.cookie = `malik_guest_unlocked=${isGuest ? "true" : "false"}; path=/; max-age=2592000; SameSite=Lax`;
+    document.cookie = "sovereign_authenticated=true; path=/; max-age=2592000; SameSite=Lax";
+  } catch {
+    // ignore cookie errors
+  }
+
+  try {
+    window.dispatchEvent(new StorageEvent("storage", { key: "malik_user", newValue: userJson }));
+    window.dispatchEvent(new CustomEvent("malik:auth", { detail: session }));
+    window.dispatchEvent(new CustomEvent("sovereign:auth", { detail: session }));
+    window.dispatchEvent(new CustomEvent("malik-auth-updated", { detail: session }));
+  } catch {
+    // ignore event errors
+  }
+}
+
+function sovereignStartOAuth(provider: "google" | "github" | "apple" | "microsoft") {
+  if (typeof window === "undefined") return;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const redirectTo = window.location.origin;
+  const supabaseProvider = provider === "microsoft" ? "azure" : provider;
+
+  if (supabaseUrl && supabaseUrl.includes("supabase.co")) {
+    const url =
+      `${supabaseUrl}/auth/v1/authorize?provider=${encodeURIComponent(supabaseProvider)}` +
+      `&redirect_to=${encodeURIComponent(redirectTo)}`;
+
+    window.location.href = url;
+    return;
+  }
+
+  alert(
+    `${provider.toUpperCase()} OAuth ?��� .env.local ������ NEXT_PUBLIC_SUPABASE_URL �?�� NEXT_PUBLIC_SUPABASE_ANON_KEY �����. ` +
+      `?��� demo-session �������.`
+  );
+
+  sovereignWriteAuthSession(provider);
+  window.location.href = "/dashboard";
+}
+
+function sovereignDetectButtonProvider(text: string): "guest" | "google" | "github" | "apple" | "microsoft" | "email" | null {
+  const value = text.toLowerCase();
+
+  if (value.includes("�����") || value.includes("guest")) return "guest";
+  if (value.includes("google")) return "google";
+  if (value.includes("github")) return "github";
+  if (value.includes("apple")) return "apple";
+  if (value.includes("microsoft")) return "microsoft";
+  if (value.includes("����������") || value.includes("�����") || value.includes("sign") || value.includes("continue")) return "email";
+
+  return null;
+}
+
+
+function safeSetItem(key: string, value: string) {
+  try {
+    if (typeof window !== "undefined") window.localStorage.setItem(key, value);
+  } catch {
+    // localStorage can be blocked; continue without crashing.
+  }
+}
+
+function getValue(ref: React.RefObject<HTMLInputElement | null>) {
+  return ref.current?.value?.trim() || "";
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function isAdminEmail(email: string) {
+  return normalizeEmail(email) === "amangeldymalik38@gmail.com";
+}
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="sva-provider-svg">
+      <path
+        fill="#4285F4"
+        d="M21.6 12.2c0-.8-.1-1.5-.2-2.2H12v4.2h5.4c-.2 1.2-.9 2.3-2 3v2.8h3.2c1.9-1.8 3-4.3 3-7.8Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 22c2.7 0 5-.9 6.6-2.5l-3.2-2.8c-.9.6-2 .9-3.4.9-2.6 0-4.8-1.8-5.6-4.1H3.1v2.9C4.7 19.7 8.1 22 12 22Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M6.4 13.5c-.2-.6-.3-1.2-.3-1.9s.1-1.3.3-1.9V6.9H3.1C2.4 8.3 2 9.9 2 11.6s.4 3.3 1.1 4.7l3.3-2.8Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.6c1.5 0 2.8.5 3.8 1.5l2.9-2.9C17 2.6 14.7 1.6 12 1.6 8.1 1.6 4.7 3.9 3.1 6.9l3.3 2.8c.8-2.3 3-4.1 5.6-4.1Z"
+      />
+    </svg>
+  );
+}
+
+function GitHubIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="sva-provider-svg">
+      <path
+        fill="currentColor"
+        d="M12 2.3c-5.5 0-10 4.5-10 10 0 4.4 2.9 8.2 6.9 9.5.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.2-3.4-1.2-.5-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 0 1.6 1.1 1.6 1.1.9 1.5 2.4 1.1 2.9.8.1-.7.4-1.1.7-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1 .8-.2 1.6-.3 2.5-.3s1.7.1 2.5.3c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.8 1 .8 2v2.9c0 .3.2.6.7.5 4-1.3 6.9-5.1 6.9-9.5 0-5.5-4.5-10-10-10Z"
+      />
+    </svg>
+  );
+}
+
+function AppleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="sva-provider-svg">
+      <path
+        fill="currentColor"
+        d="M16.7 12.7c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.7-1.3-.1-2.5.8-3.1.8-.7 0-1.7-.8-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1.1 8.4.7 1 1.6 2.2 2.7 2.1 1.1 0 1.5-.7 2.8-.7s1.7.7 2.8.7c1.2 0 1.9-1 2.6-2.1.8-1.2 1.2-2.4 1.2-2.4 0 0-2.7-1-2.8-3.3ZM14.7 6.5c.6-.8 1.1-1.8.9-2.9-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.8 1.1.1 2.1-.5 2.8-1.3Z"
+      />
+    </svg>
+  );
+}
+
+function MicrosoftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="sva-provider-svg">
+      <path fill="#F25022" d="M3 3h8.3v8.3H3z" />
+      <path fill="#7FBA00" d="M12.7 3H21v8.3h-8.3z" />
+      <path fill="#00A4EF" d="M3 12.7h8.3V21H3z" />
+      <path fill="#FFB900" d="M12.7 12.7H21V21h-8.3z" />
+    </svg>
+  );
+}
+
+export function SovereignVideoAuth() {
+  // MALIK_WORLD_GUEST_FORCE
+  useEffect(() => {
+    function writeGuestAndOpen() {
+      const now = new Date().toISOString();
+
+      const user = {
+        id: "guest-user",
+        uid: "guest-user",
+        name: "Гость",
+        username: "Гость",
+        email: "guest@malik.ai",
+        provider: "guest",
+        role: "user",
+        isAdmin: false,
+        isGuest: true,
+        authenticated: true,
+        isAuthenticated: true,
+        loggedIn: true,
+        createdAt: now,
+        lastLoginAt: now,
+      };
+
+      const session = {
+        ok: true,
+        user,
+        email: "guest@malik.ai",
+        name: "Гость",
+        mode: "guest",
+        provider: "guest",
+        authenticated: true,
+        isAuthenticated: true,
+        loggedIn: true,
+        accessToken: "guest-local-access",
+        refreshToken: "guest-local-refresh",
+        createdAt: now,
+        lastLoginAt: now,
+      };
+
+      const userJson = JSON.stringify(user);
+      const sessionJson = JSON.stringify(session);
+
+      const entries: Array<[string, string]> = [
+        ["malik_auth_mode", "guest"],
+        ["malik_user_name", "Гость"],
+        ["malik_user_email", "guest@malik.ai"],
+        ["malik_last_login_at", now],
+        ["malik_user", userJson],
+        ["malik_session", sessionJson],
+        ["malik_auth_snapshot", sessionJson],
+        ["malik_ai_user", userJson],
+        ["malik_ai_session", sessionJson],
+        ["malik_is_authenticated", "true"],
+        ["malik_guest_unlocked", "true"],
+        ["sovereign_user", userJson],
+        ["sovereign_session", sessionJson],
+        ["sovereign_auth_session", sessionJson],
+        ["sovereign_v7_auth", sessionJson],
+        ["sovereign_authenticated", "true"],
+        ["auth_user", userJson],
+        ["auth_session", sessionJson],
+        ["isAuthenticated", "true"],
+        ["authenticated", "true"],
+      ];
+
+      for (const [key, value] of entries) {
+        try {
+          window.localStorage.setItem(key, value);
+          window.sessionStorage.setItem(key, value);
+        } catch {
+          // ignore
+        }
+      }
+
+      window.location.href = "/dashboard";
+    }
+
+    function onClick(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest("button") as HTMLButtonElement | null;
+      if (!button) return;
+
+      const text = `${button.innerText || ""} ${button.getAttribute("aria-label") || ""}`.toLowerCase();
+      if (!text.includes("гость") && !text.includes("guest")) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      writeGuestAndOpen();
+    }
+
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
+
+  // MALIK_FORCE_GUEST_TO_DASHBOARD
+  useEffect(() => {
+    function writeGuestAndOpen() {
+      const now = new Date().toISOString();
+
+      const user = {
+        id: "guest-user",
+        uid: "guest-user",
+        name: "Гость",
+        username: "Гость",
+        email: "guest@malik.ai",
+        provider: "guest",
+        role: "user",
+        isAdmin: false,
+        isGuest: true,
+        authenticated: true,
+        isAuthenticated: true,
+        loggedIn: true,
+        createdAt: now,
+        lastLoginAt: now,
+      };
+
+      const session = {
+        ok: true,
+        user,
+        email: "guest@malik.ai",
+        name: "Гость",
+        mode: "guest",
+        provider: "guest",
+        authenticated: true,
+        isAuthenticated: true,
+        loggedIn: true,
+        accessToken: "guest-local-access",
+        refreshToken: "guest-local-refresh",
+        createdAt: now,
+        lastLoginAt: now,
+      };
+
+      const userJson = JSON.stringify(user);
+      const sessionJson = JSON.stringify(session);
+
+      const entries: Array<[string, string]> = [
+        ["malik_auth_mode", "guest"],
+        ["malik_user_name", "Гость"],
+        ["malik_user_email", "guest@malik.ai"],
+        ["malik_last_login_at", now],
+        ["malik_user", userJson],
+        ["malik_session", sessionJson],
+        ["malik_auth_snapshot", sessionJson],
+        ["malik_ai_user", userJson],
+        ["malik_ai_session", sessionJson],
+        ["malik_is_authenticated", "true"],
+        ["malik_guest_unlocked", "true"],
+        ["sovereign_user", userJson],
+        ["sovereign_session", sessionJson],
+        ["sovereign_auth_session", sessionJson],
+        ["sovereign_v7_auth", sessionJson],
+        ["sovereign_authenticated", "true"],
+        ["auth_user", userJson],
+        ["auth_session", sessionJson],
+        ["isAuthenticated", "true"],
+        ["authenticated", "true"],
+      ];
+
+      for (const [key, value] of entries) {
+        try {
+          window.localStorage.setItem(key, value);
+          window.sessionStorage.setItem(key, value);
+        } catch {
+          // ignore
+        }
+      }
+
+      try {
+        window.dispatchEvent(new CustomEvent("malik-auth-updated", { detail: session }));
+        window.dispatchEvent(new CustomEvent("malik:auth", { detail: session }));
+      } catch {
+        // ignore
+      }
+
+      window.location.href = "/dashboard";
+    }
+
+    function onClick(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest("button") as HTMLButtonElement | null;
+
+      if (!button) return;
+
+      const text = `${button.innerText || ""} ${button.getAttribute("aria-label") || ""}`.toLowerCase();
+
+      if (!text.includes("гость") && !text.includes("guest")) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      writeGuestAndOpen();
+    }
+
+    document.addEventListener("click", onClick, true);
+
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
+
+  useEffect(() => {
+    function onClick(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest("button") as HTMLButtonElement | null;
+      if (!button) return;
+
+      const text = `${button.innerText || ""} ${button.getAttribute("aria-label") || ""}`;
+      const provider = sovereignDetectButtonProvider(text);
+
+      if (!provider) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (provider === "guest" || provider === "email") {
+        sovereignWriteAuthSession(provider);
+        window.location.href = "/dashboard";
+        return;
+      }
+
+      sovereignStartOAuth(provider);
+    }
+
+    document.addEventListener("click", onClick, true);
+
+    return () => {
+      document.removeEventListener("click", onClick, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    function onClick(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest("button") as HTMLButtonElement | null;
+      if (!button) return;
+
+      const text = `${button.innerText || ""} ${button.getAttribute("aria-label") || ""}`;
+      const provider = sovereignDetectButtonProvider(text);
+
+      if (!provider) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (provider === "guest" || provider === "email") {
+        sovereignWriteAuthSession(provider);
+        window.location.href = "/dashboard";
+        return;
+      }
+
+      sovereignStartOAuth(provider);
+    }
+
+    document.addEventListener("click", onClick, true);
+
+    return () => {
+      document.removeEventListener("click", onClick, true);
+    };
+  }, []);
+
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
+
+  const [isOpening, setIsOpening] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  const [iconFailed, setIconFailed] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const openApp = useCallback(
+    (provider: Provider = "guest") => {
+      if (isOpening) return;
+
+      setIsOpening(true);
+
+      const username = getValue(usernameRef) || "Abdumalik";
+      const email = normalizeEmail(getValue(emailRef) || "guest@malik.ai");
+      const createdAt = new Date().toISOString();
+
+      safeSetItem("malik_auth_mode", provider);
+      safeSetItem("malik_user_name", username);
+      safeSetItem("malik_user_avatar", "");
+      safeSetItem("malik_last_login_at", createdAt);
+      safeSetItem(
+        "malik_user",
+        JSON.stringify({
+          username,
+          email,
+          provider,
+          createdAt,
+        }),
+      );
+      safeSetItem(
+        "malik_auth_snapshot",
+        JSON.stringify({
+          email,
+          name: username,
+          avatar: "",
+          mode: provider === "guest" ? "guest" : "supabase",
+          isAdmin: isAdminEmail(email),
+          lastLoginAt: createdAt,
+        }),
+      );
+
+      window.setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 220);
+    },
+    [isOpening],
+  );
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const username = getValue(usernameRef);
+    const email = normalizeEmail(getValue(emailRef));
+    const password = getValue(passwordRef);
+    const confirm = getValue(confirmRef);
+
+    if (username.length < 2) {
+      setMessage("��� ������������ ������� 2 �������.");
+      return;
+    }
+
+    if (!email.includes("@") || !email.includes(".")) {
+      setMessage("������� ���������� email.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setMessage("������ ������� 6 ��������.");
+      return;
+    }
+
+    if (password !== confirm) {
+      setMessage("������ �� ���������.");
+      return;
+    }
+
+    setMessage("�������� MALIK AI...");
+    openApp("email");
+  }
+
+  return (
+    <main className="sva-root" aria-label="����������� MALIK AI V6.5 TITAN">
+      <img
+        className="sva-bg"
+        src={IMAGE_SRC}
+        alt=""
+        draggable={false}
+        decoding="async"
+        loading="eager"
+        onError={() => setImageFailed(true)}
+      />
+
+      {imageFailed && <div className="sva-bg-fallback" aria-hidden="true" />}
+
+      <div className="sva-soft-left" aria-hidden="true" />
+      <div className="sva-top-clear" aria-hidden="true" />
+      <div className="sva-dragon-aura" aria-hidden="true" />
+      <div className="sva-wind sva-wind-a" aria-hidden="true" />
+      <div className="sva-wind sva-wind-b" aria-hidden="true" />
+
+      <section className="sva-card" aria-label="������� �������">
+        <div className="sva-card-aura" aria-hidden="true" />
+        <div className="sva-card-border" aria-hidden="true" />
+        <div className="sva-card-topline" aria-hidden="true" />
+
+        <header className="sva-brand">
+          <div className="sva-logo-wrap" aria-label="������ Sovereign Hub">
+            {!iconFailed ? (
+              <img
+                className="sva-logo-img"
+                src={ICON_SRC}
+                alt=""
+                draggable={false}
+                onError={() => setIconFailed(true)}
+              />
+            ) : (
+              <div className="sva-logo-empty" aria-hidden="true">
+                <span />
+              </div>
+            )}
+          </div>
+
+          <div className="sva-brand-text">
+            <p className="sva-brand-name">Sovereign Hub</p>
+            <p className="sva-brand-ver">MALIK AI � V6.5 TITAN</p>
+          </div>
+        </header>
+
+        <div className="sva-hero">
+          <span className="sva-pill">Приватный доступ</span>
+          <h1 className="sva-h1">Создать Sovereign ID.</h1>
+          <p className="sva-tagline">Твоя интеллектуальная рабочая зона уже готова.</p>
+        </div>
+
+        <form className="sva-form" onSubmit={handleSubmit} noValidate>
+          <label className="sva-field" htmlFor="sva-username">
+            <span className="sva-field-label">Повтор</span><span className="sva-input-wrap"><input id="sva-confirm"
+                  ref={confirmRef}
+                  type="password"
+                  placeholder="Ещё раз"
+                  autoComplete="new-password"
+                  className="sva-input"
+                />
+                <i className="sva-input-line" aria-hidden="true" />
+              </span>
+            </label>
+          </div>
+
+          <button className="sva-cta" type="submit" disabled={isOpening}>
+            <span className="sva-cta-bg" aria-hidden="true" />
+            <span className="sva-cta-text">{isOpening ? "Открываю..." : "Продолжить"}</span>
+            <span className="sva-cta-arrow" aria-hidden="true">{"→"}</span>
+          </button>
+
+          <div className="sva-divider" aria-hidden="true">
+            <span />
+            <small>или войти через</small>
+            <span />
+          </div>
+
+          <div className="sva-socials">
+            <button
+              type="button"
+              className="sva-social"
+              onClick={() => openApp("google")}
+              disabled={isOpening}
+              aria-label="����� ����� Google"
+            >
+              <span className="sva-social-icon" aria-hidden="true">
+                <GoogleIcon />
+              </span>
+              <span>Google</span>
+            </button>
+
+            <button
+              type="button"
+              className="sva-social"
+              onClick={() => openApp("github")}
+              disabled={isOpening}
+              aria-label="����� ����� GitHub"
+            >
+              <span className="sva-social-icon" aria-hidden="true">
+                <GitHubIcon />
+              </span>
+              <span>GitHub</span>
+            </button>
+
+            <button
+              type="button"
+              className="sva-social"
+              onClick={() => openApp("apple")}
+              disabled={isOpening}
+              aria-label="����� ����� Apple"
+            >
+              <span className="sva-social-icon" aria-hidden="true">
+                <AppleIcon />
+              </span>
+              <span>Apple</span>
+            </button>
+
+            <button
+              type="button"
+              className="sva-social"
+              onClick={() => openApp("microsoft")}
+              disabled={isOpening}
+              aria-label="����� ����� Microsoft"
+            >
+              <span className="sva-social-icon" aria-hidden="true">
+                <MicrosoftIcon />
+              </span>
+              <span>Microsoft</span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            className="sva-guest"
+            onClick={() =>Войти как гость</button>
+
+          {message && (
+            <p className="sva-msg" role="status">
+              {message}
+            </p>
+          )}
+        </form>
+      </section>
+
+      <style>{`
+        *, *::before, *::after {
+          box-sizing: border-box;
+        }
+
+        html,
+        body {
+          margin: 0;
+          background: #000;
+          overflow: hidden;
+        }
+
+        .sva-root {
+          position: fixed;
+          inset: 0;
+          width: 100vw;
+          height: 100vh;
+          height: 100dvh;
+          overflow: hidden;
+          isolation: isolate;
+          color: #fff;
+          user-select: none;
+          -webkit-user-select: none;
+          font-family:
+            -apple-system,
+            "SF Pro Display",
+            "SF Pro Text",
+            Inter,
+            ui-sans-serif,
+            system-ui,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            sans-serif;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
+
+        .sva-bg {
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          object-position: center center;
+          background: #000;
+          filter: brightness(1.12) contrast(1.055) saturate(1.12);
+          transform: translate3d(0, 0, 0) scale(1.005);
+          transform-origin: center;
+          backface-visibility: hidden;
+        }
+
+        .sva-bg-fallback {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          background:
+            radial-gradient(ellipse at 72% 38%, rgba(0, 160, 255, 0.25), transparent 40%),
+            radial-gradient(ellipse at 80% 70%, rgba(140, 0, 255, 0.2), transparent 45%),
+            linear-gradient(145deg, #010310, #050020 50%, #000d1a);
+        }
+
+        .sva-soft-left {
+          position: absolute;
+          inset: 0;
+          z-index: 3;
+          pointer-events: none;
+          background:
+            linear-gradient(
+              108deg,
+              rgba(0, 0, 0, 0.18) 0%,
+              rgba(0, 0, 0, 0.08) 28%,
+              transparent 58%
+            );
+        }
+
+        .sva-top-clear {
+          position: absolute;
+          inset: 0;
+          z-index: 4;
+          pointer-events: none;
+          background:
+            linear-gradient(
+              to bottom,
+              rgba(255, 255, 255, 0.02) 0%,
+              transparent 18%,
+              transparent 82%,
+              rgba(0, 0, 0, 0.05) 100%
+            );
+        }
+
+        .sva-dragon-aura {
+          position: absolute;
+          inset: 0;
+          z-index: 5;
+          pointer-events: none;
+          opacity: 0.85;
+          background:
+            radial-gradient(ellipse 40% 50% at 78% 36%, rgba(60, 160, 255, 0.075), transparent),
+            radial-gradient(ellipse 30% 40% at 85% 65%, rgba(140, 60, 255, 0.055), transparent);
+          animation: auraPulse 6s ease-in-out infinite;
+        }
+
+        .sva-wind {
+          position: absolute;
+          inset: 0;
+          z-index: 6;
+          pointer-events: none;
+          background-image: url("${IMAGE_SRC}");
+          background-size: cover;
+          background-position: center;
+          mix-blend-mode: screen;
+          backface-visibility: hidden;
+          will-change: transform, opacity;
+        }
+
+        .sva-wind-a {
+          opacity: 0.044;
+          clip-path: polygon(60% 0%, 100% 0%, 100% 26%, 84% 24%, 72% 14%, 60% 6%);
+          filter: blur(0.5px) brightness(1.06) saturate(1.25);
+          transform-origin: 90% 12%;
+          animation: windA 5.8s ease-in-out infinite;
+        }
+
+        .sva-wind-b {
+          opacity: 0.028;
+          clip-path: polygon(78% 2%, 100% 0%, 100% 86%, 80% 90%, 83% 54%, 80% 26%);
+          filter: blur(0.6px) brightness(1.04) saturate(1.16);
+          transform-origin: 97% 46%;
+          animation: windB 7.6s ease-in-out infinite;
+        }
+
+        .sva-card {
+          position: absolute;
+          z-index: 14;
+          left: clamp(48px, 4.2vw, 72px);
+          top: clamp(132px, 17vh, 158px);
+          bottom: 22px;
+          width: min(560px, calc(100vw - 108px));
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          padding: clamp(20px, 2.1vw, 28px) clamp(22px, 2.35vw, 32px) clamp(17px, 1.8vw, 22px);
+          border: 1px solid rgba(96, 166, 255, 0.16);
+          border-top-color: rgba(160, 214, 255, 0.20);
+          border-left-color: rgba(120, 190, 255, 0.17);
+          border-radius: 26px;
+          background:
+            linear-gradient(158deg, rgba(8, 12, 28, 0.68), rgba(6, 8, 22, 0.58) 55%, rgba(10, 6, 24, 0.62)),
+            rgba(4, 6, 16, 0.34);
+          backdrop-filter: blur(46px) saturate(1.42) brightness(1.06);
+          -webkit-backdrop-filter: blur(46px) saturate(1.42) brightness(1.06);
+          box-shadow:
+            0 0 0 1px rgba(60, 140, 255, 0.05) inset,
+            0 0 80px rgba(40, 100, 255, 0.035) inset,
+            0 54px 140px rgba(0, 0, 0, 0.68),
+            0 22px 62px rgba(0, 0, 0, 0.28),
+            0 0 110px rgba(60, 120, 255, 0.04);
+          animation: cardIn 560ms cubic-bezier(0.14, 0.88, 0.22, 1) both;
+        }
+
+        .sva-card-aura {
+          position: absolute;
+          top: -58px;
+          left: -20px;
+          right: -20px;
+          height: 170px;
+          pointer-events: none;
+          z-index: 0;
+          background:
+            radial-gradient(
+              ellipse 70% 60% at 50% 0%,
+              rgba(80, 160, 255, 0.12),
+              rgba(120, 80, 255, 0.052) 52%,
+              transparent
+            );
+          animation: cardAuraPulse 5s ease-in-out infinite;
+        }
+
+        .sva-card-border {
+          position: absolute;
+          inset: 0;
+          z-index: 20;
+          pointer-events: none;
+          border-radius: inherit;
+          border: 1px solid rgba(255, 255, 255, 0.035);
+        }
+
+        .sva-card-topline {
+          position: absolute;
+          top: 0;
+          left: 10%;
+          right: 10%;
+          height: 1px;
+          z-index: 21;
+          pointer-events: none;
+          background:
+            linear-gradient(
+              90deg,
+              transparent,
+              rgba(100, 180, 255, 0.42) 30%,
+              rgba(190, 225, 255, 0.55) 50%,
+              rgba(100, 180, 255, 0.42) 70%,
+              transparent
+            );
+        }
+
+        .sva-brand {
+          position: relative;
+          z-index: 2;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          flex: 0 0 auto;
+          margin-bottom: clamp(12px, 1.7vh, 18px);
+        }
+
+        .sva-logo-wrap {
+          position: relative;
+          flex: 0 0 auto;
+          width: clamp(52px, 5.4vw, 66px);
+          height: clamp(52px, 5.4vw, 66px);
+          border-radius: 17px;
+          border: 1px solid rgba(255, 255, 255, 0.24);
+          background: rgba(255, 255, 255, 0.86);
+          box-shadow:
+            0 0 0 1px rgba(120, 180, 255, 0.06) inset,
+            0 12px 38px rgba(0, 0, 0, 0.32);
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .sva-logo-img,
+        .sva-logo-empty {
+          position: relative;
+          z-index: 2;
+          width: 100%;
+          height: 100%;
+          display: block;
+        }
+
+        .sva-logo-img {
+          object-fit: cover;
+        }
+
+        .sva-logo-empty {
+          background: rgba(255, 255, 255, 0.78);
+        }
+
+        .sva-logo-empty span {
+          position: absolute;
+          inset: 18px;
+          border-radius: 5px;
+          background:
+            linear-gradient(135deg, #05070c 0 48%, transparent 48% 100%);
+          opacity: 0.88;
+        }
+
+        .sva-brand-text {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          min-width: 0;
+        }
+
+        .sva-brand-name,
+        .sva-brand-ver {
+          margin: 0;
+          line-height: 1;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+
+        .sva-brand-name {
+          color: rgba(245, 250, 255, 0.96);
+          font-size: clamp(11px, 1.05vw, 13px);
+          font-weight: 760;
+          letter-spacing: 0.22em;
+        }
+
+        .sva-brand-ver {
+          color: rgba(145, 200, 255, 0.62);
+          font-size: clamp(8.5px, 0.8vw, 10px);
+          font-weight: 640;
+          letter-spacing: 0.24em;
+        }
+
+        .sva-hero {
+          position: relative;
+          z-index: 2;
+          flex: 0 0 auto;
+          margin-bottom: clamp(11px, 1.55vh, 16px);
+        }
+
+        .sva-pill {
+          display: inline-flex;
+          align-items: center;
+          border: 1px solid rgba(80, 160, 255, 0.22);
+          border-radius: 999px;
+          padding: 4px 12px;
+          background: rgba(60, 120, 255, 0.10);
+          color: rgba(135, 200, 255, 0.78);
+          font-size: 10px;
+          font-weight: 740;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          box-shadow: 0 0 12px rgba(80, 160, 255, 0.06);
+        }
+
+        .sva-h1 {
+          margin: 10px 0 0;
+          max-width: 450px;
+          color: #f2f7ff;
+          font-size: clamp(30px, 3.05vw, 45px);
+          line-height: 0.96;
+          font-weight: 800;
+          letter-spacing: -0.062em;
+          text-shadow:
+            0 0 40px rgba(80, 160, 255, 0.14),
+            0 2px 30px rgba(0, 0, 0, 0.28);
+        }
+
+        .sva-tagline {
+          margin: 7px 0 0;
+          color: rgba(175, 210, 255, 0.48);
+          font-size: 12.5px;
+          line-height: 1.45;
+          font-weight: 480;
+          letter-spacing: -0.005em;
+        }
+
+        .sva-form {
+          position: relative;
+          z-index: 2;
+          flex: 0 0 auto;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
+
+        .sva-field {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          margin-bottom: clamp(7px, 0.95vh, 9px);
+        }
+
+        .sva-field-label {
+          color: rgba(135, 190, 255, 0.70);
+          font-size: 10px;
+          font-weight: 760;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          cursor: default;
+        }
+
+        .sva-input-wrap {
+          position: relative;
+          display: block;
+        }
+
+        .sva-input {
+          display: block;
+          width: 100%;
+          height: clamp(36px, 4.3vh, 41px);
+          padding: 0 14px;
+          outline: none;
+          border: 1px solid rgba(70, 140, 230, 0.22);
+          border-radius: 11px;
+          background: rgba(20, 30, 60, 0.48);
+          color: rgba(225, 240, 255, 0.94);
+          font: inherit;
+          font-size: 14px;
+          font-weight: 580;
+          box-shadow:
+            inset 0 1px 0 rgba(80, 160, 255, 0.06),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.10);
+          transition:
+            border-color 140ms ease,
+            background 140ms ease,
+            box-shadow 140ms ease;
+        }
+
+        .sva-input::placeholder {
+          color: rgba(130, 170, 230, 0.36);
+        }
+
+        .sva-input:focus {
+          border-color: rgba(90, 170, 255, 0.48);
+          background: rgba(24, 38, 80, 0.58);
+          box-shadow:
+            0 0 0 3px rgba(60, 130, 255, 0.12),
+            inset 0 1px 0 rgba(100, 180, 255, 0.08);
+        }
+
+        .sva-input-line {
+          position: absolute;
+          left: 14px;
+          right: 14px;
+          bottom: -1px;
+          height: 1px;
+          pointer-events: none;
+          opacity: 0;
+          transform: scaleX(0);
+          border-radius: 1px;
+          background: linear-gradient(90deg, transparent, rgba(80, 160, 255, 0.70), transparent);
+          transition: opacity 180ms ease, transform 180ms ease;
+        }
+
+        .sva-input:focus ~ .sva-input-line {
+          opacity: 1;
+          transform: scaleX(1);
+        }
+
+        .sva-duo {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+
+        .sva-cta {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 9px;
+          width: 100%;
+          height: clamp(42px, 5vh, 47px);
+          margin-top: 2px;
+          border: 0;
+          border-radius: 12px;
+          overflow: hidden;
+          cursor: pointer;
+          font: inherit;
+          box-shadow:
+            0 1px 0 rgba(255, 255, 255, 0.96) inset,
+            0 18px 52px rgba(255, 255, 255, 0.11),
+            0 10px 34px rgba(0, 0, 0, 0.30),
+            0 2px 8px rgba(0, 0, 0, 0.16);
+          transition: transform 130ms ease, box-shadow 130ms ease, filter 130ms ease;
+        }
+
+        .sva-cta-bg {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          pointer-events: none;
+          border-radius: inherit;
+          background: linear-gradient(180deg, #fff, rgba(235, 242, 255, 0.94));
+        }
+
+        .sva-cta-bg::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          height: 55%;
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.60), transparent);
+          opacity: 0.45;
+        }
+
+        .sva-cta-text,
+        .sva-cta-arrow {
+          position: relative;
+          z-index: 2;
+        }
+
+        .sva-cta-text {
+          color: #060810;
+          font-size: 14px;
+          font-weight: 840;
+          letter-spacing: -0.01em;
+        }
+
+        .sva-cta-arrow {
+          color: rgba(6, 8, 16, 0.70);
+          font-size: 16px;
+          line-height: 1;
+        }
+
+        .sva-cta:hover:not(:disabled) {
+          transform: translateY(-1.5px);
+          filter: brightness(1.04);
+          box-shadow:
+            0 1px 0 rgba(255, 255, 255, 0.96) inset,
+            0 22px 62px rgba(255, 255, 255, 0.15),
+            0 14px 40px rgba(0, 0, 0, 0.35),
+            0 4px 12px rgba(0, 0, 0, 0.20);
+        }
+
+        .sva-divider {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          align-items: center;
+          gap: 10px;
+          margin: clamp(9px, 1.15vh, 13px) 0 clamp(8px, 1.05vh, 12px);
+        }
+
+        .sva-divider span {
+          height: 1px;
+          background: rgba(80, 140, 255, 0.15);
+        }
+
+        .sva-divider small {
+          color: rgba(120, 180, 255, 0.52);
+          font-size: 10px;
+          font-weight: 760;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+
+        .sva-socials {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+
+        .sva-social,
+        .sva-guest {
+          border: 1px solid rgba(70, 140, 230, 0.22);
+          border-radius: 11px;
+          background: rgba(16, 24, 56, 0.54);
+          color: rgba(205, 232, 255, 0.86);
+          cursor: pointer;
+          font: inherit;
+          font-size: 12.5px;
+          font-weight: 720;
+          box-shadow:
+            inset 0 1px 0 rgba(80, 160, 255, 0.065),
+            0 2px 8px rgba(0, 0, 0, 0.16);
+          transition:
+            transform 120ms ease,
+            border-color 120ms ease,
+            background 120ms ease,
+            color 120ms ease,
+            box-shadow 120ms ease;
+        }
+
+        .sva-social {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          height: clamp(34px, 4vh, 38px);
+        }
+
+        .sva-social:hover:not(:disabled),
+        .sva-guest:hover:not(:disabled) {
+          transform: translateY(-1px);
+          border-color: rgba(100, 180, 255, 0.38);
+          background: rgba(20, 36, 80, 0.68);
+          color: rgba(225, 245, 255, 0.96);
+          box-shadow:
+            inset 0 1px 0 rgba(80, 160, 255, 0.11),
+            0 0 20px rgba(60, 130, 255, 0.09),
+            0 4px 14px rgba(0, 0, 0, 0.24);
+        }
+
+        .sva-social-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          flex-shrink: 0;
+          color: rgba(205, 232, 255, 0.92);
+          line-height: 1;
+        }
+
+        .sva-provider-svg {
+          width: 18px;
+          height: 18px;
+          display: block;
+        }
+
+        .sva-guest {
+          display: block;
+          width: 100%;
+          height: clamp(34px, 4vh, 38px);
+          background: rgba(80, 145, 255, 0.13);
+          color: rgba(232, 247, 255, 0.96);
+          border-color: rgba(110, 180, 255, 0.34);
+          font-size: 13px;
+          font-weight: 820;
+          letter-spacing: -0.01em;
+        }
+
+        .sva-cta:disabled,
+        .sva-social:disabled,
+        .sva-guest:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
+        .sva-msg {
+          margin: 8px 0 0;
+          padding: 8px 13px;
+          border: 1px solid rgba(60, 130, 220, 0.16);
+          border-radius: 10px;
+          background: rgba(10, 18, 50, 0.42);
+          color: rgba(150, 200, 255, 0.72);
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1.4;
+        }
+
+        @keyframes cardIn {
+          from {
+            opacity: 0;
+            transform: translate3d(-14px, 10px, 0) scale(0.99);
+            filter: blur(2px);
+          }
+          to {
+            opacity: 1;
+            transform: translate3d(0, 0, 0) scale(1);
+            filter: blur(0);
+          }
+        }
+
+        @keyframes windA {
+          0% {
+            transform: translate3d(-0.5%, 0.04%, 0) scale(1.004);
+            opacity: 0.040;
+          }
+          50% {
+            transform: translate3d(1%, -0.15%, 0) scale(1.009);
+            opacity: 0.060;
+          }
+          100% {
+            transform: translate3d(-0.3%, 0.06%, 0) scale(1.005);
+            opacity: 0.042;
+          }
+        }
+
+        @keyframes windB {
+          0% {
+            transform: translate3d(-0.2%, 0, 0) scale(1.004);
+            opacity: 0.022;
+          }
+          52% {
+            transform: translate3d(1.3%, -0.05%, 0) scale(1.011);
+            opacity: 0.040;
+          }
+          100% {
+            transform: translate3d(-0.1%, 0.02%, 0) scale(1.005);
+            opacity: 0.024;
+          }
+        }
+
+        @keyframes auraPulse {
+          0%, 100% {
+            opacity: 0.74;
+          }
+          50% {
+            opacity: 1;
+          }
+        }
+
+        @keyframes cardAuraPulse {
+          0%, 100% {
+            opacity: 0.68;
+          }
+          50% {
+            opacity: 1;
+          }
+        }
+
+        @media (max-height: 820px) and (min-width: 981px) {
+          .sva-card {
+            top: 132px;
+            bottom: 18px;
+            width: 560px;
+            padding: 18px 26px 14px;
+            border-radius: 22px;
+          }
+
+          .sva-logo-wrap {
+            width: 50px;
+            height: 50px;
+            border-radius: 15px;
+          }
+
+          .sva-brand {
+            gap: 12px;
+            margin-bottom: 10px;
+          }
+
+          .sva-brand-name {
+            font-size: 11px;
+          }
+
+          .sva-brand-ver {
+            font-size: 8.5px;
+          }
+
+          .sva-hero {
+            margin-bottom: 9px;
+          }
+
+          .sva-tagline {
+            display: none;
+          }
+
+          .sva-pill {
+            padding: 3px 10px;
+            font-size: 9px;
+          }
+
+          .sva-h1 {
+            margin-top: 8px;
+            font-size: clamp(25px, 2.55vw, 34px);
+            line-height: 0.96;
+          }
+
+          .sva-field {
+            gap: 4px;
+            margin-bottom: 6px;
+          }
+
+          .sva-field-label {
+            font-size: 9.5px;
+          }
+
+          .sva-input {
+            height: 34px;
+            border-radius: 9px;
+            font-size: 13px;
+          }
+
+          .sva-cta {
+            height: 40px;
+            margin-top: 1px;
+            border-radius: 10px;
+          }
+
+          .sva-cta-text {
+            font-size: 13px;
+          }
+
+          .sva-divider {
+            margin: 8px 0 7px;
+          }
+
+          .sva-social {
+            height: 31px;
+            border-radius: 9px;
+            font-size: 11.5px;
+          }
+
+          .sva-socials {
+            gap: 8px;
+            margin-bottom: 7px;
+          }
+
+          .sva-guest {
+            height: 31px;
+            border-radius: 9px;
+            font-size: 12px;
+          }
+
+          .sva-msg {
+            display: none;
+          }
+        }
+
+        @media (max-width: 980px) {
+          .sva-bg {
+            object-position: 70% center;
+          }
+
+          .sva-card {
+            left: 10px;
+            right: 10px;
+            top: auto;
+            bottom: 12px;
+            width: auto;
+            padding: 18px 16px 14px;
+            border-radius: 22px;
+          }
+
+          .sva-logo-wrap {
+            width: 48px;
+            height: 48px;
+            border-radius: 15px;
+          }
+
+          .sva-brand {
+            gap: 12px;
+            margin-bottom: 11px;
+          }
+
+          .sva-h1 {
+            font-size: 28px;
+          }
+
+          .sva-tagline {
+            display: none;
+          }
+
+          .sva-input {
+            height: 38px;
+          }
+
+          .sva-duo,
+          .sva-socials {
+            grid-template-columns: 1fr;
+          }
+
+          .sva-socials {
+            display: none;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .sva-wind,
+          .sva-card,
+          .sva-dragon-aura,
+          .sva-card-aura {
+            animation: none !important;
+          }
+        }
+      `}</style>
+    </main>
+  );
+}
+
+export default SovereignVideoAuth;
+
+
+
+
+
+
+
+
+
+
+

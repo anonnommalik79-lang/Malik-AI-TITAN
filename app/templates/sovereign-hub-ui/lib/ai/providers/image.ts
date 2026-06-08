@@ -1,0 +1,192 @@
+import type { AIProvider, AIRequest, AIResponse } from "../types"
+import { providerOrder } from "../provider-order"
+import { awsBedrockProvider } from "./aws-bedrock"
+import { providerFetch } from "./base"
+
+function configured(name: string) {
+  return Boolean(process.env[name]?.trim())
+}
+
+function falKey() {
+  return process.env.FAL_KEY || process.env.FAL_API_KEY
+}
+
+async function generateWithStability(input: AIRequest): Promise<AIResponse> {
+  const started = Date.now()
+  const key = process.env.STABILITY_API_KEY
+  if (!key) throw new Error("STABILITY_API_KEY not configured")
+
+  const response = await providerFetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${key}`,
+      accept: "application/json",
+    },
+    body: (() => {
+      const form = new FormData()
+      form.append("prompt", input.prompt)
+      form.append("output_format", "png")
+      return form
+    })(),
+    signal: input.signal,
+  }, Number(process.env.IMAGE_PROVIDER_TIMEOUT_MS || 90_000))
+
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload?.errors?.[0] || payload?.message || `Stability returned ${response.status}`)
+
+  const b64 = payload?.image
+  if (!b64) throw new Error("Stability returned no image payload")
+  return {
+    success: true,
+    provider: "stability",
+    model: "stable-image-core",
+    type: "image",
+    output: {
+      resultUrl: `data:image/png;base64,${b64}`,
+      provider: "stability",
+      model: "stable-image-core",
+    },
+    latencyMs: Date.now() - started,
+  }
+}
+
+async function generateWithOpenAI(input: AIRequest): Promise<AIResponse> {
+  const started = Date.now()
+  const key = process.env.OPENAI_API_KEY
+  if (!key) throw new Error("OPENAI_API_KEY not configured")
+
+  const model = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1"
+  const response = await providerFetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${key}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      prompt: input.prompt,
+      size: "1024x1024",
+    }),
+    signal: input.signal,
+  }, Number(process.env.IMAGE_PROVIDER_TIMEOUT_MS || 90_000))
+
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload?.error?.message || `OpenAI Images returned ${response.status}`)
+
+  const item = payload?.data?.[0] || {}
+  const resultUrl = item.url || (item.b64_json ? `data:image/png;base64,${item.b64_json}` : "")
+  if (!resultUrl) throw new Error("OpenAI Images returned no image URL or base64 payload")
+
+  return {
+    success: true,
+    provider: "openai",
+    model,
+    type: "image",
+    output: {
+      resultUrl,
+      provider: "openai",
+      model,
+    },
+    latencyMs: Date.now() - started,
+  }
+}
+
+async function generateWithFal(input: AIRequest): Promise<AIResponse> {
+  const started = Date.now()
+  const key = falKey()
+  if (!key) throw new Error("FAL_KEY or FAL_API_KEY not configured")
+
+  const model = process.env.FAL_IMAGE_MODEL || "fal-ai/flux/schnell"
+  const response = await providerFetch(`https://fal.run/${model}`, {
+    method: "POST",
+    headers: {
+      authorization: `Key ${key}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      prompt: input.prompt,
+      image_size: "square_hd",
+      num_images: 1,
+    }),
+    signal: input.signal,
+  }, Number(process.env.IMAGE_PROVIDER_TIMEOUT_MS || 90_000))
+
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload?.detail || payload?.message || `FAL returned ${response.status}`)
+  const resultUrl = payload?.images?.[0]?.url || payload?.image?.url
+  if (!resultUrl) throw new Error("FAL returned no image URL")
+
+  return {
+    success: true,
+    provider: "fal",
+    model,
+    type: "image",
+    output: { resultUrl, provider: "fal", model },
+    latencyMs: Date.now() - started,
+  }
+}
+
+const handlers: Record<string, (input: AIRequest) => Promise<AIResponse>> = {
+  openai: generateWithOpenAI,
+  stability: generateWithStability,
+  fal: generateWithFal,
+  "aws-bedrock": (input) => awsBedrockProvider.generateImage(input),
+}
+
+function isConfigured(provider: string) {
+  if (provider === "openai") return configured("OPENAI_API_KEY")
+  if (provider === "stability") return configured("STABILITY_API_KEY")
+  if (provider === "fal") return Boolean(falKey())
+  if (provider === "aws-bedrock") return awsBedrockProvider.healthCheck().configured
+  return false
+}
+
+export const imageProviderRouter: AIProvider = {
+  id: "openrouter",
+  title: "Image Provider Router",
+  supports: ["image"],
+
+  healthCheck() {
+    return {
+      provider: "openrouter",
+      configured: Object.keys(handlers).some(isConfigured),
+      supports: ["image"],
+      models: ["gpt-image-1", "stability-core", "fal-ai/flux/schnell", "amazon.nova-canvas-v1:0"],
+      message: "Image router ready. Uses the configured provider order with automatic fallback.",
+    }
+  },
+
+  async sendMessage(input) {
+    return this.generateImage(input)
+  },
+
+  async generateCode() {
+    throw new Error("Image router does not generate code.")
+  },
+
+  async generateImage(input: AIRequest): Promise<AIResponse> {
+    const errors: string[] = []
+    const requested = input.provider || String(input.metadata?.requestedProvider || "")
+    const order = providerOrder("IMAGE_PROVIDER_ORDER", ["openai", "stability", "fal", "aws-bedrock"], requested)
+
+    for (const provider of order) {
+      const handler = handlers[provider]
+      if (!handler || !isConfigured(provider)) continue
+      try {
+        return await handler(input)
+      } catch (error) {
+        errors.push(`${provider}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+
+    throw new Error(errors.length ? errors.join(" | ") : "No image provider configured. Add OPENAI_API_KEY, STABILITY_API_KEY, FAL_KEY or AWS Bedrock env.")
+  },
+
+  async generateVideo() {
+    throw new Error("Image router does not generate video.")
+  },
+
+  async analyzeFile() {
+    throw new Error("Image router does not analyze files.")
+  },
+}

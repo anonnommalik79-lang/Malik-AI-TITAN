@@ -1,0 +1,51 @@
+/* Auth route isolation — mobile uses SovereignMobileRegister (sma-*), desktop keeps sva-* */
+
+html.malik-auth-active,
+body.malik-auth-active,
+html:has(.malik-auth-page),
+body:has(.malik-auth-page),
+#malik-root:has(.malik-auth-page) {
+  background: #01030a !important;
+}
+
+html.malik-auth-active #malik-root::before,
+html.malik-auth-active #malik-root::after,
+body.malik-auth-active #malik-root::before,
+body.malik-auth-active #malik-root::after,
+#malik-root:has(.malik-auth-page)::before,
+#malik-root:has(.malik-auth-page)::after {
+  display: none !important;
+  content: none !important;
+  opacity: 0 !important;
+  background: none !important;
+}
+
+html.malik-auth-active #malik-investor-aurora,
+#malik-root:has(.malik-auth-page) #malik-investor-aurora {
+  display: none !important;
+}
+
+.malik-auth-page {
+  position: relative;
+  min-height: 100dvh;
+}
+
+@media (max-width: 980px) {
+  html.malik-auth-active,
+  body.malik-auth-active,
+  #malik-root:has(.malik-auth-page) {
+    overflow: hidden !important;
+  }
+
+  /* mobile-polish kills backdrop-filter globally — restore on mobile auth card */
+  #malik-root:has(.malik-auth-page) .sma-card {
+    backdrop-filter: blur(18px) saturate(1.25) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(1.25) !important;
+  }
+}
+
+@media (min-width: 981px) {
+  #malik-root:has(.malik-auth-page) .sma-root {
+    display: none !important;
+  }
+}

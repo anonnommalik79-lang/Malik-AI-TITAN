@@ -1,0 +1,7 @@
+Flask
+flask-cors
+requests
+PyJWT
+psycopg2-binary
+gunicorn
+aiohttp

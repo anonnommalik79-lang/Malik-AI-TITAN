@@ -1,0 +1,31 @@
+﻿"use client";
+
+import React from "react";
+import DashboardChatNoCutGuard from "@/components/sovereign/dashboard-chat-no-cut-guard";
+import * as DashboardModule from "@/components/sovereign/dashboard";
+
+export default function DashboardPage() {
+  const Dashboard =
+    (DashboardModule as any).default ||
+    (DashboardModule as any).Dashboard ||
+    (DashboardModule as any).SovereignDashboard ||
+    (DashboardModule as any).MalikDashboard ||
+    null;
+
+  if (!Dashboard) {
+    return (
+      <main className="min-h-[100dvh] bg-black text-white flex items-center justify-center p-6">
+        <div className="max-w-lg rounded-[28px] border border-white/10 bg-white/[0.05] p-7 text-center">
+          <h1 className="text-2xl font-black">Dashboard export С‚Р°Р±С‹Р»РјР°РґС‹</h1>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <>
+      <DashboardChatNoCutGuard />
+      <Dashboard />
+    </>
+  );
+}

@@ -1,0 +1,133 @@
+/* MALIK AI вЂ” FULLSCREEN VIDEO BACKGROUND FIX */
+
+.malik-force-video-root,
+.malik-welcome-video-host {
+  position: relative !important;
+  isolation: isolate !important;
+  overflow: hidden !important;
+  background: #000107 !important;
+}
+
+/* IMPORTANT:
+   fixed makes video cover the whole browser viewport,
+   not only the small centered hero wrapper.
+*/
+.malik-video-bg {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-width: 100vw !important;
+  min-height: 100vh !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  background: #000107 !important;
+}
+
+/* FULL COVER MODE */
+.malik-video-bg__video {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-width: 100vw !important;
+  min-height: 100vh !important;
+  object-fit: cover !important;
+  object-position: center center !important;
+  opacity: 0.96 !important;
+  filter: saturate(1.12) contrast(1.10) brightness(0.82) !important;
+  transform: scale(1.02) !important;
+}
+
+/* Cinematic dark overlay so UI text stays readable */
+.malik-video-bg__overlay,
+.malik-video-bg__cinema {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(65,120,255,.10), transparent 42%),
+    radial-gradient(circle at 72% 20%, rgba(168,85,247,.12), transparent 30%),
+    linear-gradient(180deg, rgba(0,2,10,.34), rgba(0,2,10,.08) 44%, rgba(0,2,10,.48)) !important;
+}
+
+.malik-video-bg__depth {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background:
+    radial-gradient(circle at 50% 72%, rgba(76,151,255,.14), transparent 50%),
+    linear-gradient(90deg, rgba(0,0,0,.28), transparent 30%, transparent 70%, rgba(0,0,0,.28)) !important;
+}
+
+.malik-video-bg__vignette {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background:
+    radial-gradient(circle at 50% 48%, transparent 0%, transparent 54%, rgba(0,0,0,.58) 100%),
+    linear-gradient(90deg, rgba(0,0,0,.34), transparent 28%, transparent 72%, rgba(0,0,0,.34)) !important;
+}
+
+/* Hide old generated/static backgrounds that can cover the video */
+.malik-force-video-root .malik-space-x,
+.malik-force-video-root .malik-animated-space,
+.malik-force-video-root .malik-welcome-earth-bg,
+.malik-force-video-root .malik-space-bg,
+.malik-welcome-video-host .malik-space-x,
+.malik-welcome-video-host .malik-animated-space,
+.malik-welcome-video-host .malik-welcome-earth-bg,
+.malik-welcome-video-host .malik-space-bg {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+/* UI above video */
+.malik-force-video-root > :not(.malik-video-bg),
+.malik-welcome-video-host > :not(.malik-video-bg) {
+  position: relative !important;
+  z-index: 5 !important;
+}
+
+/* Make nested wrappers transparent */
+.malik-force-video-root main,
+.malik-force-video-root section,
+.malik-force-video-root div,
+.malik-welcome-video-host main,
+.malik-welcome-video-host section {
+  background-color: transparent !important;
+}
+
+/* But keep cards/buttons/input their original glass backgrounds */
+.malik-force-video-root button,
+.malik-force-video-root input,
+.malik-force-video-root textarea,
+.malik-force-video-root [class*="card"],
+.malik-force-video-root [class*="panel"],
+.malik-force-video-root [class*="tile"],
+.malik-force-video-root [class*="prompt"],
+.malik-welcome-video-host button,
+.malik-welcome-video-host input,
+.malik-welcome-video-host textarea,
+.malik-welcome-video-host [class*="card"],
+.malik-welcome-video-host [class*="panel"],
+.malik-welcome-video-host [class*="tile"],
+.malik-welcome-video-host [class*="prompt"] {
+  background-color: initial;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .malik-video-bg__video {
+    display: none !important;
+  }
+
+  .malik-video-bg {
+    background-image: url("/backgrounds/space-poster.jpg") !important;
+    background-size: cover !important;
+    background-position: center center !important;
+  }
+}

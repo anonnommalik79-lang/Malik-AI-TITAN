@@ -1,0 +1,297 @@
+/* Malik AI flagship aurora v2
+   Goal: match the requested desktop concept and mobile concept:
+   - deep black/navy product UI
+   - subtle premium grid
+   - controlled blue atmosphere only from lower screen
+   - visible curved blue horizon at bottom
+   - Malik icon remains unchanged
+*/
+
+@keyframes malikAuroraPulse {
+  0% { transform: translate3d(-1.2%, 0, 0) scale(1); opacity: .78; }
+  50% { transform: translate3d(1.2%, -1.2vh, 0) scale(1.035); opacity: .96; }
+  100% { transform: translate3d(-.5%, -.4vh, 0) scale(1.015); opacity: .86; }
+}
+
+html,
+body,
+#malik-root {
+  background:
+    radial-gradient(ellipse at 50% 118%, rgba(37,99,235,.38) 0%, rgba(29,78,216,.22) 20%, rgba(3,7,18,.06) 42%, transparent 68%),
+    linear-gradient(180deg,#020205 0%,#030712 54%,#07152f 100%) !important;
+}
+
+body {
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 52% 35%, rgba(96,165,250,.06) 0%, transparent 35%),
+    radial-gradient(ellipse at 50% 111%, rgba(37,99,235,.22) 0%, rgba(29,78,216,.1) 23%, transparent 54%);
+  opacity: .85;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  left: 11vw;
+  right: 11vw;
+  bottom: -24vh;
+  height: 38vh;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(96,165,250,.98) 0%, rgba(37,99,235,.70) 8%, rgba(29,78,216,.36) 18%, rgba(14,165,233,.10) 34%, transparent 58%);
+  box-shadow:
+    0 -18px 68px rgba(37,99,235,.40),
+    0 -1px 0 rgba(191,219,254,.72) inset,
+    0 -34px 120px rgba(14,165,233,.12);
+  filter: blur(.2px) saturate(1.25);
+  opacity: .9;
+  animation: malikAuroraPulse 8s ease-in-out infinite alternate;
+}
+
+#malik-root {
+  position: relative;
+  z-index: 2;
+  isolation: isolate;
+  background-color: transparent !important;
+}
+
+#malik-root [class*="bg-[#020205]"],
+#malik-root [class*="bg-\[\#020205\]"] {
+  background:
+    radial-gradient(ellipse at 50% 102%, rgba(37,99,235,.13), transparent 56%),
+    rgba(2,2,5,.80) !important;
+}
+
+#malik-root .creator-home-shell section:first-of-type {
+  max-width: 1060px !important;
+  padding-top: .45rem !important;
+  background:
+    radial-gradient(ellipse at 50% 10%, rgba(255,255,255,.055), transparent 24%),
+    radial-gradient(ellipse at 50% 96%, rgba(37,99,235,.13), transparent 58%) !important;
+}
+
+#malik-root .creator-home-shell section:first-of-type h1 {
+  text-shadow:
+    0 0 38px rgba(96,165,250,.16),
+    0 18px 70px rgba(0,0,0,.68) !important;
+}
+
+#malik-root .creator-home-shell section:first-of-type > div:nth-of-type(3),
+#malik-root .creator-home-shell section:first-of-type [class*="grid"][class*="grid-cols-2"] {
+  filter: drop-shadow(0 18px 55px rgba(37,99,235,.10));
+}
+
+#malik-root .creator-home-shell section:first-of-type [class*="rounded-2xl"],
+#malik-root .creator-home-shell section:nth-of-type(3) button,
+#malik-root .creator-home-shell section:nth-of-type(3) [class*="rounded-"] {
+  border-color: rgba(147,197,253,.18) !important;
+  background:
+    linear-gradient(180deg, rgba(9,18,38,.72), rgba(3,8,20,.64)) !important;
+  box-shadow:
+    0 22px 70px rgba(0,0,0,.38),
+    0 0 34px rgba(37,99,235,.07),
+    inset 0 1px 0 rgba(255,255,255,.07) !important;
+}
+
+#malik-root .creator-home-shell section:nth-of-type(2) > div {
+  background:
+    radial-gradient(ellipse at 50% 105%, rgba(37,99,235,.16), transparent 65%),
+    linear-gradient(180deg, rgba(4,9,22,.94), rgba(2,6,23,.88)) !important;
+  border-color: rgba(96,165,250,.26) !important;
+  box-shadow:
+    0 30px 120px rgba(0,0,0,.56),
+    0 0 72px rgba(37,99,235,.13),
+    inset 0 1px 0 rgba(255,255,255,.08) !important;
+}
+
+#malik-root textarea {
+  background: transparent !important;
+}
+
+#malik-root .creator-home-shell section:nth-of-type(3) button {
+  border-radius: 1.35rem !important;
+}
+
+#malik-root .creator-home-shell section:nth-of-type(3) button:hover {
+  border-color: rgba(96,165,250,.44) !important;
+  box-shadow: 0 24px 82px rgba(37,99,235,.14), inset 0 1px 0 rgba(255,255,255,.10) !important;
+}
+
+@media (min-width: 1024px) {
+  #malik-root .creator-home-shell section:first-of-type {
+    margin-top: .75rem !important;
+  }
+
+  #malik-root .creator-home-shell section:nth-of-type(2),
+  #malik-root .creator-home-shell section:nth-of-type(3) {
+    max-width: 980px !important;
+  }
+
+  #malik-root .creator-home-shell section:nth-of-type(3) {
+    gap: 1rem !important;
+  }
+}
+
+@media (max-width: 640px) {
+  html,
+  body,
+  #malik-root {
+    background:
+      radial-gradient(ellipse at 50% 112%, rgba(37,99,235,.64) 0%, rgba(29,78,216,.38) 23%, rgba(7,22,51,.19) 47%, transparent 72%),
+      linear-gradient(180deg,#020205 0%,#020713 54%,#071d48 100%) !important;
+  }
+
+  body::before {
+    background:
+      radial-gradient(ellipse at 50% 28%, rgba(96,165,250,.10), transparent 44%),
+      radial-gradient(ellipse at 50% 102%, rgba(37,99,235,.36), transparent 56%),
+      linear-gradient(to right, rgba(148,163,184,.032) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(148,163,184,.026) 1px, transparent 1px);
+    background-size: auto, auto, 40px 40px, 40px 40px;
+    opacity: .9;
+  }
+
+  body::after {
+    left: -6vw;
+    right: -6vw;
+    bottom: -10.5vh;
+    height: 23vh;
+    opacity: .98;
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(125,211,252,1) 0%, rgba(37,99,235,.88) 7%, rgba(29,78,216,.54) 22%, rgba(14,165,233,.15) 42%, transparent 68%);
+    box-shadow:
+      0 -14px 58px rgba(37,99,235,.56),
+      0 -1px 0 rgba(219,234,254,.86) inset,
+      0 -34px 96px rgba(14,165,233,.20);
+  }
+
+  #malik-root [class*="bg-[#020205]"],
+  #malik-root [class*="bg-\[\#020205\]"] {
+    background: rgba(2,2,5,.58) !important;
+  }
+
+  #malik-root .max-w-\[1540px\] {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    padding-top: 1rem !important;
+    padding-bottom: 8.5rem !important;
+  }
+
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section:first-of-type {
+    padding-top: .25rem !important;
+    max-width: 100% !important;
+  }
+
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section:first-of-type > div:first-of-type {
+    width: 100% !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section:first-of-type h1 {
+    margin-top: .75rem !important;
+    font-size: clamp(2.2rem, 10.8vw, 3.15rem) !important;
+    line-height: .96 !important;
+    letter-spacing: -.068em !important;
+    text-align: center !important;
+  }
+
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section:first-of-type h1 span {
+    white-space: normal !important;
+  }
+
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section:first-of-type p:not(.hidden) {
+    max-width: 23rem !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    font-size: .875rem !important;
+    line-height: 1.65 !important;
+  }
+
+  #malik-root .creator-home-shell section:first-of-type [class*="grid-cols-2"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: .55rem !important;
+  }
+
+  #malik-root .creator-home-shell section:first-of-type [class*="grid-cols-2"] > div {
+    min-height: 112px !important;
+    padding: .85rem .55rem !important;
+    text-align: center !important;
+    border-radius: 1.05rem !important;
+  }
+
+  #malik-root .creator-home-shell section:first-of-type [class*="grid-cols-2"] p:first-child {
+    font-size: .48rem !important;
+    letter-spacing: .16em !important;
+  }
+
+  #malik-root .creator-home-shell section:first-of-type [class*="grid-cols-2"] p:last-child {
+    font-size: .92rem !important;
+  }
+
+  #malik-root .creator-home-shell section:nth-of-type(2) {
+    margin-top: 1rem !important;
+  }
+
+  #malik-root .creator-home-shell section:nth-of-type(2) > div {
+    border-radius: 1.75rem !important;
+    border-color: rgba(96,165,250,.40) !important;
+    background:
+      radial-gradient(ellipse at 50% 105%, rgba(37,99,235,.28), transparent 65%),
+      linear-gradient(180deg, rgba(6,12,26,.96), rgba(3,9,24,.92)) !important;
+    box-shadow:
+      0 22px 84px rgba(0,0,0,.54),
+      0 0 42px rgba(37,99,235,.24),
+      inset 0 1px 0 rgba(255,255,255,.10) !important;
+  }
+
+  #malik-root:not(:has(.malik-welcome-earth-shell)) textarea {
+    min-height: 86px !important;
+    font-size: .95rem !important;
+  }
+
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section.creator-feature-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: .6rem !important;
+  }
+
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section.creator-feature-grid button {
+    min-height: 92px !important;
+    padding: .75rem !important;
+    border-radius: 1rem !important;
+  }
+
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section.creator-feature-grid button span:first-child {
+    width: 2rem !important;
+    height: 2rem !important;
+    border-radius: .75rem !important;
+  }
+
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section.creator-feature-grid button span span:first-child {
+    font-size: .76rem !important;
+  }
+
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section.creator-feature-grid button span span:last-child {
+    font-size: .62rem !important;
+  }
+}
+
+@media (max-width: 390px) {
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section:first-of-type h1 {
+    font-size: clamp(1.95rem, 10vw, 2.65rem) !important;
+  }
+  #malik-root .creator-home-shell:not(.malik-welcome-earth-shell) section.creator-feature-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+

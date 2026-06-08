@@ -1,0 +1,275 @@
+﻿import type { AIRequest, AIResponse } from "./types"
+
+export type ProjectFile = {
+  path: string
+  content: string
+  language: string
+}
+
+export type ProjectBuilderInput = {
+  prompt: string
+  userId?: string
+  userEmail?: string
+  framework?: "next" | "react" | "vite" | "html"
+  language?: "typescript" | "javascript"
+  style?: "premium-dark" | "minimal" | "saas" | "dashboard"
+}
+
+export type ProjectBuilderResult = {
+  projectId: string
+  title: string
+  description: string
+  status: "queued" | "processing" | "completed" | "failed"
+  plan: string[]
+  structure: string[]
+  files: ProjectFile[]
+  commands: string[]
+  provider?: string
+  model?: string
+  error?: string
+  createdAt: string
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9а-яё]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "malik-project"
+}
+
+function titleFromPrompt(prompt: string) {
+  const clean = prompt.replace(/\s+/g, " ").trim()
+  if (!clean) return "MALIK AI Project"
+  return clean.slice(0, 64)
+}
+
+function safe(value: string) {
+  return value.replace(/`/g, "'").replace(/\$/g, "")
+}
+
+function detectProjectKind(prompt: string) {
+  const lower = prompt.toLowerCase()
+  if (/dashboard|дашборд|admin|analytics/.test(lower)) return "dashboard"
+  if (/landing|лендинг|сайт|website|saas/.test(lower)) return "landing"
+  if (/shop|store|market|магазин/.test(lower)) return "commerce"
+  if (/chat|ai|бот|assistant/.test(lower)) return "ai-app"
+  return "app"
+}
+
+export function buildLocalProject(input: ProjectBuilderInput): ProjectBuilderResult {
+  const prompt = input.prompt.trim()
+  const kind = detectProjectKind(prompt)
+  const title = titleFromPrompt(prompt)
+  const slug = slugify(title)
+  const createdAt = new Date().toISOString()
+
+  const packageJson = {
+    name: slug,
+    version: "1.0.0",
+    private: true,
+    scripts: {
+      dev: "next dev",
+      build: "next build",
+      start: "next start",
+      lint: "eslint .",
+    },
+    dependencies: {
+      next: "latest",
+      react: "latest",
+      "react-dom": "latest",
+      "lucide-react": "latest",
+    },
+    devDependencies: {
+      typescript: "latest",
+      tailwindcss: "latest",
+      eslint: "latest",
+      "@types/node": "latest",
+      "@types/react": "latest",
+      "@types/react-dom": "latest",
+    },
+  }
+
+  const pageCode = `"use client"
+
+import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react"
+
+const features = [
+  "Production-ready layout",
+  "Mobile-first responsive UI",
+  "Loading / error / success states",
+  "Clean component structure",
+]
+
+export default function Page() {
+  return (
+    <main className="min-h-screen overflow-hidden bg-[#030305] text-white">
+      <section className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-5 py-16">
+        <div className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-black text-cyan-200">
+          MALIK AI Project Builder
+        </div>
+
+        <h1 className="mt-8 max-w-4xl text-4xl font-black tracking-tight sm:text-6xl">
+          ${safe(title)}
+        </h1>
+
+        <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300">
+          ${safe(prompt)}
+        </p>
+
+        <div className="mt-10 flex flex-wrap gap-3">
+          <button className="rounded-2xl bg-white px-5 py-3 font-black text-black">
+            Launch project <ArrowRight className="ml-2 inline h-4 w-4" />
+          </button>
+          <button className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 font-black text-white">
+            View architecture
+          </button>
+        </div>
+
+        <div className="mt-12 grid gap-4 md:grid-cols-2">
+          {features.map((feature) => (
+            <div key={feature} className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
+              <CheckCircle2 className="h-5 w-5 text-emerald-300" />
+              <p className="mt-3 font-bold">{feature}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-12 rounded-3xl border border-violet-400/20 bg-violet-400/10 p-6">
+          <Sparkles className="h-6 w-6 text-violet-200" />
+          <h2 className="mt-4 text-2xl font-black">Architecture</h2>
+          <p className="mt-2 text-zinc-300">
+            Generated as a safe starter. Connect provider keys to replace this local fallback with premium AI-generated files.
+          </p>
+        </div>
+      </section>
+    </main>
+  )
+}
+`
+
+  const files: ProjectFile[] = [
+    { path: "package.json", language: "json", content: JSON.stringify(packageJson, null, 2) },
+    { path: "app/page.tsx", language: "tsx", content: pageCode },
+    {
+      path: "app/layout.tsx",
+      language: "tsx",
+      content: `import type { Metadata } from "next"
+import "./globals.css"
+
+export const metadata: Metadata = {
+  title: "${safe(title).replace(/"/g, "\\\"")}",
+  description: "Generated by MALIK AI Project Builder",
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="ru">
+      <body>{children}</body>
+    </html>
+  )
+}
+`,
+    },
+    {
+      path: "app/globals.css",
+      language: "css",
+      content: `@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: #030305; }
+`,
+    },
+    {
+      path: "README.md",
+      language: "markdown",
+      content: `# ${safe(title)}
+
+Generated by MALIK AI Project Builder.
+
+## Prompt
+
+${safe(prompt)}
+
+## Commands
+
+\`\`\`bash
+npm install
+npm run dev
+npm run build
+\`\`\`
+
+## Notes
+
+This is a safe local fallback project. When MALIK runtime lanes are connected, the router can generate deeper custom files.
+`,
+    },
+  ]
+
+  return {
+    projectId: `project_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+    title,
+    description: `Generated ${kind} project plan and starter files.`,
+    status: "completed",
+    plan: [
+      "Understand product goal and target users",
+      "Generate folder structure",
+      "Create package.json and core app files",
+      "Create premium responsive UI",
+      "Return setup commands and build instructions",
+    ],
+    structure: files.map((file) => file.path),
+    files,
+    commands: ["npm install", "npm run dev", "npm run build"],
+    provider: "local-project-builder",
+    model: "safe-fallback",
+    createdAt,
+  }
+}
+
+export async function generateProjectWithBrain(input: ProjectBuilderInput): Promise<ProjectBuilderResult> {
+  const payload: AIRequest = {
+    task: "project",
+    prompt: [
+      "Generate a production-ready project.",
+      "Return strict JSON with title, description, files[], commands[].",
+      input.prompt,
+    ].join("\n\n"),
+    userId: input.userId,
+    userEmail: input.userEmail,
+    maxTokens: Number(process.env.MAX_CODE_OUTPUT_TOKENS || 4500),
+  }
+
+  try {
+    const { routeAI } = await import("./router")
+    const result: AIResponse = await routeAI(payload)
+
+    if (!result.success) throw new Error(result.error || "AI project generation failed")
+
+    const text = typeof result.output === "string" ? result.output : JSON.stringify(result.output)
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) throw new Error("AI response did not include JSON project payload")
+
+    const parsed = JSON.parse(jsonMatch[0])
+    return {
+      ...buildLocalProject(input),
+      ...parsed,
+      projectId: parsed.projectId || `project_${Date.now()}`,
+      status: "completed",
+      provider: result.provider,
+      model: result.model,
+      createdAt: new Date().toISOString(),
+    }
+  } catch (error) {
+    const fallback = buildLocalProject(input)
+    return {
+      ...fallback,
+      error: error instanceof Error ? error.message : String(error),
+      provider: "local-project-builder",
+      model: "safe-fallback-after-router-error",
+    }
+  }
+}
+

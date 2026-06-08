@@ -1,0 +1,438 @@
+/* MALIK AI вЂ” OFFICIAL NASA STYLE SMOOTH BACKGROUND V3
+   Stable, premium, no jitter.
+   Uses CSS transforms only: GPU-friendly and clean.
+*/
+
+.malik-force-video-root,
+.malik-welcome-video-host {
+  position: relative !important;
+  isolation: isolate !important;
+  overflow: hidden !important;
+  background: #02040c !important;
+}
+
+.malik-video-bg,
+.malik-nasa-smooth-bg {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-width: 100vw !important;
+  min-height: 100vh !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  background:
+    linear-gradient(180deg, rgba(3, 6, 18, 0.12), rgba(3, 6, 18, 0.28)),
+    url("/images/welcome-reference-space.svg") center center / cover no-repeat,
+    radial-gradient(circle at 50% 38%, rgba(34, 104, 255, 0.14), transparent 42%),
+    linear-gradient(135deg, #01030a 0%, #061226 36%, #08071c 62%, #02030a 100%) !important;
+}
+
+.malik-nasa-official-image,
+.malik-nasa-deep-gradient,
+.malik-nasa-nebula-layer,
+.malik-nasa-star-layer,
+.malik-nasa-orbit-layer,
+.malik-nasa-comet,
+.malik-nasa-horizon,
+.malik-nasa-readability,
+.malik-nasa-vignette {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  pointer-events: none !important;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+.malik-creator-paint-flow {
+  position: fixed;
+  inset: -18%;
+  pointer-events: none;
+  opacity: .58;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(ellipse at 18% 52%, rgba(14, 165, 233, .26) 0%, rgba(37, 99, 235, .13) 22%, transparent 54%),
+    radial-gradient(ellipse at 76% 36%, rgba(59, 130, 246, .22) 0%, rgba(99, 102, 241, .12) 24%, transparent 58%);
+  filter: blur(34px) saturate(1.18);
+  transform: translate3d(-4%, 0, 0) rotate(-4deg) scale(1.04);
+  animation: malikCreatorPaintFlow 20s ease-in-out infinite alternate;
+}
+
+.malik-creator-paint-flow::before {
+  content: "";
+  position: absolute;
+  inset: 18% -10% 12% 5%;
+  border-radius: 46%;
+  background:
+    radial-gradient(ellipse at 28% 58%, rgba(56, 189, 248, .30), transparent 46%),
+    radial-gradient(ellipse at 67% 42%, rgba(79, 70, 229, .20), transparent 52%);
+  filter: blur(42px);
+  animation: malikCreatorPaintRibbon 15s ease-in-out infinite alternate;
+}
+
+.malik-creator-paint-flow::after {
+  content: "";
+  position: absolute;
+  inset: 32% -4% 24% 12%;
+  border-radius: 50%;
+  background: linear-gradient(112deg, transparent 4%, rgba(34, 211, 238, .18) 31%, rgba(59, 130, 246, .30) 54%, rgba(139, 92, 246, .14) 73%, transparent 94%);
+  filter: blur(36px);
+  animation: malikCreatorPaintRibbon 12s ease-in-out infinite alternate-reverse;
+}
+
+/* Official NASA/Webb still as premium base layer.
+   If image file is missing, gradient layers under it still show.
+*/
+.malik-nasa-official-image {
+  background: radial-gradient(circle at 50% 42%, rgba(37, 99, 235, .12), transparent 58%);
+  opacity: 0.76;
+  transform: scale(1.08) translate3d(-0.6%, -0.4%, 0);
+}
+
+.malik-nasa-deep-gradient {
+  background:
+    radial-gradient(circle at 16% 42%, rgba(54, 138, 255, 0.24), transparent 32%),
+    radial-gradient(circle at 84% 24%, rgba(161, 88, 255, 0.20), transparent 34%),
+    radial-gradient(circle at 52% 76%, rgba(52, 190, 255, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(2, 4, 14, 0.18), rgba(2, 4, 14, 0.32));
+  opacity: 0.90;
+}
+
+.malik-nasa-nebula-layer {
+  mix-blend-mode: screen;
+  filter: blur(30px);
+}
+
+.malik-nasa-nebula-a {
+  background:
+    radial-gradient(circle at 17% 32%, rgba(63, 146, 255, 0.24), transparent 22%),
+    radial-gradient(circle at 32% 54%, rgba(164, 86, 255, 0.17), transparent 26%),
+    radial-gradient(circle at 74% 34%, rgba(74, 207, 255, 0.13), transparent 26%);
+  opacity: 0.74;
+  transform: scale(1.05) translate3d(-1%, 0, 0);
+  animation: malikNasaNebulaA 54s ease-in-out infinite alternate;
+}
+
+.malik-nasa-nebula-b {
+  background:
+    radial-gradient(circle at 63% 20%, rgba(133, 96, 255, 0.18), transparent 24%),
+    radial-gradient(circle at 90% 64%, rgba(47, 150, 255, 0.18), transparent 25%),
+    radial-gradient(circle at 45% 88%, rgba(182, 77, 255, 0.11), transparent 34%);
+  opacity: 0.62;
+  transform: scale(1.08) translate3d(1%, -0.5%, 0);
+  animation: malikNasaNebulaB 66s ease-in-out infinite alternate;
+}
+
+/* Star layers: pure CSS, stable, not hundreds of JS objects. */
+.malik-nasa-star-layer {
+  mix-blend-mode: screen;
+  opacity: 0.72;
+}
+
+.malik-nasa-stars-a {
+  background-image:
+    radial-gradient(circle at 8% 14%, rgba(255,255,255,.90) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 17% 38%, rgba(184,220,255,.65) 0 1px, transparent 2px),
+    radial-gradient(circle at 26% 71%, rgba(255,255,255,.85) 0 1.1px, transparent 2px),
+    radial-gradient(circle at 38% 23%, rgba(125,216,255,.70) 0 1px, transparent 2px),
+    radial-gradient(circle at 47% 57%, rgba(255,255,255,.72) 0 1px, transparent 2px),
+    radial-gradient(circle at 56% 17%, rgba(213,196,255,.85) 0 1.2px, transparent 2px),
+    radial-gradient(circle at 66% 82%, rgba(255,255,255,.78) 0 1px, transparent 2px),
+    radial-gradient(circle at 77% 31%, rgba(148,226,255,.75) 0 1px, transparent 2px),
+    radial-gradient(circle at 86% 68%, rgba(255,255,255,.86) 0 1.2px, transparent 2px),
+    radial-gradient(circle at 94% 22%, rgba(255,255,255,.70) 0 1px, transparent 2px);
+  background-size: 420px 260px;
+  animation: malikNasaStarsA 18s ease-in-out infinite alternate;
+}
+
+.malik-nasa-stars-b {
+  background-image:
+    radial-gradient(circle at 12% 76%, rgba(255,255,255,.56) 0 0.9px, transparent 1.8px),
+    radial-gradient(circle at 29% 19%, rgba(151,214,255,.52) 0 1px, transparent 2px),
+    radial-gradient(circle at 44% 86%, rgba(255,255,255,.54) 0 1px, transparent 2px),
+    radial-gradient(circle at 58% 44%, rgba(196,174,255,.52) 0 1px, transparent 2px),
+    radial-gradient(circle at 73% 11%, rgba(255,255,255,.58) 0 0.9px, transparent 1.8px),
+    radial-gradient(circle at 91% 52%, rgba(136,218,255,.54) 0 1px, transparent 2px);
+  background-size: 310px 210px;
+  opacity: 0.44;
+  animation: malikNasaStarsB 28s ease-in-out infinite alternate;
+}
+
+.malik-nasa-orbit-layer {
+  opacity: 0.28;
+  background:
+    radial-gradient(ellipse at 52% 84%, transparent 0 44%, rgba(110, 160, 255, .18) 44.3%, transparent 44.8%),
+    radial-gradient(ellipse at 52% 84%, transparent 0 54%, rgba(160, 104, 255, .12) 54.3%, transparent 54.8%),
+    radial-gradient(ellipse at 52% 84%, transparent 0 66%, rgba(78, 214, 255, .08) 66.3%, transparent 66.8%);
+  transform: translate3d(0, 0, 0);
+  animation: malikNasaOrbitFloat 52s ease-in-out infinite alternate;
+}
+
+.malik-nasa-comet {
+  width: 38vw !important;
+  height: 2px !important;
+  inset: auto !important;
+  border-radius: 999px;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(120, 225, 255, .08), rgba(255,255,255,.74), rgba(134, 92, 255, .42), transparent);
+  filter: drop-shadow(0 0 12px rgba(117, 207, 255, .52));
+  transform-origin: center;
+}
+
+.malik-nasa-comet-a {
+  top: 19vh !important;
+  left: -42vw !important;
+  transform: rotate(-17deg);
+  animation: malikNasaCometA 13s ease-in-out infinite;
+}
+
+.malik-nasa-comet-b {
+  top: 64vh !important;
+  right: -44vw !important;
+  transform: rotate(161deg);
+  animation: malikNasaCometB 19s ease-in-out infinite;
+  animation-delay: 5.5s;
+}
+
+.malik-nasa-horizon {
+  top: auto !important;
+  bottom: -18vh !important;
+  height: 42vh !important;
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(68, 156, 255, .34), transparent 58%),
+    radial-gradient(ellipse at 50% 100%, rgba(166, 92, 255, .17), transparent 70%),
+    radial-gradient(ellipse at 50% 110%, rgba(0, 0, 0, .86), rgba(0,0,0,.35) 50%, transparent 74%);
+  opacity: 0.82;
+  animation: malikNasaHorizonPulse 11s ease-in-out infinite alternate;
+}
+
+.malik-nasa-readability {
+  background:
+    linear-gradient(180deg, rgba(0, 2, 10, 0.22), rgba(0, 2, 10, 0.04) 40%, rgba(0, 2, 10, 0.30)),
+    radial-gradient(circle at 50% 36%, rgba(0, 0, 0, 0.10), transparent 42%);
+}
+
+.malik-nasa-vignette {
+  background:
+    radial-gradient(circle at 50% 48%, transparent 0%, transparent 68%, rgba(0,0,0,.36) 100%),
+    linear-gradient(90deg, rgba(0,0,0,.18), transparent 20%, transparent 80%, rgba(0,0,0,.18));
+}
+
+/* Hide legacy in-shell backgrounds only — keep global malik-space-bg visible. */
+.malik-force-video-root .malik-space-x,
+.malik-force-video-root .malik-animated-space,
+.malik-force-video-root .malik-welcome-earth-bg,
+.malik-welcome-video-host .malik-space-x,
+.malik-welcome-video-host .malik-animated-space,
+.malik-welcome-video-host .malik-welcome-earth-bg {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+.malik-force-video-root > :not(.malik-video-bg),
+.malik-welcome-video-host > :not(.malik-video-bg) {
+  position: relative !important;
+  z-index: 5 !important;
+}
+
+/* Release performance profile: one cinematic base, fewer repaint-heavy layers. */
+.malik-nasa-smooth-bg {
+  contain: strict !important;
+  transform: translateZ(0) !important;
+}
+
+.malik-nasa-official-image,
+.malik-nasa-star-layer,
+.malik-nasa-readability,
+.malik-nasa-vignette {
+  will-change: auto !important;
+}
+
+.malik-nasa-official-image {
+  animation-duration: 150s !important;
+}
+
+.malik-nasa-nebula-layer,
+.malik-nasa-orbit-layer,
+.malik-nasa-horizon {
+  animation: none !important;
+  will-change: auto !important;
+}
+
+.malik-nasa-nebula-b,
+.malik-nasa-stars-b,
+.malik-nasa-comet-b {
+  display: none !important;
+}
+
+.malik-nasa-stars-a {
+  animation-duration: 34s !important;
+}
+
+.malik-nasa-comet-a {
+  animation-duration: 19s !important;
+}
+
+.malik-low-motion-runtime .malik-nasa-official-image,
+.malik-low-motion-runtime .malik-nasa-star-layer,
+.malik-low-motion-runtime .malik-nasa-comet {
+  animation: none !important;
+}
+
+@keyframes malikNasaOfficialPan {
+  0% {
+    transform: scale(1.08) translate3d(-0.7%, -0.5%, 0);
+    opacity: 0.30;
+  }
+  100% {
+    transform: scale(1.13) translate3d(0.9%, 0.6%, 0);
+    opacity: 0.38;
+  }
+}
+
+@keyframes malikCreatorPaintFlow {
+  0% {
+    transform: translate3d(-4%, 0, 0) rotate(-4deg) scale(1.04);
+  }
+  100% {
+    transform: translate3d(5%, -2%, 0) rotate(3deg) scale(1.11);
+  }
+}
+
+@keyframes malikCreatorPaintRibbon {
+  0% {
+    transform: translate3d(-4%, 1%, 0) scale(.96);
+    opacity: .62;
+  }
+  100% {
+    transform: translate3d(6%, -3%, 0) scale(1.08);
+    opacity: .94;
+  }
+}
+
+@keyframes malikNasaNebulaA {
+  0% {
+    transform: scale(1.05) translate3d(-1.2%, 0.4%, 0);
+    opacity: 0.62;
+  }
+  100% {
+    transform: scale(1.11) translate3d(1.0%, -0.6%, 0);
+    opacity: 0.80;
+  }
+}
+
+@keyframes malikNasaNebulaB {
+  0% {
+    transform: scale(1.08) translate3d(1.1%, -0.4%, 0);
+    opacity: 0.52;
+  }
+  100% {
+    transform: scale(1.14) translate3d(-0.9%, 0.7%, 0);
+    opacity: 0.70;
+  }
+}
+
+@keyframes malikNasaStarsA {
+  0% {
+    opacity: 0.48;
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    opacity: 0.78;
+    transform: translate3d(0.10%, -0.08%, 0);
+  }
+  100% {
+    opacity: 0.58;
+    transform: translate3d(-0.08%, 0.10%, 0);
+  }
+}
+
+@keyframes malikNasaStarsB {
+  0% {
+    opacity: 0.26;
+    transform: translate3d(0.12%, 0, 0);
+  }
+  100% {
+    opacity: 0.48;
+    transform: translate3d(-0.12%, -0.08%, 0);
+  }
+}
+
+@keyframes malikNasaOrbitFloat {
+  0% {
+    transform: translate3d(-0.2%, 0.2%, 0) scale(1);
+    opacity: 0.18;
+  }
+  100% {
+    transform: translate3d(0.2%, -0.2%, 0) scale(1.02);
+    opacity: 0.30;
+  }
+}
+
+@keyframes malikNasaCometA {
+  0%, 58% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(-17deg);
+  }
+  64% {
+    opacity: 0.9;
+  }
+  74% {
+    opacity: 0;
+    transform: translate3d(155vw, 32vh, 0) rotate(-17deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(155vw, 32vh, 0) rotate(-17deg);
+  }
+}
+
+@keyframes malikNasaCometB {
+  0%, 62% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(161deg);
+  }
+  68% {
+    opacity: 0.76;
+  }
+  78% {
+    opacity: 0;
+    transform: translate3d(-150vw, -26vh, 0) rotate(161deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-150vw, -26vh, 0) rotate(161deg);
+  }
+}
+
+@keyframes malikNasaHorizonPulse {
+  0% {
+    opacity: 0.70;
+    transform: translate3d(0, 1.5%, 0) scale(1);
+  }
+  100% {
+    opacity: 0.90;
+    transform: translate3d(0, -1.0%, 0) scale(1.02);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .malik-nasa-official-image,
+  .malik-nasa-nebula-layer,
+  .malik-nasa-star-layer,
+  .malik-nasa-orbit-layer,
+  .malik-nasa-comet,
+  .malik-nasa-horizon {
+    animation: none !important;
+  }
+
+  .malik-creator-paint-flow,
+  .malik-creator-paint-flow::before,
+  .malik-creator-paint-flow::after {
+    animation: none !important;
+  }
+}

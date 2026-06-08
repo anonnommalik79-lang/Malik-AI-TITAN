@@ -1,0 +1,5 @@
+{
+  "name": "MALIK_FIX_STAGE3_ROUTER_PATCH_SAFE",
+  "purpose": "Safely patch router.ts to use taskSystemPrompt without PowerShell -replace bug",
+  "safe": true
+}

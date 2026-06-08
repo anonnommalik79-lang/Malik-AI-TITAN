@@ -1,0 +1,17 @@
+node_modules
+.next
+.turbo
+dist
+build
+out
+.env
+.env.local
+.env.production
+.env.development
+render-env.txt
+bedrock-secrets.env
+bedrock-primary*.json
+bedrock-backup*.json
+bedrock-api-key*.json
+*.log
+ВСТАВЬ_КЛЮЧИ.txt

@@ -1,0 +1,26 @@
+// Stage 4 Project Builder route template.
+// Disabled because current Next app is static/export safe.
+// Backend implementation lives in Flask blueprint app/ai/project_builder.
+
+import { generateProjectWithBrain } from "@/lib/ai/project-builder"
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const prompt = String(body?.prompt || "").trim()
+    if (!prompt) return Response.json({ ok: false, error: "Prompt is required." }, { status: 400 })
+
+    const project = await generateProjectWithBrain({
+      prompt,
+      userId: body?.userId,
+      userEmail: body?.userEmail,
+      framework: body?.framework,
+      language: body?.language,
+      style: body?.style,
+    })
+
+    return Response.json({ ok: true, projectId: project.projectId, status: project.status, project })
+  } catch (error) {
+    return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 })
+  }
+}

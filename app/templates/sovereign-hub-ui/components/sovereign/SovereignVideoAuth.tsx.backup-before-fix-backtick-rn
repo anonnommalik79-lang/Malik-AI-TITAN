@@ -1,0 +1,690 @@
+﻿"use client";
+
+import React, { FormEvent, useCallback, useRef, useState } from "react";
+
+type Provider = "email" | "google" | "github" | "apple" | "microsoft" | "guest";
+
+const IMAGE_SRC = "/images/titan-auth-bg.jpg";
+const ICON_SRC = "/icon.svg";
+
+const T = {
+  pill: "\u041f\u0440\u0438\u0432\u0430\u0442\u043d\u044b\u0439 \u0434\u043e\u0441\u0442\u0443\u043f",
+  title: "\u0421\u043e\u0437\u0434\u0430\u0442\u044c Sovereign ID.",
+  tagline: "\u0422\u0432\u043e\u044f \u0438\u043d\u0442\u0435\u043b\u043b\u0435\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u0430\u044f \u0440\u0430\u0431\u043e\u0447\u0430\u044f \u0437\u043e\u043d\u0430 \u0443\u0436\u0435 \u0433\u043e\u0442\u043e\u0432\u0430.",
+  username: "\u0418\u043c\u044f \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f",
+  password: "\u041f\u0430\u0440\u043e\u043b\u044c",
+  repeat: "\u041f\u043e\u0432\u0442\u043e\u0440",
+  passPh: "\u041c\u0438\u043d. 6 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432",
+  repeatPh: "\u0415\u0449\u0451 \u0440\u0430\u0437",
+  opening: "\u041e\u0442\u043a\u0440\u044b\u0432\u0430\u044e...",
+  cont: "\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c",
+  divider: "\u0438\u043b\u0438 \u0432\u043e\u0439\u0442\u0438 \u0447\u0435\u0440\u0435\u0437",
+  guest: "\u0412\u043e\u0439\u0442\u0438 \u043a\u0430\u043a \u0433\u043e\u0441\u0442\u044c",
+  badName: "\u0418\u043c\u044f \u043c\u0438\u043d\u0438\u043c\u0443\u043c 2 \u0441\u0438\u043c\u0432\u043e\u043b\u0430.",
+  badEmail: "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043d\u044b\u0439 email.",
+  badPass: "\u041f\u0430\u0440\u043e\u043b\u044c \u043c\u0438\u043d\u0438\u043c\u0443\u043c 6 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432.",
+  badRepeat: "\u041f\u0430\u0440\u043e\u043b\u0438 \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u044e\u0442.",
+};
+
+function read(ref: React.RefObject<HTMLInputElement | null>) {
+  return ref.current?.value?.trim() || "";
+}
+
+function saveSession(provider: Provider, username = "Abdumalik", emailRaw = "guest@malik.ai") {
+  if (typeof window === "undefined") return;
+
+  const now = new Date().toISOString();
+  const isGuest = provider === "guest";
+  const email = (isGuest ? "guest@malik.ai" : emailRaw || `${provider}@malik.ai`).trim().toLowerCase();
+  const name = isGuest ? "\u0413\u043e\u0441\u0442\u044c" : username || "Abdumalik";
+
+  const user = {
+    id: isGuest ? "guest-user" : email,
+    uid: isGuest ? "guest-user" : email,
+    name,
+    username: name,
+    email,
+    provider,
+    role: email === "amangeldymalik38@gmail.com" ? "admin" : "user",
+    isAdmin: email === "amangeldymalik38@gmail.com",
+    isGuest,
+    authenticated: true,
+    isAuthenticated: true,
+    loggedIn: true,
+    createdAt: now,
+    lastLoginAt: now,
+  };
+
+  const session = {
+    ok: true,
+    user,
+    email,
+    name,
+    mode: isGuest ? "guest" : provider === "email" ? "email" : "oauth",
+    provider,
+    authenticated: true,
+    isAuthenticated: true,
+    loggedIn: true,
+    accessToken: isGuest ? "guest-local-access" : `${provider}-local-access`,
+    refreshToken: isGuest ? "guest-local-refresh" : `${provider}-local-refresh`,
+    createdAt: now,
+    lastLoginAt: now,
+  };
+
+  const userJson = JSON.stringify(user);
+  const sessionJson = JSON.stringify(session);
+
+  const pairs: Array<[string, string]> = [
+    ["malik_auth_mode", provider],
+    ["malik_user_name", name],
+    ["malik_user_email", email],
+    ["malik_user", userJson],
+    ["malik_session", sessionJson],
+    ["malik_auth_snapshot", sessionJson],
+    ["malik_ai_session", sessionJson],
+    ["malik_is_authenticated", "true"],
+    ["malik_guest_unlocked", isGuest ? "true" : "false"],
+    ["sovereign_session", sessionJson],
+    ["sovereign_v7_auth", sessionJson],
+    ["sovereign_authenticated", "true"],
+    ["auth_session", sessionJson],
+    ["isAuthenticated", "true"],
+    ["authenticated", "true"],
+  ];
+
+  for (const [key, value] of pairs) {
+    try {
+      localStorage.setItem(key, value);
+      sessionStorage.setItem(key, value);
+    } catch {}
+  }
+}
+
+function startOAuth(provider: Exclude<Provider, "email" | "guest">) {
+  if (typeof window === "undefined") return;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseProvider = provider === "microsoft" ? "azure" : provider;
+
+  if (supabaseUrl && supabaseUrl.includes("supabase.co")) {
+    window.location.href =
+      `${supabaseUrl.replace(/\/+$/, "")}/auth/v1/authorize?provider=${encodeURIComponent(supabaseProvider)}` +
+      `&redirect_to=${encodeURIComponent(window.location.origin + "/dashboard")}`;
+    return;
+  }
+
+  saveSession(provider, "Abdumalik", `${provider}@malik.ai`);
+  window.location.href = "/dashboard";
+}
+
+function ProviderIcon({ type }: { type: Provider }) {
+  if (type === "google") {
+    return (
+      <svg viewBox="0 0 24 24" className="sva-provider-svg" aria-hidden="true">
+        <path fill="#4285F4" d="M21.6 12.2c0-.8-.1-1.5-.2-2.2H12v4.2h5.4c-.2 1.2-.9 2.3-2 3v2.8h3.2c1.9-1.8 3-4.3 3-7.8Z" />
+        <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.5l-3.2-2.8c-.9.6-2 .9-3.4.9-2.6 0-4.8-1.8-5.6-4.1H3.1v2.9C4.7 19.7 8.1 22 12 22Z" />
+        <path fill="#FBBC05" d="M6.4 13.5c-.2-.6-.3-1.2-.3-1.9s.1-1.3.3-1.9V6.9H3.1C2.4 8.3 2 9.9 2 11.6s.4 3.3 1.1 4.7l3.3-2.8Z" />
+        <path fill="#EA4335" d="M12 5.6c1.5 0 2.8.5 3.8 1.5l2.9-2.9C17 2.6 14.7 1.6 12 1.6 8.1 1.6 4.7 3.9 3.1 6.9l3.3 2.8c.8-2.3 3-4.1 5.6-4.1Z" />
+      </svg>
+    );
+  }
+
+  if (type === "github") {
+    return (
+      <svg viewBox="0 0 24 24" className="sva-provider-svg" aria-hidden="true">
+        <path fill="currentColor" d="M12 2.3c-5.5 0-10 4.5-10 10 0 4.4 2.9 8.2 6.9 9.5.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.2-3.4-1.2-.5-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 0 1.6 1.1 1.6 1.1.9 1.5 2.4 1.1 2.9.8.1-.7.4-1.1.7-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1 .8-.2 1.6-.3 2.5-.3s1.7.1 2.5.3c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.8 1 .8 2v2.9c0 .3.2.6.7.5 4-1.3 6.9-5.1 6.9-9.5 0-5.5-4.5-10-10-10Z" />
+      </svg>
+    );
+  }
+
+  if (type === "apple") {
+    return (
+      <svg viewBox="0 0 24 24" className="sva-provider-svg" aria-hidden="true">
+        <path fill="currentColor" d="M16.7 12.7c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.7-1.3-.1-2.5.8-3.1.8-.7 0-1.7-.8-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1.1 8.4.7 1 1.6 2.2 2.7 2.1 1.1 0 1.5-.7 2.8-.7s1.7.7 2.8.7c1.2 0 1.9-1 2.6-2.1.8-1.2 1.2-2.4 1.2-2.4 0 0-2.7-1-2.8-3.3ZM14.7 6.5c.6-.8 1.1-1.8.9-2.9-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.8 1.1.1 2.1-.5 2.8-1.3Z" />
+      </svg>
+    );
+  }
+
+  if (type === "microsoft") {
+    return (
+      <svg viewBox="0 0 24 24" className="sva-provider-svg" aria-hidden="true">
+        <path fill="#F25022" d="M3 3h8.3v8.3H3z" />
+        <path fill="#7FBA00" d="M12.7 3H21v8.3h-8.3z" />
+        <path fill="#00A4EF" d="M3 12.7h8.3V21H3z" />
+        <path fill="#FFB900" d="M12.7 12.7H21V21h-8.3z" />
+      </svg>
+    );
+  }
+
+  return null;
+}
+export function SovereignVideoAuth() {
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
+
+  const [isOpening, setIsOpening] = useState(false);
+  const [message, setMessage] = useState("");
+  const [bgFailed, setBgFailed] = useState(false);
+
+  const openGuest = useCallback(() => {
+    if (isOpening) return;
+    setIsOpening(true);
+    saveSession("guest", "\u0413\u043e\u0441\u0442\u044c", "guest@malik.ai");
+    window.location.href = "/dashboard";
+  }, [isOpening]);
+
+  const submit = useCallback((event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const username = read(usernameRef);
+    const email = read(emailRef).toLowerCase();
+    const password = read(passwordRef);
+    const confirm = read(confirmRef);
+
+    if (username.length < 2) return setMessage(T.badName);
+    if (!email.includes("@") || !email.includes(".")) return setMessage(T.badEmail);
+    if (password.length < 6) return setMessage(T.badPass);
+    if (password !== confirm) return setMessage(T.badRepeat);
+
+    setIsOpening(true);
+    saveSession("email", username, email);
+    window.location.href = "/dashboard";
+  }, []);
+
+  return (
+    <main className="sva-root">
+      <img className="sva-bg" src={IMAGE_SRC} alt="" draggable={false} onError={() => setBgFailed(true)} />
+      {bgFailed && <div className="sva-bg-fallback" />}
+
+      <div className="sva-left-shadow" />
+      <div className="sva-top-clear" />
+      <div className="sva-dragon-aura" />
+      <div className="sva-wind sva-wind-a" />
+      <div className="sva-wind sva-wind-b" />
+
+      <section className="sva-card">
+        <div className="sva-card-aura" />
+        <div className="sva-card-line" />
+
+        <header className="sva-brand">
+          <div className="sva-logo" aria-label="Sovereign Hub"><span className="sva-logo-left" /><span className="sva-logo-right" /></div>
+
+          <div>
+            <p className="sva-brand-title">Sovereign Hub</p>
+            <p className="sva-brand-sub">MALIK AI В· V6.5 TITAN</p>
+          </div>
+        </header>
+
+        <div className="sva-hero">
+          <span className="sva-pill">{T.pill}</span>
+          <h1 className="sva-h1">{T.title}</h1>
+          <p className="sva-tagline">{T.tagline}</p>
+        </div>
+
+        <form className="sva-form" onSubmit={submit}>
+          <label className="sva-field" htmlFor="sva-username">
+            <span>{T.username}</span>
+            <input id="sva-username" ref={usernameRef} defaultValue="Abdumalik" autoComplete="username" />
+          </label>
+
+          <label className="sva-field" htmlFor="sva-email">
+            <span>Email</span>
+            <input id="sva-email" ref={emailRef} type="email" placeholder="name@domain.com" autoComplete="email" />
+          </label>
+
+          <div className="sva-duo">
+            <label className="sva-field" htmlFor="sva-password">
+              <span>{T.password}</span>
+              <input id="sva-password" ref={passwordRef} type="password" placeholder={T.passPh} autoComplete="new-password" />
+            </label>
+
+            <label className="sva-field" htmlFor="sva-confirm">
+              <span>{T.repeat}</span>
+              <input id="sva-confirm" ref={confirmRef} type="password" placeholder={T.repeatPh} autoComplete="new-password" />
+            </label>
+          </div>
+
+          <button className="sva-cta" type="submit" disabled={isOpening}>
+            <span>{isOpening ? T.opening : T.cont}</span>
+            <em>{"в†’"}</em>
+          </button>
+
+          <div className="sva-divider">
+            <i />
+            <small>{T.divider}</small>
+            <i />
+          </div>
+
+          <div className="sva-socials">
+            <button type="button" onClick={() => startOAuth("google")} disabled={isOpening}><ProviderIcon type="google" /><span>Google</span></button>
+            <button type="button" onClick={() => startOAuth("github")} disabled={isOpening}><ProviderIcon type="github" /><span>GitHub</span></button>
+            <button type="button" onClick={() => startOAuth("apple")} disabled={isOpening}><ProviderIcon type="apple" /><span>Apple</span></button>
+            <button type="button" onClick={() => startOAuth("microsoft")} disabled={isOpening}><ProviderIcon type="microsoft" /><span>Microsoft</span></button>
+          </div>
+
+          <button className="sva-guest" type="button" onClick={openGuest} disabled={isOpening}>
+            {T.guest}
+          </button>
+
+          {message && <p className="sva-message">{message}</p>}
+        </form>
+      </section>
+
+      <style>{styles}</style>
+    </main>
+  );
+}
+
+export default SovereignVideoAuth;
+
+const styles = `
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #000; overflow: hidden; }
+
+.sva-root {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, "Segoe UI", system-ui, sans-serif;
+}
+
+.sva-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  filter: brightness(1.15) contrast(1.08) saturate(1.12);
+}
+
+.sva-bg-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(circle at 70% 40%, rgba(0, 140, 255, 0.25), transparent 40%), #02040c;
+}
+
+.sva-left-shadow,
+.sva-top-clear,
+.sva-dragon-aura,
+.sva-wind {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sva-left-shadow {
+  z-index: 3;
+  background: linear-gradient(105deg, rgba(0,0,0,.22) 0%, rgba(0,0,0,.10) 28%, transparent 58%);
+}
+
+.sva-top-clear {
+  z-index: 4;
+  background: linear-gradient(to bottom, rgba(255,255,255,.02), transparent 22%, transparent 82%, rgba(0,0,0,.04));
+}
+
+.sva-dragon-aura {
+  z-index: 5;
+  background:
+    radial-gradient(ellipse 42% 48% at 78% 36%, rgba(80, 180, 255, .08), transparent),
+    radial-gradient(ellipse 34% 42% at 86% 65%, rgba(155, 70, 255, .06), transparent);
+}
+
+.sva-wind {
+  z-index: 6;
+  background-image: url("/images/titan-auth-bg.jpg");
+  background-size: cover;
+  background-position: center;
+  mix-blend-mode: screen;
+}
+
+.sva-wind-a {
+  opacity: .038;
+  clip-path: polygon(60% 0%, 100% 0%, 100% 26%, 84% 24%, 72% 14%, 60% 6%);
+  filter: blur(.55px);
+  animation: windA 5.8s ease-in-out infinite;
+}
+
+.sva-wind-b {
+  opacity: .024;
+  clip-path: polygon(78% 2%, 100% 0%, 100% 86%, 80% 90%, 83% 54%, 80% 26%);
+  filter: blur(.65px);
+  animation: windB 7.6s ease-in-out infinite;
+}
+
+.sva-card {
+  position: absolute;
+  z-index: 14;
+  left: clamp(42px, 3.35vw, 62px);
+  top: clamp(126px, 17.5vh, 155px);
+  width: min(486px, calc(100vw - 86px));
+  max-height: calc(100dvh - 150px);
+  overflow: hidden;
+  padding: 24px 27px 22px;
+  border: 1px solid rgba(95,165,255,.17);
+  border-radius: 25px;
+  background: linear-gradient(158deg, rgba(8,12,28,.64), rgba(6,8,22,.53) 55%, rgba(10,6,24,.59));
+  backdrop-filter: blur(36px) saturate(1.36);
+  -webkit-backdrop-filter: blur(36px) saturate(1.36);
+  box-shadow: 0 0 0 1px rgba(60,140,255,.05) inset, 0 54px 140px rgba(0,0,0,.66), 0 0 110px rgba(60,120,255,.04);
+  animation: cardIn 560ms cubic-bezier(.14,.88,.22,1) both;
+}
+
+.sva-card-aura {
+  position: absolute;
+  top: -58px;
+  left: -20px;
+  right: -20px;
+  height: 170px;
+  pointer-events: none;
+  background: radial-gradient(ellipse 70% 60% at 50% 0%, rgba(80,160,255,.105), rgba(120,80,255,.045) 52%, transparent);
+}
+
+.sva-card-line {
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(100,180,255,.42), rgba(190,225,255,.55), rgba(100,180,255,.42), transparent);
+}
+
+.sva-brand,
+.sva-hero,
+.sva-form {
+  position: relative;
+  z-index: 2;
+}
+
+.sva-brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 16px;
+}
+
+.sva-logo {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  background: rgba(255,255,255,.88);
+  border: 1px solid rgba(255,255,255,.24);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;`r`n}
+
+.sva-logo-left,
+.sva-logo-right {
+  position: absolute;
+  display: block;
+  background: #05070c;
+  filter: drop-shadow(0 0 8px rgba(90, 210, 255, .18));
+}
+
+.sva-logo-left {
+  width: 26px;
+  height: 25px;
+  left: 10px;
+  bottom: 14px;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
+.sva-logo-right {
+  width: 27px;
+  height: 28px;
+  right: 9px;
+  top: 13px;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+.sva-brand-title,
+.sva-brand-sub {
+  margin: 0;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sva-brand-title {
+  color: rgba(245,250,255,.96);
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: .22em;
+}
+
+.sva-brand-sub {
+  margin-top: 6px;
+  color: rgba(145,200,255,.62);
+  font-size: 9px;
+  font-weight: 640;
+  letter-spacing: .24em;
+}
+
+.sva-hero { margin-bottom: 13px; }
+
+.sva-pill {
+  display: inline-flex;
+  border: 1px solid rgba(80,160,255,.24);
+  border-radius: 999px;
+  padding: 4px 12px;
+  background: rgba(60,120,255,.10);
+  color: rgba(135,200,255,.78);
+  font-size: 10px;
+  font-weight: 740;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.sva-h1 {
+  margin: 10px 0 0;
+  max-width: 420px;
+  color: #f2f7ff;
+  font-size: clamp(33px, 3.1vw, 42px);
+  line-height: .98;
+  font-weight: 860;
+  letter-spacing: -.065em;
+  text-shadow: 0 0 40px rgba(80,160,255,.14);
+}
+
+.sva-tagline {
+  margin: 8px 0 0;
+  color: rgba(175,210,255,.52);
+  font-size: 12.5px;
+  line-height: 1.42;
+}
+
+.sva-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.sva-field span {
+  color: rgba(135,190,255,.72);
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.sva-field input {
+  width: 100%;
+  height: 39px;
+  padding: 0 14px;
+  outline: none;
+  border: 1px solid rgba(70,140,230,.23);
+  border-radius: 11px;
+  background: rgba(20,30,60,.50);
+  color: rgba(225,240,255,.94);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 580;
+}
+
+.sva-field input::placeholder { color: rgba(130,170,230,.38); }
+
+.sva-field input:focus {
+  border-color: rgba(90,170,255,.50);
+  background: rgba(24,38,80,.58);
+  box-shadow: 0 0 0 3px rgba(60,130,255,.12);
+}
+
+.sva-duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.sva-cta {
+  width: 100%;
+  height: 44px;
+  margin-top: 3px;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  font: inherit;
+  color: #060810;
+  background: linear-gradient(180deg, #fff, rgba(235,242,255,.94));
+  box-shadow: 0 1px 0 rgba(255,255,255,.96) inset, 0 18px 52px rgba(255,255,255,.11), 0 10px 34px rgba(0,0,0,.30);
+}
+
+.sva-cta span {
+  font-size: 14px;
+  font-weight: 840;
+}
+
+.sva-cta em {
+  margin-left: 8px;
+  font-style: normal;
+  color: rgba(6,8,16,.7);
+}
+
+.sva-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin: 11px 0 10px;
+}
+
+.sva-divider i {
+  height: 1px;
+  background: rgba(80,140,255,.15);
+}
+
+.sva-divider small {
+  color: rgba(120,180,255,.52);
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.sva-socials {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sva-socials button,
+.sva-guest {
+  height: 36px;
+  border: 1px solid rgba(70,140,230,.24);
+  border-radius: 11px;
+  background: rgba(16,24,56,.56);
+  color: rgba(205,232,255,.88);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 740;
+}
+
+.sva-socials button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.sva-provider-svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex: 0 0 auto;
+}
+
+
+.sva-guest {
+  width: 100%;
+  background: rgba(80,145,255,.13);
+  color: rgba(232,247,255,.96);
+  border-color: rgba(110,180,255,.34);
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.sva-message {
+  margin: 8px 0 0;
+  padding: 8px 13px;
+  border: 1px solid rgba(60,130,220,.16);
+  border-radius: 10px;
+  background: rgba(10,18,50,.42);
+  color: rgba(150,200,255,.74);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translate3d(-14px,10px,0) scale(.99); filter: blur(2px); }
+  to { opacity: 1; transform: translate3d(0,0,0) scale(1); filter: blur(0); }
+}
+
+@keyframes windA {
+  0% { transform: translate3d(-.5%, .04%, 0) scale(1.004); opacity: .034; }
+  50% { transform: translate3d(1%, -.15%, 0) scale(1.009); opacity: .052; }
+  100% { transform: translate3d(-.3%, .06%, 0) scale(1.005); opacity: .036; }
+}
+
+@keyframes windB {
+  0% { transform: translate3d(-.2%, 0, 0) scale(1.004); opacity: .020; }
+  52% { transform: translate3d(1.3%, -.05%, 0) scale(1.011); opacity: .034; }
+  100% { transform: translate3d(-.1%, .02%, 0) scale(1.005); opacity: .022; }
+}
+
+@media (max-height: 820px) and (min-width: 981px) {
+  .sva-card { top: 128px; width: 486px; max-height: calc(100dvh - 150px); padding: 17px 25px 14px; border-radius: 22px; }
+  .sva-logo { width: 50px; height: 50px; border-radius: 15px; }
+  .sva-brand { margin-bottom: 10px; }
+  .sva-tagline { display: none; }
+  .sva-h1 { margin-top: 8px; font-size: clamp(25px, 2.55vw, 34px); line-height: .96; }
+  .sva-field { gap: 4px; margin-bottom: 6px; }
+  .sva-field input { height: 34px; border-radius: 9px; font-size: 13px; }
+  .sva-cta { height: 40px; }
+  .sva-socials button, .sva-guest { height: 31px; border-radius: 9px; font-size: 11.5px; }
+}
+
+@media (max-width: 980px) {
+  .sva-bg { object-position: 70% center; }
+  .sva-card { left: 10px; right: 10px; top: auto; bottom: 12px; width: auto; max-height: calc(100dvh - 24px); padding: 18px 16px 14px; border-radius: 22px; }
+  .sva-duo, .sva-socials { grid-template-columns: 1fr; }
+  .sva-h1 { font-size: 28px; }
+}
+`;
+

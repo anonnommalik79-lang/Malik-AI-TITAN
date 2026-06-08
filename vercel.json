@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "installCommand": "cd app/templates/sovereign-hub-ui && npm install --legacy-peer-deps",
+  "buildCommand": "cd app/templates/sovereign-hub-ui && npm run clean && npm run build",
+  "outputDirectory": "app/templates/sovereign-hub-ui/out"
+}

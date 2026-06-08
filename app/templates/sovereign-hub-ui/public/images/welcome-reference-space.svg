@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="spaceCore" cx="55%" cy="42%" r="72%">
+      <stop offset="0" stop-color="#123a8a"/>
+      <stop offset=".36" stop-color="#071a46"/>
+      <stop offset=".7" stop-color="#050817"/>
+      <stop offset="1" stop-color="#02030a"/>
+    </radialGradient>
+    <radialGradient id="purpleNebula" cx="80%" cy="7%" r="45%">
+      <stop offset="0" stop-color="#d946ef" stop-opacity=".86"/>
+      <stop offset=".14" stop-color="#8b5cf6" stop-opacity=".48"/>
+      <stop offset=".42" stop-color="#1d4ed8" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bottomNebula" cx="50%" cy="95%" r="62%">
+      <stop offset="0" stop-color="#a855f7" stop-opacity=".52"/>
+      <stop offset=".28" stop-color="#2563eb" stop-opacity=".26"/>
+      <stop offset=".64" stop-color="#050617" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="planetGlow" cx="8%" cy="48%" r="72%">
+      <stop offset="0" stop-color="#e0f7ff" stop-opacity=".9"/>
+      <stop offset=".035" stop-color="#7dd3fc" stop-opacity=".72"/>
+      <stop offset=".12" stop-color="#2563eb" stop-opacity=".42"/>
+      <stop offset=".32" stop-color="#0f274f" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#020617"/>
+    </radialGradient>
+    <linearGradient id="meteor" x1="0" x2="1">
+      <stop offset="0" stop-color="#93c5fd" stop-opacity="0"/>
+      <stop offset=".55" stop-color="#60a5fa" stop-opacity=".42"/>
+      <stop offset=".9" stop-color="#ffffff" stop-opacity=".94"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="rockLight" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#8d99aa"/>
+      <stop offset=".42" stop-color="#303847"/>
+      <stop offset="1" stop-color="#070a12"/>
+    </linearGradient>
+    <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="rockTex" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency=".72" numOctaves="3" seed="8" result="noise"/>
+      <feColorMatrix in="noise" type="matrix" values=".22 0 0 0 0  0 .22 0 0 0  0 0 .24 0 0  0 0 0 .34 0" result="grain"/>
+      <feBlend in="SourceGraphic" in2="grain" mode="screen"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#spaceCore)"/>
+  <rect width="1600" height="900" fill="url(#purpleNebula)"/>
+  <rect width="1600" height="900" fill="url(#bottomNebula)"/>
+  <path d="M-60 705 C220 602 410 752 650 625 C910 490 1170 540 1660 380 L1660 930 L-60 930Z" fill="#050819" opacity=".42"/>
+  <path d="M70 790 C320 698 550 825 800 704 C1060 574 1330 608 1590 512" fill="none" stroke="#8b5cf6" stroke-opacity=".26" stroke-width="2"/>
+  <path d="M-40 650 C230 574 420 678 628 588 C884 476 1104 494 1320 432" fill="none" stroke="#38bdf8" stroke-opacity=".16" stroke-width="1.4"/>
+
+  <g opacity=".92">
+    <circle cx="104" cy="82" r="1.5" fill="#e5f4ff"/>
+    <circle cx="242" cy="54" r="1.2" fill="#a5d8ff"/>
+    <circle cx="382" cy="96" r="1.1" fill="#ffffff"/>
+    <circle cx="522" cy="58" r="2" fill="#93c5fd"/>
+    <circle cx="693" cy="106" r="1.1" fill="#f8fbff"/>
+    <circle cx="842" cy="50" r="1.4" fill="#c4b5fd"/>
+    <circle cx="1012" cy="92" r="1.1" fill="#ffffff"/>
+    <circle cx="1260" cy="62" r="1.5" fill="#bfdbfe"/>
+    <circle cx="1450" cy="112" r="1.1" fill="#ffffff"/>
+    <circle cx="94" cy="238" r="1.1" fill="#93c5fd"/>
+    <circle cx="224" cy="310" r="2.4" fill="#38bdf8" filter="url(#softGlow)"/>
+    <circle cx="378" cy="244" r="1.3" fill="#e0f2fe"/>
+    <circle cx="526" cy="320" r="1.1" fill="#ffffff"/>
+    <circle cx="720" cy="245" r="1.2" fill="#c4b5fd"/>
+    <circle cx="882" cy="300" r="2.6" fill="#60a5fa" filter="url(#softGlow)"/>
+    <circle cx="1096" cy="236" r="1.2" fill="#ffffff"/>
+    <circle cx="1315" cy="292" r="1.4" fill="#bae6fd"/>
+    <circle cx="1528" cy="250" r="1.1" fill="#ffffff"/>
+    <circle cx="150" cy="512" r="1.2" fill="#f8fbff"/>
+    <circle cx="316" cy="462" r="1.4" fill="#93c5fd"/>
+    <circle cx="478" cy="544" r="1.2" fill="#ffffff"/>
+    <circle cx="654" cy="486" r="1.4" fill="#7dd3fc"/>
+    <circle cx="818" cy="564" r="1.1" fill="#ffffff"/>
+    <circle cx="1000" cy="482" r="1.2" fill="#c4b5fd"/>
+    <circle cx="1218" cy="538" r="1.6" fill="#ffffff"/>
+    <circle cx="1456" cy="482" r="1.2" fill="#93c5fd"/>
+    <circle cx="78" cy="760" r="1.2" fill="#ffffff"/>
+    <circle cx="306" cy="720" r="1.4" fill="#bae6fd"/>
+    <circle cx="560" cy="785" r="1.2" fill="#ffffff"/>
+    <circle cx="748" cy="722" r="1.5" fill="#60a5fa"/>
+    <circle cx="988" cy="800" r="1.1" fill="#ffffff"/>
+    <circle cx="1250" cy="744" r="1.3" fill="#c4b5fd"/>
+    <circle cx="1482" cy="820" r="1.2" fill="#ffffff"/>
+  </g>
+
+  <g opacity=".92" filter="url(#softGlow)">
+    <path d="M358 112 L492 56" stroke="url(#meteor)" stroke-width="2.2" stroke-linecap="round"/>
+    <circle cx="492" cy="56" r="3.2" fill="#fff"/>
+    <path d="M1045 222 L1372 40" stroke="url(#meteor)" stroke-width="2.8" stroke-linecap="round"/>
+    <circle cx="1372" cy="40" r="4.5" fill="#fff"/>
+    <path d="M278 305 L392 244" stroke="url(#meteor)" stroke-width="1.7" stroke-linecap="round" opacity=".72"/>
+    <circle cx="392" cy="244" r="2.5" fill="#fff" opacity=".8"/>
+  </g>
+
+  <g filter="url(#rockTex)" opacity=".9">
+    <path d="M118 178 C96 138 126 98 172 88 C230 76 284 118 294 170 C306 232 262 284 198 278 C150 274 126 226 118 178Z" fill="url(#rockLight)"/>
+    <path d="M146 142 C162 122 212 112 238 148 C222 139 185 144 164 166Z" fill="#cbd5e1" opacity=".16"/>
+    <circle cx="186" cy="166" r="20" fill="#020617" opacity=".32"/>
+    <circle cx="242" cy="213" r="16" fill="#020617" opacity=".42"/>
+  </g>
+
+  <g filter="url(#rockTex)" opacity=".9">
+    <path d="M62 620 C102 562 198 560 258 610 C315 658 302 730 230 762 C154 796 58 738 62 620Z" fill="url(#rockLight)"/>
+    <path d="M96 610 C135 580 204 592 240 632 C184 612 142 626 92 660Z" fill="#e2e8f0" opacity=".13"/>
+    <circle cx="174" cy="650" r="24" fill="#020617" opacity=".38"/>
+    <circle cx="245" cy="704" r="18" fill="#020617" opacity=".5"/>
+  </g>
+
+  <g filter="url(#rockTex)" opacity=".84">
+    <path d="M1484 584 C1534 558 1596 586 1618 644 C1640 704 1588 760 1518 748 C1452 736 1428 614 1484 584Z" fill="url(#rockLight)"/>
+    <path d="M1498 606 C1530 586 1574 604 1590 640 C1550 620 1510 628 1478 658Z" fill="#e2e8f0" opacity=".13"/>
+  </g>
+
+  <g filter="url(#rockTex)" opacity=".62">
+    <path d="M316 352 C340 332 377 338 391 366 C404 392 378 418 344 412 C316 407 294 372 316 352Z" fill="url(#rockLight)"/>
+    <path d="M1228 222 C1246 208 1274 214 1284 236 C1292 256 1272 275 1248 270 C1225 266 1208 238 1228 222Z" fill="url(#rockLight)"/>
+    <path d="M420 712 C438 692 472 698 484 724 C494 746 469 765 443 758 C421 752 402 732 420 712Z" fill="url(#rockLight)"/>
+  </g>
+
+  <ellipse cx="1668" cy="438" rx="245" ry="390" fill="url(#planetGlow)"/>
+  <path d="M1438 220 C1512 188 1590 184 1690 208" fill="none" stroke="#7dd3fc" stroke-opacity=".55" stroke-width="2"/>
+  <path d="M1430 578 C1528 626 1602 646 1702 630" fill="none" stroke="#60a5fa" stroke-opacity=".35" stroke-width="1.4"/>
+  <ellipse cx="1508" cy="312" rx="20" ry="8" fill="#93c5fd" opacity=".12"/>
+
+  <rect width="1600" height="900" fill="none" stroke="#60a5fa" stroke-opacity=".08"/>
+  <rect width="1600" height="900" fill="url(#spaceCore)" opacity=".12"/>
+</svg>

@@ -1,0 +1,13 @@
+# Env notes
+
+No secrets included.
+
+Useful env:
+- OPENAI_API_KEY
+- GROQ_API_KEY
+- XAI_API_KEY
+- LUMA_API_KEY
+- FAL_KEY
+- RUNWAYML_API_SECRET
+- GOOGLE_VEO_API_KEY
+- GEMINI_API_KEY

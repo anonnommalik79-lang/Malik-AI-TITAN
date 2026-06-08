@@ -1,0 +1,15 @@
+﻿node_modules/
+.next/
+out/
+dist/
+build/
+.cache/
+.turbo/
+.vercel/
+coverage/
+*.log
+.env
+.env.local
+.env.production
+.env.development
+secrets/

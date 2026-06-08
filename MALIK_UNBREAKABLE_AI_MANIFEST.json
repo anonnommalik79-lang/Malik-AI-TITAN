@@ -1,0 +1,9 @@
+{
+  "pack": "MALIK_UNBREAKABLE_AI_95_FILES_FINAL",
+  "fileCount": 95,
+  "purpose": "Second final folder pack: resilience/fallback layer for AI answers, image/video/code generation, provider recovery, auth/session recovery, Render safety.",
+  "safe": true,
+  "noSecrets": true,
+  "noDynamicNextRoutes": true,
+  "note": "No product can be literally 100% invulnerable; this pack adds strong resilience architecture and graceful fallbacks."
+}

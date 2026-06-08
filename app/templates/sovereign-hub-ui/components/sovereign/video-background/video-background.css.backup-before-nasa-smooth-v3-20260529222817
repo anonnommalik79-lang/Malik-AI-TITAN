@@ -1,0 +1,115 @@
+/* MALIK AI вЂ” GOD-TIER COSMIC BACKGROUND V2 */
+
+.malik-force-video-root,
+.malik-welcome-video-host {
+  position: relative !important;
+  isolation: isolate !important;
+  overflow: hidden !important;
+  background: #000107 !important;
+}
+
+.malik-video-bg,
+.malik-cosmic-god-bg {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-width: 100vw !important;
+  min-height: 100vh !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  background: #000107 !important;
+}
+
+.malik-cosmic-god-canvas {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  display: block !important;
+  background: #000107 !important;
+  transform: translateZ(0) !important;
+  backface-visibility: hidden !important;
+}
+
+.malik-cosmic-noise {
+  position: fixed !important;
+  inset: 0 !important;
+  opacity: 0.055 !important;
+  mix-blend-mode: screen !important;
+  background-image:
+    radial-gradient(circle at 12% 22%, rgba(255,255,255,.65) 0 1px, transparent 1px),
+    radial-gradient(circle at 72% 39%, rgba(123,216,255,.48) 0 1px, transparent 1px),
+    radial-gradient(circle at 44% 78%, rgba(198,125,255,.44) 0 1px, transparent 1px),
+    radial-gradient(circle at 82% 12%, rgba(255,255,255,.42) 0 .8px, transparent .8px);
+  background-size: 130px 130px, 180px 180px, 240px 240px, 310px 310px;
+  animation: malikCosmicNoiseDrift 38s linear infinite;
+}
+
+.malik-cosmic-scanlines {
+  position: fixed !important;
+  inset: 0 !important;
+  opacity: 0.05 !important;
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(255,255,255,.08) 0px,
+      rgba(255,255,255,.02) 1px,
+      transparent 2px,
+      transparent 4px
+    ) !important;
+  background-size: 100% 4px !important;
+  mix-blend-mode: soft-light !important;
+}
+
+.malik-cosmic-readability {
+  position: fixed !important;
+  inset: 0 !important;
+  background:
+    linear-gradient(180deg, rgba(2, 5, 16, 0.18), rgba(2, 5, 16, 0.02) 36%, rgba(2, 5, 16, 0.22)),
+    radial-gradient(circle at 50% 34%, rgba(32, 92, 255, 0.035), transparent 44%),
+    radial-gradient(circle at 52% 44%, rgba(5, 10, 22, 0.06), transparent 35%) !important;
+}
+
+.malik-cosmic-vignette {
+  position: fixed !important;
+  inset: 0 !important;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0%, transparent 66%, rgba(0,0,0,.34) 100%),
+    linear-gradient(90deg, rgba(0,0,0,.16), transparent 18%, transparent 82%, rgba(0,0,0,.16)),
+    linear-gradient(180deg, rgba(0,0,0,.14), transparent 18%, transparent 82%, rgba(0,0,0,.16)) !important;
+}
+
+.malik-force-video-root .malik-space-x,
+.malik-force-video-root .malik-animated-space,
+.malik-force-video-root .malik-welcome-earth-bg,
+.malik-force-video-root .malik-space-bg,
+.malik-welcome-video-host .malik-space-x,
+.malik-welcome-video-host .malik-animated-space,
+.malik-welcome-video-host .malik-welcome-earth-bg,
+.malik-welcome-video-host .malik-space-bg {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+.malik-force-video-root > :not(.malik-video-bg),
+.malik-welcome-video-host > :not(.malik-video-bg) {
+  position: relative !important;
+  z-index: 5 !important;
+}
+
+@keyframes malikCosmicNoiseDrift {
+  from {
+    background-position: 0 0, 0 0, 0 0, 0 0;
+  }
+  to {
+    background-position: 260px 180px, -220px 260px, 180px -280px, -140px 200px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .malik-cosmic-noise {
+    animation: none !important;
+  }
+}

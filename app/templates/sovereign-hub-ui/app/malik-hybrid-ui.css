@@ -1,0 +1,86 @@
+/* Hybrid UI: decorative background (non-interactive) + real React controls on top */
+
+.malik-hybrid-ui {
+  position: relative;
+  isolation: isolate;
+}
+
+.malik-decor-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+  contain: strict;
+}
+
+.malik-decor-bg__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 42%;
+  opacity: 0.92;
+  transform: translateZ(0);
+}
+
+.malik-decor-bg__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(2, 6, 23, 0.42) 0%, rgba(2, 6, 23, 0.18) 38%, rgba(2, 6, 23, 0.52) 100%),
+    radial-gradient(120% 80% at 50% 0%, rgba(3, 7, 18, 0.35), transparent 55%);
+}
+
+.malik-decor-bg__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 45%, transparent 35%, rgba(1, 4, 12, 0.55) 100%);
+}
+
+.malik-decor-bg[data-variant="chat"] .malik-decor-bg__image {
+  opacity: 0.55;
+}
+
+.malik-decor-bg[data-variant="chat"] .malik-decor-bg__scrim {
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.72) 0%, rgba(2, 6, 23, 0.88) 100%);
+}
+
+.malik-hybrid-ui > .hidden.lg\:block,
+.malik-hybrid-ui > .fixed.inset-y-0,
+.malik-hybrid-ui > main {
+  position: relative;
+  z-index: 2;
+}
+
+.malik-hybrid-ui-layer {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.malik-hybrid-home {
+  background: transparent !important;
+}
+
+.malik-hybrid-home .creator-home-main,
+.malik-hybrid-home .creator-prompt,
+.malik-hybrid-home .creator-stat-card,
+.malik-hybrid-home .creator-feature-card,
+.malik-hybrid-home .creator-chip,
+.malik-hybrid-home .creator-template-card,
+.malik-hybrid-home .creator-kazakh-card {
+  pointer-events: auto;
+}
+
+.malik-hybrid-home button,
+.malik-hybrid-home textarea,
+.malik-hybrid-home a {
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .malik-decor-bg__image {
+    transition: none !important;
+  }
+}

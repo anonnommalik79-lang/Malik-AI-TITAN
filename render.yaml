@@ -1,0 +1,89 @@
+services:
+  - type: web
+    name: malik-ai-sovereign
+    env: python
+    plan: starter
+    buildCommand: cd app/templates/sovereign-hub-ui && npm install && npm run clean && npm run build && cd ../../.. && pip install -r requirements.txt
+    startCommand: gunicorn run:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 180
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: MALIK_CODEX_PROVIDER_FALLBACK
+        value: "0"
+      - key: MALIK_CODEX_AUTO_MODE
+        value: "0"
+      - key: MEDIA_VIDEO_PROVIDER_ORDER
+        value: "fal-video,luma-video,runway-video,fal-kling-pro-video,google-veo,pika-video,kling-video,replicate-video"
+      - key: MEDIA_PRO_VIDEO_PROVIDER_ORDER
+        value: "google-veo,runway-video,fal-kling-pro-video,luma-video,fal-video,pika-video,kling-video,replicate-video"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: STABILITY_API_KEY
+        sync: false
+      - key: STABILITY_IMAGE_URL
+        sync: false
+      - key: REPLICATE_API_TOKEN
+        sync: false
+      - key: REPLICATE_IMAGE_URL
+        sync: false
+      - key: REPLICATE_VIDEO_URL
+        sync: false
+      - key: FAL_KEY
+        sync: false
+      - key: FAL_IMAGE_URL
+        sync: false
+      - key: FAL_VIDEO_URL
+        value: "https://fal.run/fal-ai/wan/v2.7/text-to-video"
+      - key: FAL_PRO_VIDEO_URL
+        value: "https://fal.run/fal-ai/kling-video/o3/4k/text-to-video"
+      - key: GOOGLE_VEO_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_VEO_VIDEO_URL
+        value: "https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning"
+      - key: GOOGLE_VEO_MODEL
+        value: "veo-3.1-generate-preview"
+      - key: GOOGLE_VEO_RESOLUTION
+        value: "720p"
+      - key: GOOGLE_VEO_DURATION_SECONDS
+        value: "8"
+      - key: GOOGLE_VEO_NEGATIVE_PROMPT
+        value: "cartoon, drawing, low quality, distorted, blurry"
+      - key: LEONARDO_API_KEY
+        sync: false
+      - key: LEONARDO_IMAGE_URL
+        sync: false
+      - key: RUNWAY_API_KEY
+        sync: false
+      - key: RUNWAYML_API_SECRET
+        sync: false
+      - key: RUNWAY_VIDEO_URL
+        value: "https://api.dev.runwayml.com/v1/text_to_video"
+      - key: RUNWAY_VIDEO_MODEL
+        value: "gen4.5"
+      - key: RUNWAY_API_VERSION
+        value: "2024-11-06"
+      - key: LUMA_API_KEY
+        sync: false
+      - key: LUMAAI_API_KEY
+        sync: false
+      - key: LUMA_VIDEO_URL
+        value: "https://api.lumalabs.ai/dream-machine/v1/generations"
+      - key: LUMA_VIDEO_MODEL
+        value: "ray-2"
+      - key: LUMA_VIDEO_RESOLUTION
+        value: "720p"
+      - key: LUMA_VIDEO_DURATION
+        value: "5s"
+      - key: PIKA_API_KEY
+        sync: false
+      - key: PIKA_VIDEO_URL
+        sync: false
+      - key: KLING_API_KEY
+        sync: false
+      - key: KLING_VIDEO_URL
+        sync: false
+      - key: MEDIA_PRO_ACCESS_CODE
+        sync: false

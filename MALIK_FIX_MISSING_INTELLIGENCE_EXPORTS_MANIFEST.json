@@ -1,0 +1,9 @@
+{
+  "name": "MALIK_FIX_MISSING_INTELLIGENCE_EXPORTS",
+  "purpose": "Fix Render build missing exports MALIK_COPY and launchReadiness",
+  "safe": true,
+  "touches": [
+    "app/templates/sovereign-hub-ui/lib/malik-intelligence/compatibility.ts",
+    "app/templates/sovereign-hub-ui/lib/malik-intelligence/index.ts via ps1 append"
+  ]
+}

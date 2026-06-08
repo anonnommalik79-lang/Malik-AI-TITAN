@@ -1,0 +1,21 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="core" x1="65" y1="45" x2="102" y2="126" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FBFF"/>
+      <stop offset=".48" stop-color="#9AC8FF"/>
+      <stop offset="1" stop-color="#17233E"/>
+    </linearGradient>
+    <linearGradient id="solar" x1="8" y1="55" x2="172" y2="114" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0EA5E9"/>
+      <stop offset=".52" stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+  <path d="M16 70L66 56L72 82L22 96L16 70Z" fill="url(#solar)" opacity=".84"/>
+  <path d="M110 96L160 82L166 108L116 122L110 96Z" fill="url(#solar)" opacity=".84"/>
+  <path d="M72 44L108 65L102 130L62 110L72 44Z" fill="url(#core)"/>
+  <path d="M78 70L100 80L96 107L72 98L78 70Z" fill="#030712" opacity=".58"/>
+  <path d="M106 58L142 32" stroke="#E0F2FE" stroke-width="3" stroke-linecap="round"/>
+  <path d="M62 110L38 148" stroke="#C4B5FD" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="110" cy="66" r="4.5" fill="#7DD3FC"/>
+</svg>

@@ -1,0 +1,353 @@
+/* Malik AI legendary polish: Gemini-like bottom atmosphere, stronger desktop depth, safer mobile UI. */
+
+html,
+body,
+#malik-root {
+  background:
+    radial-gradient(ellipse at 50% 115%, rgba(37, 99, 235, 0.42) 0%, rgba(29, 78, 216, 0.28) 18%, rgba(14, 30, 64, 0.13) 36%, transparent 62%),
+    radial-gradient(ellipse at 18% 100%, rgba(34, 211, 238, 0.16) 0%, transparent 38%),
+    radial-gradient(ellipse at 82% 100%, rgba(99, 102, 241, 0.16) 0%, transparent 42%),
+    linear-gradient(180deg, #020205 0%, #030712 48%, #041127 100%) !important;
+  overflow-x: hidden !important;
+}
+
+#malik-root {
+  position: relative;
+  isolation: isolate;
+}
+
+#malik-root::before,
+#malik-root::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#malik-root::before {
+  top: 0;
+  bottom: 0;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(59, 130, 246, 0.055), transparent 34%),
+    linear-gradient(to right, rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.032) 1px, transparent 1px);
+  background-size: auto, 52px 52px, 52px 52px;
+  mask-image: radial-gradient(ellipse at center, black 20%, rgba(0,0,0,0.58) 58%, transparent 100%);
+  opacity: 0.9;
+}
+
+#malik-root::after {
+  height: 46vh;
+  bottom: -19vh;
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(37, 99, 235, 0.82) 0%, rgba(29, 78, 216, 0.52) 23%, rgba(14, 165, 233, 0.20) 43%, transparent 69%),
+    radial-gradient(ellipse at 18% 95%, rgba(34, 211, 238, 0.34) 0%, transparent 44%),
+    radial-gradient(ellipse at 82% 96%, rgba(99, 102, 241, 0.32) 0%, transparent 46%);
+  filter: blur(22px) saturate(1.45);
+  opacity: 0.92;
+  transform: translateZ(0);
+  animation: malikLegendAurora 8s ease-in-out infinite alternate;
+}
+
+#malik-root > *:not(#malik-investor-aurora) {
+  position: relative;
+  z-index: 1;
+}
+
+#malik-investor-aurora {
+  position: fixed;
+  left: -10vw;
+  right: -10vw;
+  bottom: -21vh;
+  height: 52vh;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.98;
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(37, 99, 235, 0.90) 0%, rgba(29, 78, 216, 0.58) 22%, rgba(14, 165, 233, 0.22) 42%, transparent 70%),
+    radial-gradient(ellipse at 7% 92%, rgba(34, 211, 238, 0.35), transparent 46%),
+    radial-gradient(ellipse at 93% 92%, rgba(99, 102, 241, 0.32), transparent 46%),
+    linear-gradient(180deg, transparent 0%, rgba(5, 23, 58, 0.32) 62%, rgba(37, 99, 235, 0.48) 100%);
+  filter: blur(24px) saturate(1.55);
+  mix-blend-mode: screen;
+  transform: translateZ(0);
+  animation: malikLegendAurora 7.5s ease-in-out infinite alternate;
+}
+
+@keyframes malikLegendAurora {
+  0% {
+    transform: translate3d(-2.2%, 0, 0) scale(1);
+    opacity: 0.76;
+  }
+  48% {
+    transform: translate3d(1.8%, -2.8vh, 0) scale(1.07);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(-0.8%, -1.2vh, 0) scale(1.035);
+    opacity: 0.88;
+  }
+}
+
+/* Premium depth for the first screen on desktop. */
+#malik-root section:first-of-type {
+  background:
+    radial-gradient(ellipse at 50% 34%, rgba(59, 130, 246, 0.10), transparent 42%),
+    radial-gradient(ellipse at 50% 105%, rgba(37, 99, 235, 0.22), transparent 54%) !important;
+}
+
+/* Home Earth photo must show through — no fake gradient panel on top */
+#malik-root:has(.malik-welcome-earth-shell) section:first-of-type,
+#malik-root:has(.malik-welcome-earth-shell) .malik-dashboard-shell,
+#malik-root:has(.malik-welcome-earth-shell) .malik-dashboard-shell > main,
+#malik-root:has(.malik-welcome-earth-shell) .malik-main-scroll-host {
+  background: transparent !important;
+}
+
+#malik-root section:first-of-type [class*="bg-white/[0.02]"],
+#malik-root section:first-of-type [class*="bg-white/[0.03]"],
+#malik-root section:first-of-type [class*="bg-white/[0.04]"],
+#malik-root section:first-of-type [class*="bg-black/20"],
+#malik-root section:first-of-type [class*="bg-black/30"],
+#malik-root section:first-of-type [class*="bg-black/45"] {
+  box-shadow:
+    0 18px 64px rgba(2, 6, 23, 0.38),
+    0 0 0 1px rgba(147, 197, 253, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055) !important;
+}
+
+#malik-root section:first-of-type button,
+#malik-root section:first-of-type [role="button"] {
+  box-shadow: 0 0 24px rgba(37, 99, 235, 0.08) !important;
+}
+
+@media (max-width: 640px) {
+  html,
+  body,
+  #malik-root {
+    background:
+      radial-gradient(ellipse at 50% 112%, rgba(37, 99, 235, 0.54) 0%, rgba(29, 78, 216, 0.36) 21%, rgba(5, 23, 58, 0.18) 43%, transparent 67%),
+      linear-gradient(180deg, #020205 0%, #030712 54%, #071942 100%) !important;
+    overflow-x: hidden !important;
+  }
+
+  #malik-root::before {
+    background:
+      radial-gradient(ellipse at 50% 38%, rgba(59, 130, 246, 0.08), transparent 44%),
+      linear-gradient(to right, rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(148, 163, 184, 0.032) 1px, transparent 1px);
+    background-size: auto, 44px 44px, 44px 44px;
+    mask-image: linear-gradient(180deg, rgba(0,0,0,0.62) 0%, black 44%, black 100%);
+  }
+
+  #malik-root::after,
+  #malik-investor-aurora {
+    bottom: -12vh;
+    height: 34vh;
+    opacity: 0.98;
+    filter: blur(17px) saturate(1.42);
+    background:
+      radial-gradient(ellipse at 50% 100%, rgba(37, 99, 235, 0.98) 0%, rgba(29, 78, 216, 0.66) 26%, rgba(14, 165, 233, 0.22) 46%, transparent 73%),
+      radial-gradient(ellipse at 15% 100%, rgba(34, 211, 238, 0.28), transparent 46%),
+      radial-gradient(ellipse at 86% 100%, rgba(99, 102, 241, 0.28), transparent 48%);
+  }
+
+  #malik-root,
+  #malik-root * {
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  #malik-root * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  #malik-root [class*="bg-[#020205]"],
+  #malik-root [class*="bg-[#020205]"] > div {
+    background-color: transparent !important;
+  }
+
+  /* Stop glass cards from becoming almost invisible on mobile screenshots. */
+  #malik-root [class*="bg-white/[0.02]"],
+  #malik-root [class*="bg-white/[0.03]"],
+  #malik-root [class*="bg-white/[0.035]"],
+  #malik-root [class*="bg-white/[0.04]"],
+  #malik-root [class*="bg-white/[0.045]"],
+  #malik-root [class*="bg-white/[0.055]"],
+  #malik-root [class*="bg-white/[0.07]"],
+  #malik-root [class*="bg-white/[0.08]"] {
+    background: linear-gradient(180deg, rgba(10, 17, 32, 0.94), rgba(5, 10, 22, 0.89)) !important;
+    border-color: rgba(147, 197, 253, 0.20) !important;
+    box-shadow:
+      0 18px 56px rgba(0, 0, 0, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+    backdrop-filter: none !important;
+  }
+
+  #malik-root [class*="bg-black/20"],
+  #malik-root [class*="bg-black/30"],
+  #malik-root [class*="bg-black/35"],
+  #malik-root [class*="bg-black/45"],
+  #malik-root [class*="bg-black/55"],
+  #malik-root [class*="bg-black/60"],
+  #malik-root [class*="bg-black/70"],
+  #malik-root [class*="bg-black/72"] {
+    background: linear-gradient(180deg, rgba(3, 7, 18, 0.92), rgba(2, 6, 23, 0.88)) !important;
+    backdrop-filter: none !important;
+  }
+
+  #malik-root [class*="blur-["],
+  #malik-root [class*="backdrop-blur"] {
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Make the home page compact and solid on phones. */
+  #malik-root .max-w-\[1540px\] {
+    max-width: 100% !important;
+    padding-left: 0.85rem !important;
+    padding-right: 0.85rem !important;
+    padding-bottom: 8rem !important;
+  }
+
+  #malik-root section {
+    scroll-margin-top: 88px;
+  }
+
+  #malik-root section:first-of-type {
+    padding-top: 0 !important;
+    min-height: auto !important;
+    background: radial-gradient(ellipse at 50% 115%, rgba(37, 99, 235, 0.28), transparent 56%) !important;
+  }
+
+  #malik-root section:first-of-type h1 {
+    max-width: 100% !important;
+    font-size: clamp(1.92rem, 9.2vw, 2.55rem) !important;
+    line-height: 0.98 !important;
+    letter-spacing: -0.065em !important;
+    text-shadow: 0 0 32px rgba(96, 165, 250, 0.11) !important;
+  }
+
+  #malik-root section:first-of-type h1 span {
+    white-space: normal !important;
+  }
+
+  #malik-root section:first-of-type p:not(.hidden) {
+    max-width: 21.5rem !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  #malik-root section:first-of-type [class*="h-[360px]"],
+  #malik-root section:first-of-type [class*="h-[420px]"],
+  #malik-root section:first-of-type [class*="h-[520px]"],
+  #malik-root section:first-of-type [class*="min-h-[280px]"],
+  #malik-root section:first-of-type [class*="min-h-[320px]"] {
+    max-height: 210px !important;
+    min-height: 140px !important;
+    overflow: hidden !important;
+    background: rgba(5, 9, 20, 0.86) !important;
+  }
+
+  #malik-root:not(:has(.malik-welcome-earth-shell)) textarea {
+    min-height: 112px !important;
+    color: #f8fafc !important;
+    background: rgba(2, 6, 23, 0.86) !important;
+    border-radius: 1.3rem !important;
+    box-shadow: 0 0 36px rgba(37, 99, 235, 0.11), inset 0 1px 0 rgba(255,255,255,0.06) !important;
+  }
+
+  #malik-root:not(:has(.malik-welcome-earth-shell)) textarea::placeholder {
+    color: rgba(148, 163, 184, 0.88) !important;
+  }
+
+  /* The prompt composer must not look like a transparent blur block. */
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:nth-of-type(2) > div {
+    background: linear-gradient(180deg, rgba(7, 12, 24, 0.94), rgba(2, 6, 23, 0.89)) !important;
+    border-color: rgba(96, 165, 250, 0.25) !important;
+    box-shadow:
+      0 20px 70px rgba(0, 0, 0, 0.48),
+      0 0 38px rgba(37, 99, 235, 0.10),
+      inset 0 1px 0 rgba(255,255,255,0.08) !important;
+    backdrop-filter: none !important;
+  }
+
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:nth-of-type(2) .flex.flex-wrap {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Hide huge lower showcases on legacy layouts only; sovereign home shows all sections. */
+  #malik-root:not(:has(.creator-home-shell)) section:nth-of-type(n+5) {
+    display: none !important;
+  }
+
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:nth-of-type(3) {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.65rem !important;
+  }
+
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:nth-of-type(3) button {
+    min-height: 88px !important;
+    padding: 0.85rem !important;
+    border-radius: 1.1rem !important;
+  }
+
+  #malik-root:not(:has(.malik-welcome-earth-shell)) img {
+    transform: none !important;
+  }
+
+  #malik-root header,
+  #malik-root header > div {
+    background: rgba(3, 7, 18, 0.94) !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+  }
+
+  #malik-root header::-webkit-scrollbar,
+  #malik-root header > div::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  #malik-root .fixed.inset-y-0.left-0.z-50.lg\:hidden {
+    width: min(92vw, 360px) !important;
+    height: 100dvh !important;
+    transition-duration: 120ms !important;
+  }
+
+  #malik-root .fixed.inset-y-0.left-0.z-50.lg\:hidden aside {
+    width: min(92vw, 360px) !important;
+    max-width: min(92vw, 360px) !important;
+    height: 100dvh !important;
+    background: linear-gradient(180deg, #020205 0%, #030712 100%) !important;
+    border-right-color: rgba(147, 197, 253, 0.18) !important;
+  }
+
+  #malik-root aside button {
+    min-height: 48px !important;
+    touch-action: manipulation !important;
+  }
+
+  #malik-root .malik-home-sweep,
+  #malik-root .malik-home-video-pan,
+  #malik-root .malik-home-progress,
+  #malik-root .malik-media-float,
+  #malik-root .malik-frame-glow {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (max-width: 390px) {
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:first-of-type h1 {
+    font-size: clamp(1.78rem, 8.9vw, 2.18rem) !important;
+  }
+
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:nth-of-type(3) {
+    grid-template-columns: 1fr !important;
+  }
+}
+

@@ -1,0 +1,22 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="body" x1="62" y1="54" x2="112" y2="118" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FCFF"/>
+      <stop offset=".45" stop-color="#8EC5FF"/>
+      <stop offset="1" stop-color="#1F2B4D"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="10" y1="58" x2="166" y2="110" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE"/>
+      <stop offset=".5" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <path d="M20 72L66 58L72 78L26 92L20 72Z" fill="url(#panel)" opacity=".84"/>
+  <path d="M108 96L154 80L160 101L114 117L108 96Z" fill="url(#panel)" opacity=".84"/>
+  <path d="M66 56L115 74L104 122L55 103L66 56Z" fill="url(#body)"/>
+  <path d="M76 70L101 80L94 106L69 97L76 70Z" fill="#020817" opacity=".62"/>
+  <path d="M108 58C122 46 137 43 156 45" stroke="#7DD3FC" stroke-width="3" stroke-linecap="round" opacity=".75"/>
+  <path d="M112 70C126 64 142 68 162 78" stroke="#C4B5FD" stroke-width="2" stroke-linecap="round" opacity=".50"/>
+  <circle cx="110" cy="75" r="4.5" fill="#8CF0FF"/>
+  <circle cx="110" cy="75" r="15" stroke="#8CF0FF" stroke-opacity=".22"/>
+</svg>

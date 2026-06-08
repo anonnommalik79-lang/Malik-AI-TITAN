@@ -1,0 +1,11 @@
+// Stage 3 job status route template.
+// Disabled for static/export safety.
+
+import { getAIJob } from "@/lib/ai/jobs"
+
+export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  const job = getAIJob(id)
+  if (!job) return Response.json({ ok: false, error: "Job not found." }, { status: 404 })
+  return Response.json({ ok: true, job })
+}

@@ -1,0 +1,56 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import "./video-background.css";
+
+const VIDEO_VERSION = "regex-fixed-v1";
+
+export default function VideoBackground() {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.loop = true;
+
+    const tryPlay = () => {
+      const playPromise = video.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => {});
+      }
+    };
+
+    tryPlay();
+    video.addEventListener("canplay", tryPlay);
+
+    return () => {
+      video.removeEventListener("canplay", tryPlay);
+    };
+  }, []);
+
+  return (
+    <div className="malik-video-bg" aria-hidden="true">
+      <video
+        ref={videoRef}
+        key={VIDEO_VERSION}
+        className="malik-video-bg__video"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        poster={`/backgrounds/space-poster.jpg?v=${VIDEO_VERSION}`}
+        disablePictureInPicture
+      >
+        <source src={`/backgrounds/space-loop.mp4?v=${VIDEO_VERSION}`} type="video/mp4" />
+      </video>
+
+      <div className="malik-video-bg__readability" />
+      <div className="malik-video-bg__vignette" />
+    </div>
+  );
+}

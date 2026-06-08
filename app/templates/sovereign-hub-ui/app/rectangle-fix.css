@@ -1,0 +1,68 @@
+﻿@media (min-width: 1024px) {
+  #malik-root .fixed.inset-0.z-\[100\] {
+    background: #02050d !important;
+  }
+
+  #malik-root .fixed.inset-0.z-\[100\] > main {
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    max-width: 1040px !important;
+    padding-top: 2.05rem !important;
+    padding-bottom: 8rem !important;
+  }
+
+  #malik-root .fixed.inset-0.z-\[100\] > main::before,
+  #malik-root .fixed.inset-0.z-\[100\] > main::after {
+    content: none !important;
+    display: none !important;
+    opacity: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .fixed.inset-0.z-\[100\] > main > section:first-child {
+    background: transparent !important;
+    box-shadow: none !important;
+    max-width: 860px !important;
+  }
+
+  #malik-root .fixed.inset-0.z-\[100\] h1 {
+    transform: scale(.84) !important;
+    transform-origin: center top !important;
+    margin-top: .55rem !important;
+    text-shadow: 0 0 18px rgba(255,255,255,.12), 0 0 34px rgba(34,211,238,.10) !important;
+  }
+
+  #malik-root .fixed.inset-0.z-\[100\] > div.absolute.-bottom-\[3\.9rem\] {
+    left: 50% !important;
+    bottom: -3.4rem !important;
+    width: 118% !important;
+    height: 8.8rem !important;
+    border-top-color: rgba(219,234,254,.92) !important;
+    box-shadow: 0 -30px 110px rgba(37,99,235,.88), 0 -8px 32px rgba(125,211,252,.56) !important;
+  }
+
+  #malik-root .fixed.inset-0.z-\[100\] > div.absolute.inset-x-0.bottom-0 {
+    height: 29vh !important;
+    opacity: .92 !important;
+  }
+
+  #malik-root .fixed.inset-0.z-\[100\] > div.absolute.inset-0.opacity-\[0\.07\] {
+    opacity: .055 !important;
+  }
+
+  #malik-root .fixed.inset-0.z-\[100\] > main > section:nth-of-type(2),
+  #malik-root .fixed.inset-0.z-\[100\] > main > section:nth-of-type(3),
+  #malik-root .fixed.inset-0.z-\[100\] > main > section:nth-of-type(4),
+  #malik-root .fixed.inset-0.z-\[100\] > main > section:nth-of-type(5) {
+    max-width: 980px !important;
+  }
+
+  #malik-root .fixed.inset-0.z-\[100\] > main > section:nth-of-type(3) {
+    margin-top: 1rem !important;
+    border-color: rgba(139,92,246,.50) !important;
+    box-shadow: 0 0 36px rgba(124,58,237,.22), 0 0 70px rgba(37,99,235,.16), inset 0 1px 0 rgba(255,255,255,.07) !important;
+  }
+}
+

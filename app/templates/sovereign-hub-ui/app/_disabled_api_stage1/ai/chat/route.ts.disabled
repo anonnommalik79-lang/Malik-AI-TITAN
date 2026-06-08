@@ -1,0 +1,27 @@
+// Stage 1 chat route template.
+// It is intentionally disabled because current Sovereign Hub has static export constraints.
+// To enable only after switching to server runtime, move this file to:
+// app/api/ai/chat/route.ts
+
+import { routeAI } from "@/lib/ai/router"
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const result = await routeAI(body)
+    return Response.json(result, { status: result.success ? 200 : 500 })
+  } catch (error) {
+    return Response.json(
+      {
+        success: false,
+        provider: "local",
+        model: "route-error",
+        type: "chat",
+        output: "AI route failed.",
+        error: error instanceof Error ? error.message : String(error),
+        latencyMs: 0,
+      },
+      { status: 500 },
+    )
+  }
+}
