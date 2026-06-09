@@ -13,9 +13,14 @@ export type SocialProviderConfig = {
 
 function providerEnabled(envName?: string): boolean {
   if (!isSupabaseConfigured()) return false
-  if (!envName) return true
+  if (!envName) return false
+
   const value = process.env[envName]?.trim().toLowerCase()
-  return value !== "false"
+  return value === "true" || value === "1" || value === "yes" || value === "on"
+}
+
+function getProviderConfig(provider: SocialProviderId): SocialProviderConfig | undefined {
+  return getSocialProviders().find((item) => item.id === provider)
 }
 
 export function getSocialProviders(): SocialProviderConfig[] {
@@ -29,10 +34,19 @@ export function getSocialProviders(): SocialProviderConfig[] {
 }
 
 export async function loginWithSocialProvider(provider: SocialProviderId, redirectTo?: string) {
+  const providerConfig = getProviderConfig(provider)
+
+  if (!providerConfig?.enabled || !providerConfig?.configured) {
+    throw new Error(
+      `${providerConfig?.name || provider} login is disabled. Enable ${providerConfig?.envFlag || "this provider"}=true only after the provider is configured in Supabase.`,
+    )
+  }
+
   const client = getSupabaseClient()
   if (!client) {
-    throw new Error("Configure Supabase to enable this sign-in method.")
+    throw new Error("Configure Supabase URL and anon key to enable this sign-in method.")
   }
+
   const origin = typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL || ""
   const { error } = await client.auth.signInWithOAuth({
     provider,
