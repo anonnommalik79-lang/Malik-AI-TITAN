@@ -7,6 +7,7 @@ import "./chat-layout-fix.css"
 import "./creator-home-polish.css"
 import "./creator-clone-safe.css"
 import "./malik-hybrid-ui.css"
+import "./malik-final-fixes.css"
 
 export const metadata: Metadata = {
   title: "Malik AI Sovereign",
@@ -31,11 +32,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-[#030303] font-sans antialiased notranslate">
         <CleanInteractionLayer />
-<div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden notranslate">
+        <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden notranslate">
           {children}
         </div>
       </body>
     </html>
   )
 }
-
