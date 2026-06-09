@@ -1,0 +1,139 @@
+/* MALIK AI FINAL VISUAL FIXES
+   Purpose: make the dashboard/home feel less zoomed-in, remove the ugly empty
+   composer side zones, and make capability cards behave like photo cards.
+   Frontend-only: no API, auth, Render or environment variables are touched. */
+
+:root {
+  --malik-safe-sidebar: 236px;
+}
+
+/* HOME EARTH: pull the ISS/Earth photo farther back like the chat reference. */
+#malik-root .malik-welcome-earth-stage {
+  position: fixed !important;
+  inset: 0 !important;
+  overflow: hidden !important;
+  background: #02050d !important;
+}
+
+#malik-root .malik-welcome-earth-spin {
+  position: absolute !important;
+  inset: -3vh -2vw -9vh -2vw !important;
+  transform: none !important;
+}
+
+#malik-root .malik-welcome-earth-photo {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center 40% !important;
+  transform: scale(0.86) translateY(5.5vh) !important;
+  transform-origin: center center !important;
+  opacity: 0.96 !important;
+  filter: saturate(1.12) contrast(1.05) brightness(0.86) !important;
+}
+
+#malik-root .malik-welcome-earth-stage::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(2, 6, 23, 0.08), rgba(2, 6, 23, 0.62) 78%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.24), transparent 36%, rgba(0, 0, 0, 0.20));
+}
+
+/* CHAT: remove the red-marked dead zones by letting the composer sit wider and lower. */
+@media (min-width: 1024px) {
+  #malik-root .malik-ai-chat-bg .malik-chat-scroll {
+    padding-left: clamp(44px, 6.2vw, 118px) !important;
+    padding-right: clamp(44px, 6.2vw, 118px) !important;
+    padding-bottom: clamp(170px, 22vh, 260px) !important;
+  }
+
+  #malik-root .malik-ai-chat-bg .malik-composer-dock {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 16px !important;
+    width: 100% !important;
+    padding-left: clamp(72px, 12vw, 270px) !important;
+    padding-right: clamp(72px, 12vw, 270px) !important;
+    background:
+      linear-gradient(180deg, transparent 0%, rgba(3, 7, 18, 0.34) 36%, rgba(3, 7, 18, 0.72) 100%) !important;
+  }
+
+  #malik-root .malik-ai-chat-bg .malik-composer-panel {
+    width: min(100%, 1180px) !important;
+    margin: 0 auto !important;
+    border-radius: 24px !important;
+    border-color: rgba(96, 165, 250, 0.34) !important;
+    background:
+      radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.15), transparent 38%),
+      radial-gradient(circle at 92% 96%, rgba(124, 58, 237, 0.22), transparent 40%),
+      rgba(3, 8, 23, 0.88) !important;
+    box-shadow:
+      0 -18px 85px rgba(37, 99, 235, 0.18),
+      0 24px 90px rgba(0, 0, 0, 0.58),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  }
+
+  #malik-root .malik-chat-fullwidth > div > div:nth-of-type(3) > div > div.justify-start > .min-w-0 {
+    max-width: min(980px, 74%) !important;
+  }
+
+  #malik-root .malik-chat-fullwidth > div > div:nth-of-type(3) > div > div.justify-end > .min-w-0 {
+    max-width: min(520px, 46%) !important;
+  }
+}
+
+/* FEATURED ABILITIES: keep cards as bright photo templates, not playing video tiles. */
+#malik-root section[aria-label="Featured capabilities"] p:first-child {
+  font-size: 0 !important;
+}
+
+#malik-root section[aria-label="Featured capabilities"] p:first-child::after {
+  content: "Capabilities Engine · Photo templates" !important;
+  font-size: 12px !important;
+}
+
+#malik-root section[aria-label="Featured capabilities"] p.mt-1.text-xs.text-slate-500 {
+  font-size: 0 !important;
+}
+
+#malik-root section[aria-label="Featured capabilities"] p.mt-1.text-xs.text-slate-500::after {
+  content: "Нажми карточку — шаблон откроется. Можно добавить своё фото." !important;
+  font-size: 12px !important;
+}
+
+#malik-root section[aria-label="Featured capabilities"] article video {
+  pointer-events: none !important;
+  animation: none !important;
+  filter: saturate(1.42) contrast(1.12) brightness(0.92) !important;
+}
+
+#malik-root section[aria-label="Featured capabilities"] article button span:last-child {
+  font-size: 0 !important;
+}
+
+#malik-root section[aria-label="Featured capabilities"] article button span:last-child::after {
+  content: "НАЖМИ — ЗАПУСТИТЬ ШАБЛОН" !important;
+  font-size: 10px !important;
+  letter-spacing: 0.14em !important;
+}
+
+#malik-root section[aria-label="Featured capabilities"] article {
+  min-height: 156px !important;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255,255,255,.06) !important;
+}
+
+/* Mobile: avoid over-scaling and keep input visible. */
+@media (max-width: 1023px) {
+  #malik-root .malik-welcome-earth-photo {
+    transform: scale(0.98) translateY(2vh) !important;
+    object-position: center 44% !important;
+  }
+
+  #malik-root .malik-ai-chat-bg .malik-composer-dock {
+    bottom: 10px !important;
+    padding-inline: 12px !important;
+  }
+}
