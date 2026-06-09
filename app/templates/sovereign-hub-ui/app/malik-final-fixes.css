@@ -42,23 +42,40 @@
     linear-gradient(180deg, rgba(0, 0, 0, 0.24), transparent 36%, rgba(0, 0, 0, 0.20));
 }
 
-/* CHAT: remove the red-marked dead zones by letting the composer sit wider and lower. */
+/* CHAT: remove the red-marked dead zones and keep only the real composer glass. */
 @media (min-width: 1024px) {
   #malik-root .malik-ai-chat-bg .malik-chat-scroll {
     padding-left: clamp(44px, 6.2vw, 118px) !important;
     padding-right: clamp(44px, 6.2vw, 118px) !important;
-    padding-bottom: clamp(170px, 22vh, 260px) !important;
+    padding-bottom: clamp(150px, 19vh, 230px) !important;
   }
 
   #malik-root .malik-ai-chat-bg .malik-composer-dock {
     left: 0 !important;
     right: 0 !important;
-    bottom: 16px !important;
+    bottom: 18px !important;
     width: 100% !important;
-    padding-left: clamp(72px, 12vw, 270px) !important;
-    padding-right: clamp(72px, 12vw, 270px) !important;
-    background:
-      linear-gradient(180deg, transparent 0%, rgba(3, 7, 18, 0.34) 36%, rgba(3, 7, 18, 0.72) 100%) !important;
+    padding-left: clamp(88px, 18vw, 360px) !important;
+    padding-right: clamp(88px, 18vw, 360px) !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+  }
+
+  #malik-root .malik-ai-chat-bg .malik-composer-dock::before,
+  #malik-root .malik-ai-chat-bg .malik-composer-dock::after {
+    content: none !important;
+    display: none !important;
+    opacity: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
   #malik-root .malik-ai-chat-bg .malik-composer-panel {
@@ -69,10 +86,9 @@
     background:
       radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.15), transparent 38%),
       radial-gradient(circle at 92% 96%, rgba(124, 58, 237, 0.22), transparent 40%),
-      rgba(3, 8, 23, 0.88) !important;
+      rgba(3, 8, 23, 0.90) !important;
     box-shadow:
-      0 -18px 85px rgba(37, 99, 235, 0.18),
-      0 24px 90px rgba(0, 0, 0, 0.58),
+      0 22px 80px rgba(0, 0, 0, 0.50),
       inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   }
 
@@ -135,5 +151,10 @@
   #malik-root .malik-ai-chat-bg .malik-composer-dock {
     bottom: 10px !important;
     padding-inline: 12px !important;
+    background: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 }
