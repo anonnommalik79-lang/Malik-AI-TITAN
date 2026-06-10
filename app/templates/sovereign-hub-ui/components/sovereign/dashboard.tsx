@@ -169,14 +169,50 @@ function detectInlineMediaGenerationRequest(
   mode: AiModeId = "auto",
 ): "image" | "video" | null {
   const text = `${mode} ${prompt || ""} ${attachments.map((item) => item.kind).join(" ")}`.toLowerCase()
-  const createIntent = /(СЃРѕР·РґР°Р№|СЃРґРµР»Р°Р№|СЃРіРµРЅРµСЂРёСЂСѓР№|СЃРіРµРЅРµСЂРёС‚СЊ|РЅР°СЂРёСЃСѓР№|generate|create|make|draw|render|СЂРµРЅРґРµСЂ|Р·Р°РїСѓСЃС‚Рё)/i.test(text)
-  const imageIntent = /(image|photo|picture|С„РѕС‚Рѕ|РёР·РѕР±СЂР°Р¶|РєР°СЂС‚РёРЅ|Р°РІР°С‚Р°СЂ|РїРѕСЃС‚РµСЂ|РѕР±Р»РѕР¶Рє|Р»РѕРіРѕС‚РёРї|Р°СЂС‚|СЂРёСЃСѓРЅРѕРє)/i.test(text)
-  const videoIntent = /(video|РІРёРґРµРѕ|СЂРѕР»РёРє|РєР»РёРї|Р°РЅРёРјР°С†|motion|cinematic|runway|luma|veo|РєР°РґСЂ|СЃС†РµРЅР°)/i.test(text)
-  const modeForcesImage = mode === "image"
-  const modeForcesVideo = mode === "video"
 
-  if ((createIntent || modeForcesVideo) && videoIntent) return "video"
-  if ((createIntent || modeForcesImage) && imageIntent) return "image"
+  const hasVideoWord =
+    text.includes("video") ||
+    text.includes("veo") ||
+    text.includes("cinematic") ||
+    text.includes("motion") ||
+    text.includes("animation") ||
+    text.includes("animate") ||
+    text.includes("видео") ||
+    text.includes("ролик") ||
+    text.includes("клип") ||
+    text.includes("анимац") ||
+    text.includes("сгенерируй видео") ||
+    text.includes("создай видео") ||
+    text.includes("сделай видео") ||
+    text.includes("генерируй видео") ||
+    text.includes("запусти видео")
+
+  const hasImageWord =
+    text.includes("image") ||
+    text.includes("photo") ||
+    text.includes("picture") ||
+    text.includes("фото") ||
+    text.includes("изображ") ||
+    text.includes("картин") ||
+    text.includes("логотип") ||
+    text.includes("постер") ||
+    text.includes("арт")
+
+  const hasCreateIntent =
+    text.includes("generate") ||
+    text.includes("create") ||
+    text.includes("make") ||
+    text.includes("render") ||
+    text.includes("draw") ||
+    text.includes("сгенер") ||
+    text.includes("создай") ||
+    text.includes("сделай") ||
+    text.includes("нарисуй") ||
+    text.includes("запусти")
+
+  if (mode === "video" || hasVideoWord) return "video"
+  if (mode === "image" || mode === "photo" || (hasCreateIntent && hasImageWord)) return "image"
+
   return null
 }
 
@@ -8108,4 +8144,5 @@ function ChatsListView({
 // merge-map-344: ai-generator bridge preserved; runtime cost: zero; fallback: photo-generation; canvas handoff: safeOpenCanvas.
 
 export default Dashboard
+
 
