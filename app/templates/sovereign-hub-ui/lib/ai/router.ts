@@ -6,6 +6,7 @@ import { runWithFallback } from "./fallback"
 import { providersForTask, providerStatus } from "./providers"
 import { checkUsageLimit } from "@/lib/limits/rate-limit"
 import { incrementUsage } from "./usage"
+import { identityAnswerFor, sanitizeModelAnswer, MALIK_STRICT_SYSTEM_PROMPT } from "./identity"
 
 function normalize(input: AIRequest): AIRequest {
   const detected = detectTask(input.prompt, input.attachments)
@@ -17,7 +18,7 @@ function normalize(input: AIRequest): AIRequest {
     messages: (() => {
       const windowed = input.messages?.slice(-Number(process.env.CHAT_HISTORY_WINDOW || 12)) || []
       const hasSystem = windowed.some((message) => message.role === "system")
-      return hasSystem ? windowed : [{ role: "system" as const, content: taskSystemPrompt(task, input.prompt) }, ...windowed]
+      return hasSystem ? windowed : [{ role: "system" as const, content: MALIK_STRICT_SYSTEM_PROMPT }, ...windowed]
     })(),
     maxTokens:
       input.maxTokens ||
@@ -44,6 +45,19 @@ export async function routeAI(input: AIRequest): Promise<AIResponse> {
   const userId = request.userId || request.userEmail || "guest"
   const plan = request.plan || "free"
 
+  // Identity Guard: Check if this is a question about MALIK AI identity
+  const identityAnswer = identityAnswerFor(request.prompt)
+  if (identityAnswer) {
+    return {
+      success: true,
+      provider: "malik-identity",
+      model: "identity-guard",
+      type: "chat",
+      output: identityAnswer,
+      latencyMs: 0,
+    }
+  }
+
   const rate = await checkUsageLimit({ userId, plan, task: request.task || "chat" })
   if (!rate.ok) {
     return {
@@ -62,6 +76,11 @@ export async function routeAI(input: AIRequest): Promise<AIResponse> {
     : undefined
   const providers = providersForTask(request.task || "chat", request.provider, allowedProviders)
   const result = await runWithFallback(providers, request, runProvider)
+
+  // Sanitize output to prevent identity confusion
+  if (result.success && typeof result.output === "string") {
+    result.output = sanitizeModelAnswer(result.output, request.prompt)
+  }
 
   if (result.success) {
     const usage = result.usage || {}

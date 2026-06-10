@@ -13,6 +13,8 @@
 
 export type AIProviderId =
   | "local"
+  | "malik-identity"
+  | "demo-fallback"
   | "kimi"
   | "grok"
   | "nvidia-nim"

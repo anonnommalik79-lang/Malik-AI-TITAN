@@ -1,6 +1,7 @@
 import type { MalikAIMode } from "@/lib/ai/config"
 import type { AIFileAttachment, AIMessage, AITaskType } from "@/lib/ai/types"
 import { publicEngineForProvider, sanitizePublicText } from "@/lib/brand-provider-map"
+import { identityAnswerFor, sanitizeModelAnswer, MALIK_STRICT_SYSTEM_PROMPT } from "@/lib/ai/identity"
 
 export const runtime = "nodejs"
 
@@ -108,7 +109,7 @@ function messagesFor(prompt: string, body: StreamBody) {
     .slice(-8)
     .map((message) => ({ role: message.role === "assistant" ? "assistant" : message.role === "system" ? "system" : "user", content: message.content }))
   if (!cleaned.some((message) => message.role === "system")) {
-    cleaned.unshift({ role: "system", content: "You are MALIK AI, a fast helpful AI assistant. Answer clearly in the user's language." })
+    cleaned.unshift({ role: "system", content: MALIK_STRICT_SYSTEM_PROMPT })
   }
   if (!cleaned.some((message) => message.role === "user" && message.content.trim() === prompt)) {
     cleaned.push({ role: "user", content: prompt })
@@ -186,11 +187,19 @@ export async function POST(request: Request) {
 
   if (!prompt) return streamText("MALIK AI is ready. Send a prompt to continue.", "demo-fallback", finalTask, false)
 
+  // Identity Guard: Check if this is a question about MALIK AI identity
+  const identityAnswer = identityAnswerFor(prompt)
+  if (identityAnswer) {
+    return streamText(identityAnswer, "malik-identity", finalTask, false)
+  }
+
   try {
     const result = await callLiveProviders(mode, prompt, body, request.signal)
-    return streamText(result.text, result.provider, finalTask, false)
+    const cleanText = sanitizeModelAnswer(result.text, prompt)
+    return streamText(cleanText, result.provider, finalTask, false)
   } catch (error) {
-    return streamText(fallbackText(prompt, error instanceof Error ? error.message : String(error)), "demo-fallback", finalTask, true)
+    const fallback = "MALIK AI switched to standby mode. Please try again or select another mode."
+    return streamText(fallback, "demo-fallback", finalTask, true)
   }
 }
 

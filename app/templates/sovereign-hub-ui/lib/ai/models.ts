@@ -2,6 +2,8 @@ import type { AIProviderId, AITaskType } from "./types"
 
 export const MODEL_REGISTRY: Record<AIProviderId, Partial<Record<AITaskType, string>>> = {
   local: {},
+  "malik-identity": {},
+  "demo-fallback": {},
   kimi: {
     chat: process.env.KIMI_MODEL || "kimi-k2.5",
     code: process.env.KIMI_CODE_MODEL || process.env.KIMI_MODEL || "kimi-k2.5",

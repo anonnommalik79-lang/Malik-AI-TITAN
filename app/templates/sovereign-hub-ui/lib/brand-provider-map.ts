@@ -58,9 +58,14 @@ export function publicEngineForProvider(provider?: string, kind?: string) {
 export function sanitizePublicText(value: unknown, fallback = "MALIK AI is temporarily using backup mode.") {
   const text = String(value || "").trim()
   if (!text) return fallback
+  
+  // Only sanitize environment keys, secrets, and internal config
+  // Do NOT replace provider names - that's handled by Identity Guard
+  const INTERNAL_ENV_PATTERN =
+    /\b[A-Z][A-Z0-9_]*(?:API_KEY|SECRET|TOKEN|MODEL|DEPLOYMENT|REGION|URL|BUCKET|ACCESS_KEY_ID)\b/g
+  
   const withoutEnv = text.replace(INTERNAL_ENV_PATTERN, "server setting")
-  const withoutIdentity = withoutEnv.replace(INTERNAL_IDENTITY_PATTERN, "MALIK engine")
-  return withoutIdentity
+  return withoutEnv
 }
 
 export function publicErrorMessage(error?: unknown) {

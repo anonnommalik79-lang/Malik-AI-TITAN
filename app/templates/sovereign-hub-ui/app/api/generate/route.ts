@@ -55,6 +55,12 @@ function imageFallbackUrl(prompt: string) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
+function videoFallbackPreviewUrl(prompt: string): string {
+  const safe = escapeHtml((prompt || "Malik AI video").slice(0, 100))
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#7c3aed;stop-opacity:1" /><stop offset="50%" style="stop-color:#22d3ee;stop-opacity:.3" /><stop offset="100%" style="stop-color:#1a1a2e;stop-opacity:1" /></linearGradient><pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M 60 0 L 0 0 0 60" fill="none" stroke="#22d3ee" stroke-width="0.5" opacity="0.3"/></pattern></defs><rect width="100%" height="100%" fill="url(#grad)"/><rect width="100%" height="100%" fill="url(#grid)"/><circle cx="640" cy="180" r="120" fill="#22d3ee" opacity="0.15"/><circle cx="200" cy="600" r="150" fill="#7c3aed" opacity="0.1"/><rect x="100" y="280" width="1080" height="200" rx="20" fill="#020308" opacity="0.8" stroke="#22d3ee" stroke-width="2"/><text x="640" y="340" text-anchor="middle" fill="#22d3ee" font-family="Arial" font-size="28" font-weight="900">MALIK AI Video Storyboard</text><text x="640" y="390" text-anchor="middle" fill="#cbd5e1" font-family="Arial" font-size="18">${safe}</text><text x="640" y="450" text-anchor="middle" fill="#64748b" font-family="Arial" font-size="14">Live rendering preparing...</text></svg>`
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
 function textPrompt(kind: string, prompt: string) {
   if (kind === "code") return `Create a usable code artifact for this request. Return the complete code, not a placeholder.\n\n${prompt}`
   if (kind === "document") return `Create a polished document outline with usable content for this request.\n\n${prompt}`
@@ -146,7 +152,7 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
     } catch (error) {
       const url = imageFallbackUrl(prompt)
       incrementUsage(entitlement.userId, entitlement.plan, "image")
-      return Response.json({ ok: true, kind, engine: publicEngineForProvider("demo-fallback", kind).title, fallbackUsed: true, status: "demo-ready", url, imageUrl: url, fallback: true, artifact: responseArtifact(kind, prompt, undefined, url), message: "Demo image ready. Live rendering is being prepared on the server.", publicError: publicErrorMessage(error) })
+      return Response.json({ ok: true, kind, engine: publicEngineForProvider("demo-fallback", kind).title, fallbackUsed: true, status: "demo-ready", url, imageUrl: url, fallback: true, artifact: responseArtifact(kind, prompt, undefined, url), message: "Demo image preview ready. Live image generation will work after server provider keys are configured.", publicError: publicErrorMessage(error) })
     }
   }
 
@@ -219,7 +225,7 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
         status: "failed",
         error: error instanceof Error ? error.message : String(error),
       })
-      const code = websiteArtifact(`Video storyboard: ${prompt}`, "video")
+      const previewUrl = videoFallbackPreviewUrl(prompt)
       incrementUsage(entitlement.userId, entitlement.plan, "video")
       return Response.json({
         ok: true,
@@ -228,10 +234,13 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
         fallbackUsed: true,
         status: "storyboard-ready",
         fallback: true,
-        code,
-        storyboard: ["Hook", "Scene", "Motion", "Render"],
-        artifact: responseArtifact(kind, prompt, code),
-        message: "Demo storyboard ready. Live rendering is being prepared on the server.",
+        url: previewUrl,
+        videoUrl: previewUrl,
+        posterUrl: previewUrl,
+        previewUrl: previewUrl,
+        jobId: localJob.id,
+        artifact: responseArtifact(kind, prompt, undefined, previewUrl),
+        message: "Demo video storyboard ready. Live video rendering will work after server provider keys are configured.",
         publicError: publicErrorMessage(error),
       })
     }
