@@ -4,6 +4,8 @@ import { providerFetch } from "./base"
 
 type VideoProviderId = "aws-bedrock" | "runway" | "luma" | "fal" | "veo"
 
+const GEMINI_VIDEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
 function has(name: string) {
   return Boolean(process.env[name]?.trim())
 }
@@ -17,7 +19,7 @@ function runwayKey() {
 }
 
 function veoKey() {
-  return process.env.GOOGLE_VEO_API_KEY || process.env.VEO_API_KEY
+  return process.env.GOOGLE_VEO_API_KEY || process.env.VEO_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
 }
 
 function bedrockBearerToken() {
@@ -51,7 +53,8 @@ function bedrockOutputS3Uri() {
 }
 
 function aspectRatio(input: AIRequest) {
-  return String(input.metadata?.aspectRatio || "16:9")
+  const value = String(input.metadata?.aspectRatio || input.metadata?.format || "16:9")
+  return value === "9:16" ? "9:16" : "16:9"
 }
 
 function duration(input: AIRequest) {
@@ -266,28 +269,36 @@ async function generateWithVeo(input: AIRequest) {
   const started = Date.now()
   const key = veoKey()
   if (!key) throw new Error("GOOGLE_VEO_API_KEY or VEO_API_KEY not configured")
-  const model = process.env.GOOGLE_VEO_MODEL || "veo-3.1-generate-preview"
 
-  const response = await providerFetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:predictLongRunning?key=${key}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        instances: [{ prompt: input.prompt }],
-        parameters: { aspectRatio: aspectRatio(input) },
-      }),
-      signal: input.signal,
+  const model = process.env.GOOGLE_VEO_MODEL || process.env.VEO_MODEL || "veo-3.1-generate-preview"
+  const endpoint = `${GEMINI_VIDEO_BASE_URL}/models/${model}:predictLongRunning`
+
+  const response = await providerFetch(endpoint, {
+    method: "POST",
+    headers: {
+      "x-goog-api-key": key,
+      "content-type": "application/json",
+      accept: "application/json",
     },
-  )
+    body: JSON.stringify({
+      instances: [{ prompt: input.prompt }],
+      parameters: {
+        aspectRatio: aspectRatio(input),
+      },
+    }),
+    signal: input.signal,
+  })
 
   const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(payload?.error?.message || `Google Veo returned ${response.status}`)
-  if (!payload?.name) throw new Error("Google Veo returned no operation name")
+  if (!response.ok) throw new Error(extractJsonError(payload, `Google Veo returned ${response.status}`))
+
+  const operationName = payload?.name
+  if (!operationName) throw new Error("Google Veo returned no operation name")
 
   return queued("veo", model, started, {
-    jobId: payload.name,
-    statusUrl: `https://generativelanguage.googleapis.com/v1beta/${payload.name}`,
+    jobId: operationName,
+    operationName,
+    statusUrl: `${GEMINI_VIDEO_BASE_URL}/${operationName}`,
   })
 }
 
@@ -309,7 +320,7 @@ function isConfigured(provider: string) {
 }
 
 export const videoProviderRouter: AIProvider = {
-  id: "aws-bedrock",
+  id: "veo",
   title: "Video Provider Router",
   supports: ["video"],
 
@@ -318,13 +329,13 @@ export const videoProviderRouter: AIProvider = {
     const configured = providers.filter(isConfigured)
 
     return {
-      provider: "aws-bedrock",
+      provider: "veo",
       configured: configured.length > 0,
       supports: ["video"],
       models: providers,
       message: configured.length
         ? `Video router ready. Configured: ${configured.join(", ")}. Long-running providers return queued jobs.`
-        : "No video provider configured. Add AWS Bedrock video, Runway, Luma, FAL, or Veo keys.",
+        : "No video provider configured. Add GOOGLE_VEO_API_KEY, FAL_KEY, LUMA_API_KEY, Runway, or AWS Bedrock video keys.",
     }
   },
 
@@ -343,7 +354,7 @@ export const videoProviderRouter: AIProvider = {
   async generateVideo(input: AIRequest): Promise<AIResponse> {
     const errors: string[] = []
     const requested = input.provider || String(input.metadata?.requestedProvider || "")
-    const order = providerOrder("VIDEO_PROVIDER_ORDER", ["aws-bedrock", "runway", "luma", "fal", "veo"], requested)
+    const order = providerOrder("VIDEO_PROVIDER_ORDER", ["veo", "fal", "luma", "runway", "aws-bedrock"], requested)
 
     for (const provider of order) {
       const handler = handlers[provider]
@@ -364,7 +375,7 @@ export const videoProviderRouter: AIProvider = {
     throw new Error(
       errors.length
         ? errors.join(" | ")
-        : "No video provider configured. Add AWS_BEARER_TOKEN_BEDROCK + BEDROCK_VIDEO_OUTPUT_S3_URI, RUNWAYML_API_SECRET, LUMA_API_KEY, FAL_KEY, or GOOGLE_VEO_API_KEY.",
+        : "No video provider configured. Add GOOGLE_VEO_API_KEY, FAL_KEY, LUMA_API_KEY, RUNWAYML_API_SECRET, or AWS Bedrock video keys.",
     )
   },
 
