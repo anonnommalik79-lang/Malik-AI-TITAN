@@ -186,7 +186,7 @@ function createInlineMediaSeed(kind: "image" | "video", prompt: string): InlineM
     kind,
     status: "queued",
     prompt,
-    provider: kind === "video" ? "Luma Dream Machine" : "Luma Photon",
+    provider: kind === "video" ? "Google Veo" : "Gemini Vision",
     progress: 6,
     createdAt: new Date().toISOString(),
   }
@@ -237,6 +237,61 @@ function extractInlineMediaUrl(payload: any, kind: "image" | "video"): string {
   return scan(payload)
 }
 
+
+function getInlineProvider(kind: "image" | "video"): string {
+  if (kind === "video") {
+    return "veo"
+  }
+  return "gemini"
+}
+
+function pickInlineMediaStatus(payload: any, kind: "image" | "video", mediaUrl: string, isFallback: boolean): InlineMediaGenerationStatus {
+  const raw = String(payload?.status || payload?.state || payload?.generationStatus || "").toLowerCase()
+
+  if (raw === "failed" || raw === "error" || raw === "cancelled") return "failed"
+
+  const hasJob =
+    typeof payload?.jobId === "string" ||
+    typeof payload?.id === "string" ||
+    typeof payload?.operationName === "string" ||
+    typeof payload?.operation === "string" ||
+    typeof payload?.statusUrl === "string"
+
+  const isVideo = kind === "video"
+  const isRealVideo =
+    typeof mediaUrl === "string" &&
+    (/\\.(mp4|webm|mov|m4v)(\\?|#|$)/i.test(mediaUrl) || /^blob:/i.test(mediaUrl))
+
+  if (isVideo && hasJob && !isRealVideo && !isFallback) return "rendering"
+  if (raw === "queued" || raw === "processing" || raw === "rendering" || raw === "running" || raw === "submitted") return "rendering"
+
+  if (mediaUrl) return "ready"
+  if (hasJob) return "rendering"
+
+  return "failed"
+}
+
+function extractInlineMediaJobId(payload: any): string | undefined {
+  const value =
+    payload?.jobId ||
+    payload?.id ||
+    payload?.operationName ||
+    payload?.operation ||
+    payload?.providerJobId ||
+    payload?.data?.jobId ||
+    payload?.result?.jobId
+  return typeof value === "string" && value.trim() ? value : undefined
+}
+
+function extractInlineMediaStatusUrl(payload: any): string | undefined {
+  const value =
+    payload?.statusUrl ||
+    payload?.pollUrl ||
+    payload?.data?.statusUrl ||
+    payload?.result?.statusUrl
+  return typeof value === "string" && value.trim() ? value : undefined
+}
+
 function buildInlineMediaAssistantText(media: InlineMediaGeneration): string {
   if (media.status === "ready") {
     return media.kind === "video"
@@ -249,7 +304,7 @@ function buildInlineMediaAssistantText(media: InlineMediaGeneration): string {
   }
 
   if (media.kind === "video" && (media.status === "queued" || media.status === "rendering" || media.status === "generating")) {
-    return "🎬 Видео запущено. Bedrock/Runway/Luma рендерит сцену — это long-running job, дождись статуса."
+    return "🎬 Видео запущено через Google Veo. Это long-running job: карточка сама дождётся готового результата."
   }
 
   return media.kind === "video"
