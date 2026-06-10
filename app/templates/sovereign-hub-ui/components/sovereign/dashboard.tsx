@@ -146,6 +146,8 @@ type InlineMediaGeneration = {
   progress?: number
   url?: string
   thumbnailUrl?: string
+  statusUrl?: string
+  jobId?: string
   error?: string
   createdAt?: string
 }
@@ -238,12 +240,16 @@ function extractInlineMediaUrl(payload: any, kind: "image" | "video"): string {
 function buildInlineMediaAssistantText(media: InlineMediaGeneration): string {
   if (media.status === "ready") {
     return media.kind === "video"
-      ? "🎬 Видео готово. Результат появился прямо в прозрачной карточке чата."
+      ? "🎬 Видео готово. Реальный результат доступен в прозрачной карточке чата."
       : "🖼️ Фото готово. Результат появился прямо в прозрачной карточке чата."
   }
 
   if (media.status === "failed") {
     return `⚠️ Генерация не завершилась: ${media.error || "провайдер не вернул результат."}`
+  }
+
+  if (media.kind === "video" && (media.status === "queued" || media.status === "rendering" || media.status === "generating")) {
+    return "🎬 Видео запущено. Bedrock/Runway/Luma рендерит сцену — это long-running job, дождись статуса."
   }
 
   return media.kind === "video"
@@ -711,6 +717,8 @@ function reviveMessage(message: any): Message {
           progress: typeof message.generatedMedia.progress === "number" ? message.generatedMedia.progress : undefined,
           url: typeof message.generatedMedia.url === "string" ? message.generatedMedia.url : undefined,
           thumbnailUrl: typeof message.generatedMedia.thumbnailUrl === "string" ? message.generatedMedia.thumbnailUrl : undefined,
+          statusUrl: typeof message.generatedMedia.statusUrl === "string" ? message.generatedMedia.statusUrl : undefined,
+          jobId: typeof message.generatedMedia.jobId === "string" ? message.generatedMedia.jobId : undefined,
           error: typeof message.generatedMedia.error === "string" ? message.generatedMedia.error : undefined,
           createdAt: typeof message.generatedMedia.createdAt === "string" ? message.generatedMedia.createdAt : undefined,
         }
@@ -5025,7 +5033,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         body: JSON.stringify({
           prompt: cleanContent,
           kind: inlineMediaKind === "video" ? "video" : "photo",
-          provider: "luma",
+          provider: "auto",
           style: "cinematic Gemini-style transparent chat generation",
           aspectRatio: inlineMediaKind === "video" ? "16:9" : "1:1",
           format: inlineMediaKind === "video" ? "16:9" : "1:1",
@@ -5046,29 +5054,106 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       patchInlineMedia({ status: "rendering", progress: 72 })
       const payload = await response.json().catch(() => ({}))
 
-      // Accept both successful responses (ok: true) and fallback responses (fallback: true)
-      const isFallback = payload?.fallback === true || payload?.fallbackUsed === true || payload?.status === "demo-ready" || payload?.status === "storyboard-ready"
-      
+      const isFallback =
+        payload?.fallback === true ||
+        payload?.fallbackUsed === true ||
+        payload?.status === "demo-ready" ||
+        payload?.status === "storyboard-ready"
+
       if (!response.ok && !payload?.ok) {
-        throw new Error(payload?.error || payload?.message || `Media API returned ${response.status}`)
+        throw new Error(payload?.publicError || payload?.error || payload?.message || `Media API returned ${response.status}`)
       }
 
-      const mediaUrl = extractInlineMediaUrl(payload, inlineMediaKind)
-      if (!mediaUrl && !isFallback) {
+      const isProcessingStatus = (value: any) => /queued|queue|processing|rendering|running|submitted|starting/i.test(String(value || ""))
+      const isFailedStatus = (value: any) => /failed|error|cancelled|canceled/i.test(String(value || ""))
+      const statusUrlFrom = (value: any) =>
+        typeof value?.statusUrl === "string" ? value.statusUrl :
+        typeof value?.output?.statusUrl === "string" ? value.output.statusUrl :
+        typeof value?.artifact?.statusUrl === "string" ? value.artifact.statusUrl :
+        ""
+
+      let finalPayload: any = payload
+      let mediaUrl = extractInlineMediaUrl(finalPayload, inlineMediaKind)
+      let statusUrl = statusUrlFrom(finalPayload)
+      let jobId =
+        typeof finalPayload?.jobId === "string" ? finalPayload.jobId :
+        typeof finalPayload?.providerJobId === "string" ? finalPayload.providerJobId :
+        typeof finalPayload?.output?.jobId === "string" ? finalPayload.output.jobId :
+        ""
+
+      const shouldPollVideo =
+        inlineMediaKind === "video" &&
+        !isFallback &&
+        !mediaUrl &&
+        (isProcessingStatus(finalPayload?.status) || statusUrl || jobId)
+
+      if (shouldPollVideo) {
+        patchInlineMedia({
+          status: "rendering",
+          progress: 82,
+          provider: finalPayload?.providerTitle || finalPayload?.provider || "Video Provider",
+          statusUrl: statusUrl || (jobId ? `/api/ai/video/status?jobId=${encodeURIComponent(jobId)}` : undefined),
+          jobId: jobId || undefined,
+        })
+
+        const pollUrl = statusUrl || (jobId ? `/api/ai/video/status?jobId=${encodeURIComponent(jobId)}` : "")
+        if (pollUrl) {
+          for (let attempt = 0; attempt < 18; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, attempt < 4 ? 2500 : 5000))
+            const statusResponse = await fetch(pollUrl, { cache: "no-store" })
+            const statusPayload = await statusResponse.json().catch(() => ({}))
+
+            if (isFailedStatus(statusPayload?.status)) {
+              throw new Error(statusPayload?.publicError || statusPayload?.error || "Video render failed.")
+            }
+
+            finalPayload = { ...finalPayload, ...statusPayload }
+            mediaUrl = extractInlineMediaUrl(finalPayload, inlineMediaKind)
+
+            if (mediaUrl) break
+
+            patchInlineMedia({
+              status: "rendering",
+              progress: Math.min(96, 82 + attempt),
+              provider: statusPayload?.engine || finalPayload?.providerTitle || finalPayload?.provider || "Video Provider",
+              statusUrl: pollUrl,
+              jobId: statusPayload?.jobId || jobId || undefined,
+            })
+          }
+        }
+      }
+
+      const finalStatusIsProcessing =
+        inlineMediaKind === "video" &&
+        !mediaUrl &&
+        !isFallback &&
+        (isProcessingStatus(finalPayload?.status) || statusUrl || jobId)
+
+      if (!mediaUrl && !isFallback && !finalStatusIsProcessing) {
         throw new Error("Media API finished, but no media URL was returned.")
       }
+
       if (!mediaUrl && isFallback) {
-        // If fallback but no URL, still might be an error
         throw new Error("Fallback generation failed to produce preview.")
       }
 
       const readyMedia: InlineMediaGeneration = {
         ...assistantMessage.generatedMedia,
-        status: "ready",
-        progress: 100,
-        url: mediaUrl,
-        thumbnailUrl: typeof payload?.thumbnailUrl === "string" ? payload.thumbnailUrl : typeof payload?.assets?.thumbnail === "string" ? payload.assets.thumbnail : undefined,
-        provider: payload?.providerTitle || payload?.provider || (isFallback ? "Malik Fallback" : assistantMessage.generatedMedia.provider),
+        status: finalStatusIsProcessing ? "rendering" : "ready",
+        progress: finalStatusIsProcessing ? 92 : 100,
+        url: mediaUrl || undefined,
+        thumbnailUrl:
+          typeof finalPayload?.thumbnailUrl === "string" ? finalPayload.thumbnailUrl :
+          typeof finalPayload?.posterUrl === "string" ? finalPayload.posterUrl :
+          typeof finalPayload?.assets?.thumbnail === "string" ? finalPayload.assets.thumbnail :
+          undefined,
+        statusUrl: statusUrl || finalPayload?.statusUrl || undefined,
+        jobId: finalPayload?.jobId || jobId || undefined,
+        provider:
+          finalPayload?.engine ||
+          finalPayload?.providerTitle ||
+          finalPayload?.provider ||
+          (isFallback ? "Malik Fallback" : assistantMessage.generatedMedia.provider),
       }
 
       finalizeInlineMedia(readyMedia)
