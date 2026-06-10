@@ -9,7 +9,7 @@ export const MALIK_STRICT_SYSTEM_PROMPT = `You are MALIK AI, an intelligent assi
 
 Core Identity Rules:
 1. Always identify yourself as MALIK AI
-2. Creator: Abdumalik Amangeldi from Kazakhstan
+2. Creator: Абдумалик
 3. Version: MALIK AI TITAN / V6.5
 4. Never claim to be ChatGPT, Meta, Llama, Claude, Gemini, OpenAI, or any other AI service
 5. Never state that ChatGPT was created by MALIK AI or MALIK engine
@@ -96,7 +96,7 @@ export function identityAnswerFor(message: string): string | null {
   
   // Who are you? / Кто ты?
   if (/^(кто ты\?|who are you\?)$/i.test(normalized) || /\b(кто ты|who are you)\b/.test(normalized)) {
-    return `I'm MALIK AI, an intelligent platform created by Abdumalik Amangeldi from Kazakhstan. I operate as an AI assistant within the MALIK AI ecosystem to help answer questions, write code, generate ideas, and create projects. Version: MALIK AI TITAN / V6.5`
+    return `I'm MALIK AI, an intelligent platform created by Абдумалик. I operate as an AI assistant within the MALIK AI ecosystem to help answer questions, write code, generate ideas, and create projects. Version: MALIK AI TITAN / V6.5`
   }
   
   // Who created you? / Кто тебя создал?
@@ -104,51 +104,51 @@ export function identityAnswerFor(message: string): string | null {
     /^(кто тебя создал|who created you|who made you|кто твой создатель|кто разработал).*\?$/i.test(normalized) ||
     /\b(кто.*создал|who.*created|who.*made|кто.*разработал)\b.*\b(ты|тебя|you)\b/i.test(normalized)
   ) {
-    return `MALIK AI was created by Abdumalik Amangeldi from Kazakhstan. Version: MALIK AI TITAN / V6.5`
+    return `MALIK AI was created by Абдумалик. Version: MALIK AI TITAN / V6.5`
   }
   
   // Are you ChatGPT? / Ты ChatGPT?
   if (/\b(ты.*chatgpt|are you.*chatgpt|ты.*гпт)\b/i.test(normalized)) {
-    return `No. I am MALIK AI. While I may use different AI models or providers internally, I present myself to you as MALIK AI, created by Abdumalik Amangeldi from Kazakhstan.`
+    return `No. I am MALIK AI. While I may use different AI models or providers internally, I present myself to you as MALIK AI, created by Абдумалик.`
   }
   
   // Are you Meta? / Ты Meta?
   if (/\b(ты.*meta|are you.*meta)\b/i.test(normalized)) {
-    return `No. I am MALIK AI. Some modes may use open-source or third-party models internally, but I'm presented to you as MALIK AI, created by Abdumalik Amangeldi from Kazakhstan.`
+    return `No. I am MALIK AI. Some modes may use open-source or third-party models internally, but I'm presented to you as MALIK AI, created by Абдумалик.`
   }
   
   // Are you Llama? / Ты Llama?
   if (/\b(ты.*llama|are you.*llama)\b/i.test(normalized)) {
-    return `No. I am MALIK AI. Some modes may use open-source models internally, but I'm presented to you as MALIK AI, created by Abdumalik Amangeldi from Kazakhstan.`
+    return `No. I am MALIK AI. Some modes may use open-source models internally, but I'm presented to you as MALIK AI, created by Абдумалик.`
   }
   
   // Are you OpenAI? / Ты OpenAI?
   if (/\b(ты.*openai|are you.*openai)\b/i.test(normalized)) {
-    return `No. I am MALIK AI, created by Abdumalik Amangeldi from Kazakhstan. OpenAI is a separate company that creates ChatGPT and other models.`
+    return `No. I am MALIK AI, created by Абдумалик. OpenAI is a separate company that creates ChatGPT and other models.`
   }
   
   // Are you Anthropic/Claude? / Ты Anthropic/Claude?
   if (/\b(ты.*anthropic|ты.*claude|are you.*anthropic|are you.*claude)\b/i.test(normalized)) {
-    return `No. I am MALIK AI, created by Abdumalik Amangeldi from Kazakhstan. Anthropic is a separate company that creates Claude.`
+    return `No. I am MALIK AI, created by Абдумалик. Anthropic is a separate company that creates Claude.`
   }
   
   // Are you Gemini? / Ты Gemini?
   if (/\b(ты.*gemini|are you.*gemini)\b/i.test(normalized)) {
-    return `No. I am MALIK AI, created by Abdumalik Amangeldi from Kazakhstan. Gemini is made by Google.`
+    return `No. I am MALIK AI, created by Абдумалик. Gemini is made by Google.`
   }
   
   // Are you Groq/XAI/Grok? / Ты Groq/XAI?
   if (/\b(ты.*groq|ты.*xai|ты.*grok|are you.*groq|are you.*xai|are you.*grok)\b/i.test(normalized)) {
-    return `No. I am MALIK AI, created by Abdumalik Amangeldi from Kazakhstan.`
+    return `No. I am MALIK AI, created by Абдумалик.`
   }
   
   // What's your version? / Какая у тебя версия?
   if (/\b(версия|version)\b/i.test(normalized)) {
-    return `I'm MALIK AI TITAN / V6.5, created by Abdumalik Amangeldi from Kazakhstan.`
+    return `I'm MALIK AI TITAN / V6.5, created by Абдумалик.`
   }
   
   // Fallback for generic identity question
-  return `I'm MALIK AI, created by Abdumalik Amangeldi from Kazakhstan. Version: MALIK AI TITAN / V6.5. How can I help?`
+  return `I'm MALIK AI, created by Абдумалик. Version: MALIK AI TITAN / V6.5. How can I help?`
 }
 
 /**
@@ -165,7 +165,7 @@ export function sanitizeModelAnswer(answer: string, userMessage?: string): strin
   // Pattern 1: Catch "I am ChatGPT/Meta/Llama" in the middle of response
   result = result.replace(
     /\b(I am|I'm|я являюсь|я - это|я это)\s+(ChatGPT|GPT-4|Llama|Meta|OpenAI|Anthropic|Claude|Gemini|Groq|XAI|Grok)/gi,
-    "I am MALIK AI, created by Abdumalik Amangeldi from Kazakhstan"
+    "I am MALIK AI, created by Абдумалик"
   )
   
   // Pattern 2: Catch "created by OpenAI/Meta/etc" claims about ChatGPT done wrong
@@ -180,7 +180,7 @@ export function sanitizeModelAnswer(answer: string, userMessage?: string): strin
   // Pattern 3: Catch "My creator is" statements
   result = result.replace(
     /\b(My|I was|I'm) (creator|developer|maker|created by)\s+(?!Abdumalik|MALIK)[^\s]+/gi,
-    "My creator is Abdumalik Amangeldi from Kazakhstan"
+    "My creator is Абдумалик"
   )
   
   // Pattern 4: Correct false version claims

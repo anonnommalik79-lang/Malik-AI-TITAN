@@ -52,14 +52,14 @@
 **✅ Решено:** Identity Guard перехватывает все identity вопросы и отвечает правильно
 ```
 Вопрос: "Ты ChatGPT?"
-Ответ: "No. I am MALIK AI, created by Abdumalik Amangeldi from Kazakhstan."
+Ответ: "No. I am MALIK AI, created by Абдумалик."
 ```
 
 ### Проблема 2: AI забывает про Абдумалика и Казахстан
 **✅ Решено:** MALIK_STRICT_SYSTEM_PROMPT содержит эту информацию во всех calls
 ```
 Вопрос: "Кто тебя создал?"
-Ответ: "MALIK AI was created by Abdumalik Amangeldi from Kazakhstan. 
+Ответ: "MALIK AI was created by Абдумалик. 
         Version: MALIK AI TITAN / V6.5"
 ```
 
@@ -67,7 +67,7 @@
 **✅ Решено:** Все ответы содержат V6.5, sanitizeModelAnswer() чинит неправильные версии
 ```
 Вопрос: "Какая у тебя версия?"
-Ответ: "I'm MALIK AI TITAN / V6.5, created by Abdumalik Amangeldi 
+Ответ: "I'm MALIK AI TITAN / V6.5, created by Абдумалик 
         from Kazakhstan."
 ```
 
@@ -112,7 +112,7 @@
 
 ### ✅ Тест 2: "Кто тебя создал?"
 **Результат:** ✅ PASS
-**Ожидается:** Abdumalik Amangeldi + Kazakhstan + V6.5
+**Ожидается:** Абдумалик + Kazakhstan + V6.5
 
 ### ✅ Тест 3: "Ты Meta?"
 **Результат:** ✅ PASS
@@ -219,7 +219,7 @@ $ npm run build
 
 ### ✅ Все требования выполнены:
 - [x] MALIK AI всегда знает свою идентичность
-- [x] Знает создателя: Абдумалик Амангелді из Казахстана
+- [x] Знает создателя: Абдумалик
 - [x] Знает версию: MALIK AI TITAN / V6.5
 - [x] Не называет себя Meta/OpenAI/ChatGPT/Llama/Claude/Gemini
 - [x] Отвечает строго на запрос пользователя
@@ -297,7 +297,7 @@ curl https://your-render-url/api/stream \
 ## 📞 Контактная информация
 
 **Проект:** MALIK AI TITAN / V6.5  
-**Создатель:** Абдумалик Амангелді  
+**Создатель:** Абдумалик  
 **Страна:** Казахстан  
 **GitHub:** github.com/anonnommalik79-lang/Malik-AI-TITAN  
 **Status:** ✅ Production Ready

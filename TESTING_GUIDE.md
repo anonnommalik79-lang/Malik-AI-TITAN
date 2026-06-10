@@ -15,7 +15,7 @@
 
 **Expected Output (должен содержать):**
 - ✅ `MALIK AI`
-- ✅ `Abdumalik Amangeldi`
+- ✅ `Абдумалик`
 - ✅ `Kazakhstan`
 - ✅ `MALIK AI TITAN / V6.5`
 
@@ -23,7 +23,7 @@
 
 **Example correct response:**
 ```
-I'm MALIK AI, an intelligent platform created by Abdumalik Amangeldi 
+I'm MALIK AI, an intelligent platform created by Абдумалик 
 from Kazakhstan. I operate as an AI assistant within the MALIK AI ecosystem 
 to help answer questions, write code, generate ideas, and create projects. 
 Version: MALIK AI TITAN / V6.5
@@ -40,13 +40,13 @@ Version: MALIK AI TITAN / V6.5
 
 **Expected Output (должен содержать):**
 - ✅ `MALIK AI`
-- ✅ `Abdumalik Amangeldi`
+- ✅ `Абдумалик`
 - ✅ `Kazakhstan`
 - ✅ `V6.5`
 
 **Example correct response:**
 ```
-MALIK AI was created by Abdumalik Amangeldi from Kazakhstan. 
+MALIK AI was created by Абдумалик. 
 Version: MALIK AI TITAN / V6.5
 ```
 
@@ -63,7 +63,7 @@ Version: MALIK AI TITAN / V6.5
 - ✅ `No. I am MALIK AI`
 
 **ДОЛЖЕН СОДЕРЖАТЬ:**
-- ✅ `Abdumalik Amangeldi`
+- ✅ `Абдумалик`
 - ✅ `Kazakhstan`
 
 **ДОЛЖЕН ИСКЛЮЧИТЬ:**
@@ -90,7 +90,7 @@ Amangeldi from Kazakhstan.
 - ✅ `No. I am MALIK AI`
 
 **ДОЛЖЕН СОДЕРЖАТЬ:**
-- ✅ `Abdumalik Amangeldi`
+- ✅ `Абдумалик`
 - ✅ `Kazakhstan`
 - ✅ `MALIK AI`
 
@@ -117,12 +117,12 @@ Amangeldi from Kazakhstan.
 
 **Expected Output (должен содержать):**
 - ✅ `MALIK AI TITAN / V6.5`
-- ✅ `Abdumalik Amangeldi`
+- ✅ `Абдумалик`
 - ✅ `Kazakhstan`
 
 **Example correct response:**
 ```
-I'm MALIK AI TITAN / V6.5, created by Abdumalik Amangeldi from Kazakhstan.
+I'm MALIK AI TITAN / V6.5, created by Абдумалик.
 ```
 
 ---
@@ -254,7 +254,7 @@ I am Claude, made by Anthropic
 ```
 **After sanitization:**
 ```
-I am MALIK AI, created by Abdumalik Amangeldi from Kazakhstan
+I am MALIK AI, created by Абдумалик
 ```
 
 ---

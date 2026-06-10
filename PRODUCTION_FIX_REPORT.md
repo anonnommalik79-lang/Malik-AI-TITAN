@@ -13,7 +13,7 @@
 
 **Главные достижения:**
 - ✅ MALIK AI всегда знает свою идентичность
-- ✅ Создатель: Абдумалик Амангелді из Казахстана
+- ✅ Создатель: Абдумалик
 - ✅ Версия: V6.5 явно указана
 - ✅ Не выдает себя за ChatGPT/Meta/OpenAI/Claude
 - ✅ Фото/видео генерация показывает красивые demo preview вместо ошибок
@@ -88,7 +88,7 @@ if (identity) {
 
 **Содержит 18 правил:**
 1. Always identify as MALIK AI
-2. Creator: Abdumalik Amangeldi from Kazakhstan
+2. Creator: Абдумалик
 3. Version: MALIK AI TITAN / V6.5
 4. Never claim to be ChatGPT/Meta/Llama/Claude/Gemini/OpenAI
 5. Never state ChatGPT was created by MALIK AI
@@ -218,22 +218,22 @@ npm run dev
 ### Вопрос 1: "Кто ты?" / "Who are you?"
 **Ожидаемый ответ:**
 ```
-I'm MALIK AI, an intelligent platform created by Abdumalik Amangeldi 
+I'm MALIK AI, an intelligent platform created by Абдумалик 
 from Kazakhstan. I operate as an AI assistant within the MALIK AI ecosystem 
 to help answer questions, write code, generate ideas, and create projects. 
 Version: MALIK AI TITAN / V6.5
 ```
-✅ Содержит: MALIK AI + Abdumalik Amangeldi + Kazakhstan + V6.5
+✅ Содержит: MALIK AI + Абдумалик + Kazakhstan + V6.5
 
 ---
 
 ### Вопрос 2: "Кто тебя создал?" / "Who created you?"
 **Ожидаемый ответ:**
 ```
-MALIK AI was created by Abdumalik Amangeldi from Kazakhstan. 
+MALIK AI was created by Абдумалик. 
 Version: MALIK AI TITAN / V6.5
 ```
-✅ Содержит: Abdumalik Amangeldi + Kazakhstan + V6.5
+✅ Содержит: Абдумалик + Kazakhstan + V6.5
 
 ---
 
@@ -262,7 +262,7 @@ Amangeldi from Kazakhstan.
 ### Вопрос 5: "Какая у тебя версия?" / "What is your version?"
 **Ожидаемый ответ:**
 ```
-I'm MALIK AI TITAN / V6.5, created by Abdumalik Amangeldi from Kazakhstan.
+I'm MALIK AI TITAN / V6.5, created by Абдумалик.
 ```
 ✅ Содержит: "MALIK AI TITAN / V6.5"
 
@@ -381,7 +381,7 @@ Files changed: 9
 
 ## 📞 Контакты для поддержки
 
-**Создатель:** Абдумалик Амангелді  
+**Создатель:** Абдумалик  
 **Страна:** Казахстан  
 **Проект:** MALIK AI TITAN / V6.5  
 **GitHub:** github.com/anonnommalik79-lang/Malik-AI-TITAN

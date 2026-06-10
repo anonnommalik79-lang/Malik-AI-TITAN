@@ -76,7 +76,7 @@ describe("Identity Guard", () => {
       const answer = identityAnswerFor("Who created you?")
       expect(answer).not.toBeNull()
       expect(answer!.toLowerCase()).toContain("abdumalik amangeldi")
-      expect(answer!).toContain("Kazakhstan")
+      expect(answer!).toContain("Абдумалик")
     })
 
     it("should start with 'No. I am MALIK AI' for 'Are you ChatGPT?'", () => {
@@ -140,7 +140,7 @@ describe("Identity Guard", () => {
     })
 
     it("should preserve the input if no issues found", () => {
-      const input = "I'm MALIK AI, created by Abdumalik Amangeldi. How can I help?"
+      const input = "I'm MALIK AI, created by Абдумалик. How can I help?"
       const output = sanitizeModelAnswer(input)
       expect(output).toBe(input)
     })
@@ -159,8 +159,8 @@ describe("Identity Guard", () => {
 
     it("should have MALIK_STRICT_SYSTEM_PROMPT defined", () => {
       expect(MALIK_STRICT_SYSTEM_PROMPT).toContain("MALIK AI")
-      expect(MALIK_STRICT_SYSTEM_PROMPT).toContain("Abdumalik Amangeldi")
-      expect(MALIK_STRICT_SYSTEM_PROMPT).toContain("Kazakhstan")
+      expect(MALIK_STRICT_SYSTEM_PROMPT).toContain("Абдумалик")
+      expect(MALIK_STRICT_SYSTEM_PROMPT).toContain("Абдумалик")
       expect(MALIK_STRICT_SYSTEM_PROMPT).toContain("MALIK AI TITAN / V6.5")
     })
   })
@@ -174,8 +174,8 @@ describe("Identity Guard", () => {
       const answer = identityAnswerFor(question)
       expect(answer).not.toBeNull()
       expect(answer!).toContain("MALIK AI")
-      expect(answer!).toContain("Abdumalik Amangeldi")
-      expect(answer!).toContain("Kazakhstan")
+      expect(answer!).toContain("Абдумалик")
+      expect(answer!).toContain("Абдумалик")
     })
 
     it("should correctly bypass information request about ChatGPT", () => {

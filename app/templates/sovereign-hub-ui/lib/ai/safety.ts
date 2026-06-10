@@ -5,7 +5,7 @@ export const HONEST_POSITIONING =
   "MALIK AI is a Kazakhstan-built multi-model AI command center combining fast chat, deep reasoning, coding, image generation, video generation, memory and 200 practical AI capabilities."
 
 export const FOUNDER_LINE =
-  "Built by Abdumalik Amangeldy, a 16-year-old founder/developer from Kazakhstan."
+  "Built by Абдумалик."
 
 export const STAGE_LINE =
   "MALIK AI is an early-stage AI platform and release candidate with global ambition."
