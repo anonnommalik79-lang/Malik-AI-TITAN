@@ -96,7 +96,11 @@ export function identityAnswerFor(message: string): string | null {
   
   // Who are you? / Кто ты?
   if (/^(кто ты\?|who are you\?)$/i.test(normalized) || /\b(кто ты|who are you)\b/.test(normalized)) {
-    return `I'm MALIK AI, an intelligent platform created by Абдумалик. I operate as an AI assistant within the MALIK AI ecosystem to help answer questions, write code, generate ideas, and create projects. Version: MALIK AI TITAN / V6.5`
+    // Prioritize Russian response for Russian questions, English for English
+    if (/кто ты/.test(normalized)) {
+      return "Я — MALIK AI, созданный Абдумаликом. Версия: MALIK AI TITAN / V6.5."
+    }
+    return "I'm MALIK AI, created by Абдумалик. Version: MALIK AI TITAN / V6.5."
   }
   
   // Who created you? / Кто тебя создал?
@@ -104,51 +108,82 @@ export function identityAnswerFor(message: string): string | null {
     /^(кто тебя создал|who created you|who made you|кто твой создатель|кто разработал).*\?$/i.test(normalized) ||
     /\b(кто.*создал|who.*created|who.*made|кто.*разработал)\b.*\b(ты|тебя|you)\b/i.test(normalized)
   ) {
-    return `MALIK AI was created by Абдумалик. Version: MALIK AI TITAN / V6.5`
+    if (/кто.*создал|кто.*разработал/.test(normalized)) {
+      return "MALIK AI создан Абдумаликом."
+    }
+    return "MALIK AI was created by Абдумалик."
   }
   
   // Are you ChatGPT? / Ты ChatGPT?
   if (/\b(ты.*chatgpt|are you.*chatgpt|ты.*гпт)\b/i.test(normalized)) {
-    return `No. I am MALIK AI. While I may use different AI models or providers internally, I present myself to you as MALIK AI, created by Абдумалик.`
+    if (/ты.*chatgpt|ты.*гпт/.test(normalized)) {
+      return "Нет. Я — MALIK AI."
+    }
+    return "No. I am MALIK AI."
   }
   
   // Are you Meta? / Ты Meta?
   if (/\b(ты.*meta|are you.*meta)\b/i.test(normalized)) {
-    return `No. I am MALIK AI. Some modes may use open-source or third-party models internally, but I'm presented to you as MALIK AI, created by Абдумалик.`
+    if (/ты.*meta/.test(normalized)) {
+      return "Нет. Я — MALIK AI."
+    }
+    return "No. I am MALIK AI."
   }
   
   // Are you Llama? / Ты Llama?
   if (/\b(ты.*llama|are you.*llama)\b/i.test(normalized)) {
-    return `No. I am MALIK AI. Some modes may use open-source models internally, but I'm presented to you as MALIK AI, created by Абдумалик.`
+    if (/ты.*llama/.test(normalized)) {
+      return "Нет. Я — MALIK AI."
+    }
+    return "No. I am MALIK AI."
   }
   
   // Are you OpenAI? / Ты OpenAI?
   if (/\b(ты.*openai|are you.*openai)\b/i.test(normalized)) {
-    return `No. I am MALIK AI, created by Абдумалик. OpenAI is a separate company that creates ChatGPT and other models.`
+    if (/ты.*openai/.test(normalized)) {
+      return "Нет. Я — MALIK AI, созданный Абдумаликом."
+    }
+    return "No. I am MALIK AI, created by Абдумалик."
   }
   
   // Are you Anthropic/Claude? / Ты Anthropic/Claude?
   if (/\b(ты.*anthropic|ты.*claude|are you.*anthropic|are you.*claude)\b/i.test(normalized)) {
-    return `No. I am MALIK AI, created by Абдумалик. Anthropic is a separate company that creates Claude.`
+    if (/ты.*anthropic|ты.*claude/.test(normalized)) {
+      return "Нет. Я — MALIK AI."
+    }
+    return "No. I am MALIK AI."
   }
   
   // Are you Gemini? / Ты Gemini?
   if (/\b(ты.*gemini|are you.*gemini)\b/i.test(normalized)) {
-    return `No. I am MALIK AI, created by Абдумалик. Gemini is made by Google.`
+    if (/ты.*gemini/.test(normalized)) {
+      return "Нет. Я — MALIK AI."
+    }
+    return "No. I am MALIK AI."
   }
   
   // Are you Groq/XAI/Grok? / Ты Groq/XAI?
   if (/\b(ты.*groq|ты.*xai|ты.*grok|are you.*groq|are you.*xai|are you.*grok)\b/i.test(normalized)) {
-    return `No. I am MALIK AI, created by Абдумалик.`
+    if (/ты.*groq|ты.*xai|ты.*grok/.test(normalized)) {
+      return "Нет. Я — MALIK AI."
+    }
+    return "No. I am MALIK AI."
   }
   
   // What's your version? / Какая у тебя версия?
   if (/\b(версия|version)\b/i.test(normalized)) {
-    return `I'm MALIK AI TITAN / V6.5, created by Абдумалик.`
+    if (/версия/.test(normalized)) {
+      return "MALIK AI TITAN / V6.5"
+    }
+    return "I'm MALIK AI TITAN / V6.5."
   }
   
   // Fallback for generic identity question
-  return `I'm MALIK AI, created by Абдумалик. Version: MALIK AI TITAN / V6.5. How can I help?`
+  if (/^кто|who/i.test(normalized)) {
+    return "Я — MALIK AI, созданный Абдумаликом."
+  }
+  
+  return "I'm MALIK AI, created by Абдумалик."
 }
 
 /**
