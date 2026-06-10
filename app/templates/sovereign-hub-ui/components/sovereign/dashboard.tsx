@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import MalikGodUIEngine from "@/components/sovereign/god-ui-engine/MalikGodUIEngine";
 import SidebarActionsUpgrade from "@/components/sovereign/sidebar-actions/SidebarActionsUpgrade";
 import FinalIntelligenceUpgrade from "@/components/sovereign/final-intelligence/FinalIntelligenceUpgrade";
@@ -169,9 +169,9 @@ function detectInlineMediaGenerationRequest(
   mode: AiModeId = "auto",
 ): "image" | "video" | null {
   const text = `${mode} ${prompt || ""} ${attachments.map((item) => item.kind).join(" ")}`.toLowerCase()
-  const createIntent = /(создай|сделай|сгенерируй|сгенерить|нарисуй|generate|create|make|draw|render|рендер|запусти)/i.test(text)
-  const imageIntent = /(image|photo|picture|фото|изображ|картин|аватар|постер|обложк|логотип|арт|рисунок)/i.test(text)
-  const videoIntent = /(video|видео|ролик|клип|анимац|motion|cinematic|runway|luma|veo|кадр|сцена)/i.test(text)
+  const createIntent = /(СЃРѕР·РґР°Р№|СЃРґРµР»Р°Р№|СЃРіРµРЅРµСЂРёСЂСѓР№|СЃРіРµРЅРµСЂРёС‚СЊ|РЅР°СЂРёСЃСѓР№|generate|create|make|draw|render|СЂРµРЅРґРµСЂ|Р·Р°РїСѓСЃС‚Рё)/i.test(text)
+  const imageIntent = /(image|photo|picture|С„РѕС‚Рѕ|РёР·РѕР±СЂР°Р¶|РєР°СЂС‚РёРЅ|Р°РІР°С‚Р°СЂ|РїРѕСЃС‚РµСЂ|РѕР±Р»РѕР¶Рє|Р»РѕРіРѕС‚РёРї|Р°СЂС‚|СЂРёСЃСѓРЅРѕРє)/i.test(text)
+  const videoIntent = /(video|РІРёРґРµРѕ|СЂРѕР»РёРє|РєР»РёРї|Р°РЅРёРјР°С†|motion|cinematic|runway|luma|veo|РєР°РґСЂ|СЃС†РµРЅР°)/i.test(text)
   const modeForcesImage = mode === "image"
   const modeForcesVideo = mode === "video"
 
@@ -295,33 +295,33 @@ function extractInlineMediaStatusUrl(payload: any): string | undefined {
 function buildInlineMediaAssistantText(media: InlineMediaGeneration): string {
   if (media.status === "ready") {
     return media.kind === "video"
-      ? "🎬 Видео готово. Реальный результат доступен в прозрачной карточке чата."
-      : "🖼️ Фото готово. Результат появился прямо в прозрачной карточке чата."
+      ? "рџЋ¬ Р’РёРґРµРѕ РіРѕС‚РѕРІРѕ. Р РµР°Р»СЊРЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚ РґРѕСЃС‚СѓРїРµРЅ РІ РїСЂРѕР·СЂР°С‡РЅРѕР№ РєР°СЂС‚РѕС‡РєРµ С‡Р°С‚Р°."
+      : "рџ–јпёЏ Р¤РѕС‚Рѕ РіРѕС‚РѕРІРѕ. Р РµР·СѓР»СЊС‚Р°С‚ РїРѕСЏРІРёР»СЃСЏ РїСЂСЏРјРѕ РІ РїСЂРѕР·СЂР°С‡РЅРѕР№ РєР°СЂС‚РѕС‡РєРµ С‡Р°С‚Р°."
   }
 
   if (media.status === "failed") {
-    return `⚠️ Генерация не завершилась: ${media.error || "провайдер не вернул результат."}`
+    return `вљ пёЏ Р“РµРЅРµСЂР°С†РёСЏ РЅРµ Р·Р°РІРµСЂС€РёР»Р°СЃСЊ: ${media.error || "РїСЂРѕРІР°Р№РґРµСЂ РЅРµ РІРµСЂРЅСѓР» СЂРµР·СѓР»СЊС‚Р°С‚."}`
   }
 
   if (media.kind === "video" && (media.status === "queued" || media.status === "rendering" || media.status === "generating")) {
-    return "🎬 Видео запущено через Google Veo. Это long-running job: карточка сама дождётся готового результата."
+    return "рџЋ¬ Р’РёРґРµРѕ Р·Р°РїСѓС‰РµРЅРѕ С‡РµСЂРµР· Google Veo. Р­С‚Рѕ long-running job: РєР°СЂС‚РѕС‡РєР° СЃР°РјР° РґРѕР¶РґС‘С‚СЃСЏ РіРѕС‚РѕРІРѕРіРѕ СЂРµР·СѓР»СЊС‚Р°С‚Р°."
   }
 
   return media.kind === "video"
-    ? "🎬 Запускаю генерацию видео прямо в чате..."
-    : "🖼️ Запускаю генерацию изображения прямо в чате..."
+    ? "рџЋ¬ Р—Р°РїСѓСЃРєР°СЋ РіРµРЅРµСЂР°С†РёСЋ РІРёРґРµРѕ РїСЂСЏРјРѕ РІ С‡Р°С‚Рµ..."
+    : "рџ–јпёЏ Р—Р°РїСѓСЃРєР°СЋ РіРµРЅРµСЂР°С†РёСЋ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ РїСЂСЏРјРѕ РІ С‡Р°С‚Рµ..."
 }
 
 
 function detectDashboardGenerationKind(prompt: string, attachments: ChatAttachment[] = [], mode: AiModeId = "auto"): GenerationStatusType {
   const attachmentHint = attachments.map((item) => item.kind).join(" ")
   const text = `${mode} ${prompt} ${attachmentHint}`.toLowerCase()
-  if (/image|photo|picture|фото|изображ|картин|нарисуй/.test(text)) return "image"
-  if (/video|видео|ролик|runway/.test(text)) return "video"
-  if (/codex|agent|папк|файл|project/.test(text)) return "codex"
-  if (/code|react|tsx|typescript|javascript|python|debug|код|ошиб/.test(text)) return "code"
-  if (/website|site|landing|dashboard|ui|html|canvas|preview|сайт|лендинг|дашборд|интерфейс|шаблон/.test(text)) return "website"
-  if (/file|document|pdf|word|файл|документ/.test(text)) return "file"
+  if (/image|photo|picture|С„РѕС‚Рѕ|РёР·РѕР±СЂР°Р¶|РєР°СЂС‚РёРЅ|РЅР°СЂРёСЃСѓР№/.test(text)) return "image"
+  if (/video|РІРёРґРµРѕ|СЂРѕР»РёРє|runway/.test(text)) return "video"
+  if (/codex|agent|РїР°РїРє|С„Р°Р№Р»|project/.test(text)) return "codex"
+  if (/code|react|tsx|typescript|javascript|python|debug|РєРѕРґ|РѕС€РёР±/.test(text)) return "code"
+  if (/website|site|landing|dashboard|ui|html|canvas|preview|СЃР°Р№С‚|Р»РµРЅРґРёРЅРі|РґР°С€Р±РѕСЂРґ|РёРЅС‚РµСЂС„РµР№СЃ|С€Р°Р±Р»РѕРЅ/.test(text)) return "website"
+  if (/file|document|pdf|word|С„Р°Р№Р»|РґРѕРєСѓРјРµРЅС‚/.test(text)) return "file"
   return "text"
 }
 
@@ -340,10 +340,10 @@ function formatDate(date: Date | string | number): string {
     const hours = Math.floor(minutes / 60)
     const days = Math.floor(hours / 24)
 
-    if (seconds < 60) return "Только что"
-    if (minutes < 60) return `${minutes} мин. назад`
-    if (hours < 24) return `${hours} ч. назад`
-    if (days < 7) return `${days} дн. назад`
+    if (seconds < 60) return "РўРѕР»СЊРєРѕ С‡С‚Рѕ"
+    if (minutes < 60) return `${minutes} РјРёРЅ. РЅР°Р·Р°Рґ`
+    if (hours < 24) return `${hours} С‡. РЅР°Р·Р°Рґ`
+    if (days < 7) return `${days} РґРЅ. РЅР°Р·Р°Рґ`
 
     return d.toLocaleDateString("ru-RU", {
       day: 'numeric',
@@ -376,7 +376,7 @@ function formatDateTime(date: Date | string | number): string {
 // =========================================================================
 // V0.DEV STYLE MASSIVE CYBER-TERMINAL (30+ Steps with Real-time Metrics)
 // =========================================================================
-function V0GenerationTerminal({ title = "Инициализация среды разработки" }: { title?: string }) {
+function V0GenerationTerminal({ title = "РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЃСЂРµРґС‹ СЂР°Р·СЂР°Р±РѕС‚РєРё" }: { title?: string }) {
   const [step, setStep] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [metrics, setMetrics] = useState({
@@ -406,56 +406,56 @@ function V0GenerationTerminal({ title = "Инициализация среды �
 
   const terminalSequence = [
     { delay: 200, text: "$ malik-sovereign-v7 init --mode=production --template=premium" },
-    { delay: 400, text: "⠙ Loading core neural modules..." },
-    { delay: 600, text: "✓ Neural engine initialized (v7.3.0)" },
-    { delay: 800, text: "⠙ Establishing secure connection to Groq cluster..." },
-    { delay: 1000, text: "✓ Connected to primary node: us-east-1-groq-01" },
-    { delay: 1200, text: "⠙ Activating brand shielding protocols..." },
-    { delay: 1400, text: "✓ Identity guard: ACTIVE" },
-    { delay: 1600, text: "⠙ Resolving dependency tree..." },
+    { delay: 400, text: "в ™ Loading core neural modules..." },
+    { delay: 600, text: "вњ“ Neural engine initialized (v7.3.0)" },
+    { delay: 800, text: "в ™ Establishing secure connection to Groq cluster..." },
+    { delay: 1000, text: "вњ“ Connected to primary node: us-east-1-groq-01" },
+    { delay: 1200, text: "в ™ Activating brand shielding protocols..." },
+    { delay: 1400, text: "вњ“ Identity guard: ACTIVE" },
+    { delay: 1600, text: "в ™ Resolving dependency tree..." },
     { delay: 1800, text: "Progress: resolved 1, reused 0, downloaded 0" },
     { delay: 2000, text: "Progress: resolved 47, reused 32, downloaded 15" },
-    { delay: 2200, text: "⠙ Installing core packages..." },
+    { delay: 2200, text: "в ™ Installing core packages..." },
     { delay: 2400, text: "$ pnpm add react@18.3.1 next.js@14.2.0 tailwindcss@3.4.0" },
     { delay: 2600, text: "$ pnpm add framer-motion@11.0.0 lucide-react@0.344.0 clsx@2.1.0" },
     { delay: 2800, text: "Progress: resolved 156, reused 120, downloaded 36" },
     { delay: 3000, text: "Packages: +124" },
     { delay: 3200, text: "++++++++++++++++++++++++++++++++++++++++++++++++" },
-    { delay: 3400, text: "✔ Packages installed successfully in 2.4s" },
-    { delay: 3600, text: "⠙ Synthesizing AST Tree..." },
-    { delay: 3800, text: "✓ AST structure validated" },
-    { delay: 4000, text: "⠙ Injecting Glassmorphism tokens..." },
-    { delay: 4200, text: "✓ backdrop-blur-xl applied to 47 components" },
-    { delay: 4400, text: "⠙ Applying neon glow effects..." },
-    { delay: 4600, text: "✓ shadow-[0_0_30px_rgba(139,92,246,0.3)] configured" },
-    { delay: 4800, text: "⠙ Processing gradient text layers..." },
-    { delay: 5000, text: "✓ bg-clip-text gradients synthesized" },
-    { delay: 5200, text: "⠙ Optimizing dark mode palette..." },
-    { delay: 5400, text: "✓ bg-[#030303] base color locked" },
-    { delay: 5600, text: "⠙ Analyzing user intent matrix..." },
-    { delay: 5800, text: "✓ Intent classified: PROJECT_GENERATION" },
-    { delay: 6000, text: "⠙ Compiling React components..." },
-    { delay: 6200, text: "✓ 23 components compiled successfully" },
-    { delay: 6400, text: "⠙ Applying Tailwind utility classes..." },
-    { delay: 6600, text: "✓ 847 utility classes injected" },
-    { delay: 6800, text: "⠙ Optimizing bundle size..." },
-    { delay: 7000, text: "✓ Tree-shaking: 34% reduction achieved" },
-    { delay: 7200, text: "⠙ Generating responsive breakpoints..." },
-    { delay: 7400, text: "✓ Mobile-first breakpoints configured" },
-    { delay: 7600, text: "⠙ Synthesizing final build artifact..." },
-    { delay: 7800, text: "✓ Build artifact ready" },
-    { delay: 8000, text: "⠙ Running accessibility audit..." },
-    { delay: 8200, text: "✓ WCAG 2.1 AA compliant" },
-    { delay: 8400, text: "⠙ Hydrating UI components..." },
-    { delay: 8600, text: "✓ Client-side hydration complete" },
-    { delay: 8800, text: "✔ Build completed successfully. Ready for deployment." },
-    { delay: 9000, text: "═══════════════════════════════════════════════════════════" },
-    { delay: 9200, text: "✨ INTERFACE SYNTHESIS COMPLETE" },
+    { delay: 3400, text: "вњ” Packages installed successfully in 2.4s" },
+    { delay: 3600, text: "в ™ Synthesizing AST Tree..." },
+    { delay: 3800, text: "вњ“ AST structure validated" },
+    { delay: 4000, text: "в ™ Injecting Glassmorphism tokens..." },
+    { delay: 4200, text: "вњ“ backdrop-blur-xl applied to 47 components" },
+    { delay: 4400, text: "в ™ Applying neon glow effects..." },
+    { delay: 4600, text: "вњ“ shadow-[0_0_30px_rgba(139,92,246,0.3)] configured" },
+    { delay: 4800, text: "в ™ Processing gradient text layers..." },
+    { delay: 5000, text: "вњ“ bg-clip-text gradients synthesized" },
+    { delay: 5200, text: "в ™ Optimizing dark mode palette..." },
+    { delay: 5400, text: "вњ“ bg-[#030303] base color locked" },
+    { delay: 5600, text: "в ™ Analyzing user intent matrix..." },
+    { delay: 5800, text: "вњ“ Intent classified: PROJECT_GENERATION" },
+    { delay: 6000, text: "в ™ Compiling React components..." },
+    { delay: 6200, text: "вњ“ 23 components compiled successfully" },
+    { delay: 6400, text: "в ™ Applying Tailwind utility classes..." },
+    { delay: 6600, text: "вњ“ 847 utility classes injected" },
+    { delay: 6800, text: "в ™ Optimizing bundle size..." },
+    { delay: 7000, text: "вњ“ Tree-shaking: 34% reduction achieved" },
+    { delay: 7200, text: "в ™ Generating responsive breakpoints..." },
+    { delay: 7400, text: "вњ“ Mobile-first breakpoints configured" },
+    { delay: 7600, text: "в ™ Synthesizing final build artifact..." },
+    { delay: 7800, text: "вњ“ Build artifact ready" },
+    { delay: 8000, text: "в ™ Running accessibility audit..." },
+    { delay: 8200, text: "вњ“ WCAG 2.1 AA compliant" },
+    { delay: 8400, text: "в ™ Hydrating UI components..." },
+    { delay: 8600, text: "вњ“ Client-side hydration complete" },
+    { delay: 8800, text: "вњ” Build completed successfully. Ready for deployment." },
+    { delay: 9000, text: "в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ" },
+    { delay: 9200, text: "вњЁ INTERFACE SYNTHESIS COMPLETE" },
     { delay: 9400, text: "Total time: 9.4s | Components: 23 | Bundle: 247KB gzipped" },
   ];
 
   useEffect(() => {
-    // Симуляция шагов
+    // РЎРёРјСѓР»СЏС†РёСЏ С€Р°РіРѕРІ
     const stepTimer1 = setTimeout(() => setStep(1), 1500);
     const stepTimer2 = setTimeout(() => setStep(2), 3000);
     const stepTimer3 = setTimeout(() => setStep(3), 9500);
@@ -474,7 +474,7 @@ function V0GenerationTerminal({ title = "Инициализация среды �
       }
     };
 
-    // Запускаем логи терминала
+    // Р—Р°РїСѓСЃРєР°РµРј Р»РѕРіРё С‚РµСЂРјРёРЅР°Р»Р°
     const terminalTimer = setTimeout(() => {
       runTerminalLogs();
     }, 500);
@@ -548,7 +548,7 @@ function V0GenerationTerminal({ title = "Инициализация среды �
             <Terminal className="w-8 h-8 text-violet-400 relative z-10" />
           </div>
           <h2 className="text-2xl font-bold text-white tracking-tight">{title}</h2>
-          <p className="text-gray-500 mt-2 text-sm">Malik AI Sovereign V7 оркестрирует код и собирает компоненты</p>
+          <p className="text-gray-500 mt-2 text-sm">Malik AI Sovereign V7 РѕСЂРєРµСЃС‚СЂРёСЂСѓРµС‚ РєРѕРґ Рё СЃРѕР±РёСЂР°РµС‚ РєРѕРјРїРѕРЅРµРЅС‚С‹</p>
         </div>
 
         {/* Real-time Metrics Panel */}
@@ -569,7 +569,7 @@ function V0GenerationTerminal({ title = "Инициализация среды �
             <StepIndicator isActive={step === 0} isDone={step > 0} />
             <div className="flex-1">
               <p className={cn("text-sm font-medium transition-colors", step === 0 ? "text-white" : step > 0 ? "text-gray-300" : "text-gray-500")}>
-                Синхронизация когнитивной матрицы
+                РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ РєРѕРіРЅРёС‚РёРІРЅРѕР№ РјР°С‚СЂРёС†С‹
               </p>
             </div>
             {step > 0 && <span className="text-xs text-gray-600 font-mono">1.5s</span>}
@@ -580,7 +580,7 @@ function V0GenerationTerminal({ title = "Инициализация среды �
             <StepIndicator isActive={step === 1} isDone={step > 1} />
             <div className="flex-1">
               <p className={cn("text-sm font-medium transition-colors", step === 1 ? "text-white" : step > 1 ? "text-gray-300" : "text-gray-500")}>
-                Формирование архитектуры дизайна
+                Р¤РѕСЂРјРёСЂРѕРІР°РЅРёРµ Р°СЂС…РёС‚РµРєС‚СѓСЂС‹ РґРёР·Р°Р№РЅР°
               </p>
             </div>
             {step > 1 && <span className="text-xs text-gray-600 font-mono">1.5s</span>}
@@ -592,7 +592,7 @@ function V0GenerationTerminal({ title = "Инициализация среды �
               <StepIndicator isActive={step === 2} isDone={step > 2} />
               <div className="flex-1">
                 <p className={cn("text-sm font-medium transition-colors", step === 2 ? "text-white" : step > 2 ? "text-gray-300" : "text-gray-500")}>
-                  Синтез компонентов и сборка
+                  РЎРёРЅС‚РµР· РєРѕРјРїРѕРЅРµРЅС‚РѕРІ Рё СЃР±РѕСЂРєР°
                 </p>
               </div>
               {step > 2 && <span className="text-xs text-gray-600 font-mono">6.5s</span>}
@@ -611,10 +611,10 @@ function V0GenerationTerminal({ title = "Инициализация среды �
                   {logs.map((log, i) => (
                     <div key={i} className={cn("mb-1",
                       log.startsWith('$') ? "text-violet-400" :
-                      log.includes('✔') || log.includes('✓') ? "text-emerald-400" :
-                      log.includes('⠙') || log.includes('⠋') ? "text-amber-400" :
-                      log.includes('═══') ? "text-fuchsia-400 font-bold" :
-                      log.includes('✨') ? "text-cyan-400 font-bold" :
+                      log.includes('вњ”') || log.includes('вњ“') ? "text-emerald-400" :
+                      log.includes('в ™') || log.includes('в ‹') ? "text-amber-400" :
+                      log.includes('в•ђв•ђв•ђ') ? "text-fuchsia-400 font-bold" :
+                      log.includes('вњЁ') ? "text-cyan-400 font-bold" :
                       ""
                     )}>
                       {log}
@@ -636,7 +636,7 @@ function V0GenerationTerminal({ title = "Инициализация среды �
             <StepIndicator isActive={step === 3} isDone={step > 3} />
             <div className="flex-1">
               <p className={cn("text-sm font-medium transition-colors", step === 3 ? "text-white" : step > 3 ? "text-gray-300" : "text-gray-500")}>
-                Рендеринг компонентов и стилей
+                Р РµРЅРґРµСЂРёРЅРі РєРѕРјРїРѕРЅРµРЅС‚РѕРІ Рё СЃС‚РёР»РµР№
               </p>
             </div>
             {step > 3 && <span className="text-xs text-gray-600 font-mono">0.5s</span>}
@@ -650,7 +650,7 @@ function V0GenerationTerminal({ title = "Инициализация среды �
 
 
 // =========================================================================
-// TERMINATOR SAFETY CORE — localStorage, auth profile, crash isolation
+// TERMINATOR SAFETY CORE вЂ” localStorage, auth profile, crash isolation
 // =========================================================================
 type StoredChat = Omit<Chat, "timestamp" | "messages"> & {
   timestamp: string | number | Date
@@ -786,7 +786,7 @@ function reviveMessage(message: any): Message {
 function reviveChat(chat: StoredChat): Chat {
   return {
     id: String(chat?.id || crypto.randomUUID()),
-    title: String(chat?.title || "Новый проект"),
+    title: String(chat?.title || "РќРѕРІС‹Р№ РїСЂРѕРµРєС‚"),
     timestamp: chat?.timestamp ? new Date(chat.timestamp) : new Date(),
     isPinned: Boolean(chat?.isPinned),
     messages: Array.isArray(chat?.messages) ? chat.messages.map(reviveMessage) : [],
@@ -799,7 +799,7 @@ function getProfileFromSessionUser(user: any) {
   const email = String(user?.email || "").toLowerCase()
   const meta = user?.user_metadata || {}
   const avatar = String(meta?.avatar_url || meta?.picture || meta?.avatar || "")
-  const name = String(meta?.full_name || meta?.name || email || "Пользователь")
+  const name = String(meta?.full_name || meta?.name || email || "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ")
   return { email, avatar, name }
 }
 
@@ -824,7 +824,7 @@ function readDashboardAuthSnapshot(): DashboardAuthSnapshot | null {
         if (parsed?.email && parsed?.mode) {
           return {
             email: String(parsed.email),
-            name: String(parsed.name || parsed.email || "Пользователь"),
+            name: String(parsed.name || parsed.email || "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ"),
             avatar: String(parsed.avatar || ""),
             mode: parsed.mode === "guest" ? "guest" : "supabase",
             isAdmin: Boolean(parsed.isAdmin),
@@ -841,7 +841,7 @@ function readDashboardAuthSnapshot(): DashboardAuthSnapshot | null {
     if (!email || !modeRaw) return null
 
     const mode = modeRaw === "guest" ? "guest" : "supabase"
-    const name = safeGetStorage("malik_user_name") || (mode === "guest" ? "Гость" : email)
+    const name = safeGetStorage("malik_user_name") || (mode === "guest" ? "Р“РѕСЃС‚СЊ" : email)
     const avatar = safeGetStorage("malik_user_avatar")
     const isAdmin = safeGetStorage("malik_is_admin") === "true" || AUTH_ADMINS.includes(String(email).toLowerCase())
 
@@ -886,7 +886,7 @@ function LoadingShell() {
         </div>
         <div className="text-center">
           <p className="text-sm font-bold tracking-wide">Malik AI Sovereign</p>
-          <p className="mt-1 text-xs text-gray-500">Синхронизация сессии и ядра…</p>
+          <p className="mt-1 text-xs text-gray-500">РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ СЃРµСЃСЃРёРё Рё СЏРґСЂР°вЂ¦</p>
         </div>
       </div>
     </div>
@@ -919,9 +919,9 @@ class DashboardCrashBoundary extends Component<
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 text-red-200">
             <ShieldCheck className="h-6 w-6" />
           </div>
-          <h2 className="text-2xl font-black">Dashboard қорғаныс режимі</h2>
+          <h2 className="text-2xl font-black">Dashboard Т›РѕСЂТ“Р°РЅС‹СЃ СЂРµР¶РёРјС–</h2>
           <p className="mt-2 text-sm leading-6 text-gray-400">
-            Бір ішкі компонент құлады, бірақ ядро тірі. Қайта жүктеу немесе auth/cache тазалау арқылы жүйені көтер.
+            Р‘С–СЂ С–С€РєС– РєРѕРјРїРѕРЅРµРЅС‚ Т›Т±Р»Р°РґС‹, Р±С–СЂР°Т› СЏРґСЂРѕ С‚С–СЂС–. ТљР°Р№С‚Р° Р¶ТЇРєС‚РµСѓ РЅРµРјРµСЃРµ auth/cache С‚Р°Р·Р°Р»Р°Сѓ Р°СЂТ›С‹Р»С‹ Р¶ТЇР№РµРЅС– РєУ©С‚РµСЂ.
           </p>
           <pre className="mt-4 max-h-40 overflow-auto rounded-2xl border border-white/10 bg-black/40 p-3 text-xs text-red-100">
             {this.state.message}
@@ -931,7 +931,7 @@ class DashboardCrashBoundary extends Component<
               className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black"
               onClick={() => this.setState({ hasError: false, message: "" })}
             >
-              Қайта іске қосу
+              ТљР°Р№С‚Р° С–СЃРєРµ Т›РѕСЃСѓ
             </button>
             <button
               className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white"
@@ -941,7 +941,7 @@ class DashboardCrashBoundary extends Component<
                 window.location.reload()
               }}
             >
-              Cache тазалау
+              Cache С‚Р°Р·Р°Р»Р°Сѓ
             </button>
           </div>
         </div>
@@ -952,7 +952,7 @@ class DashboardCrashBoundary extends Component<
 
 
 // =========================================================================
-// SOVEREIGN DASHBOARD RUNTIME LAYER — registries, safe routing, event bus,
+// SOVEREIGN DASHBOARD RUNTIME LAYER вЂ” registries, safe routing, event bus,
 // mobile state machine, local project history and canvas artifact manager.
 // This block is intentionally data-driven: it adds power without heavy render.
 // =========================================================================
@@ -1124,7 +1124,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "stack",
     fallbackView: "home",
-    keywords: ["home", "chat", "главная", "чат", "ai", "malik"],
+    keywords: ["home", "chat", "РіР»Р°РІРЅР°СЏ", "С‡Р°С‚", "ai", "malik"],
   },
   "ai-generator": {
     id: "ai-generator",
@@ -1135,7 +1135,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "photo-generation",
-    keywords: ["ai-generator", "media", "generator", "генератор", "медиа", "image", "photo", "video", "фото", "видео"],
+    keywords: ["ai-generator", "media", "generator", "РіРµРЅРµСЂР°С‚РѕСЂ", "РјРµРґРёР°", "image", "photo", "video", "С„РѕС‚Рѕ", "РІРёРґРµРѕ"],
     opensPreview: true,
   },
   "final-intelligence": {
@@ -1147,7 +1147,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["final", "intelligence", "brain", "мозг", "финал", "astana", "launch", "media director", "code architect"],
+    keywords: ["final", "intelligence", "brain", "РјРѕР·Рі", "С„РёРЅР°Р»", "astana", "launch", "media director", "code architect"],
     opensPreview: true,
   },
   "unbreakable-ai": {
@@ -1159,7 +1159,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "final-intelligence",
-    keywords: ["unbreakable", "resilience", "guard", "shield", "fallback", "retry", "защита", "пуленепробиваемый", "render safe"],
+    keywords: ["unbreakable", "resilience", "guard", "shield", "fallback", "retry", "Р·Р°С‰РёС‚Р°", "РїСѓР»РµРЅРµРїСЂРѕР±РёРІР°РµРјС‹Р№", "render safe"],
     opensPreview: true,
   },
   "command-center": {
@@ -1171,7 +1171,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["command", "center", "команд", "центр", "cockpit", "terminal"],
+    keywords: ["command", "center", "РєРѕРјР°РЅРґ", "С†РµРЅС‚СЂ", "cockpit", "terminal"],
   },
   features: {
     id: "features",
@@ -1182,7 +1182,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["features", "фичи", "возможности", "modules", "модули"],
+    keywords: ["features", "С„РёС‡Рё", "РІРѕР·РјРѕР¶РЅРѕСЃС‚Рё", "modules", "РјРѕРґСѓР»Рё"],
   },
   search: {
     id: "search",
@@ -1227,7 +1227,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["photo", "image", "фото", "изображ", "картин", "нарисуй"],
+    keywords: ["photo", "image", "С„РѕС‚Рѕ", "РёР·РѕР±СЂР°Р¶", "РєР°СЂС‚РёРЅ", "РЅР°СЂРёСЃСѓР№"],
     opensPreview: true,
   },
   "video-generation": {
@@ -1239,7 +1239,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "beta",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["video", "видео", "ролик", "motion", "runway"],
+    keywords: ["video", "РІРёРґРµРѕ", "СЂРѕР»РёРє", "motion", "runway"],
     opensPreview: true,
   },
   "code-generation": {
@@ -1251,7 +1251,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["code", "код", "tsx", "typescript", "javascript", "python", "debug"],
+    keywords: ["code", "РєРѕРґ", "tsx", "typescript", "javascript", "python", "debug"],
     opensPreview: true,
   },
   "component-generation": {
@@ -1263,7 +1263,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "code-generation",
-    keywords: ["component", "компонент", "react component", "tsx component"],
+    keywords: ["component", "РєРѕРјРїРѕРЅРµРЅС‚", "react component", "tsx component"],
     opensPreview: true,
   },
   "website-generation": {
@@ -1275,7 +1275,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["website", "site", "сайт", "landing", "лендинг", "web"],
+    keywords: ["website", "site", "СЃР°Р№С‚", "landing", "Р»РµРЅРґРёРЅРі", "web"],
     opensPreview: true,
   },
   "landing-generation": {
@@ -1287,7 +1287,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "website-generation",
-    keywords: ["landing", "лендинг", "страница", "cta", "sales"],
+    keywords: ["landing", "Р»РµРЅРґРёРЅРі", "СЃС‚СЂР°РЅРёС†Р°", "cta", "sales"],
     opensPreview: true,
   },
   "dashboard-generation": {
@@ -1299,7 +1299,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "website-generation",
-    keywords: ["dashboard", "дашборд", "analytics", "admin", "panel", "crm"],
+    keywords: ["dashboard", "РґР°С€Р±РѕСЂРґ", "analytics", "admin", "panel", "crm"],
     opensPreview: true,
   },
   "document-generation": {
@@ -1311,7 +1311,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["document", "doc", "pdf", "word", "документ", "отчет"],
+    keywords: ["document", "doc", "pdf", "word", "РґРѕРєСѓРјРµРЅС‚", "РѕС‚С‡РµС‚"],
     opensPreview: true,
   },
   "presentation-generation": {
@@ -1323,7 +1323,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "document-generation",
-    keywords: ["presentation", "slides", "презентация", "слайд", "deck"],
+    keywords: ["presentation", "slides", "РїСЂРµР·РµРЅС‚Р°С†РёСЏ", "СЃР»Р°Р№Рґ", "deck"],
     opensPreview: true,
   },
   "template-generation": {
@@ -1335,7 +1335,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "templates",
-    keywords: ["template", "шаблон", "starter", "preset"],
+    keywords: ["template", "С€Р°Р±Р»РѕРЅ", "starter", "preset"],
     opensPreview: true,
   },
   templates: {
@@ -1347,7 +1347,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["templates", "шаблоны", "gallery", "market"],
+    keywords: ["templates", "С€Р°Р±Р»РѕРЅС‹", "gallery", "market"],
   },
   projects: {
     id: "projects",
@@ -1358,7 +1358,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["projects", "проекты", "history", "история", "files"],
+    keywords: ["projects", "РїСЂРѕРµРєС‚С‹", "history", "РёСЃС‚РѕСЂРёСЏ", "files"],
   },
   design: {
     id: "design",
@@ -1369,7 +1369,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["design", "дизайн", "style", "tokens", "palette"],
+    keywords: ["design", "РґРёР·Р°Р№РЅ", "style", "tokens", "palette"],
   },
   chats: {
     id: "chats",
@@ -1380,7 +1380,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["chats", "чаттар", "dialogs", "диалоги", "messages"],
+    keywords: ["chats", "С‡Р°С‚С‚Р°СЂ", "dialogs", "РґРёР°Р»РѕРіРё", "messages"],
   },
   billing: {
     id: "billing",
@@ -1391,7 +1391,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["billing", "подписка", "оплата", "credits", "limit", "pro"],
+    keywords: ["billing", "РїРѕРґРїРёСЃРєР°", "РѕРїР»Р°С‚Р°", "credits", "limit", "pro"],
     requiresAuth: true,
   },
   settings: {
@@ -1403,7 +1403,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["settings", "настройки", "profile", "профиль", "account"],
+    keywords: ["settings", "РЅР°СЃС‚СЂРѕР№РєРё", "profile", "РїСЂРѕС„РёР»СЊ", "account"],
     requiresAuth: true,
   },
   profile: {
@@ -1415,7 +1415,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "settings",
-    keywords: ["profile", "профиль", "account", "user"],
+    keywords: ["profile", "РїСЂРѕС„РёР»СЊ", "account", "user"],
     requiresAuth: true,
   },
   support: {
@@ -1427,7 +1427,7 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["support", "help", "помощь", "faq", "contact"],
+    keywords: ["support", "help", "РїРѕРјРѕС‰СЊ", "faq", "contact"],
   },
 }
 
@@ -3651,8 +3651,8 @@ function getDashboardViewMeta(view: string): DashboardViewRegistryEntry {
 
 function inferDashboardResponseKind(prompt: string, mode: AiModeId = "auto"): DashboardResponseKind {
   const t = `${mode} ${prompt || ""}`.toLowerCase()
-  if (/website|landing|dashboard|canvas|preview|html|tsx|react|component|ui|сайт|лендинг|дашборд|интерфейс|шаблон/.test(t)) return "canvas"
-  if (/code|код|debug|ошиб|typescript|javascript|python|sql|api|refactor|архитект/.test(t)) return "code"
+  if (/website|landing|dashboard|canvas|preview|html|tsx|react|component|ui|СЃР°Р№С‚|Р»РµРЅРґРёРЅРі|РґР°С€Р±РѕСЂРґ|РёРЅС‚РµСЂС„РµР№СЃ|С€Р°Р±Р»РѕРЅ/.test(t)) return "canvas"
+  if (/code|РєРѕРґ|debug|РѕС€РёР±|typescript|javascript|python|sql|api|refactor|Р°СЂС…РёС‚РµРєС‚/.test(t)) return "code"
   return "chat"
 }
 
@@ -3663,7 +3663,7 @@ function detectIntentAndRoute(
 ): DashboardRouteDecision {
   const raw = String(prompt || "")
   const t = `${mode} ${raw}`.toLowerCase()
-  const explicitRoute = /^(open|go to|show|открой|перейди|покажи|запусти)\b/.test(t)
+  const explicitRoute = /^(open|go to|show|РѕС‚РєСЂРѕР№|РїРµСЂРµР№РґРё|РїРѕРєР°Р¶Рё|Р·Р°РїСѓСЃС‚Рё)\b/.test(t)
   const responseKind = inferDashboardResponseKind(raw, mode)
   const generationKind = detectDashboardGenerationKind(raw, attachments, mode)
   const candidates = DASHBOARD_SAFE_VIEW_IDS
@@ -3681,7 +3681,7 @@ function detectIntentAndRoute(
   const best = candidates[0]
   const matchedKeywords = best?.matchedKeywords || []
 
-  if (/\bcodex\b|кодекс|cursor|папк|файл проекта/.test(t)) {
+  if (/\bcodex\b|РєРѕРґРµРєСЃ|cursor|РїР°РїРє|С„Р°Р№Р» РїСЂРѕРµРєС‚Р°/.test(t)) {
     return {
       action: "open-codex",
       targetView: "home",
@@ -3694,7 +3694,7 @@ function detectIntentAndRoute(
     }
   }
 
-  if (/canvas|preview|превью|открой холст|канвас/.test(t)) {
+  if (/canvas|preview|РїСЂРµРІСЊСЋ|РѕС‚РєСЂРѕР№ С…РѕР»СЃС‚|РєР°РЅРІР°СЃ/.test(t)) {
     return {
       action: "open-canvas",
       targetView: "home",
@@ -3963,7 +3963,7 @@ const DASHBOARD_ACTION_REGISTRY: Record<string, DashboardActionRegistryEntry> = 
     id: "open-home",
     title: "Open Home",
     description: "Return to the main chat and workspace.",
-    keywords: ["home", "главная", "чат"],
+    keywords: ["home", "РіР»Р°РІРЅР°СЏ", "С‡Р°С‚"],
     view: "home",
     run: (ctx) => ctx.openView("home", "manual"),
   },
@@ -3971,7 +3971,7 @@ const DASHBOARD_ACTION_REGISTRY: Record<string, DashboardActionRegistryEntry> = 
     id: "open-ai-generator",
     title: "Open AI Media Generator",
     description: "Open the unified MediaGenerator screen from the newer working build.",
-    keywords: ["ai-generator", "media", "generator", "генератор", "медиа", "image", "photo", "video", "фото", "видео"],
+    keywords: ["ai-generator", "media", "generator", "РіРµРЅРµСЂР°С‚РѕСЂ", "РјРµРґРёР°", "image", "photo", "video", "С„РѕС‚Рѕ", "РІРёРґРµРѕ"],
     view: "ai-generator",
     mode: "image",
     run: (ctx) => {
@@ -3983,7 +3983,7 @@ const DASHBOARD_ACTION_REGISTRY: Record<string, DashboardActionRegistryEntry> = 
     id: "open-final-intelligence",
     title: "Open Final Intelligence",
     description: "Open the MALIK final intelligence cockpit.",
-    keywords: ["final", "intelligence", "brain", "мозг", "финал", "astana"],
+    keywords: ["final", "intelligence", "brain", "РјРѕР·Рі", "С„РёРЅР°Р»", "astana"],
     view: "final-intelligence",
     run: (ctx) => ctx.openView("final-intelligence", "manual"),
   },
@@ -3991,7 +3991,7 @@ const DASHBOARD_ACTION_REGISTRY: Record<string, DashboardActionRegistryEntry> = 
     id: "open-unbreakable-ai",
     title: "Open Unbreakable AI",
     description: "Open the resilience, fallback and provider guard cockpit.",
-    keywords: ["unbreakable", "resilience", "guard", "shield", "fallback", "защита"],
+    keywords: ["unbreakable", "resilience", "guard", "shield", "fallback", "Р·Р°С‰РёС‚Р°"],
     view: "unbreakable-ai",
     run: (ctx) => ctx.openView("unbreakable-ai", "manual"),
   },
@@ -3999,7 +3999,7 @@ const DASHBOARD_ACTION_REGISTRY: Record<string, DashboardActionRegistryEntry> = 
     id: "open-command-center",
     title: "Open Command Center",
     description: "Open the sovereign command cockpit.",
-    keywords: ["command", "центр", "terminal"],
+    keywords: ["command", "С†РµРЅС‚СЂ", "terminal"],
     view: "command-center",
     run: (ctx) => ctx.openView("command-center", "command-center"),
   },
@@ -4007,7 +4007,7 @@ const DASHBOARD_ACTION_REGISTRY: Record<string, DashboardActionRegistryEntry> = 
     id: "open-canvas",
     title: "Open Canvas",
     description: "Open a safe canvas artifact without crashing render.",
-    keywords: ["canvas", "preview", "канвас", "превью"],
+    keywords: ["canvas", "preview", "РєР°РЅРІР°СЃ", "РїСЂРµРІСЊСЋ"],
     view: "home",
     mode: "canvas",
     run: (ctx, payload) => ctx.openCanvas(payload, "action-registry"),
@@ -4016,7 +4016,7 @@ const DASHBOARD_ACTION_REGISTRY: Record<string, DashboardActionRegistryEntry> = 
     id: "open-codex",
     title: "Open Codex",
     description: "Open the Malik Codex modal.",
-    keywords: ["codex", "кодекс", "cursor", "папка"],
+    keywords: ["codex", "РєРѕРґРµРєСЃ", "cursor", "РїР°РїРєР°"],
     view: "home",
     mode: "code",
     run: (ctx) => ctx.openCodex(),
@@ -4025,7 +4025,7 @@ const DASHBOARD_ACTION_REGISTRY: Record<string, DashboardActionRegistryEntry> = 
     id: "new-project",
     title: "New Project",
     description: "Create a new local project chat.",
-    keywords: ["new", "новый", "project", "проект"],
+    keywords: ["new", "РЅРѕРІС‹Р№", "project", "РїСЂРѕРµРєС‚"],
     view: "home",
     run: (ctx) => ctx.newChat(),
   },
@@ -4033,7 +4033,7 @@ const DASHBOARD_ACTION_REGISTRY: Record<string, DashboardActionRegistryEntry> = 
     id: "mode-website",
     title: "Website Mode",
     description: "Switch to website mode.",
-    keywords: ["website", "сайт", "лендинг"],
+    keywords: ["website", "СЃР°Р№С‚", "Р»РµРЅРґРёРЅРі"],
     view: "website-generation",
     mode: "website",
     run: (ctx) => {
@@ -4045,7 +4045,7 @@ const DASHBOARD_ACTION_REGISTRY: Record<string, DashboardActionRegistryEntry> = 
     id: "mode-code",
     title: "Code Mode",
     description: "Switch to code mode.",
-    keywords: ["code", "код", "debug"],
+    keywords: ["code", "РєРѕРґ", "debug"],
     view: "code-generation",
     mode: "code",
     run: (ctx) => {
@@ -4147,8 +4147,8 @@ export function Dashboard() {
       const text = `${button.innerText || ""} ${button.textContent || ""} ${button.getAttribute("aria-label") || ""}`.toLowerCase();
 
       if (
-        text.includes("завершить") ||
-        text.includes("выйти") ||
+        text.includes("Р·Р°РІРµСЂС€РёС‚СЊ") ||
+        text.includes("РІС‹Р№С‚Рё") ||
         text.includes("logout") ||
         text.includes("sign out")
       ) {
@@ -4182,7 +4182,7 @@ export function Dashboard() {
   const [chats, setChats] = useState<Chat[]>([
     {
       id: "1",
-      title: "Интерфейс Sovereign Hub",
+      title: "РРЅС‚РµСЂС„РµР№СЃ Sovereign Hub",
       timestamp: new Date(Date.now() - 1000 * 60 * 30),
       messages: [],
       isPinned: true,
@@ -4191,7 +4191,7 @@ export function Dashboard() {
     },
     {
       id: "2",
-      title: "Дашборд аналитики AI",
+      title: "Р”Р°С€Р±РѕСЂРґ Р°РЅР°Р»РёС‚РёРєРё AI",
       timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
       messages: [],
       status: "draft",
@@ -4217,7 +4217,7 @@ export function Dashboard() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [isGeneratingTerminal, setIsGeneratingTerminal] = useState(false) // Новое состояние для терминала
+  const [isGeneratingTerminal, setIsGeneratingTerminal] = useState(false) // РќРѕРІРѕРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РґР»СЏ С‚РµСЂРјРёРЅР°Р»Р°
   const [generatedCode, setGeneratedCode] = useState<string>("")
   const [streamingText, setStreamingText] = useState("")
   const [currentVersion, setCurrentVersion] = useState(1)
@@ -4243,7 +4243,7 @@ export function Dashboard() {
 
       persistDashboardAuthSnapshot(snapshot)
       setUsername(snapshot.email)
-      setUserDisplayName(snapshot.name || (snapshot.mode === "guest" ? "Гость" : snapshot.email))
+      setUserDisplayName(snapshot.name || (snapshot.mode === "guest" ? "Р“РѕСЃС‚СЊ" : snapshot.email))
       setUserAvatar(snapshot.avatar || "")
       setIsAuthenticated(true)
       setIsAdmin(Boolean(snapshot.isAdmin))
@@ -4344,7 +4344,7 @@ export function Dashboard() {
       if (detail?.email && detail?.mode) {
         applySnapshot({
           email: String(detail.email),
-          name: String(detail.name || detail.email || "Пользователь"),
+          name: String(detail.name || detail.email || "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ"),
           avatar: String(detail.avatar || ""),
           mode: detail.mode === "guest" ? "guest" : "supabase",
           isAdmin: Boolean(detail.isAdmin),
@@ -4470,7 +4470,7 @@ export function Dashboard() {
     setErrorNotification(null)
     const newChat: Chat = {
       id: crypto.randomUUID(),
-      title: "Новый проект",
+      title: "РќРѕРІС‹Р№ РїСЂРѕРµРєС‚",
       timestamp: new Date(),
       messages: [],
       status: "draft",
@@ -4546,7 +4546,7 @@ export function Dashboard() {
   }, [codexOpen, mobilePreviewOpen, previousView])
 
   // =========================================================================
-  // FLAWLESS CHAT PARSER — only canvas projects become preview artifacts
+  // FLAWLESS CHAT PARSER вЂ” only canvas projects become preview artifacts
   // =========================================================================
   const extractCodeBlocks = (
     text: string,
@@ -4577,7 +4577,7 @@ export function Dashboard() {
     // Preview opens ONLY for canvas/project requests with a serious artifact.
     if (mode === "canvas" && isLargeArtifact) {
       return {
-        text: cleanText || "✨ Интерфейс успешно сгенерирован",
+        text: cleanText || "вњЁ РРЅС‚РµСЂС„РµР№СЃ СѓСЃРїРµС€РЅРѕ СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅ",
         code,
         lang,
       }
@@ -4590,7 +4590,7 @@ export function Dashboard() {
     }
   }
 
-  // Функция-определитель: это запрос на создание проекта или просто болтовня?
+  // Р¤СѓРЅРєС†РёСЏ-РѕРїСЂРµРґРµР»РёС‚РµР»СЊ: СЌС‚Рѕ Р·Р°РїСЂРѕСЃ РЅР° СЃРѕР·РґР°РЅРёРµ РїСЂРѕРµРєС‚Р° РёР»Рё РїСЂРѕСЃС‚Рѕ Р±РѕР»С‚РѕРІРЅСЏ?
 type ResponseMode = "chat" | "code" | "canvas"
 
 
@@ -4598,8 +4598,8 @@ const detectResponseMode = (text: string): ResponseMode => {
   const t = (text || "").toLowerCase().trim()
   if (!t) return "chat"
 
-  // SYSTEM COMMANDS: никогда не открывать canvas/preview
-  // Эти команды должны идти как обычный чат в backend/ai_model.py
+  // SYSTEM COMMANDS: РЅРёРєРѕРіРґР° РЅРµ РѕС‚РєСЂС‹РІР°С‚СЊ canvas/preview
+  // Р­С‚Рё РєРѕРјР°РЅРґС‹ РґРѕР»Р¶РЅС‹ РёРґС‚Рё РєР°Рє РѕР±С‹С‡РЅС‹Р№ С‡Р°С‚ РІ backend/ai_model.py
   if (
     t.startsWith("/admin_db") ||
     t.startsWith("/admin") ||
@@ -4609,23 +4609,23 @@ const detectResponseMode = (text: string): ResponseMode => {
   }
 
   const strongCanvas = [
-    /\bсайт\b/, /\bлендинг\b/, /\blanding\b/, /\blanding page\b/,
-    /\bстраниц(?:а|у|ы|е)\b/, /\bинтерфейс\b/, /\bui\b/,
-    /\bdashboard\b/, /\bдашборд\b/,
-    /\breact компонент\b/, /\bкомпонент\b/,
-    /\bhtml\b/, /\bcss\b/, /\bверстк/, /\bсверстай\b/,
+    /\bСЃР°Р№С‚\b/, /\bР»РµРЅРґРёРЅРі\b/, /\blanding\b/, /\blanding page\b/,
+    /\bСЃС‚СЂР°РЅРёС†(?:Р°|Сѓ|С‹|Рµ)\b/, /\bРёРЅС‚РµСЂС„РµР№СЃ\b/, /\bui\b/,
+    /\bdashboard\b/, /\bРґР°С€Р±РѕСЂРґ\b/,
+    /\breact РєРѕРјРїРѕРЅРµРЅС‚\b/, /\bРєРѕРјРїРѕРЅРµРЅС‚\b/,
+    /\bhtml\b/, /\bcss\b/, /\bРІРµСЂСЃС‚Рє/, /\bСЃРІРµСЂСЃС‚Р°Р№\b/,
     /\bweb app\b/, /\bwebsite\b/, /\bfrontend\b/,
     /\bcreate website\b/, /\bbuild website\b/, /\bgenerate ui\b/, /\bcreate component\b/
   ]
 
   const codeWords = [
-    "python", "javascript", "typescript", "sql", "функц", "скрипт", "пример кода",
-    "ошибка", "debug", "refactor", "js", "ts"
+    "python", "javascript", "typescript", "sql", "С„СѓРЅРєС†", "СЃРєСЂРёРїС‚", "РїСЂРёРјРµСЂ РєРѕРґР°",
+    "РѕС€РёР±РєР°", "debug", "refactor", "js", "ts"
   ]
 
-  const createWords = ["создай", "сделай", "сгенерируй", "построй", "собери", "build", "generate", "create", "make"]
+  const createWords = ["СЃРѕР·РґР°Р№", "СЃРґРµР»Р°Р№", "СЃРіРµРЅРµСЂРёСЂСѓР№", "РїРѕСЃС‚СЂРѕР№", "СЃРѕР±РµСЂРё", "build", "generate", "create", "make"]
   const canvasWords = [
-    "сайт", "лендинг", "страница", "интерфейс", "шаблон", "дашборд", "компонент", "код",
+    "СЃР°Р№С‚", "Р»РµРЅРґРёРЅРі", "СЃС‚СЂР°РЅРёС†Р°", "РёРЅС‚РµСЂС„РµР№СЃ", "С€Р°Р±Р»РѕРЅ", "РґР°С€Р±РѕСЂРґ", "РєРѕРјРїРѕРЅРµРЅС‚", "РєРѕРґ",
     "website", "site", "landing", "dashboard", "ui", "react", "tsx", "html", "component",
     "template", "canvas", "preview", "app", "saas",
   ]
@@ -4723,7 +4723,7 @@ const buildSovereignRuntimePlan = (
       modeRules[activeMode],
       `Detected response mode: ${responseMode}.`,
       `Canvas policy: ${isProjectRequest ? "open right preview with generated artifact" : "keep response in chat unless code artifact is explicitly requested"}.`,
-      "If backend answer is weak, empty, or only says done, use the local Malik fallback and still give a useful result.",
+      "If backend answer is weak, empty, or only says done, use the local Google Veo and still give a useful result.",
       "Never break /api/stream. Never require secrets on the frontend. Never pretend a deploy happened.",
       ...attachmentRules,
     ].join("\n"),
@@ -4778,14 +4778,14 @@ const saveGeneratedProjectSnapshot = (prompt: string, code: string, plan: Sovere
 const buildSovereignInstruction = (mode: ResponseMode, prompt: string): string => {
   const base = `
 [SOVEREIGN_MALIK_AI_RUNTIME]
-Ты — Malik AI Sovereign: быстрый, точный, профессиональный AI-оркестратор.
-Всегда отвечай по сути, без пустого "Готово".
-Если вопрос обычный — дай нормальный человеческий ответ.
-Если вопрос про код — дай рабочее решение, шаги проверки и код-блоки.
-Если вопрос просит сайт/UI/лендинг/dashboard/компонент — верни один большой production-ready код-блок.
-Никогда не возвращай только "Готово".
-Не называй себя ChatGPT, Gemini, Grok или чужим брендом. Ты Malik AI.
-Сохраняй стиль: уверенный, полезный, понятный, без мусора.
+РўС‹ вЂ” Malik AI Sovereign: Р±С‹СЃС‚СЂС‹Р№, С‚РѕС‡РЅС‹Р№, РїСЂРѕС„РµСЃСЃРёРѕРЅР°Р»СЊРЅС‹Р№ AI-РѕСЂРєРµСЃС‚СЂР°С‚РѕСЂ.
+Р’СЃРµРіРґР° РѕС‚РІРµС‡Р°Р№ РїРѕ СЃСѓС‚Рё, Р±РµР· РїСѓСЃС‚РѕРіРѕ "Р“РѕС‚РѕРІРѕ".
+Р•СЃР»Рё РІРѕРїСЂРѕСЃ РѕР±С‹С‡РЅС‹Р№ вЂ” РґР°Р№ РЅРѕСЂРјР°Р»СЊРЅС‹Р№ С‡РµР»РѕРІРµС‡РµСЃРєРёР№ РѕС‚РІРµС‚.
+Р•СЃР»Рё РІРѕРїСЂРѕСЃ РїСЂРѕ РєРѕРґ вЂ” РґР°Р№ СЂР°Р±РѕС‡РµРµ СЂРµС€РµРЅРёРµ, С€Р°РіРё РїСЂРѕРІРµСЂРєРё Рё РєРѕРґ-Р±Р»РѕРєРё.
+Р•СЃР»Рё РІРѕРїСЂРѕСЃ РїСЂРѕСЃРёС‚ СЃР°Р№С‚/UI/Р»РµРЅРґРёРЅРі/dashboard/РєРѕРјРїРѕРЅРµРЅС‚ вЂ” РІРµСЂРЅРё РѕРґРёРЅ Р±РѕР»СЊС€РѕР№ production-ready РєРѕРґ-Р±Р»РѕРє.
+РќРёРєРѕРіРґР° РЅРµ РІРѕР·РІСЂР°С‰Р°Р№ С‚РѕР»СЊРєРѕ "Р“РѕС‚РѕРІРѕ".
+РќРµ РЅР°Р·С‹РІР°Р№ СЃРµР±СЏ ChatGPT, Gemini, Grok РёР»Рё С‡СѓР¶РёРј Р±СЂРµРЅРґРѕРј. РўС‹ Malik AI.
+РЎРѕС…СЂР°РЅСЏР№ СЃС‚РёР»СЊ: СѓРІРµСЂРµРЅРЅС‹Р№, РїРѕР»РµР·РЅС‹Р№, РїРѕРЅСЏС‚РЅС‹Р№, Р±РµР· РјСѓСЃРѕСЂР°.
 `
 
   if (mode === "canvas") {
@@ -4793,40 +4793,40 @@ const buildSovereignInstruction = (mode: ResponseMode, prompt: string): string =
 [UI_GENERATION_MODE]
 User request: ${prompt}
 
-Сгенерируй УНИКАЛЬНЫЙ проект строго под тему запроса.
-Запрещено использовать один и тот же дефолтный Sovereign-шаблон.
+РЎРіРµРЅРµСЂРёСЂСѓР№ РЈРќРРљРђР›Р¬РќР«Р™ РїСЂРѕРµРєС‚ СЃС‚СЂРѕРіРѕ РїРѕРґ С‚РµРјСѓ Р·Р°РїСЂРѕСЃР°.
+Р—Р°РїСЂРµС‰РµРЅРѕ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РѕРґРёРЅ Рё С‚РѕС‚ Р¶Рµ РґРµС„РѕР»С‚РЅС‹Р№ Sovereign-С€Р°Р±Р»РѕРЅ.
 
-Жёсткие требования к UI:
-- Один цельный код-блок: HTML/CSS/JS или React/Tailwind, без разбросанных кусочков.
+Р–С‘СЃС‚РєРёРµ С‚СЂРµР±РѕРІР°РЅРёСЏ Рє UI:
+- РћРґРёРЅ С†РµР»СЊРЅС‹Р№ РєРѕРґ-Р±Р»РѕРє: HTML/CSS/JS РёР»Рё React/Tailwind, Р±РµР· СЂР°Р·Р±СЂРѕСЃР°РЅРЅС‹С… РєСѓСЃРѕС‡РєРѕРІ.
 - Production-ready, responsive, mobile-first.
-- Реальные тематические секции под запрос пользователя, не заглушки.
-- Дорогая визуальная система: glassmorphism, gradients, depth, shadows, cards, micro-interactions.
-- Если ресторан: hero/menu/booking/reviews/location/contact.
-- Если фитнес: hero/programs/coaches/schedule/pricing/CTA.
-- Если SaaS: hero/features/dashboard-preview/pricing/testimonials/FAQ/CTA.
-- Если dashboard: sidebar/topbar/cards/charts/table/filters/activity.
-- Если portfolio: hero/projects/skills/about/contact.
-- Если продажи/e-commerce: hero, benefits, product cards, pricing, testimonials, FAQ, CTA, footer.
-- Если игра: интерактивная логика, state, score, controls, restart, анимации и понятные правила.
-- Код должен быть самодостаточный и красивый сразу после вставки.
-- Не пиши "Готово" вместо кода.
-- Если модель не уверена — всё равно возвращай полноценный рабочий демо-проект по теме.
+- Р РµР°Р»СЊРЅС‹Рµ С‚РµРјР°С‚РёС‡РµСЃРєРёРµ СЃРµРєС†РёРё РїРѕРґ Р·Р°РїСЂРѕСЃ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ, РЅРµ Р·Р°РіР»СѓС€РєРё.
+- Р”РѕСЂРѕРіР°СЏ РІРёР·СѓР°Р»СЊРЅР°СЏ СЃРёСЃС‚РµРјР°: glassmorphism, gradients, depth, shadows, cards, micro-interactions.
+- Р•СЃР»Рё СЂРµСЃС‚РѕСЂР°РЅ: hero/menu/booking/reviews/location/contact.
+- Р•СЃР»Рё С„РёС‚РЅРµСЃ: hero/programs/coaches/schedule/pricing/CTA.
+- Р•СЃР»Рё SaaS: hero/features/dashboard-preview/pricing/testimonials/FAQ/CTA.
+- Р•СЃР»Рё dashboard: sidebar/topbar/cards/charts/table/filters/activity.
+- Р•СЃР»Рё portfolio: hero/projects/skills/about/contact.
+- Р•СЃР»Рё РїСЂРѕРґР°Р¶Рё/e-commerce: hero, benefits, product cards, pricing, testimonials, FAQ, CTA, footer.
+- Р•СЃР»Рё РёРіСЂР°: РёРЅС‚РµСЂР°РєС‚РёРІРЅР°СЏ Р»РѕРіРёРєР°, state, score, controls, restart, Р°РЅРёРјР°С†РёРё Рё РїРѕРЅСЏС‚РЅС‹Рµ РїСЂР°РІРёР»Р°.
+- РљРѕРґ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ СЃР°РјРѕРґРѕСЃС‚Р°С‚РѕС‡РЅС‹Р№ Рё РєСЂР°СЃРёРІС‹Р№ СЃСЂР°Р·Сѓ РїРѕСЃР»Рµ РІСЃС‚Р°РІРєРё.
+- РќРµ РїРёС€Рё "Р“РѕС‚РѕРІРѕ" РІРјРµСЃС‚Рѕ РєРѕРґР°.
+- Р•СЃР»Рё РјРѕРґРµР»СЊ РЅРµ СѓРІРµСЂРµРЅР° вЂ” РІСЃС‘ СЂР°РІРЅРѕ РІРѕР·РІСЂР°С‰Р°Р№ РїРѕР»РЅРѕС†РµРЅРЅС‹Р№ СЂР°Р±РѕС‡РёР№ РґРµРјРѕ-РїСЂРѕРµРєС‚ РїРѕ С‚РµРјРµ.
 `
   }
 
   if (mode === "code") {
     return `${base}
 [CODE_ASSISTANT_MODE]
-Дай понятное решение с рабочим кодом.
-Если исправляешь баг — объясни причину, дай точную замену и проверку.
-Не открывай canvas без необходимости.
+Р”Р°Р№ РїРѕРЅСЏС‚РЅРѕРµ СЂРµС€РµРЅРёРµ СЃ СЂР°Р±РѕС‡РёРј РєРѕРґРѕРј.
+Р•СЃР»Рё РёСЃРїСЂР°РІР»СЏРµС€СЊ Р±Р°Рі вЂ” РѕР±СЉСЏСЃРЅРё РїСЂРёС‡РёРЅСѓ, РґР°Р№ С‚РѕС‡РЅСѓСЋ Р·Р°РјРµРЅСѓ Рё РїСЂРѕРІРµСЂРєСѓ.
+РќРµ РѕС‚РєСЂС‹РІР°Р№ canvas Р±РµР· РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё.
 `
   }
 
   return `${base}
 [CHAT_MODE]
-Ответь нормально и содержательно. Если пользователь здоровается — ответь как Malik AI и предложи помощь.
-Если спрашивает "кто ты" — объясни, что ты Malik AI Sovereign, AI-workbench для чата, кода, UI и проектов.
+РћС‚РІРµС‚СЊ РЅРѕСЂРјР°Р»СЊРЅРѕ Рё СЃРѕРґРµСЂР¶Р°С‚РµР»СЊРЅРѕ. Р•СЃР»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ Р·РґРѕСЂРѕРІР°РµС‚СЃСЏ вЂ” РѕС‚РІРµС‚СЊ РєР°Рє Malik AI Рё РїСЂРµРґР»РѕР¶Рё РїРѕРјРѕС‰СЊ.
+Р•СЃР»Рё СЃРїСЂР°С€РёРІР°РµС‚ "РєС‚Рѕ С‚С‹" вЂ” РѕР±СЉСЏСЃРЅРё, С‡С‚Рѕ С‚С‹ Malik AI Sovereign, AI-workbench РґР»СЏ С‡Р°С‚Р°, РєРѕРґР°, UI Рё РїСЂРѕРµРєС‚РѕРІ.
 `
 }
 
@@ -4834,13 +4834,13 @@ const isWeakBackendAnswer = (answer: string): boolean => {
   const raw = answer || ""
   const t = raw.trim().toLowerCase()
   if (!t) return true
-  const weak = ["готово", "готово.", "done", "ok", "ок", "хорошо", "yes", "да"]
+  const weak = ["РіРѕС‚РѕРІРѕ", "РіРѕС‚РѕРІРѕ.", "done", "ok", "РѕРє", "С…РѕСЂРѕС€Рѕ", "yes", "РґР°"]
   if (weak.includes(t) || t.length < 8) return true
   const noCode = !raw.includes("```") && !/<(html|body|main|section|div|script|style)[\s>]/i.test(raw)
   const weakProjectStatus = [
-    "интерфейс успешно сгенерирован",
-    "проект успешно сгенерирован",
-    "генерация завершена",
+    "РёРЅС‚РµСЂС„РµР№СЃ СѓСЃРїРµС€РЅРѕ СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅ",
+    "РїСЂРѕРµРєС‚ СѓСЃРїРµС€РЅРѕ СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅ",
+    "РіРµРЅРµСЂР°С†РёСЏ Р·Р°РІРµСЂС€РµРЅР°",
     "interface synthesis complete",
   ]
   if (noCode && weakProjectStatus.some((x) => t.includes(x))) return true
@@ -4850,20 +4850,20 @@ const isWeakBackendAnswer = (answer: string): boolean => {
 const buildLocalChatAnswer = (prompt: string, mode: ResponseMode): string => {
   const t = (prompt || "").toLowerCase().trim()
 
-  if (!t) return "Я на связи. Напиши задачу — отвечу, помогу с кодом, сайтом, UI или архитектурой."
-  if (["привет", "салам", "hello", "hi", "йо"].some(w => t === w || t.startsWith(w))) {
-    return "Привет. Я Malik AI Sovereign — могу отвечать на вопросы, писать код, проектировать интерфейсы, создавать сайты и помогать прокачивать твой проект. Что создаём?"
+  if (!t) return "РЇ РЅР° СЃРІСЏР·Рё. РќР°РїРёС€Рё Р·Р°РґР°С‡Сѓ вЂ” РѕС‚РІРµС‡Сѓ, РїРѕРјРѕРіСѓ СЃ РєРѕРґРѕРј, СЃР°Р№С‚РѕРј, UI РёР»Рё Р°СЂС…РёС‚РµРєС‚СѓСЂРѕР№."
+  if (["РїСЂРёРІРµС‚", "СЃР°Р»Р°Рј", "hello", "hi", "Р№Рѕ"].some(w => t === w || t.startsWith(w))) {
+    return "РџСЂРёРІРµС‚. РЇ Malik AI Sovereign вЂ” РјРѕРіСѓ РѕС‚РІРµС‡Р°С‚СЊ РЅР° РІРѕРїСЂРѕСЃС‹, РїРёСЃР°С‚СЊ РєРѕРґ, РїСЂРѕРµРєС‚РёСЂРѕРІР°С‚СЊ РёРЅС‚РµСЂС„РµР№СЃС‹, СЃРѕР·РґР°РІР°С‚СЊ СЃР°Р№С‚С‹ Рё РїРѕРјРѕРіР°С‚СЊ РїСЂРѕРєР°С‡РёРІР°С‚СЊ С‚РІРѕР№ РїСЂРѕРµРєС‚. Р§С‚Рѕ СЃРѕР·РґР°С‘Рј?"
   }
-  if (t.includes("кто ты") || t.includes("что ты") || t.includes("who are you")) {
-    return "Я Malik AI Sovereign — AI-workbench для чата, программирования, генерации интерфейсов, лендингов, dashboard-ов и проектов с canvas/preview. Моя задача — помогать тебе быстро строить продукт, не ломая структуру проекта."
+  if (t.includes("РєС‚Рѕ С‚С‹") || t.includes("С‡С‚Рѕ С‚С‹") || t.includes("who are you")) {
+    return "РЇ Malik AI Sovereign вЂ” AI-workbench РґР»СЏ С‡Р°С‚Р°, РїСЂРѕРіСЂР°РјРјРёСЂРѕРІР°РЅРёСЏ, РіРµРЅРµСЂР°С†РёРё РёРЅС‚РµСЂС„РµР№СЃРѕРІ, Р»РµРЅРґРёРЅРіРѕРІ, dashboard-РѕРІ Рё РїСЂРѕРµРєС‚РѕРІ СЃ canvas/preview. РњРѕСЏ Р·Р°РґР°С‡Р° вЂ” РїРѕРјРѕРіР°С‚СЊ С‚РµР±Рµ Р±С‹СЃС‚СЂРѕ СЃС‚СЂРѕРёС‚СЊ РїСЂРѕРґСѓРєС‚, РЅРµ Р»РѕРјР°СЏ СЃС‚СЂСѓРєС‚СѓСЂСѓ РїСЂРѕРµРєС‚Р°."
   }
   if (mode === "code") {
-    return "Я понял задачу по коду. Backend сейчас вернул слишком короткий ответ, поэтому безопасно не открываю preview. Пришли конкретный файл/ошибку — дам точный блок замены и проверку."
+    return "РЇ РїРѕРЅСЏР» Р·Р°РґР°С‡Сѓ РїРѕ РєРѕРґСѓ. Backend СЃРµР№С‡Р°СЃ РІРµСЂРЅСѓР» СЃР»РёС€РєРѕРј РєРѕСЂРѕС‚РєРёР№ РѕС‚РІРµС‚, РїРѕСЌС‚РѕРјСѓ Р±РµР·РѕРїР°СЃРЅРѕ РЅРµ РѕС‚РєСЂС‹РІР°СЋ preview. РџСЂРёС€Р»Рё РєРѕРЅРєСЂРµС‚РЅС‹Р№ С„Р°Р№Р»/РѕС€РёР±РєСѓ вЂ” РґР°Рј С‚РѕС‡РЅС‹Р№ Р±Р»РѕРє Р·Р°РјРµРЅС‹ Рё РїСЂРѕРІРµСЂРєСѓ."
   }
   if (mode === "canvas") {
-    return "Я понял задачу на создание интерфейса. Backend вернул слишком короткий ответ, поэтому я включил безопасный режим. Повтори запрос чуть подробнее: тема сайта, секции, стиль и цвета — открою preview с полноценным кодом."
+    return "РЇ РїРѕРЅСЏР» Р·Р°РґР°С‡Сѓ РЅР° СЃРѕР·РґР°РЅРёРµ РёРЅС‚РµСЂС„РµР№СЃР°. Backend РІРµСЂРЅСѓР» СЃР»РёС€РєРѕРј РєРѕСЂРѕС‚РєРёР№ РѕС‚РІРµС‚, РїРѕСЌС‚РѕРјСѓ СЏ РІРєР»СЋС‡РёР» Р±РµР·РѕРїР°СЃРЅС‹Р№ СЂРµР¶РёРј. РџРѕРІС‚РѕСЂРё Р·Р°РїСЂРѕСЃ С‡СѓС‚СЊ РїРѕРґСЂРѕР±РЅРµРµ: С‚РµРјР° СЃР°Р№С‚Р°, СЃРµРєС†РёРё, СЃС‚РёР»СЊ Рё С†РІРµС‚Р° вЂ” РѕС‚РєСЂРѕСЋ preview СЃ РїРѕР»РЅРѕС†РµРЅРЅС‹Рј РєРѕРґРѕРј."
   }
-  return "Понял. Backend вернул слишком короткий ответ, но я не буду показывать пустое “Готово”. Напиши чуть подробнее, и я дам нормальный развёрнутый ответ."
+  return "РџРѕРЅСЏР». Backend РІРµСЂРЅСѓР» СЃР»РёС€РєРѕРј РєРѕСЂРѕС‚РєРёР№ РѕС‚РІРµС‚, РЅРѕ СЏ РЅРµ Р±СѓРґСѓ РїРѕРєР°Р·С‹РІР°С‚СЊ РїСѓСЃС‚РѕРµ вЂњР“РѕС‚РѕРІРѕвЂќ. РќР°РїРёС€Рё С‡СѓС‚СЊ РїРѕРґСЂРѕР±РЅРµРµ, Рё СЏ РґР°Рј РЅРѕСЂРјР°Р»СЊРЅС‹Р№ СЂР°Р·РІС‘СЂРЅСѓС‚С‹Р№ РѕС‚РІРµС‚."
 }
 
 const normalizeStreamChunk = (parsed: any): string | null => {
@@ -4966,7 +4966,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }))
 
   const attachmentSummary = attachments.length
-    ? "\n\n[Вложения]: " + attachments.map(a => `${a.kind}:${a.name || a.url || "untitled"} (${a.mime || "text"})`).join(", ")
+    ? "\n\n[Р’Р»РѕР¶РµРЅРёСЏ]: " + attachments.map(a => `${a.kind}:${a.name || a.url || "untitled"} (${a.mime || "text"})`).join(", ")
     : ""
 
   const instruction = `${buildSovereignInstruction(mode, cleanContent + attachmentSummary)}\n\n${runtimePlan.instruction}\n\n${responseDepthInstruction(responseDepth)}`
@@ -4976,7 +4976,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     const hasProjectCode = Boolean(finalCode && finalCode.trim().split("\n").length >= 25)
     const openPreview = isProjReq && hasProjectCode
     const safeContent = openPreview
-      ? "✨ Генерация проекта завершена. Результат открыт справа."
+      ? "вњЁ Р“РµРЅРµСЂР°С†РёСЏ РїСЂРѕРµРєС‚Р° Р·Р°РІРµСЂС€РµРЅР°. Р РµР·СѓР»СЊС‚Р°С‚ РѕС‚РєСЂС‹С‚ СЃРїСЂР°РІР°."
       : finalText || buildLocalChatAnswer(cleanContent, mode)
 
     setMessages(prev =>
@@ -5208,7 +5208,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           finalPayload?.engine ||
           finalPayload?.providerTitle ||
           finalPayload?.provider ||
-          (isFallback ? "Malik Fallback" : assistantMessage.generatedMedia.provider),
+          (isFallback ? "Google Veo" : assistantMessage.generatedMedia.provider),
       }
 
       finalizeInlineMedia(readyMedia)
@@ -5251,7 +5251,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         userEmail: normalizedEmail,
         isAdmin,
         isCreator: normalizedEmail === "amangeldymalik38@gmail.com",
-        creatorName: "Абдумалик Малик",
+        creatorName: "РђР±РґСѓРјР°Р»РёРє РњР°Р»РёРє",
         attachments,
         media_b64: attachments.find(a => a.base64)?.base64,
         media_type: attachments.find(a => a.base64)?.mime,
@@ -5277,13 +5277,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         quality: {
           minimumAnswerChars: isProjReq ? 1200 : Math.max(depthLimits.minAnswerChars, 80),
           retryIfShort: responseDepth === "deep" || responseDepth === "ultra",
-          neverReturnOnly: ["Готово", "Ок", "Done", "Yes"],
+          neverReturnOnly: ["Р“РѕС‚РѕРІРѕ", "РћРє", "Done", "Yes"],
         },
         capabilities: {
           chat: true,
           code: true,
           canvas: isProjReq,
-          multimodalRequested: /фото|изображ|картин|video|видео|file|файл/i.test(cleanContent),
+          multimodalRequested: /С„РѕС‚Рѕ|РёР·РѕР±СЂР°Р¶|РєР°СЂС‚РёРЅ|video|РІРёРґРµРѕ|file|С„Р°Р№Р»/i.test(cleanContent),
         },
       }),
     })
@@ -5340,8 +5340,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       setIsGeneratingTerminal(false)
 
       if (isProjReq) {
-        // Backend вернул слабое “Готово”, но пользователь просил проект.
-        // Включаем локальный Sovereign fallback: создаём полноценный preview/code вместо пустого ответа.
+        // Backend РІРµСЂРЅСѓР» СЃР»Р°Р±РѕРµ вЂњР“РѕС‚РѕРІРѕвЂќ, РЅРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РїСЂРѕСЃРёР» РїСЂРѕРµРєС‚.
+        // Р’РєР»СЋС‡Р°РµРј Р»РѕРєР°Р»СЊРЅС‹Р№ Sovereign fallback: СЃРѕР·РґР°С‘Рј РїРѕР»РЅРѕС†РµРЅРЅС‹Р№ preview/code РІРјРµСЃС‚Рѕ РїСѓСЃС‚РѕРіРѕ РѕС‚РІРµС‚Р°.
         const responseText = generateMockResponse(cleanContent)
         const codeText = generateMockCode(cleanContent)
         finalizeAssistant(responseText, codeText)
@@ -5354,8 +5354,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     let { text: cleanText, code } = extractCodeBlocks(fullText, mode)
 
     // TERMINATOR CANVAS GUARANTEE:
-    // Если внешний провайдер сказал “сгенерировано”, но не дал код,
-    // canvas всё равно получает полноценный локальный preview, а не пустой чат.
+    // Р•СЃР»Рё РІРЅРµС€РЅРёР№ РїСЂРѕРІР°Р№РґРµСЂ СЃРєР°Р·Р°Р» вЂњСЃРіРµРЅРµСЂРёСЂРѕРІР°РЅРѕвЂќ, РЅРѕ РЅРµ РґР°Р» РєРѕРґ,
+    // canvas РІСЃС‘ СЂР°РІРЅРѕ РїРѕР»СѓС‡Р°РµС‚ РїРѕР»РЅРѕС†РµРЅРЅС‹Р№ Р»РѕРєР°Р»СЊРЅС‹Р№ preview, Р° РЅРµ РїСѓСЃС‚РѕР№ С‡Р°С‚.
     if (isProjReq && (!code || code.trim().split("\n").length < 25)) {
       cleanText = cleanText || fullText || generateMockResponse(cleanContent)
       code = generateMockCode(cleanContent)
@@ -5382,7 +5382,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       view: activeViewRef.current,
       payload: error instanceof Error ? error.message : error,
     })
-    const errorMessage = `⚠️ **Ошибка соединения**\n\nСервер недоступен или вернул ошибку. Malik AI включил безопасный fallback.\n\n${error instanceof Error ? error.message : 'Неизвестная ошибка'}`
+    const errorMessage = `вљ пёЏ **РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏ**\n\nРЎРµСЂРІРµСЂ РЅРµРґРѕСЃС‚СѓРїРµРЅ РёР»Рё РІРµСЂРЅСѓР» РѕС€РёР±РєСѓ. Malik AI РІРєР»СЋС‡РёР» Р±РµР·РѕРїР°СЃРЅС‹Р№ fallback.\n\n${error instanceof Error ? error.message : 'РќРµРёР·РІРµСЃС‚РЅР°СЏ РѕС€РёР±РєР°'}`
     setErrorNotification(errorMessage)
 
     const elapsed = Date.now() - startTime
@@ -5469,8 +5469,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const shouldRenderEmptyHome = activeView === "home" && !hasStartedChat
   const hasMessages = hasStartedChat
 
-  // Явно определяем, должны ли мы показывать правую панель (Проект)
-  // Показываем если: есть код, ИЛИ мы сейчас генерируем терминалом, ИЛИ интент был project
+  // РЇРІРЅРѕ РѕРїСЂРµРґРµР»СЏРµРј, РґРѕР»Р¶РЅС‹ Р»Рё РјС‹ РїРѕРєР°Р·С‹РІР°С‚СЊ РїСЂР°РІСѓСЋ РїР°РЅРµР»СЊ (РџСЂРѕРµРєС‚)
+  // РџРѕРєР°Р·С‹РІР°РµРј РµСЃР»Рё: РµСЃС‚СЊ РєРѕРґ, РР›Р РјС‹ СЃРµР№С‡Р°СЃ РіРµРЅРµСЂРёСЂСѓРµРј С‚РµСЂРјРёРЅР°Р»РѕРј, РР›Р РёРЅС‚РµРЅС‚ Р±С‹Р» project
   const latestAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant")
   const shouldShowPreviewPanel =
     activeView === "home" &&
@@ -5506,9 +5506,9 @@ const shouldShowMobilePreviewButton =
           const storedSnapshot = readDashboardAuthSnapshot()
           const snapshot: DashboardAuthSnapshot = storedSnapshot || {
             email: user || "guest@malik.ai",
-            name: user === "guest@malik.ai" || user === "Гость" ? "Гость" : user || "Пользователь",
+            name: user === "guest@malik.ai" || user === "Р“РѕСЃС‚СЊ" ? "Р“РѕСЃС‚СЊ" : user || "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ",
             avatar: safeGetStorage("malik_user_avatar", ""),
-            mode: user === "guest@malik.ai" || user === "Гость" ? "guest" : "supabase",
+            mode: user === "guest@malik.ai" || user === "Р“РѕСЃС‚СЊ" ? "guest" : "supabase",
             isAdmin: Boolean(pro),
             lastLoginAt: new Date().toISOString(),
           }
@@ -5694,7 +5694,7 @@ const shouldShowMobilePreviewButton =
           )}
         </section>
 
-        {/* ПРАВАЯ ПАНЕЛЬ С WOW-АНИМАЦИЕЙ ТЕРМИНАЛА (V0 STYLE) */}
+        {/* РџР РђР’РђРЇ РџРђРќР•Р›Р¬ РЎ WOW-РђРќРРњРђР¦РР•Р™ РўР•Р РњРРќРђР›Рђ (V0 STYLE) */}
         {shouldShowPreviewPanel && (
           <aside className="hidden min-h-0 w-[42%] min-w-[480px] max-w-[760px] flex-col border-l border-[#1F2937] bg-[#030303] z-0 lg:flex animate-in slide-in-from-right duration-500">
             {isGeneratingTerminal ? (
@@ -6015,21 +6015,21 @@ const shouldShowMobilePreviewButton =
       <div className="px-3 pb-2 flex items-center gap-2 border-b border-[#1F2937]">
         <button
           type="button"
-          aria-label="Назад к чату"
+          aria-label="РќР°Р·Р°Рґ Рє С‡Р°С‚Сѓ"
           onClick={() => setMobilePreviewOpen(false)}
           className="p-2 rounded-lg bg-[#121212] border border-[#2A2A2A] text-white"
         >
-          ←
+          в†ђ
         </button>
         <div className="text-sm text-gray-300">Preview</div>
         <div className="ml-auto">
           <button
             type="button"
-            aria-label="Закрыть"
+            aria-label="Р—Р°РєСЂС‹С‚СЊ"
             onClick={() => setMobilePreviewOpen(false)}
             className="p-2 rounded-lg bg-[#121212] border border-[#2A2A2A] text-white"
           >
-            ✕
+            вњ•
           </button>
         </div>
       </div>
@@ -6084,7 +6084,7 @@ const shouldShowMobilePreviewButton =
   {false && activeView === "templates" && (
     <button
       type="button"
-      aria-label="На главную"
+      aria-label="РќР° РіР»Р°РІРЅСѓСЋ"
       onClick={() => safeOpenView("home", "mobile")}
       className="lg:hidden fixed top-[max(env(safe-area-inset-top),12px)] left-3 z-[70] p-2 rounded-xl bg-black/70 border border-[#2A2A2A] text-white backdrop-blur"
     >
@@ -6102,7 +6102,7 @@ const shouldShowMobilePreviewButton =
       onClick={() => setMobilePreviewOpen(true)}
       className="lg:hidden fixed bottom-[max(env(safe-area-inset-bottom),16px)] right-4 z-[70] px-4 py-2 rounded-xl bg-violet-600 text-white shadow-lg border border-violet-400/30"
     >
-      Открыть Preview
+      РћС‚РєСЂС‹С‚СЊ Preview
     </button>
   )}
 
@@ -6143,8 +6143,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-001",
       title: "Sovereign V8 Template 001",
       category: "Sovereign V8",
-      description: "Локальный режим, IDE, системные метрики, no-telemetry, model swap",
-      prompt: "Создай Sovereign V8 модуль для Malik AI: Локальный режим, IDE, системные метрики, no-telemetry, model swap. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 001.",
+      description: "Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap",
+      prompt: "РЎРѕР·РґР°Р№ Sovereign V8 РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 001.",
       likes: "38.3K",
       views: "46.7K",
       badge: "FREE",
@@ -6153,8 +6153,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-002",
       title: "Qazaq Rescue AI Template 002",
       category: "Qazaq Rescue AI",
-      description: "протоколы ЧС, offline QR, panic UI, school drill, PDF reports",
-      prompt: "Создай Qazaq Rescue AI модуль для Malik AI: протоколы ЧС, offline QR, panic UI, school drill, PDF reports. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 002.",
+      description: "РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports",
+      prompt: "РЎРѕР·РґР°Р№ Qazaq Rescue AI РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 002.",
       likes: "75.6K",
       views: "37.4K",
       badge: "PRO",
@@ -6163,8 +6163,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-003",
       title: "Defensive Cyber Template 003",
       category: "Defensive Cyber",
-      description: "аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code",
-      prompt: "Создай Defensive Cyber модуль для Malik AI: аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 003.",
+      description: "Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code",
+      prompt: "РЎРѕР·РґР°Р№ Defensive Cyber РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 003.",
       likes: "112.9K",
       views: "28.1K",
       badge: "FREE",
@@ -6174,7 +6174,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Auto Dev Template 004",
       category: "Auto Dev",
       description: "React, Next.js, Tailwind, API routes, DB schema, tests",
-      prompt: "Создай Auto Dev модуль для Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 004.",
+      prompt: "РЎРѕР·РґР°Р№ Auto Dev РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 004.",
       likes: "149.2K",
       views: "19.8K",
       badge: "PRO",
@@ -6184,7 +6184,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Investor WOW Template 005",
       category: "Investor WOW",
       description: "pitch, founder story, Astana Hub, market map, demo script",
-      prompt: "Создай Investor WOW модуль для Malik AI: pitch, founder story, Astana Hub, market map, demo script. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 005.",
+      prompt: "РЎРѕР·РґР°Р№ Investor WOW РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: pitch, founder story, Astana Hub, market map, demo script. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 005.",
       likes: "186.5K",
       views: "10.5K",
       badge: "CORE",
@@ -6194,7 +6194,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "UI/UX Template 006",
       category: "UI/UX",
       description: "glassmorphism, animations, micro-interactions, responsive systems",
-      prompt: "Создай UI/UX модуль для Malik AI: glassmorphism, animations, micro-interactions, responsive systems. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 006.",
+      prompt: "РЎРѕР·РґР°Р№ UI/UX РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: glassmorphism, animations, micro-interactions, responsive systems. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 006.",
       likes: "223.8K",
       views: "51.2K",
       badge: "PRO",
@@ -6204,7 +6204,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Billing Template 007",
       category: "Billing",
       description: "free/pro/team, usage limits, checkout foundation",
-      prompt: "Создай Billing модуль для Malik AI: free/pro/team, usage limits, checkout foundation. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 007.",
+      prompt: "РЎРѕР·РґР°Р№ Billing РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: free/pro/team, usage limits, checkout foundation. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 007.",
       likes: "260.1K",
       views: "42.9K",
       badge: "FREE",
@@ -6214,7 +6214,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Storage Template 008",
       category: "Storage",
       description: "uploads, project files, artifacts, metadata",
-      prompt: "Создай Storage модуль для Malik AI: uploads, project files, artifacts, metadata. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 008.",
+      prompt: "РЎРѕР·РґР°Р№ Storage РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: uploads, project files, artifacts, metadata. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 008.",
       likes: "297.4K",
       views: "33.6K",
       badge: "PRO",
@@ -6224,7 +6224,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Workers Template 009",
       category: "Workers",
       description: "image/video queues, long-running tasks, realtime status",
-      prompt: "Создай Workers модуль для Malik AI: image/video queues, long-running tasks, realtime status. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 009.",
+      prompt: "РЎРѕР·РґР°Р№ Workers РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: image/video queues, long-running tasks, realtime status. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 009.",
       likes: "334.7K",
       views: "24.3K",
       badge: "FREE",
@@ -6234,7 +6234,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Projects Template 010",
       category: "Projects",
       description: "Cursor-like projects, file tree, generated apps",
-      prompt: "Создай Projects модуль для Malik AI: Cursor-like projects, file tree, generated apps. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 010.",
+      prompt: "РЎРѕР·РґР°Р№ Projects РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Cursor-like projects, file tree, generated apps. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 010.",
       likes: "371.0K",
       views: "15.0K",
       badge: "CORE",
@@ -6243,8 +6243,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-011",
       title: "Sovereign V8 Template 011",
       category: "Sovereign V8",
-      description: "Локальный режим, IDE, системные метрики, no-telemetry, model swap",
-      prompt: "Создай Sovereign V8 модуль для Malik AI: Локальный режим, IDE, системные метрики, no-telemetry, model swap. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 011.",
+      description: "Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap",
+      prompt: "РЎРѕР·РґР°Р№ Sovereign V8 РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 011.",
       likes: "408.3K",
       views: "6.7K",
       badge: "FREE",
@@ -6253,8 +6253,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-012",
       title: "Qazaq Rescue AI Template 012",
       category: "Qazaq Rescue AI",
-      description: "протоколы ЧС, offline QR, panic UI, school drill, PDF reports",
-      prompt: "Создай Qazaq Rescue AI модуль для Malik AI: протоколы ЧС, offline QR, panic UI, school drill, PDF reports. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 012.",
+      description: "РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports",
+      prompt: "РЎРѕР·РґР°Р№ Qazaq Rescue AI РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 012.",
       likes: "445.6K",
       views: "47.4K",
       badge: "PRO",
@@ -6263,8 +6263,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-013",
       title: "Defensive Cyber Template 013",
       category: "Defensive Cyber",
-      description: "аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code",
-      prompt: "Создай Defensive Cyber модуль для Malik AI: аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 013.",
+      description: "Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code",
+      prompt: "РЎРѕР·РґР°Р№ Defensive Cyber РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 013.",
       likes: "482.9K",
       views: "38.1K",
       badge: "FREE",
@@ -6274,7 +6274,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Auto Dev Template 014",
       category: "Auto Dev",
       description: "React, Next.js, Tailwind, API routes, DB schema, tests",
-      prompt: "Создай Auto Dev модуль для Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 014.",
+      prompt: "РЎРѕР·РґР°Р№ Auto Dev РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 014.",
       likes: "519.2K",
       views: "29.8K",
       badge: "PRO",
@@ -6284,7 +6284,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Investor WOW Template 015",
       category: "Investor WOW",
       description: "pitch, founder story, Astana Hub, market map, demo script",
-      prompt: "Создай Investor WOW модуль для Malik AI: pitch, founder story, Astana Hub, market map, demo script. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 015.",
+      prompt: "РЎРѕР·РґР°Р№ Investor WOW РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: pitch, founder story, Astana Hub, market map, demo script. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 015.",
       likes: "556.5K",
       views: "20.5K",
       badge: "CORE",
@@ -6294,7 +6294,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "UI/UX Template 016",
       category: "UI/UX",
       description: "glassmorphism, animations, micro-interactions, responsive systems",
-      prompt: "Создай UI/UX модуль для Malik AI: glassmorphism, animations, micro-interactions, responsive systems. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 016.",
+      prompt: "РЎРѕР·РґР°Р№ UI/UX РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: glassmorphism, animations, micro-interactions, responsive systems. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 016.",
       likes: "593.8K",
       views: "11.2K",
       badge: "PRO",
@@ -6304,7 +6304,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Billing Template 017",
       category: "Billing",
       description: "free/pro/team, usage limits, checkout foundation",
-      prompt: "Создай Billing модуль для Malik AI: free/pro/team, usage limits, checkout foundation. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 017.",
+      prompt: "РЎРѕР·РґР°Р№ Billing РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: free/pro/team, usage limits, checkout foundation. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 017.",
       likes: "630.1K",
       views: "52.9K",
       badge: "FREE",
@@ -6314,7 +6314,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Storage Template 018",
       category: "Storage",
       description: "uploads, project files, artifacts, metadata",
-      prompt: "Создай Storage модуль для Malik AI: uploads, project files, artifacts, metadata. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 018.",
+      prompt: "РЎРѕР·РґР°Р№ Storage РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: uploads, project files, artifacts, metadata. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 018.",
       likes: "667.4K",
       views: "43.6K",
       badge: "PRO",
@@ -6324,7 +6324,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Workers Template 019",
       category: "Workers",
       description: "image/video queues, long-running tasks, realtime status",
-      prompt: "Создай Workers модуль для Malik AI: image/video queues, long-running tasks, realtime status. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 019.",
+      prompt: "РЎРѕР·РґР°Р№ Workers РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: image/video queues, long-running tasks, realtime status. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 019.",
       likes: "704.7K",
       views: "34.3K",
       badge: "FREE",
@@ -6334,7 +6334,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Projects Template 020",
       category: "Projects",
       description: "Cursor-like projects, file tree, generated apps",
-      prompt: "Создай Projects модуль для Malik AI: Cursor-like projects, file tree, generated apps. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 020.",
+      prompt: "РЎРѕР·РґР°Р№ Projects РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Cursor-like projects, file tree, generated apps. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 020.",
       likes: "741.0K",
       views: "25.0K",
       badge: "CORE",
@@ -6343,8 +6343,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-021",
       title: "Sovereign V8 Template 021",
       category: "Sovereign V8",
-      description: "Локальный режим, IDE, системные метрики, no-telemetry, model swap",
-      prompt: "Создай Sovereign V8 модуль для Malik AI: Локальный режим, IDE, системные метрики, no-telemetry, model swap. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 021.",
+      description: "Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap",
+      prompt: "РЎРѕР·РґР°Р№ Sovereign V8 РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 021.",
       likes: "778.3K",
       views: "16.7K",
       badge: "FREE",
@@ -6353,8 +6353,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-022",
       title: "Qazaq Rescue AI Template 022",
       category: "Qazaq Rescue AI",
-      description: "протоколы ЧС, offline QR, panic UI, school drill, PDF reports",
-      prompt: "Создай Qazaq Rescue AI модуль для Malik AI: протоколы ЧС, offline QR, panic UI, school drill, PDF reports. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 022.",
+      description: "РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports",
+      prompt: "РЎРѕР·РґР°Р№ Qazaq Rescue AI РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 022.",
       likes: "815.6K",
       views: "7.4K",
       badge: "PRO",
@@ -6363,8 +6363,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-023",
       title: "Defensive Cyber Template 023",
       category: "Defensive Cyber",
-      description: "аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code",
-      prompt: "Создай Defensive Cyber модуль для Malik AI: аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 023.",
+      description: "Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code",
+      prompt: "РЎРѕР·РґР°Р№ Defensive Cyber РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 023.",
       likes: "852.9K",
       views: "48.1K",
       badge: "FREE",
@@ -6374,7 +6374,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Auto Dev Template 024",
       category: "Auto Dev",
       description: "React, Next.js, Tailwind, API routes, DB schema, tests",
-      prompt: "Создай Auto Dev модуль для Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 024.",
+      prompt: "РЎРѕР·РґР°Р№ Auto Dev РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 024.",
       likes: "889.2K",
       views: "39.8K",
       badge: "PRO",
@@ -6384,7 +6384,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Investor WOW Template 025",
       category: "Investor WOW",
       description: "pitch, founder story, Astana Hub, market map, demo script",
-      prompt: "Создай Investor WOW модуль для Malik AI: pitch, founder story, Astana Hub, market map, demo script. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 025.",
+      prompt: "РЎРѕР·РґР°Р№ Investor WOW РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: pitch, founder story, Astana Hub, market map, demo script. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 025.",
       likes: "26.5K",
       views: "30.5K",
       badge: "CORE",
@@ -6394,7 +6394,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "UI/UX Template 026",
       category: "UI/UX",
       description: "glassmorphism, animations, micro-interactions, responsive systems",
-      prompt: "Создай UI/UX модуль для Malik AI: glassmorphism, animations, micro-interactions, responsive systems. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 026.",
+      prompt: "РЎРѕР·РґР°Р№ UI/UX РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: glassmorphism, animations, micro-interactions, responsive systems. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 026.",
       likes: "63.8K",
       views: "21.2K",
       badge: "PRO",
@@ -6404,7 +6404,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Billing Template 027",
       category: "Billing",
       description: "free/pro/team, usage limits, checkout foundation",
-      prompt: "Создай Billing модуль для Malik AI: free/pro/team, usage limits, checkout foundation. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 027.",
+      prompt: "РЎРѕР·РґР°Р№ Billing РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: free/pro/team, usage limits, checkout foundation. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 027.",
       likes: "100.1K",
       views: "12.9K",
       badge: "FREE",
@@ -6414,7 +6414,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Storage Template 028",
       category: "Storage",
       description: "uploads, project files, artifacts, metadata",
-      prompt: "Создай Storage модуль для Malik AI: uploads, project files, artifacts, metadata. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 028.",
+      prompt: "РЎРѕР·РґР°Р№ Storage РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: uploads, project files, artifacts, metadata. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 028.",
       likes: "137.4K",
       views: "53.6K",
       badge: "PRO",
@@ -6424,7 +6424,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Workers Template 029",
       category: "Workers",
       description: "image/video queues, long-running tasks, realtime status",
-      prompt: "Создай Workers модуль для Malik AI: image/video queues, long-running tasks, realtime status. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 029.",
+      prompt: "РЎРѕР·РґР°Р№ Workers РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: image/video queues, long-running tasks, realtime status. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 029.",
       likes: "174.7K",
       views: "44.3K",
       badge: "FREE",
@@ -6434,7 +6434,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Projects Template 030",
       category: "Projects",
       description: "Cursor-like projects, file tree, generated apps",
-      prompt: "Создай Projects модуль для Malik AI: Cursor-like projects, file tree, generated apps. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 030.",
+      prompt: "РЎРѕР·РґР°Р№ Projects РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Cursor-like projects, file tree, generated apps. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 030.",
       likes: "211.0K",
       views: "35.0K",
       badge: "CORE",
@@ -6443,8 +6443,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-031",
       title: "Sovereign V8 Template 031",
       category: "Sovereign V8",
-      description: "Локальный режим, IDE, системные метрики, no-telemetry, model swap",
-      prompt: "Создай Sovereign V8 модуль для Malik AI: Локальный режим, IDE, системные метрики, no-telemetry, model swap. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 031.",
+      description: "Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap",
+      prompt: "РЎРѕР·РґР°Р№ Sovereign V8 РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 031.",
       likes: "248.3K",
       views: "26.7K",
       badge: "FREE",
@@ -6453,8 +6453,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-032",
       title: "Qazaq Rescue AI Template 032",
       category: "Qazaq Rescue AI",
-      description: "протоколы ЧС, offline QR, panic UI, school drill, PDF reports",
-      prompt: "Создай Qazaq Rescue AI модуль для Malik AI: протоколы ЧС, offline QR, panic UI, school drill, PDF reports. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 032.",
+      description: "РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports",
+      prompt: "РЎРѕР·РґР°Р№ Qazaq Rescue AI РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 032.",
       likes: "285.6K",
       views: "17.4K",
       badge: "PRO",
@@ -6463,8 +6463,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-033",
       title: "Defensive Cyber Template 033",
       category: "Defensive Cyber",
-      description: "аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code",
-      prompt: "Создай Defensive Cyber модуль для Malik AI: аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 033.",
+      description: "Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code",
+      prompt: "РЎРѕР·РґР°Р№ Defensive Cyber РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 033.",
       likes: "322.9K",
       views: "8.1K",
       badge: "FREE",
@@ -6474,7 +6474,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Auto Dev Template 034",
       category: "Auto Dev",
       description: "React, Next.js, Tailwind, API routes, DB schema, tests",
-      prompt: "Создай Auto Dev модуль для Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 034.",
+      prompt: "РЎРѕР·РґР°Р№ Auto Dev РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 034.",
       likes: "359.2K",
       views: "49.8K",
       badge: "PRO",
@@ -6484,7 +6484,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Investor WOW Template 035",
       category: "Investor WOW",
       description: "pitch, founder story, Astana Hub, market map, demo script",
-      prompt: "Создай Investor WOW модуль для Malik AI: pitch, founder story, Astana Hub, market map, demo script. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 035.",
+      prompt: "РЎРѕР·РґР°Р№ Investor WOW РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: pitch, founder story, Astana Hub, market map, demo script. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 035.",
       likes: "396.5K",
       views: "40.5K",
       badge: "CORE",
@@ -6494,7 +6494,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "UI/UX Template 036",
       category: "UI/UX",
       description: "glassmorphism, animations, micro-interactions, responsive systems",
-      prompt: "Создай UI/UX модуль для Malik AI: glassmorphism, animations, micro-interactions, responsive systems. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 036.",
+      prompt: "РЎРѕР·РґР°Р№ UI/UX РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: glassmorphism, animations, micro-interactions, responsive systems. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 036.",
       likes: "433.8K",
       views: "31.2K",
       badge: "PRO",
@@ -6504,7 +6504,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Billing Template 037",
       category: "Billing",
       description: "free/pro/team, usage limits, checkout foundation",
-      prompt: "Создай Billing модуль для Malik AI: free/pro/team, usage limits, checkout foundation. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 037.",
+      prompt: "РЎРѕР·РґР°Р№ Billing РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: free/pro/team, usage limits, checkout foundation. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 037.",
       likes: "470.1K",
       views: "22.9K",
       badge: "FREE",
@@ -6514,7 +6514,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Storage Template 038",
       category: "Storage",
       description: "uploads, project files, artifacts, metadata",
-      prompt: "Создай Storage модуль для Malik AI: uploads, project files, artifacts, metadata. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 038.",
+      prompt: "РЎРѕР·РґР°Р№ Storage РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: uploads, project files, artifacts, metadata. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 038.",
       likes: "507.4K",
       views: "13.6K",
       badge: "PRO",
@@ -6524,7 +6524,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Workers Template 039",
       category: "Workers",
       description: "image/video queues, long-running tasks, realtime status",
-      prompt: "Создай Workers модуль для Malik AI: image/video queues, long-running tasks, realtime status. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 039.",
+      prompt: "РЎРѕР·РґР°Р№ Workers РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: image/video queues, long-running tasks, realtime status. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 039.",
       likes: "544.7K",
       views: "54.3K",
       badge: "FREE",
@@ -6534,7 +6534,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Projects Template 040",
       category: "Projects",
       description: "Cursor-like projects, file tree, generated apps",
-      prompt: "Создай Projects модуль для Malik AI: Cursor-like projects, file tree, generated apps. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 040.",
+      prompt: "РЎРѕР·РґР°Р№ Projects РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Cursor-like projects, file tree, generated apps. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 040.",
       likes: "581.0K",
       views: "45.0K",
       badge: "CORE",
@@ -6543,8 +6543,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-041",
       title: "Sovereign V8 Template 041",
       category: "Sovereign V8",
-      description: "Локальный режим, IDE, системные метрики, no-telemetry, model swap",
-      prompt: "Создай Sovereign V8 модуль для Malik AI: Локальный режим, IDE, системные метрики, no-telemetry, model swap. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 041.",
+      description: "Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap",
+      prompt: "РЎРѕР·РґР°Р№ Sovereign V8 РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 041.",
       likes: "618.3K",
       views: "36.7K",
       badge: "FREE",
@@ -6553,8 +6553,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-042",
       title: "Qazaq Rescue AI Template 042",
       category: "Qazaq Rescue AI",
-      description: "протоколы ЧС, offline QR, panic UI, school drill, PDF reports",
-      prompt: "Создай Qazaq Rescue AI модуль для Malik AI: протоколы ЧС, offline QR, panic UI, school drill, PDF reports. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 042.",
+      description: "РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports",
+      prompt: "РЎРѕР·РґР°Р№ Qazaq Rescue AI РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 042.",
       likes: "655.6K",
       views: "27.4K",
       badge: "PRO",
@@ -6563,8 +6563,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-043",
       title: "Defensive Cyber Template 043",
       category: "Defensive Cyber",
-      description: "аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code",
-      prompt: "Создай Defensive Cyber модуль для Malik AI: аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 043.",
+      description: "Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code",
+      prompt: "РЎРѕР·РґР°Р№ Defensive Cyber РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 043.",
       likes: "692.9K",
       views: "18.1K",
       badge: "FREE",
@@ -6574,7 +6574,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Auto Dev Template 044",
       category: "Auto Dev",
       description: "React, Next.js, Tailwind, API routes, DB schema, tests",
-      prompt: "Создай Auto Dev модуль для Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 044.",
+      prompt: "РЎРѕР·РґР°Р№ Auto Dev РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 044.",
       likes: "729.2K",
       views: "9.8K",
       badge: "PRO",
@@ -6584,7 +6584,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Investor WOW Template 045",
       category: "Investor WOW",
       description: "pitch, founder story, Astana Hub, market map, demo script",
-      prompt: "Создай Investor WOW модуль для Malik AI: pitch, founder story, Astana Hub, market map, demo script. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 045.",
+      prompt: "РЎРѕР·РґР°Р№ Investor WOW РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: pitch, founder story, Astana Hub, market map, demo script. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 045.",
       likes: "766.5K",
       views: "50.5K",
       badge: "CORE",
@@ -6594,7 +6594,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "UI/UX Template 046",
       category: "UI/UX",
       description: "glassmorphism, animations, micro-interactions, responsive systems",
-      prompt: "Создай UI/UX модуль для Malik AI: glassmorphism, animations, micro-interactions, responsive systems. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 046.",
+      prompt: "РЎРѕР·РґР°Р№ UI/UX РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: glassmorphism, animations, micro-interactions, responsive systems. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 046.",
       likes: "803.8K",
       views: "41.2K",
       badge: "PRO",
@@ -6604,7 +6604,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Billing Template 047",
       category: "Billing",
       description: "free/pro/team, usage limits, checkout foundation",
-      prompt: "Создай Billing модуль для Malik AI: free/pro/team, usage limits, checkout foundation. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 047.",
+      prompt: "РЎРѕР·РґР°Р№ Billing РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: free/pro/team, usage limits, checkout foundation. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 047.",
       likes: "840.1K",
       views: "32.9K",
       badge: "FREE",
@@ -6614,7 +6614,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Storage Template 048",
       category: "Storage",
       description: "uploads, project files, artifacts, metadata",
-      prompt: "Создай Storage модуль для Malik AI: uploads, project files, artifacts, metadata. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 048.",
+      prompt: "РЎРѕР·РґР°Р№ Storage РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: uploads, project files, artifacts, metadata. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 048.",
       likes: "877.4K",
       views: "23.6K",
       badge: "PRO",
@@ -6624,7 +6624,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Workers Template 049",
       category: "Workers",
       description: "image/video queues, long-running tasks, realtime status",
-      prompt: "Создай Workers модуль для Malik AI: image/video queues, long-running tasks, realtime status. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 049.",
+      prompt: "РЎРѕР·РґР°Р№ Workers РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: image/video queues, long-running tasks, realtime status. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 049.",
       likes: "14.7K",
       views: "14.3K",
       badge: "FREE",
@@ -6634,7 +6634,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Projects Template 050",
       category: "Projects",
       description: "Cursor-like projects, file tree, generated apps",
-      prompt: "Создай Projects модуль для Malik AI: Cursor-like projects, file tree, generated apps. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 050.",
+      prompt: "РЎРѕР·РґР°Р№ Projects РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Cursor-like projects, file tree, generated apps. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 050.",
       likes: "51.0K",
       views: "5.0K",
       badge: "CORE",
@@ -6643,8 +6643,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-051",
       title: "Sovereign V8 Template 051",
       category: "Sovereign V8",
-      description: "Локальный режим, IDE, системные метрики, no-telemetry, model swap",
-      prompt: "Создай Sovereign V8 модуль для Malik AI: Локальный режим, IDE, системные метрики, no-telemetry, model swap. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 051.",
+      description: "Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap",
+      prompt: "РЎРѕР·РґР°Р№ Sovereign V8 РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 051.",
       likes: "88.3K",
       views: "46.7K",
       badge: "FREE",
@@ -6653,8 +6653,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-052",
       title: "Qazaq Rescue AI Template 052",
       category: "Qazaq Rescue AI",
-      description: "протоколы ЧС, offline QR, panic UI, school drill, PDF reports",
-      prompt: "Создай Qazaq Rescue AI модуль для Malik AI: протоколы ЧС, offline QR, panic UI, school drill, PDF reports. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 052.",
+      description: "РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports",
+      prompt: "РЎРѕР·РґР°Р№ Qazaq Rescue AI РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 052.",
       likes: "125.6K",
       views: "37.4K",
       badge: "PRO",
@@ -6663,8 +6663,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-053",
       title: "Defensive Cyber Template 053",
       category: "Defensive Cyber",
-      description: "аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code",
-      prompt: "Создай Defensive Cyber модуль для Malik AI: аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 053.",
+      description: "Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code",
+      prompt: "РЎРѕР·РґР°Р№ Defensive Cyber РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 053.",
       likes: "162.9K",
       views: "28.1K",
       badge: "FREE",
@@ -6674,7 +6674,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Auto Dev Template 054",
       category: "Auto Dev",
       description: "React, Next.js, Tailwind, API routes, DB schema, tests",
-      prompt: "Создай Auto Dev модуль для Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 054.",
+      prompt: "РЎРѕР·РґР°Р№ Auto Dev РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 054.",
       likes: "199.2K",
       views: "19.8K",
       badge: "PRO",
@@ -6684,7 +6684,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Investor WOW Template 055",
       category: "Investor WOW",
       description: "pitch, founder story, Astana Hub, market map, demo script",
-      prompt: "Создай Investor WOW модуль для Malik AI: pitch, founder story, Astana Hub, market map, demo script. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 055.",
+      prompt: "РЎРѕР·РґР°Р№ Investor WOW РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: pitch, founder story, Astana Hub, market map, demo script. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 055.",
       likes: "236.5K",
       views: "10.5K",
       badge: "CORE",
@@ -6694,7 +6694,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "UI/UX Template 056",
       category: "UI/UX",
       description: "glassmorphism, animations, micro-interactions, responsive systems",
-      prompt: "Создай UI/UX модуль для Malik AI: glassmorphism, animations, micro-interactions, responsive systems. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 056.",
+      prompt: "РЎРѕР·РґР°Р№ UI/UX РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: glassmorphism, animations, micro-interactions, responsive systems. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 056.",
       likes: "273.8K",
       views: "51.2K",
       badge: "PRO",
@@ -6704,7 +6704,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Billing Template 057",
       category: "Billing",
       description: "free/pro/team, usage limits, checkout foundation",
-      prompt: "Создай Billing модуль для Malik AI: free/pro/team, usage limits, checkout foundation. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 057.",
+      prompt: "РЎРѕР·РґР°Р№ Billing РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: free/pro/team, usage limits, checkout foundation. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 057.",
       likes: "310.1K",
       views: "42.9K",
       badge: "FREE",
@@ -6714,7 +6714,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Storage Template 058",
       category: "Storage",
       description: "uploads, project files, artifacts, metadata",
-      prompt: "Создай Storage модуль для Malik AI: uploads, project files, artifacts, metadata. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 058.",
+      prompt: "РЎРѕР·РґР°Р№ Storage РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: uploads, project files, artifacts, metadata. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 058.",
       likes: "347.4K",
       views: "33.6K",
       badge: "PRO",
@@ -6724,7 +6724,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Workers Template 059",
       category: "Workers",
       description: "image/video queues, long-running tasks, realtime status",
-      prompt: "Создай Workers модуль для Malik AI: image/video queues, long-running tasks, realtime status. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 059.",
+      prompt: "РЎРѕР·РґР°Р№ Workers РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: image/video queues, long-running tasks, realtime status. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 059.",
       likes: "384.7K",
       views: "24.3K",
       badge: "FREE",
@@ -6734,7 +6734,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Projects Template 060",
       category: "Projects",
       description: "Cursor-like projects, file tree, generated apps",
-      prompt: "Создай Projects модуль для Malik AI: Cursor-like projects, file tree, generated apps. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 060.",
+      prompt: "РЎРѕР·РґР°Р№ Projects РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Cursor-like projects, file tree, generated apps. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 060.",
       likes: "421.0K",
       views: "15.0K",
       badge: "CORE",
@@ -6743,8 +6743,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-061",
       title: "Sovereign V8 Template 061",
       category: "Sovereign V8",
-      description: "Локальный режим, IDE, системные метрики, no-telemetry, model swap",
-      prompt: "Создай Sovereign V8 модуль для Malik AI: Локальный режим, IDE, системные метрики, no-telemetry, model swap. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 061.",
+      description: "Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap",
+      prompt: "РЎРѕР·РґР°Р№ Sovereign V8 РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 061.",
       likes: "458.3K",
       views: "6.7K",
       badge: "FREE",
@@ -6753,8 +6753,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-062",
       title: "Qazaq Rescue AI Template 062",
       category: "Qazaq Rescue AI",
-      description: "протоколы ЧС, offline QR, panic UI, school drill, PDF reports",
-      prompt: "Создай Qazaq Rescue AI модуль для Malik AI: протоколы ЧС, offline QR, panic UI, school drill, PDF reports. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 062.",
+      description: "РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports",
+      prompt: "РЎРѕР·РґР°Р№ Qazaq Rescue AI РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 062.",
       likes: "495.6K",
       views: "47.4K",
       badge: "PRO",
@@ -6763,8 +6763,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-063",
       title: "Defensive Cyber Template 063",
       category: "Defensive Cyber",
-      description: "аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code",
-      prompt: "Создай Defensive Cyber модуль для Malik AI: аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 063.",
+      description: "Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code",
+      prompt: "РЎРѕР·РґР°Р№ Defensive Cyber РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 063.",
       likes: "532.9K",
       views: "38.1K",
       badge: "FREE",
@@ -6774,7 +6774,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Auto Dev Template 064",
       category: "Auto Dev",
       description: "React, Next.js, Tailwind, API routes, DB schema, tests",
-      prompt: "Создай Auto Dev модуль для Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 064.",
+      prompt: "РЎРѕР·РґР°Р№ Auto Dev РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 064.",
       likes: "569.2K",
       views: "29.8K",
       badge: "PRO",
@@ -6784,7 +6784,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Investor WOW Template 065",
       category: "Investor WOW",
       description: "pitch, founder story, Astana Hub, market map, demo script",
-      prompt: "Создай Investor WOW модуль для Malik AI: pitch, founder story, Astana Hub, market map, demo script. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 065.",
+      prompt: "РЎРѕР·РґР°Р№ Investor WOW РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: pitch, founder story, Astana Hub, market map, demo script. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 065.",
       likes: "606.5K",
       views: "20.5K",
       badge: "CORE",
@@ -6794,7 +6794,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "UI/UX Template 066",
       category: "UI/UX",
       description: "glassmorphism, animations, micro-interactions, responsive systems",
-      prompt: "Создай UI/UX модуль для Malik AI: glassmorphism, animations, micro-interactions, responsive systems. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 066.",
+      prompt: "РЎРѕР·РґР°Р№ UI/UX РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: glassmorphism, animations, micro-interactions, responsive systems. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 066.",
       likes: "643.8K",
       views: "11.2K",
       badge: "PRO",
@@ -6804,7 +6804,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Billing Template 067",
       category: "Billing",
       description: "free/pro/team, usage limits, checkout foundation",
-      prompt: "Создай Billing модуль для Malik AI: free/pro/team, usage limits, checkout foundation. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 067.",
+      prompt: "РЎРѕР·РґР°Р№ Billing РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: free/pro/team, usage limits, checkout foundation. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 067.",
       likes: "680.1K",
       views: "52.9K",
       badge: "FREE",
@@ -6814,7 +6814,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Storage Template 068",
       category: "Storage",
       description: "uploads, project files, artifacts, metadata",
-      prompt: "Создай Storage модуль для Malik AI: uploads, project files, artifacts, metadata. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 068.",
+      prompt: "РЎРѕР·РґР°Р№ Storage РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: uploads, project files, artifacts, metadata. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 068.",
       likes: "717.4K",
       views: "43.6K",
       badge: "PRO",
@@ -6824,7 +6824,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Workers Template 069",
       category: "Workers",
       description: "image/video queues, long-running tasks, realtime status",
-      prompt: "Создай Workers модуль для Malik AI: image/video queues, long-running tasks, realtime status. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 069.",
+      prompt: "РЎРѕР·РґР°Р№ Workers РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: image/video queues, long-running tasks, realtime status. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 069.",
       likes: "754.7K",
       views: "34.3K",
       badge: "FREE",
@@ -6834,7 +6834,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Projects Template 070",
       category: "Projects",
       description: "Cursor-like projects, file tree, generated apps",
-      prompt: "Создай Projects модуль для Malik AI: Cursor-like projects, file tree, generated apps. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 070.",
+      prompt: "РЎРѕР·РґР°Р№ Projects РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Cursor-like projects, file tree, generated apps. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 070.",
       likes: "791.0K",
       views: "25.0K",
       badge: "CORE",
@@ -6843,8 +6843,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-071",
       title: "Sovereign V8 Template 071",
       category: "Sovereign V8",
-      description: "Локальный режим, IDE, системные метрики, no-telemetry, model swap",
-      prompt: "Создай Sovereign V8 модуль для Malik AI: Локальный режим, IDE, системные метрики, no-telemetry, model swap. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 071.",
+      description: "Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap",
+      prompt: "РЎРѕР·РґР°Р№ Sovereign V8 РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 071.",
       likes: "828.3K",
       views: "16.7K",
       badge: "FREE",
@@ -6853,8 +6853,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-072",
       title: "Qazaq Rescue AI Template 072",
       category: "Qazaq Rescue AI",
-      description: "протоколы ЧС, offline QR, panic UI, school drill, PDF reports",
-      prompt: "Создай Qazaq Rescue AI модуль для Malik AI: протоколы ЧС, offline QR, panic UI, school drill, PDF reports. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 072.",
+      description: "РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports",
+      prompt: "РЎРѕР·РґР°Р№ Qazaq Rescue AI РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 072.",
       likes: "865.6K",
       views: "7.4K",
       badge: "PRO",
@@ -6863,8 +6863,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-073",
       title: "Defensive Cyber Template 073",
       category: "Defensive Cyber",
-      description: "аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code",
-      prompt: "Создай Defensive Cyber модуль для Malik AI: аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 073.",
+      description: "Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code",
+      prompt: "РЎРѕР·РґР°Р№ Defensive Cyber РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 073.",
       likes: "2.9K",
       views: "48.1K",
       badge: "FREE",
@@ -6874,7 +6874,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Auto Dev Template 074",
       category: "Auto Dev",
       description: "React, Next.js, Tailwind, API routes, DB schema, tests",
-      prompt: "Создай Auto Dev модуль для Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 074.",
+      prompt: "РЎРѕР·РґР°Р№ Auto Dev РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 074.",
       likes: "39.2K",
       views: "39.8K",
       badge: "PRO",
@@ -6884,7 +6884,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Investor WOW Template 075",
       category: "Investor WOW",
       description: "pitch, founder story, Astana Hub, market map, demo script",
-      prompt: "Создай Investor WOW модуль для Malik AI: pitch, founder story, Astana Hub, market map, demo script. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 075.",
+      prompt: "РЎРѕР·РґР°Р№ Investor WOW РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: pitch, founder story, Astana Hub, market map, demo script. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 075.",
       likes: "76.5K",
       views: "30.5K",
       badge: "CORE",
@@ -6894,7 +6894,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "UI/UX Template 076",
       category: "UI/UX",
       description: "glassmorphism, animations, micro-interactions, responsive systems",
-      prompt: "Создай UI/UX модуль для Malik AI: glassmorphism, animations, micro-interactions, responsive systems. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 076.",
+      prompt: "РЎРѕР·РґР°Р№ UI/UX РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: glassmorphism, animations, micro-interactions, responsive systems. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 076.",
       likes: "113.8K",
       views: "21.2K",
       badge: "PRO",
@@ -6904,7 +6904,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Billing Template 077",
       category: "Billing",
       description: "free/pro/team, usage limits, checkout foundation",
-      prompt: "Создай Billing модуль для Malik AI: free/pro/team, usage limits, checkout foundation. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 077.",
+      prompt: "РЎРѕР·РґР°Р№ Billing РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: free/pro/team, usage limits, checkout foundation. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 077.",
       likes: "150.1K",
       views: "12.9K",
       badge: "FREE",
@@ -6914,7 +6914,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Storage Template 078",
       category: "Storage",
       description: "uploads, project files, artifacts, metadata",
-      prompt: "Создай Storage модуль для Malik AI: uploads, project files, artifacts, metadata. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 078.",
+      prompt: "РЎРѕР·РґР°Р№ Storage РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: uploads, project files, artifacts, metadata. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 078.",
       likes: "187.4K",
       views: "53.6K",
       badge: "PRO",
@@ -6924,7 +6924,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Workers Template 079",
       category: "Workers",
       description: "image/video queues, long-running tasks, realtime status",
-      prompt: "Создай Workers модуль для Malik AI: image/video queues, long-running tasks, realtime status. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 079.",
+      prompt: "РЎРѕР·РґР°Р№ Workers РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: image/video queues, long-running tasks, realtime status. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 079.",
       likes: "224.7K",
       views: "44.3K",
       badge: "FREE",
@@ -6934,7 +6934,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Projects Template 080",
       category: "Projects",
       description: "Cursor-like projects, file tree, generated apps",
-      prompt: "Создай Projects модуль для Malik AI: Cursor-like projects, file tree, generated apps. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 080.",
+      prompt: "РЎРѕР·РґР°Р№ Projects РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Cursor-like projects, file tree, generated apps. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 080.",
       likes: "261.0K",
       views: "35.0K",
       badge: "CORE",
@@ -6943,8 +6943,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-081",
       title: "Sovereign V8 Template 081",
       category: "Sovereign V8",
-      description: "Локальный режим, IDE, системные метрики, no-telemetry, model swap",
-      prompt: "Создай Sovereign V8 модуль для Malik AI: Локальный режим, IDE, системные метрики, no-telemetry, model swap. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 081.",
+      description: "Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap",
+      prompt: "РЎРѕР·РґР°Р№ Sovereign V8 РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 081.",
       likes: "298.3K",
       views: "26.7K",
       badge: "FREE",
@@ -6953,8 +6953,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-082",
       title: "Qazaq Rescue AI Template 082",
       category: "Qazaq Rescue AI",
-      description: "протоколы ЧС, offline QR, panic UI, school drill, PDF reports",
-      prompt: "Создай Qazaq Rescue AI модуль для Malik AI: протоколы ЧС, offline QR, panic UI, school drill, PDF reports. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 082.",
+      description: "РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports",
+      prompt: "РЎРѕР·РґР°Р№ Qazaq Rescue AI РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 082.",
       likes: "335.6K",
       views: "17.4K",
       badge: "PRO",
@@ -6963,8 +6963,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-083",
       title: "Defensive Cyber Template 083",
       category: "Defensive Cyber",
-      description: "аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code",
-      prompt: "Создай Defensive Cyber модуль для Malik AI: аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 083.",
+      description: "Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code",
+      prompt: "РЎРѕР·РґР°Р№ Defensive Cyber РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 083.",
       likes: "372.9K",
       views: "8.1K",
       badge: "FREE",
@@ -6974,7 +6974,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Auto Dev Template 084",
       category: "Auto Dev",
       description: "React, Next.js, Tailwind, API routes, DB schema, tests",
-      prompt: "Создай Auto Dev модуль для Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 084.",
+      prompt: "РЎРѕР·РґР°Р№ Auto Dev РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 084.",
       likes: "409.2K",
       views: "49.8K",
       badge: "PRO",
@@ -6984,7 +6984,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Investor WOW Template 085",
       category: "Investor WOW",
       description: "pitch, founder story, Astana Hub, market map, demo script",
-      prompt: "Создай Investor WOW модуль для Malik AI: pitch, founder story, Astana Hub, market map, demo script. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 085.",
+      prompt: "РЎРѕР·РґР°Р№ Investor WOW РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: pitch, founder story, Astana Hub, market map, demo script. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 085.",
       likes: "446.5K",
       views: "40.5K",
       badge: "CORE",
@@ -6994,7 +6994,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "UI/UX Template 086",
       category: "UI/UX",
       description: "glassmorphism, animations, micro-interactions, responsive systems",
-      prompt: "Создай UI/UX модуль для Malik AI: glassmorphism, animations, micro-interactions, responsive systems. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 086.",
+      prompt: "РЎРѕР·РґР°Р№ UI/UX РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: glassmorphism, animations, micro-interactions, responsive systems. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 086.",
       likes: "483.8K",
       views: "31.2K",
       badge: "PRO",
@@ -7004,7 +7004,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Billing Template 087",
       category: "Billing",
       description: "free/pro/team, usage limits, checkout foundation",
-      prompt: "Создай Billing модуль для Malik AI: free/pro/team, usage limits, checkout foundation. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 087.",
+      prompt: "РЎРѕР·РґР°Р№ Billing РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: free/pro/team, usage limits, checkout foundation. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 087.",
       likes: "520.1K",
       views: "22.9K",
       badge: "FREE",
@@ -7014,7 +7014,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Storage Template 088",
       category: "Storage",
       description: "uploads, project files, artifacts, metadata",
-      prompt: "Создай Storage модуль для Malik AI: uploads, project files, artifacts, metadata. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 088.",
+      prompt: "РЎРѕР·РґР°Р№ Storage РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: uploads, project files, artifacts, metadata. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 088.",
       likes: "557.4K",
       views: "13.6K",
       badge: "PRO",
@@ -7024,7 +7024,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Workers Template 089",
       category: "Workers",
       description: "image/video queues, long-running tasks, realtime status",
-      prompt: "Создай Workers модуль для Malik AI: image/video queues, long-running tasks, realtime status. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 089.",
+      prompt: "РЎРѕР·РґР°Р№ Workers РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: image/video queues, long-running tasks, realtime status. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 089.",
       likes: "594.7K",
       views: "54.3K",
       badge: "FREE",
@@ -7034,7 +7034,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Projects Template 090",
       category: "Projects",
       description: "Cursor-like projects, file tree, generated apps",
-      prompt: "Создай Projects модуль для Malik AI: Cursor-like projects, file tree, generated apps. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 090.",
+      prompt: "РЎРѕР·РґР°Р№ Projects РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Cursor-like projects, file tree, generated apps. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 090.",
       likes: "631.0K",
       views: "45.0K",
       badge: "CORE",
@@ -7043,8 +7043,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-091",
       title: "Sovereign V8 Template 091",
       category: "Sovereign V8",
-      description: "Локальный режим, IDE, системные метрики, no-telemetry, model swap",
-      prompt: "Создай Sovereign V8 модуль для Malik AI: Локальный режим, IDE, системные метрики, no-telemetry, model swap. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 091.",
+      description: "Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap",
+      prompt: "РЎРѕР·РґР°Р№ Sovereign V8 РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р›РѕРєР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј, IDE, СЃРёСЃС‚РµРјРЅС‹Рµ РјРµС‚СЂРёРєРё, no-telemetry, model swap. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 091.",
       likes: "668.3K",
       views: "36.7K",
       badge: "FREE",
@@ -7053,8 +7053,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-092",
       title: "Qazaq Rescue AI Template 092",
       category: "Qazaq Rescue AI",
-      description: "протоколы ЧС, offline QR, panic UI, school drill, PDF reports",
-      prompt: "Создай Qazaq Rescue AI модуль для Malik AI: протоколы ЧС, offline QR, panic UI, school drill, PDF reports. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 092.",
+      description: "РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports",
+      prompt: "РЎРѕР·РґР°Р№ Qazaq Rescue AI РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: РїСЂРѕС‚РѕРєРѕР»С‹ Р§РЎ, offline QR, panic UI, school drill, PDF reports. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 092.",
       likes: "705.6K",
       views: "27.4K",
       badge: "PRO",
@@ -7063,8 +7063,8 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       id: "malik-template-093",
       title: "Defensive Cyber Template 093",
       category: "Defensive Cyber",
-      description: "аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code",
-      prompt: "Создай Defensive Cyber модуль для Malik AI: аудит, безопасный OSINT, CTF, EXIF, vulnerability scan owned code. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 093.",
+      description: "Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code",
+      prompt: "РЎРѕР·РґР°Р№ Defensive Cyber РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Р°СѓРґРёС‚, Р±РµР·РѕРїР°СЃРЅС‹Р№ OSINT, CTF, EXIF, vulnerability scan owned code. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 093.",
       likes: "742.9K",
       views: "18.1K",
       badge: "FREE",
@@ -7074,7 +7074,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Auto Dev Template 094",
       category: "Auto Dev",
       description: "React, Next.js, Tailwind, API routes, DB schema, tests",
-      prompt: "Создай Auto Dev модуль для Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 094.",
+      prompt: "РЎРѕР·РґР°Р№ Auto Dev РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: React, Next.js, Tailwind, API routes, DB schema, tests. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 094.",
       likes: "779.2K",
       views: "9.8K",
       badge: "PRO",
@@ -7084,7 +7084,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Investor WOW Template 095",
       category: "Investor WOW",
       description: "pitch, founder story, Astana Hub, market map, demo script",
-      prompt: "Создай Investor WOW модуль для Malik AI: pitch, founder story, Astana Hub, market map, demo script. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 095.",
+      prompt: "РЎРѕР·РґР°Р№ Investor WOW РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: pitch, founder story, Astana Hub, market map, demo script. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 095.",
       likes: "816.5K",
       views: "50.5K",
       badge: "CORE",
@@ -7094,7 +7094,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "UI/UX Template 096",
       category: "UI/UX",
       description: "glassmorphism, animations, micro-interactions, responsive systems",
-      prompt: "Создай UI/UX модуль для Malik AI: glassmorphism, animations, micro-interactions, responsive systems. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 096.",
+      prompt: "РЎРѕР·РґР°Р№ UI/UX РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: glassmorphism, animations, micro-interactions, responsive systems. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 096.",
       likes: "853.8K",
       views: "41.2K",
       badge: "PRO",
@@ -7104,7 +7104,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Billing Template 097",
       category: "Billing",
       description: "free/pro/team, usage limits, checkout foundation",
-      prompt: "Создай Billing модуль для Malik AI: free/pro/team, usage limits, checkout foundation. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 097.",
+      prompt: "РЎРѕР·РґР°Р№ Billing РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: free/pro/team, usage limits, checkout foundation. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 097.",
       likes: "890.1K",
       views: "32.9K",
       badge: "FREE",
@@ -7114,7 +7114,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Storage Template 098",
       category: "Storage",
       description: "uploads, project files, artifacts, metadata",
-      prompt: "Создай Storage модуль для Malik AI: uploads, project files, artifacts, metadata. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 098.",
+      prompt: "РЎРѕР·РґР°Р№ Storage РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: uploads, project files, artifacts, metadata. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 098.",
       likes: "27.4K",
       views: "23.6K",
       badge: "PRO",
@@ -7124,7 +7124,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Workers Template 099",
       category: "Workers",
       description: "image/video queues, long-running tasks, realtime status",
-      prompt: "Создай Workers модуль для Malik AI: image/video queues, long-running tasks, realtime status. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 099.",
+      prompt: "РЎРѕР·РґР°Р№ Workers РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: image/video queues, long-running tasks, realtime status. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 099.",
       likes: "64.7K",
       views: "14.3K",
       badge: "FREE",
@@ -7134,7 +7134,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
       title: "Projects Template 100",
       category: "Projects",
       description: "Cursor-like projects, file tree, generated apps",
-      prompt: "Создай Projects модуль для Malik AI: Cursor-like projects, file tree, generated apps. Сделай премиум UI, рабочие секции, адаптив, анимации, dashboard и production-ready код. Template 100.",
+      prompt: "РЎРѕР·РґР°Р№ Projects РјРѕРґСѓР»СЊ РґР»СЏ Malik AI: Cursor-like projects, file tree, generated apps. РЎРґРµР»Р°Р№ РїСЂРµРјРёСѓРј UI, СЂР°Р±РѕС‡РёРµ СЃРµРєС†РёРё, Р°РґР°РїС‚РёРІ, Р°РЅРёРјР°С†РёРё, dashboard Рё production-ready РєРѕРґ. Template 100.",
       likes: "101.0K",
       views: "5.0K",
       badge: "CORE",
@@ -7162,7 +7162,7 @@ const MALIK_CONNECTED_MODULES: SovereignModule[] = [
     },
     {
       name: "Malik Codex",
-      description: "prompt → project → files → preview route",
+      description: "prompt в†’ project в†’ files в†’ preview route",
       health: 92,
       status: "connected",
     },
@@ -7229,23 +7229,23 @@ function getActiveChatPreview(chats: Chat[]) {
 
 function normalizePromptTopic(prompt: string) {
   const t = prompt.toLowerCase()
-  if (t.includes("rescue") || t.includes("чс") || t.includes("землетр")) return "qazaq-rescue"
-  if (t.includes("billing") || t.includes("подпис")) return "billing"
-  if (t.includes("storage") || t.includes("file") || t.includes("файл")) return "storage"
-  if (t.includes("codex") || t.includes("cursor") || t.includes("папк")) return "codex"
-  if (t.includes("dashboard") || t.includes("дашборд")) return "dashboard"
-  if (t.includes("cyber") || t.includes("security") || t.includes("защит")) return "defensive-cyber"
+  if (t.includes("rescue") || t.includes("С‡СЃ") || t.includes("Р·РµРјР»РµС‚СЂ")) return "qazaq-rescue"
+  if (t.includes("billing") || t.includes("РїРѕРґРїРёСЃ")) return "billing"
+  if (t.includes("storage") || t.includes("file") || t.includes("С„Р°Р№Р»")) return "storage"
+  if (t.includes("codex") || t.includes("cursor") || t.includes("РїР°РїРє")) return "codex"
+  if (t.includes("dashboard") || t.includes("РґР°С€Р±РѕСЂРґ")) return "dashboard"
+  if (t.includes("cyber") || t.includes("security") || t.includes("Р·Р°С‰РёС‚")) return "defensive-cyber"
   return "sovereign-saas"
 }
 
 function generateMockResponse(prompt: string): string {
   const topic = normalizePromptTopic(prompt)
   return [
-    "✨ Malik AI Sovereign сгенерировал рабочий проект.",
+    "вњЁ Malik AI Sovereign СЃРіРµРЅРµСЂРёСЂРѕРІР°Р» СЂР°Р±РѕС‡РёР№ РїСЂРѕРµРєС‚.",
     "",
-    `Тема: ${topic}`,
+    `РўРµРјР°: ${topic}`,
     "",
-    "Что внутри:",
+    "Р§С‚Рѕ РІРЅСѓС‚СЂРё:",
     "- premium hero section",
     "- feature cards",
     "- dashboard metrics",
@@ -7254,7 +7254,7 @@ function generateMockResponse(prompt: string): string {
     "- responsive layout",
     "- clean dark SaaS visual style",
     "",
-    "Preview открыт справа. Код можно скачать или перенести в проект."
+    "Preview РѕС‚РєСЂС‹С‚ СЃРїСЂР°РІР°. РљРѕРґ РјРѕР¶РЅРѕ СЃРєР°С‡Р°С‚СЊ РёР»Рё РїРµСЂРµРЅРµСЃС‚Рё РІ РїСЂРѕРµРєС‚."
   ].join("\n")
 }
 
@@ -7316,12 +7316,12 @@ function generateMockCode(prompt: string): string {
           <span class="block">World SaaS</span>
         </h1>
         <p class="mt-7 text-xl leading-9 text-zinc-300">
-          ${safeTitle}. Премиальный интерфейс с auth, canvas, codex, workers, billing, storage,
-          observability және 200 Features architecture.
+          ${safeTitle}. РџСЂРµРјРёР°Р»СЊРЅС‹Р№ РёРЅС‚РµСЂС„РµР№СЃ СЃ auth, canvas, codex, workers, billing, storage,
+          observability Р¶У™РЅРµ 200 Features architecture.
         </p>
         <div class="mt-9 flex flex-wrap gap-4">
-          <button class="rounded-2xl bg-white px-8 py-4 font-black text-black transition hover:scale-105">Начать</button>
-          <button class="rounded-2xl border border-white/15 bg-white/5 px-8 py-4 font-black text-white hover:bg-white/10">Смотреть демо</button>
+          <button class="rounded-2xl bg-white px-8 py-4 font-black text-black transition hover:scale-105">РќР°С‡Р°С‚СЊ</button>
+          <button class="rounded-2xl border border-white/15 bg-white/5 px-8 py-4 font-black text-white hover:bg-white/10">РЎРјРѕС‚СЂРµС‚СЊ РґРµРјРѕ</button>
         </div>
       </div>
 
@@ -7364,7 +7364,7 @@ function generateMockCode(prompt: string): string {
         ${["Free", "Pro", "Team"].map((plan, i) => `
           <div class="rounded-[2rem] border border-white/10 bg-white/[.04] p-8">
             <p class="text-sm font-black text-violet-300">${plan}</p>
-            <h3 class="mt-4 text-4xl font-black">${i === 0 ? "0 ₸" : i === 1 ? "4 900 ₸" : "19 900 ₸"}</h3>
+            <h3 class="mt-4 text-4xl font-black">${i === 0 ? "0 в‚ё" : i === 1 ? "4 900 в‚ё" : "19 900 в‚ё"}</h3>
             <p class="mt-4 text-zinc-400">${i === 0 ? "1 big generation" : i === 1 ? "Pro generations" : "Team workspace"}</p>
             <button class="mt-8 w-full rounded-2xl bg-white py-4 font-black text-black">Choose</button>
           </div>`).join("")}
@@ -7442,8 +7442,8 @@ function TemplatesView({ onUseTemplate }: { onUseTemplate: (prompt: string) => v
           </div>
           <h1 className="mt-5 text-5xl font-black text-white">200 Features Templates</h1>
           <p className="mt-3 max-w-3xl text-gray-500">
-            Бұл бөлім 200 фичаның UI/Dev/Rescue/SaaS бағыттарын шаблон ретінде қосады.
-            Әр карточка prompt-ты canvas generation-ға жібереді.
+            Р‘Т±Р» Р±У©Р»С–Рј 200 С„РёС‡Р°РЅС‹ТЈ UI/Dev/Rescue/SaaS Р±Р°Т“С‹С‚С‚Р°СЂС‹РЅ С€Р°Р±Р»РѕРЅ СЂРµС‚С–РЅРґРµ Т›РѕСЃР°РґС‹.
+            УСЂ РєР°СЂС‚РѕС‡РєР° prompt-С‚С‹ canvas generation-Т“Р° Р¶С–Р±РµСЂРµРґС–.
           </p>
         </div>
 
@@ -7664,7 +7664,7 @@ function NotificationsView({ onOpenSupport }: { onOpenSupport?: () => void }) {
   return (
     <div className="flex-1 h-full overflow-y-auto bg-[#030303] p-8">
       <div className="mx-auto max-w-4xl">
-        <h1 className="text-5xl font-black text-white">Сигналы</h1>
+        <h1 className="text-5xl font-black text-white">РЎРёРіРЅР°Р»С‹</h1>
         <p className="mt-2 text-gray-500">Alerts, runtime events and product status.</p>
         <div className="mt-8 space-y-3">
           {items.map((item) => (
@@ -8108,3 +8108,4 @@ function ChatsListView({
 // merge-map-344: ai-generator bridge preserved; runtime cost: zero; fallback: photo-generation; canvas handoff: safeOpenCanvas.
 
 export default Dashboard
+

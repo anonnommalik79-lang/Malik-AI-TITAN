@@ -1,11 +1,13 @@
 ﻿export const runtime = "nodejs"
 
 function googleVideoKey() {
-  return process.env.GOOGLE_VEO_API_KEY ||
+  return (
+    process.env.GOOGLE_VEO_API_KEY ||
     process.env.VEO_API_KEY ||
     process.env.GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
     ""
+  )
 }
 
 function isAllowedGoogleVideoUri(uri: string) {

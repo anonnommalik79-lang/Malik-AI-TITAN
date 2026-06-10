@@ -1,4 +1,4 @@
-import type { AIProvider, AIProviderId, AIRequest, AIResponse } from "../types"
+﻿import type { AIProvider, AIProviderId, AIRequest, AIResponse } from "../types"
 import { providerOrder } from "../provider-order"
 import { providerFetch } from "./base"
 
@@ -383,3 +383,4 @@ export const videoProviderRouter: AIProvider = {
     throw new Error("Video router does not analyze files.")
   },
 }
+

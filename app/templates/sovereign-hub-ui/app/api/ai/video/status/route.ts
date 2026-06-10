@@ -1,4 +1,4 @@
-import { publicEngineForProvider, publicErrorMessage } from "@/lib/brand-provider-map"
+﻿import { publicEngineForProvider, publicErrorMessage } from "@/lib/brand-provider-map"
 import { getAIJob, updateAIJob } from "@/lib/ai/jobs"
 import { providerFetch } from "@/lib/ai/providers/base"
 
@@ -171,7 +171,7 @@ async function pollFal(raw: Record<string, unknown>): Promise<PollResult> {
 async function pollVeo(raw: Record<string, unknown>): Promise<PollResult> {
   const key = googleVideoKey()
   const operationName = String(raw.operationName || raw.jobId || raw.providerJobId || raw.name || "")
-  const statusUrl = String(raw.statusUrl || (operationName ? `${GEMINI_VIDEO_BASE_URL}/${operationName}` : ""))
+  const statusUrl = String(raw.statusUrl || (operationName ? `https://generativelanguage.googleapis.com/v1beta/${operationName}` : ""))
   if (!key || !statusUrl) return { status: "processing" }
 
   const payload = record(await fetchJson(statusUrl, {
@@ -265,3 +265,4 @@ export async function GET(request: Request) {
     })
   }
 }
+

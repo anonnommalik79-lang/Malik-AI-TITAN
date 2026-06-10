@@ -890,7 +890,44 @@ async function handleVideoGeneration(ctx: RequestContext, body: GenerationBody, 
     })
   } catch (error) {
     safeIncrementUsage(ctx.entitlement.userId, ctx.entitlement.plan, "video")
-    return makeVideoFallback("storyboard-ready", error, false)
+
+    const message = error instanceof Error ? error.message : String(error)
+    const model = String(process.env.GOOGLE_VEO_MODEL || process.env.VEO_MODEL || "veo-3.1-generate-preview")
+
+    safeUpdateVideoJob(localJob.id, {
+      status: "failed",
+      provider: "veo",
+      model,
+      error: message,
+      output: {
+        provider: "veo",
+        model,
+        raw: {
+          fallback: false,
+          realProviderFailed: true,
+          error: message,
+        },
+      },
+    })
+
+    return responseJson(ctx, {
+      ok: false,
+      kind: ctx.kind,
+      requestedKind: ctx.requestedKind,
+      engine: publicEngineForProvider("veo", ctx.kind).title,
+      provider: "veo",
+      model,
+      fallbackUsed: false,
+      fallback: false,
+      status: "failed",
+      error: "veo_provider_failed",
+      message,
+      publicError: publicErrorMessage(error),
+      diagnostics: publicDiagnostics(ctx, {
+        lane: "video",
+        providerStatus: "veo-error",
+      }),
+    }, { status: 200 })
   }
 }
 
@@ -1092,4 +1129,5 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
     })
   }
 }
+
 
