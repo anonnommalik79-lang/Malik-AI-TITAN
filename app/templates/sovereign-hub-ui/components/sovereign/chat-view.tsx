@@ -82,6 +82,8 @@ export type InlineMediaGeneration = {
   progress?: number
   url?: string
   thumbnailUrl?: string
+  jobId?: string
+  statusUrl?: string
   error?: string
   createdAt?: string
 }
@@ -144,7 +146,7 @@ function AttachmentPill({ item, onRemove }: { item: ChatAttachment; onRemove: ()
       <button type="button" onClick={onRemove} className="ml-1 rounded-md p-1 text-slate-500 hover:bg-white/10 hover:text-white">
         <X className="h-3.5 w-3.5" />
       </button>
-    </dfunction isDataSvgUrl(url?: string) {
+    <dfunction isDataSvgUrl(url?: string) {
   return typeof url === "string" && url.startsWith("data:image/svg+xml")
 }
 
