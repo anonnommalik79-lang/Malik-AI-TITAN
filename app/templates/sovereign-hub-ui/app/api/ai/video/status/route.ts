@@ -172,6 +172,7 @@ async function pollVeo(raw: Record<string, unknown>): Promise<PollResult> {
   const key = googleVideoKey()
   const operationName = String(raw.operationName || raw.jobId || raw.providerJobId || raw.name || "")
   const statusUrl = String(raw.statusUrl || (operationName ? `https://generativelanguage.googleapis.com/v1beta/${operationName}` : ""))
+
   if (!key || !statusUrl) return { status: "processing" }
 
   const payload = record(await fetchJson(statusUrl, {
@@ -188,7 +189,14 @@ async function pollVeo(raw: Record<string, unknown>): Promise<PollResult> {
   const url = googleUri ? proxyGoogleVideoUri(googleUri) : directUrl
 
   if (url) return { status: "ready", url }
-  if (done) return { status: "failed", error: String(record(payload.error).message || "Veo finished but did not return a video URI.") }
+
+  if (done) {
+    return {
+      status: "failed",
+      error: String(record(payload.error).message || "Veo finished but did not return a video URI."),
+    }
+  }
+
   return { status: "processing" }
 }
 
@@ -265,4 +273,5 @@ export async function GET(request: Request) {
     })
   }
 }
+
 

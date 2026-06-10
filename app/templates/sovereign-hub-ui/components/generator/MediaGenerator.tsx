@@ -150,6 +150,84 @@ function createCanvasHtml(mode: MediaMode, prompt: string, result: MediaResult, 
 }
 
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+}
+
+function mediaUrlFromResult(data: MediaResult) {
+  return data.videoUrl || data.url || ""
+}
+
+async function pollVideoUntilReady(
+  initial: MediaResult,
+  setStatusText: (value: string) => void,
+): Promise<MediaResult> {
+  const statusUrl =
+    initial.statusUrl ||
+    (initial.jobId ? `/api/ai/video/status?jobId=${encodeURIComponent(initial.jobId)}` : "")
+
+  if (mediaUrlFromResult(initial)) return initial
+
+  if (!statusUrl) {
+    return {
+      ...initial,
+      ok: false,
+      status: "failed",
+      message: initial.message || "Veo started, but backend did not return jobId/statusUrl.",
+    }
+  }
+
+  for (let attempt = 1; attempt <= 45; attempt += 1) {
+    setStatusText(`Google Veo rendering... ${attempt}/45`)
+    await sleep(attempt === 1 ? 1500 : 4000)
+
+    const response = await fetch(statusUrl, {
+      method: "GET",
+      cache: "no-store",
+    })
+
+    const payload: MediaResult = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new Error(payload.message || payload.publicError || `Video status returned ${response.status}`)
+    }
+
+    const merged: MediaResult = {
+      ...initial,
+      ...payload,
+      url: payload.url || payload.videoUrl || initial.url,
+      videoUrl: payload.videoUrl || payload.url || initial.videoUrl,
+      message: payload.message || initial.message,
+      status: payload.status || initial.status,
+    }
+
+    if (mediaUrlFromResult(merged)) {
+      return {
+        ...merged,
+        ok: true,
+        status: "ready",
+        message: "Google Veo video ready.",
+      }
+    }
+
+    if (payload.status === "failed" || payload.ok === false) {
+      return {
+        ...merged,
+        ok: false,
+        status: "failed",
+        message: payload.message || payload.publicError || "Google Veo failed.",
+      }
+    }
+  }
+
+  return {
+    ...initial,
+    ok: false,
+    status: "failed",
+    message: "Google Veo polling finished, but no video URL was returned.",
+  }
+}
+
 const titanMediaModes = [
   ["text", "Reasoning copy", "Pitch copy, plans, scripts and product text"],
   ["code", "Code forge", "Components, APIs, UI states and project files"],
@@ -656,5 +734,6 @@ export function MediaGenerator({ userEmail, onSendToCanvas }: MediaGeneratorProp
 }
 
 export default MediaGenerator
+
 
 
