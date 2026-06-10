@@ -11,6 +11,8 @@ type PollResult = {
   error?: string
 }
 
+const GEMINI_VIDEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {}
 }
@@ -19,11 +21,56 @@ function rawRecord(value: unknown): Record<string, unknown> {
   return record(record(value).raw)
 }
 
+function googleVideoKey() {
+  return process.env.GOOGLE_VEO_API_KEY || process.env.VEO_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || ""
+}
+
+function proxyGoogleVideoUri(uri: string) {
+  if (!uri) return ""
+  return `/api/ai/video/file?uri=${encodeURIComponent(uri)}`
+}
+
+function extractGoogleVideoUri(value: unknown): string {
+  if (!value) return ""
+  if (typeof value === "string") {
+    if (/^https:\/\/generativelanguage\.googleapis\.com\//i.test(value)) return value
+    if (/^https?:\/\//i.test(value) && /video|file|media|download|mp4|webm/i.test(value)) return value
+    return ""
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extractGoogleVideoUri(item)
+      if (found) return found
+    }
+    return ""
+  }
+  if (typeof value === "object") {
+    const data = value as Record<string, unknown>
+    const direct =
+      data.uri ||
+      data.url ||
+      data.videoUrl ||
+      data.resultUrl ||
+      data.outputUrl ||
+      record(data.video).uri ||
+      record(data.video).url ||
+      record(data.file).uri ||
+      record(data.file).url
+    const directFound = extractGoogleVideoUri(direct)
+    if (directFound) return directFound
+    for (const item of Object.values(data)) {
+      const found = extractGoogleVideoUri(item)
+      if (found) return found
+    }
+  }
+  return ""
+}
+
 function extractVideoUrl(value: unknown): string {
   if (!value) return ""
   if (typeof value === "string") {
-    const looksLikeVideo = /\.(mp4|webm|mov)(\?|$)/i.test(value) || /video|mp4|generation|storage|asset/i.test(value)
-    return value.startsWith("http") && looksLikeVideo ? value : ""
+    const looksLikeVideo = /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(value) || /video|mp4|webm|generation|storage|asset|media|download/i.test(value)
+    return (value.startsWith("http") || value.startsWith("/")) && looksLikeVideo ? value : ""
   }
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -42,7 +89,8 @@ function extractVideoUrl(value: unknown): string {
       data.uri ||
       record(data.assets).video ||
       record(data.asset).url ||
-      record(data.video).url
+      record(data.video).url ||
+      record(data.video).uri
     const foundDirect = extractVideoUrl(direct)
     if (foundDirect) return foundDirect
     for (const item of Object.values(data)) {
@@ -56,7 +104,7 @@ function extractVideoUrl(value: unknown): string {
 async function fetchJson(url: string, init: RequestInit) {
   const response = await providerFetch(url, init, Number(process.env.VIDEO_STATUS_TIMEOUT_MS || 20_000))
   const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(record(payload).message as string || record(payload).error as string || `Video status returned ${response.status}`)
+  if (!response.ok) throw new Error(record(payload).message as string || record(record(payload).error).message as string || record(payload).error as string || `Video status returned ${response.status}`)
   return payload
 }
 
@@ -121,17 +169,34 @@ async function pollFal(raw: Record<string, unknown>): Promise<PollResult> {
 }
 
 async function pollVeo(raw: Record<string, unknown>): Promise<PollResult> {
-  const key = process.env.GOOGLE_VEO_API_KEY || process.env.VEO_API_KEY
-  const statusUrl = String(raw.statusUrl || "")
+  const key = googleVideoKey()
+  const operationName = String(raw.operationName || raw.jobId || raw.providerJobId || raw.name || "")
+  const statusUrl = String(raw.statusUrl || (operationName ? `${GEMINI_VIDEO_BASE_URL}/${operationName}` : ""))
   if (!key || !statusUrl) return { status: "processing" }
-  const separator = statusUrl.includes("?") ? "&" : "?"
-  const payload = record(await fetchJson(`${statusUrl}${separator}key=${encodeURIComponent(key)}`, {
-    headers: { "content-type": "application/json" },
+
+  const payload = record(await fetchJson(statusUrl, {
+    headers: {
+      "x-goog-api-key": key,
+      "content-type": "application/json",
+      accept: "application/json",
+    },
   }))
-  const url = extractVideoUrl(payload.response || payload.predictions || payload)
+
+  const googleUri = extractGoogleVideoUri(payload.response || payload)
+  const directUrl = extractVideoUrl(payload.response || payload)
   const done = payload.done === true
-  const status = url ? "ready" : done ? "failed" : "processing"
-  return { status, url: url || undefined, error: status === "failed" ? String(record(payload.error).message || "Video render did not return media.") : undefined }
+  const url = googleUri ? proxyGoogleVideoUri(googleUri) : directUrl
+
+  if (url) return { status: "ready", url }
+  if (done) return { status: "failed", error: String(record(payload.error).message || "Veo finished but did not return a video URI.") }
+  return { status: "processing" }
+}
+
+async function pollBedrock(raw: Record<string, unknown>): Promise<PollResult> {
+  // Bedrock video output usually lands in S3 and needs a signed URL layer.
+  // Until that layer is configured, keep the job processing instead of returning fake media.
+  if (raw.resultUrl && typeof raw.resultUrl === "string") return { status: "ready", url: raw.resultUrl }
+  return { status: "processing" }
 }
 
 async function pollProvider(provider: string, raw: Record<string, unknown>): Promise<PollResult> {
@@ -139,6 +204,7 @@ async function pollProvider(provider: string, raw: Record<string, unknown>): Pro
   if (provider === "luma") return pollLuma(raw)
   if (provider === "fal") return pollFal(raw)
   if (provider === "veo") return pollVeo(raw)
+  if (provider === "aws-bedrock" || provider === "bedrock") return pollBedrock(raw)
   return { status: "processing" }
 }
 
