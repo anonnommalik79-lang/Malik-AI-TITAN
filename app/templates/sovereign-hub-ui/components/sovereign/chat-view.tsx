@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -34,6 +34,7 @@ import {
   Zap,
   Brain,
   Crown,
+  Loader2,
 } from "lucide-react"
 import type { GenerationStatusType } from "./generation-status"
 import type { AIPlan } from "@/lib/ai/types"
@@ -143,59 +144,198 @@ function AttachmentPill({ item, onRemove }: { item: ChatAttachment; onRemove: ()
       <button type="button" onClick={onRemove} className="ml-1 rounded-md p-1 text-slate-500 hover:bg-white/10 hover:text-white">
         <X className="h-3.5 w-3.5" />
       </button>
-    </div>
-  )
+    </dfunction isDataSvgUrl(url?: string) {
+  return typeof url === "string" && url.startsWith("data:image/svg+xml")
+}
+
+function isRealVideoUrl(url?: string) {
+  if (!url || typeof url !== "string") return false
+  if (url.startsWith("blob:")) return true
+  if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) return false
+  return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url) || /\/video\/|videoUrl|mp4|webm|rendered-video|generation.*video/i.test(url)
+}
+
+function isImageLikeUrl(url?: string) {
+  if (!url || typeof url !== "string") return false
+  if (isDataSvgUrl(url)) return true
+  if (url.startsWith("data:image/")) return true
+  if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) return false
+  return /\.(png|jpg|jpeg|webp|gif|svg)(\?|#|$)/i.test(url) || /image|thumbnail|poster|preview|asset|generation/i.test(url)
+}
+
+function isProcessingStatus(status: InlineMediaGenerationStatus) {
+  return status === "queued" || status === "thinking" || status === "generating" || status === "rendering"
+}
+
+function mediaProgress(media: InlineMediaGeneration) {
+  if (media.status === "ready") return 100
+  if (media.status === "failed") return 100
+  if (typeof media.progress === "number") return Math.min(96, Math.max(4, media.progress))
+  if (media.status === "queued") return 8
+  if (media.status === "thinking") return 22
+  if (media.status === "generating") return 52
+  if (media.status === "rendering") return 78
+  return 18
 }
 
 function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) {
   const isVideo = media.kind === "video"
-  const isReady = media.status === "ready" && Boolean(media.url)
-  const isFailed = media.status === "failed"
-  const progress = Math.min(100, Math.max(4, media.progress ?? (isReady ? 100 : isFailed ? 100 : 18)))
+  const [liveMedia, setLiveMedia] = useState(media)
+  const [pollHint, setPollHint] = useState<string>("")
+
+  useEffect(() => {
+    setLiveMedia(media)
+  }, [media])
+
+  useEffect(() => {
+    const statusUrl = liveMedia.statusUrl || (liveMedia.jobId ? `/api/ai/video/status?jobId=${encodeURIComponent(liveMedia.jobId)}` : "")
+    if (!isVideo || !statusUrl || !isProcessingStatus(liveMedia.status)) return
+
+    let cancelled = false
+    let tries = 0
+    let timer: number | undefined
+
+    const poll = async () => {
+      try {
+        tries += 1
+        const response = await fetch(statusUrl, { cache: "no-store" })
+        const payload = await response.json().catch(() => ({}))
+        if (cancelled) return
+
+        if (payload?.ok && payload?.status === "ready" && (payload?.videoUrl || payload?.url)) {
+          const nextUrl = String(payload.videoUrl || payload.url)
+          setLiveMedia((previous) => ({
+            ...previous,
+            status: "ready",
+            progress: 100,
+            url: nextUrl,
+            thumbnailUrl: typeof payload.thumbnailUrl === "string" ? payload.thumbnailUrl : previous.thumbnailUrl,
+            provider: payload.engine || previous.provider,
+          }))
+          return
+        }
+
+        if (payload?.status === "failed" || payload?.ok === false) {
+          setLiveMedia((previous) => ({
+            ...previous,
+            status: "failed",
+            progress: 100,
+            error: payload?.publicError || payload?.error || "Видео не завершилось.",
+          }))
+          return
+        }
+
+        setPollHint("Видео ещё рендерится. Malik AI проверяет статус автоматически.")
+      } catch {
+        if (!cancelled) setPollHint("Статус видео проверяется. Провайдер может отвечать с задержкой.")
+      }
+
+      if (!cancelled && tries < 45) {
+        timer = window.setTimeout(poll, 4000)
+      }
+    }
+
+    timer = window.setTimeout(poll, 1800)
+    return () => {
+      cancelled = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [isVideo, liveMedia.jobId, liveMedia.status, liveMedia.statusUrl])
+
+  const url = liveMedia.url || liveMedia.thumbnailUrl || ""
+  const isFailed = liveMedia.status === "failed"
+  const isProcessing = isProcessingStatus(liveMedia.status)
+  const realVideo = isVideo && liveMedia.status === "ready" && isRealVideoUrl(url)
+  const previewImage = Boolean(url) && (isDataSvgUrl(url) || isImageLikeUrl(url) || (isVideo && !realVideo))
+  const progress = mediaProgress(liveMedia)
+
   const statusLabel: Record<InlineMediaGenerationStatus, string> = {
     queued: "Очередь",
     thinking: "Понимаю идею",
     generating: isVideo ? "Генерирую видео" : "Генерирую изображение",
-    rendering: isVideo ? "Рендерю сцену" : "Собираю финальный кадр",
-    ready: "Готово",
+    rendering: isVideo ? "Рендерю видео" : "Собираю финальный кадр",
+    ready: realVideo ? "Готово" : isVideo ? "Storyboard preview" : "Готово",
     failed: "Ошибка генерации",
   }
 
+  const headline = isVideo
+    ? realVideo
+      ? "Видео готово"
+      : liveMedia.status === "ready"
+        ? "Storyboard preview готов"
+        : "Видео создаётся"
+    : liveMedia.status === "ready"
+      ? "Изображение готово"
+      : "Изображение создаётся"
+
+  const subline = isFailed
+    ? liveMedia.error || "Провайдер не вернул готовый результат."
+    : realVideo
+      ? "Финальный mp4/webm получен и готов к просмотру."
+      : isVideo && liveMedia.status === "ready"
+        ? "Пока нет финального mp4. Показываю безопасный storyboard/preview вместо чёрного плеера."
+        : isProcessing
+          ? pollHint || "Генератор работает внутри чата. Когда видео будет готово, карточка обновится."
+          : "Результат подготовлен внутри чата."
+
   return (
-    <div className="relative w-full max-w-[620px] overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] p-3 shadow-[0_28px_90px_rgba(0,0,0,.42)] backdrop-blur-2xl">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_12%,rgba(34,211,238,.18),transparent_36%),radial-gradient(circle_at_82%_78%,rgba(139,92,246,.18),transparent_38%)]" />
-      <div className="relative overflow-hidden rounded-[1.55rem] border border-white/10 bg-black/45">
-        <div className="aspect-square w-full">
-          {isReady && media.url ? (
-            isVideo ? (
-              <video src={media.url} poster={media.thumbnailUrl} controls playsInline className="h-full w-full rounded-[1.55rem] object-cover" />
-            ) : (
-              <img src={media.url} alt={media.prompt || "Generated media"} className="h-full w-full rounded-[1.55rem] object-cover" />
-            )
+    <div className="relative w-full max-w-[720px] overflow-hidden rounded-[2rem] border border-white/10 bg-[#050816]/88 p-3 shadow-[0_30px_120px_rgba(0,0,0,.52)] backdrop-blur-2xl">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_10%,rgba(34,211,238,.20),transparent_34%),radial-gradient(circle_at_82%_82%,rgba(168,85,247,.22),transparent_40%),linear-gradient(135deg,rgba(255,255,255,.07),transparent_45%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-[0.09] [background-image:linear-gradient(to_right,rgba(255,255,255,.22)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,.22)_1px,transparent_1px)] [background-size:36px_36px]" />
+
+      <div className="relative overflow-hidden rounded-[1.55rem] border border-white/10 bg-black/55">
+        <div className={cn("w-full", isVideo ? "aspect-video" : "aspect-square")}>
+          {realVideo ? (
+            <video
+              src={url}
+              poster={liveMedia.thumbnailUrl}
+              controls
+              playsInline
+              preload="metadata"
+              className="h-full w-full rounded-[1.55rem] bg-black object-contain"
+            />
+          ) : previewImage ? (
+            <img
+              src={url}
+              alt={isVideo ? "Video storyboard preview" : liveMedia.prompt || "Generated media"}
+              className="h-full w-full rounded-[1.55rem] bg-black object-contain"
+            />
           ) : (
             <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[1.55rem] bg-[#050507]">
-              <div className="absolute h-52 w-52 rounded-full bg-cyan-400/18 blur-[60px]" />
-              <div className="absolute h-72 w-72 rounded-full bg-violet-500/16 blur-[80px]" />
+              <div className="absolute h-56 w-56 rounded-full bg-cyan-400/18 blur-[70px]" />
+              <div className="absolute h-80 w-80 rounded-full bg-violet-500/16 blur-[90px]" />
               <div className="absolute inset-8 rounded-[2rem] border border-white/10 bg-white/[0.035]" />
-              <div className="relative z-10 flex flex-col items-center text-center">
+              <div className="relative z-10 flex max-w-[320px] flex-col items-center px-6 text-center">
                 <div className="grid h-16 w-16 place-items-center rounded-2xl border border-white/15 bg-white/[0.06] shadow-[0_0_45px_rgba(139,92,246,.22)] backdrop-blur-xl">
-                  {isVideo ? <Video className="h-7 w-7 text-cyan-100" /> : <ImageIcon className="h-7 w-7 text-cyan-100" />}
+                  {isFailed ? (
+                    <X className="h-7 w-7 text-red-100" />
+                  ) : isProcessing ? (
+                    <Loader2 className="h-7 w-7 animate-spin text-cyan-100" />
+                  ) : isVideo ? (
+                    <Video className="h-7 w-7 text-cyan-100" />
+                  ) : (
+                    <ImageIcon className="h-7 w-7 text-cyan-100" />
+                  )}
                 </div>
-                <p className="mt-4 text-xs font-black uppercase tracking-[0.22em] text-white/70">Malik AI {isVideo ? "Video" : "Image"}</p>
-                <p className="mt-2 max-w-[280px] text-sm leading-6 text-zinc-400">{isFailed ? media.error || "Провайдер вернул ошибку." : "Генератор работает прямо внутри чата."}</p>
+                <p className="mt-4 text-xs font-black uppercase tracking-[0.22em] text-white/70">
+                  Malik AI {isVideo ? "Video" : "Image"}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-zinc-400">{subline}</p>
               </div>
             </div>
           )}
         </div>
 
-        {!isReady && !isFailed && (
-          <div className="absolute inset-x-3 bottom-3 rounded-2xl border border-white/10 bg-black/62 p-3 backdrop-blur-xl">
+        {!isFailed && !realVideo && (
+          <div className="absolute inset-x-3 bottom-3 rounded-2xl border border-white/10 bg-black/68 p-3 backdrop-blur-xl">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-xs font-black uppercase tracking-[0.18em] text-white">{statusLabel[media.status]}</p>
-                <p className="mt-1 truncate text-[11px] text-zinc-500">{media.provider || "Media API"} · {Math.round(progress)}%</p>
+                <p className="truncate text-xs font-black uppercase tracking-[0.18em] text-white">{statusLabel[liveMedia.status]}</p>
+                <p className="mt-1 truncate text-[11px] text-zinc-500">
+                  {liveMedia.provider || (isVideo ? "Bedrock / Runway / Luma" : "Media API")} · {Math.round(progress)}%
+                </p>
               </div>
-              <Sparkles className="h-4 w-4 shrink-0 animate-pulse text-cyan-200" />
+              {isProcessing ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-cyan-200" /> : <Sparkles className="h-4 w-4 shrink-0 text-cyan-200" />}
             </div>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
               <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-violet-300 to-fuchsia-300 transition-all duration-700" style={{ width: `${progress}%` }} />
@@ -205,22 +345,35 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
       </div>
 
       <div className="relative mt-3 rounded-[1.25rem] border border-white/10 bg-black/35 p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/65">
             {isVideo ? <Video className="h-3.5 w-3.5 text-cyan-200" /> : <ImageIcon className="h-3.5 w-3.5 text-cyan-200" />}
             {isVideo ? "Video generation" : "Image generation"}
           </span>
-          <span className={cn("rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]", isReady ? "bg-emerald-300/12 text-emerald-100" : isFailed ? "bg-red-400/12 text-red-100" : "bg-cyan-300/12 text-cyan-100")}>{statusLabel[media.status]}</span>
+          <span className={cn(
+            "rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]",
+            realVideo ? "bg-emerald-300/12 text-emerald-100" : isFailed ? "bg-red-400/12 text-red-100" : liveMedia.status === "ready" ? "bg-violet-300/12 text-violet-100" : "bg-cyan-300/12 text-cyan-100",
+          )}>
+            {statusLabel[liveMedia.status]}
+          </span>
         </div>
-        <p className="line-clamp-3 text-sm leading-6 text-zinc-300">{media.prompt}</p>
-        {isReady && media.url && (
+
+        <p className="text-sm font-bold text-white">{headline}</p>
+        <p className="mt-1 text-xs leading-5 text-zinc-400">{subline}</p>
+        <p className="mt-3 line-clamp-3 text-sm leading-6 text-zinc-300">{liveMedia.prompt}</p>
+
+        {liveMedia.status === "ready" && url ? (
           <div className="mt-3 flex flex-wrap gap-2">
-            <a href={media.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-cyan-50">Открыть результат</a>
-            <button type="button" onClick={() => navigator.clipboard?.writeText(media.url || "")} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-black text-zinc-300 transition hover:bg-white/10">Copy link</button>
+            <a href={url} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-cyan-50">Открыть результат</a>
+            <button type="button" onClick={() => navigator.clipboard?.writeText(url)} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-black text-zinc-300 transition hover:bg-white/10">Copy link</button>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
+  )
+}
+
+iv>
   )
 }
 
