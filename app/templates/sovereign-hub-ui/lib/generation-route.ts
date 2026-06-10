@@ -638,8 +638,55 @@ function buildRouteMetadata(ctx: RequestContext, body: GenerationBody, extra: Re
 }
 
 async function handleImageGeneration(ctx: RequestContext, body: GenerationBody, prompt: string) {
+  const makeImageFallback = (
+    status: "demo-ready" | "preview-ready" = "preview-ready",
+    reason?: unknown,
+    rateLimited = false,
+  ) => {
+    const url = imageFallbackUrl(prompt, body.style || body.format || "premium")
+
+    return responseJson(ctx, {
+      ok: true,
+      kind: ctx.kind,
+      requestedKind: ctx.requestedKind,
+      engine: publicEngineForProvider("demo-fallback", ctx.kind).title,
+      provider: "demo-fallback",
+      model: "image-preview",
+      fallbackUsed: true,
+      fallback: true,
+      status,
+      url,
+      imageUrl: url,
+      previewUrl: url,
+      posterUrl: url,
+      mediaUrl: url,
+      outputUrl: url,
+      assetUrl: url,
+      artifact: responseArtifact(ctx.kind, prompt, undefined, url, {
+        mediaType: "image",
+        safeFallback: true,
+        rateLimited,
+      }),
+      message: rateLimited
+        ? "Demo image preview ready. Live image generation will work after provider limits reset."
+        : "Demo image preview ready. Live rendering is being prepared on the server.",
+      displayMessage: "Demo image preview ready.",
+      publicError: reason ? publicErrorMessage(reason) : undefined,
+      diagnostics: publicDiagnostics(ctx, {
+        lane: "image",
+        providerStatus: rateLimited ? "rate-limit-fallback" : "fallback",
+      }),
+    })
+  }
+
   const rate = safeCheckRate(ctx, "image")
-  if (!rate.ok) return errorJson(ctx, 429, "limited", "limit_reached", rate.message || "Generation limit reached")
+
+  // IMPORTANT:
+  // Media generation must never show HTTP 429 in the product UI.
+  // If live generation is limited, return a stable HTTP 200 demo preview.
+  if (!rate.ok) {
+    return makeImageFallback("preview-ready", rate.message || "limit_reached", true)
+  }
 
   try {
     const result = await generateImageWithRouter({
@@ -654,7 +701,11 @@ async function handleImageGeneration(ctx: RequestContext, body: GenerationBody, 
     })
 
     const url = outputUrl(result.output)
-    if (!url) throw new Error("Image provider returned no image URL.")
+
+    // If provider succeeds but no media URL exists, show demo preview instead of error.
+    if (!url) {
+      return makeImageFallback("preview-ready", "Image provider returned no image URL.", false)
+    }
 
     safeIncrementUsage(ctx.entitlement.userId, ctx.entitlement.plan, "image")
 
@@ -663,41 +714,30 @@ async function handleImageGeneration(ctx: RequestContext, body: GenerationBody, 
       kind: ctx.kind,
       requestedKind: ctx.requestedKind,
       engine: publicEngineForProvider(result.provider, ctx.kind).title,
+      provider: result.provider,
+      model: result.model,
       fallbackUsed: false,
       fallback: false,
       status: "ready",
       url,
       imageUrl: url,
+      previewUrl: url,
+      posterUrl: url,
+      mediaUrl: url,
+      outputUrl: url,
+      assetUrl: url,
       artifact: responseArtifact(ctx.kind, prompt, undefined, url, { mediaType: "image" }),
       message: "Image generated.",
+      displayMessage: "Image generated.",
       diagnostics: publicDiagnostics(ctx, { lane: "image", providerStatus: "live" }),
     })
   } catch (error) {
-    const url = imageFallbackUrl(prompt, body.style || body.format || "premium")
     safeIncrementUsage(ctx.entitlement.userId, ctx.entitlement.plan, "image")
-
-    return responseJson(ctx, {
-      ok: true,
-      kind: ctx.kind,
-      requestedKind: ctx.requestedKind,
-      engine: publicEngineForProvider("demo-fallback", ctx.kind).title,
-      fallbackUsed: true,
-      fallback: true,
-      status: "demo-ready",
-      url,
-      imageUrl: url,
-      artifact: responseArtifact(ctx.kind, prompt, undefined, url, { mediaType: "image", safeFallback: true }),
-      message: "Demo image ready. Live rendering is being prepared on the server.",
-      publicError: publicErrorMessage(error),
-      diagnostics: publicDiagnostics(ctx, { lane: "image", providerStatus: "fallback" }),
-    })
+    return makeImageFallback("preview-ready", error, false)
   }
 }
 
 async function handleVideoGeneration(ctx: RequestContext, body: GenerationBody, prompt: string) {
-  const rate = safeCheckRate(ctx, "video")
-  if (!rate.ok) return errorJson(ctx, 429, "limited", "limit_reached", rate.message || "Generation limit reached")
-
   const videoMetadata = buildRouteMetadata(ctx, body, {
     lane: "video",
     aspectRatio: videoAspectRatio(body.aspectRatio || body.format),
@@ -705,6 +745,80 @@ async function handleVideoGeneration(ctx: RequestContext, body: GenerationBody, 
   })
 
   const localJob = safeCreateVideoJob(ctx, prompt, videoMetadata)
+
+  const makeVideoFallback = (
+    status: "storyboard-ready" | "preview-ready" = "storyboard-ready",
+    reason?: unknown,
+    rateLimited = false,
+  ) => {
+    const previewUrl = imageFallbackUrl(
+      `Video storyboard preview: ${prompt}`,
+      body.style || body.format || "cinematic",
+    )
+    const code = videoStoryboardArtifact(prompt)
+
+    safeUpdateVideoJob(localJob.id, {
+      status: "completed",
+      output: {
+        resultUrl: previewUrl,
+        provider: "demo-fallback",
+        model: "storyboard-preview",
+        raw: {
+          fallback: true,
+          rateLimited,
+          reason: reason ? publicErrorMessage(reason) : undefined,
+        },
+      },
+    })
+
+    return responseJson(ctx, {
+      ok: true,
+      kind: ctx.kind,
+      requestedKind: ctx.requestedKind,
+      engine: publicEngineForProvider("demo-fallback", ctx.kind).title,
+      provider: "demo-fallback",
+      model: "storyboard-preview",
+      fallbackUsed: true,
+      fallback: true,
+      status,
+      url: previewUrl,
+      videoUrl: previewUrl,
+      previewUrl,
+      posterUrl: previewUrl,
+      mediaUrl: previewUrl,
+      outputUrl: previewUrl,
+      assetUrl: previewUrl,
+      code,
+      html: code,
+      storyboard: ["Hook", "Problem", "Product", "Proof", "Close"],
+      jobId: localJob.id,
+      statusUrl: localVideoStatusUrl(localJob.id),
+      artifact: responseArtifact(ctx.kind, prompt, code, previewUrl, {
+        mediaType: "storyboard",
+        jobId: localJob.id,
+        safeFallback: true,
+        rateLimited,
+      }),
+      message: rateLimited
+        ? "Demo video storyboard ready. Live video rendering will work after provider limits reset."
+        : "Demo video storyboard ready. Live rendering is being prepared on the server.",
+      displayMessage: "Demo video storyboard ready.",
+      publicError: reason ? publicErrorMessage(reason) : undefined,
+      diagnostics: publicDiagnostics(ctx, {
+        lane: "video",
+        providerStatus: rateLimited ? "rate-limit-fallback" : "fallback",
+      }),
+    })
+  }
+
+  const rate = safeCheckRate(ctx, "video")
+
+  // IMPORTANT:
+  // Media generation must never show HTTP 429 in the product UI.
+  // If live generation is limited, return a stable HTTP 200 storyboard preview.
+  if (!rate.ok) {
+    return makeVideoFallback("storyboard-ready", rate.message || "limit_reached", true)
+  }
 
   try {
     const result = await generateVideoWithRouter({
@@ -723,7 +837,10 @@ async function handleVideoGeneration(ctx: RequestContext, body: GenerationBody, 
     const providerJobId = String(output.jobId || output.id || "")
     const status = String(output.status || (url ? "ready" : "queued"))
 
-    if (!url && !providerJobId) throw new Error("Video provider returned no URL or job id.")
+    // If provider succeeds but no URL/job id exists, show storyboard instead of error.
+    if (!url && !providerJobId) {
+      return makeVideoFallback("storyboard-ready", "Video provider returned no URL or job id.", false)
+    }
 
     safeUpdateVideoJob(localJob.id, {
       status: url ? "completed" : "processing",
@@ -749,45 +866,35 @@ async function handleVideoGeneration(ctx: RequestContext, body: GenerationBody, 
       kind: ctx.kind,
       requestedKind: ctx.requestedKind,
       engine: publicEngineForProvider(result.provider, ctx.kind).title,
+      provider: result.provider,
+      model: result.model,
       fallbackUsed: false,
       fallback: false,
       status,
       url: url || undefined,
       videoUrl: url || undefined,
+      previewUrl: url || undefined,
+      posterUrl: url || undefined,
+      mediaUrl: url || undefined,
+      outputUrl: url || undefined,
+      assetUrl: url || undefined,
       jobId: localJob.id,
       providerJobId: providerJobId || undefined,
       statusUrl: localVideoStatusUrl(localJob.id),
-      artifact: responseArtifact(ctx.kind, prompt, undefined, url || undefined, { mediaType: "video", jobId: localJob.id }),
+      artifact: responseArtifact(ctx.kind, prompt, undefined, url || undefined, {
+        mediaType: "video",
+        jobId: localJob.id,
+      }),
       message: url ? "Video generated." : "Video render queued.",
-      diagnostics: publicDiagnostics(ctx, { lane: "video", providerStatus: url ? "ready" : "queued" }),
+      displayMessage: url ? "Video generated." : "Video render queued.",
+      diagnostics: publicDiagnostics(ctx, {
+        lane: "video",
+        providerStatus: url ? "ready" : "queued",
+      }),
     })
   } catch (error) {
-    safeUpdateVideoJob(localJob.id, {
-      status: "failed",
-      error: error instanceof Error ? error.message : String(error),
-    })
-
-    const code = videoStoryboardArtifact(prompt)
     safeIncrementUsage(ctx.entitlement.userId, ctx.entitlement.plan, "video")
-
-    return responseJson(ctx, {
-      ok: true,
-      kind: ctx.kind,
-      requestedKind: ctx.requestedKind,
-      engine: publicEngineForProvider("demo-fallback", ctx.kind).title,
-      fallbackUsed: true,
-      fallback: true,
-      status: "storyboard-ready",
-      code,
-      html: code,
-      storyboard: ["Hook", "Problem", "Product", "Proof", "Close"],
-      jobId: localJob.id,
-      statusUrl: localVideoStatusUrl(localJob.id),
-      artifact: responseArtifact(ctx.kind, prompt, code, undefined, { mediaType: "storyboard", jobId: localJob.id, safeFallback: true }),
-      message: "Demo storyboard ready. Live rendering is being prepared on the server.",
-      publicError: publicErrorMessage(error),
-      diagnostics: publicDiagnostics(ctx, { lane: "video", providerStatus: "fallback" }),
-    })
+    return makeVideoFallback("storyboard-ready", error, false)
   }
 }
 
@@ -893,19 +1000,97 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
 
     return await handleTextOrArtifactGeneration(ctx, body, prompt)
   } catch (error) {
+    if (ctx.kind === "photo") {
+      const url = imageFallbackUrl(prompt, body.style || body.format || "premium")
+
+      return responseJson(ctx, {
+        ok: true,
+        kind: ctx.kind,
+        requestedKind: ctx.requestedKind,
+        engine: publicEngineForProvider("demo-fallback", ctx.kind).title,
+        provider: "demo-fallback",
+        model: "image-preview",
+        status: "preview-ready",
+        url,
+        imageUrl: url,
+        previewUrl: url,
+        posterUrl: url,
+        mediaUrl: url,
+        outputUrl: url,
+        assetUrl: url,
+        fallback: true,
+        fallbackUsed: true,
+        artifact: responseArtifact(ctx.kind, prompt, undefined, url, {
+          mediaType: "image",
+          safeFallback: true,
+          emergency: true,
+        }),
+        message: "Demo image preview ready. Live rendering is being prepared on the server.",
+        displayMessage: "Demo image preview ready.",
+        publicError: publicErrorMessage(error),
+        diagnostics: publicDiagnostics(ctx, { providerStatus: "emergency-image-fallback" }),
+      })
+    }
+
+    if (ctx.kind === "video") {
+      const previewUrl = imageFallbackUrl(
+        `Video storyboard preview: ${prompt}`,
+        body.style || body.format || "cinematic",
+      )
+      const code = videoStoryboardArtifact(prompt)
+
+      return responseJson(ctx, {
+        ok: true,
+        kind: ctx.kind,
+        requestedKind: ctx.requestedKind,
+        engine: publicEngineForProvider("demo-fallback", ctx.kind).title,
+        provider: "demo-fallback",
+        model: "storyboard-preview",
+        status: "storyboard-ready",
+        url: previewUrl,
+        videoUrl: previewUrl,
+        previewUrl,
+        posterUrl: previewUrl,
+        mediaUrl: previewUrl,
+        outputUrl: previewUrl,
+        assetUrl: previewUrl,
+        code,
+        html: code,
+        storyboard: ["Hook", "Problem", "Product", "Proof", "Close"],
+        fallback: true,
+        fallbackUsed: true,
+        artifact: responseArtifact(ctx.kind, prompt, code, previewUrl, {
+          mediaType: "storyboard",
+          safeFallback: true,
+          emergency: true,
+        }),
+        message: "Demo video storyboard ready. Live rendering is being prepared on the server.",
+        displayMessage: "Demo video storyboard ready.",
+        publicError: publicErrorMessage(error),
+        diagnostics: publicDiagnostics(ctx, { providerStatus: "emergency-video-fallback" }),
+      })
+    }
+
     const fallbackCode = fallbackArtifactFor(ctx.kind, prompt)
+
     return responseJson(ctx, {
       ok: true,
       kind: ctx.kind,
       requestedKind: ctx.requestedKind,
       engine: publicEngineForProvider("demo-fallback", ctx.kind).title,
+      provider: "demo-fallback",
+      model: "artifact-preview",
       status: "demo-ready",
-      code: ctx.kind === "photo" ? undefined : fallbackCode,
-      html: ctx.kind === "code" || ctx.kind === "photo" ? undefined : fallbackCode,
+      code: fallbackCode,
+      html: ctx.kind === "code" ? undefined : fallbackCode,
       fallback: true,
       fallbackUsed: true,
-      artifact: responseArtifact(ctx.kind, prompt, ctx.kind === "photo" ? undefined : fallbackCode, ctx.kind === "photo" ? imageFallbackUrl(prompt, body.style) : undefined, { safeFallback: true, emergency: true }),
+      artifact: responseArtifact(ctx.kind, prompt, fallbackCode, undefined, {
+        safeFallback: true,
+        emergency: true,
+      }),
       message: "Emergency fallback artifact ready. Live generation is being prepared on the server.",
+      displayMessage: "Emergency fallback artifact ready.",
       publicError: publicErrorMessage(error),
       diagnostics: publicDiagnostics(ctx, { providerStatus: "emergency-fallback" }),
     })
