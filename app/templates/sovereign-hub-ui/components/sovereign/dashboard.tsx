@@ -207,13 +207,14 @@ function extractInlineMediaUrl(payload: any, kind: "image" | "video"): string {
     payload?.generation?.assets?.video ||
     payload?.generation?.assets?.image
 
-  if (typeof direct === "string" && (direct.startsWith("http") || direct.startsWith("/"))) return direct
+  // Support data: URIs for fallback SVG previews
+  if (typeof direct === "string" && (direct.startsWith("data:") || direct.startsWith("http") || direct.startsWith("/"))) return direct
 
   const outputs = payload.output || payload.outputs || payload.images || payload.videos || payload.files || payload?.data?.output || payload?.result?.outputs
   if (Array.isArray(outputs)) {
-    const found = outputs.find((item) => typeof item === "string" && item.startsWith("http"))
-      || outputs.find((item) => typeof item?.url === "string" && item.url.startsWith("http"))
-      || outputs.find((item) => typeof item?.uri === "string" && item.uri.startsWith("http"))
+    const found = outputs.find((item) => typeof item === "string" && (item.startsWith("data:") || item.startsWith("http")))
+      || outputs.find((item) => typeof item?.url === "string" && (item.url.startsWith("data:") || item.url.startsWith("http")))
+      || outputs.find((item) => typeof item?.uri === "string" && (item.uri.startsWith("data:") || item.uri.startsWith("http")))
     if (typeof found === "string") return found
     if (found?.url) return found.url
     if (found?.uri) return found.uri
@@ -5045,13 +5046,20 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       patchInlineMedia({ status: "rendering", progress: 72 })
       const payload = await response.json().catch(() => ({}))
 
-      if (!response.ok) {
+      // Accept both successful responses (ok: true) and fallback responses (fallback: true)
+      const isFallback = payload?.fallback === true || payload?.fallbackUsed === true || payload?.status === "demo-ready" || payload?.status === "storyboard-ready"
+      
+      if (!response.ok && !payload?.ok) {
         throw new Error(payload?.error || payload?.message || `Media API returned ${response.status}`)
       }
 
       const mediaUrl = extractInlineMediaUrl(payload, inlineMediaKind)
-      if (!mediaUrl) {
+      if (!mediaUrl && !isFallback) {
         throw new Error("Media API finished, but no media URL was returned.")
+      }
+      if (!mediaUrl && isFallback) {
+        // If fallback but no URL, still might be an error
+        throw new Error("Fallback generation failed to produce preview.")
       }
 
       const readyMedia: InlineMediaGeneration = {
@@ -5060,7 +5068,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         progress: 100,
         url: mediaUrl,
         thumbnailUrl: typeof payload?.thumbnailUrl === "string" ? payload.thumbnailUrl : typeof payload?.assets?.thumbnail === "string" ? payload.assets.thumbnail : undefined,
-        provider: payload?.providerTitle || payload?.provider || assistantMessage.generatedMedia.provider,
+        provider: payload?.providerTitle || payload?.provider || (isFallback ? "Malik Fallback" : assistantMessage.generatedMedia.provider),
       }
 
       finalizeInlineMedia(readyMedia)

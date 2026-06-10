@@ -128,7 +128,11 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
 
   if (kind === "photo" || kind === "image") {
     const rate = checkRateLimit({ userId: entitlement.userId, plan: entitlement.plan, task: "image" })
-    if (!rate.ok) return Response.json({ ok: false, kind, status: "limited", error: "limit_reached", message: rate.message }, { status: 429 })
+    if (!rate.ok) {
+      const url = imageFallbackUrl(prompt)
+      incrementUsage(entitlement.userId, entitlement.plan, "image")
+      return Response.json({ ok: true, kind, engine: publicEngineForProvider("demo-fallback", kind).title, fallbackUsed: true, status: "demo-ready", url, imageUrl: url, fallback: true, artifact: responseArtifact(kind, prompt, undefined, url), message: "Limit reached. Demo preview ready. Upgrade for more daily generations.", publicError: rate.message })
+    }
     try {
       const result = await generateImageWithRouter({
         prompt,
@@ -158,7 +162,11 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
 
   if (kind === "video") {
     const rate = checkRateLimit({ userId: entitlement.userId, plan: entitlement.plan, task: "video" })
-    if (!rate.ok) return Response.json({ ok: false, kind, status: "limited", error: "limit_reached", message: rate.message }, { status: 429 })
+    if (!rate.ok) {
+      const previewUrl = videoFallbackPreviewUrl(prompt)
+      incrementUsage(entitlement.userId, entitlement.plan, "video")
+      return Response.json({ ok: true, kind, engine: publicEngineForProvider("demo-fallback", kind).title, fallbackUsed: true, status: "storyboard-ready", fallback: true, url: previewUrl, videoUrl: previewUrl, posterUrl: previewUrl, previewUrl: previewUrl, artifact: responseArtifact(kind, prompt, undefined, previewUrl), message: "Limit reached. Demo storyboard ready. Upgrade for more daily generations.", publicError: rate.message })
+    }
     const videoMetadata = {
       requestedProvider,
       aspectRatio: videoAspectRatio(body.aspectRatio),
