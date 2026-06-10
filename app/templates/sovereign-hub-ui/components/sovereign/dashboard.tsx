@@ -168,7 +168,8 @@ function detectInlineMediaGenerationRequest(
   attachments: ChatAttachment[] = [],
   mode: AiModeId = "auto",
 ): "image" | "video" | null {
-  const text = `${mode} ${prompt || ""} ${attachments.map((item) => item.kind).join(" ")}`.toLowerCase()
+  const modeText = String(mode).toLowerCase()
+  const text = `${modeText} ${prompt || ""} ${attachments.map((item) => item.kind).join(" ")}`.toLowerCase()
 
   const hasVideoWord =
     text.includes("video") ||
@@ -210,8 +211,8 @@ function detectInlineMediaGenerationRequest(
     text.includes("нарисуй") ||
     text.includes("запусти")
 
-  if (mode === "video" || hasVideoWord) return "video"
-  if (mode === "image" || mode === "photo" || (hasCreateIntent && hasImageWord)) return "image"
+  if (modeText === "video" || hasVideoWord) return "video"
+  if (modeText === "image" || modeText === "photo" || (hasCreateIntent && hasImageWord)) return "image"
 
   return null
 }
@@ -8144,5 +8145,6 @@ function ChatsListView({
 // merge-map-344: ai-generator bridge preserved; runtime cost: zero; fallback: photo-generation; canvas handoff: safeOpenCanvas.
 
 export default Dashboard
+
 
 
