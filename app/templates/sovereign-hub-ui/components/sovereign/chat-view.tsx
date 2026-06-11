@@ -168,7 +168,7 @@ function isImageLikeUrl(url?: string) {
   if (isDataSvgUrl(url)) return true
   if (url.startsWith("data:image/")) return true
   if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) return false
-  return /\.(png|jpg|jpeg|webp|gif|svg)(\?|#|$)/i.test(url) || /image|thumbnail|poster|preview|asset|generation/i.test(url)
+  const value = url.toLowerCase(); if (value.includes("/api/") || value.includes("/status") || value.includes("status?")) return false; return /\.(png|jpg|jpeg|webp|gif|svg)(\?|#|$)/i.test(url) || /image|thumbnail|poster|preview|asset/i.test(url)
 }
 
 function isProcessingStatus(status: InlineMediaGenerationStatus) {
@@ -196,7 +196,7 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
   }, [media])
 
   useEffect(() => {
-    const statusUrl = liveMedia.statusUrl || (liveMedia.jobId ? `/api/ai/video/status?jobId=${encodeURIComponent(liveMedia.jobId)}` : "")
+    const statusUrl = liveMedia.statusUrl || (liveMedia.jobId ? `/api/generate/video/status?provider=aws-bedrock-nova-reel&jobId=${encodeURIComponent(liveMedia.jobId)}` : "")
     const hasFinalVideo = isRealVideoUrl(liveMedia.url || liveMedia.thumbnailUrl)
     const shouldPoll = isProcessingStatus(liveMedia.status) || (liveMedia.status === "ready" && !hasFinalVideo)
     if (!isVideo || !statusUrl || !shouldPoll) return
@@ -235,13 +235,13 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
           return
         }
 
-        setPollHint("Видео ещё рендерится. Malik AI проверяет статус автоматически.")
+        const nextStatus = String(payload?.status || "").toLowerCase(); if (nextStatus === "queued" || nextStatus === "thinking" || nextStatus === "generating" || nextStatus === "rendering") { setLiveMedia((previous) => ({ ...previous, status: nextStatus as InlineMediaGenerationStatus, progress: nextStatus === "queued" ? 8 : nextStatus === "thinking" ? 22 : nextStatus === "generating" ? 52 : 78 })) }; setPollHint("Видео ещё рендерится. Malik AI проверяет статус автоматически.")
       } catch {
         if (!cancelled) setPollHint("Статус видео проверяется. Провайдер может отвечать с задержкой.")
       }
 
-      if (!cancelled && tries < 45) {
-        timer = window.setTimeout(poll, 4000)
+      if (!cancelled && tries < 120) {
+        timer = window.setTimeout(poll, 5000)
       }
     }
 
@@ -256,15 +256,15 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
   const isFailed = liveMedia.status === "failed"
   const isProcessing = isProcessingStatus(liveMedia.status)
   const realVideo = isVideo && liveMedia.status === "ready" && isRealVideoUrl(url)
-  const previewImage = Boolean(url) && (isDataSvgUrl(url) || isImageLikeUrl(url) || (isVideo && !realVideo))
-  const progress = mediaProgress(liveMedia)
+  const previewImage = Boolean(url) && !isVideo && (isDataSvgUrl(url) || isImageLikeUrl(url))
+  const progress = isVideo && liveMedia.status === "ready" && !realVideo ? 82 : mediaProgress(liveMedia)
 
   const statusLabel: Record<InlineMediaGenerationStatus, string> = {
     queued: "Очередь",
     thinking: "Понимаю идею",
     generating: isVideo ? "Генерирую видео" : "Генерирую изображение",
     rendering: isVideo ? "Рендерю видео" : "Собираю финальный кадр",
-    ready: realVideo ? "Готово" : isVideo ? "Storyboard preview" : "Готово",
+    ready: realVideo ? "Готово" : isVideo ? "Рендерю видео" : "Готово",
     failed: "Ошибка генерации",
   }
 
@@ -272,7 +272,7 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
     ? realVideo
       ? "Видео готово"
       : liveMedia.status === "ready"
-        ? "Storyboard preview готов"
+        ? "Видео ещё рендерится"
         : "Видео создаётся"
     : liveMedia.status === "ready"
       ? "Изображение готово"
@@ -283,7 +283,7 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
     : realVideo
       ? "Финальный mp4/webm получен и готов к просмотру."
       : isVideo && liveMedia.status === "ready"
-        ? "Пока нет финального mp4. Показываю безопасный storyboard/preview вместо чёрного плеера."
+        ? "AWS ещё готовит финальный mp4. Карточка автоматически ждёт настоящий videoUrl."
         : isProcessing
           ? pollHint || "Генератор работает внутри чата. Когда видео будет готово, карточка обновится."
           : "Результат подготовлен внутри чата."
@@ -907,6 +907,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
 }
 
 export default ChatView
+
 
 
 
