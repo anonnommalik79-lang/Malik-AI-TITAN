@@ -1,4 +1,4 @@
-﻿import { compileGodVideoPrompt, type VideoAspectRatio } from "./god-prompt-compiler"
+﻿import { compileGodVideoPrompt, type VideoAspectRatio, type CompiledVideoPrompt } from "./god-prompt-compiler"
 
 type StartResult = {
   ok: boolean
@@ -50,6 +50,22 @@ export function isAwsNovaConfigured() {
   return Boolean(env("AWS_ACCESS_KEY_ID") && env("AWS_SECRET_ACCESS_KEY") && videoS3Uri())
 }
 
+
+function compactNovaPrompt(compiled: CompiledVideoPrompt) {
+  const oneLine = (value: string) => value.replace(/\s+/g, " ").trim()
+
+  const prompt = [
+    `${compiled.subject}.`,
+    `Scene: ${compiled.scene}.`,
+    `Camera: ${compiled.motion}.`,
+    `Style: realistic premium cinematic trailer, high detail, coherent motion.`,
+    `Rules: keep exact subject centered; no random people, no unrelated location, no cartoon.`,
+    `Format: ${compiled.aspectRatio}, ${compiled.durationSeconds} seconds.`,
+  ].join(" ")
+
+  return oneLine(prompt).slice(0, 500).trim()
+}
+
 function s3FromUri(uri: string) {
   const clean = uri.replace(/^s3:\/\//i, "")
   const slash = clean.indexOf("/")
@@ -98,7 +114,7 @@ export async function startAwsNovaReelVideo(input: {
   const modelInput = {
     taskType: "TEXT_VIDEO",
     textToVideoParams: {
-      text: compiled.providerPrompt,
+      text: compactNovaPrompt(compiled),
     },
     videoGenerationConfig: {
       durationSeconds: compiled.durationSeconds,
@@ -230,5 +246,6 @@ export async function pollAwsNovaReelVideo(jobId: string): Promise<StartResult> 
     message: "Nova Reel video ready.",
   }
 }
+
 
 
