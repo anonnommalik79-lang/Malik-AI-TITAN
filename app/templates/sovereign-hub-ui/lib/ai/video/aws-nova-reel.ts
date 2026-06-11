@@ -32,6 +32,20 @@ function videoS3Uri() {
   return env("AWS_BEDROCK_VIDEO_S3_URI") || env("AWS_NOVA_REEL_S3_URI") || env("AWS_VIDEO_S3_URI") || ""
 }
 
+function awsCredentials() {
+  const accessKeyId = env("AWS_ACCESS_KEY_ID")
+  const secretAccessKey = env("AWS_SECRET_ACCESS_KEY")
+  const sessionToken = env("AWS_SESSION_TOKEN")
+
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error("Missing AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY")
+  }
+
+  return sessionToken
+    ? { accessKeyId, secretAccessKey, sessionToken }
+    : { accessKeyId, secretAccessKey }
+}
+
 export function isAwsNovaConfigured() {
   return Boolean(env("AWS_ACCESS_KEY_ID") && env("AWS_SECRET_ACCESS_KEY") && videoS3Uri())
 }
@@ -78,7 +92,7 @@ export async function startAwsNovaReelVideo(input: {
   })
 
   const { bedrock } = await sdk()
-  const client = new bedrock.BedrockRuntimeClient({ region: awsRegion() })
+  const client = new bedrock.BedrockRuntimeClient({ region: awsRegion(), credentials: awsCredentials() })
   const s3Uri = videoS3Uri()
 
   const modelInput = {
@@ -145,8 +159,8 @@ export async function pollAwsNovaReelVideo(jobId: string): Promise<StartResult> 
 
   const { bedrock, s3, presigner } = await sdk()
   const region = awsRegion()
-  const bedrockClient = new bedrock.BedrockRuntimeClient({ region })
-  const s3Client = new s3.S3Client({ region })
+  const bedrockClient = new bedrock.BedrockRuntimeClient({ region, credentials: awsCredentials() })
+  const s3Client = new s3.S3Client({ region, credentials: awsCredentials() })
 
   const response = await bedrockClient.send(new bedrock.GetAsyncInvokeCommand({ invocationArn: jobId }))
   const status = String(response.status || "").toLowerCase()
@@ -216,4 +230,5 @@ export async function pollAwsNovaReelVideo(jobId: string): Promise<StartResult> 
     message: "Nova Reel video ready.",
   }
 }
+
 
