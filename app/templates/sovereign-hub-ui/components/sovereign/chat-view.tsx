@@ -156,9 +156,11 @@ function isDataSvgUrl(url?: string) {
 
 function isRealVideoUrl(url?: string) {
   if (!url || typeof url !== "string") return false
+  const value = url.toLowerCase()
+  if (value.includes("/status") || value.includes("status?") || value.includes("/api/generate/video/status") || value.includes("/api/ai/video/status") || value.includes("/api/media/video/status")) return false
   if (url.startsWith("blob:")) return true
   if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) return false
-  return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url) || /\/video\/|videoUrl|mp4|webm|rendered-video|generation.*video/i.test(url)
+  return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url) || /output\.mp4|\.mp4\?|\.webm\?|rendered-video/i.test(url)
 }
 
 function isImageLikeUrl(url?: string) {
@@ -905,5 +907,6 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
 }
 
 export default ChatView
+
 
 
