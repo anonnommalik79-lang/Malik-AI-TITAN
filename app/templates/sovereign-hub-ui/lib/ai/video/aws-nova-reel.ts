@@ -1,4 +1,4 @@
-import { compileGodVideoPrompt, type VideoAspectRatio } from "./god-prompt-compiler"
+﻿import { compileGodVideoPrompt, type VideoAspectRatio } from "./god-prompt-compiler"
 
 type StartResult = {
   ok: boolean
@@ -117,7 +117,7 @@ export async function startAwsNovaReelVideo(input: {
       publicError: "AWS Bedrock did not return invocationArn.",
       message: "Nova Reel job could not be started.",
       compiledPrompt: compiled.providerPrompt,
-      debug: response as Record<string, unknown>,
+      debug: response as unknown as Record<string, unknown>,
     }
   }
 
@@ -159,7 +159,7 @@ export async function pollAwsNovaReelVideo(jobId: string): Promise<StartResult> 
       providerTitle,
       engine,
       publicError: String((response as any).failureMessage || "AWS Nova Reel generation failed."),
-      debug: response as Record<string, unknown>,
+      debug: response as unknown as Record<string, unknown>,
     }
   }
 
@@ -216,3 +216,4 @@ export async function pollAwsNovaReelVideo(jobId: string): Promise<StartResult> 
     message: "Nova Reel video ready.",
   }
 }
+
