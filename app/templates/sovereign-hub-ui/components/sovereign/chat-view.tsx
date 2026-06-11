@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -195,7 +195,9 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
 
   useEffect(() => {
     const statusUrl = liveMedia.statusUrl || (liveMedia.jobId ? `/api/ai/video/status?jobId=${encodeURIComponent(liveMedia.jobId)}` : "")
-    if (!isVideo || !statusUrl || !isProcessingStatus(liveMedia.status)) return
+    const hasFinalVideo = isRealVideoUrl(liveMedia.url || liveMedia.thumbnailUrl)
+    const shouldPoll = isProcessingStatus(liveMedia.status) || (liveMedia.status === "ready" && !hasFinalVideo)
+    if (!isVideo || !statusUrl || !shouldPoll) return
 
     let cancelled = false
     let tries = 0
@@ -368,7 +370,7 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
         <p className="mt-1 text-xs leading-5 text-zinc-400">{subline}</p>
         <p className="mt-3 line-clamp-3 text-sm leading-6 text-zinc-300">{liveMedia.prompt}</p>
 
-        {liveMedia.status === "ready" && url ? (
+        {realVideo ? (
           <div className="mt-3 flex flex-wrap gap-2">
             <a href={url} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-cyan-50">Открыть результат</a>
             <button type="button" onClick={() => navigator.clipboard?.writeText(url)} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-black text-zinc-300 transition hover:bg-white/10">Copy link</button>
@@ -903,4 +905,5 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
 }
 
 export default ChatView
+
 
