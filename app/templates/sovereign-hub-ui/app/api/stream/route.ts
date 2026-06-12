@@ -81,6 +81,13 @@ function smartFallback(prompt: string) {
 
 function looksGeneric(text: string) {
   const t = lower(text)
+  const normalizedReadyApiText = t.replace(/\u2014|\u2013/g, "-")
+  if (
+    normalizedReadyApiText.includes("\u0433\u043e\u0442\u043e\u0432 \u043f\u043e\u043c\u043e\u0447\u044c") ||
+    normalizedReadyApiText.includes("\u043d\u0430\u043f\u0438\u0448\u0438 \u0437\u0430\u0434\u0430\u0447\u0443") ||
+    normalizedReadyApiText.includes("\u043e\u0442\u0432\u0435\u0447\u0443 \u043a\u043e\u0440\u043e\u0442\u043a\u043e") ||
+    normalizedReadyApiText.includes("\u043f\u043e\u043d\u044f\u043b. \u043d\u0430\u043f\u0438\u0448\u0438")
+  ) return true
   return t.includes("\u0433\u043e\u0442\u043e\u0432 \u043f\u043e\u043c\u043e\u0447\u044c") ||
     t.includes("\u043d\u0430\u043f\u0438\u0448\u0438 \u0437\u0430\u0434\u0430\u0447\u0443") ||
     t.includes("ready to help")
@@ -106,7 +113,7 @@ function sanitize(text: string, prompt: string) {
 
   if (looksBroken(value)) return ""
 
-  if ((isIdentityPrompt(prompt) || isCapsPrompt(prompt)) && looksGeneric(value)) {
+  if (looksGeneric(value)) {
     return ""
   }
 

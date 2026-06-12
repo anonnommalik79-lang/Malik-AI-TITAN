@@ -113,8 +113,7 @@ import {
   type ChatSendOptions,
 } from "@/lib/ai/response-depth"
 
-const MALIK_DASHBOARD_SAFE_TEXT =
-  "\u0413\u043e\u0442\u043e\u0432 \u043f\u043e\u043c\u043e\u0447\u044c. \u041d\u0430\u043f\u0438\u0448\u0438 \u0437\u0430\u0434\u0430\u0447\u0443 \u2014 \u043e\u0442\u0432\u0435\u0447\u0443 \u043a\u043e\u0440\u043e\u0442\u043a\u043e \u0438 \u043f\u043e \u0434\u0435\u043b\u0443."
+const MALIK_DASHBOARD_SAFE_TEXT = ""
 
 function isDashboardBadText(value: string) {
   const text = String(value || "")
@@ -139,7 +138,7 @@ function isDashboardBadText(value: string) {
 
 function cleanDashboardAIText(value: string) {
   const text = String(value || "").trim()
-  return isDashboardBadText(text) ? MALIK_DASHBOARD_SAFE_TEXT : text
+  return isDashboardBadText(text) ? "" : text
 }
 
 interface Message {
