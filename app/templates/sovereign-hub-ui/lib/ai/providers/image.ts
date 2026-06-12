@@ -48,6 +48,63 @@ function extractCloudflareImage(payload: any) {
   return ""
 }
 
+function buildCloudflareImagePrompt(rawPrompt: string) {
+  const source = String(rawPrompt || "").trim()
+  const lower = source.toLowerCase()
+  const requested = source.slice(0, 500)
+  const quality = "ultra realistic, cinematic lighting, high detail, sharp focus, 4k, professional composition, no text, no watermark, no random unrelated scene"
+
+  if (/трансформ|transformer/.test(lower)) {
+    return [
+      "MAIN SUBJECT: a giant humanoid transformer robot, full body visible, mechanical armored body, metal plates, glowing blue eyes, heroic cinematic pose.",
+      "The image MUST clearly show a robot transformer as the central subject.",
+      "Do NOT show only a normal street, bus, motorcycle, bicycle, empty city, or electrical transformer box.",
+      "Scene: futuristic night city, dramatic atmosphere, neon reflections, smoke, cinematic lighting.",
+      quality,
+      `Original user request: ${requested}`,
+    ].join(" ")
+  }
+
+  if (/иконк|icon|логотип|logo|эмблем|emblem|аватар|avatar/.test(lower)) {
+    return [
+      "MAIN SUBJECT: professional modern icon logo emblem, centered composition, clean silhouette, premium design, app icon style.",
+      "If the user mentions a football club, create a football club badge/shield emblem with strong sports identity.",
+      "No random street scene, no people unless requested, no long text.",
+      quality,
+      `Original user request: ${requested}`,
+    ].join(" ")
+  }
+
+  if (/футбол|football|club|клуб/.test(lower)) {
+    return [
+      "MAIN SUBJECT: football club visual identity, premium sports badge or football player scene depending on request.",
+      "Make the football subject clear and central.",
+      quality,
+      `Original user request: ${requested}`,
+    ].join(" ")
+  }
+
+  if (/казахстан|kazakhstan|алматы|almaty|астана|astana|город|city/.test(lower)) {
+    return [
+      "MAIN SUBJECT: futuristic Kazakhstan AI city at night, neon cyan and royal purple, cinematic skyline, advanced technology, premium startup aesthetic.",
+      "The Kazakhstan futuristic city must be clearly visible.",
+      quality,
+      `Original user request: ${requested}`,
+    ].join(" ")
+  }
+
+  if (/[а-яё]/i.test(source)) {
+    return [
+      "Interpret the following Russian/Kazakh user request as an English image generation prompt.",
+      "Depict the requested main subject exactly, not a random unrelated scene.",
+      quality,
+      `User request: ${requested}`,
+    ].join(" ")
+  }
+
+  return `${requested}. ${quality}`
+}
+
 async function generateWithCloudflare(input: AIRequest): Promise<AIResponse> {
   const started = Date.now()
   const accountId = cloudflareAccountId()
@@ -58,6 +115,7 @@ async function generateWithCloudflare(input: AIRequest): Promise<AIResponse> {
   }
 
   const model = process.env.CLOUDFLARE_IMAGE_MODEL || "@cf/black-forest-labs/flux-1-schnell"
+  const finalPrompt = buildCloudflareImagePrompt(input.prompt)
 
   const response = await providerFetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`, {
     method: "POST",
@@ -66,7 +124,7 @@ async function generateWithCloudflare(input: AIRequest): Promise<AIResponse> {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      prompt: input.prompt,
+      prompt: finalPrompt,
       num_steps: Number(process.env.CLOUDFLARE_IMAGE_STEPS || 4),
     }),
     signal: input.signal,
@@ -297,6 +355,7 @@ export const imageProviderRouter: AIProvider = {
     throw new Error("Image router does not analyze files.")
   },
 }
+
 
 
 
