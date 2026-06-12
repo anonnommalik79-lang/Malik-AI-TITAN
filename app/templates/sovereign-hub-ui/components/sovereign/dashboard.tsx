@@ -5147,6 +5147,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: cleanContent,
+        stream: false,
           kind: inlineMediaKind === "video" ? "video" : "photo",
           provider: "auto",
           style: "cinematic Gemini-style transparent chat generation",
@@ -5301,7 +5302,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Accept': 'text/event-stream; charset=utf-8',
+        'Accept': 'text/plain; charset=utf-8',
       },
       body: JSON.stringify({
         question,
@@ -5351,52 +5352,16 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
     if (!response.ok) throw new Error(`Server returned ${response.status}`)
 
-    const reader = response.body?.getReader()
-    if (!reader) throw new Error("No response body reader")
+    let fullText = cleanDashboardAIText(await response.text())
 
-    const decoder = new TextDecoder("utf-8")
-    let fullText = ""
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      const chunkText = decoder.decode(value, { stream: true })
-      const lines = chunkText.split('\n')
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        const data = line.slice(6).trim()
-        if (!data || data === '[DONE]') continue
-
-        try {
-          const parsed = JSON.parse(data)
-          if (parsed?.error) throw new Error(parsed.error)
-          const chunkContent = normalizeStreamChunk(parsed)
-          if (chunkContent !== null && chunkContent !== undefined) {
-            fullText += String(chunkContent)
-            fullText = cleanDashboardAIText(fullText)
-          }
-        } catch (e) {
-          if (data && !data.startsWith('{')) {
-            fullText += data.replace(/\\n/g, '\n')
-            fullText = cleanDashboardAIText(fullText)
-          }
-        }
-
-        if (fullText) {
-          setStreamingText(cleanDashboardAIText(fullText))
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === assistantMessage.id ? { ...m, content: cleanDashboardAIText(fullText) } : m
-            )
-          )
-        }
-      }
+    if (fullText) {
+      setStreamingText(fullText)
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === assistantMessage.id ? { ...m, content: fullText } : m
+        )
+      )
     }
-
-    fullText = cleanDashboardAIText(fullText)
-
     if (isWeakBackendAnswer(fullText)) {
       const elapsed = Date.now() - startTime
       if (isProjReq && elapsed < MIN_TERMINAL_TIME) {
