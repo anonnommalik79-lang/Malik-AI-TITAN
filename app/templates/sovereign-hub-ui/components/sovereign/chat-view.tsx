@@ -50,8 +50,7 @@ export type { ChatSendOptions }
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
-const MALIK_CHATVIEW_SAFE_TEXT =
-  "\u0413\u043e\u0442\u043e\u0432 \u043f\u043e\u043c\u043e\u0447\u044c. \u041d\u0430\u043f\u0438\u0448\u0438 \u0437\u0430\u0434\u0430\u0447\u0443 \u2014 \u043e\u0442\u0432\u0435\u0447\u0443 \u043a\u043e\u0440\u043e\u0442\u043a\u043e \u0438 \u043f\u043e \u0434\u0435\u043b\u0443."
+const MALIK_CHATVIEW_SAFE_TEXT = ""
 
 function isChatViewBadText(value: string) {
   const text = String(value || "")
@@ -76,7 +75,7 @@ function isChatViewBadText(value: string) {
 
 function cleanChatViewText(value: string) {
   const text = String(value || "").trim()
-  return isChatViewBadText(text) ? MALIK_CHATVIEW_SAFE_TEXT : text
+  return isChatViewBadText(text) ? "" : text
 }
 
 
