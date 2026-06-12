@@ -5354,7 +5354,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
     let fullText = cleanDashboardAIText(await response.text())
 
-    if (fullText) {
+    if (fullText && !isWeakBackendAnswer(fullText)) {
       setStreamingText(fullText)
       setMessages(prev =>
         prev.map(m =>
@@ -5376,7 +5376,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         const codeText = generateMockCode(cleanContent)
         finalizeAssistant(responseText, codeText)
       } else {
-        finalizeAssistant(MALIK_DASHBOARD_SAFE_TEXT, undefined)
+        finalizeAssistant("DeepSeek не вернул ответ. Повтори запрос.", undefined)
       }
       return
     }
@@ -5414,7 +5414,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       view: activeViewRef.current,
       payload: error instanceof Error ? error.message : error,
     })
-    const errorMessage = MALIK_DASHBOARD_SAFE_TEXT
+    const errorMessage = "DeepSeek не вернул ответ. Повтори запрос."
     setErrorNotification(errorMessage)
 
     const elapsed = Date.now() - startTime
@@ -5429,7 +5429,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       const codeText = generateMockCode(cleanContent)
       finalizeAssistant(responseText, codeText)
     } else {
-      finalizeAssistant(MALIK_DASHBOARD_SAFE_TEXT, undefined)
+      finalizeAssistant("DeepSeek не вернул ответ. Повтори запрос.", undefined)
     }
   } finally {
     setIsLoading(false)
