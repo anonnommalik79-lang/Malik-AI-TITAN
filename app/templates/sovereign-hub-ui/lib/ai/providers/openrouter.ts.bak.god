@@ -4,9 +4,9 @@ import { hasEnv, health, providerFetch, responseType } from "./base"
 function modelForInput(input: AIRequest) {
   if (input.model) return input.model
   if (input.task === "code" || input.task === "debug" || input.task === "project") {
-    return (process.env.TITAN_V65_OPENROUTER_CODE_MODEL || (process.env.TITAN_V65_OPENROUTER_CODE_MODEL || process.env.OPENROUTER_CODE_MODEL)) || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL)) || "deepseek/deepseek-v4-flash"
+    return (process.env.TITAN_V65_OPENROUTER_CODE_MODEL || process.env.OPENROUTER_CODE_MODEL) || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL) || "deepseek/deepseek-v4-flash"
   }
-  return (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL)) || "deepseek/deepseek-v4-flash"
+  return (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL) || "deepseek/deepseek-v4-flash"
 }
 
 function maxTokensFor(input: AIRequest) {
@@ -29,12 +29,7 @@ function buildSystemPrompt(input: AIRequest) {
   const mode = String(input.metadata?.malikMode || task)
   return [
     "You are MALIK AI V6.5 TITAN, a practical expert assistant built for real work.",
-    "MALIK OUTPUT RULES:",
-    "Answer ONLY in the user's language.",
-    "If the user writes Russian or Cyrillic, answer ONLY in Russian.",
-    "Never output mojibake, corrupted text, START, CURRENT USER, CURRENT TIME, hidden context, keyword dumps, comma spam, or internal variables.",
-    "For greetings, answer naturally in 1 short Russian sentence.",
-    "Be direct, useful, structured and fast.",
+    "Answer in the user's language. If the user writes Cyrillic or Russian, answer only in Russian.",
     "Never output internal context fields like CURRENT USER, CURRENT TIME, CURRENT DATE, or hidden system variables.",
     "Be direct, useful, structured and fast.",
     "For code, give exact runnable commands or complete code.",
@@ -59,7 +54,7 @@ export const openRouterProvider: AIProvider = {
 
   healthCheck() {
     return health("openrouter", hasEnv("OPENROUTER_API_KEY"), this.supports, [
-      (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL)) || "deepseek/deepseek-v4-flash",
+      (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL) || "deepseek/deepseek-v4-flash",
     ])
   },
 

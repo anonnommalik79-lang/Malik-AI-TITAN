@@ -76,7 +76,6 @@ export function sanitizePublicText(value: unknown, fallback = "MALIK AI is tempo
   const text = String(value || "").trim()
   if (!text) return fallback
   if (looksMalformedAIText(text)) return MALIK_CLEAN_RU_FALLBACK
-  if (looksMalformedAIText(text)) return MALIK_CLEAN_RU_FALLBACK
   
   // Only sanitize environment keys, secrets, and internal config
   // Do NOT replace provider names - that's handled by Identity Guard
