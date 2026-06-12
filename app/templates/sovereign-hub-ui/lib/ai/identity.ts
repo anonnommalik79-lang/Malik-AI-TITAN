@@ -238,6 +238,11 @@ export function sanitizeModelAnswer(answer: string, userMessage?: string): strin
       ? "Готов помочь. Напиши задачу — отвечу коротко и по делу."
       : "Ready to help. Send your task and I’ll answer directly."
   }
+  if (/^\s*(START:|BEGIN:|END:)\s*$/i.test(result.trim()) || /[ÐÑâ]{2,}/.test(result)) {
+    return /[А-Яа-яЁё]/.test(userMessage || "")
+      ? "\u0413\u043e\u0442\u043e\u0432 \u043f\u043e\u043c\u043e\u0447\u044c. \u041d\u0430\u043f\u0438\u0448\u0438 \u0437\u0430\u0434\u0430\u0447\u0443 \u2014 \u043e\u0442\u0432\u0435\u0447\u0443 \u043a\u043e\u0440\u043e\u0442\u043a\u043e \u0438 \u043f\u043e \u0434\u0435\u043b\u0443."
+      : "Ready to help. Send your task and I will answer directly."
+  }
   return result
 }
 
