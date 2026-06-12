@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import MalikGodUIEngine from "@/components/sovereign/god-ui-engine/MalikGodUIEngine";
 import SidebarActionsUpgrade from "@/components/sovereign/sidebar-actions/SidebarActionsUpgrade";
 import FinalIntelligenceUpgrade from "@/components/sovereign/final-intelligence/FinalIntelligenceUpgrade";
@@ -112,6 +112,35 @@ import {
   resolveResponseDepth,
   type ChatSendOptions,
 } from "@/lib/ai/response-depth"
+
+const MALIK_DASHBOARD_SAFE_TEXT =
+  "\u0413\u043e\u0442\u043e\u0432 \u043f\u043e\u043c\u043e\u0447\u044c. \u041d\u0430\u043f\u0438\u0448\u0438 \u0437\u0430\u0434\u0430\u0447\u0443 \u2014 \u043e\u0442\u0432\u0435\u0447\u0443 \u043a\u043e\u0440\u043e\u0442\u043a\u043e \u0438 \u043f\u043e \u0434\u0435\u043b\u0443."
+
+function isDashboardBadText(value: string) {
+  const text = String(value || "")
+  const commaCount = (text.match(/,/g) || []).length
+  const perSpamCount = (text.match(/\bper[-\w]*/gi) || []).length
+  const badMarks = [
+    "\u00D0", "\u00D1", "\u00E2",
+    "\u0420\u045F", "\u0420\u0491", "\u0420\u0451", "\u0420\u00B0", "\u0420\u00B5", "\u0421\u0453", "\u0421\u201A", "\u0421\u0152",
+    "\u0413\u0452", "\u0413\u2018", "\u0413\u045E"
+  ]
+
+  return (
+    !text.trim() ||
+    badMarks.some((mark) => text.includes(mark)) ||
+    /CURRENT\s+(USER|TIME|DATE|YEAR|LANGUAGE|DOMAIN|CONTEXT):/i.test(text) ||
+    /^\s*(START:|BEGIN:|END:)\s*$/i.test(text) ||
+    /^[,;:]/.test(text.trim()) ||
+    commaCount >= 25 ||
+    perSpamCount >= 5
+  )
+}
+
+function cleanDashboardAIText(value: string) {
+  const text = String(value || "").trim()
+  return isDashboardBadText(text) ? MALIK_DASHBOARD_SAFE_TEXT : text
+}
 
 interface Message {
   id: string
@@ -5271,7 +5300,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     const response = await fetch('/api/stream', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
+        'Accept': 'text/event-stream; charset=utf-8',
       },
       body: JSON.stringify({
         question,
@@ -5282,11 +5312,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         userEmail: normalizedEmail,
         isAdmin,
         isCreator: normalizedEmail === "amangeldymalik38@gmail.com",
-        creatorName: "РђР±РґСѓРјР°Р»РёРє РњР°Р»РёРє",
+        creatorName: "Abdumalik Malik",
         attachments,
         media_b64: attachments.find(a => a.base64)?.base64,
         media_type: attachments.find(a => a.base64)?.mime,
-        mode: isProjReq ? "pro" : isCodeReq ? "code" : "chat",
+        mode: isProjReq ? "pro" : isCodeReq ? "code" : "fast",
         responseMode: mode,
         forceCanvas: isProjReq,
         isProjectRequest: isProjReq,
@@ -5324,7 +5354,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     const reader = response.body?.getReader()
     if (!reader) throw new Error("No response body reader")
 
-    const decoder = new TextDecoder()
+    const decoder = new TextDecoder("utf-8")
     let fullText = ""
 
     while (true) {
@@ -5345,23 +5375,27 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           const chunkContent = normalizeStreamChunk(parsed)
           if (chunkContent !== null && chunkContent !== undefined) {
             fullText += String(chunkContent)
+            fullText = cleanDashboardAIText(fullText)
           }
         } catch (e) {
           if (data && !data.startsWith('{')) {
             fullText += data.replace(/\\n/g, '\n')
+            fullText = cleanDashboardAIText(fullText)
           }
         }
 
         if (fullText) {
-          setStreamingText(fullText)
+          setStreamingText(cleanDashboardAIText(fullText))
           setMessages(prev =>
             prev.map(m =>
-              m.id === assistantMessage.id ? { ...m, content: fullText } : m
+              m.id === assistantMessage.id ? { ...m, content: cleanDashboardAIText(fullText) } : m
             )
           )
         }
       }
     }
+
+    fullText = cleanDashboardAIText(fullText)
 
     if (isWeakBackendAnswer(fullText)) {
       const elapsed = Date.now() - startTime
@@ -5377,12 +5411,14 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         const codeText = generateMockCode(cleanContent)
         finalizeAssistant(responseText, codeText)
       } else {
-        finalizeAssistant(buildLocalChatAnswer(cleanContent, mode), undefined)
+        finalizeAssistant(MALIK_DASHBOARD_SAFE_TEXT, undefined)
       }
       return
     }
 
+    fullText = cleanDashboardAIText(fullText)
     let { text: cleanText, code } = extractCodeBlocks(fullText, mode)
+    cleanText = cleanDashboardAIText(cleanText)
 
     // TERMINATOR CANVAS GUARANTEE:
     // Р•СЃР»Рё РІРЅРµС€РЅРёР№ РїСЂРѕРІР°Р№РґРµСЂ СЃРєР°Р·Р°Р» вЂњСЃРіРµРЅРµСЂРёСЂРѕРІР°РЅРѕвЂќ, РЅРѕ РЅРµ РґР°Р» РєРѕРґ,
@@ -5404,7 +5440,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       view: activeViewRef.current,
       payload: { chatId, mode, hasCode: Boolean(code), textLength: (cleanText || fullText || "").length },
     })
-    finalizeAssistant(cleanText || fullText, code)
+    finalizeAssistant(cleanDashboardAIText(cleanText || fullText), code)
   } catch (error) {
     console.error("Streaming error:", error)
     dashboardEventBus.emit({
@@ -5413,7 +5449,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       view: activeViewRef.current,
       payload: error instanceof Error ? error.message : error,
     })
-    const errorMessage = `вљ пёЏ **РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏ**\n\nРЎРµСЂРІРµСЂ РЅРµРґРѕСЃС‚СѓРїРµРЅ РёР»Рё РІРµСЂРЅСѓР» РѕС€РёР±РєСѓ. Malik AI РІРєР»СЋС‡РёР» Р±РµР·РѕРїР°СЃРЅС‹Р№ fallback.\n\n${error instanceof Error ? error.message : 'РќРµРёР·РІРµСЃС‚РЅР°СЏ РѕС€РёР±РєР°'}`
+    const errorMessage = MALIK_DASHBOARD_SAFE_TEXT
     setErrorNotification(errorMessage)
 
     const elapsed = Date.now() - startTime
@@ -5428,7 +5464,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       const codeText = generateMockCode(cleanContent)
       finalizeAssistant(responseText, codeText)
     } else {
-      finalizeAssistant(buildLocalChatAnswer(cleanContent, mode), undefined)
+      finalizeAssistant(MALIK_DASHBOARD_SAFE_TEXT, undefined)
     }
   } finally {
     setIsLoading(false)

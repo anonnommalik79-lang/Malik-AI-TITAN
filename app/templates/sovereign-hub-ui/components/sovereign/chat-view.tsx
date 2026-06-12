@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -49,6 +49,36 @@ import {
 export type { ChatSendOptions }
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
+
+const MALIK_CHATVIEW_SAFE_TEXT =
+  "\u0413\u043e\u0442\u043e\u0432 \u043f\u043e\u043c\u043e\u0447\u044c. \u041d\u0430\u043f\u0438\u0448\u0438 \u0437\u0430\u0434\u0430\u0447\u0443 \u2014 \u043e\u0442\u0432\u0435\u0447\u0443 \u043a\u043e\u0440\u043e\u0442\u043a\u043e \u0438 \u043f\u043e \u0434\u0435\u043b\u0443."
+
+function isChatViewBadText(value: string) {
+  const text = String(value || "")
+  const commaCount = (text.match(/,/g) || []).length
+  const perSpamCount = (text.match(/\bper[-\w]*/gi) || []).length
+  const badMarks = [
+    "\u00D0", "\u00D1", "\u00E2",
+    "\u0420\u045F", "\u0420\u0491", "\u0420\u0451", "\u0420\u00B0", "\u0420\u00B5", "\u0421\u0453", "\u0421\u201A", "\u0421\u0152",
+    "\u0413\u0452", "\u0413\u2018", "\u0413\u045E"
+  ]
+
+  return (
+    !text.trim() ||
+    badMarks.some((mark) => text.includes(mark)) ||
+    /CURRENT\s+(USER|TIME|DATE|YEAR|LANGUAGE|DOMAIN|CONTEXT):/i.test(text) ||
+    /^\s*(START:|BEGIN:|END:)\s*$/i.test(text) ||
+    /^[,;:]/.test(text.trim()) ||
+    commaCount >= 25 ||
+    perSpamCount >= 5
+  )
+}
+
+function cleanChatViewText(value: string) {
+  const text = String(value || "").trim()
+  return isChatViewBadText(text) ? MALIK_CHATVIEW_SAFE_TEXT : text
+}
+
 
 interface Message {
   id: string
@@ -439,6 +469,7 @@ function MessageBubble({
 }) {
   const isUser = message.role === "user"
   const isThinking = Boolean(message.isStreaming && !message.content && !message.generatedMedia)
+  const displayContent = isUser ? message.content : cleanChatViewText(message.content)
   return (
     <div data-malik-message={message.role} className={cn("malik-message-row flex w-full gap-3 sm:gap-4", isUser ? "malik-message-row-user justify-end" : "malik-message-row-assistant justify-start")}>
       {!isUser && (
@@ -457,15 +488,15 @@ function MessageBubble({
             ? "bg-transparent p-0"
             : cn("whitespace-pre-wrap border px-4 py-3 sm:px-5 sm:py-4", isUser ? "malik-message-card-user border-white/10 bg-white/[0.07] text-white" : "malik-message-card-assistant border-blue-300/10 bg-[#071126]/78 text-gray-100 shadow-[0_18px_60px_rgba(0,0,0,.22)]")
         )}>
-          {message.generatedMedia ? <GeminiMediaGenerationCard media={message.generatedMedia} /> : message.content || (message.isStreaming ? <ThinkingBubble generationType={generationType} /> : "")}
+          {message.generatedMedia ? <GeminiMediaGenerationCard media={message.generatedMedia} /> : displayContent || (message.isStreaming ? <ThinkingBubble generationType={generationType} /> : "")}
         </div>
         {!isUser && message.content && !message.isStreaming && (
           <div className="malik-message-actions mt-2 flex items-center gap-2 text-slate-500">
-            <button type="button" title="Копировать" onClick={() => onCopy(message.id, message.content)} className="rounded-md p-1 hover:bg-white/10 hover:text-white">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
+            <button type="button" title="Копировать" onClick={() => onCopy(message.id, displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
             <button type="button" title="Полезно" onClick={() => onFeedback?.(message.id, "up")} className={cn("rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "text-emerald-300")}><ThumbsUp className="h-4 w-4" /></button>
             <button type="button" title="Не полезно" onClick={() => onFeedback?.(message.id, "down")} className={cn("rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "text-amber-300")}><ThumbsDown className="h-4 w-4" /></button>
-            <button type="button" title="Поделиться" onClick={() => onShare?.(message.content)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
+            <button type="button" title="Поделиться" onClick={() => onShare?.(displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
           </div>
         )}
         {!isUser && !message.generatedMedia && message.content && !message.isStreaming && (
