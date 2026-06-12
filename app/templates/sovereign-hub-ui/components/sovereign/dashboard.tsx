@@ -172,8 +172,8 @@ function detectInlineMediaGenerationRequest(
   const text = `${modeText} ${prompt || ""} ${attachments.map((item) => item.kind).join(" ")}`.toLowerCase()
 
   const hasExplicitImage =
-    /image|photo|picture|icon|logo|avatar|poster|wallpaper|portrait|illustration|art/.test(text) ||
-    /\u0444\u043e\u0442\u043e|\u0438\u0437\u043e\u0431\u0440\u0430\u0436|\u043a\u0430\u0440\u0442\u0438\u043d|\u0438\u043a\u043e\u043d|\u043b\u043e\u0433\u043e\u0442\u0438\u043f|\u0430\u0432\u0430\u0442\u0430\u0440|\u043f\u043e\u0441\u0442\u0435\u0440|\u0430\u0440\u0442|\u043d\u0430\u0440\u0438\u0441/.test(text)
+    /image|photo|picture|icon|logo|avatar|poster|wallpaper|portrait|illustration|art|transformer/.test(text) ||
+    /\u0444\u043e\u0442\u043e|\u0438\u0437\u043e\u0431\u0440\u0430\u0436|\u043a\u0430\u0440\u0442\u0438\u043d|\u0438\u043a\u043e\u043d|\u043b\u043e\u0433\u043e\u0442\u0438\u043f|\u0430\u0432\u0430\u0442\u0430\u0440|\u043f\u043e\u0441\u0442\u0435\u0440|\u0430\u0440\u0442|\u043d\u0430\u0440\u0438\u0441|\u0442\u0440\u0430\u043d\u0441\u0444\u043e\u0440\u043c/.test(text)
 
   const hasExplicitVideo =
     /video|veo|runway|luma|motion|animation|animate|clip/.test(text) ||
@@ -185,7 +185,7 @@ function detectInlineMediaGenerationRequest(
 
   const looksLikeImagePrompt =
     hasCreateIntent &&
-    /4k|8k|ultra detailed|sharp focus|cinematic lighting|realistic|futuristic|neon|stadium|city|club/.test(text)
+    /4k|8k|ultra detailed|sharp focus|cinematic lighting|realistic|futuristic|neon|stadium|city|club|robot|transformer/.test(text)
 
   if (modeText.includes("image") || modeText.includes("photo") || hasExplicitImage || looksLikeImagePrompt) return "image"
   if (modeText.includes("video") || hasExplicitVideo) return "video"
@@ -8139,6 +8139,7 @@ function ChatsListView({
 // merge-map-344: ai-generator bridge preserved; runtime cost: zero; fallback: photo-generation; canvas handoff: safeOpenCanvas.
 
 export default Dashboard
+
 
 
 

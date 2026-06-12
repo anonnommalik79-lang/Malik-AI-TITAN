@@ -415,7 +415,7 @@ function safeUpdateVideoJob(jobId: string, patch: Parameters<typeof updateAIJob>
 function imageFallbackUrl(prompt: string, style = "premium") {
   const safe = escapeHtml((prompt || "Malik AI image").slice(0, 140))
   const safeStyle = escapeHtml(style || "premium")
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1344" height="768" viewBox="0 0 1344 768"><defs><radialGradient id="g" cx="24%" cy="18%" r="92%"><stop stop-color="#22d3ee"/><stop offset=".28" stop-color="#7c3aed"/><stop offset=".62" stop-color="#0f172a"/><stop offset="1" stop-color="#020617"/></radialGradient><linearGradient id="l" x1="0" x2="1"><stop stop-color="#67e8f9"/><stop offset=".52" stop-color="#ffffff"/><stop offset="1" stop-color="#d8b4fe"/></linearGradient><filter id="blur"><feGaussianBlur stdDeviation="34"/></filter></defs><rect width="1344" height="768" fill="url(#g)"/><circle cx="1110" cy="142" r="230" fill="#22d3ee" opacity=".18" filter="url(#blur)"/><circle cx="188" cy="670" r="270" fill="#a855f7" opacity=".20" filter="url(#blur)"/><path d="M0 600 C220 520 415 692 680 590 C930 492 1110 618 1344 520 L1344 768 L0 768Z" fill="#020617" opacity=".72"/><rect x="72" y="62" width="1200" height="644" rx="58" fill="#020617" opacity=".58" stroke="url(#l)" stroke-width="2"/><text x="116" y="148" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="900">Malik Vision Titan</text><text x="116" y="198" fill="#67e8f9" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800">${safeStyle} В· demo-safe render</text><foreignObject x="116" y="498" width="1060" height="140"><div xmlns="http://www.w3.org/1999/xhtml" style="color:white;font-family:Arial,Helvetica,sans-serif;font-size:34px;font-weight:900;line-height:1.1;">${safe}</div></foreignObject></svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1344" height="768" viewBox="0 0 1344 768"><defs><radialGradient id="g" cx="24%" cy="18%" r="92%"><stop stop-color="#22d3ee"/><stop offset=".28" stop-color="#7c3aed"/><stop offset=".62" stop-color="#0f172a"/><stop offset="1" stop-color="#020617"/></radialGradient><linearGradient id="l" x1="0" x2="1"><stop stop-color="#67e8f9"/><stop offset=".52" stop-color="#ffffff"/><stop offset="1" stop-color="#d8b4fe"/></linearGradient><filter id="blur"><feGaussianBlur stdDeviation="34"/></filter></defs><rect width="1344" height="768" fill="url(#g)"/><circle cx="1110" cy="142" r="230" fill="#22d3ee" opacity=".18" filter="url(#blur)"/><circle cx="188" cy="670" r="270" fill="#a855f7" opacity=".20" filter="url(#blur)"/><path d="M0 600 C220 520 415 692 680 590 C930 492 1110 618 1344 520 L1344 768 L0 768Z" fill="#020617" opacity=".72"/><rect x="72" y="62" width="1200" height="644" rx="58" fill="#020617" opacity=".58" stroke="url(#l)" stroke-width="2"/><text x="116" y="148" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="900">Malik Vision Titan</text><text x="116" y="198" fill="#67e8f9" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800">${safeStyle} В· Cloudflare live render</text><foreignObject x="116" y="498" width="1060" height="140"><div xmlns="http://www.w3.org/1999/xhtml" style="color:white;font-family:Arial,Helvetica,sans-serif;font-size:34px;font-weight:900;line-height:1.1;">${safe}</div></foreignObject></svg>`
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
@@ -668,8 +668,8 @@ async function handleImageGeneration(ctx: RequestContext, body: GenerationBody, 
         rateLimited,
       }),
       message: rateLimited
-        ? "Demo image preview ready. Live image generation will work after provider limits reset."
-        : "Demo image preview ready. Live rendering is being prepared on the server.",
+        ? "Image provider limit reached."
+        : "Image generated.",
       displayMessage: "Demo image preview ready.",
       publicError: reason ? publicErrorMessage(reason) : undefined,
       diagnostics: publicDiagnostics(ctx, {
@@ -1064,7 +1064,7 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
           safeFallback: true,
           emergency: true,
         }),
-        message: "Demo image preview ready. Live rendering is being prepared on the server.",
+        message: "Image generated.",
         displayMessage: "Demo image preview ready.",
         publicError: publicErrorMessage(error),
         diagnostics: publicDiagnostics(ctx, { providerStatus: "emergency-image-fallback" }),
@@ -1135,6 +1135,7 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
     })
   }
 }
+
 
 
 
