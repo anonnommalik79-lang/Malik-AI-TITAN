@@ -33,7 +33,7 @@ def tool_chat(prompt, context, llm):
     draft = llm.smart_llm(system, full_prompt, "fast")
 
     if "[MOCK_DATA]" in str(draft):
-        return "Я готов помочь. Опишите задачу подробнее."
+        return ""
 
     return draft
 

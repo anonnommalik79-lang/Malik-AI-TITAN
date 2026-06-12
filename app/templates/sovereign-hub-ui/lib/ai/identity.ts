@@ -234,14 +234,10 @@ export function sanitizeModelAnswer(answer: string, userMessage?: string): strin
   }
   
   if (/^\s*CURRENT USER:/i.test(result) || /\nCURRENT TIME:/i.test(result) || /\nCURRENT DATE:/i.test(result)) {
-    return /[А-Яа-яЁё]/.test(userMessage || "")
-      ? "Готов помочь. Напиши задачу — отвечу коротко и по делу."
-      : "Ready to help. Send your task and I’ll answer directly."
+    return ""
   }
   if (/^\s*(START:|BEGIN:|END:)\s*$/i.test(result.trim()) || /[ÐÑâ]{2,}/.test(result)) {
-    return /[А-Яа-яЁё]/.test(userMessage || "")
-      ? ""
-      : "Ready to help. Send your task and I will answer directly."
+    return ""
   }
   const askedRussian = /[А-Яа-яЁё]/.test(userMessage || "")
   const hasRussian = /[А-Яа-яЁё]/.test(result)
