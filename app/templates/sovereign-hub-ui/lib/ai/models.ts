@@ -1,6 +1,7 @@
-import type { AIProviderId, AITaskType } from "./types"
+﻿import type { AIProviderId, AITaskType } from "./types"
 
 export const MODEL_REGISTRY: Record<AIProviderId, Partial<Record<AITaskType, string>>> = {
+  cloudflare: { image: process.env.CLOUDFLARE_IMAGE_MODEL || "@cf/black-forest-labs/flux-1-schnell" },
   local: {},
   "malik-identity": {},
   "demo-fallback": {},
@@ -82,4 +83,5 @@ export const MODEL_REGISTRY: Record<AIProviderId, Partial<Record<AITaskType, str
 export function modelFor(provider: AIProviderId, task: AITaskType, override?: string) {
   return override || MODEL_REGISTRY[provider]?.[task] || MODEL_REGISTRY[provider]?.chat || "default"
 }
+
 

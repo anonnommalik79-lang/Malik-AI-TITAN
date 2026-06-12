@@ -12,6 +12,7 @@
   | "enterprise"
 
 export type AIProviderId =
+  | "cloudflare"
   | "local"
   | "malik-identity"
   | "demo-fallback"
@@ -118,4 +119,5 @@ export type AIProvider = {
   generateVideo(input: AIRequest): Promise<AIResponse>
   analyzeFile(input: AIRequest): Promise<AIResponse>
 }
+
 
