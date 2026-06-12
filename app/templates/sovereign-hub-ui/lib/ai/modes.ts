@@ -1,12 +1,19 @@
 import type { AITaskType } from "./types"
 import type { MalikAIMode } from "./config"
 import { modelChainForMode } from "./config"
-import { groqConfigured } from "./env"
 
 export type ModeRouteStep = {
-  provider: "groq" | "aws-bedrock"
+  provider: "deepseek" | "openrouter" | "aws-bedrock"
   model?: string
   task: AITaskType
+}
+
+function hasEnv(name: string) {
+  return Boolean(process.env[name]?.trim())
+}
+
+function env(name: string, fallback: string) {
+  return process.env[name]?.trim() || fallback
 }
 
 export function taskForMode(mode: MalikAIMode): AITaskType {
@@ -16,13 +23,29 @@ export function taskForMode(mode: MalikAIMode): AITaskType {
   return "chat"
 }
 
-/** Production provider/model order per mode. Reads model IDs from env only. */
 export function routeStepsForMode(mode: MalikAIMode): ModeRouteStep[] {
   const task = taskForMode(mode)
   const steps: ModeRouteStep[] = []
+  const isText = task !== "image" && task !== "video"
 
-  if (mode === "fast" && groqConfigured()) {
-    steps.push({ provider: "groq", task })
+  if (isText && hasEnv("DEEPSEEK_API_KEY")) {
+    const model =
+      mode === "code"
+        ? env("DEEPSEEK_CODE_MODEL", env("DEEPSEEK_PRO_MODEL", "deepseek-v4-pro"))
+        : mode === "pro" || mode === "deep"
+          ? env("DEEPSEEK_PRO_MODEL", env("DEEPSEEK_MODEL", "deepseek-v4-pro"))
+          : env("DEEPSEEK_FAST_MODEL", env("DEEPSEEK_MODEL", "deepseek-v4-flash"))
+
+    steps.push({ provider: "deepseek", model, task })
+  }
+
+  if (isText && hasEnv("OPENROUTER_API_KEY")) {
+    const model =
+      mode === "code"
+        ? env("OPENROUTER_CODE_MODEL", env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash:free"))
+        : env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash:free")
+
+    steps.push({ provider: "openrouter", model, task })
   }
 
   for (const model of modelChainForMode(mode)) {
@@ -34,26 +57,26 @@ export function routeStepsForMode(mode: MalikAIMode): ModeRouteStep[] {
 
 export function modeLabel(mode: MalikAIMode): string {
   const labels: Record<MalikAIMode, string> = {
-    fast: "Fast AI",
-    deep: "Deep Reasoning",
-    pro: "Pro Intelligence",
-    code: "Code Generation",
-    photo: "AI Image Studio",
-    video: "AI Video Studio",
-    memory: "Memory / Embeddings",
+    fast: "MALIK AI Fast — DeepSeek V4 Flash",
+    deep: "MALIK AI Deep — DeepSeek V4 Pro",
+    pro: "MALIK AI Pro — DeepSeek V4 Pro",
+    code: "MALIK AI Code — DeepSeek V4 Pro",
+    photo: "MALIK AI Vision",
+    video: "MALIK AI Video",
+    memory: "MALIK AI Memory",
   }
   return labels[mode]
 }
 
 export function modeDescription(mode: MalikAIMode): string {
   const descriptions: Record<MalikAIMode, string> = {
-    fast: "Low-latency answers for everyday chat and quick tasks.",
-    deep: "Structured analysis for startups, research and complex questions.",
-    pro: "Investor-grade strategy, long-form reasoning and premium output.",
-    code: "TypeScript, Next.js and full-stack code generation via Malik Codex.",
-    photo: "Image generation through configured Bedrock image models.",
-    video: "Async video jobs with provider status and safe fallbacks.",
-    memory: "Embeddings and semantic search when embedding model is configured.",
+    fast: "Fast answers, business, study, strategy and daily tasks through DeepSeek V4 Flash.",
+    deep: "Deep reasoning, medicine explanations, business analysis, research and planning through DeepSeek V4 Pro.",
+    pro: "Premium investor-grade reasoning through DeepSeek V4 Pro.",
+    code: "Code, debugging and architecture through DeepSeek V4 Pro.",
+    photo: "Image generation through configured image providers.",
+    video: "Video generation through configured video providers.",
+    memory: "Memory and embeddings when configured.",
   }
   return descriptions[mode]
 }
