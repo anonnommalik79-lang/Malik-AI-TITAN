@@ -8,6 +8,7 @@ import "./creator-home-polish.css"
 import "./creator-clone-safe.css"
 import "./malik-hybrid-ui.css"
 import "./malik-final-fixes.css"
+import "./malik-mobile-worldclass.css"
 
 export const metadata: Metadata = {
   title: "Malik AI Sovereign",
@@ -27,7 +28,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <meta name="google" content="notranslate" />
         <meta name="robots" content="notranslate" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
         <meta name="theme-color" content="#05070d" />
       </head>
       <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-[#030303] font-sans antialiased notranslate">
