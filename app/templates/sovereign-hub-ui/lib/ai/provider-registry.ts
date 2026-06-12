@@ -1,5 +1,4 @@
 import type { MalikAIMode } from "./config"
-import { groqModelId } from "./config"
 import { routeStepsForMode } from "./modes"
 import type { AIRequest, AIResponse } from "./types"
 import { routeAI } from "./router"
@@ -53,7 +52,7 @@ export async function routeModeAI(mode: MalikAIMode, input: AIRequest): Promise<
       ...input,
       task: step.task,
       provider: step.provider,
-      model: step.provider === "groq" ? groqModelId() : step.model,
+      model: step.model,
       metadata: { ...input.metadata, malikMode: mode, routeStep: key },
     })
 
