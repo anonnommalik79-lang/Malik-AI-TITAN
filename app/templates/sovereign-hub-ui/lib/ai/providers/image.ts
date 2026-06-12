@@ -54,7 +54,7 @@ function buildCloudflareImagePrompt(rawPrompt: string) {
   const requested = source.slice(0, 500)
   const quality = "ultra realistic, cinematic lighting, high detail, sharp focus, 4k, professional composition, no text, no watermark, no random unrelated scene"
 
-  if (/трансформ|transformer/.test(lower)) {
+  if (/трансформ|transformer|робот|robot/.test(lower)) {
     return [
       "MAIN SUBJECT: a giant humanoid transformer robot, full body visible, mechanical armored body, metal plates, glowing blue eyes, heroic cinematic pose.",
       "The image MUST clearly show a robot transformer as the central subject.",
@@ -65,7 +65,7 @@ function buildCloudflareImagePrompt(rawPrompt: string) {
     ].join(" ")
   }
 
-  if (/иконк|icon|логотип|logo|эмблем|emblem|аватар|avatar/.test(lower)) {
+  if (/иконк|icon|логотип|logo|эмблем|emblem|аватар|avatar|значок|badge/.test(lower)) {
     return [
       "MAIN SUBJECT: professional modern icon logo emblem, centered composition, clean silhouette, premium design, app icon style.",
       "If the user mentions a football club, create a football club badge/shield emblem with strong sports identity.",
@@ -75,9 +75,9 @@ function buildCloudflareImagePrompt(rawPrompt: string) {
     ].join(" ")
   }
 
-  if (/футбол|football|club|клуб/.test(lower)) {
+  if (/футбол|football|club|клуб|мяч|стадион/.test(lower)) {
     return [
-      "MAIN SUBJECT: football club visual identity, premium sports badge or football player scene depending on request.",
+      "MAIN SUBJECT: football club visual identity or football scene depending on request, clear football theme, premium sports style.",
       "Make the football subject clear and central.",
       quality,
       `Original user request: ${requested}`,
@@ -355,6 +355,7 @@ export const imageProviderRouter: AIProvider = {
     throw new Error("Image router does not analyze files.")
   },
 }
+
 
 
 
