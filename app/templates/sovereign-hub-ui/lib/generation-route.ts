@@ -679,7 +679,13 @@ async function handleImageGeneration(ctx: RequestContext, body: GenerationBody, 
     })
   }
 
-  const rate = safeCheckRate(ctx, "image")
+  const bypassLocalImageRateLimit =
+    ctx.requestedProvider === "cloudflare" &&
+    process.env.CLOUDFLARE_IMAGE_BYPASS_LOCAL_LIMIT !== "false"
+
+  const rate = bypassLocalImageRateLimit
+    ? { ok: true, message: "Cloudflare provider uses its own daily quota." }
+    : safeCheckRate(ctx, "image")
 
   // IMPORTANT:
   // Media generation must never show HTTP 429 in the product UI.
@@ -1129,5 +1135,6 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
     })
   }
 }
+
 
 
