@@ -24,6 +24,10 @@ function pickPrompt(body: any) {
   if (typeof body?.message === "string" && body.message.trim()) return body.message.trim()
   if (typeof body?.input === "string" && body.input.trim()) return body.input.trim()
   if (typeof body?.text === "string" && body.text.trim()) return body.text.trim()
+  if (typeof body?.question === "string" && body.question.trim()) return body.question.trim()
+  if (typeof body?.originalQuestion === "string" && body.originalQuestion.trim()) return body.originalQuestion.trim()
+  if (typeof body?.cleanContent === "string" && body.cleanContent.trim()) return body.cleanContent.trim()
+  if (typeof body?.content === "string" && body.content.trim()) return body.content.trim()
 
   const messages = Array.isArray(body?.messages) ? body.messages : []
   for (let i = messages.length - 1; i >= 0; i--) {
