@@ -233,6 +233,11 @@ export function sanitizeModelAnswer(answer: string, userMessage?: string): strin
     // These should ideally not appear from the AI model in the first place
   }
   
+  if (/^\s*CURRENT USER:/i.test(result) || /\nCURRENT TIME:/i.test(result) || /\nCURRENT DATE:/i.test(result)) {
+    return /[А-Яа-яЁё]/.test(userMessage || "")
+      ? "Готов помочь. Напиши задачу — отвечу коротко и по делу."
+      : "Ready to help. Send your task and I’ll answer directly."
+  }
   return result
 }
 

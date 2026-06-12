@@ -64,7 +64,7 @@ export async function routeModeAI(mode: MalikAIMode, input: AIRequest): Promise<
     if (result.success && result.output) {
       return {
         ...result,
-        fallbackUsed: step.provider !== "deepseek" || Boolean(result.fallbackUsed),
+        fallbackUsed: Boolean(result.fallbackUsed),
         latencyMs: result.latencyMs || Date.now() - started,
       }
     }
@@ -72,7 +72,7 @@ export async function routeModeAI(mode: MalikAIMode, input: AIRequest): Promise<
     const message = sanitizePublicError(result.error || "empty response")
     errors.push(`${key}: ${message}`)
     if (/accessdenied|validation|401|403|429|timeout|unavailable|empty|invalid|not found|model/i.test(message)) {
-      markUnavailable(key, Number(process.env.PROVIDER_UNAVAILABLE_CACHE_MS || 600_000))
+      markUnavailable(key, Number(process.env.TITAN_V65_PROVIDER_CACHE_MS || process.env.PROVIDER_UNAVAILABLE_CACHE_MS || 600_000))
     }
   }
 

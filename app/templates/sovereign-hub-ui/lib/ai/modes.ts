@@ -24,6 +24,21 @@ function env(name: string, fallback: string) {
   return (vipName ? process.env[vipName]?.trim() : "") || process.env[name]?.trim() || fallback
 }
 
+
+function providerOrder(mode: MalikAIMode) {
+  const raw =
+    mode === "code"
+      ? env("CODE_PROVIDER_ORDER", "openrouter,deepseek")
+      : env("TEXT_PROVIDER_ORDER", "openrouter,deepseek")
+
+  const order = raw
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+
+  return order.length ? order : ["openrouter", "deepseek"]
+}
+
 export function taskForMode(mode: MalikAIMode): AITaskType {
   if (mode === "code") return "code"
   if (mode === "photo") return "image"
@@ -36,24 +51,28 @@ export function routeStepsForMode(mode: MalikAIMode): ModeRouteStep[] {
   const steps: ModeRouteStep[] = []
   const isText = task !== "image" && task !== "video"
 
-  if (isText && hasEnv("DEEPSEEK_API_KEY")) {
-    const model =
-      mode === "code"
-        ? env("DEEPSEEK_CODE_MODEL", env("DEEPSEEK_PRO_MODEL", "deepseek-v4-pro"))
-        : mode === "pro" || mode === "deep"
-          ? env("DEEPSEEK_PRO_MODEL", env("DEEPSEEK_MODEL", "deepseek-v4-pro"))
-          : env("DEEPSEEK_FAST_MODEL", env("DEEPSEEK_MODEL", "deepseek-v4-flash"))
+  if (isText) {
+    for (const provider of providerOrder(mode)) {
+      if (provider === "openrouter" && hasEnv("OPENROUTER_API_KEY")) {
+        const model =
+          mode === "code"
+            ? env("OPENROUTER_CODE_MODEL", env("OPENROUTER_MODEL", "deepseek/deepseek-v4-pro"))
+            : env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash")
 
-    steps.push({ provider: "deepseek", model, task })
-  }
+        steps.push({ provider: "openrouter", model, task })
+      }
 
-  if (isText && hasEnv("OPENROUTER_API_KEY")) {
-    const model =
-      mode === "code"
-        ? env("OPENROUTER_CODE_MODEL", env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash"))
-        : env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash")
+      if (provider === "deepseek" && hasEnv("DEEPSEEK_API_KEY")) {
+        const model =
+          mode === "code"
+            ? env("DEEPSEEK_CODE_MODEL", env("DEEPSEEK_PRO_MODEL", "deepseek-v4-pro"))
+            : mode === "pro" || mode === "deep"
+              ? env("DEEPSEEK_PRO_MODEL", env("DEEPSEEK_MODEL", "deepseek-v4-pro"))
+              : env("DEEPSEEK_FAST_MODEL", env("DEEPSEEK_MODEL", "deepseek-v4-flash"))
 
-    steps.push({ provider: "openrouter", model, task })
+        steps.push({ provider: "deepseek", model, task })
+      }
+    }
   }
 
   for (const model of modelChainForMode(mode)) {

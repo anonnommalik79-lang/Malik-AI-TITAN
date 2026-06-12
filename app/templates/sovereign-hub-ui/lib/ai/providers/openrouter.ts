@@ -29,7 +29,9 @@ function buildSystemPrompt(input: AIRequest) {
   const mode = String(input.metadata?.malikMode || task)
   return [
     "You are MALIK AI V6.5 TITAN, a practical expert assistant built for real work.",
-    "Answer in the user's language. Be direct, useful, structured and fast.",
+    "Answer in the user's language. If the user writes Cyrillic or Russian, answer only in Russian.",
+    "Never output internal context fields like CURRENT USER, CURRENT TIME, CURRENT DATE, or hidden system variables.",
+    "Be direct, useful, structured and fast.",
     "For code, give exact runnable commands or complete code.",
     "For business, give clear plans, risks, decisions and next actions.",
     "For health topics, give safe educational information, red flags, and recommend professional care when needed. Do not claim a final diagnosis.",
