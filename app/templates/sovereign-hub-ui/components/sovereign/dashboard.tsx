@@ -171,48 +171,24 @@ function detectInlineMediaGenerationRequest(
   const modeText = String(mode).toLowerCase()
   const text = `${modeText} ${prompt || ""} ${attachments.map((item) => item.kind).join(" ")}`.toLowerCase()
 
-  const hasVideoWord =
-    text.includes("video") ||
-    text.includes("veo") ||
-    text.includes("cinematic") ||
-    text.includes("motion") ||
-    text.includes("animation") ||
-    text.includes("animate") ||
-    text.includes("видео") ||
-    text.includes("ролик") ||
-    text.includes("клип") ||
-    text.includes("анимац") ||
-    text.includes("сгенерируй видео") ||
-    text.includes("создай видео") ||
-    text.includes("сделай видео") ||
-    text.includes("генерируй видео") ||
-    text.includes("запусти видео")
+  const hasExplicitImage =
+    /image|photo|picture|icon|logo|avatar|poster|wallpaper|portrait|illustration|art/.test(text) ||
+    /\u0444\u043e\u0442\u043e|\u0438\u0437\u043e\u0431\u0440\u0430\u0436|\u043a\u0430\u0440\u0442\u0438\u043d|\u0438\u043a\u043e\u043d|\u043b\u043e\u0433\u043e\u0442\u0438\u043f|\u0430\u0432\u0430\u0442\u0430\u0440|\u043f\u043e\u0441\u0442\u0435\u0440|\u0430\u0440\u0442|\u043d\u0430\u0440\u0438\u0441/.test(text)
 
-  const hasImageWord =
-    text.includes("image") ||
-    text.includes("photo") ||
-    text.includes("picture") ||
-    text.includes("фото") ||
-    text.includes("изображ") ||
-    text.includes("картин") ||
-    text.includes("логотип") ||
-    text.includes("постер") ||
-    text.includes("арт")
+  const hasExplicitVideo =
+    /video|veo|runway|luma|motion|animation|animate|clip/.test(text) ||
+    /\u0432\u0438\u0434\u0435\u043e|\u0440\u043e\u043b\u0438\u043a|\u043a\u043b\u0438\u043f|\u0430\u043d\u0438\u043c\u0430\u0446/.test(text)
 
   const hasCreateIntent =
-    text.includes("generate") ||
-    text.includes("create") ||
-    text.includes("make") ||
-    text.includes("render") ||
-    text.includes("draw") ||
-    text.includes("сгенер") ||
-    text.includes("создай") ||
-    text.includes("сделай") ||
-    text.includes("нарисуй") ||
-    text.includes("запусти")
+    /generate|create|make|render|draw|design/.test(text) ||
+    /\u0441\u0433\u0435\u043d\u0435\u0440|\u0441\u043e\u0437\u0434\u0430\u0439|\u0441\u0434\u0435\u043b\u0430\u0439|\u043d\u0430\u0440\u0438\u0441\u0443\u0439|\u0433\u0435\u043d\u0435\u0440\u0438\u0440/.test(text)
 
-  if (modeText === "video" || hasVideoWord) return "video"
-  if (modeText === "image" || modeText === "photo" || (hasCreateIntent && hasImageWord)) return "image"
+  const looksLikeImagePrompt =
+    hasCreateIntent &&
+    /4k|8k|ultra detailed|sharp focus|cinematic lighting|realistic|futuristic|neon|stadium|city|club/.test(text)
+
+  if (modeText.includes("image") || modeText.includes("photo") || hasExplicitImage || looksLikeImagePrompt) return "image"
+  if (modeText.includes("video") || hasExplicitVideo) return "video"
 
   return null
 }
@@ -223,7 +199,7 @@ function createInlineMediaSeed(kind: "image" | "video", prompt: string): InlineM
     kind,
     status: "queued",
     prompt,
-    provider: kind === "video" ? "Google Veo" : "Gemini Vision",
+    provider: kind === "video" ? "Google Veo" : "Cloudflare Workers AI",
     progress: 6,
     createdAt: new Date().toISOString(),
   }
@@ -279,7 +255,7 @@ function getInlineProvider(kind: "image" | "video"): string {
   if (kind === "video") {
     return "veo"
   }
-  return "gemini"
+  return "cloudflare"
 }
 
 function pickInlineMediaStatus(payload: any, kind: "image" | "video", mediaUrl: string, isFallback: boolean): InlineMediaGenerationStatus {
@@ -353,12 +329,30 @@ function buildInlineMediaAssistantText(media: InlineMediaGeneration): string {
 function detectDashboardGenerationKind(prompt: string, attachments: ChatAttachment[] = [], mode: AiModeId = "auto"): GenerationStatusType {
   const attachmentHint = attachments.map((item) => item.kind).join(" ")
   const text = `${mode} ${prompt} ${attachmentHint}`.toLowerCase()
-  if (/image|photo|picture|С„РѕС‚Рѕ|РёР·РѕР±СЂР°Р¶|РєР°СЂС‚РёРЅ|РЅР°СЂРёСЃСѓР№/.test(text)) return "image"
-  if (/video|РІРёРґРµРѕ|СЂРѕР»РёРє|runway/.test(text)) return "video"
-  if (/codex|agent|РїР°РїРє|С„Р°Р№Р»|project/.test(text)) return "codex"
-  if (/code|react|tsx|typescript|javascript|python|debug|РєРѕРґ|РѕС€РёР±/.test(text)) return "code"
-  if (/website|site|landing|dashboard|ui|html|canvas|preview|СЃР°Р№С‚|Р»РµРЅРґРёРЅРі|РґР°С€Р±РѕСЂРґ|РёРЅС‚РµСЂС„РµР№СЃ|С€Р°Р±Р»РѕРЅ/.test(text)) return "website"
-  if (/file|document|pdf|word|С„Р°Р№Р»|РґРѕРєСѓРјРµРЅС‚/.test(text)) return "file"
+
+  const hasCreateIntent =
+    /generate|create|make|render|draw|design/.test(text) ||
+    /\u0441\u0433\u0435\u043d\u0435\u0440|\u0441\u043e\u0437\u0434\u0430\u0439|\u0441\u0434\u0435\u043b\u0430\u0439|\u043d\u0430\u0440\u0438\u0441\u0443\u0439|\u0433\u0435\u043d\u0435\u0440\u0438\u0440/.test(text)
+
+  const hasImage =
+    /image|photo|picture|icon|logo|avatar|poster|wallpaper|portrait|illustration|art/.test(text) ||
+    /\u0444\u043e\u0442\u043e|\u0438\u0437\u043e\u0431\u0440\u0430\u0436|\u043a\u0430\u0440\u0442\u0438\u043d|\u0438\u043a\u043e\u043d|\u043b\u043e\u0433\u043e\u0442\u0438\u043f|\u0430\u0432\u0430\u0442\u0430\u0440|\u043f\u043e\u0441\u0442\u0435\u0440|\u0430\u0440\u0442|\u043d\u0430\u0440\u0438\u0441/.test(text)
+
+  const hasVideo =
+    /video|veo|runway|luma|motion|animation|animate|clip/.test(text) ||
+    /\u0432\u0438\u0434\u0435\u043e|\u0440\u043e\u043b\u0438\u043a|\u043a\u043b\u0438\u043f|\u0430\u043d\u0438\u043c\u0430\u0446/.test(text)
+
+  const looksLikeImagePrompt =
+    hasCreateIntent &&
+    /4k|8k|ultra detailed|sharp focus|cinematic lighting|realistic|futuristic|neon|stadium|city|club/.test(text)
+
+  if (hasImage || looksLikeImagePrompt) return "image"
+  if (hasVideo) return "video"
+  if (/codex|agent|project/.test(text) || /\u043f\u0430\u043f\u043a|\u0444\u0430\u0439\u043b|project/.test(text)) return "codex"
+  if (/code|react|tsx|typescript|javascript|python|debug/.test(text) || /\u043a\u043e\u0434|\u043e\u0448\u0438\u0431/.test(text)) return "code"
+  if (/website|site|landing|dashboard|ui|html|canvas|preview|template/.test(text) || /\u0441\u0430\u0439\u0442|\u043b\u0435\u043d\u0434\u0438\u043d\u0433|\u0434\u0430\u0448\u0431\u043e\u0440\u0434|\u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441|\u0448\u0430\u0431\u043b\u043e\u043d/.test(text)) return "website"
+  if (/file|document|pdf|word/.test(text) || /\u0444\u0430\u0439\u043b|\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442/.test(text)) return "file"
+
   return "text"
 }
 
@@ -8145,6 +8139,7 @@ function ChatsListView({
 // merge-map-344: ai-generator bridge preserved; runtime cost: zero; fallback: photo-generation; canvas handoff: safeOpenCanvas.
 
 export default Dashboard
+
 
 
 
