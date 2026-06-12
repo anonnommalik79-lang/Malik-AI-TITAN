@@ -13,6 +13,8 @@ import { grokProvider } from "./providers/grok"
 import { nvidiaNimProvider } from "./providers/nvidia-nim"
 
 export const WORLD_TITANS_PROVIDERS: AIProvider[] = [
+  deepSeekProvider,
+  openRouterProvider,
   kimiProvider,
   geminiProvider,
   claudeProvider,
@@ -21,23 +23,21 @@ export const WORLD_TITANS_PROVIDERS: AIProvider[] = [
   awsBedrockProvider,
   nvidiaNimProvider,
   azureProvider,
-  deepSeekProvider,
   groqProvider,
-  openRouterProvider,
 ]
 
 const ROUTING_ORDER: Record<AITaskType, string[]> = {
-  chat: ["kimi", "openai", "claude", "gemini", "grok", "aws-bedrock", "nvidia-nim", "groq", "deepseek", "openrouter", "azure"],
-  code: ["openai", "kimi", "claude", "gemini", "deepseek", "grok", "nvidia-nim", "openrouter", "aws-bedrock", "azure", "groq"],
-  debug: ["openai", "kimi", "claude", "gemini", "deepseek", "grok", "openrouter", "aws-bedrock"],
-  project: ["openai", "kimi", "claude", "gemini", "grok", "openrouter", "aws-bedrock", "azure"],
+  chat: ["deepseek", "openrouter", "kimi", "openai", "claude", "gemini", "grok", "aws-bedrock", "nvidia-nim", "azure", "groq"],
+  code: ["deepseek", "openrouter", "openai", "kimi", "claude", "gemini", "grok", "nvidia-nim", "aws-bedrock", "azure", "groq"],
+  debug: ["deepseek", "openrouter", "openai", "kimi", "claude", "gemini", "grok", "aws-bedrock"],
+  project: ["deepseek", "openrouter", "openai", "kimi", "claude", "gemini", "grok", "aws-bedrock", "azure"],
   image: ["aws-bedrock"],
   video: [],
-  file_analysis: ["gemini", "openai", "claude", "aws-bedrock", "azure", "openrouter"],
-  research: ["gemini", "openai", "claude", "openrouter", "groq", "aws-bedrock"],
+  file_analysis: ["deepseek", "openrouter", "gemini", "openai", "claude", "aws-bedrock", "azure"],
+  research: ["deepseek", "openrouter", "gemini", "openai", "claude", "aws-bedrock", "groq"],
   voice: [],
-  general: ["gemini", "openai", "claude", "groq", "deepseek", "openrouter"],
-  enterprise: ["aws-bedrock", "nvidia-nim", "azure", "gemini", "openai", "claude"],
+  general: ["deepseek", "openrouter", "gemini", "openai", "claude", "groq"],
+  enterprise: ["deepseek", "openrouter", "aws-bedrock", "nvidia-nim", "azure", "gemini", "openai", "claude"],
 }
 
 export function providersForTask(task: AITaskType, requestedProvider?: string, allowedProviderIds?: string[]) {
@@ -57,4 +57,3 @@ export function providersForTask(task: AITaskType, requestedProvider?: string, a
 export function providerStatus() {
   return WORLD_TITANS_PROVIDERS.map((provider) => provider.healthCheck())
 }
-
