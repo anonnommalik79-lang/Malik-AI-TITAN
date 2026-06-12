@@ -1,12 +1,8 @@
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-function textUtf8(content: string, init: ResponseInit = {}) {
-  const headers = new Headers(init.headers)
-  headers.set("content-type", "text/plain; charset=utf-8")
-  headers.set("cache-control", "no-store")
-  return new Response(content, { ...init, headers })
-}
+const SAFE_RU =
+  "\u0413\u043e\u0442\u043e\u0432 \u043f\u043e\u043c\u043e\u0447\u044c. \u041d\u0430\u043f\u0438\u0448\u0438 \u0437\u0430\u0434\u0430\u0447\u0443 \u2014 \u043e\u0442\u0432\u0435\u0447\u0443 \u043a\u043e\u0440\u043e\u0442\u043a\u043e \u0438 \u043f\u043e \u0434\u0435\u043b\u0443."
 
 function jsonUtf8(data: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers)
@@ -15,14 +11,21 @@ function jsonUtf8(data: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(data), { ...init, headers })
 }
 
-function sseUtf8(content: string) {
+function textUtf8(text: string, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers)
+  headers.set("content-type", "text/plain; charset=utf-8")
+  headers.set("cache-control", "no-store")
+  return new Response(text, { ...init, headers })
+}
+
+function sseUtf8(text: string) {
   const headers = new Headers()
   headers.set("content-type", "text/event-stream; charset=utf-8")
   headers.set("cache-control", "no-cache, no-transform")
   headers.set("connection", "keep-alive")
 
   const payload =
-    `data: ${JSON.stringify({ type: "content", content })}\n\n` +
+    `data: ${JSON.stringify({ type: "content", content: text })}\n\n` +
     `data: ${JSON.stringify({ type: "done" })}\n\n`
 
   return new Response(payload, { headers })
@@ -36,73 +39,72 @@ function pickPrompt(body: any) {
 
   const messages = Array.isArray(body?.messages) ? body.messages : []
   for (let i = messages.length - 1; i >= 0; i--) {
-    const item = messages[i]
-    const content = typeof item?.content === "string" ? item.content : ""
-    if (content.trim()) return content.trim()
+    const content = typeof messages[i]?.content === "string" ? messages[i].content.trim() : ""
+    if (content) return content
   }
 
   return ""
 }
 
-function wantsSSE(request: Request, body: any) {
+function wantsSse(request: Request, body: any) {
   const accept = request.headers.get("accept") || ""
   return accept.includes("text/event-stream") || body?.stream === true
 }
 
-function cleanMode(mode: unknown) {
-  const raw = typeof mode === "string" ? mode.toLowerCase().trim() : "fast"
-  if (raw === "code") return "code"
-  if (raw === "pro") return "pro"
-  if (raw === "deep") return "deep"
-  return "fast"
+function cleanText(text: string) {
+  const value = String(text || "").trim()
+  const commaCount = (value.match(/,/g) || []).length
+  const bad =
+    !value ||
+    /[ÐÑâ]/.test(value) ||
+    /CURRENT\s+(USER|TIME|DATE|YEAR|LANGUAGE|DOMAIN|CONTEXT):/i.test(value) ||
+    /^\s*(START:|BEGIN:|END:)\s*$/i.test(value) ||
+    /^[,;:]/.test(value) ||
+    commaCount >= 25
+
+  return bad ? SAFE_RU : value
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({}))
-  const prompt = pickPrompt(body)
-  const mode = cleanMode(body?.mode)
+  try {
+    const body = await request.json().catch(() => ({}))
+    const prompt = pickPrompt(body)
 
-  if (!prompt) {
-    const fallback = "Готов помочь. Напиши задачу — отвечу коротко и по делу."
-    return wantsSSE(request, body) ? sseUtf8(fallback) : textUtf8(fallback)
+    if (!prompt) {
+      return wantsSse(request, body) ? sseUtf8(SAFE_RU) : textUtf8(SAFE_RU)
+    }
+
+    const origin = new URL(request.url).origin
+
+    const response = await fetch(`${origin}/api/ai/chat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        accept: "application/json",
+      },
+      body: JSON.stringify({
+        mode: body?.mode || "fast",
+        prompt,
+        stream: false,
+      }),
+      cache: "no-store",
+    })
+
+    const data = await response.json().catch(() => null)
+    const content = cleanText(typeof data?.content === "string" ? data.content : "")
+
+    return wantsSse(request, body) ? sseUtf8(content) : textUtf8(content)
+  } catch {
+    return wantsSse(request, {}) ? sseUtf8(SAFE_RU) : textUtf8(SAFE_RU)
   }
-
-  const origin = new URL(request.url).origin
-
-  const response = await fetch(`${origin}/api/ai/chat`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "accept": "application/json",
-    },
-    body: JSON.stringify({
-      ...body,
-      mode,
-      prompt,
-      stream: false,
-    }),
-    cache: "no-store",
-  })
-
-  const data = await response.json().catch(() => null)
-
-  const content =
-    typeof data?.content === "string" && data.content.trim()
-      ? data.content.trim()
-      : "Готов помочь. Напиши задачу — отвечу коротко и по делу."
-
-  if (wantsSSE(request, body)) return sseUtf8(content)
-
-  return textUtf8(content)
 }
 
 export async function GET() {
   return jsonUtf8({
     ok: true,
     route: "/api/stream",
-    engine: "MALIK AI",
+    status: "connected-to-api-ai-chat",
     provider: "openrouter",
     model: "deepseek/deepseek-v4-flash",
-    status: "connected-to-chat-api",
   })
 }
