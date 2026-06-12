@@ -13,7 +13,15 @@ function hasEnv(name: string) {
 }
 
 function env(name: string, fallback: string) {
-  return process.env[name]?.trim() || fallback
+  const vipMap: Record<string, string> = {
+    TEXT_PROVIDER_ORDER: "TITAN_V65_TEXT_ENGINE_ORDER",
+    CODE_PROVIDER_ORDER: "TITAN_V65_CODE_ENGINE_ORDER",
+    OPENROUTER_MODEL: "TITAN_V65_OPENROUTER_CHAT_MODEL",
+    OPENROUTER_CODE_MODEL: "TITAN_V65_OPENROUTER_CODE_MODEL",
+  }
+
+  const vipName = vipMap[name]
+  return (vipName ? process.env[vipName]?.trim() : "") || process.env[name]?.trim() || fallback
 }
 
 export function taskForMode(mode: MalikAIMode): AITaskType {
@@ -42,8 +50,8 @@ export function routeStepsForMode(mode: MalikAIMode): ModeRouteStep[] {
   if (isText && hasEnv("OPENROUTER_API_KEY")) {
     const model =
       mode === "code"
-        ? env("OPENROUTER_CODE_MODEL", env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash:free"))
-        : env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash:free")
+        ? env("OPENROUTER_CODE_MODEL", env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash"))
+        : env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash")
 
     steps.push({ provider: "openrouter", model, task })
   }

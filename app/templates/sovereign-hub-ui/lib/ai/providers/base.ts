@@ -1,4 +1,4 @@
-﻿import type { AIProviderHealth, AIProviderId, AITaskType } from "../types"
+import type { AIProviderHealth, AIProviderId, AITaskType } from "../types"
 
 export function hasEnv(name: string) {
   try {
