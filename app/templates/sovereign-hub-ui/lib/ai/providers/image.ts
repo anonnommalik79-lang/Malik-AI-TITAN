@@ -240,6 +240,7 @@ const handlers: Record<string, (input: AIRequest) => Promise<AIResponse>> = {
 }
 
 function isConfigured(provider: string) {
+  if (provider === "cloudflare") return Boolean(cloudflareAccountId() && cloudflareApiToken())
   if (provider === "openai") return configured("OPENAI_API_KEY")
   if (provider === "stability") return configured("STABILITY_API_KEY")
   if (provider === "fal") return Boolean(falKey())
@@ -296,4 +297,5 @@ export const imageProviderRouter: AIProvider = {
     throw new Error("Image router does not analyze files.")
   },
 }
+
 
