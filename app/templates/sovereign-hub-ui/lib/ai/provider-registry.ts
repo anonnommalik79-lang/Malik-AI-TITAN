@@ -53,14 +53,25 @@ export async function routeModeAI(mode: MalikAIMode, input: AIRequest): Promise<
       task: step.task,
       provider: step.provider,
       model: step.model,
-      metadata: { ...input.metadata, malikMode: mode, routeStep: key },
+      metadata: {
+        ...input.metadata,
+        malikMode: mode,
+        routeStep: key,
+        allowedProviders: [step.provider],
+      },
     })
 
-    if (result.success && result.output) return { ...result, latencyMs: result.latencyMs || Date.now() - started }
+    if (result.success && result.output) {
+      return {
+        ...result,
+        fallbackUsed: step.provider !== "deepseek" || Boolean(result.fallbackUsed),
+        latencyMs: result.latencyMs || Date.now() - started,
+      }
+    }
 
     const message = sanitizePublicError(result.error || "empty response")
     errors.push(`${key}: ${message}`)
-    if (/accessdenied|validation|401|403|429|timeout|unavailable|empty/i.test(message)) {
+    if (/accessdenied|validation|401|403|429|timeout|unavailable|empty|invalid|not found|model/i.test(message)) {
       markUnavailable(key, Number(process.env.PROVIDER_UNAVAILABLE_CACHE_MS || 600_000))
     }
   }
