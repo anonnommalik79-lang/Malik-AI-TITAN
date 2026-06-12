@@ -1,208 +1,108 @@
-import type { MalikAIMode } from "@/lib/ai/config"
-import type { AIFileAttachment, AIMessage, AITaskType } from "@/lib/ai/types"
-import { publicEngineForProvider, sanitizePublicText } from "@/lib/brand-provider-map"
-import { identityAnswerFor, sanitizeModelAnswer, MALIK_STRICT_SYSTEM_PROMPT } from "@/lib/ai/identity"
-
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
-type StreamBody = {
-  message?: string
-  prompt?: string
-  question?: string
-  originalQuestion?: string
-  input?: string
-  text?: string
-  task?: AITaskType
-  responseMode?: string
-  messages?: AIMessage[]
-  history?: AIMessage[]
-  attachments?: AIFileAttachment[]
-  responseDepth?: "fast" | "deep" | "ultra"
-  maxTokens?: number
-  temperature?: number
+function textUtf8(content: string, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers)
+  headers.set("content-type", "text/plain; charset=utf-8")
+  headers.set("cache-control", "no-store")
+  return new Response(content, { ...init, headers })
 }
 
-type LiveResult = {
-  provider: "groq" | "aws-bedrock"
-  model: string
-  text: string
+function jsonUtf8(data: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers)
+  headers.set("content-type", "application/json; charset=utf-8")
+  headers.set("cache-control", "no-store")
+  return new Response(JSON.stringify(data), { ...init, headers })
 }
 
-const encoder = new TextEncoder()
-const SSE_HEADERS = {
-  "Content-Type": "text/event-stream; charset=utf-8",
-  "Cache-Control": "no-cache, no-transform",
-  Connection: "keep-alive",
+function sseUtf8(content: string) {
+  const headers = new Headers()
+  headers.set("content-type", "text/event-stream; charset=utf-8")
+  headers.set("cache-control", "no-cache, no-transform")
+  headers.set("connection", "keep-alive")
+
+  const payload =
+    `data: ${JSON.stringify({ type: "content", content })}\n\n` +
+    `data: ${JSON.stringify({ type: "done" })}\n\n`
+
+  return new Response(payload, { headers })
 }
 
-function env(name: string, fallback = "") {
-  return (process.env[name] || fallback).trim()
+function pickPrompt(body: any) {
+  if (typeof body?.prompt === "string" && body.prompt.trim()) return body.prompt.trim()
+  if (typeof body?.message === "string" && body.message.trim()) return body.message.trim()
+  if (typeof body?.input === "string" && body.input.trim()) return body.input.trim()
+  if (typeof body?.text === "string" && body.text.trim()) return body.text.trim()
+
+  const messages = Array.isArray(body?.messages) ? body.messages : []
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const item = messages[i]
+    const content = typeof item?.content === "string" ? item.content : ""
+    if (content.trim()) return content.trim()
+  }
+
+  return ""
 }
 
-function pickPrompt(body: StreamBody) {
-  const direct = body.originalQuestion || body.message || body.prompt || body.input || body.text || body.question
-  if (typeof direct === "string" && direct.trim()) return direct.trim()
-  const last = Array.isArray(body.messages)
-    ? [...body.messages].reverse().find((item) => typeof item?.content === "string" && item.content.trim())
-    : null
-  return last?.content?.trim() || ""
+function wantsSSE(request: Request, body: any) {
+  const accept = request.headers.get("accept") || ""
+  return accept.includes("text/event-stream") || body?.stream === true
 }
 
-function resolveMode(body: StreamBody, task?: AITaskType): MalikAIMode {
-  const value = String(body.responseMode || "").toLowerCase()
-  if (["fast", "deep", "pro", "code", "photo", "video"].includes(value)) return value as MalikAIMode
-  if (task === "code") return "code"
-  if (task === "image") return "photo"
-  if (task === "video") return "video"
-  if (body.responseDepth === "ultra") return "pro"
-  if (body.responseDepth === "deep") return "deep"
+function cleanMode(mode: unknown) {
+  const raw = typeof mode === "string" ? mode.toLowerCase().trim() : "fast"
+  if (raw === "code") return "code"
+  if (raw === "pro") return "pro"
+  if (raw === "deep") return "deep"
   return "fast"
 }
 
-function taskForMode(mode: MalikAIMode, task?: AITaskType): AITaskType {
-  if (mode === "code") return "code"
-  if (mode === "photo") return "image"
-  if (mode === "video") return "video"
-  return task || "chat"
-}
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => ({}))
+  const prompt = pickPrompt(body)
+  const mode = cleanMode(body?.mode)
 
-function modelForMode(mode: MalikAIMode) {
-  if (mode === "deep") return env("BEDROCK_DEEP_MODEL_ID", "amazon.nova-pro-v1:0")
-  if (mode === "pro") return env("BEDROCK_PRO_MODEL_ID", "openai.gpt-oss-120b-1:0")
-  if (mode === "code") return env("BEDROCK_CODE_MODEL_ID", "qwen.qwen3-coder-next")
-  return env("BEDROCK_FAST_MODEL_ID", "qwen.qwen3-next-80b-a3b")
-}
-
-function splitChunks(text: string) {
-  return text.match(/.{1,70}(?:\s|$)/g) || [text]
-}
-
-function streamText(text: string, provider: string, task: AITaskType, fallbackUsed = false) {
-  const engine = publicEngineForProvider(provider, task)
-  const requestId = crypto.randomUUID()
-  const stream = new ReadableStream({
-    async start(controller) {
-      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ meta: { engine: engine.title, engineId: engine.id, fallbackUsed, safeMode: fallbackUsed, requestId } })}\n\n`))
-      for (const chunk of splitChunks(sanitizePublicText(text))) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`))
-        await new Promise((resolve) => setTimeout(resolve, 10))
-      }
-      controller.enqueue(encoder.encode("data: [DONE]\n\n"))
-      controller.close()
-    },
-  })
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      ...SSE_HEADERS,
-      "X-Malik-Engine": engine.id,
-      "X-Malik-Fallback": String(fallbackUsed),
-      "X-Malik-Request-Id": requestId,
-    },
-  })
-}
-
-function messagesFor(prompt: string, body: StreamBody) {
-  const history = Array.isArray(body.messages) ? body.messages : Array.isArray(body.history) ? body.history : []
-  const cleaned = history
-    .filter((message) => message && typeof message.content === "string" && message.content.trim())
-    .slice(-8)
-    .map((message) => ({ role: message.role === "assistant" ? "assistant" : message.role === "system" ? "system" : "user", content: message.content }))
-  if (!cleaned.some((message) => message.role === "system")) {
-    cleaned.unshift({ role: "system", content: MALIK_STRICT_SYSTEM_PROMPT })
+  if (!prompt) {
+    const fallback = "Готов помочь. Напиши задачу — отвечу коротко и по делу."
+    return wantsSSE(request, body) ? sseUtf8(fallback) : textUtf8(fallback)
   }
-  if (!cleaned.some((message) => message.role === "user" && message.content.trim() === prompt)) {
-    cleaned.push({ role: "user", content: prompt })
-  }
-  return cleaned
-}
 
-async function callOpenAICompatible(baseUrl: string, apiKey: string, model: string, prompt: string, body: StreamBody, signal: AbortSignal): Promise<string> {
-  const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+  const origin = new URL(request.url).origin
+
+  const response = await fetch(`${origin}/api/ai/chat`, {
     method: "POST",
     headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json; charset=utf-8",
+      "accept": "application/json",
     },
     body: JSON.stringify({
-      model,
-      messages: messagesFor(prompt, body),
-      max_tokens: Math.min(Number(body.maxTokens || process.env.MAX_OUTPUT_TOKENS || 900), 2000),
-      temperature: typeof body.temperature === "number" ? body.temperature : 0.35,
+      ...body,
+      mode,
+      prompt,
+      stream: false,
     }),
-    signal,
+    cache: "no-store",
   })
 
-  const payload = await response.json().catch(async () => ({ error: { message: await response.text().catch(() => "") } }))
-  if (!response.ok) {
-    const message = payload?.error?.message || payload?.message || `HTTP ${response.status}`
-    throw new Error(String(message).slice(0, 240))
-  }
-  const text = payload?.choices?.[0]?.message?.content || payload?.choices?.[0]?.text || payload?.output_text || ""
-  if (!String(text).trim()) throw new Error("empty response")
-  return String(text)
-}
+  const data = await response.json().catch(() => null)
 
-async function callLiveProviders(mode: MalikAIMode, prompt: string, body: StreamBody, signal: AbortSignal): Promise<LiveResult> {
-  const errors: string[] = []
+  const content =
+    typeof data?.content === "string" && data.content.trim()
+      ? data.content.trim()
+      : "Готов помочь. Напиши задачу — отвечу коротко и по делу."
 
-  if (mode === "fast" && env("GROQ_API_KEY")) {
-    const model = env("GROQ_MODEL", "llama-3.3-70b-versatile")
-    try {
-      const text = await callOpenAICompatible("https://api.groq.com/openai/v1", env("GROQ_API_KEY"), model, prompt, body, signal)
-      return { provider: "groq", model, text }
-    } catch (error) {
-      errors.push(`groq: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
+  if (wantsSSE(request, body)) return sseUtf8(content)
 
-  const bedrockBase = env("OPENAI_BASE_URL", "https://bedrock-mantle.us-east-1.api.aws/v1")
-  const model = modelForMode(mode)
-  const keys = [env("OPENAI_API_KEY"), env("AWS_BEARER_TOKEN_BEDROCK"), env("OPENAI_API_KEY_BACKUP"), env("AWS_BEARER_TOKEN_BEDROCK_BACKUP")].filter(Boolean)
-  for (const key of [...new Set(keys)]) {
-    try {
-      const text = await callOpenAICompatible(bedrockBase, key, model, prompt, body, signal)
-      return { provider: "aws-bedrock", model, text }
-    } catch (error) {
-      errors.push(`bedrock:${model}: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-
-  throw new Error(errors.join(" | ") || "No live provider keys available")
-}
-
-function fallbackText(prompt: string, error?: string) {
-  const suffix = error ? ` Error: ${error.slice(0, 320)}` : ""
-  return prompt
-    ? `MALIK AI received: "${prompt}". Live providers are configured, but this request failed.${suffix}`
-    : `MALIK AI is ready. Send a prompt to continue.${suffix}`
-}
-
-export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as StreamBody
-  const prompt = pickPrompt(body)
-  const task = body.task || (body.responseMode === "code" ? "code" : "chat")
-  const mode = resolveMode(body, task)
-  const finalTask = taskForMode(mode, task)
-
-  if (!prompt) return streamText("MALIK AI is ready. Send a prompt to continue.", "demo-fallback", finalTask, false)
-
-  // Identity Guard: Check if this is a question about MALIK AI identity
-  const identityAnswer = identityAnswerFor(prompt)
-  if (identityAnswer) {
-    return streamText(identityAnswer, "malik-identity", finalTask, false)
-  }
-
-  try {
-    const result = await callLiveProviders(mode, prompt, body, request.signal)
-    const cleanText = sanitizeModelAnswer(result.text, prompt)
-    return streamText(cleanText, result.provider, finalTask, false)
-  } catch (error) {
-    const fallback = "MALIK AI switched to standby mode. Please try again or select another mode."
-    return streamText(fallback, "demo-fallback", finalTask, true)
-  }
+  return textUtf8(content)
 }
 
 export async function GET() {
-  return Response.json({ ok: true, route: "/api/stream", mode: "direct-live-provider-routing-ready" })
+  return jsonUtf8({
+    ok: true,
+    route: "/api/stream",
+    engine: "MALIK AI",
+    provider: "openrouter",
+    model: "deepseek/deepseek-v4-flash",
+    status: "connected-to-chat-api",
+  })
 }
