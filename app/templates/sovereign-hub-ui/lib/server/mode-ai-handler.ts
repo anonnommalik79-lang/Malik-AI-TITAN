@@ -4,11 +4,17 @@ import { sanitizePublicError, validatePrompt } from "@/lib/ai/safety"
 import { publicEngineForProvider, publicErrorMessage, sanitizePublicText } from "@/lib/brand-provider-map"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 
+function jsonUtf8(data: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers)
+  headers.set("content-type", "application/json; charset=utf-8")
+  return new Response(JSON.stringify(data), { ...init, headers })
+}
+
 export async function handleModeAI(request: Request, mode: MalikAIMode) {
   const body = await request.json().catch(() => ({}))
   const promptCheck = validatePrompt(body?.prompt || body?.message || body?.question)
   if (!promptCheck.ok) {
-    return Response.json({ ok: false, error: promptCheck.error }, { status: 400 })
+    return jsonUtf8({ ok: false, error: promptCheck.error }, { status: 400 })
   }
 
   const entitlement = await resolveRequestEntitlement(request)
@@ -26,7 +32,7 @@ export async function handleModeAI(request: Request, mode: MalikAIMode) {
   const task = mode === "code" ? "code" : mode === "photo" ? "image" : mode === "video" ? "video" : "chat"
   const engine = publicEngineForProvider(result.provider, task)
 
-  return Response.json(
+  return jsonUtf8(
     {
       ok: result.success,
       mode,

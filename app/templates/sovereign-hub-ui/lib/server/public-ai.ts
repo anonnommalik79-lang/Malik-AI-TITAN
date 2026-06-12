@@ -7,17 +7,23 @@ import { publicEngineForProvider, publicErrorMessage, sanitizePublicText } from 
 import { addRuntimeHistory } from "@/lib/server/runtime-store"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 
+function jsonUtf8(data: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers)
+  headers.set("content-type", "application/json; charset=utf-8")
+  return new Response(JSON.stringify(data), { ...init, headers })
+}
+
 export async function handlePublicTextAI(request: Request, task: AITaskType) {
   const body = await request.json().catch(() => ({}))
   const prompt = String(body?.prompt || body?.message || body?.question || "").trim()
   const entitlement = await resolveRequestEntitlement(request)
   const userId = entitlement.userId
-  if (!prompt) return Response.json({ ok: false, error: "prompt_required" }, { status: 400 })
+  if (!prompt) return jsonUtf8({ ok: false, error: "prompt_required" }, { status: 400 })
 
   const tier = resolveUserTier(userId, entitlement.plan)
   const promptCheck = checkPromptLength(prompt, tier)
   if (!promptCheck.ok) {
-    return Response.json(
+    return jsonUtf8(
       { ok: false, error: promptCheck.error, code: promptCheck.code },
       { status: 400 },
     )
@@ -38,7 +44,7 @@ export async function handlePublicTextAI(request: Request, task: AITaskType) {
   const engine = publicEngineForProvider(result.provider, task)
   const fallbackUsed = !result.success || Boolean(result.fallbackUsed)
   addRuntimeHistory(userId, { type: task, engine: engine.title, status: fallbackUsed ? "fallback" : "ready" })
-  return Response.json(
+  return jsonUtf8(
     {
       ok: result.success,
       engine: engine.title,
