@@ -412,32 +412,102 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
   )
 }
 
-function ThinkingBubble({ generationType }: { generationType: GenerationStatusType }) {
+function isWorldResearchPrompt(text: string) {
+  const value = String(text || "").toLowerCase()
+  return /(search|google|browse|web|source|link|wikipedia|wiki|latest|current|today|now|news|deadline|event|hackathon|competition|president|ceo|price|schedule|202\d)/i.test(value) ||
+    /(найди|поищи|загугли|гугл|интернет|открыт|источник|ссылк|википед|свеж|актуальн|сейчас|сегодня|новост|дедлайн|мероприят|хакатон|конкурс|соревн|президент|министр|цена|расписание|проверь)/i.test(value)
+}
+
+function researchDomainsFor(text: string) {
+  const value = String(text || "").toLowerCase()
+  if (/president|white house|сша|usa|united states|президент/.test(value)) return ["google.com", "whitehouse.gov", "wikipedia.org", "apnews.com"]
+  if (/wiki|history|истори|википед/.test(value)) return ["wikipedia.org", "britannica.com", "archive.org", "google.com"]
+  if (/hackathon|competition|event|startup|ai|хакатон|конкурс|соревн|мероприят|акселератор/.test(value)) return ["google.com", "astanahub.com", "devpost.com", "tavily.com"]
+  if (/news|новост/.test(value)) return ["news.google.com", "reuters.com", "bbc.com", "apnews.com"]
+  return ["google.com", "wikipedia.org", "tavily.com", "brave.com"]
+}
+
+function ThinkingBubble({ generationType, query = "" }: { generationType: GenerationStatusType; query?: string }) {
+  const [step, setStep] = useState(0)
+  const isResearch = isWorldResearchPrompt(query)
+  const domains = researchDomainsFor(query)
+
+  useEffect(() => {
+    setStep(0)
+    const timer = window.setInterval(() => setStep((value) => (value + 1) % 5), 1150)
+    return () => window.clearInterval(timer)
+  }, [query, isResearch])
+
   const labelMap: Record<GenerationStatusType, string> = {
-    text: "Думаю над ответом",
-    image: "Продумываю визуал",
-    video: "Собираю сцены",
-    file: "Читаю вложения",
-    code: "Планирую код",
-    website: "Собираю интерфейс",
-    codex: "Планирую файлы",
+    text: "Thinking",
+    image: "Designing visual",
+    video: "Building scenes",
+    file: "Reading files",
+    code: "Planning code",
+    website: "Building interface",
+    codex: "Planning files",
   }
+
+  const researchSteps = [
+    "Classifying: model or live web",
+    `Searching open web: ${domains[0]}`,
+    `Reading source: ${domains[1]}`,
+    `Cross-checking: ${domains[2]}`,
+    "Ranking evidence and preparing answer",
+  ]
+
+  const normalSteps = [
+    "Understanding request",
+    "Selecting AI engine",
+    "Building answer",
+    "Checking quality",
+    "Preparing response",
+  ]
+
+  const steps = isResearch ? researchSteps : normalSteps
 
   return (
     <div className="malik-thinking-card">
-      <div className="malik-thinking-orb">
-        <Sparkles className="h-4 w-4" />
+      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 shadow-[0_0_35px_rgba(34,211,238,.16)]">
+        <span className="absolute h-9 w-9 animate-spin rounded-2xl border border-cyan-200/20 border-t-cyan-100" />
+        <span className="grid h-5 w-5 grid-cols-2 gap-0.5">
+          <i className="rounded-sm bg-cyan-200/80 animate-pulse" />
+          <i className="rounded-sm bg-violet-200/70 animate-pulse [animation-delay:150ms]" />
+          <i className="rounded-sm bg-blue-200/70 animate-pulse [animation-delay:300ms]" />
+          <i className="rounded-sm bg-white/80 animate-pulse [animation-delay:450ms]" />
+        </span>
       </div>
+
       <div className="min-w-0 flex-1">
         <div className="malik-thinking-title">
-          <span>{labelMap[generationType] || labelMap.text}</span>
+          <span>{isResearch ? "Live web research" : (labelMap[generationType] || labelMap.text)}</span>
           <span className="malik-thinking-dots" aria-hidden="true">
             <i />
             <i />
             <i />
           </span>
         </div>
-        <div className="malik-thinking-line">
+
+        <div className="mt-2 space-y-1.5">
+          {steps.map((item, index) => (
+            <div
+              key={item}
+              className={cn(
+                "flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-[11px] transition",
+                index === step
+                  ? "border-cyan-300/25 bg-cyan-300/10 text-cyan-50"
+                  : index < step
+                    ? "border-emerald-300/15 bg-emerald-300/5 text-emerald-100/80"
+                    : "border-white/8 bg-white/[0.025] text-white/42",
+              )}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", index <= step ? "bg-cyan-200" : "bg-white/20")} />
+              <span className="truncate">{item}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="malik-thinking-line mt-3">
           <span />
         </div>
       </div>
@@ -451,6 +521,7 @@ function MessageBubble({
   onCopy,
   copied,
   generationType = "text",
+  thinkingQuery = "",
   onRegenerate,
   onShare,
   onFeedback,
@@ -461,6 +532,8 @@ function MessageBubble({
   onCopy: (id: string, text: string) => void
   copied: boolean
   generationType?: GenerationStatusType
+  
+  thinkingQuery?: string
   onRegenerate?: (id: string) => void
   onShare?: (text: string) => void
   onFeedback?: (id: string, value: "up" | "down") => void
@@ -487,7 +560,7 @@ function MessageBubble({
             ? "bg-transparent p-0"
             : cn("whitespace-pre-wrap border px-4 py-3 sm:px-5 sm:py-4", isUser ? "malik-message-card-user border-white/10 bg-white/[0.07] text-white" : "malik-message-card-assistant border-blue-300/10 bg-[#071126]/78 text-gray-100 shadow-[0_18px_60px_rgba(0,0,0,.22)]")
         )}>
-          {message.generatedMedia ? <GeminiMediaGenerationCard media={message.generatedMedia} /> : displayContent || (message.isStreaming ? <ThinkingBubble generationType={generationType} /> : "")}
+          {message.generatedMedia ? <GeminiMediaGenerationCard media={message.generatedMedia} /> : displayContent || (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} /> : "")}
         </div>
         {!isUser && message.content && !message.isStreaming && (
           <div className="malik-message-actions mt-2 flex items-center gap-2 text-slate-500">
@@ -558,6 +631,8 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
     textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`
   }, [prompt])
 
+  const lastUserPrompt = useMemo(() => [...messages].reverse().find((message) => message.role === "user")?.content || prompt, [messages, prompt])
+
   const activeGenerationType = useMemo(() => {
     const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")
     const attachmentHint = attachments.map((item) => item.kind).join(" ")
@@ -603,6 +678,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
       return
     }
     setLocalError(null)
+    try { window.localStorage.setItem("malik_last_user_prompt", text || "Analyze attachments") } catch {}
     onSendMessage(text || "Проанализируй вложения", attachments, { responseDepth })
     setPrompt("")
     setAttachments([])
@@ -753,6 +829,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
                   onCopy={handleCopy}
                   copied={copiedId === message.id}
                   generationType={activeGenerationType}
+                  thinkingQuery={lastUserPrompt}
                   onRegenerate={handleRegenerate}
                   onShare={handleShare}
                   onFeedback={handleFeedback}

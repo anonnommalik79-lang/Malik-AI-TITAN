@@ -1,3 +1,5 @@
+import { needsLiveResearch, runResearch } from "../../../lib/malik-research/research"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -45,6 +47,27 @@ function wantsSse(request: Request, body: any) {
 
 function lower(value: string) {
   return String(value || "").toLowerCase().trim()
+}
+
+function shouldUseWorldResearch(prompt: string, body: any) {
+  if (body?.disableResearch === true || body?.research === false) return false
+  if (body?.forceResearch === true || body?.research === true) return true
+
+  const p = lower(prompt)
+
+  if (!p) return false
+
+  const explicit =
+    /(\bsearch\b|\bgoogle\b|\bbrowse\b|\bweb\b|\bsource\b|\blink\b|\bwikipedia\b|\bwiki\b|\blatest\b|\bcurrent\b|\btoday\b|\bnow\b|\bnews\b|\bdeadline\b|\bevent\b|\bhackathon\b|\bcompetition\b|\bwho is current\b|\bwhat is the current\b)/i.test(prompt) ||
+    /(найди|поищи|загугли|гугл|интернет|открыт(ых|ые|ыех)? источник|источник|ссылк|википед|свеж|актуальн|сейчас|сегодня|новост|дедлайн|мероприят|хакатон|конкурс|соревн|кто сейчас|какой сейчас|когда будет|где проходит|проверь)/i.test(prompt)
+
+  if (explicit) return true
+
+  // Current public facts likely to change must go to web.
+  if (/\b(2025|2026|2027|price|schedule|rank|rating|release|ceo|president|minister|version|law|rules)\b/i.test(prompt)) return true
+  if (/(президент|министр|цена|расписание|рейтинг|релиз|версия|закон|правил|курс валют|погода)/i.test(prompt)) return true
+
+  return needsLiveResearch(prompt)
 }
 
 function isIdentityPrompt(prompt: string) {
@@ -110,13 +133,8 @@ function looksBroken(text: string) {
 
 function sanitize(text: string, prompt: string) {
   const value = String(text || "").trim()
-
   if (looksBroken(value)) return ""
-
-  if (looksGeneric(value)) {
-    return ""
-  }
-
+  if (looksGeneric(value)) return ""
   return value
 }
 
@@ -310,12 +328,43 @@ async function answer(prompt: string, mode: string, origin: string) {
   }
 }
 
+async function answerWithResearch(prompt: string) {
+  const events: Array<{ event: string; data: any }> = []
+  const result = await runResearch(prompt, (event, data) => {
+    events.push({ event, data })
+  })
+
+  const sourceLines = result.sources.length
+    ? [
+        "",
+        "## Sources",
+        ...result.sources.slice(0, 8).map((source, index) => `${index + 1}. ${source.title} — ${source.url}`),
+      ]
+    : []
+
+  const activityLines = events.length
+    ? [
+        "",
+        "## Research activity",
+        ...events.slice(-10).map((item) => `- ${String(item?.data?.text || item.event)}`),
+      ]
+    : []
+
+  return {
+    ok: true,
+    provider: "malik-world-research",
+    model: "multi-provider-live-web",
+    content: `${result.answer}${sourceLines.join("\n")}${activityLines.join("\n")}`,
+    attempts: [],
+  }
+}
+
 function textResponse(content: string) {
   return new Response(content, {
     headers: {
       "content-type": "text/plain; charset=utf-8",
       "cache-control": "no-store",
-      "x-malik-ai": "deepseek-supreme",
+      "x-malik-ai": "world-research-v7",
     },
   })
 }
@@ -330,7 +379,7 @@ function sseResponse(content: string) {
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-cache, no-transform",
       connection: "keep-alive",
-      "x-malik-ai": "deepseek-supreme",
+      "x-malik-ai": "world-research-v7",
     },
   })
 }
@@ -341,7 +390,7 @@ function jsonResponse(data: unknown, status = 200) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
-      "x-malik-ai": "deepseek-supreme",
+      "x-malik-ai": "world-research-v7",
     },
   })
 }
@@ -357,7 +406,9 @@ export async function POST(request: Request) {
       return wantsSse(request, body) ? sseResponse(fallback) : textResponse(fallback)
     }
 
-    const result = await answer(prompt, mode, new URL(request.url).origin)
+    const result = shouldUseWorldResearch(prompt, body)
+      ? await answerWithResearch(prompt)
+      : await answer(prompt, mode, new URL(request.url).origin)
 
     return wantsSse(request, body) ? sseResponse(result.content) : textResponse(result.content)
   } catch {
@@ -369,10 +420,15 @@ export async function GET() {
   return jsonResponse({
     ok: true,
     route: "/api/stream",
-    status: "deepseek-supreme-ready",
+    status: "world-research-v7-ready",
+    researchAutopilot: true,
     providers: {
       openrouterKey: Boolean(openRouterKey()),
       deepseekKey: Boolean(deepseekKey()),
+      serperKey: Boolean(env("SERPER_API_KEY")),
+      tavilyKey: Boolean(env("TAVILY_API_KEY")),
+      braveKey: Boolean(env("BRAVE_SEARCH_API_KEY")),
+      jinaEnabled: env("JINA_SEARCH_DISABLED") !== "true",
       openrouterChatModel: chatModel("fast"),
       openrouterCodeModel: chatModel("code"),
       officialDeepSeekModel: officialDeepSeekModel("fast"),
