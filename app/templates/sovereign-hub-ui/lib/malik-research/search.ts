@@ -1,5 +1,5 @@
 import type { SearchResult } from "./types";
-import { cleanTitle, decodeHtml, domainOf, fetchWithTimeout, safeJsonParse, stripHtml } from "./utils";
+import { cleanTitle, decodeHtml, domainOf, fetchWithTimeout, stripHtml } from "./utils";
 
 function uniqueResults(results: SearchResult[], limit: number) {
   const seen = new Set<string>();
@@ -52,7 +52,7 @@ function unwrapDuckUrl(href: string) {
 }
 
 async function searchSerper(query: string, limit: number): Promise<SearchResult[]> {
-  const key = process.env.SERPER_API_KEY;
+  const key = process.env.SERPER_API_KEY?.trim();
   if (!key) return [];
 
   const res = await fetchWithTimeout(
@@ -63,9 +63,9 @@ async function searchSerper(query: string, limit: number): Promise<SearchResult[
         "X-API-KEY": key,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ q: query, num: limit }),
+      body: JSON.stringify({ q: query, num: Math.min(limit, 10) }),
     },
-    12000
+    7000
   );
 
   if (!res.ok) return [];
@@ -91,28 +91,37 @@ async function searchSerper(query: string, limit: number): Promise<SearchResult[
   );
 }
 
-async function searchTavily(query: string, limit: number): Promise<SearchResult[]> {
-  const key = process.env.TAVILY_API_KEY;
-  if (!key) return [];
-
-  const res = await fetchWithTimeout(
+async function tavilyFetch(query: string, limit: number, key: string, useBearer: boolean) {
+  return fetchWithTimeout(
     "https://api.tavily.com/search",
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(useBearer ? { Authorization: `Bearer ${key}` } : {}),
       },
       body: JSON.stringify({
-        api_key: key,
+        ...(useBearer ? {} : { api_key: key }),
         query,
-        max_results: limit,
+        max_results: Math.min(limit, 10),
         search_depth: "basic",
         include_answer: false,
         include_raw_content: false,
       }),
     },
-    15000
+    8000
   );
+}
+
+async function searchTavily(query: string, limit: number): Promise<SearchResult[]> {
+  const key = process.env.TAVILY_API_KEY?.trim();
+  if (!key) return [];
+
+  let res = await tavilyFetch(query, limit, key, false);
+
+  if (!res.ok && [401, 403, 422].includes(res.status)) {
+    res = await tavilyFetch(query, limit, key, true);
+  }
 
   if (!res.ok) return [];
 
@@ -138,7 +147,7 @@ async function searchTavily(query: string, limit: number): Promise<SearchResult[
 }
 
 async function searchBrave(query: string, limit: number): Promise<SearchResult[]> {
-  const key = process.env.BRAVE_SEARCH_API_KEY;
+  const key = process.env.BRAVE_SEARCH_API_KEY?.trim();
   if (!key) return [];
 
   const url = new URL("https://api.search.brave.com/res/v1/web/search");
@@ -154,7 +163,7 @@ async function searchBrave(query: string, limit: number): Promise<SearchResult[]
         accept: "application/json",
       },
     },
-    12000
+    8000
   );
 
   if (!res.ok) return [];
@@ -230,7 +239,7 @@ async function searchJina(query: string, limit: number): Promise<SearchResult[]>
         accept: "text/plain, text/markdown, */*",
       },
     },
-    15000
+    8000
   );
 
   if (!res.ok) return [];
@@ -240,15 +249,15 @@ async function searchJina(query: string, limit: number): Promise<SearchResult[]>
 }
 
 async function searchSearxng(query: string, limit: number): Promise<SearchResult[]> {
-  const base = process.env.SEARXNG_URL;
-  if (!base) return [];
+  const base = process.env.SEARXNG_URL?.trim();
+  if (!base || base === "value") return [];
 
   const url = new URL("/search", base);
   url.searchParams.set("q", query);
   url.searchParams.set("format", "json");
   url.searchParams.set("language", "auto");
 
-  const res = await fetchWithTimeout(url.toString(), {}, 12000);
+  const res = await fetchWithTimeout(url.toString(), {}, 8000);
   if (!res.ok) return [];
 
   const data = await res.json();
@@ -274,7 +283,7 @@ async function searchSearxng(query: string, limit: number): Promise<SearchResult
 
 async function searchDuckDuckGo(query: string, limit: number): Promise<SearchResult[]> {
   const url = "https://duckduckgo.com/html/?q=" + encodeURIComponent(query);
-  const res = await fetchWithTimeout(url, {}, 12000);
+  const res = await fetchWithTimeout(url, {}, 8000);
   if (!res.ok) return [];
 
   const html = await res.text();
@@ -294,7 +303,6 @@ async function searchDuckDuckGo(query: string, limit: number): Promise<SearchRes
       chunk.match(/<div[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
 
     const snippet = snippetMatch ? stripHtml(snippetMatch[1]) : "";
-
     const item = normalizeResult({ title, url: rawUrl, snippet }, "duckduckgo");
     if (item) results.push(item);
   }
@@ -302,33 +310,38 @@ async function searchDuckDuckGo(query: string, limit: number): Promise<SearchRes
   return uniqueResults(results, limit);
 }
 
-async function runProvider(
-  name: string,
-  fn: () => Promise<SearchResult[]>,
-  errors: string[]
-) {
+async function runProvider(name: string, fn: () => Promise<SearchResult[]>) {
   try {
     const results = await fn();
     return results.map((r) => ({ ...r, provider: r.provider || name }));
-  } catch (error) {
-    errors.push(`${name}: ${error instanceof Error ? error.message : "failed"}`);
+  } catch {
     return [];
   }
 }
 
 export async function searchWeb(query: string, limit = 8): Promise<SearchResult[]> {
-  const errors: string[] = [];
-  const providers = [
-    runProvider("serper", () => searchSerper(query, limit), errors),
-    runProvider("tavily", () => searchTavily(query, limit), errors),
-    runProvider("brave", () => searchBrave(query, limit), errors),
-    runProvider("searxng", () => searchSearxng(query, limit), errors),
-    runProvider("jina", () => searchJina(query, limit), errors),
-    runProvider("duckduckgo", () => searchDuckDuckGo(query, limit), errors),
-  ];
+  const fastSettled = await Promise.all([
+    runProvider("serper", () => searchSerper(query, limit)),
+    runProvider("tavily", () => searchTavily(query, limit)),
+    runProvider("brave", () => searchBrave(query, limit)),
+    runProvider("jina", () => searchJina(query, limit)),
+  ]);
 
-  const settled = await Promise.all(providers);
-  const merged = settled.flat();
+  const fastMerged = fastSettled.flat();
+
+  if (fastMerged.length >= Math.min(4, limit)) {
+    return uniqueResults(
+      fastMerged.sort((a, b) => (b.score || 0) - (a.score || 0)),
+      limit
+    );
+  }
+
+  const backupSettled = await Promise.all([
+    runProvider("searxng", () => searchSearxng(query, limit)),
+    runProvider("duckduckgo", () => searchDuckDuckGo(query, limit)),
+  ]);
+
+  const merged = [...fastMerged, ...backupSettled.flat()];
 
   return uniqueResults(
     merged.sort((a, b) => (b.score || 0) - (a.score || 0)),

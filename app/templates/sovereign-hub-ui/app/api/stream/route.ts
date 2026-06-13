@@ -3,7 +3,7 @@ import { needsLiveResearch, runResearch } from "../../../lib/malik-research/rese
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const DEFAULT_ANSWER = ""
+const DEFAULT_ANSWER = "MALIK AI временно не получил ответ от провайдера. Попробуй ещё раз."
 const HELLO_ANSWER = "\u041f\u0440\u0438\u0432\u0435\u0442. \u042f \u0437\u0434\u0435\u0441\u044c. \u0427\u0435\u043c \u043f\u043e\u043c\u043e\u0447\u044c?"
 const ID_ANSWER = "\u042f MALIK AI V6.5 TITAN \u2014 \u0442\u0432\u043e\u0439 AI-\u043a\u043e\u043c\u0430\u043d\u0434\u043d\u044b\u0439 \u0446\u0435\u043d\u0442\u0440. \u0420\u0430\u0431\u043e\u0442\u0430\u044e \u043d\u0430 DeepSeek/OpenRouter, \u043f\u043e\u043c\u043e\u0433\u0430\u044e \u0441 \u043a\u043e\u0434\u043e\u043c, \u0438\u0434\u0435\u044f\u043c\u0438, \u0434\u0438\u0437\u0430\u0439\u043d\u043e\u043c, \u0430\u043d\u0430\u043b\u0438\u0437\u043e\u043c \u0438 \u0437\u0430\u043f\u0443\u0441\u043a\u043e\u043c \u043f\u0440\u043e\u0435\u043a\u0442\u043e\u0432."
 const CAPS_ANSWER = "\u042f \u0443\u043c\u0435\u044e \u043e\u0442\u0432\u0435\u0447\u0430\u0442\u044c, \u043f\u0438\u0441\u0430\u0442\u044c \u043a\u043e\u0434, \u0443\u043b\u0443\u0447\u0448\u0430\u0442\u044c \u0438\u0434\u0435\u0438, \u0441\u043e\u0431\u0438\u0440\u0430\u0442\u044c \u043f\u043b\u0430\u043d\u044b, \u0434\u0435\u043b\u0430\u0442\u044c \u0442\u0435\u043a\u0441\u0442\u044b, \u043e\u0431\u044a\u044f\u0441\u043d\u044f\u0442\u044c \u043e\u0448\u0438\u0431\u043a\u0438 \u0438 \u043f\u043e\u043c\u043e\u0433\u0430\u0442\u044c \u0437\u0430\u043f\u0443\u0441\u043a\u0430\u0442\u044c AI-\u043f\u0440\u043e\u0435\u043a\u0442\u044b."
@@ -49,27 +49,31 @@ function lower(value: string) {
   return String(value || "").toLowerCase().trim()
 }
 
+function isTinyCasualPrompt(prompt: string) {
+  const p = String(prompt || "").toLowerCase().trim()
+  return !p || p.length < 8 || /^(привет|салам|сәлем|hi|hello|hey|йо|ку|здарова|как дела|қалайсың)[\s.!?]*$/i.test(p)
+}
+
 function shouldUseWorldResearch(prompt: string, body: any) {
   if (body?.disableResearch === true || body?.research === false) return false
   if (body?.forceResearch === true || body?.research === true) return true
+  if (isTinyCasualPrompt(prompt)) return false
 
-  const p = lower(prompt)
+  const p = String(prompt || "").toLowerCase()
 
-  if (!p) return false
+  const explicitSearch =
+    /(search|google|browse|web|source|sources|link|links|wikipedia|wiki|latest|current|today|now|news|deadline|event|hackathon|competition|official source|check online)/i.test(p) ||
+    /(найди|поищи|загугли|гугл|интернет|открыт|источник|источники|ссылк|википед|свеж|актуальн|сейчас|сегодня|новост|дедлайн|мероприят|хакатон|конкурс|соревн|официальн|проверь онлайн|проверь в сети)/i.test(p)
 
-  const explicit =
-    /(\bsearch\b|\bgoogle\b|\bbrowse\b|\bweb\b|\bsource\b|\blink\b|\bwikipedia\b|\bwiki\b|\blatest\b|\bcurrent\b|\btoday\b|\bnow\b|\bnews\b|\bdeadline\b|\bevent\b|\bhackathon\b|\bcompetition\b|\bwho is current\b|\bwhat is the current\b)/i.test(prompt) ||
-    /(найди|поищи|загугли|гугл|интернет|открыт(ых|ые|ыех)? источник|источник|ссылк|википед|свеж|актуальн|сейчас|сегодня|новост|дедлайн|мероприят|хакатон|конкурс|соревн|кто сейчас|какой сейчас|когда будет|где проходит|проверь)/i.test(prompt)
+  if (explicitSearch) return true
 
-  if (explicit) return true
+  const publicFact =
+    /(president|ceo|minister|price|schedule|release date|version|law|rules|ranking|rating|weather|exchange rate|stock|crypto)/i.test(p) ||
+    /(президент|министр|цена|расписание|релиз|версия|закон|правил|рейтинг|погода|курс валют|акция|крипто)/i.test(p)
 
-  // Current public facts likely to change must go to web.
-  if (/\b(2025|2026|2027|price|schedule|rank|rating|release|ceo|president|minister|version|law|rules)\b/i.test(prompt)) return true
-  if (/(президент|министр|цена|расписание|рейтинг|релиз|версия|закон|правил|курс валют|погода)/i.test(prompt)) return true
-
-  return needsLiveResearch(prompt)
+  const yearSignal = /\b202[5-9]\b/.test(p)
+  return publicFact || (yearSignal && /(who|what|when|where|кто|что|когда|где|какой|какая|какие|қашан|қайда)/i.test(p))
 }
-
 function isIdentityPrompt(prompt: string) {
   const p = lower(prompt)
   return p.includes("\u043a\u0442\u043e \u0442\u044b") ||
@@ -328,10 +332,28 @@ async function answer(prompt: string, mode: string, origin: string) {
   }
 }
 
+function withHardTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => {
+      timer = setTimeout(() => resolve(fallback), ms)
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer)
+  })
+}
+
 async function answerWithResearch(prompt: string) {
   const events: Array<{ event: string; data: any }> = []
-  const result = await runResearch(prompt, (event, data) => {
+  const result = await withHardTimeout(runResearch(prompt, (event, data) => {
     events.push({ event, data })
+  }), Number(process.env.RESEARCH_TURBO_STREAM_TIMEOUT_MS || 19000), {
+    answer: "⚡ Turbo Research не успел дочитать страницы, но поиск уже запущен. Повтори запрос — кэш и быстрый режим сработают быстрее.",
+    sources: [],
+    webSourceCount: 0,
+    cached: false,
+    tookMs: Number(process.env.RESEARCH_TURBO_STREAM_TIMEOUT_MS || 19000),
   })
 
   const sourceLines = result.sources.length

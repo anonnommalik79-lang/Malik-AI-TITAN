@@ -413,18 +413,66 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
 }
 
 function isWorldResearchPrompt(text: string) {
-  const value = String(text || "").toLowerCase()
-  return /(search|google|browse|web|source|link|wikipedia|wiki|latest|current|today|now|news|deadline|event|hackathon|competition|president|ceo|price|schedule|202\d)/i.test(value) ||
-    /(найди|поищи|загугли|гугл|интернет|открыт|источник|ссылк|википед|свеж|актуальн|сейчас|сегодня|новост|дедлайн|мероприят|хакатон|конкурс|соревн|президент|министр|цена|расписание|проверь)/i.test(value)
+  const value = String(text || "").toLowerCase().trim()
+  if (!value) return false
+
+  if (/^(привет|салам|сәлем|hi|hello|hey|йо|ку|здарова|ассалаумағалейкум|assalamu|как дела|қалайсың)[\s.!?]*$/i.test(value)) return false
+  if (value.length < 8) return false
+
+  const explicitSearch =
+    /(search|google|browse|web|source|sources|link|links|wikipedia|wiki|latest|current|today|now|news|deadline|event|hackathon|competition|official source|check online)/i.test(value) ||
+    /(найди|поищи|загугли|гугл|интернет|открыт|источник|источники|ссылк|википед|свеж|актуальн|сейчас|сегодня|новост|дедлайн|мероприят|хакатон|конкурс|соревн|официальн|проверь онлайн|проверь в сети)/i.test(value)
+
+  if (explicitSearch) return true
+
+  const publicFact =
+    /(president|ceo|minister|price|schedule|release date|version|law|rules|ranking|rating|weather|exchange rate|stock|crypto)/i.test(value) ||
+    /(президент|министр|цена|расписание|релиз|версия|закон|правил|рейтинг|погода|курс валют|акция|крипто)/i.test(value)
+
+  const yearSignal = /\b202[5-9]\b/.test(value)
+  return publicFact || (yearSignal && /(who|what|when|where|кто|что|когда|где|какой|какая|какие|қашан|қайда)/i.test(value))
 }
 
 function researchDomainsFor(text: string) {
   const value = String(text || "").toLowerCase()
-  if (/president|white house|сша|usa|united states|президент/.test(value)) return ["google.com", "whitehouse.gov", "wikipedia.org", "apnews.com"]
-  if (/wiki|history|истори|википед/.test(value)) return ["wikipedia.org", "britannica.com", "archive.org", "google.com"]
-  if (/hackathon|competition|event|startup|ai|хакатон|конкурс|соревн|мероприят|акселератор/.test(value)) return ["google.com", "astanahub.com", "devpost.com", "tavily.com"]
-  if (/news|новост/.test(value)) return ["news.google.com", "reuters.com", "bbc.com", "apnews.com"]
-  return ["google.com", "wikipedia.org", "tavily.com", "brave.com"]
+  if (/president|white house|сша|usa|united states|президент/.test(value)) {
+    return [
+      { icon: "G", name: "Google", domain: "google.com" },
+      { icon: "W", name: "White House", domain: "whitehouse.gov" },
+      { icon: "Wiki", name: "Wikipedia", domain: "wikipedia.org" },
+      { icon: "B", name: "Brave", domain: "brave.com" },
+    ]
+  }
+  if (/wiki|history|истори|википед/.test(value)) {
+    return [
+      { icon: "Wiki", name: "Wikipedia", domain: "wikipedia.org" },
+      { icon: "B", name: "Britannica", domain: "britannica.com" },
+      { icon: "G", name: "Google", domain: "google.com" },
+      { icon: "J", name: "Jina Reader", domain: "r.jina.ai" },
+    ]
+  }
+  if (/hackathon|competition|event|startup|ai|хакатон|конкурс|соревн|мероприят|акселератор/.test(value)) {
+    return [
+      { icon: "G", name: "Google", domain: "google.com" },
+      { icon: "AH", name: "Astana Hub", domain: "astanahub.com" },
+      { icon: "D", name: "Devpost", domain: "devpost.com" },
+      { icon: "T", name: "Tavily", domain: "tavily.com" },
+    ]
+  }
+  if (/news|новост/.test(value)) {
+    return [
+      { icon: "G", name: "Google News", domain: "news.google.com" },
+      { icon: "R", name: "Reuters", domain: "reuters.com" },
+      { icon: "AP", name: "AP News", domain: "apnews.com" },
+      { icon: "B", name: "Brave", domain: "brave.com" },
+    ]
+  }
+  return [
+    { icon: "G", name: "Google", domain: "google.com" },
+    { icon: "Wiki", name: "Wikipedia", domain: "wikipedia.org" },
+    { icon: "T", name: "Tavily", domain: "tavily.com" },
+    { icon: "B", name: "Brave", domain: "brave.com" },
+  ]
 }
 
 function ThinkingBubble({ generationType, query = "" }: { generationType: GenerationStatusType; query?: string }) {
@@ -434,82 +482,75 @@ function ThinkingBubble({ generationType, query = "" }: { generationType: Genera
 
   useEffect(() => {
     setStep(0)
-    const timer = window.setInterval(() => setStep((value) => (value + 1) % 5), 1150)
+    const timer = window.setInterval(() => setStep((value) => (value + 1) % (isResearch ? 5 : 3)), 900)
     return () => window.clearInterval(timer)
   }, [query, isResearch])
 
   const labelMap: Record<GenerationStatusType, string> = {
-    text: "Thinking",
-    image: "Designing visual",
-    video: "Building scenes",
-    file: "Reading files",
-    code: "Planning code",
-    website: "Building interface",
-    codex: "Planning files",
+    text: "MALIK AI думает",
+    image: "Готовлю визуал",
+    video: "Собираю видео",
+    file: "Читаю файлы",
+    code: "Планирую код",
+    website: "Собираю интерфейс",
+    codex: "Планирую файлы",
   }
 
-  const researchSteps = [
-    "Classifying: model or live web",
-    `Searching open web: ${domains[0]}`,
-    `Reading source: ${domains[1]}`,
-    `Cross-checking: ${domains[2]}`,
-    "Ranking evidence and preparing answer",
-  ]
+  if (!isResearch) {
+    return (
+      <div className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-[#071126]/80 px-4 py-3 text-sm text-slate-200 shadow-[0_14px_45px_rgba(0,0,0,.22)]">
+        <span className="relative flex h-7 w-7 items-center justify-center rounded-xl border border-violet-300/20 bg-violet-300/10">
+          <span className="absolute h-6 w-6 animate-spin rounded-xl border border-violet-200/20 border-t-violet-100" />
+          <Sparkles className="h-3.5 w-3.5 text-violet-100" />
+        </span>
+        <span>{labelMap[generationType] || labelMap.text}</span>
+        <span className="malik-thinking-dots" aria-hidden="true"><i /><i /><i /></span>
+      </div>
+    )
+  }
 
-  const normalSteps = [
-    "Understanding request",
-    "Selecting AI engine",
-    "Building answer",
-    "Checking quality",
-    "Preparing response",
+  const rows = [
+    { icon: "AI", text: "Понял запрос: нужны свежие открытые источники" },
+    { icon: domains[0]?.icon || "G", text: `Ищу в сети: ${domains[0]?.domain || "google.com"}` },
+    { icon: domains[1]?.icon || "W", text: `Читаю источник: ${domains[1]?.domain || "wikipedia.org"}` },
+    { icon: domains[2]?.icon || "B", text: `Сверяю данные: ${domains[2]?.domain || "brave.com"}` },
+    { icon: "✓", text: "Собираю ответ с ссылками и кэшем" },
   ]
-
-  const steps = isResearch ? researchSteps : normalSteps
 
   return (
-    <div className="malik-thinking-card">
-      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 shadow-[0_0_35px_rgba(34,211,238,.16)]">
-        <span className="absolute h-9 w-9 animate-spin rounded-2xl border border-cyan-200/20 border-t-cyan-100" />
-        <span className="grid h-5 w-5 grid-cols-2 gap-0.5">
-          <i className="rounded-sm bg-cyan-200/80 animate-pulse" />
-          <i className="rounded-sm bg-violet-200/70 animate-pulse [animation-delay:150ms]" />
-          <i className="rounded-sm bg-blue-200/70 animate-pulse [animation-delay:300ms]" />
-          <i className="rounded-sm bg-white/80 animate-pulse [animation-delay:450ms]" />
-        </span>
+    <div className="w-[min(520px,86vw)] rounded-2xl border border-white/10 bg-black/45 px-4 py-3 text-[13px] text-slate-200 shadow-[0_18px_60px_rgba(0,0,0,.24)] backdrop-blur-xl">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
+        <Globe className="h-4 w-4 animate-pulse text-cyan-200" />
+        <span>Live web research</span>
+        <span className="malik-thinking-dots" aria-hidden="true"><i /><i /><i /></span>
       </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="malik-thinking-title">
-          <span>{isResearch ? "Live web research" : (labelMap[generationType] || labelMap.text)}</span>
-          <span className="malik-thinking-dots" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
-        </div>
+      <div className="space-y-1.5">
+        {rows.map((row, index) => (
+          <div
+            key={row.text}
+            className={cn(
+              "flex items-center gap-2 rounded-xl border px-2.5 py-1.5 transition",
+              index === step
+                ? "border-cyan-300/25 bg-cyan-300/10 text-cyan-50"
+                : index < step
+                  ? "border-emerald-300/15 bg-emerald-300/5 text-emerald-100/85"
+                  : "border-white/8 bg-white/[0.025] text-white/45",
+            )}
+          >
+            <span className={cn(
+              "flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-[9px] font-black",
+              index <= step ? "bg-cyan-200/15 text-cyan-100" : "bg-white/5 text-white/35"
+            )}>
+              {row.icon}
+            </span>
+            <span className="truncate">{row.text}</span>
+          </div>
+        ))}
+      </div>
 
-        <div className="mt-2 space-y-1.5">
-          {steps.map((item, index) => (
-            <div
-              key={item}
-              className={cn(
-                "flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-[11px] transition",
-                index === step
-                  ? "border-cyan-300/25 bg-cyan-300/10 text-cyan-50"
-                  : index < step
-                    ? "border-emerald-300/15 bg-emerald-300/5 text-emerald-100/80"
-                    : "border-white/8 bg-white/[0.025] text-white/42",
-              )}
-            >
-              <span className={cn("h-1.5 w-1.5 rounded-full", index <= step ? "bg-cyan-200" : "bg-white/20")} />
-              <span className="truncate">{item}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="malik-thinking-line mt-3">
-          <span />
-        </div>
+      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-violet-300 to-fuchsia-300 transition-all duration-500" style={{ width: `${Math.max(18, (step + 1) * 20)}%` }} />
       </div>
     </div>
   )
@@ -585,6 +626,7 @@ function MessageBubble({
 
 export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", onOpenCodex, onForceCanvas }: ChatViewProps) {
   const [prompt, setPrompt] = useState("")
+  const [lastSubmittedPrompt, setLastSubmittedPrompt] = useState("")
   const [effectivePlan, setEffectivePlan] = useState<AIPlan>(userPlan)
   const [responseDepth, setResponseDepth] = useState<ResponseDepth>(() => loadResponseDepth(userPlan))
   const showUltra = canUseUltra(effectivePlan)
@@ -631,7 +673,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
     textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`
   }, [prompt])
 
-  const lastUserPrompt = useMemo(() => [...messages].reverse().find((message) => message.role === "user")?.content || prompt, [messages, prompt])
+  const lastUserPrompt = useMemo(() => lastSubmittedPrompt || [...messages].reverse().find((message) => message.role === "user")?.content || prompt, [lastSubmittedPrompt, messages, prompt])
 
   const activeGenerationType = useMemo(() => {
     const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")
@@ -679,6 +721,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
     }
     setLocalError(null)
     try { window.localStorage.setItem("malik_last_user_prompt", text || "Analyze attachments") } catch {}
+    setLastSubmittedPrompt(text || "Проанализируй вложения")
     onSendMessage(text || "Проанализируй вложения", attachments, { responseDepth })
     setPrompt("")
     setAttachments([])
