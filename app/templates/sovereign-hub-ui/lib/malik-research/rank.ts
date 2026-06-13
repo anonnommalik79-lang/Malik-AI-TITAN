@@ -17,6 +17,9 @@ const strongWords = [
   "kazakhstan",
   "astana",
   "almaty",
+  "president",
+  "government",
+  "official",
   "ии",
   "хакатон",
   "конкурс",
@@ -29,6 +32,8 @@ const strongWords = [
   "казахстан",
   "астана",
   "алматы",
+  "президент",
+  "официальн",
 ];
 
 function scoreText(question: string, text: string) {
@@ -46,7 +51,7 @@ function scoreText(question: string, text: string) {
   }
 
   if (/20\d{2}/.test(lower)) score += 3;
-  if (/(deadline|application|apply|заявк|дедлайн|регистрац)/i.test(lower)) score += 4;
+  if (/(deadline|application|apply|заявк|дедлайн|регистрац|official|current|сейчас|официальн)/i.test(lower)) score += 4;
 
   return score;
 }
@@ -57,11 +62,11 @@ export function dedupeSearchResults(results: SearchResult[], max = 24) {
   const out: SearchResult[] = [];
 
   for (const r of results) {
-    const key = r.url.split("#")[0];
+    const key = r.url.split("#")[0].replace(/\/$/, "");
     const domainCount = seenDomainCount.get(r.domain) || 0;
 
     if (seenUrl.has(key)) continue;
-    if (domainCount >= 3) continue;
+    if (domainCount >= 4) continue;
 
     seenUrl.add(key);
     seenDomainCount.set(r.domain, domainCount + 1);

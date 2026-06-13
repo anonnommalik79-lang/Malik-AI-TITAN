@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       try {
         const result = await runResearch(message, emit);
         emit("answer", result as unknown as Record<string, unknown>);
-        emit("done", { text: "Готово" });
+        emit("done", { text: "Done" });
       } catch (error) {
         emit("error", {
           text: error instanceof Error ? error.message : "Research failed",

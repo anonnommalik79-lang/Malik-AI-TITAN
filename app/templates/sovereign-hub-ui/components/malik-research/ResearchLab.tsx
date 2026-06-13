@@ -7,7 +7,7 @@ import { ResearchMarkdown } from "./ResearchMarkdown";
 
 export function ResearchLab() {
   const [message, setMessage] = useState(
-    "найди актуальные AI хакатоны, конкурсы и акселераторы в Казахстане и онлайн для MALIK AI 2026"
+    "current president of the United States official 2026"
   );
 
   const research = useMalikResearch();
@@ -22,15 +22,11 @@ export function ResearchLab() {
       <div className="mx-auto flex max-w-7xl flex-col gap-6 lg:flex-row">
         <section className="min-w-0 flex-1">
           <div className="mb-6 rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-2xl shadow-black">
-            <div className="mb-2 text-sm uppercase tracking-[0.25em] text-white/35">
-              MALIK AI
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Live Internet Research Mode
-            </h1>
+            <div className="mb-2 text-sm uppercase tracking-[0.25em] text-white/35">MALIK AI</div>
+            <h1 className="text-3xl font-bold tracking-tight">World AI Research Mode</h1>
             <p className="mt-3 max-w-3xl text-white/55">
-              Свежий поиск по открытым источникам, чтение страниц, кэширование и
-              ответ с источниками. По умолчанию почти без траты AI API токенов.
+              Multi-provider web research like top AI systems: Serper, Tavily, Brave, SearXNG, Jina and fallback readers.
+              It reads open sources, ranks evidence, caches results and shows live activity.
             </p>
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
@@ -38,7 +34,7 @@ export function ResearchLab() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 className="min-h-12 flex-1 rounded-2xl border border-white/10 bg-black px-4 text-white outline-none placeholder:text-white/25 focus:border-white/30"
-                placeholder="Спроси про свежие события, конкурсы, новости..."
+                placeholder="Ask for current facts, events, competitions, news..."
               />
 
               <button
@@ -46,7 +42,7 @@ export function ResearchLab() {
                 disabled={research.active}
                 className="rounded-2xl bg-white px-5 py-3 font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {research.active ? "Ищу..." : "Запустить"}
+                {research.active ? "Researching..." : "Run"}
               </button>
             </div>
           </div>
@@ -56,7 +52,7 @@ export function ResearchLab() {
               <ResearchMarkdown text={research.answer} />
             ) : (
               <div className="py-16 text-center text-white/35">
-                Запусти Live Research — здесь появится ответ с источниками.
+                Run World AI Research and the answer with sources will appear here.
               </div>
             )}
           </div>

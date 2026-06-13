@@ -43,11 +43,7 @@ export function clampText(input: string, max = 18000) {
   return input.slice(0, max) + "\n...[trimmed]";
 }
 
-export async function fetchWithTimeout(
-  url: string,
-  init: RequestInit = {},
-  timeoutMs = 9000
-) {
+export async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 12000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -57,9 +53,9 @@ export async function fetchWithTimeout(
       signal: controller.signal,
       headers: {
         "user-agent":
-          "Mozilla/5.0 MALIK-AI-ResearchBot/1.0 OpenSourceResearch",
+          "Mozilla/5.0 MALIK-AI-ResearchBot/5.0 OpenSourceResearch",
         accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
+          "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,application/json;q=0.8,*/*;q=0.5",
         ...(init.headers || {}),
       },
       cache: "no-store",
@@ -93,6 +89,8 @@ export function getQueryTerms(question: string) {
           "это",
           "надо",
           "найди",
+          "покажи",
+          "скажи",
           "the",
           "and",
           "with",
@@ -101,7 +99,16 @@ export function getQueryTerms(question: string) {
           "that",
           "your",
           "find",
+          "show",
         ].includes(w)
     )
     .slice(0, 18);
+}
+
+export function safeJsonParse<T>(text: string, fallback: T): T {
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return fallback;
+  }
 }

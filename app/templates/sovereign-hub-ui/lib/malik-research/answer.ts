@@ -19,7 +19,7 @@ function bestExcerpt(question: string, text: string, fallback?: string) {
     .replace(/\s+/g, " ")
     .split(/(?<=[.!?])\s+|;\s+|\n+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 60 && s.length < 420);
+    .filter((s) => s.length > 60 && s.length < 460);
 
   const scored = sentences
     .map((s) => {
@@ -30,7 +30,7 @@ function bestExcerpt(question: string, text: string, fallback?: string) {
         if (lower.includes(t)) score += 3;
       }
 
-      if (/(deadline|application|apply|заявк|дедлайн|регистрац|hackathon|хакатон|accelerator|акселератор|competition|конкурс)/i.test(s)) {
+      if (/(deadline|application|apply|заявк|дедлайн|регистрац|hackathon|хакатон|accelerator|акселератор|competition|конкурс|president|президент|official|current|сейчас)/i.test(s)) {
         score += 6;
       }
 
@@ -46,20 +46,21 @@ function bestExcerpt(question: string, text: string, fallback?: string) {
 function sourceLine(i: number, s: FetchedSource, question: string) {
   const dates = extractDates(`${s.title} ${s.snippet || ""} ${s.text}`).join(", ");
   const excerpt = bestExcerpt(question, s.text, s.snippet);
-  const dateText = dates || "дата не найдена в видимом тексте";
+  const dateText = dates || "not found";
+  const provider = s.provider ? ` / ${s.provider}` : "";
 
-  return `| ${i + 1} | [${escapeMd(s.title)}](${s.url}) | ${escapeMd(s.domain)} | ${escapeMd(dateText)} | ${excerpt} |`;
+  return `| ${i + 1} | [${escapeMd(s.title)}](${s.url}) | ${escapeMd(s.domain + provider)} | ${escapeMd(dateText)} | ${excerpt} |`;
 }
 
 export function buildResearchAnswer(question: string, ranked: FetchedSource[], allSources: SearchResult[]) {
   if (!ranked.length) {
     return [
-      "Я попробовал проверить открытые источники, но не смог достать достаточно читаемого текста со страниц.",
+      "I searched open web sources, but I could not read enough text from the found pages.",
       "",
-      "Что можно сделать:",
-      "1. Указать более точный запрос.",
-      "2. Добавить `SEARXNG_URL` для стабильного поиска без платного API.",
-      "3. Проверить, не блокируют ли сайты сервер Render.",
+      "What to do:",
+      "1. Make the query more exact.",
+      "2. Add `SERPER_API_KEY`, `TAVILY_API_KEY`, or `BRAVE_SEARCH_API_KEY` in Render for ChatGPT/Claude-level stable search.",
+      "3. Keep free fallback enabled: `JINA_SEARCH_DISABLED=false` and `JINA_READER_DISABLED=false`.",
     ].join("\n");
   }
 
@@ -69,11 +70,11 @@ export function buildResearchAnswer(question: string, ranked: FetchedSource[], a
     );
 
   const intro = isOpportunity
-    ? "Я проверил открытые источники и собрал варианты, где потенциально можно искать мероприятия, заявки, хакатоны, акселераторы и конкурсы для MALIK AI. Я не пишу, что прочитал весь интернет: ниже только найденные открытые источники."
-    : "Я проверил открытые источники и собрал ответ только по найденным страницам. Если данных мало, лучше перепроверить важные даты вручную.";
+    ? "I checked open sources and collected relevant opportunities, events, applications, hackathons, accelerators, and competitions for MALIK AI. I am not claiming I read the whole internet: these are the sources that were found and read."
+    : "I checked open sources and built the answer from the pages that were found and read. Important facts should still be verified from the primary source.";
 
   const table = [
-    "| # | Источник | Домен | Даты/следы времени | Что найдено |",
+    "| # | Source | Domain / provider | Date signal | Evidence |",
     "|---|---|---|---|---|",
     ...ranked.map((s, i) => sourceLine(i, s, question)),
   ].join("\n");
@@ -82,36 +83,36 @@ export function buildResearchAnswer(question: string, ranked: FetchedSource[], a
     .slice(0, 5)
     .map((s, i) => {
       const excerpt = bestExcerpt(question, s.text, s.snippet);
-      return `${i + 1}. **${s.title}** — ${excerpt}  \n   Источник: ${s.url}`;
+      return `${i + 1}. **${s.title}** — ${excerpt}  \n   Source: ${s.url}`;
     })
     .join("\n\n");
 
   const nextActions = isOpportunity
     ? [
-        "## Что делать прямо сейчас",
-        "1. Открой первые 3–5 источников и проверь дедлайн/возраст/город.",
-        "2. Для каждой заявки упакуй MALIK AI как: `AI command layer for building, automating, coding, designing, analyzing and launching projects`.",
-        "3. Если конкурс 18+, укажи взрослого сооснователя/представителя.",
-        "4. Сохрани ссылки в отдельный файл `opportunities.md` и обновляй каждый день.",
+        "## Next actions for MALIK AI",
+        "1. Open the first 3-5 sources and verify deadline, age rules, city, and application form.",
+        "2. Pitch MALIK AI as: `AI command layer for building, automating, coding, designing, analyzing and launching projects`.",
+        "3. If an opportunity is 18+, use an adult cofounder or representative.",
+        "4. Save the links into `opportunities.md` and refresh daily.",
       ].join("\n")
     : [
-        "## Что делать дальше",
-        "1. Проверь самые важные факты по источникам.",
-        "2. Если нужна точность по датам/ценам/правилам — открой первоисточник.",
-        "3. Сформулируй следующий запрос уже точнее, и MALIK AI сузит поиск.",
+        "## Next actions",
+        "1. Open the primary source for the most important fact.",
+        "2. Ask a narrower follow-up query if you need exact dates, prices, laws, or rules.",
+        "3. Add a search API key in Render for more stable results.",
       ].join("\n");
 
   return [
     intro,
     "",
-    "## Самое важное из найденного",
+    "## Key findings",
     best,
     "",
-    "## Таблица источников",
+    "## Source table",
     table,
     "",
     nextActions,
     "",
-    `Проверено ссылок в поиске: **${allSources.length}**. Прочитано страниц: **${ranked.length}**.`,
+    `Search links found: **${allSources.length}**. Pages read: **${ranked.length}**.`,
   ].join("\n");
 }

@@ -4,6 +4,8 @@ export type SearchResult = {
   domain: string;
   snippet?: string;
   publishedAt?: string;
+  score?: number;
+  provider?: string;
 };
 
 export type FetchedSource = {
@@ -13,6 +15,7 @@ export type FetchedSource = {
   text: string;
   snippet?: string;
   publishedAt?: string;
+  provider?: string;
 };
 
 export type ResearchFinal = {

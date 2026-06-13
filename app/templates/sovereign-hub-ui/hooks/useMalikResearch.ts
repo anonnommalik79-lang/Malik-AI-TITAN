@@ -8,6 +8,7 @@ export type MalikResearchSource = {
   domain: string;
   snippet?: string;
   publishedAt?: string;
+  provider?: string;
 };
 
 export type MalikResearchStep = {
@@ -36,7 +37,7 @@ export function useMalikResearch() {
           domain: typeof data?.domain === "string" ? data.domain : undefined,
           at: Number(data?.at || Date.now()),
         },
-      ].slice(-60)
+      ].slice(-80)
     );
   }, []);
 
@@ -113,14 +114,5 @@ export function useMalikResearch() {
     setActive(false);
   }, []);
 
-  return {
-    active,
-    answer,
-    sources,
-    steps,
-    webSourceCount,
-    cached,
-    run,
-    stop,
-  };
+  return { active, answer, sources, steps, webSourceCount, cached, run, stop };
 }

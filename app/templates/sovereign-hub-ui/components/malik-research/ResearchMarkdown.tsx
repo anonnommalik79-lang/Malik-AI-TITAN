@@ -65,10 +65,7 @@ export function ResearchMarkdown({ text }: Props) {
 
         if (trimmed.startsWith("|")) {
           return (
-            <pre
-              key={index}
-              className="overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-white/70"
-            >
+            <pre key={index} className="overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-white/70">
               {trimmed}
             </pre>
           );

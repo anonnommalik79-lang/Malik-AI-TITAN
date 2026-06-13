@@ -22,12 +22,6 @@ export function getCache<T>(key: string): T | null {
 }
 
 export function setCache<T>(key: string, value: T, ttlMs?: number) {
-  const ttl =
-    ttlMs ||
-    Number(process.env.RESEARCH_CACHE_TTL_MS || 1000 * 60 * 60 * 6);
-
-  memory.set(key, {
-    value,
-    expiresAt: Date.now() + ttl,
-  });
+  const ttl = ttlMs || Number(process.env.RESEARCH_CACHE_TTL_MS || 1000 * 60 * 60 * 6);
+  memory.set(key, { value, expiresAt: Date.now() + ttl });
 }
