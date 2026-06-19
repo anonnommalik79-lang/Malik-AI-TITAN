@@ -789,6 +789,7 @@ function clearSupabaseAuthStorage(): void {
     safeRemoveStorage("malik_user_avatar")
     safeRemoveStorage("malik_auth_mode")
     safeRemoveStorage("malik_is_admin")
+    safeRemoveStorage("malik_user_role")
     safeRemoveStorage("malik_auth_snapshot")
     safeRemoveStorage("malik_last_login_at")
     safeRemoveStorage("malik_is_authenticated")
@@ -869,6 +870,7 @@ type DashboardAuthSnapshot = {
   avatar: string
   mode: "supabase" | "guest"
   isAdmin: boolean
+  role?: "creator" | "admin" | "user" | "guest"
   lastLoginAt?: string
 }
 
@@ -886,7 +888,8 @@ function readDashboardAuthSnapshot(): DashboardAuthSnapshot | null {
             name: String(parsed.name || parsed.email || "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ"),
             avatar: String(parsed.avatar || ""),
             mode: parsed.mode === "guest" ? "guest" : "supabase",
-            isAdmin: Boolean(parsed.isAdmin),
+            isAdmin: Boolean(parsed.isAdmin) || AUTH_ADMINS.includes(String(parsed.email).toLowerCase()),
+            role: parsed.role,
             lastLoginAt: parsed.lastLoginAt,
           }
         }
@@ -910,6 +913,7 @@ function readDashboardAuthSnapshot(): DashboardAuthSnapshot | null {
       avatar,
       mode,
       isAdmin,
+      role: isAdmin ? (String(email).toLowerCase() === "amangeldymalik38@gmail.com" ? "creator" : "admin") : mode === "guest" ? "guest" : "user",
       lastLoginAt: safeGetStorage("malik_last_login_at"),
     }
   } catch {
@@ -926,6 +930,7 @@ function persistDashboardAuthSnapshot(snapshot: DashboardAuthSnapshot): void {
     safeSetStorage("malik_auth_snapshot", JSON.stringify(snapshot))
     safeSetStorage("malik_is_authenticated", "true")
     safeSetStorage("sovereign_authenticated", "true")
+    safeSetStorage("malik_user_role", snapshot.role || (snapshot.isAdmin ? "admin" : snapshot.mode === "guest" ? "guest" : "user"))
     if (snapshot.avatar) safeSetStorage("malik_user_avatar", snapshot.avatar)
     else safeRemoveStorage("malik_user_avatar")
     if (snapshot.isAdmin) safeSetStorage("malik_is_admin", "true")
@@ -933,6 +938,111 @@ function persistDashboardAuthSnapshot(snapshot: DashboardAuthSnapshot): void {
   } catch (err) {
     console.warn("[DASHBOARD AUTH SNAPSHOT SAVE ERROR]", err)
   }
+}
+
+type AdminDbUser = {
+  id?: string
+  email?: string
+  displayName?: string
+  role?: string
+  plan?: string
+  provider?: string
+  providers?: string[]
+  createdAt?: string | null
+  lastSignInAt?: string | null
+}
+
+function isDashboardAdminEmail(email?: string | null) {
+  return AUTH_ADMINS.includes(String(email || "").trim().toLowerCase())
+}
+
+function formatAdminDate(value?: string | null) {
+  if (!value) return "never"
+  try {
+    return new Date(value).toLocaleString("ru-RU", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  } catch {
+    return String(value)
+  }
+}
+
+async function getDashboardAccessToken() {
+  try {
+    const mod = await import("@/lib/supabase")
+    const client = mod.getSupabaseClient?.()
+    if (!client) return ""
+    const { data } = await client.auth.getSession()
+    return data?.session?.access_token || ""
+  } catch {
+    return ""
+  }
+}
+
+function formatAdminDbPayload(payload: any, currentEmail: string) {
+  const users = Array.isArray(payload?.users) ? payload.users as AdminDbUser[] : []
+  if (!users.length) {
+    return [
+      "ADMIN_DB online.",
+      `Requested by: ${currentEmail}`,
+      "No registered users were returned yet.",
+      payload?.message ? `Note: ${payload.message}` : "",
+    ].filter(Boolean).join("\n")
+  }
+
+  const rows = users.slice(0, 80).map((user, index) => {
+    const providers = user.providers?.length ? user.providers.join(",") : user.provider || "email"
+    return `${index + 1}. ${user.email || "unknown"} | ${user.role || "user"} | ${user.plan || "free"} | ${providers} | created ${formatAdminDate(user.createdAt)} | last ${formatAdminDate(user.lastSignInAt)}`
+  })
+
+  return [
+    "ADMIN_DB online.",
+    `Mode: ${payload?.mode || "unknown"}`,
+    `Requested by: ${payload?.requestedBy || currentEmail}`,
+    `Users: ${payload?.count ?? users.length}`,
+    payload?.message ? `Note: ${payload.message}` : "",
+    "",
+    ...rows,
+  ].filter((line) => line !== "").join("\n")
+}
+
+async function runAdminDbCommand(currentEmail: string, isAdmin: boolean) {
+  const cleanEmail = String(currentEmail || "").trim().toLowerCase()
+  if (!isAdmin && !isDashboardAdminEmail(cleanEmail)) {
+    return "ADMIN_DB denied. This command is only for creator/admin accounts."
+  }
+
+  const token = await getDashboardAccessToken()
+  if (!token) {
+    return [
+      "ADMIN_DB local creator mode.",
+      `Creator: ${cleanEmail || "amangeldymalik38@gmail.com"}`,
+      "Cloud user list needs a live Supabase session token.",
+      "Sign in with email/OAuth after Supabase is configured, then run /admin_db again.",
+    ].join("\n")
+  }
+
+  const response = await fetch("/api/admin/users", {
+    method: "GET",
+    cache: "no-store",
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok || payload?.ok === false) {
+    return [
+      "ADMIN_DB denied by server.",
+      `Status: ${response.status}`,
+      `Reason: ${payload?.error || payload?.message || "admin_access_required"}`,
+    ].join("\n")
+  }
+
+  return formatAdminDbPayload(payload, cleanEmail)
 }
 
 function LoadingShell() {
@@ -4325,6 +4435,7 @@ export function Dashboard() {
         avatar: profile.avatar,
         mode: "supabase",
         isAdmin: AUTH_ADMINS.includes(profile.email.toLowerCase()),
+        role: profile.email.toLowerCase() === "amangeldymalik38@gmail.com" ? "creator" : AUTH_ADMINS.includes(profile.email.toLowerCase()) ? "admin" : "user",
         lastLoginAt: new Date().toISOString(),
       }
 
@@ -4406,7 +4517,8 @@ export function Dashboard() {
           name: String(detail.name || detail.email || "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ"),
           avatar: String(detail.avatar || ""),
           mode: detail.mode === "guest" ? "guest" : "supabase",
-          isAdmin: Boolean(detail.isAdmin),
+          isAdmin: Boolean(detail.isAdmin) || AUTH_ADMINS.includes(String(detail.email).toLowerCase()),
+          role: detail.role || (String(detail.email).toLowerCase() === "amangeldymalik38@gmail.com" ? "creator" : Boolean(detail.isAdmin) ? "admin" : detail.mode === "guest" ? "guest" : "user"),
           lastLoginAt: detail.lastLoginAt || new Date().toISOString(),
         })
         setAuthReady(true)
@@ -5131,6 +5243,26 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           : m
       )
     )
+  }
+
+  if (cleanContent.toLowerCase().startsWith("/admin_db")) {
+    try {
+      const adminText = await runAdminDbCommand(normalizedEmail, isAdmin)
+      finalizeAssistant(adminText, undefined)
+    } catch (error) {
+      finalizeAssistant(
+        [
+          "ADMIN_DB failed.",
+          error instanceof Error ? error.message : "Unknown admin command error.",
+        ].join("\n"),
+        undefined,
+      )
+    } finally {
+      setIsGeneratingTerminal(false)
+      setIsLoading(false)
+      setStreamingText("")
+    }
+    return
   }
 
   if (inlineMediaKind && assistantMessage.generatedMedia) {

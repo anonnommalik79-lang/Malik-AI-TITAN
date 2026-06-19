@@ -1,5 +1,0 @@
-{
-  "name": "MALIK_FIX_ROUTER_PERSONA_PATCH",
-  "purpose": "Fix earlier PowerShell -replace error and connect persona.ts to router.ts",
-  "safe": true
-}

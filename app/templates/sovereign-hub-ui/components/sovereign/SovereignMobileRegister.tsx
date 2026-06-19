@@ -4,7 +4,7 @@ import React, { FormEvent, useCallback, useEffect, useRef, useState } from "reac
 import { useRouter } from "next/navigation";
 import { Check, ChevronRight, Eye, EyeOff, Lock, Mail, User } from "lucide-react";
 import { loginWithSocialProvider, type SocialProviderId } from "@/lib/auth/social-providers";
-import { isSupabaseConfigured, persistGuestUser } from "@/lib/supabase";
+import { isSupabaseConfigured, persistGuestUser, persistLocalUser } from "@/lib/supabase";
 import "./sovereign-mobile-auth.css";
 
 type Provider = "google" | "github" | "apple" | "microsoft";
@@ -124,7 +124,11 @@ export function SovereignMobileRegister() {
     try {
       const mod = await import("@/lib/supabase");
       const supabase = mod.getSupabaseClient();
-      if (!supabase) throw new Error("Supabase is not configured. Use guest mode.");
+      if (!supabase) {
+        mod.persistLocalUser?.(email, username);
+        router.push("/dashboard");
+        return;
+      }
       if (authMode === "signin") {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -141,8 +145,8 @@ export function SovereignMobileRegister() {
       });
       if (error) throw error;
       if (!data.session) {
-        setMessage("Check your email to confirm the account, then return to MALIK AI.");
-        setIsOpening(false);
+        mod.persistLocalUser?.(data.user?.email || email, username);
+        router.push("/dashboard");
         return;
       }
       mod.persistSupabaseUser(data.session.user);
@@ -156,7 +160,7 @@ export function SovereignMobileRegister() {
     }
   }, [router, authMode, supabaseReady, usernameValue]);
 
-  const openOAuth = useCallback(async (provider: SocialProviderId | "microsoft") => {
+  const openOAuth = useCallback(async (provider: SocialProviderId) => {
     if (isOpening) return;
     if (!supabaseReady) {
       setMessage("Configure Supabase to enable OAuth.");
@@ -165,24 +169,13 @@ export function SovereignMobileRegister() {
     setIsOpening(true);
     setMessage("");
     try {
-      if (provider === "microsoft") {
-        const mod = await import("@/lib/supabase");
-        const client = mod.getSupabaseClient();
-        if (!client) throw new Error("Supabase client missing");
-        const { error } = await client.auth.signInWithOAuth({
-          provider: "azure",
-          options: { redirectTo: `${window.location.origin}/auth/callback` },
-        });
-        if (error) throw error;
-        return;
-      }
       const row = oauthProviders.find((item) => item.id === provider);
-      if (!row?.enabled) {
+      if (row && !row.enabled) {
         setMessage(row?.configured === false ? "Configure Supabase to enable OAuth." : "This provider is disabled.");
         setIsOpening(false);
         return;
       }
-      await loginWithSocialProvider(provider);
+      await loginWithSocialProvider(provider, `${window.location.origin}/auth/callback`);
     } catch {
       setMessage("Secure social login is temporarily unavailable. Please use guest mode or try again later.");
       setIsOpening(false);
@@ -272,7 +265,7 @@ export function SovereignMobileRegister() {
               </label>
             )}
 
-            <button className="sma-cta" type="submit" disabled={isOpening || !supabaseReady}>
+            <button className="sma-cta" type="submit" disabled={isOpening}>
               <span>{isOpening ? T.opening : T.cont}</span>
               <ChevronRight size={18} strokeWidth={2.6} />
             </button>
@@ -290,8 +283,7 @@ export function SovereignMobileRegister() {
                 { id: "apple" as const, label: "Apple", type: "apple" as Provider },
                 { id: "microsoft" as const, label: "Microsoft", type: "microsoft" as Provider },
               ]).map((item) => {
-                const row = item.id === "microsoft" ? null : oauthProviders.find((p) => p.id === item.id);
-                const disabled = isOpening || (item.id === "microsoft" ? !supabaseReady : !row?.enabled);
+                const disabled = isOpening;
                 return (
                   <button key={item.id} type="button" onClick={() => openOAuth(item.id)} disabled={disabled}>
                     <ProviderIcon type={item.type} />

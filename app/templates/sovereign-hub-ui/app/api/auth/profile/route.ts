@@ -1,4 +1,5 @@
 import { createSupabaseUserClient, isServerSupabaseConfigured } from "@/lib/server/supabase-user"
+import { isMalikAdminEmail } from "@/lib/server/admin"
 
 export const runtime = "nodejs"
 
@@ -17,16 +18,20 @@ export async function POST(request: Request) {
   const { data, error } = await client.auth.getUser(token)
   if (error || !data.user?.id || !data.user.email) return Response.json({ ok: false, error: "secure_session_required" }, { status: 401 })
   const body = await request.json().catch(() => ({}))
+  const email = data.user.email.toLowerCase()
+  const isCreator = email === "amangeldymalik38@gmail.com"
+  const isAdmin = isCreator || isMalikAdminEmail(email)
   const profile = {
     id: data.user.id,
-    email: data.user.email.toLowerCase(),
+    email,
     display_name: String(body?.name || data.user.user_metadata?.full_name || data.user.email.split("@")[0]).slice(0, 120),
     avatar_url: String(body?.avatar || data.user.user_metadata?.avatar_url || "").slice(0, 1200),
+    plan: isAdmin ? "owner" : "free",
     updated_at: new Date().toISOString(),
   }
   const result = await client.from("profiles").upsert(profile, { onConflict: "id" })
   if (result.error) {
-    return Response.json({ ok: true, profile: { email: profile.email, displayName: profile.display_name }, databaseSynced: false, message: "Profile session is ready. Database sync is being prepared." })
+    return Response.json({ ok: true, profile: { email: profile.email, displayName: profile.display_name, role: isCreator ? "creator" : isAdmin ? "admin" : "user" }, databaseSynced: false, message: "Profile session is ready. Database sync is being prepared." })
   }
-  return Response.json({ ok: true, profile: { email: profile.email, displayName: profile.display_name }, databaseSynced: true })
+  return Response.json({ ok: true, profile: { email: profile.email, displayName: profile.display_name, role: isCreator ? "creator" : isAdmin ? "admin" : "user" }, databaseSynced: true })
 }
