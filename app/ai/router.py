@@ -161,24 +161,38 @@ class PromptIntent:
 
 
 def detect_prompt_intent(prompt: str, mode: str = "auto") -> str:
-    text = f"{mode} {prompt or ''}".lower()
-    if any(word in text for word in ["video", "видео", "ролик", "анимац", "cinematic", "luma", "runway", "veo"]):
+    text = (prompt or "").strip().lower()
+    mode_value = (mode or "auto").strip().lower()
+
+    # COST GUARD:
+    # Normal chat must NEVER trigger paid image/video generation by keywords.
+    # Words like "launch video", "photo", "image", "cinematic" stay CHAT.
+    # Media generation is allowed only through explicit slash commands or dedicated mode/studio.
+    if text.startswith(("/video ", "/video:", "/veo ")):
         return PromptIntent.VIDEO
-    if any(word in text for word in ["image", "photo", "picture", "фото", "картин", "изображ", "нарисуй", "логотип"]):
+    if text.startswith(("/image ", "/photo ", "/img ", "/image:", "/photo:")):
         return PromptIntent.IMAGE
-    if any(word in text for word in ["codex", "agent", "агент", "папк", "файлы проекта", "архитектура проекта"]):
+
+    if mode_value in {"video", "video-generation"}:
+        return PromptIntent.VIDEO
+    if mode_value in {"image", "photo", "photo-generation", "image-generation"}:
+        return PromptIntent.IMAGE
+
+    if text.startswith(("/codex ", "/agent ")):
         return PromptIntent.CODEX
-    if any(word in text for word in ["debug", "fix", "bug", "ошиб", "исправ", "stacktrace"]):
+    if text.startswith(("/debug ", "/fix ")):
         return PromptIntent.DEBUG
-    if any(word in text for word in ["code", "react", "tsx", "typescript", "javascript", "python", "код", "проект"]):
+    if text.startswith(("/code ",)):
         return PromptIntent.CODE
-    if any(word in text for word in ["website", "site", "landing", "dashboard", "сайт", "лендинг", "дашборд", "ui", "app"]):
+    if text.startswith(("/website ", "/site ", "/landing ")):
         return PromptIntent.WEBSITE
-    if any(word in text for word in ["presentation", "slides", "deck", "презентация", "слайды"]):
+    if text.startswith(("/slides ", "/presentation ")):
         return PromptIntent.PRESENTATION
-    if any(word in text for word in ["document", "pdf", "word", "документ", "отчет", "отчёт"]):
+    if text.startswith(("/document ", "/pdf ", "/word ")):
         return PromptIntent.DOCUMENT
+
     return PromptIntent.CHAT
+
 
 
 def token_budget_for_intent(intent: str) -> int:

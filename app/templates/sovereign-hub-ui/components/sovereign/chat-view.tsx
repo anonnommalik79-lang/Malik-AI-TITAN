@@ -156,13 +156,18 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
 }
 
 function detectGenerationStatusType(text: string): GenerationStatusType {
-  const value = text.toLowerCase()
-  if (/image|photo|picture|фото|изображ|картин|нарисуй/.test(value)) return "image"
-  if (/video|видео|ролик|runway|анимац/.test(value)) return "video"
-  if (/file|document|pdf|word|txt|файл|документ/.test(value)) return "file"
-  if (/codex|agent|агент|папк|файлы|структур|project/.test(value)) return "codex"
-  if (/code|react|tsx|typescript|javascript|python|debug|код|ошиб|фикс/.test(value)) return "code"
-  if (/website|site|landing|dashboard|ui|html|canvas|preview|app|сайт|лендинг|дашборд|интерфейс|шаблон/.test(value)) return "website"
+  const value = text.toLowerCase().trim()
+
+  // COST GUARD:
+  // Never auto-route normal chat to paid media generation.
+  // Only explicit slash commands show media mode.
+  if (value.startsWith("/image ") || value.startsWith("/photo ") || value.startsWith("/img ")) return "image"
+  if (value.startsWith("/video ") || value.startsWith("/veo ")) return "video"
+  if (value.startsWith("/file ") || value.startsWith("/document ")) return "file"
+  if (value.startsWith("/codex ") || value.startsWith("/agent ")) return "codex"
+  if (value.startsWith("/code ")) return "code"
+  if (value.startsWith("/website ") || value.startsWith("/site ") || value.startsWith("/landing ")) return "website"
+
   return "text"
 }
 
