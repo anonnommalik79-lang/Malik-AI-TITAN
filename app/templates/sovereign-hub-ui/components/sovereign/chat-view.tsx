@@ -155,6 +155,26 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
   return { id: crypto.randomUUID(), name: file.name, mime, size: file.size, kind, base64 }
 }
 
+
+function getSafeTextModePrompt(raw: string) {
+  const value = raw.trim()
+  const lower = value.toLowerCase()
+
+  // ABSOLUTE COST GUARD:
+  // Normal chat is always text. Paid media only through explicit slash commands.
+  if (
+    lower.startsWith("/image ") ||
+    lower.startsWith("/photo ") ||
+    lower.startsWith("/img ") ||
+    lower.startsWith("/video ") ||
+    lower.startsWith("/veo ")
+  ) {
+    return value
+  }
+
+  return `TEXT ONLY. Do not generate image, photo, animation or video. Answer as text only.\n\n${value}`
+}
+
 function detectGenerationStatusType(text: string): GenerationStatusType {
   const value = text.toLowerCase().trim()
 
