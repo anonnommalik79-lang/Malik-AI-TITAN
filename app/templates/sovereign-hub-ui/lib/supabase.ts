@@ -22,6 +22,8 @@ const ADMIN_EMAILS = "amangeldymalik38@gmail.com,anonnommalik79@gmail.com"
   .map((x) => x.trim().toLowerCase())
   .filter(Boolean)
 
+type MalikAccountRole = "creator" | "admin" | "user" | "guest"
+
 let client: SupabaseClient | null = null
 let restorePromise: Promise<MalikAuthSnapshot | null> | null = null
 let signOutPromise: Promise<void> | null = null
@@ -31,6 +33,7 @@ export type MalikAuthSnapshot = {
   name: string
   avatar: string
   isAdmin: boolean
+  role: MalikAccountRole
   mode: "supabase" | "guest"
   lastLoginAt: string
 }
@@ -140,6 +143,7 @@ export const clearSupabaseAuthStorage = (): void => {
 
 export const clearMalikAuthCache = (): void => {
   Object.values(STORAGE_KEYS).forEach((k) => safeLocalStorageRemove(k))
+  safeLocalStorageRemove("malik_user_role")
   ;["malik_session", "malik_ai_session", "sovereign_session", "auth_session", "malik_is_authenticated", "sovereign_authenticated", "isAuthenticated", "authenticated", "malik_guest_unlocked"].forEach((key) => safeLocalStorageRemove(key))
   clearSupabaseAuthStorage()
   dispatchMalikAuthEvent({})
@@ -148,6 +152,14 @@ export const clearMalikAuthCache = (): void => {
 export const isAdminEmail = (email?: string | null): boolean => {
   if (!email) return false
   return ADMIN_EMAILS.includes(email.toLowerCase())
+}
+
+export const getAccountRole = (email?: string | null, mode?: "supabase" | "guest"): MalikAccountRole => {
+  const clean = String(email || "").trim().toLowerCase()
+  if (!clean || clean === "guest@malik.ai" || mode === "guest" && !isAdminEmail(clean)) return "guest"
+  if (clean === "amangeldymalik38@gmail.com") return "creator"
+  if (isAdminEmail(clean)) return "admin"
+  return "user"
 }
 
 export const getUserDisplayName = (user: User): string => {
@@ -174,14 +186,17 @@ export const dispatchMalikAuthEvent = (snapshot?: Partial<MalikAuthSnapshot>): v
 }
 
 export const persistAuthSnapshot = (snapshot: MalikAuthSnapshot): MalikAuthSnapshot => {
+  const role = snapshot.role || getAccountRole(snapshot.email, snapshot.mode)
+  const normalizedSnapshot = { ...snapshot, role, isAdmin: snapshot.isAdmin || role === "creator" || role === "admin" }
   safeLocalStorageSet(STORAGE_KEYS.user, snapshot.email)
   safeLocalStorageSet(STORAGE_KEYS.userName, snapshot.name)
   safeLocalStorageSet(STORAGE_KEYS.userAvatar, snapshot.avatar)
   safeLocalStorageSet(STORAGE_KEYS.authMode, snapshot.mode)
   safeLocalStorageSet(STORAGE_KEYS.lastLoginAt, snapshot.lastLoginAt)
-  safeLocalStorageSet(STORAGE_KEYS.authSnapshot, JSON.stringify(snapshot))
+  safeLocalStorageSet(STORAGE_KEYS.authSnapshot, JSON.stringify(normalizedSnapshot))
+  safeLocalStorageSet("malik_user_role", role)
   safeLocalStorageSet(STORAGE_KEYS.authHealth, "ready")
-  const session = JSON.stringify({ ok: true, user: snapshot, mode: snapshot.mode, authenticated: true, lastLoginAt: snapshot.lastLoginAt })
+  const session = JSON.stringify({ ok: true, user: normalizedSnapshot, mode: snapshot.mode, authenticated: true, lastLoginAt: snapshot.lastLoginAt })
   safeLocalStorageSet("malik_session", session)
   safeLocalStorageSet("malik_ai_session", session)
   safeLocalStorageSet("sovereign_session", session)
@@ -192,10 +207,10 @@ export const persistAuthSnapshot = (snapshot: MalikAuthSnapshot): MalikAuthSnaps
   safeLocalStorageSet("authenticated", "true")
   safeLocalStorageSet("malik_guest_unlocked", snapshot.mode === "guest" ? "true" : "false")
   safeLocalStorageRemove(STORAGE_KEYS.authError)
-  if (snapshot.isAdmin) safeLocalStorageSet(STORAGE_KEYS.isAdmin, "true")
+  if (normalizedSnapshot.isAdmin) safeLocalStorageSet(STORAGE_KEYS.isAdmin, "true")
   else safeLocalStorageRemove(STORAGE_KEYS.isAdmin)
-  dispatchMalikAuthEvent(snapshot)
-  return snapshot
+  dispatchMalikAuthEvent(normalizedSnapshot)
+  return normalizedSnapshot
 }
 
 export const persistSupabaseUser = (user: User): MalikAuthSnapshot => {
@@ -206,7 +221,23 @@ export const persistSupabaseUser = (user: User): MalikAuthSnapshot => {
     name: getUserDisplayName(user),
     avatar: getUserAvatar(user),
     isAdmin: isAdminEmail(email),
+    role: getAccountRole(email, "supabase"),
     mode: "supabase",
+    lastLoginAt: new Date().toISOString(),
+  })
+}
+
+export const persistLocalUser = (email: string, name?: string): MalikAuthSnapshot => {
+  const cleanEmail = email.trim().toLowerCase()
+  const displayName = name?.trim() || cleanEmail.split("@")[0] || "Пользователь"
+  const role = getAccountRole(cleanEmail, "supabase")
+  return persistAuthSnapshot({
+    email: cleanEmail,
+    name: displayName,
+    avatar: buildFallbackAvatar(cleanEmail || displayName),
+    isAdmin: role === "creator" || role === "admin",
+    role,
+    mode: "guest",
     lastLoginAt: new Date().toISOString(),
   })
 }
@@ -217,6 +248,7 @@ export const persistGuestUser = (): MalikAuthSnapshot =>
     name: "Гость",
     avatar: buildFallbackAvatar("guest@malik.ai"),
     isAdmin: false,
+    role: "guest",
     mode: "guest",
     lastLoginAt: new Date().toISOString(),
   })
@@ -236,7 +268,8 @@ export const getStoredAuthSnapshot = (): MalikAuthSnapshot | null => {
   if (!email || !mode) return null
   const name = safeLocalStorageGet(STORAGE_KEYS.userName) || email.split("@")[0] || "Пользователь"
   const avatar = safeLocalStorageGet(STORAGE_KEYS.userAvatar) || buildFallbackAvatar(email)
-  return { email, name, avatar, isAdmin: safeLocalStorageGet(STORAGE_KEYS.isAdmin) === "true", mode, lastLoginAt: safeLocalStorageGet(STORAGE_KEYS.lastLoginAt) || "" }
+  const role = (safeLocalStorageGet("malik_user_role") as MalikAccountRole) || getAccountRole(email, mode)
+  return { email, name, avatar, isAdmin: safeLocalStorageGet(STORAGE_KEYS.isAdmin) === "true" || role === "creator" || role === "admin", role, mode, lastLoginAt: safeLocalStorageGet(STORAGE_KEYS.lastLoginAt) || "" }
 }
 
 export const signOutMalik = async (): Promise<void> => {
@@ -313,6 +346,7 @@ export const syncProfile = async (session: Session): Promise<void> => {
       body: JSON.stringify({
         name: getUserDisplayName(session.user),
         avatar: getUserAvatar(session.user),
+        role: getAccountRole(session.user.email, "supabase"),
       }),
     })
   } catch {}

@@ -4,11 +4,11 @@ import React, { FormEvent, useCallback, useEffect, useRef, useState } from "reac
 import { useRouter } from "next/navigation";
 import { Check, ChevronRight, Eye, EyeOff, Lock, Mail, User } from "lucide-react";
 import { loginWithSocialProvider, type SocialProviderId } from "@/lib/auth/social-providers";
-import { isSupabaseConfigured, persistGuestUser } from "@/lib/supabase";
+import { isSupabaseConfigured, persistGuestUser, persistLocalUser } from "@/lib/supabase";
 import SovereignMobileRegister from "@/components/sovereign/SovereignMobileRegister";
 import { AUTH_DRAGON_BACKGROUND, AUTH_DRAGON_JPG } from "@/lib/brand-assets";
 
-type Provider = "email" | "google" | "github" | "apple" | "discord" | "microsoft" | "guest";
+type Provider = "email" | "google" | "github" | "apple" | "microsoft" | "guest";
 
 const T = {
   pill: "\u041f\u0420\u0418\u0412\u0410\u0422\u041d\u042b\u0419 \u0414\u041e\u0421\u0422\u0423\u041f",
@@ -77,14 +77,6 @@ function ProviderIcon({ type }: { type: Provider }) {
     );
   }
 
-  if (type === "discord") {
-    return (
-      <svg viewBox="0 0 24 24" className="sva-provider-svg" aria-hidden="true">
-        <path fill="#5865F2" d="M19.5 4.5A16.7 16.7 0 0 0 15.7 3c-.2.4-.5 1-.7 1.5a15.4 15.4 0 0 0-6 0C8.8 4 8.5 3.4 8.3 3A16.8 16.8 0 0 0 4.5 4.5 27.7 27.7 0 0 0 .7 16.2 16.9 16.9 0 0 0 5 19.2c.4-.6.8-1.1 1.1-1.7-.6-.2-1.2-.5-1.7-.8l.4-.3c3.3 1.5 6.9 1.5 10.1 0l.4.3c-.5.3-1.1.6-1.7.8.3.6.7 1.2 1.1 1.7a16.8 16.8 0 0 0 4.3-3 27.5 27.5 0 0 0-3.8-11.7ZM8.2 13.8c-.9 0-1.7-.8-1.7-1.8s.7-1.8 1.7-1.8 1.7.8 1.7 1.8-.8 1.8-1.7 1.8Zm7.6 0c-.9 0-1.7-.8-1.7-1.8s.7-1.8 1.7-1.8 1.7.8 1.7 1.8-.8 1.8-1.7 1.8Z" />
-      </svg>
-    );
-  }
-
   if (type === "microsoft") {
     return (
       <svg viewBox="0 0 24 24" className="sva-provider-svg" aria-hidden="true">
@@ -146,7 +138,11 @@ export function SovereignVideoAuth() {
     try {
       const mod = await import("@/lib/supabase");
       const supabase = mod.getSupabaseClient();
-      if (!supabase) throw new Error("Supabase is not configured. Use guest mode.");
+      if (!supabase) {
+        mod.persistLocalUser?.(email, username);
+        router.push("/dashboard");
+        return;
+      }
       if (authMode === "signin") {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -163,8 +159,8 @@ export function SovereignVideoAuth() {
       });
       if (error) throw error;
       if (!data.session) {
-        setMessage("Check your email to confirm the account, then return to MALIK AI.");
-        setIsOpening(false);
+        mod.persistLocalUser?.(data.user?.email || email, username);
+        router.push("/dashboard");
         return;
       }
       mod.persistSupabaseUser(data.session.user);
@@ -178,7 +174,7 @@ export function SovereignVideoAuth() {
     }
   }, [router, authMode, supabaseReady, usernameValue]);
 
-  const openOAuth = useCallback(async (provider: SocialProviderId | "microsoft") => {
+  const openOAuth = useCallback(async (provider: SocialProviderId) => {
     if (isOpening) return;
     if (!supabaseReady) {
       setMessage("Configure Supabase to enable OAuth.");
@@ -187,24 +183,13 @@ export function SovereignVideoAuth() {
     setIsOpening(true);
     setMessage("");
     try {
-      if (provider === "microsoft") {
-        const mod = await import("@/lib/supabase");
-        const client = mod.getSupabaseClient();
-        if (!client) throw new Error("Supabase client missing");
-        const { error } = await client.auth.signInWithOAuth({
-          provider: "azure",
-          options: { redirectTo: `${window.location.origin}/auth/callback` },
-        });
-        if (error) throw error;
-        return;
-      }
       const row = oauthProviders.find((item) => item.id === provider);
-      if (!row?.enabled) {
+      if (row && !row.enabled) {
         setMessage(row?.configured === false ? "Configure Supabase to enable OAuth." : "This provider is disabled.");
         setIsOpening(false);
         return;
       }
-      await loginWithSocialProvider(provider);
+      await loginWithSocialProvider(provider, `${window.location.origin}/auth/callback`);
     } catch {
       setMessage("Secure social login is temporarily unavailable. Please use guest mode or try again later.");
       setIsOpening(false);
@@ -323,7 +308,7 @@ export function SovereignVideoAuth() {
               )}
             </div>
 
-            <button className="sva-cta" type="submit" disabled={isOpening || !supabaseReady}>
+            <button className="sva-cta" type="submit" disabled={isOpening}>
               <span>{isOpening ? T.opening : T.cont}</span>
               <ChevronRight className="sva-cta-chevron" size={18} strokeWidth={2.6} />
             </button>
@@ -341,11 +326,15 @@ export function SovereignVideoAuth() {
                 { id: "apple" as const, label: "Apple", type: "apple" as Provider },
                 { id: "microsoft" as const, label: "Microsoft", type: "microsoft" as Provider },
               ]).map((item) => {
-                const row = item.id === "microsoft" ? null : oauthProviders.find((p) => p.id === item.id);
-                const disabled = isOpening || (item.id === "microsoft" ? !supabaseReady : !row?.enabled);
-                const tooltip = item.id === "microsoft"
-                  ? (supabaseReady ? "Microsoft / Azure OAuth" : "Configure Supabase")
-                  : !row?.configured ? "Configure Supabase URL and anon key" : !row?.enabled ? "Provider disabled in env" : "";
+                const row = oauthProviders.find((p) => p.id === item.id);
+                const disabled = isOpening;
+                const tooltip = !supabaseReady
+                  ? "Configure Supabase"
+                  : row && !row.enabled
+                    ? "Provider disabled in env"
+                    : item.id === "microsoft"
+                      ? "Microsoft / Azure OAuth"
+                      : "";
                 return (
                   <button
                     key={item.id}

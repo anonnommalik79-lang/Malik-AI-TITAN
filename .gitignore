@@ -6,6 +6,13 @@ build
 out
 coverage
 .vercel
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite
+*.sqlite3
+*.backup-*
+*.bak.*
 
 .env
 .env.local
