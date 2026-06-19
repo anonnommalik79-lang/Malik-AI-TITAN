@@ -173,10 +173,9 @@ def detect_prompt_intent(prompt: str, mode: str = "auto") -> str:
     if text.startswith(("/image ", "/photo ", "/img ", "/image:", "/photo:")):
         return PromptIntent.IMAGE
 
-    if mode_value in {"video", "video-generation"}:
-        return PromptIntent.VIDEO
-    if mode_value in {"image", "photo", "photo-generation", "image-generation"}:
-        return PromptIntent.IMAGE
+    # COST GUARD:
+    # Do not trust hidden UI mode for paid media.
+    # Only explicit /image or /video commands can trigger media.
 
     if text.startswith(("/codex ", "/agent ")):
         return PromptIntent.CODEX

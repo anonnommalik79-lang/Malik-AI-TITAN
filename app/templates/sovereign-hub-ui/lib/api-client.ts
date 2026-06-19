@@ -222,9 +222,47 @@ export async function getMediaStatus() {
 }
 
 export async function generateMedia(input: MediaGenerateInput) {
+  const rawPrompt = String(input.prompt || "").trim()
+  const lower = rawPrompt.toLowerCase()
   const kind = input.kind === "video" ? "video" : "photo"
+
+  const explicitImage =
+    lower.startsWith("/image ") ||
+    lower.startsWith("/image:") ||
+    lower.startsWith("/img ") ||
+    lower.startsWith("/img:") ||
+    lower.startsWith("/photo ") ||
+    lower.startsWith("/photo:")
+
+  const explicitVideo =
+    lower.startsWith("/video ") ||
+    lower.startsWith("/video:") ||
+    lower.startsWith("/veo ") ||
+    lower.startsWith("/veo:")
+
+  // NUCLEAR COST GUARD:
+  // Never call paid media routes unless the user used an explicit slash command.
+  if ((kind === "photo" && !explicitImage) || (kind === "video" && !explicitVideo)) {
+    return {
+      ok: false,
+      status: 0,
+      latencyMs: 0,
+      error: "Media generation blocked. Use /image or /video to generate paid media.",
+      data: {
+        ok: false,
+        kind,
+        mediaKind: kind === "video" ? "video" : "image",
+        status: "blocked",
+        message: "Blocked by MALIK cost guard. Normal chat stays text-only.",
+      },
+    } as ApiResult<MediaGenerateResult>
+  }
+
+  const cleanPrompt = rawPrompt.replace(/^\/(image|img|photo|video|veo)\s*:?/i, "").trim()
+
   const payload = {
     ...input,
+    prompt: cleanPrompt,
     kind,
     format: input.format || input.aspectRatio || "16:9",
     aspectRatio: input.aspectRatio || input.format || "16:9",
@@ -236,6 +274,9 @@ export async function generateMedia(input: MediaGenerateInput) {
     `/api/generate/${kind}`,
     {
       method: "POST",
+      headers: {
+        "x-malik-explicit-media": "true",
+      },
       body: JSON.stringify(payload),
     },
     kind === "video" ? 190_000 : 95_000,

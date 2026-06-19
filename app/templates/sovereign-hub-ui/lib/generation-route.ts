@@ -993,6 +993,58 @@ async function handleTextOrArtifactGeneration(ctx: RequestContext, body: Generat
   }
 }
 
+
+function explicitMediaKindFromPrompt(prompt: string): "photo" | "video" | null {
+  const value = toPlainText(prompt).trim().toLowerCase()
+
+  if (
+    value.startsWith("/image ") ||
+    value.startsWith("/image:") ||
+    value.startsWith("/img ") ||
+    value.startsWith("/img:") ||
+    value.startsWith("/photo ") ||
+    value.startsWith("/photo:")
+  ) {
+    return "photo"
+  }
+
+  if (
+    value.startsWith("/video ") ||
+    value.startsWith("/video:") ||
+    value.startsWith("/veo ") ||
+    value.startsWith("/veo:")
+  ) {
+    return "video"
+  }
+
+  return null
+}
+
+function stripExplicitMediaCommand(prompt: string) {
+  return toPlainText(prompt)
+    .replace(/^\/(image|img|photo|video|veo)\s*:?/i, "")
+    .trim()
+}
+
+function forceMediaRequestToText(ctx: RequestContext, body: GenerationBody, prompt: string) {
+  const textCtx: RequestContext = {
+    ...ctx,
+    kind: "text",
+    requestedKind: `${ctx.requestedKind}:blocked-to-text`,
+  }
+
+  const cleanPrompt = toPlainText(prompt)
+    .replace(/^TEXT ONLY\.\s*Do not generate image, photo, animation or video\.\s*Answer as text only\.\s*/i, "")
+    .trim()
+
+  return handleTextOrArtifactGeneration(
+    textCtx,
+    { ...body, kind: "text" },
+    `TEXT ONLY. Answer as text. Do not generate image, photo, animation or video.\n\n${cleanPrompt || prompt}`,
+  )
+}
+
+
 export function generationManifest() {
   return {
     ok: true,
@@ -1028,16 +1080,27 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
     return errorJson(ctx, 400, "invalid", "prompt_required", "Prompt is required.")
   }
 
+  const explicitMediaKind = explicitMediaKindFromPrompt(prompt)
+
+  // NUCLEAR COST GUARD:
+  // Backend must never generate paid media from normal chat or hidden UI mode.
+  // Media is allowed only when the prompt starts with /image, /photo, /img, /video or /veo.
+  if ((ctx.kind === "photo" || ctx.kind === "video") && explicitMediaKind !== ctx.kind) {
+    return await forceMediaRequestToText(ctx, body, prompt)
+  }
+
+  const routedPrompt = explicitMediaKind ? stripExplicitMediaCommand(prompt) : prompt
+
   try {
     if (ctx.kind === "photo") {
-      return await handleImageGeneration(ctx, body, prompt)
+      return await handleImageGeneration(ctx, body, routedPrompt)
     }
 
     if (ctx.kind === "video") {
-      return await handleVideoGeneration(ctx, body, prompt)
+      return await handleVideoGeneration(ctx, body, routedPrompt)
     }
 
-    return await handleTextOrArtifactGeneration(ctx, body, prompt)
+    return await handleTextOrArtifactGeneration(ctx, body, routedPrompt)
   } catch (error) {
     if (ctx.kind === "photo") {
       const url = imageFallbackUrl(prompt, body.style || body.format || "premium")

@@ -774,7 +774,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
     if (index <= 0) return
     for (let i = index - 1; i >= 0; i -= 1) {
       if (messages[i].role === "user" && messages[i].content.trim()) {
-        onSendMessage(messages[i].content, [], { responseDepth })
+        onSendMessage(getSafeTextModePrompt(messages[i].content), [], { responseDepth, outputMode: "text" } as any)
         return
       }
     }
@@ -850,8 +850,8 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
     { label: isRecording ? "Остановить запись" : "Записать голос", icon: Mic, action: toggleRecording },
     { label: "Вставить код", icon: Code, action: () => setCodeModalOpen(true) },
     { label: "Из URL", icon: LinkIcon, action: () => setUrlModalOpen(true) },
-    { label: "Создать изображение", icon: Wand2, action: () => handleQuickAction("Создай изображение по описанию") },
-    { label: "Создать видео", icon: Video, action: () => handleQuickAction("Создай видео по описанию") },
+    { label: "Создать изображение", icon: Wand2, action: () => handleQuickAction("/image") },
+    { label: "Создать видео", icon: Video, action: () => handleQuickAction("/video") },
     { label: "Глубокое исследование", icon: Search, action: () => handleQuickAction("Проведи глубокое исследование") },
     { label: "Поиск в сети", icon: Globe, action: () => handleQuickAction("Найди в сети свежую информацию") },
     { label: "Режим агента", icon: Bot, action: () => handleQuickAction("Включи режим агента и составь план выполнения") },
