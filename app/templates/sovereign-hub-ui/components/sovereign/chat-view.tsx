@@ -738,16 +738,21 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
   }
 
   const handleGuardedSubmit = () => {
-    const text = prompt.trim()
-    if (!text && attachments.length === 0) return
+    const rawText = prompt.trim()
+    if (!rawText && attachments.length === 0) return
     if (isLoading) {
       setLocalError("Malik AI уже обрабатывает запрос.")
       return
     }
+
+    const safeText = rawText
+      ? getSafeTextModePrompt(rawText)
+      : "TEXT ONLY. Do not generate image, photo, animation or video. Answer as text only.\n\nПроанализируй вложения."
+
     setLocalError(null)
-    try { window.localStorage.setItem("malik_last_user_prompt", text || "Analyze attachments") } catch {}
-    setLastSubmittedPrompt(text || "Проанализируй вложения")
-    onSendMessage(text || "Проанализируй вложения", attachments, { responseDepth })
+    try { window.localStorage.setItem("malik_last_user_prompt", rawText || "Analyze attachments") } catch {}
+    setLastSubmittedPrompt(rawText || "Проанализируй вложения")
+    onSendMessage(safeText, attachments, { responseDepth, outputMode: "text" } as any)
     setPrompt("")
     setAttachments([])
     setShowAttachMenu(false)
