@@ -60,7 +60,7 @@ export function canBypassLimits(user?: AdminUserLike | string | null) {
 export function getUserPlan(user?: AdminUserLike | string | null): AIPlan {
   if (isAdminUser(user) || isDevBypassEnabled()) return "owner"
 
-  if (typeof user === "object" && user.serverVerified === true && user.plan) {
+  if (user && typeof user === "object" && user.serverVerified === true && user.plan) {
     const plan = String(user.plan).toLowerCase()
     if (plan === "pro" || plan === "ultra" || plan === "owner") return plan as AIPlan
   }
