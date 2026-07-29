@@ -1,22 +1,49 @@
-name: Export fix branch
+name: Apply and verify critical fixes
 
 on:
   pull_request:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  apply-and-verify:
     if: github.head_ref == 'fix/security-context-routing-20260729'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
-      - uses: actions/upload-artifact@v4
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
         with:
-          name: malik-fix-branch-source
-          path: app/templates/sovereign-hub-ui
-          retention-days: 1
+          node-version: '22'
+
+      - name: Apply UI security and routing patch
+        run: python3 scripts/apply_ui_security_fixes.py
+
+      - name: Install dependencies
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm run typecheck
+
+      - name: Production build
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm run build
+
+      - name: Commit verified fixes and remove temporary tooling
+        run: |
+          rm -f scripts/apply_ui_security_fixes.py
+          rm -f .github/workflows/export-fix-branch.yml
+          git config user.name "malik-ai-fix-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix critical auth, context, API and routing issues"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
