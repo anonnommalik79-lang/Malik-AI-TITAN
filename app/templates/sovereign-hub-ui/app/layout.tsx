@@ -1,5 +1,6 @@
-import CleanInteractionLayer from "@/components/sovereign/clean-ui/CleanInteractionLayer";
+import CleanInteractionLayer from "@/components/sovereign/clean-ui/CleanInteractionLayer"
 import type { Metadata } from "next"
+import Script from "next/script"
 import "./globals.css"
 import "./mobile-polish.css"
 import "./legendary-aurora.css"
@@ -30,6 +31,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <meta name="robots" content="notranslate" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
         <meta name="theme-color" content="#05070d" />
+        <Script
+          id="malik-supabase-runtime-config"
+          src="/api/auth/runtime-config"
+          strategy="beforeInteractive"
+        />
       </head>
       <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-[#030303] font-sans antialiased notranslate">
         <CleanInteractionLayer />
