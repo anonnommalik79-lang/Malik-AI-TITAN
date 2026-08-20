@@ -12,7 +12,6 @@ import {
   ArrowRight,
   CircleCheck,
   Code2,
-  Crown,
   Film,
   Grid3X3,
   Hexagon,
@@ -21,7 +20,6 @@ import {
   Link2,
   Network,
   PanelLeft,
-  Rocket,
   Sparkles,
   Terminal,
   Wand2,
@@ -210,10 +208,10 @@ function MalikHomePromptComposer({
 
 function MalikHomeQuickChips({ onSelect }: { onSelect: (value: string) => void }) {
   const chips = [
-    ["Premium SaaS", <Crown key="i" />, "Создай Premium SaaS dashboard"],
-    ["Landing page", <Rocket key="i" />, "Создай landing page"],
-    ["React component", <Sparkles key="i" />, "Создай React component"],
-    ["Dashboard", <Grid3X3 key="i" />, "Создай dashboard"],
+    ["AI Chat", <Sparkles key="i" />, "Создай полноценный AI Chat с историей диалогов, моделями, файлами и streaming"],
+    ["CRM", <Grid3X3 key="i" />, "Создай CRM с клиентами, сделками, pipeline и задачами"],
+    ["Интернет-магазин", <Layout key="i" />, "Создай интернет-магазин с каталогом, корзиной, checkout и профилем"],
+    ["Analytics", <Code2 key="i" />, "Создай analytics dashboard с KPI, графиками, таблицами и фильтрами"],
     ["Photo gallery", <Image key="i" />, "Создай photo gallery"],
     ["Video studio", <Film key="i" />, "Создай video studio"],
   ] as const
