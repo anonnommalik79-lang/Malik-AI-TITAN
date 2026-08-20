@@ -130,8 +130,6 @@ export type DashboardMainContentProps = {
   onModeChange: (mode: AiModeId) => void
   onOpenCommandCenter: () => void
   onWelcomeOpenTemplates: () => void
-  onWelcomeOpenPhoto: () => void
-  onWelcomeOpenVideo: () => void
   onWelcomeOpenWebsite: () => void
   onWelcomeOpenCode: () => void
   onWelcomeOpenBilling: () => void
@@ -160,8 +158,6 @@ function DashboardMainContentInner({
   onModeChange,
   onOpenCommandCenter,
   onWelcomeOpenTemplates,
-  onWelcomeOpenPhoto,
-  onWelcomeOpenVideo,
   onWelcomeOpenWebsite,
   onWelcomeOpenCode,
   onWelcomeOpenBilling,
@@ -346,8 +342,6 @@ function DashboardMainContentInner({
           isLoading={isLoading}
           onOpenCodex={onOpenCodex}
           onOpenTemplates={onWelcomeOpenTemplates}
-          onOpenPhoto={onWelcomeOpenPhoto}
-          onOpenVideo={onWelcomeOpenVideo}
           onOpenWebsite={onWelcomeOpenWebsite}
           onOpenCode={onWelcomeOpenCode}
           onOpenBilling={onWelcomeOpenBilling}

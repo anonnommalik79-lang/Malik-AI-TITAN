@@ -10,6 +10,8 @@ import "./creator-clone-safe.css"
 import "./malik-hybrid-ui.css"
 import "./malik-final-fixes.css"
 import "./malik-mobile-worldclass.css"
+// Last import wins: strips the effects that cost the most per frame on phones.
+import "./mobile-performance.css"
 
 export const metadata: Metadata = {
   title: "Malik AI Sovereign",

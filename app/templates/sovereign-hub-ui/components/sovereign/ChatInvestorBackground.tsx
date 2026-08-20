@@ -9,7 +9,7 @@ export function ChatInvestorBackground() {
         alt=""
         className="malik-chat-legend-photo"
         draggable={false}
-        decoding="sync"
+        decoding="async"
         loading="eager"
         fetchPriority="high"
       />

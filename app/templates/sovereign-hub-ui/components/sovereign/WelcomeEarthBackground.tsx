@@ -10,7 +10,7 @@ export function WelcomeEarthBackground() {
           src={EARTH_BACKGROUND_URL}
           alt=""
           loading="eager"
-          decoding="sync"
+          decoding="async"
           fetchPriority="high"
           draggable={false}
         />

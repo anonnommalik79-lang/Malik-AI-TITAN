@@ -16,7 +16,6 @@ import {
   Film,
   Grid3X3,
   Hexagon,
-  Image,
   Layout,
   Link2,
   Network,
@@ -43,8 +42,6 @@ export interface MalikHybridHomeProps {
   isLoading?: boolean
   onOpenCodex?: () => void
   onOpenTemplates?: () => void
-  onOpenPhoto?: () => void
-  onOpenVideo?: () => void
   onOpenWebsite?: () => void
   onOpenCode?: () => void
   onOpenBilling?: () => void
@@ -106,10 +103,10 @@ function MalikHomeHero() {
       </div>
       <h1 className="creator-title">
         <span className="creator-title-line">Создай продукт или сайт,</span>
-        <span className="creator-title-line creator-title-grad">фото, видео, код — одним запросом</span>
+        <span className="creator-title-line creator-title-grad">интерфейс или код — одним запросом</span>
       </h1>
       <p className="creator-subtitle">
-        Один промпт превращает идею в сайт, код, фото, видео, саунды и многое другое — без шаблонов, плагинов и бесконечных рутин.
+        Один промпт превращает идею в сайт, дашборд, компонент, код и документ — без шаблонов, плагинов и бесконечных рутин.
       </p>
     </section>
   )
@@ -144,7 +141,6 @@ function MalikHomePromptComposer({
   isLoading,
   onPromptChange,
   onSubmit,
-  onOpenPhoto,
   onOpenWebsite,
   onOpenCanvas,
   onEnhance,
@@ -153,7 +149,6 @@ function MalikHomePromptComposer({
   isLoading?: boolean
   onPromptChange: (value: string) => void
   onSubmit: () => void
-  onOpenPhoto?: () => void
   onOpenWebsite?: () => void
   onOpenCanvas?: () => void
   onEnhance: () => void
@@ -174,13 +169,10 @@ function MalikHomePromptComposer({
           }
         }}
         rows={1}
-        placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."
+        placeholder="Опиши идею: сайт, дашборд, компонент, код, документ..."
       />
       <div className="creator-prompt-actions creator-prompt-toolbar">
         <div className="creator-prompt-tools">
-          <button type="button" onClick={onOpenPhoto} className="creator-square-button" aria-label="Add image">
-            <Image />
-          </button>
           <button type="button" onClick={onOpenWebsite} className="creator-square-button" aria-label="Attach link">
             <Link2 />
           </button>
@@ -214,8 +206,7 @@ function MalikHomeQuickChips({ onSelect }: { onSelect: (value: string) => void }
     ["Landing page", <Rocket key="i" />, "Создай landing page"],
     ["React component", <Sparkles key="i" />, "Создай React component"],
     ["Dashboard", <Grid3X3 key="i" />, "Создай dashboard"],
-    ["Photo gallery", <Image key="i" />, "Создай photo gallery"],
-    ["Video studio", <Film key="i" />, "Создай video studio"],
+    ["Документ", <Layout key="i" />, "Составь продуктовый бриф"],
   ] as const
 
   return (
@@ -231,16 +222,12 @@ function MalikHomeQuickChips({ onSelect }: { onSelect: (value: string) => void }
 }
 
 function MalikHomeFeatureGrid({
-  onOpenPhoto,
-  onOpenVideo,
   onOpenWebsite,
   onOpenCode,
   onOpenTemplates,
   onOpenCodex,
-}: Pick<MalikHybridHomeProps, "onOpenPhoto" | "onOpenVideo" | "onOpenWebsite" | "onOpenCode" | "onOpenTemplates" | "onOpenCodex">) {
+}: Pick<MalikHybridHomeProps, "onOpenWebsite" | "onOpenCode" | "onOpenTemplates" | "onOpenCodex">) {
   const cards = [
-    ["Photo Studio", "AI image flow", <Image key="i" />, onOpenPhoto, "cyan"],
-    ["Video Studio", "Cinematic creator", <Film key="i" />, onOpenVideo, "blue"],
     ["Website Builder", "Insert premium prompt", <Layout key="i" />, onOpenWebsite, "sky"],
     ["Code Generator", "Switch to code creation", <Code2 key="i" />, onOpenCode, "cyan"],
     ["Templates", "Open gallery", <Grid3X3 key="i" />, onOpenTemplates, "violet"],
@@ -289,7 +276,6 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
         isLoading={props.isLoading}
         onPromptChange={setPrompt}
         onSubmit={submit}
-        onOpenPhoto={props.onOpenPhoto}
         onOpenWebsite={props.onOpenWebsite}
         onOpenCanvas={props.onOpenCanvas}
         onEnhance={() => setPrompt(`Сделай как premium Malik AI: ${prompt || "AI product"}`)}
@@ -300,8 +286,6 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
         onOpenCapabilities={props.onOpenCapabilities}
       />
       <MalikHomeFeatureGrid
-        onOpenPhoto={props.onOpenPhoto}
-        onOpenVideo={props.onOpenVideo}
         onOpenWebsite={props.onOpenWebsite}
         onOpenCode={props.onOpenCode}
         onOpenTemplates={props.onOpenTemplates}

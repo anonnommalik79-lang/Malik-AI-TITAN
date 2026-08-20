@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
+import { useLowPowerMode } from "@/lib/use-low-power"
 
 const AnimatedAIBackground = dynamic(
   () => import("../AnimatedAIBackground").then((mod) => mod.AnimatedAIBackground),
@@ -12,11 +13,22 @@ const DigitalBridgeDemoPolish = dynamic(
   { ssr: false },
 )
 
-/** Mount heavy WebGL/CSS backgrounds after the route paint — keeps section switches instant. */
+/**
+ * Mount heavy WebGL/CSS backgrounds after the route paint — keeps section
+ * switches instant. On phones and reduced-motion setups they are not mounted at
+ * all: the animated star field repaints continuously and was the difference
+ * between a smooth and a stuttering scroll on mid-range hardware.
+ */
 export function DeferredHeavyBackground() {
+  const lowPower = useLowPowerMode()
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
+    if (lowPower) {
+      setReady(false)
+      return
+    }
+
     let cancelled = false
     const run = () => {
       if (!cancelled) setReady(true)
@@ -35,9 +47,9 @@ export function DeferredHeavyBackground() {
       cancelled = true
       window.clearTimeout(fallback)
     }
-  }, [])
+  }, [lowPower])
 
-  if (!ready) return null
+  if (lowPower || !ready) return null
 
   return (
     <>

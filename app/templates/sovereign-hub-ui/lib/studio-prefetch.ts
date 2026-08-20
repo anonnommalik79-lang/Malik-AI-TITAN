@@ -25,11 +25,28 @@ const STUDIO_IMPORTS = [
   () => import("@/components/sovereign/digital-bridge-demo-polish"),
 ] as const
 
+/**
+ * Phones pay for this twice: the download itself on a metered connection, and
+ * the parse/compile of eleven studio chunks on a slower CPU. Touch devices get
+ * the chat shell only; the studio chunk still loads on demand when opened.
+ */
+function shouldPrefetchStudios(): boolean {
+  try {
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
+    if (connection?.saveData) return false
+    if (window.matchMedia("(pointer: coarse)").matches) return false
+  } catch {
+    /* matchMedia can be unavailable in exotic webviews — fall through to true */
+  }
+  return true
+}
+
 export function prefetchStudioChunks(): void {
   if (typeof window === "undefined") return
   prefetchChatShell()
 
   if (prefetched) return
+  if (!shouldPrefetchStudios()) return
   prefetched = true
 
   scheduleIdle(() => {

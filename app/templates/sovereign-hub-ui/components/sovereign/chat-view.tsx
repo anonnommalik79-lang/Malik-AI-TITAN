@@ -156,25 +156,6 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
 }
 
 
-function getSafeTextModePrompt(raw: string) {
-  const value = raw.trim()
-  const lower = value.toLowerCase()
-
-  // ABSOLUTE COST GUARD:
-  // Normal chat is always text. Paid media only through explicit slash commands.
-  if (
-    lower.startsWith("/image ") ||
-    lower.startsWith("/photo ") ||
-    lower.startsWith("/img ") ||
-    lower.startsWith("/video ") ||
-    lower.startsWith("/veo ")
-  ) {
-    return value
-  }
-
-  return `TEXT ONLY. Do not generate image, photo, animation or video. Answer as text only.\n\n${value}`
-}
-
 function detectGenerationStatusType(text: string): GenerationStatusType {
   const value = text.toLowerCase().trim()
 
@@ -745,14 +726,17 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
       return
     }
 
-    const safeText = rawText
-      ? getSafeTextModePrompt(rawText)
-      : "TEXT ONLY. Do not generate image, photo, animation or video. Answer as text only.\n\nПроанализируй вложения."
+    // The message is sent exactly as the user wrote it. Media generation is gated
+    // by the slash-command check in the dashboard and by the server-side cost
+    // guard; prefixing every prompt with a "TEXT ONLY" instruction used to leak
+    // into chat titles and history, and the words "image/photo/video" inside
+    // that instruction were themselves matching the old media detector.
+    const outgoing = rawText || "Проанализируй вложения"
 
     setLocalError(null)
-    try { window.localStorage.setItem("malik_last_user_prompt", rawText || "Analyze attachments") } catch {}
-    setLastSubmittedPrompt(rawText || "Проанализируй вложения")
-    onSendMessage(safeText, attachments, { responseDepth, outputMode: "text" } as any)
+    try { window.localStorage.setItem("malik_last_user_prompt", outgoing) } catch {}
+    setLastSubmittedPrompt(outgoing)
+    onSendMessage(outgoing, attachments, { responseDepth })
     setPrompt("")
     setAttachments([])
     setShowAttachMenu(false)
@@ -774,7 +758,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
     if (index <= 0) return
     for (let i = index - 1; i >= 0; i -= 1) {
       if (messages[i].role === "user" && messages[i].content.trim()) {
-        onSendMessage(getSafeTextModePrompt(messages[i].content), [], { responseDepth, outputMode: "text" } as any)
+        onSendMessage(messages[i].content, [], { responseDepth })
         return
       }
     }

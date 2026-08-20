@@ -1,0 +1,189 @@
+/* =========================================================================
+   MOBILE PERFORMANCE LAYER
+   =========================================================================
+   Imported last so it wins over the decorative stylesheets.
+
+   Phones were dropping frames because the home and chat surfaces stack three
+   expensive things on top of each other: full-bleed backdrop blurs, a handful
+   of never-ending background animations, and an Earth image scaled to 168% of
+   the viewport that sits in its own composited layer with a colour filter on
+   top. None of that survives a mid-range Android GPU.
+
+   This file does not change the desktop look. It only strips the effects that
+   cost the most per frame on small screens, and honours prefers-reduced-motion
+   everywhere.
+   ========================================================================= */
+
+@media (max-width: 900px) {
+  /* ---- 1. Backdrop blur is the single most expensive effect on mobile ----
+     Every blurred surface forces the compositor to re-sample everything behind
+     it on each frame. Solid surfaces read the same at these sizes. */
+  #malik-root *,
+  body * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* ---- 2. Decorative infinite animations ----
+     Drifting stars, orbiting satellites, aurora sweeps and shine loops all
+     repaint forever, even while the user is just reading. */
+  .malik-welcome-earth-spin,
+  .malik-welcome-earth-satellite,
+  .malik-welcome-earth-photo,
+  .malik-chat-legend-bg,
+  .malik-chat-legend-photo,
+  [class*="creatorSatellite"],
+  [class*="malik-star"],
+  [class*="malik-meteor"],
+  [class*="malik-aurora"],
+  [class*="space-bg"],
+  .digital-bridge-demo-polish {
+    animation: none !important;
+    will-change: auto !important;
+  }
+
+  /* ---- 3. The Earth backdrop ----
+     Keep the picture, drop the oversize composited layer and the live filter. */
+  .malik-welcome-earth-spin {
+    width: 100% !important;
+    height: 100% !important;
+    top: 50% !important;
+  }
+
+  .malik-welcome-earth-photo {
+    filter: none !important;
+    will-change: auto !important;
+  }
+
+  .malik-welcome-earth-satellite {
+    display: none !important;
+  }
+
+  /* ---- 4. Layered shadows ----
+     Large soft shadows are cheap to declare and expensive to paint. */
+  .creator-feature-card,
+  .creator-stat-card,
+  .creator-chip,
+  .creator-template-card,
+  .malik-sidebar,
+  .creator-prompt {
+    box-shadow: none !important;
+  }
+
+  /* ---- 5. Scrolling ----
+     Momentum scrolling plus containment keeps long lists from repainting the
+     whole page. */
+  .malik-sidebar-scroll,
+  .creator-home-main,
+  .malik-premium-chat-host {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+}
+
+/* =========================================================================
+   MOBILE LAYOUT AND TOUCH TARGETS
+   ========================================================================= */
+
+@media (max-width: 768px) {
+  /* Anything tappable gets a 44px target — the smallest size that is reliably
+     hittable with a thumb. */
+  .creator-chip,
+  .creator-square-button,
+  .creator-tool-button,
+  .creator-submit-button,
+  .malik-sidebar-item,
+  .malik-sidebar-menu-item {
+    min-height: 44px !important;
+  }
+
+  .malik-sidebar-item {
+    height: auto !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+  }
+
+  /* The composer is the primary control on the home screen: give it room and
+     keep the send button reachable with one hand. */
+  .creator-prompt textarea {
+    min-height: 88px !important;
+    font-size: 16px !important; /* < 16px makes iOS Safari zoom on focus */
+    line-height: 1.45 !important;
+  }
+
+  .creator-prompt-toolbar {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .creator-submit-button {
+    flex: 1 1 100% !important;
+    justify-content: center !important;
+  }
+
+  /* One column beats a cramped two-column grid on a phone. */
+  .creator-feature-grid,
+  .creator-stats {
+    grid-template-columns: 1fr !important;
+  }
+
+  .creator-chip-row {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  .creator-chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .creator-chip {
+    scroll-snap-align: start;
+    flex: 0 0 auto;
+  }
+
+  /* Hero copy at phone scale. */
+  .creator-title {
+    font-size: clamp(26px, 7.4vw, 38px) !important;
+    line-height: 1.16 !important;
+  }
+
+  .creator-subtitle {
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+  }
+
+  /* Respect the notch and the home indicator. */
+  .creator-home-main {
+    padding-left: max(16px, env(safe-area-inset-left)) !important;
+    padding-right: max(16px, env(safe-area-inset-right)) !important;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .malik-sidebar {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Stop horizontal drift caused by oversized decorative layers. */
+  html,
+  body {
+    overflow-x: hidden;
+  }
+}
+
+/* =========================================================================
+   REDUCED MOTION — applies at every width
+   ========================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

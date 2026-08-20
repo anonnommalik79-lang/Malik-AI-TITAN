@@ -1,7 +1,4 @@
 "use client"
-import MalikGodUIEngine from "@/components/sovereign/god-ui-engine/MalikGodUIEngine";
-import SidebarActionsUpgrade from "@/components/sovereign/sidebar-actions/SidebarActionsUpgrade";
-import FinalIntelligenceUpgrade from "@/components/sovereign/final-intelligence/FinalIntelligenceUpgrade";
 import dynamic from "next/dynamic"
 import { Component, useState, useCallback, useEffect, useRef } from "react"
 import { Sidebar } from "./sidebar"
@@ -56,7 +53,6 @@ import { BusinessCommandCenter } from "./business/BusinessCommandCenter"
 import { NewsroomStudio } from "./media/NewsroomStudio"
 import { GenerationAnimation } from "./generation-animation"
 import { MobileNavigationGuard } from "./mobile-navigation-guard"
-import { PremiumCss, PremiumHero, PremiumScene } from "../ui/premium-components"
 import type { GenerationStatusType } from "./generation-status"
 import type { AiModeId, PowerAction } from "./power-registry"
 import type { Capability } from "@/lib/ai/capabilities/types"
@@ -91,9 +87,7 @@ import {
   CheckCircle2,
   Palette,
   Type,
-  Box,
   Maximize2,
-  Activity,
   Globe,
   Users,
   Cpu,
@@ -190,32 +184,40 @@ interface Chat {
 }
 
 
+/**
+ * Media generation is paid and slow, so it must never start by accident.
+ *
+ * The previous version matched loose substrings — "art" fired on "start",
+ * "smart" and "chart", the Russian "арт" fired on "стартап" and "карта",
+ * "motion" fired on "emotion" — which meant an ordinary question could
+ * silently launch an image or video job. It now mirrors the server-side cost
+ * guard in lib/generation-route.ts: media runs only on an explicit slash
+ * command, or when the user has deliberately switched the composer into image
+ * or video mode.
+ */
+// `\b` is ASCII-only, so it never matches after a Cyrillic command. The unicode
+// lookahead below is the equivalent boundary for "/фото" and "/видео".
+const MEDIA_COMMAND_PATTERN = /^\s*\/(image|img|photo|foto|фото|картинка|video|veo|видео)(?![\p{L}\p{N}_])\s*:?\s*/iu
+
+export function parseMediaCommand(prompt: string): { kind: "image" | "video"; prompt: string } | null {
+  const match = MEDIA_COMMAND_PATTERN.exec(String(prompt || ""))
+  if (!match) return null
+  const command = match[1].toLowerCase()
+  const kind: "image" | "video" = /video|veo|видео/.test(command) ? "video" : "image"
+  return { kind, prompt: String(prompt).slice(match[0].length).trim() }
+}
+
 function detectInlineMediaGenerationRequest(
   prompt: string,
-  attachments: ChatAttachment[] = [],
+  _attachments: ChatAttachment[] = [],
   mode: AiModeId = "auto",
 ): "image" | "video" | null {
-  const modeText = String(mode).toLowerCase()
-  const text = `${modeText} ${prompt || ""} ${attachments.map((item) => item.kind).join(" ")}`.toLowerCase()
+  const command = parseMediaCommand(prompt)
+  if (command) return command.kind
 
-  const hasExplicitImage =
-    /image|photo|picture|icon|logo|avatar|poster|wallpaper|portrait|illustration|art|transformer/.test(text) ||
-    /\u0444\u043e\u0442\u043e|\u0438\u0437\u043e\u0431\u0440\u0430\u0436|\u043a\u0430\u0440\u0442\u0438\u043d|\u0438\u043a\u043e\u043d|\u043b\u043e\u0433\u043e\u0442\u0438\u043f|\u0430\u0432\u0430\u0442\u0430\u0440|\u043f\u043e\u0441\u0442\u0435\u0440|\u0430\u0440\u0442|\u043d\u0430\u0440\u0438\u0441|\u0442\u0440\u0430\u043d\u0441\u0444\u043e\u0440\u043c/.test(text)
-
-  const hasExplicitVideo =
-    /video|veo|runway|luma|motion|animation|animate|clip/.test(text) ||
-    /\u0432\u0438\u0434\u0435\u043e|\u0440\u043e\u043b\u0438\u043a|\u043a\u043b\u0438\u043f|\u0430\u043d\u0438\u043c\u0430\u0446/.test(text)
-
-  const hasCreateIntent =
-    /generate|create|make|render|draw|design/.test(text) ||
-    /\u0441\u0433\u0435\u043d\u0435\u0440|\u0441\u043e\u0437\u0434\u0430\u0439|\u0441\u0434\u0435\u043b\u0430\u0439|\u043d\u0430\u0440\u0438\u0441\u0443\u0439|\u0433\u0435\u043d\u0435\u0440\u0438\u0440/.test(text)
-
-  const looksLikeImagePrompt =
-    hasCreateIntent &&
-    /4k|8k|ultra detailed|sharp focus|cinematic lighting|realistic|futuristic|neon|stadium|city|club|robot|transformer/.test(text)
-
-  if (modeText.includes("image") || modeText.includes("photo") || hasExplicitImage || looksLikeImagePrompt) return "image"
-  if (modeText.includes("video") || hasExplicitVideo) return "video"
+  // An explicitly chosen composer mode counts as consent; "auto" never does.
+  if (mode === "image") return "image"
+  if (mode === "video") return "video"
 
   return null
 }
@@ -354,31 +356,28 @@ function buildInlineMediaAssistantText(media: InlineMediaGeneration): string {
 
 
 function detectDashboardGenerationKind(prompt: string, attachments: ChatAttachment[] = [], mode: AiModeId = "auto"): GenerationStatusType {
-  const attachmentHint = attachments.map((item) => item.kind).join(" ")
-  const text = `${mode} ${prompt} ${attachmentHint}`.toLowerCase()
+  // Image/video are only claimed when media generation was actually requested,
+  // otherwise the progress animation lies about what the app is doing.
+  const mediaKind = detectInlineMediaGenerationRequest(prompt, attachments, mode)
+  if (mediaKind === "image") return "image"
+  if (mediaKind === "video") return "video"
 
-  const hasCreateIntent =
-    /generate|create|make|render|draw|design/.test(text) ||
-    /\u0441\u0433\u0435\u043d\u0435\u0440|\u0441\u043e\u0437\u0434\u0430\u0439|\u0441\u0434\u0435\u043b\u0430\u0439|\u043d\u0430\u0440\u0438\u0441\u0443\u0439|\u0433\u0435\u043d\u0435\u0440\u0438\u0440/.test(text)
+  const text = `${mode} ${prompt}`.toLowerCase()
 
-  const hasImage =
-    /image|photo|picture|icon|logo|avatar|poster|wallpaper|portrait|illustration|art/.test(text) ||
-    /\u0444\u043e\u0442\u043e|\u0438\u0437\u043e\u0431\u0440\u0430\u0436|\u043a\u0430\u0440\u0442\u0438\u043d|\u0438\u043a\u043e\u043d|\u043b\u043e\u0433\u043e\u0442\u0438\u043f|\u0430\u0432\u0430\u0442\u0430\u0440|\u043f\u043e\u0441\u0442\u0435\u0440|\u0430\u0440\u0442|\u043d\u0430\u0440\u0438\u0441/.test(text)
-
-  const hasVideo =
-    /video|veo|runway|luma|motion|animation|animate|clip/.test(text) ||
-    /\u0432\u0438\u0434\u0435\u043e|\u0440\u043e\u043b\u0438\u043a|\u043a\u043b\u0438\u043f|\u0430\u043d\u0438\u043c\u0430\u0446/.test(text)
-
-  const looksLikeImagePrompt =
-    hasCreateIntent &&
-    /4k|8k|ultra detailed|sharp focus|cinematic lighting|realistic|futuristic|neon|stadium|city|club/.test(text)
-
-  if (hasImage || looksLikeImagePrompt) return "image"
-  if (hasVideo) return "video"
-  if (/codex|agent|project/.test(text) || /\u043f\u0430\u043f\u043a|\u0444\u0430\u0439\u043b|project/.test(text)) return "codex"
-  if (/code|react|tsx|typescript|javascript|python|debug/.test(text) || /\u043a\u043e\u0434|\u043e\u0448\u0438\u0431/.test(text)) return "code"
-  if (/website|site|landing|dashboard|ui|html|canvas|preview|template/.test(text) || /\u0441\u0430\u0439\u0442|\u043b\u0435\u043d\u0434\u0438\u043d\u0433|\u0434\u0430\u0448\u0431\u043e\u0440\u0434|\u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441|\u0448\u0430\u0431\u043b\u043e\u043d/.test(text)) return "website"
-  if (/file|document|pdf|word/.test(text) || /\u0444\u0430\u0439\u043b|\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442/.test(text)) return "file"
+  if (/\bcodex\b|\bagent\b/.test(text) || /\u043a\u043e\u0434\u0435\u043a\u0441/.test(text)) return "codex"
+  if (
+    /\bcode\b|\breact\b|\btsx\b|typescript|javascript|python|\bdebug\b|refactor/.test(text) ||
+    /\u043a\u043e\u0434\b|\u043e\u0448\u0438\u0431\u043a|\u0440\u0435\u0444\u0430\u043a\u0442\u043e\u0440/.test(text)
+  ) {
+    return "code"
+  }
+  if (
+    /website|landing|dashboard|\bui\b|\bhtml\b|canvas|preview|template/.test(text) ||
+    /\u0441\u0430\u0439\u0442|\u043b\u0435\u043d\u0434\u0438\u043d\u0433|\u0434\u0430\u0448\u0431\u043e\u0440\u0434|\u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441|\u0448\u0430\u0431\u043b\u043e\u043d/.test(text)
+  ) {
+    return "website"
+  }
+  if (/\bpdf\b|\bdocx?\b|document/.test(text) || /\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442/.test(text)) return "file"
 
   return "text"
 }
@@ -554,8 +553,6 @@ function V0GenerationTerminal({ title = "Рнициализация среды
     if (isDone) {
       return (
         <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
-      <SidebarActionsUpgrade />
-      <FinalIntelligenceUpgrade />
           <Check className="w-3 h-3 text-emerald-400" />
         </div>
       );
@@ -3800,7 +3797,7 @@ function detectIntentAndRoute(
 ): DashboardRouteDecision {
   const raw = String(prompt || "")
   const t = `${mode} ${raw}`.toLowerCase()
-  const explicitRoute = /^(open|go to|show|открой|перейди|покажи|запусти)\b/.test(t)
+  const explicitRoute = /^\s*(open|go to|show|открой|перейди|покажи|запусти)\b/i.test(raw.trim())
   const responseKind = inferDashboardResponseKind(raw, mode)
   const generationKind = detectDashboardGenerationKind(raw, attachments, mode)
   const candidates = DASHBOARD_SAFE_VIEW_IDS
@@ -3844,7 +3841,10 @@ function detectIntentAndRoute(
     }
   }
 
-  if (best && best.score >= 10 && normalizeDashboardViewId(best.id) !== "home") {
+  // A single loose keyword is not enough to yank the user out of the chat they
+  // are typing in: require the view id itself or several keywords, and only
+  // after an explicit "открой/покажи/open/show" verb (see explicitRoute above).
+  if (best && best.score >= 16 && normalizeDashboardViewId(best.id) !== "home") {
     return {
       action: "open-view",
       targetView: best.id,
@@ -5045,6 +5045,14 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setGeneratedCode("")
   }
   const inlineMediaKind = detectInlineMediaGenerationRequest(cleanContent, attachments, activeAiMode)
+  const parsedMediaCommand = parseMediaCommand(cleanContent)
+  // Shown in the chat card: without the slash command.
+  const inlineMediaPrompt = parsedMediaCommand ? parsedMediaCommand.prompt || cleanContent : cleanContent
+  // Sent to the API: the server-side cost guard only accepts prompts that carry
+  // the command, so a mode-selected request gets the prefix added here.
+  const inlineMediaApiPrompt = parsedMediaCommand
+    ? cleanContent
+    : `${inlineMediaKind === "video" ? "/video" : "/image"} ${cleanContent}`
   setActiveGenerationKind(inlineMediaKind || detectDashboardGenerationKind(cleanContent, attachments, activeAiMode))
   const chatId = activeChatId || crypto.randomUUID()
   const title = cleanContent.slice(0, 34) + (cleanContent.length > 34 ? "..." : "")
@@ -5074,11 +5082,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const assistantMessage: Message = {
     id: crypto.randomUUID(),
     role: "assistant",
-    content: inlineMediaKind ? buildInlineMediaAssistantText(createInlineMediaSeed(inlineMediaKind, cleanContent)) : "",
+    content: inlineMediaKind ? buildInlineMediaAssistantText(createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt)) : "",
     timestamp: new Date(),
     isStreaming: true,
     intentType: inlineMediaKind ? "chat" : isProjReq ? "project" : "chat",
-    generatedMedia: inlineMediaKind ? createInlineMediaSeed(inlineMediaKind, cleanContent) : undefined,
+    generatedMedia: inlineMediaKind ? createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt) : undefined,
   }
 
   setMessages(prev => [...prev, userMessage, assistantMessage])
@@ -5246,8 +5254,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: cleanContent,
-        stream: false,
+          prompt: inlineMediaApiPrompt,
+          stream: false,
           kind: inlineMediaKind === "video" ? "video" : "photo",
           provider: "auto",
           style: "cinematic Gemini-style transparent chat generation",
@@ -5844,8 +5852,6 @@ const shouldShowMobilePreviewButton =
               isLoading={isLoading}
               onOpenCodex={() => setCodexOpen(true)}
               onOpenTemplates={() => safeOpenView("templates", "welcome")}
-              onOpenPhoto={() => safeOpenView("photo-generation", "welcome")}
-              onOpenVideo={() => safeOpenView("video-generation", "welcome")}
               onOpenWebsite={() => safeOpenView("website-generation", "welcome")}
               onOpenCode={() => safeOpenView("code-generation", "welcome")}
               onOpenBilling={() => safeOpenView("billing", "welcome")}
@@ -7451,7 +7457,6 @@ function generateMockCode(prompt: string): string {
   </style>
 </head>
 <body class="bg-[#030303] text-white antialiased">
-        <MalikGodUIEngine />
   <main class="relative min-h-screen overflow-hidden">
     <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,.35),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,.18),transparent_30%)]"></div>
 
