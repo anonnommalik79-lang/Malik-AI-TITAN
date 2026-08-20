@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import {
+  BookOpen,
   Bot,
   Check,
   ChevronRight,
@@ -16,6 +17,7 @@ import {
   Layers,
   Link as LinkIcon,
   Maximize2,
+  Lightbulb,
   Mic,
   MoreHorizontal,
   Paperclip,
@@ -26,6 +28,7 @@ import {
   Sparkles,
   ThumbsDown,
   ThumbsUp,
+  Timer,
   Video,
   Volume2,
   Wand2,
@@ -480,16 +483,46 @@ function researchDomainsFor(text: string) {
   ]
 }
 
+type ActivityStep = { kind: "think" | "search" | "read"; text: string }
+
+function ActivityIcon({ kind }: { kind: ActivityStep["kind"] | "done" }) {
+  if (kind === "search") return <Search className="h-[13px] w-[13px]" />
+  if (kind === "read") return <BookOpen className="h-[13px] w-[13px]" />
+  if (kind === "done") return <Timer className="h-[13px] w-[13px]" />
+  return <Lightbulb className="h-[13px] w-[13px]" />
+}
+
 function ThinkingBubble({ generationType, query = "" }: { generationType: GenerationStatusType; query?: string }) {
   const [step, setStep] = useState(0)
+  const [elapsed, setElapsed] = useState(0)
   const isResearch = isWorldResearchPrompt(query)
   const domains = researchDomainsFor(query)
 
+  const steps = useMemo<ActivityStep[]>(() => {
+    if (!isResearch) return []
+    return [
+      { kind: "think", text: "Разбираю запрос" },
+      { kind: "search", text: `Ищу в сети · ${domains[0]?.domain || "google.com"}` },
+      { kind: "read", text: `Читаю источник · ${domains[1]?.domain || "wikipedia.org"}` },
+      { kind: "search", text: `Сверяю данные · ${domains[2]?.domain || "brave.com"}` },
+      { kind: "think", text: "Собираю ответ со ссылками" },
+    ]
+  }, [isResearch, domains])
+
   useEffect(() => {
     setStep(0)
-    const timer = window.setInterval(() => setStep((value) => (value + 1) % (isResearch ? 5 : 3)), 900)
+    if (!isResearch) return
+    const timer = window.setInterval(() => setStep((value) => Math.min(value + 1, steps.length - 1)), 900)
     return () => window.clearInterval(timer)
-  }, [query, isResearch])
+  }, [query, isResearch, steps.length])
+
+  // Elapsed time is measured, not animated — the row at the end reports how long
+  // the turn actually took.
+  useEffect(() => {
+    const startedAt = Date.now()
+    const timer = window.setInterval(() => setElapsed(Math.round((Date.now() - startedAt) / 1000)), 1000)
+    return () => window.clearInterval(timer)
+  }, [query])
 
   const labelMap: Record<GenerationStatusType, string> = {
     text: "Думаю",
@@ -502,9 +535,6 @@ function ThinkingBubble({ generationType, query = "" }: { generationType: Genera
   }
 
   if (!isResearch) {
-    // Bare line, no card: the avatar to the left is already animating, and a
-    // boxed placeholder that is then replaced by unboxed text makes the answer
-    // appear to jump.
     return (
       <p className="malik-thinking-line" aria-live="polite">
         {labelMap[generationType] || labelMap.text}
@@ -517,23 +547,14 @@ function ThinkingBubble({ generationType, query = "" }: { generationType: Genera
     )
   }
 
-  const rows = [
-    "Разбираю запрос",
-    `Ищу в сети · ${domains[0]?.domain || "google.com"}`,
-    `Читаю источник · ${domains[1]?.domain || "wikipedia.org"}`,
-    `Сверяю данные · ${domains[2]?.domain || "brave.com"}`,
-    "Собираю ответ со ссылками",
-  ]
-
-  // A quiet activity list, the way the big assistants show it: finished steps
-  // dim out, the current one is lit, upcoming ones stay hidden. No card, no
-  // borders, nothing that competes with the answer that replaces it.
   return (
     <div className="malik-activity" aria-live="polite">
-      {rows.slice(0, step + 1).map((row, index) => (
-        <p key={row} className={cn("malik-activity-row", index === step && "is-current")}>
-          <span className="malik-activity-dot" aria-hidden="true" />
-          {row}
+      {steps.slice(0, step + 1).map((row, index) => (
+        <div key={row.text} className={cn("malik-activity-row", index === step && "is-current")}>
+          <span className="malik-activity-icon" aria-hidden="true">
+            <ActivityIcon kind={row.kind} />
+          </span>
+          <span className="malik-activity-text">{row.text}</span>
           {index === step ? (
             <span className="malik-thinking-dots" aria-hidden="true">
               <i />
@@ -541,8 +562,14 @@ function ThinkingBubble({ generationType, query = "" }: { generationType: Genera
               <i />
             </span>
           ) : null}
-        </p>
+        </div>
       ))}
+      <div className="malik-activity-row is-meta">
+        <span className="malik-activity-icon" aria-hidden="true">
+          <ActivityIcon kind="done" />
+        </span>
+        <span className="malik-activity-text">Работа {elapsed}s</span>
+      </div>
     </div>
   )
 }

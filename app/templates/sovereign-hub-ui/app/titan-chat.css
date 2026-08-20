@@ -114,36 +114,57 @@
 .malik-activity {
   display: flex;
   flex-direction: column;
-  gap: 5px;
 }
 
+/* Steps are joined by a hairline running through the icon column, so the list
+   reads as one process rather than four separate notices. */
 .malik-activity-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 9px;
-  margin: 0;
+  gap: 10px;
+  padding: 5px 0;
   font-size: 13.5px;
   line-height: 1.5;
   color: #6f695f;
   animation: malikAnswerIn 0.2s ease-out both;
 }
 
+.malik-activity-row:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 26px;
+  bottom: -4px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.malik-activity-icon {
+  display: flex;
+  height: 21px;
+  width: 21px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: #5e594f;
+}
+
 .malik-activity-row.is-current {
   color: #cfc7b8;
 }
 
-.malik-activity-dot {
-  height: 5px;
-  width: 5px;
-  flex-shrink: 0;
-  border-radius: 999px;
-  background: currentColor;
-  opacity: 0.5;
+.malik-activity-row.is-current .malik-activity-icon {
+  color: var(--malik-accent-bright, #e8c56a);
 }
 
-.malik-activity-row.is-current .malik-activity-dot {
-  background: var(--malik-accent-bright, #e8c56a);
-  opacity: 1;
+.malik-activity-row.is-meta {
+  color: #57534a;
+  font-size: 12.5px;
+}
+
+.malik-activity-text {
+  min-width: 0;
 }
 
 .malik-thinking-dots {

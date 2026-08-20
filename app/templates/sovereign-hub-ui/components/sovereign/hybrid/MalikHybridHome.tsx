@@ -16,7 +16,6 @@ import {
   Sparkles,
   SquareCode,
 } from "lucide-react"
-import { sectionHeroUrl } from "@/lib/section-media"
 import { prefetchChatShell } from "@/lib/studio-prefetch"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { PREFILL_EVENT, useContextEnabled } from "@/lib/malik-context"
@@ -49,6 +48,12 @@ export interface MalikHybridHomeProps {
  * no third-party image host on the critical path of the first paint.
  */
 const HERO_PHOTO = "/images/titan-hero.jpg"
+
+/**
+ * Card plates come from the same design source as the hero and ship locally.
+ * Remote stock URLs meant four more third-party requests on first paint and a
+ * blank card whenever that host was slow or blocked.
+ */
 
 type TemplateKind = "chat" | "crm" | "shop" | "analytics" | "booking"
 
@@ -299,7 +304,7 @@ function HomeActions({
       icon: MessageSquare,
       title: "AI Чат",
       detail: "Размышляет. Анализирует. Отвечает глубоко.",
-      photo: sectionHeroUrl("final-intelligence", 700),
+      photo: "/images/card-chat.jpg",
       action: onStartChat,
     },
     {
@@ -307,7 +312,7 @@ function HomeActions({
       icon: ImageIcon,
       title: "Создать изображение",
       detail: "Премиум визуализация в 4K.",
-      photo: sectionHeroUrl("photo-generation", 700),
+      photo: "/images/card-photo.jpg",
       action: onOpenPhoto,
     },
     {
@@ -315,7 +320,7 @@ function HomeActions({
       icon: Film,
       title: "Сгенерировать видео",
       detail: "Киноуровень за минуты.",
-      photo: sectionHeroUrl("video-generation", 700),
+      photo: "/images/card-video.jpg",
       action: onOpenVideo,
     },
     {
@@ -323,7 +328,7 @@ function HomeActions({
       icon: Code2,
       title: "Написать код",
       detail: "Тысячи строк. Без воды.",
-      photo: sectionHeroUrl("website-generation", 700),
+      photo: "/images/card-code.jpg",
       action: onOpenCode,
     },
   ] as const
