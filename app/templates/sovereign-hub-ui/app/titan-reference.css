@@ -36,9 +36,38 @@
     background: #020303 !important;
   }
 
-  /* The reference keeps the center dense instead of stretching cards edge-to-edge. */
   #malik-root .malik-welcome-earth-content > main > section {
     max-width: 1040px !important;
+  }
+}
+
+/* Stage 12: keep the product composition intact on laptop/tablet widths. */
+@media (min-width: 1024px) and (max-width: 1439px) {
+  #malik-root .malik-sidebar:not(.w-16) {
+    width: 232px !important;
+    min-width: 232px !important;
+  }
+
+  #malik-root header nav button {
+    padding-inline: 9px !important;
+  }
+
+  #malik-root .malik-welcome-earth-content > main > section {
+    max-width: 960px !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1279px) {
+  #malik-root .malik-welcome-earth-content > main {
+    padding: 12px 14px 22px !important;
+  }
+
+  #malik-root .malik-welcome-earth-content > main > section:first-of-type {
+    border-radius: 20px !important;
+  }
+
+  #malik-root .malik-welcome-earth-content > main textarea {
+    min-height: 86px !important;
   }
 }
 
@@ -75,12 +104,6 @@
   contain-intrinsic-size: 220px;
 }
 
-@media (max-width: 1279px) {
-  #malik-root .malik-welcome-earth-content > main {
-    padding-inline: 14px !important;
-  }
-}
-
 @media (max-width: 767px) {
   #malik-root header {
     height: 56px !important;
@@ -93,6 +116,30 @@
 
   #malik-root .malik-welcome-earth-content > main > section:first-of-type {
     border-radius: 18px !important;
+  }
+
+  #malik-root .malik-welcome-earth-content > main > section:first-of-type > div:last-child {
+    min-height: 190px !important;
+    padding-inline: 14px !important;
+  }
+
+  #malik-root .malik-welcome-earth-content > main textarea {
+    min-height: 96px !important;
+    font-size: 16px !important;
+  }
+
+  #malik-root .malik-welcome-earth-content > main button {
+    touch-action: manipulation;
+  }
+}
+
+@media (max-width: 430px) {
+  #malik-root .malik-welcome-earth-content > main {
+    padding-inline: 8px !important;
+  }
+
+  #malik-root .malik-welcome-earth-content > main > section {
+    border-radius: 16px !important;
   }
 }
 
