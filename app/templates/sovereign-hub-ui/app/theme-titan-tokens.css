@@ -132,5 +132,5 @@
   --malik-glow-gold: 0 8px 30px rgba(201, 152, 47, 0.22);
 
   --malik-gradient-gold: linear-gradient(135deg, #f3de96 0%, #d9ae45 45%, #a87c22 100%);
-  --malik-gradient-wordmark: linear-gradient(180deg, #ffffff 0%, #e8e2d4 38%, #d9ae45 78%, #a87c22 100%);
+  --malik-gradient-wordmark: linear-gradient(180deg, #ffffff 0%, #fbf9f4 40%, #e6dfd0 60%, #d9ae45 86%, #b3861f 100%);
 }

@@ -16,7 +16,7 @@ import {
   Sparkles,
   SquareCode,
 } from "lucide-react"
-import { sectionHeroUrl, unsplashPhoto } from "@/lib/section-media"
+import { sectionHeroUrl } from "@/lib/section-media"
 import { prefetchChatShell } from "@/lib/studio-prefetch"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { PREFILL_EVENT, useContextEnabled } from "@/lib/malik-context"
@@ -42,7 +42,13 @@ export interface MalikHybridHomeProps {
   onModeChange?: (mode: AiModeId) => void
 }
 
-const HERO_PHOTO = unsplashPhoto("photo-1454496522488-7a8e488e8606", 1800)
+/**
+ * Lifted from the design mock and shipped as a local asset: the wordmark, crown,
+ * subtitle and model badge that were burnt into that bitmap are masked out and
+ * inpainted, because the app draws all four as live DOM on top. Local also means
+ * no third-party image host on the critical path of the first paint.
+ */
+const HERO_PHOTO = "/images/titan-hero.jpg"
 
 type TemplateKind = "chat" | "crm" | "shop" | "analytics" | "booking"
 
