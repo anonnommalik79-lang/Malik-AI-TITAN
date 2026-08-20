@@ -75,48 +75,19 @@ type NavSection = {
 
 const navSections: NavSection[] = [
   {
-    title: "Sovereign Core",
+    title: "Рабочая область",
     items: [
-      { id: "home", icon: Home, label: "Панель управления", description: "Chat-first home", accent: "violet" },
-      { id: "final-intelligence", icon: Sparkles, label: "Final Intelligence", description: "AI brain + launch cockpit", badge: "NEW", hot: true, accent: "cyan" },
-      { id: "unbreakable-ai", icon: Shield, label: "Unbreakable AI", description: "Fallback, retry, guard", badge: "LIVE", hot: true, accent: "emerald" },
-      { id: "command-center", icon: Workflow, label: "Command Center", description: "Actions + control", accent: "amber" },
-      { id: "capabilities", icon: Sparkles, label: "Capabilities", description: "200 practical AI abilities", badge: "200", hot: true, accent: "cyan" },
-      { id: "business-command-center", icon: Briefcase, label: "Business Command Center", description: "30 business AI modes", badge: "NEW", hot: true, accent: "emerald" },
-      { id: "media-newsroom", icon: Newspaper, label: "Newsroom Studio", description: "СМИ: новости, фактчек, эфир, KZ/RU/EN", badge: "СМИ", hot: true, accent: "blue" },
-      { id: "search", icon: Search, label: "Глобальный поиск", description: "Ctrl+K router", accent: "blue" },
+      { id: "home", icon: Home, label: "Главная", description: "Новая задача", accent: "violet" },
+      { id: "chats", icon: MessageSquare, label: "AI-диалоги", description: "История разговоров", accent: "blue" },
+      { id: "projects", icon: FolderKanban, label: "Проекты", description: "Созданные работы", accent: "emerald" },
     ],
   },
   {
-    title: "Creator Engines",
+    title: "Создать",
     items: [
-      { id: "ai-generator", icon: Zap, label: "AI Генератор", description: "Unified media flow", badge: 1, accent: "violet" },
-      { id: "photo-generation", icon: Image, label: "Photo Generation", description: "MALIK Vision studio", badge: 1, accent: "cyan" },
-      { id: "video-generation", icon: Video, label: "Video Generation", description: "MALIK Cinema pipeline", accent: "rose" },
-      { id: "website-generation", icon: Globe2, label: "Website Builder", description: "Landing + preview", accent: "emerald" },
-      { id: "code-generation", icon: Code2, label: "Code Generator", description: "MALIK Codex files", accent: "amber" },
-    ],
-  },
-  {
-    title: "Build Studios",
-    items: [
-      { id: "component-generation", icon: Layers, label: "Component Forge", description: "Cards, panels, TSX blocks", accent: "cyan" },
-      { id: "landing-generation", icon: Globe2, label: "Landing Studio", description: "Hero + CTA + waitlist", accent: "emerald" },
-      { id: "dashboard-generation", icon: Database, label: "Dashboard Builder", description: "KPI cockpit + charts", accent: "blue" },
-      { id: "document-generation", icon: LayoutTemplate, label: "Document Studio", description: "PRD, brief, reports", accent: "amber" },
-      { id: "presentation-generation", icon: Rocket, label: "Pitch Deck Studio", description: "Digital Bridge slides", badge: "PITCH", hot: true, accent: "rose" },
-      { id: "template-generation", icon: LayoutTemplate, label: "Template Generator", description: "Reusable launch kits", accent: "violet" },
-    ],
-  },
-  {
-    title: "Workspace",
-    items: [
-      { id: "projects", icon: FolderKanban, label: "Проекты", badge: 3, accent: "blue" },
-      { id: "chats", icon: MessageSquare, label: "Нейро-диалоги", badge: 12, accent: "violet" },
-      { id: "analytics", icon: Database, label: "Аналитика", description: "Usage + queue + costs", accent: "blue" },
-      { id: "notifications", icon: Zap, label: "Сигналы", description: "Alerts + runtime status", accent: "amber" },
-      { id: "design", icon: Layers, label: "Дизайн системы", accent: "cyan" },
-      { id: "templates", icon: LayoutTemplate, label: "Библиотека шаблонов", accent: "emerald" },
+      { id: "photo-generation", icon: Image, label: "Фото", description: "Изображения и редактор", accent: "cyan" },
+      { id: "video-generation", icon: Video, label: "Видео", description: "Генерация роликов", accent: "rose" },
+      { id: "code-generation", icon: Code2, label: "Код", description: "Сайты и приложения", accent: "amber" },
     ],
   },
 ]
