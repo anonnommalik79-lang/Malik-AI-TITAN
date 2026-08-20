@@ -5,18 +5,18 @@ import {
   ArrowRight,
   BarChart3,
   Bot,
-  ChevronDown,
+  CalendarDays,
   Code2,
   Crown,
   Globe2,
   Image as ImageIcon,
   MemoryStick,
   MessageSquare,
-  Mic2,
-  Paperclip,
   Play,
   ShoppingBag,
   Sparkles,
+  Users,
+  Zap,
 } from "lucide-react"
 import { unsplashPhoto } from "@/lib/section-media"
 
@@ -51,61 +51,91 @@ type TemplateCard = {
   prompt: string
 }
 
-const HERO_IMAGE = unsplashPhoto("photo-1519681393784-d120267933ba", 1800)
-const CHAT_IMAGE = unsplashPhoto("photo-1519681393784-d120267933ba", 900)
-const IMAGE_IMAGE = unsplashPhoto("photo-1500530855697-b586d89ba3ee", 900)
-const VIDEO_IMAGE = unsplashPhoto("photo-1485846234645-a62644f84728", 900)
-const CODE_IMAGE = unsplashPhoto("photo-1555066931-4365d14bab8c", 900)
+const HERO_IMAGE = unsplashPhoto("photo-1519681393784-d120267933ba", 1600)
+const CHAT_IMAGE = unsplashPhoto("photo-1519681393784-d120267933ba", 700)
+const IMAGE_IMAGE = unsplashPhoto("photo-1500530855697-b586d89ba3ee", 700)
+const VIDEO_IMAGE = unsplashPhoto("photo-1485846234645-a62644f84728", 700)
+const CODE_IMAGE = unsplashPhoto("photo-1555066931-4365d14bab8c", 700)
 
 function TemplatePreview({ kind }: { kind: TemplateCard["kind"] }) {
   if (kind === "chat") {
     return (
-      <div className="flex h-full flex-col gap-2 rounded-[8px] border border-white/[0.06] bg-[#090b0f] p-2">
-        <div className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#d7ac2d]" /><span className="h-1.5 w-8 rounded-full bg-white/10" /></div>
-        <div className="mt-1 h-2 w-[72%] rounded-full bg-white/10" />
-        <div className="h-2 w-[52%] rounded-full bg-white/[0.06]" />
-        <div className="mt-auto flex gap-1.5"><span className="h-4 flex-1 rounded bg-[#16181d]" /><span className="h-4 w-5 rounded bg-[#bb8920]" /></div>
+      <div className="flex h-full flex-col rounded-xl border border-white/[0.06] bg-[#070807] p-3">
+        <div className="flex items-center gap-2 text-[8px] text-zinc-500">
+          <span className="grid h-5 w-5 place-items-center rounded-md bg-[#d7aa2d]/10 text-[#e8bc3d]">M</span>
+          <span>Malik Assistant</span>
+        </div>
+        <div className="mt-3 rounded-lg border border-white/[0.05] bg-white/[0.025] px-2.5 py-2 text-[7px] leading-3 text-zinc-400">
+          Как запустить продажи быстрее?
+        </div>
+        <div className="mt-2 ml-5 rounded-lg border border-[#d7aa2d]/12 bg-[#d7aa2d]/[0.055] px-2.5 py-2 text-[7px] leading-3 text-zinc-300">
+          Соберу воронку и план запуска.
+        </div>
       </div>
     )
   }
 
   if (kind === "crm") {
     return (
-      <div className="grid h-full grid-cols-[28%_1fr] gap-2 rounded-[8px] border border-white/[0.06] bg-[#090b0f] p-2">
-        <div className="space-y-1.5"><div className="h-2 w-full rounded bg-[#b98b21]" /><div className="h-2 w-4/5 rounded bg-white/10" /><div className="h-2 w-3/5 rounded bg-white/[0.06]" /></div>
-        <div className="flex flex-col"><div className="text-[8px] font-bold text-zinc-200">1,248</div><div className="mt-auto flex h-7 items-end gap-1"><span className="h-2 w-1 bg-[#906b18]" /><span className="h-4 w-1 bg-[#b68b24]" /><span className="h-6 w-1 bg-[#d2a62f]" /><span className="h-3 w-1 bg-[#9e731b]" /></div></div>
+      <div className="h-full rounded-xl border border-white/[0.06] bg-[#070807] p-3">
+        <div className="flex items-center justify-between text-[7px] text-zinc-500"><span>Pipeline</span><span className="text-[#e3b631]">₸ 12.4M</span></div>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {["Новые", "В работе", "Сделка"].map((label, index) => (
+            <div key={label} className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-2">
+              <div className="text-[6px] text-zinc-600">{label}</div>
+              <div className="mt-1 text-[10px] font-semibold text-zinc-200">{[18, 11, 7][index]}</div>
+              <div className="mt-2 h-1 rounded-full bg-white/[0.05]"><div className="h-full rounded-full bg-[#d7aa2d]" style={{ width: `${[72, 48, 31][index]}%` }} /></div>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
 
   if (kind === "commerce") {
     return (
-      <div className="grid h-full grid-cols-3 gap-1.5 rounded-[8px] border border-white/[0.06] bg-[#090b0f] p-2">
-        {[0, 1, 2, 3, 4, 5].map((item) => <div key={item} className={`rounded ${item === 2 ? "bg-[#8e6c24]" : "bg-[#24231e]"}`} />)}
+      <div className="h-full rounded-xl border border-white/[0.06] bg-[#070807] p-3">
+        <div className="flex items-center justify-between"><span className="text-[8px] text-zinc-400">Store AI</span><ShoppingBag className="h-3 w-3 text-[#d7aa2d]" /></div>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {["Pro", "Air", "Max"].map((name, index) => (
+            <div key={name} className="rounded-lg border border-white/[0.05] bg-[#0c0d0c] p-2 text-center">
+              <div className={`mx-auto h-7 w-full rounded-md ${index === 1 ? "bg-[#4f3b12]" : "bg-[#181a18]"}`} />
+              <div className="mt-1.5 text-[7px] text-zinc-400">{name}</div>
+              <div className="text-[7px] text-[#dbaf31]">₸{[89, 129, 179][index]}k</div>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
 
   if (kind === "analytics") {
     return (
-      <div className="relative h-full rounded-[8px] border border-white/[0.06] bg-[#090b0f] p-2">
-        <div className="text-[8px] font-bold text-zinc-200">+24.6%</div>
-        <svg className="absolute inset-x-2 bottom-4 h-8 w-[calc(100%-16px)]" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"><path d="M0 23 L17 15 L33 19 L49 9 L66 13 L82 4 L100 9" fill="none" stroke="#d9ad2f" strokeWidth="2" /></svg>
-        <div className="absolute inset-x-2 bottom-1 flex h-2 items-end gap-1">{[30, 55, 38, 72, 44, 82, 63, 94].map((h, i) => <span key={i} className="flex-1 bg-[#a67a1d]" style={{ height: `${h}%` }} />)}</div>
+      <div className="relative h-full overflow-hidden rounded-xl border border-white/[0.06] bg-[#070807] p-3">
+        <div className="flex items-end justify-between"><div><div className="text-[7px] text-zinc-600">Revenue</div><div className="text-[12px] font-semibold text-zinc-100">+24.6%</div></div><BarChart3 className="h-4 w-4 text-[#d7aa2d]" /></div>
+        <svg className="mt-2 h-12 w-full" viewBox="0 0 120 42" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 36 L18 28 L34 31 L50 19 L66 23 L82 12 L100 17 L120 5" fill="none" stroke="#d9ad2f" strokeWidth="2" />
+          <path d="M0 36 L18 28 L34 31 L50 19 L66 23 L82 12 L100 17 L120 5 L120 42 L0 42 Z" fill="rgba(217,173,47,.08)" />
+        </svg>
       </div>
     )
   }
 
   return (
-    <div className="grid h-full grid-cols-7 gap-1 rounded-[8px] border border-white/[0.06] bg-[#090b0f] p-2">
-      {Array.from({ length: 28 }).map((_, item) => <span key={item} className={`rounded-sm ${item === 11 || item === 18 ? "bg-[#be9028]" : "bg-[#181a1e]"}`} />)}
+    <div className="h-full rounded-xl border border-white/[0.06] bg-[#070807] p-3">
+      <div className="flex items-center justify-between"><span className="text-[8px] text-zinc-400">Август 2026</span><CalendarDays className="h-3 w-3 text-[#d7aa2d]" /></div>
+      <div className="mt-3 grid grid-cols-7 gap-1">
+        {Array.from({ length: 28 }).map((_, item) => (
+          <span key={item} className={`grid aspect-square place-items-center rounded text-[6px] ${item === 11 || item === 18 ? "bg-[#d7aa2d] font-semibold text-black" : "bg-white/[0.035] text-zinc-600"}`}>{item + 1}</span>
+        ))}
+      </div>
     </div>
   )
 }
 
 function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [prompt, setPrompt] = useState("")
-  const [mode, setMode] = useState("Create")
+  const [mode, setMode] = useState<"Create" | "Chat">("Create")
   const [webEnabled, setWebEnabled] = useState(true)
   const [memoryEnabled, setMemoryEnabled] = useState(true)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
@@ -122,170 +152,155 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     setPrompt("")
   }
 
-  const actionCards: ActionCard[] = [
-    {
-      id: "chat",
-      title: "AI Чат",
-      detail: "Размышляет. Анализирует. Отвечает глубоко.",
-      icon: MessageSquare,
-      image: CHAT_IMAGE,
-      action: () => focusPrompt(""),
-    },
-    {
-      id: "image",
-      title: "Создать изображение",
-      detail: "Премиум визуализация в 4K",
-      icon: ImageIcon,
-      image: IMAGE_IMAGE,
-      action: () => focusPrompt("/image "),
-    },
-    {
-      id: "video",
-      title: "Сгенерировать видео",
-      detail: "Киноуровень за минуты.",
-      icon: Play,
-      image: VIDEO_IMAGE,
-      action: () => focusPrompt("/video "),
-    },
-    {
-      id: "code",
-      title: "Написать код",
-      detail: "Тысячи строк. Без воды.",
-      icon: Code2,
-      image: CODE_IMAGE,
-      action: () => props.onOpenCode ? props.onOpenCode() : focusPrompt("Напиши код: "),
-    },
+  const actions: ActionCard[] = [
+    { id: "chat", title: "AI Чат", detail: "Глубокий анализ и точные ответы", icon: MessageSquare, image: CHAT_IMAGE, action: () => focusPrompt("") },
+    { id: "image", title: "Изображение", detail: "Премиум визуализация до 4K", icon: ImageIcon, image: IMAGE_IMAGE, action: () => focusPrompt("/image ") },
+    { id: "video", title: "Видео", detail: "Кинематографичная генерация", icon: Play, image: VIDEO_IMAGE, action: () => focusPrompt("/video ") },
+    { id: "code", title: "Код", detail: "Архитектура, функции, интерфейсы", icon: Code2, image: CODE_IMAGE, action: () => props.onOpenCode ? props.onOpenCode() : focusPrompt("Напиши код: ") },
   ]
 
   const templates: TemplateCard[] = [
-    { id: "ai-chat", title: "AI Chat", subtitle: "Умный ассистент", kind: "chat", prompt: "Создай AI Chat продукт с умным ассистентом" },
-    { id: "crm", title: "CRM System", subtitle: "Управление клиентами", kind: "crm", prompt: "Создай AI CRM для малого бизнеса" },
-    { id: "commerce", title: "E-commerce", subtitle: "Интернет-магазин", kind: "commerce", prompt: "Создай современный интернет-магазин с AI помощником" },
-    { id: "analytics", title: "Analytics", subtitle: "Аналитика и инсайты", kind: "analytics", prompt: "Создай аналитическую панель с AI инсайтами" },
-    { id: "booking", title: "Booking", subtitle: "Система бронирования", kind: "booking", prompt: "Создай систему бронирования с AI автоматизацией" },
+    { id: "ai-chat", title: "AI Chat", subtitle: "Интеллектуальный ассистент", kind: "chat", prompt: "Создай премиальный AI Chat продукт с умным ассистентом" },
+    { id: "crm", title: "CRM System", subtitle: "Продажи и клиенты", kind: "crm", prompt: "Создай AI CRM для малого бизнеса с воронкой продаж" },
+    { id: "commerce", title: "E-commerce", subtitle: "AI интернет-магазин", kind: "commerce", prompt: "Создай премиальный интернет-магазин с AI помощником" },
+    { id: "analytics", title: "Analytics", subtitle: "Метрики и инсайты", kind: "analytics", prompt: "Создай аналитическую панель с AI инсайтами" },
+    { id: "booking", title: "Booking", subtitle: "Умное бронирование", kind: "booking", prompt: "Создай систему бронирования с AI автоматизацией" },
   ]
 
+  const chipClass = "inline-flex h-8 items-center gap-2 rounded-xl border border-[#d9a928]/14 bg-[#090a08]/90 px-3 text-[10px] font-medium text-zinc-300 shadow-[inset_0_1px_0_rgba(255,255,255,.025)] transition-all duration-200 hover:border-[#d9a928]/30 hover:bg-[#111008] hover:text-white active:translate-y-px"
+
   return (
-    <main className="relative min-h-full bg-[#020303] px-4 pb-5 pt-4 text-white sm:px-5 lg:px-6">
-      <section className="relative mx-auto w-full max-w-[1040px] overflow-hidden rounded-[22px] border border-[#d9a928]/12 bg-[#050606]">
-        <img src={HERO_IMAGE} alt="" className="absolute inset-0 h-full w-full object-cover opacity-55" loading="eager" decoding="async" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,.42),rgba(0,0,0,.7)_65%,#020303_100%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_50%,rgba(215,158,38,.18),transparent_22%)]" />
+    <main className="titan-center relative min-h-full bg-[#020303] px-3 pb-6 pt-3 text-white sm:px-4 lg:px-5">
+      <div className="mx-auto w-full max-w-[920px]">
+        <section className="relative overflow-hidden rounded-[20px] border border-[#d9a928]/12 bg-[#050606] shadow-[0_24px_70px_rgba(0,0,0,.36)]">
+          <img src={HERO_IMAGE} alt="" className="absolute inset-0 h-full w-full object-cover opacity-45" loading="eager" decoding="async" />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,3,3,.96)_0%,rgba(2,3,3,.68)_48%,rgba(2,3,3,.88)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_40%,rgba(203,145,24,.16),transparent_22%)]" />
+          <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[#d9a928]/35 to-transparent" />
 
-        <div className="relative flex min-h-[228px] flex-col items-center justify-center px-6 pb-5 pt-7 text-center sm:min-h-[242px]">
-          <Crown className="mb-1 h-7 w-7 fill-[#d7aa2c]/15 text-[#e9bf3d] drop-shadow-[0_0_16px_rgba(229,178,50,.38)]" />
-          <h1 className="text-[clamp(42px,6.2vw,76px)] font-black leading-none tracking-[.09em] text-transparent [background:linear-gradient(180deg,#ffffff_0%,#d8d8d8_48%,#8f9295_100%)] bg-clip-text drop-shadow-[0_7px_18px_rgba(0,0,0,.75)]">
-            MALIK AI
-          </h1>
-          <p className="mt-1 text-[clamp(18px,2.2vw,28px)] font-semibold tracking-[.34em] text-[#efbf34]">TITAN</p>
-          <p className="mt-3 max-w-[640px] text-[11px] leading-5 text-zinc-300 sm:text-[12px]">
-            Ваш личный ИИ-ассистент. Создаёт. Анализирует. Автоматизирует.<br />Один интеллект — безграничные возможности.
-          </p>
-        </div>
-      </section>
+          <div className="relative flex min-h-[166px] flex-col items-center justify-center px-5 py-5 text-center sm:min-h-[178px]">
+            <Crown className="mb-1 h-5 w-5 fill-[#d7aa2d]/10 text-[#e3b630] drop-shadow-[0_0_14px_rgba(227,182,48,.34)]" />
+            <h1 className="text-[clamp(36px,5vw,58px)] font-black leading-[.95] tracking-[.10em] text-[#f0d174] drop-shadow-[0_3px_14px_rgba(0,0,0,.9)]">
+              MALIK AI
+            </h1>
+            <div className="mt-1 text-[clamp(13px,1.8vw,18px)] font-semibold tracking-[.46em] text-[#d9aa2a]">TITAN</div>
+            <p className="mt-3 max-w-[590px] text-[10px] leading-[1.55] text-zinc-400 sm:text-[11px]">
+              Ваш личный ИИ-ассистент. Создаёт. Анализирует. Автоматизирует.<br className="hidden sm:block" /> Один интеллект — безграничные возможности.
+            </p>
+          </div>
+        </section>
 
-      <section className="relative mx-auto -mt-1 w-full max-w-[1040px] rounded-[24px] border border-[#d9a928]/40 bg-[#050606]/95 p-3 shadow-[0_0_34px_rgba(197,143,24,.13),inset_0_1px_0_rgba(255,230,145,.04)] sm:p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className="inline-flex h-8 items-center gap-2 rounded-full border border-[#d9a928]/20 bg-[#0b0b08] px-3 text-[10px] text-zinc-200">
-            <Sparkles className="h-3.5 w-3.5 text-[#dfb32e]" />
-            <span>MalikLLM75B</span>
-            <ChevronDown className="h-3 w-3 text-zinc-600" />
-          </button>
+        <section className="relative -mt-2 rounded-[20px] border border-[#d9a928]/28 bg-[#050606]/[0.98] p-3 shadow-[0_18px_55px_rgba(0,0,0,.52),0_0_28px_rgba(199,146,28,.055),inset_0_1px_0_rgba(255,236,168,.035)] sm:p-3.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className={chipClass} title="Текущий AI Core">
+              <Sparkles className="h-3.5 w-3.5 text-[#e0b22c]" />
+              <span>MalikLLM75B</span>
+            </div>
 
-          <button type="button" onClick={() => setMode((value) => value === "Create" ? "Chat" : "Create")} className="inline-flex h-8 items-center gap-2 rounded-full border border-[#d9a928]/20 bg-[#0b0b08] px-3 text-[10px] text-zinc-200">
-            <Bot className="h-3.5 w-3.5 text-[#dfb32e]" />
-            <span>{mode}</span>
-            <ChevronDown className="h-3 w-3 text-zinc-600" />
-          </button>
-
-          <button type="button" onClick={() => setWebEnabled((value) => !value)} className={`inline-flex h-8 items-center gap-2 rounded-full border px-3 text-[10px] ${webEnabled ? "border-[#d9a928]/22 bg-[#0b0b08] text-zinc-200" : "border-white/[0.06] bg-[#070707] text-zinc-600"}`}>
-            <Globe2 className="h-3.5 w-3.5 text-[#dfb32e]" />
-            <span>Web</span>
-            <ChevronDown className="h-3 w-3 text-zinc-600" />
-          </button>
-
-          <button type="button" onClick={() => setMemoryEnabled((value) => !value)} className={`ml-auto inline-flex h-8 items-center gap-2 rounded-full border px-3 text-[10px] ${memoryEnabled ? "border-[#d9a928]/18 bg-[#0b0b08] text-zinc-200" : "border-white/[0.06] bg-[#070707] text-zinc-600"}`}>
-            <MemoryStick className="h-3.5 w-3.5" />
-            <span>Memory: {memoryEnabled ? "On" : "Off"}</span>
-          </button>
-        </div>
-
-        <textarea
-          ref={promptRef}
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault()
-              submit()
-            }
-          }}
-          placeholder="Например: Создай AI CRM для малого бизнеса с премиальным тёмным интерфейсом, интеграцией Telegram и автоматизацией продаж...."
-          className="mt-3 min-h-[94px] w-full resize-none rounded-[16px] border border-white/[0.045] bg-[#050606] px-4 py-4 text-[12px] leading-5 text-zinc-200 outline-none transition placeholder:text-zinc-600 focus:border-[#d9a928]/18"
-        />
-
-        <div className="mt-2 flex items-center gap-2">
-          <button type="button" onClick={() => focusPrompt(prompt)} title="Добавить вложение" className="grid h-9 w-9 place-items-center rounded-full border border-white/[0.055] bg-[#0a0b0a] text-zinc-400 transition hover:border-[#d9a928]/15 hover:text-zinc-200"><Paperclip className="h-4 w-4" /></button>
-          <button type="button" onClick={() => focusPrompt(prompt.startsWith("/image ") ? prompt : `/image ${prompt}`)} title="Изображение" className="grid h-9 w-9 place-items-center rounded-full border border-white/[0.055] bg-[#0a0b0a] text-zinc-400 transition hover:border-[#d9a928]/15 hover:text-zinc-200"><ImageIcon className="h-4 w-4" /></button>
-          <button type="button" onClick={() => props.onOpenCode ? props.onOpenCode() : focusPrompt("Напиши код: ")} title="Код" className="grid h-9 w-9 place-items-center rounded-full border border-white/[0.055] bg-[#0a0b0a] text-zinc-400 transition hover:border-[#d9a928]/15 hover:text-zinc-200"><Code2 className="h-4 w-4" /></button>
-          <button type="button" onClick={() => focusPrompt(prompt)} title="Voice AI" className="grid h-9 w-9 place-items-center rounded-full border border-white/[0.055] bg-[#0a0b0a] text-zinc-400 transition hover:border-[#d9a928]/15 hover:text-zinc-200"><Mic2 className="h-4 w-4" /></button>
-
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!prompt.trim() || props.isLoading}
-            className="ml-auto inline-flex h-10 min-w-[138px] items-center justify-center gap-2 rounded-[12px] border border-[#f0c547]/45 bg-gradient-to-r from-[#3b2b08] via-[#211a08] to-[#181204] px-5 text-[12px] font-semibold text-[#f1c84b] shadow-[inset_0_1px_0_rgba(255,236,169,.08),0_10px_22px_rgba(0,0,0,.25)] transition hover:border-[#f0c547]/70 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-35"
-          >
-            <Sparkles className="h-4 w-4" />
-            {props.isLoading ? "Создаю..." : "Создать"}
-            <ArrowRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </section>
-
-      <section className="mx-auto mt-4 grid w-full max-w-[1040px] grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {actionCards.map((card) => {
-          const Icon = card.icon
-          return (
-            <button key={card.id} type="button" onClick={card.action} className="group relative min-h-[142px] overflow-hidden rounded-[18px] border border-white/[0.08] bg-[#080909] text-left transition hover:-translate-y-0.5 hover:border-[#d9a928]/22">
-              <img src={card.image} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover opacity-[.28] transition duration-300 group-hover:scale-[1.03] group-hover:opacity-[.36]" />
-              <div className="absolute inset-0 bg-gradient-to-r from-[#050606] via-[#050606]/85 to-[#050606]/25" />
-              <div className="relative flex min-h-[142px] flex-col p-4">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-white/15 bg-black/30 text-zinc-100"><Icon className="h-4 w-4" /></span>
-                <strong className="mt-auto text-[12px] font-semibold text-zinc-100">{card.title}</strong>
-                <span className="mt-1 max-w-[160px] text-[9.5px] leading-4 text-zinc-500">{card.detail}</span>
-                <ArrowRight className="absolute bottom-4 right-4 h-4 w-4 text-[#e1b52f] transition group-hover:translate-x-1" />
-              </div>
+            <button type="button" onClick={() => setMode((value) => value === "Create" ? "Chat" : "Create")} className={chipClass}>
+              <Bot className="h-3.5 w-3.5 text-[#e0b22c]" />
+              <span>{mode}</span>
             </button>
-          )
-        })}
-      </section>
 
-      <section className="mx-auto mt-5 w-full max-w-[1040px]">
-        <div className="flex items-center gap-2">
-          <Crown className="h-4 w-4 text-[#dfb42f]" />
-          <h2 className="text-[13px] font-semibold text-zinc-100">Популярные шаблоны</h2>
-          <button type="button" onClick={props.onOpenTemplates} className="ml-auto inline-flex items-center gap-1 text-[9.5px] text-zinc-500 transition hover:text-[#dcb137]">Все шаблоны <ArrowRight className="h-3 w-3 text-[#dcb137]" /></button>
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-          {templates.map((template) => (
-            <button key={template.id} type="button" onClick={() => focusPrompt(template.prompt)} className="group overflow-hidden rounded-[16px] border border-white/[0.07] bg-[#060707] p-2 text-left transition hover:border-[#d9a928]/18 hover:bg-[#080907]">
-              <div className="h-[76px] overflow-hidden rounded-[10px] bg-[#090a0a] p-1"><TemplatePreview kind={template.kind} /></div>
-              <div className="px-1 pb-1 pt-2.5">
-                <strong className="block truncate text-[10.5px] font-medium text-zinc-200">{template.title}</strong>
-                <span className="mt-1 block truncate text-[8.5px] text-zinc-600">{template.subtitle}</span>
-              </div>
+            <button type="button" onClick={() => setWebEnabled((value) => !value)} aria-pressed={webEnabled} className={`${chipClass} ${webEnabled ? "border-[#d9a928]/24 text-zinc-200" : "opacity-55"}`}>
+              <Globe2 className="h-3.5 w-3.5 text-[#e0b22c]" />
+              <span>Web</span>
+              <span className={`h-1.5 w-1.5 rounded-full ${webEnabled ? "bg-emerald-400" : "bg-zinc-700"}`} />
             </button>
-          ))}
-        </div>
-      </section>
 
-      <footer className="mx-auto mt-5 flex w-full max-w-[1040px] items-center justify-center gap-3 border-t border-white/[0.045] pt-3 text-[8.5px] text-zinc-700">
-        <span>© MALIK AI — Sovereign Hub. Build the Future.</span>
-        <span className="h-3 w-px bg-white/[0.06]" />
-        <span className="font-semibold text-[#a98224]">v6.5 TITAN</span>
-      </footer>
+            <button type="button" onClick={() => setMemoryEnabled((value) => !value)} aria-pressed={memoryEnabled} className={`${chipClass} ml-auto ${memoryEnabled ? "border-[#d9a928]/24" : "opacity-55"}`}>
+              <MemoryStick className="h-3.5 w-3.5 text-[#c9a54a]" />
+              <span>Memory: {memoryEnabled ? "On" : "Off"}</span>
+            </button>
+          </div>
+
+          <div className="mt-2.5 overflow-hidden rounded-[15px] border border-white/[0.055] bg-[#080909] shadow-[inset_0_1px_0_rgba(255,255,255,.018)] focus-within:border-[#d9a928]/28 focus-within:shadow-[0_0_0_1px_rgba(217,169,40,.045),inset_0_1px_0_rgba(255,255,255,.02)]">
+            <textarea
+              ref={promptRef}
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault()
+                  submit()
+                }
+              }}
+              placeholder="Например: Создай AI CRM для малого бизнеса с премиальным тёмным интерфейсом и автоматизацией продаж…"
+              className="min-h-[76px] w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[11px] leading-5 text-zinc-200 outline-none placeholder:text-zinc-650 sm:min-h-[82px]"
+            />
+
+            <div className="flex items-center gap-1.5 border-t border-white/[0.035] px-2.5 py-2">
+              <button type="button" onClick={() => focusPrompt(prompt.startsWith("/image ") ? prompt : `/image ${prompt}`)} title="Режим изображения" className="grid h-8 w-8 place-items-center rounded-lg border border-transparent text-zinc-500 transition-all duration-200 hover:border-[#d9a928]/14 hover:bg-[#d9a928]/[0.055] hover:text-[#e2b731] active:scale-95"><ImageIcon className="h-3.5 w-3.5" /></button>
+              <button type="button" onClick={() => props.onOpenCode ? props.onOpenCode() : focusPrompt("Напиши код: ")} title="Открыть код" className="grid h-8 w-8 place-items-center rounded-lg border border-transparent text-zinc-500 transition-all duration-200 hover:border-[#d9a928]/14 hover:bg-[#d9a928]/[0.055] hover:text-[#e2b731] active:scale-95"><Code2 className="h-3.5 w-3.5" /></button>
+              <div className="ml-1 hidden text-[9px] text-zinc-700 sm:block">Enter — отправить · Shift+Enter — новая строка</div>
+
+              <button
+                type="button"
+                disabled={!prompt.trim() || props.isLoading}
+                onClick={submit}
+                className="group ml-auto inline-flex h-9 min-w-[104px] items-center justify-center gap-2 rounded-xl border border-[#f0c545]/30 bg-[linear-gradient(180deg,#e9bd42_0%,#bd8b1d_100%)] px-4 text-[10px] font-bold text-[#171006] shadow-[0_7px_22px_rgba(191,137,24,.18),inset_0_1px_0_rgba(255,246,196,.35)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_10px_28px_rgba(191,137,24,.25),inset_0_1px_0_rgba(255,246,196,.4)] active:translate-y-px active:scale-[.985] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:translate-y-0"
+              >
+                <Zap className="h-3.5 w-3.5" />
+                <span>{props.isLoading ? "Думаю…" : "Создать"}</span>
+                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-3 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+          {actions.map((item) => {
+            const Icon = item.icon
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={item.action}
+                className="group relative min-h-[112px] overflow-hidden rounded-[16px] border border-white/[0.065] bg-[#070807] p-3 text-left shadow-[0_14px_35px_rgba(0,0,0,.22)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#d9a928]/26 hover:shadow-[0_18px_42px_rgba(0,0,0,.34),0_0_18px_rgba(217,169,40,.045)] active:translate-y-0 active:scale-[.99]"
+              >
+                <img src={item.image} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-[.16] transition duration-300 group-hover:scale-[1.035] group-hover:opacity-[.22]" />
+                <div className="absolute inset-0 bg-[linear-gradient(110deg,#060706_18%,rgba(6,7,6,.86)_62%,rgba(6,7,6,.42)_100%)]" />
+                <div className="relative flex h-full flex-col">
+                  <div className="grid h-8 w-8 place-items-center rounded-xl border border-white/[0.07] bg-black/35 text-zinc-300 transition group-hover:border-[#d9a928]/25 group-hover:text-[#e2b52e]"><Icon className="h-4 w-4" /></div>
+                  <div className="mt-3 text-[11px] font-semibold text-zinc-100">{item.title}</div>
+                  <div className="mt-1 pr-4 text-[8.5px] leading-4 text-zinc-600 group-hover:text-zinc-500">{item.detail}</div>
+                  <ArrowRight className="absolute bottom-0 right-0 h-3.5 w-3.5 text-[#c99c28] transition-transform group-hover:translate-x-0.5" />
+                </div>
+              </button>
+            )
+          })}
+        </section>
+
+        <section className="mt-3.5">
+          <div className="mb-2 flex items-center gap-2 px-0.5">
+            <Crown className="h-3.5 w-3.5 text-[#d7aa2d]" />
+            <h2 className="text-[11px] font-semibold text-zinc-200">Популярные шаблоны</h2>
+            <button type="button" onClick={props.onOpenTemplates} className="ml-auto inline-flex items-center gap-1 text-[8.5px] text-zinc-600 transition hover:text-[#dcb239]">Все шаблоны <ArrowRight className="h-3 w-3" /></button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-5">
+            {templates.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                onClick={() => focusPrompt(template.prompt)}
+                className="group overflow-hidden rounded-[15px] border border-white/[0.06] bg-[#050606] p-2 text-left shadow-[0_12px_30px_rgba(0,0,0,.18)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#d9a928]/22 hover:bg-[#070807] active:translate-y-0"
+              >
+                <div className="h-[84px] overflow-hidden rounded-xl"><TemplatePreview kind={template.kind} /></div>
+                <div className="px-1 pb-1 pt-2">
+                  <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-semibold text-zinc-300 group-hover:text-white">{template.title}</span><ArrowRight className="h-3 w-3 text-zinc-700 transition group-hover:translate-x-0.5 group-hover:text-[#d7aa2d]" /></div>
+                  <div className="mt-0.5 truncate text-[7.5px] text-zinc-700">{template.subtitle}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <footer className="mt-4 flex items-center justify-center gap-2 border-t border-white/[0.035] py-3 text-[7px] text-zinc-800">
+          <Users className="h-3 w-3" />
+          <span>MALIK AI · TITAN workspace</span>
+        </footer>
+      </div>
     </main>
   )
 }
