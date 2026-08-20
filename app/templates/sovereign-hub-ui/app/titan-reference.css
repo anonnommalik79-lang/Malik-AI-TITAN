@@ -15,7 +15,6 @@
   color: var(--titan-text);
 }
 
-/* Stage 10: lock the desktop composition close to the 1672×941 reference. */
 @media (min-width: 1280px) {
   #malik-root .malik-sidebar:not(.w-16) {
     width: 264px !important;
@@ -41,7 +40,6 @@
   }
 }
 
-/* Stage 12: keep the product composition intact on laptop/tablet widths. */
 @media (min-width: 1024px) and (max-width: 1439px) {
   #malik-root .malik-sidebar:not(.w-16) {
     width: 232px !important;
@@ -71,7 +69,6 @@
   }
 }
 
-/* Gold is intentionally restrained: thin lines, warm highlights, no SaaS neon. */
 #malik-root button:focus-visible,
 #malik-root textarea:focus-visible,
 #malik-root input:focus-visible,
@@ -98,10 +95,24 @@
   border-radius: 999px;
 }
 
-/* Keep lower shelves cheap to paint while preserving the desktop look. */
+/* Stage 14: lower shelves do not paint until they approach the viewport. */
 #malik-root .malik-welcome-earth-content > main > section:nth-of-type(n + 4) {
   content-visibility: auto;
   contain-intrinsic-size: 220px;
+  contain: layout paint style;
+}
+
+/* Avoid spending GPU time on hover theatre for touch/pen devices. */
+@media (hover: none), (pointer: coarse) {
+  #malik-root button,
+  #malik-root a {
+    transition-duration: 90ms !important;
+  }
+
+  #malik-root button:hover,
+  #malik-root a:hover {
+    transform: none !important;
+  }
 }
 
 @media (max-width: 767px) {
@@ -147,6 +158,20 @@
   #malik-root *,
   #malik-root *::before,
   #malik-root *::after {
+    animation: none !important;
+    transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+@media (forced-colors: active) {
+  #malik-root button,
+  #malik-root textarea,
+  #malik-root input,
+  #malik-root a,
+  #malik-root section,
+  #malik-root aside,
+  #malik-root header {
+    forced-color-adjust: auto;
   }
 }
