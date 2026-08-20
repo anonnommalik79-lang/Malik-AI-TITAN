@@ -10,14 +10,16 @@ import "./creator-clone-safe.css"
 import "./malik-hybrid-ui.css"
 import "./malik-final-fixes.css"
 import "./malik-mobile-worldclass.css"
-// Last import wins: strips the effects that cost the most per frame on phones.
+// Last performance layer for phones.
 import "./mobile-performance.css"
+// Absolute last: reference-geometry and premium black/gold calibration.
+import "./titan-reference.css"
 
 export const metadata: Metadata = {
-  title: "Malik AI Sovereign",
-  description: "Malik AI OS — chat, code, image, video and project canvas workbench",
-  generator: "Malik AI Sovereign",
-  applicationName: "Malik AI",
+  title: "MALIK AI v6.5 TITAN",
+  description: "MALIK AI TITAN — chat, code, image, video and project intelligence workspace",
+  generator: "MALIK AI TITAN",
+  applicationName: "MALIK AI",
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     shortcut: "/icon.svg",
@@ -32,14 +34,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <meta name="google" content="notranslate" />
         <meta name="robots" content="notranslate" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
-        <meta name="theme-color" content="#05070d" />
+        <meta name="theme-color" content="#020303" />
         <Script
           id="malik-supabase-runtime-config"
           src="/api/auth/runtime-config"
           strategy="beforeInteractive"
         />
       </head>
-      <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-[#030303] font-sans antialiased notranslate">
+      <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-[#020303] font-sans antialiased notranslate">
         <CleanInteractionLayer />
         <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden notranslate">
           {children}
