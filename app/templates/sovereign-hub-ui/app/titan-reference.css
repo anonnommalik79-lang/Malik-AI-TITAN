@@ -1,0 +1,105 @@
+/* TITAN reference calibration — imported last on purpose. */
+:root {
+  --titan-bg: #020303;
+  --titan-panel: #060706;
+  --titan-panel-2: #0a0b09;
+  --titan-gold: #d9a928;
+  --titan-gold-hi: #f0c84a;
+  --titan-line: rgba(217, 169, 40, 0.14);
+  --titan-text: #f4f4f5;
+  --titan-muted: #787b80;
+}
+
+#malik-root {
+  background: var(--titan-bg);
+  color: var(--titan-text);
+}
+
+/* Stage 10: lock the desktop composition close to the 1672×941 reference. */
+@media (min-width: 1280px) {
+  #malik-root .malik-sidebar:not(.w-16) {
+    width: 264px !important;
+    min-width: 264px !important;
+  }
+
+  #malik-root header {
+    height: 62px !important;
+    min-height: 62px !important;
+    background: rgba(2, 3, 3, 0.98) !important;
+    border-bottom-color: rgba(217, 169, 40, 0.1) !important;
+  }
+
+  #malik-root .malik-welcome-earth-content > main {
+    padding-top: 14px !important;
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+    background: #020303 !important;
+  }
+
+  /* The reference keeps the center dense instead of stretching cards edge-to-edge. */
+  #malik-root .malik-welcome-earth-content > main > section {
+    max-width: 1040px !important;
+  }
+}
+
+/* Gold is intentionally restrained: thin lines, warm highlights, no SaaS neon. */
+#malik-root button:focus-visible,
+#malik-root textarea:focus-visible,
+#malik-root input:focus-visible,
+#malik-root a:focus-visible {
+  outline: 2px solid rgba(240, 200, 74, 0.82) !important;
+  outline-offset: 2px !important;
+}
+
+#malik-root .malik-sidebar,
+#malik-root header,
+#malik-root aside:not(.malik-sidebar) {
+  scrollbar-color: rgba(217, 169, 40, 0.22) transparent;
+  scrollbar-width: thin;
+}
+
+#malik-root .malik-sidebar::-webkit-scrollbar,
+#malik-root aside:not(.malik-sidebar)::-webkit-scrollbar {
+  width: 5px;
+}
+
+#malik-root .malik-sidebar::-webkit-scrollbar-thumb,
+#malik-root aside:not(.malik-sidebar)::-webkit-scrollbar-thumb {
+  background: rgba(217, 169, 40, 0.18);
+  border-radius: 999px;
+}
+
+/* Keep lower shelves cheap to paint while preserving the desktop look. */
+#malik-root .malik-welcome-earth-content > main > section:nth-of-type(n + 4) {
+  content-visibility: auto;
+  contain-intrinsic-size: 220px;
+}
+
+@media (max-width: 1279px) {
+  #malik-root .malik-welcome-earth-content > main {
+    padding-inline: 14px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  #malik-root header {
+    height: 56px !important;
+    min-height: 56px !important;
+  }
+
+  #malik-root .malik-welcome-earth-content > main {
+    padding: 10px 10px calc(18px + env(safe-area-inset-bottom)) !important;
+  }
+
+  #malik-root .malik-welcome-earth-content > main > section:first-of-type {
+    border-radius: 18px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #malik-root *,
+  #malik-root *::before,
+  #malik-root *::after {
+    scroll-behavior: auto !important;
+  }
+}
