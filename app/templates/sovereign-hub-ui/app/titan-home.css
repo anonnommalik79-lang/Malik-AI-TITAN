@@ -32,9 +32,16 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* Same proportion as the design's hero band, so the type sits where it was
+     drawn instead of stretching the box and cropping the ridges. */
+  aspect-ratio: 1107 / 228;
+  min-height: 214px;
   border-radius: 20px;
   border: 1px solid var(--malik-border, rgba(212, 175, 55, 0.14));
-  padding: 46px 28px 40px;
+  padding: 18px 24px 20px;
   text-align: center;
 }
 
@@ -54,19 +61,19 @@
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(58% 118% at 50% 48%, rgba(10, 10, 11, 0.74), rgba(10, 10, 11, 0.4) 56%, transparent 80%),
-    linear-gradient(180deg, rgba(10, 10, 11, 0.35), transparent 34%, rgba(10, 10, 11, 0.55));
+    radial-gradient(46% 104% at 50% 52%, rgba(8, 8, 9, 0.66), rgba(8, 8, 9, 0.26) 62%, transparent 86%),
+    linear-gradient(180deg, rgba(8, 8, 9, 0.22), transparent 30%, rgba(8, 8, 9, 0.42));
 }
 
 .thome-crown {
   display: block;
-  margin: 0 auto 10px;
+  margin: 0 auto 6px;
   color: var(--malik-accent-bright, #e8c56a);
 }
 
 .thome-wordmark {
   margin: 0;
-  font-size: clamp(40px, 6.4vw, 76px);
+  font-size: clamp(34px, 5.7vw, 64px);
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.06em;
@@ -77,8 +84,8 @@
 }
 
 .thome-wordmark-sub {
-  margin: 8px 0 0;
-  font-size: clamp(13px, 1.7vw, 19px);
+  margin: 6px 0 0;
+  font-size: clamp(11px, 1.45vw, 17px);
   font-weight: 600;
   letter-spacing: 0.62em;
   text-indent: 0.62em;
@@ -86,9 +93,9 @@
 }
 
 .thome-hero-lead {
-  margin: 20px auto 0;
+  margin: 14px auto 0;
   max-width: 620px;
-  font-size: 15px;
+  font-size: 14.5px;
   line-height: 1.6;
   color: #cbc3b5;
 }
@@ -502,7 +509,9 @@
   }
 
   .thome-hero {
-    padding: 30px 18px 26px;
+    aspect-ratio: auto;
+    min-height: 0;
+    padding: 28px 18px 24px;
   }
 
   .thome-model-badge {
