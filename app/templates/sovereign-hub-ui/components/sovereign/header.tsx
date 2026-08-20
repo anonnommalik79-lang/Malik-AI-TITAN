@@ -21,7 +21,6 @@ import {
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ApiStatusPopover } from "./api-status-popover"
-import { CommandPalette } from "./command-palette"
 import { DeployMenu } from "./deploy-menu"
 import { AI_MODES, type AiModeId, type PowerAction } from "./power-registry"
 import { openTelegramUpgrade } from "./pro-upgrade-card"
@@ -70,7 +69,6 @@ function HeaderInner({ onMenuClick, isSidebarCollapsed, onOpenCodex, onOpenCanva
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [upgradeHovered, setUpgradeHovered] = useState(false)
-  const [commandOpen, setCommandOpen] = useState(false)
   const [barStatus, setBarStatus] = useState("Core: Online · DB: Online · AI: fallback mode · Canvas: Ready")
 
   const activeModeLabel = useMemo(() => AI_MODES.find((mode) => mode.id === currentMode)?.label || currentMode, [currentMode])
@@ -80,10 +78,6 @@ function HeaderInner({ onMenuClick, isSidebarCollapsed, onOpenCodex, onOpenCanva
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase()
-      if ((event.ctrlKey || event.metaKey) && key === "k") {
-        event.preventDefault()
-        setCommandOpen(true)
-      }
       if (event.altKey && key === "1") {
         event.preventDefault()
         onViewChange?.("final-intelligence")
@@ -104,6 +98,9 @@ function HeaderInner({ onMenuClick, isSidebarCollapsed, onOpenCodex, onOpenCanva
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
   }, [onOpenCanvas, onOpenCodex, onViewChange])
+
+  // A single palette instance is mounted at dashboard level so Ctrl+K works on every view.
+  const openCommandPalette = () => window.dispatchEvent(new CustomEvent("malik-open-command-palette"))
 
   const notifications = [
     { id: 1, title: "Новая версия доступна", desc: "Malik Ai 2.0 с улучшенной генерацией", time: "2 мин" },
@@ -167,10 +164,10 @@ function HeaderInner({ onMenuClick, isSidebarCollapsed, onOpenCodex, onOpenCanva
     if (type === "open-templates") onViewChange?.("templates")
     else if (type === "open-projects") onViewChange?.("projects")
     else if (type === "open-chats") onViewChange?.("chats")
-    else if (type === "open-design") onViewChange?.("design")
+    else if (type === "open-design") onViewChange?.("component-generation")
     else if (type === "open-billing") onViewChange?.("billing")
     else if (type === "open-support") onViewChange?.("support")
-    else if (type === "open-command-palette") setCommandOpen(true)
+    else if (type === "open-command-palette") openCommandPalette()
     else if (type === "open-api-status") setBarStatus("API drawer is available in the top bar")
     else if (type === "open-deploy") setBarStatus("Render Guard: run npm build before push/deploy")
     else if (type === "owner-tools") setBarStatus(isOwner ? "Owner tools ready" : "Owner tools hidden for this account")
@@ -298,7 +295,7 @@ function HeaderInner({ onMenuClick, isSidebarCollapsed, onOpenCodex, onOpenCanva
       <div className={cn("malik-titan-inline-tools flex shrink-0 items-center justify-end gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", homeMode && "hidden lg:flex")}>
         <button
           type="button"
-          onClick={() => (homeMode && onOpenCommandCenter ? onOpenCommandCenter() : setCommandOpen(true))}
+          onClick={() => (homeMode && onOpenCommandCenter ? onOpenCommandCenter() : openCommandPalette())}
           className={inlineToolClass}
         >
           <Search className="h-3.5 w-3.5 text-cyan-200" />
@@ -379,7 +376,7 @@ function HeaderInner({ onMenuClick, isSidebarCollapsed, onOpenCodex, onOpenCanva
                     type="button"
                     onClick={() => {
                       setNotificationsOpen(false)
-                      onViewChange?.("notifications")
+                      onViewChange?.("support")
                     }}
                     className="w-full p-3 hover:bg-[#1F2937] transition-colors text-left border-b border-[#1F2937] last:border-0"
                   >
@@ -487,7 +484,6 @@ function HeaderInner({ onMenuClick, isSidebarCollapsed, onOpenCodex, onOpenCanva
       </div>
       </div>
 
-      <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} onRunAction={runPowerAction} />
 
       {/* Click outside to close */}
       {(userMenuOpen || notificationsOpen) && (

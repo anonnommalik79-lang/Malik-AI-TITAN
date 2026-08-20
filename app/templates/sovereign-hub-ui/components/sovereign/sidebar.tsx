@@ -1,42 +1,46 @@
 "use client"
 
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  ChevronDown,
-  CircleHelp,
-  Clock,
+  Briefcase,
+  ChevronRight,
   Code2,
-  Crown,
   CreditCard,
   Database,
+  FileText,
   FolderKanban,
   Globe2,
   Home,
-  Image,
+  Image as ImageIcon,
   Layers,
   LayoutTemplate,
+  LifeBuoy,
   LogOut,
   MessageSquare,
+  Newspaper,
+  Palette,
   PanelLeft,
   PanelLeftClose,
   Plus,
+  Presentation,
   Rocket,
   Search,
   Settings,
   Shield,
+  ShieldCheck,
   Sparkles,
-  Star,
+  Terminal,
   Trash2,
   Video,
+  Wand2,
   Workflow,
-  Zap,
-  Briefcase,
-  Newspaper,
 } from "lucide-react"
 import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/supabase"
 import { prefetchStudioChunks } from "@/lib/studio-prefetch"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
+
+const GROUP_STATE_KEY = "malik.sidebar.groups.v1"
 
 interface Chat {
   id: string
@@ -56,98 +60,114 @@ interface SidebarProps {
   chats?: Chat[]
   onLogout?: () => void
   onOpenCodex?: () => void
+  /** Opens the ⌘K command palette. Falls back to a window event picked up by the header. */
+  onOpenSearch?: () => void
 }
 
 type NavItem = {
   id: string
   icon: typeof Home
   label: string
-  description?: string
-  badge?: string | number
-  hot?: boolean
-  accent?: "cyan" | "violet" | "emerald" | "amber" | "rose" | "blue"
+  /** Shown as a native tooltip; keeps the rail itself single-line and quiet. */
+  hint?: string
+  children?: NavItem[]
 }
 
-type NavSection = {
-  title: string
+type NavGroup = {
+  id: string
+  title?: string
   items: NavItem[]
 }
 
-const navSections: NavSection[] = [
+/**
+ * Every entry below is wired to a view that actually renders and talks to a real
+ * endpoint. Demo-only screens (mock global search, mock notifications, the design
+ * token showcase, the "analytics" screen that was really a dashboard generator)
+ * were removed rather than left in the navigation.
+ */
+const NAV_GROUPS: NavGroup[] = [
   {
-    title: "Sovereign Core",
+    id: "main",
+    items: [{ id: "home", icon: Home, label: "Панель управления", hint: "Чат и главный экран" }],
+  },
+  {
+    id: "intelligence",
+    title: "Интеллект",
     items: [
-      { id: "home", icon: Home, label: "Панель управления", description: "Chat-first home", accent: "violet" },
-      { id: "final-intelligence", icon: Sparkles, label: "Final Intelligence", description: "AI brain + launch cockpit", badge: "NEW", hot: true, accent: "cyan" },
-      { id: "unbreakable-ai", icon: Shield, label: "Unbreakable AI", description: "Fallback, retry, guard", badge: "LIVE", hot: true, accent: "emerald" },
-      { id: "command-center", icon: Workflow, label: "Command Center", description: "Actions + control", accent: "amber" },
-      { id: "capabilities", icon: Sparkles, label: "Capabilities", description: "200 practical AI abilities", badge: "200", hot: true, accent: "cyan" },
-      { id: "business-command-center", icon: Briefcase, label: "Business Command Center", description: "30 business AI modes", badge: "NEW", hot: true, accent: "emerald" },
-      { id: "media-newsroom", icon: Newspaper, label: "Newsroom Studio", description: "СМИ: новости, фактчек, эфир, KZ/RU/EN", badge: "СМИ", hot: true, accent: "blue" },
-      { id: "search", icon: Search, label: "Глобальный поиск", description: "Ctrl+K router", accent: "blue" },
+      { id: "final-intelligence", icon: Sparkles, label: "Final Intelligence", hint: "Планирование, роутинг, память" },
+      { id: "unbreakable-ai", icon: ShieldCheck, label: "Unbreakable AI", hint: "Fallback, retry, проверка среды" },
+      { id: "command-center", icon: Workflow, label: "Command Center", hint: "Действия и управление агентами" },
+      { id: "capabilities", icon: Layers, label: "Возможности", hint: "Библиотека готовых AI-сценариев" },
+      { id: "business-command-center", icon: Briefcase, label: "Бизнес-центр", hint: "Бизнес-режимы и разборы" },
+      { id: "media-newsroom", icon: Newspaper, label: "Newsroom", hint: "Новости, фактчек, эфир · KZ/RU/EN" },
     ],
   },
   {
-    title: "Creator Engines",
+    id: "generation",
+    title: "Генерация",
     items: [
-      { id: "ai-generator", icon: Zap, label: "AI Генератор", description: "Unified media flow", badge: 1, accent: "violet" },
-      { id: "photo-generation", icon: Image, label: "Photo Generation", description: "MALIK Vision studio", badge: 1, accent: "cyan" },
-      { id: "video-generation", icon: Video, label: "Video Generation", description: "MALIK Cinema pipeline", accent: "rose" },
-      { id: "website-generation", icon: Globe2, label: "Website Builder", description: "Landing + preview", accent: "emerald" },
-      { id: "code-generation", icon: Code2, label: "Code Generator", description: "MALIK Codex files", accent: "amber" },
+      { id: "ai-generator", icon: Wand2, label: "AI Генератор", hint: "Единый поток медиа-генерации" },
+      { id: "photo-generation", icon: ImageIcon, label: "Изображения", hint: "MALIK Vision" },
+      { id: "video-generation", icon: Video, label: "Видео", hint: "MALIK Cinema" },
+      { id: "code-generation", icon: Code2, label: "Код", hint: "Генерация файлов и модулей" },
+      { id: "website-generation", icon: Globe2, label: "Сайты", hint: "Сборка страниц с превью" },
+      {
+        id: "studios",
+        icon: Palette,
+        label: "Студии сборки",
+        children: [
+          { id: "component-generation", icon: Layers, label: "Компоненты" },
+          { id: "landing-generation", icon: Rocket, label: "Лендинги" },
+          { id: "dashboard-generation", icon: Database, label: "Дашборды" },
+          { id: "document-generation", icon: FileText, label: "Документы" },
+          { id: "presentation-generation", icon: Presentation, label: "Презентации" },
+          { id: "template-generation", icon: LayoutTemplate, label: "Генератор шаблонов" },
+        ],
+      },
     ],
   },
   {
-    title: "Build Studios",
+    id: "workspace",
+    title: "Рабочее пространство",
     items: [
-      { id: "component-generation", icon: Layers, label: "Component Forge", description: "Cards, panels, TSX blocks", accent: "cyan" },
-      { id: "landing-generation", icon: Globe2, label: "Landing Studio", description: "Hero + CTA + waitlist", accent: "emerald" },
-      { id: "dashboard-generation", icon: Database, label: "Dashboard Builder", description: "KPI cockpit + charts", accent: "blue" },
-      { id: "document-generation", icon: LayoutTemplate, label: "Document Studio", description: "PRD, brief, reports", accent: "amber" },
-      { id: "presentation-generation", icon: Rocket, label: "Pitch Deck Studio", description: "Digital Bridge slides", badge: "PITCH", hot: true, accent: "rose" },
-      { id: "template-generation", icon: LayoutTemplate, label: "Template Generator", description: "Reusable launch kits", accent: "violet" },
-    ],
-  },
-  {
-    title: "Workspace",
-    items: [
-      { id: "projects", icon: FolderKanban, label: "Проекты", badge: 3, accent: "blue" },
-      { id: "chats", icon: MessageSquare, label: "Нейро-диалоги", badge: 12, accent: "violet" },
-      { id: "analytics", icon: Database, label: "Аналитика", description: "Usage + queue + costs", accent: "blue" },
-      { id: "notifications", icon: Zap, label: "Сигналы", description: "Alerts + runtime status", accent: "amber" },
-      { id: "design", icon: Layers, label: "Дизайн системы", accent: "cyan" },
-      { id: "templates", icon: LayoutTemplate, label: "Библиотека шаблонов", accent: "emerald" },
+      { id: "projects", icon: FolderKanban, label: "Проекты" },
+      { id: "chats", icon: MessageSquare, label: "Диалоги" },
+      { id: "templates", icon: LayoutTemplate, label: "Библиотека шаблонов" },
     ],
   },
 ]
 
-const premiumSystemActions: NavItem[] = [
-  { id: "settings", icon: Settings, label: "Настройки профиля", description: "Аккаунт и доступ", accent: "violet" },
-  { id: "billing", icon: CreditCard, label: "Подписка и биллинг", description: "План, лимиты, оплата", accent: "blue" },
-  { id: "support", icon: CircleHelp, label: "Поддержка 24/7", description: "Помощь и статус", accent: "emerald" },
-]
+const RAIL_ITEMS = NAV_GROUPS.flatMap((group) => group.items)
 
-const accentClass = (accent?: NavItem["accent"]) => {
-  if (accent === "cyan") return "from-cyan-300/20 via-sky-400/10 to-transparent border-cyan-300/25 text-cyan-100"
-  if (accent === "emerald") return "from-emerald-300/20 via-cyan-400/10 to-transparent border-emerald-300/25 text-emerald-100"
-  if (accent === "amber") return "from-amber-300/20 via-orange-400/10 to-transparent border-amber-300/25 text-amber-100"
-  if (accent === "rose") return "from-rose-300/20 via-fuchsia-400/10 to-transparent border-rose-300/25 text-rose-100"
-  if (accent === "blue") return "from-blue-300/20 via-cyan-400/10 to-transparent border-blue-300/25 text-blue-100"
-  return "from-violet-300/20 via-fuchsia-400/10 to-transparent border-violet-300/25 text-violet-100"
-}
+const PROFILE_MENU = [
+  { id: "settings", icon: Settings, label: "Настройки" },
+  { id: "billing", icon: CreditCard, label: "Подписка и биллинг" },
+  { id: "support", icon: LifeBuoy, label: "Поддержка" },
+]
 
 function formatChatTime(value: Date) {
   try {
     const date = value instanceof Date ? value : new Date(value)
-    const diff = Date.now() - date.getTime()
-    const minutes = Math.max(0, Math.floor(diff / 60000))
-    if (minutes < 1) return "now"
-    if (minutes < 60) return `${minutes}м`
+    const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000))
+    if (minutes < 1) return "сейчас"
+    if (minutes < 60) return `${minutes} мин`
     const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}ч`
-    return `${Math.floor(hours / 24)}д`
+    if (hours < 24) return `${hours} ч`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return `${days} д`
+    return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
   } catch {
-    return "—"
+    return ""
+  }
+}
+
+function readGroupState(): Record<string, boolean> {
+  if (typeof window === "undefined") return {}
+  try {
+    const raw = window.localStorage.getItem(GROUP_STATE_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
+  } catch {
+    return {}
   }
 }
 
@@ -162,8 +182,13 @@ function SidebarInner({
   chats = [],
   onLogout,
   onOpenCodex,
+  onOpenSearch,
 }: SidebarProps) {
   const [profile, setProfile] = useState<ReturnType<typeof getStoredAuthSnapshot>>(null)
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [tooltip, setTooltip] = useState<{ label: string; top: number } | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const update = () => setProfile(getStoredAuthSnapshot())
@@ -176,266 +201,649 @@ function SidebarInner({
     }
   }, [])
 
+  useEffect(() => {
+    setOpenGroups(readGroupState())
+  }, [])
+
+  // Keep the disclosure open when the active view lives inside it.
+  const parentOfActive = useMemo(() => {
+    for (const group of NAV_GROUPS) {
+      for (const item of group.items) {
+        if (item.children?.some((child) => child.id === activeView)) return item.id
+      }
+    }
+    return null
+  }, [activeView])
+
+  useEffect(() => {
+    if (!parentOfActive) return
+    setOpenGroups((prev) => (prev[parentOfActive] ? prev : { ...prev, [parentOfActive]: true }))
+  }, [parentOfActive])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false)
+    }
+    document.addEventListener("mousedown", onPointerDown)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [menuOpen])
+
   const email = profile?.email || "guest@malik.ai"
   const name = profile?.name || "Гость"
   const avatar = profile?.avatar || buildFallbackAvatar(email)
-  const initials = useMemo(() => (name || email).slice(0, 2).toUpperCase(), [name, email])
-  const fallbackRecentItems = useMemo(() => {
-    const now = Date.now()
-    return [
-      { id: "recent-1", title: "Интерфейс Sovereign Hub", timestamp: new Date(now - 1000 * 60 * 60) },
-      { id: "recent-2", title: "Дашборд аналитики AI", timestamp: new Date(now - 1000 * 60 * 60 * 2) },
-      { id: "recent-3", title: "Quantum E-commerce", timestamp: new Date(now - 1000 * 60 * 60 * 24) },
-      { id: "recent-4", title: "Neural Network Landing", timestamp: new Date(now - 1000 * 60 * 60 * 48) },
-    ]
-  }, [])
-  const recentItems = chats.length > 0 ? chats : fallbackRecentItems
   const isGuest = /guest|anonymous/i.test(email)
-  const displayName = isGuest ? "anonymous#guest" : name
+  const displayName = isGuest ? "Гостевой доступ" : name
   const planLabel = isGuest ? "Free plan" : "Pro workspace"
 
-  const openView = (view: string) => {
-    onViewChange?.(view)
-  }
+  const recentChats = useMemo(() => chats.slice(0, 5), [chats])
+  const counters = useMemo<Record<string, number>>(() => ({ chats: chats.length }), [chats.length])
+
+  const openView = useCallback(
+    (view: string) => {
+      onViewChange?.(view)
+      setMenuOpen(false)
+    },
+    [onViewChange],
+  )
+
+  const toggleGroup = useCallback((id: string) => {
+    setOpenGroups((prev) => {
+      const next = { ...prev, [id]: !prev[id] }
+      try {
+        window.localStorage.setItem(GROUP_STATE_KEY, JSON.stringify(next))
+      } catch {
+        /* storage can be unavailable — the sidebar still works, it just won't remember */
+      }
+      return next
+    })
+  }, [])
+
+  const openSearch = useCallback(() => {
+    if (onOpenSearch) {
+      onOpenSearch()
+      return
+    }
+    window.dispatchEvent(new CustomEvent("malik-open-command-palette"))
+  }, [onOpenSearch])
 
   const handleLogout = async () => {
+    setMenuOpen(false)
     await signOutMalik()
     onLogout?.()
   }
 
-  const renderNavButton = (item: NavItem, compact = false) => {
-    const isActive = activeView === item.id
-    const Icon = item.icon
-
-    return (
-      <button
-        key={item.id}
-        type="button"
-        title={compact ? item.label : undefined}
-        onClick={() => openView(item.id)}
-        onMouseEnter={prefetchStudioChunks}
-        onFocus={prefetchStudioChunks}
-        data-accent={item.accent || "violet"}
-        data-active={isActive ? "true" : "false"}
-        className={cn(
-          "malik-sidebar-nav-button group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl border text-left transition duration-200",
-          compact ? "h-12 justify-center px-0" : "px-3.5 py-3",
-          isActive
-            ? cn("border-white/15 bg-gradient-to-r text-white shadow-[0_18px_55px_rgba(0,0,0,.42)]", accentClass(item.accent))
-            : "border-transparent text-zinc-400 hover:border-white/10 hover:bg-white/[0.045] hover:text-white",
-        )}
-      >
-        {item.hot && <span className="malik-sidebar-hot-rail pointer-events-none absolute inset-y-2 left-0 w-1 rounded-r-full bg-cyan-300/80" />}
-        <span
-          className={cn(
-            "malik-sidebar-nav-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition",
-            isActive ? "border-white/15 bg-white/10 text-white" : "border-white/5 bg-white/[0.035] text-zinc-400 group-hover:text-white",
-          )}
-        >
-          <Icon className="h-4 w-4" />
-        </span>
-        {!compact && (
-          <>
-            <span className="malik-sidebar-item-copy min-w-0 flex-1">
-              <span className="malik-sidebar-item-label block text-sm font-black">{item.label}</span>
-              {item.description ? <span className="malik-sidebar-item-desc mt-0.5 block text-[11px] font-medium text-zinc-500 group-hover:text-zinc-400">{item.description}</span> : null}
-            </span>
-            {item.badge ? (
-              <span className={cn(
-                "malik-sidebar-badge shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black",
-                item.hot ? "border-cyan-300/25 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/[0.055] text-zinc-300",
-              )}>
-                {item.badge}
-              </span>
-            ) : null}
-          </>
-        )}
-      </button>
-    )
+  const showTooltip = (label: string) => (event: React.MouseEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setTooltip({ label, top: rect.top + rect.height / 2 })
   }
+  const hideTooltip = () => setTooltip(null)
+
+  /* ------------------------------------------------------------------ rail */
 
   if (isCollapsed) {
     return (
-      <aside className="malik-sovereign-sidebar malik-sovereign-sidebar-collapsed flex h-[100dvh] w-[78px] flex-col border-r border-white/10 bg-[#030303] text-white shadow-[18px_0_70px_rgba(0,0,0,.35)]">
-        <div className="flex h-16 items-center justify-center border-b border-white/10">
-          <button type="button" onClick={onToggle} className="rounded-2xl border border-white/10 bg-white/[0.035] p-2.5 hover:bg-white/10">
-            <PanelLeft className="h-5 w-5" />
+      <aside className="malik-sidebar flex h-[100dvh] w-16 shrink-0 flex-col border-r border-white/[0.06] bg-[#0A0A0C] text-white">
+        <div className="flex h-14 shrink-0 items-center justify-center">
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label="Развернуть панель"
+            onMouseEnter={showTooltip("Развернуть панель")}
+            onMouseLeave={hideTooltip}
+            className="malik-sidebar-icon-btn"
+          >
+            <PanelLeft className="h-[18px] w-[18px]" />
           </button>
         </div>
-        <button type="button" onClick={onNewChat} className="m-3 rounded-2xl bg-white p-3 text-black shadow-[0_12px_35px_rgba(255,255,255,.12)]">
-          <Plus className="h-5 w-5" />
-        </button>
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-4">
-          {navSections.flatMap((section) => section.items).slice(0, 18).map((item) => renderNavButton(item, true))}
-        </div>
-        <div className="border-t border-white/10 p-3">
-          <button type="button" onClick={onToggle} className="mb-3 w-full rounded-xl border border-white/10 bg-white/[0.035] p-2 text-zinc-400 hover:text-white">
-            <PanelLeftClose className="mx-auto h-4 w-4" />
+
+        <div className="flex flex-col items-center gap-1 px-2 pb-2">
+          <button
+            type="button"
+            onClick={onNewChat}
+            aria-label="Новый чат"
+            onMouseEnter={showTooltip("Новый чат")}
+            onMouseLeave={hideTooltip}
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-black transition hover:bg-zinc-200"
+          >
+            <Plus className="h-[18px] w-[18px]" />
           </button>
-          <img src={avatar} alt={name} className="h-11 w-11 rounded-2xl object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} />
+          <button
+            type="button"
+            onClick={openSearch}
+            aria-label="Поиск"
+            onMouseEnter={showTooltip("Поиск · Ctrl K")}
+            onMouseLeave={hideTooltip}
+            className="malik-sidebar-icon-btn"
+          >
+            <Search className="h-[18px] w-[18px]" />
+          </button>
         </div>
+
+        <nav aria-label="Навигация" className="malik-sidebar-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2">
+          {RAIL_ITEMS.map((item) => {
+            const Icon = item.icon
+            const isActive = item.children
+              ? item.children.some((child) => child.id === activeView)
+              : activeView === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-label={item.label}
+                aria-current={isActive ? "page" : undefined}
+                onClick={() => openView(item.children ? item.children[0].id : item.id)}
+                onMouseEnter={(event) => {
+                  prefetchStudioChunks()
+                  showTooltip(item.label)(event)
+                }}
+                onMouseLeave={hideTooltip}
+                onFocus={prefetchStudioChunks}
+                className={cn("malik-sidebar-rail-btn", isActive && "is-active")}
+              >
+                <Icon className="h-[18px] w-[18px]" />
+              </button>
+            )
+          })}
+        </nav>
+
+        <div className="flex shrink-0 flex-col items-center gap-1 border-t border-white/[0.06] p-2">
+          <button
+            type="button"
+            onClick={onOpenCodex}
+            aria-label="Malik Codex"
+            onMouseEnter={showTooltip("Malik Codex")}
+            onMouseLeave={hideTooltip}
+            className="malik-sidebar-icon-btn"
+          >
+            <Terminal className="h-[18px] w-[18px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => openView("settings")}
+            aria-label="Настройки"
+            onMouseEnter={showTooltip("Настройки")}
+            onMouseLeave={hideTooltip}
+            className="malik-sidebar-icon-btn"
+          >
+            <Settings className="h-[18px] w-[18px]" />
+          </button>
+          <img
+            src={avatar}
+            alt=""
+            className="mt-1 h-8 w-8 rounded-lg object-cover"
+            onError={(event) => {
+              event.currentTarget.style.visibility = "hidden"
+            }}
+          />
+        </div>
+
+        {tooltip ? (
+          <div className="malik-sidebar-tooltip" style={{ top: tooltip.top }}>
+            {tooltip.label}
+          </div>
+        ) : null}
+
+        <SidebarStyles />
       </aside>
     )
   }
 
-  return (
-    <aside className="malik-sovereign-sidebar relative flex h-[100dvh] w-[342px] max-w-[90vw] shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#030303] text-white shadow-[22px_0_90px_rgba(0,0,0,.45)]">
-      <div className="malik-sidebar-aurora pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_4%,rgba(34,211,238,.12),transparent_34%),radial-gradient(circle_at_86%_18%,rgba(139,92,246,.12),transparent_32%)]" />
-      <div className="malik-sidebar-header relative flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-[0_0_35px_rgba(255,255,255,.12)]">
-            <svg viewBox="0 0 44 44" className="h-7 w-7" aria-hidden="true">
-              <rect width="44" height="44" rx="12" fill="white" />
-              <path d="M9 29 L22 15 L22 29 Z" fill="#03040a" />
-              <path d="M24 15 H38 L24 29 Z" fill="#03040a" />
-            </svg>
-          </div>
-          <div className="min-w-0">
-            <span className="block truncate text-lg font-black">MALIK AI</span>
-            <span className="block truncate text-[10px] font-black uppercase tracking-[0.22em] text-cyan-200/55">V6.5 TITAN</span>
-          </div>
+  /* -------------------------------------------------------------- expanded */
+
+  const renderItem = (item: NavItem, depth = 0) => {
+    const Icon = item.icon
+    const count = counters[item.id]
+
+    if (item.children) {
+      const isOpen = Boolean(openGroups[item.id])
+      const hasActiveChild = item.children.some((child) => child.id === activeView)
+      return (
+        <div key={item.id}>
+          <button
+            type="button"
+            aria-expanded={isOpen}
+            onClick={() => toggleGroup(item.id)}
+            onMouseEnter={prefetchStudioChunks}
+            className={cn("malik-sidebar-item", hasActiveChild && !isOpen && "is-active")}
+          >
+            <Icon className="malik-sidebar-item-icon" />
+            <span className="malik-sidebar-item-label">{item.label}</span>
+            <ChevronRight className={cn("malik-sidebar-chevron", isOpen && "is-open")} />
+          </button>
+          {isOpen ? (
+            <div className="malik-sidebar-subtree">{item.children.map((child) => renderItem(child, depth + 1))}</div>
+          ) : null}
         </div>
-        <button type="button" onClick={onToggle} className="rounded-xl border border-white/10 bg-white/[0.035] p-2 text-zinc-500 hover:bg-white/10 hover:text-white">
-          <PanelLeftClose className="h-4 w-4" />
+      )
+    }
+
+    const isActive = activeView === item.id
+    return (
+      <button
+        key={item.id}
+        type="button"
+        title={item.hint}
+        aria-current={isActive ? "page" : undefined}
+        onClick={() => openView(item.id)}
+        onMouseEnter={prefetchStudioChunks}
+        onFocus={prefetchStudioChunks}
+        className={cn("malik-sidebar-item", isActive && "is-active", depth > 0 && "is-nested")}
+      >
+        <Icon className="malik-sidebar-item-icon" />
+        <span className="malik-sidebar-item-label">{item.label}</span>
+        {count ? <span className="malik-sidebar-count">{count > 99 ? "99+" : count}</span> : null}
+      </button>
+    )
+  }
+
+  return (
+    <aside className="malik-sidebar relative flex h-[100dvh] w-[264px] max-w-[86vw] shrink-0 flex-col border-r border-white/[0.06] bg-[#0A0A0C] text-white">
+      <div className="flex h-14 shrink-0 items-center justify-between gap-2 pl-4 pr-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white">
+            <svg viewBox="0 0 44 44" className="h-4 w-4" aria-hidden="true">
+              <path d="M9 29 L22 15 L22 29 Z" fill="#0A0A0C" />
+              <path d="M24 15 H38 L24 29 Z" fill="#0A0A0C" />
+            </svg>
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-semibold leading-tight tracking-tight">MALIK AI</span>
+            <span className="block truncate text-[10px] leading-tight text-zinc-600">v6.5 Titan</span>
+          </span>
+        </div>
+        <button type="button" onClick={onToggle} aria-label="Свернуть панель" className="malik-sidebar-icon-btn">
+          <PanelLeftClose className="h-[18px] w-[18px]" />
         </button>
       </div>
 
-      <div className="sovereign-sidebar-scroll relative min-h-0 flex-1 overflow-y-auto p-4">
+      <div className="shrink-0 space-y-1.5 px-3 pb-3">
         <button
           type="button"
           onClick={onNewChat}
-          className="malik-sidebar-create mb-4 flex w-full items-center justify-between rounded-[1.35rem] bg-white px-5 py-4 font-black text-black shadow-[0_18px_60px_rgba(255,255,255,.12)] transition hover:scale-[1.01]"
+          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-white text-[13px] font-semibold text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
         >
-          <span className="flex items-center gap-3"><Plus className="h-5 w-5" />Создать</span>
-          <ChevronDown className="h-4 w-4" />
+          <Plus className="h-4 w-4" />
+          Новый чат
         </button>
+        <button
+          type="button"
+          onClick={openSearch}
+          className="flex h-9 w-full items-center gap-2.5 rounded-lg border border-white/[0.07] bg-white/[0.02] px-2.5 text-[13px] text-zinc-500 transition hover:border-white/[0.12] hover:bg-white/[0.05] hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+        >
+          <Search className="h-4 w-4" />
+          <span className="flex-1 text-left">Поиск</span>
+          <kbd className="rounded border border-white/10 px-1.5 py-0.5 font-sans text-[10px] text-zinc-600">Ctrl K</kbd>
+        </button>
+      </div>
 
-        <div className="malik-sidebar-titan mb-5 rounded-[1.35rem] border border-cyan-300/15 bg-cyan-300/[0.055] p-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-cyan-100/70"><Crown className="h-3.5 w-3.5" />Titan Packs</p>
-            <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-black text-cyan-100">LIVE</span>
+      <nav aria-label="Навигация" className="malik-sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.id} className={group.title ? "mt-5 first:mt-0" : ""}>
+            {group.title ? <p className="malik-sidebar-group-title">{group.title}</p> : null}
+            <div className="space-y-0.5">{group.items.map((item) => renderItem(item))}</div>
           </div>
-        </div>
+        ))}
 
-        <nav className="malik-sidebar-sections space-y-6">
-          {navSections.map((section) => (
-            <div key={section.title} className="malik-sidebar-section">
-              <p className="malik-sidebar-section-title mb-2 px-2 text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600">{section.title}</p>
-              <div className="space-y-1.5">{section.items.map((item) => renderNavButton(item))}</div>
-            </div>
-          ))}
-        </nav>
-
-        <div className="sidebar-system-actions mt-6 space-y-2 rounded-[1.45rem] border border-white/10 bg-white/[0.035] p-3">
-          {premiumSystemActions.map((item) => renderNavButton(item))}
-          {profile?.isAdmin && (
-            <button type="button" onClick={() => openView("analytics")} className="malik-sidebar-plain-action flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-black text-red-300 hover:bg-red-500/10">
-              <Shield className="h-5 w-5" />Админ консоль
-            </button>
-          )}
-          <button type="button" onClick={onOpenCodex} className="malik-sidebar-plain-action flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-black text-violet-200 hover:bg-violet-500/10">
-            <Code2 className="h-5 w-5" />Malik Codex
-          </button>
-          <button type="button" onClick={handleLogout} className="malik-sidebar-plain-action flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-black text-zinc-300 hover:bg-white/5 hover:text-white">
-            <LogOut className="h-5 w-5" />Завершить сеанс
-          </button>
-        </div>
-
-        <div className="malik-sidebar-favorites mt-6">
-          <p className="malik-sidebar-section-title mb-2 flex items-center gap-2 px-2 text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600"><Star className="h-4 w-4" />Избранное</p>
-          <button type="button" onClick={() => openView("final-intelligence")} className="malik-sidebar-favorite-card w-full rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-3 text-left text-sm text-zinc-300 hover:bg-white/[0.06]">
-            <span className="mr-2 inline-block h-2 w-2 rounded-full bg-cyan-300" />Final Intelligence Cockpit
-          </button>
-        </div>
-
-        <div className="malik-sidebar-recent mt-6">
-            <div className="sidebar-recent-label malik-sidebar-section-title mb-2 flex items-center gap-2 px-2 text-[10px] font-black uppercase tracking-[0.22em] text-zinc-600"><Clock className="h-4 w-4" />Последние</div>
-            <div className="space-y-1">
-              {recentItems.slice(0, 8).map((chat) => (
-                <div key={chat.id} className="malik-sidebar-recent-item group flex items-center gap-2 rounded-2xl px-3 py-2 hover:bg-white/[0.045]">
+        {recentChats.length > 0 ? (
+          <div className="mt-5">
+            <p className="malik-sidebar-group-title">Недавние</p>
+            <div className="space-y-0.5">
+              {recentChats.map((chat) => (
+                <div key={chat.id} className="malik-sidebar-recent group">
                   <button type="button" onClick={() => onSelectChat?.(chat.id)} className="min-w-0 flex-1 text-left">
-                    <span className="block truncate text-sm font-semibold text-zinc-400 group-hover:text-white">{chat.title}</span>
-                    <span className="text-[10px] uppercase tracking-wider text-zinc-600">{formatChatTime(chat.timestamp)}</span>
+                    <span className="block truncate text-[13px] leading-tight text-zinc-400 transition group-hover:text-zinc-100">
+                      {chat.title}
+                    </span>
+                    <span className="mt-0.5 block text-[10px] leading-tight text-zinc-600">
+                      {formatChatTime(chat.timestamp)}
+                    </span>
                   </button>
                   {onDeleteChat ? (
-                    <button type="button" onClick={() => onDeleteChat(chat.id)} className="rounded-lg p-1.5 text-zinc-700 opacity-0 hover:bg-red-500/10 hover:text-red-300 group-hover:opacity-100">
+                    <button
+                      type="button"
+                      aria-label={`Удалить «${chat.title}»`}
+                      onClick={() => onDeleteChat(chat.id)}
+                      className="shrink-0 rounded-md p-1 text-zinc-600 opacity-0 transition hover:bg-red-500/10 hover:text-red-300 focus-visible:opacity-100 group-hover:opacity-100"
+                    >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   ) : null}
                 </div>
               ))}
             </div>
-        </div>
+          </div>
+        ) : null}
+      </nav>
+
+      <div ref={menuRef} className="relative shrink-0 border-t border-white/[0.06] p-2">
+        {menuOpen ? (
+          <div
+            role="menu"
+            className="absolute bottom-full left-2 right-2 mb-1.5 overflow-hidden rounded-xl border border-white/10 bg-[#141417] p-1 shadow-2xl shadow-black/60"
+          >
+            <p className="truncate px-2.5 py-2 text-[11px] text-zinc-500">{email}</p>
+            <div className="my-1 h-px bg-white/[0.07]" />
+            {PROFILE_MENU.map((entry) => {
+              const Icon = entry.icon
+              return (
+                <button key={entry.id} type="button" role="menuitem" onClick={() => openView(entry.id)} className="malik-sidebar-menu-item">
+                  <Icon className="h-4 w-4" />
+                  {entry.label}
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false)
+                onOpenCodex?.()
+              }}
+              className="malik-sidebar-menu-item"
+            >
+              <Terminal className="h-4 w-4" />
+              Malik Codex
+            </button>
+            {profile?.isAdmin ? (
+              <button type="button" role="menuitem" onClick={() => openView("command-center")} className="malik-sidebar-menu-item">
+                <Shield className="h-4 w-4" />
+                Админ-консоль
+              </button>
+            ) : null}
+            <div className="my-1 h-px bg-white/[0.07]" />
+            <button type="button" role="menuitem" onClick={handleLogout} className="malik-sidebar-menu-item is-danger">
+              <LogOut className="h-4 w-4" />
+              Выйти
+            </button>
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((open) => !open)}
+          className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+        >
+          <img
+            src={avatar}
+            alt=""
+            className="h-7 w-7 shrink-0 rounded-lg object-cover"
+            onError={(event) => {
+              event.currentTarget.style.visibility = "hidden"
+            }}
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-medium leading-tight">{displayName}</span>
+            <span className="block truncate text-[11px] leading-tight text-zinc-600">{planLabel}</span>
+          </span>
+          <ChevronRight className={cn("h-4 w-4 shrink-0 text-zinc-600 transition-transform", menuOpen && "-rotate-90")} />
+        </button>
       </div>
 
-      <div className="malik-sidebar-profile relative shrink-0 border-t border-white/10 bg-black/20 p-4">
-        <div className="flex items-center gap-3 rounded-[1.25rem] border border-white/10 bg-white/[0.035] p-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-cyan-500 to-violet-600 text-sm font-black">
-            <img src={avatar} alt={name} className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none" }} />
-            <span className="hidden">{initials}</span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-black">{displayName}</p>
-            <p className="truncate text-[11px] text-zinc-500">{planLabel}</p>
-          </div>
-        </div>
-      </div>
-
-      <style jsx global>{`
-        .malik-sovereign-sidebar {
-          contain: layout paint;
-        }
-        .sovereign-sidebar-scroll {
-          scrollbar-width: thin;
-          scrollbar-color: rgba(103,232,249,.28) transparent;
-        }
-        .sovereign-sidebar-scroll::-webkit-scrollbar {
-          width: 6px;
-        }
-        .sovereign-sidebar-scroll::-webkit-scrollbar-thumb {
-          border-radius: 999px;
-          background: linear-gradient(180deg, rgba(103,232,249,.34), rgba(167,139,250,.32));
-        }
-        .malik-sidebar-titan,
-        .sidebar-system-actions,
-        .malik-sidebar-profile > div {
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 18px 55px rgba(0,0,0,.24);
-        }
-        .malik-sidebar-nav-button::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          opacity: 0;
-          background: linear-gradient(115deg, transparent 0%, rgba(255,255,255,.12) 45%, transparent 72%);
-          transform: translateX(-120%);
-          transition: opacity .2s ease;
-        }
-        .malik-sidebar-nav-button:hover::after,
-        .malik-sidebar-nav-button[data-active="true"]::after {
-          opacity: 1;
-          animation: malikSidebarSweep 1.8s ease-in-out;
-        }
-        .malik-provider-card {
-          transition: transform .18s ease, border-color .18s ease, background .18s ease;
-        }
-        .malik-provider-card:hover {
-          transform: translateY(-2px);
-          border-color: rgba(255,255,255,.18);
-          background: rgba(255,255,255,.055);
-        }
-        @keyframes malikSidebarSweep {
-          0% { transform: translateX(-120%); }
-          55%, 100% { transform: translateX(120%); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .malik-sidebar-nav-button::after,
-          .malik-provider-card {
-            animation: none !important;
-            transition: none !important;
-          }
-        }
-      `}</style>
+      <SidebarStyles />
     </aside>
+  )
+}
+
+function SidebarStyles() {
+  return (
+    <style jsx global>{`
+      .malik-sidebar {
+        contain: layout paint;
+        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+      }
+      .malik-sidebar-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: transparent transparent;
+      }
+      .malik-sidebar-scroll:hover {
+        scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+      }
+      .malik-sidebar-scroll::-webkit-scrollbar {
+        width: 8px;
+      }
+      .malik-sidebar-scroll::-webkit-scrollbar-thumb {
+        border: 2px solid transparent;
+        background-clip: content-box;
+        border-radius: 999px;
+        background-color: transparent;
+      }
+      .malik-sidebar-scroll:hover::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.14);
+      }
+
+      .malik-sidebar-group-title {
+        margin: 0 0 4px;
+        padding: 0 8px;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #5b5b63;
+      }
+
+      .malik-sidebar-item {
+        position: relative;
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 10px;
+        height: 32px;
+        padding: 0 8px;
+        border-radius: 8px;
+        color: #a1a1aa;
+        font-size: 13px;
+        font-weight: 450;
+        text-align: left;
+        transition: background-color 0.13s ease, color 0.13s ease;
+      }
+      .malik-sidebar-item:hover {
+        background-color: rgba(255, 255, 255, 0.045);
+        color: #f4f4f5;
+      }
+      .malik-sidebar-item:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.22);
+      }
+      .malik-sidebar-item.is-active {
+        background-color: rgba(255, 255, 255, 0.075);
+        color: #ffffff;
+        font-weight: 500;
+      }
+      .malik-sidebar-item.is-active::before {
+        content: "";
+        position: absolute;
+        left: -12px;
+        top: 50%;
+        height: 16px;
+        width: 2px;
+        transform: translateY(-50%);
+        border-radius: 0 2px 2px 0;
+        background: #8b5cf6;
+      }
+      .malik-sidebar-item-icon {
+        height: 16px;
+        width: 16px;
+        flex-shrink: 0;
+        color: #71717a;
+        transition: color 0.13s ease;
+      }
+      .malik-sidebar-item:hover .malik-sidebar-item-icon,
+      .malik-sidebar-item.is-active .malik-sidebar-item-icon {
+        color: currentColor;
+      }
+      .malik-sidebar-item-label {
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .malik-sidebar-item.is-nested {
+        height: 30px;
+        font-size: 12.5px;
+      }
+
+      .malik-sidebar-count {
+        flex-shrink: 0;
+        min-width: 18px;
+        border-radius: 999px;
+        padding: 1px 5px;
+        text-align: center;
+        font-size: 10px;
+        font-weight: 500;
+        color: #8a8a93;
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .malik-sidebar-chevron {
+        height: 14px;
+        width: 14px;
+        flex-shrink: 0;
+        color: #52525b;
+        transition: transform 0.15s ease;
+      }
+      .malik-sidebar-chevron.is-open {
+        transform: rotate(90deg);
+      }
+      .malik-sidebar-subtree {
+        margin: 2px 0 2px 15px;
+        padding-left: 9px;
+        border-left: 1px solid rgba(255, 255, 255, 0.07);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .malik-sidebar-subtree .malik-sidebar-item.is-active::before {
+        left: -10px;
+      }
+
+      .malik-sidebar-recent {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 8px;
+        padding: 5px 8px;
+        transition: background-color 0.13s ease;
+      }
+      .malik-sidebar-recent:hover {
+        background-color: rgba(255, 255, 255, 0.045);
+      }
+
+      .malik-sidebar-icon-btn {
+        display: flex;
+        height: 30px;
+        width: 30px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        color: #71717a;
+        transition: background-color 0.13s ease, color 0.13s ease;
+      }
+      .malik-sidebar-icon-btn:hover {
+        background-color: rgba(255, 255, 255, 0.06);
+        color: #ffffff;
+      }
+      .malik-sidebar-icon-btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.22);
+      }
+
+      .malik-sidebar-rail-btn {
+        position: relative;
+        display: flex;
+        height: 36px;
+        width: 100%;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        color: #71717a;
+        transition: background-color 0.13s ease, color 0.13s ease;
+      }
+      .malik-sidebar-rail-btn:hover {
+        background-color: rgba(255, 255, 255, 0.05);
+        color: #f4f4f5;
+      }
+      .malik-sidebar-rail-btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.22);
+      }
+      .malik-sidebar-rail-btn.is-active {
+        background-color: rgba(255, 255, 255, 0.075);
+        color: #ffffff;
+      }
+      .malik-sidebar-rail-btn.is-active::before {
+        content: "";
+        position: absolute;
+        left: -8px;
+        top: 50%;
+        height: 16px;
+        width: 2px;
+        transform: translateY(-50%);
+        border-radius: 0 2px 2px 0;
+        background: #8b5cf6;
+      }
+
+      .malik-sidebar-tooltip {
+        position: fixed;
+        left: 70px;
+        z-index: 120;
+        transform: translateY(-50%);
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        background: #17171b;
+        padding: 5px 9px;
+        font-size: 12px;
+        font-weight: 450;
+        color: #e4e4e7;
+        white-space: nowrap;
+        pointer-events: none;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+      }
+
+      .malik-sidebar-menu-item {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 9px;
+        border-radius: 7px;
+        padding: 7px 10px;
+        font-size: 13px;
+        color: #d4d4d8;
+        text-align: left;
+        transition: background-color 0.13s ease, color 0.13s ease;
+      }
+      .malik-sidebar-menu-item:hover {
+        background-color: rgba(255, 255, 255, 0.06);
+        color: #ffffff;
+      }
+      .malik-sidebar-menu-item:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.22);
+      }
+      .malik-sidebar-menu-item.is-danger {
+        color: #fca5a5;
+      }
+      .malik-sidebar-menu-item.is-danger:hover {
+        background-color: rgba(239, 68, 68, 0.1);
+        color: #fecaca;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .malik-sidebar * {
+          transition: none !important;
+        }
+      }
+    `}</style>
   )
 }
 
