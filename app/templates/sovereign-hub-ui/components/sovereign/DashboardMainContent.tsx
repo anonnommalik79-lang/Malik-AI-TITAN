@@ -5,6 +5,7 @@ import dynamic from "next/dynamic"
 import type { AiModeId } from "./power-registry"
 import { ChatView, type ChatAttachment, type ChatSendOptions } from "./chat-view"
 import { ChatInvestorBackground } from "./ChatInvestorBackground"
+import { TitanRightRail } from "./TitanRightRail"
 import type { Capability } from "@/lib/ai/capabilities/types"
 
 function DashboardPanelSkeleton({ label }: { label: string }) {
@@ -337,19 +338,29 @@ function DashboardMainContentInner({
           />
         </div>
       ) : (
-        <WelcomeScreen
-          onSubmit={onSendMessage}
-          isLoading={isLoading}
-          onOpenCodex={onOpenCodex}
-          onOpenTemplates={onWelcomeOpenTemplates}
-          onOpenWebsite={onWelcomeOpenWebsite}
-          onOpenCode={onWelcomeOpenCode}
-          onOpenBilling={onWelcomeOpenBilling}
-          onOpenCanvas={onWelcomeOpenCanvas}
-          onOpenCommandCenter={onOpenCommandCenter}
-          onOpenSupport={onWelcomeOpenSupport}
-          onOpenCapabilities={() => onOpenView("capabilities")}
-        />
+        <div className="relative z-10 flex min-h-0 min-w-0 w-full flex-1 overflow-hidden bg-[#020303]">
+          <div className="min-w-0 flex-1 overflow-y-auto">
+            <WelcomeScreen
+              onSubmit={onSendMessage}
+              isLoading={isLoading}
+              onOpenCodex={onOpenCodex}
+              onOpenTemplates={onWelcomeOpenTemplates}
+              onOpenWebsite={onWelcomeOpenWebsite}
+              onOpenCode={onWelcomeOpenCode}
+              onOpenBilling={onWelcomeOpenBilling}
+              onOpenCanvas={onWelcomeOpenCanvas}
+              onOpenCommandCenter={onOpenCommandCenter}
+              onOpenSupport={onWelcomeOpenSupport}
+              onOpenCapabilities={() => onOpenView("capabilities")}
+            />
+          </div>
+          <TitanRightRail
+            chats={chats}
+            activeAiMode={activeAiMode}
+            username={username}
+            onOpenChats={() => onOpenView("chats")}
+          />
+        </div>
       )}
     </section>
   )
