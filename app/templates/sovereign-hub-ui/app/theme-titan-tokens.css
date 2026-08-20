@@ -1,0 +1,136 @@
+/* =========================================================================
+   MALIK AI TITAN — GOLD TOKENS
+   =========================================================================
+   Imported from globals.css so it lands inside the Tailwind entry point:
+   `@theme` only merges into the design system when it is processed as part of
+   the same context as `@import 'tailwindcss'`. The visual rules that have to
+   beat creator-clone-safe.css live in theme-titan.css, which layout.tsx loads
+   last.
+   ========================================================================= */
+
+
+
+@theme {
+  /* ---- source of truth ------------------------------------------------ */
+  --color-gold-50: #fdf8e7;
+  --color-gold-100: #faefc8;
+  --color-gold-200: #f3de96;
+  --color-gold-300: #e8c56a;
+  --color-gold-400: #d9ae45;
+  --color-gold-500: #c9982f;
+  --color-gold-600: #a87c22;
+  --color-gold-700: #7f5c18;
+  --color-gold-800: #57400f;
+  --color-gold-900: #33260a;
+  --color-gold-950: #1d1506;
+
+  /* ---- deep gold: replaces violet / fuchsia / purple ------------------- */
+  --color-violet-50: #fdf8e7;
+  --color-violet-100: #faefc8;
+  --color-violet-200: #f3de96;
+  --color-violet-300: #e8c56a;
+  --color-violet-400: #d9ae45;
+  --color-violet-500: #c9982f;
+  --color-violet-600: #a87c22;
+  --color-violet-700: #7f5c18;
+  --color-violet-800: #57400f;
+  --color-violet-900: #33260a;
+  --color-violet-950: #1d1506;
+
+  --color-fuchsia-50: #fdf8e7;
+  --color-fuchsia-100: #faefc8;
+  --color-fuchsia-200: #f3de96;
+  --color-fuchsia-300: #e8c56a;
+  --color-fuchsia-400: #d9ae45;
+  --color-fuchsia-500: #c9982f;
+  --color-fuchsia-600: #a87c22;
+  --color-fuchsia-700: #7f5c18;
+  --color-fuchsia-800: #57400f;
+  --color-fuchsia-900: #33260a;
+  --color-fuchsia-950: #1d1506;
+
+  --color-purple-50: #fdf8e7;
+  --color-purple-100: #faefc8;
+  --color-purple-200: #f3de96;
+  --color-purple-300: #e8c56a;
+  --color-purple-400: #d9ae45;
+  --color-purple-500: #c9982f;
+  --color-purple-600: #a87c22;
+  --color-purple-700: #7f5c18;
+  --color-purple-800: #57400f;
+  --color-purple-900: #33260a;
+  --color-purple-950: #1d1506;
+
+  /* ---- champagne: replaces cyan / sky ---------------------------------- */
+  --color-cyan-50: #fffbef;
+  --color-cyan-100: #fdf3d5;
+  --color-cyan-200: #f8e5ac;
+  --color-cyan-300: #f0d288;
+  --color-cyan-400: #e4bb5e;
+  --color-cyan-500: #d3a23e;
+  --color-cyan-600: #b1842c;
+  --color-cyan-700: #86631f;
+  --color-cyan-800: #5b4315;
+  --color-cyan-900: #35270c;
+  --color-cyan-950: #1e1607;
+
+  --color-sky-50: #fffbef;
+  --color-sky-100: #fdf3d5;
+  --color-sky-200: #f8e5ac;
+  --color-sky-300: #f0d288;
+  --color-sky-400: #e4bb5e;
+  --color-sky-500: #d3a23e;
+  --color-sky-600: #b1842c;
+  --color-sky-700: #86631f;
+  --color-sky-800: #5b4315;
+  --color-sky-900: #35270c;
+  --color-sky-950: #1e1607;
+
+  /* `blue` shows up in a few nav accents; nudge it into the same family so a
+     stray class does not punch a cold hole in an otherwise warm screen. */
+  --color-blue-100: #faefc8;
+  --color-blue-200: #f3de96;
+  --color-blue-300: #e8c56a;
+  --color-blue-400: #d9ae45;
+  --color-blue-500: #c9982f;
+  --color-blue-600: #a87c22;
+}
+
+/* =========================================================================
+   SURFACES AND ACCENT TOKENS
+   The CSS files use raw rgba() for brand colour in ~530 places; those are
+   rewritten to reference these variables so the palette has a single home.
+   ========================================================================= */
+
+:root {
+  --malik-bg: #0a0a0b;
+  --malik-surface: #0e0e10;
+  --malik-surface-raised: #121214;
+  --malik-surface-hover: #17171a;
+
+  --malik-accent: #c9982f;
+  --malik-accent-bright: #e8c56a;
+  --malik-accent-pale: #f3de96;
+  --malik-accent-deep: #a87c22;
+
+  --malik-accent-4: rgba(212, 175, 55, 0.04);
+  --malik-accent-8: rgba(212, 175, 55, 0.08);
+  --malik-accent-14: rgba(212, 175, 55, 0.14);
+  --malik-accent-22: rgba(212, 175, 55, 0.22);
+  --malik-accent-35: rgba(212, 175, 55, 0.35);
+
+  --malik-border: rgba(212, 175, 55, 0.14);
+  --malik-border-strong: rgba(212, 175, 55, 0.28);
+  --malik-hairline: rgba(255, 255, 255, 0.06);
+
+  --malik-text: #f5f2ea;
+  --malik-text-muted: #9a9186;
+  --malik-text-dim: #6b655c;
+
+  --malik-glow-sm: 0 0 0 1px var(--malik-accent-14), 0 8px 24px rgba(0, 0, 0, 0.45);
+  --malik-glow-md: 0 0 0 1px var(--malik-accent-22), 0 18px 48px rgba(0, 0, 0, 0.55);
+  --malik-glow-gold: 0 8px 30px rgba(201, 152, 47, 0.22);
+
+  --malik-gradient-gold: linear-gradient(135deg, #f3de96 0%, #d9ae45 45%, #a87c22 100%);
+  --malik-gradient-wordmark: linear-gradient(180deg, #ffffff 0%, #e8e2d4 38%, #d9ae45 78%, #a87c22 100%);
+}

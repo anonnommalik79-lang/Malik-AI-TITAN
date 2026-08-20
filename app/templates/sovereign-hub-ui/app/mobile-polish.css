@@ -4,8 +4,8 @@ html,
 body,
 #malik-root {
   background:
-    radial-gradient(ellipse at 50% 115%, rgba(37, 99, 235, 0.42) 0%, rgba(29, 78, 216, 0.28) 18%, rgba(14, 30, 64, 0.13) 36%, transparent 62%),
-    radial-gradient(ellipse at 18% 100%, rgba(34, 211, 238, 0.16) 0%, transparent 38%),
+    radial-gradient(ellipse at 50% 115%, rgba(177, 132, 44, 0.42) 0%, rgba(134, 99, 31, 0.28) 18%, rgba(14, 30, 64, 0.13) 36%, transparent 62%),
+    radial-gradient(ellipse at 18% 100%, rgba(228, 187, 94, 0.16) 0%, transparent 38%),
     radial-gradient(ellipse at 82% 100%, rgba(99, 102, 241, 0.16) 0%, transparent 42%),
     linear-gradient(180deg, #020205 0%, #030712 48%, #041127 100%) !important;
   overflow-x: hidden !important;
@@ -30,7 +30,7 @@ body,
   top: 0;
   bottom: 0;
   background:
-    radial-gradient(circle at 50% 44%, rgba(59, 130, 246, 0.055), transparent 34%),
+    radial-gradient(circle at 50% 44%, rgba(211, 162, 62, 0.055), transparent 34%),
     linear-gradient(to right, rgba(148, 163, 184, 0.035) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(148, 163, 184, 0.032) 1px, transparent 1px);
   background-size: auto, 52px 52px, 52px 52px;
@@ -42,8 +42,8 @@ body,
   height: 46vh;
   bottom: -19vh;
   background:
-    radial-gradient(ellipse at 50% 100%, rgba(37, 99, 235, 0.82) 0%, rgba(29, 78, 216, 0.52) 23%, rgba(14, 165, 233, 0.20) 43%, transparent 69%),
-    radial-gradient(ellipse at 18% 95%, rgba(34, 211, 238, 0.34) 0%, transparent 44%),
+    radial-gradient(ellipse at 50% 100%, rgba(177, 132, 44, 0.82) 0%, rgba(134, 99, 31, 0.52) 23%, rgba(211, 162, 62, 0.20) 43%, transparent 69%),
+    radial-gradient(ellipse at 18% 95%, rgba(228, 187, 94, 0.34) 0%, transparent 44%),
     radial-gradient(ellipse at 82% 96%, rgba(99, 102, 241, 0.32) 0%, transparent 46%);
   filter: blur(22px) saturate(1.45);
   opacity: 0.92;
@@ -66,10 +66,10 @@ body,
   pointer-events: none;
   opacity: 0.98;
   background:
-    radial-gradient(ellipse at 50% 100%, rgba(37, 99, 235, 0.90) 0%, rgba(29, 78, 216, 0.58) 22%, rgba(14, 165, 233, 0.22) 42%, transparent 70%),
-    radial-gradient(ellipse at 7% 92%, rgba(34, 211, 238, 0.35), transparent 46%),
+    radial-gradient(ellipse at 50% 100%, rgba(177, 132, 44, 0.90) 0%, rgba(134, 99, 31, 0.58) 22%, rgba(211, 162, 62, 0.22) 42%, transparent 70%),
+    radial-gradient(ellipse at 7% 92%, rgba(228, 187, 94, 0.35), transparent 46%),
     radial-gradient(ellipse at 93% 92%, rgba(99, 102, 241, 0.32), transparent 46%),
-    linear-gradient(180deg, transparent 0%, rgba(5, 23, 58, 0.32) 62%, rgba(37, 99, 235, 0.48) 100%);
+    linear-gradient(180deg, transparent 0%, rgba(5, 23, 58, 0.32) 62%, rgba(177, 132, 44, 0.48) 100%);
   filter: blur(24px) saturate(1.55);
   mix-blend-mode: screen;
   transform: translateZ(0);
@@ -94,8 +94,8 @@ body,
 /* Premium depth for the first screen on desktop. */
 #malik-root section:first-of-type {
   background:
-    radial-gradient(ellipse at 50% 34%, rgba(59, 130, 246, 0.10), transparent 42%),
-    radial-gradient(ellipse at 50% 105%, rgba(37, 99, 235, 0.22), transparent 54%) !important;
+    radial-gradient(ellipse at 50% 34%, rgba(211, 162, 62, 0.10), transparent 42%),
+    radial-gradient(ellipse at 50% 105%, rgba(177, 132, 44, 0.22), transparent 54%) !important;
 }
 
 /* Home Earth photo must show through — no fake gradient panel on top */
@@ -114,13 +114,13 @@ body,
 #malik-root section:first-of-type [class*="bg-black/45"] {
   box-shadow:
     0 18px 64px rgba(2, 6, 23, 0.38),
-    0 0 0 1px rgba(147, 197, 253, 0.045),
+    0 0 0 1px rgba(240, 210, 136, 0.045),
     inset 0 1px 0 rgba(255, 255, 255, 0.055) !important;
 }
 
 #malik-root section:first-of-type button,
 #malik-root section:first-of-type [role="button"] {
-  box-shadow: 0 0 24px rgba(37, 99, 235, 0.08) !important;
+  box-shadow: 0 0 24px rgba(177, 132, 44, 0.08) !important;
 }
 
 @media (max-width: 640px) {
@@ -128,14 +128,14 @@ body,
   body,
   #malik-root {
     background:
-      radial-gradient(ellipse at 50% 112%, rgba(37, 99, 235, 0.54) 0%, rgba(29, 78, 216, 0.36) 21%, rgba(5, 23, 58, 0.18) 43%, transparent 67%),
+      radial-gradient(ellipse at 50% 112%, rgba(177, 132, 44, 0.54) 0%, rgba(134, 99, 31, 0.36) 21%, rgba(5, 23, 58, 0.18) 43%, transparent 67%),
       linear-gradient(180deg, #020205 0%, #030712 54%, #071942 100%) !important;
     overflow-x: hidden !important;
   }
 
   #malik-root::before {
     background:
-      radial-gradient(ellipse at 50% 38%, rgba(59, 130, 246, 0.08), transparent 44%),
+      radial-gradient(ellipse at 50% 38%, rgba(211, 162, 62, 0.08), transparent 44%),
       linear-gradient(to right, rgba(148, 163, 184, 0.035) 1px, transparent 1px),
       linear-gradient(to bottom, rgba(148, 163, 184, 0.032) 1px, transparent 1px);
     background-size: auto, 44px 44px, 44px 44px;
@@ -149,8 +149,8 @@ body,
     opacity: 0.98;
     filter: blur(17px) saturate(1.42);
     background:
-      radial-gradient(ellipse at 50% 100%, rgba(37, 99, 235, 0.98) 0%, rgba(29, 78, 216, 0.66) 26%, rgba(14, 165, 233, 0.22) 46%, transparent 73%),
-      radial-gradient(ellipse at 15% 100%, rgba(34, 211, 238, 0.28), transparent 46%),
+      radial-gradient(ellipse at 50% 100%, rgba(177, 132, 44, 0.98) 0%, rgba(134, 99, 31, 0.66) 26%, rgba(211, 162, 62, 0.22) 46%, transparent 73%),
+      radial-gradient(ellipse at 15% 100%, rgba(228, 187, 94, 0.28), transparent 46%),
       radial-gradient(ellipse at 86% 100%, rgba(99, 102, 241, 0.28), transparent 48%);
   }
 
@@ -179,7 +179,7 @@ body,
   #malik-root [class*="bg-white/[0.07]"],
   #malik-root [class*="bg-white/[0.08]"] {
     background: linear-gradient(180deg, rgba(10, 17, 32, 0.94), rgba(5, 10, 22, 0.89)) !important;
-    border-color: rgba(147, 197, 253, 0.20) !important;
+    border-color: rgba(240, 210, 136, 0.20) !important;
     box-shadow:
       0 18px 56px rgba(0, 0, 0, 0.34),
       inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
@@ -220,7 +220,7 @@ body,
   #malik-root section:first-of-type {
     padding-top: 0 !important;
     min-height: auto !important;
-    background: radial-gradient(ellipse at 50% 115%, rgba(37, 99, 235, 0.28), transparent 56%) !important;
+    background: radial-gradient(ellipse at 50% 115%, rgba(177, 132, 44, 0.28), transparent 56%) !important;
   }
 
   #malik-root section:first-of-type h1 {
@@ -228,7 +228,7 @@ body,
     font-size: clamp(1.92rem, 9.2vw, 2.55rem) !important;
     line-height: 0.98 !important;
     letter-spacing: -0.065em !important;
-    text-shadow: 0 0 32px rgba(96, 165, 250, 0.11) !important;
+    text-shadow: 0 0 32px rgba(228, 187, 94, 0.11) !important;
   }
 
   #malik-root section:first-of-type h1 span {
@@ -257,7 +257,7 @@ body,
     color: #f8fafc !important;
     background: rgba(2, 6, 23, 0.86) !important;
     border-radius: 1.3rem !important;
-    box-shadow: 0 0 36px rgba(37, 99, 235, 0.11), inset 0 1px 0 rgba(255,255,255,0.06) !important;
+    box-shadow: 0 0 36px rgba(177, 132, 44, 0.11), inset 0 1px 0 rgba(255,255,255,0.06) !important;
   }
 
   #malik-root:not(:has(.malik-welcome-earth-shell)) textarea::placeholder {
@@ -267,10 +267,10 @@ body,
   /* The prompt composer must not look like a transparent blur block. */
   #malik-root:not(:has(.malik-welcome-earth-shell)) section:nth-of-type(2) > div {
     background: linear-gradient(180deg, rgba(7, 12, 24, 0.94), rgba(2, 6, 23, 0.89)) !important;
-    border-color: rgba(96, 165, 250, 0.25) !important;
+    border-color: rgba(228, 187, 94, 0.25) !important;
     box-shadow:
       0 20px 70px rgba(0, 0, 0, 0.48),
-      0 0 38px rgba(37, 99, 235, 0.10),
+      0 0 38px rgba(177, 132, 44, 0.10),
       inset 0 1px 0 rgba(255,255,255,0.08) !important;
     backdrop-filter: none !important;
   }
@@ -323,7 +323,7 @@ body,
     max-width: min(92vw, 360px) !important;
     height: 100dvh !important;
     background: linear-gradient(180deg, #020205 0%, #030712 100%) !important;
-    border-right-color: rgba(147, 197, 253, 0.18) !important;
+    border-right-color: rgba(240, 210, 136, 0.18) !important;
   }
 
   #malik-root aside button {

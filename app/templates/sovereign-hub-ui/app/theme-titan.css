@@ -1,0 +1,93 @@
+/* =========================================================================
+   MALIK AI TITAN — GOLD SURFACE RULES
+   =========================================================================
+   Loaded last in layout.tsx. Tokens live in theme-titan-tokens.css, which is
+   imported from globals.css so Tailwind can merge the `@theme` block.
+   ========================================================================= */
+
+/* =========================================================================
+   SHARED PRIMITIVES
+   Used by the shell, the sidebar and the home screen so the same button does
+   not get re-invented three times with slightly different gold.
+   ========================================================================= */
+
+.malik-gold-button {
+  background: var(--malik-gradient-gold);
+  color: #1b1405;
+  font-weight: 600;
+  border: 1px solid rgba(255, 240, 200, 0.35);
+  box-shadow: var(--malik-glow-gold);
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.malik-gold-button:hover {
+  filter: brightness(1.06);
+}
+
+.malik-gold-button:active {
+  transform: translateY(1px);
+}
+
+.malik-gold-button:focus-visible {
+  outline: none;
+  box-shadow: var(--malik-glow-gold), 0 0 0 2px rgba(232, 197, 106, 0.55);
+}
+
+.malik-gold-outline {
+  border: 1px solid var(--malik-border);
+  background: var(--malik-accent-4);
+  color: var(--malik-accent-bright);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.malik-gold-outline:hover {
+  border-color: var(--malik-border-strong);
+  background: var(--malik-accent-8);
+}
+
+.malik-panel {
+  background: var(--malik-surface);
+  border: 1px solid var(--malik-border);
+  border-radius: 16px;
+}
+
+.malik-card {
+  background: var(--malik-surface-raised);
+  border: 1px solid var(--malik-border);
+  border-radius: 14px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.malik-card:hover {
+  border-color: var(--malik-border-strong);
+  background: var(--malik-surface-hover);
+}
+
+.malik-wordmark {
+  background: var(--malik-gradient-wordmark);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Selection and scrollbars pick up the accent too — small details, but a blue
+   text selection on a gold page is the kind of thing that reads as unfinished. */
+::selection {
+  background: rgba(201, 152, 47, 0.32);
+  color: #fffaf0;
+}
+
+/* =========================================================================
+   OVERRIDES FOR THE LEGACY STYLESHEET
+   creator-clone-safe.css sets brand colour through `#malik-root … !important`,
+   so anything that must change has to match that specificity.
+   ========================================================================= */
+
+#malik-root .malik-dashboard-shell {
+  background: var(--malik-bg) !important;
+}
+
+#malik-root ::selection {
+  background: rgba(201, 152, 47, 0.32);
+  color: #fffaf0;
+}

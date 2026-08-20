@@ -48,8 +48,8 @@
 }
 
 @keyframes malikStarsTwinkle {
-  0%, 100% { opacity: 0.82; filter: drop-shadow(0 0 3px rgba(59, 130, 246, 0.28)); }
-  50% { opacity: 1; filter: drop-shadow(0 0 9px rgba(125, 211, 252, 0.48)); }
+  0%, 100% { opacity: 0.82; filter: drop-shadow(0 0 3px rgba(211, 162, 62, 0.28)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 9px rgba(240, 210, 136, 0.48)); }
 }
 
 /* Real Earth photo — disable fake gradient horizon when welcome earth shell is active */
@@ -67,10 +67,10 @@
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]):not(:has(.malik-welcome-earth-shell)) {
     background:
-      radial-gradient(circle at 50% 8%, rgba(124, 58, 237, 0.20), transparent 24%),
-      radial-gradient(circle at 50% 48%, rgba(37, 99, 235, 0.11), transparent 38%),
-      radial-gradient(circle at 10% 76%, rgba(34, 211, 238, 0.070), transparent 32%),
-      radial-gradient(circle at 92% 64%, rgba(168, 85, 247, 0.065), transparent 30%),
+      radial-gradient(circle at 50% 8%, rgba(201, 152, 47, 0.20), transparent 24%),
+      radial-gradient(circle at 50% 48%, rgba(177, 132, 44, 0.11), transparent 38%),
+      radial-gradient(circle at 10% 76%, rgba(228, 187, 94, 0.070), transparent 32%),
+      radial-gradient(circle at 92% 64%, rgba(217, 174, 69, 0.065), transparent 30%),
       linear-gradient(180deg, #02050d 0%, #030712 46%, #03122a 100%) !important;
   }
 
@@ -93,11 +93,11 @@
     border-top: 2px solid rgba(219, 234, 254, 0.98);
     border-radius: 50% 50% 0 0 / 100% 100% 0 0;
     background:
-      linear-gradient(180deg, rgba(186, 230, 253, 0.48) 0%, rgba(96, 165, 250, 0.38) 6%, rgba(37, 99, 235, 0.30) 16%, rgba(29, 78, 216, 0.18) 32%, rgba(2, 6, 23, 0.00) 58%),
-      radial-gradient(ellipse at center top, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.44) 20%, rgba(30, 64, 175, 0.14) 48%, transparent 74%);
+      linear-gradient(180deg, rgba(248, 229, 172, 0.48) 0%, rgba(228, 187, 94, 0.38) 6%, rgba(177, 132, 44, 0.30) 16%, rgba(134, 99, 31, 0.18) 32%, rgba(2, 6, 23, 0.00) 58%),
+      radial-gradient(ellipse at center top, rgba(211, 162, 62, 0.95), rgba(177, 132, 44, 0.44) 20%, rgba(30, 64, 175, 0.14) 48%, transparent 74%);
     box-shadow:
-      0 -34px 150px rgba(37, 99, 235, 1),
-      0 -13px 54px rgba(125, 211, 252, 0.94),
+      0 -34px 150px rgba(177, 132, 44, 1),
+      0 -13px 54px rgba(240, 210, 136, 0.94),
       0 -2px 16px rgba(255, 255, 255, 0.52),
       inset 0 34px 96px rgba(2, 6, 23, 0.25);
   }
@@ -118,7 +118,7 @@
   }
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) > div:first-child button {
-    border-color: rgba(96, 165, 250, 0.18) !important;
+    border-color: rgba(228, 187, 94, 0.18) !important;
     background: rgba(5, 10, 24, 0.72) !important;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.055) !important;
     backdrop-filter: blur(18px) !important;
@@ -126,31 +126,31 @@
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) h1 {
     letter-spacing: -0.07em !important;
-    text-shadow: 0 0 35px rgba(255, 255, 255, 0.14), 0 0 55px rgba(34, 211, 238, 0.08) !important;
+    text-shadow: 0 0 35px rgba(255, 255, 255, 0.14), 0 0 55px rgba(228, 187, 94, 0.08) !important;
   }
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) h1 span:last-child {
-    filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.22)) drop-shadow(0 0 24px rgba(168, 85, 247, 0.16));
+    filter: drop-shadow(0 0 18px rgba(228, 187, 94, 0.22)) drop-shadow(0 0 24px rgba(217, 174, 69, 0.16));
   }
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) section:nth-of-type(2) > div {
-    border-color: rgba(96, 165, 250, 0.34) !important;
+    border-color: rgba(228, 187, 94, 0.34) !important;
     background:
-      radial-gradient(circle at 10% 0%, rgba(34, 211, 238, 0.10), transparent 35%),
-      radial-gradient(circle at 98% 0%, rgba(124, 58, 237, 0.10), transparent 38%),
+      radial-gradient(circle at 10% 0%, rgba(228, 187, 94, 0.10), transparent 35%),
+      radial-gradient(circle at 98% 0%, rgba(201, 152, 47, 0.10), transparent 38%),
       linear-gradient(135deg, rgba(7, 17, 38, 0.94), rgba(3, 8, 18, 0.90)) !important;
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.43), inset 0 1px 0 rgba(255, 255, 255, 0.065), 0 0 0 1px rgba(124, 58, 237, 0.06) !important;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.43), inset 0 1px 0 rgba(255, 255, 255, 0.065), 0 0 0 1px rgba(201, 152, 47, 0.06) !important;
   }
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) section:nth-of-type(3) {
-    border-color: rgba(96, 165, 250, 0.45) !important;
+    border-color: rgba(228, 187, 94, 0.45) !important;
     background:
-      radial-gradient(circle at 6% 0%, rgba(34, 211, 238, 0.10), transparent 32%),
-      radial-gradient(circle at 98% 0%, rgba(168, 85, 247, 0.16), transparent 36%),
+      radial-gradient(circle at 6% 0%, rgba(228, 187, 94, 0.10), transparent 32%),
+      radial-gradient(circle at 98% 0%, rgba(217, 174, 69, 0.16), transparent 36%),
       rgba(2, 6, 23, 0.72) !important;
     box-shadow:
-      0 0 0 1px rgba(139, 92, 246, 0.10),
-      0 0 48px rgba(37, 99, 235, 0.20),
+      0 0 0 1px rgba(217, 174, 69, 0.10),
+      0 0 48px rgba(177, 132, 44, 0.20),
       0 22px 90px rgba(0, 0, 0, 0.42),
       inset 0 1px 0 rgba(255, 255, 255, 0.065) !important;
   }
@@ -161,7 +161,7 @@
     inset: -1px;
     pointer-events: none;
     border-radius: inherit;
-    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.20), rgba(168, 85, 247, 0.24), transparent);
+    background: linear-gradient(90deg, transparent, rgba(228, 187, 94, 0.20), rgba(217, 174, 69, 0.24), transparent);
     opacity: 0.38;
     mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -171,50 +171,50 @@
   }
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) section:nth-of-type(4) button {
-    border-color: rgba(96, 165, 250, 0.24) !important;
+    border-color: rgba(228, 187, 94, 0.24) !important;
     background: rgba(7, 17, 38, 0.72) !important;
     box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.055) !important;
   }
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) section:nth-of-type(5) > button {
     min-height: 112px !important;
-    border-color: rgba(96, 165, 250, 0.36) !important;
+    border-color: rgba(228, 187, 94, 0.36) !important;
     background:
-      radial-gradient(circle at 74% 34%, rgba(37, 99, 235, 0.22), transparent 38%),
-      radial-gradient(circle at 20% 100%, rgba(124, 58, 237, 0.14), transparent 34%),
+      radial-gradient(circle at 74% 34%, rgba(177, 132, 44, 0.22), transparent 38%),
+      radial-gradient(circle at 20% 100%, rgba(201, 152, 47, 0.14), transparent 34%),
       linear-gradient(135deg, rgba(7, 17, 38, 0.96), rgba(3, 8, 18, 0.92)) !important;
     box-shadow:
       0 26px 82px rgba(0, 0, 0, 0.44),
-      0 0 0 1px rgba(124, 58, 237, 0.075),
+      0 0 0 1px rgba(201, 152, 47, 0.075),
       inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
   }
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) section:nth-of-type(5) > button:nth-child(1) {
     background:
-      radial-gradient(circle at 80% 44%, rgba(34, 211, 238, 0.28), transparent 34%),
-      radial-gradient(circle at 55% 64%, rgba(37, 99, 235, 0.18), transparent 30%),
+      radial-gradient(circle at 80% 44%, rgba(228, 187, 94, 0.28), transparent 34%),
+      radial-gradient(circle at 55% 64%, rgba(177, 132, 44, 0.18), transparent 30%),
       linear-gradient(135deg, rgba(7, 17, 38, 0.96), rgba(3, 8, 18, 0.92)) !important;
   }
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) section:nth-of-type(5) > button:nth-child(2) {
     background:
-      radial-gradient(circle at 82% 46%, rgba(59, 130, 246, 0.30), transparent 35%),
-      radial-gradient(circle at 62% 52%, rgba(14, 165, 233, 0.12), transparent 28%),
+      radial-gradient(circle at 82% 46%, rgba(211, 162, 62, 0.30), transparent 35%),
+      radial-gradient(circle at 62% 52%, rgba(211, 162, 62, 0.12), transparent 28%),
       linear-gradient(135deg, rgba(7, 17, 38, 0.96), rgba(3, 8, 18, 0.92)) !important;
   }
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) section:nth-of-type(5) > button:nth-child(5),
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) section:nth-of-type(5) > button:nth-child(6) {
     background:
-      radial-gradient(circle at 82% 52%, rgba(168, 85, 247, 0.28), transparent 34%),
-      radial-gradient(circle at 58% 65%, rgba(59, 130, 246, 0.13), transparent 30%),
+      radial-gradient(circle at 82% 52%, rgba(217, 174, 69, 0.28), transparent 34%),
+      radial-gradient(circle at 58% 65%, rgba(211, 162, 62, 0.13), transparent 30%),
       linear-gradient(135deg, rgba(7, 17, 38, 0.96), rgba(3, 8, 18, 0.92)) !important;
   }
 
   .malik-dashboard-shell main:has(textarea[placeholder="Опиши идею: сайт, фото, видео, код, компонент, dashboard, шаблон..."]) section:nth-of-type(5) > button:hover {
     transform: translateY(-3px) !important;
-    border-color: rgba(167, 139, 250, 0.55) !important;
-    box-shadow: 0 30px 95px rgba(37, 99, 235, 0.26), 0 0 42px rgba(124, 58, 237, 0.16) !important;
+    border-color: rgba(232, 197, 106, 0.55) !important;
+    box-shadow: 0 30px 95px rgba(177, 132, 44, 0.26), 0 0 42px rgba(201, 152, 47, 0.16) !important;
   }
 
   .malik-dashboard-shell > div.hidden.lg\:block button:has(svg):has(+ *) {
@@ -227,10 +227,10 @@
 
   .malik-dashboard-shell > div.hidden.lg\:block button:has(svg[class*="lucide-plus"]),
   .malik-dashboard-shell > div.hidden.lg\:block button:has(.lucide-plus) {
-    background: linear-gradient(135deg, #2563eb 0%, #7c3aed 58%, #9333ea 100%) !important;
-    border-color: rgba(147, 197, 253, 0.26) !important;
+    background: linear-gradient(135deg, #b1842c 0%, #c9982f 58%, #c9982f 100%) !important;
+    border-color: rgba(240, 210, 136, 0.26) !important;
     color: white !important;
-    box-shadow: 0 18px 44px rgba(37, 99, 235, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+    box-shadow: 0 18px 44px rgba(177, 132, 44, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
   }
 }
 
@@ -263,7 +263,7 @@
   left: 8%;
   height: 420px;
   width: 420px;
-  background: rgba(34, 211, 238, 0.14);
+  background: rgba(228, 187, 94, 0.14);
 }
 
 .malik-welcome-earth-css-aura-2 {
@@ -271,7 +271,7 @@
   right: 6%;
   height: 480px;
   width: 480px;
-  background: rgba(124, 58, 237, 0.16);
+  background: rgba(201, 152, 47, 0.16);
   animation-duration: 22s;
   animation-delay: -6s;
 }
@@ -294,8 +294,8 @@
   inset: 0;
   opacity: 0.045;
   background-image:
-    linear-gradient(to right, rgba(147, 197, 253, 0.5) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(147, 197, 253, 0.5) 1px, transparent 1px);
+    linear-gradient(to right, rgba(240, 210, 136, 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(240, 210, 136, 0.5) 1px, transparent 1px);
   background-size: 46px 46px;
   mask-image: radial-gradient(120% 80% at 50% 0%, #000 35%, transparent 80%);
 }
@@ -307,8 +307,8 @@
   bottom: -42%;
   height: 68%;
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(59, 130, 246, 0.22), rgba(59, 130, 246, 0.05) 60%, transparent 72%);
-  box-shadow: 0 -40px 140px rgba(56, 189, 248, 0.16);
+  background: radial-gradient(closest-side, rgba(211, 162, 62, 0.22), rgba(211, 162, 62, 0.05) 60%, transparent 72%);
+  box-shadow: 0 -40px 140px rgba(228, 187, 94, 0.16);
 }
 
 .malik-welcome-earth-cinema-vignette {

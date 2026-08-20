@@ -31,7 +31,7 @@
     transform: scale(.84) !important;
     transform-origin: center top !important;
     margin-top: .55rem !important;
-    text-shadow: 0 0 18px rgba(255,255,255,.12), 0 0 34px rgba(34,211,238,.10) !important;
+    text-shadow: 0 0 18px rgba(255,255,255,.12), 0 0 34px rgba(228, 187, 94,.10) !important;
   }
 
   #malik-root .fixed.inset-0.z-\[100\] > div.absolute.-bottom-\[3\.9rem\] {
@@ -40,7 +40,7 @@
     width: 118% !important;
     height: 8.8rem !important;
     border-top-color: rgba(219,234,254,.92) !important;
-    box-shadow: 0 -30px 110px rgba(37,99,235,.88), 0 -8px 32px rgba(125,211,252,.56) !important;
+    box-shadow: 0 -30px 110px rgba(177, 132, 44,.88), 0 -8px 32px rgba(240, 210, 136,.56) !important;
   }
 
   #malik-root .fixed.inset-0.z-\[100\] > div.absolute.inset-x-0.bottom-0 {
@@ -61,8 +61,8 @@
 
   #malik-root .fixed.inset-0.z-\[100\] > main > section:nth-of-type(3) {
     margin-top: 1rem !important;
-    border-color: rgba(139,92,246,.50) !important;
-    box-shadow: 0 0 36px rgba(124,58,237,.22), 0 0 70px rgba(37,99,235,.16), inset 0 1px 0 rgba(255,255,255,.07) !important;
+    border-color: rgba(217, 174, 69,.50) !important;
+    box-shadow: 0 0 36px rgba(201, 152, 47,.22), 0 0 70px rgba(177, 132, 44,.16), inset 0 1px 0 rgba(255,255,255,.07) !important;
   }
 }
 

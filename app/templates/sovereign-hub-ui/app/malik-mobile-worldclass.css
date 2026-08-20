@@ -201,13 +201,13 @@
 
   .malik-message-card-assistant {
     background: linear-gradient(135deg, rgba(7, 17, 38, 0.96), rgba(3, 8, 20, 0.92)) !important;
-    border-color: rgba(96, 165, 250, 0.22) !important;
+    border-color: rgba(228, 187, 94, 0.22) !important;
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255,255,255,0.06) !important;
   }
 
   .malik-message-card-user {
     background: linear-gradient(135deg, rgba(49, 46, 129, 0.92), rgba(15, 23, 42, 0.92)) !important;
-    border-color: rgba(167, 139, 250, 0.34) !important;
+    border-color: rgba(232, 197, 106, 0.34) !important;
   }
 
   .malik-message-card:has(.malik-thinking-card) {
@@ -238,7 +238,7 @@
     min-height: 46px !important;
     width: min(100%, 360px) !important;
     padding: 10px 12px !important;
-    border: 1px solid rgba(96, 165, 250, 0.18) !important;
+    border: 1px solid rgba(228, 187, 94, 0.18) !important;
     border-radius: 18px !important;
     background: linear-gradient(135deg, rgba(6, 12, 28, 0.92), rgba(3, 8, 20, 0.86)) !important;
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255,255,255,0.06) !important;
@@ -251,7 +251,7 @@
     border-radius: 999px !important;
     display: grid !important;
     place-items: center !important;
-    background: radial-gradient(circle at 30% 20%, rgba(34, 211, 238, 0.38), rgba(124, 58, 237, 0.18) 48%, rgba(2, 6, 23, 0.8) 100%) !important;
+    background: radial-gradient(circle at 30% 20%, rgba(228, 187, 94, 0.38), rgba(201, 152, 47, 0.18) 48%, rgba(2, 6, 23, 0.8) 100%) !important;
     animation: malikMobileThinkingPulse 1.35s ease-in-out infinite !important;
   }
 
@@ -274,7 +274,7 @@
     width: 42% !important;
     height: 100% !important;
     border-radius: inherit !important;
-    background: linear-gradient(90deg, transparent, rgba(34,211,238,.9), rgba(168,85,247,.85), transparent) !important;
+    background: linear-gradient(90deg, transparent, rgba(228, 187, 94,.9), rgba(217, 174, 69,.85), transparent) !important;
     animation: malikMobileThinkingLine 1.25s ease-in-out infinite !important;
   }
 
@@ -300,8 +300,8 @@
     padding: 10px !important;
     border-radius: 22px !important;
     background: linear-gradient(180deg, rgba(7, 12, 28, 0.98), rgba(3, 7, 18, 0.96)) !important;
-    border-color: rgba(96, 165, 250, 0.24) !important;
-    box-shadow: 0 -14px 56px rgba(37, 99, 235, 0.15), 0 18px 54px rgba(0,0,0,0.42) !important;
+    border-color: rgba(228, 187, 94, 0.24) !important;
+    box-shadow: 0 -14px 56px rgba(177, 132, 44, 0.15), 0 18px 54px rgba(0,0,0,0.42) !important;
   }
 
   .malik-composer-top {
@@ -391,8 +391,8 @@
   }
 
   @keyframes malikMobileThinkingPulse {
-    0%, 100% { transform: scale(1); opacity: 0.78; box-shadow: 0 0 0 rgba(34,211,238,0); }
-    50% { transform: scale(1.06); opacity: 1; box-shadow: 0 0 22px rgba(34,211,238,0.22); }
+    0%, 100% { transform: scale(1); opacity: 0.78; box-shadow: 0 0 0 rgba(228, 187, 94,0); }
+    50% { transform: scale(1.06); opacity: 1; box-shadow: 0 0 22px rgba(228, 187, 94,0.22); }
   }
 
   @keyframes malikMobileThinkingLine {

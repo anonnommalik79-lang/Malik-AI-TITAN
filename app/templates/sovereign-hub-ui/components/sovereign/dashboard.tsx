@@ -5887,7 +5887,7 @@ const shouldShowMobilePreviewButton =
 
   return (
     <DashboardCrashBoundary>
-      <div className="malik-dashboard-shell flex h-[100dvh] w-full overflow-hidden bg-[#030303] text-[#f5f5f5] font-sans selection:bg-violet-500/30 selection:text-white relative isolate">
+      <div className="malik-dashboard-shell flex h-[100dvh] w-full overflow-hidden bg-[var(--malik-bg,#0a0a0b)] text-[var(--malik-text,#f5f2ea)] font-sans relative isolate">
         <PerformanceGuard />
 
 <style>{`

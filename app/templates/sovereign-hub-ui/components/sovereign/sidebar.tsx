@@ -290,7 +290,7 @@ function SidebarInner({
 
   if (isCollapsed) {
     return (
-      <aside className="malik-sidebar flex h-[100dvh] w-16 shrink-0 flex-col border-r border-white/[0.06] bg-[#0A0A0C] text-white">
+      <aside className="malik-sidebar flex h-[100dvh] w-16 shrink-0 flex-col border-r border-[var(--malik-hairline,rgba(255,255,255,.06))] bg-[var(--malik-bg,#0a0a0b)] text-white">
         <div className="flex h-14 shrink-0 items-center justify-center">
           <button
             type="button"
@@ -354,7 +354,7 @@ function SidebarInner({
           })}
         </nav>
 
-        <div className="flex shrink-0 flex-col items-center gap-1 border-t border-white/[0.06] p-2">
+        <div className="flex shrink-0 flex-col items-center gap-1 border-t border-[var(--malik-hairline,rgba(255,255,255,.06))] p-2">
           <button
             type="button"
             onClick={onOpenCodex}
@@ -445,7 +445,7 @@ function SidebarInner({
   }
 
   return (
-    <aside className="malik-sidebar relative flex h-[100dvh] w-[264px] max-w-[86vw] shrink-0 flex-col border-r border-white/[0.06] bg-[#0A0A0C] text-white">
+    <aside className="malik-sidebar relative flex h-[100dvh] w-[264px] max-w-[86vw] shrink-0 flex-col border-r border-[var(--malik-hairline,rgba(255,255,255,.06))] bg-[var(--malik-bg,#0a0a0b)] text-white">
       <div className="flex h-14 shrink-0 items-center justify-between gap-2 pl-4 pr-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white">
@@ -523,7 +523,7 @@ function SidebarInner({
         ) : null}
       </nav>
 
-      <div ref={menuRef} className="relative shrink-0 border-t border-white/[0.06] p-2">
+      <div ref={menuRef} className="relative shrink-0 border-t border-[var(--malik-hairline,rgba(255,255,255,.06))] p-2">
         {menuOpen ? (
           <div
             role="menu"
@@ -668,7 +668,7 @@ function SidebarStyles() {
         width: 2px;
         transform: translateY(-50%);
         border-radius: 0 2px 2px 0;
-        background: #8b5cf6;
+        background: var(--malik-accent, #c9982f);
       }
       .malik-sidebar-item-icon {
         height: 16px;
@@ -790,7 +790,7 @@ function SidebarStyles() {
         width: 2px;
         transform: translateY(-50%);
         border-radius: 0 2px 2px 0;
-        background: #8b5cf6;
+        background: var(--malik-accent, #c9982f);
       }
 
       .malik-sidebar-tooltip {
@@ -800,7 +800,7 @@ function SidebarStyles() {
         transform: translateY(-50%);
         border-radius: 6px;
         border: 1px solid rgba(255, 255, 255, 0.09);
-        background: #17171b;
+        background: var(--malik-surface-raised, #121214);
         padding: 5px 9px;
         font-size: 12px;
         font-weight: 450;
