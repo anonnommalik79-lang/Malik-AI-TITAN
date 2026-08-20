@@ -423,7 +423,7 @@ export function UnbreakableShield({
             <defs>
               <linearGradient id="ubaArc" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0" stopColor="#34d399" />
-                <stop offset="1" stopColor="#22d3ee" />
+                <stop offset="1" stopColor="#e4bb5e" />
               </linearGradient>
             </defs>
           </svg>
@@ -659,7 +659,7 @@ export function UnbreakableShield({
           pointer-events: none;
           background:
             radial-gradient(60% 38% at 18% 0%, rgba(16, 185, 129, 0.07), transparent 60%),
-            radial-gradient(50% 34% at 96% 2%, rgba(34, 211, 238, 0.05), transparent 62%);
+            radial-gradient(50% 34% at 96% 2%, rgba(228, 187, 94, 0.05), transparent 62%);
         }
         .uba > * {
           position: relative;
@@ -1070,7 +1070,7 @@ export function UnbreakableShield({
         .uba__metric-spark i {
           flex: 1;
           border-radius: 1px;
-          background: linear-gradient(180deg, #34d399, rgba(34, 211, 238, 0.2));
+          background: linear-gradient(180deg, #34d399, rgba(228, 187, 94, 0.2));
           height: 40%;
           animation: ubaSpark 1.7s ease-in-out infinite;
           animation-delay: calc(var(--i) * -0.09s);
@@ -1209,9 +1209,9 @@ export function UnbreakableShield({
           white-space: nowrap;
         }
         .uba__verdict[data-v="BLOCKED"] { color: #6ee7b7; background: rgba(16, 185, 129, 0.12); }
-        .uba__verdict[data-v="MITIGATED"] { color: #7dd3fc; background: rgba(56, 189, 248, 0.12); }
+        .uba__verdict[data-v="MITIGATED"] { color: #f0d288; background: rgba(228, 187, 94, 0.12); }
         .uba__verdict[data-v="THROTTLED"] { color: #e7c46a; background: rgba(234, 179, 8, 0.12); }
-        .uba__verdict[data-v="QUARANTINED"] { color: #cbb4f0; background: rgba(168, 85, 247, 0.14); }
+        .uba__verdict[data-v="QUARANTINED"] { color: #cbb4f0; background: rgba(217, 174, 69, 0.14); }
         .uba__verdict[data-v="LIVE"] { color: #6ee7b7; background: rgba(16, 185, 129, 0.12); }
         .uba__log .uba__link-btn { margin-top: 16px; }
 

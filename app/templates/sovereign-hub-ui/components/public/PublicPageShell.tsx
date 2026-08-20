@@ -19,7 +19,7 @@ export function PublicPageShell({
 }) {
   return (
     <main className="min-h-screen bg-[#02050d] text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(34,211,238,.08),transparent_30%),radial-gradient(circle_at_80%_0%,rgba(139,92,246,.1),transparent_28%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(228, 187, 94,.08),transparent_30%),radial-gradient(circle_at_80%_0%,rgba(217, 174, 69,.1),transparent_28%)]" />
       <div className="relative mx-auto max-w-5xl px-4 py-10 md:px-8 md:py-14">
         <header className="mb-10 flex flex-wrap items-center justify-between gap-4">
           <Link href="/" className="text-sm font-black tracking-wide text-cyan-200">

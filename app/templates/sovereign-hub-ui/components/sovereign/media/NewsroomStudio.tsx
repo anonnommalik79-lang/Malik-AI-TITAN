@@ -45,12 +45,12 @@ const SECTION_ICONS: Partial<Record<BusinessSectionId, typeof Newspaper>> = {
 }
 
 const ACCENT: Record<string, string> = {
-  cyan: "#22d3ee",
+  cyan: "#e4bb5e",
   emerald: "#34d399",
-  violet: "#a78bfa",
+  violet: "#e8c56a",
   amber: "#fbbf24",
   rose: "#fb7185",
-  blue: "#60a5fa",
+  blue: "#e4bb5e",
 }
 
 const OUTPUT_LABELS: Record<string, string> = {
@@ -358,7 +358,7 @@ export function NewsroomStudio({ username, onViewChange, onNewChat }: NewsroomSt
     setStatus(`Newsroom Engine готов · ${MEDIA_MODES.length} режимов`)
   }
 
-  const accentColor = ACCENT[activeSectionMeta?.accent || "blue"] || "#60a5fa"
+  const accentColor = ACCENT[activeSectionMeta?.accent || "blue"] || "#e4bb5e"
 
   return (
     <main className="nrs" data-view="media-newsroom">
@@ -683,8 +683,8 @@ export function NewsroomStudio({ username, onViewChange, onNewChat }: NewsroomSt
           inset: 0;
           z-index: 0;
           pointer-events: none;
-          background: radial-gradient(55% 40% at 12% 0%, rgba(96, 165, 250, 0.06), transparent 60%),
-            radial-gradient(45% 35% at 95% 4%, rgba(167, 139, 250, 0.05), transparent 62%);
+          background: radial-gradient(55% 40% at 12% 0%, rgba(228, 187, 94, 0.06), transparent 60%),
+            radial-gradient(45% 35% at 95% 4%, rgba(232, 197, 106, 0.05), transparent 62%);
         }
         .nrs__inner { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; }
         .nrs__status {
@@ -701,9 +701,9 @@ export function NewsroomStudio({ username, onViewChange, onNewChat }: NewsroomSt
         .nrs__status-left { display: inline-flex; align-items: center; gap: 10px; }
         .nrs__dot { width: 8px; height: 8px; border-radius: 999px; }
         .nrs__status-key { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8a958f; }
-        .nrs__status-val { font-size: 12.5px; font-weight: 700; color: #7dd3fc; }
+        .nrs__status-val { font-size: 12.5px; font-weight: 700; color: #f0d288; }
         .nrs__status-right { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8a958f; }
-        .nrs__status-right strong { margin-left: 8px; font-weight: 700; color: #7dd3fc; }
+        .nrs__status-right strong { margin-left: 8px; font-weight: 700; color: #f0d288; }
         .nrs__head { max-width: 70ch; margin: 0 0 28px; }
         .nrs__eyebrow {
           display: inline-flex;
@@ -793,8 +793,8 @@ export function NewsroomStudio({ username, onViewChange, onNewChat }: NewsroomSt
         .nrs__section-sub { margin: 0 0 18px; font-size: 13px; color: #8a958f; }
         .nrs__translit {
           border-radius: 18px;
-          border: 1px solid rgba(96, 165, 250, 0.2);
-          background: rgba(96, 165, 250, 0.04);
+          border: 1px solid rgba(228, 187, 94, 0.2);
+          background: rgba(228, 187, 94, 0.04);
           padding: 18px;
           margin-bottom: 22px;
         }
@@ -811,10 +811,10 @@ export function NewsroomStudio({ username, onViewChange, onNewChat }: NewsroomSt
           font-weight: 700;
           letter-spacing: 0.08em;
           text-transform: uppercase;
-          color: #7dd3fc;
+          color: #f0d288;
           padding: 3px 9px;
           border-radius: 999px;
-          border: 1px solid rgba(125, 211, 252, 0.3);
+          border: 1px solid rgba(240, 210, 136, 0.3);
         }
         .nrs__translit-area { min-height: 80px; margin-bottom: 12px; }
         .nrs__translit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -836,7 +836,7 @@ export function NewsroomStudio({ username, onViewChange, onNewChat }: NewsroomSt
           outline: none;
           cursor: pointer;
         }
-        .nrs__aws-select:focus { border-color: rgba(96, 165, 250, 0.4); }
+        .nrs__aws-select:focus { border-color: rgba(228, 187, 94, 0.4); }
         .nrs__audio { width: 100%; margin: 0 0 16px; border-radius: 10px; }
         .nrs__file-btn { cursor: pointer; }
         .nrs__file-btn input { display: none; }
@@ -924,7 +924,7 @@ export function NewsroomStudio({ username, onViewChange, onNewChat }: NewsroomSt
           padding: 16px 18px;
           outline: none;
         }
-        .nrs__textarea:focus { border-color: rgba(96, 165, 250, 0.4); }
+        .nrs__textarea:focus { border-color: rgba(228, 187, 94, 0.4); }
         .nrs__context-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -945,7 +945,7 @@ export function NewsroomStudio({ username, onViewChange, onNewChat }: NewsroomSt
           outline: none;
         }
         .nrs__field input:focus,
-        .nrs__field select:focus { border-color: rgba(96, 165, 250, 0.35); }
+        .nrs__field select:focus { border-color: rgba(228, 187, 94, 0.35); }
         .nrs__error { margin: 0 0 8px; font-size: 13px; color: #fca5a5; }
         .nrs__status-line { margin: 0 0 12px; font-size: 12px; color: #8ba3b8; }
         .nrs__result {

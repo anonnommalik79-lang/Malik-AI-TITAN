@@ -423,7 +423,7 @@ export function VideoGenerationStudio({
           inset: 0;
           z-index: 0;
           pointer-events: none;
-          background: radial-gradient(55% 40% at 10% 0%, rgba(139, 92, 246, 0.06), transparent 60%),
+          background: radial-gradient(55% 40% at 10% 0%, rgba(217, 174, 69, 0.06), transparent 60%),
             radial-gradient(45% 35% at 92% 6%, rgba(244, 63, 94, 0.05), transparent 62%);
         }
         .vgs__inner { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; }
@@ -449,9 +449,9 @@ export function VideoGenerationStudio({
           margin-bottom: 30px;
         }
         .vgs__status-left { display: inline-flex; align-items: center; gap: 10px; }
-        .vgs__dot { width: 8px; height: 8px; border-radius: 999px; background: #d8b4fe; }
+        .vgs__dot { width: 8px; height: 8px; border-radius: 999px; background: #f3de96; }
         .vgs__status-key { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8a958f; }
-        .vgs__status-val { font-size: 12.5px; font-weight: 700; color: #ede9fe; }
+        .vgs__status-val { font-size: 12.5px; font-weight: 700; color: #fdf8e7; }
         .vgs__status-right { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8a958f; }
         .vgs__status-right strong { margin-left: 8px; font-weight: 700; color: #e9d5ff; }
         .vgs__head { max-width: 70ch; margin: 0 0 40px; }
@@ -566,7 +566,7 @@ export function VideoGenerationStudio({
         .vgs__hero-copy code {
           font-family: ui-monospace, Menlo, monospace;
           font-size: 12px;
-          color: #d8b4fe;
+          color: #f3de96;
           background: rgba(255, 255, 255, 0.05);
           border-radius: 5px;
           padding: 1px 6px;
@@ -583,8 +583,8 @@ export function VideoGenerationStudio({
           font-size: 13px;
           font-weight: 700;
           color: #e9d5ff;
-          border: 1px solid rgba(216, 180, 254, 0.28);
-          background: rgba(139, 92, 246, 0.1);
+          border: 1px solid rgba(243, 222, 150, 0.28);
+          background: rgba(217, 174, 69, 0.1);
         }
         .vgs__steps li div { font-size: 14px; line-height: 1.6; color: #9aa6a0; }
         .vgs__steps strong { display: block; color: #e7ece9; font-weight: 600; margin-bottom: 2px; }
@@ -609,9 +609,9 @@ export function VideoGenerationStudio({
           cursor: pointer;
         }
         .vgs__ratio-pills button[data-active="1"] {
-          border-color: rgba(216, 180, 254, 0.45);
-          background: rgba(139, 92, 246, 0.1);
-          color: #ede9fe;
+          border-color: rgba(243, 222, 150, 0.45);
+          background: rgba(217, 174, 69, 0.1);
+          color: #fdf8e7;
         }
         .vgs__textarea {
           width: 100%;
@@ -626,7 +626,7 @@ export function VideoGenerationStudio({
           padding: 16px 18px;
           font-family: inherit;
         }
-        .vgs__textarea:focus { outline: none; border-color: rgba(216, 180, 254, 0.35); }
+        .vgs__textarea:focus { outline: none; border-color: rgba(243, 222, 150, 0.35); }
         .vgs__chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
         .vgs__chips button {
           border: 1px solid rgba(255, 255, 255, 0.1);
@@ -674,7 +674,7 @@ export function VideoGenerationStudio({
           letter-spacing: 0.08em;
           text-transform: uppercase;
           color: #e9d5ff;
-          border: 1px solid rgba(216, 180, 254, 0.3);
+          border: 1px solid rgba(243, 222, 150, 0.3);
           border-radius: 999px;
           padding: 5px 12px;
         }
@@ -696,7 +696,7 @@ export function VideoGenerationStudio({
           transition: border-color 0.18s, transform 0.18s;
         }
         .vgs__style-grid article:hover { border-color: rgba(255, 255, 255, 0.2); transform: translateY(-2px); }
-        .vgs__style-grid article[data-active="1"] { border-color: rgba(216, 180, 254, 0.45); }
+        .vgs__style-grid article[data-active="1"] { border-color: rgba(243, 222, 150, 0.45); }
         .vgs__style-photo {
           position: relative;
           height: 160px;
@@ -729,7 +729,7 @@ export function VideoGenerationStudio({
           color: #e9d5ff;
           padding: 3px 7px;
           border-radius: 6px;
-          border: 1px solid rgba(216, 180, 254, 0.28);
+          border: 1px solid rgba(243, 222, 150, 0.28);
           background: rgba(0, 0, 0, 0.45);
         }
         .vgs__style-tag {

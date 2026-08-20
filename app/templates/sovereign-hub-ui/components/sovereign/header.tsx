@@ -179,8 +179,8 @@ function HeaderInner({ onMenuClick, isSidebarCollapsed, onOpenCodex, onOpenCanva
       <style>{`
         .malik-titan-header {
           background:
-            radial-gradient(circle at 16% 0%, rgba(34, 211, 238, .12), transparent 34%),
-            radial-gradient(circle at 82% 0%, rgba(139, 92, 246, .14), transparent 38%),
+            radial-gradient(circle at 16% 0%, rgba(228, 187, 94, .12), transparent 34%),
+            radial-gradient(circle at 82% 0%, rgba(217, 174, 69, .14), transparent 38%),
             linear-gradient(180deg, rgba(2, 6, 18, .98), rgba(0, 0, 0, .96));
           backdrop-filter: blur(24px);
         }
@@ -190,16 +190,16 @@ function HeaderInner({ onMenuClick, isSidebarCollapsed, onOpenCodex, onOpenCanva
           inset: 0;
           pointer-events: none;
           background:
-            linear-gradient(90deg, transparent, rgba(125, 211, 252, .08), transparent),
+            linear-gradient(90deg, transparent, rgba(240, 210, 136, .08), transparent),
             linear-gradient(to right, rgba(255,255,255,.03) 1px, transparent 1px);
           background-size: 100% 100%, 44px 44px;
           mask-image: linear-gradient(180deg, black, transparent 96%);
         }
         .malik-titan-center-card {
-          border: 1px solid rgba(125, 211, 252, .16);
+          border: 1px solid rgba(240, 210, 136, .16);
           background:
-            radial-gradient(circle at 14% 0%, rgba(34,211,238,.16), transparent 34%),
-            radial-gradient(circle at 92% 100%, rgba(139,92,246,.16), transparent 38%),
+            radial-gradient(circle at 14% 0%, rgba(228, 187, 94,.16), transparent 34%),
+            radial-gradient(circle at 92% 100%, rgba(217, 174, 69,.16), transparent 38%),
             rgba(2, 8, 23, .62);
           box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 18px 70px rgba(8, 47, 73, .14);
           backdrop-filter: blur(18px);
@@ -207,8 +207,8 @@ function HeaderInner({ onMenuClick, isSidebarCollapsed, onOpenCodex, onOpenCanva
         .malik-titan-launch-rail {
           background:
             linear-gradient(90deg, rgba(2, 8, 23, .84), rgba(10, 9, 27, .74), rgba(2, 8, 23, .84));
-          border-top: 1px solid rgba(125, 211, 252, .09);
-          border-bottom: 1px solid rgba(125, 211, 252, .09);
+          border-top: 1px solid rgba(240, 210, 136, .09);
+          border-bottom: 1px solid rgba(240, 210, 136, .09);
         }
         .malik-titan-action-chip {
           position: relative;
@@ -223,7 +223,7 @@ function HeaderInner({ onMenuClick, isSidebarCollapsed, onOpenCodex, onOpenCanva
           inset: 0;
           opacity: 0;
           transition: opacity .2s ease;
-          background: radial-gradient(circle at 30% 0%, rgba(125,211,252,.18), transparent 38%);
+          background: radial-gradient(circle at 30% 0%, rgba(240, 210, 136,.18), transparent 38%);
         }
         .malik-titan-action-chip:hover::after { opacity: 1; }
       `}</style>

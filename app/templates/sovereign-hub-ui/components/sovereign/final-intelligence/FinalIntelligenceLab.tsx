@@ -120,7 +120,7 @@ const TEMPLATES: Template[] = [
     title: "SaaS Analytics Dashboard",
     desc: "Charts, KPIs, dark admin UI",
     category: "Dashboard",
-    gradient: "linear-gradient(135deg,#0ea5e9,#6366f1)",
+    gradient: "linear-gradient(135deg,#d3a23e,#d3a23e)",
     image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=640&q=70",
     intent: "website",
     prompt: "Build a premium SaaS analytics dashboard: sidebar, KPI cards, charts, dark glassmorphism UI.",
@@ -130,7 +130,7 @@ const TEMPLATES: Template[] = [
     title: "AI Chat Product",
     desc: "Conversational app landing",
     category: "AI",
-    gradient: "linear-gradient(135deg,#22d3ee,#a855f7)",
+    gradient: "linear-gradient(135deg,#e4bb5e,#d9ae45)",
     image: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?auto=format&fit=crop&w=640&q=70",
     intent: "website",
     prompt: "Design a landing page for an AI chat assistant product with hero, demo, features and pricing.",
@@ -150,7 +150,7 @@ const TEMPLATES: Template[] = [
     title: "Developer Portfolio",
     desc: "Projects, about, contact",
     category: "Portfolio",
-    gradient: "linear-gradient(135deg,#8b5cf6,#ec4899)",
+    gradient: "linear-gradient(135deg,#d9ae45,#ec4899)",
     image: "https://images.unsplash.com/photo-1487058792275-0ad4aaf24ca7?auto=format&fit=crop&w=640&q=70",
     intent: "code",
     prompt: "Create a sleek developer portfolio site: animated hero, project cards, skills and contact form.",
@@ -160,7 +160,7 @@ const TEMPLATES: Template[] = [
     title: "Crypto / Finance App",
     desc: "Wallet, prices, charts",
     category: "Fintech",
-    gradient: "linear-gradient(135deg,#10b981,#0ea5e9)",
+    gradient: "linear-gradient(135deg,#10b981,#d3a23e)",
     image: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?auto=format&fit=crop&w=640&q=70",
     intent: "website",
     prompt: "Design a crypto finance dashboard: portfolio balance, live price cards, candlestick charts.",
@@ -170,7 +170,7 @@ const TEMPLATES: Template[] = [
     title: "Video Studio",
     desc: "Cinematic media creator",
     category: "Media",
-    gradient: "linear-gradient(135deg,#6366f1,#ec4899)",
+    gradient: "linear-gradient(135deg,#d3a23e,#ec4899)",
     image: "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=640&q=70",
     intent: "image",
     prompt: "Describe a cinematic video studio landing: dark theme, reels grid, timeline editor preview.",
@@ -180,7 +180,7 @@ const TEMPLATES: Template[] = [
     title: "Mobile App Landing",
     desc: "App store style page",
     category: "Mobile",
-    gradient: "linear-gradient(135deg,#0ea5e9,#22d3ee)",
+    gradient: "linear-gradient(135deg,#d3a23e,#e4bb5e)",
     image: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?auto=format&fit=crop&w=640&q=70",
     intent: "website",
     prompt: "Build a mobile app landing page: phone mockups, feature highlights, app store buttons.",
@@ -190,7 +190,7 @@ const TEMPLATES: Template[] = [
     title: "Docs & Blog",
     desc: "Knowledge base layout",
     category: "Content",
-    gradient: "linear-gradient(135deg,#64748b,#0ea5e9)",
+    gradient: "linear-gradient(135deg,#64748b,#d3a23e)",
     image: "https://images.unsplash.com/photo-1499750310107-5fef28a66643?auto=format&fit=crop&w=640&q=70",
     intent: "website",
     prompt: "Create a documentation and blog site: sidebar nav, search, article layout, code blocks.",
@@ -241,10 +241,10 @@ function artifactFromOutput(prompt: string, output: string): string {
   * { box-sizing: border-box; }
   body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: radial-gradient(120% 90% at 50% -10%, #0b1430, #04050d 70%); color: #e8eeff; min-height: 100vh; padding: 48px 20px; }
   .wrap { max-width: 820px; margin: 0 auto; }
-  .tag { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: #7dd3fc; border: 1px solid rgba(125,211,252,.3); border-radius: 999px; padding: 6px 14px; }
-  h1 { font-size: 34px; margin: 18px 0 6px; background: linear-gradient(100deg,#38bdf8,#818cf8 50%,#c084fc); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tag { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: #f0d288; border: 1px solid rgba(240, 210, 136,.3); border-radius: 999px; padding: 6px 14px; }
+  h1 { font-size: 34px; margin: 18px 0 6px; background: linear-gradient(100deg,#e4bb5e,#e4bb5e 50%,#e8c56a); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .prompt { color: #9fb0d0; margin: 0 0 26px; font-size: 15px; }
-  pre { white-space: pre-wrap; word-break: break-word; background: rgba(10,16,34,.7); border: 1px solid rgba(125,211,252,.18); border-radius: 18px; padding: 22px; font-size: 14px; line-height: 1.7; box-shadow: 0 24px 80px rgba(0,0,0,.45); }
+  pre { white-space: pre-wrap; word-break: break-word; background: rgba(10,16,34,.7); border: 1px solid rgba(240, 210, 136,.18); border-radius: 18px; padding: 22px; font-size: 14px; line-height: 1.7; box-shadow: 0 24px 80px rgba(0,0,0,.45); }
 </style></head>
 <body><div class="wrap">
   <span class="tag">Final Intelligence • Artifact</span>
@@ -587,8 +587,8 @@ export function FinalIntelligenceLab({
           z-index: 0;
           pointer-events: none;
           background:
-            radial-gradient(60% 40% at 12% 0%, rgba(56, 189, 248, 0.12), transparent 60%),
-            radial-gradient(60% 46% at 92% 8%, rgba(168, 85, 247, 0.12), transparent 62%);
+            radial-gradient(60% 40% at 12% 0%, rgba(228, 187, 94, 0.12), transparent 60%),
+            radial-gradient(60% 46% at 92% 8%, rgba(217, 174, 69, 0.12), transparent 62%);
         }
         .fil > * {
           position: relative;
@@ -619,22 +619,22 @@ export function FinalIntelligenceLab({
           font-size: 18px;
           letter-spacing: 0.04em;
           color: #03060f;
-          background: linear-gradient(135deg, #67e8f9, #818cf8 55%, #c084fc);
-          box-shadow: 0 0 32px rgba(125, 211, 252, 0.4);
+          background: linear-gradient(135deg, #f0d288, #e4bb5e 55%, #e8c56a);
+          box-shadow: 0 0 32px rgba(240, 210, 136, 0.4);
         }
         .fil__eyebrow {
           margin: 0;
           font-size: 11px;
           letter-spacing: 0.26em;
           text-transform: uppercase;
-          color: #7dd3fc;
+          color: #f0d288;
         }
         .fil__title {
           margin: 2px 0 0;
           font-size: clamp(26px, 3.4vw, 40px);
           font-weight: 900;
           line-height: 1.04;
-          background: linear-gradient(100deg, #e6f1ff, #93c5fd 45%, #c4b5fd);
+          background: linear-gradient(100deg, #e6f1ff, #f0d288 45%, #f3de96);
           -webkit-background-clip: text;
           background-clip: text;
           color: transparent;
@@ -652,7 +652,7 @@ export function FinalIntelligenceLab({
           font-size: 12.5px;
           font-weight: 700;
           color: #c9d6f5;
-          border: 1px solid rgba(125, 211, 252, 0.2);
+          border: 1px solid rgba(240, 210, 136, 0.2);
           background: rgba(8, 15, 33, 0.6);
           border-radius: 999px;
           padding: 8px 14px;
@@ -662,7 +662,7 @@ export function FinalIntelligenceLab({
           height: 8px;
           border-radius: 999px;
           background: #64748b;
-          box-shadow: 0 0 0 0 rgba(125, 211, 252, 0.5);
+          box-shadow: 0 0 0 0 rgba(240, 210, 136, 0.5);
         }
         .fil__status.is-live i {
           background: #34d399;
@@ -689,7 +689,7 @@ export function FinalIntelligenceLab({
           text-align: left;
           padding: 13px 14px;
           border-radius: 15px;
-          border: 1px solid rgba(125, 211, 252, 0.14);
+          border: 1px solid rgba(240, 210, 136, 0.14);
           background: rgba(8, 14, 30, 0.55);
           color: #cbd6f0;
           cursor: pointer;
@@ -697,12 +697,12 @@ export function FinalIntelligenceLab({
         }
         .fil__intents button:hover {
           transform: translateY(-2px);
-          border-color: rgba(167, 139, 250, 0.4);
+          border-color: rgba(232, 197, 106, 0.4);
           background: rgba(15, 23, 42, 0.72);
         }
         .fil__intents button[data-active="1"] {
-          border-color: rgba(103, 232, 249, 0.55);
-          background: linear-gradient(120deg, rgba(34, 211, 238, 0.16), rgba(124, 58, 237, 0.14));
+          border-color: rgba(240, 210, 136, 0.55);
+          background: linear-gradient(120deg, rgba(228, 187, 94, 0.16), rgba(201, 152, 47, 0.14));
           box-shadow: 0 14px 40px rgba(8, 47, 73, 0.5);
         }
         .fil__intents strong {
@@ -722,7 +722,7 @@ export function FinalIntelligenceLab({
           font-size: 9px;
           font-weight: 900;
           letter-spacing: 0.12em;
-          color: #7dd3fc;
+          color: #f0d288;
           opacity: 0.7;
         }
 
@@ -752,9 +752,9 @@ export function FinalIntelligenceLab({
         /* Console */
         .fil__console {
           border-radius: 22px;
-          border: 1px solid rgba(125, 211, 252, 0.16);
+          border: 1px solid rgba(240, 210, 136, 0.16);
           background:
-            radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.08), transparent 42%),
+            radial-gradient(circle at 0% 0%, rgba(228, 187, 94, 0.08), transparent 42%),
             rgba(5, 10, 24, 0.72);
           box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 24px 80px rgba(0, 0, 0, 0.4);
           padding: 18px;
@@ -774,7 +774,7 @@ export function FinalIntelligenceLab({
           min-height: 116px;
           resize: vertical;
           background: rgba(2, 6, 18, 0.6);
-          border: 1px solid rgba(125, 211, 252, 0.14);
+          border: 1px solid rgba(240, 210, 136, 0.14);
           border-radius: 16px;
           padding: 14px 16px;
           color: #eaf1ff;
@@ -785,7 +785,7 @@ export function FinalIntelligenceLab({
           transition: border-color 0.16s ease;
         }
         .fil__textarea:focus {
-          border-color: rgba(103, 232, 249, 0.5);
+          border-color: rgba(240, 210, 136, 0.5);
         }
         .fil__charge {
           height: 4px;
@@ -799,7 +799,7 @@ export function FinalIntelligenceLab({
           height: 100%;
           width: var(--w);
           border-radius: 999px;
-          background: linear-gradient(90deg, #22d3ee, #8b5cf6 60%, #f472b6);
+          background: linear-gradient(90deg, #e4bb5e, #d9ae45 60%, #f472b6);
           transition: width 0.4s ease;
         }
         .fil__actions {
@@ -811,16 +811,16 @@ export function FinalIntelligenceLab({
           display: inline-flex;
           align-items: center;
           gap: 9px;
-          border: 1px solid rgba(216, 180, 254, 0.4);
+          border: 1px solid rgba(243, 222, 150, 0.4);
           background: radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.22), transparent 32%),
-            linear-gradient(135deg, #7c3aed, #2563eb 55%, #06b6d4);
+            linear-gradient(135deg, #c9982f, #b1842c 55%, #d3a23e);
           color: #fff;
           font-weight: 800;
           font-size: 13.5px;
           padding: 11px 18px;
           border-radius: 13px;
           cursor: pointer;
-          box-shadow: 0 0 26px rgba(124, 58, 237, 0.4);
+          box-shadow: 0 0 26px rgba(201, 152, 47, 0.4);
           transition: transform 0.16s ease, opacity 0.16s ease;
         }
         .fil__run:hover:not(:disabled) {
@@ -839,7 +839,7 @@ export function FinalIntelligenceLab({
           padding: 1px 5px;
         }
         .fil__ghost {
-          border: 1px solid rgba(125, 211, 252, 0.16);
+          border: 1px solid rgba(240, 210, 136, 0.16);
           background: rgba(8, 15, 33, 0.6);
           color: #cdd9f2;
           font-weight: 700;
@@ -850,7 +850,7 @@ export function FinalIntelligenceLab({
           transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
         }
         .fil__ghost:hover {
-          border-color: rgba(167, 139, 250, 0.42);
+          border-color: rgba(232, 197, 106, 0.42);
           color: #fff;
           background: rgba(15, 23, 42, 0.75);
         }
@@ -860,7 +860,7 @@ export function FinalIntelligenceLab({
         .fil__output {
           margin-top: 16px;
           border-radius: 16px;
-          border: 1px solid rgba(125, 211, 252, 0.12);
+          border: 1px solid rgba(240, 210, 136, 0.12);
           background: rgba(2, 6, 18, 0.55);
           min-height: 150px;
           max-height: 360px;
@@ -888,8 +888,8 @@ export function FinalIntelligenceLab({
           width: 9px;
           height: 9px;
           border-radius: 999px;
-          background: #38bdf8;
-          box-shadow: 0 0 12px rgba(56, 189, 248, 0.7);
+          background: #e4bb5e;
+          box-shadow: 0 0 12px rgba(228, 187, 94, 0.7);
         }
 
         /* Rail */
@@ -901,7 +901,7 @@ export function FinalIntelligenceLab({
         .fil__pipeline,
         .fil__stats {
           border-radius: 20px;
-          border: 1px solid rgba(125, 211, 252, 0.14);
+          border: 1px solid rgba(240, 210, 136, 0.14);
           background: rgba(6, 11, 26, 0.66);
           padding: 18px;
           backdrop-filter: blur(12px);
@@ -924,8 +924,8 @@ export function FinalIntelligenceLab({
           transition: border-color 0.2s ease, background 0.2s ease;
         }
         .fil__pipeline li[data-state="active"] {
-          border-color: rgba(103, 232, 249, 0.45);
-          background: rgba(34, 211, 238, 0.1);
+          border-color: rgba(240, 210, 136, 0.45);
+          background: rgba(228, 187, 94, 0.1);
         }
         .fil__pipeline li[data-state="done"] {
           border-color: rgba(52, 211, 153, 0.28);
@@ -945,7 +945,7 @@ export function FinalIntelligenceLab({
         }
         .fil__pipeline li[data-state="active"] .fil__pipe-dot {
           color: #03060f;
-          background: #67e8f9;
+          background: #f0d288;
         }
         .fil__pipeline li[data-state="done"] .fil__pipe-dot {
           color: #03060f;
@@ -997,19 +997,19 @@ export function FinalIntelligenceLab({
         .fil__module-grid article {
           position: relative;
           border-radius: 18px;
-          border: 1px solid rgba(125, 211, 252, 0.13);
+          border: 1px solid rgba(240, 210, 136, 0.13);
           background: rgba(6, 11, 26, 0.62);
           padding: 18px;
           transition: transform 0.18s ease, border-color 0.18s ease;
         }
         .fil__module-grid article:hover {
           transform: translateY(-3px);
-          border-color: rgba(167, 139, 250, 0.36);
+          border-color: rgba(232, 197, 106, 0.36);
         }
         .fil__module-no {
           font-size: 12px;
           font-weight: 900;
-          color: #7dd3fc;
+          color: #f0d288;
           opacity: 0.7;
         }
         .fil__module-grid strong {
@@ -1054,14 +1054,14 @@ export function FinalIntelligenceLab({
           text-align: left;
           border-radius: 18px;
           overflow: hidden;
-          border: 1px solid rgba(125, 211, 252, 0.14);
+          border: 1px solid rgba(240, 210, 136, 0.14);
           background: rgba(6, 11, 26, 0.62);
           cursor: pointer;
           transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
         }
         .fil__tpl:hover {
           transform: translateY(-4px);
-          border-color: rgba(167, 139, 250, 0.45);
+          border-color: rgba(232, 197, 106, 0.45);
           box-shadow: 0 26px 70px rgba(0, 0, 0, 0.5);
         }
         .fil__tpl-thumb {
@@ -1108,13 +1108,13 @@ export function FinalIntelligenceLab({
           font-size: 11.5px;
           font-weight: 800;
           color: #03060f;
-          background: #67e8f9;
+          background: #f0d288;
           border-radius: 999px;
           padding: 6px 12px;
           opacity: 0;
           transform: translateY(6px);
           transition: opacity 0.18s ease, transform 0.18s ease;
-          box-shadow: 0 8px 24px rgba(34, 211, 238, 0.4);
+          box-shadow: 0 8px 24px rgba(228, 187, 94, 0.4);
         }
         .fil__tpl:hover .fil__tpl-use {
           opacity: 1;

@@ -499,11 +499,11 @@ function artifactFor(section: DemoSection, output: string) {
     return `<!doctype html><html><body style="margin:0;background:#020617;color:white;font-family:Arial"><main style="min-height:100vh;padding:40px"><h1>${section.title}</h1><img src="${output}" style="width:100%;max-width:1100px;border-radius:32px;border:1px solid rgba(255,255,255,.15)"/></main></body></html>`
   }
   if (section.kind === "code" || output.includes("export default") || output.includes("<html")) return output
-  return `<!doctype html><html><body style="margin:0;background:#020617;color:white;font-family:Arial"><main style="min-height:100vh;padding:40px"><p style="color:#67e8f9;font-weight:900">${section.kicker}</p><h1 style="font-size:56px">${section.title}</h1><pre style="white-space:pre-wrap;border:1px solid rgba(255,255,255,.12);border-radius:28px;padding:24px;background:rgba(255,255,255,.05)">${output.replace(/[<>&]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[char] || char)}</pre></main></body></html>`
+  return `<!doctype html><html><body style="margin:0;background:#020617;color:white;font-family:Arial"><main style="min-height:100vh;padding:40px"><p style="color:#f0d288;font-weight:900">${section.kicker}</p><h1 style="font-size:56px">${section.title}</h1><pre style="white-space:pre-wrap;border:1px solid rgba(255,255,255,.12);border-radius:28px;padding:24px;background:rgba(255,255,255,.05)">${output.replace(/[<>&]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[char] || char)}</pre></main></body></html>`
 }
 
 function fallbackOutput(section: DemoSection) {
-  if (section.visual === "photo") return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="840"><defs><radialGradient id="g" cx="28%" cy="18%" r="85%"><stop stop-color="#22d3ee"/><stop offset=".45" stop-color="#172554"/><stop offset="1" stop-color="#020617"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><circle cx="1080" cy="180" r="210" fill="#a855f7" opacity=".28"/><text x="90" y="150" fill="white" font-size="58" font-weight="900" font-family="Arial">${section.title}</text><text x="90" y="730" fill="#bae6fd" font-size="34" font-weight="700" font-family="Arial">Digital Bridge visual generated locally</text></svg>`)
+  if (section.visual === "photo") return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="840"><defs><radialGradient id="g" cx="28%" cy="18%" r="85%"><stop stop-color="#e4bb5e"/><stop offset=".45" stop-color="#172554"/><stop offset="1" stop-color="#020617"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><circle cx="1080" cy="180" r="210" fill="#d9ae45" opacity=".28"/><text x="90" y="150" fill="white" font-size="58" font-weight="900" font-family="Arial">${section.title}</text><text x="90" y="730" fill="#f8e5ac" font-size="34" font-weight="700" font-family="Arial">Digital Bridge visual generated locally</text></svg>`)
   if (section.visual === "cinema") return "Storyboard queued: hero reveal, product flythrough, AI engine close-up, Digital Bridge founder CTA."
   if (section.visual === "code") return `"use client"\n\nexport default function ${section.title.replace(/[^a-zA-Z0-9]/g, "")}Demo() {\n  return <main className="min-h-screen bg-slate-950 p-8 text-white">Digital Bridge code artifact ready</main>\n}\n`
   return `${section.title} demo output ready. Configure API keys to activate live generation.`
@@ -1042,8 +1042,8 @@ export function DigitalBridgeSectionExperience({
 
       <style jsx global>{`
         .db-section-experience {
-          --dbx-a: #67e8f9;
-          --dbx-b: #a78bfa;
+          --dbx-a: #f0d288;
+          --dbx-b: #e8c56a;
           position: relative;
           isolation: isolate;
           min-height: 100%;
@@ -1059,12 +1059,12 @@ export function DigitalBridgeSectionExperience({
             linear-gradient(180deg, #020617 0%, #030712 58%, #01030a 100%);
         }
 
-        .db-section-cyan { --dbx-a: #67e8f9; --dbx-b: #60a5fa; }
-        .db-section-violet { --dbx-a: #a78bfa; --dbx-b: #f0abfc; }
-        .db-section-emerald { --dbx-a: #6ee7b7; --dbx-b: #22d3ee; }
+        .db-section-cyan { --dbx-a: #f0d288; --dbx-b: #e4bb5e; }
+        .db-section-violet { --dbx-a: #e8c56a; --dbx-b: #f3de96; }
+        .db-section-emerald { --dbx-a: #6ee7b7; --dbx-b: #e4bb5e; }
         .db-section-amber { --dbx-a: #fbbf24; --dbx-b: #fb7185; }
-        .db-section-rose { --dbx-a: #fb7185; --dbx-b: #f0abfc; }
-        .db-section-blue { --dbx-a: #60a5fa; --dbx-b: #67e8f9; }
+        .db-section-rose { --dbx-a: #fb7185; --dbx-b: #f3de96; }
+        .db-section-blue { --dbx-a: #e4bb5e; --dbx-b: #f0d288; }
 
         .dbx-background {
           position: absolute;
@@ -1321,7 +1321,7 @@ export function DigitalBridgeSectionExperience({
         .dbx-photo-universe {
           background:
             linear-gradient(115deg, rgba(8,47,73,.18), transparent 45%),
-            repeating-linear-gradient(90deg, rgba(103,232,249,.08) 0 1px, transparent 1px 52px);
+            repeating-linear-gradient(90deg, rgba(240, 210, 136,.08) 0 1px, transparent 1px 52px);
         }
 
         .dbx-lens-orb {
@@ -1332,8 +1332,8 @@ export function DigitalBridgeSectionExperience({
           height: 170px;
           border-radius: 999px;
           background:
-            conic-gradient(from 120deg, #67e8f9, #818cf8, #f0abfc, #67e8f9);
-          filter: drop-shadow(0 0 50px rgba(103,232,249,.46));
+            conic-gradient(from 120deg, #f0d288, #e4bb5e, #f3de96, #f0d288);
+          filter: drop-shadow(0 0 50px rgba(240, 210, 136,.46));
           opacity: .9;
           animation: dbxSpin 14s linear infinite;
         }
@@ -1363,8 +1363,8 @@ export function DigitalBridgeSectionExperience({
           border-radius: 22px;
           background:
             radial-gradient(circle at 28% 26%, #e0f2fe, transparent 9%),
-            radial-gradient(circle at 38% 34%, #22d3ee, transparent 28%),
-            radial-gradient(circle at 78% 36%, #f0abfc, transparent 32%),
+            radial-gradient(circle at 38% 34%, #e4bb5e, transparent 28%),
+            radial-gradient(circle at 78% 36%, #f3de96, transparent 32%),
             linear-gradient(140deg, #082f49, #172554, #020617);
         }
 
@@ -1645,11 +1645,11 @@ export function DigitalBridgeSectionExperience({
           top: 28%;
           width: min(76%, 440px);
           transform: translateX(-50%);
-          border: 1px solid rgba(96,165,250,.22);
+          border: 1px solid rgba(228, 187, 94,.22);
           border-radius: 999px;
           background: rgba(2,6,23,.76);
           padding: 18px 24px;
-          box-shadow: 0 0 70px rgba(96,165,250,.16);
+          box-shadow: 0 0 70px rgba(228, 187, 94,.16);
         }
 
         .dbx-search-core span {
@@ -2031,8 +2031,8 @@ export function DigitalBridgeSectionExperience({
         .dbx-photo-card[data-visual="photo"] div,
         .db-section-experience[data-visual="photo"] .dbx-photo-card div {
           background:
-            radial-gradient(circle at 24% 24%, #67e8f9, transparent 32%),
-            radial-gradient(circle at 80% 24%, #f0abfc, transparent 38%),
+            radial-gradient(circle at 24% 24%, #f0d288, transparent 32%),
+            radial-gradient(circle at 80% 24%, #f3de96, transparent 38%),
             linear-gradient(140deg, #082f49, #111827 45%, #020617);
         }
 
@@ -2149,7 +2149,7 @@ export function DigitalBridgeSectionExperience({
           min-height: 154px;
           width: 100%;
           resize: vertical;
-          border: 1px solid rgba(103,232,249,.2);
+          border: 1px solid rgba(240, 210, 136,.2);
           border-radius: 24px;
           background: rgba(2,6,23,.72);
           color: white;

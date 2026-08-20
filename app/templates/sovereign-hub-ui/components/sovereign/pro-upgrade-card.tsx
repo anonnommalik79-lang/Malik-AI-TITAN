@@ -23,7 +23,7 @@ export function ProUpgradeCard({
 }: ProUpgradeCardProps) {
   return (
     <div className={`relative overflow-hidden rounded-[2rem] border border-violet-300/20 bg-violet-500/10 text-white shadow-2xl shadow-violet-950/20 ${compact ? "p-4" : "p-6"}`}>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,.26),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,.14),transparent_34%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217, 174, 69,.26),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(228, 187, 94,.14),transparent_34%)]" />
       <div className="relative flex items-start gap-4">
         <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white text-black">
           <Crown className="h-6 w-6" />

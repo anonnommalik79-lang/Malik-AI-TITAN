@@ -118,7 +118,7 @@ export function MalikCodexAgent({ selectedFiles, provider, onPlan, onResult, onL
             key={item.id}
             type="button"
             onClick={() => setMode(item.id)}
-            className={`rounded-xl border px-4 py-2 text-xs font-black transition ${mode === item.id ? "border-cyan-300/45 bg-cyan-300/12 text-white shadow-[0_0_28px_rgba(34,211,238,.18)]" : "border-white/8 bg-white/[0.045] text-zinc-400 hover:border-white/15 hover:text-white"}`}
+            className={`rounded-xl border px-4 py-2 text-xs font-black transition ${mode === item.id ? "border-cyan-300/45 bg-cyan-300/12 text-white shadow-[0_0_28px_rgba(228, 187, 94,.18)]" : "border-white/8 bg-white/[0.045] text-zinc-400 hover:border-white/15 hover:text-white"}`}
           >
             {item.label}
           </button>
@@ -126,8 +126,8 @@ export function MalikCodexAgent({ selectedFiles, provider, onPlan, onResult, onL
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <section className="codex-hero mb-4 overflow-hidden rounded-[1.35rem] border border-white/10 bg-[radial-gradient(circle_at_50%_78%,rgba(139,92,246,.34),transparent_26%),radial-gradient(circle_at_48%_58%,rgba(34,211,238,.16),transparent_28%),linear-gradient(180deg,rgba(7,13,30,.94),rgba(3,5,12,.92))] p-7 text-center">
-          <div className="mx-auto mb-5 h-24 max-w-[560px] rounded-full border border-cyan-300/20 bg-[radial-gradient(ellipse_at_center,rgba(34,211,238,.24),transparent_22%),repeating-radial-gradient(ellipse_at_center,rgba(139,92,246,.28)_0_1px,transparent_1px_18px)] shadow-[0_0_70px_rgba(139,92,246,.22)]" />
+        <section className="codex-hero mb-4 overflow-hidden rounded-[1.35rem] border border-white/10 bg-[radial-gradient(circle_at_50%_78%,rgba(217, 174, 69,.34),transparent_26%),radial-gradient(circle_at_48%_58%,rgba(228, 187, 94,.16),transparent_28%),linear-gradient(180deg,rgba(7,13,30,.94),rgba(3,5,12,.92))] p-7 text-center">
+          <div className="mx-auto mb-5 h-24 max-w-[560px] rounded-full border border-cyan-300/20 bg-[radial-gradient(ellipse_at_center,rgba(228, 187, 94,.24),transparent_22%),repeating-radial-gradient(ellipse_at_center,rgba(217, 174, 69,.28)_0_1px,transparent_1px_18px)] shadow-[0_0_70px_rgba(217, 174, 69,.22)]" />
           <h1 className="bg-gradient-to-r from-cyan-300 via-sky-200 to-violet-400 bg-clip-text text-4xl font-black tracking-tight text-transparent md:text-5xl">Malik Codex 1.0</h1>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-300">Audit, plan, generate and connect product features with safe project context.</p>
           <div className="mt-4 flex flex-wrap justify-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-100/80">
@@ -186,7 +186,7 @@ function CodexButton({ children, onClick, primary, danger, violet, cyan, disable
       disabled={disabled}
       className={`flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-black transition disabled:opacity-50 ${
         primary
-          ? "border-cyan-300/35 bg-cyan-300/14 text-cyan-50 shadow-[0_0_28px_rgba(34,211,238,.12)]"
+          ? "border-cyan-300/35 bg-cyan-300/14 text-cyan-50 shadow-[0_0_28px_rgba(228, 187, 94,.12)]"
           : danger
             ? "border-red-400/25 bg-red-500/10 text-red-100"
             : violet

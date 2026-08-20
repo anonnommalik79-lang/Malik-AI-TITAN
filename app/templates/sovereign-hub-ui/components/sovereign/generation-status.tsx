@@ -75,7 +75,7 @@ export function GenerationStatus({
 
   return (
     <div className={`relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#07070a] p-4 text-white ${className}`}>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,.22),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,.14),transparent_34%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217, 174, 69,.22),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(228, 187, 94,.14),transparent_34%)]" />
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-violet-400 via-cyan-300 to-fuchsia-400" />
       <div className="relative flex items-center gap-4">
         <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">

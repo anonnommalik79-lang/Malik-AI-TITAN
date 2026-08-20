@@ -45,14 +45,14 @@ export function AtmosphereHorizon() {
             radial-gradient(ellipse 74% 38% at 34% 21%, rgba(77, 198, 238, 0.2), transparent 44%),
             radial-gradient(ellipse 80% 44% at 64% 26%, rgba(141, 102, 226, 0.16), transparent 46%),
             radial-gradient(ellipse 16% 8% at 38% 19%, rgba(236, 252, 255, 0.16), transparent 62%),
-            radial-gradient(ellipse 22% 9% at 55% 25%, rgba(125, 211, 252, 0.14), transparent 64%),
-            radial-gradient(ellipse 18% 7% at 70% 31%, rgba(216, 180, 254, 0.13), transparent 64%),
+            radial-gradient(ellipse 22% 9% at 55% 25%, rgba(240, 210, 136, 0.14), transparent 64%),
+            radial-gradient(ellipse 18% 7% at 70% 31%, rgba(243, 222, 150, 0.13), transparent 64%),
             repeating-linear-gradient(7deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 9px),
             radial-gradient(closest-side, rgba(18, 38, 75, 0.64) 0 62%, rgba(8, 18, 44, 0.82) 78%, rgba(3, 8, 24, 0.98) 100%);
           box-shadow:
             inset 0 58px 120px rgba(255, 255, 255, 0.08),
             inset 0 -140px 220px rgba(0, 0, 0, 0.82),
-            0 -28px 120px rgba(125, 211, 252, 0.14);
+            0 -28px 120px rgba(240, 210, 136, 0.14);
           filter: saturate(0.95) contrast(1.05);
           -webkit-mask-image: radial-gradient(closest-side, #000 0 99%, transparent 100%);
           mask-image: radial-gradient(closest-side, #000 0 99%, transparent 100%);
@@ -80,9 +80,9 @@ export function AtmosphereHorizon() {
           background: radial-gradient(
             closest-side,
             rgba(2, 6, 20, 0) 71%,
-            rgba(37, 99, 235, 0.1) 82%,
-            rgba(56, 189, 248, 0.26) 91%,
-            rgba(125, 211, 252, 0.62) 96.5%,
+            rgba(177, 132, 44, 0.1) 82%,
+            rgba(228, 187, 94, 0.26) 91%,
+            rgba(240, 210, 136, 0.62) 96.5%,
             rgba(244, 250, 255, 0.98) 99.15%,
             transparent 100%
           );
@@ -95,8 +95,8 @@ export function AtmosphereHorizon() {
           background: transparent;
           box-shadow: 0 -1px 0 rgba(248, 252, 255, 0.88) inset,
             0 -4px 24px rgba(224, 242, 255, 0.42),
-            0 -28px 100px rgba(56, 189, 248, 0.24),
-            0 -10px 54px rgba(125, 211, 252, 0.3);
+            0 -28px 100px rgba(228, 187, 94, 0.24),
+            0 -10px 54px rgba(240, 210, 136, 0.3);
           animation: malikSpaceHorizonGlow 9s ease-in-out 0.4s infinite alternate;
         }
 

@@ -10,7 +10,7 @@ const insights = [
 export function CodeArchitectShowcase() {
   return (
     <section className="relative overflow-hidden rounded-[1.35rem] border border-slate-700/60 bg-[#050b18]/84 shadow-[0_18px_70px_rgba(0,0,0,.36),inset_0_1px_0_rgba(255,255,255,.035)] backdrop-blur-xl">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_8%,rgba(34,211,238,.10),transparent_34%),radial-gradient(circle_at_82%_86%,rgba(139,92,246,.16),transparent_38%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_8%,rgba(228, 187, 94,.10),transparent_34%),radial-gradient(circle_at_82%_86%,rgba(217, 174, 69,.16),transparent_38%)]" />
       <div className="relative z-10 p-5">
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-serif text-xl font-semibold text-white">Инсайты</h3>

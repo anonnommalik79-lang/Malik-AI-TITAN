@@ -130,7 +130,7 @@ function GlassCard({ children, className }: { children: ReactNode; className?: s
 }
 
 function MiniTrend({ tone }: { tone: string }) {
-  const stroke = tone === "red" ? "#fb7185" : tone === "teal" ? "#2dd4bf" : "#a855f7"
+  const stroke = tone === "red" ? "#fb7185" : tone === "teal" ? "#2dd4bf" : "#d9ae45"
   return (
     <svg className="ub-trend" viewBox="0 0 220 56" preserveAspectRatio="none" aria-hidden="true">
       <path d="M2 43 L18 41 L31 44 L46 38 L61 40 L75 34 L91 37 L105 31 L121 32 L137 27 L154 29 L169 22 L185 24 L204 18 L218 12" />

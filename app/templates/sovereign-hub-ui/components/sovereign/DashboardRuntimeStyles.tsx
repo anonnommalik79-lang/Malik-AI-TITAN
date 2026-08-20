@@ -22,10 +22,10 @@ const DASHBOARD_RUNTIME_CSS = `
   isolation: isolate;
   overflow: hidden !important;
   background:
-    radial-gradient(ellipse 72% 30% at 50% 88%, rgba(139, 92, 246, 0.34), transparent 60%),
-    radial-gradient(ellipse 90% 50% at 50% 110%, rgba(59, 130, 246, 0.18), transparent 65%),
-    radial-gradient(circle at 18% 12%, rgba(56, 189, 248, 0.10), transparent 26%),
-    radial-gradient(circle at 82% 14%, rgba(168, 85, 247, 0.12), transparent 28%),
+    radial-gradient(ellipse 72% 30% at 50% 88%, rgba(217, 174, 69, 0.34), transparent 60%),
+    radial-gradient(ellipse 90% 50% at 50% 110%, rgba(211, 162, 62, 0.18), transparent 65%),
+    radial-gradient(circle at 18% 12%, rgba(228, 187, 94, 0.10), transparent 26%),
+    radial-gradient(circle at 82% 14%, rgba(217, 174, 69, 0.12), transparent 28%),
     linear-gradient(180deg, rgba(3, 7, 20, 0.98), rgba(4, 8, 24, 0.98) 55%, rgba(2, 5, 18, 1));
 }
 .malik-terminator-chat-host::before {
@@ -55,13 +55,13 @@ const DASHBOARD_RUNTIME_CSS = `
   z-index: 0;
   pointer-events: none;
   border-radius: 50% 50% 0 0;
-  border-top: 1px solid rgba(167, 139, 250, 0.58);
+  border-top: 1px solid rgba(232, 197, 106, 0.58);
   background:
-    radial-gradient(ellipse at center, rgba(168,85,247,.30), rgba(99,102,241,.12) 45%, transparent 72%);
+    radial-gradient(ellipse at center, rgba(217, 174, 69,.30), rgba(211, 162, 62,.12) 45%, transparent 72%);
   box-shadow:
-    0 -1px 26px rgba(168,85,247,.55),
-    0 -14px 72px rgba(59,130,246,.18),
-    0 -24px 120px rgba(99,102,241,.16);
+    0 -1px 26px rgba(217, 174, 69,.55),
+    0 -14px 72px rgba(211, 162, 62,.18),
+    0 -24px 120px rgba(211, 162, 62,.16);
   opacity: .98;
 }
 .malik-terminator-chat-host > * {
@@ -72,15 +72,15 @@ const DASHBOARD_RUNTIME_CSS = `
 /* generic chat card boost */
 .malik-terminator-chat-host [class*="rounded"][class*="border"],
 .malik-terminator-chat-host [class*="backdrop-blur"] {
-  box-shadow: 0 10px 40px rgba(76, 29, 149, 0.16);
+  box-shadow: 0 10px 40px rgba(87, 64, 15, 0.16);
 }
 
 .malik-terminator-chat-host textarea {
   background: rgba(5, 11, 30, 0.60) !important;
-  border-color: rgba(99,102,241,0.28) !important;
+  border-color: rgba(211, 162, 62,0.28) !important;
   box-shadow:
     inset 0 0 0 1px rgba(255,255,255,0.03),
-    0 0 0 1px rgba(109,40,217,0.10),
+    0 0 0 1px rgba(168, 124, 34,0.10),
     0 14px 44px rgba(15,23,42,0.45) !important;
 }
 

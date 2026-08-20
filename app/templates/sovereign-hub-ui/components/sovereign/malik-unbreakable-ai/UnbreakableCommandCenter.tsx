@@ -11,7 +11,7 @@ export function UnbreakableCommandCenter({ onPrompt }: { onPrompt?: (prompt: str
   const storage = typeof window !== "undefined" ? storageGuardReport() : { ok: true, bytes: 0, message: "SSR safe" }
 
   return (
-    <section className="rounded-[2.4rem] border border-white/10 bg-[radial-gradient(circle_at_20%_10%,rgba(34,211,238,.14),transparent_34%),radial-gradient(circle_at_80%_80%,rgba(139,92,246,.18),transparent_38%),rgba(255,255,255,.035)] p-6 shadow-[0_28px_90px_rgba(0,0,0,.45)]">
+    <section className="rounded-[2.4rem] border border-white/10 bg-[radial-gradient(circle_at_20%_10%,rgba(228, 187, 94,.14),transparent_34%),radial-gradient(circle_at_80%_80%,rgba(217, 174, 69,.18),transparent_38%),rgba(255,255,255,.035)] p-6 shadow-[0_28px_90px_rgba(0,0,0,.45)]">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-200/70">Unbreakable AI Command Center</p>

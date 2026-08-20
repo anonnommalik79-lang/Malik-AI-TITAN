@@ -52,7 +52,7 @@ function CapabilityCard({
       onClick={() => onSelect(capability)}
       className={cn(
         "group flex h-full min-h-[188px] flex-col justify-between rounded-lg border bg-white/[0.035] p-4 text-left text-white transition hover:border-cyan-200/35 hover:bg-white/[0.055]",
-        active ? "border-cyan-200/45 shadow-[0_18px_60px_rgba(14,165,233,.16)]" : "border-white/10",
+        active ? "border-cyan-200/45 shadow-[0_18px_60px_rgba(211, 162, 62,.16)]" : "border-white/10",
       )}
     >
       <span className="flex items-center justify-between gap-3">
@@ -366,7 +366,7 @@ function CapabilityVideoCard({
     <article
       className={cn(
         "group relative min-h-[168px] overflow-hidden rounded-xl border text-left transition",
-        playing ? "border-cyan-300/40 shadow-[0_0_40px_rgba(34,211,238,.18)]" : "border-white/10 hover:border-cyan-200/25",
+        playing ? "border-cyan-300/40 shadow-[0_0_40px_rgba(228, 187, 94,.18)]" : "border-white/10 hover:border-cyan-200/25",
       )}
     >
       <video

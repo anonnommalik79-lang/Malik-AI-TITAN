@@ -41,15 +41,15 @@ export function AuroraVeil() {
 
         .malik-space-bg__aurora--left {
           background:
-            radial-gradient(ellipse 30% 72% at 0% 40%, rgba(103, 232, 249, 0.28), transparent 72%),
-            linear-gradient(104deg, rgba(34, 211, 238, 0.1), transparent 46%);
+            radial-gradient(ellipse 30% 72% at 0% 40%, rgba(240, 210, 136, 0.28), transparent 72%),
+            linear-gradient(104deg, rgba(228, 187, 94, 0.1), transparent 46%);
           animation: malikSpaceAuroraLeft 11s ease-in-out infinite alternate;
         }
 
         .malik-space-bg__aurora--right {
           background:
             radial-gradient(ellipse 30% 72% at 100% 42%, rgba(244, 114, 182, 0.2), transparent 72%),
-            linear-gradient(256deg, rgba(168, 85, 247, 0.12), transparent 46%);
+            linear-gradient(256deg, rgba(217, 174, 69, 0.12), transparent 46%);
           animation: malikSpaceAuroraRight 12s ease-in-out infinite alternate;
         }
 
@@ -62,8 +62,8 @@ export function AuroraVeil() {
         .malik-space-bg__energy--left {
           right: auto;
           background:
-            radial-gradient(ellipse 72% 30% at 0% 42%, rgba(125, 211, 252, 0.5), rgba(56, 189, 248, 0.2) 42%, transparent 74%),
-            radial-gradient(ellipse 52% 16% at 18% 62%, rgba(59, 130, 246, 0.34), transparent 74%),
+            radial-gradient(ellipse 72% 30% at 0% 42%, rgba(240, 210, 136, 0.5), rgba(228, 187, 94, 0.2) 42%, transparent 74%),
+            radial-gradient(ellipse 52% 16% at 18% 62%, rgba(211, 162, 62, 0.34), transparent 74%),
             linear-gradient(100deg, rgba(8, 47, 73, 0.18), transparent 72%);
           -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.82) 42%, transparent 100%);
           mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.82) 42%, transparent 100%);
@@ -73,9 +73,9 @@ export function AuroraVeil() {
         .malik-space-bg__energy--right {
           left: auto;
           background:
-            radial-gradient(ellipse 72% 30% at 100% 42%, rgba(245, 208, 254, 0.48), rgba(217, 70, 239, 0.2) 42%, transparent 74%),
-            radial-gradient(ellipse 52% 16% at 82% 62%, rgba(124, 58, 237, 0.36), transparent 74%),
-            linear-gradient(260deg, rgba(76, 29, 149, 0.2), transparent 72%);
+            radial-gradient(ellipse 72% 30% at 100% 42%, rgba(245, 208, 254, 0.48), rgba(217, 174, 69, 0.2) 42%, transparent 74%),
+            radial-gradient(ellipse 52% 16% at 82% 62%, rgba(201, 152, 47, 0.36), transparent 74%),
+            linear-gradient(260deg, rgba(87, 64, 15, 0.2), transparent 72%);
           -webkit-mask-image: linear-gradient(270deg, #000 0%, rgba(0, 0, 0, 0.82) 42%, transparent 100%);
           mask-image: linear-gradient(270deg, #000 0%, rgba(0, 0, 0, 0.82) 42%, transparent 100%);
           animation: malikSpaceEnergyRight 8.5s ease-in-out infinite alternate;

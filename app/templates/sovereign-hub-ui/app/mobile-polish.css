@@ -6,7 +6,7 @@ body,
   background:
     radial-gradient(ellipse at 50% 115%, rgba(177, 132, 44, 0.42) 0%, rgba(134, 99, 31, 0.28) 18%, rgba(14, 30, 64, 0.13) 36%, transparent 62%),
     radial-gradient(ellipse at 18% 100%, rgba(228, 187, 94, 0.16) 0%, transparent 38%),
-    radial-gradient(ellipse at 82% 100%, rgba(99, 102, 241, 0.16) 0%, transparent 42%),
+    radial-gradient(ellipse at 82% 100%, rgba(211, 162, 62, 0.16) 0%, transparent 42%),
     linear-gradient(180deg, #020205 0%, #030712 48%, #041127 100%) !important;
   overflow-x: hidden !important;
 }
@@ -44,7 +44,7 @@ body,
   background:
     radial-gradient(ellipse at 50% 100%, rgba(177, 132, 44, 0.82) 0%, rgba(134, 99, 31, 0.52) 23%, rgba(211, 162, 62, 0.20) 43%, transparent 69%),
     radial-gradient(ellipse at 18% 95%, rgba(228, 187, 94, 0.34) 0%, transparent 44%),
-    radial-gradient(ellipse at 82% 96%, rgba(99, 102, 241, 0.32) 0%, transparent 46%);
+    radial-gradient(ellipse at 82% 96%, rgba(211, 162, 62, 0.32) 0%, transparent 46%);
   filter: blur(22px) saturate(1.45);
   opacity: 0.92;
   transform: translateZ(0);
@@ -68,7 +68,7 @@ body,
   background:
     radial-gradient(ellipse at 50% 100%, rgba(177, 132, 44, 0.90) 0%, rgba(134, 99, 31, 0.58) 22%, rgba(211, 162, 62, 0.22) 42%, transparent 70%),
     radial-gradient(ellipse at 7% 92%, rgba(228, 187, 94, 0.35), transparent 46%),
-    radial-gradient(ellipse at 93% 92%, rgba(99, 102, 241, 0.32), transparent 46%),
+    radial-gradient(ellipse at 93% 92%, rgba(211, 162, 62, 0.32), transparent 46%),
     linear-gradient(180deg, transparent 0%, rgba(5, 23, 58, 0.32) 62%, rgba(177, 132, 44, 0.48) 100%);
   filter: blur(24px) saturate(1.55);
   mix-blend-mode: screen;
@@ -151,7 +151,7 @@ body,
     background:
       radial-gradient(ellipse at 50% 100%, rgba(177, 132, 44, 0.98) 0%, rgba(134, 99, 31, 0.66) 26%, rgba(211, 162, 62, 0.22) 46%, transparent 73%),
       radial-gradient(ellipse at 15% 100%, rgba(228, 187, 94, 0.28), transparent 46%),
-      radial-gradient(ellipse at 86% 100%, rgba(99, 102, 241, 0.28), transparent 48%);
+      radial-gradient(ellipse at 86% 100%, rgba(211, 162, 62, 0.28), transparent 48%);
   }
 
   #malik-root,

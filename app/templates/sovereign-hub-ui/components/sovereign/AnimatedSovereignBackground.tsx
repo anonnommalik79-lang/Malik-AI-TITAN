@@ -12,16 +12,16 @@ export function AnimatedSovereignBackground() {
         <defs>
           <linearGradient id="sovereign-blue-line" x1="0" y1="0" x2="1" y2="0">
             <stop offset="0" stopColor="#0369a1" stopOpacity="0" />
-            <stop offset=".22" stopColor="#0ea5e9" stopOpacity=".42" />
-            <stop offset=".5" stopColor="#38bdf8" stopOpacity="1" />
-            <stop offset=".72" stopColor="#2563eb" stopOpacity=".68" />
-            <stop offset="1" stopColor="#1d4ed8" stopOpacity="0" />
+            <stop offset=".22" stopColor="#d3a23e" stopOpacity=".42" />
+            <stop offset=".5" stopColor="#e4bb5e" stopOpacity="1" />
+            <stop offset=".72" stopColor="#b1842c" stopOpacity=".68" />
+            <stop offset="1" stopColor="#86631f" stopOpacity="0" />
           </linearGradient>
           <linearGradient id="sovereign-blue-soft" x1="0" y1="0" x2="1" y2=".35">
-            <stop offset="0" stopColor="#0284c7" stopOpacity="0" />
-            <stop offset=".32" stopColor="#2563eb" stopOpacity=".26" />
-            <stop offset=".58" stopColor="#38bdf8" stopOpacity=".72" />
-            <stop offset="1" stopColor="#1d4ed8" stopOpacity="0" />
+            <stop offset="0" stopColor="#b1842c" stopOpacity="0" />
+            <stop offset=".32" stopColor="#b1842c" stopOpacity=".26" />
+            <stop offset=".58" stopColor="#e4bb5e" stopOpacity=".72" />
+            <stop offset="1" stopColor="#86631f" stopOpacity="0" />
           </linearGradient>
           <filter id="sovereign-line-glow" x="-30%" y="-120%" width="160%" height="340%">
             <feGaussianBlur stdDeviation="5" result="blur" />

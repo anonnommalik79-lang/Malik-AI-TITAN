@@ -40,7 +40,7 @@ function BottomVisual({ type }: { type: string }) {
             key={index}
             className={cn(
               "rounded bg-slate-800/80",
-              index === 7 || index === 8 || index === 13 ? "bg-violet-500/80 shadow-[0_0_14px_rgba(139,92,246,.55)]" : "",
+              index === 7 || index === 8 || index === 13 ? "bg-violet-500/80 shadow-[0_0_14px_rgba(217, 174, 69,.55)]" : "",
             )}
           />
         ))}
@@ -51,8 +51,8 @@ function BottomVisual({ type }: { type: string }) {
   if (type === "cube") {
     return (
       <div className="relative h-28 w-44">
-        <div className="absolute left-8 top-8 h-16 w-28 rotate-[-28deg] rounded-xl border border-cyan-300/30 bg-blue-500/20 shadow-[0_0_40px_rgba(59,130,246,.32)]" />
-        <div className="absolute left-14 top-2 h-16 w-28 rotate-[-28deg] rounded-xl border border-violet-300/30 bg-violet-500/25 shadow-[0_0_40px_rgba(139,92,246,.35)]" />
+        <div className="absolute left-8 top-8 h-16 w-28 rotate-[-28deg] rounded-xl border border-cyan-300/30 bg-blue-500/20 shadow-[0_0_40px_rgba(211, 162, 62,.32)]" />
+        <div className="absolute left-14 top-2 h-16 w-28 rotate-[-28deg] rounded-xl border border-violet-300/30 bg-violet-500/25 shadow-[0_0_40px_rgba(217, 174, 69,.35)]" />
         <div className="absolute left-20 top-[-8px] h-14 w-14 rotate-45 rounded-xl border border-blue-200/30 bg-cyan-400/20" />
       </div>
     )
@@ -61,7 +61,7 @@ function BottomVisual({ type }: { type: string }) {
   if (type === "network") {
     return (
       <svg className="h-28 w-44" viewBox="0 0 180 110" fill="none">
-        <path d="M28 78L70 28L116 84L146 26M70 28L146 26M70 28L96 54M96 54L116 84M96 54L146 26" stroke="rgba(139,92,246,.75)" strokeWidth="2" />
+        <path d="M28 78L70 28L116 84L146 26M70 28L146 26M70 28L96 54M96 54L116 84M96 54L146 26" stroke="rgba(217, 174, 69,.75)" strokeWidth="2" />
         {[28, 70, 116, 146, 96].map((x, i) => (
           <circle key={x} cx={x} cy={[78, 28, 84, 26, 54][i]} r="5" fill="rgb(167 139 250)" filter="drop-shadow(0 0 8px rgb(139 92 246))" />
         ))}
@@ -91,7 +91,7 @@ export function FinalIntelligencePanel() {
           key={card.title}
           className="relative min-h-[150px] overflow-hidden rounded-[1.35rem] border border-slate-700/60 bg-[#050b18]/84 shadow-[0_18px_70px_rgba(0,0,0,.36),inset_0_1px_0_rgba(255,255,255,.035)]"
         >
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_30%,rgba(59,130,246,.12),transparent_36%),radial-gradient(circle_at_85%_88%,rgba(139,92,246,.14),transparent_40%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_30%,rgba(211, 162, 62,.12),transparent_36%),radial-gradient(circle_at_85%_88%,rgba(217, 174, 69,.14),transparent_40%)]" />
           <div className="relative z-10 grid h-full grid-cols-[1fr_auto] gap-4 p-5">
             <div className="flex min-w-0 flex-col">
               <h3 className="font-serif text-xl font-semibold text-white">{card.title}</h3>

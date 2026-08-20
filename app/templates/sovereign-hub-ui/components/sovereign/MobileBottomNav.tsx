@@ -34,7 +34,7 @@ function NavTab({
         active ? "text-cyan-300" : "text-zinc-500",
       )}
     >
-      <Icon className={cn("h-5 w-5", active && "text-cyan-300 drop-shadow-[0_0_12px_rgba(34,211,238,.45)]")} />
+      <Icon className={cn("h-5 w-5", active && "text-cyan-300 drop-shadow-[0_0_12px_rgba(228, 187, 94,.45)]")} />
       <span className={cn("text-[10px] font-bold tracking-wide", active ? "text-cyan-200" : "text-zinc-500")}>{label}</span>
     </button>
   )
@@ -59,7 +59,7 @@ export function MobileBottomNav({
         <button
           type="button"
           onClick={onCenterAction}
-          className="malik-mobile-nav-fab -mt-7 flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-violet-300/30 bg-gradient-to-br from-violet-500 via-blue-500 to-cyan-400 text-white shadow-[0_12px_40px_rgba(124,58,237,.45),0_0_24px_rgba(59,130,246,.28)] transition-transform active:scale-95"
+          className="malik-mobile-nav-fab -mt-7 flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-violet-300/30 bg-gradient-to-br from-violet-500 via-blue-500 to-cyan-400 text-white shadow-[0_12px_40px_rgba(201, 152, 47,.45),0_0_24px_rgba(211, 162, 62,.28)] transition-transform active:scale-95"
           aria-label="Быстрое действие AI"
         >
           <Sparkles className="h-5 w-5" />

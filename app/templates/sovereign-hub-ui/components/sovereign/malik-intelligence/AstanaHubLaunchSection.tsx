@@ -10,7 +10,7 @@ const launchMetrics = [
 export function AstanaHubLaunchSection() {
   return (
     <section className="relative overflow-hidden rounded-[1.35rem] border border-slate-700/60 bg-[#050b18]/85 p-5 shadow-[0_18px_70px_rgba(0,0,0,.38),inset_0_1px_0_rgba(255,255,255,.04)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_8%,rgba(139,92,246,.16),transparent_32%),radial-gradient(circle_at_86%_86%,rgba(37,99,235,.13),transparent_36%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_8%,rgba(217, 174, 69,.16),transparent_32%),radial-gradient(circle_at_86%_86%,rgba(177, 132, 44,.13),transparent_36%)]" />
       <div className="relative z-10 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-serif text-3xl font-semibold tracking-tight text-white md:text-4xl">Final Intelligence</h1>
@@ -24,7 +24,7 @@ export function AstanaHubLaunchSection() {
       <div className="relative z-10 mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {launchMetrics.map((metric) => (
           <div key={metric.label} className="flex min-h-[104px] items-center gap-4 rounded-[1.15rem] border border-slate-700/70 bg-[#07101e]/82 p-4 shadow-[0_14px_46px_rgba(0,0,0,.30)]">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-violet-400/25 bg-violet-500/10 text-xl font-black text-violet-100 shadow-[0_0_26px_rgba(139,92,246,.24)]">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-violet-400/25 bg-violet-500/10 text-xl font-black text-violet-100 shadow-[0_0_26px_rgba(217, 174, 69,.24)]">
               {metric.icon}
             </div>
             <div>

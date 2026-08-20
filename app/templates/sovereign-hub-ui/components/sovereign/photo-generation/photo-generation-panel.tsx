@@ -66,7 +66,7 @@ type ApiProviderId = typeof apiProviderSlots[number][0]
 
 function localSvgDataUrl(prompt: string, style: string) {
   const safePrompt = (prompt || "Malik AI premium photo").slice(0, 120)
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1344" height="768" viewBox="0 0 1344 768"><defs><radialGradient id="g" cx="25%" cy="15%" r="80%"><stop offset="0%" stop-color="#7c3aed"/><stop offset="46%" stop-color="#0f172a"/><stop offset="100%" stop-color="#020617"/></radialGradient><linearGradient id="h" x1="0" x2="1"><stop stop-color="#22d3ee"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs><rect width="1344" height="768" fill="url(#g)"/><circle cx="1040" cy="160" r="190" fill="#22d3ee" opacity=".16"/><path d="M0 640 C250 548 470 720 710 610 C930 508 1080 612 1344 540 L1344 768 L0 768Z" fill="#020617" opacity=".7"/><rect x="80" y="76" width="1184" height="616" rx="56" fill="#030712" opacity=".56" stroke="url(#h)" stroke-width="2"/><text x="128" y="170" fill="#fff" font-family="Arial" font-size="44" font-weight="900">Malik Vision XL v2</text><text x="128" y="226" fill="#67e8f9" font-family="Arial" font-size="24">${style}</text><foreignObject x="128" y="520" width="1040" height="110"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial;color:white;font-size:32px;font-weight:900;line-height:1.12;">${safePrompt}</div></foreignObject></svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1344" height="768" viewBox="0 0 1344 768"><defs><radialGradient id="g" cx="25%" cy="15%" r="80%"><stop offset="0%" stop-color="#c9982f"/><stop offset="46%" stop-color="#0f172a"/><stop offset="100%" stop-color="#020617"/></radialGradient><linearGradient id="h" x1="0" x2="1"><stop stop-color="#e4bb5e"/><stop offset="1" stop-color="#d9ae45"/></linearGradient></defs><rect width="1344" height="768" fill="url(#g)"/><circle cx="1040" cy="160" r="190" fill="#e4bb5e" opacity=".16"/><path d="M0 640 C250 548 470 720 710 610 C930 508 1080 612 1344 540 L1344 768 L0 768Z" fill="#020617" opacity=".7"/><rect x="80" y="76" width="1184" height="616" rx="56" fill="#030712" opacity=".56" stroke="url(#h)" stroke-width="2"/><text x="128" y="170" fill="#fff" font-family="Arial" font-size="44" font-weight="900">Malik Vision XL v2</text><text x="128" y="226" fill="#f0d288" font-family="Arial" font-size="24">${style}</text><foreignObject x="128" y="520" width="1040" height="110"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial;color:white;font-size:32px;font-weight:900;line-height:1.12;">${safePrompt}</div></foreignObject></svg>`
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
@@ -103,9 +103,9 @@ function TitanPhotoCss() {
         position: relative;
         isolation: isolate;
         background:
-          radial-gradient(circle at 16% 0%, rgba(34,211,238,.16), transparent 32%),
-          radial-gradient(circle at 86% 18%, rgba(168,85,247,.15), transparent 38%),
-          radial-gradient(circle at 50% 110%, rgba(59,130,246,.10), transparent 36%),
+          radial-gradient(circle at 16% 0%, rgba(228, 187, 94,.16), transparent 32%),
+          radial-gradient(circle at 86% 18%, rgba(217, 174, 69,.15), transparent 38%),
+          radial-gradient(circle at 50% 110%, rgba(211, 162, 62,.10), transparent 36%),
           linear-gradient(135deg, #02030a, #060816 52%, #03020a) !important;
       }
       .photo-clone-shell::before {
@@ -115,8 +115,8 @@ function TitanPhotoCss() {
         z-index: 0;
         pointer-events: none;
         background:
-          linear-gradient(90deg, rgba(34,211,238,.055) 1px, transparent 1px),
-          linear-gradient(0deg, rgba(168,85,247,.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(228, 187, 94,.055) 1px, transparent 1px),
+          linear-gradient(0deg, rgba(217, 174, 69,.045) 1px, transparent 1px),
           radial-gradient(circle at 50% 0%, rgba(255,255,255,.07), transparent 28%);
         background-size: 70px 70px, 70px 70px, 100% 100%;
         mask-image: radial-gradient(ellipse 82% 70% at 50% 25%, #000 0 55%, transparent 100%);
@@ -127,10 +127,10 @@ function TitanPhotoCss() {
       .photo-clone-shell .studio-metric-card,
       .photo-clone-shell .studio-page-head,
       .photo-clone-shell .studio-api-rail {
-        border-color: rgba(125,211,252,.14) !important;
+        border-color: rgba(240, 210, 136,.14) !important;
         background:
-          radial-gradient(circle at 8% 0%, rgba(34,211,238,.09), transparent 30%),
-          radial-gradient(circle at 100% 100%, rgba(168,85,247,.08), transparent 34%),
+          radial-gradient(circle at 8% 0%, rgba(228, 187, 94,.09), transparent 30%),
+          radial-gradient(circle at 100% 100%, rgba(217, 174, 69,.08), transparent 34%),
           rgba(2,8,23,.70) !important;
         box-shadow: 0 22px 95px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.045) !important;
         backdrop-filter: blur(22px);
@@ -138,8 +138,8 @@ function TitanPhotoCss() {
       .photo-clone-shell .studio-primary-action,
       .photo-prompt-actions button:last-child {
         color: #020617 !important;
-        background: linear-gradient(135deg, #fff, #bae6fd 44%, #ddd6fe) !important;
-        box-shadow: 0 18px 70px rgba(125,211,252,.22), inset 0 1px 0 rgba(255,255,255,.9) !important;
+        background: linear-gradient(135deg, #fff, #f8e5ac 44%, #faefc8) !important;
+        box-shadow: 0 18px 70px rgba(240, 210, 136,.22), inset 0 1px 0 rgba(255,255,255,.9) !important;
       }
       .titan-photo-director {
         display: grid;
@@ -152,11 +152,11 @@ function TitanPhotoCss() {
       .titan-photo-board {
         position: relative;
         overflow: hidden;
-        border: 1px solid rgba(125,211,252,.15);
+        border: 1px solid rgba(240, 210, 136,.15);
         border-radius: 34px;
         background:
-          radial-gradient(circle at 14% 0%, rgba(34,211,238,.14), transparent 34%),
-          radial-gradient(circle at 100% 100%, rgba(168,85,247,.12), transparent 34%),
+          radial-gradient(circle at 14% 0%, rgba(228, 187, 94,.14), transparent 34%),
+          radial-gradient(circle at 100% 100%, rgba(217, 174, 69,.12), transparent 34%),
           rgba(2,8,23,.68);
         box-shadow: 0 26px 105px rgba(0,0,0,.37), inset 0 1px 0 rgba(255,255,255,.055);
         backdrop-filter: blur(26px);
@@ -166,11 +166,11 @@ function TitanPhotoCss() {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        border: 1px solid rgba(125,211,252,.18);
+        border: 1px solid rgba(240, 210, 136,.18);
         border-radius: 999px;
         padding: 8px 12px;
-        color: rgba(186,230,253,.92);
-        background: rgba(34,211,238,.08);
+        color: rgba(248, 229, 172,.92);
+        background: rgba(228, 187, 94,.08);
         font-size: 10px;
         font-weight: 1000;
         letter-spacing: .18em;
@@ -186,7 +186,7 @@ function TitanPhotoCss() {
       }
       .titan-photo-title span {
         display: block;
-        background: linear-gradient(90deg, #67e8f9, #fff, #f0abfc);
+        background: linear-gradient(90deg, #f0d288, #fff, #f3de96);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
@@ -216,8 +216,8 @@ function TitanPhotoCss() {
       }
       .titan-photo-preset-grid button:hover {
         transform: translateY(-2px);
-        border-color: rgba(125,211,252,.32);
-        background: rgba(125,211,252,.08);
+        border-color: rgba(240, 210, 136,.32);
+        background: rgba(240, 210, 136,.08);
       }
       .titan-photo-control { padding: 18px; }
       .titan-photo-control h3,
@@ -242,7 +242,7 @@ function TitanPhotoCss() {
       }
       .titan-photo-board-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .photo-gallery-item {
-        box-shadow: 0 22px 70px rgba(0,0,0,.34), 0 0 0 1px rgba(125,211,252,.10);
+        box-shadow: 0 22px 70px rgba(0,0,0,.34), 0 0 0 1px rgba(240, 210, 136,.10);
       }
       @keyframes titanPhotoGrid { from { transform: translateX(-1%); } to { transform: translateX(1%); } }
       @media (max-width: 1100px) {

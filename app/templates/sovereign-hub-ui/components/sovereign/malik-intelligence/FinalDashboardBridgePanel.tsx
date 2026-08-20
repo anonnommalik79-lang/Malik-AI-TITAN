@@ -34,7 +34,7 @@ export function FinalDashboardBridgePanel({ onPrompt }: { onPrompt?: (prompt: st
 
   return (
     <section className="relative min-h-[330px] overflow-hidden rounded-[1.35rem] border border-slate-700/60 bg-[#050b18]/82 shadow-[0_18px_70px_rgba(0,0,0,.38),inset_0_1px_0_rgba(255,255,255,.035)] backdrop-blur-xl">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(96,165,250,.12),transparent_34%),radial-gradient(circle_at_80%_100%,rgba(124,58,237,.10),transparent_36%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(228, 187, 94,.12),transparent_34%),radial-gradient(circle_at_80%_100%,rgba(201, 152, 47,.10),transparent_36%)]" />
       <div className="relative z-10 flex items-start justify-between gap-4 p-5 pb-2">
         <div>
           <h3 className="font-serif text-xl font-semibold text-white">Модельный оркестратор</h3>
@@ -52,9 +52,9 @@ export function FinalDashboardBridgePanel({ onPrompt }: { onPrompt?: (prompt: st
         <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-90" viewBox="0 0 820 260" preserveAspectRatio="none">
           <defs>
             <linearGradient id="bridgeLine" x1="0%" x2="100%">
-              <stop offset="0%" stopColor="rgba(34,211,238,.25)" />
-              <stop offset="50%" stopColor="rgba(139,92,246,.95)" />
-              <stop offset="100%" stopColor="rgba(34,211,238,.25)" />
+              <stop offset="0%" stopColor="rgba(228, 187, 94,.25)" />
+              <stop offset="50%" stopColor="rgba(217, 174, 69,.95)" />
+              <stop offset="100%" stopColor="rgba(228, 187, 94,.25)" />
             </linearGradient>
             <filter id="bridgeGlow">
               <feGaussianBlur stdDeviation="3" result="blur" />
@@ -79,7 +79,7 @@ export function FinalDashboardBridgePanel({ onPrompt }: { onPrompt?: (prompt: st
         </div>
 
         <div className="relative z-20 flex flex-col items-center">
-          <div className="grid h-24 w-24 place-items-center rounded-3xl border border-violet-300/40 bg-[radial-gradient(circle_at_50%_35%,rgba(139,92,246,.52),rgba(30,41,59,.38)_58%,rgba(2,6,23,.92))] text-5xl text-violet-100 shadow-[0_0_44px_rgba(139,92,246,.55)]">
+          <div className="grid h-24 w-24 place-items-center rounded-3xl border border-violet-300/40 bg-[radial-gradient(circle_at_50%_35%,rgba(217, 174, 69,.52),rgba(30,41,59,.38)_58%,rgba(2,6,23,.92))] text-5xl text-violet-100 shadow-[0_0_44px_rgba(217, 174, 69,.55)]">
             ⬡
           </div>
           <p className="mt-3 text-sm font-semibold text-white">Orchestrator</p>

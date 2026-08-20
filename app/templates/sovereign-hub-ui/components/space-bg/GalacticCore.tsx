@@ -34,8 +34,8 @@ export function GalacticCore() {
           opacity: 0.92;
           background:
             radial-gradient(ellipse 34% 16% at 50% 23%, rgba(219, 234, 254, 0.3), transparent 70%),
-            radial-gradient(ellipse 48% 22% at 50% 35%, rgba(56, 189, 248, 0.16), rgba(217, 70, 239, 0.14) 50%, transparent 76%),
-            radial-gradient(ellipse 42% 18% at 50% 63%, rgba(59, 130, 246, 0.14), transparent 76%);
+            radial-gradient(ellipse 48% 22% at 50% 35%, rgba(228, 187, 94, 0.16), rgba(217, 174, 69, 0.14) 50%, transparent 76%),
+            radial-gradient(ellipse 42% 18% at 50% 63%, rgba(211, 162, 62, 0.14), transparent 76%);
           transform: translate3d(0, 0, 0);
           animation: malikSpaceHeroPulse 6.2s ease-in-out infinite alternate;
         }
@@ -47,7 +47,7 @@ export function GalacticCore() {
           width: min(72vw, 1040px);
           height: min(72vw, 1040px);
           border-radius: 999px;
-          border: 1px solid rgba(125, 211, 252, 0.1);
+          border: 1px solid rgba(240, 210, 136, 0.1);
           transform: translate3d(-50%, -50%, 0);
           opacity: 0.24;
           pointer-events: none;
@@ -63,14 +63,14 @@ export function GalacticCore() {
         .malik-space-bg__orbit--two {
           width: min(54vw, 800px);
           height: min(54vw, 800px);
-          border-color: rgba(216, 180, 254, 0.12);
+          border-color: rgba(243, 222, 150, 0.12);
           animation: malikSpaceOrbitTwo 24s linear infinite reverse;
         }
 
         .malik-space-bg__orbit--three {
           width: min(86vw, 1180px);
           height: min(38vw, 520px);
-          border-color: rgba(96, 165, 250, 0.1);
+          border-color: rgba(228, 187, 94, 0.1);
           animation: malikSpaceOrbitThree 34s linear infinite;
         }
 
@@ -86,11 +86,11 @@ export function GalacticCore() {
           background: conic-gradient(
             from 180deg,
             transparent 0 18deg,
-            rgba(56, 189, 248, 0.2) 46deg,
+            rgba(228, 187, 94, 0.2) 46deg,
             transparent 88deg,
-            rgba(217, 70, 239, 0.18) 136deg,
+            rgba(217, 174, 69, 0.18) 136deg,
             transparent 190deg,
-            rgba(96, 165, 250, 0.16) 250deg,
+            rgba(228, 187, 94, 0.16) 250deg,
             transparent 320deg
           );
           transform: translate3d(-50%, -48%, 0);
@@ -108,8 +108,8 @@ export function GalacticCore() {
           pointer-events: none;
           background:
             radial-gradient(circle at 50% 50%, rgba(219, 234, 254, 0.2), transparent 13%),
-            radial-gradient(circle at 50% 50%, rgba(34, 211, 238, 0.12), transparent 36%),
-            radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.1), transparent 62%);
+            radial-gradient(circle at 50% 50%, rgba(228, 187, 94, 0.12), transparent 36%),
+            radial-gradient(circle at 50% 50%, rgba(217, 174, 69, 0.1), transparent 62%);
           transform: translate3d(-50%, -50%, 0);
           opacity: 0.66;
           animation: malikSpaceCore 6.4s ease-in-out infinite alternate;

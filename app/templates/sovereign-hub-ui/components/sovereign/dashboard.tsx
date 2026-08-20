@@ -484,7 +484,7 @@ function V0GenerationTerminal({ title = "Рнициализация среды
     { delay: 4000, text: "⠙ Injecting Glassmorphism tokens..." },
     { delay: 4200, text: "✓ backdrop-blur-xl applied to 47 components" },
     { delay: 4400, text: "⠙ Applying neon glow effects..." },
-    { delay: 4600, text: "✓ shadow-[0_0_30px_rgba(139,92,246,0.3)] configured" },
+    { delay: 4600, text: "✓ shadow-[0_0_30px_rgba(217, 174, 69,0.3)] configured" },
     { delay: 4800, text: "⠙ Processing gradient text layers..." },
     { delay: 5000, text: "✓ bg-clip-text gradients synthesized" },
     { delay: 5200, text: "⠙ Optimizing dark mode palette..." },
@@ -598,7 +598,7 @@ function V0GenerationTerminal({ title = "Рнициализация среды
 
       <div className="w-full max-w-3xl z-10">
         <div className="text-center mb-10">
-          <div className="w-16 h-16 rounded-2xl bg-[#0a0a0a] border border-[#1F2937] flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(139,92,246,0.2)] relative overflow-hidden">
+          <div className="w-16 h-16 rounded-2xl bg-[#0a0a0a] border border-[#1F2937] flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(217, 174, 69,0.2)] relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-violet-600/20 to-fuchsia-600/20 animate-pulse" />
             <Terminal className="w-8 h-8 text-violet-400 relative z-10" />
           </div>
@@ -5898,10 +5898,10 @@ const shouldShowMobilePreviewButton =
             isolation: isolate;
             overflow: hidden !important;
             background:
-              radial-gradient(ellipse 72% 30% at 50% 88%, rgba(139, 92, 246, 0.34), transparent 60%),
-              radial-gradient(ellipse 90% 50% at 50% 110%, rgba(59, 130, 246, 0.18), transparent 65%),
-              radial-gradient(circle at 18% 12%, rgba(56, 189, 248, 0.10), transparent 26%),
-              radial-gradient(circle at 82% 14%, rgba(168, 85, 247, 0.12), transparent 28%),
+              radial-gradient(ellipse 72% 30% at 50% 88%, rgba(217, 174, 69, 0.34), transparent 60%),
+              radial-gradient(ellipse 90% 50% at 50% 110%, rgba(211, 162, 62, 0.18), transparent 65%),
+              radial-gradient(circle at 18% 12%, rgba(228, 187, 94, 0.10), transparent 26%),
+              radial-gradient(circle at 82% 14%, rgba(217, 174, 69, 0.12), transparent 28%),
               linear-gradient(180deg, rgba(3, 7, 20, 0.98), rgba(4, 8, 24, 0.98) 55%, rgba(2, 5, 18, 1));
           }
           .malik-terminator-chat-host::before {
@@ -5931,13 +5931,13 @@ const shouldShowMobilePreviewButton =
             z-index: 0;
             pointer-events: none;
             border-radius: 50% 50% 0 0;
-            border-top: 1px solid rgba(167, 139, 250, 0.58);
+            border-top: 1px solid rgba(232, 197, 106, 0.58);
             background:
-              radial-gradient(ellipse at center, rgba(168,85,247,.30), rgba(99,102,241,.12) 45%, transparent 72%);
+              radial-gradient(ellipse at center, rgba(217, 174, 69,.30), rgba(211, 162, 62,.12) 45%, transparent 72%);
             box-shadow:
-              0 -1px 26px rgba(168,85,247,.55),
-              0 -14px 72px rgba(59,130,246,.18),
-              0 -24px 120px rgba(99,102,241,.16);
+              0 -1px 26px rgba(217, 174, 69,.55),
+              0 -14px 72px rgba(211, 162, 62,.18),
+              0 -24px 120px rgba(211, 162, 62,.16);
             opacity: .98;
           }
           .malik-terminator-chat-host > * {
@@ -5948,15 +5948,15 @@ const shouldShowMobilePreviewButton =
           /* generic chat card boost */
           .malik-terminator-chat-host [class*="rounded"][class*="border"],
           .malik-terminator-chat-host [class*="backdrop-blur"] {
-            box-shadow: 0 10px 40px rgba(76, 29, 149, 0.16);
+            box-shadow: 0 10px 40px rgba(87, 64, 15, 0.16);
           }
 
           .malik-terminator-chat-host textarea {
             background: rgba(5, 11, 30, 0.60) !important;
-            border-color: rgba(99,102,241,0.28) !important;
+            border-color: rgba(211, 162, 62,0.28) !important;
             box-shadow:
               inset 0 0 0 1px rgba(255,255,255,0.03),
-              0 0 0 1px rgba(109,40,217,0.10),
+              0 0 0 1px rgba(168, 124, 34,0.10),
               0 14px 44px rgba(15,23,42,0.45) !important;
           }
 
@@ -5981,10 +5981,10 @@ const shouldShowMobilePreviewButton =
             isolation: isolate;
             overflow: hidden !important;
             background:
-              radial-gradient(ellipse 80% 44% at 50% 92%, rgba(139, 92, 246, 0.34), transparent 55%),
-              radial-gradient(ellipse 62% 30% at 52% 82%, rgba(59, 130, 246, 0.18), transparent 58%),
-              radial-gradient(circle at 18% 15%, rgba(60, 110, 255, 0.12), transparent 30%),
-              radial-gradient(circle at 84% 20%, rgba(168, 85, 247, 0.13), transparent 34%),
+              radial-gradient(ellipse 80% 44% at 50% 92%, rgba(217, 174, 69, 0.34), transparent 55%),
+              radial-gradient(ellipse 62% 30% at 52% 82%, rgba(211, 162, 62, 0.18), transparent 58%),
+              radial-gradient(circle at 18% 15%, rgba(211, 162, 62, 0.12), transparent 30%),
+              radial-gradient(circle at 84% 20%, rgba(217, 174, 69, 0.13), transparent 34%),
               linear-gradient(180deg, rgba(2, 7, 22, 0.98), rgba(3, 5, 16, 0.96) 54%, rgba(4, 8, 24, 0.98));
           }
 
@@ -6018,11 +6018,11 @@ const shouldShowMobilePreviewButton =
             transform: translateX(-50%);
             border-radius: 50% 50% 0 0;
             background:
-              radial-gradient(ellipse at center, rgba(168, 85, 247, 0.34), rgba(126, 58, 242, 0.16) 34%, transparent 72%);
+              radial-gradient(ellipse at center, rgba(217, 174, 69, 0.34), rgba(126, 58, 242, 0.16) 34%, transparent 72%);
             border-top: 1px solid rgba(190, 145, 255, 0.58);
             box-shadow:
-              0 -1px 34px rgba(168, 85, 247, 0.52),
-              0 -14px 100px rgba(96, 165, 250, 0.16),
+              0 -1px 34px rgba(217, 174, 69, 0.52),
+              0 -14px 100px rgba(228, 187, 94, 0.16),
               0 -26px 140px rgba(126, 58, 242, 0.12);
             opacity: 0.98;
           }
@@ -7447,7 +7447,7 @@ function generateMockCode(prompt: string): string {
     @keyframes pulseGlow { 0%,100% { opacity:.45 } 50% { opacity:1 } }
     .float { animation: float 5s ease-in-out infinite; }
     .shine {
-      background: linear-gradient(90deg,#a78bfa,#22d3ee,#f0abfc,#a78bfa);
+      background: linear-gradient(90deg,#e8c56a,#e4bb5e,#f3de96,#e8c56a);
       background-size: 200%;
       animation: shine 5s linear infinite;
       -webkit-background-clip: text;
@@ -7458,7 +7458,7 @@ function generateMockCode(prompt: string): string {
 </head>
 <body class="bg-[#030303] text-white antialiased">
   <main class="relative min-h-screen overflow-hidden">
-    <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,.35),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,.18),transparent_30%)]"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(217, 174, 69,.35),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(228, 187, 94,.18),transparent_30%)]"></div>
 
     <nav class="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
       <div class="flex items-center gap-3">

@@ -69,7 +69,7 @@ export function MediaGenerationPlaceholder({
           isVideo ? "aspect-video w-full max-w-3xl" : "aspect-square w-full max-w-[480px]"
         }`}
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,.20),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,.14),transparent_36%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217, 174, 69,.20),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(228, 187, 94,.14),transparent_36%)]" />
         <div className="absolute inset-0 opacity-[0.12] [background-image:radial-gradient(circle,rgba(255,255,255,.8)_1px,transparent_1px)] [background-size:22px_22px]" />
         <div className="absolute inset-y-0 left-[-40%] w-1/2 skew-x-[-12deg] bg-gradient-to-r from-transparent via-white/10 to-transparent blur-sm animate-shimmer" />
         <div className="absolute inset-x-8 top-1/3 h-24 rounded-full bg-cyan-300/10 blur-3xl" />
@@ -109,8 +109,8 @@ export function MediaGenerationPlaceholder({
 function ImageParticles() {
   return (
     <div className="relative h-full p-8">
-      <div className="absolute left-1/4 top-1/4 h-3 w-3 rounded-full bg-cyan-200/70 shadow-[0_0_24px_rgba(103,232,249,.7)] animate-pulse" />
-      <div className="absolute right-1/4 top-1/3 h-2 w-2 rounded-full bg-violet-200/70 shadow-[0_0_24px_rgba(196,181,253,.7)] animate-bounce" />
+      <div className="absolute left-1/4 top-1/4 h-3 w-3 rounded-full bg-cyan-200/70 shadow-[0_0_24px_rgba(240, 210, 136,.7)] animate-pulse" />
+      <div className="absolute right-1/4 top-1/3 h-2 w-2 rounded-full bg-violet-200/70 shadow-[0_0_24px_rgba(243, 222, 150,.7)] animate-bounce" />
       <div className="absolute bottom-1/4 left-1/3 h-2.5 w-2.5 rounded-full bg-fuchsia-200/60 animate-pulse" />
       <div className="grid h-full place-items-center">
         <ImageIcon className="h-16 w-16 text-white/30" />

@@ -127,7 +127,7 @@ export default function SovereignDashboard() {
         <XAxis dataKey="day" />
         <YAxis />
         <Tooltip />
-        <Line dataKey="value" stroke="#8b5cf6" />
+        <Line dataKey="value" stroke="#d9ae45" />
       </LineChart>
     </main>
   )
@@ -190,8 +190,8 @@ function TitanStudioCss() {
         min-height: 100%;
         overflow: hidden;
         background:
-          radial-gradient(circle at 16% 8%, rgba(34,211,238,.16), transparent 30%),
-          radial-gradient(circle at 88% 18%, rgba(168,85,247,.16), transparent 34%),
+          radial-gradient(circle at 16% 8%, rgba(228, 187, 94,.16), transparent 30%),
+          radial-gradient(circle at 88% 18%, rgba(217, 174, 69,.16), transparent 34%),
           linear-gradient(135deg, #02040a 0%, #060816 48%, #03030a 100%) !important;
       }
       .studio-shell::before {
@@ -201,8 +201,8 @@ function TitanStudioCss() {
         z-index: -2;
         opacity: .74;
         background:
-          linear-gradient(90deg, rgba(34,211,238,.07) 1px, transparent 1px),
-          linear-gradient(0deg, rgba(168,85,247,.055) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(228, 187, 94,.07) 1px, transparent 1px),
+          linear-gradient(0deg, rgba(217, 174, 69,.055) 1px, transparent 1px),
           radial-gradient(circle at 50% 0%, rgba(255,255,255,.08), transparent 24%);
         background-size: 62px 62px, 62px 62px, 100% 100%;
         mask-image: radial-gradient(ellipse 82% 74% at 50% 24%, #000 0 52%, transparent 100%);
@@ -215,18 +215,18 @@ function TitanStudioCss() {
         z-index: -1;
         pointer-events: none;
         background:
-          linear-gradient(110deg, transparent 0 26%, rgba(125,211,252,.09) 38%, transparent 48% 100%),
-          linear-gradient(250deg, transparent 0 32%, rgba(217,70,239,.08) 48%, transparent 58% 100%);
+          linear-gradient(110deg, transparent 0 26%, rgba(240, 210, 136,.09) 38%, transparent 48% 100%),
+          linear-gradient(250deg, transparent 0 32%, rgba(217, 174, 69,.08) 48%, transparent 58% 100%);
         mix-blend-mode: screen;
         opacity: .7;
         animation: titanStudioSweep 8s ease-in-out infinite alternate;
       }
       .studio-bg-grid { opacity: .55 !important; }
       .studio-motion-orbit span {
-        filter: drop-shadow(0 0 18px rgba(125,211,252,.42));
+        filter: drop-shadow(0 0 18px rgba(240, 210, 136,.42));
       }
       .studio-topbar {
-        border-bottom: 1px solid rgba(125,211,252,.13) !important;
+        border-bottom: 1px solid rgba(240, 210, 136,.13) !important;
         background: rgba(1,4,12,.72) !important;
         backdrop-filter: blur(24px) saturate(1.2);
         box-shadow: 0 16px 80px rgba(0,0,0,.35), inset 0 -1px 0 rgba(255,255,255,.035);
@@ -234,7 +234,7 @@ function TitanStudioCss() {
       .studio-topbar button {
         border: 1px solid rgba(255,255,255,.08);
         background:
-          radial-gradient(circle at 0% 0%, rgba(34,211,238,.10), transparent 36%),
+          radial-gradient(circle at 0% 0%, rgba(228, 187, 94,.10), transparent 36%),
           rgba(255,255,255,.035);
         box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
       }
@@ -245,27 +245,27 @@ function TitanStudioCss() {
       .studio-page-head {
         position: relative;
         overflow: hidden;
-        border: 1px solid rgba(125,211,252,.13);
+        border: 1px solid rgba(240, 210, 136,.13);
         border-radius: 34px;
         padding: 26px !important;
         background:
-          radial-gradient(circle at 15% 0%, rgba(34,211,238,.17), transparent 28%),
-          radial-gradient(circle at 88% 12%, rgba(168,85,247,.15), transparent 34%),
+          radial-gradient(circle at 15% 0%, rgba(228, 187, 94,.17), transparent 28%),
+          radial-gradient(circle at 88% 12%, rgba(217, 174, 69,.15), transparent 34%),
           rgba(2,8,23,.62) !important;
         box-shadow: 0 28px 110px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.055);
         backdrop-filter: blur(26px);
       }
       .studio-page-head h1 {
         letter-spacing: -.065em;
-        text-shadow: 0 0 42px rgba(125,211,252,.13);
+        text-shadow: 0 0 42px rgba(240, 210, 136,.13);
       }
       .studio-api-rail,
       .studio-card,
       .studio-metric-card {
-        border-color: rgba(125,211,252,.14) !important;
+        border-color: rgba(240, 210, 136,.14) !important;
         background:
-          radial-gradient(circle at 8% 0%, rgba(34,211,238,.09), transparent 30%),
-          radial-gradient(circle at 100% 100%, rgba(168,85,247,.08), transparent 34%),
+          radial-gradient(circle at 8% 0%, rgba(228, 187, 94,.09), transparent 30%),
+          radial-gradient(circle at 100% 100%, rgba(217, 174, 69,.08), transparent 34%),
           rgba(2,8,23,.68) !important;
         box-shadow: 0 22px 90px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.045) !important;
         backdrop-filter: blur(22px);
@@ -279,9 +279,9 @@ function TitanStudioCss() {
       .website-config button,
       .code-action-row button:first-child {
         color: #020617 !important;
-        background: linear-gradient(135deg, #ffffff, #bae6fd 42%, #ddd6fe) !important;
+        background: linear-gradient(135deg, #ffffff, #f8e5ac 42%, #faefc8) !important;
         border: 0 !important;
-        box-shadow: 0 18px 70px rgba(125,211,252,.20), inset 0 1px 0 rgba(255,255,255,.8) !important;
+        box-shadow: 0 18px 70px rgba(240, 210, 136,.20), inset 0 1px 0 rgba(255,255,255,.8) !important;
       }
       .titan-studio-deck {
         display: grid;
@@ -294,11 +294,11 @@ function TitanStudioCss() {
       .titan-studio-mission-card {
         position: relative;
         overflow: hidden;
-        border: 1px solid rgba(125,211,252,.15);
+        border: 1px solid rgba(240, 210, 136,.15);
         border-radius: 30px;
         background:
-          radial-gradient(circle at 18% 0%, rgba(34,211,238,.14), transparent 28%),
-          radial-gradient(circle at 88% 100%, rgba(168,85,247,.12), transparent 30%),
+          radial-gradient(circle at 18% 0%, rgba(228, 187, 94,.14), transparent 28%),
+          radial-gradient(circle at 88% 100%, rgba(217, 174, 69,.12), transparent 30%),
           rgba(2,8,23,.64);
         box-shadow: 0 26px 100px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.05);
         backdrop-filter: blur(24px);
@@ -316,11 +316,11 @@ function TitanStudioCss() {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        border: 1px solid rgba(125,211,252,.18);
+        border: 1px solid rgba(240, 210, 136,.18);
         border-radius: 999px;
         padding: 8px 12px;
-        color: rgba(186,230,253,.9);
-        background: rgba(14,165,233,.08);
+        color: rgba(248, 229, 172,.9);
+        background: rgba(211, 162, 62,.08);
         font-size: 10px;
         font-weight: 900;
         letter-spacing: .18em;
@@ -337,7 +337,7 @@ function TitanStudioCss() {
       }
       .titan-studio-title span {
         display: block;
-        background: linear-gradient(90deg, #67e8f9, #fff, #f0abfc);
+        background: linear-gradient(90deg, #f0d288, #fff, #f3de96);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
@@ -368,8 +368,8 @@ function TitanStudioCss() {
       .titan-studio-command-row button:hover,
       .titan-studio-boosters button:hover {
         transform: translateY(-2px);
-        border-color: rgba(125,211,252,.35);
-        background: rgba(125,211,252,.09);
+        border-color: rgba(240, 210, 136,.35);
+        background: rgba(240, 210, 136,.09);
       }
       .titan-studio-side-card { padding: 18px; }
       .titan-studio-side-card h3,
@@ -437,7 +437,7 @@ function TitanStudioCss() {
         height: 34px;
         border-radius: 12px;
         color: #020617;
-        background: linear-gradient(135deg, #67e8f9, #fff, #ddd6fe);
+        background: linear-gradient(135deg, #f0d288, #fff, #faefc8);
         font-size: 12px;
         font-weight: 1000;
       }
@@ -837,7 +837,7 @@ ${value}`)} />
               <div className="settings-tabs">{["Дизайн", "Страницы", "Интеграции", "SEO"].map((item) => <button key={item} type="button" className={selectedSettingsTab === item ? "is-active" : ""} onClick={() => { setSelectedSettingsTab(item); setStatus(`${item} settings opened`) }}>{item}</button>)}</div>
               <label><span>Логотип</span><input value="DataViz AI" readOnly /></label>
               <label><span>Слоган</span><input value="AI-платформа для умной аналитики" readOnly /></label>
-              <div className="palette-row">{["#7c3aed", "#2563eb", "#06b6d4", "#10b981", "#ec4899", "#312e81"].map((color) => <button key={color} type="button" style={{ background: color }} onClick={() => setStatus(`Palette selected: ${color}`)} />)}</div>
+              <div className="palette-row">{["#c9982f", "#b1842c", "#d3a23e", "#10b981", "#ec4899", "#5b4315"].map((color) => <button key={color} type="button" style={{ background: color }} onClick={() => setStatus(`Palette selected: ${color}`)} />)}</div>
               {["Hero", "Features", "Benefits", "Pricing", "Testimonials", "FAQ"].map((item) => <button key={item} type="button" className={`section-toggle ${enabledSections.includes(item) ? "is-on" : ""}`} onClick={() => setEnabledSections((prev) => prev.includes(item) ? prev.filter((value) => value !== item) : [...prev, item])}>{item}<span /></button>)}
               <button type="button" className="studio-primary-action" onClick={() => onSendToCanvas?.(safeCode)}>Открыть preview</button>
             </aside>

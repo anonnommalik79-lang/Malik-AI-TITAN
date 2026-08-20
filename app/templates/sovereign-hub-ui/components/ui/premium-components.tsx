@@ -217,7 +217,7 @@ function VideoScene({ meta, compact }: { meta: ReturnType<typeof getMeta>; compa
           <span className="rounded-full border border-white/12 bg-white/10 px-3 py-1 text-[10px] font-black text-white/70">16:9</span>
         </div>
         <div className="mt-5 flex items-center gap-4">
-          <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-white/30 bg-white/20 shadow-[0_0_64px_rgba(139,92,246,.38)]">
+          <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-white/30 bg-white/20 shadow-[0_0_64px_rgba(217, 174, 69,.38)]">
             <Play className="ml-1 h-7 w-7 fill-white text-white" />
           </div>
           <div className="min-w-0 flex-1">
@@ -330,7 +330,7 @@ function ProfileScene({ meta, compact }: { meta: ReturnType<typeof getMeta>; com
       <div className="absolute inset-0 bg-gradient-to-br from-black/68 via-black/78 to-violet-950/24" />
       <div className="relative flex h-full min-h-[inherit] items-center justify-center p-5">
         <div className="w-full max-w-sm rounded-[1.7rem] border border-white/10 bg-black/60 p-5 text-center backdrop-blur-xl">
-          <div className="mx-auto grid h-20 w-20 place-items-center rounded-[1.7rem] bg-gradient-to-br from-cyan-300 to-violet-400 text-black shadow-[0_0_60px_rgba(139,92,246,.25)]">
+          <div className="mx-auto grid h-20 w-20 place-items-center rounded-[1.7rem] bg-gradient-to-br from-cyan-300 to-violet-400 text-black shadow-[0_0_60px_rgba(217, 174, 69,.25)]">
             {meta.label === "Billing" ? <CreditCard className="h-8 w-8" /> : meta.label === "Workspace" ? <User className="h-8 w-8" /> : <Sparkles className="h-8 w-8" />}
           </div>
           <p className="mt-5 text-xl font-black text-white">{meta.label}</p>

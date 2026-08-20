@@ -90,7 +90,7 @@ export function CinematicOverlays() {
           border-radius: 999px;
           background: rgba(224, 242, 255, 0.9);
           opacity: var(--op);
-          box-shadow: 0 0 6px rgba(186, 230, 253, 0.5);
+          box-shadow: 0 0 6px rgba(248, 229, 172, 0.5);
           will-change: transform, opacity;
           animation: malikSpaceDustDrift var(--dur) ease-in-out infinite alternate;
           animation-delay: var(--delay);

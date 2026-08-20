@@ -69,9 +69,9 @@ export function MalikCodexTerminal({ logs, running, onClear, onStop }: MalikCode
             ]).join("\n")}
           </code>
         </pre>
-        <div className="relative hidden overflow-hidden rounded-2xl border border-cyan-300/10 bg-[radial-gradient(circle_at_60%_50%,rgba(34,211,238,.22),transparent_30%),radial-gradient(circle_at_44%_58%,rgba(139,92,246,.24),transparent_24%),linear-gradient(135deg,#041021,#03050c)] md:block">
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(34,211,238,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,.08)_1px,transparent_1px)] bg-[size:22px_22px] opacity-35" />
-          <div className="absolute bottom-[-72px] right-[-28px] h-56 w-56 rounded-full border border-cyan-300/35 bg-[repeating-radial-gradient(circle_at_center,transparent_0_12px,rgba(34,211,238,.22)_13px_14px),repeating-linear-gradient(0deg,transparent_0_18px,rgba(139,92,246,.22)_19px_20px)] shadow-[0_0_90px_rgba(34,211,238,.35)]" />
+        <div className="relative hidden overflow-hidden rounded-2xl border border-cyan-300/10 bg-[radial-gradient(circle_at_60%_50%,rgba(228, 187, 94,.22),transparent_30%),radial-gradient(circle_at_44%_58%,rgba(217, 174, 69,.24),transparent_24%),linear-gradient(135deg,#041021,#03050c)] md:block">
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(228, 187, 94,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(228, 187, 94,.08)_1px,transparent_1px)] bg-[size:22px_22px] opacity-35" />
+          <div className="absolute bottom-[-72px] right-[-28px] h-56 w-56 rounded-full border border-cyan-300/35 bg-[repeating-radial-gradient(circle_at_center,transparent_0_12px,rgba(228, 187, 94,.22)_13px_14px),repeating-linear-gradient(0deg,transparent_0_18px,rgba(217, 174, 69,.22)_19px_20px)] shadow-[0_0_90px_rgba(228, 187, 94,.35)]" />
         </div>
       </div>
     </div>

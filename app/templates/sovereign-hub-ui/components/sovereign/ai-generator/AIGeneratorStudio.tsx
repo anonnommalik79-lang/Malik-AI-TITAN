@@ -217,11 +217,11 @@ export function AIGeneratorStudio({
       <style jsx>{`
         .ags { position: relative; width: 100%; height: 100%; overflow-y: auto; padding: clamp(96px, 8vw, 116px) clamp(16px, 3vw, 44px) 88px; color: #e7eae8; scrollbar-width: thin; }
         @media (max-width: 920px) { .ags { padding-top: 24px; } }
-        .ags__bg { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(50% 40% at 8% 0%, rgba(139, 92, 246, 0.06), transparent 60%); }
+        .ags__bg { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(50% 40% at 8% 0%, rgba(217, 174, 69, 0.06), transparent 60%); }
         .ags__inner { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; }
         .ags__status { display: flex; justify-content: space-between; padding: 11px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.02); margin-bottom: 28px; font-size: 11px; color: #8a958f; text-transform: uppercase; letter-spacing: .12em; }
         .ags__status-left { display: flex; align-items: center; gap: 10px; }
-        .ags__dot { width: 8px; height: 8px; border-radius: 999px; background: #c4b5fd; }
+        .ags__dot { width: 8px; height: 8px; border-radius: 999px; background: #f3de96; }
         .ags__status-left strong { color: #e9d5ff; margin-left: 4px; }
         .ags__status-right strong { color: #e9d5ff; margin-left: 6px; }
         .ags__head { margin-bottom: 36px; max-width: 68ch; }
@@ -243,7 +243,7 @@ export function AIGeneratorStudio({
         @media (max-width: 900px) { .ags__modes { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 560px) { .ags__modes { grid-template-columns: 1fr; } }
         .ags__mode { text-align: left; border-radius: 16px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.015); overflow: hidden; cursor: pointer; color: inherit; padding: 0; }
-        .ags__mode[data-active="1"] { border-color: rgba(196,181,253,.45); box-shadow: inset 0 0 0 1px rgba(196,181,253,.12); }
+        .ags__mode[data-active="1"] { border-color: rgba(243, 222, 150,.45); box-shadow: inset 0 0 0 1px rgba(243, 222, 150,.12); }
         .ags__mode-photo { height: 100px; background-size: cover; background-position: center; }
         .ags__mode-body { padding: 14px 16px; }
         .ags__mode-body strong { display: block; margin: 8px 0 4px; color: #f1f4f2; font-size: 15px; }

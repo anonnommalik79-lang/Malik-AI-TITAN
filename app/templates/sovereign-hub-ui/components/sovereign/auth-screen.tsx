@@ -536,7 +536,7 @@ function AmbientBackground() {
       <div className="pointer-events-none absolute left-1/2 top-[-160px] h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-violet-600/20 blur-[140px]" />
       <div className="pointer-events-none absolute bottom-[-160px] right-[-120px] h-[420px] w-[420px] rounded-full bg-fuchsia-600/10 blur-[120px]" />
       <div className="pointer-events-none absolute bottom-[-120px] left-[-160px] h-[360px] w-[360px] rounded-full bg-cyan-600/10 blur-[120px]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.14),transparent_35%),linear-gradient(to_bottom,rgba(255,255,255,0.035),transparent)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(217, 174, 69,0.14),transparent_35%),linear-gradient(to_bottom,rgba(255,255,255,0.035),transparent)]" />
       <div className="pointer-events-none absolute inset-0 opacity-[0.035] [background-image:linear-gradient(to_right,#fff_1px,transparent_1px),linear-gradient(to_bottom,#fff_1px,transparent_1px)] [background-size:46px_46px]" />
     </>
   )

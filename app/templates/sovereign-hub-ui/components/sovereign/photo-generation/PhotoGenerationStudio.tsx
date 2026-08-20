@@ -413,8 +413,8 @@ export function PhotoGenerationStudio({
           inset: 0;
           z-index: 0;
           pointer-events: none;
-          background: radial-gradient(55% 40% at 12% 0%, rgba(59, 130, 246, 0.06), transparent 60%),
-            radial-gradient(45% 35% at 95% 4%, rgba(139, 92, 246, 0.05), transparent 62%);
+          background: radial-gradient(55% 40% at 12% 0%, rgba(211, 162, 62, 0.06), transparent 60%),
+            radial-gradient(45% 35% at 95% 4%, rgba(217, 174, 69, 0.05), transparent 62%);
         }
         .pgs__inner { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; }
         .pgs__shelf-label {
@@ -439,11 +439,11 @@ export function PhotoGenerationStudio({
           margin-bottom: 30px;
         }
         .pgs__status-left { display: inline-flex; align-items: center; gap: 10px; }
-        .pgs__dot { width: 8px; height: 8px; border-radius: 999px; background: #93c5fd; }
+        .pgs__dot { width: 8px; height: 8px; border-radius: 999px; background: #f0d288; }
         .pgs__status-key { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8a958f; }
         .pgs__status-val { font-size: 12.5px; font-weight: 700; color: #dbeafe; }
         .pgs__status-right { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8a958f; }
-        .pgs__status-right strong { margin-left: 8px; font-weight: 700; color: #bfdbfe; }
+        .pgs__status-right strong { margin-left: 8px; font-weight: 700; color: #f8e5ac; }
         .pgs__head { max-width: 70ch; margin: 0 0 40px; }
         .pgs__eyebrow {
           display: inline-flex;
@@ -533,7 +533,7 @@ export function PhotoGenerationStudio({
         .pgs__hero-copy code {
           font-family: ui-monospace, Menlo, monospace;
           font-size: 12px;
-          color: #93c5fd;
+          color: #f0d288;
           background: rgba(255, 255, 255, 0.05);
           border-radius: 5px;
           padding: 1px 6px;
@@ -549,9 +549,9 @@ export function PhotoGenerationStudio({
           border-radius: 999px;
           font-size: 13px;
           font-weight: 700;
-          color: #bfdbfe;
-          border: 1px solid rgba(147, 197, 253, 0.28);
-          background: rgba(59, 130, 246, 0.08);
+          color: #f8e5ac;
+          border: 1px solid rgba(240, 210, 136, 0.28);
+          background: rgba(211, 162, 62, 0.08);
         }
         .pgs__steps li div { font-size: 14px; line-height: 1.6; color: #9aa6a0; }
         .pgs__steps strong { display: block; color: #e7ece9; font-weight: 600; margin-bottom: 2px; }
@@ -577,8 +577,8 @@ export function PhotoGenerationStudio({
           transition: border-color 0.16s, background 0.16s, color 0.16s;
         }
         .pgs__ratio-pills button[data-active="1"] {
-          border-color: rgba(147, 197, 253, 0.45);
-          background: rgba(59, 130, 246, 0.1);
+          border-color: rgba(240, 210, 136, 0.45);
+          background: rgba(211, 162, 62, 0.1);
           color: #dbeafe;
         }
         .pgs__textarea {
@@ -594,7 +594,7 @@ export function PhotoGenerationStudio({
           padding: 16px 18px;
           font-family: inherit;
         }
-        .pgs__textarea:focus { outline: none; border-color: rgba(147, 197, 253, 0.35); }
+        .pgs__textarea:focus { outline: none; border-color: rgba(240, 210, 136, 0.35); }
         .pgs__chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
         .pgs__chips button {
           border: 1px solid rgba(255, 255, 255, 0.1);
@@ -663,7 +663,7 @@ export function PhotoGenerationStudio({
           transition: border-color 0.18s, transform 0.18s;
         }
         .pgs__style-grid article:hover { border-color: rgba(255, 255, 255, 0.2); transform: translateY(-2px); }
-        .pgs__style-grid article[data-active="1"] { border-color: rgba(147, 197, 253, 0.45); }
+        .pgs__style-grid article[data-active="1"] { border-color: rgba(240, 210, 136, 0.45); }
         .pgs__style-photo {
           position: relative;
           height: 160px;

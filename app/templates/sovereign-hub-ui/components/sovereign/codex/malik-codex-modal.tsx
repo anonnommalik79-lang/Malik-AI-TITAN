@@ -67,10 +67,10 @@ export function MalikCodexModal({ open, onClose, onSendToCanvas }: MalikCodexMod
     <div className="fixed inset-0 z-[120] bg-black/88 p-0 text-white backdrop-blur-2xl lg:p-2">
       <PremiumCss />
       <div className="codex-clone-shell relative flex h-[100dvh] min-h-0 flex-col overflow-hidden rounded-none border border-white/10 bg-[#02040a] shadow-2xl shadow-violet-950/40 lg:h-full lg:rounded-[1.75rem]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(84,56,255,.18),transparent_34%),radial-gradient(circle_at_82%_22%,rgba(34,211,238,.08),transparent_24%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(84,56,255,.18),transparent_34%),radial-gradient(circle_at_82%_22%,rgba(228, 187, 94,.08),transparent_24%)]" />
         <div className="relative flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 via-blue-500 to-cyan-400 text-black shadow-[0_0_42px_rgba(34,211,238,.26)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 via-blue-500 to-cyan-400 text-black shadow-[0_0_42px_rgba(228, 187, 94,.26)]">
               <Code2 className="h-5 w-5" />
             </div>
             <div>
@@ -114,7 +114,7 @@ export function MalikCodexModal({ open, onClose, onSendToCanvas }: MalikCodexMod
             <div className="flex-1 overflow-y-auto p-4">
               <div className="mb-4 rounded-[1.2rem] border border-cyan-300/16 bg-black/42 p-4">
                 <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-4">
-                  <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-cyan-300/20 bg-[conic-gradient(from_220deg,rgba(34,211,238,.9),rgba(124,58,237,.95),rgba(15,23,42,.25),rgba(34,211,238,.9))] p-2">
+                  <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-cyan-300/20 bg-[conic-gradient(from_220deg,rgba(228, 187, 94,.9),rgba(201, 152, 47,.95),rgba(15,23,42,.25),rgba(228, 187, 94,.9))] p-2">
                     <div className="flex h-full w-full items-center justify-center rounded-full bg-[#050814] text-2xl font-black text-cyan-100">72%</div>
                   </div>
                   <div className="space-y-2 text-xs">

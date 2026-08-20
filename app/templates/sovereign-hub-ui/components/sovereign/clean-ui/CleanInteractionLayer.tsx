@@ -169,10 +169,10 @@ function shouldSkipHeavyCleanUi() {
 
 const CLEAN_STYLE = `
 html[data-malik-clean-ui="on"] body {
-  --mclean-cyan: #22d3ee;
-  --mclean-violet: #8b5cf6;
+  --mclean-cyan: #e4bb5e;
+  --mclean-violet: #d9ae45;
   --mclean-emerald: #34d399;
-  --mclean-border: rgba(125, 211, 252, 0.18);
+  --mclean-border: rgba(240, 210, 136, 0.18);
 }
 
 #malik-god-ui-root,
@@ -188,25 +188,25 @@ html[data-malik-clean-ui="on"] body {
 
 .mclean-title {
   color: transparent !important;
-  background: linear-gradient(90deg, #ffffff, #b9efff 38%, #d8b4fe 74%, #ffffff) !important;
+  background: linear-gradient(90deg, #ffffff, #b9efff 38%, #f3de96 74%, #ffffff) !important;
   -webkit-background-clip: text !important;
   background-clip: text !important;
   letter-spacing: -0.045em !important;
-  text-shadow: 0 0 34px rgba(125, 211, 252, .13) !important;
+  text-shadow: 0 0 34px rgba(240, 210, 136, .13) !important;
 }
 
 .mclean-card {
   position: relative !important;
   overflow: hidden !important;
-  border-color: rgba(125, 211, 252, 0.16) !important;
+  border-color: rgba(240, 210, 136, 0.16) !important;
   box-shadow: 0 14px 36px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.055) !important;
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, filter .18s ease !important;
 }
 
 .mclean-card:hover {
   transform: translateY(-1px) !important;
-  border-color: rgba(125, 211, 252, 0.30) !important;
-  box-shadow: 0 18px 42px rgba(0,0,0,.28), 0 0 20px rgba(34,211,238,.05) !important;
+  border-color: rgba(240, 210, 136, 0.30) !important;
+  box-shadow: 0 18px 42px rgba(0,0,0,.28), 0 0 20px rgba(228, 187, 94,.05) !important;
   filter: saturate(1.06) !important;
 }
 
@@ -216,8 +216,8 @@ html[data-malik-clean-ui="on"] body {
   inset: 0 !important;
   pointer-events: none !important;
   background:
-    radial-gradient(circle at 14% 0%, rgba(34,211,238,.075), transparent 32%),
-    radial-gradient(circle at 100% 0%, rgba(168,85,247,.065), transparent 34%) !important;
+    radial-gradient(circle at 14% 0%, rgba(228, 187, 94,.075), transparent 32%),
+    radial-gradient(circle at 100% 0%, rgba(217, 174, 69,.065), transparent 34%) !important;
   opacity: .9 !important;
 }
 
@@ -230,7 +230,7 @@ html[data-malik-clean-ui="on"] body {
 
 .mclean-action:hover {
   transform: translateY(-1px) !important;
-  border-color: rgba(125, 211, 252, .34) !important;
+  border-color: rgba(240, 210, 136, .34) !important;
   box-shadow: 0 10px 24px rgba(0,0,0,.20), inset 0 1px 0 rgba(255,255,255,.09) !important;
 }
 
@@ -243,10 +243,10 @@ html[data-malik-clean-ui="on"] body {
 
 .mclean-side-item:hover {
   transform: translateX(3px) !important;
-  border-color: rgba(125,211,252,.26) !important;
+  border-color: rgba(240, 210, 136,.26) !important;
   background:
     linear-gradient(135deg, rgba(15,23,42,.82), rgba(30,27,75,.48)),
-    radial-gradient(circle at 0% 50%, rgba(34,211,238,.11), transparent 38%) !important;
+    radial-gradient(circle at 0% 50%, rgba(228, 187, 94,.11), transparent 38%) !important;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 12px 26px rgba(0,0,0,.20) !important;
 }
 
@@ -274,7 +274,7 @@ html[data-malik-clean-ui="on"] body {
   height: 12px !important;
   border-radius: 999px !important;
   transform: translate(-50%, -50%) scale(1) !important;
-  background: rgba(125, 211, 252, .35) !important;
+  background: rgba(240, 210, 136, .35) !important;
   pointer-events: none !important;
   animation: mcleanRipple .62s ease-out forwards !important;
 }
@@ -288,7 +288,7 @@ html[data-malik-clean-ui="on"] body {
   max-width: min(340px, calc(100vw - 32px)) !important;
   padding: 12px 16px 12px 36px !important;
   border-radius: 18px !important;
-  border: 1px solid rgba(125,211,252,.22) !important;
+  border: 1px solid rgba(240, 210, 136,.22) !important;
   background: linear-gradient(135deg, rgba(8,15,35,.95), rgba(25,18,55,.92)) !important;
   color: #eaf7ff !important;
   font-size: 13px !important;
@@ -296,7 +296,7 @@ html[data-malik-clean-ui="on"] body {
   font-weight: 850 !important;
   letter-spacing: .01em !important;
   overflow-wrap: anywhere !important;
-  box-shadow: 0 18px 48px rgba(0,0,0,.34), 0 0 28px rgba(34,211,238,.10) !important;
+  box-shadow: 0 18px 48px rgba(0,0,0,.34), 0 0 28px rgba(228, 187, 94,.10) !important;
   backdrop-filter: blur(16px) !important;
   animation: mcleanToastIn .18s ease both !important;
 }

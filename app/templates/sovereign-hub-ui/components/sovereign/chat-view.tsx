@@ -325,7 +325,7 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
 
   return (
     <div className="relative w-full max-w-[720px] overflow-hidden rounded-[2rem] border border-white/10 bg-[#050816]/88 p-3 shadow-[0_30px_120px_rgba(0,0,0,.52)] backdrop-blur-2xl">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_10%,rgba(34,211,238,.20),transparent_34%),radial-gradient(circle_at_82%_82%,rgba(168,85,247,.22),transparent_40%),linear-gradient(135deg,rgba(255,255,255,.07),transparent_45%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_10%,rgba(228, 187, 94,.20),transparent_34%),radial-gradient(circle_at_82%_82%,rgba(217, 174, 69,.22),transparent_40%),linear-gradient(135deg,rgba(255,255,255,.07),transparent_45%)]" />
       <div className="pointer-events-none absolute inset-0 opacity-[0.09] [background-image:linear-gradient(to_right,rgba(255,255,255,.22)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,.22)_1px,transparent_1px)] [background-size:36px_36px]" />
 
       <div className="relative overflow-hidden rounded-[1.55rem] border border-white/10 bg-black/55">
@@ -351,7 +351,7 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
               <div className="absolute h-80 w-80 rounded-full bg-violet-500/16 blur-[90px]" />
               <div className="absolute inset-8 rounded-[2rem] border border-white/10 bg-white/[0.035]" />
               <div className="relative z-10 flex max-w-[320px] flex-col items-center px-6 text-center">
-                <div className="grid h-16 w-16 place-items-center rounded-2xl border border-white/15 bg-white/[0.06] shadow-[0_0_45px_rgba(139,92,246,.22)] backdrop-blur-xl">
+                <div className="grid h-16 w-16 place-items-center rounded-2xl border border-white/15 bg-white/[0.06] shadow-[0_0_45px_rgba(217, 174, 69,.22)] backdrop-blur-xl">
                   {isFailed ? (
                     <X className="h-7 w-7 text-red-100" />
                   ) : isProcessing ? (
@@ -860,15 +860,15 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
           }
         }
       `}</style>
-      <div className="malik-chat-space pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_22%_18%,rgba(34,211,238,.06),transparent_26%),radial-gradient(circle_at_72%_10%,rgba(124,58,237,.08),transparent_28%),linear-gradient(180deg,#02050d,#030303)]" />
-      <div className="malik-chat-grid pointer-events-none absolute inset-0 opacity-[0.035] [background-image:linear-gradient(to_right,rgba(147,197,253,.32)_1px,transparent_1px),linear-gradient(to_bottom,rgba(147,197,253,.32)_1px,transparent_1px)] [background-size:44px_44px]" />
+      <div className="malik-chat-space pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_22%_18%,rgba(228, 187, 94,.06),transparent_26%),radial-gradient(circle_at_72%_10%,rgba(201, 152, 47,.08),transparent_28%),linear-gradient(180deg,#02050d,#030303)]" />
+      <div className="malik-chat-grid pointer-events-none absolute inset-0 opacity-[0.035] [background-image:linear-gradient(to_right,rgba(240, 210, 136,.32)_1px,transparent_1px),linear-gradient(to_bottom,rgba(240, 210, 136,.32)_1px,transparent_1px)] [background-size:44px_44px]" />
       <span className="malik-chat-horizon pointer-events-none absolute inset-x-0 bottom-[134px] h-48" />
 
       <div data-message-list className="malik-chat-scroll relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-44 pt-6 md:px-8 md:pb-48 lg:px-10">
         <div className="malik-message-list mx-auto flex w-full max-w-[1180px] flex-col gap-7 sm:gap-8">
           {messages.length === 0 ? (
             <div className="relative mt-10 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,.38)] backdrop-blur-xl sm:mt-16 sm:p-10">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_18%,rgba(34,211,238,.15),transparent_35%),radial-gradient(circle_at_78%_75%,rgba(139,92,246,.16),transparent_36%)]" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_18%,rgba(228, 187, 94,.15),transparent_35%),radial-gradient(circle_at_78%_75%,rgba(217, 174, 69,.16),transparent_36%)]" />
               <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-[0_0_60px_rgba(255,255,255,.16)]">
                 <svg viewBox="0 0 44 44" className="h-full w-full" aria-hidden="true"><rect width="44" height="44" rx="12" fill="white" /><path d="M9 29 L22 15 L22 29 Z" fill="#03040a" /><path d="M24 15 H38 L24 29 Z" fill="#03040a" /></svg>
               </div>
@@ -900,7 +900,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
       </div>
 
       <div data-composer className="malik-composer-dock relative z-20 w-full shrink-0 border-t border-white/8 bg-[#02050d]/72 px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 backdrop-blur-2xl md:px-8 md:pb-6 lg:px-10">
-        <div className="malik-composer-panel chat-composer mx-auto w-full max-w-[1180px] rounded-[1.55rem] border border-blue-300/16 bg-[#060914]/96 p-3 shadow-[0_-18px_80px_rgba(37,99,235,.12)] backdrop-blur-xl sm:p-4">
+        <div className="malik-composer-panel chat-composer mx-auto w-full max-w-[1180px] rounded-[1.55rem] border border-blue-300/16 bg-[#060914]/96 p-3 shadow-[0_-18px_80px_rgba(177, 132, 44,.12)] backdrop-blur-xl sm:p-4">
           {localError && <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">{localError}</div>}
           {attachments.length > 0 && <div className="mb-3 flex flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => setAttachments((previous) => previous.filter((item) => item.id !== attachment.id))} />)}</div>}
           <div className="malik-composer-top relative mb-2 flex items-center justify-between gap-3">

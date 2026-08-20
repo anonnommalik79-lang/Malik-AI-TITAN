@@ -54,7 +54,7 @@ export function GenerationAnimation({
 
   return (
     <div className="relative flex h-full min-h-[520px] w-full overflow-hidden bg-[#030303] text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,.24),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,.16),transparent_38%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217, 174, 69,.24),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(228, 187, 94,.16),transparent_38%)]" />
       <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(to_right,#fff_1px,transparent_1px),linear-gradient(to_bottom,#fff_1px,transparent_1px)] [background-size:32px_32px]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-300" />
 

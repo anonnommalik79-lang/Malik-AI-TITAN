@@ -51,12 +51,12 @@ const BUSINESS_ONLY_SECTIONS = BUSINESS_SECTIONS.filter((s) => !MEDIA_SECTION_ID
 const BUSINESS_ONLY_MODE_COUNT = BUSINESS_MODES.filter((m) => !MEDIA_SECTION_IDS.has(m.sectionId)).length
 
 const ACCENT: Record<string, string> = {
-  cyan: "#22d3ee",
+  cyan: "#e4bb5e",
   emerald: "#34d399",
-  violet: "#a78bfa",
+  violet: "#e8c56a",
   amber: "#fbbf24",
   rose: "#fb7185",
-  blue: "#60a5fa",
+  blue: "#e4bb5e",
 }
 
 const OUTPUT_LABELS: Record<string, string> = {
@@ -177,7 +177,7 @@ export function BusinessCommandCenter({ username, onViewChange, onNewChat }: Bus
     setStatus("Business Engine готов · 30 режимов")
   }
 
-  const accentColor = ACCENT[activeSectionMeta?.accent || "cyan"] || "#22d3ee"
+  const accentColor = ACCENT[activeSectionMeta?.accent || "cyan"] || "#e4bb5e"
 
   return (
     <main className="bcc" data-view="business-command-center">
@@ -375,7 +375,7 @@ export function BusinessCommandCenter({ username, onViewChange, onNewChat }: Bus
           inset: 0;
           z-index: 0;
           pointer-events: none;
-          background: radial-gradient(55% 40% at 12% 0%, rgba(34, 211, 238, 0.05), transparent 60%),
+          background: radial-gradient(55% 40% at 12% 0%, rgba(228, 187, 94, 0.05), transparent 60%),
             radial-gradient(45% 35% at 95% 4%, rgba(52, 211, 153, 0.04), transparent 62%);
         }
         .bcc__inner { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; }
@@ -554,7 +554,7 @@ export function BusinessCommandCenter({ username, onViewChange, onNewChat }: Bus
           padding: 16px 18px;
           outline: none;
         }
-        .bcc__textarea:focus { border-color: rgba(34, 211, 238, 0.35); }
+        .bcc__textarea:focus { border-color: rgba(228, 187, 94, 0.35); }
         .bcc__context-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -577,7 +577,7 @@ export function BusinessCommandCenter({ username, onViewChange, onNewChat }: Bus
           outline: none;
         }
         .bcc__field input:focus,
-        .bcc__field select:focus { border-color: rgba(34, 211, 238, 0.3); }
+        .bcc__field select:focus { border-color: rgba(228, 187, 94, 0.3); }
         .bcc__error { margin: 0 0 8px; font-size: 13px; color: #fca5a5; }
         .bcc__status-line { margin: 0 0 12px; font-size: 12px; color: #8ba3b8; }
         .bcc__result {

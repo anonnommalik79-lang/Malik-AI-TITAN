@@ -669,7 +669,7 @@ html, body { margin: 0; background: #000; }
 }
 
 .sva-h1-accent {
-  background: linear-gradient(90deg, #7dd3fc 0%, #c4b5fd 45%, #f0abfc 100%);
+  background: linear-gradient(90deg, #f0d288 0%, #f3de96 45%, #f3de96 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -738,7 +738,7 @@ html, body { margin: 0; background: #000; }
 .sva-input-valid {
   position: absolute;
   right: 12px;
-  color: #c084fc;
+  color: #e8c56a;
   pointer-events: none;
 }
 
@@ -796,7 +796,7 @@ html, body { margin: 0; background: #000; }
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(90deg, #00D2FF 0%, #8B5CF6 52%, #FF00FF 100%);
+  background: linear-gradient(90deg, #00D2FF 0%, #d9ae45 52%, #FF00FF 100%);
   box-shadow: 0 0 24px rgba(0, 210, 255, .22), 0 0 36px rgba(255, 0, 255, .14), 0 10px 34px rgba(0,0,0,.30);
 }
 

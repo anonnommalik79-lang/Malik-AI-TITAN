@@ -344,7 +344,7 @@ export function CommandCenterStudio({
           z-index: 0;
           pointer-events: none;
           background: radial-gradient(55% 40% at 12% 0%, rgba(245, 158, 11, 0.05), transparent 60%),
-            radial-gradient(45% 35% at 95% 4%, rgba(59, 130, 246, 0.04), transparent 62%);
+            radial-gradient(45% 35% at 95% 4%, rgba(211, 162, 62, 0.04), transparent 62%);
         }
         .ccs__inner { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; }
         .ccs__shelf-label {

@@ -68,7 +68,7 @@ function GlassCard({ children, className }: { children: ReactNode; className?: s
     <section
       className={cx(
         "fi-glass-card relative overflow-hidden rounded-[1.35rem] border border-slate-700/60 bg-[#050b18]/82 shadow-[0_18px_70px_rgba(0,0,0,.38),inset_0_1px_0_rgba(255,255,255,.035)] backdrop-blur-xl",
-        "before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_20%_0%,rgba(96,165,250,.12),transparent_34%),radial-gradient(circle_at_80%_100%,rgba(124,58,237,.10),transparent_36%)]",
+        "before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_20%_0%,rgba(228, 187, 94,.12),transparent_34%),radial-gradient(circle_at_80%_100%,rgba(201, 152, 47,.10),transparent_36%)]",
         className,
       )}
     >
@@ -85,11 +85,11 @@ function IconBubble({
   tone?: "violet" | "purple" | "blue" | "amber" | "cyan"
 }) {
   const tones = {
-    violet: "border-violet-400/30 bg-violet-500/10 text-violet-200 shadow-[0_0_26px_rgba(139,92,246,.24)]",
-    purple: "border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-100 shadow-[0_0_26px_rgba(217,70,239,.20)]",
-    blue: "border-blue-400/30 bg-blue-500/10 text-blue-100 shadow-[0_0_26px_rgba(59,130,246,.22)]",
+    violet: "border-violet-400/30 bg-violet-500/10 text-violet-200 shadow-[0_0_26px_rgba(217, 174, 69,.24)]",
+    purple: "border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-100 shadow-[0_0_26px_rgba(217, 174, 69,.20)]",
+    blue: "border-blue-400/30 bg-blue-500/10 text-blue-100 shadow-[0_0_26px_rgba(211, 162, 62,.22)]",
     amber: "border-amber-400/30 bg-amber-500/10 text-amber-100 shadow-[0_0_26px_rgba(245,158,11,.18)]",
-    cyan: "border-cyan-300/30 bg-cyan-500/10 text-cyan-100 shadow-[0_0_26px_rgba(34,211,238,.20)]",
+    cyan: "border-cyan-300/30 bg-cyan-500/10 text-cyan-100 shadow-[0_0_26px_rgba(228, 187, 94,.20)]",
   } as const
 
   return (
@@ -147,9 +147,9 @@ function OrchestratorPanel() {
         <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-90" viewBox="0 0 820 260" preserveAspectRatio="none">
           <defs>
             <linearGradient id="fiLine" x1="0%" x2="100%">
-              <stop offset="0%" stopColor="rgba(34,211,238,.25)" />
-              <stop offset="50%" stopColor="rgba(139,92,246,.95)" />
-              <stop offset="100%" stopColor="rgba(34,211,238,.25)" />
+              <stop offset="0%" stopColor="rgba(228, 187, 94,.25)" />
+              <stop offset="50%" stopColor="rgba(217, 174, 69,.95)" />
+              <stop offset="100%" stopColor="rgba(228, 187, 94,.25)" />
             </linearGradient>
             <filter id="fiGlow">
               <feGaussianBlur stdDeviation="3" result="blur" />
@@ -169,7 +169,7 @@ function OrchestratorPanel() {
           <path d="M465 130 C550 130 550 202 630 202" stroke="url(#fiLine)" strokeWidth="3" fill="none" filter="url(#fiGlow)" />
 
           {[190, 355, 465, 630].map((x) => (
-            <circle key={x} cx={x} cy="130" r="4" fill="rgba(216,180,254,.95)" filter="url(#fiGlow)" />
+            <circle key={x} cx={x} cy="130" r="4" fill="rgba(243, 222, 150,.95)" filter="url(#fiGlow)" />
           ))}
         </svg>
 
@@ -180,7 +180,7 @@ function OrchestratorPanel() {
         </div>
 
         <div className="relative z-20 flex flex-col items-center">
-          <div className="grid h-24 w-24 place-items-center rounded-3xl border border-violet-300/40 bg-[radial-gradient(circle_at_50%_35%,rgba(139,92,246,.52),rgba(30,41,59,.38)_58%,rgba(2,6,23,.92))] text-5xl text-violet-100 shadow-[0_0_44px_rgba(139,92,246,.55)]">
+          <div className="grid h-24 w-24 place-items-center rounded-3xl border border-violet-300/40 bg-[radial-gradient(circle_at_50%_35%,rgba(217, 174, 69,.52),rgba(30,41,59,.38)_58%,rgba(2,6,23,.92))] text-5xl text-violet-100 shadow-[0_0_44px_rgba(217, 174, 69,.55)]">
             ⬡
           </div>
           <p className="mt-3 text-sm font-semibold text-white">Orchestrator</p>
@@ -253,7 +253,7 @@ function ContextMemoryPanel({ onPrompt }: FinalIntelligenceHomeProps) {
             <span>82,541 / 200,000</span>
           </div>
           <div className="mt-3 h-2 rounded-full bg-slate-800">
-            <div className="h-full w-[41%] rounded-full bg-gradient-to-r from-violet-500 via-blue-500 to-cyan-300 shadow-[0_0_18px_rgba(139,92,246,.45)]" />
+            <div className="h-full w-[41%] rounded-full bg-gradient-to-r from-violet-500 via-blue-500 to-cyan-300 shadow-[0_0_18px_rgba(217, 174, 69,.45)]" />
           </div>
           <div className="mt-3 grid grid-cols-3 gap-3 text-[12px]">
             <div>
@@ -298,7 +298,7 @@ function ThinkingModes({ onPrompt }: FinalIntelligenceHomeProps) {
               className={cx(
                 "fi-mode-card group flex items-center gap-3 rounded-2xl border p-4 text-left transition hover:-translate-y-0.5",
                 active
-                  ? "border-violet-400/45 bg-violet-500/20 shadow-[0_0_30px_rgba(139,92,246,.30)]"
+                  ? "border-violet-400/45 bg-violet-500/20 shadow-[0_0_30px_rgba(217, 174, 69,.30)]"
                   : "border-slate-700/70 bg-[#07101e]/75 hover:border-blue-400/30",
               )}
             >
@@ -342,7 +342,7 @@ function BottomVisual({ type }: { type: string }) {
     return (
       <div className="grid h-28 w-40 grid-cols-5 gap-1 rounded-2xl border border-blue-400/15 bg-black/25 p-3">
         {Array.from({ length: 20 }).map((_, index) => (
-          <span key={index} className={cx("rounded bg-slate-800/80", index === 7 || index === 8 || index === 13 ? "bg-violet-500/80 shadow-[0_0_14px_rgba(139,92,246,.55)]" : "")} />
+          <span key={index} className={cx("rounded bg-slate-800/80", index === 7 || index === 8 || index === 13 ? "bg-violet-500/80 shadow-[0_0_14px_rgba(217, 174, 69,.55)]" : "")} />
         ))}
       </div>
     )
@@ -351,8 +351,8 @@ function BottomVisual({ type }: { type: string }) {
   if (type === "cube") {
     return (
       <div className="relative h-28 w-44">
-        <div className="absolute left-8 top-8 h-16 w-28 rotate-[-28deg] rounded-xl border border-cyan-300/30 bg-blue-500/20 shadow-[0_0_40px_rgba(59,130,246,.32)]" />
-        <div className="absolute left-14 top-2 h-16 w-28 rotate-[-28deg] rounded-xl border border-violet-300/30 bg-violet-500/25 shadow-[0_0_40px_rgba(139,92,246,.35)]" />
+        <div className="absolute left-8 top-8 h-16 w-28 rotate-[-28deg] rounded-xl border border-cyan-300/30 bg-blue-500/20 shadow-[0_0_40px_rgba(211, 162, 62,.32)]" />
+        <div className="absolute left-14 top-2 h-16 w-28 rotate-[-28deg] rounded-xl border border-violet-300/30 bg-violet-500/25 shadow-[0_0_40px_rgba(217, 174, 69,.35)]" />
         <div className="absolute left-20 top-[-8px] h-14 w-14 rotate-45 rounded-xl border border-blue-200/30 bg-cyan-400/20" />
       </div>
     )
@@ -361,7 +361,7 @@ function BottomVisual({ type }: { type: string }) {
   if (type === "network") {
     return (
       <svg className="h-28 w-44" viewBox="0 0 180 110" fill="none">
-        <path d="M28 78L70 28L116 84L146 26M70 28L146 26M70 28L96 54M96 54L116 84M96 54L146 26" stroke="rgba(139,92,246,.75)" strokeWidth="2" />
+        <path d="M28 78L70 28L116 84L146 26M70 28L146 26M70 28L96 54M96 54L116 84M96 54L146 26" stroke="rgba(217, 174, 69,.75)" strokeWidth="2" />
         {[28, 70, 116, 146, 96].map((x, i) => (
           <circle key={x} cx={x} cy={[78, 28, 84, 26, 54][i]} r="5" fill="rgb(167 139 250)" filter="drop-shadow(0 0 8px rgb(139 92 246))" />
         ))}
@@ -405,7 +405,7 @@ function BottomCard({ card }: { card: (typeof bottomCards)[number] }) {
 export function FinalIntelligenceHome({ onPrompt }: FinalIntelligenceHomeProps) {
   return (
     <main className="final-intelligence-home relative min-h-[calc(100vh-72px)] overflow-hidden rounded-[1.2rem] bg-[#020611] px-4 py-4 text-white md:px-6">
-      <div className="fi-aura-layer pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_52%_2%,rgba(88,28,135,.18),transparent_34%),radial-gradient(circle_at_0%_55%,rgba(37,99,235,.13),transparent_34%),linear-gradient(180deg,rgba(15,23,42,.36),rgba(2,6,23,.92))]" />
+      <div className="fi-aura-layer pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_52%_2%,rgba(88,28,135,.18),transparent_34%),radial-gradient(circle_at_0%_55%,rgba(177, 132, 44,.13),transparent_34%),linear-gradient(180deg,rgba(15,23,42,.36),rgba(2,6,23,.92))]" />
       <div className="fi-grid-layer pointer-events-none absolute inset-0 opacity-[0.055] [background-image:linear-gradient(rgba(148,163,184,.38)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,.38)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="fi-topbar" aria-label="Final Intelligence shortcuts">

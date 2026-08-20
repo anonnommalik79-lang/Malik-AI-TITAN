@@ -14,7 +14,7 @@ function cn(...classes: Array<string | false | null | undefined>) {
 export function MediaDirectorShowcase() {
   return (
     <section className="relative overflow-hidden rounded-[1.35rem] border border-slate-700/60 bg-[#050b18]/84 shadow-[0_18px_70px_rgba(0,0,0,.36),inset_0_1px_0_rgba(255,255,255,.035)] backdrop-blur-xl">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(139,92,246,.16),transparent_32%),radial-gradient(circle_at_92%_90%,rgba(37,99,235,.10),transparent_38%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(217, 174, 69,.16),transparent_32%),radial-gradient(circle_at_92%_90%,rgba(177, 132, 44,.10),transparent_38%)]" />
       <div className="relative z-10 p-5">
         <h3 className="font-serif text-xl font-semibold text-white">Режимы мышления</h3>
         <p className="mt-1 text-sm text-slate-400">Выберите режим, соответствующий вашей задаче.</p>
@@ -27,7 +27,7 @@ export function MediaDirectorShowcase() {
               className={cn(
                 "group flex min-h-[78px] items-center gap-3 rounded-2xl border p-4 text-left transition hover:-translate-y-0.5",
                 active
-                  ? "border-violet-400/45 bg-violet-500/20 shadow-[0_0_30px_rgba(139,92,246,.30)]"
+                  ? "border-violet-400/45 bg-violet-500/20 shadow-[0_0_30px_rgba(217, 174, 69,.30)]"
                   : "border-slate-700/70 bg-[#07101e]/75 hover:border-blue-400/30",
               )}
             >

@@ -58,9 +58,9 @@ export function DeepSpaceBase() {
           mix-blend-mode: screen;
           filter: blur(48px) saturate(1.12);
           background:
-            radial-gradient(ellipse 38% 34% at 22% 30%, rgba(56, 189, 248, 0.24), transparent 72%),
-            radial-gradient(ellipse 42% 38% at 79% 34%, rgba(168, 85, 247, 0.22), transparent 74%),
-            radial-gradient(ellipse 50% 28% at 52% 82%, rgba(37, 99, 235, 0.2), transparent 76%),
+            radial-gradient(ellipse 38% 34% at 22% 30%, rgba(228, 187, 94, 0.24), transparent 72%),
+            radial-gradient(ellipse 42% 38% at 79% 34%, rgba(217, 174, 69, 0.22), transparent 74%),
+            radial-gradient(ellipse 50% 28% at 52% 82%, rgba(177, 132, 44, 0.2), transparent 76%),
             radial-gradient(ellipse 26% 22% at 64% 16%, rgba(244, 114, 182, 0.14), transparent 74%),
             radial-gradient(ellipse 30% 30% at 40% 58%, rgba(45, 212, 191, 0.1), transparent 76%);
           will-change: transform, opacity;
@@ -103,13 +103,13 @@ export function DeepSpaceBase() {
           mix-blend-mode: screen;
           background:
             radial-gradient(circle at 6% 18%, rgba(224, 242, 255, 0.52) 0 0.45px, transparent 1px),
-            radial-gradient(circle at 11% 76%, rgba(147, 197, 253, 0.38) 0 0.42px, transparent 1px),
+            radial-gradient(circle at 11% 76%, rgba(240, 210, 136, 0.38) 0 0.42px, transparent 1px),
             radial-gradient(circle at 22% 42%, rgba(224, 242, 255, 0.5) 0 0.5px, transparent 1.1px),
-            radial-gradient(circle at 34% 12%, rgba(216, 180, 254, 0.38) 0 0.45px, transparent 1px),
+            radial-gradient(circle at 34% 12%, rgba(243, 222, 150, 0.38) 0 0.45px, transparent 1px),
             radial-gradient(circle at 47% 68%, rgba(224, 242, 255, 0.46) 0 0.45px, transparent 1px),
-            radial-gradient(circle at 59% 28%, rgba(186, 230, 253, 0.44) 0 0.48px, transparent 1.1px),
+            radial-gradient(circle at 59% 28%, rgba(248, 229, 172, 0.44) 0 0.48px, transparent 1.1px),
             radial-gradient(circle at 72% 82%, rgba(224, 242, 255, 0.5) 0 0.48px, transparent 1.1px),
-            radial-gradient(circle at 84% 38%, rgba(216, 180, 254, 0.42) 0 0.45px, transparent 1px),
+            radial-gradient(circle at 84% 38%, rgba(243, 222, 150, 0.42) 0 0.45px, transparent 1px),
             radial-gradient(circle at 94% 14%, rgba(224, 242, 255, 0.48) 0 0.5px, transparent 1.1px);
           background-size:
             137px 109px,

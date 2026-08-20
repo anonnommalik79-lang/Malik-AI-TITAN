@@ -180,7 +180,7 @@
     border: 1px solid rgba(232, 197, 106, 0.30) !important;
     background:
       radial-gradient(circle at 90% 0%, rgba(228, 187, 94, 0.18), transparent 42%),
-      linear-gradient(135deg, rgba(49, 46, 129, 0.88), rgba(15, 23, 42, 0.92)) !important;
+      linear-gradient(135deg, rgba(91, 67, 21, 0.88), rgba(15, 23, 42, 0.92)) !important;
     box-shadow:
       0 18px 52px rgba(88, 28, 135, 0.20),
       inset 0 1px 0 rgba(255, 255, 255, 0.075) !important;
@@ -409,7 +409,7 @@
 
 #malik-root .malik-chat-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(99, 102, 241, .36) transparent;
+  scrollbar-color: rgba(211, 162, 62, .36) transparent;
 }
 
 #malik-root .malik-message-list {
@@ -771,7 +771,7 @@
   border-radius: 13px !important;
   background:
     radial-gradient(circle at 92% 0%, rgba(255, 255, 255, .24), transparent 32%),
-    linear-gradient(135deg, #5b21d8, #c9982f 52%, #4f46e5) !important;
+    linear-gradient(135deg, #5b21d8, #c9982f 52%, #b1842c) !important;
   box-shadow: 0 0 28px rgba(201, 152, 47, .45), inset 0 1px 0 rgba(255, 255, 255, .2) !important;
   color: white !important;
 }

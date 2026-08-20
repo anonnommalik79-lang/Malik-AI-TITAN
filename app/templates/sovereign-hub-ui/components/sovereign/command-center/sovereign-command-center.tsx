@@ -104,7 +104,7 @@ function priorityClass(priority: MissionPriority) {
 }
 
 function MiniTrend({ tone }: { tone: string }) {
-  const color = tone === "cyan" ? "#22d3ee" : tone === "purple" || tone === "violet" ? "#a855f7" : "#94a3b8"
+  const color = tone === "cyan" ? "#e4bb5e" : tone === "purple" || tone === "violet" ? "#d9ae45" : "#94a3b8"
   return (
     <svg className="cmd-mini-trend" viewBox="0 0 150 52" preserveAspectRatio="none" aria-hidden="true">
       <path d="M2 38 L16 36 L27 40 L39 30 L51 34 L62 22 L75 31 L88 17 L100 25 L112 12 L124 20 L137 8 L148 14" />
@@ -119,9 +119,9 @@ function AgentMap({ runRoute }: { runRoute: (route: string) => void }) {
       <svg className="cmd-agent-lines" viewBox="0 0 1000 320" preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id="cmdLine" x1="0%" x2="100%">
-            <stop offset="0%" stopColor="rgba(168,85,247,.2)" />
-            <stop offset="45%" stopColor="rgba(168,85,247,.85)" />
-            <stop offset="100%" stopColor="rgba(34,211,238,.35)" />
+            <stop offset="0%" stopColor="rgba(217, 174, 69,.2)" />
+            <stop offset="45%" stopColor="rgba(217, 174, 69,.85)" />
+            <stop offset="100%" stopColor="rgba(228, 187, 94,.35)" />
           </linearGradient>
           <filter id="cmdGlow">
             <feGaussianBlur stdDeviation="3" result="blur" />

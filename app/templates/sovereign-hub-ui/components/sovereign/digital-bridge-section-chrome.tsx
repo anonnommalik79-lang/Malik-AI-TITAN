@@ -405,18 +405,18 @@ export function DigitalBridgeSectionChrome({
           overflow-x: hidden;
           padding: clamp(16px, 2vw, 28px);
           background:
-            radial-gradient(ellipse 48% 30% at 50% 0%, rgba(96, 165, 250, .18), transparent 70%),
-            radial-gradient(ellipse 38% 42% at 6% 42%, rgba(34, 211, 238, .19), transparent 72%),
-            radial-gradient(ellipse 38% 42% at 96% 40%, rgba(217, 70, 239, .16), transparent 72%),
+            radial-gradient(ellipse 48% 30% at 50% 0%, rgba(228, 187, 94, .18), transparent 70%),
+            radial-gradient(ellipse 38% 42% at 6% 42%, rgba(228, 187, 94, .19), transparent 72%),
+            radial-gradient(ellipse 38% 42% at 96% 40%, rgba(217, 174, 69, .16), transparent 72%),
             linear-gradient(180deg, rgba(2, 6, 23, .98), rgba(2, 3, 10, .99));
         }
 
-        .digital-bridge-section-chrome--emerald { --db-accent: #6ee7b7; --db-accent-2: #22d3ee; }
-        .digital-bridge-section-chrome--cyan { --db-accent: #67e8f9; --db-accent-2: #60a5fa; }
-        .digital-bridge-section-chrome--violet { --db-accent: #a78bfa; --db-accent-2: #f0abfc; }
+        .digital-bridge-section-chrome--emerald { --db-accent: #6ee7b7; --db-accent-2: #e4bb5e; }
+        .digital-bridge-section-chrome--cyan { --db-accent: #f0d288; --db-accent-2: #e4bb5e; }
+        .digital-bridge-section-chrome--violet { --db-accent: #e8c56a; --db-accent-2: #f3de96; }
         .digital-bridge-section-chrome--amber { --db-accent: #fbbf24; --db-accent-2: #fb7185; }
-        .digital-bridge-section-chrome--rose { --db-accent: #fb7185; --db-accent-2: #f0abfc; }
-        .digital-bridge-section-chrome--blue { --db-accent: #60a5fa; --db-accent-2: #67e8f9; }
+        .digital-bridge-section-chrome--rose { --db-accent: #fb7185; --db-accent-2: #f3de96; }
+        .digital-bridge-section-chrome--blue { --db-accent: #e4bb5e; --db-accent-2: #f0d288; }
 
         .db-chrome-bg {
           position: absolute;

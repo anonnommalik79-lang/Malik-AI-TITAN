@@ -258,8 +258,8 @@ function TitanMediaCss() {
         position: relative;
         isolation: isolate;
         background:
-          radial-gradient(circle at 18% 0%, rgba(34,211,238,.16), transparent 32%),
-          radial-gradient(circle at 88% 18%, rgba(168,85,247,.14), transparent 38%),
+          radial-gradient(circle at 18% 0%, rgba(228, 187, 94,.16), transparent 32%),
+          radial-gradient(circle at 88% 18%, rgba(217, 174, 69,.14), transparent 38%),
           linear-gradient(135deg, #02030a, #050816 58%, #04020a) !important;
       }
       .ai-generator-clone::before {
@@ -269,8 +269,8 @@ function TitanMediaCss() {
         z-index: 0;
         pointer-events: none;
         background:
-          linear-gradient(90deg, rgba(34,211,238,.055) 1px, transparent 1px),
-          linear-gradient(0deg, rgba(168,85,247,.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(228, 187, 94,.055) 1px, transparent 1px),
+          linear-gradient(0deg, rgba(217, 174, 69,.05) 1px, transparent 1px),
           radial-gradient(circle at 50% 10%, rgba(255,255,255,.07), transparent 25%);
         background-size: 72px 72px, 72px 72px, 100% 100%;
         mask-image: radial-gradient(ellipse 80% 70% at 50% 24%, #000 0 55%, transparent 100%);
@@ -291,11 +291,11 @@ function TitanMediaCss() {
       .titan-media-proof {
         position: relative;
         overflow: hidden;
-        border: 1px solid rgba(125,211,252,.15);
+        border: 1px solid rgba(240, 210, 136,.15);
         border-radius: 34px;
         background:
-          radial-gradient(circle at 14% 0%, rgba(34,211,238,.14), transparent 34%),
-          radial-gradient(circle at 100% 100%, rgba(168,85,247,.12), transparent 34%),
+          radial-gradient(circle at 14% 0%, rgba(228, 187, 94,.14), transparent 34%),
+          radial-gradient(circle at 100% 100%, rgba(217, 174, 69,.12), transparent 34%),
           rgba(2,8,23,.68);
         box-shadow: 0 26px 105px rgba(0,0,0,.37), inset 0 1px 0 rgba(255,255,255,.055);
         backdrop-filter: blur(26px);
@@ -305,11 +305,11 @@ function TitanMediaCss() {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        border: 1px solid rgba(125,211,252,.18);
+        border: 1px solid rgba(240, 210, 136,.18);
         border-radius: 999px;
         padding: 8px 12px;
-        color: rgba(186,230,253,.92);
-        background: rgba(34,211,238,.08);
+        color: rgba(248, 229, 172,.92);
+        background: rgba(228, 187, 94,.08);
         font-size: 10px;
         font-weight: 1000;
         letter-spacing: .18em;
@@ -325,7 +325,7 @@ function TitanMediaCss() {
       }
       .titan-media-title span {
         display: block;
-        background: linear-gradient(90deg, #67e8f9, #fff, #f0abfc);
+        background: linear-gradient(90deg, #f0d288, #fff, #f3de96);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
@@ -356,8 +356,8 @@ function TitanMediaCss() {
       .titan-media-preset-grid button:hover,
       .titan-media-router button:hover {
         transform: translateY(-2px);
-        border-color: rgba(125,211,252,.32);
-        background: rgba(125,211,252,.08);
+        border-color: rgba(240, 210, 136,.32);
+        background: rgba(240, 210, 136,.08);
       }
       .titan-media-router { padding: 18px; }
       .titan-media-router h3,
@@ -376,9 +376,9 @@ function TitanMediaCss() {
         transition: .18s ease;
       }
       .titan-media-router button.is-active {
-        border-color: rgba(103,232,249,.4);
-        background: rgba(34,211,238,.12);
-        box-shadow: 0 18px 55px rgba(34,211,238,.12);
+        border-color: rgba(240, 210, 136,.4);
+        background: rgba(228, 187, 94,.12);
+        box-shadow: 0 18px 55px rgba(228, 187, 94,.12);
       }
       .titan-media-router b {
         display: grid;
@@ -387,7 +387,7 @@ function TitanMediaCss() {
         height: 30px;
         border-radius: 11px;
         color: #020617;
-        background: linear-gradient(135deg, #67e8f9, #fff, #ddd6fe);
+        background: linear-gradient(135deg, #f0d288, #fff, #faefc8);
         font-size: 11px;
       }
       .titan-media-router strong,
@@ -408,18 +408,18 @@ function TitanMediaCss() {
       .ai-generator-clone .studio-card,
       .ai-generator-clone .studio-metric-card,
       .ai-generator-clone .studio-page-head {
-        border-color: rgba(125,211,252,.14) !important;
+        border-color: rgba(240, 210, 136,.14) !important;
         background:
-          radial-gradient(circle at 8% 0%, rgba(34,211,238,.09), transparent 30%),
-          radial-gradient(circle at 100% 100%, rgba(168,85,247,.08), transparent 34%),
+          radial-gradient(circle at 8% 0%, rgba(228, 187, 94,.09), transparent 30%),
+          radial-gradient(circle at 100% 100%, rgba(217, 174, 69,.08), transparent 34%),
           rgba(2,8,23,.70) !important;
         box-shadow: 0 22px 95px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.045) !important;
         backdrop-filter: blur(22px);
       }
       .ai-generator-clone .studio-primary-action {
         color: #020617 !important;
-        background: linear-gradient(135deg, #fff, #bae6fd 44%, #ddd6fe) !important;
-        box-shadow: 0 18px 70px rgba(125,211,252,.22), inset 0 1px 0 rgba(255,255,255,.9) !important;
+        background: linear-gradient(135deg, #fff, #f8e5ac 44%, #faefc8) !important;
+        box-shadow: 0 18px 70px rgba(240, 210, 136,.22), inset 0 1px 0 rgba(255,255,255,.9) !important;
       }
       @keyframes titanMediaGrid { from { transform: translateX(-1%); } to { transform: translateX(1%); } }
       @media (max-width: 1100px) {
