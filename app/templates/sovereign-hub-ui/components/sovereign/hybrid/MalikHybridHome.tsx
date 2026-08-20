@@ -1,47 +1,35 @@
 "use client"
 
-import { memo, useState, type ReactNode } from "react"
-import { cn } from "@/lib/utils"
-import { prefetchChatShell } from "@/lib/studio-prefetch"
-import { HOME_STARTER_TEMPLATES, KAZAKH_SMI_TEMPLATES } from "@/lib/media-library"
-import { unsplashPhoto } from "@/lib/section-media"
-import { CapabilityHomeShowcase } from "@/components/sovereign/capabilities"
-import { renderCapabilityPrompt } from "@/lib/ai/capabilities/registry"
-import type { Capability } from "@/lib/ai/capabilities/types"
+import { memo, useEffect, useMemo, useState } from "react"
 import {
   ArrowRight,
-  CircleCheck,
+  Brain,
   Code2,
   Crown,
   Film,
-  Grid3X3,
-  Hexagon,
-  Layout,
-  Link2,
-  Network,
-  PanelLeft,
-  Rocket,
+  Globe,
+  Image as ImageIcon,
+  MessageSquare,
+  Mic,
+  Paperclip,
+  Send,
   Sparkles,
-  Terminal,
-  Wand2,
-  Workflow,
+  SquareCode,
 } from "lucide-react"
+import { sectionHeroUrl, unsplashPhoto } from "@/lib/section-media"
+import { prefetchChatShell } from "@/lib/studio-prefetch"
+import { clientFetchWithTimeout } from "@/lib/api-client"
+import type { AiModeId } from "../power-registry"
 
-type StarterTemplate = {
-  id: string
-  title: string
-  subtitle: string
-  tag: string
-  photo: string
-  tint: string
-  prompt: string
-}
+const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
 export interface MalikHybridHomeProps {
   onSubmit: (prompt: string) => void
   isLoading?: boolean
   onOpenCodex?: () => void
   onOpenTemplates?: () => void
+  onOpenPhoto?: () => void
+  onOpenVideo?: () => void
   onOpenWebsite?: () => void
   onOpenCode?: () => void
   onOpenBilling?: () => void
@@ -49,112 +37,198 @@ export interface MalikHybridHomeProps {
   onOpenCommandCenter?: () => void
   onOpenSupport?: () => void
   onOpenCapabilities?: () => void
+  currentMode?: AiModeId
+  onModeChange?: (mode: AiModeId) => void
 }
 
-function MalikLogo({ className }: { className?: string }) {
-  return (
-    <span className={cn("creator-logo", className)}>
-      <svg viewBox="0 0 44 44" aria-hidden="true">
-        <rect width="44" height="44" rx="12" fill="white" />
-        <path d="M9 29 L22 15 L22 29 Z" fill="#03040a" />
-        <path d="M24 15 H38 L24 29 Z" fill="#03040a" />
-      </svg>
-    </span>
-  )
+const HERO_PHOTO = unsplashPhoto("photo-1454496522488-7a8e488e8606", 1800)
+
+type TemplateKind = "chat" | "crm" | "shop" | "analytics" | "booking"
+
+/**
+ * Template thumbnails are drawn, not photographed. A stock picture of an office
+ * says nothing about what the template builds, and five remote images would be
+ * five more requests competing with the hero on first paint. These are inline
+ * SVGs in the product palette: no network, and they actually resemble the
+ * screen the template produces.
+ */
+function templateShot(kind: TemplateKind) {
+  const gold = "#d9ae45"
+  const pale = "#f3de96"
+  const dim = "#2a2620"
+
+  const body: Record<TemplateKind, string> = {
+    chat: `
+      <rect x="26" y="34" width="150" height="12" rx="6" fill="${dim}"/>
+      <rect x="26" y="58" width="196" height="30" rx="10" fill="${dim}"/>
+      <rect x="118" y="98" width="176" height="30" rx="10" fill="${gold}" opacity=".5"/>
+      <rect x="26" y="140" width="150" height="26" rx="10" fill="${dim}"/>
+      <rect x="26" y="180" width="268" height="26" rx="13" fill="none" stroke="${gold}" stroke-opacity=".45"/>`,
+    crm: `
+      <rect x="26" y="30" width="80" height="176" rx="10" fill="${dim}"/>
+      <rect x="38" y="44" width="56" height="8" rx="4" fill="${gold}" opacity=".7"/>
+      <rect x="38" y="62" width="44" height="6" rx="3" fill="${gold}" opacity=".3"/>
+      <rect x="38" y="78" width="50" height="6" rx="3" fill="${gold}" opacity=".3"/>
+      <rect x="118" y="30" width="176" height="48" rx="10" fill="${dim}"/>
+      <text x="132" y="62" fill="${pale}" font-family="Arial" font-size="21" font-weight="700">1 248</text>
+      <rect x="118" y="90" width="176" height="116" rx="10" fill="${dim}"/>
+      <polyline points="132,184 162,162 192,170 222,134 252,146 282,112" fill="none" stroke="${gold}" stroke-width="3"/>`,
+    shop: `
+      <rect x="26" y="30" width="78" height="78" rx="10" fill="${dim}"/>
+      <rect x="116" y="30" width="78" height="78" rx="10" fill="${dim}"/>
+      <rect x="206" y="30" width="88" height="78" rx="10" fill="${gold}" opacity=".32"/>
+      <rect x="26" y="120" width="78" height="86" rx="10" fill="${dim}"/>
+      <rect x="116" y="120" width="78" height="86" rx="10" fill="${dim}"/>
+      <rect x="206" y="120" width="88" height="86" rx="10" fill="${dim}"/>`,
+    analytics: `
+      <text x="26" y="54" fill="${pale}" font-family="Arial" font-size="21" font-weight="700">+24.6%</text>
+      <rect x="26" y="72" width="268" height="58" rx="10" fill="${dim}"/>
+      <polyline points="40,116 82,96 124,104 166,80 208,90 250,64 282,74" fill="none" stroke="${gold}" stroke-width="3"/>
+      <rect x="26" y="148" width="36" height="58" rx="6" fill="${gold}" opacity=".5"/>
+      <rect x="74" y="166" width="36" height="40" rx="6" fill="${gold}" opacity=".33"/>
+      <rect x="122" y="134" width="36" height="72" rx="6" fill="${gold}" opacity=".7"/>
+      <rect x="170" y="160" width="36" height="46" rx="6" fill="${gold}" opacity=".4"/>
+      <rect x="218" y="142" width="36" height="64" rx="6" fill="${gold}" opacity=".6"/>`,
+    booking: `
+      <rect x="26" y="30" width="268" height="34" rx="10" fill="${dim}"/>
+      <rect x="26" y="76" width="268" height="130" rx="10" fill="${dim}"/>
+      ${Array.from({ length: 21 }, (_, index) => {
+        const column = index % 7
+        const row = Math.floor(index / 7)
+        const marked = index === 4 || index === 9 || index === 15
+        return `<rect x="${40 + column * 36}" y="${92 + row * 38}" width="26" height="26" rx="6" fill="${marked ? gold : "#1b1a1f"}" opacity="${marked ? 0.85 : 1}"/>`
+      }).join("")}`,
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 230" width="320" height="230">
+    <rect width="320" height="230" fill="#111013"/>
+    <rect x="0" y="0" width="320" height="18" fill="#17161a"/>
+    <circle cx="16" cy="9" r="3" fill="${gold}" opacity=".6"/>
+    <circle cx="28" cy="9" r="3" fill="${gold}" opacity=".3"/>
+    <circle cx="40" cy="9" r="3" fill="${gold}" opacity=".3"/>
+    ${body[kind]}
+  </svg>`
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
-function QuickChip({ children, onClick }: { children: ReactNode; onClick?: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className="creator-chip">
-      {children}
-    </button>
-  )
-}
+const TEMPLATES: Array<{ id: TemplateKind; title: string; detail: string; prompt: string }> = [
+  {
+    id: "chat",
+    title: "AI Chat",
+    detail: "Умный ассистент",
+    prompt: "Собери премиальный AI-чат: тёмный интерфейс, история диалогов, потоковые ответы и загрузка файлов.",
+  },
+  {
+    id: "crm",
+    title: "CRM System",
+    detail: "Управление клиентами",
+    prompt: "Создай CRM для малого бизнеса: воронка сделок, карточка клиента, задачи и отчёт по выручке.",
+  },
+  {
+    id: "shop",
+    title: "E-commerce",
+    detail: "Интернет-магазин",
+    prompt: "Создай интернет-магазин: каталог, карточка товара, корзина и оформление заказа. Тёмная премиальная тема.",
+  },
+  {
+    id: "analytics",
+    title: "Analytics",
+    detail: "Аналитика и инсайты",
+    prompt: "Собери аналитический дашборд: KPI-карты, график роста, разбивка по каналам и короткие выводы.",
+  },
+  {
+    id: "booking",
+    title: "Booking",
+    detail: "Система бронирования",
+    prompt: "Создай систему бронирования: календарь свободных слотов, форма записи и подтверждение брони.",
+  },
+]
 
-const TEMPLATE_COVER_FALLBACK = unsplashPhoto("photo-1565008576549-57569a49371d", 900)
-
-function TemplateCover({ src, className, priority = "auto" }: { src: string; className?: string; priority?: "high" | "low" | "auto" }) {
-  const [url, setUrl] = useState(src)
+function HomeHero({ modelOnline }: { modelOnline: boolean | null }) {
   return (
-    <img
-      src={url}
-      alt=""
-      className={className}
-      loading={priority === "high" ? "eager" : "lazy"}
-      decoding="async"
-      fetchPriority={priority}
-      style={{ objectFit: "cover", width: "100%", height: "100%", display: "block" }}
-      onError={() => {
-        if (url !== TEMPLATE_COVER_FALLBACK) setUrl(TEMPLATE_COVER_FALLBACK)
-      }}
-    />
-  )
-}
+    <section className="thome-hero" aria-label="MALIK AI TITAN">
+      <img
+        className="thome-hero-photo"
+        src={HERO_PHOTO}
+        alt=""
+        loading="eager"
+        decoding="async"
+        fetchPriority="high"
+        draggable={false}
+      />
 
-function MalikHomeHero() {
-  return (
-    <section className="creator-hero" aria-label="Malik AI creator home">
-      <MalikLogo />
-      <p className="creator-brand">MALIK AI</p>
-      <p className="creator-powered">POWERED BY SOVEREIGN</p>
-      <div className="creator-badge">
-        <Sparkles />
-        <span>MALIK AI SOVEREIGN CREATOR HOME</span>
+      <div className={cn("thome-model-badge", modelOnline === false && "is-down")}>
+        <span className="thome-pulse" />
+        <span>
+          <b>MalikLLM75B</b>
+          <small>{modelOnline === null ? "Проверяю…" : modelOnline ? "Online" : "Offline"}</small>
+        </span>
       </div>
-      <h1 className="creator-title">
-        <span className="creator-title-line">Создай продукт или сайт,</span>
-        <span className="creator-title-line creator-title-grad">интерфейс или код — одним запросом</span>
-      </h1>
-      <p className="creator-subtitle">
-        Один промпт превращает идею в сайт, дашборд, компонент, код и документ — без шаблонов, плагинов и бесконечных рутин.
+
+      <Crown className="thome-crown h-7 w-7" aria-hidden="true" />
+      <h1 className="thome-wordmark">MALIK AI</h1>
+      <p className="thome-wordmark-sub">TITAN</p>
+      <p className="thome-hero-lead">
+        <span>Ваш личный ИИ-ассистент. Создаёт. Анализирует. Автоматизирует.</span>
+        <span>Один интеллект — безграничные возможности.</span>
       </p>
     </section>
   )
 }
 
-function MalikHomeStatsRow() {
-  const stats = [
-    ["CREATOR ROUTES", "12+", "Активных направлений", <Network key="i" />],
-    ["CANVAS READY", "100%", "Генерация без шаблонов", <CircleCheck key="i" />],
-    ["MEDIA FLOW", "Live", "Реальное время", <Workflow key="i" />],
-    ["RENDER GUARD", "On", "Без сбоев", <Hexagon key="i" />],
-  ] as const
-
-  return (
-    <section className="creator-stats" aria-label="Creator stats">
-      {stats.map(([label, value, detail, icon]) => (
-        <div key={label} className="creator-stat-card">
-          <div className="creator-card-icon">{icon}</div>
-          <div>
-            <p>{label}</p>
-            <strong>{value}</strong>
-            <span>{detail}</span>
-          </div>
-        </div>
-      ))}
-    </section>
-  )
-}
-
-function MalikHomePromptComposer({
+function HomeComposer({
   prompt,
   isLoading,
+  webOn,
+  memoryOn,
   onPromptChange,
   onSubmit,
-  onOpenWebsite,
+  onToggleWeb,
+  onToggleMemory,
+  onOpenPhoto,
+  onOpenCode,
   onOpenCanvas,
-  onEnhance,
 }: {
   prompt: string
   isLoading?: boolean
+  webOn: boolean
+  memoryOn: boolean
   onPromptChange: (value: string) => void
   onSubmit: () => void
-  onOpenWebsite?: () => void
+  onToggleWeb: () => void
+  onToggleMemory: () => void
+  onOpenPhoto?: () => void
+  onOpenCode?: () => void
   onOpenCanvas?: () => void
-  onEnhance: () => void
 }) {
   return (
-    <section className="creator-prompt" aria-label="Prompt composer">
+    <section className="thome-composer" aria-label="Новый запрос">
+      <div className="thome-composer-top">
+        <span className="thome-chip is-on">
+          <Sparkles className="h-4 w-4" />
+          MalikLLM75B
+        </span>
+        <span className="thome-chip">
+          <SquareCode className="h-4 w-4" />
+          Create
+        </span>
+        <button type="button" onClick={onToggleWeb} aria-pressed={webOn} className={cn("thome-chip", webOn && "is-on")}>
+          <Globe className="h-4 w-4" />
+          Web
+        </button>
+        <span className="thome-chip-spacer" />
+        <button
+          type="button"
+          onClick={onToggleMemory}
+          aria-pressed={memoryOn}
+          className={cn("thome-chip", memoryOn && "is-on")}
+        >
+          <Brain className="h-4 w-4" />
+          Memory: {memoryOn ? "On" : "Off"}
+        </button>
+      </div>
+
       <textarea
         value={prompt}
         onFocus={prefetchChatShell}
@@ -168,91 +242,134 @@ function MalikHomePromptComposer({
             onSubmit()
           }
         }}
-        rows={1}
-        placeholder="Опиши идею: сайт, дашборд, компонент, код, документ..."
+        rows={3}
+        aria-label="Опишите задачу"
+        placeholder="Например: Создай AI CRM для малого бизнеса с премиальным тёмным интерфейсом, интеграцией Telegram и автоматизацией продаж…"
       />
-      <div className="creator-prompt-actions creator-prompt-toolbar">
-        <div className="creator-prompt-tools">
-          <button type="button" onClick={onOpenWebsite} className="creator-square-button" aria-label="Attach link">
-            <Link2 />
-          </button>
-          <button type="button" onClick={onEnhance} className="creator-tool-button creator-tool-enhance">
-            <Wand2 />
-            <span>Enhance</span>
-          </button>
-          <button type="button" onClick={onOpenCanvas} className="creator-tool-button creator-tool-canvas">
-            <PanelLeft />
-            <span>Canvas</span>
-          </button>
-        </div>
+
+      <div className="thome-composer-bottom">
+        <button type="button" onClick={onOpenCanvas} className="thome-tool" aria-label="Открыть холст">
+          <Paperclip className="h-[18px] w-[18px]" />
+        </button>
+        <button type="button" onClick={onOpenPhoto} className="thome-tool" aria-label="Студия изображений">
+          <ImageIcon className="h-[18px] w-[18px]" />
+        </button>
+        <button type="button" onClick={onOpenCode} className="thome-tool" aria-label="Генератор кода">
+          <Code2 className="h-[18px] w-[18px]" />
+        </button>
+        <button type="button" className="thome-tool" aria-label="Голосовой ввод" disabled>
+          <Mic className="h-[18px] w-[18px]" />
+        </button>
+
         <button
           type="button"
           onClick={onSubmit}
           disabled={!prompt.trim() || isLoading}
-          className="creator-submit-button"
-          aria-label="Отправить запрос"
+          className="malik-gold-button thome-submit"
         >
-          <span>{isLoading ? "Генерация..." : "Отправить"}</span>
-          <ArrowRight />
+          <Send className="h-4 w-4" />
+          {isLoading ? "Генерация…" : "Создать"}
         </button>
       </div>
     </section>
   )
 }
 
-function MalikHomeQuickChips({ onSelect }: { onSelect: (value: string) => void }) {
-  const chips = [
-    ["Premium SaaS", <Crown key="i" />, "Создай Premium SaaS dashboard"],
-    ["Landing page", <Rocket key="i" />, "Создай landing page"],
-    ["React component", <Sparkles key="i" />, "Создай React component"],
-    ["Dashboard", <Grid3X3 key="i" />, "Создай dashboard"],
-    ["Документ", <Layout key="i" />, "Составь продуктовый бриф"],
-  ] as const
-
-  return (
-    <section className="creator-chip-row creator-chips" aria-label="Prompt presets">
-      {chips.map(([label, icon, value]) => (
-        <QuickChip key={label} onClick={() => onSelect(value)}>
-          {icon}
-          <span>{label}</span>
-        </QuickChip>
-      ))}
-    </section>
-  )
-}
-
-function MalikHomeFeatureGrid({
-  onOpenWebsite,
+function HomeActions({
+  onStartChat,
+  onOpenPhoto,
+  onOpenVideo,
   onOpenCode,
-  onOpenTemplates,
-  onOpenCodex,
-}: Pick<MalikHybridHomeProps, "onOpenWebsite" | "onOpenCode" | "onOpenTemplates" | "onOpenCodex">) {
+}: {
+  onStartChat: () => void
+  onOpenPhoto?: () => void
+  onOpenVideo?: () => void
+  onOpenCode?: () => void
+}) {
   const cards = [
-    ["Website Builder", "Insert premium prompt", <Layout key="i" />, onOpenWebsite, "sky"],
-    ["Code Generator", "Switch to code creation", <Code2 key="i" />, onOpenCode, "cyan"],
-    ["Templates", "Open gallery", <Grid3X3 key="i" />, onOpenTemplates, "violet"],
-    ["Malik Codex", "Open agent cockpit", <Terminal key="i" />, onOpenCodex, "purple"],
+    {
+      id: "chat",
+      icon: MessageSquare,
+      title: "AI Чат",
+      detail: "Размышляет. Анализирует. Отвечает глубоко.",
+      photo: sectionHeroUrl("final-intelligence", 700),
+      action: onStartChat,
+    },
+    {
+      id: "photo",
+      icon: ImageIcon,
+      title: "Создать изображение",
+      detail: "Премиум визуализация в 4K.",
+      photo: sectionHeroUrl("photo-generation", 700),
+      action: onOpenPhoto,
+    },
+    {
+      id: "video",
+      icon: Film,
+      title: "Сгенерировать видео",
+      detail: "Киноуровень за минуты.",
+      photo: sectionHeroUrl("video-generation", 700),
+      action: onOpenVideo,
+    },
+    {
+      id: "code",
+      icon: Code2,
+      title: "Написать код",
+      detail: "Тысячи строк. Без воды.",
+      photo: sectionHeroUrl("website-generation", 700),
+      action: onOpenCode,
+    },
   ] as const
 
   return (
-    <section className="creator-feature-grid" aria-label="Creator engines">
-      {cards.map(([title, detail, icon, action, tone]) => (
-        <button key={title} type="button" onClick={action} className={cn("creator-feature-card", `creator-feature-card-${tone}`)}>
-          <span className="creator-feature-glow" />
-          <span className="creator-feature-icon">{icon}</span>
-          <span className="creator-feature-copy">
-            <strong>{title}</strong>
-            <span>{detail}</span>
-          </span>
-          <ArrowRight className="creator-feature-arrow" />
-        </button>
-      ))}
+    <section className="thome-actions" aria-label="Быстрые действия">
+      {cards.map((card) => {
+        const Icon = card.icon
+        return (
+          <button key={card.id} type="button" onClick={card.action} className="thome-action">
+            <img
+              className="thome-action-photo"
+              src={card.photo}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+            />
+            <span className="thome-action-icon">
+              <Icon className="h-[18px] w-[18px]" />
+            </span>
+            <h3>{card.title}</h3>
+            <p>{card.detail}</p>
+            <ArrowRight className="thome-action-arrow h-4 w-4" />
+          </button>
+        )
+      })}
     </section>
   )
 }
 
 function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [prompt, setPrompt] = useState("")
+  const [webOn, setWebOn] = useState(true)
+  const [memoryOn, setMemoryOn] = useState(true)
+  const [modelOnline, setModelOnline] = useState<boolean | null>(null)
+
+  // One read on mount, so the hero badge reflects the real runtime instead of a
+  // hardcoded "Online".
+  useEffect(() => {
+    let cancelled = false
+    clientFetchWithTimeout("/api/ai/status", { method: "GET" }, 6000)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!cancelled) setModelOnline(Boolean(data?.ok))
+      })
+      .catch(() => {
+        if (!cancelled) setModelOnline(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const submit = () => {
     const text = prompt.trim()
@@ -261,111 +378,83 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     setPrompt("")
   }
 
-  const runTemplate = (tpl: StarterTemplate) => {
+  const runTemplate = (value: string) => {
     if (props.isLoading) return
-    props.onSubmit(tpl.prompt)
+    props.onSubmit(value)
     setPrompt("")
   }
 
+  const templates = useMemo(() => TEMPLATES.map((template) => ({ ...template, shot: templateShot(template.id) })), [])
+
   return (
-    <main className="creator-home-main malik-hybrid-ui-layer">
-      <MalikHomeHero />
-      <MalikHomeStatsRow />
-      <MalikHomePromptComposer
-        prompt={prompt}
-        isLoading={props.isLoading}
-        onPromptChange={setPrompt}
-        onSubmit={submit}
-        onOpenWebsite={props.onOpenWebsite}
-        onOpenCanvas={props.onOpenCanvas}
-        onEnhance={() => setPrompt(`Сделай как premium Malik AI: ${prompt || "AI product"}`)}
-      />
-      <MalikHomeQuickChips onSelect={setPrompt} />
-      <CapabilityHomeShowcase
-        onSelectCapability={(capability: Capability) => setPrompt(renderCapabilityPrompt(capability, prompt))}
-        onOpenCapabilities={props.onOpenCapabilities}
-      />
-      <MalikHomeFeatureGrid
-        onOpenWebsite={props.onOpenWebsite}
-        onOpenCode={props.onOpenCode}
-        onOpenTemplates={props.onOpenTemplates}
-        onOpenCodex={props.onOpenCodex}
-      />
+    <div className="thome">
+      <div className="thome-inner">
+        <HomeHero modelOnline={modelOnline} />
 
-      <section className="creator-template-shelf" aria-label="Готовые шаблоны">
-        <div className="creator-template-head">
-          <div>
-            <span className="creator-template-eyebrow">
-              <Grid3X3 size={13} />
-              Стартовые шаблоны
-            </span>
-            <h2 className="creator-template-title">Четыре рабочих сценария</h2>
+        <HomeComposer
+          prompt={prompt}
+          isLoading={props.isLoading}
+          webOn={webOn}
+          memoryOn={memoryOn}
+          onPromptChange={setPrompt}
+          onSubmit={submit}
+          onToggleWeb={() => setWebOn((on) => !on)}
+          onToggleMemory={() => setMemoryOn((on) => !on)}
+          onOpenPhoto={props.onOpenPhoto}
+          onOpenCode={props.onOpenCode}
+          onOpenCanvas={props.onOpenCanvas}
+        />
+
+        <HomeActions
+          onStartChat={() => document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")?.focus()}
+          onOpenPhoto={props.onOpenPhoto}
+          onOpenVideo={props.onOpenVideo}
+          onOpenCode={props.onOpenCode}
+        />
+
+        <div>
+          <div className="thome-section-head">
+            <h2>
+              <Crown className="h-[18px] w-[18px]" />
+              Популярные шаблоны
+            </h2>
+            <button type="button" onClick={props.onOpenTemplates} className="thome-section-link">
+              Все шаблоны
+              <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
-          <button type="button" className="creator-template-all" onClick={props.onOpenTemplates}>
-            Все шаблоны
-            <ArrowRight size={14} />
-          </button>
-        </div>
-        <div className="creator-template-grid">
-          {HOME_STARTER_TEMPLATES.map((tpl) => (
-            <button
-              key={tpl.id}
-              type="button"
-              className="creator-template-card"
-              onClick={() => runTemplate(tpl)}
-              disabled={props.isLoading}
-            >
-              <div className="creator-template-photo" aria-hidden="true">
-                <TemplateCover src={tpl.photo} className="creator-template-cover" priority="low" />
-                <div className="creator-template-tint" style={{ background: tpl.tint }} />
-                <span className="creator-template-tag">{tpl.tag}</span>
-              </div>
-              <div className="creator-template-body">
-                <strong>{tpl.title}</strong>
-                <p>{tpl.subtitle}</p>
-                <span className="creator-template-cta">
-                  Запустить
-                  <ArrowRight size={14} />
+
+          <section className="thome-templates" style={{ marginTop: 14 }} aria-label="Популярные шаблоны">
+            {templates.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                onClick={() => runTemplate(template.prompt)}
+                className="thome-template"
+              >
+                <img
+                  className="thome-template-shot"
+                  src={template.shot}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  draggable={false}
+                />
+                <span className="thome-template-body">
+                  <strong>{template.title}</strong>
+                  <span>{template.detail}</span>
                 </span>
-              </div>
-            </button>
-          ))}
+              </button>
+            ))}
+          </section>
         </div>
-      </section>
 
-      <section className="creator-kazakh-shelf" aria-label="Казахстанские СМИ шаблоны">
-        <div className="creator-template-head">
-          <div>
-            <span className="creator-template-eyebrow">
-              <Film size={13} />
-              Казахстанские СМИ
-            </span>
-            <h2 className="creator-template-title">30 медиа-шаблонов — листай вправо</h2>
-          </div>
-        </div>
-        <div className="creator-kazakh-scroll">
-          {KAZAKH_SMI_TEMPLATES.map((tpl) => (
-            <button
-              key={tpl.id}
-              type="button"
-              className="creator-kazakh-card"
-              onClick={() => runTemplate(tpl)}
-              disabled={props.isLoading}
-            >
-              <div className="creator-kazakh-media">
-                <TemplateCover src={tpl.photo} className="creator-kazakh-photo" priority="low" />
-                <div className="creator-template-tint" style={{ background: tpl.tint }} />
-                <span className="creator-template-tag">{tpl.tag}</span>
-              </div>
-              <div className="creator-kazakh-body">
-                <strong>{tpl.title}</strong>
-                <p>{tpl.subtitle}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
-    </main>
+        <footer className="thome-footer">
+          <span>© MALIK AI — Sovereign Hub. Build the Future.</span>
+          <b>v6.5 TITAN</b>
+        </footer>
+      </div>
+    </div>
   )
 }
 

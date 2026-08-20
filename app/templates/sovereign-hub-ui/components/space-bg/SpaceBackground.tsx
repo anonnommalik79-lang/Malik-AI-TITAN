@@ -65,7 +65,7 @@ export function SpaceBackground() {
         #malik-root .malik-dashboard-shell:has(.malik-space-bg) > main,
         #malik-root .malik-dashboard-shell:has(.malik-space-bg) > main > section,
         #malik-root .malik-dashboard-shell:has(.malik-space-bg) .creator-home-shell,
-        #malik-root .malik-dashboard-shell:has(.malik-space-bg) .malik-welcome-earth-shell,
+        #malik-root .malik-dashboard-shell:has(.malik-space-bg) .thome,
         #malik-root .malik-dashboard-shell:has(.malik-space-bg) .malik-force-video-root,
         #malik-root .malik-dashboard-shell:has(.malik-space-bg) [data-malik-chat-fullwidth="1"] {
           background-color: transparent !important;
@@ -78,18 +78,18 @@ export function SpaceBackground() {
           opacity: 0 !important;
         }
 
-        /* Home uses WelcomeEarthBackground — hide the global space layer entirely. */
-        #malik-root .malik-dashboard-shell:has(.malik-welcome-earth-shell) .malik-space-bg {
+        /* Home carries its own hero image — hide the global space layer entirely. */
+        #malik-root .malik-dashboard-shell:has(.thome) .malik-space-bg {
           visibility: hidden !important;
           opacity: 0 !important;
           pointer-events: none !important;
         }
 
-        /* Home keeps the photo earth layer; hide the duplicate CSS planet arc. */
-        #malik-root .malik-dashboard-shell:has(.malik-welcome-earth-shell) .malik-space-bg__planet-disc,
-        #malik-root .malik-dashboard-shell:has(.malik-welcome-earth-shell) .malik-space-bg__planet-night,
-        #malik-root .malik-dashboard-shell:has(.malik-welcome-earth-shell) .malik-space-bg__horizon,
-        #malik-root .malik-dashboard-shell:has(.malik-welcome-earth-shell) .malik-space-bg__horizon-rim {
+        /* Home keeps its own hero; hide the duplicate CSS planet arc. */
+        #malik-root .malik-dashboard-shell:has(.thome) .malik-space-bg__planet-disc,
+        #malik-root .malik-dashboard-shell:has(.thome) .malik-space-bg__planet-night,
+        #malik-root .malik-dashboard-shell:has(.thome) .malik-space-bg__horizon,
+        #malik-root .malik-dashboard-shell:has(.thome) .malik-space-bg__horizon-rim {
           display: none !important;
           opacity: 0 !important;
         }

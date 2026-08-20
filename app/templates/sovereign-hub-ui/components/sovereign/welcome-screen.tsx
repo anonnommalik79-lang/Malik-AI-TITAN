@@ -1,16 +1,17 @@
 "use client"
 
 import { memo } from "react"
-import { WelcomeEarthBackground } from "./WelcomeEarthBackground"
 import { MalikHybridHome, type MalikHybridHomeProps } from "./hybrid/MalikHybridHome"
 
+/**
+ * The home screen carries its own hero image, so the shared Earth backdrop that
+ * used to sit behind it was removed: two full-bleed layers competed for the
+ * same space, and the outer one was the more expensive of the two.
+ */
 function WelcomeScreenInner(props: MalikHybridHomeProps) {
   return (
-    <div className="creator-home-shell malik-welcome-earth-shell malik-mobile-home relative isolate min-h-full w-full flex-1 overflow-visible">
-      <WelcomeEarthBackground />
-      <div className="malik-welcome-earth-content">
-        <MalikHybridHome {...props} />
-      </div>
+    <div className="malik-mobile-home relative isolate flex h-full min-h-0 w-full flex-1">
+      <MalikHybridHome {...props} />
     </div>
   )
 }

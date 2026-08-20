@@ -5841,6 +5841,8 @@ const shouldShowMobilePreviewButton =
               isLoading={isLoading}
               onOpenCodex={() => setCodexOpen(true)}
               onOpenTemplates={() => safeOpenView("templates", "welcome")}
+              onOpenPhoto={() => safeOpenView("photo-generation", "welcome")}
+              onOpenVideo={() => safeOpenView("video-generation", "welcome")}
               onOpenWebsite={() => safeOpenView("website-generation", "welcome")}
               onOpenCode={() => safeOpenView("code-generation", "welcome")}
               onOpenBilling={() => safeOpenView("billing", "welcome")}

@@ -12,6 +12,7 @@ import "./malik-final-fixes.css"
 import "./malik-mobile-worldclass.css"
 // Gold surface rules; must beat creator-clone-safe.css, so it loads after it.
 import "./theme-titan.css"
+import "./titan-home.css"
 // Last import wins: strips the effects that cost the most per frame on phones.
 import "./mobile-performance.css"
 
