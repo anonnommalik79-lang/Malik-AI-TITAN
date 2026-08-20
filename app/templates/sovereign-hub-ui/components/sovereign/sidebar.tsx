@@ -2,11 +2,16 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
+  AudioLines,
+  BarChart3,
+  BookOpen,
+  Bot,
   Briefcase,
   ChevronRight,
+  Crown,
+  Languages,
   Code2,
   CreditCard,
-  Database,
   FileText,
   FolderKanban,
   Globe2,
@@ -33,10 +38,10 @@ import {
   Trash2,
   Video,
   Wand2,
-  Workflow,
 } from "lucide-react"
 import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/supabase"
 import { prefetchStudioChunks } from "@/lib/studio-prefetch"
+import { prefillPrompt } from "@/lib/malik-context"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
@@ -80,61 +85,61 @@ type NavGroup = {
 }
 
 /**
- * Every entry below is wired to a view that actually renders and talks to a real
- * endpoint. Demo-only screens (mock global search, mock notifications, the design
- * token showcase, the "analytics" screen that was really a dashboard generator)
- * were removed rather than left in the navigation.
+ * Laid out to match the design, with one rule kept from the cleanup: every entry
+ * lands on a screen that exists. Three labels in the mockup have no dedicated
+ * view, so they point at the closest real one rather than at nothing —
+ * "База знаний" opens the capability library, "Агенты AI" opens Command Center.
+ * The build studios stay behind one collapsed row so six working screens are
+ * still reachable without adding six lines to the design.
  */
 const NAV_GROUPS: NavGroup[] = [
   {
     id: "main",
-    items: [{ id: "home", icon: Home, label: "Панель управления", hint: "Чат и главный экран" }],
-  },
-  {
-    id: "intelligence",
-    title: "Интеллект",
     items: [
-      { id: "final-intelligence", icon: Sparkles, label: "Final Intelligence", hint: "Планирование, роутинг, память" },
-      { id: "unbreakable-ai", icon: ShieldCheck, label: "Unbreakable AI", hint: "Fallback, retry, проверка среды" },
-      { id: "command-center", icon: Workflow, label: "Command Center", hint: "Действия и управление агентами" },
-      { id: "capabilities", icon: Layers, label: "Возможности", hint: "Библиотека готовых AI-сценариев" },
-      { id: "business-command-center", icon: Briefcase, label: "Бизнес-центр", hint: "Бизнес-режимы и разборы" },
-      { id: "media-newsroom", icon: Newspaper, label: "Newsroom", hint: "Новости, фактчек, эфир · KZ/RU/EN" },
-    ],
-  },
-  {
-    id: "generation",
-    title: "Генерация",
-    items: [
-      { id: "ai-generator", icon: Wand2, label: "AI Генератор", hint: "Единый поток медиа-генерации" },
+      { id: "home", icon: Home, label: "Главная", hint: "Стартовый экран и композер" },
+      { id: "chats", icon: MessageSquare, label: "Чат", hint: "Все диалоги" },
+      { id: "projects", icon: FolderKanban, label: "Проекты" },
+      { id: "templates", icon: LayoutTemplate, label: "Библиотека", hint: "Готовые шаблоны" },
+      { id: "capabilities", icon: BookOpen, label: "База знаний", hint: "Библиотека готовых AI-сценариев" },
       { id: "photo-generation", icon: ImageIcon, label: "Изображения", hint: "MALIK Vision" },
       { id: "video-generation", icon: Video, label: "Видео", hint: "MALIK Cinema" },
       { id: "code-generation", icon: Code2, label: "Код", hint: "Генерация файлов и модулей" },
+      { id: "command-center", icon: Bot, label: "Агенты AI", hint: "Действия и управление агентами" },
+      { id: "dashboard-generation", icon: BarChart3, label: "Аналитика", hint: "Сборка дашбордов и отчётов" },
       { id: "website-generation", icon: Globe2, label: "Сайты", hint: "Сборка страниц с превью" },
       {
         id: "studios",
         icon: Palette,
         label: "Студии сборки",
         children: [
+          { id: "ai-generator", icon: Wand2, label: "AI Генератор" },
           { id: "component-generation", icon: Layers, label: "Компоненты" },
           { id: "landing-generation", icon: Rocket, label: "Лендинги" },
-          { id: "dashboard-generation", icon: Database, label: "Дашборды" },
           { id: "document-generation", icon: FileText, label: "Документы" },
           { id: "presentation-generation", icon: Presentation, label: "Презентации" },
           { id: "template-generation", icon: LayoutTemplate, label: "Генератор шаблонов" },
+          { id: "business-command-center", icon: Briefcase, label: "Бизнес-центр" },
+          { id: "media-newsroom", icon: Newspaper, label: "Newsroom" },
+          { id: "final-intelligence", icon: Sparkles, label: "Final Intelligence" },
+          { id: "unbreakable-ai", icon: ShieldCheck, label: "Unbreakable AI" },
         ],
       },
     ],
   },
-  {
-    id: "workspace",
-    title: "Рабочее пространство",
-    items: [
-      { id: "projects", icon: FolderKanban, label: "Проекты" },
-      { id: "chats", icon: MessageSquare, label: "Диалоги" },
-      { id: "templates", icon: LayoutTemplate, label: "Библиотека шаблонов" },
-    ],
-  },
+]
+
+type ToolItem = {
+  id: string
+  icon: typeof Home
+  label: string
+  badge?: string
+}
+
+const TOOL_ITEMS: ToolItem[] = [
+  { id: "codex", icon: Terminal, label: "Malik Codex", badge: "NEW" },
+  { id: "voice", icon: AudioLines, label: "Voice AI", badge: "NEW" },
+  { id: "translate", icon: Languages, label: "Translator" },
+  { id: "data", icon: BarChart3, label: "Анализ данных" },
 ]
 
 const RAIL_ITEMS = NAV_GROUPS.flatMap((group) => group.items)
@@ -241,7 +246,8 @@ function SidebarInner({
   const avatar = profile?.avatar || buildFallbackAvatar(email)
   const isGuest = /guest|anonymous/i.test(email)
   const displayName = isGuest ? "Гостевой доступ" : name
-  const planLabel = isGuest ? "Free plan" : "Pro workspace"
+  const isPro = Boolean(profile?.isAdmin) || !isGuest
+  const roleLabel = profile?.isAdmin ? "Соло-фаундер" : isGuest ? "Free plan" : "Pro workspace"
 
   const recentChats = useMemo(() => chats.slice(0, 5), [chats])
   const counters = useMemo<Record<string, number>>(() => ({ chats: chats.length }), [chats.length])
@@ -265,6 +271,38 @@ function SidebarInner({
       return next
     })
   }, [])
+
+  /**
+   * The four tools in the design have no screens of their own. Rather than add
+   * navigation that leads nowhere, each one does the thing it names using what
+   * the app already has: Codex opens its console, Voice AI focuses the composer
+   * where the microphone lives, Translator and Анализ данных drop a starting
+   * prompt into that same composer.
+   */
+  const runTool = useCallback(
+    (id: string) => {
+      setMenuOpen(false)
+      if (id === "codex") {
+        onOpenCodex?.()
+        return
+      }
+      onViewChange?.("home")
+      if (id === "voice") {
+        window.setTimeout(() => {
+          document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")?.focus()
+        }, 60)
+        return
+      }
+      if (id === "translate") {
+        prefillPrompt("Переведи текст ниже на казахский и английский, сохрани смысл и тон:\n\n")
+        return
+      }
+      if (id === "data") {
+        prefillPrompt("Проанализируй данные ниже: найди тренды, аномалии и три вывода с цифрами.\n\n")
+      }
+    },
+    [onOpenCodex, onViewChange],
+  )
 
   const openSearch = useCallback(() => {
     if (onOpenSearch) {
@@ -492,6 +530,22 @@ function SidebarInner({
           </div>
         ))}
 
+        <div className="mt-5">
+          <p className="malik-sidebar-group-title">Инструменты</p>
+          <div className="space-y-0.5">
+            {TOOL_ITEMS.map((tool) => {
+              const Icon = tool.icon
+              return (
+                <button key={tool.id} type="button" onClick={() => runTool(tool.id)} className="malik-sidebar-item">
+                  <Icon className="malik-sidebar-item-icon" />
+                  <span className="malik-sidebar-item-label">{tool.label}</span>
+                  {tool.badge ? <span className="malik-sidebar-tag">{tool.badge}</span> : null}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         {recentChats.length > 0 ? (
           <div className="mt-5">
             <p className="malik-sidebar-group-title">Недавние</p>
@@ -571,22 +625,53 @@ function SidebarInner({
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((open) => !open)}
-          className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+          className="malik-sidebar-user"
         >
-          <img
-            src={avatar}
-            alt=""
-            className="h-7 w-7 shrink-0 rounded-lg object-cover"
-            onError={(event) => {
-              event.currentTarget.style.visibility = "hidden"
-            }}
-          />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-medium leading-tight">{displayName}</span>
-            <span className="block truncate text-[11px] leading-tight text-zinc-600">{planLabel}</span>
+          <span className="malik-sidebar-user-avatar">
+            <img
+              src={avatar}
+              alt=""
+              onError={(event) => {
+                event.currentTarget.style.visibility = "hidden"
+              }}
+            />
+            <span>{initials}</span>
           </span>
-          <ChevronRight className={cn("h-4 w-4 shrink-0 text-zinc-600 transition-transform", menuOpen && "-rotate-90")} />
+          <span className="min-w-0 flex-1">
+            <span className="malik-sidebar-user-name">{displayName}</span>
+            <span className="malik-sidebar-user-role">{roleLabel}</span>
+          </span>
+          <span className="malik-sidebar-user-dot" aria-hidden="true" />
         </button>
+
+        <button type="button" onClick={() => openView("billing")} className="malik-sidebar-premium">
+          <span className="malik-sidebar-premium-mark" aria-hidden="true">
+            <svg viewBox="0 0 44 44">
+              <path d="M9 29 L22 15 L22 29 Z" fill="#1b1405" />
+              <path d="M24 15 H38 L24 29 Z" fill="#1b1405" />
+            </svg>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="malik-sidebar-premium-title">MALIK AI TITAN</span>
+            <span className="malik-sidebar-premium-note">{isPro ? "Премиум активен" : "Открыть премиум"}</span>
+          </span>
+          <Crown className="h-4 w-4 shrink-0 text-[var(--malik-accent-bright,#e8c56a)]" />
+        </button>
+
+        <div className="malik-sidebar-quickrow">
+          <button type="button" onClick={() => openView("settings")} aria-label="Настройки" className="malik-sidebar-icon-btn">
+            <Settings className="h-[17px] w-[17px]" />
+          </button>
+          <button type="button" onClick={() => openView("capabilities")} aria-label="Возможности" className="malik-sidebar-icon-btn">
+            <Sparkles className="h-[17px] w-[17px]" />
+          </button>
+          <button type="button" onClick={() => openView("support")} aria-label="Поддержка" className="malik-sidebar-icon-btn">
+            <LifeBuoy className="h-[17px] w-[17px]" />
+          </button>
+          <button type="button" onClick={handleLogout} aria-label="Выйти" className="malik-sidebar-icon-btn is-danger">
+            <LogOut className="h-[17px] w-[17px]" />
+          </button>
+        </div>
       </div>
 
       <SidebarStyles />
@@ -833,6 +918,153 @@ function SidebarStyles() {
       .malik-sidebar-menu-item.is-danger {
         color: #fca5a5;
       }
+      /* ---------------------------------------------------- tools + footer */
+
+      .malik-sidebar-tag {
+        flex-shrink: 0;
+        border-radius: 5px;
+        border: 1px solid var(--malik-border-strong, rgba(212, 175, 55, 0.28));
+        background: var(--malik-accent-8, rgba(212, 175, 55, 0.08));
+        padding: 1px 5px;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: var(--malik-accent-pale, #f3de96);
+      }
+
+      .malik-sidebar-user {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 10px;
+        border-radius: 10px;
+        padding: 8px;
+        text-align: left;
+        transition: background-color 0.13s ease;
+      }
+      .malik-sidebar-user:hover {
+        background: var(--malik-accent-4, rgba(212, 175, 55, 0.04));
+      }
+      .malik-sidebar-user:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(232, 197, 106, 0.45);
+      }
+      .malik-sidebar-user-avatar {
+        position: relative;
+        display: flex;
+        height: 32px;
+        width: 32px;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border-radius: 999px;
+        border: 1px solid var(--malik-border-strong, rgba(212, 175, 55, 0.28));
+        background: var(--malik-gradient-gold, linear-gradient(135deg, #f3de96, #a87c22));
+        color: #1b1405;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .malik-sidebar-user-avatar img {
+        position: absolute;
+        inset: 0;
+        height: 100%;
+        width: 100%;
+        object-fit: cover;
+      }
+      .malik-sidebar-user-name {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 1.2;
+        color: #efe9dc;
+      }
+      .malik-sidebar-user-role {
+        display: block;
+        margin-top: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+        line-height: 1.2;
+        color: #6f695f;
+      }
+      .malik-sidebar-user-dot {
+        height: 7px;
+        width: 7px;
+        flex-shrink: 0;
+        border-radius: 999px;
+        background: #34d399;
+      }
+
+      .malik-sidebar-premium {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 10px;
+        margin-top: 6px;
+        border-radius: 12px;
+        border: 1px solid var(--malik-border-strong, rgba(212, 175, 55, 0.28));
+        background:
+          radial-gradient(140% 120% at 0% 0%, rgba(201, 152, 47, 0.18), transparent 62%),
+          var(--malik-surface-raised, #121214);
+        padding: 9px 10px;
+        text-align: left;
+        transition: border-color 0.13s ease, background-color 0.13s ease;
+      }
+      .malik-sidebar-premium:hover {
+        border-color: rgba(232, 197, 106, 0.5);
+      }
+      .malik-sidebar-premium:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(232, 197, 106, 0.45);
+      }
+      .malik-sidebar-premium-mark {
+        display: flex;
+        height: 26px;
+        width: 26px;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: var(--malik-gradient-gold, linear-gradient(135deg, #f3de96, #a87c22));
+      }
+      .malik-sidebar-premium-mark svg {
+        height: 16px;
+        width: 16px;
+      }
+      .malik-sidebar-premium-title {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.2;
+        color: var(--malik-accent-pale, #f3de96);
+      }
+      .malik-sidebar-premium-note {
+        display: block;
+        margin-top: 2px;
+        font-size: 11px;
+        line-height: 1.2;
+        color: #8f887d;
+      }
+
+      .malik-sidebar-quickrow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+        margin-top: 8px;
+        border-top: 1px solid var(--malik-hairline, rgba(255, 255, 255, 0.06));
+        padding-top: 8px;
+      }
+      .malik-sidebar-quickrow .malik-sidebar-icon-btn.is-danger:hover {
+        background: rgba(239, 68, 68, 0.1);
+        color: #fca5a5;
+      }
+
       .malik-sidebar-menu-item.is-danger:hover {
         background-color: rgba(239, 68, 68, 0.1);
         color: #fecaca;

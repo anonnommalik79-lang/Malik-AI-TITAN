@@ -14,6 +14,7 @@ import { MalikCodexModal } from "./codex/malik-codex-modal"
 import { CommandPalette } from "./command-palette"
 import { TitanTopBar } from "./TitanTopBar"
 import { RightRail } from "./RightRail"
+import { readContextEnabled } from "@/lib/malik-context"
 import { SovereignBillingPanel } from "./billing/sovereign-billing-panel"
 import { SovereignSettingsPanel } from "./settings/sovereign-settings-panel"
 import { SovereignSupportPanel } from "./support"
@@ -55,6 +56,7 @@ import { NewsroomStudio } from "./media/NewsroomStudio"
 import { GenerationAnimation } from "./generation-animation"
 import { MobileNavigationGuard } from "./mobile-navigation-guard"
 import type { GenerationStatusType } from "./generation-status"
+import { AI_MODES } from "./power-registry"
 import type { AiModeId, PowerAction } from "./power-registry"
 import type { Capability } from "@/lib/ai/capabilities/types"
 import { cn } from "@/lib/utils"
@@ -1349,6 +1351,39 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     mobileMode: "full",
     fallbackView: "home",
     keywords: ["features", "фичи", "возможности", "modules", "модули"],
+  },
+  capabilities: {
+    id: "capabilities",
+    title: "Возможности",
+    description: "Library of ready-made AI scenarios that drop a prompt into the chat.",
+    bucket: "core",
+    icon: "layers",
+    status: "stable",
+    mobileMode: "full",
+    fallbackView: "home",
+    keywords: ["capabilities", "возможности", "сценарии", "база знаний", "knowledge"],
+  },
+  "business-command-center": {
+    id: "business-command-center",
+    title: "Бизнес-центр",
+    description: "Business modes: decisions, x-ray, pricing, go-to-market.",
+    bucket: "core",
+    icon: "briefcase",
+    status: "stable",
+    mobileMode: "full",
+    fallbackView: "home",
+    keywords: ["business", "бизнес", "стратегия", "выручка", "маркетинг"],
+  },
+  "media-newsroom": {
+    id: "media-newsroom",
+    title: "Newsroom",
+    description: "News, fact-checking and broadcast copy in KZ, RU and EN.",
+    bucket: "media",
+    icon: "newspaper",
+    status: "stable",
+    mobileMode: "full",
+    fallbackView: "home",
+    keywords: ["newsroom", "новости", "сми", "фактчек", "эфир"],
   },
   "photo-generation": {
     id: "photo-generation",
@@ -5109,7 +5144,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const MIN_TERMINAL_TIME = isProjReq ? 6500 : 0
   const normalizedEmail = (username || "").trim().toLowerCase() || "guest@local"
 
-  const history = [...messages, userMessage].slice(-12).map(m => ({
+  // The "Контекст" switch in the right rail decides whether prior turns travel
+  // with the request. Off means the model sees this message and nothing else.
+  const carryContext = readContextEnabled()
+  const history = (carryContext ? [...messages, userMessage].slice(-12) : [userMessage]).map(m => ({
     role: m.role,
     content: m.content,
   }))
@@ -6289,6 +6327,10 @@ const shouldShowMobilePreviewButton =
               chats={chats}
               onSelectChat={handleSelectChat}
               onSeeAll={() => safeOpenView("chats", "rail")}
+              projectName={chats.find((chat) => chat.id === activeChatId)?.title}
+              modeLabel={AI_MODES.find((mode) => mode.id === activeAiMode)?.label || "Create"}
+              contextTexts={messages.map((message) => message.content)}
+              onOpenBilling={() => safeOpenView("billing", "rail")}
             />
           )}
         </div>

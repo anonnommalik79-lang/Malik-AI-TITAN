@@ -19,6 +19,7 @@ import {
 import { sectionHeroUrl, unsplashPhoto } from "@/lib/section-media"
 import { prefetchChatShell } from "@/lib/studio-prefetch"
 import { clientFetchWithTimeout } from "@/lib/api-client"
+import { PREFILL_EVENT, useContextEnabled } from "@/lib/malik-context"
 import type { AiModeId } from "../power-registry"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
@@ -351,8 +352,24 @@ function HomeActions({
 function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [prompt, setPrompt] = useState("")
   const [webOn, setWebOn] = useState(true)
-  const [memoryOn, setMemoryOn] = useState(true)
+  // Same setting as the "Контекст" switch in the right rail — one value, shown twice.
+  const [memoryOn, setMemoryOn] = useContextEnabled()
   const [modelOnline, setModelOnline] = useState<boolean | null>(null)
+
+  // Sidebar tools drop a starting prompt in here instead of opening a screen
+  // that would only contain a text field.
+  useEffect(() => {
+    const fill = (event: Event) => {
+      const text = (event as CustomEvent<string>).detail
+      if (typeof text !== "string") return
+      setPrompt(text)
+      const field = document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")
+      field?.focus()
+      field?.setSelectionRange(text.length, text.length)
+    }
+    window.addEventListener(PREFILL_EVENT, fill)
+    return () => window.removeEventListener(PREFILL_EVENT, fill)
+  }, [])
 
   // One read on mount, so the hero badge reflects the real runtime instead of a
   // hardcoded "Online".
@@ -399,7 +416,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
           onPromptChange={setPrompt}
           onSubmit={submit}
           onToggleWeb={() => setWebOn((on) => !on)}
-          onToggleMemory={() => setMemoryOn((on) => !on)}
+          onToggleMemory={() => setMemoryOn(!memoryOn)}
           onOpenPhoto={props.onOpenPhoto}
           onOpenCode={props.onOpenCode}
           onOpenCanvas={props.onOpenCanvas}
