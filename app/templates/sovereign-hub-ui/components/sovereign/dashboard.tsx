@@ -2,7 +2,6 @@
 import dynamic from "next/dynamic"
 import { Component, useState, useCallback, useEffect, useRef } from "react"
 import { Sidebar } from "./sidebar"
-import { Header } from "./header"
 import { WelcomeScreen } from "./welcome-screen"
 import { ChatView } from "./chat-view"
 import { ChatInvestorBackground } from "./ChatInvestorBackground"
@@ -13,6 +12,8 @@ import { FeatureCenter } from "./features/FeatureCenter"
 import { CapabilitiesPanel } from "./capabilities"
 import { MalikCodexModal } from "./codex/malik-codex-modal"
 import { CommandPalette } from "./command-palette"
+import { TitanTopBar } from "./TitanTopBar"
+import { RightRail } from "./RightRail"
 import { SovereignBillingPanel } from "./billing/sovereign-billing-panel"
 import { SovereignSettingsPanel } from "./settings/sovereign-settings-panel"
 import { SovereignSupportPanel } from "./support"
@@ -5819,18 +5820,6 @@ const shouldShowMobilePreviewButton =
           "flex min-w-0 flex-1 flex-col h-full transition-all duration-500 ease-out",
           shouldShowPreviewPanel && "lg:border-r lg:border-[#1F2937] lg:shadow-[20px_0_50px_-20px_rgba(0,0,0,0.5)] lg:z-10"
         )}>
-          <Header
-            onMenuClick={() => setMobileMenuOpen(true)}
-            isSidebarCollapsed={sidebarCollapsed}
-            onOpenCodex={() => setCodexOpen(true)}
-            onOpenCanvas={() => safeOpenCanvas(undefined, "open-canvas")}
-            onViewChange={(view) => safeOpenView(view, "manual")}
-            onLogout={handleLogout}
-            currentMode={activeAiMode}
-            onModeChange={setActiveAiMode}
-            isOwner={isAdmin}
-            userEmail={username}
-          />
           {!shouldRenderEmptyHome ? (
             <div className="malik-premium-chat-host malik-ai-chat-bg relative min-h-0 flex-1 overflow-hidden">
               <ChatInvestorBackground />
@@ -6251,7 +6240,18 @@ const shouldShowMobilePreviewButton =
           onOpenSearch={() => { setCommandPaletteOpen(true); setMobileMenuOpen(false) }}
         />
       </div>
-       <main className={cn("flex min-h-0 min-w-0 flex-1 overflow-hidden", activeView !== "home" && "pt-[64px] md:pt-0")}>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <TitanTopBar
+          activeView={activeView}
+          onViewChange={(view) => safeOpenView(view, "topbar")}
+          onOpenSearch={() => setCommandPaletteOpen(true)}
+          onMenuClick={() => setMobileMenuOpen(true)}
+          onLogout={handleLogout}
+          currentMode={activeAiMode}
+          onModeChange={setActiveAiMode}
+        />
+        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+       <main className={cn("flex min-h-0 min-w-0 flex-1 overflow-hidden")}>
   {false && activeView === "templates" && (
     <button
       type="button"
@@ -6281,6 +6281,16 @@ const shouldShowMobilePreviewButton =
   <MalikCodexModal open={codexOpen} onClose={() => setCodexOpen(false)} onSendToCanvas={(code) => safeOpenCanvas(code, "generator-panel")} />
   <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} onRunAction={runCommandPaletteAction} />
 </main>
+          {/* The canvas needs the same space, so the rail yields to it. */}
+          {!shouldShowPreviewPanel && (
+            <RightRail
+              chats={chats}
+              onSelectChat={handleSelectChat}
+              onSeeAll={() => safeOpenView("chats", "rail")}
+            />
+          )}
+        </div>
+      </div>
       </div>
     </DashboardCrashBoundary>
   )
