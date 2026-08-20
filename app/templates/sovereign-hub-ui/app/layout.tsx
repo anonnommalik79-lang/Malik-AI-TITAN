@@ -1,4 +1,5 @@
 import CleanInteractionLayer from "@/components/sovereign/clean-ui/CleanInteractionLayer"
+import TitanKeyboardShortcuts from "@/components/sovereign/TitanKeyboardShortcuts"
 import type { Metadata } from "next"
 import Script from "next/script"
 import "./globals.css"
@@ -10,9 +11,7 @@ import "./creator-clone-safe.css"
 import "./malik-hybrid-ui.css"
 import "./malik-final-fixes.css"
 import "./malik-mobile-worldclass.css"
-// Last performance layer for phones.
 import "./mobile-performance.css"
-// Absolute last: reference-geometry and premium black/gold calibration.
 import "./titan-reference.css"
 
 export const metadata: Metadata = {
@@ -43,6 +42,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-[#020303] font-sans antialiased notranslate">
         <CleanInteractionLayer />
+        <TitanKeyboardShortcuts />
         <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden notranslate">
           {children}
         </div>
