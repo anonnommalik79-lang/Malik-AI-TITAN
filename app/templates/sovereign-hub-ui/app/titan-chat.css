@@ -1,0 +1,218 @@
+/* =========================================================================
+   TITAN CHAT
+   =========================================================================
+   The answer surface. Loaded after the legacy sheets, which style the old
+   bubble with `#malik-root … !important`, so the overrides here carry the same
+   specificity where they have to.
+
+   The shape follows what the mainstream assistants settled on, for reasons that
+   hold up: the reply is the page, not an object sitting on the page. A card
+   around it adds a border, a shadow and a background that all compete with the
+   text, and it caps the line length twice — once by the card, once by the
+   column. Only the person's own message keeps a bubble, because there it marks
+   authorship at a glance.
+   ========================================================================= */
+
+/* ------------------------------------------------------------- the reply -- */
+
+#malik-root .malik-message-card-assistant {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  color: #e9e3d6 !important;
+}
+
+#malik-root .malik-message-row-assistant .malik-message-stack {
+  max-width: min(760px, 100%);
+}
+
+/* A finished answer fades up rather than snapping in — the same beat as the
+   haptic that fires with it. */
+#malik-root .malik-message-row-assistant .malik-message-card-assistant {
+  animation: malikAnswerIn 0.22s ease-out both;
+}
+
+@keyframes malikAnswerIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --------------------------------------------------------- the person's --- */
+
+#malik-root .malik-message-card-user {
+  border-color: var(--malik-border, rgba(212, 175, 55, 0.14)) !important;
+  background: var(--malik-accent-8, rgba(212, 175, 55, 0.08)) !important;
+  color: #f5f2ea !important;
+  box-shadow: none !important;
+}
+
+.malik-user-avatar {
+  background: var(--malik-gradient-gold, linear-gradient(135deg, #f3de96, #a87c22));
+  color: #1b1405;
+}
+
+/* ------------------------------------------------------------- the mark --- */
+
+.malik-ai-avatar {
+  position: relative;
+  border-color: var(--malik-border, rgba(212, 175, 55, 0.14)) !important;
+  transition: transform 0.2s ease;
+}
+
+/* While the model works the mark breathes and a ring travels around it. Two
+   cheap transforms on one small element — no layout, no repaint of the column. */
+.malik-ai-avatar.is-working {
+  animation: malikMarkBreathe 1.6s ease-in-out infinite;
+}
+
+.malik-ai-avatar.is-working::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--malik-accent-bright, #e8c56a);
+  border-right-color: rgba(232, 197, 106, 0.35);
+  animation: malikMarkSpin 0.9s linear infinite;
+}
+
+@keyframes malikMarkBreathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.93);
+  }
+}
+
+@keyframes malikMarkSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --------------------------------------------------------------- status --- */
+
+.malik-thinking-line {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #8f887d;
+}
+
+.malik-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.malik-activity-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #6f695f;
+  animation: malikAnswerIn 0.2s ease-out both;
+}
+
+.malik-activity-row.is-current {
+  color: #cfc7b8;
+}
+
+.malik-activity-dot {
+  height: 5px;
+  width: 5px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.malik-activity-row.is-current .malik-activity-dot {
+  background: var(--malik-accent-bright, #e8c56a);
+  opacity: 1;
+}
+
+.malik-thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.malik-thinking-dots i {
+  height: 4px;
+  width: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.35;
+  animation: malikDot 1.1s ease-in-out infinite;
+}
+
+.malik-thinking-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.malik-thinking-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes malikDot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* -------------------------------------------------------------- actions --- */
+
+/* The row under an answer stays out of the way until the answer is hovered,
+   which is what stops a long thread reading as a wall of icons. */
+#malik-root .malik-message-actions {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+#malik-root .malik-message-row-assistant:hover .malik-message-actions,
+#malik-root .malik-message-actions:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  #malik-root .malik-message-actions {
+    opacity: 1;
+  }
+}
+
+/* Anything the old sheets drew around an answer. */
+#malik-root .malik-answer-badges {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .malik-ai-avatar.is-working,
+  .malik-ai-avatar.is-working::after,
+  .malik-thinking-dots i,
+  #malik-root .malik-message-card-assistant,
+  .malik-activity-row {
+    animation: none !important;
+  }
+}

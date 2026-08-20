@@ -8,7 +8,6 @@ export function prefetchChatShell(): void {
   if (chatPrefetched || typeof window === "undefined") return
   chatPrefetched = true
   void import("@/components/sovereign/chat-view").catch(() => undefined)
-  void import("@/components/sovereign/header").catch(() => undefined)
 }
 
 const STUDIO_IMPORTS = [
@@ -21,8 +20,6 @@ const STUDIO_IMPORTS = [
   () => import("@/components/sovereign/final-intelligence/FinalIntelligenceLab"),
   () => import("@/components/sovereign/unbreakable/UnbreakableShield"),
   () => import("@/components/sovereign/digital-bridge-sections"),
-  () => import("@/components/AnimatedAIBackground"),
-  () => import("@/components/sovereign/digital-bridge-demo-polish"),
 ] as const
 
 /**

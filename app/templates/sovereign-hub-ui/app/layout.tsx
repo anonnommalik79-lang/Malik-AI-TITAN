@@ -1,4 +1,3 @@
-import CleanInteractionLayer from "@/components/sovereign/clean-ui/CleanInteractionLayer"
 import type { Metadata } from "next"
 import Script from "next/script"
 import "./globals.css"
@@ -13,6 +12,7 @@ import "./malik-mobile-worldclass.css"
 // Gold surface rules; must beat creator-clone-safe.css, so it loads after it.
 import "./theme-titan.css"
 import "./titan-home.css"
+import "./titan-chat.css"
 // Last import wins: strips the effects that cost the most per frame on phones.
 import "./mobile-performance.css"
 
@@ -43,7 +43,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         />
       </head>
       <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-[#030303] font-sans antialiased notranslate">
-        <CleanInteractionLayer />
         <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden notranslate">
           {children}
         </div>

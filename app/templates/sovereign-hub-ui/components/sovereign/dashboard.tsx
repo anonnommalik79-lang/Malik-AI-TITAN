@@ -5523,7 +5523,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         const codeText = generateMockCode(cleanContent)
         finalizeAssistant(responseText, codeText)
       } else {
-        finalizeAssistant("DeepSeek не вернул ответ. Повтори запрос.", undefined)
+        finalizeAssistant("Не удалось получить ответ. Попробуйте ещё раз.", undefined)
       }
       return
     }
@@ -5561,7 +5561,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       view: activeViewRef.current,
       payload: error instanceof Error ? error.message : error,
     })
-    const errorMessage = "DeepSeek не вернул ответ. Повтори запрос."
+    const errorMessage = "Не удалось получить ответ. Попробуйте ещё раз."
     setErrorNotification(errorMessage)
 
     const elapsed = Date.now() - startTime
@@ -5576,7 +5576,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       const codeText = generateMockCode(cleanContent)
       finalizeAssistant(responseText, codeText)
     } else {
-      finalizeAssistant("DeepSeek не вернул ответ. Повтори запрос.", undefined)
+      finalizeAssistant("Не удалось получить ответ. Попробуйте ещё раз.", undefined)
     }
   } finally {
     setIsLoading(false)

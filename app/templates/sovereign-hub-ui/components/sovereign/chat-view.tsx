@@ -23,7 +23,6 @@ import {
   Search,
   SendHorizontal,
   Share,
-  ShieldCheck,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
@@ -493,7 +492,7 @@ function ThinkingBubble({ generationType, query = "" }: { generationType: Genera
   }, [query, isResearch])
 
   const labelMap: Record<GenerationStatusType, string> = {
-    text: "MALIK AI думает",
+    text: "Думаю",
     image: "Готовлю визуал",
     video: "Собираю видео",
     file: "Читаю файлы",
@@ -503,61 +502,47 @@ function ThinkingBubble({ generationType, query = "" }: { generationType: Genera
   }
 
   if (!isResearch) {
+    // Bare line, no card: the avatar to the left is already animating, and a
+    // boxed placeholder that is then replaced by unboxed text makes the answer
+    // appear to jump.
     return (
-      <div className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-[#071126]/80 px-4 py-3 text-sm text-slate-200 shadow-[0_14px_45px_rgba(0,0,0,.22)]">
-        <span className="relative flex h-7 w-7 items-center justify-center rounded-xl border border-violet-300/20 bg-violet-300/10">
-          <span className="absolute h-6 w-6 animate-spin rounded-xl border border-violet-200/20 border-t-violet-100" />
-          <Sparkles className="h-3.5 w-3.5 text-violet-100" />
+      <p className="malik-thinking-line" aria-live="polite">
+        {labelMap[generationType] || labelMap.text}
+        <span className="malik-thinking-dots" aria-hidden="true">
+          <i />
+          <i />
+          <i />
         </span>
-        <span>{labelMap[generationType] || labelMap.text}</span>
-        <span className="malik-thinking-dots" aria-hidden="true"><i /><i /><i /></span>
-      </div>
+      </p>
     )
   }
 
   const rows = [
-    { icon: "AI", text: "Понял запрос: нужны свежие открытые источники" },
-    { icon: domains[0]?.icon || "G", text: `Ищу в сети: ${domains[0]?.domain || "google.com"}` },
-    { icon: domains[1]?.icon || "W", text: `Читаю источник: ${domains[1]?.domain || "wikipedia.org"}` },
-    { icon: domains[2]?.icon || "B", text: `Сверяю данные: ${domains[2]?.domain || "brave.com"}` },
-    { icon: "✓", text: "Собираю ответ с ссылками и кэшем" },
+    "Разбираю запрос",
+    `Ищу в сети · ${domains[0]?.domain || "google.com"}`,
+    `Читаю источник · ${domains[1]?.domain || "wikipedia.org"}`,
+    `Сверяю данные · ${domains[2]?.domain || "brave.com"}`,
+    "Собираю ответ со ссылками",
   ]
 
+  // A quiet activity list, the way the big assistants show it: finished steps
+  // dim out, the current one is lit, upcoming ones stay hidden. No card, no
+  // borders, nothing that competes with the answer that replaces it.
   return (
-    <div className="w-[min(520px,86vw)] rounded-2xl border border-white/10 bg-black/45 px-4 py-3 text-[13px] text-slate-200 shadow-[0_18px_60px_rgba(0,0,0,.24)] backdrop-blur-xl">
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
-        <Globe className="h-4 w-4 animate-pulse text-cyan-200" />
-        <span>Live web research</span>
-        <span className="malik-thinking-dots" aria-hidden="true"><i /><i /><i /></span>
-      </div>
-
-      <div className="space-y-1.5">
-        {rows.map((row, index) => (
-          <div
-            key={row.text}
-            className={cn(
-              "flex items-center gap-2 rounded-xl border px-2.5 py-1.5 transition",
-              index === step
-                ? "border-cyan-300/25 bg-cyan-300/10 text-cyan-50"
-                : index < step
-                  ? "border-emerald-300/15 bg-emerald-300/5 text-emerald-100/85"
-                  : "border-white/8 bg-white/[0.025] text-white/45",
-            )}
-          >
-            <span className={cn(
-              "flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-[9px] font-black",
-              index <= step ? "bg-cyan-200/15 text-cyan-100" : "bg-white/5 text-white/35"
-            )}>
-              {row.icon}
+    <div className="malik-activity" aria-live="polite">
+      {rows.slice(0, step + 1).map((row, index) => (
+        <p key={row} className={cn("malik-activity-row", index === step && "is-current")}>
+          <span className="malik-activity-dot" aria-hidden="true" />
+          {row}
+          {index === step ? (
+            <span className="malik-thinking-dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
             </span>
-            <span className="truncate">{row.text}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-violet-300 to-fuchsia-300 transition-all duration-500" style={{ width: `${Math.max(18, (step + 1) * 20)}%` }} />
-      </div>
+          ) : null}
+        </p>
+      ))}
     </div>
   )
 }
@@ -592,20 +577,23 @@ function MessageBubble({
   return (
     <div data-malik-message={message.role} className={cn("malik-message-row flex w-full gap-3 sm:gap-4", isUser ? "malik-message-row-user justify-end" : "malik-message-row-assistant justify-start")}>
       {!isUser && (
-        <div className="malik-ai-avatar flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black">
+        <div
+          className={cn(
+            "malik-ai-avatar flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black",
+            message.isStreaming && "is-working",
+          )}
+        >
           <svg viewBox="0 0 44 44" className="h-full w-full" aria-hidden="true"><rect width="44" height="44" rx="12" fill="white" /><path d="M9 29 L22 15 L22 29 Z" fill="#03040a" /><path d="M24 15 H38 L24 29 Z" fill="#03040a" /></svg>
         </div>
       )}
       <div className={cn("malik-message-stack min-w-0 max-w-[min(900px,82%)] overflow-hidden", isUser && "order-first max-w-[min(720px,74%)]")}>
-        <div className={cn("malik-message-meta mb-1 flex items-center gap-2 text-xs", isUser ? "justify-end text-slate-500" : "text-slate-500")}>
-          <span>{isUser ? "Вы" : "Malik AI"}</span>
-          <span>{new Date(message.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
-        </div>
         <div className={cn(
-          "malik-message-card break-words rounded-2xl text-[14px] leading-7 sm:text-[15px]",
+          "malik-message-card break-words text-[15px] leading-7 sm:text-[15.5px]",
           message.generatedMedia || isThinking
             ? "bg-transparent p-0"
-            : cn("whitespace-pre-wrap border px-4 py-3 sm:px-5 sm:py-4", isUser ? "malik-message-card-user border-white/10 bg-white/[0.07] text-white" : "malik-message-card-assistant border-blue-300/10 bg-[#071126]/78 text-gray-100 shadow-[0_18px_60px_rgba(0,0,0,.22)]")
+            : isUser
+              ? "malik-message-card-user whitespace-pre-wrap rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3 text-white sm:px-5 sm:py-4"
+              : "malik-message-card-assistant whitespace-pre-wrap text-[#e9e3d6]",
         )}>
           {message.generatedMedia ? <GeminiMediaGenerationCard media={message.generatedMedia} /> : displayContent || (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} /> : "")}
         </div>
@@ -618,19 +606,32 @@ function MessageBubble({
             <button type="button" title="Поделиться" onClick={() => onShare?.(displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
           </div>
         )}
-        {!isUser && !message.generatedMedia && message.content && !message.isStreaming && (
-          <div className="malik-answer-badges">
-            <span><Sparkles className="h-3 w-3" /> Обработано</span>
-            <span><ShieldCheck className="h-3 w-3" /> Безопасный режим</span>
-          </div>
-        )}
       </div>
-      {isUser && <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 text-xs font-black text-white">{getInitials(currentUser)}</div>}
+      {isUser && (
+        <div className="malik-user-avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
+          {getInitials(currentUser)}
+        </div>
+      )}
     </div>
   )
 }
 
 export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", onOpenCodex, onForceCanvas }: ChatViewProps) {
+  // A short tick when the answer lands. Only fires when the tab is focused and
+  // only on hardware that has a vibrator, so desktop gets nothing rather than a
+  // console warning.
+  const wasLoading = useRef(false)
+  useEffect(() => {
+    if (wasLoading.current && !isLoading && document.visibilityState === "visible") {
+      try {
+        navigator.vibrate?.(12)
+      } catch {
+        /* unsupported or blocked — the visual fade is the fallback */
+      }
+    }
+    wasLoading.current = Boolean(isLoading)
+  }, [isLoading])
+
   const [prompt, setPrompt] = useState("")
   const [lastSubmittedPrompt, setLastSubmittedPrompt] = useState("")
   const [effectivePlan, setEffectivePlan] = useState<AIPlan>(userPlan)
