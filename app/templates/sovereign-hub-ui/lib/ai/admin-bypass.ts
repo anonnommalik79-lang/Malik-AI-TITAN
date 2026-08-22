@@ -1,4 +1,4 @@
-﻿import type { AIPlan } from "./types"
+import type { AIPlan } from "./types"
 
 export type AdminUserLike = {
   email?: string | null
@@ -6,15 +6,11 @@ export type AdminUserLike = {
   username?: string | null
   id?: string | null
   plan?: AIPlan | string | null
+  role?: string | null
   isAdmin?: boolean | null
   isOwner?: boolean | null
+  serverVerified?: boolean | null
 }
-
-const DEFAULT_ADMINS = [
-  "amangeldymalik38@gmail.com",
-  "anonnommalik79@gmail.com",
-  "admin@malik.ai",
-]
 
 function parseEmails(raw?: string | null) {
   return String(raw || "")
@@ -29,15 +25,18 @@ export function normalizeUserEmail(user?: AdminUserLike | string | null) {
 }
 
 export function getAdminEmails() {
-  const raw = process.env.ADMIN_EMAILS || process.env.MALIK_ADMIN_USERS || DEFAULT_ADMINS.join(",")
-  return parseEmails(raw)
+  // Server-only variables. Never ship hard-coded owner addresses in the client bundle.
+  return parseEmails(process.env.ADMIN_EMAILS || process.env.MALIK_ADMIN_USERS)
 }
 
 export function isAdminUser(user?: AdminUserLike | string | null) {
-  if (typeof user === "object" && user && (user.isAdmin || user.isOwner)) return true
+  if (!user || typeof user !== "object" || user.serverVerified !== true) return false
+
+  const role = String(user.role || "").toLowerCase()
+  if (user.isAdmin === true || user.isOwner === true || role === "admin" || role === "owner") return true
+
   const email = normalizeUserEmail(user)
-  if (!email) return false
-  return getAdminEmails().includes(email)
+  return Boolean(email && getAdminEmails().includes(email))
 }
 
 export function appEnvironment() {
@@ -59,10 +58,9 @@ export function canBypassLimits(user?: AdminUserLike | string | null) {
 }
 
 export function getUserPlan(user?: AdminUserLike | string | null): AIPlan {
-  if (isAdminUser(user)) return "owner"
-  if (isDevBypassEnabled()) return "owner"
+  if (isAdminUser(user) || isDevBypassEnabled()) return "owner"
 
-  if (typeof user === "object" && user?.plan) {
+  if (user && typeof user === "object" && user.serverVerified === true && user.plan) {
     const plan = String(user.plan).toLowerCase()
     if (plan === "pro" || plan === "ultra" || plan === "owner") return plan as AIPlan
   }
@@ -84,7 +82,7 @@ export function getBypassStatus(user?: AdminUserLike | string | null) {
     appEnvironment: appEnvironment(),
     label: admin ? "Admin mode active" : devBypass ? "Dev bypass limits enabled" : "Production limits active",
     message: admin
-      ? "All limits unlocked for owner."
+      ? "All limits unlocked for a server-verified owner."
       : devBypass
         ? "Limits disabled only in development/local mode."
         : "Usage limits are active for this user.",
@@ -101,4 +99,3 @@ export function shouldShowPaywall(input: {
   if (plan === "pro" || plan === "ultra" || plan === "owner") return false
   return Boolean(input.limitReached)
 }
-

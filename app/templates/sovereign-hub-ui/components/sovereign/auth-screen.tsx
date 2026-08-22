@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import React, {
   useCallback,
@@ -69,11 +69,7 @@ type AuthSnapshot = {
   lastLoginAt: string
 }
 
-const ADMINS = [
-  "amangeldymalik38@gmail.com",
-  "anonnommalik79@gmail.com",
-  "admin@malik.ai",
-]
+const ADMINS: string[] = []
 
 const STORAGE_KEYS = {
   user: "malik_user",
@@ -100,9 +96,9 @@ function normalizeEmail(value: string) {
   return (value || "").trim().toLowerCase()
 }
 
-function isAdminEmail(email?: string | null) {
-  if (!email) return false
-  return ADMINS.includes(normalizeEmail(email))
+function isAdminEmail(_email?: string | null) {
+  // Privileged access must come from a server-signed session, never a browser email.
+  return false
 }
 
 function getDisplayNameFromEmail(email: string) {
@@ -266,7 +262,7 @@ function persistLocalEmailSnapshot(email: string, name?: string) {
     name: display,
     avatar: createAvatarFallback(cleanEmail, display),
     mode: "guest",
-    isAdmin: isAdminEmail(cleanEmail),
+    isAdmin: false,
     lastLoginAt: getNowIso(),
   }
 
@@ -287,7 +283,7 @@ function persistSupabaseUser(user: any) {
     name,
     avatar,
     mode: "supabase",
-    isAdmin: isAdminEmail(email),
+    isAdmin: Boolean(user?.app_metadata?.role === "owner" || user?.app_metadata?.is_admin === true),
     lastLoginAt: getNowIso(),
   }
 
@@ -1048,8 +1044,8 @@ export function AuthScreen({ onSuccess }: AuthScreenProps) {
       try {
         const supabase = await getClient()
         if (!supabase) {
-          const snapshot = persistLocalEmailSnapshot(cleanEmail, displayName)
-          completeSession(snapshot)
+          setError("Авторизация временно недоступна. Используйте безопасный гостевой вход.")
+          setStage("error")
           return
         }
 
@@ -1109,9 +1105,8 @@ export function AuthScreen({ onSuccess }: AuthScreenProps) {
         console.error("[AUTH ERROR]", err instanceof Error ? err.message : err)
         const normalized = normalizeError(err)
         safeLocalStorageSet(STORAGE_KEYS.lastError, normalized)
-        const snapshot = persistLocalEmailSnapshot(cleanEmail, displayName)
-        setError(`${normalized} Local access opened.`)
-        completeSession(snapshot)
+        setError(normalized)
+        setStage("error")
       } finally {
         if (mountedRef.current) setIsLoading(false)
         submitLockRef.current = false
