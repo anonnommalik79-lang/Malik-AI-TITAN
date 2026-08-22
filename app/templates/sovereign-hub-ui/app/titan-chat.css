@@ -267,10 +267,72 @@
    frame, so it becomes solid black with a hairline separator. */
 #malik-root .malik-ai-chat-bg .malik-composer-dock {
   background: #000 !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-top: 0 !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   box-shadow: none !important;
+}
+
+/* The decorative wash, 44px grid and horizon glow are gone from the JSX.
+   Older sheets still target them, so they are pinned off here too — a
+   cached stylesheet must not be able to paint a seam back in. */
+#malik-root .malik-chat-space,
+#malik-root .malik-chat-grid,
+#malik-root .malik-chat-horizon {
+  display: none !important;
+}
+
+/* One column, ChatGPT's width, for both the thread and the composer, so the
+   answer and the input line up on the same left and right edge. */
+#malik-root .malik-ai-chat-bg .malik-message-list,
+#malik-root .malik-ai-chat-bg .malik-composer-panel {
+  max-width: 768px !important;
+  margin-inline: auto !important;
+}
+
+/* malik-final-fixes.css squeezes the dock with
+   `padding-inline: clamp(88px, 18vw, 360px)` — 288px a side at 1600px. That
+   was how the composer got centred before it had a max-width, and it now
+   fights the column: the thread centres inside the scroll area's padding
+   while the input centres inside 288px, so the two never line up.
+
+   Both boxes centre with `margin-inline: auto`, so they only agree when
+   their content boxes agree. Below 768px the column is narrower than its
+   768px cap and fills the box outright, which turns any difference in
+   padding into a visible offset — so the dock mirrors .malik-chat-scroll's
+   padding band for band rather than picking its own. */
+#malik-root .malik-ai-chat-bg .malik-composer-dock {
+  padding-inline: 32px !important;
+}
+
+@media (max-width: 768px) {
+  #malik-root .malik-ai-chat-bg .malik-composer-dock {
+    padding-inline: 12px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  #malik-root .malik-ai-chat-bg .malik-composer-dock {
+    padding-inline: clamp(44px, 6.2vw, 118px) !important;
+  }
+}
+
+/* The date chip kept rgba(6, 12, 27, .74) from the old blue theme — the one
+   coloured spot left on an otherwise black surface. */
+#malik-root .malik-date-chip {
+  background: #141416 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+/* The composer is a neutral pill on the same black — no blue tint, no glow,
+   no blur pass. */
+#malik-root .malik-ai-chat-bg .malik-composer-panel {
+  background: #111112 !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 /* No fade strip above the dock. malik-final-fixes.css already forces

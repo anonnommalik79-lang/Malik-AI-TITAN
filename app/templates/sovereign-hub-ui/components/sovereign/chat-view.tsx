@@ -132,11 +132,6 @@ interface ChatViewProps {
 
 const MAX_FILE_SIZE = 12 * 1024 * 1024
 
-function getInitials(value?: string) {
-  const clean = (value || "US").replace(/@.*/, "").trim()
-  return (clean.slice(0, 2) || "US").toUpperCase()
-}
-
 async function fileToAttachment(file: File): Promise<ChatAttachment> {
   if (file.size > MAX_FILE_SIZE) throw new Error(`Файл слишком большой: ${file.name}. Лимит 12MB.`)
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -576,7 +571,6 @@ function ThinkingBubble({ generationType, query = "" }: { generationType: Genera
 
 function MessageBubble({
   message,
-  currentUser,
   onCopy,
   copied,
   generationType = "text",
@@ -587,7 +581,6 @@ function MessageBubble({
   feedback,
 }: {
   message: Message
-  currentUser: string
   onCopy: (id: string, text: string) => void
   copied: boolean
   generationType?: GenerationStatusType
@@ -603,17 +596,16 @@ function MessageBubble({
   const displayContent = isUser ? message.content : cleanChatViewText(message.content)
   return (
     <div data-malik-message={message.role} className={cn("malik-message-row flex w-full gap-3 sm:gap-4", isUser ? "malik-message-row-user justify-end" : "malik-message-row-assistant justify-start")}>
-      {!isUser && (
-        <div
-          className={cn(
-            "malik-ai-avatar flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black",
-            message.isStreaming && "is-working",
-          )}
-        >
+      {/* The mark is a progress indicator, not a byline: it appears while the
+          answer is being produced and leaves with the spinner. A finished
+          answer stands on its own, the way every mainstream assistant shows
+          one. */}
+      {!isUser && message.isStreaming && (
+        <div className="malik-ai-avatar is-working flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black">
           <svg viewBox="0 0 44 44" className="h-full w-full" aria-hidden="true"><rect width="44" height="44" rx="12" fill="white" /><path d="M9 29 L22 15 L22 29 Z" fill="#03040a" /><path d="M24 15 H38 L24 29 Z" fill="#03040a" /></svg>
         </div>
       )}
-      <div className={cn("malik-message-stack min-w-0 max-w-[min(900px,82%)] overflow-hidden", isUser && "order-first max-w-[min(720px,74%)]")}>
+      <div className={cn("malik-message-stack min-w-0 overflow-hidden", isUser ? "order-first max-w-[80%]" : "w-full")}>
         <div className={cn(
           "malik-message-card break-words text-[15px] leading-7 sm:text-[15.5px]",
           message.generatedMedia || isThinking
@@ -634,11 +626,8 @@ function MessageBubble({
           </div>
         )}
       </div>
-      {isUser && (
-        <div className="malik-user-avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
-          {getInitials(currentUser)}
-        </div>
-      )}
+      {/* No initials disc beside the user's own turn either — the bubble and
+          its right alignment already say who wrote it. */}
     </div>
   )
 }
@@ -874,7 +863,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
   ], [onOpenCodex, onForceCanvas, isRecording])
 
   return (
-    <div data-malik-chat-fullwidth="1" className="malik-chat-fullwidth relative z-[2] flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-[#02050d]/35 text-white">
+    <div data-malik-chat-fullwidth="1" className="malik-chat-fullwidth relative z-[2] flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-transparent text-white">
       <style>{`
         @media (min-width: 1024px) {
           .malik-dashboard-shell main > section {
@@ -888,12 +877,12 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
           }
         }
       `}</style>
-      <div className="malik-chat-space pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_22%_18%,rgba(228, 187, 94,.06),transparent_26%),radial-gradient(circle_at_72%_10%,rgba(201, 152, 47,.08),transparent_28%),linear-gradient(180deg,#02050d,#030303)]" />
-      <div className="malik-chat-grid pointer-events-none absolute inset-0 opacity-[0.035] [background-image:linear-gradient(to_right,rgba(240, 210, 136,.32)_1px,transparent_1px),linear-gradient(to_bottom,rgba(240, 210, 136,.32)_1px,transparent_1px)] [background-size:44px_44px]" />
-      <span className="malik-chat-horizon pointer-events-none absolute inset-x-0 bottom-[134px] h-48" />
+      {/* No gradient wash, 44px grid or horizon glow behind the thread. Three
+          stacked decorative layers are what made the surface read as panels
+          with seams instead of one continuous background. */}
 
       <div data-message-list className="malik-chat-scroll relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-44 pt-6 md:px-8 md:pb-48 lg:px-10">
-        <div className="malik-message-list mx-auto flex w-full max-w-[1180px] flex-col gap-7 sm:gap-8">
+        <div className="malik-message-list mx-auto flex w-full max-w-[768px] flex-col gap-8 sm:gap-10">
           {messages.length === 0 ? (
             <div className="relative mt-10 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,.38)] backdrop-blur-xl sm:mt-16 sm:p-10">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_18%,rgba(228, 187, 94,.15),transparent_35%),radial-gradient(circle_at_78%_75%,rgba(217, 174, 69,.16),transparent_36%)]" />
@@ -910,7 +899,6 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
                 <MessageBubble
                   key={message.id}
                   message={message}
-                  currentUser={currentUser}
                   onCopy={handleCopy}
                   copied={copiedId === message.id}
                   generationType={activeGenerationType}
@@ -927,8 +915,8 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
         </div>
       </div>
 
-      <div data-composer className="malik-composer-dock relative z-20 w-full shrink-0 border-t border-white/8 bg-[#02050d]/72 px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 backdrop-blur-2xl md:px-8 md:pb-6 lg:px-10">
-        <div className="malik-composer-panel chat-composer mx-auto w-full max-w-[1180px] rounded-[1.55rem] border border-blue-300/16 bg-[#060914]/96 p-3 shadow-[0_-18px_80px_rgba(177, 132, 44,.12)] backdrop-blur-xl sm:p-4">
+      <div data-composer className="malik-composer-dock relative z-20 w-full shrink-0 bg-transparent px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 md:px-8 md:pb-6 lg:px-10">
+        <div className="malik-composer-panel chat-composer mx-auto w-full max-w-[768px] rounded-[1.55rem] border border-white/10 bg-[#111112] p-3 sm:p-4">
           {localError && <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">{localError}</div>}
           {attachments.length > 0 && <div className="mb-3 flex flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => setAttachments((previous) => previous.filter((item) => item.id !== attachment.id))} />)}</div>}
           <div className="malik-composer-top relative mb-2 flex items-center justify-between gap-3">
