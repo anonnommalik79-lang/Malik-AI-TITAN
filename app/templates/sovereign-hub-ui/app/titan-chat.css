@@ -237,3 +237,50 @@
     animation: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FLAT BLACK CHAT SURFACE
+
+   chat-layout-fix.css painted the conversation on #030818 — a navy tint
+   that came from the space photo behind it. The photo is gone (see
+   ChatInvestorBackground), so the tint has nothing left to match and the
+   surface goes to true black, the way ChatGPT, Claude and Gemini render a
+   thread. This sheet loads after chat-layout-fix.css, so an equally
+   specific !important rule here wins.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#malik-root .malik-ai-chat-bg,
+#malik-root .malik-chat-legend-bg,
+#malik-root .malik-premium-chat-host {
+  background: #000 !important;
+}
+
+/* The photo elements are no longer rendered; kill the rules too, so a
+   stale cached sheet can never paint them back. */
+#malik-root .malik-chat-legend-photo,
+#malik-root .malik-chat-legend-grade {
+  display: none !important;
+}
+
+/* The composer sat on a translucent blur to read against the photo. On flat
+   black the blur buys nothing and costs a full-viewport backdrop pass every
+   frame, so it becomes solid black with a hairline separator. */
+#malik-root .malik-ai-chat-bg .malik-composer-dock {
+  background: #000 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+/* No fade strip above the dock. malik-final-fixes.css already forces
+   `content: none !important` on this dock's ::before/::after above 1024px,
+   so a gradient here would only render on phones — an inconsistency, and
+   one more layer to paint. The hairline border separates the two areas. */
+
+/* Whatever sits behind the chat column — shell, main, section — is black too,
+   so no seam shows at the rails. */
+#malik-root .malik-dashboard-shell:has(.malik-chat-legend-bg) > main,
+#malik-root .malik-dashboard-shell:has(.malik-chat-legend-bg) > main > section {
+  background: #000 !important;
+}
