@@ -1145,7 +1145,7 @@ type DashboardViewRegistryEntry = {
   id: string
   title: string
   description: string
-  bucket: "core" | "generator" | "workspace" | "account" | "support"
+  bucket: "core" | "generator" | "workspace" | "account" | "support" | "media"
   icon: string
   status: DashboardViewStatus
   mobileMode: "stack" | "modal" | "full"
