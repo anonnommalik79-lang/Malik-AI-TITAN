@@ -1128,6 +1128,8 @@ type DashboardRouteReason =
   | "manual"
   | "intent"
   | "sidebar"
+  | "topbar"
+  | "rail"
   | "welcome"
   | "command-center"
   | "mobile"

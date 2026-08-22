@@ -246,6 +246,13 @@ function SidebarInner({
   const avatar = profile?.avatar || buildFallbackAvatar(email)
   const isGuest = /guest|anonymous/i.test(email)
   const displayName = isGuest ? "Гостевой доступ" : name
+  const initials = displayName
+    .trim()
+    .split(/\s+/)
+    .map((part) => part.charAt(0))
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "M"
   const isPro = Boolean(profile?.isAdmin) || !isGuest
   const roleLabel = profile?.isAdmin ? "Соло-фаундер" : isGuest ? "Free plan" : "Pro workspace"
 
