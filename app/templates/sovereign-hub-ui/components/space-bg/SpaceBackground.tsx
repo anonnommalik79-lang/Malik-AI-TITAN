@@ -14,10 +14,12 @@ import { GalacticCore } from "./GalacticCore"
  *   DeepSpaceBase ........ void + nebula + Milky Way        (z 0–2)
  *   AuroraVeil ........... edge auroras + energy            (z 5–6)
  *   GalacticCore ......... orbits + pulse + core + hero glow(z 7–10)
- *   UltraStarField ....... 3 parallax star layers           (z 11–13)
- *   CinematicOverlays .... dust (z14) ... + grade overlays  (z 14, 19–22)
- *   ShootingStars ........ meteors near/far                 (z 15–16)
  *   AtmosphereHorizon .... planet limb + rim                (z 17–18)
+ *
+ * The star field, shooting stars and cinematic grade overlays used to sit
+ * between the core and the horizon. They were per-frame canvas work that
+ * dominated the mobile frame budget, so they were removed rather than
+ * throttled; the four layers above carry the look on their own.
  *
  * The root keeps the legacy `malik-ai-background` class in addition to the
  * new `malik-space-bg` class. This is intentional: existing global CSS (in

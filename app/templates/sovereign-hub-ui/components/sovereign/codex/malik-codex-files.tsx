@@ -17,6 +17,9 @@ const fileGroups = [
       "app/templates/sovereign-hub-ui/components/sovereign/chat-view.tsx",
       "app/templates/sovereign-hub-ui/components/sovereign/preview-panel.tsx",
       "app/templates/sovereign-hub-ui/components/sovereign/sidebar.tsx",
+      "app/templates/sovereign-hub-ui/components/sovereign/TitanTopBar.tsx",
+      "app/templates/sovereign-hub-ui/components/sovereign/RightRail.tsx",
+      "app/templates/sovereign-hub-ui/components/sovereign/hybrid/MalikHybridHome.tsx",
     ],
   },
   {
@@ -24,8 +27,8 @@ const fileGroups = [
     icon: FileCode2,
     files: [
       "components/sovereign/core/feature-registry.ts",
-      "components/sovereign/photo-generation/photo-generation-panel.tsx",
-      "components/sovereign/generators/generator-panel.tsx",
+      "components/sovereign/photo-generation/PhotoGenerationStudio.tsx",
+      "components/sovereign/video-generation/VideoGenerationStudio.tsx",
     ],
   },
   {
