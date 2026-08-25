@@ -40,6 +40,9 @@ import {
 } from "lucide-react"
 import type { GenerationStatusType } from "./generation-status"
 import type { AIPlan } from "@/lib/ai/types"
+import { DEFAULT_MALIK_MODEL_ID, type MalikModelId } from "@/lib/ai/malik-models"
+import { clientFetchWithTimeout } from "@/lib/api-client"
+import { MalikModelSelector } from "./MalikModelSelector"
 import {
   canUseUltra,
   loadResponseDepth,
@@ -126,6 +129,9 @@ interface ChatViewProps {
   streamingText?: string
   currentUser?: string
   userPlan?: AIPlan
+  selectedModelId?: MalikModelId
+  onModelChange?: (modelId: MalikModelId) => void
+  onOpenBilling?: () => void
   onOpenCodex?: () => void
   onForceCanvas?: () => void
 }
@@ -632,7 +638,7 @@ function MessageBubble({
   )
 }
 
-export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", onOpenCodex, onForceCanvas }: ChatViewProps) {
+export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenCodex, onForceCanvas }: ChatViewProps) {
   // A short tick when the answer lands. Only fires when the tab is focused and
   // only on hardware that has a vibrator, so desktop gets nothing rather than a
   // console warning.
@@ -655,7 +661,6 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
   const showUltra = canUseUltra(effectivePlan)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [feedbackMap, setFeedbackMap] = useState<Record<string, "up" | "down">>({})
-  const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [codeModalOpen, setCodeModalOpen] = useState(false)
@@ -677,7 +682,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
   useEffect(() => {
     setEffectivePlan(userPlan)
     if (!currentUser || currentUser === "User") return
-    fetch(`/api/ai/usage?userId=${encodeURIComponent(currentUser)}`)
+    clientFetchWithTimeout(`/api/ai/usage?userId=${encodeURIComponent(currentUser)}`, { cache: "no-store" })
       .then((response) => response.json())
       .then((data) => {
         const plan = data?.plan
@@ -802,9 +807,6 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
     setFeedbackMap((previous) => ({ ...previous, [messageId]: value }))
   }
 
-  const modelLabel =
-    responseDepth === "ultra" ? "Malik AI Ultra Pro" : responseDepth === "deep" ? "Malik AI Deep" : "Malik AI Fast"
-
   const selectDepth = (depth: ResponseDepth) => {
     if (depth === "ultra" && !showUltra) return
     setResponseDepth(depth)
@@ -920,30 +922,12 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
           {localError && <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">{localError}</div>}
           {attachments.length > 0 && <div className="mb-3 flex flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => setAttachments((previous) => previous.filter((item) => item.id !== attachment.id))} />)}</div>}
           <div className="malik-composer-top relative mb-2 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setModelMenuOpen((value) => !value)}
-              className="malik-model-chip flex min-w-0 items-center gap-2 text-sm font-bold"
-            >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white"><svg viewBox="0 0 44 44" className="h-5 w-5" aria-hidden="true"><rect width="44" height="44" rx="12" fill="white" /><path d="M9 29 L22 15 L22 29 Z" fill="#03040a" /><path d="M24 15 H38 L24 29 Z" fill="#03040a" /></svg></span>
-              <span className="truncate">{modelLabel}</span>
-              <ChevronRight className={cn("h-4 w-4 rotate-90 text-slate-500 transition", modelMenuOpen && "rotate-[-90deg]")} />
-            </button>
-            {modelMenuOpen ? (
-              <div className="absolute left-0 top-full z-30 mt-2 w-56 rounded-xl border border-white/10 bg-[#060914] p-1.5 shadow-2xl">
-                <button type="button" onClick={() => { selectDepth("fast"); setModelMenuOpen(false) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-white/5">
-                  <Zap className="h-4 w-4 text-cyan-300" /> Malik AI Fast
-                </button>
-                <button type="button" onClick={() => { selectDepth("deep"); setModelMenuOpen(false) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-white/5">
-                  <Brain className="h-4 w-4 text-violet-300" /> Malik AI Deep
-                </button>
-                {showUltra ? (
-                  <button type="button" onClick={() => { selectDepth("ultra"); setModelMenuOpen(false) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-white/5">
-                    <Crown className="h-4 w-4 text-amber-300" /> Malik AI Ultra Pro
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
+            <MalikModelSelector
+              selectedModelId={selectedModelId}
+              plan={effectivePlan}
+              onSelect={onModelChange || (() => {})}
+              onOpenBilling={onOpenBilling}
+            />
             <button type="button" onClick={() => textareaRef.current?.focus()} className="malik-composer-expand" aria-label="Развернуть поле ввода">
               <Maximize2 className="h-4 w-4" />
             </button>

@@ -14,7 +14,8 @@ import { MalikCodexModal } from "./codex/malik-codex-modal"
 import { CommandPalette } from "./command-palette"
 import { TitanTopBar } from "./TitanTopBar"
 import { RightRail } from "./RightRail"
-import { readContextEnabled } from "@/lib/malik-context"
+import { prefillPrompt, readContextEnabled } from "@/lib/malik-context"
+import { targetViewForTemplate, type MalikTemplate } from "@/lib/malik-template-registry"
 import { SovereignBillingPanel } from "./billing/sovereign-billing-panel"
 import { SovereignSettingsPanel } from "./settings/sovereign-settings-panel"
 import { SovereignSupportPanel } from "./support"
@@ -101,7 +102,17 @@ import {
   RefreshCw,
   ShieldCheck
 } from "lucide-react"
-import { getUserPlan } from "@/lib/ai/admin-bypass"
+import { clientFetchWithTimeout } from "@/lib/api-client"
+import {
+  DEFAULT_MALIK_MODEL_ID,
+  canUseMalikModel,
+  getMalikModel,
+  isMalikModelId,
+  loadMalikModelSelection,
+  saveMalikModelSelection,
+  type MalikModelId,
+} from "@/lib/ai/malik-models"
+import type { AIPlan } from "@/lib/ai/types"
 import {
   responseDepthInstruction,
   responseDepthLimits,
@@ -146,6 +157,7 @@ interface Message {
   generatedMedia?: InlineMediaGeneration
   isStreaming?: boolean
   intentType?: "chat" | "project"
+  modelId?: MalikModelId
 }
 
 interface ChatAttachment {
@@ -184,6 +196,7 @@ interface Chat {
   messages: Message[]
   status?: "deployed" | "draft" | "building"
   techStack?: string[]
+  selectedModelId?: MalikModelId
 }
 
 
@@ -839,6 +852,7 @@ function reviveMessage(message: any): Message {
       : undefined,
     isStreaming: false,
     intentType: message?.intentType === "project" ? "project" : "chat",
+    modelId: isMalikModelId(message?.modelId) ? message.modelId : undefined,
   }
 }
 
@@ -851,6 +865,7 @@ function reviveChat(chat: StoredChat): Chat {
     messages: Array.isArray(chat?.messages) ? chat.messages.map(reviveMessage) : [],
     status: chat?.status === "deployed" || chat?.status === "building" ? chat.status : "draft",
     techStack: Array.isArray(chat?.techStack) ? chat.techStack : ["React", "Tailwind"],
+    selectedModelId: isMalikModelId(chat?.selectedModelId) ? chat.selectedModelId : undefined,
   }
 }
 
@@ -1136,6 +1151,7 @@ type DashboardRouteReason =
   | "history"
   | "canvas"
   | "capability"
+  | "template"
   | "fallback"
   | "system"
 
@@ -4402,6 +4418,9 @@ export function Dashboard() {
 
   const [username, setUsername] = useState<string>(safeGetStorage("malik_user", ""))
   const [isAdmin, setIsAdmin] = useState<boolean>(safeGetStorage("malik_is_admin") === "true")
+  const [selectedModelId, setSelectedModelId] = useState<MalikModelId>(() => loadMalikModelSelection())
+  const [currentPlan, setCurrentPlan] = useState<AIPlan>("free")
+  const [planResolved, setPlanResolved] = useState(false)
   const [authReady, setAuthReady] = useState(true)
   const [userAvatar, setUserAvatar] = useState<string>(safeGetStorage("malik_user_avatar", ""))
   const [userDisplayName, setUserDisplayName] = useState<string>(safeGetStorage("malik_user_name", ""))
@@ -4551,6 +4570,31 @@ export function Dashboard() {
     }
   }, [])
 
+  useEffect(() => {
+    let alive = true
+    setPlanResolved(false)
+    clientFetchWithTimeout("/api/ai/usage", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (!alive) return
+        const plan = payload?.plan
+        setCurrentPlan(plan === "pro" || plan === "ultra" || plan === "owner" ? plan : "free")
+      })
+      .catch(() => {
+        if (alive) setCurrentPlan("free")
+      })
+      .finally(() => {
+        if (alive) setPlanResolved(true)
+      })
+    return () => { alive = false }
+  }, [username])
+
+  useEffect(() => {
+    if (!planResolved || canUseMalikModel(selectedModelId, currentPlan)) return
+    setSelectedModelId(DEFAULT_MALIK_MODEL_ID)
+    saveMalikModelSelection(DEFAULT_MALIK_MODEL_ID)
+  }, [currentPlan, planResolved, selectedModelId])
+
   // Persist chats/project state so refresh does not erase user's work.
   useEffect(() => {
     try {
@@ -4563,6 +4607,7 @@ export function Dashboard() {
         if (Array.isArray(parsed?.messages)) setMessages(parsed.messages.map(reviveMessage))
         if (typeof parsed?.generatedCode === "string") setGeneratedCode(parsed.generatedCode)
         if (typeof parsed?.activeView === "string") setActiveView(parsed.activeView)
+        if (isMalikModelId(parsed?.selectedModelId)) setSelectedModelId(parsed.selectedModelId)
       }
     } catch (err) {
       console.warn("[DASHBOARD RESTORE ERROR]", err)
@@ -4580,11 +4625,12 @@ export function Dashboard() {
         messages,
         generatedCode,
         activeView,
+        selectedModelId,
       }))
     } catch (err) {
       console.warn("[DASHBOARD SAVE ERROR]", err)
     }
-  }, [storageRestored, chats, activeChatId, messages, generatedCode, activeView])
+  }, [storageRestored, chats, activeChatId, messages, generatedCode, activeView, selectedModelId])
 
   useEffect(() => {
     if (activeViewRef.current === activeView) return
@@ -4640,6 +4686,15 @@ export function Dashboard() {
     }
   }, [])
 
+  const handleModelChange = useCallback((modelId: MalikModelId) => {
+    if (!canUseMalikModel(modelId, currentPlan)) return
+    setSelectedModelId(modelId)
+    saveMalikModelSelection(modelId)
+    if (activeChatId) {
+      setChats((previous) => previous.map((chat) => chat.id === activeChatId ? { ...chat, selectedModelId: modelId } : chat))
+    }
+  }, [activeChatId, currentPlan])
+
   const handleNewChat = useCallback(() => {
     safeOpenView("home", "manual")
     setMobilePreviewOpen(false)
@@ -4651,6 +4706,7 @@ export function Dashboard() {
       title: "Новый проект",
       timestamp: new Date(),
       messages: [],
+      selectedModelId,
       status: "draft",
       techStack: ["React", "Tailwind"]
     }
@@ -4660,11 +4716,29 @@ export function Dashboard() {
     setGeneratedCode("")
     setCurrentVersion(1)
     setTotalVersions(1)
-  }, [])
+  }, [selectedModelId])
+
+  const launchTemplate = useCallback((template: MalikTemplate) => {
+    const targetView = targetViewForTemplate(template)
+
+    if (targetView === "home") {
+      handleNewChat()
+      window.setTimeout(() => prefillPrompt(template.prompt), 0)
+      return
+    }
+
+    prefillPrompt(template.prompt)
+    safeOpenView(targetView, "template")
+  }, [handleNewChat, safeOpenView])
 
   const handleSelectChat = useCallback((chatId: string) => {
     const chat = chats.find(c => c.id === chatId)
     if (chat) {
+      const chatModel = chat.selectedModelId && canUseMalikModel(chat.selectedModelId, currentPlan)
+        ? chat.selectedModelId
+        : DEFAULT_MALIK_MODEL_ID
+      setSelectedModelId(chatModel)
+      saveMalikModelSelection(chatModel)
       safeOpenView("home", "history")
       setActiveChatId(chatId)
       setMessages(chat.messages)
@@ -4678,7 +4752,7 @@ export function Dashboard() {
       setIsGeneratingTerminal(false)
       setStreamingText("")
     }
-  }, [chats])
+  }, [chats, currentPlan])
 
   const handleDeleteChat = useCallback((chatId: string) => {
     setChats(prev => prev.filter(c => c.id !== chatId))
@@ -5054,7 +5128,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const cleanContent = (content || "").trim()
   if (!cleanContent || isLoading) return
 
-  const userPlan = getUserPlan(isAdmin ? username : { email: username })
+  const userPlan = currentPlan
   const responseDepth = resolveResponseDepth(options?.responseDepth, userPlan)
   const depthLimits = responseDepthLimits(responseDepth)
 
@@ -5101,13 +5175,14 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       title,
       timestamp: new Date(),
       messages: [],
+      selectedModelId,
       status: runtimePlan.status,
       techStack: runtimePlan.techStack
     }
     setChats(prev => [newChat, ...prev])
     setActiveChatId(chatId)
   } else {
-    setChats(prev => prev.map(c => c.id === chatId ? { ...c, status: runtimePlan.status, techStack: runtimePlan.techStack } : c))
+    setChats(prev => prev.map(c => c.id === chatId ? { ...c, selectedModelId, status: runtimePlan.status, techStack: runtimePlan.techStack } : c))
   }
 
   const userMessage: Message = {
@@ -5124,6 +5199,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     timestamp: new Date(),
     isStreaming: true,
     intentType: inlineMediaKind ? "chat" : isProjReq ? "project" : "chat",
+    modelId: selectedModelId,
     generatedMedia: inlineMediaKind ? createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt) : undefined,
   }
 
@@ -5447,11 +5523,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       payload: { chatId, mode, generationKind: routeDecision.generationKind },
     })
 
+    const accessToken = await getDashboardAccessToken()
     const response = await fetch('/api/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Accept': 'text/plain; charset=utf-8',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
       body: JSON.stringify({
         question,
@@ -5468,6 +5546,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         media_type: attachments.find(a => a.base64)?.mime,
         mode: isProjReq ? "pro" : isCodeReq ? "code" : "fast",
         responseMode: mode,
+        model: selectedModelId,
         forceCanvas: isProjReq,
         isProjectRequest: isProjReq,
         isCodeRequest: isCodeReq,
@@ -5499,7 +5578,15 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       }),
     })
 
-    if (!response.ok) throw new Error(`Server returned ${response.status}`)
+    if (!response.ok) {
+      const rawError = await response.text()
+      let message = rawError
+      try {
+        const payload = JSON.parse(rawError)
+        message = payload?.message || payload?.error || rawError
+      } catch {}
+      throw new Error(message || `${getMalikModel(selectedModelId).label} временно недоступна.`)
+    }
 
     let fullText = cleanDashboardAIText(await response.text())
 
@@ -5518,15 +5605,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       }
       setIsGeneratingTerminal(false)
 
-      if (isProjReq) {
-        // Backend вернул слабое “Готово”, но пользователь просил проект.
-        // Включаем локальный Sovereign fallback: создаём полноценный preview/code вместо пустого ответа.
-        const responseText = generateMockResponse(cleanContent)
-        const codeText = generateMockCode(cleanContent)
-        finalizeAssistant(responseText, codeText)
-      } else {
-        finalizeAssistant("Не удалось получить ответ. Попробуйте ещё раз.", undefined)
-      }
+      finalizeAssistant(
+        fullText || `${getMalikModel(selectedModelId).label} не вернула готовый ответ. Попробуйте ещё раз или выберите другую модель.`,
+        undefined,
+      )
       return
     }
 
@@ -5534,12 +5616,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     let { text: cleanText, code } = extractCodeBlocks(fullText, mode)
     cleanText = cleanDashboardAIText(cleanText)
 
-    // TERMINATOR CANVAS GUARANTEE:
-    // Если внешний провайдер сказал “сгенерировано”, но не дал код,
-    // canvas всё равно получает полноценный локальный preview, а не пустой чат.
+    // A strict model selection may return an explanation instead of a full
+    // artifact. Keep that exact answer in chat; never manufacture a local
+    // project and present it as output from the selected model.
     if (isProjReq && (!code || code.trim().split("\n").length < 25)) {
-      cleanText = cleanText || fullText || generateMockResponse(cleanContent)
-      code = generateMockCode(cleanContent)
+      cleanText = cleanText || fullText
+      code = ""
     }
 
     const elapsed = Date.now() - startTime
@@ -5563,7 +5645,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       view: activeViewRef.current,
       payload: error instanceof Error ? error.message : error,
     })
-    const errorMessage = "Не удалось получить ответ. Попробуйте ещё раз."
+    const errorMessage = error instanceof Error && error.message
+      ? error.message
+      : `${getMalikModel(selectedModelId).label} временно недоступна. Попробуйте ещё раз или выберите другую модель.`
     setErrorNotification(errorMessage)
 
     const elapsed = Date.now() - startTime
@@ -5573,18 +5657,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
     setIsGeneratingTerminal(false)
 
-    if (isProjReq) {
-      const responseText = generateMockResponse(cleanContent)
-      const codeText = generateMockCode(cleanContent)
-      finalizeAssistant(responseText, codeText)
-    } else {
-      finalizeAssistant("Не удалось получить ответ. Попробуйте ещё раз.", undefined)
-    }
+    finalizeAssistant(errorMessage, undefined)
   } finally {
     setIsLoading(false)
     setStreamingText("")
   }
-}, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode])
+}, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId])
 
   const handleUseTemplate = useCallback((prompt: string) => {
     safeOpenView("home", "history")
@@ -5846,7 +5924,7 @@ const shouldShowMobilePreviewButton =
       return <SovereignSettingsPanel username={userDisplayName || username} onLogout={handleLogout} />;
     }
     if (activeView === "templates") {
-      return <TemplateGalleryPanel onSendToCanvas={(code) => safeOpenCanvas(code, "generator-panel")} />;
+      return <TemplateGalleryPanel onLaunchTemplate={launchTemplate} />;
     }
     if (activeView === "projects") {
       return <ProjectsView chats={chats} onSelectProject={handleSelectChat} onNewProject={handleNewChat} />;
@@ -5869,7 +5947,10 @@ const shouldShowMobilePreviewButton =
               isLoading={isLoading}
               streamingText={streamingText}
               currentUser={username}
-              userPlan={getUserPlan(isAdmin ? username : { email: username })}
+              userPlan={currentPlan}
+              selectedModelId={selectedModelId}
+              onModelChange={handleModelChange}
+              onOpenBilling={() => safeOpenView("billing", "manual")}
               onOpenCodex={() => setCodexOpen(true)}
               onForceCanvas={() => safeOpenCanvas(undefined, "chat-force")}
             />
@@ -5890,6 +5971,10 @@ const shouldShowMobilePreviewButton =
               onOpenCommandCenter={() => safeOpenView("command-center", "welcome")}
               onOpenSupport={() => safeOpenView("support", "welcome")}
               onOpenCapabilities={() => safeOpenView("capabilities", "welcome")}
+              onLaunchTemplate={launchTemplate}
+              selectedModelId={selectedModelId}
+              userPlan={currentPlan}
+              onModelChange={handleModelChange}
             />
           )}
         </section>

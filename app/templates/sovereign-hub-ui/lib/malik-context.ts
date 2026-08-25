@@ -73,8 +73,26 @@ export function formatTokens(count: number): string {
 
 /** Prefill the home composer from anywhere (sidebar tools, shortcuts). */
 export const PREFILL_EVENT = "malik-prefill-prompt"
+const PREFILL_STORAGE_KEY = "malik.prefill.prompt.v1"
 
 export function prefillPrompt(text: string): void {
   if (typeof window === "undefined") return
+  try {
+    window.sessionStorage.setItem(PREFILL_STORAGE_KEY, text)
+  } catch {
+    /* The event still fills a mounted workspace when storage is unavailable. */
+  }
   window.dispatchEvent(new CustomEvent(PREFILL_EVENT, { detail: text }))
+}
+
+/** Read a template prompt exactly once when the destination workspace mounts. */
+export function takePrefillPrompt(): string {
+  if (typeof window === "undefined") return ""
+  try {
+    const value = window.sessionStorage.getItem(PREFILL_STORAGE_KEY) || ""
+    window.sessionStorage.removeItem(PREFILL_STORAGE_KEY)
+    return value
+  } catch {
+    return ""
+  }
 }

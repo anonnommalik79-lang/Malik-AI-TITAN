@@ -1,24 +1,27 @@
 "use client"
 
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import {
   ArrowRight,
+  ArrowUp,
   Brain,
   Code2,
-  Crown,
   Film,
   Globe,
   Image as ImageIcon,
-  MessageSquare,
+  Layers3,
   Mic,
   Paperclip,
-  Send,
-  Sparkles,
-  SquareCode,
+  Plus,
+  Wrench,
+  type LucideIcon,
 } from "lucide-react"
 import { prefetchChatShell } from "@/lib/studio-prefetch"
-import { clientFetchWithTimeout } from "@/lib/api-client"
-import { PREFILL_EVENT, useContextEnabled } from "@/lib/malik-context"
+import { PREFILL_EVENT, takePrefillPrompt, useContextEnabled } from "@/lib/malik-context"
+import { DEFAULT_MALIK_MODEL_ID, type MalikModelId } from "@/lib/ai/malik-models"
+import type { AIPlan } from "@/lib/ai/types"
+import { HOME_MALIK_TEMPLATES, type MalikTemplate } from "@/lib/malik-template-registry"
+import { MalikModelSelector } from "../MalikModelSelector"
 import type { AiModeId } from "../power-registry"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
@@ -37,156 +40,12 @@ export interface MalikHybridHomeProps {
   onOpenCommandCenter?: () => void
   onOpenSupport?: () => void
   onOpenCapabilities?: () => void
+  onLaunchTemplate?: (template: MalikTemplate) => void
+  selectedModelId?: MalikModelId
+  userPlan?: AIPlan
+  onModelChange?: (modelId: MalikModelId) => void
   currentMode?: AiModeId
   onModeChange?: (mode: AiModeId) => void
-}
-
-/**
- * Lifted from the design mock and shipped as a local asset: the wordmark, crown,
- * subtitle and model badge that were burnt into that bitmap are masked out and
- * inpainted, because the app draws all four as live DOM on top. Local also means
- * no third-party image host on the critical path of the first paint.
- */
-const HERO_PHOTO = "/images/titan-hero.jpg"
-
-/**
- * Card plates come from the same design source as the hero and ship locally.
- * Remote stock URLs meant four more third-party requests on first paint and a
- * blank card whenever that host was slow or blocked.
- */
-
-type TemplateKind = "chat" | "crm" | "shop" | "analytics" | "booking"
-
-/**
- * Template thumbnails are drawn, not photographed. A stock picture of an office
- * says nothing about what the template builds, and five remote images would be
- * five more requests competing with the hero on first paint. These are inline
- * SVGs in the product palette: no network, and they actually resemble the
- * screen the template produces.
- */
-function templateShot(kind: TemplateKind) {
-  const gold = "#d9ae45"
-  const pale = "#f3de96"
-  const dim = "#2a2620"
-
-  const body: Record<TemplateKind, string> = {
-    chat: `
-      <rect x="26" y="34" width="150" height="12" rx="6" fill="${dim}"/>
-      <rect x="26" y="58" width="196" height="30" rx="10" fill="${dim}"/>
-      <rect x="118" y="98" width="176" height="30" rx="10" fill="${gold}" opacity=".5"/>
-      <rect x="26" y="140" width="150" height="26" rx="10" fill="${dim}"/>
-      <rect x="26" y="180" width="268" height="26" rx="13" fill="none" stroke="${gold}" stroke-opacity=".45"/>`,
-    crm: `
-      <rect x="26" y="30" width="80" height="176" rx="10" fill="${dim}"/>
-      <rect x="38" y="44" width="56" height="8" rx="4" fill="${gold}" opacity=".7"/>
-      <rect x="38" y="62" width="44" height="6" rx="3" fill="${gold}" opacity=".3"/>
-      <rect x="38" y="78" width="50" height="6" rx="3" fill="${gold}" opacity=".3"/>
-      <rect x="118" y="30" width="176" height="48" rx="10" fill="${dim}"/>
-      <text x="132" y="62" fill="${pale}" font-family="Arial" font-size="21" font-weight="700">1 248</text>
-      <rect x="118" y="90" width="176" height="116" rx="10" fill="${dim}"/>
-      <polyline points="132,184 162,162 192,170 222,134 252,146 282,112" fill="none" stroke="${gold}" stroke-width="3"/>`,
-    shop: `
-      <rect x="26" y="30" width="78" height="78" rx="10" fill="${dim}"/>
-      <rect x="116" y="30" width="78" height="78" rx="10" fill="${dim}"/>
-      <rect x="206" y="30" width="88" height="78" rx="10" fill="${gold}" opacity=".32"/>
-      <rect x="26" y="120" width="78" height="86" rx="10" fill="${dim}"/>
-      <rect x="116" y="120" width="78" height="86" rx="10" fill="${dim}"/>
-      <rect x="206" y="120" width="88" height="86" rx="10" fill="${dim}"/>`,
-    analytics: `
-      <text x="26" y="54" fill="${pale}" font-family="Arial" font-size="21" font-weight="700">+24.6%</text>
-      <rect x="26" y="72" width="268" height="58" rx="10" fill="${dim}"/>
-      <polyline points="40,116 82,96 124,104 166,80 208,90 250,64 282,74" fill="none" stroke="${gold}" stroke-width="3"/>
-      <rect x="26" y="148" width="36" height="58" rx="6" fill="${gold}" opacity=".5"/>
-      <rect x="74" y="166" width="36" height="40" rx="6" fill="${gold}" opacity=".33"/>
-      <rect x="122" y="134" width="36" height="72" rx="6" fill="${gold}" opacity=".7"/>
-      <rect x="170" y="160" width="36" height="46" rx="6" fill="${gold}" opacity=".4"/>
-      <rect x="218" y="142" width="36" height="64" rx="6" fill="${gold}" opacity=".6"/>`,
-    booking: `
-      <rect x="26" y="30" width="268" height="34" rx="10" fill="${dim}"/>
-      <rect x="26" y="76" width="268" height="130" rx="10" fill="${dim}"/>
-      ${Array.from({ length: 21 }, (_, index) => {
-        const column = index % 7
-        const row = Math.floor(index / 7)
-        const marked = index === 4 || index === 9 || index === 15
-        return `<rect x="${40 + column * 36}" y="${92 + row * 38}" width="26" height="26" rx="6" fill="${marked ? gold : "#1b1a1f"}" opacity="${marked ? 0.85 : 1}"/>`
-      }).join("")}`,
-  }
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 230" width="320" height="230">
-    <rect width="320" height="230" fill="#111013"/>
-    <rect x="0" y="0" width="320" height="18" fill="#17161a"/>
-    <circle cx="16" cy="9" r="3" fill="${gold}" opacity=".6"/>
-    <circle cx="28" cy="9" r="3" fill="${gold}" opacity=".3"/>
-    <circle cx="40" cy="9" r="3" fill="${gold}" opacity=".3"/>
-    ${body[kind]}
-  </svg>`
-
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
-}
-
-const TEMPLATES: Array<{ id: TemplateKind; title: string; detail: string; prompt: string }> = [
-  {
-    id: "chat",
-    title: "AI Chat",
-    detail: "Умный ассистент",
-    prompt: "Собери премиальный AI-чат: тёмный интерфейс, история диалогов, потоковые ответы и загрузка файлов.",
-  },
-  {
-    id: "crm",
-    title: "CRM System",
-    detail: "Управление клиентами",
-    prompt: "Создай CRM для малого бизнеса: воронка сделок, карточка клиента, задачи и отчёт по выручке.",
-  },
-  {
-    id: "shop",
-    title: "E-commerce",
-    detail: "Интернет-магазин",
-    prompt: "Создай интернет-магазин: каталог, карточка товара, корзина и оформление заказа. Тёмная премиальная тема.",
-  },
-  {
-    id: "analytics",
-    title: "Analytics",
-    detail: "Аналитика и инсайты",
-    prompt: "Собери аналитический дашборд: KPI-карты, график роста, разбивка по каналам и короткие выводы.",
-  },
-  {
-    id: "booking",
-    title: "Booking",
-    detail: "Система бронирования",
-    prompt: "Создай систему бронирования: календарь свободных слотов, форма записи и подтверждение брони.",
-  },
-]
-
-function HomeHero({ modelOnline }: { modelOnline: boolean | null }) {
-  return (
-    <section className="thome-hero" aria-label="MALIK AI TITAN">
-      <img
-        className="thome-hero-photo"
-        src={HERO_PHOTO}
-        alt=""
-        loading="eager"
-        decoding="async"
-        fetchPriority="high"
-        draggable={false}
-      />
-
-      <div className={cn("thome-model-badge", modelOnline === false && "is-down")}>
-        <span className="thome-pulse" />
-        <span>
-          <b>MalikLLM75B</b>
-          <small>{modelOnline === null ? "Проверяю…" : modelOnline ? "Online" : "Offline"}</small>
-        </span>
-      </div>
-
-      <Crown className="thome-crown h-7 w-7" aria-hidden="true" />
-      <h1 className="thome-wordmark">MALIK AI</h1>
-      <p className="thome-wordmark-sub">TITAN</p>
-      <p className="thome-hero-lead">
-        <span>Ваш личный ИИ-ассистент. Создаёт. Анализирует. Автоматизирует.</span>
-        <span>Один интеллект — безграничные возможности.</span>
-      </p>
-    </section>
-  )
 }
 
 function HomeComposer({
@@ -199,8 +58,13 @@ function HomeComposer({
   onToggleWeb,
   onToggleMemory,
   onOpenPhoto,
+  onOpenVideo,
   onOpenCode,
   onOpenCanvas,
+  selectedModelId,
+  userPlan,
+  onModelChange,
+  onOpenBilling,
 }: {
   prompt: string
   isLoading?: boolean
@@ -211,37 +75,58 @@ function HomeComposer({
   onToggleWeb: () => void
   onToggleMemory: () => void
   onOpenPhoto?: () => void
+  onOpenVideo?: () => void
   onOpenCode?: () => void
   onOpenCanvas?: () => void
+  selectedModelId: MalikModelId
+  userPlan: AIPlan
+  onModelChange: (modelId: MalikModelId) => void
+  onOpenBilling?: () => void
 }) {
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const toolsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const field = textareaRef.current
+    if (!field) return
+    field.style.height = "0px"
+    field.style.height = `${Math.min(Math.max(field.scrollHeight, 54), 220)}px`
+  }, [prompt])
+
+  useEffect(() => {
+    if (!toolsOpen) return
+    const close = (event: PointerEvent) => {
+      if (!toolsRef.current?.contains(event.target as Node)) setToolsOpen(false)
+    }
+    document.addEventListener("pointerdown", close)
+    return () => document.removeEventListener("pointerdown", close)
+  }, [toolsOpen])
+
+  const openAndClose = (action?: () => void) => {
+    action?.()
+    setToolsOpen(false)
+  }
+
+  const tools: Array<{
+    id: string
+    label: string
+    icon: LucideIcon
+    active?: boolean
+    action?: () => void
+  }> = [
+    { id: "web", label: "Веб-поиск", icon: Globe, active: webOn, action: onToggleWeb },
+    { id: "image", label: "Изображение", icon: ImageIcon, action: onOpenPhoto },
+    { id: "video", label: "Видео", icon: Film, action: onOpenVideo },
+    { id: "code", label: "Код", icon: Code2, action: onOpenCode },
+    { id: "files", label: "Файлы", icon: Paperclip, action: onOpenCanvas },
+    { id: "memory", label: "Память", icon: Brain, active: memoryOn, action: onToggleMemory },
+  ]
+
   return (
     <section className="thome-composer" aria-label="Новый запрос">
-      <div className="thome-composer-top">
-        <span className="thome-chip is-on">
-          <Sparkles className="h-4 w-4" />
-          MalikLLM75B
-        </span>
-        <span className="thome-chip">
-          <SquareCode className="h-4 w-4" />
-          Create
-        </span>
-        <button type="button" onClick={onToggleWeb} aria-pressed={webOn} className={cn("thome-chip", webOn && "is-on")}>
-          <Globe className="h-4 w-4" />
-          Web
-        </button>
-        <span className="thome-chip-spacer" />
-        <button
-          type="button"
-          onClick={onToggleMemory}
-          aria-pressed={memoryOn}
-          className={cn("thome-chip", memoryOn && "is-on")}
-        >
-          <Brain className="h-4 w-4" />
-          Memory: {memoryOn ? "On" : "Off"}
-        </button>
-      </div>
-
       <textarea
+        ref={textareaRef}
         value={prompt}
         onFocus={prefetchChatShell}
         onChange={(event) => {
@@ -254,108 +139,74 @@ function HomeComposer({
             onSubmit()
           }
         }}
-        rows={3}
-        aria-label="Опишите задачу"
-        placeholder="Например: Создай AI CRM для малого бизнеса с премиальным тёмным интерфейсом, интеграцией Telegram и автоматизацией продаж…"
+        rows={1}
+        aria-label="Спросите Malik AI"
+        placeholder="Спросите Malik AI"
       />
 
-      <div className="thome-composer-bottom">
-        <button type="button" onClick={onOpenCanvas} className="thome-tool" aria-label="Открыть холст">
-          <Paperclip className="h-[18px] w-[18px]" />
-        </button>
-        <button type="button" onClick={onOpenPhoto} className="thome-tool" aria-label="Студия изображений">
-          <ImageIcon className="h-[18px] w-[18px]" />
-        </button>
-        <button type="button" onClick={onOpenCode} className="thome-tool" aria-label="Генератор кода">
-          <Code2 className="h-[18px] w-[18px]" />
-        </button>
-        <button type="button" className="thome-tool" aria-label="Голосовой ввод" disabled>
-          <Mic className="h-[18px] w-[18px]" />
-        </button>
-
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={!prompt.trim() || isLoading}
-          className="malik-gold-button thome-submit"
-        >
-          <Send className="h-4 w-4" />
-          {isLoading ? "Генерация…" : "Создать"}
-        </button>
-      </div>
-    </section>
-  )
-}
-
-function HomeActions({
-  onStartChat,
-  onOpenPhoto,
-  onOpenVideo,
-  onOpenCode,
-}: {
-  onStartChat: () => void
-  onOpenPhoto?: () => void
-  onOpenVideo?: () => void
-  onOpenCode?: () => void
-}) {
-  const cards = [
-    {
-      id: "chat",
-      icon: MessageSquare,
-      title: "AI Чат",
-      detail: "Размышляет. Анализирует. Отвечает глубоко.",
-      photo: "/images/card-chat.jpg",
-      action: onStartChat,
-    },
-    {
-      id: "photo",
-      icon: ImageIcon,
-      title: "Создать изображение",
-      detail: "Премиум визуализация в 4K.",
-      photo: "/images/card-photo.jpg",
-      action: onOpenPhoto,
-    },
-    {
-      id: "video",
-      icon: Film,
-      title: "Сгенерировать видео",
-      detail: "Киноуровень за минуты.",
-      photo: "/images/card-video.jpg",
-      action: onOpenVideo,
-    },
-    {
-      id: "code",
-      icon: Code2,
-      title: "Написать код",
-      detail: "Тысячи строк. Без воды.",
-      photo: "/images/card-code.jpg",
-      action: onOpenCode,
-    },
-  ] as const
-
-  return (
-    <section className="thome-actions" aria-label="Быстрые действия">
-      {cards.map((card) => {
-        const Icon = card.icon
-        return (
-          <button key={card.id} type="button" onClick={card.action} className="thome-action">
-            <img
-              className="thome-action-photo"
-              src={card.photo}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              draggable={false}
-            />
-            <span className="thome-action-icon">
-              <Icon className="h-[18px] w-[18px]" />
-            </span>
-            <h3>{card.title}</h3>
-            <p>{card.detail}</p>
-            <ArrowRight className="thome-action-arrow h-4 w-4" />
+      <div className="thome-composer-bar">
+        <div className="thome-composer-left">
+          <button type="button" onClick={onOpenCanvas} className="thome-icon-button" aria-label="Добавить файл">
+            <Plus aria-hidden="true" />
           </button>
-        )
-      })}
+
+          <div className="thome-tools" ref={toolsRef}>
+            <button
+              type="button"
+              className={cn("thome-tools-trigger", toolsOpen && "is-open")}
+              onClick={() => setToolsOpen((open) => !open)}
+              aria-expanded={toolsOpen}
+              aria-haspopup="menu"
+            >
+              <Wrench aria-hidden="true" />
+              Инструменты
+            </button>
+
+            {toolsOpen ? (
+              <div className="thome-tools-menu" role="menu" aria-label="Инструменты Malik AI">
+                {tools.map((tool) => {
+                  const Icon = tool.icon
+                  return (
+                    <button
+                      key={tool.id}
+                      type="button"
+                      role="menuitem"
+                      className={cn("thome-tools-item", tool.active && "is-active")}
+                      onClick={() => openAndClose(tool.action)}
+                    >
+                      <Icon aria-hidden="true" />
+                      <span>{tool.label}</span>
+                      {tool.active ? <span className="thome-tools-state">Вкл.</span> : null}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
+
+          <MalikModelSelector
+            selectedModelId={selectedModelId}
+            plan={userPlan}
+            onSelect={onModelChange}
+            onOpenBilling={onOpenBilling}
+          />
+        </div>
+
+        <div className="thome-composer-right">
+          <button type="button" className="thome-icon-button" aria-label="Голосовой ввод" disabled>
+            <Mic aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={!prompt.trim() || isLoading}
+            className="thome-submit"
+            aria-label={isLoading ? "Malik AI отвечает" : "Отправить запрос"}
+          >
+            {isLoading ? <span className="thome-submit-loader" aria-hidden="true" /> : <ArrowUp aria-hidden="true" />}
+          </button>
+        </div>
+      </div>
     </section>
   )
 }
@@ -363,40 +214,25 @@ function HomeActions({
 function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [prompt, setPrompt] = useState("")
   const [webOn, setWebOn] = useState(true)
-  // Same setting as the "Контекст" switch in the right rail — one value, shown twice.
   const [memoryOn, setMemoryOn] = useContextEnabled()
-  const [modelOnline, setModelOnline] = useState<boolean | null>(null)
 
-  // Sidebar tools drop a starting prompt in here instead of opening a screen
-  // that would only contain a text field.
   useEffect(() => {
     const fill = (event: Event) => {
       const text = (event as CustomEvent<string>).detail
       if (typeof text !== "string") return
       setPrompt(text)
-      const field = document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")
-      field?.focus()
-      field?.setSelectionRange(text.length, text.length)
+      window.setTimeout(() => {
+        const field = document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")
+        field?.focus()
+        field?.setSelectionRange(text.length, text.length)
+      }, 0)
     }
+
+    const pending = takePrefillPrompt()
+    if (pending) fill(new CustomEvent(PREFILL_EVENT, { detail: pending }))
+
     window.addEventListener(PREFILL_EVENT, fill)
     return () => window.removeEventListener(PREFILL_EVENT, fill)
-  }, [])
-
-  // One read on mount, so the hero badge reflects the real runtime instead of a
-  // hardcoded "Online".
-  useEffect(() => {
-    let cancelled = false
-    clientFetchWithTimeout("/api/ai/status", { method: "GET" }, 6000)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        if (!cancelled) setModelOnline(Boolean(data?.ok))
-      })
-      .catch(() => {
-        if (!cancelled) setModelOnline(false)
-      })
-    return () => {
-      cancelled = true
-    }
   }, [])
 
   const submit = () => {
@@ -406,76 +242,102 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     setPrompt("")
   }
 
-  const runTemplate = (value: string) => {
-    if (props.isLoading) return
-    props.onSubmit(value)
-    setPrompt("")
+  const runTemplate = (template: MalikTemplate) => {
+    if (props.onLaunchTemplate) {
+      props.onLaunchTemplate(template)
+      return
+    }
+    setPrompt(template.prompt)
   }
-
-  const templates = useMemo(() => TEMPLATES.map((template) => ({ ...template, shot: templateShot(template.id) })), [])
 
   return (
     <div className="thome">
       <div className="thome-inner">
-        <HomeHero modelOnline={modelOnline} />
+        <section className="thome-launcher" aria-label="Malik AI">
+          <div className="thome-welcome">
+            <span className="thome-welcome-logo" aria-hidden="true">
+              <svg viewBox="0 0 44 44">
+                <path d="M9 29 L22 15 L22 29 Z" fill="currentColor" />
+                <path d="M24 15 H38 L24 29 Z" fill="currentColor" />
+              </svg>
+            </span>
+            <h1 aria-label="Добро пожаловать в Malik AI">
+              <span className="thome-word is-1">Добро</span>{" "}
+              <span className="thome-word is-2">пожаловать</span>{" "}
+              <span className="thome-word is-3">в</span>{" "}
+              <strong>
+                <span className="thome-word is-4">Malik</span>{" "}
+                <span className="thome-word is-5">AI</span>
+              </strong>
+            </h1>
 
-        <HomeComposer
-          prompt={prompt}
-          isLoading={props.isLoading}
-          webOn={webOn}
-          memoryOn={memoryOn}
-          onPromptChange={setPrompt}
-          onSubmit={submit}
-          onToggleWeb={() => setWebOn((on) => !on)}
-          onToggleMemory={() => setMemoryOn(!memoryOn)}
-          onOpenPhoto={props.onOpenPhoto}
-          onOpenCode={props.onOpenCode}
-          onOpenCanvas={props.onOpenCanvas}
-        />
+            <HomeComposer
+              prompt={prompt}
+              isLoading={props.isLoading}
+              webOn={webOn}
+              memoryOn={memoryOn}
+              onPromptChange={setPrompt}
+              onSubmit={submit}
+              onToggleWeb={() => setWebOn((on) => !on)}
+              onToggleMemory={() => setMemoryOn(!memoryOn)}
+              onOpenPhoto={props.onOpenPhoto}
+              onOpenVideo={props.onOpenVideo}
+              onOpenCode={props.onOpenCode}
+              onOpenCanvas={props.onOpenCanvas}
+              selectedModelId={props.selectedModelId || DEFAULT_MALIK_MODEL_ID}
+              userPlan={props.userPlan || "free"}
+              onModelChange={props.onModelChange || (() => {})}
+              onOpenBilling={props.onOpenBilling}
+            />
+          </div>
+        </section>
 
-        <HomeActions
-          onStartChat={() => document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")?.focus()}
-          onOpenPhoto={props.onOpenPhoto}
-          onOpenVideo={props.onOpenVideo}
-          onOpenCode={props.onOpenCode}
-        />
-
-        <div>
+        <section className="thome-library" aria-labelledby="thome-library-title">
           <div className="thome-section-head">
-            <h2>
-              <Crown className="h-[18px] w-[18px]" />
-              Популярные шаблоны
-            </h2>
+            <div>
+              <span>Библиотека</span>
+              <h2 id="thome-library-title">
+                <Layers3 aria-hidden="true" />
+                Готовые шаблоны <small>40</small>
+              </h2>
+            </div>
             <button type="button" onClick={props.onOpenTemplates} className="thome-section-link">
-              Все шаблоны
-              <ArrowRight className="h-4 w-4" />
+              Все 100 шаблонов
+              <ArrowRight aria-hidden="true" />
             </button>
           </div>
 
-          <section className="thome-templates" style={{ marginTop: 14 }} aria-label="Популярные шаблоны">
-            {templates.map((template) => (
+          <div className="thome-templates" aria-label="40 шаблонов на главной">
+            {HOME_MALIK_TEMPLATES.map((template) => (
               <button
                 key={template.id}
                 type="button"
-                onClick={() => runTemplate(template.prompt)}
+                onClick={() => runTemplate(template)}
                 className="thome-template"
               >
-                <img
-                  className="thome-template-shot"
-                  src={template.shot}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  draggable={false}
-                />
+                <span className="thome-template-media">
+                  <img
+                    className="thome-template-shot"
+                    src={template.preview}
+                    alt={`Превью шаблона «${template.title}»`}
+                    loading="lazy"
+                    decoding="async"
+                    draggable={false}
+                  />
+                  <span className="thome-template-category">{template.category}</span>
+                </span>
                 <span className="thome-template-body">
                   <strong>{template.title}</strong>
-                  <span>{template.detail}</span>
+                  <span>{template.description}</span>
+                  <span className="thome-template-meta">
+                    Открыть в Malik AI
+                    <ArrowRight aria-hidden="true" />
+                  </span>
                 </span>
               </button>
             ))}
-          </section>
-        </div>
+          </div>
+        </section>
 
         <footer className="thome-footer">
           <span>© MALIK AI — Sovereign Hub. Build the Future.</span>

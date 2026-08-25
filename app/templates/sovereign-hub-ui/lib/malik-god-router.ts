@@ -1,3 +1,6 @@
+import type { MalikModelId } from "@/lib/ai/malik-models"
+import { runStrictMalikModel } from "@/lib/server/malik-model-router"
+
 type ProviderAttempt = {
   provider: string
   model: string
@@ -22,6 +25,7 @@ type GodAnswer = {
   usedWeb: boolean
   sources: SourceItem[]
   attempts: ProviderAttempt[]
+  selectedModelId?: MalikModelId
 }
 
 const CACHE = new Map<string, { expiresAt: number; value: GodAnswer }>()
@@ -535,8 +539,41 @@ function sourceFallback(sources: SourceItem[], attempts: ProviderAttempt[]) {
   }
 }
 
-export async function malikGodAnswer(body: any): Promise<GodAnswer> {
+export async function malikGodAnswer(body: any, selection?: { modelId: MalikModelId }): Promise<GodAnswer> {
   const prompt = extractPrompt(body)
+
+  if (selection) {
+    const usedWeb = shouldUseWeb(prompt, body)
+    const sources = usedWeb ? await gatherSources(prompt) : []
+    const strictPrompt = usedWeb
+      ? `Question:\n${prompt}\n\nWeb sources:\n${sourceContext(sources)}`
+      : prompt
+    const result = await runStrictMalikModel({
+      modelId: selection.modelId,
+      prompt: strictPrompt,
+      systemPrompt: systemPrompt(usedWeb),
+      history: Array.isArray(body?.history) ? body.history : Array.isArray(body?.messages) ? body.messages : [],
+      attachments: Array.isArray(body?.attachments) ? body.attachments : [],
+      maxTokens: Number(body?.maxTokens) || undefined,
+      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+    })
+    return {
+      content: result.content,
+      provider: result.provider,
+      model: result.model,
+      selectedModelId: result.selectedModelId,
+      usedWeb,
+      sources,
+      attempts: [{
+        provider: result.provider,
+        model: result.model,
+        ok: true,
+        status: 200,
+        latencyMs: result.latencyMs,
+      }],
+    }
+  }
+
   const local = localSmart(prompt)
 
   if (local) {
@@ -575,6 +612,7 @@ export function asJson(answer: GodAnswer) {
     content: asPlainText(answer),
     provider: answer.provider,
     model: answer.model,
+    selectedModelId: answer.selectedModelId,
     usedWeb: answer.usedWeb,
     sources: answer.sources,
     attempts: answer.attempts,

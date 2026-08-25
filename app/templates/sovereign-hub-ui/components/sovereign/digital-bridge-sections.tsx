@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
+import { takePrefillPrompt } from "@/lib/malik-context"
 
 type DemoTone = "cyan" | "violet" | "emerald" | "amber" | "rose" | "blue"
 type DemoVisual =
@@ -846,7 +847,7 @@ export function DigitalBridgeSectionExperience({
 
   useEffect(() => {
     requestSeqRef.current += 1
-    setPrompt(section.prompt)
+    setPrompt(takePrefillPrompt() || section.prompt)
     setStatus("Ready for Digital Bridge demo")
     setOutput("")
     setLoading(false)

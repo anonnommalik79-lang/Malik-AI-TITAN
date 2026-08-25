@@ -16,6 +16,7 @@ import {
 import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { VIDEO_AI_TEMPLATES } from "@/lib/media-library"
+import { takePrefillPrompt } from "@/lib/malik-context"
 import { VideoLoop } from "./VideoLoop"
 
 export type VideoGenerationStudioProps = {
@@ -100,7 +101,7 @@ export function VideoGenerationStudio({
 }: VideoGenerationStudioProps) {
   const operator = username?.trim() || "guest@malik.ai"
 
-  const [prompt, setPrompt] = useState(DEFAULT_PROMPT)
+  const [prompt, setPrompt] = useState(() => takePrefillPrompt() || DEFAULT_PROMPT)
   const [activeStyle, setActiveStyle] = useState(STYLE_PRESETS[0].id)
   const [ratio, setRatio] = useState<(typeof RATIOS)[number]>("16:9")
   const [loading, setLoading] = useState(false)

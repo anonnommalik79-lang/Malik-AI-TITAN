@@ -18,6 +18,7 @@ import {
 import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { PHOTO_GALLERY_EXAMPLES, PHOTO_STYLE_PRESETS } from "@/lib/media-library"
+import { takePrefillPrompt } from "@/lib/malik-context"
 
 export type PhotoGenerationStudioProps = {
   username?: string
@@ -90,7 +91,7 @@ export function PhotoGenerationStudio({
 }: PhotoGenerationStudioProps) {
   const operator = username?.trim() || "guest@malik.ai"
 
-  const [prompt, setPrompt] = useState(DEFAULT_PROMPT)
+  const [prompt, setPrompt] = useState(() => takePrefillPrompt() || DEFAULT_PROMPT)
   const [activeStyle, setActiveStyle] = useState(STYLE_PRESETS[0].id)
   const [ratio, setRatio] = useState<(typeof RATIOS)[number]>("16:9")
   const [loading, setLoading] = useState(false)
@@ -98,6 +99,7 @@ export function PhotoGenerationStudio({
   const [error, setError] = useState<string | null>(null)
   const [results, setResults] = useState<PhotoResult[]>([])
   const [providerUsed, setProviderUsed] = useState("")
+
   const [remainingDaily, setRemainingDaily] = useState<number | null>(null)
 
   const styleMeta = useMemo(

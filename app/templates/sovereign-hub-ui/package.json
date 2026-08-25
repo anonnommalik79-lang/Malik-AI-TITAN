@@ -13,6 +13,7 @@
     "start": "next start",
     "launch": "npm run build && npm run start",
     "lint": "eslint .",
+    "test:models": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-malik-models.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build",
     "clean": "node -e \"const fs=require('fs'); for (const p of ['.next','out']) if (fs.existsSync(p)) fs.rmSync(p,{recursive:true,force:true});\""

@@ -17,6 +17,7 @@ import {
   Megaphone,
 } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
+import { takePrefillPrompt } from "@/lib/malik-context"
 import { BUSINESS_SECTIONS } from "@/lib/business/sections"
 import { BUSINESS_MODES, modesForSection } from "@/lib/business/modes"
 import type { BusinessMode, BusinessModeId, BusinessRunContext, BusinessSectionId } from "@/lib/business/types"
@@ -85,7 +86,7 @@ export function BusinessCommandCenter({ username, onViewChange, onNewChat }: Bus
   const operator = username?.trim() || "guest@malik.ai"
   const [activeSection, setActiveSection] = useState<BusinessSectionId>("business-doctor")
   const [selectedMode, setSelectedMode] = useState<BusinessMode | null>(BUSINESS_MODES[0] ?? null)
-  const [input, setInput] = useState("")
+  const [input, setInput] = useState(() => takePrefillPrompt())
   const [context, setContext] = useState<BusinessRunContext>({ language: "ru" })
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState("Business Engine готов · 30 режимов")
