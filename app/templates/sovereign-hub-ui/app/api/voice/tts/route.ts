@@ -37,7 +37,7 @@ async function xaiTts(text: string, voice: string, language: string) {
   const response = await fetch("https://api.x.ai/v1/tts", {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ text, voice_id: voiceId, language: language || "auto", output_format: "mp3" }),
+    body: JSON.stringify({ text, voice_id: voiceId, language: language || "auto" }),
     cache: "no-store",
   })
   if (!response.ok) return null
