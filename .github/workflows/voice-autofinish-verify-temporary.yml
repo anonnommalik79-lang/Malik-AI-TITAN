@@ -1,0 +1,25 @@
+name: Malik Voice Autofinish Verify
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/voice-autofinish-verify-temporary.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:voice
+      - run: npm run build
