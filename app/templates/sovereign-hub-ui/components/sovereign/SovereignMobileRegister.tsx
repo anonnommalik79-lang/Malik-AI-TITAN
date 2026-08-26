@@ -114,11 +114,12 @@ export function SovereignMobileRegister() {
       }
 
       const ctx = audioRef.current;
-      if (ctx.state === "suspended" || ctx.state === "interrupted") {
+      const state = String(ctx.state);
+      if (state !== "running" && state !== "closed") {
         await ctx.resume();
       }
 
-      return ctx.state === "running";
+      return String(ctx.state) === "running";
     } catch {
       // Feedback is enhancement-only. Auth must never depend on it.
       return false;
