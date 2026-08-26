@@ -1,234 +1,325 @@
 "use client";
 
-import React, { FormEvent, useCallback, useRef, useState } from "react";
-import { Check, ChevronRight, Eye, EyeOff, Lock, Mail, User } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import "./sovereign-mobile-auth.css";
 
-type Provider = "google" | "github" | "apple" | "microsoft";
+const PHRASES = [
+  "Давайте изучать",
+  "Находи главное",
+  "Исследуй глубже",
+  "Создавай быстрее",
+  "Делай невозможное",
+  "Malik AI",
+] as const;
 
-const T = {
-  pill: "\u041f\u0420\u0418\u0412\u0410\u0422\u041d\u042b\u0419 \u0414\u041e\u0421\u0422\u0423\u041f",
-  tagline: "\u0422\u0432\u043e\u044f \u0438\u043d\u0442\u0435\u043b\u043b\u0435\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u0430\u044f \u0440\u0430\u0431\u043e\u0447\u0430\u044f \u0437\u043e\u043d\u0430 \u0443\u0436\u0435 \u0433\u043e\u0442\u043e\u0432\u0430.",
-  username: "\u0418\u043c\u044f \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f",
-  password: "\u041f\u0430\u0440\u043e\u043b\u044c",
-  repeat: "\u041f\u043e\u0432\u0442\u043e\u0440",
-  passPh: "\u041c\u0438\u043d. 6 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432",
-  repeatPh: "\u0415\u0449\u0451 \u0440\u0430\u0437",
-  opening: "\u041e\u0442\u043a\u0440\u044b\u0432\u0430\u044e...",
-  cont: "\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c",
-  divider: "\u0438\u043b\u0438 \u0432\u043e\u0439\u0442\u0438 \u0447\u0435\u0440\u0435\u0437",
-  guest: "\u0412\u043e\u0439\u0442\u0438 \u043a\u0430\u043a \u0433\u043e\u0441\u0442\u044c",
-  toggleSignIn: "\u0423\u0436\u0435 \u0435\u0441\u0442\u044c \u0430\u043a\u043a\u0430\u0443\u043d\u0442? \u0412\u043e\u0439\u0442\u0438",
-  toggleSignUp: "\u041d\u0435\u0442 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430? \u0421\u043e\u0437\u0434\u0430\u0442\u044c",
-  badName: "\u0418\u043c\u044f \u043c\u0438\u043d\u0438\u043c\u0443\u043c 2 \u0441\u0438\u043c\u0432\u043e\u043b\u0430.",
-  badEmail: "\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u043d\u044b\u0439 email.",
-  badPass: "\u041f\u0430\u0440\u043e\u043b\u044c \u043c\u0438\u043d\u0438\u043c\u0443\u043c 6 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432.",
-  badRepeat: "\u041f\u0430\u0440\u043e\u043b\u0438 \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u044e\u0442.",
-};
+const TYPE_MS = 42;
+const HOLD_MS = 420;
+const FINAL_HOLD_MS = 980;
+const GAP_MS = 105;
 
-function read(ref: React.RefObject<HTMLInputElement | null>) {
-  return ref.current?.value?.trim() || "";
+type HapticKind = "character" | "tap";
+
+function AppleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M16.7 12.7c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.7-1.3-.1-2.5.8-3.1.8-.7 0-1.7-.8-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1.1 8.4.7 1 1.6 2.2 2.7 2.1 1.1 0 1.5-.7 2.8-.7s1.7.7 2.8.7c1.2 0 1.9-1 2.6-2.1.8-1.2 1.2-2.4 1.2-2.4 0 0-2.7-1-2.8-3.3ZM14.7 6.5c.6-.8 1.1-1.8.9-2.9-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.8 1.1.1 2.1-.5 2.8-1.3Z"
+      />
+    </svg>
+  );
 }
 
-function ProviderIcon({ type }: { type: Provider }) {
-  if (type === "google") {
-    return (
-      <svg viewBox="0 0 24 24" className="sma-provider-svg" aria-hidden="true">
-        <path fill="#4285F4" d="M21.6 12.2c0-.8-.1-1.5-.2-2.2H12v4.2h5.4c-.2 1.2-.9 2.3-2 3v2.8h3.2c1.9-1.8 3-4.3 3-7.8Z" />
-        <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.5l-3.2-2.8c-.9.6-2 .9-3.4.9-2.6 0-4.8-1.8-5.6-4.1H3.1v2.9C4.7 19.7 8.1 22 12 22Z" />
-        <path fill="#FBBC05" d="M6.4 13.5c-.2-.6-.3-1.2-.3-1.9s.1-1.3.3-1.9V6.9H3.1C2.4 8.3 2 9.9 2 11.6s.4 3.3 1.1 4.7l3.3-2.8Z" />
-        <path fill="#EA4335" d="M12 5.6c1.5 0 2.8.5 3.8 1.5l2.9-2.9C17 2.6 14.7 1.6 12 1.6 8.1 1.6 4.7 3.9 3.1 6.9l3.3 2.8c.8-2.3 3-4.1 5.6-4.1Z" />
-      </svg>
-    );
-  }
-  if (type === "github") {
-    return (
-      <svg viewBox="0 0 24 24" className="sma-provider-svg" aria-hidden="true">
-        <path fill="currentColor" d="M12 2.3c-5.5 0-10 4.5-10 10 0 4.4 2.9 8.2 6.9 9.5.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.2-3.4-1.2-.5-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 0 1.6 1.1 1.6 1.1.9 1.5 2.4 1.1 2.9.8.1-.7.4-1.1.7-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1 .8-.2 1.6-.3 2.5-.3s1.7.1 2.5.3c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.8 1 .8 2v2.9c0 .3.2.6.7.5 4-1.3 6.9-5.1 6.9-9.5 0-5.5-4.5-10-10-10Z" />
-      </svg>
-    );
-  }
-  if (type === "apple") {
-    return (
-      <svg viewBox="0 0 24 24" className="sma-provider-svg" aria-hidden="true">
-        <path fill="currentColor" d="M16.7 12.7c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.7-1.3-.1-2.5.8-3.1.8-.7 0-1.7-.8-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1.1 8.4.7 1 1.6 2.2 2.7 2.1 1.1 0 1.5-.7 2.8-.7s1.7.7 2.8.7c1.2 0 1.9-1 2.6-2.1.8-1.2 1.2-2.4 1.2-2.4 0 0-2.7-1-2.8-3.3ZM14.7 6.5c.6-.8 1.1-1.8.9-2.9-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-1 2.8 1.1.1 2.1-.5 2.8-1.3Z" />
-      </svg>
-    );
-  }
+function GoogleIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="sma-provider-svg" aria-hidden="true">
-      <path fill="#F25022" d="M1 1h10v10H1z" />
-      <path fill="#7FBA00" d="M13 1h10v10H13z" />
-      <path fill="#00A4EF" d="M1 13h10v10H1z" />
-      <path fill="#FFB900" d="M13 13h10v10H13z" />
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M21.6 12.2c0-.8-.1-1.5-.2-2.2H12v4.2h5.4c-.2 1.2-.9 2.3-2 3v2.8h3.2c1.9-1.8 3-4.3 3-7.8Z" />
+      <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.5l-3.2-2.8c-.9.6-2 .9-3.4.9-2.6 0-4.8-1.8-5.6-4.1H3.1v2.9C4.7 19.7 8.1 22 12 22Z" />
+      <path fill="#FBBC05" d="M6.4 13.5c-.2-.6-.3-1.2-.3-1.9s.1-1.3.3-1.9V6.9H3.1C2.4 8.3 2 9.9 2 11.6s.4 3.3 1.1 4.7l3.3-2.8Z" />
+      <path fill="#EA4335" d="M12 5.6c1.5 0 2.8.5 3.8 1.5l2.9-2.9C17 2.6 14.7 1.6 12 1.6 8.1 1.6 4.7 3.9 3.1 6.9l3.3 2.8c.8-2.3 3-4.1 5.6-4.1Z" />
+    </svg>
+  );
+}
+
+function MailIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4.4 6.5h15.2c.8 0 1.4.6 1.4 1.4v8.2c0 .8-.6 1.4-1.4 1.4H4.4c-.8 0-1.4-.6-1.4-1.4V7.9c0-.8.6-1.4 1.4-1.4Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="m4.2 7.4 7.1 5.4c.4.3 1 .3 1.4 0l7.1-5.4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
 
 export function SovereignMobileRegister() {
-  const emailRef = useRef<HTMLInputElement>(null);
-  const passwordRef = useRef<HTMLInputElement>(null);
-  const confirmRef = useRef<HTMLInputElement>(null);
+  const [typed, setTyped] = useState("");
+  const [restartKey, setRestartKey] = useState(0);
+  const [navigating, setNavigating] = useState(false);
 
-  const [isOpening, setIsOpening] = useState(false);
-  const [message, setMessage] = useState("");
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signup");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [usernameValue, setUsernameValue] = useState("Abdumalik");
-  const submit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const username = usernameValue.trim();
-    const email = read(emailRef).toLowerCase();
-    const password = read(passwordRef);
-    const confirm = read(confirmRef);
+  const armedRef = useRef(false);
+  const audioRef = useRef<AudioContext | null>(null);
+  const masterRef = useRef<GainNode | null>(null);
 
-    if (authMode === "signup" && username.length < 2) return setMessage(T.badName);
-    if (!email.includes("@") || !email.includes(".")) return setMessage(T.badEmail);
-    if (password.length < 6) return setMessage(T.badPass);
-    if (authMode === "signup" && password !== confirm) return setMessage(T.badRepeat);
+  const ensureAudio = useCallback(async () => {
+    if (typeof window === "undefined") return;
 
-    setIsOpening(true);
-    setMessage("");
+    try {
+      if (!audioRef.current) {
+        const AudioCtor =
+          window.AudioContext ||
+          (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+        if (!AudioCtor) return;
+
+        const ctx = new AudioCtor();
+        const master = ctx.createGain();
+        const compressor = ctx.createDynamicsCompressor();
+
+        master.gain.value = 0.16;
+        compressor.threshold.value = -22;
+        compressor.knee.value = 9;
+        compressor.ratio.value = 3.5;
+        compressor.attack.value = 0.001;
+        compressor.release.value = 0.045;
+
+        master.connect(compressor);
+        compressor.connect(ctx.destination);
+
+        audioRef.current = ctx;
+        masterRef.current = master;
+      }
+
+      if (audioRef.current.state === "suspended") {
+        await audioRef.current.resume();
+      }
+    } catch {
+      // Audio feedback is enhancement-only. Auth must never depend on it.
+    }
+  }, []);
+
+  const playSoftTick = useCallback((kind: HapticKind) => {
+    const ctx = audioRef.current;
+    const master = masterRef.current;
+    if (!armedRef.current || !ctx || !master || ctx.state !== "running") return;
+
+    try {
+      const now = ctx.currentTime;
+      const strength = kind === "character" ? 0.78 : 1;
+
+      const body = ctx.createOscillator();
+      const bodyGain = ctx.createGain();
+      body.type = "sine";
+      body.frequency.setValueAtTime(208, now);
+      body.frequency.exponentialRampToValueAtTime(158, now + 0.017);
+      bodyGain.gain.setValueAtTime(0.0001, now);
+      bodyGain.gain.exponentialRampToValueAtTime(0.062 * strength, now + 0.001);
+      bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
+      body.connect(bodyGain);
+      bodyGain.connect(master);
+      body.start(now);
+      body.stop(now + 0.024);
+
+      const edge = ctx.createOscillator();
+      const edgeGain = ctx.createGain();
+      edge.type = "sine";
+      edge.frequency.setValueAtTime(390, now);
+      edge.frequency.exponentialRampToValueAtTime(305, now + 0.007);
+      edgeGain.gain.setValueAtTime(0.0001, now);
+      edgeGain.gain.exponentialRampToValueAtTime(0.017 * strength, now + 0.0006);
+      edgeGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.0085);
+      edge.connect(edgeGain);
+      edgeGain.connect(master);
+      edge.start(now);
+      edge.stop(now + 0.01);
+    } catch {
+      // Ignore browsers that reject an individual audio node.
+    }
+  }, []);
+
+  const pulse = useCallback((kind: HapticKind) => {
+    if (typeof window === "undefined") return;
+
+    let nativeHandled = false;
+    const bridge = window as typeof window & {
+      nativeHapticTick?: () => void;
+      nativeHapticTap?: () => void;
+      webkit?: {
+        messageHandlers?: {
+          malikHaptics?: { postMessage: (payload: unknown) => void };
+        };
+      };
+    };
+
+    try {
+      if (kind === "character" && bridge.nativeHapticTick) {
+        bridge.nativeHapticTick();
+        nativeHandled = true;
+      } else if (kind === "tap" && bridge.nativeHapticTap) {
+        bridge.nativeHapticTap();
+        nativeHandled = true;
+      } else if (bridge.webkit?.messageHandlers?.malikHaptics) {
+        bridge.webkit.messageHandlers.malikHaptics.postMessage({
+          type: kind,
+          intensity: kind === "character" ? 0.4 : 0.62,
+          sharpness: kind === "character" ? 0.58 : 0.7,
+        });
+        nativeHandled = true;
+      }
+    } catch {
+      nativeHandled = false;
+    }
+
+    if (!nativeHandled && typeof navigator.vibrate === "function") {
+      try {
+        navigator.vibrate(kind === "character" ? 5 : 12);
+      } catch {
+        // iOS Safari currently ignores web vibration; the soft tick remains.
+      }
+    }
+
+    playSoftTick(kind);
+  }, [playSoftTick]);
+
+  const armFeedback = useCallback(async () => {
+    if (armedRef.current) return;
+    armedRef.current = true;
+    await ensureAudio();
+    pulse("tap");
+    setRestartKey((value) => value + 1);
+  }, [ensureAudio, pulse]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timers: number[] = [];
+
+    const later = (callback: () => void, ms: number) => {
+      const id = window.setTimeout(() => {
+        if (!cancelled) callback();
+      }, ms);
+      timers.push(id);
+    };
+
+    const runPhrase = (phraseIndex: number) => {
+      if (cancelled) return;
+
+      const phrase = PHRASES[phraseIndex];
+      setTyped("");
+      let cursor = 0;
+
+      const typeNext = () => {
+        if (cancelled) return;
+
+        cursor += 1;
+        setTyped(phrase.slice(0, cursor));
+
+        const character = phrase[cursor - 1];
+        if (armedRef.current && character && character.trim()) {
+          pulse("character");
+        }
+
+        if (cursor < phrase.length) {
+          later(typeNext, TYPE_MS);
+          return;
+        }
+
+        const hold = phraseIndex === PHRASES.length - 1 ? FINAL_HOLD_MS : HOLD_MS;
+        later(() => {
+          setTyped("");
+          later(() => runPhrase((phraseIndex + 1) % PHRASES.length), GAP_MS);
+        }, hold);
+      };
+
+      later(typeNext, 80);
+    };
+
+    runPhrase(0);
+
+    return () => {
+      cancelled = true;
+      timers.forEach(window.clearTimeout);
+    };
+  }, [pulse, restartKey]);
+
+  useEffect(() => {
+    return () => {
+      try {
+        void audioRef.current?.close();
+      } catch {
+        // no-op
+      }
+    };
+  }, []);
+
+  const openSignIn = useCallback(async () => {
+    if (navigating) return;
+    setNavigating(true);
+    await ensureAudio();
+    pulse("tap");
     window.location.assign("/sign-in");
-  }, [authMode, usernameValue]);
+  }, [ensureAudio, navigating, pulse]);
 
-  const openOAuth = useCallback((_provider: "google" | "github") => {
-    if (isOpening) return;
-    setIsOpening(true);
-    setMessage("");
-    window.location.assign("/sign-in");
-  }, [isOpening]);
+  const close = useCallback(async () => {
+    await ensureAudio();
+    pulse("tap");
 
-  const openGuest = useCallback(() => {
-    if (isOpening) return;
-    setIsOpening(true);
-    setMessage("");
-    window.location.assign("/guest");
-  }, [isOpening]);
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      window.location.assign("/");
+    }
+  }, [ensureAudio, pulse]);
 
   return (
-    <main className="sma-root" aria-label="Sovereign mobile registration">
-      <div className="sma-bg-mesh" aria-hidden="true" />
-      <div className="sma-bg-particles" aria-hidden="true" />
-      <div className="sma-bg-glow" aria-hidden="true" />
-      <div className="sma-bg-veil" aria-hidden="true" />
+    <main
+      className="sma-root"
+      aria-label="Malik AI mobile authentication"
+      onPointerDownCapture={() => {
+        void armFeedback();
+      }}
+    >
+      <button className="sma-close" type="button" aria-label="Закрыть" onClick={() => void close()}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 7l10 10M17 7 7 17" />
+        </svg>
+      </button>
 
-      <div className="sma-scroll">
-        <section className="sma-card">
-          <div className="sma-card-ring" aria-hidden="true" />
+      <section className="sma-hero" aria-live="polite">
+        <div className="sma-typewriter">
+          <span className="sma-type-text">{typed}</span>
+          <span className="sma-type-dot" aria-hidden="true" />
+        </div>
+      </section>
 
-          <span className="sma-pill"><Lock size={11} strokeWidth={2.2} />{T.pill}</span>
+      <section className="sma-auth-panel" aria-label="Способы входа">
+        <button
+          className="sma-auth-button sma-auth-button--apple"
+          type="button"
+          disabled={navigating}
+          onClick={() => void openSignIn()}
+        >
+          <span className="sma-auth-icon"><AppleIcon /></span>
+          <span>Продолжить с Apple</span>
+        </button>
 
-          <h1 className="sma-title">
-            {authMode === "signin" ? (
-              <>Войти в <span className="sma-title-accent">Sovereign Hub.</span></>
-            ) : (
-              <>Создать <span className="sma-title-accent">Sovereign ID.</span></>
-            )}
-          </h1>
-          <p className="sma-tagline">{T.tagline}</p>
+        <button
+          className="sma-auth-button sma-auth-button--dark"
+          type="button"
+          disabled={navigating}
+          onClick={() => void openSignIn()}
+        >
+          <span className="sma-auth-icon"><GoogleIcon /></span>
+          <span>Продолжить с Google</span>
+        </button>
 
-          <form className="sma-form" onSubmit={submit}>
-            {authMode === "signup" && (
-              <label className="sma-field" htmlFor="sma-username">
-                <span>{T.username}</span>
-                <div className="sma-input-wrap">
-                  <User className="sma-input-icon" size={16} strokeWidth={2.2} />
-                  <input
-                    id="sma-username"
-                    value={usernameValue}
-                    onChange={(e) => setUsernameValue(e.target.value)}
-                    autoComplete="username"
-                  />
-                  {usernameValue.trim().length >= 2 && <Check className="sma-input-valid" size={16} strokeWidth={2.4} />}
-                </div>
-              </label>
-            )}
-
-            <label className="sma-field" htmlFor="sma-email">
-              <span>Email</span>
-              <div className="sma-input-wrap">
-                <Mail className="sma-input-icon" size={16} strokeWidth={2.2} />
-                <input id="sma-email" ref={emailRef} type="email" placeholder="name@domain.com" autoComplete="email" />
-              </div>
-            </label>
-
-            <label className="sma-field" htmlFor="sma-password">
-              <span>{T.password}</span>
-              <div className="sma-input-wrap">
-                <Lock className="sma-input-icon" size={16} strokeWidth={2.2} />
-                <input
-                  id="sma-password"
-                  ref={passwordRef}
-                  type={showPassword ? "text" : "password"}
-                  placeholder={T.passPh}
-                  autoComplete={authMode === "signin" ? "current-password" : "new-password"}
-                />
-                <button type="button" className="sma-eye" onClick={() => setShowPassword((v) => !v)} aria-label="Toggle password">
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </label>
-
-            {authMode === "signup" && (
-              <label className="sma-field" htmlFor="sma-confirm">
-                <span>{T.repeat}</span>
-                <div className="sma-input-wrap">
-                  <Lock className="sma-input-icon" size={16} strokeWidth={2.2} />
-                  <input
-                    id="sma-confirm"
-                    ref={confirmRef}
-                    type={showConfirm ? "text" : "password"}
-                    placeholder={T.repeatPh}
-                    autoComplete="new-password"
-                  />
-                  <button type="button" className="sma-eye" onClick={() => setShowConfirm((v) => !v)} aria-label="Toggle confirm password">
-                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </label>
-            )}
-
-            <button className="sma-cta" type="submit" disabled={isOpening}>
-              <span>{isOpening ? T.opening : T.cont}</span>
-              <ChevronRight size={18} strokeWidth={2.6} />
-            </button>
-
-            <div className="sma-divider">
-              <i />
-              <small>{T.divider}</small>
-              <i />
-            </div>
-
-            <div className="sma-socials">
-              {([
-                { id: "google" as const, label: "Google", type: "google" as Provider },
-                { id: "github" as const, label: "GitHub", type: "github" as Provider },
-              ]).map((item) => {
-                const disabled = isOpening;
-                return (
-                  <button key={item.id} type="button" onClick={() => openOAuth(item.id)} disabled={disabled}>
-                    <ProviderIcon type={item.type} />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <button type="button" className="sma-guest" onClick={openGuest} disabled={isOpening}>
-              <User size={16} strokeWidth={2.2} />
-              <span>{T.guest}</span>
-            </button>
-
-            {message && <p className="sma-message">{message}</p>}
-
-            <button type="button" className="sma-toggle" onClick={() => setAuthMode((m) => (m === "signin" ? "signup" : "signin"))}>
-              {authMode === "signin" ? T.toggleSignUp : T.toggleSignIn}
-            </button>
-          </form>
-        </section>
-      </div>
+        <button
+          className="sma-auth-button sma-auth-button--dark"
+          type="button"
+          disabled={navigating}
+          onClick={() => void openSignIn()}
+        >
+          <span className="sma-auth-icon"><MailIcon /></span>
+          <span>{navigating ? "Открываю..." : "Войти или зарегистрироваться"}</span>
+        </button>
+      </section>
     </main>
   );
 }
