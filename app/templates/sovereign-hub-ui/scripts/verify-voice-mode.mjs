@@ -6,7 +6,7 @@ import path from "node:path"
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const read = (file) => readFile(path.join(root, file), "utf8")
 
-const [home, chat, dashboard, sidebar, mode, dock, orb, settings, sound, css, homeCss, chatCss] = await Promise.all([
+const [home, chat, dashboard, sidebar, mode, dock, orb, settings, sound, tts, css, homeCss, chatCss] = await Promise.all([
   read("components/sovereign/hybrid/MalikHybridHome.tsx"),
   read("components/sovereign/chat-view.tsx"),
   read("components/sovereign/dashboard.tsx"),
@@ -16,6 +16,7 @@ const [home, chat, dashboard, sidebar, mode, dock, orb, settings, sound, css, ho
   read("components/voice/VoiceOrb.tsx"),
   read("components/voice/VoiceSettings.tsx"),
   read("lib/voice-transition-sound.ts"),
+  read("app/api/voice/tts/route.ts"),
   read("components/voice/VoiceMode.module.css"),
   read("app/titan-home.css"),
   read("app/titan-chat.css"),
@@ -34,6 +35,9 @@ const checks = [
   ["10 file, sound, voice, personality and speed controls are real", () => { assert.match(dock, /type="file"/); assert.match(settings, /Sola/); assert.match(settings, /Assistant/); assert.match(settings, /type="range"/); assert.match(sound, /createOscillator/); assert.match(dashboard, /playVoiceTransitionSound\("open"\)/); assert.match(mode, /playVoiceTransitionSound\("close"\)/) }],
   ["11 Esc and unmount release live resources", () => { assert.match(mode, /event\.key === "Escape"/); assert.match(mode, /getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/); assert.match(mode, /context\.close\(\)/); assert.match(orb, /WEBGL_lose_context/) }],
   ["12 responsive layout and DPR caps are present", () => { assert.match(css, /@media \(max-width: 680px\)/); assert.match(css, /@media \(max-width: 450px\)/); assert.match(orb, /resize\(background, backgroundCanvas, 1\.6\)/); assert.match(orb, /resize\(orb, orbCanvas, 2\)/) }],
+  ["13 xAI TTS uses official request fields and MP3", () => { assert.match(tts, /https:\/\/api\.x\.ai\/v1\/tts/); assert.match(tts, /voice_id:\s*voiceId/); assert.match(tts, /codec:\s*"mp3"/); assert.match(tts, /sample_rate:\s*24000/) }],
+  ["14 async iPhone reply has WebAudio blob fallback", () => { assert.match(sound, /HTMLMediaElement\.prototype/); assert.match(sound, /sourceUrl\.startsWith\("blob:"\)/); assert.match(sound, /decodeAudioData/); assert.match(sound, /dispatchEvent\(new Event\("ended"\)\)/) }],
+  ["15 every Malik voice profile resolves to a built-in xAI voice", () => { for (const id of ["ara", "eve", "leo", "rex", "sal"]) assert.match(settings, new RegExp(`xaiVoiceId: \\"${id}\\"`)); assert.doesNotMatch(settings, /xaiVoiceId:\s*"(?:carina|luna|orion|aurora|atlas)"/) }],
 ]
 
 for (const [name, check] of checks) {
