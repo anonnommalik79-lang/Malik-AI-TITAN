@@ -1,8 +1,9 @@
 "use client"
 
-import { ChevronUp, FileText, Image as ImageIcon, Mic, MicOff, Monitor, Paperclip, SlidersHorizontal, Volume2, VolumeX } from "lucide-react"
+import { ChevronUp, FileText, Image as ImageIcon, Mic, MicOff, Monitor, Plus, SlidersHorizontal, Volume2, VolumeX } from "lucide-react"
 import { useEffect, useRef, useState, type MutableRefObject } from "react"
 import styles from "./VoiceMode.module.css"
+import mobileStyles from "./VoiceMobileTarget.module.css"
 
 export type PickedVoiceFile = { name: string; file: File }
 
@@ -126,7 +127,7 @@ export function VoiceDock({
   }
 
   return (
-    <section ref={rootRef} className={styles.dock} aria-label="Панель голосового режима">
+    <section ref={rootRef} className={`${styles.dock} ${mobileStyles.mobileDock}`} aria-label="Панель голосового режима">
       {pickedFile ? <div className={styles.fileChip}>📎 {pickedFile.name}</div> : null}
       <div className={styles.promptRow}>
         <textarea
@@ -140,7 +141,7 @@ export function VoiceDock({
             }
           }}
           rows={1}
-          placeholder="Как Malik AI может помочь?"
+          placeholder="Спросить Malik AI"
           aria-label="Сообщение для голосового режима"
         />
       </div>
@@ -154,7 +155,7 @@ export function VoiceDock({
         <input ref={fileInputRef} type="file" hidden onChange={(event) => choose(event.target.files?.[0])} />
 
         <button type="button" className={`${styles.controlButton} ${attachOpen ? styles.active : ""}`} onClick={() => setAttachOpen((value) => !value)} title="Добавить" aria-label="Добавить файл" aria-expanded={attachOpen}>
-          <Paperclip size={20} />
+          <Plus size={20} />
         </button>
         <div className={styles.controlDivider} />
 
@@ -178,7 +179,7 @@ export function VoiceDock({
           <span>{voice}</span><small>· {personality}</small><ChevronUp size={15} />
         </button>
 
-        <button type="button" className={styles.stopButton} onClick={onStop}>Остановить</button>
+        <button type="button" className={styles.stopButton} onClick={onStop} aria-label="Остановить Voice">Остановить</button>
       </div>
     </section>
   )
