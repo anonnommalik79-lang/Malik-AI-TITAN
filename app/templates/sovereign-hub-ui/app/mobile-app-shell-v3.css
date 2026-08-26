@@ -1,17 +1,22 @@
 /* ========================================================================
-   MALIK AI — PHONE SHELL V3
-   Final phone-only layer for the whole product. Desktop/tablet stay untouched.
-   Target: compact native mobile geometry around 320–767 CSS px.
+   MALIK AI — RESPONSIVE PHONE SHELL V4
+   Same Malik AI product, same visual identity, reflowed for phones.
+   Desktop/tablet are untouched; this file only adapts the existing DOM.
    ======================================================================== */
 
 @media (max-width: 767px) {
   :root {
-    --malik-mobile-header: 52px;
-    --malik-mobile-side: 10px;
-    --malik-mobile-blue: #1388ff;
-    --malik-mobile-card: #11131d;
-    --malik-mobile-card-2: #1c1c1f;
-    --malik-mobile-line: rgba(255,255,255,.085);
+    --malik-mobile-header: 54px;
+    --malik-mobile-side: 14px;
+    --malik-mobile-bg: #0f0f10;
+    --malik-mobile-surface: #131315;
+    --malik-mobile-surface-2: #171719;
+    --malik-mobile-line: rgba(212,175,55,.13);
+    --malik-mobile-line-soft: rgba(255,255,255,.07);
+    --malik-mobile-gold: #e7bd49;
+    --malik-mobile-gold-2: #c99d2c;
+    --malik-mobile-text: #f4f4f5;
+    --malik-mobile-muted: #8b8b93;
   }
 
   html,
@@ -20,10 +25,11 @@
   .malik-dashboard-shell {
     width: 100% !important;
     max-width: 100% !important;
+    min-width: 0 !important;
     height: 100dvh !important;
     min-height: 100dvh !important;
     overflow: hidden !important;
-    background: #000 !important;
+    background: var(--malik-mobile-bg) !important;
   }
 
   body,
@@ -33,8 +39,21 @@
     overscroll-behavior: none !important;
   }
 
+  #malik-root *,
+  #malik-root *::before,
+  #malik-root *::after {
+    box-sizing: border-box;
+  }
+
+  #malik-root button,
+  #malik-root a,
+  #malik-root input,
+  #malik-root textarea,
+  #malik-root select {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   .malik-dashboard-shell {
-    min-width: 0 !important;
     isolation: isolate !important;
   }
 
@@ -53,7 +72,7 @@
     height: calc(100dvh - var(--malik-mobile-header)) !important;
     min-height: 0 !important;
     overflow: hidden !important;
-    background: #000 !important;
+    background: var(--malik-mobile-bg) !important;
   }
 
   .malik-dashboard-shell main > *,
@@ -70,156 +89,163 @@
     max-width: 100% !important;
   }
 
-  .malik-dashboard-shell main [class*="min-w-["] {
-    min-width: 0 !important;
+  /* Desktop utility rail must never squeeze the phone canvas. */
+  .titan-rail {
+    display: none !important;
   }
 
-  .malik-dashboard-shell main [class*="max-w-["] {
-    max-width: 100% !important;
-  }
-
-  /* ----------------------------- phone header --------------------------- */
+  /* ------------------------------ top bar ------------------------------- */
   .titan-topbar {
     position: relative !important;
     z-index: 90 !important;
     display: grid !important;
-    grid-template-columns: 36px minmax(0, 1fr) 36px !important;
+    grid-template-columns: 40px minmax(0, 1fr) 40px !important;
     width: 100% !important;
     height: var(--malik-mobile-header) !important;
     min-height: var(--malik-mobile-header) !important;
     max-height: var(--malik-mobile-header) !important;
     align-items: center !important;
     gap: 8px !important;
-    border: 0 !important;
-    background: #02060f !important;
-    padding: 5px 10px !important;
-    box-shadow: none !important;
     overflow: visible !important;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(212,175,55,.10) !important;
+    background: #0d0d0f !important;
+    padding: max(4px, env(safe-area-inset-top)) 10px 4px !important;
+    color: #fff !important;
+    box-shadow: none !important;
   }
 
   .titan-topbar > .titan-icon-btn:first-child {
     display: grid !important;
-    width: 34px !important;
-    height: 34px !important;
-    min-width: 34px !important;
-    min-height: 34px !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    min-height: 38px !important;
     place-items: center !important;
     justify-self: start !important;
     border: 0 !important;
-    border-radius: 10px !important;
+    border-radius: 12px !important;
     background: transparent !important;
-    color: #b8bcc6 !important;
+    color: #d5d5d8 !important;
+  }
+
+  .titan-topbar > .titan-icon-btn:first-child:active {
+    background: rgba(255,255,255,.055) !important;
   }
 
   .titan-topbar > .titan-icon-btn:first-child svg {
-    width: 18px !important;
-    height: 18px !important;
+    width: 20px !important;
+    height: 20px !important;
     stroke-width: 1.8 !important;
   }
 
-  /* On phones one compact active section lives in the center. All product
-     areas stay reachable through the hamburger drawer. */
+  /* Same product tabs, but only the active section is shown in the narrow
+     header. The complete navigation remains in the existing sidebar drawer. */
   .titan-tabs {
     display: flex !important;
-    width: min(182px, calc(100vw - 104px)) !important;
+    width: auto !important;
     min-width: 0 !important;
-    max-width: 182px !important;
-    height: 30px !important;
+    max-width: 100% !important;
     align-items: center !important;
     justify-content: center !important;
     justify-self: center !important;
-    overflow: hidden !important;
-    border: 0 !important;
-    border-radius: 8px !important;
-    background: #232326 !important;
-    padding: 2px !important;
-    box-shadow: none !important;
+    gap: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+    padding: 0 !important;
   }
 
-  .titan-tab,
-  .titan-tab:nth-child(1),
-  .titan-tab:nth-child(2),
-  .titan-tab:nth-child(5) {
+  .titan-tab {
     display: none !important;
   }
 
   .titan-tab.is-active {
     display: inline-flex !important;
-    width: 100% !important;
-    height: 26px !important;
-    min-width: 0 !important;
-    min-height: 26px !important;
-    flex: 1 1 100% !important;
+    width: auto !important;
+    min-width: 72px !important;
+    max-width: min(190px, calc(100vw - 116px)) !important;
+    height: 34px !important;
     align-items: center !important;
     justify-content: center !important;
-    gap: 0 !important;
-    border: 0 !important;
-    border-radius: 6px !important;
-    background: #4a4a4e !important;
+    gap: 7px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(255,224,122,.25) !important;
+    border-radius: 13px !important;
+    background: linear-gradient(180deg, #edc95e, #d8aa38) !important;
     padding: 0 12px !important;
-    color: #fff !important;
-    font-size: 10.5px !important;
-    font-weight: 650 !important;
+    color: #16120a !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
     letter-spacing: -.01em !important;
-    box-shadow: none !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+    box-shadow: 0 7px 24px rgba(202,155,39,.13) !important;
   }
 
   .titan-tab.is-active svg {
-    display: none !important;
+    display: block !important;
+    width: 14px !important;
+    height: 14px !important;
+    flex: 0 0 14px !important;
   }
 
   .titan-topbar-right {
     display: flex !important;
-    width: 36px !important;
-    min-width: 36px !important;
+    width: 40px !important;
+    min-width: 40px !important;
     align-items: center !important;
     justify-content: flex-end !important;
     justify-self: end !important;
-    gap: 0 !important;
     overflow: visible !important;
   }
 
   .titan-topbar-right > .titan-search,
-  .titan-topbar-right > div:nth-of-type(2),
-  .titan-topbar-right > div:nth-of-type(3) {
+  .titan-topbar-right > div:nth-of-type(1),
+  .titan-topbar-right > div:nth-of-type(2) {
     display: none !important;
   }
 
-  .titan-topbar-right > div:nth-of-type(1) {
+  .titan-topbar-right > div:nth-of-type(3) {
     display: block !important;
-    width: 34px !important;
-    min-width: 34px !important;
+    width: 38px !important;
+    min-width: 38px !important;
     overflow: visible !important;
   }
 
-  .titan-topbar-right .titan-icon-btn.is-round {
-    width: 34px !important;
-    height: 34px !important;
-    min-width: 34px !important;
-    min-height: 34px !important;
-    border: 0 !important;
-    border-radius: 10px !important;
-    background: transparent !important;
-    color: #c7cbd4 !important;
+  .titan-avatar {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    border: 1px solid rgba(212,175,55,.22) !important;
+    border-radius: 50% !important;
+    background: #171719 !important;
   }
 
-  .titan-topbar-right .titan-icon-btn.is-round svg {
-    width: 18px !important;
-    height: 18px !important;
+  .titan-popover {
+    position: fixed !important;
+    left: 10px !important;
+    right: 10px !important;
+    top: calc(var(--malik-mobile-header) + 8px) !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: min(70dvh, 560px) !important;
+    overflow-y: auto !important;
   }
 
-  /* ------------------------------ drawer -------------------------------- */
+  /* --------------------------- sidebar drawer --------------------------- */
   .malik-sidebar[data-collapsed="false"] {
     position: fixed !important;
     z-index: 120 !important;
     inset: 0 auto 0 0 !important;
-    width: min(88vw, 338px) !important;
-    max-width: min(88vw, 338px) !important;
+    width: min(88vw, 340px) !important;
+    max-width: min(88vw, 340px) !important;
     height: 100dvh !important;
     overflow: hidden !important;
-    border-right: 1px solid rgba(255,255,255,.07) !important;
-    background: #111113 !important;
-    box-shadow: 24px 0 80px rgba(0,0,0,.62) !important;
+    border-right: 1px solid rgba(212,175,55,.12) !important;
+    background: #0d0d0f !important;
+    color: #f5f5f5 !important;
+    box-shadow: 24px 0 80px rgba(0,0,0,.58) !important;
   }
 
   .malik-sidebar[data-collapsed="true"] {
@@ -243,123 +269,203 @@
   .thome-launcher,
   .thome-welcome {
     width: 100% !important;
-    max-width: 100% !important;
     min-width: 0 !important;
   }
 
   .thome {
     height: calc(100dvh - var(--malik-mobile-header)) !important;
     min-height: 0 !important;
-    overflow: hidden !important;
-    background: #000 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    background: var(--malik-mobile-bg) !important;
+    scrollbar-width: none !important;
   }
 
-  .thome-inner {
-    height: 100% !important;
-    min-height: 0 !important;
-    padding: 0 var(--malik-mobile-side) !important;
-  }
-
-  .thome-launcher {
-    height: 100% !important;
-    min-height: 100% !important;
-    display: flex !important;
-    align-items: flex-end !important;
-    justify-content: center !important;
-    padding: 0 0 calc(11px + env(safe-area-inset-bottom)) !important;
-  }
-
-  .thome-welcome {
-    transform: none !important;
-  }
-
-  .thome-welcome-logo,
-  .thome-welcome h1,
-  .thome-welcome-subtitle,
-  [aria-label="Бесплатные плагины источников"] {
+  .thome::-webkit-scrollbar {
     display: none !important;
   }
 
-  /* Reference geometry: + | large input card | blue Voice/send circle. */
+  .thome-inner {
+    min-height: 100% !important;
+    height: auto !important;
+    padding: 0 !important;
+  }
+
+  .thome-launcher {
+    display: flex !important;
+    min-height: calc(100dvh - var(--malik-mobile-header)) !important;
+    height: auto !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 18px var(--malik-mobile-side) calc(22px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .thome-welcome {
+    display: flex !important;
+    max-width: 560px !important;
+    min-height: 0 !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    transform: none !important;
+    text-align: center !important;
+  }
+
+  .thome-welcome-logo {
+    display: grid !important;
+    width: 54px !important;
+    height: 54px !important;
+    min-width: 54px !important;
+    min-height: 54px !important;
+    place-items: center !important;
+    border-radius: 16px !important;
+    background: #fff !important;
+    color: #09090b !important;
+    box-shadow: 0 12px 34px rgba(0,0,0,.22) !important;
+  }
+
+  .thome-welcome-logo svg {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .thome-welcome h1 {
+    display: block !important;
+    max-width: 100% !important;
+    margin: 19px 0 0 !important;
+    color: #f5f5f6 !important;
+    font-size: clamp(27px, 8.2vw, 33px) !important;
+    font-weight: 650 !important;
+    line-height: 1.08 !important;
+    letter-spacing: -.045em !important;
+    text-wrap: balance !important;
+  }
+
+  .thome-welcome-subtitle {
+    display: block !important;
+    width: min(100%, 360px) !important;
+    margin: 10px auto 0 !important;
+    color: #8c8c94 !important;
+    font-size: 12.5px !important;
+    line-height: 1.55 !important;
+    text-wrap: balance !important;
+  }
+
+  /* Same desktop composer, reflowed instead of replaced. */
   .thome-composer,
   .thome-composer:focus-within {
     width: 100% !important;
-    min-height: 74px !important;
+    max-width: 560px !important;
+    min-height: 0 !important;
+    margin: 24px auto 0 !important;
     overflow: visible !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    padding: 0 !important;
-    box-shadow: none !important;
+    border: 1px solid rgba(255,255,255,.075) !important;
+    border-radius: 20px !important;
+    background:
+      radial-gradient(circle at 62% 120%, rgba(213,163,51,.15), transparent 36%),
+      #121214 !important;
+    padding: 9px 9px 8px !important;
+    box-shadow: 0 16px 46px rgba(0,0,0,.16) !important;
   }
 
   .thome-composer-row {
     display: grid !important;
-    grid-template-columns: 40px minmax(0, 1fr) 42px !important;
+    grid-template-columns: 38px minmax(0, 1fr) auto !important;
     width: 100% !important;
-    min-height: 74px !important;
+    min-height: 54px !important;
     align-items: end !important;
-    gap: 8px !important;
+    gap: 7px !important;
     padding: 0 !important;
   }
 
   .thome-tools {
-    width: 40px !important;
+    width: 38px !important;
     align-self: end !important;
   }
 
   .thome-plus-button,
   .thome-icon-button {
-    width: 40px !important;
-    height: 40px !important;
-    min-width: 40px !important;
-    min-height: 40px !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    min-height: 38px !important;
     border: 0 !important;
     border-radius: 50% !important;
-    background: rgba(255,255,255,.025) !important;
-    color: #a5a9b3 !important;
+    background: rgba(255,255,255,.035) !important;
+    color: #a7a7ae !important;
     box-shadow: none !important;
+  }
+
+  .thome-plus-button:active,
+  .thome-icon-button:active {
+    background: rgba(255,255,255,.075) !important;
   }
 
   .thome-composer textarea {
     width: 100% !important;
     min-width: 0 !important;
-    min-height: 74px !important;
+    min-height: 52px !important;
     max-height: 118px !important;
     resize: none !important;
     align-self: end !important;
-    border: 1px solid rgba(80,100,180,.24) !important;
+    border: 0 !important;
     border-radius: 12px !important;
     outline: 0 !important;
-    background:
-      radial-gradient(circle at 62% 112%, rgba(222,162,27,.16), transparent 34%),
-      linear-gradient(180deg, #0d101b, #0c0e18) !important;
-    padding: 12px 13px !important;
-    color: #eef0f6 !important;
-    font-size: 14px !important;
-    line-height: 20px !important;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,.01) !important;
+    background: transparent !important;
+    padding: 10px 4px 9px !important;
+    color: #f0f0f2 !important;
+    font-size: 15px !important;
+    line-height: 21px !important;
+    box-shadow: none !important;
   }
 
   .thome-composer textarea::placeholder {
-    color: #8a8fa0 !important;
+    color: #85858d !important;
     opacity: 1 !important;
   }
 
   .thome-composer-right {
     display: flex !important;
-    width: 42px !important;
+    width: auto !important;
     min-width: 42px !important;
     height: 42px !important;
     align-self: end !important;
     align-items: center !important;
-    justify-content: center !important;
+    justify-content: flex-end !important;
+    gap: 6px !important;
   }
 
-  .thome-composer-right .malik-model-selector,
-  .thome-composer-right .malik-model-selector__trigger,
-  .thome-composer-meta {
-    display: none !important;
+  .thome-composer-right .malik-model-selector {
+    display: block !important;
+    min-width: 0 !important;
+  }
+
+  .thome-composer-right .malik-model-selector__trigger {
+    display: inline-flex !important;
+    width: 92px !important;
+    max-width: 92px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    overflow: hidden !important;
+    gap: 5px !important;
+    border: 1px solid rgba(255,255,255,.07) !important;
+    border-radius: 12px !important;
+    background: #19191b !important;
+    padding: 0 7px !important;
+    color: #d8d8dc !important;
+    font-size: 10.5px !important;
+    white-space: nowrap !important;
+  }
+
+  .thome-composer-right .malik-model-selector__trigger > span:not(.malik-model-selector__mark) {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .thome-composer-right .malik-model-selector__mark {
+    width: 18px !important;
+    height: 18px !important;
+    flex: 0 0 18px !important;
   }
 
   .thome-action-swap,
@@ -379,21 +485,83 @@
   .thome-submit {
     display: grid !important;
     place-items: center !important;
-    border: 0 !important;
+    border: 1px solid rgba(255,230,150,.30) !important;
     border-radius: 50% !important;
-    background: var(--malik-mobile-blue) !important;
-    color: #fff !important;
-    box-shadow: 0 6px 20px rgba(19,136,255,.2) !important;
+    background: linear-gradient(180deg, #ecc75d, #d7a837) !important;
+    color: #16120a !important;
+    box-shadow: 0 8px 24px rgba(203,155,37,.16) !important;
+  }
+
+  .thome-submit:disabled {
+    opacity: .55 !important;
+  }
+
+  .thome-composer-meta {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    align-items: center !important;
+    gap: 6px !important;
+    margin-top: 7px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 0 1px 1px !important;
+    scrollbar-width: none !important;
+  }
+
+  .thome-composer-meta::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .thome-meta-chip {
+    min-height: 28px !important;
+    flex: 0 0 auto !important;
+    border-radius: 999px !important;
+    padding: 0 9px !important;
+    font-size: 10.5px !important;
+    white-space: nowrap !important;
+  }
+
+  .thome-meta-note {
+    display: none !important;
   }
 
   .thome-tools-menu {
-    left: 10px !important;
-    right: 10px !important;
-    bottom: calc(94px + env(safe-area-inset-bottom)) !important;
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    bottom: calc(12px + env(safe-area-inset-bottom)) !important;
     width: auto !important;
     max-height: min(54dvh, 430px) !important;
     overflow-y: auto !important;
     grid-template-columns: 1fr 1fr !important;
+    z-index: 140 !important;
+  }
+
+  /* Keep the four existing source plugins — same feature set, mobile grid. */
+  [aria-label="Бесплатные плагины источников"] {
+    display: grid !important;
+    width: 100% !important;
+    max-width: 560px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+    margin-top: 13px !important;
+  }
+
+  [aria-label="Бесплатные плагины источников"] > button {
+    height: 40px !important;
+    min-width: 0 !important;
+    border-radius: 12px !important;
+    border-color: rgba(255,255,255,.065) !important;
+    background: rgba(255,255,255,.018) !important;
+    padding: 0 10px !important;
+    color: #9d9da5 !important;
+    font-size: 11.5px !important;
+  }
+
+  [aria-label="Бесплатные плагины источников"] > button svg {
+    width: 14px !important;
+    height: 14px !important;
   }
 
   /* ------------------------------- chat --------------------------------- */
@@ -405,20 +573,21 @@
     height: calc(100dvh - var(--malik-mobile-header)) !important;
     min-height: 0 !important;
     overflow: hidden !important;
-    background: #000 !important;
+    background: var(--malik-mobile-bg) !important;
   }
 
   .malik-chat-scroll {
     width: 100% !important;
     min-width: 0 !important;
-    padding: 12px 12px calc(88px + env(safe-area-inset-bottom)) !important;
-    scroll-padding-bottom: calc(98px + env(safe-area-inset-bottom)) !important;
+    padding: 14px 12px calc(90px + env(safe-area-inset-bottom)) !important;
+    scroll-padding-bottom: calc(100px + env(safe-area-inset-bottom)) !important;
     overflow-x: hidden !important;
   }
 
   .malik-message-list {
     width: 100% !important;
-    max-width: 100% !important;
+    max-width: 760px !important;
+    margin: 0 auto !important;
   }
 
   .malik-message-row,
@@ -430,7 +599,7 @@
 
   .malik-message-stack {
     width: auto !important;
-    max-width: calc(100% - 34px) !important;
+    max-width: calc(100% - 26px) !important;
   }
 
   .malik-message-card {
@@ -442,20 +611,20 @@
     width: 100% !important;
     min-width: 0 !important;
     padding: 6px 10px calc(8px + env(safe-area-inset-bottom)) !important;
-    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.92) 22%, #000 52%) !important;
+    background: linear-gradient(180deg, transparent 0%, rgba(15,15,16,.92) 24%, #0f0f10 54%) !important;
     border: 0 !important;
   }
 
   .malik-composer-panel.chat-composer {
     width: 100% !important;
-    max-width: 100% !important;
-    min-height: 54px !important;
-    margin: 0 !important;
-    border: 0 !important;
-    border-radius: 18px !important;
-    background: #242225 !important;
-    padding: 6px !important;
-    box-shadow: none !important;
+    max-width: 760px !important;
+    min-height: 56px !important;
+    margin: 0 auto !important;
+    border: 1px solid rgba(255,255,255,.075) !important;
+    border-radius: 19px !important;
+    background: #151517 !important;
+    padding: 7px !important;
+    box-shadow: 0 14px 38px rgba(0,0,0,.20) !important;
   }
 
   .malik-inline-composer {
@@ -475,24 +644,26 @@
     min-width: 40px !important;
     min-height: 40px !important;
     flex: 0 0 40px !important;
-    border-radius: 12px !important;
+    border-radius: 50% !important;
+    background: rgba(255,255,255,.035) !important;
   }
 
   .malik-composer-textarea {
     min-width: 0 !important;
     min-height: 40px !important;
-    max-height: 112px !important;
+    max-height: 116px !important;
     flex: 1 1 auto !important;
     padding: 9px 5px !important;
+    color: #f1f1f3 !important;
     font-size: 15px !important;
     line-height: 22px !important;
   }
 
   .malik-inline-composer__right {
     display: flex !important;
-    width: 40px !important;
-    min-width: 40px !important;
-    flex: 0 0 40px !important;
+    width: 42px !important;
+    min-width: 42px !important;
+    flex: 0 0 42px !important;
     align-items: center !important;
     gap: 0 !important;
   }
@@ -518,16 +689,13 @@
   .malik-voice-entry,
   .malik-inline-composer__right button[aria-label*="Отправ"],
   .malik-inline-composer__right button[aria-label*="голос"] {
-    border: 0 !important;
+    border: 1px solid rgba(255,230,150,.30) !important;
     border-radius: 50% !important;
-    background: var(--malik-mobile-blue) !important;
-    color: #fff !important;
+    background: linear-gradient(180deg, #ecc75d, #d7a837) !important;
+    color: #16120a !important;
   }
 
-  /* ----------------------- all other Malik AI screens ------------------- */
-  /* Every studio/panel now receives a real phone viewport instead of a
-     squeezed desktop column. Internal components may still choose their own
-     cards, but they cannot force the product wider than the device. */
+  /* ------------------------- all current sections ----------------------- */
   .malik-dashboard-shell main > :not(.thome):not(.malik-chat-fullwidth) {
     width: 100% !important;
     max-width: 100% !important;
@@ -542,8 +710,15 @@
     max-width: 100% !important;
   }
 
-  .malik-dashboard-shell main [role="dialog"] {
+  .malik-dashboard-shell main [role="dialog"],
+  .titan-popover,
+  .malik-sources-drawer,
+  [role="dialog"] {
     max-width: calc(100vw - 20px) !important;
+  }
+
+  .malik-sources-drawer {
+    width: min(94vw, 430px) !important;
   }
 
   .malik-dashboard-shell main table {
@@ -556,43 +731,39 @@
     overflow-x: auto !important;
   }
 
-  .titan-popover,
-  .malik-sources-drawer,
-  [role="dialog"] {
-    max-width: calc(100vw - 16px) !important;
-  }
-
-  .malik-sources-drawer {
-    width: min(94vw, 430px) !important;
-  }
-
-  /* No accidental page-level horizontal scroll anywhere in the phone app. */
-  #malik-root * {
-    box-sizing: border-box;
-  }
-
   #malik-root {
     overflow-x: clip !important;
   }
-
-  /* iOS/Android tap behavior. */
-  #malik-root button,
-  #malik-root a,
-  #malik-root input,
-  #malik-root textarea,
-  #malik-root select {
-    -webkit-tap-highlight-color: transparent;
-  }
 }
 
-@media (max-width: 360px) {
-  .titan-tabs {
-    width: min(150px, calc(100vw - 102px)) !important;
+@media (max-width: 380px) {
+  .titan-tab.is-active {
+    min-width: 68px !important;
+    padding: 0 10px !important;
+    font-size: 11.5px !important;
+  }
+
+  .thome-launcher {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  .thome-welcome h1 {
+    font-size: 27px !important;
+  }
+
+  .thome-welcome-subtitle {
+    max-width: 320px !important;
+    font-size: 12px !important;
+  }
+
+  .thome-composer {
+    padding: 8px !important;
   }
 
   .thome-composer-row {
-    grid-template-columns: 36px minmax(0, 1fr) 40px !important;
-    gap: 6px !important;
+    grid-template-columns: 36px minmax(0, 1fr) auto !important;
+    gap: 5px !important;
   }
 
   .thome-tools,
@@ -600,10 +771,30 @@
   .thome-icon-button {
     width: 36px !important;
     min-width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
   }
 
-  .thome-composer textarea {
-    min-height: 70px !important;
-    font-size: 13.5px !important;
+  .thome-composer-right .malik-model-selector__trigger {
+    width: 74px !important;
+    max-width: 74px !important;
+    padding: 0 5px !important;
+    font-size: 9.5px !important;
+  }
+
+  .thome-action-swap,
+  .thome-action-swap > button,
+  .thome-voice-entry,
+  .thome-submit {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    flex-basis: 40px !important;
+  }
+
+  [aria-label="Бесплатные плагины источников"] > button {
+    font-size: 11px !important;
+    padding: 0 7px !important;
   }
 }
