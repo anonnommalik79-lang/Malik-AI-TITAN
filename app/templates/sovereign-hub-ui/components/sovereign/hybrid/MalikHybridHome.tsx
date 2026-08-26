@@ -3,12 +3,14 @@
 import { memo, useEffect, useRef, useState } from "react"
 import {
   ArrowUp,
+  BookOpen,
   Brain,
   Code2,
   Film,
+  Github,
   Globe,
+  GraduationCap,
   Image as ImageIcon,
-  Layers3,
   Paperclip,
   Plus,
   type LucideIcon,
@@ -25,6 +27,38 @@ import type { AiModeId } from "../power-registry"
 import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
+
+const SOURCE_PLUGINS: Array<{
+  id: string
+  label: string
+  icon: LucideIcon
+  prompt: string
+}> = [
+  {
+    id: "web",
+    label: "Веб",
+    icon: Globe,
+    prompt: "Найди в открытом вебе актуальную информацию по теме: ",
+  },
+  {
+    id: "github",
+    label: "GitHub",
+    icon: Github,
+    prompt: "Найди на GitHub лучшие открытые репозитории и исходный код по теме: ",
+  },
+  {
+    id: "wikipedia",
+    label: "Wikipedia",
+    icon: BookOpen,
+    prompt: "Найди в Wikipedia проверенную справочную информацию по теме: ",
+  },
+  {
+    id: "arxiv",
+    label: "arXiv",
+    icon: GraduationCap,
+    prompt: "Найди на arXiv научные статьи и исследования по теме: ",
+  },
+]
 
 export interface MalikHybridHomeProps {
   onSubmit: (prompt: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => void
@@ -273,6 +307,12 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     }, 0)
   }
 
+  const openSourcePlugin = (pluginPrompt: string) => {
+    setWebOn(true)
+    prefetchChatShell()
+    focusPrompt(pluginPrompt)
+  }
+
   return (
     <div className="thome">
       <div className="thome-inner">
@@ -317,45 +357,21 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               onOpenVoice={props.onOpenVoice}
             />
 
-            <div
-              className="mx-auto mt-4 flex max-w-[920px] flex-wrap items-center justify-center gap-2"
-              aria-label="Быстрые действия Malik AI"
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setWebOn(true)
-                  focusPrompt("Исследуй тему: ")
-                }}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-3.5 text-xs font-medium text-zinc-400 transition hover:border-white/[0.14] hover:bg-white/[0.055] hover:text-zinc-100"
-              >
-                <Globe className="h-3.5 w-3.5" aria-hidden="true" />
-                Глубокое исследование
-              </button>
-              <button
-                type="button"
-                onClick={props.onOpenPhoto}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-3.5 text-xs font-medium text-zinc-400 transition hover:border-white/[0.14] hover:bg-white/[0.055] hover:text-zinc-100"
-              >
-                <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                Создать изображение
-              </button>
-              <button
-                type="button"
-                onClick={props.onOpenCode}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-3.5 text-xs font-medium text-zinc-400 transition hover:border-white/[0.14] hover:bg-white/[0.055] hover:text-zinc-100"
-              >
-                <Code2 className="h-3.5 w-3.5" aria-hidden="true" />
-                Написать код
-              </button>
-              <button
-                type="button"
-                onClick={props.onOpenTemplates}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-3.5 text-xs font-medium text-zinc-400 transition hover:border-white/[0.14] hover:bg-white/[0.055] hover:text-zinc-100"
-              >
-                <Layers3 className="h-3.5 w-3.5" aria-hidden="true" />
-                Шаблоны
-              </button>
+            <div className="thome-source-plugins" aria-label="Бесплатные плагины источников">
+              {SOURCE_PLUGINS.map((plugin) => {
+                const Icon = plugin.icon
+                return (
+                  <button
+                    key={plugin.id}
+                    type="button"
+                    onClick={() => openSourcePlugin(plugin.prompt)}
+                    className="thome-source-plugin"
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{plugin.label}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         </section>
