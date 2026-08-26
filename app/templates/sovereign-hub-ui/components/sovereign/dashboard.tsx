@@ -4278,7 +4278,7 @@ function buildDashboardRuntimeDiagnostics() {
 
 
 
-export function Dashboard() {
+export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
   const { user: workOSUser, loading: workOSLoading } = useAuth()
 // MALIK_LOGOUT_BRIDGE_V1
   useEffect(() => {
@@ -4393,6 +4393,17 @@ export function Dashboard() {
 
   // WorkOS AuthKit is the only authority for authentication. Local state below is display cache only.
   useEffect(() => {
+    if (guestMode) {
+      clearStoredAuthSnapshot()
+      setUsername("guest@local")
+      setUserDisplayName("Гость")
+      setUserAvatar("")
+      setIsAuthenticated(true)
+      setIsAdmin(false)
+      setAuthReady(true)
+      return
+    }
+
     if (workOSLoading) {
       setAuthReady(false)
       return
@@ -4429,7 +4440,7 @@ export function Dashboard() {
     setIsAuthenticated(true)
     setIsAdmin(isOwner)
     setAuthReady(true)
-  }, [workOSLoading, workOSUser])
+  }, [guestMode, workOSLoading, workOSUser])
 
   useEffect(() => {
     let alive = true

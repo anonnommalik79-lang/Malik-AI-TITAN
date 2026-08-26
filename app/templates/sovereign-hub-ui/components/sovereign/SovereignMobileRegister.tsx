@@ -100,6 +100,13 @@ export function SovereignMobileRegister() {
     window.location.assign("/sign-in");
   }, [isOpening]);
 
+  const openGuest = useCallback(() => {
+    if (isOpening) return;
+    setIsOpening(true);
+    setMessage("");
+    window.location.assign("/guest");
+  }, [isOpening]);
+
   return (
     <main className="sma-root" aria-label="Sovereign mobile registration">
       <div className="sma-bg-mesh" aria-hidden="true" />
@@ -208,6 +215,11 @@ export function SovereignMobileRegister() {
                 );
               })}
             </div>
+
+            <button type="button" className="sma-guest" onClick={openGuest} disabled={isOpening}>
+              <User size={16} strokeWidth={2.2} />
+              <span>{T.guest}</span>
+            </button>
 
             {message && <p className="sma-message">{message}</p>}
 

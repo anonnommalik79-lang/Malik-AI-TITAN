@@ -114,6 +114,13 @@ export function SovereignVideoAuth() {
     window.location.assign("/sign-in");
   }, [isOpening]);
 
+  const openGuest = useCallback(() => {
+    if (isOpening) return;
+    setIsOpening(true);
+    setMessage("");
+    window.location.assign("/guest");
+  }, [isOpening]);
+
   return (
     <>
       <SovereignMobileRegister />
@@ -257,6 +264,11 @@ export function SovereignVideoAuth() {
                 );
               })}
             </div>
+
+            <button type="button" className="sva-guest" onClick={openGuest} disabled={isOpening}>
+              <User size={16} strokeWidth={2.2} />
+              <span>{T.guest}</span>
+            </button>
 
             {message && <p className="sva-message">{message}</p>}
           </form>

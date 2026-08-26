@@ -10,5 +10,10 @@ export function isWorkOSConfigured() {
 
 export async function getOptionalWorkOSAuth() {
   if (!isWorkOSConfigured()) return { user: null, sessionId: undefined }
-  return withAuth()
+  try {
+    return await withAuth()
+  } catch (error) {
+    console.warn("[WorkOS] Session is unavailable; continuing without an authenticated user.", error)
+    return { user: null, sessionId: undefined }
+  }
 }
