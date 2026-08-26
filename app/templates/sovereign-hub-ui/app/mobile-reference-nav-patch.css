@@ -1,0 +1,53 @@
+/* Keep the reference-style segmented mobile header while exposing the two
+   product areas the user asked to reach in one tap. The legacy sidebar
+   Translator action is hidden because it still points at the old chat-prefill
+   flow; the topbar Translator opens the standalone /translator page. */
+
+@media (max-width: 767px) {
+  .titan-tabs {
+    width: 202px !important;
+    min-width: 202px !important;
+    max-width: 202px !important;
+    flex-basis: 202px !important;
+  }
+
+  .titan-tab:nth-child(1),
+  .titan-tab:nth-child(2),
+  .titan-tab:nth-child(5) {
+    display: inline-flex !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 26px !important;
+    min-height: 26px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 0 !important;
+    border-radius: 6px !important;
+    padding: 0 7px !important;
+    background: transparent !important;
+    color: #b9b9be !important;
+    font-size: 9.7px !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+  }
+
+  .titan-tab:nth-child(1) { flex: .82 1 0 !important; }
+  .titan-tab:nth-child(2) { flex: 1 1 0 !important; }
+  .titan-tab:nth-child(5) { flex: 1.35 1 0 !important; }
+
+  .titan-tab:nth-child(1) svg,
+  .titan-tab:nth-child(2) svg,
+  .titan-tab:nth-child(5) svg {
+    display: none !important;
+  }
+
+  .titan-tab.is-active {
+    background: #4b4b4f !important;
+    color: #fff !important;
+  }
+
+  /* Avoid exposing the old AI-prefill Translator duplicate in the phone drawer. */
+  nav[aria-label="Основная навигация"] .malik-sidebar-primary:nth-child(5) {
+    display: none !important;
+  }
+}
