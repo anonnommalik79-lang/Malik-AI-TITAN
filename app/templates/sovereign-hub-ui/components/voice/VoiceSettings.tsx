@@ -10,7 +10,7 @@ export type VoiceProfile = {
   xaiVoiceId?: string
   rate: number
   pitch: number
-  hints: string[]
+  hints: readonly string[]
 }
 
 export const VOICES: readonly VoiceProfile[] = [
@@ -39,7 +39,7 @@ export const PERSONALITIES = [
 ] as const
 
 export function getVoiceProfile(name: string): VoiceProfile {
-  return VOICES.find((voice) => voice.name === name) || VOICES[0]
+  return VOICES.find((item) => item.name === name) || VOICES[0]
 }
 
 export function VoiceSettings({
@@ -90,7 +90,7 @@ export function VoiceSettings({
               >
                 <span className={styles.itemText}><strong>{profile.name}</strong><small>{profile.description}</small></span>
                 <span className={styles.actions}>
-                  <span className={styles.preview} role="button" aria-label={`Прослушать ${profile.name}`}><Volume2 size={14} /></span>
+                  <span className={styles.preview} aria-hidden="true"><Volume2 size={14} /></span>
                   {voice === profile.name ? <Check className={styles.check} size={15} /> : null}
                 </span>
               </button>
