@@ -3,14 +3,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   BarChart3,
-  BookOpen,
-  Bot,
-  Code2,
   CreditCard,
   Crown,
   FolderKanban,
-  Globe2,
-  Image as ImageIcon,
   Languages,
   LayoutTemplate,
   LifeBuoy,
@@ -29,10 +24,8 @@ import {
   Sparkles,
   Terminal,
   Trash2,
-  Video,
 } from "lucide-react"
 import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/auth/client-session"
-import { prefetchStudioChunks } from "@/lib/studio-prefetch"
 import { prefillPrompt } from "@/lib/malik-context"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
@@ -67,7 +60,7 @@ type SidebarAction = {
   label: string
   icon: typeof LayoutTemplate
   view?: string
-  action?: "new" | "codex" | "voice"
+  action?: "new" | "codex" | "voice" | "translate"
 }
 
 const PRIMARY_ACTIONS: SidebarAction[] = [
@@ -75,23 +68,10 @@ const PRIMARY_ACTIONS: SidebarAction[] = [
   { id: "library", label: "Библиотека", icon: LayoutTemplate, view: "templates" },
   { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects" },
   { id: "plugins", label: "Плагины", icon: Plug, view: "features" },
-]
-
-const MORE_ACTIONS: SidebarAction[] = [
-  { id: "knowledge", label: "База знаний", icon: BookOpen, view: "capabilities" },
-  { id: "images", label: "Изображения", icon: ImageIcon, view: "photo-generation" },
-  { id: "video", label: "Видео", icon: Video, view: "video-generation" },
-  { id: "code", label: "Код", icon: Code2, view: "code-generation" },
-  { id: "agents", label: "Агенты AI", icon: Bot, view: "command-center" },
-  { id: "analytics", label: "Аналитика", icon: BarChart3, view: "dashboard-generation" },
-  { id: "sites", label: "Сайты", icon: Globe2, view: "website-generation" },
-  { id: "studio", label: "Студия сборки", icon: Sparkles, view: "ai-generator" },
-  { id: "codex", label: "Malik Codex", icon: Terminal, action: "codex" },
-  { id: "voice", label: "Voice AI", icon: Shield, action: "voice" },
+  { id: "translate", label: "Переводчик", icon: Languages, action: "translate" },
 ]
 
 const TOOL_ACTIONS = [
-  { id: "translate", label: "Переводчик", icon: Languages },
   { id: "data", label: "Анализ данных", icon: BarChart3 },
 ] as const
 
@@ -120,7 +100,6 @@ function SidebarInner({
 }: SidebarProps) {
   const [profile, setProfile] = useState<ReturnType<typeof getStoredAuthSnapshot>>(null)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
-  const [moreOpen, setMoreOpen] = useState(false)
   const [chatMenuId, setChatMenuId] = useState<string | null>(null)
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState("")
@@ -149,14 +128,12 @@ function SidebarInner({
     const closeMenus = (event: MouseEvent) => {
       if (!sidebarRef.current?.contains(event.target as Node)) {
         setProfileMenuOpen(false)
-        setMoreOpen(false)
         setChatMenuId(null)
       }
     }
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
       setProfileMenuOpen(false)
-      setMoreOpen(false)
       setChatMenuId(null)
       setEditingChatId(null)
     }
@@ -191,7 +168,6 @@ function SidebarInner({
   const roleLabel = profile?.isAdmin ? "Соло-фаундер" : isGuest ? "Free plan" : "Pro workspace"
 
   const openView = useCallback((view: string) => {
-    setMoreOpen(false)
     setProfileMenuOpen(false)
     setChatMenuId(null)
     onViewChange?.(view)
@@ -203,7 +179,6 @@ function SidebarInner({
   }, [onOpenSearch])
 
   const runAction = useCallback((action: SidebarAction) => {
-    setMoreOpen(false)
     if (action.action === "new") {
       onNewChat?.()
       return
@@ -216,14 +191,17 @@ function SidebarInner({
       onOpenVoice?.()
       return
     }
+    if (action.action === "translate") {
+      onViewChange?.("home")
+      prefillPrompt("Переведи текст ниже на нужный язык, сохрани смысл, факты и тон:\n\n")
+      return
+    }
     if (action.view) openView(action.view)
-  }, [onNewChat, onOpenCodex, onOpenVoice, openView])
+  }, [onNewChat, onOpenCodex, onOpenVoice, onViewChange, openView])
 
   const runTool = useCallback((id: (typeof TOOL_ACTIONS)[number]["id"]) => {
     onViewChange?.("home")
-    if (id === "translate") {
-      prefillPrompt("Переведи текст ниже на нужный язык, сохрани смысл, факты и тон:\n\n")
-    } else {
+    if (id === "data") {
       prefillPrompt("Проанализируй данные ниже: найди тренды, аномалии и дай выводы с цифрами.\n\n")
     }
   }, [onViewChange])
@@ -280,9 +258,6 @@ function SidebarInner({
         </div>
         <nav aria-label="Навигация" className="malik-sidebar-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2">
           {PRIMARY_ACTIONS.map(renderRailButton)}
-          <button type="button" aria-label="Больше" onClick={() => onToggle()} onMouseEnter={showTooltip("Больше")} onMouseLeave={() => setTooltip(null)} className="malik-sidebar-rail-btn">
-            <MoreHorizontal className="h-[18px] w-[18px]" />
-          </button>
         </nav>
         <div className="flex shrink-0 flex-col items-center gap-1 border-t border-[var(--malik-hairline,rgba(255,255,255,.06))] p-2">
           <button type="button" onClick={() => openView("settings")} aria-label="Настройки" className="malik-sidebar-icon-btn"><Settings className="h-[18px] w-[18px]" /></button>
@@ -389,23 +364,6 @@ function SidebarInner({
             </button>
           )
         })}
-        <div className="relative">
-          <button type="button" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => { setMoreOpen((open) => !open); setProfileMenuOpen(false) }} className={cn("malik-sidebar-primary", MORE_ACTIONS.some((item) => item.view === activeView) && "is-active")}>
-            <MoreHorizontal className="h-[17px] w-[17px]" /><span>Больше</span>
-          </button>
-          {moreOpen ? (
-            <div role="menu" className="malik-sidebar-more-menu">
-              {MORE_ACTIONS.map((action) => {
-                const Icon = action.icon
-                return (
-                  <button key={action.id} type="button" role="menuitem" onMouseEnter={prefetchStudioChunks} onFocus={prefetchStudioChunks} onClick={() => runAction(action)} className={cn(action.view === activeView && "is-active")}>
-                    <Icon className="h-4 w-4" /><span>{action.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          ) : null}
-        </div>
       </nav>
 
       <div className="malik-sidebar-history min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
@@ -450,7 +408,7 @@ function SidebarInner({
           </div>
         ) : null}
 
-        <button type="button" aria-haspopup="menu" aria-expanded={profileMenuOpen} onClick={() => { setProfileMenuOpen((open) => !open); setMoreOpen(false) }} className="malik-sidebar-user">
+        <button type="button" aria-haspopup="menu" aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen((open) => !open)} className="malik-sidebar-user">
           <span className="malik-sidebar-user-avatar"><img src={avatar} alt="" /><span>{initials}</span></span>
           <span className="min-w-0 flex-1"><span className="malik-sidebar-user-name">{displayName}</span><span className="malik-sidebar-user-role">{roleLabel}</span></span>
           <span className="malik-sidebar-user-dot" aria-hidden="true" />
