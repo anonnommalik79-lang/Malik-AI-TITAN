@@ -7,8 +7,8 @@ import mobileStyles from "./VoiceMobileTarget.module.css"
 
 export type PickedVoiceFile = { name: string; file: File }
 
-const AUTO_FINISH_SILENCE_MS = 1350
-const SPEECH_LEVEL_THRESHOLD = .115
+const AUTO_FINISH_SILENCE_MS = 1150
+const SPEECH_LEVEL_THRESHOLD = .07
 const MIC_START_GRACE_MS = 450
 
 export function VoiceDock({
@@ -53,6 +53,7 @@ export function VoiceDock({
   const dotsRef = useRef<Array<HTMLSpanElement | null>>([])
   const heardSpeechRef = useRef(false)
   const lastSpeechAtRef = useRef(0)
+  const lastTranscriptRef = useRef("")
   const micStartedAtRef = useRef(0)
   const autoFinishTriggeredRef = useRef(false)
 
@@ -75,6 +76,7 @@ export function VoiceDock({
   useEffect(() => {
     heardSpeechRef.current = false
     lastSpeechAtRef.current = 0
+    lastTranscriptRef.current = ""
     autoFinishTriggeredRef.current = false
     micStartedAtRef.current = micActive ? performance.now() : 0
   }, [micActive])
@@ -93,10 +95,20 @@ export function VoiceDock({
 
       if (micActive && !autoFinishTriggeredRef.current) {
         const pastGrace = !micStartedAtRef.current || time - micStartedAtRef.current >= MIC_START_GRACE_MS
-        if (pastGrace && energyRef.current >= SPEECH_LEVEL_THRESHOLD) {
+        const transcript = pastGrace
+          ? (document.querySelector('[data-voice-mode] [aria-live="polite"]')?.textContent || "").trim()
+          : ""
+
+        if (transcript && transcript !== lastTranscriptRef.current) {
+          lastTranscriptRef.current = transcript
+          heardSpeechRef.current = true
+          lastSpeechAtRef.current = time
+        } else if (pastGrace && !heardSpeechRef.current && energyRef.current >= SPEECH_LEVEL_THRESHOLD) {
+          // Fallback for browsers without live SpeechRecognition text.
           heardSpeechRef.current = true
           lastSpeechAtRef.current = time
         } else if (
+          pastGrace &&
           heardSpeechRef.current &&
           lastSpeechAtRef.current > 0 &&
           time - lastSpeechAtRef.current >= AUTO_FINISH_SILENCE_MS
@@ -104,6 +116,11 @@ export function VoiceDock({
           autoFinishTriggeredRef.current = true
           onMicToggle()
           return
+        }
+
+        // Keep the fallback silence clock fresh only while the user is audibly speaking.
+        if (!transcript && heardSpeechRef.current && energyRef.current >= SPEECH_LEVEL_THRESHOLD) {
+          lastSpeechAtRef.current = time
         }
       }
 
