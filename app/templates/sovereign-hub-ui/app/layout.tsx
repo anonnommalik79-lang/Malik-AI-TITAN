@@ -17,9 +17,11 @@ import "./titan-templates.css"
 import "./titan-chat.css"
 // Strips the effects that cost the most per frame on phones.
 import "./mobile-performance.css"
-// Final workspace geometry/background pass: keep this last so no legacy home
-// rule can reintroduce a split surface or top-heavy launcher.
+// Final workspace geometry/background pass.
 import "./home-viewport-fix.css"
+// Absolute last mobile pass: matches the compact native phone reference and
+// intentionally wins over every legacy mobile/home/chat rule above.
+import "./mobile-reference-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 
