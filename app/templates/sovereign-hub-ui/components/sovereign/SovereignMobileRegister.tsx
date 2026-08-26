@@ -25,7 +25,7 @@ function isPhoneFeedbackDevice() {
   const androidPhone = /Android/i.test(ua) && /Mobile/i.test(ua);
   const otherPhone = /IEMobile|Windows Phone|Opera Mini/i.test(ua);
 
-  // Intentionally reject desktop/laptop browsers, even when the window is narrow.
+  // Never enable this effect on desktop/laptop, even with a narrow browser window.
   return (iphone || androidPhone || otherPhone) && window.innerWidth <= 900;
 }
 
@@ -63,6 +63,7 @@ function MailIcon() {
 export function SovereignMobileRegister() {
   const [typed, setTyped] = useState("");
   const [navigating, setNavigating] = useState(false);
+  const [restartKey, setRestartKey] = useState(0);
 
   const phoneFeedbackRef = useRef(false);
   const armedRef = useRef(false);
@@ -77,7 +78,7 @@ export function SovereignMobileRegister() {
       typeof window === "undefined" ||
       !phoneFeedbackRef.current ||
       feedbackStoppedRef.current
-    ) return;
+    ) return false;
 
     try {
       if (!audioRef.current) {
@@ -85,17 +86,17 @@ export function SovereignMobileRegister() {
           window.AudioContext ||
           (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
 
-        if (!AudioCtor) return;
+        if (!AudioCtor) return false;
 
         const ctx = new AudioCtor();
         const master = ctx.createGain();
         const compressor = ctx.createDynamicsCompressor();
         const toneFilter = ctx.createBiquadFilter();
 
-        master.gain.value = 0.23;
+        master.gain.value = 0.27;
         toneFilter.type = "lowpass";
-        toneFilter.frequency.value = 920;
-        toneFilter.Q.value = 0.45;
+        toneFilter.frequency.value = 960;
+        toneFilter.Q.value = 0.42;
 
         compressor.threshold.value = -20;
         compressor.knee.value = 11;
@@ -112,11 +113,15 @@ export function SovereignMobileRegister() {
         toneFilterRef.current = toneFilter;
       }
 
-      if (audioRef.current.state === "suspended") {
-        await audioRef.current.resume();
+      const ctx = audioRef.current;
+      if (ctx.state === "suspended" || ctx.state === "interrupted") {
+        await ctx.resume();
       }
+
+      return ctx.state === "running";
     } catch {
       // Feedback is enhancement-only. Auth must never depend on it.
+      return false;
     }
   }, []);
 
@@ -140,10 +145,10 @@ export function SovereignMobileRegister() {
         const bodyGain = ctx.createGain();
 
         body.type = "sine";
-        body.frequency.setValueAtTime(236, at);
+        body.frequency.setValueAtTime(238, at);
         body.frequency.exponentialRampToValueAtTime(184, at + 0.016);
         bodyGain.gain.setValueAtTime(0.0001, at);
-        bodyGain.gain.exponentialRampToValueAtTime(0.0705 * level, at + 0.001);
+        bodyGain.gain.exponentialRampToValueAtTime(0.078 * level, at + 0.001);
         bodyGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.021);
         body.connect(bodyGain);
         bodyGain.connect(master);
@@ -154,10 +159,10 @@ export function SovereignMobileRegister() {
         const edgeGain = ctx.createGain();
 
         edge.type = "triangle";
-        edge.frequency.setValueAtTime(355, at);
-        edge.frequency.exponentialRampToValueAtTime(286, at + 0.0065);
+        edge.frequency.setValueAtTime(360, at);
+        edge.frequency.exponentialRampToValueAtTime(288, at + 0.0065);
         edgeGain.gain.setValueAtTime(0.0001, at);
-        edgeGain.gain.exponentialRampToValueAtTime(0.0205 * level, at + 0.0007);
+        edgeGain.gain.exponentialRampToValueAtTime(0.022 * level, at + 0.0007);
         edgeGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.008);
         edge.connect(edgeGain);
         edgeGain.connect(master);
@@ -166,7 +171,7 @@ export function SovereignMobileRegister() {
       };
 
       microTap(now, 1);
-      microTap(now + 0.012, 0.52);
+      microTap(now + 0.012, 0.5);
     } catch {
       // Ignore browsers that reject an individual audio node.
     }
@@ -209,7 +214,7 @@ export function SovereignMobileRegister() {
       try {
         navigator.vibrate([3, 5, 3]);
       } catch {
-        // iOS Safari ignores web vibration; native wrappers can use the bridge above.
+        // iOS Safari has no normal web-vibration support; sound remains primary.
       }
     }
 
@@ -223,9 +228,16 @@ export function SovereignMobileRegister() {
       gestureUnlockedRef.current
     ) return;
 
+    // iPhone Safari requires a real user gesture before WebAudio can become audible.
+    // Resume inside that gesture and restart the phrase only after the context runs,
+    // so the visible letters and the character sound are synchronized.
     gestureUnlockedRef.current = true;
     armedRef.current = true;
-    await ensureAudio();
+    const running = await ensureAudio();
+
+    if (running && !feedbackStoppedRef.current) {
+      setRestartKey((value) => value + 1);
+    }
   }, [ensureAudio]);
 
   const stopFeedback = useCallback(() => {
@@ -257,15 +269,28 @@ export function SovereignMobileRegister() {
     phoneFeedbackRef.current = isPhoneFeedbackDevice();
 
     if (!phoneFeedbackRef.current) {
-      // Desktop and laptop must stay completely silent.
+      // Desktop and laptop stay completely silent.
       feedbackStoppedRef.current = true;
       armedRef.current = false;
       return;
     }
 
-    // On phones, feedback belongs only to visible typewriter characters.
+    // Android and browsers that allow it can start immediately. iPhone will
+    // remain silent until the first real touch, then armFeedback restarts text.
     armedRef.current = true;
     void ensureAudio();
+  }, [ensureAudio]);
+
+  useEffect(() => {
+    if (!phoneFeedbackRef.current || feedbackStoppedRef.current) return;
+
+    const resumeWhenVisible = () => {
+      if (document.visibilityState !== "visible" || feedbackStoppedRef.current) return;
+      void ensureAudio();
+    };
+
+    document.addEventListener("visibilitychange", resumeWhenVisible);
+    return () => document.removeEventListener("visibilitychange", resumeWhenVisible);
   }, [ensureAudio]);
 
   useEffect(() => {
@@ -318,7 +343,7 @@ export function SovereignMobileRegister() {
       cancelled = true;
       timers.forEach(window.clearTimeout);
     };
-  }, [pulseCharacter]);
+  }, [pulseCharacter, restartKey]);
 
   useEffect(() => {
     return () => {
@@ -348,18 +373,22 @@ export function SovereignMobileRegister() {
     }
   }, [stopFeedback]);
 
+  const handleFeedbackGesture = useCallback((target: EventTarget | null) => {
+    const element = target instanceof Element ? target : null;
+    if (element?.closest(".sma-auth-button, .sma-close")) {
+      stopFeedback();
+      return;
+    }
+    void armFeedback();
+  }, [armFeedback, stopFeedback]);
+
   return (
     <main
       className="sma-root"
       aria-label="Malik AI mobile authentication"
-      onPointerDownCapture={(event) => {
-        const target = event.target as Element | null;
-        if (target?.closest(".sma-auth-button")) {
-          stopFeedback();
-          return;
-        }
-        void armFeedback();
-      }}
+      onTouchStartCapture={(event) => handleFeedbackGesture(event.target)}
+      onPointerDownCapture={(event) => handleFeedbackGesture(event.target)}
+      onClickCapture={(event) => handleFeedbackGesture(event.target)}
     >
       <button className="sma-close" type="button" aria-label="Закрыть" onClick={close}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -380,6 +409,7 @@ export function SovereignMobileRegister() {
           type="button"
           disabled={navigating}
           onPointerDown={stopFeedback}
+          onTouchStart={stopFeedback}
           onClick={openSignIn}
         >
           <span className="sma-auth-icon"><AppleIcon /></span>
@@ -391,6 +421,7 @@ export function SovereignMobileRegister() {
           type="button"
           disabled={navigating}
           onPointerDown={stopFeedback}
+          onTouchStart={stopFeedback}
           onClick={openSignIn}
         >
           <span className="sma-auth-icon"><GoogleIcon /></span>
@@ -402,6 +433,7 @@ export function SovereignMobileRegister() {
           type="button"
           disabled={navigating}
           onPointerDown={stopFeedback}
+          onTouchStart={stopFeedback}
           onClick={openSignIn}
         >
           <span className="sma-auth-icon"><MailIcon /></span>
