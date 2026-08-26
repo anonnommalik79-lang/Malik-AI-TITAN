@@ -22,6 +22,8 @@ import "./home-viewport-fix.css"
 // Absolute last mobile pass: matches the compact native phone reference and
 // intentionally wins over every legacy mobile/home/chat rule above.
 import "./mobile-reference-final.css"
+// Product-nav correction layered after the visual pass.
+import "./mobile-reference-nav-patch.css"
 
 const SITE_URL = "https://malikaiworld.world"
 
