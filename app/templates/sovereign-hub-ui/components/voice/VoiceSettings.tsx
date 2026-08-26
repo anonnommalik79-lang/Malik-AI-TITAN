@@ -19,11 +19,11 @@ export const VOICES: readonly VoiceProfile[] = [
   { name: "Leo", description: "Authoritative and strong.", xaiVoiceId: "leo", rate: .96, pitch: .88, hints: ["male", "david", "guy", "daniel"] },
   { name: "Rex", description: "Confident and direct.", xaiVoiceId: "rex", rate: 1.00, pitch: .82, hints: ["male", "mark", "david", "guy"] },
   { name: "Sal", description: "Smooth and balanced.", xaiVoiceId: "sal", rate: .98, pitch: .95, hints: ["natural", "alex", "daniel", "google"] },
-  { name: "Carina", description: "Soft, empathetic and soothing.", xaiVoiceId: "carina", rate: .92, pitch: 1.06, hints: ["female", "samantha", "aria", "jenny"] },
-  { name: "Luna", description: "Calm, bright and conversational.", xaiVoiceId: "luna", rate: .97, pitch: 1.10, hints: ["female", "susan", "samantha", "google"] },
-  { name: "Orion", description: "Deep, cinematic and focused.", xaiVoiceId: "orion", rate: .94, pitch: .78, hints: ["male", "daniel", "george", "david"] },
-  { name: "Aurora", description: "Expressive, vivid and friendly.", xaiVoiceId: "aurora", rate: 1.03, pitch: 1.13, hints: ["female", "aria", "jenny", "samantha"] },
-  { name: "Atlas", description: "Steady, mature and powerful.", xaiVoiceId: "atlas", rate: .93, pitch: .74, hints: ["male", "george", "david", "daniel"] },
+  { name: "Carina", description: "Soft, empathetic and soothing.", xaiVoiceId: "ara", rate: .92, pitch: 1.06, hints: ["female", "samantha", "aria", "jenny"] },
+  { name: "Luna", description: "Calm, bright and conversational.", xaiVoiceId: "eve", rate: .97, pitch: 1.10, hints: ["female", "susan", "samantha", "google"] },
+  { name: "Orion", description: "Deep, cinematic and focused.", xaiVoiceId: "leo", rate: .94, pitch: .78, hints: ["male", "daniel", "george", "david"] },
+  { name: "Aurora", description: "Expressive, vivid and friendly.", xaiVoiceId: "eve", rate: 1.03, pitch: 1.13, hints: ["female", "aria", "jenny", "samantha"] },
+  { name: "Atlas", description: "Steady, mature and powerful.", xaiVoiceId: "rex", rate: .93, pitch: .74, hints: ["male", "george", "david", "daniel"] },
 ] as const
 
 export const PERSONALITIES = [
