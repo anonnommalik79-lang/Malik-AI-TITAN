@@ -42,6 +42,7 @@ import { DEFAULT_MALIK_MODEL_ID, getMalikModel, type MalikModelId } from "@/lib/
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { MalikModelSelector } from "./MalikModelSelector"
 import { canUseUltra, loadResponseDepth, type ChatSendOptions, type ResponseDepth } from "@/lib/ai/response-depth"
+import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 
 export type { ChatSendOptions }
 
@@ -130,6 +131,7 @@ interface ChatViewProps {
   onOpenBilling?: () => void
   onOpenCodex?: () => void
   onForceCanvas?: () => void
+  onOpenVoice?: () => void
   projectName?: string
   projectDescription?: string
 }
@@ -772,7 +774,7 @@ function MessageBubble({
   )
 }
 
-export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenCodex, onForceCanvas, projectName, projectDescription }: ChatViewProps) {
+export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenCodex, onForceCanvas, onOpenVoice, projectName, projectDescription }: ChatViewProps) {
   // One short pulse after the complete answer lands. Passing a number (rather
   // than a pattern) deliberately keeps this to a single haptic event.
   const wasLoading = useRef(false)
@@ -1093,12 +1095,30 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
                 onSelect={onModelChange || (() => {})}
                 onOpenBilling={onOpenBilling}
               />
-              <button type="button" onClick={toggleRecording} className={cn("malik-inline-action", isRecording && "is-recording")} aria-label={isRecording ? "Остановить запись" : "Голосовой ввод"}>
-                <Mic className="h-5 w-5" />
-              </button>
-              <button type="button" onClick={handleGuardedSubmit} disabled={isLoading || (!prompt.trim() && attachments.length === 0)} className="malik-inline-send" aria-label={isLoading ? "Malik AI отвечает" : "Отправить"}>
-                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <SendHorizontal className="h-5 w-5" />}
-              </button>
+              <span className="malik-inline-action-swap">
+                <button
+                  type="button"
+                  onClick={onOpenVoice}
+                  disabled={isLoading}
+                  className={cn("malik-voice-entry", prompt.trim() && "is-hidden")}
+                  aria-label="Открыть голосовой режим"
+                  aria-hidden={Boolean(prompt.trim())}
+                  tabIndex={prompt.trim() ? -1 : 0}
+                >
+                  <VoiceWaveIcon />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGuardedSubmit}
+                  disabled={isLoading || (!prompt.trim() && attachments.length === 0)}
+                  className={cn("malik-inline-send", !prompt.trim() && "is-hidden")}
+                  aria-label={isLoading ? "Malik AI отвечает" : "Отправить"}
+                  aria-hidden={!prompt.trim()}
+                  tabIndex={prompt.trim() ? 0 : -1}
+                >
+                  {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <SendHorizontal className="h-5 w-5" />}
+                </button>
+              </span>
             </div>
           </div>
           <div className="malik-composer-context-row">

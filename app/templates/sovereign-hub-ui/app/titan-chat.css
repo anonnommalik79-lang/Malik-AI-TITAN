@@ -809,6 +809,54 @@ body:has(#malik-root .malik-active-chat-shell),
   cursor: not-allowed;
 }
 
+#malik-root .malik-inline-action-swap {
+  position: relative;
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+}
+
+#malik-root .malik-inline-action-swap > button {
+  position: absolute;
+  inset: 0;
+  width: 48px;
+  height: 48px;
+  transition: opacity 160ms ease, transform 160ms cubic-bezier(.22, 1, .36, 1), background-color 140ms ease, color 140ms ease;
+}
+
+#malik-root .malik-voice-entry {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #09090a;
+  background: #fff;
+  box-shadow: 0 5px 22px rgba(255, 255, 255, .12);
+}
+
+#malik-root .malik-voice-entry:hover:not(:disabled) {
+  background: #f2f2f2;
+  transform: scale(1.035);
+}
+
+#malik-root .malik-voice-entry:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+#malik-root .malik-voice-entry svg {
+  width: 25px;
+  height: 25px;
+}
+
+#malik-root .malik-inline-action-swap > button.is-hidden,
+.thome-action-swap > button.is-hidden {
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(.72);
+}
+
 #malik-root .malik-inline-composer .malik-model-selector__trigger {
   min-height: 42px;
   max-width: 184px;

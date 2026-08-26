@@ -10,7 +10,6 @@ import {
   Globe,
   Image as ImageIcon,
   Layers3,
-  Mic,
   Paperclip,
   Plus,
   type LucideIcon,
@@ -24,6 +23,7 @@ import { HOME_MALIK_TEMPLATES, type MalikTemplate } from "@/lib/malik-template-r
 import { MalikModelSelector } from "../MalikModelSelector"
 import type { ChatAttachment } from "../chat-view"
 import type { AiModeId } from "../power-registry"
+import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
@@ -41,6 +41,7 @@ export interface MalikHybridHomeProps {
   onOpenCommandCenter?: () => void
   onOpenSupport?: () => void
   onOpenCapabilities?: () => void
+  onOpenVoice?: () => void
   onLaunchTemplate?: (template: MalikTemplate) => void
   selectedModelId?: MalikModelId
   userPlan?: AIPlan
@@ -66,6 +67,7 @@ function HomeComposer({
   userPlan,
   onModelChange,
   onOpenBilling,
+  onOpenVoice,
 }: {
   prompt: string
   isLoading?: boolean
@@ -83,6 +85,7 @@ function HomeComposer({
   userPlan: AIPlan
   onModelChange: (modelId: MalikModelId) => void
   onOpenBilling?: () => void
+  onOpenVoice?: () => void
 }) {
   const [toolsOpen, setToolsOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -189,18 +192,30 @@ function HomeComposer({
             placement="bottom"
           />
 
-          <button type="button" className="thome-icon-button" aria-label="Голосовой ввод" disabled>
-            <Mic aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={!prompt.trim() || isLoading}
-            className="thome-submit"
-            aria-label={isLoading ? "Malik AI отвечает" : "Отправить запрос"}
-          >
-            {isLoading ? <span className="thome-submit-loader" aria-hidden="true" /> : <ArrowUp aria-hidden="true" />}
-          </button>
+          <span className="thome-action-swap">
+            <button
+              type="button"
+              onClick={onOpenVoice}
+              disabled={isLoading}
+              className={cn("thome-voice-entry", prompt.trim() && "is-hidden")}
+              aria-label="Открыть голосовой режим"
+              aria-hidden={Boolean(prompt.trim())}
+              tabIndex={prompt.trim() ? -1 : 0}
+            >
+              <VoiceWaveIcon />
+            </button>
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!prompt.trim() || isLoading}
+              className={cn("thome-submit", !prompt.trim() && "is-hidden")}
+              aria-label={isLoading ? "Malik AI отвечает" : "Отправить запрос"}
+              aria-hidden={!prompt.trim()}
+              tabIndex={prompt.trim() ? 0 : -1}
+            >
+              {isLoading ? <span className="thome-submit-loader" aria-hidden="true" /> : <ArrowUp aria-hidden="true" />}
+            </button>
+          </span>
         </div>
       </div>
 
@@ -299,6 +314,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               userPlan={props.userPlan || "free"}
               onModelChange={props.onModelChange || (() => {})}
               onOpenBilling={props.onOpenBilling}
+              onOpenVoice={props.onOpenVoice}
             />
           </div>
         </section>

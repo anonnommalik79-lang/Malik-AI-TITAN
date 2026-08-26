@@ -59,6 +59,7 @@ interface SidebarProps {
   onLogout?: () => void
   onOpenCodex?: () => void
   onOpenSearch?: () => void
+  onOpenVoice?: () => void
 }
 
 type SidebarAction = {
@@ -115,6 +116,7 @@ function SidebarInner({
   onLogout,
   onOpenCodex,
   onOpenSearch,
+  onOpenVoice,
 }: SidebarProps) {
   const [profile, setProfile] = useState<ReturnType<typeof getStoredAuthSnapshot>>(null)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
@@ -211,12 +213,11 @@ function SidebarInner({
       return
     }
     if (action.action === "voice") {
-      onViewChange?.("home")
-      window.setTimeout(() => document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")?.focus(), 60)
+      onOpenVoice?.()
       return
     }
     if (action.view) openView(action.view)
-  }, [onNewChat, onOpenCodex, onViewChange, openView])
+  }, [onNewChat, onOpenCodex, onOpenVoice, openView])
 
   const runTool = useCallback((id: (typeof TOOL_ACTIONS)[number]["id"]) => {
     onViewChange?.("home")

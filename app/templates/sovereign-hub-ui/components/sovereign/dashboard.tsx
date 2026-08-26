@@ -59,6 +59,10 @@ const DigitalBridgeSectionExperience = dynamic(
   () => import("./digital-bridge-sections").then((mod) => mod.DigitalBridgeSectionExperience),
   { ssr: false },
 )
+const VoiceMode = dynamic(
+  () => import("@/components/voice/VoiceMode").then((mod) => mod.VoiceMode),
+  { ssr: false },
+)
 import { BusinessCommandCenter } from "./business/BusinessCommandCenter"
 import { NewsroomStudio } from "./media/NewsroomStudio"
 import { GenerationAnimation } from "./generation-animation"
@@ -4361,6 +4365,7 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false)
   const [codexOpen, setCodexOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [voiceModeOpen, setVoiceModeOpen] = useState(false)
   const [activeAiMode, setActiveAiMode] = useState<AiModeId>("auto")
   const [activeGenerationKind, setActiveGenerationKind] = useState<GenerationStatusType>("website")
   const activeViewRef = useRef("home")
@@ -6072,6 +6077,7 @@ const shouldShowMobilePreviewButton =
                 onOpenBilling={() => safeOpenView("billing", "manual")}
                 onOpenCodex={() => setCodexOpen(true)}
                 onForceCanvas={() => safeOpenCanvas(undefined, "project-chat")}
+                onOpenVoice={() => setVoiceModeOpen(true)}
                 projectName={chats.find((chat) => chat.id === activeProjectWorkspaceId)?.title}
                 projectDescription={chats.find((chat) => chat.id === activeProjectWorkspaceId)?.projectDescription}
               />
@@ -6105,6 +6111,7 @@ const shouldShowMobilePreviewButton =
               onOpenBilling={() => safeOpenView("billing", "manual")}
               onOpenCodex={() => setCodexOpen(true)}
               onForceCanvas={() => safeOpenCanvas(undefined, "chat-force")}
+              onOpenVoice={() => setVoiceModeOpen(true)}
             />
 
             </div>
@@ -6127,6 +6134,7 @@ const shouldShowMobilePreviewButton =
               selectedModelId={selectedModelId}
               userPlan={currentPlan}
               onModelChange={handleModelChange}
+              onOpenVoice={() => setVoiceModeOpen(true)}
             />
           )}
         </section>
@@ -6451,6 +6459,7 @@ const shouldShowMobilePreviewButton =
           onLogout={handleLogout}
           onOpenCodex={() => { setCodexOpen(true); setMobileMenuOpen(false) }}
           onOpenSearch={() => setCommandPaletteOpen(true)}
+          onOpenVoice={() => setVoiceModeOpen(true)}
         />
       </div>
       <div className={cn("fixed inset-y-0 left-0 z-50 lg:hidden transition-transform duration-300 ease-out", mobileMenuOpen ? "translate-x-0" : "-translate-x-full")}>
@@ -6469,6 +6478,7 @@ const shouldShowMobilePreviewButton =
           onLogout={handleLogout}
           onOpenCodex={() => { setCodexOpen(true); setMobileMenuOpen(false) }}
           onOpenSearch={() => { setCommandPaletteOpen(true); setMobileMenuOpen(false) }}
+          onOpenVoice={() => { setVoiceModeOpen(true); setMobileMenuOpen(false) }}
         />
       </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -6511,6 +6521,7 @@ const shouldShowMobilePreviewButton =
   {renderActiveView()}
   <MalikCodexModal open={codexOpen} onClose={() => setCodexOpen(false)} onSendToCanvas={(code) => safeOpenCanvas(code, "generator-panel")} />
   <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} onRunAction={runCommandPaletteAction} />
+  {voiceModeOpen ? <VoiceMode onClose={() => setVoiceModeOpen(false)} onSubmit={(prompt) => handleSendMessage(prompt)} /> : null}
 </main>
           {/* The canvas needs the same space, so the rail yields to it. */}
           {!shouldShowPreviewPanel && (

@@ -393,6 +393,59 @@
   animation: thome-spin 700ms linear infinite;
 }
 
+.thome-action-swap {
+  position: relative;
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+}
+
+.thome-action-swap > button {
+  position: absolute;
+  inset: 0;
+  width: 48px;
+  height: 48px;
+  transition: opacity 160ms ease, transform 160ms cubic-bezier(.22, 1, .36, 1), background-color 140ms ease, color 140ms ease;
+}
+
+.thome-action-swap > button.is-hidden {
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(.72);
+}
+
+.thome-voice-entry {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #080809;
+  background: #fff;
+  box-shadow: 0 5px 22px rgba(255, 255, 255, .12);
+}
+
+.thome-voice-entry:hover:not(:disabled) {
+  background: #f1f1f1;
+  transform: scale(1.035);
+}
+
+.thome-voice-entry:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+.thome-voice-entry svg {
+  width: 25px;
+  height: 25px;
+}
+
+.thome-action-swap > button.is-hidden {
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(.72);
+}
+
 /* ------------------------------------------------------------- library --- */
 
 .thome-library {
