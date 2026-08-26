@@ -52,16 +52,17 @@ function MailIcon() {
 
 export function SovereignMobileRegister() {
   const [typed, setTyped] = useState("");
-  const [restartKey, setRestartKey] = useState(0);
   const [navigating, setNavigating] = useState(false);
 
   const armedRef = useRef(false);
+  const gestureUnlockedRef = useRef(false);
+  const feedbackStoppedRef = useRef(false);
   const audioRef = useRef<AudioContext | null>(null);
   const masterRef = useRef<GainNode | null>(null);
   const toneFilterRef = useRef<BiquadFilterNode | null>(null);
 
   const ensureAudio = useCallback(async () => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || feedbackStoppedRef.current) return;
 
     try {
       if (!audioRef.current) {
@@ -108,7 +109,7 @@ export function SovereignMobileRegister() {
   const playGentleDoubleTap = useCallback((kind: HapticKind) => {
     const ctx = audioRef.current;
     const master = masterRef.current;
-    if (!armedRef.current || !ctx || !master || ctx.state !== "running") return;
+    if (feedbackStoppedRef.current || !armedRef.current || !ctx || !master || ctx.state !== "running") return;
 
     try {
       const now = ctx.currentTime;
@@ -144,7 +145,6 @@ export function SovereignMobileRegister() {
         edge.stop(at + 0.009);
       };
 
-      // Every visible character gets a soft “тук-тук”: first tap + lighter echo.
       microTap(now, 1);
       microTap(now + 0.012, 0.52);
     } catch {
@@ -153,7 +153,7 @@ export function SovereignMobileRegister() {
   }, []);
 
   const pulse = useCallback((kind: HapticKind) => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || feedbackStoppedRef.current) return;
 
     let nativeHandled = false;
     const bridge = window as typeof window & {
@@ -189,7 +189,7 @@ export function SovereignMobileRegister() {
       try {
         navigator.vibrate(kind === "character" ? [3, 5, 3] : [7, 7, 7]);
       } catch {
-        // iOS Safari ignores web vibration; sound still works after user gesture.
+        // iOS Safari ignores web vibration; native wrappers can use the bridge above.
       }
     }
 
@@ -197,15 +197,41 @@ export function SovereignMobileRegister() {
   }, [playGentleDoubleTap]);
 
   const armFeedback = useCallback(async () => {
-    if (armedRef.current) return;
-
-    // Mobile browsers require one real gesture before WebAudio may play.
-    // Once armed, restart the intro so every following character has sound.
+    if (feedbackStoppedRef.current || gestureUnlockedRef.current) return;
+    gestureUnlockedRef.current = true;
     armedRef.current = true;
     await ensureAudio();
-    pulse("tap");
-    setRestartKey((value) => value + 1);
-  }, [ensureAudio, pulse]);
+  }, [ensureAudio]);
+
+  const stopFeedback = useCallback(() => {
+    feedbackStoppedRef.current = true;
+    armedRef.current = false;
+
+    try {
+      if (typeof navigator.vibrate === "function") navigator.vibrate(0);
+    } catch {
+      // no-op
+    }
+
+    try {
+      const ctx = audioRef.current;
+      const master = masterRef.current;
+      if (ctx && master) {
+        const now = ctx.currentTime;
+        master.gain.cancelScheduledValues(now);
+        master.gain.setValueAtTime(0.0001, now);
+      }
+    } catch {
+      // no-op
+    }
+  }, []);
+
+  useEffect(() => {
+    // Start feedback immediately on entry. Android/web vibration can work at once;
+    // WebAudio is also attempted immediately and will start automatically where allowed.
+    armedRef.current = true;
+    void ensureAudio();
+  }, [ensureAudio]);
 
   useEffect(() => {
     let cancelled = false;
@@ -257,7 +283,7 @@ export function SovereignMobileRegister() {
       cancelled = true;
       timers.forEach(window.clearTimeout);
     };
-  }, [pulse, restartKey]);
+  }, [pulse]);
 
   useEffect(() => {
     return () => {
@@ -270,13 +296,12 @@ export function SovereignMobileRegister() {
     };
   }, []);
 
-  const openSignIn = useCallback(async () => {
+  const openSignIn = useCallback(() => {
     if (navigating) return;
+    stopFeedback();
     setNavigating(true);
-    await ensureAudio();
-    pulse("tap");
     window.location.assign("/sign-in");
-  }, [ensureAudio, navigating, pulse]);
+  }, [navigating, stopFeedback]);
 
   const close = useCallback(async () => {
     await ensureAudio();
@@ -293,7 +318,12 @@ export function SovereignMobileRegister() {
     <main
       className="sma-root"
       aria-label="Malik AI mobile authentication"
-      onPointerDownCapture={() => {
+      onPointerDownCapture={(event) => {
+        const target = event.target as Element | null;
+        if (target?.closest(".sma-auth-button")) {
+          stopFeedback();
+          return;
+        }
         void armFeedback();
       }}
     >
@@ -315,7 +345,8 @@ export function SovereignMobileRegister() {
           className="sma-auth-button sma-auth-button--apple"
           type="button"
           disabled={navigating}
-          onClick={() => void openSignIn()}
+          onPointerDown={stopFeedback}
+          onClick={openSignIn}
         >
           <span className="sma-auth-icon"><AppleIcon /></span>
           <span>Продолжить с Apple</span>
@@ -325,7 +356,8 @@ export function SovereignMobileRegister() {
           className="sma-auth-button sma-auth-button--dark"
           type="button"
           disabled={navigating}
-          onClick={() => void openSignIn()}
+          onPointerDown={stopFeedback}
+          onClick={openSignIn}
         >
           <span className="sma-auth-icon"><GoogleIcon /></span>
           <span>Продолжить с Google</span>
@@ -335,7 +367,8 @@ export function SovereignMobileRegister() {
           className="sma-auth-button sma-auth-button--dark"
           type="button"
           disabled={navigating}
-          onClick={() => void openSignIn()}
+          onPointerDown={stopFeedback}
+          onClick={openSignIn}
         >
           <span className="sma-auth-icon"><MailIcon /></span>
           <span>{navigating ? "Открываю..." : "Войти или зарегистрироваться"}</span>
