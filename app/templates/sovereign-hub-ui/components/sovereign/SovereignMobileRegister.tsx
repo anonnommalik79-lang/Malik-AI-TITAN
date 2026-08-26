@@ -58,6 +58,7 @@ export function SovereignMobileRegister() {
   const armedRef = useRef(false);
   const audioRef = useRef<AudioContext | null>(null);
   const masterRef = useRef<GainNode | null>(null);
+  const toneFilterRef = useRef<BiquadFilterNode | null>(null);
 
   const ensureAudio = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -73,63 +74,79 @@ export function SovereignMobileRegister() {
         const ctx = new AudioCtor();
         const master = ctx.createGain();
         const compressor = ctx.createDynamicsCompressor();
+        const toneFilter = ctx.createBiquadFilter();
 
-        master.gain.value = 0.16;
-        compressor.threshold.value = -22;
-        compressor.knee.value = 9;
-        compressor.ratio.value = 3.5;
+        master.gain.value = 0.23;
+
+        toneFilter.type = "lowpass";
+        toneFilter.frequency.value = 920;
+        toneFilter.Q.value = 0.45;
+
+        compressor.threshold.value = -20;
+        compressor.knee.value = 11;
+        compressor.ratio.value = 2.7;
         compressor.attack.value = 0.001;
-        compressor.release.value = 0.045;
+        compressor.release.value = 0.05;
 
-        master.connect(compressor);
+        master.connect(toneFilter);
+        toneFilter.connect(compressor);
         compressor.connect(ctx.destination);
 
         audioRef.current = ctx;
         masterRef.current = master;
+        toneFilterRef.current = toneFilter;
       }
 
       if (audioRef.current.state === "suspended") {
         await audioRef.current.resume();
       }
     } catch {
-      // Audio feedback is enhancement-only. Auth must never depend on it.
+      // Feedback is enhancement-only. Auth must never depend on it.
     }
   }, []);
 
-  const playSoftTick = useCallback((kind: HapticKind) => {
+  const playGentleDoubleTap = useCallback((kind: HapticKind) => {
     const ctx = audioRef.current;
     const master = masterRef.current;
     if (!armedRef.current || !ctx || !master || ctx.state !== "running") return;
 
     try {
       const now = ctx.currentTime;
-      const strength = kind === "character" ? 0.78 : 1;
+      const strength = kind === "character" ? 0.86 : 1;
 
-      const body = ctx.createOscillator();
-      const bodyGain = ctx.createGain();
-      body.type = "sine";
-      body.frequency.setValueAtTime(208, now);
-      body.frequency.exponentialRampToValueAtTime(158, now + 0.017);
-      bodyGain.gain.setValueAtTime(0.0001, now);
-      bodyGain.gain.exponentialRampToValueAtTime(0.062 * strength, now + 0.001);
-      bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
-      body.connect(bodyGain);
-      bodyGain.connect(master);
-      body.start(now);
-      body.stop(now + 0.024);
+      const microTap = (at: number, level: number) => {
+        const body = ctx.createOscillator();
+        const bodyGain = ctx.createGain();
 
-      const edge = ctx.createOscillator();
-      const edgeGain = ctx.createGain();
-      edge.type = "sine";
-      edge.frequency.setValueAtTime(390, now);
-      edge.frequency.exponentialRampToValueAtTime(305, now + 0.007);
-      edgeGain.gain.setValueAtTime(0.0001, now);
-      edgeGain.gain.exponentialRampToValueAtTime(0.017 * strength, now + 0.0006);
-      edgeGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.0085);
-      edge.connect(edgeGain);
-      edgeGain.connect(master);
-      edge.start(now);
-      edge.stop(now + 0.01);
+        body.type = "sine";
+        body.frequency.setValueAtTime(236, at);
+        body.frequency.exponentialRampToValueAtTime(184, at + 0.016);
+        bodyGain.gain.setValueAtTime(0.0001, at);
+        bodyGain.gain.exponentialRampToValueAtTime(0.082 * strength * level, at + 0.001);
+        bodyGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.021);
+        body.connect(bodyGain);
+        bodyGain.connect(master);
+        body.start(at);
+        body.stop(at + 0.023);
+
+        const edge = ctx.createOscillator();
+        const edgeGain = ctx.createGain();
+
+        edge.type = "triangle";
+        edge.frequency.setValueAtTime(355, at);
+        edge.frequency.exponentialRampToValueAtTime(286, at + 0.0065);
+        edgeGain.gain.setValueAtTime(0.0001, at);
+        edgeGain.gain.exponentialRampToValueAtTime(0.024 * strength * level, at + 0.0007);
+        edgeGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.008);
+        edge.connect(edgeGain);
+        edgeGain.connect(master);
+        edge.start(at);
+        edge.stop(at + 0.009);
+      };
+
+      // Every visible character gets a soft “тук-тук”: first tap + lighter echo.
+      microTap(now, 1);
+      microTap(now + 0.012, 0.52);
     } catch {
       // Ignore browsers that reject an individual audio node.
     }
@@ -159,8 +176,8 @@ export function SovereignMobileRegister() {
       } else if (bridge.webkit?.messageHandlers?.malikHaptics) {
         bridge.webkit.messageHandlers.malikHaptics.postMessage({
           type: kind,
-          intensity: kind === "character" ? 0.4 : 0.62,
-          sharpness: kind === "character" ? 0.58 : 0.7,
+          intensity: kind === "character" ? 0.36 : 0.58,
+          sharpness: kind === "character" ? 0.5 : 0.66,
         });
         nativeHandled = true;
       }
@@ -170,17 +187,20 @@ export function SovereignMobileRegister() {
 
     if (!nativeHandled && typeof navigator.vibrate === "function") {
       try {
-        navigator.vibrate(kind === "character" ? 5 : 12);
+        navigator.vibrate(kind === "character" ? [3, 5, 3] : [7, 7, 7]);
       } catch {
-        // iOS Safari currently ignores web vibration; the soft tick remains.
+        // iOS Safari ignores web vibration; sound still works after user gesture.
       }
     }
 
-    playSoftTick(kind);
-  }, [playSoftTick]);
+    playGentleDoubleTap(kind);
+  }, [playGentleDoubleTap]);
 
   const armFeedback = useCallback(async () => {
     if (armedRef.current) return;
+
+    // Mobile browsers require one real gesture before WebAudio may play.
+    // Once armed, restart the intro so every following character has sound.
     armedRef.current = true;
     await ensureAudio();
     pulse("tap");
@@ -242,6 +262,7 @@ export function SovereignMobileRegister() {
   useEffect(() => {
     return () => {
       try {
+        toneFilterRef.current?.disconnect();
         void audioRef.current?.close();
       } catch {
         // no-op
