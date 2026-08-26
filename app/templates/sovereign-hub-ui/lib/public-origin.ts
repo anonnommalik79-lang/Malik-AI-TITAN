@@ -9,10 +9,14 @@ function normalizeOrigin(value: string) {
   }
 }
 
+function isHostedProduction() {
+  return process.env.NODE_ENV === "production" || process.env.RENDER === "true"
+}
+
 export function getPublicOrigin() {
-  // Production is intentionally locked to the canonical public domain.
-  // Never trust Render's internal request host or a stale localhost env value.
-  if (process.env.NODE_ENV === "production") return PRODUCTION_ORIGIN
+  // Hosted production is intentionally locked to the canonical public domain.
+  // Never trust Render's internal localhost:<PORT> origin or stale env values.
+  if (isHostedProduction()) return PRODUCTION_ORIGIN
 
   const configured = normalizeOrigin(
     process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "",
@@ -26,8 +30,8 @@ export function getPublicUrl(path = "/") {
 }
 
 export function getWorkOSRedirectUri() {
-  // WorkOS must always return production users to the real Malik AI domain.
-  if (process.env.NODE_ENV === "production") return PRODUCTION_CALLBACK
+  // WorkOS must always return hosted users to the real Malik AI domain.
+  if (isHostedProduction()) return PRODUCTION_CALLBACK
 
   const configured =
     process.env.WORKOS_REDIRECT_URI || process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI || ""
