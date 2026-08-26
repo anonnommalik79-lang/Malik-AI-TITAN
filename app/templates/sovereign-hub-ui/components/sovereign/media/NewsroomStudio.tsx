@@ -88,7 +88,7 @@ function CapBadge({ label, state }: { label: string; state?: boolean }) {
   return (
     <span
       className={`nrs__cap ${state ? "nrs__cap--on" : "nrs__cap--off"}`}
-      title={state ? "Подключено" : "Не подключено — добавьте ключи в .env.local"}
+      title={state ? "Подключено" : "Не подключено — добавьте ключи в Render Environment"}
     >
       <i className="nrs__cap-dot" /> {label}{state ? "" : " · не подключено"}
     </span>
@@ -165,7 +165,7 @@ export function NewsroomStudio({ username, onViewChange, onNewChat }: NewsroomSt
       )
       const data = await res.json().catch(() => ({}))
       if (res.status === 503) {
-        setTranslateNote("AWS Translate не подключён. Добавьте ключи AWS в .env.local")
+        setTranslateNote("AWS Translate не подключён. Добавьте ключи AWS в Render Environment")
         return
       }
       if (!res.ok || data.ok === false) {
@@ -198,7 +198,7 @@ export function NewsroomStudio({ username, onViewChange, onNewChat }: NewsroomSt
       const res = await fetch("/api/transcribe", { method: "POST", body: form })
       const data = await res.json().catch(() => ({}))
       if (res.status === 503) {
-        setTranscribeNote("Транскрипция не подключена. Добавьте GROQ_API_KEY в .env.local")
+        setTranscribeNote("Транскрипция не подключена. Добавьте GROQ_API_KEY в Render Environment")
         return
       }
       if (!res.ok || data.ok === false || !data.text) {
@@ -237,7 +237,7 @@ export function NewsroomStudio({ username, onViewChange, onNewChat }: NewsroomSt
       )
       const data = await res.json().catch(() => ({}))
       if (res.status === 503) {
-        setError("AWS Polly не подключён. Добавьте ключи AWS в .env.local")
+        setError("AWS Polly не подключён. Добавьте ключи AWS в Render Environment")
         return
       }
       if (!res.ok || data.ok === false || !data.audio) {

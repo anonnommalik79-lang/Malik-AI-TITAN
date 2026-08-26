@@ -12,7 +12,7 @@ export async function GET(request: Parameters<typeof workOSCallback>[0]) {
     return Response.json({
       ok: false,
       error: "workos_not_configured",
-      message: "Set WORKOS_CLIENT_ID and WORKOS_API_KEY in .env.local.",
+      message: "Set WORKOS_CLIENT_ID and WORKOS_API_KEY in Render Environment (or .env.local for local development).",
     }, { status: 503 })
   }
 

@@ -11,7 +11,7 @@ export async function GET() {
 export async function POST(request: Request) {
   if (!isTranscribeConfigured()) {
     return Response.json(
-      { ok: false, error: "Транскрипция не подключена. Добавьте GROQ_API_KEY в .env.local" },
+      { ok: false, error: "Транскрипция не подключена. Добавьте GROQ_API_KEY в Render Environment" },
       { status: 503 },
     )
   }
