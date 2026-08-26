@@ -17,7 +17,17 @@ const HOLD_MS = 420;
 const FINAL_HOLD_MS = 980;
 const GAP_MS = 105;
 
-type HapticKind = "character" | "tap";
+function isPhoneFeedbackDevice() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+
+  const ua = navigator.userAgent || "";
+  const iphone = /iPhone|iPod/i.test(ua);
+  const androidPhone = /Android/i.test(ua) && /Mobile/i.test(ua);
+  const otherPhone = /IEMobile|Windows Phone|Opera Mini/i.test(ua);
+
+  // Intentionally reject desktop/laptop browsers, even when the window is narrow.
+  return (iphone || androidPhone || otherPhone) && window.innerWidth <= 900;
+}
 
 function AppleIcon() {
   return (
@@ -54,6 +64,7 @@ export function SovereignMobileRegister() {
   const [typed, setTyped] = useState("");
   const [navigating, setNavigating] = useState(false);
 
+  const phoneFeedbackRef = useRef(false);
   const armedRef = useRef(false);
   const gestureUnlockedRef = useRef(false);
   const feedbackStoppedRef = useRef(false);
@@ -62,7 +73,11 @@ export function SovereignMobileRegister() {
   const toneFilterRef = useRef<BiquadFilterNode | null>(null);
 
   const ensureAudio = useCallback(async () => {
-    if (typeof window === "undefined" || feedbackStoppedRef.current) return;
+    if (
+      typeof window === "undefined" ||
+      !phoneFeedbackRef.current ||
+      feedbackStoppedRef.current
+    ) return;
 
     try {
       if (!audioRef.current) {
@@ -78,7 +93,6 @@ export function SovereignMobileRegister() {
         const toneFilter = ctx.createBiquadFilter();
 
         master.gain.value = 0.23;
-
         toneFilter.type = "lowpass";
         toneFilter.frequency.value = 920;
         toneFilter.Q.value = 0.45;
@@ -106,14 +120,20 @@ export function SovereignMobileRegister() {
     }
   }, []);
 
-  const playGentleDoubleTap = useCallback((kind: HapticKind) => {
+  const playCharacterSound = useCallback(() => {
     const ctx = audioRef.current;
     const master = masterRef.current;
-    if (feedbackStoppedRef.current || !armedRef.current || !ctx || !master || ctx.state !== "running") return;
+    if (
+      !phoneFeedbackRef.current ||
+      feedbackStoppedRef.current ||
+      !armedRef.current ||
+      !ctx ||
+      !master ||
+      ctx.state !== "running"
+    ) return;
 
     try {
       const now = ctx.currentTime;
-      const strength = kind === "character" ? 0.86 : 1;
 
       const microTap = (at: number, level: number) => {
         const body = ctx.createOscillator();
@@ -123,7 +143,7 @@ export function SovereignMobileRegister() {
         body.frequency.setValueAtTime(236, at);
         body.frequency.exponentialRampToValueAtTime(184, at + 0.016);
         bodyGain.gain.setValueAtTime(0.0001, at);
-        bodyGain.gain.exponentialRampToValueAtTime(0.082 * strength * level, at + 0.001);
+        bodyGain.gain.exponentialRampToValueAtTime(0.0705 * level, at + 0.001);
         bodyGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.021);
         body.connect(bodyGain);
         bodyGain.connect(master);
@@ -137,7 +157,7 @@ export function SovereignMobileRegister() {
         edge.frequency.setValueAtTime(355, at);
         edge.frequency.exponentialRampToValueAtTime(286, at + 0.0065);
         edgeGain.gain.setValueAtTime(0.0001, at);
-        edgeGain.gain.exponentialRampToValueAtTime(0.024 * strength * level, at + 0.0007);
+        edgeGain.gain.exponentialRampToValueAtTime(0.0205 * level, at + 0.0007);
         edgeGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.008);
         edge.connect(edgeGain);
         edgeGain.connect(master);
@@ -152,13 +172,16 @@ export function SovereignMobileRegister() {
     }
   }, []);
 
-  const pulse = useCallback((kind: HapticKind) => {
-    if (typeof window === "undefined" || feedbackStoppedRef.current) return;
+  const pulseCharacter = useCallback(() => {
+    if (
+      typeof window === "undefined" ||
+      !phoneFeedbackRef.current ||
+      feedbackStoppedRef.current
+    ) return;
 
     let nativeHandled = false;
     const bridge = window as typeof window & {
       nativeHapticTick?: () => void;
-      nativeHapticTap?: () => void;
       webkit?: {
         messageHandlers?: {
           malikHaptics?: { postMessage: (payload: unknown) => void };
@@ -167,17 +190,14 @@ export function SovereignMobileRegister() {
     };
 
     try {
-      if (kind === "character" && bridge.nativeHapticTick) {
+      if (bridge.nativeHapticTick) {
         bridge.nativeHapticTick();
-        nativeHandled = true;
-      } else if (kind === "tap" && bridge.nativeHapticTap) {
-        bridge.nativeHapticTap();
         nativeHandled = true;
       } else if (bridge.webkit?.messageHandlers?.malikHaptics) {
         bridge.webkit.messageHandlers.malikHaptics.postMessage({
-          type: kind,
-          intensity: kind === "character" ? 0.36 : 0.58,
-          sharpness: kind === "character" ? 0.5 : 0.66,
+          type: "character",
+          intensity: 0.36,
+          sharpness: 0.5,
         });
         nativeHandled = true;
       }
@@ -187,17 +207,22 @@ export function SovereignMobileRegister() {
 
     if (!nativeHandled && typeof navigator.vibrate === "function") {
       try {
-        navigator.vibrate(kind === "character" ? [3, 5, 3] : [7, 7, 7]);
+        navigator.vibrate([3, 5, 3]);
       } catch {
         // iOS Safari ignores web vibration; native wrappers can use the bridge above.
       }
     }
 
-    playGentleDoubleTap(kind);
-  }, [playGentleDoubleTap]);
+    playCharacterSound();
+  }, [playCharacterSound]);
 
   const armFeedback = useCallback(async () => {
-    if (feedbackStoppedRef.current || gestureUnlockedRef.current) return;
+    if (
+      !phoneFeedbackRef.current ||
+      feedbackStoppedRef.current ||
+      gestureUnlockedRef.current
+    ) return;
+
     gestureUnlockedRef.current = true;
     armedRef.current = true;
     await ensureAudio();
@@ -208,7 +233,9 @@ export function SovereignMobileRegister() {
     armedRef.current = false;
 
     try {
-      if (typeof navigator.vibrate === "function") navigator.vibrate(0);
+      if (phoneFeedbackRef.current && typeof navigator.vibrate === "function") {
+        navigator.vibrate(0);
+      }
     } catch {
       // no-op
     }
@@ -227,8 +254,16 @@ export function SovereignMobileRegister() {
   }, []);
 
   useEffect(() => {
-    // Start feedback immediately on entry. Android/web vibration can work at once;
-    // WebAudio is also attempted immediately and will start automatically where allowed.
+    phoneFeedbackRef.current = isPhoneFeedbackDevice();
+
+    if (!phoneFeedbackRef.current) {
+      // Desktop and laptop must stay completely silent.
+      feedbackStoppedRef.current = true;
+      armedRef.current = false;
+      return;
+    }
+
+    // On phones, feedback belongs only to visible typewriter characters.
     armedRef.current = true;
     void ensureAudio();
   }, [ensureAudio]);
@@ -258,8 +293,8 @@ export function SovereignMobileRegister() {
         setTyped(phrase.slice(0, cursor));
 
         const character = phrase[cursor - 1];
-        if (armedRef.current && character && character.trim()) {
-          pulse("character");
+        if (character && character.trim()) {
+          pulseCharacter();
         }
 
         if (cursor < phrase.length) {
@@ -283,7 +318,7 @@ export function SovereignMobileRegister() {
       cancelled = true;
       timers.forEach(window.clearTimeout);
     };
-  }, [pulse]);
+  }, [pulseCharacter]);
 
   useEffect(() => {
     return () => {
@@ -303,16 +338,15 @@ export function SovereignMobileRegister() {
     window.location.assign("/sign-in");
   }, [navigating, stopFeedback]);
 
-  const close = useCallback(async () => {
-    await ensureAudio();
-    pulse("tap");
+  const close = useCallback(() => {
+    stopFeedback();
 
     if (window.history.length > 1) {
       window.history.back();
     } else {
       window.location.assign("/");
     }
-  }, [ensureAudio, pulse]);
+  }, [stopFeedback]);
 
   return (
     <main
@@ -327,7 +361,7 @@ export function SovereignMobileRegister() {
         void armFeedback();
       }}
     >
-      <button className="sma-close" type="button" aria-label="Закрыть" onClick={() => void close()}>
+      <button className="sma-close" type="button" aria-label="Закрыть" onClick={close}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M7 7l10 10M17 7 7 17" />
         </svg>
