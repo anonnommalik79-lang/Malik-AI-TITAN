@@ -32,8 +32,12 @@ if (cookieValue.length < 32) {
   else lines.push(`WORKOS_COOKIE_PASSWORD=${generated}`)
 }
 
-ensure("WORKOS_REDIRECT_URI", "http://localhost:3000/callback")
-ensure("NEXT_PUBLIC_WORKOS_REDIRECT_URI", "http://localhost:3000/callback")
+const redirectUri = process.env.NODE_ENV === "production"
+  ? "https://malikaiworld.world/callback"
+  : "http://localhost:3000/callback"
+
+ensure("WORKOS_REDIRECT_URI", redirectUri)
+ensure("NEXT_PUBLIC_WORKOS_REDIRECT_URI", redirectUri)
 
 await writeFile(file, `${lines.join("\n").replace(/\n+$/, "")}\n`, "utf8")
-console.log("WorkOS env keys ensured; cookie password length is valid; secret values were not printed.")
+console.log("WorkOS env keys ensured; production callback is pinned to malikaiworld.world; secret values were not printed.")
