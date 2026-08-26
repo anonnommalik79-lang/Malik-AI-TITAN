@@ -3,16 +3,16 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Bell,
-  Compass,
+  CreditCard,
   FolderKanban,
-  LayoutGrid,
+  Languages,
   LibraryBig,
   LogOut,
   Menu,
   MessageSquare,
+  Plug,
   Search,
   Settings,
-  CreditCard,
   Zap,
 } from "lucide-react"
 import type { AiModeId } from "./power-registry"
@@ -26,29 +26,18 @@ type Tab = {
   id: string
   label: string
   icon: typeof MessageSquare
-  /** Views that should light this tab up, beyond the primary one. */
   owns?: string[]
+  href?: string
 }
 
 const TABS: Tab[] = [
   { id: "home", label: "Чат", icon: MessageSquare, owns: ["chats"] },
-  {
-    id: "command-center",
-    label: "Рабочая область",
-    icon: LayoutGrid,
-    owns: ["final-intelligence", "unbreakable-ai", "capabilities", "business-command-center", "media-newsroom"],
-  },
+  { id: "features", label: "Плагины", icon: Plug },
   { id: "projects", label: "Проекты", icon: FolderKanban },
   { id: "templates", label: "Библиотека", icon: LibraryBig },
-  {
-    id: "dashboard-generation",
-    label: "Аналитика",
-    icon: Compass,
-    owns: ["code-generation", "website-generation", "landing-generation", "document-generation", "presentation-generation", "template-generation", "component-generation"],
-  },
+  { id: "translator", label: "Переводчик", icon: Languages, href: "/translator" },
 ]
 
-/** Only the modes worth reaching in one click; the full list lives in the composer. */
 const QUICK_MODE_IDS: AiModeId[] = ["auto", "chat", "code", "website", "research", "deep"]
 
 type RuntimeSignal = { label: string; value: string; ok: boolean }
@@ -115,7 +104,6 @@ function TitanTopBarInner({
     }
   }, [])
 
-  // Runtime state is read only when the panel is opened — no background polling.
   useEffect(() => {
     if (!signalsOpen || signals) return
     let cancelled = false
@@ -130,10 +118,9 @@ function TitanTopBarInner({
         }
         setSignals([
           { label: "Ядро", value: data.ok ? "онлайн" : "недоступно", ok: Boolean(data.ok) },
-          { label: "Текстовые модели", value: data.groqConfigured || data.bedrockPrimaryConfigured ? "подключены" : "не настроены", ok: Boolean(data.groqConfigured || data.bedrockPrimaryConfigured) },
+          { label: "Модели", value: data.groqConfigured || data.bedrockPrimaryConfigured ? "подключены" : "не настроены", ok: Boolean(data.groqConfigured || data.bedrockPrimaryConfigured) },
           { label: "Изображения", value: data.photoModelConfigured ? "подключены" : "не настроены", ok: Boolean(data.photoModelConfigured) },
           { label: "Видео", value: data.videoModelConfigured ? "подключены" : "не настроены", ok: Boolean(data.videoModelConfigured) },
-          { label: "Возможности", value: data.capabilitiesLoaded ? `${data.capabilitiesCount}` : "не загружены", ok: Boolean(data.capabilitiesLoaded) },
         ])
       })
       .catch(() => {
@@ -153,8 +140,7 @@ function TitanTopBarInner({
   const activeTab = useMemo(() => {
     const exact = TABS.find((tab) => tab.id === activeView)
     if (exact) return exact.id
-    const owner = TABS.find((tab) => tab.owns?.includes(activeView))
-    return owner?.id ?? null
+    return TABS.find((tab) => tab.owns?.includes(activeView))?.id ?? null
   }, [activeView])
 
   const closeAll = () => {
@@ -163,7 +149,16 @@ function TitanTopBarInner({
     setUserOpen(false)
   }
 
-  const go = (view: string) => {
+  const go = (tab: Tab) => {
+    closeAll()
+    if (tab.href) {
+      window.location.assign(tab.href)
+      return
+    }
+    onViewChange(tab.id)
+  }
+
+  const goView = (view: string) => {
     closeAll()
     onViewChange(view)
   }
@@ -191,7 +186,7 @@ function TitanTopBarInner({
               key={tab.id}
               type="button"
               aria-current={isActive ? "page" : undefined}
-              onClick={() => go(tab.id)}
+              onClick={() => go(tab)}
               className={cn("titan-tab", isActive && "is-active")}
             >
               <Icon className="h-4 w-4" />
@@ -269,17 +264,13 @@ function TitanTopBarInner({
           {signalsOpen ? (
             <div role="menu" className="titan-popover w-72">
               <p className="titan-popover-title">Состояние среды</p>
-              {signals ? (
-                signals.map((signal) => (
-                  <div key={signal.label} className="titan-signal-row">
-                    <span className={cn("titan-signal-dot", signal.ok ? "is-ok" : "is-bad")} />
-                    <span className="flex-1 truncate">{signal.label}</span>
-                    <span className="titan-signal-value">{signal.value}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="titan-popover-empty">Читаю /api/ai/status…</p>
-              )}
+              {signals ? signals.map((signal) => (
+                <div key={signal.label} className="titan-signal-row">
+                  <span className={cn("titan-signal-dot", signal.ok ? "is-ok" : "is-bad")} />
+                  <span className="flex-1 truncate">{signal.label}</span>
+                  <span className="titan-signal-value">{signal.value}</span>
+                </div>
+              )) : <p className="titan-popover-empty">Проверяю…</p>}
             </div>
           ) : null}
         </div>
@@ -297,31 +288,22 @@ function TitanTopBarInner({
             }}
             className="titan-avatar"
           >
-            <img
-              src={avatar}
-              alt=""
-              onError={(event) => {
-                event.currentTarget.style.display = "none"
-              }}
-            />
+            <img src={avatar} alt="" onError={(event) => { event.currentTarget.style.display = "none" }} />
             <span className="titan-avatar-initials">{initials}</span>
           </button>
           {userOpen ? (
             <div role="menu" className="titan-popover right-0 w-60">
               <p className="titan-popover-email">{email}</p>
               <div className="titan-popover-sep" />
-              <button type="button" role="menuitem" onClick={() => go("settings")} className="titan-popover-item">
-                <Settings className="h-4 w-4" />
-                Настройки
+              <button type="button" role="menuitem" onClick={() => goView("settings")} className="titan-popover-item">
+                <Settings className="h-4 w-4" /> Настройки
               </button>
-              <button type="button" role="menuitem" onClick={() => go("billing")} className="titan-popover-item">
-                <CreditCard className="h-4 w-4" />
-                Подписка
+              <button type="button" role="menuitem" onClick={() => goView("billing")} className="titan-popover-item">
+                <CreditCard className="h-4 w-4" /> Подписка
               </button>
               <div className="titan-popover-sep" />
               <button type="button" role="menuitem" onClick={handleLogout} className="titan-popover-item is-danger">
-                <LogOut className="h-4 w-4" />
-                Выйти
+                <LogOut className="h-4 w-4" /> Выйти
               </button>
             </div>
           ) : null}
@@ -337,277 +319,134 @@ function TitanTopBarInner({
           flex-shrink: 0;
           align-items: center;
           gap: 12px;
-          border-bottom: 1px solid var(--malik-border, rgba(212, 175, 55, 0.14));
+          border-bottom: 1px solid var(--malik-border, rgba(212,175,55,.14));
           background: var(--malik-surface, #0e0e10);
           padding: 0 14px;
           color: #fff;
           font-family: Inter, "Segoe UI", Arial, sans-serif;
         }
-
         .titan-tabs {
           display: flex;
+          min-width: 0;
           flex: 1;
           align-items: center;
           justify-content: center;
           gap: 4px;
-          min-width: 0;
           overflow-x: auto;
           scrollbar-width: none;
         }
-        .titan-tabs::-webkit-scrollbar {
-          display: none;
-        }
-
+        .titan-tabs::-webkit-scrollbar { display: none; }
         .titan-tab {
           display: inline-flex;
+          height: 36px;
           flex-shrink: 0;
           align-items: center;
           gap: 8px;
-          height: 36px;
-          padding: 0 14px;
-          border-radius: 999px;
           border: 1px solid transparent;
+          border-radius: 999px;
+          padding: 0 14px;
           color: #f5f5f5;
           font-size: 13px;
           font-weight: 500;
           white-space: nowrap;
-          transition: color 0.14s ease, background-color 0.14s ease, border-color 0.14s ease;
+          transition: color .14s ease, background-color .14s ease, border-color .14s ease;
         }
-        .titan-tab:hover {
-          color: #fff;
-          background: var(--malik-accent-4, rgba(212, 175, 55, 0.04));
-        }
-        .titan-tab:focus-visible {
-          outline: none;
-          box-shadow: 0 0 0 2px rgba(232, 197, 106, 0.45);
-        }
+        .titan-tab:hover { background: rgba(255,255,255,.045); color: #fff; }
+        .titan-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(232,197,106,.45); }
         .titan-tab.is-active {
+          border-color: rgba(255,240,200,.3);
+          background: var(--malik-gradient-gold, linear-gradient(135deg,#f3de96,#d9ae45 45%,#a87c22));
           color: #1b1405;
-          background: var(--malik-gradient-gold, linear-gradient(135deg, #f3de96, #d9ae45 45%, #a87c22));
-          border-color: rgba(255, 240, 200, 0.3);
-          box-shadow: 0 6px 20px rgba(201, 152, 47, 0.22);
+          box-shadow: 0 6px 20px rgba(201,152,47,.22);
         }
-        .titan-tab.is-active svg {
-          color: #1b1405;
-        }
-
-        .titan-topbar-right {
-          display: flex;
-          flex-shrink: 0;
-          align-items: center;
-          gap: 8px;
-        }
-
+        .titan-tab.is-active svg { color: #1b1405; }
+        .titan-topbar-right { display: flex; flex-shrink: 0; align-items: center; gap: 8px; }
         .titan-search {
           display: none;
-          align-items: center;
-          gap: 10px;
           height: 36px;
           width: 230px;
-          padding: 0 12px;
+          align-items: center;
+          gap: 10px;
+          border: 1px solid var(--malik-border, rgba(212,175,55,.14));
           border-radius: 10px;
-          border: 1px solid var(--malik-border, rgba(212, 175, 55, 0.14));
-          background: rgba(255, 255, 255, 0.02);
-          color: #f5f5f5;
-          font-size: 13px;
-          transition: border-color 0.14s ease, color 0.14s ease;
-        }
-        @media (min-width: 1024px) {
-          .titan-search {
-            display: flex;
-          }
-        }
-        .titan-search:hover {
-          border-color: var(--malik-border-strong, rgba(212, 175, 55, 0.28));
-          color: #fff;
-        }
-        .titan-search span {
-          flex: 1;
+          background: rgba(255,255,255,.02);
+          padding: 0 12px;
+          color: #d6d6d6;
+          font-size: 12px;
           text-align: left;
         }
-        .titan-search kbd {
-          font-family: inherit;
-          font-size: 11px;
-          color: rgba(255, 255, 255, 0.68);
-        }
-
+        .titan-search span { flex: 1; color: #f1f1f1; }
+        .titan-search kbd { color: #8b8b8f; font-size: 10px; }
         .titan-icon-btn {
-          position: relative;
-          display: flex;
+          display: inline-grid;
           height: 36px;
           width: 36px;
-          flex-shrink: 0;
-          align-items: center;
-          justify-content: center;
+          place-items: center;
           border-radius: 10px;
-          border: 1px solid transparent;
-          color: #f5f5f5;
-          transition: color 0.14s ease, background-color 0.14s ease, border-color 0.14s ease;
+          color: #d7d7d9;
+          transition: background-color .14s ease, color .14s ease;
         }
-        .titan-icon-btn.is-round {
-          border-radius: 999px;
-          border-color: var(--malik-border, rgba(212, 175, 55, 0.14));
-        }
-        .titan-icon-btn:hover,
-        .titan-icon-btn.is-open {
-          color: var(--malik-accent-bright, #e8c56a);
-          background: var(--malik-accent-8, rgba(212, 175, 55, 0.08));
-          border-color: var(--malik-border-strong, rgba(212, 175, 55, 0.28));
-        }
-        .titan-icon-btn:focus-visible {
-          outline: none;
-          box-shadow: 0 0 0 2px rgba(232, 197, 106, 0.45);
-        }
-
-        .titan-badge-dot {
-          position: absolute;
-          top: 7px;
-          right: 8px;
-          height: 6px;
-          width: 6px;
-          border-radius: 999px;
-          background: #f87171;
-        }
-
-        .titan-avatar {
-          position: relative;
-          display: flex;
-          height: 36px;
-          width: 36px;
-          flex-shrink: 0;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
-          border-radius: 999px;
-          border: 1px solid var(--malik-border-strong, rgba(212, 175, 55, 0.28));
-          background: var(--malik-gradient-gold, linear-gradient(135deg, #f3de96, #a87c22));
-          color: #1b1405;
-          font-size: 12px;
-          font-weight: 700;
-        }
-        .titan-avatar img {
-          position: absolute;
-          inset: 0;
-          height: 100%;
-          width: 100%;
-          object-fit: cover;
-        }
-        .titan-avatar:focus-visible {
-          outline: none;
-          box-shadow: 0 0 0 2px rgba(232, 197, 106, 0.45);
-        }
-
+        .titan-icon-btn:hover, .titan-icon-btn.is-open { background: rgba(255,255,255,.06); color: #fff; }
+        .titan-icon-btn.is-round { border: 1px solid var(--malik-border, rgba(212,175,55,.14)); border-radius: 999px; }
         .titan-popover {
           position: absolute;
-          top: calc(100% + 8px);
           right: 0;
-          z-index: 60;
-          overflow: hidden;
-          border-radius: 12px;
-          border: 1px solid var(--malik-border-strong, rgba(212, 175, 55, 0.28));
-          background: var(--malik-surface-raised, #121214);
-          padding: 6px;
-          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+          top: 44px;
+          z-index: 80;
+          border: 1px solid rgba(255,255,255,.09);
+          border-radius: 14px;
+          background: #171718;
+          padding: 7px;
+          box-shadow: 0 20px 55px rgba(0,0,0,.45);
         }
-
-        .titan-popover-title {
-          padding: 6px 10px 8px;
-          font-size: 11px;
-          font-weight: 500;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          color: #6f695f;
-        }
-
-        .titan-popover-email {
-          padding: 8px 10px;
-          font-size: 11px;
-          color: #8f887d;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .titan-popover-sep {
-          height: 1px;
-          margin: 4px 0;
-          background: var(--malik-hairline, rgba(255, 255, 255, 0.06));
-        }
-
+        .titan-popover-title, .titan-popover-email { padding: 8px 9px; color: #8f8f96; font-size: 11px; }
+        .titan-popover-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .titan-popover-item {
           display: flex;
+          min-height: 38px;
           width: 100%;
           align-items: center;
           gap: 9px;
-          border-radius: 8px;
-          padding: 8px 10px;
-          font-size: 13px;
-          color: #cfc7b8;
+          border-radius: 9px;
+          padding: 0 10px;
+          color: #d5d5d8;
+          font-size: 12px;
           text-align: left;
-          transition: background-color 0.13s ease, color 0.13s ease;
         }
-        .titan-popover-item:hover {
-          background: var(--malik-accent-8, rgba(212, 175, 55, 0.08));
-          color: #fff8ea;
-        }
-        .titan-popover-item:focus-visible {
-          outline: none;
-          box-shadow: 0 0 0 2px rgba(232, 197, 106, 0.45);
-        }
-        .titan-popover-item.is-active {
-          color: var(--malik-accent-bright, #e8c56a);
-        }
-        .titan-popover-item.is-danger {
-          color: #fca5a5;
-        }
-        .titan-popover-item.is-danger:hover {
-          background: rgba(239, 68, 68, 0.1);
-          color: #fecaca;
-        }
-
-        .titan-popover-empty {
-          padding: 10px;
-          font-size: 12px;
-          color: #6f695f;
-        }
-
-        .titan-dot {
-          height: 6px;
-          width: 6px;
+        .titan-popover-item:hover, .titan-popover-item.is-active { background: rgba(255,255,255,.06); color: #fff; }
+        .titan-popover-item.is-danger { color: #f19a9a; }
+        .titan-popover-sep { height: 1px; margin: 5px 3px; background: rgba(255,255,255,.07); }
+        .titan-dot, .titan-badge-dot, .titan-signal-dot { display: inline-block; border-radius: 999px; }
+        .titan-dot { margin-left: auto; height: 6px; width: 6px; background: #d9ae45; }
+        .titan-badge-dot { position: absolute; right: 4px; top: 4px; height: 6px; width: 6px; background: #f87171; }
+        .titan-signal-row { display: flex; min-height: 34px; align-items: center; gap: 8px; padding: 0 9px; color: #cfcfd3; font-size: 11px; }
+        .titan-signal-dot { height: 7px; width: 7px; }
+        .titan-signal-dot.is-ok { background: #34d399; }
+        .titan-signal-dot.is-bad { background: #f87171; }
+        .titan-signal-value { color: #8d8d94; }
+        .titan-popover-empty { padding: 10px; color: #77777e; font-size: 11px; }
+        .titan-avatar {
+          position: relative;
+          display: grid;
+          height: 36px;
+          width: 36px;
+          place-items: center;
+          overflow: hidden;
+          border: 1px solid rgba(255,255,255,.1);
           border-radius: 999px;
-          background: var(--malik-accent-bright, #e8c56a);
+          background: #1b1b1d;
+          color: #fff;
+          font-size: 10px;
+          font-weight: 700;
         }
-
-        .titan-signal-row {
-          display: flex;
-          align-items: center;
-          gap: 9px;
-          padding: 7px 10px;
-          font-size: 13px;
-          color: #cfc7b8;
-        }
-        .titan-signal-dot {
-          height: 6px;
-          width: 6px;
-          flex-shrink: 0;
-          border-radius: 999px;
-        }
-        .titan-signal-dot.is-ok {
-          background: #34d399;
-        }
-        .titan-signal-dot.is-bad {
-          background: #f87171;
-        }
-        .titan-signal-value {
-          flex-shrink: 0;
-          font-size: 12px;
-          color: #8f887d;
-        }
-
-        @media (max-width: 1023px) {
-          .titan-tabs {
-            justify-content: flex-start;
-          }
+        .titan-avatar img { position: absolute; inset: 0; height: 100%; width: 100%; object-fit: cover; z-index: 1; }
+        .titan-avatar-initials { position: relative; z-index: 0; }
+        @media (min-width: 1180px) { .titan-search { display: flex; } }
+        @media (max-width: 900px) {
+          .titan-topbar { padding: 0 8px; gap: 6px; }
+          .titan-tab { padding: 0 10px; font-size: 12px; }
+          .titan-tab span { display: none; }
+          .titan-tab.is-active span { display: inline; }
         }
       `}</style>
     </header>
