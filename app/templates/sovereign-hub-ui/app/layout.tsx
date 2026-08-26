@@ -24,6 +24,9 @@ import "./home-viewport-fix.css"
 import "./mobile-reference-final.css"
 // Product-nav correction layered after the visual pass.
 import "./mobile-reference-nav-patch.css"
+// True product-wide phone shell. This MUST stay last so legacy mobile rules
+// cannot squeeze desktop geometry back into the phone viewport.
+import "./mobile-app-shell-v3.css"
 
 const SITE_URL = "https://malikaiworld.world"
 
