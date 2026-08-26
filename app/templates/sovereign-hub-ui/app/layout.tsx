@@ -15,8 +15,11 @@ import "./titan-home.css"
 import "./malik-model-selector.css"
 import "./titan-templates.css"
 import "./titan-chat.css"
-// Last import wins: strips the effects that cost the most per frame on phones.
+// Strips the effects that cost the most per frame on phones.
 import "./mobile-performance.css"
+// Final workspace geometry/background pass: keep this last so no legacy home
+// rule can reintroduce a split surface or top-heavy launcher.
+import "./home-viewport-fix.css"
 
 export const metadata: Metadata = {
   title: "Malik AI Sovereign",
