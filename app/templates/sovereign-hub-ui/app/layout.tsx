@@ -47,8 +47,8 @@ export const metadata: Metadata = {
     description: "AI-ассистент для поиска, исследований, кода, изображений, видео и проектов.",
   },
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml", sizes: "any" }],
-    shortcut: "/icon.svg",
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml", sizes: "any" }],
+    shortcut: "/favicon.svg",
     apple: "/icon.svg",
   },
 }
@@ -56,9 +56,10 @@ export const metadata: Metadata = {
 const websiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
+  "@id": `${SITE_URL}/#website`,
   name: "Malik AI",
-  alternateName: ["MalikAI", "Malik AI World"],
-  url: SITE_URL,
+  alternateName: ["MalikAI"],
+  url: `${SITE_URL}/`,
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -69,6 +70,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
         <meta name="theme-color" content="#05070d" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
