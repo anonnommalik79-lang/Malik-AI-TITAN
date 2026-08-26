@@ -4,7 +4,7 @@ import { X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { VoiceDock, type PickedVoiceFile } from "./VoiceDock"
 import { VoiceOrb } from "./VoiceOrb"
-import { VoiceSettings } from "./VoiceSettings"
+import { VoiceSettings, VOICES, getVoiceProfile } from "./VoiceSettings"
 import styles from "./VoiceMode.module.css"
 import { isVoiceSoundEnabled, playVoiceTransitionSound, saveVoiceSoundEnabled } from "@/lib/voice-transition-sound"
 
@@ -27,6 +27,11 @@ type VoiceWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext
 }
 
+type VoiceTurnPayload = { ok?: boolean; content?: string; error?: string }
+type TranscribePayload = { ok?: boolean; text?: string; error?: string; remainingSeconds?: number }
+
+const STORAGE_KEY = "malik.voice.preferences.v2"
+
 export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit?: (prompt: string) => void }) {
   const [phase, setPhase] = useState<"enter" | "open" | "leave">("enter")
   const [micActive, setMicActive] = useState(false)
@@ -44,6 +49,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const [finalTranscript, setFinalTranscript] = useState("")
   const [interimTranscript, setInterimTranscript] = useState("")
   const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const energyRef = useRef(.07)
   const speedRef = useRef(1)
@@ -54,20 +60,112 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const recorderChunksRef = useRef<Blob[]>([])
+  const recordingStartedAtRef = useRef(0)
   const audioFrameRef = useRef(0)
   const closeTimerRef = useRef<number | null>(null)
   const noticeTimerRef = useRef<number | null>(null)
   const closingRef = useRef(false)
   const mountedRef = useRef(true)
   const micRequestRef = useRef(0)
+  const replyAudioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => { speedRef.current = speed }, [speed])
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}")
+      if (typeof saved.voice === "string" && VOICES.some((item) => item.name === saved.voice)) setVoice(saved.voice)
+      if (typeof saved.personality === "string") setPersonality(saved.personality)
+      if (typeof saved.speed === "number" && saved.speed >= .7 && saved.speed <= 1.35) setSpeed(saved.speed)
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ voice, personality, speed })) } catch {}
+  }, [voice, personality, speed])
 
   const showNotice = useCallback((message: string) => {
     setNotice(message)
     if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
-    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 1700)
+    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 2200)
   }, [])
+
+  const stopReplyAudio = useCallback(() => {
+    window.speechSynthesis?.cancel()
+    const audio = replyAudioRef.current
+    replyAudioRef.current = null
+    if (audio) {
+      audio.pause()
+      audio.src = ""
+    }
+  }, [])
+
+  const chooseBrowserVoice = useCallback((profileName: string, text: string) => {
+    const profile = getVoiceProfile(profileName)
+    const voices = window.speechSynthesis?.getVoices?.() || []
+    if (!voices.length) return null
+    const wantsRu = /[а-яёәіңғүұқөһ]/i.test(text)
+    const languagePool = voices.filter((item) => wantsRu ? /^ru|^kk/i.test(item.lang) : /^en/i.test(item.lang))
+    const pool = languagePool.length ? languagePool : voices
+    for (const hint of profile.hints) {
+      const match = pool.find((item) => item.name.toLowerCase().includes(hint.toLowerCase()))
+      if (match) return match
+    }
+    const index = Math.max(0, VOICES.findIndex((item) => item.name === profileName))
+    return pool[index % pool.length] || pool[0]
+  }, [])
+
+  const speakBrowser = useCallback((text: string, profileName: string) => new Promise<boolean>((resolve) => {
+    if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") return resolve(false)
+    const profile = getVoiceProfile(profileName)
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.voice = chooseBrowserVoice(profileName, text)
+    utterance.lang = /[а-яёәіңғүұқөһ]/i.test(text) ? "ru-RU" : "en-US"
+    utterance.rate = Math.max(.7, Math.min(1.35, profile.rate * speedRef.current))
+    utterance.pitch = profile.pitch
+    utterance.volume = 1
+    utterance.onend = () => resolve(true)
+    utterance.onerror = () => resolve(false)
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+  }), [chooseBrowserVoice])
+
+  const previewVoice = useCallback((profileName: string) => {
+    if (!soundEnabled) return
+    stopReplyAudio()
+    void speakBrowser(`Привет. Я ${profileName}. Готов помочь.`, profileName)
+  }, [soundEnabled, speakBrowser, stopReplyAudio])
+
+  const speakReply = useCallback(async (text: string) => {
+    if (!soundEnabled || !text.trim()) return
+    stopReplyAudio()
+    try {
+      const response = await fetch("/api/voice/tts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text, voice }),
+      })
+      const provider = response.headers.get("x-malik-tts-provider")
+      if (response.ok && (provider === "xai" || (provider === "cloudflare" && voice === "Sola"))) {
+        const blob = await response.blob()
+        if (blob.size > 128) {
+          const url = URL.createObjectURL(blob)
+          await new Promise<void>((resolve) => {
+            const audio = new Audio(url)
+            replyAudioRef.current = audio
+            audio.playbackRate = Math.max(.75, Math.min(1.3, speedRef.current))
+            audio.onended = () => { URL.revokeObjectURL(url); replyAudioRef.current = null; resolve() }
+            audio.onerror = () => { URL.revokeObjectURL(url); replyAudioRef.current = null; resolve() }
+            void audio.play().catch(() => resolve())
+          })
+          return
+        }
+      }
+    } catch {}
+    await speakBrowser(text, voice)
+  }, [soundEnabled, speakBrowser, stopReplyAudio, voice])
 
   const stopSpeech = useCallback(() => {
     micActiveRef.current = false
@@ -79,9 +177,37 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     }
   }, [])
 
+  const discardRecorder = useCallback(() => {
+    const recorder = recorderRef.current
+    recorderRef.current = null
+    recorderChunksRef.current = []
+    if (recorder && recorder.state !== "inactive") {
+      try { recorder.stop() } catch {}
+    }
+  }, [])
+
+  const collectRecorder = useCallback(async (): Promise<Blob | null> => {
+    const recorder = recorderRef.current
+    if (!recorder || recorder.state === "inactive") return null
+    recorderRef.current = null
+    const chunks = recorderChunksRef.current
+    const mime = recorder.mimeType || chunks[0]?.type || "audio/webm"
+    return await new Promise<Blob | null>((resolve) => {
+      recorder.ondataavailable = (event) => { if (event.data?.size) chunks.push(event.data) }
+      recorder.onstop = () => {
+        const result = chunks.length ? new Blob(chunks, { type: mime }) : null
+        recorderChunksRef.current = []
+        resolve(result)
+      }
+      recorder.onerror = () => { recorderChunksRef.current = []; resolve(null) }
+      try { recorder.requestData(); recorder.stop() } catch { resolve(null) }
+    })
+  }, [])
+
   const stopMicrophone = useCallback(async () => {
     micRequestRef.current += 1
     stopSpeech()
+    discardRecorder()
     cancelAnimationFrame(audioFrameRef.current)
     microphoneRef.current?.getTracks().forEach((track) => track.stop())
     microphoneRef.current = null
@@ -93,7 +219,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     }
     energyRef.current = .055
     setMicActive(false)
-  }, [stopSpeech])
+  }, [discardRecorder, stopSpeech])
 
   const stopScreen = useCallback(() => {
     screenRef.current?.getTracks().forEach((track) => track.stop())
@@ -103,10 +229,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   const cleanupAll = useCallback(() => {
     demoRef.current = false
+    stopReplyAudio()
     void stopMicrophone()
     stopScreen()
     if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
-  }, [stopMicrophone, stopScreen])
+  }, [stopMicrophone, stopReplyAudio, stopScreen])
 
   const startSpeech = useCallback(() => {
     const voiceWindow = window as VoiceWindow
@@ -155,15 +282,31 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     audioFrameRef.current = requestAnimationFrame(tick)
   }, [])
 
+  const startRecorder = useCallback((stream: MediaStream) => {
+    if (typeof MediaRecorder === "undefined") return
+    const candidates = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"]
+    const mimeType = candidates.find((item) => { try { return MediaRecorder.isTypeSupported(item) } catch { return false } })
+    try {
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      recorderChunksRef.current = []
+      recorder.ondataavailable = (event) => { if (event.data?.size) recorderChunksRef.current.push(event.data) }
+      recorder.start(300)
+      recorderRef.current = recorder
+      recordingStartedAtRef.current = Date.now()
+    } catch {}
+  }, [])
+
   const startMicrophone = useCallback(async () => {
     await stopMicrophone()
     const requestId = ++micRequestRef.current
     demoRef.current = false
     setMicError(null)
+    setFinalTranscript("")
+    setInterimTranscript("")
     if (!navigator.mediaDevices?.getUserMedia) {
       setMicError("Микрофон не поддерживается этим браузером.")
       setTitle("Микрофон недоступен")
-      setSubtitle("Используй localhost или HTTPS и современный браузер")
+      setSubtitle("Используй HTTPS и современный браузер")
       return
     }
     try {
@@ -185,9 +328,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       micActiveRef.current = true
       setMicActive(true)
       setTitle("Слушаю")
-      setSubtitle("Светлый туман плавно летит через весь шар")
+      setSubtitle("Говори естественно · нажми микрофон, когда закончишь")
       startAudioLoop(analyser)
       startSpeech()
+      startRecorder(stream)
     } catch {
       setMicActive(false)
       micActiveRef.current = false
@@ -196,18 +340,93 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       setTitle("Разреши доступ к микрофону")
       setSubtitle("Или включи демо — живой туман продолжит двигаться")
     }
-  }, [startAudioLoop, startSpeech, stopMicrophone])
+  }, [startAudioLoop, startRecorder, startSpeech, stopMicrophone])
 
-  const toggleMicrophone = useCallback(() => {
-    if (micActiveRef.current) {
-      void stopMicrophone().then(() => {
-        setTitle("Микрофон выключен")
-        setSubtitle("Нажми на микрофон, чтобы продолжить")
+  const runVoiceTurn = useCallback(async (prompt: string) => {
+    const clean = prompt.trim()
+    if (!clean || busy) return
+    setBusy(true)
+    setTitle("Думаю")
+    setSubtitle(`${voice} · ${personality}`)
+    try {
+      const response = await fetch("/api/voice/turn", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: clean, personality }),
       })
-    } else {
-      void startMicrophone()
+      const payload = await response.json().catch(() => ({})) as VoiceTurnPayload
+      if (!response.ok || !payload.ok || !payload.content) throw new Error(payload.error || "voice turn failed")
+      setFinalTranscript(payload.content)
+      setInterimTranscript("")
+      setTitle("Отвечаю")
+      setSubtitle(`${voice} · ${personality}`)
+      await speakReply(payload.content)
+      if (mountedRef.current && !closingRef.current) {
+        setTitle("Слушаю")
+        setSubtitle("Продолжай разговор")
+        window.setTimeout(() => { if (mountedRef.current && !closingRef.current) void startMicrophone() }, 180)
+      }
+    } catch {
+      showNotice("Voice-ответ временно недоступен — отправляю в обычный чат")
+      onSubmit?.(clean)
+      setTitle("Попробуй ещё раз")
+      setSubtitle("Voice автоматически переключит провайдера")
+    } finally {
+      if (mountedRef.current) setBusy(false)
     }
-  }, [startMicrophone, stopMicrophone])
+  }, [busy, onSubmit, personality, showNotice, speakReply, startMicrophone, voice])
+
+  const transcribeAndRespond = useCallback(async (blob: Blob, durationSec: number, browserFallback: string) => {
+    setBusy(true)
+    setTitle("Распознаю")
+    setSubtitle("Groq → Cloudflare · автоматический fallback")
+    let prompt = ""
+    try {
+      const form = new FormData()
+      const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm"
+      form.append("file", blob, `malik-voice.${extension}`)
+      form.append("language", "auto")
+      form.append("durationSec", String(Math.max(1, Math.round(durationSec * 10) / 10)))
+      const response = await fetch("/api/transcribe", { method: "POST", body: form })
+      const payload = await response.json().catch(() => ({})) as TranscribePayload
+      if (response.status === 429) {
+        showNotice(payload.error || "Лимит Voice на сегодня использован")
+        setTitle("Лимит Voice использован")
+        setSubtitle("Доступ восстановится завтра")
+        return
+      }
+      if (response.ok && payload.ok && payload.text) {
+        prompt = payload.text.trim()
+        if (typeof payload.remainingSeconds === "number") showNotice(`Осталось ${Math.max(0, Math.floor(payload.remainingSeconds))} сек. Voice сегодня`)
+      }
+    } catch {}
+    if (!prompt) prompt = browserFallback.trim()
+    setBusy(false)
+    if (!prompt) {
+      setTitle("Не расслышал")
+      setSubtitle("Попробуй сказать ещё раз")
+      showNotice("Не удалось распознать голос")
+      return
+    }
+    setFinalTranscript(prompt)
+    setInterimTranscript("")
+    await runVoiceTurn(prompt)
+  }, [runVoiceTurn, showNotice])
+
+  const toggleMicrophone = useCallback(async () => {
+    if (busy) return
+    if (!micActiveRef.current) {
+      void startMicrophone()
+      return
+    }
+    const fallback = `${finalTranscript} ${interimTranscript}`.trim()
+    const durationSec = recordingStartedAtRef.current ? (Date.now() - recordingStartedAtRef.current) / 1000 : 0
+    const blob = await collectRecorder()
+    await stopMicrophone()
+    if (blob && blob.size > 200) await transcribeAndRespond(blob, durationSec, fallback)
+    else if (fallback) await runVoiceTurn(fallback)
+    else showNotice("Скажи что-нибудь и нажми микрофон ещё раз")
+  }, [busy, collectRecorder, finalTranscript, interimTranscript, runVoiceTurn, showNotice, startMicrophone, stopMicrophone, transcribeAndRespond])
 
   const toggleScreen = useCallback(async () => {
     if (screenRef.current) {
@@ -234,9 +453,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         setScreenActive(false)
         showNotice("Демонстрация экрана остановлена")
       }
-    } catch {
-      showNotice("Демонстрация экрана отменена")
-    }
+    } catch { showNotice("Демонстрация экрана отменена") }
   }, [showNotice, stopScreen])
 
   const startDemo = useCallback(() => {
@@ -262,14 +479,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       const next = !current
       saveVoiceSoundEnabled(next)
       if (next) playVoiceTransitionSound("open")
+      else stopReplyAudio()
       return next
     })
-  }, [])
+  }, [stopReplyAudio])
 
-  const submitText = useCallback((prompt: string) => {
-    onSubmit?.(prompt)
-    closeMode()
-  }, [closeMode, onSubmit])
+  const submitText = useCallback((prompt: string) => { void runVoiceTurn(prompt) }, [runVoiceTurn])
 
   useEffect(() => {
     mountedRef.current = true
@@ -277,9 +492,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     document.body.style.overflow = "hidden"
     const frame = requestAnimationFrame(() => setPhase("open"))
     const micTimer = window.setTimeout(() => { void startMicrophone() }, 240)
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeMode()
-    }
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") closeMode() }
     window.addEventListener("keydown", onKeyDown)
     return () => {
       mountedRef.current = false
@@ -325,6 +538,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         onVoiceChange={setVoice}
         onPersonalityChange={setPersonality}
         onSpeedChange={setSpeed}
+        onPreviewVoice={previewVoice}
         onClose={() => setSettingsOpen(false)}
       />
       <VoiceDock
@@ -336,7 +550,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         personality={personality}
         pickedFile={pickedFile}
         energyRef={energyRef}
-        onMicToggle={toggleMicrophone}
+        onMicToggle={() => { void toggleMicrophone() }}
         onSoundToggle={toggleSound}
         onScreenToggle={() => void toggleScreen()}
         onSettingsToggle={() => setSettingsOpen((value) => !value)}
@@ -346,7 +560,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       />
 
       <div className={`${styles.notice} ${notice ? styles.open : ""}`}>{notice}</div>
-      <div className={styles.hint}>Esc — выйти из голосового режима</div>
+      <div className={styles.hint}>{busy ? "Voice обрабатывает запрос…" : "Нажми микрофон после фразы · Esc — выйти"}</div>
     </section>
   )
 }
