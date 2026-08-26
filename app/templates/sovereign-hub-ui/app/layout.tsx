@@ -21,16 +21,40 @@ import "./mobile-performance.css"
 // rule can reintroduce a split surface or top-heavy launcher.
 import "./home-viewport-fix.css"
 
+const SITE_URL = "https://malikaiworld.world"
+
 export const metadata: Metadata = {
-  title: "Malik AI Sovereign",
-  description: "Malik AI OS — chat, code, image, video and project canvas workbench",
-  generator: "Malik AI Sovereign",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Malik AI",
+    template: "%s | Malik AI",
+  },
+  description: "Malik AI — интеллектуальный AI-ассистент для поиска, исследований, кода, изображений, видео и работы с проектами.",
+  generator: "Malik AI",
   applicationName: "Malik AI",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: "Malik AI",
+    title: "Malik AI",
+    description: "AI-ассистент для поиска, исследований, кода, изображений, видео и проектов.",
+  },
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    icon: [{ url: "/icon.svg", type: "image/svg+xml", sizes: "any" }],
     shortcut: "/icon.svg",
     apple: "/icon.svg",
   },
+}
+
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "Malik AI",
+  alternateName: ["MalikAI", "Malik AI World"],
+  url: SITE_URL,
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -38,13 +62,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="ru" translate="no" suppressHydrationWarning className="bg-background notranslate">
       <head>
         <meta name="google" content="notranslate" />
-        <meta name="robots" content="notranslate" />
+        <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
         <meta name="theme-color" content="#05070d" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+        />
       </head>
-      <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-[#030303] font-sans antialiased notranslate">
+      <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-[#0f0f10] font-sans antialiased notranslate">
         <AuthKitProvider>
-          <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden notranslate">
+          <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden bg-[#0f0f10] notranslate">
             {children}
           </div>
         </AuthKitProvider>
