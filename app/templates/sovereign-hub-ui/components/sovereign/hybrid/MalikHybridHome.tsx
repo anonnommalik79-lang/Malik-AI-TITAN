@@ -2,7 +2,6 @@
 
 import { memo, useEffect, useRef, useState } from "react"
 import {
-  ArrowRight,
   ArrowUp,
   Brain,
   Code2,
@@ -19,7 +18,7 @@ import { PREFILL_EVENT, takePrefillPrompt, useContextEnabled } from "@/lib/malik
 import { DEFAULT_MALIK_MODEL_ID, type MalikModelId } from "@/lib/ai/malik-models"
 import type { ChatSendOptions } from "@/lib/ai/response-depth"
 import type { AIPlan } from "@/lib/ai/types"
-import { HOME_MALIK_TEMPLATES, type MalikTemplate } from "@/lib/malik-template-registry"
+import type { MalikTemplate } from "@/lib/malik-template-registry"
 import { MalikModelSelector } from "../MalikModelSelector"
 import type { ChatAttachment } from "../chat-view"
 import type { AiModeId } from "../power-registry"
@@ -265,12 +264,13 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     setPrompt("")
   }
 
-  const runTemplate = (template: MalikTemplate) => {
-    if (props.onLaunchTemplate) {
-      props.onLaunchTemplate(template)
-      return
-    }
-    setPrompt(template.prompt)
+  const focusPrompt = (value: string) => {
+    setPrompt(value)
+    window.setTimeout(() => {
+      const field = document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")
+      field?.focus()
+      field?.setSelectionRange(value.length, value.length)
+    }, 0)
   }
 
   return (
@@ -316,60 +316,49 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               onOpenBilling={props.onOpenBilling}
               onOpenVoice={props.onOpenVoice}
             />
-          </div>
-        </section>
 
-        <section className="thome-library" aria-labelledby="thome-library-title">
-          <div className="thome-section-head">
-            <div>
-              <span>Библиотека</span>
-              <h2 id="thome-library-title">
-                <Layers3 aria-hidden="true" />
-                Готовые шаблоны <small>40</small>
-              </h2>
-            </div>
-            <button type="button" onClick={props.onOpenTemplates} className="thome-section-link">
-              Все 100 шаблонов
-              <ArrowRight aria-hidden="true" />
-            </button>
-          </div>
-
-          <div className="thome-templates" aria-label="40 шаблонов на главной">
-            {HOME_MALIK_TEMPLATES.map((template) => (
+            <div
+              className="mx-auto mt-4 flex max-w-[920px] flex-wrap items-center justify-center gap-2"
+              aria-label="Быстрые действия Malik AI"
+            >
               <button
-                key={template.id}
                 type="button"
-                onClick={() => runTemplate(template)}
-                className="thome-template"
+                onClick={() => {
+                  setWebOn(true)
+                  focusPrompt("Исследуй тему: ")
+                }}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-3.5 text-xs font-medium text-zinc-400 transition hover:border-white/[0.14] hover:bg-white/[0.055] hover:text-zinc-100"
               >
-                <span className="thome-template-media">
-                  <img
-                    className="thome-template-shot"
-                    src={template.preview}
-                    alt={`Превью шаблона «${template.title}»`}
-                    loading="lazy"
-                    decoding="async"
-                    draggable={false}
-                  />
-                  <span className="thome-template-category">{template.category}</span>
-                </span>
-                <span className="thome-template-body">
-                  <strong>{template.title}</strong>
-                  <span>{template.description}</span>
-                  <span className="thome-template-meta">
-                    Открыть в Malik AI
-                    <ArrowRight aria-hidden="true" />
-                  </span>
-                </span>
+                <Globe className="h-3.5 w-3.5" aria-hidden="true" />
+                Глубокое исследование
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={props.onOpenPhoto}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-3.5 text-xs font-medium text-zinc-400 transition hover:border-white/[0.14] hover:bg-white/[0.055] hover:text-zinc-100"
+              >
+                <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                Создать изображение
+              </button>
+              <button
+                type="button"
+                onClick={props.onOpenCode}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-3.5 text-xs font-medium text-zinc-400 transition hover:border-white/[0.14] hover:bg-white/[0.055] hover:text-zinc-100"
+              >
+                <Code2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Написать код
+              </button>
+              <button
+                type="button"
+                onClick={props.onOpenTemplates}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.025] px-3.5 text-xs font-medium text-zinc-400 transition hover:border-white/[0.14] hover:bg-white/[0.055] hover:text-zinc-100"
+              >
+                <Layers3 className="h-3.5 w-3.5" aria-hidden="true" />
+                Шаблоны
+              </button>
+            </div>
           </div>
         </section>
-
-        <footer className="thome-footer">
-          <span>© MALIK AI — Sovereign Hub. Build the Future.</span>
-          <b>v6.5 TITAN</b>
-        </footer>
       </div>
     </div>
   )
