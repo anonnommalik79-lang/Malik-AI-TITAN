@@ -3,9 +3,71 @@
 const SOUND_STORAGE_KEY = "malik_voice_sound_enabled"
 
 let sharedContext: AudioContext | null = null
+let mediaFallbackInstalled = false
 
 type AudioWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext
+}
+
+function getSharedContext() {
+  const audioWindow = window as AudioWindow
+  const Context = window.AudioContext || audioWindow.webkitAudioContext
+  if (!Context) return null
+  const context = sharedContext && sharedContext.state !== "closed" ? sharedContext : new Context()
+  sharedContext = context
+  return context
+}
+
+/**
+ * Mobile Safari can allow the opening chime (direct user gesture) but later
+ * reject HTMLAudioElement.play() after the async TTS request finishes. Voice
+ * Mode used to swallow that rejection, which left a perfectly valid xAI audio
+ * blob completely silent.
+ *
+ * Reuse the AudioContext unlocked by the opening chime. If native media
+ * playback is rejected for a blob URL, decode that exact blob with WebAudio
+ * and dispatch the normal `ended` event so VoiceMode continues its turn loop.
+ */
+function installBlobAudioFallback() {
+  if (mediaFallbackInstalled || typeof HTMLMediaElement === "undefined") return
+  mediaFallbackInstalled = true
+
+  const prototype = HTMLMediaElement.prototype
+  const nativePlay = prototype.play
+
+  prototype.play = function patchedVoicePlay(...args: Parameters<HTMLMediaElement["play"]>) {
+    const media = this
+    return nativePlay.apply(media, args).catch(async (nativeError) => {
+      const sourceUrl = media.currentSrc || media.src || ""
+      if (!sourceUrl.startsWith("blob:")) throw nativeError
+
+      const context = getSharedContext()
+      if (!context) throw nativeError
+
+      try {
+        if (context.state === "suspended") await context.resume()
+        const response = await fetch(sourceUrl, { cache: "no-store" })
+        if (!response.ok) throw new Error(`voice blob fetch failed: ${response.status}`)
+        const encoded = await response.arrayBuffer()
+        if (encoded.byteLength < 128) throw new Error("voice blob is empty")
+
+        const decoded = await context.decodeAudioData(encoded.slice(0))
+        const node = context.createBufferSource()
+        const gain = context.createGain()
+        node.buffer = decoded
+        node.playbackRate.value = Number.isFinite(media.playbackRate) ? Math.max(.5, Math.min(2, media.playbackRate)) : 1
+        gain.gain.value = media.muted ? 0 : (Number.isFinite(media.volume) ? Math.max(0, Math.min(1, media.volume)) : 1)
+        node.connect(gain)
+        gain.connect(context.destination)
+        node.onended = () => media.dispatchEvent(new Event("ended"))
+        node.start()
+      } catch (fallbackError) {
+        // Let VoiceMode's existing error path finish instead of hanging forever.
+        queueMicrotask(() => media.dispatchEvent(new Event("error")))
+        throw fallbackError
+      }
+    })
+  }
 }
 
 export function isVoiceSoundEnabled() {
@@ -27,11 +89,9 @@ export function saveVoiceSoundEnabled(enabled: boolean) {
 export function playVoiceTransitionSound(kind: "open" | "close") {
   if (typeof window === "undefined" || !isVoiceSoundEnabled()) return
   try {
-    const audioWindow = window as AudioWindow
-    const Context = window.AudioContext || audioWindow.webkitAudioContext
-    if (!Context) return
-    const context = sharedContext && sharedContext.state !== "closed" ? sharedContext : new Context()
-    sharedContext = context
+    installBlobAudioFallback()
+    const context = getSharedContext()
+    if (!context) return
     void context.resume()
 
     const now = context.currentTime
