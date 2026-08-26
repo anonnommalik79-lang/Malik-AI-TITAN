@@ -44,19 +44,19 @@ const SOURCE_PLUGINS: Array<{
     id: "github",
     label: "GitHub",
     icon: Github,
-    prompt: "Найди на GitHub лучшие открытые репозитории и исходный код по теме: ",
+    prompt: "Найди через веб-поиск лучшие открытые репозитории и исходный код по теме (site:github.com): ",
   },
   {
     id: "wikipedia",
     label: "Wikipedia",
     icon: BookOpen,
-    prompt: "Найди в Wikipedia проверенную справочную информацию по теме: ",
+    prompt: "Найди проверенную справочную информацию по теме в Wikipedia (site:wikipedia.org): ",
   },
   {
     id: "arxiv",
     label: "arXiv",
     icon: GraduationCap,
-    prompt: "Найди на arXiv научные статьи и исследования по теме: ",
+    prompt: "Найди научные статьи и исследования по теме на arXiv (site:arxiv.org): ",
   },
 ]
 
@@ -357,7 +357,10 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               onOpenVoice={props.onOpenVoice}
             />
 
-            <div className="thome-source-plugins" aria-label="Бесплатные плагины источников">
+            <div
+              className="mx-auto mt-5 grid w-full max-w-[920px] grid-cols-2 gap-2 sm:grid-cols-4"
+              aria-label="Бесплатные плагины источников"
+            >
               {SOURCE_PLUGINS.map((plugin) => {
                 const Icon = plugin.icon
                 return (
@@ -365,9 +368,9 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                     key={plugin.id}
                     type="button"
                     onClick={() => openSourcePlugin(plugin.prompt)}
-                    className="thome-source-plugin"
+                    className="group inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.018] px-3 text-[13px] font-medium text-zinc-400 transition duration-150 hover:border-white/[0.13] hover:bg-white/[0.045] hover:text-zinc-100 active:scale-[0.985]"
                   >
-                    <Icon aria-hidden="true" />
+                    <Icon className="h-4 w-4 shrink-0 stroke-[1.7] text-zinc-500 transition-colors group-hover:text-zinc-300" aria-hidden="true" />
                     <span>{plugin.label}</span>
                   </button>
                 )
