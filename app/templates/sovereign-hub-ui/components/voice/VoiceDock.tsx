@@ -6,6 +6,10 @@ import styles from "./VoiceMode.module.css"
 
 export type PickedVoiceFile = { name: string; file: File }
 
+const AUTO_FINISH_SILENCE_MS = 1350
+const SPEECH_LEVEL_THRESHOLD = .115
+const MIC_START_GRACE_MS = 450
+
 export function VoiceDock({
   micActive,
   soundEnabled,
@@ -46,6 +50,10 @@ export function VoiceDock({
   const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dotsRef = useRef<Array<HTMLSpanElement | null>>([])
+  const heardSpeechRef = useRef(false)
+  const lastSpeechAtRef = useRef(0)
+  const micStartedAtRef = useRef(0)
+  const autoFinishTriggeredRef = useRef(false)
 
   useEffect(() => {
     const field = textareaRef.current
@@ -64,6 +72,13 @@ export function VoiceDock({
   }, [attachOpen])
 
   useEffect(() => {
+    heardSpeechRef.current = false
+    lastSpeechAtRef.current = 0
+    autoFinishTriggeredRef.current = false
+    micStartedAtRef.current = micActive ? performance.now() : 0
+  }, [micActive])
+
+  useEffect(() => {
     let frame = 0
     const update = (time: number) => {
       const base = micActive ? Math.max(.06, Math.min(1, energyRef.current)) : .035
@@ -74,11 +89,28 @@ export function VoiceDock({
         dot.style.height = `${3 + amplitude * (2.2 + index % 3 * 1.3)}px`
         dot.style.opacity = micActive ? `${.60 + amplitude * .24}` : ".36"
       })
+
+      if (micActive && !autoFinishTriggeredRef.current) {
+        const pastGrace = !micStartedAtRef.current || time - micStartedAtRef.current >= MIC_START_GRACE_MS
+        if (pastGrace && energyRef.current >= SPEECH_LEVEL_THRESHOLD) {
+          heardSpeechRef.current = true
+          lastSpeechAtRef.current = time
+        } else if (
+          heardSpeechRef.current &&
+          lastSpeechAtRef.current > 0 &&
+          time - lastSpeechAtRef.current >= AUTO_FINISH_SILENCE_MS
+        ) {
+          autoFinishTriggeredRef.current = true
+          onMicToggle()
+          return
+        }
+      }
+
       frame = requestAnimationFrame(update)
     }
     frame = requestAnimationFrame(update)
     return () => cancelAnimationFrame(frame)
-  }, [energyRef, micActive])
+  }, [energyRef, micActive, onMicToggle])
 
   const choose = (file: File | undefined) => {
     if (!file) return
@@ -126,7 +158,7 @@ export function VoiceDock({
         </button>
         <div className={styles.controlDivider} />
 
-        <button type="button" className={`${styles.micPill} ${micActive ? styles.live : styles.muted}`} onClick={onMicToggle} title={micActive ? "Выключить микрофон" : "Включить микрофон"} aria-label={micActive ? "Выключить микрофон" : "Включить микрофон"} aria-pressed={micActive}>
+        <button type="button" className={`${styles.micPill} ${micActive ? styles.live : styles.muted}`} onClick={onMicToggle} title={micActive ? "Закончить фразу" : "Включить микрофон"} aria-label={micActive ? "Закончить фразу" : "Включить микрофон"} aria-pressed={micActive}>
           <span className={styles.micDots} aria-hidden="true">
             {Array.from({ length: 6 }, (_, index) => <span key={index} ref={(node) => { dotsRef.current[index] = node }} />)}
           </span>
