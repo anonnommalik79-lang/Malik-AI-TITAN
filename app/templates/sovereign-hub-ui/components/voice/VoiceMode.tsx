@@ -139,7 +139,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   }, [soundEnabled, speakBrowser, stopReplyAudio])
 
   const speakReply = useCallback(async (text: string) => {
-    if (!soundEnabled || !text.trim()) return
+    if (!soundEnabled || !text.trim()) return false
     stopReplyAudio()
     try {
       const response = await fetch("/api/voice/tts", {
@@ -148,24 +148,42 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         body: JSON.stringify({ text, voice }),
       })
       const provider = response.headers.get("x-malik-tts-provider")
-      if (response.ok && (provider === "xai" || (provider === "cloudflare" && voice === "Sola"))) {
+      if (response.ok && (provider === "xai" || provider === "cloudflare")) {
         const blob = await response.blob()
         if (blob.size > 128) {
           const url = URL.createObjectURL(blob)
-          await new Promise<void>((resolve) => {
+          const played = await new Promise<boolean>((resolve) => {
             const audio = new Audio(url)
+            let settled = false
+            const settle = (ok: boolean) => {
+              if (settled) return
+              settled = true
+              URL.revokeObjectURL(url)
+              if (replyAudioRef.current === audio) replyAudioRef.current = null
+              resolve(ok)
+            }
             replyAudioRef.current = audio
-            audio.playbackRate = Math.max(.75, Math.min(1.3, speedRef.current))
-            audio.onended = () => { URL.revokeObjectURL(url); replyAudioRef.current = null; resolve() }
-            audio.onerror = () => { URL.revokeObjectURL(url); replyAudioRef.current = null; resolve() }
-            void audio.play().catch(() => resolve())
+            audio.preload = "auto"
+            audio.volume = 1
+            audio.playbackRate = Math.max(.8, Math.min(1.18, speedRef.current))
+            audio.setAttribute("playsinline", "true")
+            audio.onended = () => settle(true)
+            audio.onerror = () => settle(false)
+            const timeout = window.setTimeout(() => settle(false), 120000)
+            const clear = () => window.clearTimeout(timeout)
+            audio.addEventListener("ended", clear, { once: true })
+            audio.addEventListener("error", clear, { once: true })
+            void audio.play().catch(() => { clear(); settle(false) })
           })
-          return
+          if (played) return true
         }
       }
     } catch {}
-    await speakBrowser(text, voice)
-  }, [soundEnabled, speakBrowser, stopReplyAudio, voice])
+
+    const browserPlayed = await speakBrowser(text, voice)
+    if (!browserPlayed) showNotice("Не удалось воспроизвести Voice-ответ")
+    return browserPlayed
+  }, [soundEnabled, showNotice, speakBrowser, stopReplyAudio, voice])
 
   const stopSpeech = useCallback(() => {
     micActiveRef.current = false

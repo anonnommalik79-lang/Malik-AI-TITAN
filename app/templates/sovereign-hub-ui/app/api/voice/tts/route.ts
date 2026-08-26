@@ -7,16 +7,16 @@ export const dynamic = "force-dynamic"
 // keeps ten UI profiles, but every profile must resolve to a real xAI voice id
 // so selecting an extra profile never sends an invalid voice_id to /v1/tts.
 const XAI_VOICES: Record<string, string> = {
-  Sola: "ara",
+  Sola: "rex",
   Eve: "eve",
   Leo: "leo",
   Rex: "rex",
   Sal: "sal",
-  Carina: "ara",
-  Luna: "eve",
-  Orion: "leo",
-  Aurora: "eve",
-  Atlas: "rex",
+  Carina: "carina",
+  Luna: "luna",
+  Orion: "orion",
+  Aurora: "aurora",
+  Atlas: "atlas",
 }
 
 function env(...names: string[]) {
@@ -36,7 +36,7 @@ function detectLanguage(text: string) {
 async function xaiTts(text: string, voice: string, language: string) {
   const key = env("XAI_VOICE_API_KEY", "XAI_API_KEY")
   if (!key) return null
-  const voiceId = XAI_VOICES[voice] || "ara"
+  const voiceId = XAI_VOICES[voice] || "rex"
   const response = await fetch("https://api.x.ai/v1/tts", {
     method: "POST",
     headers: {
@@ -50,9 +50,12 @@ async function xaiTts(text: string, voice: string, language: string) {
       language: language || "auto",
       output_format: {
         codec: "mp3",
-        sample_rate: 24000,
-        bit_rate: 128000,
+        sample_rate: 44100,
+        bit_rate: 192000,
       },
+      speed: 0.98,
+      text_normalization: true,
+      optimize_streaming_latency: 0,
     }),
     cache: "no-store",
   })
