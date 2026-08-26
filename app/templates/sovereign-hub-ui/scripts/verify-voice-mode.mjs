@@ -6,7 +6,7 @@ import path from "node:path"
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const read = (file) => readFile(path.join(root, file), "utf8")
 
-const [home, chat, dashboard, sidebar, mode, dock, orb, settings, css, homeCss, chatCss] = await Promise.all([
+const [home, chat, dashboard, sidebar, mode, dock, orb, settings, sound, css, homeCss, chatCss] = await Promise.all([
   read("components/sovereign/hybrid/MalikHybridHome.tsx"),
   read("components/sovereign/chat-view.tsx"),
   read("components/sovereign/dashboard.tsx"),
@@ -15,6 +15,7 @@ const [home, chat, dashboard, sidebar, mode, dock, orb, settings, css, homeCss, 
   read("components/voice/VoiceDock.tsx"),
   read("components/voice/VoiceOrb.tsx"),
   read("components/voice/VoiceSettings.tsx"),
+  read("lib/voice-transition-sound.ts"),
   read("components/voice/VoiceMode.module.css"),
   read("app/titan-home.css"),
   read("app/titan-chat.css"),
@@ -30,7 +31,7 @@ const checks = [
   ["07 microphone drives a real analyser", () => { assert.match(mode, /getUserMedia/); assert.match(mode, /createAnalyser/); assert.match(mode, /getByteFrequencyData/) }],
   ["08 live speech recognition is wired", () => { assert.match(mode, /webkitSpeechRecognition/); assert.match(mode, /recognition\.lang = "ru-RU"/); assert.match(mode, /interimResults = true/) }],
   ["09 screen sharing uses the browser API", () => { assert.match(mode, /getDisplayMedia/); assert.match(mode, /getVideoTracks\(\)\[0\]/) }],
-  ["10 file, voice, personality and speed controls are real", () => { assert.match(dock, /type="file"/); assert.match(settings, /Sola/); assert.match(settings, /Assistant/); assert.match(settings, /type="range"/) }],
+  ["10 file, sound, voice, personality and speed controls are real", () => { assert.match(dock, /type="file"/); assert.match(settings, /Sola/); assert.match(settings, /Assistant/); assert.match(settings, /type="range"/); assert.match(sound, /createOscillator/); assert.match(dashboard, /playVoiceTransitionSound\("open"\)/); assert.match(mode, /playVoiceTransitionSound\("close"\)/) }],
   ["11 Esc and unmount release live resources", () => { assert.match(mode, /event\.key === "Escape"/); assert.match(mode, /getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/); assert.match(mode, /context\.close\(\)/); assert.match(orb, /WEBGL_lose_context/) }],
   ["12 responsive layout and DPR caps are present", () => { assert.match(css, /@media \(max-width: 680px\)/); assert.match(css, /@media \(max-width: 450px\)/); assert.match(orb, /resize\(background, backgroundCanvas, 1\.6\)/); assert.match(orb, /resize\(orb, orbCanvas, 2\)/) }],
 ]

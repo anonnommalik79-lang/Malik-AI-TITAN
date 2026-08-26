@@ -17,6 +17,7 @@ import { TitanTopBar } from "./TitanTopBar"
 import { RightRail } from "./RightRail"
 import { prefillPrompt, readContextEnabled } from "@/lib/malik-context"
 import { targetViewForTemplate, type MalikTemplate } from "@/lib/malik-template-registry"
+import { playVoiceTransitionSound } from "@/lib/voice-transition-sound"
 import { SovereignBillingPanel } from "./billing/sovereign-billing-panel"
 import { SovereignSettingsPanel } from "./settings/sovereign-settings-panel"
 import { SovereignSupportPanel } from "./support"
@@ -4366,6 +4367,10 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
   const [codexOpen, setCodexOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [voiceModeOpen, setVoiceModeOpen] = useState(false)
+  const openVoiceMode = useCallback(() => {
+    playVoiceTransitionSound("open")
+    setVoiceModeOpen(true)
+  }, [])
   const [activeAiMode, setActiveAiMode] = useState<AiModeId>("auto")
   const [activeGenerationKind, setActiveGenerationKind] = useState<GenerationStatusType>("website")
   const activeViewRef = useRef("home")
@@ -6077,7 +6082,7 @@ const shouldShowMobilePreviewButton =
                 onOpenBilling={() => safeOpenView("billing", "manual")}
                 onOpenCodex={() => setCodexOpen(true)}
                 onForceCanvas={() => safeOpenCanvas(undefined, "project-chat")}
-                onOpenVoice={() => setVoiceModeOpen(true)}
+                onOpenVoice={openVoiceMode}
                 projectName={chats.find((chat) => chat.id === activeProjectWorkspaceId)?.title}
                 projectDescription={chats.find((chat) => chat.id === activeProjectWorkspaceId)?.projectDescription}
               />
@@ -6111,7 +6116,7 @@ const shouldShowMobilePreviewButton =
               onOpenBilling={() => safeOpenView("billing", "manual")}
               onOpenCodex={() => setCodexOpen(true)}
               onForceCanvas={() => safeOpenCanvas(undefined, "chat-force")}
-              onOpenVoice={() => setVoiceModeOpen(true)}
+              onOpenVoice={openVoiceMode}
             />
 
             </div>
@@ -6134,7 +6139,7 @@ const shouldShowMobilePreviewButton =
               selectedModelId={selectedModelId}
               userPlan={currentPlan}
               onModelChange={handleModelChange}
-              onOpenVoice={() => setVoiceModeOpen(true)}
+              onOpenVoice={openVoiceMode}
             />
           )}
         </section>
@@ -6459,7 +6464,7 @@ const shouldShowMobilePreviewButton =
           onLogout={handleLogout}
           onOpenCodex={() => { setCodexOpen(true); setMobileMenuOpen(false) }}
           onOpenSearch={() => setCommandPaletteOpen(true)}
-          onOpenVoice={() => setVoiceModeOpen(true)}
+          onOpenVoice={openVoiceMode}
         />
       </div>
       <div className={cn("fixed inset-y-0 left-0 z-50 lg:hidden transition-transform duration-300 ease-out", mobileMenuOpen ? "translate-x-0" : "-translate-x-full")}>
@@ -6478,7 +6483,7 @@ const shouldShowMobilePreviewButton =
           onLogout={handleLogout}
           onOpenCodex={() => { setCodexOpen(true); setMobileMenuOpen(false) }}
           onOpenSearch={() => { setCommandPaletteOpen(true); setMobileMenuOpen(false) }}
-          onOpenVoice={() => { setVoiceModeOpen(true); setMobileMenuOpen(false) }}
+          onOpenVoice={() => { openVoiceMode(); setMobileMenuOpen(false) }}
         />
       </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

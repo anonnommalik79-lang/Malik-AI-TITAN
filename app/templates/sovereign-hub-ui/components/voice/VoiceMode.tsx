@@ -6,6 +6,7 @@ import { VoiceDock, type PickedVoiceFile } from "./VoiceDock"
 import { VoiceOrb } from "./VoiceOrb"
 import { VoiceSettings } from "./VoiceSettings"
 import styles from "./VoiceMode.module.css"
+import { isVoiceSoundEnabled, playVoiceTransitionSound, saveVoiceSoundEnabled } from "@/lib/voice-transition-sound"
 
 type SpeechResult = { isFinal: boolean; 0: { transcript: string } }
 type SpeechResultEvent = { resultIndex: number; results: ArrayLike<SpeechResult> }
@@ -31,7 +32,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const [micActive, setMicActive] = useState(false)
   const [micError, setMicError] = useState<string | null>(null)
   const [webGLError, setWebGLError] = useState(false)
-  const [soundEnabled, setSoundEnabled] = useState(true)
+  const [soundEnabled, setSoundEnabled] = useState(isVoiceSoundEnabled)
   const [screenActive, setScreenActive] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [voice, setVoice] = useState("Sola")
@@ -249,11 +250,21 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const closeMode = useCallback(() => {
     if (closingRef.current) return
     closingRef.current = true
+    if (soundEnabled) playVoiceTransitionSound("close")
     cleanupAll()
     setSettingsOpen(false)
     setPhase("leave")
     closeTimerRef.current = window.setTimeout(onClose, 220)
-  }, [cleanupAll, onClose])
+  }, [cleanupAll, onClose, soundEnabled])
+
+  const toggleSound = useCallback(() => {
+    setSoundEnabled((current) => {
+      const next = !current
+      saveVoiceSoundEnabled(next)
+      if (next) playVoiceTransitionSound("open")
+      return next
+    })
+  }, [])
 
   const submitText = useCallback((prompt: string) => {
     onSubmit?.(prompt)
@@ -290,7 +301,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         <button type="button" className={styles.closeButton} onClick={closeMode} aria-label="Закрыть голосовой режим"><X size={20} /></button>
       </header>
 
-      <main className={styles.center}>
+      <div className={styles.center}>
         <div className={styles.orbSpacer} aria-hidden="true" />
         <h1>{title}</h1>
         <p>{subtitle}</p>
@@ -304,7 +315,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
             <button type="button" onClick={startDemo}>Демо-реакция</button>
           </div>
         ) : null}
-      </main>
+      </div>
 
       <VoiceSettings
         open={settingsOpen}
@@ -326,7 +337,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         pickedFile={pickedFile}
         energyRef={energyRef}
         onMicToggle={toggleMicrophone}
-        onSoundToggle={() => setSoundEnabled((value) => !value)}
+        onSoundToggle={toggleSound}
         onScreenToggle={() => void toggleScreen()}
         onSettingsToggle={() => setSettingsOpen((value) => !value)}
         onPickFile={setPickedFile}
