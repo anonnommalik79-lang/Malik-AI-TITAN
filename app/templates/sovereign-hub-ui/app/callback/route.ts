@@ -1,8 +1,10 @@
 import { handleAuth } from "@workos-inc/authkit-nextjs"
 import { isWorkOSConfigured } from "@/lib/auth/server"
+import { getPublicOrigin } from "@/lib/public-origin"
 
 const workOSCallback = handleAuth({
-  returnPathname: "/",
+  returnPathname: "/dashboard",
+  baseURL: getPublicOrigin(),
 })
 
 export async function GET(request: Parameters<typeof workOSCallback>[0]) {
