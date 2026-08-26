@@ -82,11 +82,11 @@ POLLO_VIDEO_ENABLED=true
 
 | Переменная | Где взять |
 |------------|-----------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | там же |
-| `SUPABASE_SERVICE_ROLE_KEY` | там же (только сервер!) |
+| `WORKOS_CLIENT_ID` | WorkOS Dashboard → Configuration |
+| `WORKOS_API_KEY` | WorkOS Dashboard → API Keys (только сервер!) |
+| `WORKOS_COOKIE_PASSWORD` | случайная строка минимум 32 символа |
 
-Потом в Supabase SQL Editor запусти `supabase/schema.sql`.
+Добавь `http://localhost:3000/callback` в Redirect URIs WorkOS.
 
 ### Amazon / AWS (опционально)
 
@@ -123,7 +123,7 @@ npm run dev
 GET http://localhost:3000/api/health
 GET http://localhost:3000/api/health/providers      ← чат-провайдеры
 GET http://localhost:3000/api/health/media-providers  ← Stability, Pollo, Pollinations
-GET http://localhost:3000/api/health/auth           ← Supabase
+GET http://localhost:3000/api/health/auth           ← WorkOS AuthKit
 ```
 
 Если `stability: configured`, `groq: configured` и т.д. — ключ принят.
@@ -144,8 +144,8 @@ GET http://localhost:3000/api/health/auth           ← Supabase
     ├─ POLLO_API_KEY + POLLO_VIDEO_ENABLED=true
     │       → /api/media/video  (Video, «Создай видео»)
     │
-    └─ SUPABASE_* 
-            → /auth, OAuth, сохранение профиля/чатов
+    └─ WORKOS_*
+            → /auth, /sign-in, /callback, защищённая сессия
 ```
 
 ---

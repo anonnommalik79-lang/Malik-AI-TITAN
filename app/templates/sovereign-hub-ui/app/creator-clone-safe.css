@@ -6,7 +6,7 @@
 */
 
 :root {
-  --creator-sidebar-width: 230px;
+  --creator-sidebar-width: 250px;
   --creator-topbar-height: 58px;
   --creator-panel-max: 1180px;
   --creator-panel-wide: min(1180px, calc(100vw - var(--creator-sidebar-width) - 40px));
@@ -29,8 +29,8 @@ body,
     background: #02050d !important;
   }
 
-  .malik-dashboard-shell:has(> div.hidden.lg\:block aside[class*="w-[78px]"]) {
-    --creator-sidebar-width: 78px;
+  .malik-dashboard-shell:has(> div.hidden.lg\:block aside[data-collapsed="true"]) {
+    --creator-sidebar-width: 64px;
   }
 
   .malik-dashboard-shell > div.hidden.lg\:block {

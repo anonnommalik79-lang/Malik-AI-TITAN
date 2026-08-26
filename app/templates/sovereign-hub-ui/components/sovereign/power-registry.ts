@@ -122,7 +122,7 @@ export const POWER_REGISTRY: PowerAction[] = [
   { id: "export-zip-guide", title: "Export ZIP Guide", category: "Deploy", description: "Show safe ZIP export steps.", actionType: "open-deploy", safeStatus: "Guide ready" },
   { id: "render-build-checklist", title: "Render Build Checklist", category: "Deploy", description: "Show npm build, GitHub push and Render redeploy steps.", actionType: "open-deploy", safeStatus: "Guide ready" },
   { id: "vercel-deploy-guide", title: "Vercel Deploy Guide", category: "Deploy", description: "Show Vercel deploy guidance without fake API calls.", actionType: "open-deploy", safeStatus: "Guide ready" },
-  { id: "supabase-status", title: "Sovereign ID Status", category: "Admin", description: "Show identity runtime status in the safe API drawer.", actionType: "open-api-status", safeStatus: "UI only" },
+  { id: "workos-status", title: "Sovereign ID Status", category: "Admin", description: "Show WorkOS identity runtime status in the safe API drawer.", actionType: "open-api-status", safeStatus: "UI only" },
   { id: "api-status", title: "API Status", category: "Admin", description: "Show engine statuses and fallback states.", actionType: "open-api-status", safeStatus: "UI only" },
   { id: "billing-setup-guide", title: "Billing Setup Guide", category: "Business", description: "Open billing and usage planning.", actionType: "open-billing", safeStatus: "Connected to billing view" },
   { id: "usage-limits-setup", title: "Usage Limits Setup", category: "Admin", description: "Plan usage limits and cost guardrails.", actionType: "open-billing", safeStatus: "Guide ready" },

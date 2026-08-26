@@ -26,7 +26,7 @@ export const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
   { id: "luma", title: "Luma", group: "video", requiredEnv: ["LUMA_API_KEY"], modelEnv: ["LUMA_VIDEO_MODEL"] },
   { id: "runway", title: "Runway", group: "video", requiredEnv: ["RUNWAYML_API_SECRET", "RUNWAY_API_KEY"], mode: "any", modelEnv: ["RUNWAY_VIDEO_MODEL"] },
   { id: "googleVeo", title: "Google Veo", group: "video", requiredEnv: ["GOOGLE_VEO_API_KEY", "VEO_API_KEY"], mode: "any", modelEnv: ["GOOGLE_VEO_MODEL"] },
-  { id: "supabase", title: "Supabase", group: "auth", requiredEnv: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"], mode: "all" },
+  { id: "workos", title: "WorkOS AuthKit", group: "auth", requiredEnv: ["WORKOS_CLIENT_ID", "WORKOS_API_KEY", "WORKOS_COOKIE_PASSWORD"], mode: "all" },
   { id: "backend", title: "Malik Backend", group: "backend", requiredEnv: ["MALIK_BACKEND_URL"] },
 ]
 
@@ -122,7 +122,7 @@ export function getPublicEngineReadiness(): PublicEngine[] {
     ["vision", "image", any("openai", "stability", "fal", "awsBedrock")],
     ["cinema", "video", any("googleVeo", "runway", "luma", "fal")],
     ["infrastructure", "infrastructure", any("awsBedrock", "nvidiaNim", "backend")],
-    ["identity", "identity", any("supabase")],
+    ["identity", "identity", any("workos")],
   ]
   return engines.map(([id, group, configured]) => buildPublicEngine(id, group, configured))
 }

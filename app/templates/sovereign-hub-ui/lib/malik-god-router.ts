@@ -1,4 +1,6 @@
 import type { MalikModelId } from "@/lib/ai/malik-models"
+import type { MalikResearchProgress, MalikWebSource } from "@/lib/ai/web-research-types"
+import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 
 type ProviderAttempt = {
@@ -10,13 +12,9 @@ type ProviderAttempt = {
   latencyMs?: number
 }
 
-type SourceItem = {
-  title: string
-  url: string
-  domain: string
-  snippet?: string
-  provider?: string
-}
+type SourceItem = MalikWebSource
+
+type ResearchEmitter = (progress: MalikResearchProgress) => void
 
 type GodAnswer = {
   content: string
@@ -29,6 +27,7 @@ type GodAnswer = {
 }
 
 const CACHE = new Map<string, { expiresAt: number; value: GodAnswer }>()
+const SEARCH_CACHE_VERSION = "multi-query-v3"
 
 function env(name: string) {
   const value = process.env[name]
@@ -36,7 +35,11 @@ function env(name: string) {
 }
 
 function cleanText(value: unknown) {
-  return String(value || "").replace(/\s+/g, " ").trim()
+  return String(value || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, " ")
+    .replace(/<think>[\s\S]*$/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function getDomain(url: string) {
@@ -48,6 +51,11 @@ function getDomain(url: string) {
 }
 
 function extractPrompt(body: any) {
+  // Dashboard sends its orchestration instructions in `question`, but live
+  // search and the selected model must receive the user's clean request. This
+  // prevents internal runtime text from polluting search queries or being
+  // echoed into the conversation.
+  if (typeof body?.originalQuestion === "string" && body.originalQuestion.trim()) return body.originalQuestion.trim()
   if (typeof body?.prompt === "string" && body.prompt.trim()) return body.prompt.trim()
   if (typeof body?.message === "string" && body.message.trim()) return body.message.trim()
   if (typeof body?.question === "string" && body.question.trim()) return body.question.trim()
@@ -65,7 +73,7 @@ function extractPrompt(body: any) {
 }
 
 function cacheKey(prompt: string) {
-  return prompt.toLowerCase().trim().replace(/\s+/g, " ").slice(0, 420)
+  return `${SEARCH_CACHE_VERSION}:${prompt.toLowerCase().trim().replace(/\s+/g, " ").slice(0, 420)}`
 }
 
 function getCache(prompt: string) {
@@ -178,6 +186,26 @@ function uniqueSources(items: SourceItem[], limit: number) {
   return out
 }
 
+function diverseSources(items: SourceItem[], limit: number) {
+  const domains = new Set<string>()
+  const out: SourceItem[] = []
+
+  for (const item of items) {
+    const rawDomain = item.domain.toLowerCase().replace(/^www\./, "")
+    const domain = rawDomain.endsWith(".wikipedia.org")
+      ? "wikipedia.org"
+      : rawDomain.endsWith(".google.com")
+        ? "google.com"
+        : rawDomain
+    if (domains.has(domain)) continue
+    domains.add(domain)
+    out.push(item)
+    if (out.length >= limit) break
+  }
+
+  return out
+}
+
 async function searchSerper(query: string, limit: number): Promise<SourceItem[]> {
   const key = env("SERPER_API_KEY")
   if (!key) return []
@@ -264,6 +292,109 @@ async function searchBrave(query: string, limit: number): Promise<SourceItem[]> 
   )
 }
 
+function decodeSearchText(value: string) {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+async function searchBingRss(query: string, limit: number): Promise<SourceItem[]> {
+  const url = new URL("https://www.bing.com/search")
+  url.searchParams.set("format", "rss")
+  url.searchParams.set("q", query)
+  url.searchParams.set("count", String(Math.min(limit, 10)))
+  const res = await fetchWithTimeout(url.toString(), {}, 9000)
+  if (!res.ok) return []
+  const xml = await res.text()
+  const items = Array.from(xml.matchAll(/<item>([\s\S]*?)<\/item>/gi))
+  return uniqueSources(items.map((match) => {
+    const block = match[1]
+    const title = block.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || ""
+    const link = block.match(/<link>([\s\S]*?)<\/link>/i)?.[1] || ""
+    const snippet = block.match(/<description>([\s\S]*?)<\/description>/i)?.[1] || ""
+    return normalizeSource({
+      title: decodeSearchText(title),
+      url: decodeSearchText(link),
+      snippet: decodeSearchText(snippet),
+    }, "bing-rss")
+  }).filter(Boolean) as SourceItem[], limit)
+}
+
+async function searchGoogleNews(query: string, limit: number): Promise<SourceItem[]> {
+  const isRussian = /[а-яё]/i.test(query)
+  const url = new URL("https://news.google.com/rss/search")
+  url.searchParams.set("q", query)
+  url.searchParams.set("hl", isRussian ? "ru" : "en-US")
+  url.searchParams.set("gl", isRussian ? "KZ" : "US")
+  url.searchParams.set("ceid", isRussian ? "KZ:ru" : "US:en")
+
+  const res = await fetchWithTimeout(url.toString(), {}, 9000)
+  if (!res.ok) return []
+  const xml = await res.text()
+  const items = Array.from(xml.matchAll(/<item>([\s\S]*?)<\/item>/gi))
+
+  return uniqueSources(items.map((match) => {
+    const block = match[1]
+    const title = decodeSearchText(block.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || "")
+    const link = decodeSearchText(block.match(/<link>([\s\S]*?)<\/link>/i)?.[1] || "")
+    const snippet = decodeSearchText(block.match(/<description>([\s\S]*?)<\/description>/i)?.[1] || "")
+    const publisher = decodeSearchText(block.match(/<source[^>]*>([\s\S]*?)<\/source>/i)?.[1] || "")
+    return normalizeSource({
+      title,
+      url: link,
+      snippet: publisher ? `${publisher}. ${snippet}` : snippet,
+    }, "google-news")
+  }).filter(Boolean) as SourceItem[], limit)
+}
+
+async function searchWikipedia(query: string, limit: number): Promise<SourceItem[]> {
+  const language = /[а-яё]/i.test(query) ? "ru" : "en"
+  const base = `https://${language}.wikipedia.org/w/api.php`
+  const url = new URL(base)
+  url.searchParams.set("action", "query")
+  url.searchParams.set("list", "search")
+  url.searchParams.set("srsearch", query)
+  url.searchParams.set("srlimit", String(Math.min(limit, 8)))
+  url.searchParams.set("format", "json")
+  url.searchParams.set("origin", "*")
+  const res = await fetchWithTimeout(url.toString(), {}, 8000)
+  if (!res.ok) return []
+  const data: any = await res.json().catch(() => null)
+  const results = Array.isArray(data?.query?.search) ? data.query.search : []
+  return uniqueSources(results.map((item: any) => normalizeSource({
+    title: item.title,
+    url: `https://${language}.wikipedia.org/wiki/${encodeURIComponent(String(item.title || "").replace(/ /g, "_"))}`,
+    snippet: decodeSearchText(String(item.snippet || "")),
+  }, "wikipedia" )).filter(Boolean) as SourceItem[], limit)
+}
+
+async function searchGdelt(query: string, limit: number): Promise<SourceItem[]> {
+  const url = new URL("https://api.gdeltproject.org/api/v2/doc/doc")
+  url.searchParams.set("query", query)
+  url.searchParams.set("mode", "artlist")
+  url.searchParams.set("format", "json")
+  url.searchParams.set("maxrecords", String(Math.min(limit, 10)))
+  const res = await fetchWithTimeout(url.toString(), {}, 9000)
+  if (!res.ok) return []
+  const data: any = await res.json().catch(() => null)
+  const articles = Array.isArray(data?.articles) ? data.articles : []
+  return uniqueSources(articles.map((item: any) => normalizeSource({
+    title: item.title,
+    url: item.url,
+    domain: item.domain,
+    snippet: item.socialimage ? `News result from ${item.domain || getDomain(item.url)}` : "",
+    publishedAt: item.seendate,
+  } as MalikWebSource, "gdelt")).filter(Boolean) as SourceItem[], limit)
+}
+
 function parseJina(text: string, limit: number) {
   const blocks = text.split(/\n(?=Title:\s)/g).map((x) => x.trim()).filter(Boolean)
   const out: SourceItem[] = []
@@ -298,13 +429,123 @@ async function searchJina(query: string, limit: number): Promise<SourceItem[]> {
   return uniqueSources(parseJina(await res.text(), limit), limit)
 }
 
+function collectGroqSources(message: any, limit: number): SourceItem[] {
+  const found: SourceItem[] = []
+  const add = (value: any, provider = "groq-browser-search") => {
+    if (!value) return
+    if (typeof value === "string") {
+      found.push(...parseJina(value, limit))
+      const markdownLinks = Array.from(value.matchAll(/\[([^\]]{2,180})\]\((https?:\/\/[^\s)]+)\)/g))
+      for (const match of markdownLinks) {
+        const source = normalizeSource({ title: match[1], url: match[2] }, provider)
+        if (source) found.push(source)
+      }
+      const looseUrls = value.match(/https?:\/\/[^\s<>"')\]]+/g) || []
+      for (const rawUrl of looseUrls) {
+        const url = rawUrl.replace(/[.,;:!?]+$/, "")
+        const source = normalizeSource({ title: getDomain(url), url }, provider)
+        if (source) found.push(source)
+      }
+      return
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item) => add(item, provider))
+      return
+    }
+    if (typeof value !== "object") return
+
+    const url = value.url || value.link || value.href || value.source_url
+    if (url) {
+      const source = normalizeSource({
+        title: value.title || value.name || value.source || url,
+        url,
+        snippet: value.snippet || value.content || value.text || value.description,
+        publishedAt: value.publishedAt || value.published_at || value.date,
+      } as MalikWebSource, provider)
+      if (source) found.push(source)
+    }
+
+    for (const key of ["search_results", "results", "citations", "sources", "output"]) {
+      if (value[key] && value[key] !== value) add(value[key], provider)
+    }
+  }
+
+  add(message?.executed_tools)
+  add(message?.citations)
+  add(message?.content)
+  return uniqueSources(found, limit)
+}
+
+async function searchGroqBrowser(query: string, limit: number): Promise<SourceItem[]> {
+  const key = env("GROQ_API_KEY")
+  if (!key) return []
+
+  const baseUrl = (env("GROQ_BASE_URL") || "https://api.groq.com/openai/v1").replace(/\/+$/, "")
+  const res = await fetchWithTimeout(
+    `${baseUrl}/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${key}`,
+        "content-type": "application/json; charset=utf-8",
+      },
+      body: JSON.stringify({
+        model: "openai/gpt-oss-20b",
+        messages: [{
+          role: "user",
+          content: `Search the public web for this request and collect reliable primary sources. Do not answer from memory. Query: ${query}`,
+        }],
+        tools: [{ type: "browser_search" }],
+        max_tokens: 700,
+        temperature: 0.1,
+      }),
+    },
+    Number(process.env.MALIK_WEB_SEARCH_TIMEOUT_MS || 20000)
+  )
+
+  if (!res.ok) return []
+  const data: any = await res.json().catch(() => null)
+  return collectGroqSources(data?.choices?.[0]?.message, limit)
+}
+
+function extractNamedSubject(value: string) {
+  // JavaScript's `\b` is ASCII-only and does not recognize Cyrillic word
+  // boundaries. Use whitespace/start anchors so requests such as
+  // "поищи кто такой трамп" are parsed correctly.
+  return value.match(/(?:^|\s)(?:кто\s+(?:такой|такая|такие)|who\s+is)\s+([^?.!,]{2,90}?)(?=\s+(?:и|его|ее|её|чем|что|где|когда|and|his|her|what|where|when)(?:\s|[?.!,]|$)|[?.!,]|$)/i)?.[1]?.trim() || ""
+}
+
+function knownPersonSearchName(value: string) {
+  if (/эпштейн/i.test(value)) return "Jeffrey Epstein"
+  if (/трамп/i.test(value)) return "Donald Trump"
+  if (/байден/i.test(value)) return "Joe Biden"
+  if (/путин/i.test(value)) return "Vladimir Putin"
+  if (/токаев/i.test(value)) return "Kassym-Jomart Tokayev"
+  if (/зеленск/i.test(value)) return "Volodymyr Zelenskyy"
+  if (/илон\s+маск|маск/i.test(value)) return "Elon Musk"
+  return ""
+}
+
 function buildQueries(prompt: string) {
   const year = new Date().getFullYear()
-  const q = prompt.trim()
+  const q = prompt
+    .replace(/\[(?:system|assistant|developer|internal)[^\]]*\][\s\S]*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 260)
   const queries = [q]
 
-  if (!/\b202[0-9]\b/.test(q)) queries.push(`${q} ${year}`)
-  queries.push(`${q} official source`)
+  const namedSubject = extractNamedSubject(q)
+  const internationalName = knownPersonSearchName(q)
+  if (namedSubject) {
+    queries.push(`"${namedSubject}" биография деятельность факты`)
+  }
+  if (internationalName) {
+    queries.push(`"${internationalName}" official biography career facts`)
+  }
+
+  if (!namedSubject && !/\b202[0-9]\b/.test(q)) queries.push(`${q} ${year}`)
+  if (!namedSubject) queries.push(`${q} official source`)
 
   if (/(президент|president|usa|сша|united states|white house)/i.test(q)) {
     queries.push(`current president of the United States official ${year}`)
@@ -318,17 +559,106 @@ function buildQueries(prompt: string) {
   return Array.from(new Set(queries)).slice(0, Number(process.env.MALIK_GOD_MAX_SEARCH_QUERIES || 3))
 }
 
-async function gatherSources(prompt: string): Promise<SourceItem[]> {
+const SEARCH_STOP_WORDS = new Set([
+  "about", "answer", "briefly", "cite", "current", "find", "from", "latest", "please", "show", "source", "sources", "that", "what", "when", "where", "which", "with",
+  "актуально", "где", "дай", "его", "источник", "источники", "какой", "кратко", "кто", "найди", "ответь", "покажи", "поищи", "про", "сейчас", "ссылки", "такой", "текущий", "через",
+])
+
+function searchTokens(value: string) {
+  return Array.from(new Set((value.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || [])
+    .filter((token) => !SEARCH_STOP_WORDS.has(token))))
+    .slice(0, 18)
+}
+
+function knownNameAliases(value: string) {
+  const aliases: string[] = []
+  // Search indexes often store internationally known names only in Latin.
+  // Keep aliases explicit so they improve recall without broadening unrelated
+  // queries or allowing arbitrary off-topic results through the filter.
+  if (/эпштейн/i.test(value)) aliases.push("jeffrey", "epstein")
+  if (/трамп/i.test(value)) aliases.push("donald", "trump")
+  if (/байден/i.test(value)) aliases.push("joe", "biden")
+  if (/путин/i.test(value)) aliases.push("vladimir", "putin")
+  if (/токаев/i.test(value)) aliases.push("kassym-jomart", "tokayev")
+  if (/зеленск/i.test(value)) aliases.push("volodymyr", "zelenskyy")
+  if (/илон\s+маск|маск/i.test(value)) aliases.push("elon", "musk")
+  return aliases
+}
+
+function identityTokensForNamedSubject(namedSubject: string, prompt: string) {
+  const subjectTokens = searchTokens(namedSubject)
+  const identity = subjectTokens.length ? [subjectTokens[subjectTokens.length - 1]] : []
+  if (/эпштейн/i.test(prompt)) identity.push("epstein")
+  if (/трамп/i.test(prompt)) identity.push("trump")
+  if (/байден/i.test(prompt)) identity.push("biden")
+  if (/путин/i.test(prompt)) identity.push("putin")
+  if (/токаев/i.test(prompt)) identity.push("tokayev")
+  if (/зеленск/i.test(prompt)) identity.push("zelenskyy")
+  if (/илон\s+маск|маск/i.test(prompt)) identity.push("musk")
+  return Array.from(new Set(identity))
+}
+
+function rankSourcesForPrompt(prompt: string, sources: SourceItem[]) {
+  const tokens = Array.from(new Set([...searchTokens(prompt), ...knownNameAliases(prompt)]))
+  const namedSubject = extractNamedSubject(prompt)
+  const subjectTokens = Array.from(new Set([...searchTokens(namedSubject), ...knownNameAliases(prompt)]))
+  const identityTokens = identityTokensForNamedSubject(namedSubject, prompt)
+  const softwareNoise = /\b(?:winrar|winzip|7-zip|softonic|архиватор|zip files?|unzip|download)\b/i
+  const promptAsksForSoftware = softwareNoise.test(prompt)
+
+  const scored = sources.map((source, index) => {
+    const title = source.title.toLowerCase()
+    const body = `${source.snippet || ""} ${source.domain} ${source.url}`.toLowerCase()
+    const identityHaystack = `${title} ${source.url}`.toLowerCase()
+    let score = 0
+    let matched = 0
+    let subjectMatched = 0
+    for (const token of tokens) {
+      const titleHit = title.includes(token)
+      const bodyHit = body.includes(token)
+      if (titleHit || bodyHit) matched += 1
+      if (titleHit) score += 7
+      if (bodyHit) score += 3
+      if (subjectTokens.includes(token) && (titleHit || bodyHit)) subjectMatched += 1
+    }
+    if (score > 0 && (/\.(gov|gov\.[a-z]{2}|edu|ac\.[a-z]{2})$/i.test(source.domain) || /(?:wikipedia|britannica|reuters|apnews|bbc)\./i.test(source.domain))) score += 4
+    if (!promptAsksForSoftware && softwareNoise.test(`${title} ${body}`)) score -= 40
+
+    const subjectRelevant = subjectTokens.length === 0 || subjectMatched >= Math.max(1, Math.ceil(subjectTokens.length / 2))
+    const identityRelevant = identityTokens.length === 0 || identityTokens.some((token) => identityHaystack.includes(token))
+    const relevant = score > 0 && matched > 0 && subjectRelevant && identityRelevant
+    return { source, score, index, relevant }
+  }).sort((a, b) => b.score - a.score || a.index - b.index)
+
+  // Never fill the UI with unrelated links. An empty set is safer than
+  // presenting stale or off-topic results as if MALIK AI had read them.
+  return scored.filter((item) => item.relevant).map((item) => item.source)
+}
+
+async function gatherSources(prompt: string, emit?: ResearchEmitter): Promise<SourceItem[]> {
   const queries = buildQueries(prompt)
   const perQuery = Number(process.env.MALIK_GOD_SEARCH_PER_QUERY || 6)
 
+  emit?.({
+    kind: "plan",
+    text: `Планирую поиск по открытым источникам · ${queries.length} запрос${queries.length === 1 ? "" : "а"}`,
+  })
+
   const batches = await Promise.allSettled(
-    queries.flatMap((query) => [
-      searchSerper(query, perQuery),
-      searchTavily(query, perQuery),
-      searchBrave(query, perQuery),
-      searchJina(query, perQuery),
-    ])
+    queries.map(async (query) => {
+      emit?.({ kind: "search", text: `Ищу через Google News и открытый веб · ${query}` })
+      const settled = await Promise.allSettled([
+        searchSerper(query, perQuery),
+        searchTavily(query, perQuery),
+        searchBrave(query, perQuery),
+        searchJina(query, perQuery),
+        searchGoogleNews(query, perQuery),
+        searchBingRss(query, perQuery),
+        searchWikipedia(query, perQuery),
+        searchGdelt(query, perQuery),
+      ])
+      return settled.flatMap((item) => item.status === "fulfilled" ? item.value : [])
+    })
   )
 
   const all: SourceItem[] = []
@@ -336,7 +666,66 @@ async function gatherSources(prompt: string): Promise<SourceItem[]> {
     if (batch.status === "fulfilled") all.push(...batch.value)
   }
 
-  return uniqueSources(all, Number(process.env.MALIK_GOD_MAX_SOURCES || 8))
+  const maxSearchResults = Number(process.env.MALIK_GOD_MAX_SEARCH_RESULTS || 16)
+  // Deduplicate the complete provider pool first. Truncating before ranking
+  // allowed one noisy provider to crowd Wikipedia and other relevant sources
+  // out of consideration.
+  let unique = diverseSources(
+    rankSourcesForPrompt(prompt, uniqueSources(all, Math.max(maxSearchResults * 8, 96))),
+    maxSearchResults,
+  )
+
+  if (unique.length < 3) {
+    emit?.({ kind: "search", text: "Расширяю поиск через Malik Web Scout · Groq Browser Search" })
+    try {
+      unique = diverseSources(
+        rankSourcesForPrompt(prompt, uniqueSources([...unique, ...(await searchGroqBrowser(prompt, perQuery))], Math.max(maxSearchResults * 3, 48))),
+        maxSearchResults,
+      )
+    } catch {
+      // Other providers may still have returned usable evidence.
+    }
+  }
+
+  for (const source of unique.slice(0, 10)) {
+    emit?.({
+      kind: "source",
+      text: `Найден источник · ${source.domain}`,
+      domain: source.domain,
+      title: source.title,
+      url: source.url,
+      provider: source.provider,
+      source,
+    })
+  }
+
+  const maxSources = Number(process.env.MALIK_GOD_MAX_SOURCES || 8)
+  const preferred = unique.slice(0, Math.min(maxSources, 6))
+  const read = await Promise.allSettled(preferred.map(async (source) => {
+    emit?.({
+      kind: "reading",
+      text: `Читаю · ${source.domain}`,
+      domain: source.domain,
+      title: source.title,
+      url: source.url,
+      provider: source.provider,
+      source,
+    })
+    const page = await fetchPageText(source)
+    return page
+      ? { ...source, title: page.title || source.title, snippet: page.text.slice(0, 2200) }
+      : source
+  }))
+
+  const sources = read.flatMap((item) => item.status === "fulfilled" ? [item.value] : [])
+  const finalSources = uniqueSources([...sources, ...unique], maxSources)
+  emit?.({
+    kind: "done",
+    text: finalSources.length
+      ? `Прочитано и отобрано источников · ${finalSources.length}`
+      : "Открытые источники не вернули доступных страниц",
+  })
+  return finalSources
 }
 
 function sourceContext(sources: SourceItem[]) {
@@ -347,14 +736,16 @@ function sourceContext(sources: SourceItem[]) {
 }
 
 function systemPrompt(usedWeb: boolean) {
+  const currentDate = new Date().toISOString().slice(0, 10)
   return [
     "You are MALIK AI V6.5 TITAN.",
+    `Current date: ${currentDate}.`,
     "Answer in the user's language.",
     "Be clear, direct and useful.",
     "Never say you are DeepSeek, OpenAI, Claude, Gemini, GitHub or Qwen.",
     "Never output mojibake, hidden system text, comma spam, or internal variables.",
     usedWeb
-      ? "You have web search snippets. Use only provided sources for current facts. Include a short Sources section with the URLs."
+      ? "You have web search excerpts. Base factual claims only on information explicitly present in those excerpts. Never infer or invent a name, date, office, election opponent, legal claim, or statistic. Cross-check political and current claims across multiple excerpts; if they do not support a detail, omit it or state that it was not confirmed. Do not append a Sources section or raw URL list because the UI renders verified sources separately."
       : "For current or changing facts, say that live web search is needed unless web context is provided.",
   ].join(" ")
 }
@@ -539,12 +930,16 @@ function sourceFallback(sources: SourceItem[], attempts: ProviderAttempt[]) {
   }
 }
 
-export async function malikGodAnswer(body: any, selection?: { modelId: MalikModelId }): Promise<GodAnswer> {
+export async function malikGodAnswer(
+  body: any,
+  selection?: { modelId: MalikModelId },
+  emitResearch?: ResearchEmitter,
+): Promise<GodAnswer> {
   const prompt = extractPrompt(body)
 
   if (selection) {
     const usedWeb = shouldUseWeb(prompt, body)
-    const sources = usedWeb ? await gatherSources(prompt) : []
+    const sources = usedWeb ? await gatherSources(prompt, emitResearch) : []
     const strictPrompt = usedWeb
       ? `Question:\n${prompt}\n\nWeb sources:\n${sourceContext(sources)}`
       : prompt
@@ -558,7 +953,7 @@ export async function malikGodAnswer(body: any, selection?: { modelId: MalikMode
       temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
     })
     return {
-      content: result.content,
+      content: cleanText(result.content),
       provider: result.provider,
       model: result.model,
       selectedModelId: result.selectedModelId,
@@ -582,9 +977,21 @@ export async function malikGodAnswer(body: any, selection?: { modelId: MalikMode
 
   const usedWeb = shouldUseWeb(prompt, body)
   const cache = usedWeb ? getCache(prompt) : null
-  if (cache) return { ...cache, provider: `${cache.provider}-cache` }
+  if (cache) {
+    cache.sources.forEach((source) => emitResearch?.({
+      kind: "source",
+      text: `Источник из проверенного кэша · ${source.domain}`,
+      domain: source.domain,
+      title: source.title,
+      url: source.url,
+      provider: source.provider,
+      source,
+    }))
+    emitResearch?.({ kind: "done", text: `Источники восстановлены из кэша · ${cache.sources.length}` })
+    return { ...cache, provider: `${cache.provider}-cache` }
+  }
 
-  const sources = usedWeb ? await gatherSources(prompt) : []
+  const sources = usedWeb ? await gatherSources(prompt, emitResearch) : []
   const result = await callProviderChain(prompt, usedWeb, sources)
 
   let answer: GodAnswer

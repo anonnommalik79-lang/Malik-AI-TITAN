@@ -29,7 +29,7 @@ const TITLES: Record<PublicEngineId, string> = {
 }
 
 const INTERNAL_IDENTITY_PATTERN =
-  /\b(openai|anthropic|claude|gemini|veo|runway|luma|fal(?:\.ai)?|stability|moonshot|kimi|groq|deepseek|openrouter|xai|grok|aws|bedrock|nvidia|nim|supabase|azure)\b/gi
+  /\b(openai|anthropic|claude|gemini|veo|runway|luma|fal(?:\.ai)?|stability|moonshot|kimi|groq|deepseek|openrouter|xai|grok|aws|bedrock|nvidia|nim|workos|azure)\b/gi
 
 const INTERNAL_ENV_PATTERN =
   /\b[A-Z][A-Z0-9_]*(?:API_KEY|SECRET|TOKEN|MODEL|DEPLOYMENT|REGION|URL|BUCKET|ACCESS_KEY_ID)\b/g
@@ -45,7 +45,7 @@ export function publicEngineIdForProvider(provider?: string, kind?: string): Pub
   if (kind === "video" || ["veo", "runway", "luma"].includes(normalized)) return "cinema"
   if (kind === "code" || kind === "project" || kind === "debug") return "code"
   if (normalized.includes("aws") || normalized.includes("nvidia") || normalized === "azure") return "infrastructure"
-  if (normalized.includes("supabase")) return "identity"
+  if (normalized.includes("workos")) return "identity"
   if (["kimi", "grok", "deepseek", "claude"].includes(normalized)) return "reasoning"
   return "core"
 }

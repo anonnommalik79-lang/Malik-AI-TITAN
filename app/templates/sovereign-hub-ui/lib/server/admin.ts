@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto"
-import { createSupabaseUserClient, isServerSupabaseConfigured } from "@/lib/server/supabase-user"
+import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 
 const DEFAULT_ADMINS = [
   "amangeldymalik38@gmail.com",
@@ -18,11 +18,6 @@ function safeEqual(left?: string | null, right?: string | null) {
   const a = Buffer.from(left)
   const b = Buffer.from(right)
   return a.length === b.length && timingSafeEqual(a, b)
-}
-
-function bearer(request: Request) {
-  const value = request.headers.get("authorization") || ""
-  return value.toLowerCase().startsWith("bearer ") ? value.slice(7).trim() : ""
 }
 
 export function malikAdminEmails() {
@@ -51,23 +46,16 @@ export async function getAdminAccessAsync(request: Request) {
   const headerAccess = getAdminAccess(request)
   if (headerAccess.authorized) return { ...headerAccess, source: "admin-token" as const }
 
-  const token = bearer(request)
-  if (!token || !isServerSupabaseConfigured()) {
-    return { ...headerAccess, source: "none" as const }
-  }
-
   try {
-    const client = createSupabaseUserClient(token)
-    if (!client) return { ...headerAccess, source: "none" as const }
-    const { data, error } = await client.auth.getUser(token)
-    const email = data?.user?.email?.trim().toLowerCase() || ""
-    const authorized = !error && isMalikAdminEmail(email)
+    const { user } = await getOptionalWorkOSAuth()
+    const email = user?.email?.trim().toLowerCase() || ""
+    const authorized = Boolean(user && isMalikAdminEmail(email))
     return {
       email,
       authorized,
       debugAllowed: authorized && process.env.MALIK_DEBUG_PROVIDERS === "true",
-      source: "supabase-session" as const,
-      user: data?.user || null,
+      source: "workos-session" as const,
+      user: user || null,
     }
   } catch {
     return { ...headerAccess, source: "none" as const }

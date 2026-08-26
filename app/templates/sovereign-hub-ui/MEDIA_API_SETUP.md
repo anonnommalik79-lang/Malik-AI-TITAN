@@ -126,5 +126,5 @@ Use the tunnel URL for OAuth callbacks only. **Do not** put API keys in URLs or 
 ## 7. What remains placeholder
 
 - Amazon Bedrock / AWS media: explicitly disabled (`amazon: "disabled"` in health).
-- Persistent media storage (S3/R2/Supabase): not wired — URLs returned directly from providers.
-- Server-side usage counters reset on process restart (in-memory); Supabase `usage_events` table ready for future wiring.
+- Persistent media storage (S3/R2): not wired — URLs returned directly from providers.
+- Server-side usage counters reset on process restart (in-memory).

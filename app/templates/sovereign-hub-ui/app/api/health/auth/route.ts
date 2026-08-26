@@ -1,20 +1,18 @@
-import { getSocialProviders } from "@/lib/auth/social-providers"
-import { isSupabaseConfigured } from "@/lib/supabase"
+import { isWorkOSConfigured } from "@/lib/auth/server"
 
 export const runtime = "nodejs"
 
 export async function GET() {
-  const configured = isSupabaseConfigured()
-  const providers = getSocialProviders()
+  const configured = isWorkOSConfigured()
+
   return Response.json({
     ok: true,
-    supabase: configured ? "configured" : "missing",
-    guestModeActive: !configured,
-    oauthProviders: providers.map((p) => ({
-      id: p.id,
-      name: p.name,
-      enabled: p.enabled && p.configured,
-      configured: p.configured,
-    })),
+    provider: "workos",
+    configured,
+    callback: "/callback",
+    oauthProviders: [
+      { id: "google", name: "Google", enabled: configured, configured },
+      { id: "github", name: "GitHub", enabled: configured, configured },
+    ],
   })
 }

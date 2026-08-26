@@ -4,7 +4,7 @@
 
 - Node.js 20+
 - Render Web Service account
-- Optional: Supabase project (guest mode works without it)
+- WorkOS AuthKit project with Google and GitHub enabled
 - At least one AI provider API key (Groq/Gemini/OpenRouter recommended for free mode)
 
 ## Build settings
@@ -28,17 +28,17 @@ AI_FREE_MODE=true
 
 Add provider keys from `.env.example` (at minimum one of `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`).
 
-## Optional: Supabase auth
+## WorkOS AuthKit
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
-NEXT_PUBLIC_ENABLE_GOOGLE_OAUTH=true
-NEXT_PUBLIC_ENABLE_GITHUB_OAUTH=true
+WORKOS_CLIENT_ID=client_...
+WORKOS_API_KEY=sk_...
+WORKOS_COOKIE_PASSWORD=at-least-32-characters-long
+WORKOS_REDIRECT_URI=https://your-service.onrender.com/callback
+NEXT_PUBLIC_WORKOS_REDIRECT_URI=https://your-service.onrender.com/callback
 ```
 
-Run `supabase/schema.sql` in the Supabase SQL editor before enabling persistence.
+Add the same callback URL in WorkOS Dashboard and enable Google/GitHub connections.
 
 ## Upload limits
 
@@ -52,12 +52,12 @@ MAX_UPLOAD_DOC_MB=12
 
 - `GET /api/health` — basic liveness
 - `GET /api/health/providers` — AI provider readiness
-- `GET /api/health/auth` — Supabase + OAuth status
+- `GET /api/health/auth` — WorkOS AuthKit status
 
 ## Post-deploy verification
 
 1. Open `/` — auth screen loads
-2. Guest login → `/dashboard` — chat works
+2. Google/GitHub login → callback → `/dashboard`
 3. Send a message — SSE stream returns thinking status + content
 4. Check API Health popover — providers show configured/missing
 
@@ -65,4 +65,4 @@ MAX_UPLOAD_DOC_MB=12
 
 - Cold starts on Render free tier may take 30–60s for first request.
 - Set `MALIK_BACKEND_PROXY_ENABLED=false` unless you run a separate backend.
-- Do not expose service role keys in `NEXT_PUBLIC_*` variables.
+- Keep `WORKOS_API_KEY` and `WORKOS_COOKIE_PASSWORD` server-only.

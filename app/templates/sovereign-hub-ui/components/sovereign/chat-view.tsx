@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import {
   BookOpen,
   Bot,
@@ -16,11 +17,10 @@ import {
   Image as ImageIcon,
   Layers,
   Link as LinkIcon,
-  Maximize2,
   Lightbulb,
   Mic,
-  MoreHorizontal,
   Paperclip,
+  Plus,
   RefreshCw,
   Search,
   SendHorizontal,
@@ -33,23 +33,15 @@ import {
   Volume2,
   Wand2,
   X,
-  Zap,
-  Brain,
-  Crown,
   Loader2,
 } from "lucide-react"
 import type { GenerationStatusType } from "./generation-status"
 import type { AIPlan } from "@/lib/ai/types"
-import { DEFAULT_MALIK_MODEL_ID, type MalikModelId } from "@/lib/ai/malik-models"
+import type { MalikMessageResearch, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
+import { DEFAULT_MALIK_MODEL_ID, getMalikModel, type MalikModelId } from "@/lib/ai/malik-models"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { MalikModelSelector } from "./MalikModelSelector"
-import {
-  canUseUltra,
-  loadResponseDepth,
-  saveResponseDepth,
-  type ChatSendOptions,
-  type ResponseDepth,
-} from "@/lib/ai/response-depth"
+import { canUseUltra, loadResponseDepth, type ChatSendOptions, type ResponseDepth } from "@/lib/ai/response-depth"
 
 export type { ChatSendOptions }
 
@@ -71,6 +63,8 @@ function isChatViewBadText(value: string) {
     !text.trim() ||
     badMarks.some((mark) => text.includes(mark)) ||
     /CURRENT\s+(USER|TIME|DATE|YEAR|LANGUAGE|DOMAIN|CONTEXT):/i.test(text) ||
+    /\[(SOVEREIGN_MALIK_AI_RUNTIME|CHAT_MODE|MALIK_SOVEREIGN_DASHBOARD_KERNEL_V2|MALIK_RESPONSE_DEPTH_[A-Z]+)\]/i.test(text) ||
+    /Mode:\s*choose\s+(chat|code|canvas|Codex|media)\s+flow/i.test(text) ||
     /^\s*(START:|BEGIN:|END:)\s*$/i.test(text) ||
     /^[,;:]/.test(text.trim()) ||
     commaCount >= 25 ||
@@ -91,6 +85,8 @@ interface Message {
   timestamp: Date
   isStreaming?: boolean
   username?: string
+  modelId?: MalikModelId
+  research?: MalikMessageResearch
   generatedMedia?: InlineMediaGeneration
 }
 
@@ -134,6 +130,8 @@ interface ChatViewProps {
   onOpenBilling?: () => void
   onOpenCodex?: () => void
   onForceCanvas?: () => void
+  projectName?: string
+  projectDescription?: string
 }
 
 const MAX_FILE_SIZE = 12 * 1024 * 1024
@@ -442,88 +440,100 @@ function isWorldResearchPrompt(text: string) {
   return publicFact || (yearSignal && /(who|what|when|where|кто|что|когда|где|какой|какая|какие|қашан|қайда)/i.test(value))
 }
 
-function researchDomainsFor(text: string) {
-  const value = String(text || "").toLowerCase()
-  if (/president|white house|сша|usa|united states|президент/.test(value)) {
-    return [
-      { icon: "G", name: "Google", domain: "google.com" },
-      { icon: "W", name: "White House", domain: "whitehouse.gov" },
-      { icon: "Wiki", name: "Wikipedia", domain: "wikipedia.org" },
-      { icon: "B", name: "Brave", domain: "brave.com" },
-    ]
-  }
-  if (/wiki|history|истори|википед/.test(value)) {
-    return [
-      { icon: "Wiki", name: "Wikipedia", domain: "wikipedia.org" },
-      { icon: "B", name: "Britannica", domain: "britannica.com" },
-      { icon: "G", name: "Google", domain: "google.com" },
-      { icon: "J", name: "Jina Reader", domain: "r.jina.ai" },
-    ]
-  }
-  if (/hackathon|competition|event|startup|ai|хакатон|конкурс|соревн|мероприят|акселератор/.test(value)) {
-    return [
-      { icon: "G", name: "Google", domain: "google.com" },
-      { icon: "AH", name: "Astana Hub", domain: "astanahub.com" },
-      { icon: "D", name: "Devpost", domain: "devpost.com" },
-      { icon: "T", name: "Tavily", domain: "tavily.com" },
-    ]
-  }
-  if (/news|новост/.test(value)) {
-    return [
-      { icon: "G", name: "Google News", domain: "news.google.com" },
-      { icon: "R", name: "Reuters", domain: "reuters.com" },
-      { icon: "AP", name: "AP News", domain: "apnews.com" },
-      { icon: "B", name: "Brave", domain: "brave.com" },
-    ]
-  }
-  return [
-    { icon: "G", name: "Google", domain: "google.com" },
-    { icon: "Wiki", name: "Wikipedia", domain: "wikipedia.org" },
-    { icon: "T", name: "Tavily", domain: "tavily.com" },
-    { icon: "B", name: "Brave", domain: "brave.com" },
-  ]
+function sourceIconUrl(domain: string) {
+  const cleanDomain = String(domain || "").replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]
+  return `https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(`https://${cleanDomain}`)}&sz=64`
 }
 
-type ActivityStep = { kind: "think" | "search" | "read"; text: string }
+function SourceIcon({ source, className = "" }: { source: Pick<MalikWebSource, "domain" | "title">; className?: string }) {
+  const [fallbackStep, setFallbackStep] = useState(0)
+  const cleanDomain = (source.domain || "").replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]
+  const letter = (cleanDomain || source.title || "S").charAt(0).toUpperCase()
+  const candidates = [
+    sourceIconUrl(cleanDomain),
+    cleanDomain ? `https://${cleanDomain}/favicon.ico` : "",
+  ].filter(Boolean)
+  return (
+    <span className={cn("malik-source-icon", className)} aria-hidden="true">
+      {fallbackStep >= candidates.length
+        ? letter
+        : <img src={candidates[fallbackStep]} alt="" onError={() => setFallbackStep((step) => step + 1)} />}
+    </span>
+  )
+}
 
-function ActivityIcon({ kind }: { kind: ActivityStep["kind"] | "done" }) {
-  if (kind === "search") return <Search className="h-[13px] w-[13px]" />
-  if (kind === "read") return <BookOpen className="h-[13px] w-[13px]" />
-  if (kind === "done") return <Timer className="h-[13px] w-[13px]" />
+function sourceDisplayName(source: MalikWebSource) {
+  const domain = String(source.domain || "")
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0]
+    .toLowerCase()
+
+  const known: Record<string, string> = {
+    "wikipedia.org": "Wikipedia",
+    "en.wikipedia.org": "Wikipedia",
+    "britannica.com": "Britannica",
+    "millercenter.org": "Miller Center",
+    "whitehousehistory.org": "White House Historical Association",
+    "ballotpedia.org": "Ballotpedia",
+    "bing.com": "Bing",
+    "www2.bing.com": "Bing",
+    "rewards.bing.com": "Microsoft Rewards",
+    "github.com": "GitHub",
+    "google.com": "Google",
+    "youtube.com": "YouTube",
+  }
+  if (known[domain]) return known[domain]
+
+  const parts = domain.split(".").filter(Boolean)
+  const root = parts.length > 1 ? parts[parts.length - 2] : parts[0] || "Источник"
+  return root
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function cleanResearchDisplayText(value: string, research?: MalikMessageResearch) {
+  const text = cleanChatViewText(value)
+  if (!research?.sources.length || !text) return text
+
+  const markers = [...text.matchAll(/(?:^|\n)(?:#{1,3}\s*)?(?:sources|источники)\s*:?\s*/gim)]
+  const marker = markers.at(-1)
+  if (!marker || marker.index == null) return text
+
+  const appendix = text.slice(marker.index)
+  const isTrailingAppendix = marker.index > text.length * 0.45 || /https?:\/\/|\[[^\]]+\]\(/i.test(appendix)
+  return isTrailingAppendix ? text.slice(0, marker.index).trim() : text
+}
+
+function ActivityIcon({ step }: { step: MalikResearchStep }) {
+  if (step.domain) return <SourceIcon source={{ domain: step.domain, title: step.title || step.domain }} />
+  if (step.kind === "search" || step.kind === "source") return <Search className="h-[13px] w-[13px]" />
+  if (step.kind === "reading") return <BookOpen className="h-[13px] w-[13px]" />
+  if (step.kind === "done") return <Check className="h-[13px] w-[13px]" />
   return <Lightbulb className="h-[13px] w-[13px]" />
 }
 
-function ThinkingBubble({ generationType, query = "" }: { generationType: GenerationStatusType; query?: string }) {
-  const [step, setStep] = useState(0)
+function ThinkingBubble({
+  generationType,
+  query = "",
+  research,
+}: {
+  generationType: GenerationStatusType
+  query?: string
+  research?: MalikMessageResearch
+}) {
   const [elapsed, setElapsed] = useState(0)
-  const isResearch = isWorldResearchPrompt(query)
-  const domains = researchDomainsFor(query)
-
-  const steps = useMemo<ActivityStep[]>(() => {
-    if (!isResearch) return []
-    return [
-      { kind: "think", text: "Разбираю запрос" },
-      { kind: "search", text: `Ищу в сети · ${domains[0]?.domain || "google.com"}` },
-      { kind: "read", text: `Читаю источник · ${domains[1]?.domain || "wikipedia.org"}` },
-      { kind: "search", text: `Сверяю данные · ${domains[2]?.domain || "brave.com"}` },
-      { kind: "think", text: "Собираю ответ со ссылками" },
-    ]
-  }, [isResearch, domains])
-
-  useEffect(() => {
-    setStep(0)
-    if (!isResearch) return
-    const timer = window.setInterval(() => setStep((value) => Math.min(value + 1, steps.length - 1)), 900)
-    return () => window.clearInterval(timer)
-  }, [query, isResearch, steps.length])
+  const isResearch = Boolean(research?.usedWeb || research?.steps.length || isWorldResearchPrompt(query))
+  const steps = research?.steps || []
+  const visibleSources = research?.sources.slice(0, 6) || []
 
   // Elapsed time is measured, not animated — the row at the end reports how long
   // the turn actually took.
   useEffect(() => {
-    const startedAt = Date.now()
+    const startedAt = research?.startedAt || Date.now()
     const timer = window.setInterval(() => setElapsed(Math.round((Date.now() - startedAt) / 1000)), 1000)
     return () => window.clearInterval(timer)
-  }, [query])
+  }, [query, research?.startedAt])
 
   const labelMap: Record<GenerationStatusType, string> = {
     text: "Думаю",
@@ -550,13 +560,19 @@ function ThinkingBubble({ generationType, query = "" }: { generationType: Genera
 
   return (
     <div className="malik-activity" aria-live="polite">
-      {steps.slice(0, step + 1).map((row, index) => (
-        <div key={row.text} className={cn("malik-activity-row", index === step && "is-current")}>
+      {visibleSources.length ? (
+        <div className="malik-live-source-icons" aria-label={`Найдено источников: ${visibleSources.length}`}>
+          {visibleSources.map((source) => <SourceIcon key={source.url} source={source} />)}
+          <span>Проверяю открытые источники</span>
+        </div>
+      ) : null}
+      {(steps.length ? steps : [{ id: "search-start", kind: "search", text: "Ищу по открытому вебу", at: Date.now() } as MalikResearchStep]).slice(-7).map((row, index, rows) => (
+        <div key={row.id} className={cn("malik-activity-row", index === rows.length - 1 && "is-current")}>
           <span className="malik-activity-icon" aria-hidden="true">
-            <ActivityIcon kind={row.kind} />
+            <ActivityIcon step={row} />
           </span>
           <span className="malik-activity-text">{row.text}</span>
-          {index === step ? (
+          {index === rows.length - 1 && research?.status !== "done" ? (
             <span className="malik-thinking-dots" aria-hidden="true">
               <i />
               <i />
@@ -567,7 +583,7 @@ function ThinkingBubble({ generationType, query = "" }: { generationType: Genera
       ))}
       <div className="malik-activity-row is-meta">
         <span className="malik-activity-icon" aria-hidden="true">
-          <ActivityIcon kind="done" />
+          <Timer className="h-[13px] w-[13px]" />
         </span>
         <span className="malik-activity-text">Работа {elapsed}s</span>
       </div>
@@ -575,6 +591,110 @@ function ThinkingBubble({ generationType, query = "" }: { generationType: Genera
   )
 }
 
+function SourceDrawer({ research, onClose }: { research: MalikMessageResearch; onClose: () => void }) {
+  const visibleSteps = research.steps
+    .filter((step, index, list) => list.findIndex((candidate) =>
+      candidate.kind === step.kind && candidate.domain === step.domain && candidate.text === step.text
+    ) === index)
+    .slice(-12)
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose()
+    }
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    document.addEventListener("keydown", closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener("keydown", closeOnEscape)
+    }
+  }, [onClose])
+
+  return createPortal(
+    <div className="malik-sources-drawer-layer">
+      <button type="button" aria-label="Закрыть источники" className="malik-sources-drawer-backdrop" onClick={onClose} />
+      <aside className="malik-sources-drawer" role="dialog" aria-modal="true" aria-label="Источники">
+        <header className="malik-sources-drawer__header">
+          <div>
+            <h2>Источники</h2>
+            <p>{research.sources.length} прочитано{research.tookMs ? ` · ${(research.tookMs / 1000).toFixed(1)}с` : ""}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Закрыть"><X className="h-5 w-5" /></button>
+        </header>
+
+        <div className="malik-sources-drawer__scroll">
+          {visibleSteps.length ? (
+            <section className="malik-sources-drawer__section" aria-label="Ход поиска">
+              <h3>Ход поиска</h3>
+              <div className="malik-sources-drawer__activity">
+                {visibleSteps.map((step) => (
+                  <div key={step.id} className="malik-sources-drawer__activity-row">
+                    <span><ActivityIcon step={step} /></span>
+                    <div>
+                      <strong>{step.text}</strong>
+                      {step.domain ? <small>{step.domain}</small> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="malik-sources-drawer__section" aria-label="Прочитанные страницы">
+            <h3>Прочитанные страницы</h3>
+            <div className="malik-sources-drawer__links">
+              {research.sources.map((source, index) => (
+                <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
+                  <SourceIcon source={source} />
+                  <span>
+                    <strong>{source.title || sourceDisplayName(source)}</strong>
+                    <small>{source.domain}</small>
+                  </span>
+                  <em>{index + 1}</em>
+                </a>
+              ))}
+            </div>
+          </section>
+        </div>
+      </aside>
+    </div>,
+    document.body,
+  )
+}
+
+function SourceDeck({ research }: { research: MalikMessageResearch }) {
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const sources = research.sources
+  if (!sources.length) return null
+
+  const distinctSources = sources.filter((source, index, list) =>
+    list.findIndex((candidate) => candidate.domain === source.domain) === index
+  )
+  const uniqueIconSources = distinctSources.slice(0, 4)
+
+  return (
+    <section className="malik-source-inline" aria-label="Источники ответа">
+      <p className="malik-source-inline__links">
+        <strong>Источники:</strong>{" "}
+        {distinctSources.slice(0, 5).map((source, index) => (
+          <React.Fragment key={source.url}>
+            {index > 0 ? ", " : null}
+            <a href={source.url} target="_blank" rel="noreferrer">{sourceDisplayName(source)}</a>
+          </React.Fragment>
+        ))}
+        {distinctSources.length > 5 ? ` и ещё ${distinctSources.length - 5}` : null}.
+      </p>
+      <button type="button" onClick={() => setDrawerOpen(true)} className="malik-source-pill" aria-label={`Открыть ${sources.length} источников`}>
+        <span className="malik-source-pill__icons">
+          {uniqueIconSources.map((source) => <SourceIcon key={source.url} source={source} />)}
+        </span>
+        <span>sources</span>
+      </button>
+      {drawerOpen ? <SourceDrawer research={research} onClose={() => setDrawerOpen(false)} /> : null}
+    </section>
+  )
+}
 function MessageBubble({
   message,
   onCopy,
@@ -599,7 +719,8 @@ function MessageBubble({
 }) {
   const isUser = message.role === "user"
   const isThinking = Boolean(message.isStreaming && !message.content && !message.generatedMedia)
-  const displayContent = isUser ? message.content : cleanChatViewText(message.content)
+  const displayContent = isUser ? message.content : cleanResearchDisplayText(message.content, message.research)
+  const responseModel = !isUser && message.modelId ? getMalikModel(message.modelId) : null
   return (
     <div data-malik-message={message.role} className={cn("malik-message-row flex w-full gap-3 sm:gap-4", isUser ? "malik-message-row-user justify-end" : "malik-message-row-assistant justify-start")}>
       {/* The mark is a progress indicator, not a byline: it appears while the
@@ -620,10 +741,23 @@ function MessageBubble({
               ? "malik-message-card-user whitespace-pre-wrap rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3 text-white sm:px-5 sm:py-4"
               : "malik-message-card-assistant whitespace-pre-wrap text-[#e9e3d6]",
         )}>
-          {message.generatedMedia ? <GeminiMediaGenerationCard media={message.generatedMedia} /> : displayContent || (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} /> : "")}
+          {responseModel && !message.generatedMedia ? (
+            <div className="malik-response-model" aria-label={`Ответ модели ${responseModel.label}`}>
+              <span className="malik-response-model__mark" aria-hidden="true">
+                <svg viewBox="0 0 44 44"><path d="M9 29 L22 15 L22 29 Z" fill="currentColor" /><path d="M24 15 H38 L24 29 Z" fill="currentColor" /></svg>
+              </span>
+              <span>{responseModel.label}</span>
+            </div>
+          ) : null}
+          {message.generatedMedia
+            ? <GeminiMediaGenerationCard media={message.generatedMedia} />
+            : displayContent || (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} /> : "")}
+          {!isUser && !message.isStreaming && message.research?.sources.length ? (
+            <SourceDeck research={message.research} />
+          ) : null}
         </div>
         {!isUser && message.content && !message.isStreaming && (
-          <div className="malik-message-actions mt-2 flex items-center gap-2 text-slate-500">
+          <div className={cn("malik-message-actions mt-2 flex items-center gap-2 text-slate-500", Boolean(message.research?.sources.length) && "is-research")}>
             <button type="button" title="Копировать" onClick={() => onCopy(message.id, displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
             <button type="button" title="Полезно" onClick={() => onFeedback?.(message.id, "up")} className={cn("rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "text-emerald-300")}><ThumbsUp className="h-4 w-4" /></button>
@@ -638,17 +772,16 @@ function MessageBubble({
   )
 }
 
-export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenCodex, onForceCanvas }: ChatViewProps) {
-  // A short tick when the answer lands. Only fires when the tab is focused and
-  // only on hardware that has a vibrator, so desktop gets nothing rather than a
-  // console warning.
+export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenCodex, onForceCanvas, projectName, projectDescription }: ChatViewProps) {
+  // One short pulse after the complete answer lands. Passing a number (rather
+  // than a pattern) deliberately keeps this to a single haptic event.
   const wasLoading = useRef(false)
   useEffect(() => {
     if (wasLoading.current && !isLoading && document.visibilityState === "visible") {
       try {
-        navigator.vibrate?.(12)
+        navigator.vibrate?.(20)
       } catch {
-        /* unsupported or blocked — the visual fade is the fallback */
+        /* unsupported or blocked */
       }
     }
     wasLoading.current = Boolean(isLoading)
@@ -658,7 +791,6 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
   const [lastSubmittedPrompt, setLastSubmittedPrompt] = useState("")
   const [effectivePlan, setEffectivePlan] = useState<AIPlan>(userPlan)
   const [responseDepth, setResponseDepth] = useState<ResponseDepth>(() => loadResponseDepth(userPlan))
-  const showUltra = canUseUltra(effectivePlan)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [feedbackMap, setFeedbackMap] = useState<Record<string, "up" | "down">>({})
   const [showAttachMenu, setShowAttachMenu] = useState(false)
@@ -807,12 +939,6 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
     setFeedbackMap((previous) => ({ ...previous, [messageId]: value }))
   }
 
-  const selectDepth = (depth: ResponseDepth) => {
-    if (depth === "ultra" && !showUltra) return
-    setResponseDepth(depth)
-    saveResponseDepth(depth)
-  }
-
   const handleQuickAction = (prefix: string) => {
     setPrompt((previous) => previous ? `${prefix}: ${previous}` : prefix)
     setShowAttachMenu(false)
@@ -886,14 +1012,36 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
       <div data-message-list className="malik-chat-scroll relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-44 pt-6 md:px-8 md:pb-48 lg:px-10">
         <div className="malik-message-list mx-auto flex w-full max-w-[768px] flex-col gap-8 sm:gap-10">
           {messages.length === 0 ? (
-            <div className="relative mt-10 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,.38)] backdrop-blur-xl sm:mt-16 sm:p-10">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_18%,rgba(228, 187, 94,.15),transparent_35%),radial-gradient(circle_at_78%_75%,rgba(217, 174, 69,.16),transparent_36%)]" />
-              <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-[0_0_60px_rgba(255,255,255,.16)]">
-                <svg viewBox="0 0 44 44" className="h-full w-full" aria-hidden="true"><rect width="44" height="44" rx="12" fill="white" /><path d="M9 29 L22 15 L22 29 Z" fill="#03040a" /><path d="M24 15 H38 L24 29 Z" fill="#03040a" /></svg>
+            projectName ? (
+              <div className="mx-auto mt-12 w-full max-w-2xl px-2 text-center sm:mt-20">
+                <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-amber-300/20 bg-amber-300/[0.08] text-amber-200 shadow-[inset_0_1px_0_rgba(255,255,255,.08)]">
+                  <FolderTree className="h-6 w-6" />
+                </div>
+                <h2 className="mt-5 text-2xl font-semibold tracking-[-0.025em] text-white">Начните работу над «{projectName}»</h2>
+                <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-zinc-500">{projectDescription || "Инструкции и выбранная Malik-модель уже привязаны к этому проекту."}</p>
+                <div className="mt-7 grid gap-2 text-left sm:grid-cols-2">
+                  {[
+                    "Составь план проекта по шагам",
+                    "Предложи production-ready архитектуру",
+                    "Определи риски и следующие действия",
+                    "Начни реализацию основной функции",
+                  ].map((suggestion) => (
+                    <button key={suggestion} type="button" onClick={() => handleQuickAction(suggestion)} className="rounded-xl border border-white/[0.08] bg-white/[0.025] px-4 py-3 text-xs leading-5 text-zinc-400 transition hover:border-white/[0.15] hover:bg-white/[0.05] hover:text-white">
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <h2 className="relative text-3xl font-black tracking-tight">Malik AI Max</h2>
-              <p className="relative mx-auto mt-2 max-w-xl text-sm leading-6 text-gray-500">Чат, код, canvas, файлы, голос, Codex және фото/видео generation — бәрі бір prompt ішінде.</p>
-            </div>
+            ) : (
+              <div className="relative mt-10 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,.38)] backdrop-blur-xl sm:mt-16 sm:p-10">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_18%,rgba(228, 187, 94,.15),transparent_35%),radial-gradient(circle_at_78%_75%,rgba(217, 174, 69,.16),transparent_36%)]" />
+                <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-[0_0_60px_rgba(255,255,255,.16)]">
+                  <svg viewBox="0 0 44 44" className="h-full w-full" aria-hidden="true"><rect width="44" height="44" rx="12" fill="white" /><path d="M9 29 L22 15 L22 29 Z" fill="#03040a" /><path d="M24 15 H38 L24 29 Z" fill="#03040a" /></svg>
+                </div>
+                <h2 className="relative text-3xl font-black tracking-tight">Malik AI Max</h2>
+                <p className="relative mx-auto mt-2 max-w-xl text-sm leading-6 text-gray-500">Чат, код, canvas, файлы, голос, Codex және фото/видео generation — бәрі бір prompt ішінде.</p>
+              </div>
+            )
           ) : (
             <>
               <div className="malik-date-chip">Сегодня</div>
@@ -921,104 +1069,43 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
         <div className="malik-composer-panel chat-composer mx-auto w-full max-w-[768px] rounded-[1.55rem] border border-white/10 bg-[#111112] p-3 sm:p-4">
           {localError && <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">{localError}</div>}
           {attachments.length > 0 && <div className="mb-3 flex flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => setAttachments((previous) => previous.filter((item) => item.id !== attachment.id))} />)}</div>}
-          <div className="malik-composer-top relative mb-2 flex items-center justify-between gap-3">
-            <MalikModelSelector
-              selectedModelId={selectedModelId}
-              plan={effectivePlan}
-              onSelect={onModelChange || (() => {})}
-              onOpenBilling={onOpenBilling}
+          <div className="malik-inline-composer">
+            <button type="button" onClick={() => setShowAttachMenu((value) => !value)} className={cn("malik-inline-action", showAttachMenu && "is-active")} aria-label="Добавить файл или инструмент">
+              <Plus className="h-5 w-5" />
+            </button>
+            <textarea
+              ref={textareaRef}
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault()
+                  handleGuardedSubmit()
+                }
+              }}
+              placeholder="Чем я могу помочь сегодня?"
+              className="malik-composer-textarea"
             />
-            <button type="button" onClick={() => textareaRef.current?.focus()} className="malik-composer-expand" aria-label="Развернуть поле ввода">
-              <Maximize2 className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="malik-depth-toggle mb-2 flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => selectDepth("fast")}
-              className={cn(
-                "malik-depth-toggle__btn inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold transition",
-                responseDepth === "fast"
-                  ? "malik-depth-toggle__btn--active border-cyan-400/50 bg-cyan-500/15 text-cyan-200"
-                  : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-200",
-              )}
-            >
-              <Zap className="h-3 w-3" />
-              Быстрый
-            </button>
-            <button
-              type="button"
-              onClick={() => selectDepth("deep")}
-              className={cn(
-                "malik-depth-toggle__btn inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold transition",
-                responseDepth === "deep"
-                  ? "malik-depth-toggle__btn--active border-violet-400/50 bg-violet-500/15 text-violet-200"
-                  : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-200",
-              )}
-            >
-              <Brain className="h-3 w-3" />
-              Глубокий
-            </button>
-            {showUltra ? (
-              <button
-                type="button"
-                onClick={() => selectDepth("ultra")}
-                className={cn(
-                  "malik-depth-toggle__btn malik-depth-toggle__btn--ultra inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold transition",
-                  responseDepth === "ultra"
-                    ? "malik-depth-toggle__btn--ultra-active border-amber-300/70 bg-gradient-to-r from-amber-500/30 via-yellow-400/25 to-amber-600/30 text-amber-100 shadow-[0_0_18px_rgba(251,191,36,.35)]"
-                    : "border-amber-500/35 bg-amber-500/[0.06] text-amber-200/80 hover:border-amber-400/55 hover:text-amber-100",
-                )}
-              >
-                <Crown className="h-3 w-3" />
-                Ultra Pro
+            <div className="malik-inline-composer__right">
+              <MalikModelSelector
+                selectedModelId={selectedModelId}
+                plan={effectivePlan}
+                onSelect={onModelChange || (() => {})}
+                onOpenBilling={onOpenBilling}
+              />
+              <button type="button" onClick={toggleRecording} className={cn("malik-inline-action", isRecording && "is-recording")} aria-label={isRecording ? "Остановить запись" : "Голосовой ввод"}>
+                <Mic className="h-5 w-5" />
               </button>
-            ) : null}
-          </div>
-          <textarea
-            ref={textareaRef}
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault()
-                handleGuardedSubmit()
-              }
-            }}
-            placeholder="Опишите вашу идею для Malik AI..."
-            className="malik-composer-textarea min-h-[50px] w-full resize-none bg-transparent text-[15px] text-white outline-none placeholder:text-slate-600 sm:min-h-[64px] sm:text-lg"
-          />
-          <div className="malik-composer-actions mt-2 flex items-center justify-between gap-2">
-            <div className="malik-composer-tools flex items-center gap-1.5">
-              <button type="button" onClick={() => setShowAttachMenu((value) => !value)} className="malik-composer-tool" aria-label="Прикрепить файл">
-                <Paperclip className="h-5 w-5" />
-              </button>
-              <button type="button" onClick={() => handleQuickAction("Собери структуру проекта")} className="malik-composer-tool" aria-label="Структура проекта">
-                <Layers className="h-5 w-5" />
-              </button>
-              <button type="button" onClick={() => handleQuickAction("Найди в сети свежую информацию")} className="malik-composer-tool" aria-label="Поиск в сети">
-                <Globe className="h-5 w-5" />
-              </button>
-              <button type="button" onClick={() => handleQuickAction("Усиль запрос и сделай профессионально")} className="malik-composer-tool malik-composer-tool-active" aria-label="Улучшить запрос">
-                <Sparkles className="h-5 w-5" />
-              </button>
-              <button type="button" onClick={() => handleQuickAction("Напиши код и объясни решение")} className="malik-composer-tool" aria-label="Код">
-                <Code className="h-5 w-5" />
-              </button>
-              <button type="button" onClick={() => setShowAttachMenu((value) => !value)} className="malik-composer-tool" aria-label="Еще">
-                <MoreHorizontal className="h-5 w-5" />
+              <button type="button" onClick={handleGuardedSubmit} disabled={isLoading || (!prompt.trim() && attachments.length === 0)} className="malik-inline-send" aria-label={isLoading ? "Malik AI отвечает" : "Отправить"}>
+                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <SendHorizontal className="h-5 w-5" />}
               </button>
             </div>
-            <div className="malik-composer-right-actions">
-              <button type="button" onClick={() => handleQuickAction("Усиль запрос и сделай профессионально")} className="malik-enhance-button">
-                <Wand2 className="h-4 w-4" />
-                <span>Улучшить промпт</span>
-              </button>
-              <button type="button" onClick={handleGuardedSubmit} disabled={isLoading || (!prompt.trim() && attachments.length === 0)} className="malik-send-button flex min-w-[118px] items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-black transition hover:scale-[1.02] disabled:opacity-40 sm:min-w-[132px] sm:px-7">
-                {isLoading ? "Думаю..." : "Отправить"}
-                <SendHorizontal className="h-4 w-4" />
-              </button>
-            </div>
+          </div>
+          <div className="malik-composer-context-row">
+            <button type="button" onClick={() => handleQuickAction("Найди в открытом вебе свежую информацию и покажи источники")}>
+              <Globe className="h-3.5 w-3.5" /> Веб и источники
+            </button>
+            <span>Enter — отправить · Shift + Enter — новая строка</span>
           </div>
           {showAttachMenu && (
             <div className="fixed inset-x-3 bottom-[152px] z-40 max-h-[58dvh] overflow-y-auto rounded-2xl border border-[#1F2937] bg-[#101010] p-2 shadow-2xl md:absolute md:bottom-[170px] md:left-6 md:w-[330px] md:max-w-[330px]">

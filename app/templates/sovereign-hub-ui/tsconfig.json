@@ -23,9 +23,6 @@
       }
     ],
     "paths": {
-      "@/lib/supabase": [
-        "./lib/supabase-runtime"
-      ],
       "@/*": [
         "./*"
       ]

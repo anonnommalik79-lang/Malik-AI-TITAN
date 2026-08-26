@@ -198,6 +198,13 @@ export async function runStrictMalikModel(input: {
         messages,
         max_tokens: input.maxTokens || Number(process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || 2200),
         temperature: input.temperature ?? Number(process.env.MALIK_GOD_TEMPERATURE || 0.4),
+        // Qwen 3.6 defaults to raw thinking mode on Groq. With a finite token
+        // budget that can produce only <think>…</think> and no user-facing
+        // answer. General Malik AI chat uses the model's documented
+        // non-thinking mode so message.content always contains the final text.
+        ...(model.provider === "groq" && model.providerModel === "qwen/qwen3.6-27b"
+          ? { reasoning_effort: "none" }
+          : {}),
         stream: false,
       }),
     }, Number(process.env.MALIK_MODEL_PROVIDER_TIMEOUT_MS || 30_000))

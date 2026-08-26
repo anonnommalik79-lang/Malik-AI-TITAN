@@ -5,10 +5,6 @@ export function isStorageConfigured(): boolean {
   return isCloudStorageConfigured()
 }
 
-export function isSupabaseStorageConfigured(): boolean {
-  return isCloudStorageConfigured()
-}
-
 export async function persistUploadMetadata(userId: string, file: UploadedFile) {
   if (!isStorageConfigured()) {
     return { stored: false, reason: "Storage is not configured. File kept as client preview only.", file }

@@ -1,6 +1,7 @@
 import type { AIPlan } from "./types"
 
 export type MalikModelId =
+  | "malik-8b"
   | "malik-20b"
   | "malik-27b"
   | "malik-30b"
@@ -41,6 +42,15 @@ export const MALIK_MODELS = [
     provider: "groq",
     providerModel: "qwen/qwen3.6-27b",
     capabilities: ["text", "vision", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-8b",
+    label: "MalikLLM8B",
+    description: "Лёгкая · Быстрые ответы",
+    tier: "pro",
+    provider: "cloudflare",
+    providerModel: "@cf/meta/llama-3.1-8b-instruct-fast",
+    capabilities: ["text"],
   },
   {
     id: "malik-30b",

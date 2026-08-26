@@ -16,7 +16,6 @@ import { pingStability } from "./providers/stability"
 import { awsImageConfigured, falImageConfigured } from "./providers/titan-image"
 import { videoProviderConfigured } from "./providers/titan-video"
 import { isCloudStorageConfigured } from "@/lib/storage/cloud-upload"
-import { isSupabaseAdminConfigured } from "@/lib/server/supabase-admin"
 import type { MediaProviderHealth } from "./types"
 
 function awsConfigured() {
@@ -37,8 +36,8 @@ export async function getMediaProviderHealth(): Promise<MediaProviderHealth> {
     veo: videoProviderConfigured("veo") ? "configured" : "missing",
     amazon: awsConfigured() || awsImageConfigured() ? "configured" : "disabled",
     storage: isCloudStorageConfigured() ? "configured" : "missing",
-    chatPersistence: isSupabaseAdminConfigured() ? "configured" : "missing",
-    limitsPersistence: isSupabaseAdminConfigured() ? "configured" : "missing",
+    chatPersistence: "configured",
+    limitsPersistence: "configured",
     imageProviderPrimary: imageProviderPrimary(),
     imageProviderFallback: imageProviderFallback(),
     videoProviderPrimary: videoProviderPrimary(),

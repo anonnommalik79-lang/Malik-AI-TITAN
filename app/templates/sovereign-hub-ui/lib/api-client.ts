@@ -96,17 +96,7 @@ export async function clientFetchWithTimeout(
   else parentSignal?.addEventListener("abort", abortFromParent, { once: true })
 
   try {
-    let headers = init.headers
-    if (isBrowser() && !new Headers(headers).has("authorization")) {
-      try {
-        const { getSupabaseClient } = await import("@/lib/supabase")
-        const { data } = await getSupabaseClient()?.auth.getSession() || { data: { session: null } }
-        if (data.session?.access_token) {
-          headers = { ...(headers || {}), authorization: `Bearer ${data.session.access_token}` }
-        }
-      } catch {}
-    }
-    return await fetch(buildApiUrl(path), { ...init, headers, signal: controller.signal })
+    return await fetch(buildApiUrl(path), { ...init, credentials: init.credentials || "same-origin", signal: controller.signal })
   } finally {
     clearTimeout(timeout)
     parentSignal?.removeEventListener("abort", abortFromParent)

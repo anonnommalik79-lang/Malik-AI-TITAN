@@ -122,7 +122,7 @@ const CAPABILITY_GROUP_SEEDS: CapabilityGroupSeed[] = [
       "Env validation generator",
       "Server/client boundary checker",
       "Database schema helper",
-      "Supabase helper",
+      "WorkOS AuthKit helper",
       "Auth flow builder",
       "GitHub README generator",
       "Git command helper",

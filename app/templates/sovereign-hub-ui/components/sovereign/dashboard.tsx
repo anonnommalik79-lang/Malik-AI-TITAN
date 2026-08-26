@@ -1,5 +1,6 @@
 "use client"
 import dynamic from "next/dynamic"
+import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import { Component, useState, useCallback, useEffect, useRef } from "react"
 import { Sidebar } from "./sidebar"
 import { WelcomeScreen } from "./welcome-screen"
@@ -7,7 +8,7 @@ import { ChatView } from "./chat-view"
 import { ChatInvestorBackground } from "./ChatInvestorBackground"
 import { PerformanceGuard } from "./performance-guard"
 import { PreviewPanel } from "./preview-panel"
-import { AuthScreen } from "./auth-screen"
+import { clearStoredAuthSnapshot, storeWorkOSProfile } from "@/lib/auth/client-session"
 import { FeatureCenter } from "./features/FeatureCenter"
 import { CapabilitiesPanel } from "./capabilities"
 import { MalikCodexModal } from "./codex/malik-codex-modal"
@@ -20,6 +21,12 @@ import { SovereignBillingPanel } from "./billing/sovereign-billing-panel"
 import { SovereignSettingsPanel } from "./settings/sovereign-settings-panel"
 import { SovereignSupportPanel } from "./support"
 import { TemplateGalleryPanel } from "./templates"
+import {
+  ProjectsWorkspace,
+  type MalikProjectColor,
+  type MalikProjectDraft,
+  type MalikProjectPatch,
+} from "./projects/ProjectsWorkspace"
 const FinalIntelligenceLab = dynamic(
   () => import("./final-intelligence/FinalIntelligenceLab").then((mod) => mod.FinalIntelligenceLab),
   { ssr: false },
@@ -113,6 +120,7 @@ import {
   type MalikModelId,
 } from "@/lib/ai/malik-models"
 import type { AIPlan } from "@/lib/ai/types"
+import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import {
   responseDepthInstruction,
   responseDepthLimits,
@@ -158,6 +166,7 @@ interface Message {
   isStreaming?: boolean
   intentType?: "chat" | "project"
   modelId?: MalikModelId
+  research?: MalikMessageResearch
 }
 
 interface ChatAttachment {
@@ -197,6 +206,10 @@ interface Chat {
   status?: "deployed" | "draft" | "building"
   techStack?: string[]
   selectedModelId?: MalikModelId
+  projectDescription?: string
+  projectInstructions?: string
+  projectColor?: MalikProjectColor
+  kind?: "chat" | "project"
 }
 
 
@@ -755,26 +768,7 @@ function safeRemoveStorage(key: string): void {
 }
 
 
-function isRefreshTokenReuseError(error: any): boolean {
-  const message = String(
-    error?.message ||
-      error?.error_description ||
-      error?.name ||
-      error ||
-      "",
-  ).toLowerCase()
-
-  return (
-    message.includes("refresh token") ||
-    message.includes("already used") ||
-    message.includes("token has been used") ||
-    message.includes("invalid refresh token") ||
-    message.includes("refresh_token_not_found") ||
-    message.includes("session_not_found")
-  )
-}
-
-function clearSupabaseAuthStorage(): void {
+function clearLegacyAuthStorage(): void {
   try {
     if (!isBrowser()) return
     const clearFrom = (storage: Storage) => {
@@ -782,8 +776,6 @@ function clearSupabaseAuthStorage(): void {
         const clean = key.toLowerCase()
         if (
           clean.startsWith("sb-") ||
-          clean.includes("supabase") ||
-          clean.includes("gotrue") ||
           clean.includes("auth-token") ||
           clean.includes("refresh-token") ||
           clean.includes("sovereign_v7_auth") ||
@@ -813,16 +805,48 @@ function clearSupabaseAuthStorage(): void {
   }
 }
 
-async function forceCleanLogout(): Promise<void> {
-  try {
-    const mod = await import("@/lib/supabase")
-    const supabase = mod.getSupabaseClient?.()
-    await supabase?.auth?.signOut?.()
-    mod.clearMalikAuthCache?.()
-  } catch (err) {
-    console.warn("[SUPABASE FORCE LOGOUT ERROR]", err)
-  } finally {
-    clearSupabaseAuthStorage()
+function reviveWebSource(value: any): MalikWebSource | null {
+  const url = typeof value?.url === "string" ? value.url.trim() : ""
+  if (!/^https?:\/\//i.test(url)) return null
+  let domain = typeof value?.domain === "string" ? value.domain.trim() : ""
+  if (!domain) {
+    try { domain = new URL(url).hostname.replace(/^www\./, "") } catch { domain = "source" }
+  }
+  return {
+    title: String(value?.title || domain).slice(0, 220),
+    url,
+    domain,
+    snippet: typeof value?.snippet === "string" ? value.snippet.slice(0, 1200) : undefined,
+    provider: typeof value?.provider === "string" ? value.provider.slice(0, 80) : undefined,
+    publishedAt: typeof value?.publishedAt === "string" ? value.publishedAt : undefined,
+  }
+}
+
+function reviveResearch(value: any): MalikMessageResearch | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const sources = Array.isArray(value.sources)
+    ? value.sources.map(reviveWebSource).filter(Boolean).slice(0, 12) as MalikWebSource[]
+    : []
+  const steps = Array.isArray(value.steps)
+    ? value.steps.slice(-16).map((step: any, index: number): MalikResearchStep => ({
+        id: String(step?.id || `restored-${index}`),
+        kind: ["plan", "search", "source", "reading", "done", "error"].includes(step?.kind) ? step.kind : "search",
+        text: String(step?.text || "Работа с источником").slice(0, 360),
+        domain: typeof step?.domain === "string" ? step.domain.slice(0, 140) : undefined,
+        title: typeof step?.title === "string" ? step.title.slice(0, 220) : undefined,
+        url: typeof step?.url === "string" && /^https?:\/\//i.test(step.url) ? step.url : undefined,
+        provider: typeof step?.provider === "string" ? step.provider.slice(0, 80) : undefined,
+        at: Number(step?.at) || Date.now(),
+      }))
+    : []
+  return {
+    status: value.status === "done" || value.status === "error" || value.status === "reading" ? value.status : "searching",
+    usedWeb: Boolean(value.usedWeb),
+    steps,
+    sources,
+    startedAt: Number(value.startedAt) || Date.now(),
+    tookMs: Number.isFinite(Number(value.tookMs)) ? Number(value.tookMs) : undefined,
+    webSourceCount: Number.isFinite(Number(value.webSourceCount)) ? Number(value.webSourceCount) : sources.length,
   }
 }
 
@@ -853,6 +877,7 @@ function reviveMessage(message: any): Message {
     isStreaming: false,
     intentType: message?.intentType === "project" ? "project" : "chat",
     modelId: isMalikModelId(message?.modelId) ? message.modelId : undefined,
+    research: reviveResearch(message?.research),
   }
 }
 
@@ -866,6 +891,10 @@ function reviveChat(chat: StoredChat): Chat {
     status: chat?.status === "deployed" || chat?.status === "building" ? chat.status : "draft",
     techStack: Array.isArray(chat?.techStack) ? chat.techStack : ["React", "Tailwind"],
     selectedModelId: isMalikModelId(chat?.selectedModelId) ? chat.selectedModelId : undefined,
+    projectDescription: typeof chat?.projectDescription === "string" ? chat.projectDescription.slice(0, 240) : undefined,
+    projectInstructions: typeof chat?.projectInstructions === "string" ? chat.projectInstructions.slice(0, 3000) : undefined,
+    projectColor: ["gold", "blue", "violet", "emerald", "rose"].includes(String(chat?.projectColor)) ? chat.projectColor : undefined,
+    kind: chat?.kind === "project" ? "project" : chat?.kind === "chat" ? "chat" : undefined,
   }
 }
 
@@ -882,9 +911,9 @@ type DashboardAuthSnapshot = {
   email: string
   name: string
   avatar: string
-  mode: "supabase" | "guest"
+  mode: "workos"
   isAdmin: boolean
-  role?: "creator" | "admin" | "user" | "guest"
+  role?: "creator" | "admin" | "user"
   lastLoginAt?: string
 }
 
@@ -901,7 +930,7 @@ function readDashboardAuthSnapshot(): DashboardAuthSnapshot | null {
             email: String(parsed.email),
             name: String(parsed.name || parsed.email || "Пользователь"),
             avatar: String(parsed.avatar || ""),
-            mode: parsed.mode === "guest" ? "guest" : "supabase",
+            mode: "workos",
             isAdmin: Boolean(parsed.isAdmin) || AUTH_ADMINS.includes(String(parsed.email).toLowerCase()),
             role: parsed.role,
             lastLoginAt: parsed.lastLoginAt,
@@ -916,8 +945,8 @@ function readDashboardAuthSnapshot(): DashboardAuthSnapshot | null {
     const modeRaw = safeGetStorage("malik_auth_mode")
     if (!email || !modeRaw) return null
 
-    const mode = modeRaw === "guest" ? "guest" : "supabase"
-    const name = safeGetStorage("malik_user_name") || (mode === "guest" ? "Гость" : email)
+    const mode = "workos" as const
+    const name = safeGetStorage("malik_user_name") || email
     const avatar = safeGetStorage("malik_user_avatar")
     const isAdmin = safeGetStorage("malik_is_admin") === "true" || AUTH_ADMINS.includes(String(email).toLowerCase())
 
@@ -927,7 +956,7 @@ function readDashboardAuthSnapshot(): DashboardAuthSnapshot | null {
       avatar,
       mode,
       isAdmin,
-      role: isAdmin ? (String(email).toLowerCase() === "amangeldymalik38@gmail.com" ? "creator" : "admin") : mode === "guest" ? "guest" : "user",
+      role: isAdmin ? (String(email).toLowerCase() === "amangeldymalik38@gmail.com" ? "creator" : "admin") : "user",
       lastLoginAt: safeGetStorage("malik_last_login_at"),
     }
   } catch {
@@ -944,7 +973,7 @@ function persistDashboardAuthSnapshot(snapshot: DashboardAuthSnapshot): void {
     safeSetStorage("malik_auth_snapshot", JSON.stringify(snapshot))
     safeSetStorage("malik_is_authenticated", "true")
     safeSetStorage("sovereign_authenticated", "true")
-    safeSetStorage("malik_user_role", snapshot.role || (snapshot.isAdmin ? "admin" : snapshot.mode === "guest" ? "guest" : "user"))
+    safeSetStorage("malik_user_role", snapshot.role || (snapshot.isAdmin ? "admin" : "user"))
     if (snapshot.avatar) safeSetStorage("malik_user_avatar", snapshot.avatar)
     else safeRemoveStorage("malik_user_avatar")
     if (snapshot.isAdmin) safeSetStorage("malik_is_admin", "true")
@@ -985,18 +1014,6 @@ function formatAdminDate(value?: string | null) {
   }
 }
 
-async function getDashboardAccessToken() {
-  try {
-    const mod = await import("@/lib/supabase")
-    const client = mod.getSupabaseClient?.()
-    if (!client) return ""
-    const { data } = await client.auth.getSession()
-    return data?.session?.access_token || ""
-  } catch {
-    return ""
-  }
-}
-
 function formatAdminDbPayload(payload: any, currentEmail: string) {
   const users = Array.isArray(payload?.users) ? payload.users as AdminDbUser[] : []
   if (!users.length) {
@@ -1030,22 +1047,9 @@ async function runAdminDbCommand(currentEmail: string, isAdmin: boolean) {
     return "ADMIN_DB denied. This command is only for creator/admin accounts."
   }
 
-  const token = await getDashboardAccessToken()
-  if (!token) {
-    return [
-      "ADMIN_DB local creator mode.",
-      `Creator: ${cleanEmail || "amangeldymalik38@gmail.com"}`,
-      "Cloud user list needs a live Supabase session token.",
-      "Sign in with email/OAuth after Supabase is configured, then run /admin_db again.",
-    ].join("\n")
-  }
-
   const response = await fetch("/api/admin/users", {
     method: "GET",
     cache: "no-store",
-    headers: {
-      authorization: `Bearer ${token}`,
-    },
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok || payload?.ok === false) {
@@ -4275,6 +4279,7 @@ function buildDashboardRuntimeDiagnostics() {
 
 
 export function Dashboard() {
+  const { user: workOSUser, loading: workOSLoading } = useAuth()
 // MALIK_LOGOUT_BRIDGE_V1
   useEffect(() => {
     function logoutToDragonAuth() {
@@ -4310,17 +4315,8 @@ export function Dashboard() {
         }
       }
 
-      try {
-        document.cookie.split(";").forEach((cookie) => {
-          document.cookie = cookie
-            .replace(/^ +/, "")
-            .replace(/=.*/, "=;expires=" + new Date(0).toUTCString() + ";path=/");
-        });
-      } catch {
-        // ignore
-      }
-
-      window.location.href = "/auth";
+      clearStoredAuthSnapshot()
+      window.location.href = "/sign-out";
     }
 
     try {
@@ -4357,7 +4353,7 @@ export function Dashboard() {
   }, []);
 
   // TANK PATCH: safeOpenView is stable; never put it in deps before initialization.
-  const [isAuthenticated, setIsAuthenticated] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState("home")
@@ -4371,42 +4367,11 @@ export function Dashboard() {
   const dashboardRuntimeIdRef = useRef(createDashboardRuntimeId("runtime"))
   const dashboardEventUnsubscribeRef = useRef<(() => void) | null>(null)
 
-  const [chats, setChats] = useState<Chat[]>([
-    {
-      id: "1",
-      title: "Рнтерфейс Sovereign Hub",
-      timestamp: new Date(Date.now() - 1000 * 60 * 30),
-      messages: [],
-      isPinned: true,
-      status: "deployed",
-      techStack: ["React", "Tailwind", "Framer"]
-    },
-    {
-      id: "2",
-      title: "Дашборд аналитики AI",
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-      messages: [],
-      status: "draft",
-      techStack: ["Next.js", "Recharts"]
-    },
-    {
-      id: "3",
-      title: "Quantum E-commerce",
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
-      messages: [],
-      status: "deployed",
-      techStack: ["React", "Stripe"]
-    },
-    {
-      id: "4",
-      title: "Neural Network Landing",
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48),
-      messages: [],
-      status: "building",
-      techStack: ["HTML", "CSS", "JS"]
-    },
-  ])
+  // Conversation history is restored from the user's persisted workspace below.
+  // Keep a clean account empty instead of manufacturing demo conversations.
+  const [chats, setChats] = useState<Chat[]>([])
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
+  const [activeProjectWorkspaceId, setActiveProjectWorkspaceId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isGeneratingTerminal, setIsGeneratingTerminal] = useState(false) // Новое состояние для терминала
@@ -4421,154 +4386,50 @@ export function Dashboard() {
   const [selectedModelId, setSelectedModelId] = useState<MalikModelId>(() => loadMalikModelSelection())
   const [currentPlan, setCurrentPlan] = useState<AIPlan>("free")
   const [planResolved, setPlanResolved] = useState(false)
-  const [authReady, setAuthReady] = useState(true)
+  const [authReady, setAuthReady] = useState(false)
   const [userAvatar, setUserAvatar] = useState<string>(safeGetStorage("malik_user_avatar", ""))
   const [userDisplayName, setUserDisplayName] = useState<string>(safeGetStorage("malik_user_name", ""))
   const [storageRestored, setStorageRestored] = useState(false)
 
-// =========================================================================
-  // KERNEL AUTH: OFFICIAL SUPABASE + LOCAL GUEST SESSION RESTORE
-  // =========================================================================
+  // WorkOS AuthKit is the only authority for authentication. Local state below is display cache only.
   useEffect(() => {
-    let alive = true
-    let unsubscribeAuth: (() => void) | undefined
-
-    const applySnapshot = (snapshot: DashboardAuthSnapshot | null) => {
-      if (!alive || !snapshot?.email || !snapshot?.mode) return false
-
-      persistDashboardAuthSnapshot(snapshot)
-      setUsername(snapshot.email)
-      setUserDisplayName(snapshot.name || (snapshot.mode === "guest" ? "Гость" : snapshot.email))
-      setUserAvatar(snapshot.avatar || "")
-      setIsAuthenticated(true)
-      setIsAdmin(Boolean(snapshot.isAdmin))
-      return true
+    if (workOSLoading) {
+      setAuthReady(false)
+      return
     }
 
-    const applyStoredSession = () => {
-      const stored = readDashboardAuthSnapshot()
-      if (!stored) return false
-      return applySnapshot(stored)
-    }
-
-    const applySupabaseUser = (user: any) => {
-      const profile = getProfileFromSessionUser(user)
-      if (!profile.email) return false
-
-      const snapshot: DashboardAuthSnapshot = {
-        email: profile.email,
-        name: profile.name || profile.email,
-        avatar: profile.avatar,
-        mode: "supabase",
-        isAdmin: AUTH_ADMINS.includes(profile.email.toLowerCase()),
-        role: profile.email.toLowerCase() === "amangeldymalik38@gmail.com" ? "creator" : AUTH_ADMINS.includes(profile.email.toLowerCase()) ? "admin" : "user",
-        lastLoginAt: new Date().toISOString(),
-      }
-
-      return applySnapshot(snapshot)
-    }
-
-    const resetAuthState = () => {
-      if (!alive) return
+    if (!workOSUser) {
+      clearStoredAuthSnapshot()
       setUsername("")
       setUserDisplayName("")
       setUserAvatar("")
       setIsAuthenticated(false)
       setIsAdmin(false)
+      setAuthReady(true)
+      window.location.replace("/auth")
+      return
     }
 
-    const initializeSovereignAuth = async () => {
-      try {
-        // Instant restore first: guest/login should not flash back to auth screen.
-        const restored = applyStoredSession()
-
-        const mod = await import("@/lib/supabase")
-        const supabase = mod.getSupabaseClient?.()
-
-        if (!supabase) {
-          if (!restored) resetAuthState()
-          return
-        }
-
-        const { data, error } = await supabase.auth.getSession()
-        if (error) throw error
-
-        if (data?.session?.user && applySupabaseUser(data.session.user)) {
-          return
-        }
-
-        if (!applyStoredSession()) {
-          resetAuthState()
-        }
-
-        const authListener = supabase.auth.onAuthStateChange((_event: string, session: any) => {
-          if (!alive) return
-          if (session?.user) {
-            applySupabaseUser(session.user)
-          } else if (!applyStoredSession()) {
-            resetAuthState()
-          }
-        })
-
-        unsubscribeAuth = () => {
-          try {
-            authListener?.data?.subscription?.unsubscribe?.()
-          } catch (err) {
-            console.warn("[AUTH UNSUBSCRIBE ERROR]", err)
-          }
-        }
-      } catch (e) {
-        console.error("[AUTH INIT ERROR]", e)
-
-        if (isRefreshTokenReuseError(e)) {
-          await forceCleanLogout()
-          safeSetStorage("malik_auth_error", "session_expired")
-          resetAuthState()
-          return
-        }
-
-        if (!applyStoredSession()) {
-          resetAuthState()
-        }
-      } finally {
-        if (alive) setAuthReady(true)
-      }
+    const email = workOSUser.email.trim().toLowerCase()
+    const isOwner = AUTH_ADMINS.includes(email)
+    const snapshot: DashboardAuthSnapshot = {
+      email,
+      name: workOSUser.name || [workOSUser.firstName, workOSUser.lastName].filter(Boolean).join(" ") || email.split("@")[0],
+      avatar: workOSUser.profilePictureUrl || "",
+      mode: "workos",
+      isAdmin: isOwner,
+      role: email === "amangeldymalik38@gmail.com" ? "creator" : isOwner ? "admin" : "user",
+      lastLoginAt: new Date().toISOString(),
     }
-
-    const handleAuthEvent = (event: Event) => {
-      const detail = (event as CustomEvent<Partial<DashboardAuthSnapshot>>).detail
-      if (detail?.email && detail?.mode) {
-        applySnapshot({
-          email: String(detail.email),
-          name: String(detail.name || detail.email || "Пользователь"),
-          avatar: String(detail.avatar || ""),
-          mode: detail.mode === "guest" ? "guest" : "supabase",
-          isAdmin: Boolean(detail.isAdmin) || AUTH_ADMINS.includes(String(detail.email).toLowerCase()),
-          role: detail.role || (String(detail.email).toLowerCase() === "amangeldymalik38@gmail.com" ? "creator" : Boolean(detail.isAdmin) ? "admin" : detail.mode === "guest" ? "guest" : "user"),
-          lastLoginAt: detail.lastLoginAt || new Date().toISOString(),
-        })
-        setAuthReady(true)
-        safeOpenView("home", "system")
-        return
-      }
-
-      if (applyStoredSession()) {
-        setAuthReady(true)
-        safeOpenView("home", "system")
-      }
-    }
-
-    window.addEventListener("malik-auth-updated", handleAuthEvent)
-    window.addEventListener("sovereign-auth-updated", handleAuthEvent)
-    initializeSovereignAuth()
-
-    return () => {
-      alive = false
-      window.removeEventListener("malik-auth-updated", handleAuthEvent)
-      window.removeEventListener("sovereign-auth-updated", handleAuthEvent)
-      if (unsubscribeAuth) unsubscribeAuth()
-    }
-  }, [])
+    persistDashboardAuthSnapshot(snapshot)
+    storeWorkOSProfile({ ...snapshot, id: workOSUser.id, role: snapshot.role || "user" })
+    setUsername(email)
+    setUserDisplayName(snapshot.name)
+    setUserAvatar(snapshot.avatar)
+    setIsAuthenticated(true)
+    setIsAdmin(isOwner)
+    setAuthReady(true)
+  }, [workOSLoading, workOSUser])
 
   useEffect(() => {
     let alive = true
@@ -4637,6 +4498,12 @@ export function Dashboard() {
     setPreviousView(activeViewRef.current || "home")
     activeViewRef.current = activeView
   }, [activeView])
+
+  useEffect(() => {
+    if (activeView === "projects" && previousView !== "projects") {
+      setActiveProjectWorkspaceId(null)
+    }
+  }, [activeView, previousView])
 
   const safeOpenView = useCallback((view: string, reason: DashboardRouteReason = "manual") => {
     const nextView = normalizeDashboardViewId(view)
@@ -4708,15 +4575,43 @@ export function Dashboard() {
       messages: [],
       selectedModelId,
       status: "draft",
-      techStack: ["React", "Tailwind"]
+      techStack: ["React", "Tailwind"],
+      kind: "chat",
     }
     setChats(prev => [newChat, ...prev])
     setActiveChatId(newChat.id)
+    setActiveProjectWorkspaceId(null)
     setMessages([])
     setGeneratedCode("")
     setCurrentVersion(1)
     setTotalVersions(1)
   }, [selectedModelId])
+
+  const handleCreateProject = useCallback((draft: MalikProjectDraft) => {
+    const newProject: Chat = {
+      id: crypto.randomUUID(),
+      title: draft.title,
+      timestamp: new Date(),
+      messages: [],
+      selectedModelId: draft.selectedModelId,
+      status: "draft",
+      techStack: ["Malik AI", getMalikModel(draft.selectedModelId).label],
+      projectDescription: draft.description,
+      projectInstructions: draft.instructions,
+      projectColor: draft.color,
+      kind: "project",
+    }
+    setChats((previous) => [newProject, ...previous])
+    setActiveChatId(newProject.id)
+    setActiveProjectWorkspaceId(newProject.id)
+    setMessages([])
+    setGeneratedCode("")
+    setStreamingText("")
+    setIsGeneratingTerminal(false)
+    setSelectedModelId(draft.selectedModelId)
+    saveMalikModelSelection(draft.selectedModelId)
+    safeOpenView("projects", "manual")
+  }, [])
 
   const launchTemplate = useCallback((template: MalikTemplate) => {
     const targetView = targetViewForTemplate(template)
@@ -4741,6 +4636,7 @@ export function Dashboard() {
       saveMalikModelSelection(chatModel)
       safeOpenView("home", "history")
       setActiveChatId(chatId)
+      setActiveProjectWorkspaceId(null)
       setMessages(chat.messages)
       const lastAssistantMsg = [...chat.messages].reverse().find(m => m.role === "assistant" && m.generatedCode)
       if (lastAssistantMsg?.generatedCode) {
@@ -4754,17 +4650,63 @@ export function Dashboard() {
     }
   }, [chats, currentPlan])
 
+  const handleSelectProject = useCallback((projectId: string) => {
+    const project = chats.find((chat) => chat.id === projectId)
+    if (!project) return
+
+    const projectModel = project.selectedModelId && canUseMalikModel(project.selectedModelId, currentPlan)
+      ? project.selectedModelId
+      : DEFAULT_MALIK_MODEL_ID
+    setSelectedModelId(projectModel)
+    saveMalikModelSelection(projectModel)
+    setActiveChatId(projectId)
+    setActiveProjectWorkspaceId(projectId)
+    setMessages(project.messages)
+    setGeneratedCode("")
+    setMobilePreviewOpen(false)
+    setIsGeneratingTerminal(false)
+    setStreamingText("")
+    safeOpenView("projects", "history")
+  }, [chats, currentPlan])
+
+  const handleCloseProject = useCallback(() => {
+    setActiveProjectWorkspaceId(null)
+    setStreamingText("")
+    setIsGeneratingTerminal(false)
+    safeOpenView("projects", "manual")
+  }, [])
+
   const handleDeleteChat = useCallback((chatId: string) => {
     setChats(prev => prev.filter(c => c.id !== chatId))
+    if (activeProjectWorkspaceId === chatId) setActiveProjectWorkspaceId(null)
     if (activeChatId === chatId) {
       setActiveChatId(null)
       setMessages([])
       setGeneratedCode("")
     }
-  }, [activeChatId])
+  }, [activeChatId, activeProjectWorkspaceId])
+
+  const handleRenameChat = useCallback((chatId: string, nextTitle: string) => {
+    const title = nextTitle.trim().slice(0, 90)
+    if (!title) return
+    setChats((previous) => previous.map((chat) => chat.id === chatId ? { ...chat, title } : chat))
+  }, [])
+
+  const handleTogglePinChat = useCallback((chatId: string) => {
+    setChats((previous) => previous.map((chat) => chat.id === chatId ? { ...chat, isPinned: !chat.isPinned } : chat))
+  }, [])
+
+  const handleUpdateProject = useCallback((projectId: string, patch: MalikProjectPatch) => {
+    setChats((previous) => previous.map((chat) => chat.id === projectId ? { ...chat, ...patch, timestamp: new Date() } : chat))
+    if (activeChatId === projectId && patch.selectedModelId && canUseMalikModel(patch.selectedModelId, currentPlan)) {
+      setSelectedModelId(patch.selectedModelId)
+      saveMalikModelSelection(patch.selectedModelId)
+    }
+  }, [activeChatId, currentPlan])
 
   const handleLogout = useCallback(async () => {
-    await forceCleanLogout()
+    clearStoredAuthSnapshot()
+    clearLegacyAuthStorage()
     setUsername("")
     setUserDisplayName("")
     setUserAvatar("")
@@ -4772,7 +4714,7 @@ export function Dashboard() {
     setIsAuthenticated(false)
     setAuthReady(true)
     if (typeof window !== "undefined") {
-      window.location.assign("/auth")
+      window.location.assign("/sign-out")
       return
     }
     safeOpenView("home", "system")
@@ -5124,6 +5066,40 @@ const normalizeStreamChunk = (parsed: any): string | null => {
   return parsed.content ?? parsed.text ?? parsed.message ?? parsed.response ?? parsed.delta ?? null
 }
 
+/**
+ * Some providers return the completed answer in one SSE event. Reveal that
+ * payload in a compact burst so the answer reads like a live response instead
+ * of popping onto the page as one large block. Long answers are capped below
+ * one second; reduced-motion users still receive the complete text at once.
+ */
+async function revealAssistantTextQuickly(text: string, onFrame: (visible: string) => void) {
+  const answer = String(text || "")
+  if (!answer) return
+
+  const reduceMotion = typeof window !== "undefined"
+    && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+  if (reduceMotion || answer.length < 4) {
+    onFrame(answer)
+    return
+  }
+
+  const durationMs = Math.min(900, Math.max(280, answer.length * 0.72))
+  const frameCount = Math.max(4, Math.ceil(durationMs / 16))
+  const charsPerFrame = Math.max(1, Math.ceil(answer.length / frameCount))
+
+  for (let end = charsPerFrame; end < answer.length; end += charsPerFrame) {
+    onFrame(answer.slice(0, end))
+    await new Promise<void>((resolve) => {
+      if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+        window.requestAnimationFrame(() => resolve())
+      } else {
+        setTimeout(resolve, 16)
+      }
+    })
+  }
+  onFrame(answer)
+}
+
 const handleSendMessage = useCallback(async (content: string, attachments: ChatAttachment[] = [], options?: ChatSendOptions) => {
   const cleanContent = (content || "").trim()
   if (!cleanContent || isLoading) return
@@ -5177,7 +5153,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       messages: [],
       selectedModelId,
       status: runtimePlan.status,
-      techStack: runtimePlan.techStack
+      techStack: runtimePlan.techStack,
+      kind: isProjReq ? "project" : "chat",
     }
     setChats(prev => [newChat, ...prev])
     setActiveChatId(chatId)
@@ -5200,6 +5177,20 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     isStreaming: true,
     intentType: inlineMediaKind ? "chat" : isProjReq ? "project" : "chat",
     modelId: selectedModelId,
+    research: options?.research
+      ? {
+          status: "searching",
+          usedWeb: true,
+          steps: [{
+            id: crypto.randomUUID(),
+            kind: "plan",
+            text: "Подключаю поиск по открытым источникам",
+            at: Date.now(),
+          }],
+          sources: [],
+          startedAt: Date.now(),
+        }
+      : undefined,
     generatedMedia: inlineMediaKind ? createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt) : undefined,
   }
 
@@ -5234,10 +5225,20 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     ? "\n\n[Вложения]: " + attachments.map(a => `${a.kind}:${a.name || a.url || "untitled"} (${a.mime || "text"})`).join(", ")
     : ""
 
-  const instruction = `${buildSovereignInstruction(mode, cleanContent + attachmentSummary)}\n\n${runtimePlan.instruction}\n\n${responseDepthInstruction(responseDepth)}`
+  const activeProject = chats.find((chat) => chat.id === chatId)
+  const projectContext = activeProject && (activeProject.projectDescription || activeProject.projectInstructions)
+    ? [
+        "[MALIK_PROJECT_CONTEXT]",
+        `Project: ${activeProject.title}`,
+        activeProject.projectDescription ? `Goal: ${activeProject.projectDescription}` : "",
+        activeProject.projectInstructions ? `Persistent project instructions:\n${activeProject.projectInstructions}` : "",
+        "Use this project context for the answer. Do not repeat this block to the user.",
+      ].filter(Boolean).join("\n")
+    : ""
+  const instruction = `${buildSovereignInstruction(mode, cleanContent + attachmentSummary)}\n\n${runtimePlan.instruction}\n\n${responseDepthInstruction(responseDepth)}${projectContext ? `\n\n${projectContext}` : ""}`
   const question = `${cleanContent}\n\n${instruction}`
 
-  const finalizeAssistant = (finalText: string, finalCode?: string) => {
+  const finalizeAssistant = (finalText: string, finalCode?: string, finalResearch?: MalikMessageResearch) => {
     const hasProjectCode = Boolean(finalCode && finalCode.trim().split("\n").length >= 25)
     const openPreview = isProjReq && hasProjectCode
     const safeContent = openPreview
@@ -5253,6 +5254,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
               generatedCode: openPreview ? finalCode : undefined,
               isStreaming: false,
               intentType: openPreview ? "project" : "chat",
+              research: finalResearch || m.research,
             }
           : m
       )
@@ -5283,6 +5285,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
                   generatedCode: openPreview ? finalCode : undefined,
                   isStreaming: false,
                   intentType: openPreview ? "project" : "chat",
+                  research: finalResearch || assistantMessage.research,
                 },
               ],
             }
@@ -5514,6 +5517,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return
   }
 
+  let finalResearch = assistantMessage.research
 
   try {
     dashboardEventBus.emit({
@@ -5523,13 +5527,53 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       payload: { chatId, mode, generationKind: routeDecision.generationKind },
     })
 
-    const accessToken = await getDashboardAccessToken()
+    const applyResearchProgress = (progress: MalikResearchProgress) => {
+      const source = reviveWebSource(progress.source || progress)
+      const previous = finalResearch || {
+        status: "searching" as const,
+        usedWeb: true,
+        steps: [],
+        sources: [],
+        startedAt: Date.now(),
+      }
+      const step: MalikResearchStep = {
+        id: crypto.randomUUID(),
+        kind: progress.kind,
+        text: String(progress.text || "Работа с открытым источником"),
+        domain: progress.domain,
+        title: progress.title,
+        url: progress.url,
+        provider: progress.provider,
+        at: Date.now(),
+      }
+      const sources = source && !previous.sources.some((item) => item.url === source.url)
+        ? [...previous.sources, source].slice(0, 12)
+        : previous.sources
+      const status: MalikMessageResearch["status"] = progress.kind === "error"
+        ? "error"
+        : progress.kind === "done"
+          ? "done"
+          : progress.kind === "reading"
+            ? "reading"
+            : "searching"
+      finalResearch = {
+        ...previous,
+        status,
+        usedWeb: true,
+        steps: [...previous.steps, step].slice(-16),
+        sources,
+        webSourceCount: Math.max(previous.webSourceCount || 0, sources.length),
+      }
+      setMessages((current) => current.map((message) =>
+        message.id === assistantMessage.id ? { ...message, research: finalResearch } : message
+      ))
+    }
+
     const response = await fetch('/api/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Accept': 'text/plain; charset=utf-8',
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        'Accept': 'text/event-stream',
       },
       body: JSON.stringify({
         question,
@@ -5562,6 +5606,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           expectedOutput: isProjReq ? "single-large-code-block" : isCodeReq ? "code-and-explanation" : "helpful-chat-answer",
         },
         responseDepth,
+        research: options?.research,
+        stream: true,
         maxTokens: depthLimits.maxTokens,
         temperature: depthLimits.temperature,
         quality: {
@@ -5588,7 +5634,87 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       throw new Error(message || `${getMalikModel(selectedModelId).label} временно недоступна.`)
     }
 
-    let fullText = cleanDashboardAIText(await response.text())
+    let fullText = ""
+    const responseType = response.headers.get("content-type") || ""
+
+    if (responseType.includes("text/event-stream") && response.body) {
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      const consumeEvent = (block: string) => {
+        const eventName = block.match(/^event:\s*(.+)$/m)?.[1]?.trim() || "message"
+        const rawData = block.split(/\r?\n/)
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trimStart())
+          .join("\n")
+        if (!rawData) return
+        let payload: any
+        try { payload = JSON.parse(rawData) } catch { return }
+
+        if (eventName === "progress" || payload?.type === "progress") {
+          applyResearchProgress(payload as MalikResearchProgress)
+          return
+        }
+        if (eventName === "content" || payload?.type === "content") {
+          const chunk = normalizeStreamChunk(payload)
+          if (!chunk) return
+          const nextText = String(chunk)
+          // Providers differ: some send a cumulative payload, others deltas.
+          fullText = nextText.startsWith(fullText) ? nextText : `${fullText}${nextText}`
+          return
+        }
+        if (eventName === "done" || payload?.type === "done") {
+          const sources = Array.isArray(payload?.sources)
+            ? payload.sources.map(reviveWebSource).filter(Boolean).slice(0, 12) as MalikWebSource[]
+            : finalResearch?.sources || []
+          if (payload?.usedWeb || finalResearch) {
+            const previous = finalResearch || {
+              status: "done" as const,
+              usedWeb: Boolean(payload?.usedWeb),
+              steps: [],
+              sources: [],
+              startedAt: Date.now(),
+            }
+            finalResearch = {
+              ...previous,
+              status: "done",
+              usedWeb: Boolean(payload?.usedWeb || previous.usedWeb),
+              sources,
+              tookMs: Number(payload?.tookMs) || Date.now() - previous.startedAt,
+              webSourceCount: Number(payload?.webSourceCount) || sources.length,
+            }
+          }
+          return
+        }
+        if (eventName === "error" || payload?.type === "error") {
+          throw new Error(payload?.message || payload?.error || "Malik AI временно недоступна.")
+        }
+      }
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const blocks = buffer.split(/\r?\n\r?\n/)
+        buffer = blocks.pop() || ""
+        blocks.forEach(consumeEvent)
+      }
+      buffer += decoder.decode()
+      if (buffer.trim()) consumeEvent(buffer)
+      fullText = cleanDashboardAIText(fullText)
+    } else {
+      fullText = cleanDashboardAIText(await response.text())
+    }
+
+    if (fullText && !isProjReq) {
+      await revealAssistantTextQuickly(fullText, (visibleText) => {
+        setStreamingText(visibleText)
+        setMessages((current) => current.map((message) =>
+          message.id === assistantMessage.id ? { ...message, content: visibleText } : message
+        ))
+      })
+    }
 
     if (fullText && !isWeakBackendAnswer(fullText)) {
       setStreamingText(fullText)
@@ -5608,6 +5734,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       finalizeAssistant(
         fullText || `${getMalikModel(selectedModelId).label} не вернула готовый ответ. Попробуйте ещё раз или выберите другую модель.`,
         undefined,
+        finalResearch,
       )
       return
     }
@@ -5636,7 +5763,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       view: activeViewRef.current,
       payload: { chatId, mode, hasCode: Boolean(code), textLength: (cleanText || fullText || "").length },
     })
-    finalizeAssistant(cleanDashboardAIText(cleanText || fullText), code)
+    finalizeAssistant(cleanDashboardAIText(cleanText || fullText), code, finalResearch)
   } catch (error) {
     console.error("Streaming error:", error)
     dashboardEventBus.emit({
@@ -5657,7 +5784,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
     setIsGeneratingTerminal(false)
 
-    finalizeAssistant(errorMessage, undefined)
+    finalizeAssistant(errorMessage, undefined, finalResearch ? { ...finalResearch, status: "error", tookMs: Date.now() - finalResearch.startedAt } : undefined)
   } finally {
     setIsLoading(false)
     setStreamingText("")
@@ -5797,39 +5924,12 @@ const shouldShowMobilePreviewButton =
   })
 
 
-  if (false && !authReady) {
+  if (!authReady) {
     return <LoadingShell />
   }
 
-  if (false && !isAuthenticated) {
-    return (
-      <AuthScreen
-        onSuccess={(user, pro) => {
-          const storedSnapshot = readDashboardAuthSnapshot()
-          const snapshot: DashboardAuthSnapshot = storedSnapshot || {
-            email: user || "guest@malik.ai",
-            name: user === "guest@malik.ai" || user === "Гость" ? "Гость" : user || "Пользователь",
-            avatar: safeGetStorage("malik_user_avatar", ""),
-            mode: user === "guest@malik.ai" || user === "Гость" ? "guest" : "supabase",
-            isAdmin: Boolean(pro),
-            lastLoginAt: new Date().toISOString(),
-          }
-
-          persistDashboardAuthSnapshot({
-            ...snapshot,
-            isAdmin: Boolean(snapshot.isAdmin || pro),
-          })
-
-          setUsername(snapshot.email)
-          setUserDisplayName(snapshot.name || snapshot.email)
-          setUserAvatar(snapshot.avatar || "")
-          setIsAdmin(Boolean(snapshot.isAdmin || pro))
-          setIsAuthenticated(true)
-          setAuthReady(true)
-          safeOpenView("home", "system")
-        }}
-      />
-    )
+  if (!isAuthenticated) {
+    return <LoadingShell />
   }
 
   const studioBridgeProps = {
@@ -5927,7 +6027,47 @@ const shouldShowMobilePreviewButton =
       return <TemplateGalleryPanel onLaunchTemplate={launchTemplate} />;
     }
     if (activeView === "projects") {
-      return <ProjectsView chats={chats} onSelectProject={handleSelectChat} onNewProject={handleNewChat} />;
+      const projectChats = chats.filter((chat) =>
+        chat.kind === "project"
+        || Boolean(chat.projectDescription || chat.projectInstructions)
+        || chat.messages.some((message) => message.intentType === "project" || Boolean(message.generatedCode)),
+      )
+      return (
+        <ProjectsWorkspace
+          projects={projectChats}
+          activeProjectId={activeProjectWorkspaceId}
+          selectedModelId={selectedModelId}
+          plan={currentPlan}
+          onSelectModel={handleModelChange}
+          onOpenBilling={() => safeOpenView("billing", "manual")}
+          onCreateProject={handleCreateProject}
+          onOpenProject={handleSelectProject}
+          onCloseProject={handleCloseProject}
+          onUpdateProject={handleUpdateProject}
+          onDeleteProject={handleDeleteChat}
+          onTogglePin={handleTogglePinChat}
+          onSendPrompt={(prompt) => handleSendMessage(prompt)}
+          renderProjectChat={() => (
+            <div className="malik-premium-chat-host malik-ai-chat-bg relative h-full min-h-0 overflow-hidden bg-black">
+              <ChatView
+                messages={messages}
+                onSendMessage={handleSendMessage}
+                isLoading={isLoading}
+                streamingText={streamingText}
+                currentUser={username}
+                userPlan={currentPlan}
+                selectedModelId={selectedModelId}
+                onModelChange={handleModelChange}
+                onOpenBilling={() => safeOpenView("billing", "manual")}
+                onOpenCodex={() => setCodexOpen(true)}
+                onForceCanvas={() => safeOpenCanvas(undefined, "project-chat")}
+                projectName={chats.find((chat) => chat.id === activeProjectWorkspaceId)?.title}
+                projectDescription={chats.find((chat) => chat.id === activeProjectWorkspaceId)?.projectDescription}
+              />
+            </div>
+          )}
+        />
+      );
     }
     if (activeView === "chats") {
       return <ChatsListView chats={chats} onSelectChat={handleSelectChat} onNewChat={handleNewChat} />;
@@ -5936,6 +6076,7 @@ const shouldShowMobilePreviewButton =
       <>
         <section className={cn(
           "flex min-w-0 flex-1 flex-col h-full transition-all duration-500 ease-out",
+          !shouldRenderEmptyHome && "malik-active-chat-shell",
           shouldShowPreviewPanel && "lg:border-r lg:border-[#1F2937] lg:shadow-[20px_0_50px_-20px_rgba(0,0,0,0.5)] lg:z-10"
         )}>
           {!shouldRenderEmptyHome ? (
@@ -6096,51 +6237,13 @@ const shouldShowMobilePreviewButton =
             position: relative;
             isolation: isolate;
             overflow: hidden !important;
-            background:
-              radial-gradient(ellipse 80% 44% at 50% 92%, rgba(217, 174, 69, 0.34), transparent 55%),
-              radial-gradient(ellipse 62% 30% at 52% 82%, rgba(211, 162, 62, 0.18), transparent 58%),
-              radial-gradient(circle at 18% 15%, rgba(211, 162, 62, 0.12), transparent 30%),
-              radial-gradient(circle at 84% 20%, rgba(217, 174, 69, 0.13), transparent 34%),
-              linear-gradient(180deg, rgba(2, 7, 22, 0.98), rgba(3, 5, 16, 0.96) 54%, rgba(4, 8, 24, 0.98));
+            background: #000;
           }
 
-          .malik-ai-chat-bg::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            z-index: 0;
-            pointer-events: none;
-            background:
-              radial-gradient(circle at 14% 18%, rgba(220, 240, 255, 0.46) 0 1px, transparent 1.4px),
-              radial-gradient(circle at 78% 24%, rgba(190, 210, 255, 0.38) 0 1px, transparent 1.5px),
-              radial-gradient(circle at 55% 34%, rgba(150, 180, 255, 0.26) 0 1px, transparent 1.6px),
-              linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(255, 255, 255, 0.023) 1px, transparent 1px);
-            background-size: 310px 210px, 420px 290px, 520px 360px, 36px 36px, 36px 36px;
-            background-position: 0 0, 80px 30px, 180px 70px, 0 0, 0 0;
-            opacity: 0.72;
-            mask-image: linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0.86) 50%, rgba(0,0,0,0.36));
-          }
-
+          .malik-ai-chat-bg::before,
           .malik-ai-chat-bg::after {
-            content: "";
-            position: absolute;
-            left: 50%;
-            bottom: 92px;
-            z-index: 0;
-            pointer-events: none;
-            width: min(1200px, 96%);
-            height: 210px;
-            transform: translateX(-50%);
-            border-radius: 50% 50% 0 0;
-            background:
-              radial-gradient(ellipse at center, rgba(217, 174, 69, 0.34), rgba(126, 58, 242, 0.16) 34%, transparent 72%);
-            border-top: 1px solid rgba(190, 145, 255, 0.58);
-            box-shadow:
-              0 -1px 34px rgba(217, 174, 69, 0.52),
-              0 -14px 100px rgba(228, 187, 94, 0.16),
-              0 -26px 140px rgba(126, 58, 242, 0.12);
-            opacity: 0.98;
+            content: none;
+            display: none;
           }
 
           .malik-ai-chat-bg > * {
@@ -6157,22 +6260,6 @@ const shouldShowMobilePreviewButton =
             background-color: transparent !important;
           }
 
-          @media (prefers-reduced-motion: no-preference) {
-            .malik-ai-chat-bg::after {
-              animation: malikChatHorizonGlow 7s ease-in-out infinite;
-            }
-
-            @keyframes malikChatHorizonGlow {
-              0%, 100% {
-                opacity: 0.82;
-                transform: translateX(-50%) scaleX(0.985);
-              }
-              50% {
-                opacity: 1;
-                transform: translateX(-50%) scaleX(1.018);
-              }
-            }
-          }
           /* END_MALIK_CHAT_AI_BACKGROUND_V1 */
           /* MALIK_PREMIUM_CHAT_HOST_CSS_V3 */
           .malik-premium-chat-host {
@@ -6344,6 +6431,9 @@ const shouldShowMobilePreviewButton =
           onNewChat={handleNewChat}
           onSelectChat={handleSelectChat}
           onDeleteChat={handleDeleteChat}
+          onRenameChat={handleRenameChat}
+          onTogglePinChat={handleTogglePinChat}
+          activeChatId={activeChatId}
           activeView={activeView}
           onViewChange={(view) => safeOpenView(view, "manual")}
           chats={chats}
@@ -6359,6 +6449,9 @@ const shouldShowMobilePreviewButton =
           onNewChat={() => { handleNewChat(); setMobileMenuOpen(false) }}
           onSelectChat={(id) => { handleSelectChat(id); setMobileMenuOpen(false) }}
           onDeleteChat={handleDeleteChat}
+          onRenameChat={handleRenameChat}
+          onTogglePinChat={handleTogglePinChat}
+          activeChatId={activeChatId}
           activeView={activeView}
           onViewChange={(view) => safeOpenView(view, "sidebar")}
           chats={chats}
@@ -7457,7 +7550,7 @@ const MALIK_200_TEMPLATE_LIBRARY: SovereignTemplate[] = [
 const MALIK_CONNECTED_MODULES: SovereignModule[] = [
     {
       name: "Auth Shield",
-      description: "Supabase restore, guest restore, avatar sync, logout bridge",
+      description: "WorkOS session restore, avatar sync, secure logout bridge",
       health: 89,
       status: "connected",
     },
@@ -7517,7 +7610,7 @@ const MALIK_CONNECTED_MODULES: SovereignModule[] = [
     },
     {
       name: "Admin DB",
-      description: "/admin_db owner command and Supabase users",
+      description: "/admin_db owner command and WorkOS users",
       health: 87,
       status: "connected",
     },

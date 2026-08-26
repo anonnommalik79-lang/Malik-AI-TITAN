@@ -292,7 +292,7 @@ const sections: Record<string, DemoSection> = {
     method: "GET",
     kind: "settings",
     nextView: "billing",
-    stats: [["Profile", "Ready", "User session"], ["OAuth", "Safe", "Supabase flags"], ["Admin", "Gated", "Debug only admin"]],
+    stats: [["Profile", "Ready", "WorkOS session"], ["OAuth", "Safe", "AuthKit providers"], ["Admin", "Gated", "Debug only admin"]],
     features: [["Identity surface", "Looks like a real app profile screen."], ["OAuth readiness", "Google/GitHub/Apple/Microsoft flags remain server-safe."], ["Admin privacy", "Debug is hidden unless admin env allows it."]],
     gallery: [["Profile", "User"], ["Access", "Roles"], ["Security", "Session"]],
     workflow: [["Login", "Session state"], ["Profile", "Sync identity"], ["Access", "Role checks"], ["Debug", "Admin only"]],

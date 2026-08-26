@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 import type { AiModeId } from "./power-registry"
 import { AI_MODES } from "./power-registry"
-import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/supabase"
+import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/auth/client-session"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
@@ -340,6 +340,8 @@ function TitanTopBarInner({
           border-bottom: 1px solid var(--malik-border, rgba(212, 175, 55, 0.14));
           background: var(--malik-surface, #0e0e10);
           padding: 0 14px;
+          color: #fff;
+          font-family: Inter, "Segoe UI", Arial, sans-serif;
         }
 
         .titan-tabs {
@@ -365,14 +367,14 @@ function TitanTopBarInner({
           padding: 0 14px;
           border-radius: 999px;
           border: 1px solid transparent;
-          color: #8f887d;
+          color: #f5f5f5;
           font-size: 13px;
           font-weight: 500;
           white-space: nowrap;
           transition: color 0.14s ease, background-color 0.14s ease, border-color 0.14s ease;
         }
         .titan-tab:hover {
-          color: var(--malik-accent-pale, #f3de96);
+          color: #fff;
           background: var(--malik-accent-4, rgba(212, 175, 55, 0.04));
         }
         .titan-tab:focus-visible {
@@ -406,7 +408,7 @@ function TitanTopBarInner({
           border-radius: 10px;
           border: 1px solid var(--malik-border, rgba(212, 175, 55, 0.14));
           background: rgba(255, 255, 255, 0.02);
-          color: #6f695f;
+          color: #f5f5f5;
           font-size: 13px;
           transition: border-color 0.14s ease, color 0.14s ease;
         }
@@ -417,7 +419,7 @@ function TitanTopBarInner({
         }
         .titan-search:hover {
           border-color: var(--malik-border-strong, rgba(212, 175, 55, 0.28));
-          color: #b9b1a3;
+          color: #fff;
         }
         .titan-search span {
           flex: 1;
@@ -426,7 +428,7 @@ function TitanTopBarInner({
         .titan-search kbd {
           font-family: inherit;
           font-size: 11px;
-          color: #6f695f;
+          color: rgba(255, 255, 255, 0.68);
         }
 
         .titan-icon-btn {
@@ -439,7 +441,7 @@ function TitanTopBarInner({
           justify-content: center;
           border-radius: 10px;
           border: 1px solid transparent;
-          color: #8f887d;
+          color: #f5f5f5;
           transition: color 0.14s ease, background-color 0.14s ease, border-color 0.14s ease;
         }
         .titan-icon-btn.is-round {

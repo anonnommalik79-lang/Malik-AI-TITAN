@@ -1,10 +1,7 @@
 "use client";
 
-import React, { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { FormEvent, useCallback, useRef, useState } from "react";
 import { Check, ChevronRight, Eye, EyeOff, Lock, Mail, User } from "lucide-react";
-import { loginWithSocialProvider, type SocialProviderId } from "@/lib/auth/social-providers";
-import { isSupabaseConfigured, persistGuestUser, persistLocalUser } from "@/lib/supabase";
 import SovereignMobileRegister from "@/components/sovereign/SovereignMobileRegister";
 import { AUTH_DRAGON_BACKGROUND, AUTH_DRAGON_JPG } from "@/lib/brand-assets";
 
@@ -34,19 +31,6 @@ const T = {
 
 function read(ref: React.RefObject<HTMLInputElement | null>) {
   return ref.current?.value?.trim() || "";
-}
-
-type OAuthProviderState = { id: SocialProviderId; name: string; enabled: boolean; configured: boolean }
-
-async function loadOAuthProviders(): Promise<OAuthProviderState[]> {
-  try {
-    const response = await fetch("/api/health/auth", { cache: "no-store" });
-    if (!response.ok) throw new Error("auth health unavailable");
-    const data = await response.json();
-    return Array.isArray(data?.oauthProviders) ? data.oauthProviders : [];
-  } catch {
-    return [];
-  }
 }
 
 function ProviderIcon({ type }: { type: Provider }) {
@@ -92,7 +76,6 @@ function ProviderIcon({ type }: { type: Provider }) {
 }
 
 export function SovereignVideoAuth() {
-  const router = useRouter();
   const usernameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -106,20 +89,6 @@ export function SovereignVideoAuth() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [usernameValue, setUsernameValue] = useState("Abdumalik");
-  const [oauthProviders, setOauthProviders] = useState<OAuthProviderState[]>([]);
-  const supabaseReady = isSupabaseConfigured();
-
-  useEffect(() => {
-    void loadOAuthProviders().then(setOauthProviders);
-  }, []);
-
-  const openGuest = useCallback(() => {
-    if (isOpening) return;
-    setIsOpening(true);
-    persistGuestUser();
-    router.push("/dashboard");
-  }, [isOpening, router]);
-
   const submit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -135,66 +104,15 @@ export function SovereignVideoAuth() {
 
     setIsOpening(true);
     setMessage("");
-    try {
-      const mod = await import("@/lib/supabase");
-      const supabase = mod.getSupabaseClient();
-      if (!supabase) {
-        mod.persistLocalUser?.(email, username);
-        router.push("/dashboard");
-        return;
-      }
-      if (authMode === "signin") {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        if (!data.session?.user) throw new Error("No session returned");
-        mod.persistSupabaseUser(data.session.user);
-        await mod.syncProfile(data.session);
-        router.push("/dashboard");
-        return;
-      }
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { name: username, full_name: username }, emailRedirectTo: `${window.location.origin}/auth/callback` },
-      });
-      if (error) throw error;
-      if (!data.session) {
-        mod.persistLocalUser?.(data.user?.email || email, username);
-        router.push("/dashboard");
-        return;
-      }
-      mod.persistSupabaseUser(data.session.user);
-      await mod.syncProfile(data.session);
-      router.push("/dashboard");
-    } catch {
-      setMessage(supabaseReady
-        ? "Email auth failed. Check credentials or use guest mode."
-        : "Supabase is not configured. Continue as guest.");
-      setIsOpening(false);
-    }
-  }, [router, authMode, supabaseReady, usernameValue]);
+    window.location.assign("/sign-in");
+  }, [authMode, usernameValue]);
 
-  const openOAuth = useCallback(async (provider: SocialProviderId) => {
+  const openOAuth = useCallback((_provider: "google" | "github") => {
     if (isOpening) return;
-    if (!supabaseReady) {
-      setMessage("Configure Supabase to enable OAuth.");
-      return;
-    }
     setIsOpening(true);
     setMessage("");
-    try {
-      const row = oauthProviders.find((item) => item.id === provider);
-      if (row && !row.enabled) {
-        setMessage(row?.configured === false ? "Configure Supabase to enable OAuth." : "This provider is disabled.");
-        setIsOpening(false);
-        return;
-      }
-      await loginWithSocialProvider(provider, `${window.location.origin}/auth/callback`);
-    } catch {
-      setMessage("Secure social login is temporarily unavailable. Please use guest mode or try again later.");
-      setIsOpening(false);
-    }
-  }, [isOpening, oauthProviders, supabaseReady]);
+    window.location.assign("/sign-in");
+  }, [isOpening]);
 
   return (
     <>
@@ -323,23 +241,13 @@ export function SovereignVideoAuth() {
               {([
                 { id: "google" as const, label: "Google", type: "google" as Provider },
                 { id: "github" as const, label: "GitHub", type: "github" as Provider },
-                { id: "apple" as const, label: "Apple", type: "apple" as Provider },
-                { id: "microsoft" as const, label: "Microsoft", type: "microsoft" as Provider },
               ]).map((item) => {
-                const row = oauthProviders.find((p) => p.id === item.id);
                 const disabled = isOpening;
-                const tooltip = !supabaseReady
-                  ? "Configure Supabase"
-                  : row && !row.enabled
-                    ? "Provider disabled in env"
-                    : item.id === "microsoft"
-                      ? "Microsoft / Azure OAuth"
-                      : "";
                 return (
                   <button
                     key={item.id}
                     type="button"
-                    title={tooltip}
+                    title={`Войти через ${item.label} в WorkOS AuthKit`}
                     onClick={() => openOAuth(item.id)}
                     disabled={disabled}
                   >
@@ -349,11 +257,6 @@ export function SovereignVideoAuth() {
                 );
               })}
             </div>
-
-            <button className="sva-guest" type="button" onClick={openGuest} disabled={isOpening}>
-              <User size={15} strokeWidth={2.2} />
-              <span>{T.guest}</span>
-            </button>
 
             {message && <p className="sva-message">{message}</p>}
           </form>

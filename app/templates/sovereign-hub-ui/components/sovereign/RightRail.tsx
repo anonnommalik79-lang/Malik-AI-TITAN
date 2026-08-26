@@ -253,6 +253,8 @@ function RightRailInner({
           border-left: 1px solid var(--malik-border, rgba(212, 175, 55, 0.14));
           background: var(--malik-surface, #0e0e10);
           padding: 14px;
+          color: #fff;
+          font-family: Inter, "Segoe UI", Arial, sans-serif;
           scrollbar-width: thin;
           scrollbar-color: rgba(212, 175, 55, 0.22) transparent;
         }
@@ -279,7 +281,7 @@ function RightRailInner({
         .titan-rail-head h2 {
           font-size: 13px;
           font-weight: 600;
-          color: var(--malik-text, #f5f2ea);
+          color: #fff;
         }
 
         .titan-rail-link {
@@ -343,7 +345,7 @@ function RightRailInner({
           white-space: nowrap;
           font-size: 13px;
           line-height: 1.25;
-          color: #d8d1c4;
+          color: #fff;
         }
         .titan-rail-item:hover .titan-rail-item-title {
           color: #fff8ea;
@@ -354,14 +356,14 @@ function RightRailInner({
           margin-top: 2px;
           font-size: 11px;
           line-height: 1.2;
-          color: #6f695f;
+          color: rgba(255, 255, 255, 0.62);
         }
 
         .titan-rail-empty {
           padding: 6px 4px 4px;
           font-size: 12px;
           line-height: 1.5;
-          color: #6f695f;
+          color: rgba(255, 255, 255, 0.66);
         }
 
         /* ---------------------------------------------------------- switch */
@@ -443,7 +445,7 @@ function RightRailInner({
           align-items: center;
           gap: 9px;
           font-size: 12.5px;
-          color: #8f887d;
+          color: rgba(255, 255, 255, 0.78);
         }
         .titan-context dt svg {
           color: var(--malik-accent-bright, #e8c56a);
@@ -457,7 +459,7 @@ function RightRailInner({
           white-space: nowrap;
           font-size: 12.5px;
           font-weight: 500;
-          color: #d8d1c4;
+          color: #fff;
         }
 
         /* ---------------------------------------------------------- status */
@@ -494,7 +496,7 @@ function RightRailInner({
           width: 44px;
           flex-shrink: 0;
           font-size: 12px;
-          color: #8f887d;
+          color: rgba(255, 255, 255, 0.8);
         }
         .titan-meter-track {
           position: relative;
@@ -516,7 +518,7 @@ function RightRailInner({
           text-align: right;
           font-size: 12px;
           font-variant-numeric: tabular-nums;
-          color: #d8d1c4;
+          color: #fff;
         }
 
         /* ----------------------------------------------------------- promo */
@@ -536,12 +538,12 @@ function RightRailInner({
           font-size: 14px;
           font-weight: 700;
           letter-spacing: 0.01em;
-          color: var(--malik-text, #f5f2ea);
+          color: #fff;
         }
         .titan-rail-promo p {
           margin: 5px 0 12px;
           font-size: 12.5px;
-          color: #9a9186;
+          color: rgba(255, 255, 255, 0.76);
         }
         .titan-promo-cta {
           height: 34px;

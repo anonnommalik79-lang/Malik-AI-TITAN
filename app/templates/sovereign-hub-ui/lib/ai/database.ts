@@ -1,6 +1,6 @@
 ﻿export type DatabaseStatus = {
   configured: boolean
-  mode: "postgres" | "supabase" | "memory"
+  mode: "postgres" | "memory"
   message: string
 }
 
@@ -41,11 +41,7 @@ function id(prefix: string) {
 
 export function databaseStatus(): DatabaseStatus {
   const databaseUrl = Boolean(process.env.DATABASE_URL?.trim())
-  const supabaseUrl = Boolean(process.env.SUPABASE_URL?.trim() || process.env.NEXT_PUBLIC_SUPABASE_URL?.trim())
-  const serviceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim())
-
   if (databaseUrl) return { configured: true, mode: "postgres", message: "DATABASE_URL configured." }
-  if (supabaseUrl) return { configured: serviceRole, mode: "supabase", message: serviceRole ? "Supabase server runtime configured." : "Identity URL configured. Service role is still required on the server for persistent admin operations." }
   return { configured: false, mode: "memory", message: "DATABASE_URL missing. Using safe in-memory dev mode." }
 }
 

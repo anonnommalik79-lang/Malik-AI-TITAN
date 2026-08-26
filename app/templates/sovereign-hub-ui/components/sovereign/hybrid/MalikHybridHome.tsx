@@ -13,21 +13,22 @@ import {
   Mic,
   Paperclip,
   Plus,
-  Wrench,
   type LucideIcon,
 } from "lucide-react"
 import { prefetchChatShell } from "@/lib/studio-prefetch"
 import { PREFILL_EVENT, takePrefillPrompt, useContextEnabled } from "@/lib/malik-context"
 import { DEFAULT_MALIK_MODEL_ID, type MalikModelId } from "@/lib/ai/malik-models"
+import type { ChatSendOptions } from "@/lib/ai/response-depth"
 import type { AIPlan } from "@/lib/ai/types"
 import { HOME_MALIK_TEMPLATES, type MalikTemplate } from "@/lib/malik-template-registry"
 import { MalikModelSelector } from "../MalikModelSelector"
+import type { ChatAttachment } from "../chat-view"
 import type { AiModeId } from "../power-registry"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
 export interface MalikHybridHomeProps {
-  onSubmit: (prompt: string) => void
+  onSubmit: (prompt: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => void
   isLoading?: boolean
   onOpenCodex?: () => void
   onOpenTemplates?: () => void
@@ -125,74 +126,69 @@ function HomeComposer({
 
   return (
     <section className="thome-composer" aria-label="Новый запрос">
-      <textarea
-        ref={textareaRef}
-        value={prompt}
-        onFocus={prefetchChatShell}
-        onChange={(event) => {
-          if (event.target.value.trim()) prefetchChatShell()
-          onPromptChange(event.target.value)
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault()
-            onSubmit()
-          }
-        }}
-        rows={1}
-        aria-label="Спросите Malik AI"
-        placeholder="Спросите Malik AI"
-      />
-
-      <div className="thome-composer-bar">
-        <div className="thome-composer-left">
-          <button type="button" onClick={onOpenCanvas} className="thome-icon-button" aria-label="Добавить файл">
+      <div className="thome-composer-row">
+        <div className="thome-tools" ref={toolsRef}>
+          <button
+            type="button"
+            onClick={() => setToolsOpen((open) => !open)}
+            className={cn("thome-icon-button thome-plus-button", toolsOpen && "is-open")}
+            aria-label="Добавить файл или инструмент"
+            aria-expanded={toolsOpen}
+            aria-haspopup="menu"
+          >
             <Plus aria-hidden="true" />
           </button>
 
-          <div className="thome-tools" ref={toolsRef}>
-            <button
-              type="button"
-              className={cn("thome-tools-trigger", toolsOpen && "is-open")}
-              onClick={() => setToolsOpen((open) => !open)}
-              aria-expanded={toolsOpen}
-              aria-haspopup="menu"
-            >
-              <Wrench aria-hidden="true" />
-              Инструменты
-            </button>
+          {toolsOpen ? (
+            <div className="thome-tools-menu" role="menu" aria-label="Инструменты Malik AI">
+              {tools.map((tool) => {
+                const Icon = tool.icon
+                return (
+                  <button
+                    key={tool.id}
+                    type="button"
+                    role="menuitem"
+                    className={cn("thome-tools-item", tool.active && "is-active")}
+                    onClick={() => openAndClose(tool.action)}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{tool.label}</span>
+                    {tool.active ? <span className="thome-tools-state">Вкл.</span> : null}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+        </div>
 
-            {toolsOpen ? (
-              <div className="thome-tools-menu" role="menu" aria-label="Инструменты Malik AI">
-                {tools.map((tool) => {
-                  const Icon = tool.icon
-                  return (
-                    <button
-                      key={tool.id}
-                      type="button"
-                      role="menuitem"
-                      className={cn("thome-tools-item", tool.active && "is-active")}
-                      onClick={() => openAndClose(tool.action)}
-                    >
-                      <Icon aria-hidden="true" />
-                      <span>{tool.label}</span>
-                      {tool.active ? <span className="thome-tools-state">Вкл.</span> : null}
-                    </button>
-                  )
-                })}
-              </div>
-            ) : null}
-          </div>
+        <textarea
+          ref={textareaRef}
+          value={prompt}
+          onFocus={prefetchChatShell}
+          onChange={(event) => {
+            if (event.target.value.trim()) prefetchChatShell()
+            onPromptChange(event.target.value)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault()
+              onSubmit()
+            }
+          }}
+          rows={1}
+          aria-label="Спросите Malik AI"
+          placeholder="Чем я могу помочь сегодня?"
+        />
 
+        <div className="thome-composer-right">
           <MalikModelSelector
             selectedModelId={selectedModelId}
             plan={userPlan}
             onSelect={onModelChange}
             onOpenBilling={onOpenBilling}
+            placement="bottom"
           />
-        </div>
 
-        <div className="thome-composer-right">
           <button type="button" className="thome-icon-button" aria-label="Голосовой ввод" disabled>
             <Mic aria-hidden="true" />
           </button>
@@ -206,6 +202,18 @@ function HomeComposer({
             {isLoading ? <span className="thome-submit-loader" aria-hidden="true" /> : <ArrowUp aria-hidden="true" />}
           </button>
         </div>
+      </div>
+
+      <div className="thome-composer-meta" aria-label="Активные возможности">
+        <button type="button" onClick={onToggleWeb} className={cn("thome-meta-chip", webOn && "is-active")}>
+          <Globe aria-hidden="true" />
+          {webOn ? "Веб-поиск включён" : "Веб-поиск выключен"}
+        </button>
+        <button type="button" onClick={onToggleMemory} className={cn("thome-meta-chip", memoryOn && "is-active")}>
+          <Brain aria-hidden="true" />
+          Память {memoryOn ? "включена" : "выключена"}
+        </button>
+        <span className="thome-meta-note">Покажу прочитанные источники</span>
       </div>
     </section>
   )
@@ -238,7 +246,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const submit = () => {
     const text = prompt.trim()
     if (!text || props.isLoading) return
-    props.onSubmit(text)
+    props.onSubmit(text, [], { research: webOn })
     setPrompt("")
   }
 
@@ -270,6 +278,9 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                 <span className="thome-word is-5">AI</span>
               </strong>
             </h1>
+            <p className="thome-welcome-subtitle">
+              От простого вопроса до глубокого исследования — Malik AI ищет по открытому вебу, читает страницы и показывает источники.
+            </p>
 
             <HomeComposer
               prompt={prompt}

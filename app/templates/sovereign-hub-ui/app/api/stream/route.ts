@@ -23,17 +23,65 @@ function textResponse(content: string) {
   })
 }
 
-function sseResponse(content: string) {
-  const safe = content || "MALIK AI: empty response prevented."
-  const payload =
-    `data: ${JSON.stringify({ type: "content", content: safe })}\n\n` +
-    `data: ${JSON.stringify({ type: "done" })}\n\n`
+function liveSseResponse(
+  body: any,
+  selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>,
+) {
+  const encoder = new TextEncoder()
+  const startedAt = Date.now()
 
-  return new Response(payload, {
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      let closed = false
+      const send = (event: string, data: Record<string, unknown>) => {
+        if (closed) return
+        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify({ ...data, at: Date.now() })}\n\n`))
+      }
+      const close = () => {
+        if (closed) return
+        closed = true
+        controller.close()
+      }
+
+      send("status", { type: "status", text: "Malik AI принял запрос" })
+
+      void malikGodAnswer(
+        body,
+        selection ? { modelId: selection.modelId } : undefined,
+        (progress) => send("progress", { type: "progress", ...progress }),
+      ).then((answer) => {
+        send("content", {
+          type: "content",
+          content: asPlainText(answer) || "MALIK AI: empty response prevented.",
+        })
+        send("done", {
+          type: "done",
+          provider: answer.provider,
+          model: answer.model,
+          selectedModelId: answer.selectedModelId,
+          usedWeb: answer.usedWeb,
+          sources: answer.sources,
+          webSourceCount: answer.sources.length,
+          tookMs: Date.now() - startedAt,
+        })
+        close()
+      }).catch((error) => {
+        const payload = malikModelErrorPayload(error)
+        send("error", {
+          type: "error",
+          message: payload.message || payload.error || "Malik AI temporarily unavailable.",
+        })
+        close()
+      })
+    },
+  })
+
+  return new Response(stream, {
     headers: {
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-cache, no-transform",
       connection: "keep-alive",
+      "x-accel-buffering": "no",
       "x-malik-router": "github-openrouter-deepseek-v13",
     },
   })
@@ -43,9 +91,10 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   try {
     const selection = await resolveStrictMalikSelection(request, body)
+    if (wantsSse(request, body)) return liveSseResponse(body, selection)
     const answer = await malikGodAnswer(body, selection ? { modelId: selection.modelId } : undefined)
     const content = asPlainText(answer)
-    return wantsSse(request, body) ? sseResponse(content) : textResponse(content)
+    return textResponse(content)
   } catch (error) {
     const payload = malikModelErrorPayload(error)
     const status = error instanceof MalikModelRouteError ? error.status : 503

@@ -37,7 +37,7 @@ export function getTitanProviderStatus() {
       runway: mapId("runway"),
       luma: mapId("luma"),
       elevenlabs: { id: "elevenlabs", configured: Boolean(process.env.ELEVENLABS_API_KEY?.trim()), ready: false, title: "ElevenLabs" },
-      supabase: mapId("supabase"),
+      workos: mapId("workos"),
       storage: {
         id: "storage",
         configured: envGroupConfigured(["R2_BUCKET", "S3_BUCKET", "STORAGE_BUCKET", "CLOUDFLARE_R2_BUCKET"], "any"),

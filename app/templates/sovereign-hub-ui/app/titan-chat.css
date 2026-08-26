@@ -17,31 +17,53 @@
 
 #malik-root .malik-message-card-assistant {
   border: 0 !important;
+  border-radius: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
   padding: 0 !important;
-  color: #e9e3d6 !important;
+  color: #fff !important;
+}
+
+#malik-root .malik-message-card-assistant::before {
+  content: none !important;
+}
+
+#malik-root .malik-response-model {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.015em;
+}
+
+#malik-root .malik-response-model__mark {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 6px;
+  background: #fff;
+  color: #09090b;
+}
+
+#malik-root .malik-response-model__mark svg {
+  width: 13px;
+  height: 13px;
 }
 
 #malik-root .malik-message-row-assistant .malik-message-stack {
   max-width: min(760px, 100%);
 }
 
-/* A finished answer fades up rather than snapping in — the same beat as the
-   haptic that fires with it. */
+/* The characters are revealed by the streaming state in dashboard.tsx. The
+   answer itself must not fade in as one finished block on top of that. */
 #malik-root .malik-message-row-assistant .malik-message-card-assistant {
-  animation: malikAnswerIn 0.22s ease-out both;
-}
-
-@keyframes malikAnswerIn {
-  from {
-    opacity: 0;
-    transform: translateY(3px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  animation: none !important;
 }
 
 /* --------------------------------------------------------- the person's --- */
@@ -116,6 +138,47 @@
   flex-direction: column;
 }
 
+.malik-live-source-icons {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  margin-bottom: 8px;
+  color: #aaa397;
+  font-size: 12.5px;
+}
+
+.malik-live-source-icons .malik-source-icon + .malik-source-icon {
+  margin-left: -7px;
+}
+
+.malik-live-source-icons > span:last-child {
+  margin-left: 11px;
+}
+
+.malik-source-icon {
+  display: inline-flex;
+  width: 23px;
+  height: 23px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 7px;
+  background: #f5f5f5;
+  color: #111;
+  font-size: 10px;
+  font-weight: 800;
+  box-shadow: 0 3px 11px rgba(0, 0, 0, 0.32);
+}
+
+.malik-source-icon img {
+  display: block;
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+}
+
 /* Steps are joined by a hairline running through the icon column, so the list
    reads as one process rather than four separate notices. */
 .malik-activity-row {
@@ -167,6 +230,302 @@
   min-width: 0;
 }
 
+.malik-activity-icon > .malik-source-icon {
+  width: 21px;
+  height: 21px;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.malik-activity-icon > .malik-source-icon img {
+  width: 13px;
+  height: 13px;
+}
+
+.malik-source-inline {
+  margin-top: 17px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.085);
+  color: #ece8df;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: normal;
+}
+
+.malik-source-inline__links {
+  margin: 0;
+}
+
+.malik-source-inline__links strong {
+  color: #f4f1ea;
+  font-weight: 650;
+}
+
+.malik-source-inline__links a {
+  color: #f5f5f4;
+  font-weight: 560;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.55);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.malik-source-inline__links a:hover {
+  color: var(--malik-accent-pale, #f3de96);
+  text-decoration-color: currentColor;
+}
+
+.malik-source-pill {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 999px;
+  padding: 4px 11px 4px 5px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #f4f4f5;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.malik-source-pill:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.malik-source-pill__icons {
+  display: inline-flex;
+  align-items: center;
+}
+
+.malik-source-pill__icons .malik-source-icon {
+  width: 23px;
+  height: 23px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px #0a0a0b;
+}
+
+.malik-source-pill__icons .malik-source-icon + .malik-source-icon {
+  margin-left: -8px;
+}
+
+.malik-sources-drawer-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  white-space: normal;
+}
+
+.malik-sources-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(1px);
+}
+
+.malik-sources-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  width: min(460px, 94vw);
+  flex-direction: column;
+  border-left: 1px solid rgba(255, 255, 255, 0.11);
+  background: #070708;
+  color: #f4f4f5;
+  box-shadow: -24px 0 70px rgba(0, 0, 0, 0.58);
+  animation: malikSourcesDrawerIn 180ms ease-out both;
+}
+
+@keyframes malikSourcesDrawerIn {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.malik-sources-drawer__header {
+  display: flex;
+  min-height: 74px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 15px 18px;
+}
+
+.malik-sources-drawer__header h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 720;
+}
+
+.malik-sources-drawer__header p {
+  margin: 3px 0 0;
+  color: #777780;
+  font-size: 10.5px;
+}
+
+.malik-sources-drawer__header button {
+  display: flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  color: #8d8d95;
+}
+
+.malik-sources-drawer__header button:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.malik-sources-drawer__scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+}
+
+.malik-sources-drawer__section + .malik-sources-drawer__section {
+  margin-top: 25px;
+}
+
+.malik-sources-drawer__section h3 {
+  margin: 0 0 11px;
+  color: #85858e;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.malik-sources-drawer__activity,
+.malik-sources-drawer__links {
+  display: grid;
+  gap: 4px;
+}
+
+.malik-sources-drawer__activity-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  min-height: 45px;
+  padding: 6px 4px;
+}
+
+.malik-sources-drawer__activity-row > span {
+  display: flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  color: #8b8b93;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.malik-sources-drawer__activity-row > span .malik-source-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.malik-sources-drawer__activity-row strong,
+.malik-sources-drawer__activity-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.malik-sources-drawer__activity-row strong {
+  color: #e4e4e7;
+  font-size: 12.5px;
+  font-weight: 520;
+  line-height: 1.45;
+}
+
+.malik-sources-drawer__activity-row small {
+  margin-top: 2px;
+  color: #686871;
+  font-size: 10.5px;
+}
+
+.malik-sources-drawer__links a {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 28px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  border-radius: 11px;
+  padding: 7px 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.malik-sources-drawer__links a:hover {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.malik-sources-drawer__links a > span:not(.malik-source-icon),
+.malik-sources-drawer__links strong,
+.malik-sources-drawer__links small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.malik-sources-drawer__links strong,
+.malik-sources-drawer__links small {
+  display: block;
+}
+
+.malik-sources-drawer__links strong {
+  color: #e8e8eb;
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.malik-sources-drawer__links small {
+  margin-top: 3px;
+  color: #66666f;
+  font-size: 10px;
+}
+
+.malik-sources-drawer__links em {
+  display: flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 6px;
+  color: #777780;
+  font-size: 9.5px;
+  font-style: normal;
+}
+
+@media (max-width: 620px) {
+  .malik-source-inline { font-size: 13px; }
+  .malik-sources-drawer { width: 100%; }
+  .malik-sources-drawer-backdrop { display: none; }
+}
+
 .malik-thinking-dots {
   display: inline-flex;
   align-items: center;
@@ -213,7 +572,8 @@
 }
 
 #malik-root .malik-message-row-assistant:hover .malik-message-actions,
-#malik-root .malik-message-actions:focus-within {
+#malik-root .malik-message-actions:focus-within,
+#malik-root .malik-message-actions.is-research {
   opacity: 1;
 }
 
@@ -255,6 +615,34 @@
   background: #000 !important;
 }
 
+/* Active conversations are a single uninterrupted ChatGPT-style black
+   canvas. Kill every legacy root/host halo, including pseudo-elements from
+   inline dashboard styles and the mobile theme. */
+html:has(#malik-root .malik-active-chat-shell),
+body:has(#malik-root .malik-active-chat-shell),
+#malik-root:has(.malik-active-chat-shell),
+#malik-root .malik-active-chat-shell,
+#malik-root section.malik-active-chat-shell:first-of-type {
+  background: #000 !important;
+  background-image: none !important;
+}
+
+#malik-root:has(.malik-active-chat-shell)::before,
+#malik-root:has(.malik-active-chat-shell)::after,
+#malik-root .malik-active-chat-shell::before,
+#malik-root .malik-active-chat-shell::after,
+#malik-root .malik-ai-chat-bg::before,
+#malik-root .malik-ai-chat-bg::after,
+#malik-root .malik-premium-chat-host::before,
+#malik-root .malik-premium-chat-host::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
 /* The photo elements are no longer rendered; kill the rules too, so a
    stale cached sheet can never paint them back. */
 #malik-root .malik-chat-legend-photo,
@@ -286,7 +674,7 @@
    answer and the input line up on the same left and right edge. */
 #malik-root .malik-ai-chat-bg .malik-message-list,
 #malik-root .malik-ai-chat-bg .malik-composer-panel {
-  max-width: 768px !important;
+  max-width: 880px !important;
   margin-inline: auto !important;
 }
 
@@ -328,11 +716,150 @@
 /* The composer is a neutral pill on the same black — no blue tint, no glow,
    no blur pass. */
 #malik-root .malik-ai-chat-bg .malik-composer-panel {
-  background: #111112 !important;
+  padding: 7px !important;
+  border-radius: 30px !important;
+  background: #121213 !important;
   border-color: rgba(255, 255, 255, 0.10) !important;
-  box-shadow: none !important;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.32) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+
+#malik-root .malik-ai-chat-bg .malik-composer-panel::before,
+#malik-root .malik-ai-chat-bg .malik-composer-panel::after {
+  content: none !important;
+}
+
+#malik-root .malik-inline-composer {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  gap: 6px;
+  border-radius: 24px;
+  padding: 6px 7px 6px 9px;
+  background: #121213;
+}
+
+#malik-root .malik-inline-composer .malik-composer-textarea {
+  min-width: 0;
+  min-height: 48px !important;
+  max-height: 150px !important;
+  flex: 1 1 auto;
+  resize: none;
+  overflow-y: auto;
+  border: 0 !important;
+  background: transparent !important;
+  padding: 12px 8px !important;
+  color: #f2f2f3 !important;
+  font-size: 16px !important;
+  line-height: 24px !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+#malik-root .malik-inline-composer .malik-composer-textarea::placeholder {
+  color: #77777f !important;
+  opacity: 1;
+}
+
+#malik-root .malik-inline-composer__right {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+#malik-root .malik-inline-action,
+#malik-root .malik-inline-send {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #96969d;
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+#malik-root .malik-inline-action:hover,
+#malik-root .malik-inline-action.is-active {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+#malik-root .malik-inline-action.is-recording {
+  background: rgba(244, 63, 94, 0.14);
+  color: #fb7185;
+  animation: malikMarkBreathe 1.4s ease-in-out infinite;
+}
+
+#malik-root .malik-inline-send {
+  background: #f4f4f5;
+  color: #111113;
+}
+
+#malik-root .malik-inline-send:hover:not(:disabled) {
+  transform: scale(1.035);
+}
+
+#malik-root .malik-inline-send:disabled {
+  background: #303033;
+  color: #6d6d74;
+  cursor: not-allowed;
+}
+
+#malik-root .malik-inline-composer .malik-model-selector__trigger {
+  min-height: 42px;
+  max-width: 184px;
+  border-radius: 999px;
+  padding: 5px 9px 5px 6px;
+  background: rgba(255, 255, 255, 0.045);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+#malik-root .malik-composer-context-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+  padding: 6px 14px 5px;
+  color: #626269;
+  font-size: 9.5px;
+}
+
+#malik-root .malik-composer-context-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #a69359;
+  font-weight: 650;
+}
+
+@media (max-width: 720px) {
+  #malik-root .malik-inline-composer {
+    flex-wrap: wrap;
+    padding: 7px;
+  }
+
+  #malik-root .malik-inline-composer .malik-composer-textarea {
+    min-width: calc(100% - 56px);
+  }
+
+  #malik-root .malik-inline-composer__right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  #malik-root .malik-inline-composer__right .malik-model-selector {
+    margin-right: auto;
+  }
+
+  #malik-root .malik-composer-context-row > span {
+    display: none;
+  }
 }
 
 /* No fade strip above the dock. malik-final-fixes.css already forces

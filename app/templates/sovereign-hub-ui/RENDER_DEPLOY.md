@@ -34,14 +34,15 @@ IMAGE_PROVIDER_PRIMARY=pollinations
 ## Recommended (auth + history)
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...          # server only — never expose to browser
-SUPABASE_STORAGE_BUCKET=malik-media
+WORKOS_CLIENT_ID=client_...
+WORKOS_API_KEY=sk_...                     # server only
+WORKOS_COOKIE_PASSWORD=at-least-32-characters-long
+WORKOS_REDIRECT_URI=https://YOUR_APP.onrender.com/callback
+NEXT_PUBLIC_WORKOS_REDIRECT_URI=https://YOUR_APP.onrender.com/callback
 MALIK_ADMIN_TOKEN=long-random-secret
 ```
 
-Apply SQL from `supabase/migrations/001_core.sql` in Supabase SQL Editor before enabling chat persistence.
+Add the production callback URL in WorkOS Dashboard and enable Google/GitHub connections.
 
 ## Do NOT set on free-tier demo (paid APIs)
 

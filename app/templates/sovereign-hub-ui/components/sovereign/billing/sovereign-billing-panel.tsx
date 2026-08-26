@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Check, Loader2, Sparkles } from "lucide-react"
 import { PremiumCss, PremiumHero, PremiumScene } from "../../ui/premium-components"
-import { getStoredAuthSnapshot } from "@/lib/supabase"
+import { getStoredAuthSnapshot } from "@/lib/auth/client-session"
 
 export function SovereignBillingPanel() {
   const [status, setStatus] = useState("Billing safe mode ready")

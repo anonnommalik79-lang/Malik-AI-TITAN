@@ -6,6 +6,7 @@ import {
 } from "../lib/ai/malik-models.ts"
 
 const expected = {
+  "malik-8b": ["cloudflare", "@cf/meta/llama-3.1-8b-instruct-fast"],
   "malik-20b": ["groq", "openai/gpt-oss-20b"],
   "malik-27b": ["groq", "qwen/qwen3.6-27b"],
   "malik-30b": ["cloudflare", "@cf/qwen/qwen3-30b-a3b-fp8"],
@@ -16,9 +17,9 @@ const expected = {
   "malik-agent-120b": ["cloudflare", "@cf/nvidia/nemotron-3-120b-a12b"],
 }
 
-assert.equal(MALIK_MODELS.length, 8, "The selector must expose exactly eight models")
-assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, 8, "Model IDs must be unique")
-assert.equal(new Set(MALIK_MODELS.map((model) => `${model.provider}:${model.providerModel}`)).size, 8, "Provider routes must be unique")
+assert.equal(MALIK_MODELS.length, 9, "The selector must expose exactly nine models")
+assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, 9, "Model IDs must be unique")
+assert.equal(new Set(MALIK_MODELS.map((model) => `${model.provider}:${model.providerModel}`)).size, 9, "Provider routes must be unique")
 
 for (const [id, [provider, providerModel]] of Object.entries(expected)) {
   const model = getMalikModel(id)
@@ -35,4 +36,4 @@ assert.deepEqual(
   "Guest/Free must have exactly the first two models",
 )
 
-console.log("Verified 8 unique Malik model routes and Free/Pro gates.")
+console.log("Verified 9 unique Malik model routes and Free/Pro gates.")

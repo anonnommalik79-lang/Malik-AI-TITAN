@@ -75,11 +75,9 @@
 }
 
 .malik-model-selector__popover {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 0;
-  z-index: 160;
-  width: 328px;
+  position: fixed;
+  z-index: 460;
+  width: 344px;
   max-height: min(67dvh, 566px);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -88,10 +86,16 @@
   padding: 8px;
   background: #181819;
   color: #f4f4f5;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
   animation: malik-model-popover-in 150ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.malik-model-selector__popover.is-bottom {
+  transform-origin: top left;
+  animation-name: malik-model-popover-down;
 }
 
 .malik-model-selector__title {
@@ -308,6 +312,11 @@
 
 @keyframes malik-model-popover-in {
   from { opacity: 0; transform: translateY(5px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes malik-model-popover-down {
+  from { opacity: 0; transform: translateY(-5px) scale(0.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 

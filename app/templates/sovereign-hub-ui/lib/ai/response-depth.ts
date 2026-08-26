@@ -4,6 +4,7 @@ export type ResponseDepth = "fast" | "deep" | "ultra"
 
 export type ChatSendOptions = {
   responseDepth?: ResponseDepth
+  research?: boolean
 }
 
 const STORAGE_KEY = "malik_response_depth"

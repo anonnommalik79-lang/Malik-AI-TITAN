@@ -14,6 +14,7 @@
     "launch": "npm run build && npm run start",
     "lint": "eslint .",
     "test:models": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-malik-models.mjs",
+    "test:models:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-malik-models-live.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build",
     "clean": "node -e \"const fs=require('fs'); for (const p of ['.next','out']) if (fs.existsSync(p)) fs.rmSync(p,{recursive:true,force:true});\""
@@ -50,8 +51,9 @@
     "@radix-ui/react-toggle": "1.1.10",
     "@radix-ui/react-toggle-group": "1.1.11",
     "@radix-ui/react-tooltip": "1.2.8",
-    "@supabase/supabase-js": "^2.43.1",
     "@vercel/analytics": "1.6.1",
+    "@workos-inc/authkit-nextjs": "^4.3.1",
+    "@workos-inc/node": "^10.11.0",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
