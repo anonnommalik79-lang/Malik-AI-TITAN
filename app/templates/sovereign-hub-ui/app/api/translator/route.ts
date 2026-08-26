@@ -10,7 +10,7 @@ const MAX_TEXT_LENGTH = 3000
 const MAX_SEGMENT_BYTES = 450
 
 function detectLanguage(text: string) {
-  if (/[ӘәҒғҚқҢңӨөҰұҮүҺһІі]/.test(text)) return "kk"
+  if (/[ӘәҒғҚқҢңӨөҰұҮүҺһ]/.test(text)) return "kk"
   if (/[ぁ-ゟ゠-ヿ]/.test(text)) return "ja"
   if (/[가-힣]/.test(text)) return "ko"
   if (/[一-鿿]/.test(text)) return "zh-CN"
@@ -73,12 +73,12 @@ function splitSegment(value: string, maxBytes = MAX_SEGMENT_BYTES) {
 }
 
 function splitText(text: string) {
-  const paragraphs = text.split(/(\n{2,})/)
+  const lines = text.split(/(\n+)/)
   const output: Array<{ text: string; separator: boolean }> = []
 
-  for (const part of paragraphs) {
+  for (const part of lines) {
     if (!part) continue
-    if (/^\n{2,}$/.test(part)) {
+    if (/^\n+$/.test(part)) {
       output.push({ text: part, separator: true })
       continue
     }
@@ -172,18 +172,21 @@ export async function POST(request: NextRequest) {
     }
 
     const pieces = splitText(text)
-    const translated: string[] = []
+    let translatedText = ""
 
     for (const piece of pieces) {
       if (piece.separator) {
-        translated.push(piece.text)
+        translatedText += piece.text
         continue
       }
-      translated.push(await translateSegment(piece.text, source, target))
+
+      const translated = await translateSegment(piece.text, source, target)
+      if (translatedText && !translatedText.endsWith("\n") && !translatedText.endsWith(" ")) translatedText += " "
+      translatedText += translated
     }
 
     return NextResponse.json({
-      translatedText: translated.join(" ").replace(/ \n{2,} /g, "\n\n").replace(/\n{2,} /g, "\n\n"),
+      translatedText: translatedText.trim(),
       detectedSource: source,
       provider: "mymemory",
     })
