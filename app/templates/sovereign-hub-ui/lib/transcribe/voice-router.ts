@@ -143,7 +143,13 @@ export async function transcribeVoiceAudio(
       return { ok: true, text: result.text, language: result.language, durationSec: result.durationSec, provider, model, latencyMs: result.latencyMs, attempts }
     }
     if (!("skipped" in result && result.skipped)) {
-      attempts.push({ provider, model, status: result.status, error: result.error, latencyMs: result.latencyMs || 0 })
+      attempts.push({
+        provider,
+        model,
+        status: "status" in result ? result.status : undefined,
+        error: result.error,
+        latencyMs: "latencyMs" in result ? result.latencyMs || 0 : 0,
+      })
     }
   }
 
