@@ -37,7 +37,7 @@ const checks = [
   ["12 responsive layout and DPR caps are present", () => { assert.match(css, /@media \(max-width: 680px\)/); assert.match(css, /@media \(max-width: 450px\)/); assert.match(orb, /resize\(background, backgroundCanvas, 1\.6\)/); assert.match(orb, /resize\(orb, orbCanvas, 2\)/) }],
   ["13 xAI TTS uses official request fields and MP3", () => { assert.match(tts, /https:\/\/api\.x\.ai\/v1\/tts/); assert.match(tts, /voice_id:\s*voiceId/); assert.match(tts, /codec:\s*"mp3"/); assert.match(tts, /sample_rate:\s*24000/) }],
   ["14 async iPhone reply has WebAudio blob fallback", () => { assert.match(sound, /HTMLMediaElement\.prototype/); assert.match(sound, /sourceUrl\.startsWith\("blob:"\)/); assert.match(sound, /decodeAudioData/); assert.match(sound, /dispatchEvent\(new Event\("ended"\)\)/) }],
-  ["15 every Malik voice profile resolves to a built-in xAI voice", () => { for (const id of ["ara", "eve", "leo", "rex", "sal"]) assert.match(settings, new RegExp(`xaiVoiceId: \\"${id}\\"`)); assert.doesNotMatch(settings, /xaiVoiceId:\s*"(?:carina|luna|orion|aurora|atlas)"/) }],
+  ["15 every Malik voice profile resolves to a built-in xAI voice", () => { for (const id of ["ara", "eve", "leo", "rex", "sal"]) assert.ok(settings.includes(`xaiVoiceId: "${id}"`), `missing xAI voice ${id}`); assert.doesNotMatch(settings, /xaiVoiceId:\s*"(?:carina|luna|orion|aurora|atlas)"/) }],
 ]
 
 for (const [name, check] of checks) {
