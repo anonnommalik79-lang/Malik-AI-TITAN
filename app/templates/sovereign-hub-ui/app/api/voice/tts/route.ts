@@ -3,17 +3,20 @@ import { Buffer } from "node:buffer"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+// xAI currently exposes the built-in voice ids ara/eve/leo/rex/sal. Malik AI
+// keeps ten UI profiles, but every profile must resolve to a real xAI voice id
+// so selecting an extra profile never sends an invalid voice_id to /v1/tts.
 const XAI_VOICES: Record<string, string> = {
   Sola: "ara",
   Eve: "eve",
   Leo: "leo",
   Rex: "rex",
   Sal: "sal",
-  Carina: "carina",
-  Luna: "luna",
-  Orion: "orion",
-  Aurora: "aurora",
-  Atlas: "atlas",
+  Carina: "ara",
+  Luna: "eve",
+  Orion: "leo",
+  Aurora: "eve",
+  Atlas: "rex",
 }
 
 function env(...names: string[]) {
@@ -33,17 +36,47 @@ function detectLanguage(text: string) {
 async function xaiTts(text: string, voice: string, language: string) {
   const key = env("XAI_VOICE_API_KEY", "XAI_API_KEY")
   if (!key) return null
-  const voiceId = XAI_VOICES[voice] || "eve"
+  const voiceId = XAI_VOICES[voice] || "ara"
   const response = await fetch("https://api.x.ai/v1/tts", {
     method: "POST",
-    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ text, voice_id: voiceId, language: language || "auto" }),
+    headers: {
+      authorization: `Bearer ${key}`,
+      "content-type": "application/json",
+      accept: "audio/mpeg,application/octet-stream;q=0.9,*/*;q=0.8",
+    },
+    body: JSON.stringify({
+      text,
+      voice_id: voiceId,
+      language: language || "auto",
+      output_format: {
+        codec: "mp3",
+        sample_rate: 24000,
+        bit_rate: 128000,
+      },
+    }),
     cache: "no-store",
   })
-  if (!response.ok) return null
+
+  if (!response.ok) {
+    const detail = (await response.text().catch(() => "")).slice(0, 500)
+    console.warn(`[VOICE_XAI_TTS_ERROR] status=${response.status} voice=${voiceId} ${detail}`)
+    return null
+  }
+
   const bytes = await response.arrayBuffer()
-  if (!bytes.byteLength) return null
-  return new Response(bytes, { headers: { "content-type": response.headers.get("content-type") || "audio/mpeg", "cache-control": "no-store", "x-malik-tts-provider": "xai" } })
+  if (bytes.byteLength < 128) {
+    console.warn(`[VOICE_XAI_TTS_ERROR] empty audio voice=${voiceId} bytes=${bytes.byteLength}`)
+    return null
+  }
+
+  return new Response(bytes, {
+    headers: {
+      "content-type": response.headers.get("content-type") || "audio/mpeg",
+      "cache-control": "no-store",
+      "x-malik-tts-provider": "xai",
+      "x-malik-tts-voice": voiceId,
+    },
+  })
 }
 
 function extractCloudflareAudio(payload: any): Buffer | null {
@@ -71,7 +104,10 @@ async function cloudflareTts(text: string, language: string) {
     body: JSON.stringify({ prompt: text, lang: language === "ru" ? "ru" : "en" }),
     cache: "no-store",
   })
-  if (!response.ok) return null
+  if (!response.ok) {
+    console.warn(`[VOICE_CF_TTS_ERROR] status=${response.status}`)
+    return null
+  }
   const contentType = response.headers.get("content-type") || ""
   if (contentType.startsWith("audio/")) {
     return new Response(await response.arrayBuffer(), { headers: { "content-type": contentType, "cache-control": "no-store", "x-malik-tts-provider": "cloudflare" } })
@@ -93,9 +129,8 @@ export async function POST(request: Request) {
     const xai = await xaiTts(text, voice, language)
     if (xai) return xai
 
-    // MeloTTS is the zero-cost cloud fallback. It does not expose ten distinct
-    // speakers, so the client uses device SpeechSynthesis profiles when xAI is
-    // not configured and MeloTTS cannot provide a usable audio payload.
+    // Zero-cost fallback if xAI is unavailable. VoiceMode then either plays the
+    // returned audio or uses the device SpeechSynthesis fallback.
     const cloudflare = await cloudflareTts(text, language)
     if (cloudflare) return cloudflare
   } catch (error) {
