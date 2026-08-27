@@ -6,6 +6,7 @@ import {
   type MalikModelId,
 } from "@/lib/ai/malik-models"
 import { providerFetch } from "@/lib/ai/providers/base"
+import { hasHiddenGeminiMedia, runHiddenGeminiMultimodal } from "@/lib/server/hidden-gemini-multimodal"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
 
 type HistoryMessage = { role: "user" | "assistant"; content: string }
@@ -21,6 +22,13 @@ type MalikAttachment = {
   mime?: string
   base64?: string
   url?: string
+  name?: string
+}
+
+const TEXT_FALLBACK_MODEL: Partial<Record<MalikModelId, MalikModelId>> = {
+  "malik-27b": "malik-glm-355b",
+  "malik-glm-355b": "malik-fast-120b",
+  "malik-fast-120b": "malik-20b",
 }
 
 export class MalikModelRouteError extends Error {
@@ -94,15 +102,12 @@ function buildMessages(input: {
   if (images.length && !input.model.capabilities.includes("vision")) {
     throw new MalikModelRouteError(
       "MODEL_CAPABILITY_MISMATCH",
-      `${input.model.label} не принимает изображения. Выберите MalikLLM27B или MalikVision26B.`,
+      `${input.model.label} не принимает изображения.`,
       422,
       input.model.id,
     )
   }
 
-  // The dashboard persists the current user turn before it starts the request.
-  // Remove that trailing turn unconditionally so it is represented exactly once
-  // by the multimodal-aware message below.
   const prior = history.length && history[history.length - 1]?.role === "user" ? history.slice(0, -1) : history
   const userContent: ProviderMessage["content"] = images.length
     ? [{ type: "text", text: input.prompt }, ...images.map((url) => ({ type: "image_url" as const, image_url: { url } }))]
@@ -173,6 +178,36 @@ function contentFrom(payload: any): string {
   return ""
 }
 
+async function runFallback(input: {
+  failedModelId: MalikModelId
+  originalModelId: MalikModelId
+  prompt: string
+  systemPrompt: string
+  history?: HistoryMessage[]
+  attachments?: MalikAttachment[]
+  maxTokens?: number
+  temperature?: number
+}) {
+  const fallbackModelId = TEXT_FALLBACK_MODEL[input.failedModelId]
+  if (!fallbackModelId) return null
+  console.warn("[MALIK_MODEL_ROUTE]", JSON.stringify({
+    selectedModelId: input.originalModelId,
+    failedModelId: input.failedModelId,
+    fallbackModelId,
+    stage: "fallback",
+  }))
+  const result = await runStrictMalikModel({
+    modelId: fallbackModelId,
+    prompt: input.prompt,
+    systemPrompt: input.systemPrompt,
+    history: input.history,
+    attachments: input.attachments,
+    maxTokens: input.maxTokens,
+    temperature: input.temperature,
+  })
+  return { ...result, selectedModelId: input.originalModelId }
+}
+
 export async function runStrictMalikModel(input: {
   modelId: MalikModelId
   prompt: string
@@ -182,6 +217,45 @@ export async function runStrictMalikModel(input: {
   maxTokens?: number
   temperature?: number
 }) {
+  if (hasHiddenGeminiMedia(input.attachments)) {
+    const started = Date.now()
+    try {
+      const result = await runHiddenGeminiMultimodal({
+        prompt: input.prompt,
+        systemPrompt: input.systemPrompt,
+        history: input.history,
+        attachments: input.attachments,
+      })
+      console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({
+        selectedModelId: input.modelId,
+        provider: "hidden-multimodal",
+        stage: "success",
+        latencyMs: Date.now() - started,
+      }))
+      return {
+        content: result.content,
+        provider: result.provider,
+        model: result.model,
+        selectedModelId: input.modelId,
+        latencyMs: Date.now() - started,
+        usage: result.usage,
+      }
+    } catch (error) {
+      console.error("[MALIK_MODEL_ROUTE]", JSON.stringify({
+        selectedModelId: input.modelId,
+        provider: "hidden-multimodal",
+        stage: "error",
+        error: error instanceof Error ? error.message : String(error),
+      }))
+      throw new MalikModelRouteError(
+        "MULTIMODAL_ENGINE_UNAVAILABLE",
+        "Анализ фото, видео или аудио временно недоступен. Проверь мультимодальный API в Render.",
+        503,
+        input.modelId,
+      )
+    }
+  }
+
   const model = getMalikModel(input.modelId)
   const started = Date.now()
   const messages = buildMessages({
@@ -200,9 +274,8 @@ export async function runStrictMalikModel(input: {
     stage: "request",
   }))
 
-  const provider = providerConfig(model)
-
   try {
+    const provider = providerConfig(model)
     const response = await providerFetch(provider.url, {
       method: "POST",
       headers: {
@@ -214,11 +287,7 @@ export async function runStrictMalikModel(input: {
         messages,
         max_tokens: input.maxTokens || Number(process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || 2200),
         temperature: input.temperature ?? Number(process.env.MALIK_GOD_TEMPERATURE || 0.4),
-        // Qwen 3.6 defaults to raw thinking mode on Groq. With a finite token
-        // budget that can produce only <think>…</think> and no user-facing
-        // answer. General Malik AI chat uses the model's documented
-        // non-thinking mode so message.content always contains the final text.
-        ...(model.provider === "groq" && model.providerModel === "qwen/qwen3.6-27b"
+        ...(model.provider === "groq" && /^qwen\/qwen3\./.test(model.providerModel)
           ? { reasoning_effort: "none" }
           : {}),
         stream: false,
@@ -242,7 +311,7 @@ export async function runStrictMalikModel(input: {
     if (!response.ok || !content) {
       throw new MalikModelRouteError(
         "SELECTED_MODEL_UNAVAILABLE",
-        `${model.label} временно недоступна. Попробуйте ещё раз или выберите другую модель.`,
+        `${model.label} временно недоступна.`,
         response.status >= 400 ? response.status : 503,
         model.id,
       )
@@ -257,6 +326,27 @@ export async function runStrictMalikModel(input: {
       usage: payload?.usage,
     }
   } catch (error) {
+    try {
+      const fallback = await runFallback({
+        failedModelId: model.id,
+        originalModelId: input.modelId,
+        prompt: input.prompt,
+        systemPrompt: input.systemPrompt,
+        history: input.history,
+        attachments: input.attachments,
+        maxTokens: input.maxTokens,
+        temperature: input.temperature,
+      })
+      if (fallback) return fallback
+    } catch (fallbackError) {
+      console.error("[MALIK_MODEL_ROUTE]", JSON.stringify({
+        selectedModelId: input.modelId,
+        failedModelId: model.id,
+        stage: "fallback-exhausted",
+        error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+      }))
+    }
+
     if (error instanceof MalikModelRouteError) throw error
     console.error("[MALIK_MODEL_ROUTE]", JSON.stringify({
       selectedModelId: model.id,
