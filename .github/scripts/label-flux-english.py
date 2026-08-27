@@ -7,6 +7,6 @@ new = '<span className={styles.itemText}><strong>{profile.name} <span className=
 if old not in text:
     raise SystemExit("Voice name render anchor not found")
 text = text.replace(old, new, 1)
-text = text.replace('<div className={styles.heading}><span>Голос</span><small>36 Deepgram Flux голосов</small></div>', '<div className={styles.heading}><span>Голос</span><small>36 Deepgram Flux · English</small></div>', 1)
+text = text.replace('<div className={styles.heading}><span>Голос</span><small>36 Deepgram Flux голосов</small></div>', '<div className={styles.heading}><span>Голос</span><small>36 Deepgram Flux голосов · English</small></div>', 1)
 path.write_text(text, encoding="utf-8")
 print("Marked all Deepgram Flux voices as English.")
