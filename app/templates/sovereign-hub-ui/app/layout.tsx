@@ -31,6 +31,8 @@ import "./mobile-app-shell-v3.css"
 import "./malik-pure-black-final.css"
 // Final phone welcome geometry: larger mark/type and a higher hero position.
 import "./mobile-welcome-final.css"
+// Final attachment/menu authority: native media inputs and foreground tools.
+import "./malik-attachment-tools-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 
