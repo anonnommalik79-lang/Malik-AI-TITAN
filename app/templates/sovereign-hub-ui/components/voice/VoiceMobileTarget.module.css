@@ -73,13 +73,16 @@
     line-height: 20px !important;
     white-space: nowrap !important;
     overflow: hidden !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 
   .mobileDock textarea::placeholder {
     color: rgba(255,255,255,.48) !important;
   }
 
-  .mobileDock > div:has(> button[aria-label*="микрофон"]) {
+  .mobileDock > [class*="controls"] {
     display: contents !important;
     min-height: 0 !important;
     padding: 0 !important;
@@ -104,7 +107,7 @@
     height: 19px !important;
   }
 
-  .mobileDock button[aria-label*="микрофон"] {
+  .mobileDock button[class*="micPill"] {
     grid-column: 2 !important;
     grid-row: 1 !important;
     width: 44px !important;
@@ -119,11 +122,11 @@
     background: rgba(37,34,39,.96) !important;
   }
 
-  .mobileDock button[aria-label*="микрофон"] [class*="micDots"] {
+  .mobileDock button[class*="micPill"] [class*="micDots"] {
     display: none !important;
   }
 
-  .mobileDock button[aria-label*="микрофон"] svg {
+  .mobileDock button[class*="micPill"] svg {
     width: 19px !important;
     height: 19px !important;
   }
@@ -136,7 +139,7 @@
     display: none !important;
   }
 
-  .mobileDock button[aria-label="Настройки Sola Assistant"] {
+  .mobileDock button[class*="assistantButton"] {
     position: fixed !important;
     z-index: 45 !important;
     top: max(14px, calc(env(safe-area-inset-top) + 4px)) !important;
@@ -153,19 +156,19 @@
     background: transparent !important;
   }
 
-  .mobileDock button[aria-label="Настройки Sola Assistant"] span,
-  .mobileDock button[aria-label="Настройки Sola Assistant"] small,
-  .mobileDock button[aria-label="Настройки Sola Assistant"] svg:last-child {
+  .mobileDock button[class*="assistantButton"] span,
+  .mobileDock button[class*="assistantButton"] small,
+  .mobileDock button[class*="assistantButton"] svg:last-child {
     display: none !important;
   }
 
-  .mobileDock button[aria-label="Настройки Sola Assistant"] svg:first-child {
+  .mobileDock button[class*="assistantButton"] svg:first-child {
     display: block !important;
     width: 19px !important;
     height: 19px !important;
   }
 
-  .mobileDock > div:has(> button[aria-label*="микрофон"]) > button:last-child {
+  .mobileDock button[class*="stopButton"] {
     grid-column: 3 !important;
     grid-row: 1 !important;
     width: 44px !important;
@@ -181,7 +184,7 @@
     font-size: 0 !important;
   }
 
-  .mobileDock > div:has(> button[aria-label*="микрофон"]) > button:last-child::after {
+  .mobileDock button[class*="stopButton"]::after {
     content: "×";
     display: block;
     font-size: 27px;
@@ -232,8 +235,8 @@
     max-height: 42px !important;
   }
 
-  .mobileDock button[aria-label*="микрофон"],
-  .mobileDock > div:has(> button[aria-label*="микрофон"]) > button:last-child {
+  .mobileDock button[class*="micPill"],
+  .mobileDock button[class*="stopButton"] {
     width: 42px !important;
     min-width: 42px !important;
     height: 42px !important;

@@ -294,9 +294,9 @@ function ProjectsIndex({
   }
 
   return (
-    <div className="h-full flex-1 overflow-y-auto bg-black font-sans text-white">
-      <div className="mx-auto w-full max-w-[920px] px-5 pb-10 pt-12 sm:px-8 sm:pt-16">
-        <div className="border-b border-white/10">
+    <div className="malik-projects-index h-full flex-1 overflow-y-auto bg-black font-sans text-white">
+      <div className="malik-projects-inner mx-auto w-full max-w-[920px] px-5 pb-10 pt-12 sm:px-8 sm:pt-16">
+        <div className="malik-projects-head border-b border-white/10">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
             <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-white">Проекты</h1>
             <div className="flex min-w-0 flex-1 items-center gap-3 sm:justify-end">
@@ -315,7 +315,7 @@ function ProjectsIndex({
             </div>
           </div>
 
-          <nav aria-label="Фильтр проектов" className="mt-10 flex items-center gap-1 pb-3">
+          <nav aria-label="Фильтр проектов" className="malik-projects-filters mt-10 flex items-center gap-1 pb-3">
             {[
               ["all", "Все"],
               ["mine", "Созданные вами"],
@@ -324,6 +324,7 @@ function ProjectsIndex({
               <button
                 key={id}
                 type="button"
+                aria-pressed={filter === id}
                 onClick={() => setFilter(id as "all" | "mine" | "shared")}
                 className={cn(
                   "h-9 rounded-full px-4 text-[13px] font-medium text-white transition hover:bg-white/10",
@@ -369,7 +370,7 @@ function ProjectsIndex({
             })}
           </div>
         ) : (
-          <div className="flex min-h-[360px] flex-col items-center justify-start pt-16 text-center">
+          <div className="malik-projects-empty flex min-h-[360px] flex-col items-center justify-start pt-16 text-center">
             <span className="grid h-[52px] w-[52px] place-items-center rounded-xl bg-[#343434] text-white">
               <Folder className="h-6 w-6" strokeWidth={1.8} />
             </span>

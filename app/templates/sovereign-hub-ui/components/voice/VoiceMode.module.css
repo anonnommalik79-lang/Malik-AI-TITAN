@@ -575,16 +575,70 @@
 }
 
 @media (max-width: 450px) {
-  .center h1 { font-size: 25px; }
-  .center > p { font-size: 12px; }
-  .transcript { max-height: 55px; overflow: hidden; font-size: 12px; }
-  .promptRow { min-height: 36px; }
-  .controlButton { width: 40px; height: 40px; flex-basis: 40px; }
-  .micPill { width: 78px; height: 40px; flex-basis: 78px; }
-  .assistantButton, .stopButton { height: 40px; }
-  .assistantButton { flex-basis: calc(58% - 5px); }
-  .stopButton { flex-basis: calc(42% - 5px); }
-  .settings { bottom: 154px; max-height: calc(100dvh - 174px); overflow-y: auto; }
+  .stage {
+    inset: 0 !important;
+    width: 100vw !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    max-height: none !important;
+    overflow: hidden !important;
+    border-radius: 0 !important;
+    background: #030304 !important;
+  }
+  .topbar {
+    top: max(10px, env(safe-area-inset-top)) !important;
+    right: 10px !important;
+    width: auto !important;
+    max-width: none !important;
+    overflow: visible !important;
+  }
+  .closeButton { width: 38px; height: 38px; }
+  .orbWrap { top: calc(34% - 62px); width: 132px; }
+  .center { top: 34%; width: calc(100vw - 32px); }
+  .orbSpacer { height: 150px; }
+  .center h1 { font-size: 24px; }
+  .center > p { margin-top: 6px; font-size: 12px; }
+  .transcript { max-height: 50px; margin-top: 8px; overflow: hidden; font-size: 12px; }
+
+  .dock {
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: 8px;
+    width: calc(100vw - 16px);
+    padding: 6px;
+    border-radius: 20px;
+  }
+  .promptRow { min-height: 42px; padding: 0 8px 4px; }
+  .promptRow textarea { min-height: 34px; max-height: 56px; padding: 6px 1px; font-size: 16px; line-height: 21px; }
+  .controls { min-height: 44px; flex-wrap: nowrap; gap: 5px; padding-top: 5px; }
+  .controlDivider,
+  .controls > button.controlButton:nth-of-type(3),
+  .controls > button.controlButton:nth-of-type(4) { display: none; }
+  .controlButton { width: 38px; height: 38px; flex-basis: 38px; }
+  .micPill { width: 70px; height: 38px; flex-basis: 70px; gap: 6px; }
+  .assistantButton, .stopButton { height: 38px; }
+  .assistantButton { min-width: 0; flex: 1 1 auto; padding: 0 10px; }
+  .assistantButton span { max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stopButton { flex: 0 0 86px; font-size: 12px; }
+  .settings { right: 8px; bottom: 106px; left: 8px; width: auto; max-height: calc(100dvh - 126px); overflow-y: auto; }
+  .notice { bottom: 112px; }
+
+  /* Neutralize legacy main > section rules without changing desktop Voice. */
+  :global(#malik-root) .stage[data-voice-mode] > .visuals,
+  :global(#malik-root) .stage[data-voice-mode] > .center,
+  :global(#malik-root) .stage[data-voice-mode] > .topbar {
+    background: transparent !important;
+  }
+  :global(#malik-root) .stage[data-voice-mode] > .dock {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    left: 8px !important;
+    right: 8px !important;
+    background: transparent !important;
+  }
+  :global(#malik-root) .stage[data-voice-mode] > .settings {
+    background: rgba(20, 20, 23, .96) !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

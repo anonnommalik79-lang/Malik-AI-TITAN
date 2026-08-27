@@ -67,7 +67,6 @@ const VoiceMode = dynamic(
 import { BusinessCommandCenter } from "./business/BusinessCommandCenter"
 import { NewsroomStudio } from "./media/NewsroomStudio"
 import { GenerationAnimation } from "./generation-animation"
-import { MobileNavigationGuard } from "./mobile-navigation-guard"
 import type { GenerationStatusType } from "./generation-status"
 import { AI_MODES } from "./power-registry"
 import type { AiModeId, PowerAction } from "./power-registry"
@@ -6395,16 +6394,6 @@ const shouldShowMobilePreviewButton =
             }
           }
         `}</style>
-        {(activeView !== "home" || mobilePreviewOpen || codexOpen) && (
-          <MobileNavigationGuard
-            title={mobileRuntime.title}
-            canGoBack={mobileRuntime.canGoBack}
-            showClose={mobilePreviewOpen || codexOpen}
-            onBack={handleMobileBack}
-            onHome={handleMobileHome}
-            onClose={handleMobileBack}
-          />
-        )}
  {mobilePreviewOpen && (
   <div className="lg:hidden fixed inset-0 z-[80] bg-[#050505] w-full max-w-full overflow-x-hidden h-[100dvh]">
     <div className="h-[100dvh] w-full flex flex-col pt-[max(env(safe-area-inset-top),8px)] pb-[max(env(safe-area-inset-bottom),10px)]">
@@ -6446,7 +6435,7 @@ const shouldShowMobilePreviewButton =
 )}
 
 {mobileMenuOpen && (
-  <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
+  <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[45] lg:hidden" onClick={() => setMobileMenuOpen(false)} />
 )}
       <div className="hidden lg:block z-50">
         <Sidebar
@@ -6467,7 +6456,7 @@ const shouldShowMobilePreviewButton =
           onOpenVoice={openVoiceMode}
         />
       </div>
-      <div className={cn("fixed inset-y-0 left-0 z-50 lg:hidden transition-transform duration-300 ease-out", mobileMenuOpen ? "translate-x-0" : "-translate-x-full")}>
+      <div className={cn("malik-mobile-drawer fixed inset-y-0 left-0 z-50 lg:hidden transition-transform duration-300 ease-out", mobileMenuOpen ? "translate-x-0" : "-translate-x-full")}>
         <Sidebar
           isCollapsed={false}
           onToggle={() => setMobileMenuOpen(false)}

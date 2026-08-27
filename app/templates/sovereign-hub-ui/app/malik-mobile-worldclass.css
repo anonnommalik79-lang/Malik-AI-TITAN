@@ -1,12 +1,11 @@
-/* MALIK AI MOBILE WORLDCLASS HARD FIX
-   Goal: app-like mobile chat, no rubber layout, no horizontal overflow,
-   compact header, stable bottom composer, readable messages.
-   This file is intentionally mobile-only and imported last. */
+/* MALIK AI — compact application shell for phones.
+   Everything is scoped to the authenticated dashboard so /auth is untouched. */
 
 @media (max-width: 768px) {
-  html,
-  body,
-  #malik-root {
+  /* Preserve the existing global mobile rules outside the dashboard. */
+  html:not(:has(.malik-dashboard-shell)),
+  body:not(:has(.malik-dashboard-shell)),
+  #malik-root:not(:has(.malik-dashboard-shell)) {
     width: 100% !important;
     max-width: 100% !important;
     height: 100dvh !important;
@@ -15,85 +14,39 @@
     overflow: hidden !important;
     overscroll-behavior: none !important;
     touch-action: pan-y !important;
-    -webkit-text-size-adjust: 100% !important;
     background: #020617 !important;
+    -webkit-text-size-adjust: 100% !important;
   }
 
-  body {
+  body:not(:has(.malik-dashboard-shell)),
+  #malik-root:not(:has(.malik-dashboard-shell)) {
     position: fixed !important;
     inset: 0 !important;
   }
 
-  #malik-root {
-    position: fixed !important;
-    inset: 0 !important;
+  #malik-root:not(:has(.malik-dashboard-shell)) {
     isolation: isolate !important;
   }
 
-  #malik-root,
-  #malik-root * {
+  #malik-root:not(:has(.malik-dashboard-shell)),
+  #malik-root:not(:has(.malik-dashboard-shell)) * {
     box-sizing: border-box !important;
     min-width: 0 !important;
+    max-width: 100%;
     -webkit-tap-highlight-color: transparent !important;
   }
 
-  #malik-root * {
-    max-width: 100%;
-  }
-
-  #malik-root input,
-  #malik-root textarea,
-  #malik-root select {
+  #malik-root:not(:has(.malik-dashboard-shell)) input,
+  #malik-root:not(:has(.malik-dashboard-shell)) textarea,
+  #malik-root:not(:has(.malik-dashboard-shell)) select {
     font-size: 16px !important;
   }
 
-  #malik-root button,
-  #malik-root [role="button"],
-  #malik-root a,
-  #malik-root textarea,
-  #malik-root input {
+  #malik-root:not(:has(.malik-dashboard-shell)) :is(button, [role="button"], a, textarea, input) {
     touch-action: manipulation !important;
   }
 
-  .malik-dashboard-shell {
-    position: fixed !important;
-    inset: 0 !important;
-    display: flex !important;
-    width: 100vw !important;
-    max-width: 100vw !important;
-    height: 100dvh !important;
-    min-height: 100dvh !important;
-    overflow: hidden !important;
-    background: #020617 !important;
-  }
-
-  .malik-dashboard-shell > div.hidden.lg\:block {
-    display: none !important;
-    width: 0 !important;
-    min-width: 0 !important;
-  }
-
-  .malik-dashboard-shell > main {
-    flex: 1 1 100% !important;
-    width: 100vw !important;
-    max-width: 100vw !important;
-    min-width: 0 !important;
-    height: 100dvh !important;
-    overflow: hidden !important;
-    background: transparent !important;
-  }
-
-  .malik-dashboard-shell > main > section {
-    flex: 1 1 100% !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-    height: 100% !important;
-    overflow: hidden !important;
-    border-right: 0 !important;
-  }
-
-  #malik-root header {
+  #malik-root:not(:has(.malik-dashboard-shell)) header {
     min-height: 48px !important;
     max-height: 54px !important;
     overflow-x: auto !important;
@@ -103,301 +56,778 @@
     -webkit-overflow-scrolling: touch !important;
   }
 
-  #malik-root header::-webkit-scrollbar {
+  #malik-root:not(:has(.malik-dashboard-shell)) header::-webkit-scrollbar {
     display: none !important;
   }
 
-  #malik-root header,
-  #malik-root header > * {
+  #malik-root:not(:has(.malik-dashboard-shell)) header,
+  #malik-root:not(:has(.malik-dashboard-shell)) header > * {
     max-width: 100vw !important;
   }
 
-  #malik-root header button,
-  #malik-root header [role="button"],
-  #malik-root header a {
+  #malik-root:not(:has(.malik-dashboard-shell)) header :is(button, [role="button"], a) {
     min-height: 38px !important;
     min-width: 38px !important;
     flex: 0 0 auto !important;
   }
 
-  .malik-chat-fullwidth {
-    height: calc(100dvh - 52px) !important;
-    min-height: 0 !important;
+  html:has(.malik-dashboard-shell),
+  body:has(.malik-dashboard-shell),
+  #malik-root:has(.malik-dashboard-shell) {
+    width: 100%;
+    max-width: 100%;
+    height: 100dvh;
+    min-height: 100dvh;
+    margin: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: #000;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body:has(.malik-dashboard-shell),
+  #malik-root:has(.malik-dashboard-shell) {
+    position: fixed;
+    inset: 0;
+  }
+
+  .malik-dashboard-shell,
+  .malik-dashboard-shell * {
+    box-sizing: border-box;
+    min-width: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .malik-dashboard-shell {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    overflow: hidden !important;
+    background: #000 !important;
+    color: #f7f7f8 !important;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  }
+
+  .malik-dashboard-shell > div.hidden.lg\:block {
+    display: none !important;
+  }
+
+  .malik-dashboard-shell > div.flex.min-h-0.min-w-0.flex-1 {
+    width: 100vw !important;
+    height: 100dvh !important;
+  }
+
+  .malik-dashboard-shell main,
+  .malik-dashboard-shell main > section {
     width: 100% !important;
     max-width: 100% !important;
-    overflow: hidden !important;
+    min-height: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  .malik-dashboard-shell input,
+  .malik-dashboard-shell textarea,
+  .malik-dashboard-shell select {
+    font-size: 16px !important;
+  }
+
+  /* Top bar — compact at the supplied 384px reference width. */
+  .malik-dashboard-shell .titan-topbar {
+    height: calc(48px + env(safe-area-inset-top)) !important;
+    min-height: calc(48px + env(safe-area-inset-top)) !important;
+    max-height: calc(48px + env(safe-area-inset-top)) !important;
+    padding: env(safe-area-inset-top) max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left)) !important;
+    gap: 7px !important;
+    overflow: visible !important;
+    border-color: rgba(255, 255, 255, .08) !important;
+    background: #0d0d0e !important;
+  }
+
+  .malik-dashboard-shell .titan-topbar > .titan-icon-btn {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
+    border: 0 !important;
+    border-radius: 10px !important;
     background: transparent !important;
   }
 
-  .malik-chat-space,
-  .malik-chat-grid,
-  .malik-chat-horizon {
-    pointer-events: none !important;
+  .malik-dashboard-shell .titan-tabs {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    overflow: hidden !important;
   }
 
-  .malik-chat-scroll {
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
+  .malik-dashboard-shell .titan-tab {
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 10px !important;
+    gap: 6px !important;
+    border-radius: 11px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    color: #d8d8da !important;
+  }
+
+  .malik-dashboard-shell .titan-tab:nth-child(n + 3) {
+    display: none !important;
+  }
+
+  .malik-dashboard-shell .titan-tab.is-active {
+    border-color: rgba(255, 255, 255, .09) !important;
+    background: #242425 !important;
+    color: #fff !important;
+    box-shadow: none !important;
+  }
+
+  .malik-dashboard-shell .titan-tab.is-active svg {
+    color: #fff !important;
+  }
+
+  .malik-dashboard-shell .titan-topbar-right {
+    gap: 0 !important;
+  }
+
+  .malik-dashboard-shell .titan-topbar-right > :not(:last-child) {
+    display: none !important;
+  }
+
+  .malik-dashboard-shell .titan-avatar {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
+    border: 0 !important;
+    font-size: 11px !important;
+    box-shadow: none !important;
+  }
+
+  .malik-dashboard-shell .titan-popover {
+    position: fixed !important;
+    top: calc(52px + env(safe-area-inset-top)) !important;
+    right: 10px !important;
+    width: min(260px, calc(100vw - 20px)) !important;
+    max-height: calc(100dvh - 70px - env(safe-area-inset-top)) !important;
+    overflow-y: auto !important;
+  }
+
+  /* Drawer — solid, stable and wide enough for chat titles. */
+  #malik-root .malik-dashboard-shell .titan-topbar {
+    z-index: 40 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer {
+    width: min(330px, 86vw) !important;
+    max-width: 86vw !important;
+    height: 100dvh !important;
+    overflow: hidden !important;
+    box-shadow: 18px 0 45px rgba(0, 0, 0, .46) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer.fixed.z-50 .malik-sidebar[data-collapsed="false"] {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    padding-top: env(safe-area-inset-top) !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    border-color: rgba(255, 255, 255, .08) !important;
+    background: #0b0b0c !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar[data-collapsed="false"] > div:first-child {
+    height: 50px !important;
+    padding-left: 14px !important;
+    padding-right: 10px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-search {
+    height: 38px !important;
+    min-height: 38px !important;
+    border-color: rgba(255, 255, 255, .08) !important;
+    border-radius: 11px !important;
+    background: #171718 !important;
+    font-size: 13px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-primary {
+    height: 40px !important;
+    min-height: 40px !important;
+    border-radius: 10px !important;
+    padding: 0 10px !important;
+    font-size: 14px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-primary.is-active,
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-chat-row.is-active {
+    background: #242425 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-history {
+    padding: 10px !important;
+    overscroll-behavior: contain !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-chat-row {
+    height: 38px !important;
+    border-radius: 9px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-chat-title {
+    min-height: 38px !important;
+    font-size: 13px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-tools {
+    padding: 7px 10px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-premium {
+    display: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-quickrow {
+    margin-top: 5px !important;
+    padding-top: 5px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-icon-btn {
+    width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    flex-shrink: 0 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-search kbd {
+    display: none !important;
+  }
+
+  /* Empty home — calm center and one compact input, library below the fold. */
+  .malik-dashboard-shell .thome {
+    height: 100% !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain !important;
+    background: #0f0f10 !important;
+    scrollbar-width: none !important;
+  }
+
+  .malik-dashboard-shell .thome::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .malik-dashboard-shell .thome-welcome-logo,
+  .malik-dashboard-shell .thome-word,
+  .malik-dashboard-shell .thome-composer {
+    animation-duration: 160ms !important;
+    animation-delay: 0ms !important;
+  }
+
+  .malik-dashboard-shell .thome-inner {
     width: 100% !important;
     max-width: 100% !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch !important;
-    padding: 10px 12px calc(164px + env(safe-area-inset-bottom)) 12px !important;
-    scroll-padding-bottom: calc(190px + env(safe-area-inset-bottom)) !important;
+    padding: 0 12px calc(24px + env(safe-area-inset-bottom)) !important;
   }
 
-  .malik-message-list {
+  .malik-dashboard-shell .thome-launcher {
+    height: calc(100dvh - 48px - env(safe-area-inset-top)) !important;
+    min-height: calc(100dvh - 48px - env(safe-area-inset-top)) !important;
+    align-items: center !important;
+    padding: 0 0 calc(58px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .malik-dashboard-shell .thome-welcome {
+    width: 100% !important;
+    max-width: 520px !important;
+  }
+
+  .malik-dashboard-shell .thome-welcome-logo {
+    width: 44px !important;
+    height: 44px !important;
+    border-radius: 13px !important;
+    box-shadow: none !important;
+  }
+
+  .malik-dashboard-shell .thome-welcome-logo svg {
+    width: 25px !important;
+    height: 25px !important;
+  }
+
+  .malik-dashboard-shell .thome-welcome h1 {
+    margin: 16px 0 7px !important;
+    font-size: clamp(24px, 7vw, 28px) !important;
+    line-height: 1.08 !important;
+    letter-spacing: -.035em !important;
+  }
+
+  .malik-dashboard-shell .thome-welcome-subtitle {
+    max-width: 330px !important;
+    margin-bottom: 17px !important;
+    padding: 0 !important;
+    font-size: 12px !important;
+    line-height: 1.45 !important;
+  }
+
+  .malik-dashboard-shell .thome-composer {
+    min-height: 64px !important;
+    border-radius: 22px !important;
+    border-color: rgba(255, 255, 255, .1) !important;
+    background: #1c1c1d !important;
+    box-shadow: 0 14px 45px rgba(0, 0, 0, .32) !important;
+    overflow: visible !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer-row {
+    display: grid !important;
+    grid-template-columns: 36px minmax(0, 1fr) !important;
+    grid-template-areas: "input input" "add actions" !important;
+    min-height: 0 !important;
+    padding: 7px 8px !important;
+    gap: 2px 6px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer textarea {
+    grid-area: input !important;
+    width: 100% !important;
+    flex: 1 1 0% !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    max-height: 92px !important;
+    padding: 7px 8px !important;
+    font-size: 16px !important;
+    line-height: 22px !important;
+    resize: none !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-tools {
+    grid-area: add !important;
+  }
+
+  .malik-dashboard-shell .thome-composer-meta {
+    display: none !important;
+  }
+
+  .malik-dashboard-shell .thome-icon-button,
+  .malik-dashboard-shell .thome-submit,
+  .malik-dashboard-shell .thome-voice-entry {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    border-radius: 999px !important;
+  }
+
+  .malik-dashboard-shell .thome-tools-trigger {
+    width: 40px !important;
+    min-width: 40px !important;
+    padding: 0 !important;
+    font-size: 0 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer-right {
+    grid-area: actions !important;
+    width: 100% !important;
+    flex: 0 0 auto !important;
+    justify-content: space-between !important;
+    gap: 3px !important;
+  }
+
+  .malik-dashboard-shell .thome-action-swap,
+  .malik-dashboard-shell .thome-action-swap > button {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .malik-dashboard-shell .thome-action-swap {
+    flex-basis: 40px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer-right .malik-model-selector__trigger {
+    width: auto !important;
+    max-width: 190px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    padding-inline: 8px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer-right .malik-model-selector__trigger > span:not(.malik-model-selector__mark) {
+    max-width: none !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .malik-dashboard-shell .thome-library {
+    padding-top: 20px !important;
+  }
+
+  .malik-dashboard-shell .thome-section-head {
+    align-items: center !important;
+  }
+
+  .malik-dashboard-shell .thome-templates {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .malik-dashboard-shell .thome-template {
+    border-radius: 16px !important;
+  }
+
+  .malik-dashboard-shell .thome-template-media {
+    aspect-ratio: 16 / 8 !important;
+  }
+
+  /* Chat messages stay readable; assistant text is no longer trapped in a card. */
+  .malik-dashboard-shell .malik-chat-fullwidth {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    background: #000 !important;
+  }
+
+  .malik-dashboard-shell .malik-chat-space,
+  .malik-dashboard-shell .malik-chat-grid,
+  .malik-dashboard-shell .malik-chat-horizon {
+    display: none !important;
+  }
+
+  .malik-dashboard-shell .malik-chat-scroll {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    padding: 12px 14px calc(92px + env(safe-area-inset-bottom)) !important;
+    scroll-padding-bottom: calc(100px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .malik-dashboard-shell .malik-message-list {
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
     gap: 18px !important;
   }
 
-  .malik-date-chip {
-    margin: 0 auto 4px auto !important;
-    transform: scale(0.92) !important;
-  }
-
-  .malik-message-row {
+  .malik-dashboard-shell .malik-message-row {
     width: 100% !important;
     max-width: 100% !important;
     gap: 8px !important;
-    align-items: flex-start !important;
   }
 
-  .malik-ai-avatar,
-  .malik-message-row-user > div:last-child {
-    width: 32px !important;
-    height: 32px !important;
-    flex: 0 0 32px !important;
+  .malik-dashboard-shell .malik-ai-avatar {
+    width: 26px !important;
+    height: 26px !important;
+    flex: 0 0 26px !important;
   }
 
-  .malik-message-stack {
+  .malik-dashboard-shell .malik-message-stack {
     width: auto !important;
-    max-width: calc(100% - 40px) !important;
-    min-width: 0 !important;
-    overflow: visible !important;
+    max-width: calc(100% - 34px) !important;
   }
 
-  .malik-message-row-user .malik-message-stack {
+  #malik-root .malik-dashboard-shell .malik-message-row-user .malik-message-stack {
+    width: fit-content !important;
+    height: auto !important;
+    flex: 0 1 auto !important;
     max-width: 86% !important;
   }
 
-  .malik-message-meta {
-    margin-bottom: 4px !important;
-    font-size: 11px !important;
-    line-height: 1.2 !important;
-  }
-
-  .malik-message-card {
-    border-radius: 18px !important;
-    font-size: 14px !important;
-    line-height: 1.65 !important;
-    padding: 12px 14px !important;
-    overflow-wrap: anywhere !important;
-    word-break: normal !important;
-  }
-
-  .malik-message-card-assistant {
-    background: linear-gradient(135deg, rgba(7, 17, 38, 0.96), rgba(3, 8, 20, 0.92)) !important;
-    border-color: rgba(228, 187, 94, 0.22) !important;
-    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255,255,255,0.06) !important;
-  }
-
-  .malik-message-card-user {
-    background: linear-gradient(135deg, rgba(91, 67, 21, 0.92), rgba(15, 23, 42, 0.92)) !important;
-    border-color: rgba(232, 197, 106, 0.34) !important;
-  }
-
-  .malik-message-card:has(.malik-thinking-card) {
+  .malik-dashboard-shell .malik-message-card {
     padding: 0 !important;
     border: 0 !important;
+    border-radius: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
+    font-size: 15px !important;
+    line-height: 1.58 !important;
+    overflow-wrap: anywhere !important;
   }
 
-  .malik-message-actions,
-  .malik-answer-badges {
-    display: flex !important;
-    flex-wrap: wrap !important;
-    gap: 6px !important;
-  }
-
-  .malik-message-actions button {
-    min-width: 36px !important;
-    min-height: 36px !important;
-    display: grid !important;
-    place-items: center !important;
-  }
-
-  .malik-thinking-card {
-    display: flex !important;
-    align-items: center !important;
-    gap: 10px !important;
-    min-height: 46px !important;
-    width: min(100%, 360px) !important;
-    padding: 10px 12px !important;
-    border: 1px solid rgba(228, 187, 94, 0.18) !important;
+  .malik-dashboard-shell .malik-message-card-user {
+    padding: 10px 13px !important;
     border-radius: 18px !important;
-    background: linear-gradient(135deg, rgba(6, 12, 28, 0.92), rgba(3, 8, 20, 0.86)) !important;
-    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255,255,255,0.06) !important;
+    background: #242425 !important;
   }
 
-  .malik-thinking-orb {
-    width: 34px !important;
-    height: 34px !important;
-    flex: 0 0 34px !important;
-    border-radius: 999px !important;
-    display: grid !important;
-    place-items: center !important;
-    background: radial-gradient(circle at 30% 20%, rgba(228, 187, 94, 0.38), rgba(201, 152, 47, 0.18) 48%, rgba(2, 6, 23, 0.8) 100%) !important;
-    animation: malikMobileThinkingPulse 1.35s ease-in-out infinite !important;
+  .malik-dashboard-shell .malik-message-actions button {
+    min-width: 34px !important;
+    min-height: 34px !important;
   }
 
-  .malik-thinking-title {
-    font-size: 13px !important;
-    line-height: 1.3 !important;
-    color: rgba(248, 250, 252, 0.92) !important;
-  }
-
-  .malik-thinking-line {
-    height: 3px !important;
-    margin-top: 8px !important;
-    border-radius: 999px !important;
-    overflow: hidden !important;
-    background: rgba(148, 163, 184, 0.12) !important;
-  }
-
-  .malik-thinking-line span {
-    display: block !important;
-    width: 42% !important;
-    height: 100% !important;
-    border-radius: inherit !important;
-    background: linear-gradient(90deg, transparent, rgba(228, 187, 94,.9), rgba(217, 174, 69,.85), transparent) !important;
-    animation: malikMobileThinkingLine 1.25s ease-in-out infinite !important;
-  }
-
-  .malik-composer-dock {
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
+  .malik-dashboard-shell .malik-composer-dock {
+    position: absolute !important;
+    inset: auto 0 0 !important;
     z-index: 60 !important;
     width: 100% !important;
-    max-width: 100% !important;
-    padding: 8px 10px calc(10px + env(safe-area-inset-bottom)) 10px !important;
-    border-top: 0 !important;
-    background: linear-gradient(180deg, rgba(2, 6, 23, 0.08), rgba(2, 6, 23, 0.96) 18%, rgba(2, 6, 23, 0.98)) !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom)) !important;
+    background: linear-gradient(180deg, transparent, #000 28%) !important;
   }
 
-  .malik-composer-panel {
+  .malik-dashboard-shell .malik-composer-panel {
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
-    padding: 10px !important;
+    padding: 7px 8px !important;
+    border: 1px solid rgba(255, 255, 255, .1) !important;
     border-radius: 22px !important;
-    background: linear-gradient(180deg, rgba(7, 12, 28, 0.98), rgba(3, 7, 18, 0.96)) !important;
-    border-color: rgba(228, 187, 94, 0.24) !important;
-    box-shadow: 0 -14px 56px rgba(177, 132, 44, 0.15), 0 18px 54px rgba(0,0,0,0.42) !important;
+    background: #1c1c1d !important;
+    box-shadow: none !important;
   }
 
-  .malik-composer-top {
-    margin-bottom: 6px !important;
-  }
-
-  .malik-model-chip {
-    min-height: 38px !important;
-    max-width: calc(100% - 46px) !important;
-    border-radius: 14px !important;
-  }
-
-  .malik-composer-expand {
-    width: 40px !important;
-    height: 40px !important;
-    min-width: 40px !important;
-    min-height: 40px !important;
-    border-radius: 14px !important;
-  }
-
-  .malik-depth-toggle {
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    gap: 6px !important;
-    scrollbar-width: none !important;
-    padding-bottom: 1px !important;
-  }
-
-  .malik-depth-toggle::-webkit-scrollbar {
+  .malik-dashboard-shell .malik-composer-top,
+  .malik-dashboard-shell .malik-depth-toggle {
     display: none !important;
   }
 
-  .malik-depth-toggle__btn {
+  #malik-root .malik-dashboard-shell .malik-composer-textarea {
+    width: 100% !important;
+    min-height: 36px !important;
+    max-height: 92px !important;
+    padding: 7px 5px !important;
+    font-size: 16px !important;
+    line-height: 22px !important;
+    resize: none !important;
+  }
+
+  .malik-dashboard-shell .malik-composer-actions {
+    margin-top: 4px !important;
+    gap: 5px !important;
+  }
+
+  .malik-dashboard-shell .malik-composer-tools {
+    gap: 3px !important;
+    overflow: hidden !important;
+  }
+
+  .malik-dashboard-shell .malik-composer-tool,
+  .malik-dashboard-shell .malik-composer-actions button {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    min-height: 38px !important;
+    flex: 0 0 38px !important;
+    border-radius: 999px !important;
+  }
+
+  .malik-dashboard-shell .malik-composer-tools .malik-composer-tool:nth-child(n + 4) {
+    display: none !important;
+  }
+
+  /* The current chat uses the inline composer, not the legacy actions row. */
+  #malik-root .malik-dashboard-shell .malik-ai-chat-bg [data-composer].malik-composer-dock {
+    position: absolute !important;
+    inset: auto 0 0 !important;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom)) !important;
+    background: #000 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-composer-panel.chat-composer {
+    padding: 7px 8px !important;
+    border-radius: 24px !important;
+    background: #1c1c1d !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-inline-composer {
+    display: grid !important;
+    grid-template-columns: 36px minmax(0, 1fr) !important;
+    grid-template-areas: "input input" "add actions" !important;
+    gap: 2px 6px !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-inline-composer .malik-composer-textarea {
+    grid-area: input !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    max-height: 84px !important;
+    padding: 7px 8px !important;
+    line-height: 22px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-inline-composer > .malik-inline-action {
+    grid-area: add !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-inline-composer__right {
+    grid-area: actions !important;
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-inline-composer .malik-model-selector__trigger {
+    display: inline-flex !important;
+    width: auto !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    max-width: 190px !important;
+    font-size: 12px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-inline-composer__right .malik-model-selector {
+    display: block !important;
+    width: auto !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-action-swap > .is-hidden,
+  #malik-root .malik-dashboard-shell .malik-inline-action-swap > .is-hidden {
+    display: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-inline-action,
+  #malik-root .malik-dashboard-shell .malik-inline-action-swap,
+  #malik-root .malik-dashboard-shell .malik-voice-entry,
+  #malik-root .malik-dashboard-shell .malik-inline-send {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    flex: 0 0 36px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-composer-context-row {
+    display: none !important;
+  }
+
+  /* Projects — one restrained toolbar, no oversized desktop empty state. */
+  .malik-dashboard-shell .malik-projects-index {
+    width: 100% !important;
+    background: #000 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-projects-index,
+  #malik-root .malik-dashboard-shell .malik-projects-index * {
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  }
+
+  .malik-dashboard-shell .malik-projects-inner {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 22px 16px calc(24px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .malik-dashboard-shell .malik-projects-head > div:first-child {
+    gap: 14px !important;
+  }
+
+  .malik-dashboard-shell .malik-projects-head h1 {
+    font-size: 22px !important;
+    line-height: 1.2 !important;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif !important;
+  }
+
+  .malik-dashboard-shell .malik-projects-head label,
+  .malik-dashboard-shell .malik-projects-head input,
+  .malik-dashboard-shell .malik-projects-head button {
+    height: 38px !important;
+    min-height: 38px !important;
+  }
+
+  .malik-dashboard-shell .malik-projects-filters {
+    margin-top: 18px !important;
+    padding-bottom: 11px !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-projects-head input {
+    padding-left: 36px !important;
+    padding-right: 12px !important;
+    border-radius: 999px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-projects-filters button {
+    background: transparent !important;
+    border: 0 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-projects-filters button[aria-pressed="true"] {
+    background: #343434 !important;
+  }
+
+  .malik-dashboard-shell .malik-projects-filters::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .malik-dashboard-shell .malik-projects-filters button {
+    height: 34px !important;
     min-height: 34px !important;
     flex: 0 0 auto !important;
-    white-space: nowrap !important;
+    padding-inline: 12px !important;
+    font-size: 12px !important;
   }
 
-  .malik-composer-textarea {
-    min-height: 58px !important;
-    max-height: 112px !important;
+  .malik-dashboard-shell .malik-projects-empty {
+    min-height: 270px !important;
+    padding-top: 56px !important;
+  }
+
+  /* Shared guardrails for every section opened from the drawer. */
+  .malik-dashboard-shell main > div,
+  .malik-dashboard-shell main > section {
+    max-width: 100vw !important;
+  }
+
+  #malik-root .malik-dashboard-shell [data-voice-mode] {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 250 !important;
+    width: 100vw !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+    background: #030304 !important;
+  }
+
+  #malik-root .malik-dashboard-shell main:has([data-voice-mode]) {
+    transform: none !important;
+    contain: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell [data-voice-mode] > header {
+    width: auto !important;
+    max-width: none !important;
+    overflow: visible !important;
+  }
+
+  #malik-root .malik-dashboard-shell [data-voice-mode] textarea {
+    min-height: 34px !important;
+    max-height: 56px !important;
+    padding: 6px 1px !important;
+    resize: none !important;
     font-size: 16px !important;
-    line-height: 1.5 !important;
-    color: rgba(248, 250, 252, 0.96) !important;
-    padding: 0 !important;
+    line-height: 21px !important;
   }
 
-  .malik-composer-actions {
-    margin-top: 8px !important;
-    gap: 8px !important;
-    align-items: center !important;
+}
+
+@media (max-width: 390px) {
+  .malik-dashboard-shell .titan-tab {
+    padding-inline: 8px !important;
   }
 
-  .malik-composer-tools {
-    flex: 1 1 auto !important;
-    min-width: 0 !important;
-    display: flex !important;
-    gap: 6px !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    scrollbar-width: none !important;
+  .malik-dashboard-shell .titan-tab:nth-child(2) span {
+    max-width: 88px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 
-  .malik-composer-tools::-webkit-scrollbar {
-    display: none !important;
+  .malik-dashboard-shell .thome-inner {
+    padding-inline: 10px !important;
   }
 
-  .malik-composer-tool {
-    width: 44px !important;
-    height: 44px !important;
-    min-width: 44px !important;
-    min-height: 44px !important;
-    flex: 0 0 44px !important;
-    border-radius: 15px !important;
-  }
-
-  .malik-composer-actions button[type="button"],
-  .malik-composer-actions button {
-    min-height: 44px !important;
-  }
-
-  .malik-composer-actions button:last-child {
-    min-width: 96px !important;
-    height: 44px !important;
-    border-radius: 16px !important;
-  }
-
-  @keyframes malikMobileThinkingPulse {
-    0%, 100% { transform: scale(1); opacity: 0.78; box-shadow: 0 0 0 rgba(228, 187, 94,0); }
-    50% { transform: scale(1.06); opacity: 1; box-shadow: 0 0 22px rgba(228, 187, 94,0.22); }
-  }
-
-  @keyframes malikMobileThinkingLine {
-    0% { transform: translateX(-120%); opacity: 0.4; }
-    50% { opacity: 1; }
-    100% { transform: translateX(240%); opacity: 0.4; }
+  .malik-dashboard-shell .thome-welcome-subtitle {
+    max-width: 300px !important;
   }
 }
