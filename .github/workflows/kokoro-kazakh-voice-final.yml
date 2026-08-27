@@ -30,7 +30,9 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Wire Kokoro Kazakh Voice
-        run: python .github/scripts/wire-kokoro-kazakh-voice.py
+        run: |
+          python .github/scripts/wire-kokoro-kazakh-voice.py
+          python .github/scripts/fix-current-voice-regression.py
 
       - name: Python syntax check
         run: python -m py_compile run.py app/ai/voice_runtime.py
