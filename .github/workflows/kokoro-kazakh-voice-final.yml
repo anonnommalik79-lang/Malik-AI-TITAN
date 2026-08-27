@@ -32,6 +32,7 @@ jobs:
       - name: Wire Kokoro Kazakh Voice
         run: |
           python .github/scripts/wire-kokoro-kazakh-voice.py
+          python .github/scripts/fix-voice-runtime-direct-load.py
           python .github/scripts/fix-current-voice-regression.py
 
       - name: Python syntax check
@@ -65,8 +66,14 @@ jobs:
       - name: Real Kazakh synthesis smoke and RAM measurement
         run: |
           /usr/bin/time -v python - <<'PY'
-          from app.ai.voice_runtime import synthesize_kazakh
-          audio = synthesize_kazakh("Сәлем! Бұл қазақ тіліндегі Malik AI дауыс сынағы. Қалың қалай?", 1.0)
+          import importlib.util
+          from pathlib import Path
+          module_path = Path("app/ai/voice_runtime.py").resolve()
+          spec = importlib.util.spec_from_file_location("malik_voice_runtime_smoke", module_path)
+          assert spec and spec.loader
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          audio = module.synthesize_kazakh("Сәлем! Бұл қазақ тіліндегі Malik AI дауыс сынағы. Қалың қалай?", 1.0)
           assert audio[:4] == b"RIFF", "expected WAV RIFF header"
           assert len(audio) > 10000, f"audio too small: {len(audio)}"
           with open("/tmp/malik-kokoro-kazakh-smoke.wav", "wb") as f:
