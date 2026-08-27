@@ -1,0 +1,90 @@
+/* MALIK AI — final pure-black surface pass.
+   This file intentionally loads last and neutralizes legacy aurora/gradient
+   backgrounds without changing cards, controls, typography or brand icons. */
+
+html,
+body,
+#malik-root {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+}
+
+/* Remove the old gold/blue atmospheric layers painted by legendary-aurora. */
+body::before,
+body::after,
+#malik-root::before,
+#malik-root::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+/* Main Malik AI home/workspace surface: true black on desktop and phone. */
+body:has(.thome),
+#malik-root:has(.thome),
+.malik-mobile-home,
+.thome,
+.thome-inner,
+.thome-launcher,
+.malik-chat-legend-bg {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+}
+
+/* Right dashboard rail has been retired. Keep this hard guard so no old CSS
+   can accidentally bring the empty rail back on large screens. */
+.titan-rail {
+  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Authentication / registration must use the same true-black canvas. */
+html.malik-auth-active,
+body.malik-auth-active,
+html:has(.malik-auth-page),
+body:has(.malik-auth-page),
+#malik-root:has(.malik-auth-page),
+.malik-auth-page,
+.sma-root,
+.sma-hero,
+.sma-auth-panel {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+}
+
+/* Keep a very small separator on the mobile auth sheet so the buttons remain
+   readable while the sheet itself stays fully black. */
+.sma-auth-panel {
+  border-top: 1px solid rgba(255, 255, 255, 0.055) !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 767px) {
+  html,
+  body,
+  #malik-root,
+  .malik-mobile-home,
+  .thome,
+  .thome-inner,
+  .thome-launcher,
+  .sma-root,
+  .sma-hero,
+  .sma-auth-panel {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+  }
+}
