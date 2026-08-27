@@ -18,7 +18,18 @@ export function SovereignSupportPanel({ onClose, onOpenSettings, onOpenBilling }
       <div className={styles.scroll}>
         <h2 className={styles.sectionTitle}>Чем помочь?</h2>
         <p className={styles.muted}>Начните с нужного раздела или найдите ответ ниже.</p>
-        <div className={styles.actions}><button className={styles.button} onClick={onOpenSettings}><Settings size={16} />Настройки</button><button className={styles.button} onClick={onOpenBilling}><CreditCard size={16} />Подписка</button></div>
+        <div className={styles.helpGrid}>
+          <button className={styles.helpCard} onClick={onOpenSettings}>
+            <span className={styles.helpIcon}><Settings size={18} /></span>
+            <span><strong>Настройки</strong><small>Модель, память и аккаунт</small></span>
+            <ArrowUpRight size={17} />
+          </button>
+          <button className={styles.helpCard} onClick={onOpenBilling}>
+            <span className={styles.helpIcon}><CreditCard size={18} /></span>
+            <span><strong>Подписка</strong><small>Ваш доступ к Malik AI</small></span>
+            <ArrowUpRight size={17} />
+          </button>
+        </div>
         <div className={styles.faq}>{FAQ.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div>
         <div className={styles.contact}><div><h2 className={styles.sectionTitle}>Не нашли ответ?</h2><p className={styles.muted}>Опишите проблему и приложите скриншот без API-ключей.</p></div><a className={styles.primaryButton} href="https://t.me/Sovereign_Hub" target="_blank" rel="noopener noreferrer">Написать в Telegram<ArrowUpRight size={16} /></a></div>
       </div>

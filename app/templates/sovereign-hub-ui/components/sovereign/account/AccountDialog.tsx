@@ -18,6 +18,10 @@ export function AccountDialog({ title, description, onClose, children, wide = fa
         <Dialog.Overlay className={styles.overlay} />
         <Dialog.Content className={styles.dialog + (wide ? " " + styles.wide : "")}>
           <header className={styles.header}>
+            <div className={styles.brand} aria-hidden="true">
+              <svg viewBox="0 0 44 44"><path d="M9 29 22 15v14ZM24 15h14L24 29Z" fill="#111" /></svg>
+              <span>MALIK AI</span>
+            </div>
             <Dialog.Title className={styles.title}>{title}</Dialog.Title>
             <Dialog.Description className={styles.subtitle}>{description}</Dialog.Description>
           </header>

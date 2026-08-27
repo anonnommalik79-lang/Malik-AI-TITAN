@@ -61,7 +61,7 @@ export function SovereignBillingPanel({ plan, authenticated, onClose }: { plan: 
             const current = isPlus === plus
             return (
               <article key={item.id} className={styles.plan + (isPlus ? " " + styles.plus : "")}>
-                <div className={styles.planHeading}><h2>{item.title}</h2>{current && <span className={styles.badge}>Ваш тариф</span>}</div>
+                <div className={styles.planHeading}><h2>{item.title}</h2>{current ? <span className={styles.badge}>Ваш тариф</span> : isPlus ? <span className={styles.badge}>Все модели</span> : null}</div>
                 <p className={styles.price}>{item.price}</p>
                 <p className={styles.planDescription}>{item.description}</p>
                 <button className={isPlus ? styles.primaryButton : styles.button} onClick={isPlus ? upgrade : undefined} disabled={!isPlus || current || loading || Boolean(orderId)}>
