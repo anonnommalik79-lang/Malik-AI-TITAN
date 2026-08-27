@@ -1,0 +1,58 @@
+name: Kokoro Kazakh ONNX Memory
+
+on:
+  push:
+    paths:
+      - ".github/workflows/kokoro-kazakh-onnx-memory.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install build/runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt onnx==1.18.0 onnxruntime==1.22.1
+      - name: Build quantized Kazakh ONNX
+        run: python app/ai/build_kokoro_kazakh_onnx.py
+      - name: Show artifact sizes
+        run: ls -lh app/ai/kokoro_kazakh_runtime
+      - name: Low-memory ONNX synthesis smoke
+        run: |
+          /usr/bin/time -v python - <<'PY'
+          import json, wave
+          from pathlib import Path
+          import numpy as np
+          import onnxruntime as ort
+          from misaki import espeak
+
+          root = Path("app/ai/kokoro_kazakh_runtime")
+          cfg = json.loads((root / "config.json").read_text(encoding="utf-8"))
+          vocab = cfg["vocab"]
+          voicepack = np.load(root / "km_m1.npy", allow_pickle=False)
+          g2p = espeak.EspeakG2P(language="kk")
+          phonemes, _ = g2p("Сәлем! Бұл қазақ тіліндегі Malik AI дауыс сынағы. Қалың қалай?")
+          ids = [vocab[p] for p in phonemes if p in vocab]
+          style = voicepack[min(len(phonemes) - 1, voicepack.shape[0] - 1)]
+          if style.ndim == 1:
+              style = style[None, :]
+          opts = ort.SessionOptions()
+          opts.intra_op_num_threads = 2
+          opts.inter_op_num_threads = 1
+          sess = ort.InferenceSession(str(root / "kokoro_kazakh_q8.onnx"), sess_options=opts, providers=["CPUExecutionProvider"])
+          feeds = {
+              "input_ids": np.asarray([[0, *ids, 0]], dtype=np.int64),
+              "style": style.astype(np.float32),
+              "speed": np.asarray(1.0, dtype=np.float32),
+          }
+          audio = np.asarray(sess.run(None, feeds)[0], dtype=np.float32).reshape(-1)
+          assert audio.size > 1000 and np.isfinite(audio).all()
+          pcm = (np.clip(audio, -1, 1) * 32767).astype("<i2").tobytes()
+          with wave.open("/tmp/kokoro-kk-onnx.wav", "wb") as w:
+              w.setnchannels(1); w.setsampwidth(2); w.setframerate(24000); w.writeframes(pcm)
+          print("KOKORO_KK_ONNX_SMOKE_OK", audio.size)
+          PY
