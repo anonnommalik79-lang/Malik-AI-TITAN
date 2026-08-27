@@ -206,6 +206,7 @@
 /* Legacy page-card selectors must never paint a rectangle over the orb. */
 :global(#malik-root) .stage[data-voice-mode] > .center,
 :global(#malik-root) .stage[data-voice-mode] > .visuals,
+:global(#malik-root) .stage[data-voice-mode] > .topbar,
 :global(#malik-root) .stage[data-voice-mode] .orbSpacer,
 :global(#malik-root) .stage[data-voice-mode] .transcript {
   background: transparent !important;

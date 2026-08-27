@@ -37,6 +37,82 @@ body:has(.thome),
   background-image: none !important;
 }
 
+/* Outrank the legacy #malik-root section:first-of-type atmosphere.
+   Scope this to the workspace; keep auth and the Voice orb artwork intact. */
+#malik-root .malik-dashboard-shell,
+#malik-root .malik-dashboard-shell main,
+#malik-root .malik-dashboard-shell main > section:not([data-voice-mode]),
+#malik-root .malik-dashboard-shell .malik-main-scroll-host,
+#malik-root .malik-dashboard-shell .malik-mobile-home,
+#malik-root .malik-dashboard-shell .thome,
+#malik-root .malik-dashboard-shell .thome-inner,
+#malik-root .malik-dashboard-shell .thome-launcher,
+#malik-root .malik-dashboard-shell .malik-active-chat-shell,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg,
+#malik-root .malik-dashboard-shell .malik-premium-chat-host,
+#malik-root .malik-dashboard-shell .malik-chat-legend-bg,
+#malik-root .malik-dashboard-shell .malik-composer-dock,
+#malik-root .malik-dashboard-shell .titan-topbar,
+#malik-root .malik-dashboard-shell .titan-topbar > div,
+#malik-root .malik-dashboard-shell .malik-sidebar,
+#malik-root .malik-dashboard-shell .malik-mobile-drawer.fixed.inset-y-0.left-0 .malik-sidebar,
+#malik-root .malik-dashboard-shell .malik-sidebar > div,
+#malik-root .malik-dashboard-shell .malik-sidebar section,
+#malik-root .malik-dashboard-shell .malik-sidebar-quickrow {
+  background: #000 !important;
+  background-image: none !important;
+}
+
+#malik-root .malik-dashboard-shell main {
+  border-right: 0 !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-welcome {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-welcome h1 {
+  text-shadow: none !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-composer,
+#malik-root .malik-dashboard-shell .malik-inline-composer {
+  background: #181818 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* One rounded composer, not a second rectangular input painted inside it. */
+#malik-root .malik-dashboard-shell .thome-composer-row,
+#malik-root .malik-dashboard-shell .thome-composer-meta,
+#malik-root .malik-dashboard-shell .thome-composer textarea,
+#malik-root .malik-dashboard-shell .malik-inline-composer textarea,
+#malik-root .malik-dashboard-shell [data-voice-mode] textarea {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  resize: none !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-composer textarea::placeholder,
+#malik-root .malik-dashboard-shell .malik-inline-composer textarea::placeholder,
+#malik-root .malik-dashboard-shell [data-voice-mode] textarea::placeholder {
+  color: #969696 !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-launcher::before,
+#malik-root .malik-dashboard-shell .thome-launcher::after,
+#malik-root .malik-dashboard-shell .thome-composer::before,
+#malik-root .malik-dashboard-shell .thome-composer::after,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-composer-dock::before,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-composer-dock::after {
+  content: none !important;
+  display: none !important;
+}
+
 /* Right dashboard rail has been retired. Keep this hard guard so no old CSS
    can accidentally bring the empty rail back on large screens. */
 .titan-rail {

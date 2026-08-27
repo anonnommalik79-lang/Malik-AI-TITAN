@@ -14,7 +14,6 @@ import { CapabilitiesPanel } from "./capabilities"
 import { MalikCodexModal } from "./codex/malik-codex-modal"
 import { CommandPalette } from "./command-palette"
 import { TitanTopBar } from "./TitanTopBar"
-import { RightRail } from "./RightRail"
 import { prefillPrompt, readContextEnabled } from "@/lib/malik-context"
 import { targetViewForTemplate, type MalikTemplate } from "@/lib/malik-template-registry"
 import { playVoiceTransitionSound } from "@/lib/voice-transition-sound"
@@ -6517,18 +6516,6 @@ const shouldShowMobilePreviewButton =
   <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} onRunAction={runCommandPaletteAction} />
   {voiceModeOpen ? <VoiceMode onClose={() => setVoiceModeOpen(false)} onSubmit={(prompt) => handleSendMessage(prompt)} /> : null}
 </main>
-          {/* The canvas needs the same space, so the rail yields to it. */}
-          {!shouldShowPreviewPanel && (
-            <RightRail
-              chats={chats}
-              onSelectChat={handleSelectChat}
-              onSeeAll={() => safeOpenView("chats", "rail")}
-              projectName={chats.find((chat) => chat.id === activeChatId)?.title}
-              modeLabel={AI_MODES.find((mode) => mode.id === activeAiMode)?.label || "Create"}
-              contextTexts={messages.map((message) => message.content)}
-              onOpenBilling={() => safeOpenView("billing", "rail")}
-            />
-          )}
         </div>
       </div>
       </div>
