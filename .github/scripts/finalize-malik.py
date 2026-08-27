@@ -1,0 +1,290 @@
+from pathlib import Path
+import json
+import re
+
+root = Path("app/templates/sovereign-hub-ui")
+
+# 1) Model catalog: keep only currently live public routes and normalize visible labels.
+models_path = root / "lib/ai/malik-models.ts"
+models = models_path.read_text(encoding="utf-8")
+models = models.replace('  | "malik-glm-355b"\n', '')
+glm_block = '''  {
+    id: "malik-glm-355b",
+    label: "MalikLLM x Glm4.7 355B",
+    description: "Cerebras · 355B · Сильный reasoning и код",
+    tier: "free",
+    provider: "cerebras",
+    providerModel: "zai-glm-4.7",
+    capabilities: ["text", "code", "tools", "reasoning"],
+  },
+'''
+if glm_block not in models:
+    raise SystemExit("Expected GLM model block was not found")
+models = models.replace(glm_block, '')
+replacements = {
+    'label: "MalikAI20B"': 'label: "MalikLLM 20B"',
+    'label: "MalikAI120B Fast"': 'label: "MalikLLM Fast 120B"',
+    'label: "MalikLLM8B"': 'label: "MalikLLM 8B"',
+    'label: "MalikLLM30B"': 'label: "MalikLLM Reason 30B"',
+    'label: "MalikVision26B"': 'label: "MalikLLM Vision 26B"',
+    'label: "MalikCoder32B"': 'label: "MalikLLM Coder 32B"',
+    'label: "MalikLLM70B"': 'label: "MalikLLM 70B"',
+    'label: "MalikLLM120B"': 'label: "MalikLLM Pro 120B"',
+    'label: "MalikAgent120B"': 'label: "MalikLLM Agent 120B"',
+    'description: "Cerebras · Быстрые ответы и рассуждения"': 'description: "Cerebras · Production · 1M токенов/день"',
+}
+for old, new in replacements.items():
+    if old not in models:
+        raise SystemExit(f"Missing expected model text: {old}")
+    models = models.replace(old, new)
+if 'zai-glm-4.7' in models or 'malik-glm-355b' in models:
+    raise SystemExit("Deprecated GLM route still present in model catalog")
+models_path.write_text(models, encoding="utf-8")
+
+# 2) Fallback: Qwen 3.8 -> Cerebras GPT-OSS 120B -> 20B.
+router_path = root / "lib/server/malik-model-router.ts"
+router = router_path.read_text(encoding="utf-8")
+old_fallback = '''const TEXT_FALLBACK_MODEL: Partial<Record<MalikModelId, MalikModelId>> = {
+  "malik-27b": "malik-glm-355b",
+  "malik-glm-355b": "malik-fast-120b",
+  "malik-fast-120b": "malik-20b",
+}'''
+new_fallback = '''const TEXT_FALLBACK_MODEL: Partial<Record<MalikModelId, MalikModelId>> = {
+  "malik-27b": "malik-fast-120b",
+  "malik-fast-120b": "malik-20b",
+}'''
+if old_fallback not in router:
+    raise SystemExit("Expected fallback chain was not found")
+router = router.replace(old_fallback, new_fallback)
+if 'malik-glm-355b' in router:
+    raise SystemExit("Deprecated GLM route still present in router")
+router_path.write_text(router, encoding="utf-8")
+
+# 3) Model verification.
+verify_path = root / "scripts/verify-malik-models.mjs"
+verify = verify_path.read_text(encoding="utf-8")
+verify = verify.replace('  "malik-glm-355b": ["cerebras", "zai-glm-4.7"],\n', '')
+verify = verify.replace('MALIK_MODELS.length, 11, "The selector must expose eleven Malik models"', 'MALIK_MODELS.length, 10, "The selector must expose ten live Malik models"')
+verify = verify.replace('new Set(MALIK_MODELS.map((model) => model.id)).size, 11', 'new Set(MALIK_MODELS.map((model) => model.id)).size, 10')
+verify = verify.replace('new Set(MALIK_MODELS.map((model) => `${model.provider}:${model.providerModel}`)).size, 11', 'new Set(MALIK_MODELS.map((model) => `${model.provider}:${model.providerModel}`)).size, 10')
+verify = verify.replace('["malik-20b", "malik-fast-120b", "malik-27b", "malik-glm-355b"]', '["malik-20b", "malik-fast-120b", "malik-27b"]')
+verify = verify.replace('"Free must expose the four free text models"', '"Free must expose the three live free text models"')
+old_tail = 'console.log("Verified 11 unique Malik model routes and Free/Plus gates.")'
+new_tail = '''for (const model of MALIK_MODELS) {
+  assert.match(model.label, /^MalikLLM .+\\d+B$/, `${model.id} label must use MalikLLM and end in parameter count`)
+}
+assert.equal(MALIK_MODELS.some((model) => model.providerModel === "zai-glm-4.7"), false, "Deprecated GLM 4.7 must not be exposed")
+assert.equal(MALIK_MODELS.some((model) => model.providerModel.includes("gemini")), false, "Hidden Gemini must never appear in the selector")
+console.log("Verified 10 unique live MalikLLM routes, branding, and Free/Plus gates.")'''
+if old_tail not in verify:
+    raise SystemExit("Model verification tail did not match")
+verify = verify.replace(old_tail, new_tail)
+verify_path.write_text(verify, encoding="utf-8")
+
+# 4) Hidden Gemini configuration.
+env_path = root / ".env.example"
+env_text = env_path.read_text(encoding="utf-8")
+old_env = '''GEMINI_API_KEY=
+GOOGLE_GENERATIVE_AI_API_KEY=
+GEMINI_MODEL=gemini-2.0-flash'''
+new_env = '''GEMINI_API_KEY=
+GOOGLE_GENERATIVE_AI_API_KEY=
+# Hidden multimodal analysis engine: automatically used for image/video/audio attachments.
+GEMINI_MULTIMODAL_MODEL=gemini-3.7-flash
+GEMINI_MULTIMODAL_TIMEOUT_MS=60000
+GEMINI_MODEL=gemini-2.0-flash'''
+if old_env not in env_text:
+    raise SystemExit("Expected Gemini env block was not found")
+env_path.write_text(env_text.replace(old_env, new_env), encoding="utf-8")
+
+# 5) Attachment menu.
+chat_path = root / "components/sovereign/chat-view.tsx"
+chat = chat_path.read_text(encoding="utf-8")
+if '  Camera,\n' not in chat:
+    chat = chat.replace('  Bot,\n', '  Bot,\n  Camera,\n')
+if '  Plug,\n' not in chat:
+    chat = chat.replace('  Plus,\n', '  Plus,\n  Plug,\n')
+
+props_old = '  onOpenBilling?: () => void\n  onOpenCodex?: () => void'
+props_new = '  onOpenBilling?: () => void\n  onOpenPlugins?: () => void\n  onOpenCodex?: () => void'
+if props_old not in chat:
+    raise SystemExit("ChatView props anchor not found")
+chat = chat.replace(props_old, props_new)
+
+old_signature = 'export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenCodex, onForceCanvas, onOpenVoice, projectName, projectDescription }: ChatViewProps) {'
+new_signature = 'export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, projectName, projectDescription }: ChatViewProps) {'
+if old_signature not in chat:
+    raise SystemExit("ChatView signature did not match expected source")
+chat = chat.replace(old_signature, new_signature)
+
+if '  const cameraInputRef = useRef<HTMLInputElement>(null)\n' not in chat:
+    chat = chat.replace('  const fileInputRef = useRef<HTMLInputElement>(null)\n', '  const cameraInputRef = useRef<HTMLInputElement>(null)\n  const fileInputRef = useRef<HTMLInputElement>(null)\n')
+if '  const attachButtonRef = useRef<HTMLButtonElement>(null)\n' not in chat:
+    chat = chat.replace('  const videoInputRef = useRef<HTMLInputElement>(null)\n', '  const videoInputRef = useRef<HTMLInputElement>(null)\n  const attachButtonRef = useRef<HTMLButtonElement>(null)\n  const attachMenuRef = useRef<HTMLDivElement>(null)\n')
+
+textarea_effect = '''  useEffect(() => {
+    if (!textareaRef.current) return
+    textareaRef.current.style.height = "auto"
+    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`
+  }, [prompt])
+'''
+attach_effect = '''  useEffect(() => {
+    if (!showAttachMenu) return
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (attachButtonRef.current?.contains(target) || attachMenuRef.current?.contains(target)) return
+      setShowAttachMenu(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowAttachMenu(false)
+    }
+    document.addEventListener("pointerdown", closeOnPointerDown)
+    document.addEventListener("keydown", closeOnEscape)
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown)
+      document.removeEventListener("keydown", closeOnEscape)
+    }
+  }, [showAttachMenu])
+
+'''
+if textarea_effect not in chat:
+    raise SystemExit("Textarea effect anchor not found")
+chat = chat.replace(textarea_effect, textarea_effect + attach_effect)
+
+attach_start = chat.index('  const attachItems = useMemo(() => [')
+attach_end_marker = '  ], [onOpenCodex, onForceCanvas, isRecording])\n'
+attach_end = chat.index(attach_end_marker, attach_start) + len(attach_end_marker)
+new_attach_items = '''  const attachItems = useMemo(() => [
+    {
+      label: "Камера",
+      icon: Camera,
+      action: () => { setShowAttachMenu(false); cameraInputRef.current?.click() },
+    },
+    {
+      label: "Фото",
+      icon: ImageIcon,
+      action: () => { setShowAttachMenu(false); imageInputRef.current?.click() },
+    },
+    {
+      label: "Видео",
+      icon: Video,
+      action: () => { setShowAttachMenu(false); videoInputRef.current?.click() },
+    },
+    {
+      label: "Файлы",
+      icon: Paperclip,
+      action: () => { setShowAttachMenu(false); fileInputRef.current?.click() },
+    },
+    {
+      label: "Плагины",
+      icon: Plug,
+      action: () => { setShowAttachMenu(false); onOpenPlugins?.() },
+    },
+  ], [onOpenPlugins])
+'''
+chat = chat[:attach_start] + new_attach_items + chat[attach_end:]
+
+panel_old = 'className="malik-composer-panel chat-composer mx-auto w-full max-w-[768px]'
+panel_new = 'className="malik-composer-panel chat-composer relative mx-auto w-full max-w-[768px]'
+if panel_old not in chat:
+    raise SystemExit("Composer panel anchor not found")
+chat = chat.replace(panel_old, panel_new)
+
+old_plus = '<button type="button" onClick={() => setShowAttachMenu((value) => !value)} className={cn("malik-inline-action", showAttachMenu && "is-active")} aria-label="Добавить файл или инструмент">'
+new_plus = '<button ref={attachButtonRef} type="button" onClick={() => setShowAttachMenu((value) => !value)} className={cn("malik-inline-action", showAttachMenu && "is-active")} aria-label="Добавить" aria-haspopup="menu" aria-expanded={showAttachMenu} aria-controls="malik-attachment-menu">'
+if old_plus not in chat:
+    raise SystemExit("Plus button source did not match")
+chat = chat.replace(old_plus, new_plus)
+
+menu_start = chat.index('          {showAttachMenu && (\n')
+menu_end_marker = '          )}\n        </div>\n        <p className="mt-2 hidden text-center text-xs text-slate-600 sm:block">'
+menu_end = chat.index(menu_end_marker, menu_start)
+new_menu = '''          {showAttachMenu && (
+            <div
+              id="malik-attachment-menu"
+              ref={attachMenuRef}
+              role="menu"
+              aria-label="Добавить в чат"
+              className="absolute bottom-[calc(100%+12px)] left-0 z-50 w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-[28px] border border-white/[0.10] bg-[#222222]/95 p-2.5 shadow-[0_24px_80px_rgba(0,0,0,.72)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#222222]/88"
+            >
+              <div className="flex flex-col gap-1">
+                {attachItems.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    role="menuitem"
+                    onClick={item.action}
+                    className="group flex w-full items-center gap-4 rounded-[20px] px-2.5 py-2.5 text-left text-[17px] font-semibold text-white transition-colors hover:bg-white/[0.07] active:bg-white/[0.11]"
+                  >
+                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white/[0.12] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08)] transition group-hover:bg-white/[0.16]">
+                      <item.icon className="h-[23px] w-[23px] stroke-[1.8]" />
+                    </span>
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+'''
+chat = chat[:menu_start] + new_menu + chat[menu_end:]
+
+input_anchor = '      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(event) => handleFiles(event.target.files)} />\n'
+camera_input = '      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => handleFiles(event.target.files)} />\n'
+if input_anchor not in chat:
+    raise SystemExit("File input anchor not found")
+chat = chat.replace(input_anchor, camera_input + input_anchor)
+chat_path.write_text(chat, encoding="utf-8")
+
+# 6) Plugins callback from both project chat and regular chat.
+dashboard_path = root / "components/sovereign/dashboard.tsx"
+dashboard = dashboard_path.read_text(encoding="utf-8")
+pattern = re.compile(r'(?P<indent>\s*)onOpenBilling=\{\(\) => safeOpenView\("billing", "manual"\)\}\n(?P=indent)onOpenCodex=')
+dashboard, count = pattern.subn(lambda m: f'{m.group("indent")}onOpenBilling={{() => safeOpenView("billing", "manual")}}\n{m.group("indent")}onOpenPlugins={{() => safeOpenView("plugins", "attachment-menu")}}\n{m.group("indent")}onOpenCodex=', dashboard)
+if count != 2:
+    raise SystemExit(f"Expected 2 ChatView billing/codex prop pairs, found {count}")
+dashboard_path.write_text(dashboard, encoding="utf-8")
+
+# 7) Targeted regression test.
+verify_attachment = root / "scripts/verify-attachment-menu.mjs"
+verify_attachment.write_text('''import assert from "node:assert/strict"
+import fs from "node:fs"
+
+const chat = fs.readFileSync("components/sovereign/chat-view.tsx", "utf8")
+const dashboard = fs.readFileSync("components/sovereign/dashboard.tsx", "utf8")
+const models = fs.readFileSync("lib/ai/malik-models.ts", "utf8")
+const router = fs.readFileSync("lib/server/malik-model-router.ts", "utf8")
+const hiddenGemini = fs.readFileSync("lib/server/hidden-gemini-multimodal.ts", "utf8")
+
+const menuStart = chat.indexOf("const attachItems = useMemo")
+const menuEnd = chat.indexOf("return (", menuStart)
+assert.ok(menuStart >= 0 && menuEnd > menuStart, "Attachment menu definition must exist")
+const menu = chat.slice(menuStart, menuEnd)
+const labels = ["Камера", "Фото", "Видео", "Файлы", "Плагины"]
+let previous = -1
+for (const label of labels) {
+  const position = menu.indexOf(`label: "${label}"`)
+  assert.ok(position > previous, `${label} must exist in the requested order`)
+  previous = position
+}
+assert.equal(menu.includes("Добавить аудио"), false, "Legacy long attachment menu must be gone")
+assert.match(chat, /capture="environment"/, "Camera picker must request the rear camera")
+assert.match(chat, /accept="image\/\*"/, "Photo picker must accept images")
+assert.match(chat, /accept="video\/\*"/, "Video picker must accept videos")
+assert.match(chat, /aria-controls="malik-attachment-menu"/, "Plus button must own the menu")
+assert.match(chat, /onOpenPlugins\?\.\(\)/, "Plugins action must invoke the dashboard callback")
+assert.ok((dashboard.match(/onOpenPlugins=/g) || []).length >= 2, "Plugins callback must be wired in normal and project chats")
+assert.match(models, /qwen\/qwen3\.8-27b/, "Qwen 3.8 27B must remain the default live text model")
+assert.match(models, /gpt-oss-120b/, "Cerebras GPT-OSS 120B fallback must remain")
+assert.equal(models.includes("zai-glm-4.7"), false, "Deprecated GLM 4.7 must not be exposed")
+assert.equal(router.includes("malik-glm-355b"), false, "Deprecated GLM route must not remain in fallback logic")
+assert.match(hiddenGemini, /gemini-3\.7-flash/, "Hidden multimodal engine must target Gemini 3.7 Flash")
+assert.equal(models.includes("gemini-3.7-flash"), false, "Gemini must stay hidden from the model selector")
+console.log("Attachment menu, Plugins navigation, live text fallbacks, and hidden Gemini routing verified.")
+''', encoding="utf-8")
+
+package_path = root / "package.json"
+package = json.loads(package_path.read_text(encoding="utf-8"))
+package["scripts"]["test:attachment-menu"] = "node scripts/verify-attachment-menu.mjs"
+package_path.write_text(json.dumps(package, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+print("Final Malik patch applied.")
