@@ -5,7 +5,7 @@ export type VoiceTranscribeResult = {
   text?: string
   language?: string
   durationSec?: number
-  provider?: "groq" | "cloudflare"
+  provider?: "gemini" | "groq" | "cloudflare"
   model?: string
   latencyMs?: number
   error?: string
@@ -23,10 +23,11 @@ function env(...names: string[]) {
 }
 
 export function isVoiceTranscribeConfigured() {
+  const gemini = env("GEMINI_VOICE_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY")
   const groq = env("GROQ_VOICE_API_KEY", "GROQ_API_KEY")
   const cfToken = env("CLOUDFLARE_VOICE_API_TOKEN", "CLOUDFLARE_API_TOKEN")
   const cfAccount = env("CLOUDFLARE_VOICE_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID")
-  return Boolean(groq || (cfToken && cfAccount))
+  return Boolean(gemini || groq || (cfToken && cfAccount))
 }
 
 async function withTimeout(url: string, init: RequestInit) {
@@ -36,6 +37,96 @@ async function withTimeout(url: string, init: RequestInit) {
     return await fetch(url, { ...init, signal: controller.signal, cache: "no-store" })
   } finally {
     clearTimeout(timer)
+  }
+}
+
+function interactionText(payload: any) {
+  if (typeof payload?.output_text === "string" && payload.output_text.trim()) return payload.output_text.trim()
+  const steps = Array.isArray(payload?.steps) ? payload.steps : []
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    const step = steps[index]
+    if (step?.type !== "model_output" || !Array.isArray(step?.content)) continue
+    const text = step.content
+      .map((part: any) => part?.type === "text" && typeof part?.text === "string" ? part.text : "")
+      .join("")
+      .trim()
+    if (text) return text
+  }
+  return ""
+}
+
+async function geminiAttempt(data: ArrayBuffer, filename: string, mime: string, model: string) {
+  const key = env("GEMINI_VOICE_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY")
+  if (!key) return { ok: false as const, skipped: true as const, error: "missing key" }
+  const started = Date.now()
+  let fileName = ""
+
+  try {
+    const startUpload = await withTimeout("https://generativelanguage.googleapis.com/upload/v1beta/files", {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": key,
+        "x-goog-upload-protocol": "resumable",
+        "x-goog-upload-command": "start",
+        "x-goog-upload-header-content-length": String(data.byteLength),
+        "x-goog-upload-header-content-type": mime || "audio/webm",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ file: { display_name: filename || "malik-voice" } }),
+    })
+
+    if (!startUpload.ok) {
+      const detail = await startUpload.text().catch(() => "")
+      return { ok: false as const, status: startUpload.status, error: `Gemini upload start: ${detail.slice(0, 220)}`, latencyMs: Date.now() - started }
+    }
+
+    const uploadUrl = startUpload.headers.get("x-goog-upload-url")
+    if (!uploadUrl) return { ok: false as const, status: 502, error: "Gemini upload URL missing", latencyMs: Date.now() - started }
+
+    const upload = await withTimeout(uploadUrl, {
+      method: "POST",
+      headers: {
+        "content-length": String(data.byteLength),
+        "x-goog-upload-offset": "0",
+        "x-goog-upload-command": "upload, finalize",
+        "content-type": mime || "audio/webm",
+      },
+      body: Buffer.from(data),
+    })
+    const filePayload = await upload.json().catch(() => ({}))
+    if (!upload.ok) return { ok: false as const, status: upload.status, error: String(filePayload?.error?.message || `Gemini upload ${upload.status}`), latencyMs: Date.now() - started }
+
+    const uri = String(filePayload?.file?.uri || "")
+    fileName = String(filePayload?.file?.name || "")
+    if (!uri) return { ok: false as const, status: 502, error: "Gemini uploaded file URI missing", latencyMs: Date.now() - started }
+
+    const response = await withTimeout("https://generativelanguage.googleapis.com/v1beta/interactions", {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": key,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        input: [{ type: "audio", uri, mime_type: mime || "audio/webm" }],
+      }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    const latencyMs = Date.now() - started
+    if (!response.ok) return { ok: false as const, status: response.status, error: String(payload?.error?.message || `Gemini ${response.status}`), latencyMs }
+    const text = interactionText(payload)
+    if (!text) return { ok: false as const, status: response.status, error: "empty transcript", latencyMs }
+    return { ok: true as const, text, latencyMs }
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Gemini network error", latencyMs: Date.now() - started }
+  } finally {
+    if (fileName) {
+      void fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}`, {
+        method: "DELETE",
+        headers: { "x-goog-api-key": key },
+        cache: "no-store",
+      }).catch(() => {})
+    }
   }
 }
 
@@ -123,6 +214,7 @@ export async function transcribeVoiceAudio(
 ): Promise<VoiceTranscribeResult> {
   if (!data?.byteLength) return { ok: false, error: "пустой файл" }
 
+  const geminiModel = env("GEMINI_TRANSCRIBE_MODEL") || "gemini-3.5-transcribe"
   const groqPrimary = env("GROQ_WHISPER_PRIMARY") || "whisper-large-v3-turbo"
   const groqFallback = env("GROQ_WHISPER_FALLBACK") || "whisper-large-v3"
   const cfPrimary = env("CLOUDFLARE_WHISPER_PRIMARY") || "@cf/openai/whisper-large-v3-turbo"
@@ -130,17 +222,29 @@ export async function transcribeVoiceAudio(
   const attempts: NonNullable<VoiceTranscribeResult["attempts"]> = []
 
   for (const [provider, model] of [
+    ["gemini", geminiModel],
     ["groq", groqPrimary],
     ["groq", groqFallback],
     ["cloudflare", cfPrimary],
     ["cloudflare", cfFallback],
   ] as const) {
-    const result = provider === "groq"
-      ? await groqAttempt(data, filename, mime, model, opts.language, opts.prompt)
-      : await cloudflareAttempt(data, model, opts.language, opts.prompt)
+    const result = provider === "gemini"
+      ? await geminiAttempt(data, filename, mime, model)
+      : provider === "groq"
+        ? await groqAttempt(data, filename, mime, model, opts.language, opts.prompt)
+        : await cloudflareAttempt(data, model, opts.language, opts.prompt)
 
     if (result.ok) {
-      return { ok: true, text: result.text, language: result.language, durationSec: result.durationSec, provider, model, latencyMs: result.latencyMs, attempts }
+      return {
+        ok: true,
+        text: result.text,
+        language: typeof (result as any).language === "string" ? (result as any).language : undefined,
+        durationSec: typeof (result as any).durationSec === "number" ? (result as any).durationSec : undefined,
+        provider,
+        model,
+        latencyMs: result.latencyMs,
+        attempts,
+      }
     }
     if (!("skipped" in result && result.skipped)) {
       attempts.push({

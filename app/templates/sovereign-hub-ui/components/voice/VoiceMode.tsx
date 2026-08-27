@@ -75,6 +75,9 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const replyPlayingRef = useRef(false)
   const replyInterruptedRef = useRef(false)
   const fluxSessionRef = useRef<FluxTtsSession | null>(null)
+  const autoSubmitRef = useRef<(() => void) | null>(null)
+  const speechDetectedRef = useRef(false)
+  const lastSpeechAtRef = useRef(0)
 
   useEffect(() => {
     speedRef.current = speed
@@ -202,7 +205,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         body: JSON.stringify({ text, voice: selectedVoice, speed, expressivity }),
       })
       const provider = response.headers.get("x-malik-tts-provider")
-      if (response.ok && (provider === "deepgram" || provider === "xai")) {
+      if (response.ok && (provider === "deepgram" || provider === "gemini" || provider === "xai")) {
         const played = await playBlobAudio(await response.blob())
         replyPlayingRef.current = false
         if (played || replyInterruptedRef.current) return played
@@ -324,9 +327,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   const startAudioLoop = useCallback((analyser: AnalyserNode) => {
     const values = new Uint8Array(analyser.frequencyBinCount)
+    const waveform = new Uint8Array(analyser.fftSize)
     function tick() {
       if (!micActiveRef.current || analyserRef.current !== analyser) return
       analyser.getByteFrequencyData(values)
+      analyser.getByteTimeDomainData(waveform)
       let sum = 0
       let peak = 0
       for (let index = 0; index < values.length; index += 1) {
@@ -334,8 +339,25 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         sum += value
         if (value > peak) peak = value
       }
+      let squareSum = 0
+      for (let index = 0; index < waveform.length; index += 1) {
+        const sample = (waveform[index] - 128) / 128
+        squareSum += sample * sample
+      }
+      const rms = Math.sqrt(squareSum / waveform.length)
       const average = sum / values.length / 255
       energyRef.current = Math.min(1, average * 4.9 + peak / 255 * .36)
+
+      const now = performance.now()
+      if (rms >= .016) {
+        speechDetectedRef.current = true
+        lastSpeechAtRef.current = now
+      } else if (speechDetectedRef.current && now - lastSpeechAtRef.current >= 1050 && Date.now() - recordingStartedAtRef.current >= 700) {
+        speechDetectedRef.current = false
+        autoSubmitRef.current?.()
+        return
+      }
+
       audioFrameRef.current = requestAnimationFrame(tick)
     }
     audioFrameRef.current = requestAnimationFrame(tick)
@@ -387,10 +409,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       micActiveRef.current = true
       setMicActive(true)
       setTitle("Слушаю")
-      setSubtitle("Қазақша · Русский · English")
+      setSubtitle("Говори — после паузы я отвечу сам · Қазақша · Русский · English")
+      speechDetectedRef.current = false
+      lastSpeechAtRef.current = 0
+      startRecorder(stream)
       startAudioLoop(analyser)
       startSpeech()
-      startRecorder(stream)
     } catch {
       setMicActive(false)
       micActiveRef.current = false
@@ -494,6 +518,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     else if (fallback) await runVoiceTurn(fallback)
     else showNotice("Скажи что-нибудь и нажми микрофон ещё раз")
   }, [busy, collectRecorder, finalTranscript, interimTranscript, runVoiceTurn, showNotice, startMicrophone, stopMicrophone, stopReplyAudio, transcribeAndRespond])
+
+  useEffect(() => {
+    autoSubmitRef.current = () => { void toggleMicrophone() }
+    return () => { autoSubmitRef.current = null }
+  }, [toggleMicrophone])
 
   const toggleScreen = useCallback(async () => {
     if (screenRef.current) {
