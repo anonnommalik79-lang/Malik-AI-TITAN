@@ -1,0 +1,27 @@
+name: Voice Env Router Verify
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/voice-env-router-verify-temporary.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - name: Install
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm ci
+      - name: Typecheck
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm run typecheck
+      - name: Production build
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm run build
