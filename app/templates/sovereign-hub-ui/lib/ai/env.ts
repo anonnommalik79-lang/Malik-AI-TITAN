@@ -25,6 +25,10 @@ export function bedrockBackupConfigured(): boolean {
   return envPresent("AWS_BEARER_TOKEN_BEDROCK_BACKUP")
 }
 
+export function cerebrasConfigured(): boolean {
+  return envPresent("CEREBRAS_API_KEY")
+}
+
 export function groqConfigured(): boolean {
   return envPresent("GROQ_API_KEY")
 }
@@ -75,6 +79,7 @@ export function modelsConfigured(): boolean {
     envPresent("BEDROCK_PRO_MODEL_ID") ||
     envPresent("BEDROCK_CODE_MODEL_ID") ||
     envPresent("AWS_BEDROCK_TEXT_MODEL") ||
+    cerebrasConfigured() ||
     groqConfigured()
   )
 }
@@ -83,6 +88,7 @@ export function getSafeEnvSnapshot() {
   return {
     bedrockPrimaryConfigured: bedrockPrimaryConfigured(),
     bedrockBackupConfigured: bedrockBackupConfigured(),
+    cerebrasConfigured: cerebrasConfigured(),
     groqConfigured: groqConfigured(),
     groqBackupConfigured: groqBackupConfigured(),
     openaiConfigured: openaiConfigured(),

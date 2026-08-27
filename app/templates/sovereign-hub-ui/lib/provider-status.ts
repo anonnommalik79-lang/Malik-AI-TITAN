@@ -16,6 +16,7 @@ export const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
   { id: "gemini", title: "Google Gemini", group: "text/code", requiredEnv: ["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"], mode: "any", modelEnv: ["GEMINI_MODEL", "GEMINI_CODE_MODEL"] },
   { id: "anthropic", title: "Anthropic Claude", group: "text/code", requiredEnv: ["ANTHROPIC_API_KEY"], modelEnv: ["ANTHROPIC_MODEL", "ANTHROPIC_CODE_MODEL"] },
   { id: "awsBedrock", title: "AWS Bedrock", group: "text/code", requiredEnv: ["AWS_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"], mode: "all", modelEnv: ["AWS_BEDROCK_TEXT_MODEL", "AWS_BEDROCK_CODE_MODEL", "AWS_BEDROCK_IMAGE_MODEL", "AWS_BEDROCK_VIDEO_MODEL"] },
+  { id: "cerebras", title: "Cerebras Fast", group: "text/code", requiredEnv: ["CEREBRAS_API_KEY"], modelEnv: ["CEREBRAS_MODEL", "CEREBRAS_CODE_MODEL"] },
   { id: "groq", title: "Groq", group: "text/code", requiredEnv: ["GROQ_API_KEY"], modelEnv: ["GROQ_MODEL", "GROQ_CODE_MODEL"] },
   { id: "grok", title: "Grok", group: "text/code", requiredEnv: ["XAI_API_KEY"], modelEnv: ["GROK_MODEL", "GROK_CODE_MODEL"] },
   { id: "nvidiaNim", title: "NVIDIA NIM", group: "text/code", requiredEnv: ["NVIDIA_NIM_API_KEY", "NVIDIA_NIM_ENABLED"], mode: "all", modelEnv: ["NVIDIA_NIM_MODEL", "NVIDIA_NIM_CODE_MODEL"] },
@@ -116,9 +117,9 @@ export function getPublicEngineReadiness(): PublicEngine[] {
   const rows = getProviderRows()
   const any = (...ids: string[]) => ids.some((id) => rows.find((row) => row.id === id)?.configured)
   const engines: Array<[PublicEngineId, PublicEngine["group"], boolean]> = [
-    ["core", "text", any("openai", "gemini", "groq", "openrouter")],
-    ["reasoning", "text", any("kimi", "anthropic", "grok", "deepseek")],
-    ["code", "code", any("openai", "kimi", "anthropic", "gemini", "grok", "deepseek", "openrouter", "awsBedrock", "nvidiaNim")],
+    ["core", "text", any("cerebras", "openai", "gemini", "groq", "openrouter")],
+    ["reasoning", "text", any("cerebras", "kimi", "anthropic", "grok", "deepseek")],
+    ["code", "code", any("cerebras", "openai", "kimi", "anthropic", "gemini", "grok", "deepseek", "openrouter", "awsBedrock", "nvidiaNim")],
     ["vision", "image", any("openai", "stability", "fal", "awsBedrock")],
     ["cinema", "video", any("googleVeo", "runway", "luma", "fal")],
     ["infrastructure", "infrastructure", any("awsBedrock", "nvidiaNim", "backend")],

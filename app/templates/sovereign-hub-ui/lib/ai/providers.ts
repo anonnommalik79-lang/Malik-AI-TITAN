@@ -1,5 +1,6 @@
 import type { AIProvider, AITaskType } from "./types"
 import { geminiProvider } from "./providers/gemini"
+import { cerebrasProvider } from "./providers/cerebras"
 import { groqProvider } from "./providers/groq"
 import { openRouterProvider } from "./providers/openrouter"
 import { openAIProvider } from "./providers/openai"
@@ -13,6 +14,7 @@ import { grokProvider } from "./providers/grok"
 import { nvidiaNimProvider } from "./providers/nvidia-nim"
 
 export const WORLD_TITANS_PROVIDERS: AIProvider[] = [
+  cerebrasProvider,
   deepSeekProvider,
   openRouterProvider,
   kimiProvider,
@@ -27,16 +29,16 @@ export const WORLD_TITANS_PROVIDERS: AIProvider[] = [
 ]
 
 const ROUTING_ORDER: Record<AITaskType, string[]> = {
-  chat: ["deepseek", "openrouter", "kimi", "openai", "claude", "gemini", "grok", "aws-bedrock", "nvidia-nim", "azure", "groq"],
-  code: ["deepseek", "openrouter", "openai", "kimi", "claude", "gemini", "grok", "nvidia-nim", "aws-bedrock", "azure", "groq"],
-  debug: ["deepseek", "openrouter", "openai", "kimi", "claude", "gemini", "grok", "aws-bedrock"],
-  project: ["deepseek", "openrouter", "openai", "kimi", "claude", "gemini", "grok", "aws-bedrock", "azure"],
+  chat: ["cerebras", "groq", "gemini", "openrouter", "deepseek", "kimi", "openai", "claude", "grok", "aws-bedrock", "nvidia-nim", "azure"],
+  code: ["cerebras", "groq", "deepseek", "openrouter", "openai", "kimi", "claude", "gemini", "grok", "nvidia-nim", "aws-bedrock", "azure"],
+  debug: ["cerebras", "deepseek", "openrouter", "openai", "kimi", "claude", "gemini", "grok", "aws-bedrock"],
+  project: ["cerebras", "deepseek", "openrouter", "openai", "kimi", "claude", "gemini", "grok", "aws-bedrock", "azure"],
   image: ["aws-bedrock"],
   video: [],
   file_analysis: ["deepseek", "openrouter", "gemini", "openai", "claude", "aws-bedrock", "azure"],
-  research: ["deepseek", "openrouter", "gemini", "openai", "claude", "aws-bedrock", "groq"],
+  research: ["cerebras", "groq", "deepseek", "openrouter", "gemini", "openai", "claude", "aws-bedrock"],
   voice: [],
-  general: ["deepseek", "openrouter", "gemini", "openai", "claude", "groq"],
+  general: ["cerebras", "groq", "gemini", "openrouter", "deepseek", "openai", "claude"],
   enterprise: ["deepseek", "openrouter", "aws-bedrock", "nvidia-nim", "azure", "gemini", "openai", "claude"],
 }
 

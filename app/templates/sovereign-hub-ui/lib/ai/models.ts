@@ -29,6 +29,14 @@ export const MODEL_REGISTRY: Record<AIProviderId, Partial<Record<AITaskType, str
     file_analysis: process.env.GEMINI_MODEL || "gemini-1.5-pro",
     research: process.env.GEMINI_MODEL || "gemini-1.5-pro",
   },
+  cerebras: {
+    chat: process.env.CEREBRAS_MODEL || "gpt-oss-120b",
+    code: process.env.CEREBRAS_CODE_MODEL || process.env.CEREBRAS_MODEL || "gpt-oss-120b",
+    debug: process.env.CEREBRAS_CODE_MODEL || process.env.CEREBRAS_MODEL || "gpt-oss-120b",
+    project: process.env.CEREBRAS_CODE_MODEL || process.env.CEREBRAS_MODEL || "gpt-oss-120b",
+    research: process.env.CEREBRAS_MODEL || "gpt-oss-120b",
+    general: process.env.CEREBRAS_MODEL || "gpt-oss-120b",
+  },
   groq: {
     chat: process.env.GROQ_MODEL || process.env.DEFAULT_FAST_MODEL || "llama-3.1-70b-versatile",
     code: process.env.GROQ_CODE_MODEL || "llama-3.1-70b-versatile",

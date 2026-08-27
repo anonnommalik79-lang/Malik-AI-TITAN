@@ -20,6 +20,7 @@ export type AIProviderId =
   | "grok"
   | "nvidia-nim"
   | "gemini"
+  | "cerebras"
   | "groq"
   | "deepseek"
   | "openrouter"

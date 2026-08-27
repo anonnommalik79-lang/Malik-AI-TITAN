@@ -1,7 +1,7 @@
 import { getProviderRows, envGroupConfigured } from "@/lib/provider-status"
 import type { AIProviderId } from "./types"
 
-export const FREE_PROVIDER_IDS: AIProviderId[] = ["groq", "gemini", "openrouter"]
+export const FREE_PROVIDER_IDS: AIProviderId[] = ["cerebras", "groq", "gemini", "openrouter"]
 
 export const PREMIUM_PROVIDER_IDS: AIProviderId[] = [
   "openai",
@@ -27,6 +27,7 @@ export function getTitanProviderStatus() {
   return {
     freeModeActive: freeMode,
     providers: {
+      cerebras: mapId("cerebras"),
       groq: mapId("groq"),
       gemini: mapId("gemini"),
       openrouter: mapId("openrouter"),
