@@ -25,6 +25,15 @@ type MalikAttachment = {
   name?: string
 }
 
+type StrictMalikResult = {
+  content: string
+  provider: string
+  model: string
+  selectedModelId: MalikModelId
+  latencyMs: number
+  usage?: any
+}
+
 const TEXT_FALLBACK_MODEL: Partial<Record<MalikModelId, MalikModelId>> = {
   "malik-27b": "malik-glm-355b",
   "malik-glm-355b": "malik-fast-120b",
@@ -187,7 +196,7 @@ async function runFallback(input: {
   attachments?: MalikAttachment[]
   maxTokens?: number
   temperature?: number
-}) {
+}): Promise<StrictMalikResult | null> {
   const fallbackModelId = TEXT_FALLBACK_MODEL[input.failedModelId]
   if (!fallbackModelId) return null
   console.warn("[MALIK_MODEL_ROUTE]", JSON.stringify({
@@ -216,7 +225,7 @@ export async function runStrictMalikModel(input: {
   attachments?: MalikAttachment[]
   maxTokens?: number
   temperature?: number
-}) {
+}): Promise<StrictMalikResult> {
   if (hasHiddenGeminiMedia(input.attachments)) {
     const started = Date.now()
     try {
