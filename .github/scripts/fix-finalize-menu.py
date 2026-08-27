@@ -21,4 +21,15 @@ if count != 2:
 dashboard = dashboard.replace('safeOpenView("plugins", "attachment-menu")', 'safeOpenView("plugins", "manual")')
 dashboard_path.write_text(dashboard, encoding="utf-8")
 
-print("Attachment-menu JSX boundary and Plugins routing fixed.")
+account_path = Path("app/templates/sovereign-hub-ui/scripts/verify-account-and-search.mjs")
+account = account_path.read_text(encoding="utf-8")
+old_title = 'await check("two plans; exactly two free models", () => {'
+new_title = 'await check("two plans; three live free MalikLLM models", () => {'
+old_models = 'assert.deepEqual(FREE_MALIK_MODELS.map(m => m.label), ["MalikAI20B", "MalikAI120B Fast"])'
+new_models = 'assert.deepEqual(FREE_MALIK_MODELS.map(m => m.label), ["MalikLLM 20B", "MalikLLM Fast 120B", "MalikLLM Qwen3.8 27B"])'
+if old_title not in account or old_models not in account:
+    raise SystemExit("Expected legacy account/model assertions were not found")
+account = account.replace(old_title, new_title).replace(old_models, new_models)
+account_path.write_text(account, encoding="utf-8")
+
+print("Attachment menu, Plugins routing, and account model expectations fixed.")
