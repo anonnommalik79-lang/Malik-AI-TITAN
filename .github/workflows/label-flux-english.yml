@@ -1,0 +1,42 @@
+name: Label Flux English Voices
+
+on:
+  push:
+    paths:
+      - ".github/workflows/label-flux-english.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - name: Apply English labels
+        run: python .github/scripts/label-flux-english.py
+      - name: Install dependencies
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm ci
+      - name: Typecheck
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm run typecheck
+      - name: Voice regression
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm run test:voice
+      - name: Commit labels
+        run: |
+          git config user.name "Malik AI CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/templates/sovereign-hub-ui/components/voice/VoiceSettings.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m "ui: mark Flux voices as English"
+          git push origin HEAD:main
