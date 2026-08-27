@@ -5,7 +5,9 @@ body.malik-auth-active,
 html:has(.malik-auth-page),
 body:has(.malik-auth-page),
 #malik-root:has(.malik-auth-page) {
-  background: #01030a !important;
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
 }
 
 html.malik-auth-active #malik-root::before,
@@ -28,6 +30,7 @@ html.malik-auth-active #malik-investor-aurora,
 .malik-auth-page {
   position: relative;
   min-height: 100dvh;
+  background: #000 !important;
 }
 
 @media (max-width: 980px) {
@@ -35,6 +38,7 @@ html.malik-auth-active #malik-investor-aurora,
   body.malik-auth-active,
   #malik-root:has(.malik-auth-page) {
     overflow: hidden !important;
+    background: #000 !important;
   }
 
   /* mobile-polish kills backdrop-filter globally — restore on mobile auth card */
