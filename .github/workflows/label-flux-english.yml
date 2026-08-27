@@ -32,7 +32,7 @@ jobs:
       - name: Voice regression
         working-directory: app/templates/sovereign-hub-ui
         run: npm run test:voice
-      - name: Commit labels
+      - name: Commit verified labels
         run: |
           git config user.name "Malik AI CI"
           git config user.email "actions@users.noreply.github.com"
