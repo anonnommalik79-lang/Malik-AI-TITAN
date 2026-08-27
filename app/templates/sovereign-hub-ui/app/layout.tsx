@@ -29,6 +29,8 @@ import "./mobile-reference-nav-patch.css"
 import "./mobile-app-shell-v3.css"
 // Final surface authority: true black app/auth backgrounds and no right rail.
 import "./malik-pure-black-final.css"
+// Final phone welcome geometry: larger mark/type and a higher hero position.
+import "./mobile-welcome-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 
