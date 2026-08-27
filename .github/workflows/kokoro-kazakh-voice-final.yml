@@ -1,0 +1,85 @@
+name: Kokoro Kazakh Voice Final
+
+on:
+  push:
+    paths:
+      - ".github/workflows/kokoro-kazakh-voice-final.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Wire Kokoro Kazakh Voice
+        run: python .github/scripts/wire-kokoro-kazakh-voice.py
+
+      - name: Python syntax check
+        run: python -m py_compile run.py app/ai/voice_runtime.py
+
+      - name: Install frontend dependencies
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm run typecheck
+
+      - name: Voice regression
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm run test:voice
+
+      - name: Account/router regression
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm run test:account
+
+      - name: Production frontend build
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm run build
+
+      - name: Install Python Voice runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Real Kazakh synthesis smoke and RAM measurement
+        run: |
+          /usr/bin/time -v python - <<'PY'
+          from app.ai.voice_runtime import synthesize_kazakh
+          audio = synthesize_kazakh("Сәлем! Бұл қазақ тіліндегі Malik AI дауыс сынағы. Қалың қалай?", 1.0)
+          assert audio[:4] == b"RIFF", "expected WAV RIFF header"
+          assert len(audio) > 10000, f"audio too small: {len(audio)}"
+          with open("/tmp/malik-kokoro-kazakh-smoke.wav", "wb") as f:
+              f.write(audio)
+          print("KOKORO_KAZAKH_SMOKE_OK", len(audio))
+          PY
+
+      - name: Commit verified integration
+        run: |
+          git config user.name "Malik AI CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add run.py requirements.txt \
+            app/templates/sovereign-hub-ui/components/voice/VoiceSettings.tsx \
+            app/templates/sovereign-hub-ui/components/voice/VoiceMode.tsx \
+            app/templates/sovereign-hub-ui/scripts/verify-voice-mode.mjs
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: connect native Kazakh Kokoro voice on Render"
+          git push origin HEAD:main
