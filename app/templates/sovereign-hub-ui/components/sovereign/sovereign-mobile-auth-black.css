@@ -1,0 +1,24 @@
+/* Final mobile-auth color authority: registration lives on true black. */
+@media (max-width: 767px), (max-height: 500px) and (pointer: coarse) {
+  .sma-root,
+  .sma-hero,
+  .sma-auth-panel {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+  }
+
+  .sma-auth-panel {
+    border-top: 1px solid rgba(255, 255, 255, 0.055) !important;
+    box-shadow: none !important;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  .sma-root,
+  .sma-hero,
+  .sma-auth-panel {
+    background: #000 !important;
+    background-image: none !important;
+  }
+}
