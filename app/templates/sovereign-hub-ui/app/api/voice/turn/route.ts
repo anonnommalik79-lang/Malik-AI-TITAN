@@ -1,4 +1,4 @@
-import { malikGodAnswer } from "@/lib/malik-god-router"
+import { voiceLlmAnswer } from "@/lib/voice/voice-llm-router"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -21,20 +21,34 @@ export async function POST(request: Request) {
   const personality = String(body?.personality || "Assistant")
   if (!text) return Response.json({ ok: false, error: "Пустой Voice запрос" }, { status: 400 })
 
-  const instruction = PERSONALITY[personality] || PERSONALITY.Assistant
-  const question = `${instruction}\n\nUser says:\n${text}`
+  const personalityInstruction = PERSONALITY[personality] || PERSONALITY.Assistant
+  const instruction = [
+    "You are Sola, the Malik AI voice assistant.",
+    personalityInstruction,
+    "Never mention GitHub Models, OpenRouter, DeepSeek, Render environment variables, internal provider routing, or missing API keys to the user.",
+    "If a provider is unavailable, the server will handle fallback. Just answer the user's request naturally.",
+  ].join(" ")
 
   try {
-    const answer = await malikGodAnswer({
-      question,
-      research: body?.research === true,
-      disableResearch: body?.research !== true,
-    })
-    const content = String(answer?.content || "").trim()
+    const answer = await voiceLlmAnswer({ text, instruction })
+    const content = String(answer.content || "").trim()
     if (!content) throw new Error("empty voice answer")
-    return Response.json({ ok: true, content, personality })
+
+    return Response.json({
+      ok: true,
+      content,
+      personality,
+      provider: answer.provider,
+      model: answer.model,
+    })
   } catch (error) {
     console.error("[VOICE_TURN_ERROR]", error instanceof Error ? error.message : error)
-    return Response.json({ ok: false, error: "Не удалось получить голосовой ответ. Попробуйте ещё раз." }, { status: 503 })
+    return Response.json(
+      {
+        ok: false,
+        error: "Voice-модель временно недоступна. Проверь подключение Groq/Cloudflare Voice в Render и попробуй ещё раз.",
+      },
+      { status: 503 },
+    )
   }
 }
