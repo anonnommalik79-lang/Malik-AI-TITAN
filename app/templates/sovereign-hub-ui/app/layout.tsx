@@ -35,19 +35,29 @@ import "./mobile-welcome-final.css"
 import "./malik-attachment-tools-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
+const SITE_NAME = "Malik AI"
 const SITE_DESCRIPTION =
   "Malik AI — AI-платформа для текста, кода, веб-поиска, изображений, видео и презентаций. Общайтесь с ИИ, создавайте контент и работайте с проектами в одном месте."
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    absolute: "Malik AI",
+    absolute: SITE_NAME,
   },
   description: SITE_DESCRIPTION,
-  generator: "Malik AI",
-  applicationName: "Malik AI",
-  creator: "Malik AI",
-  publisher: "Malik AI",
+  generator: SITE_NAME,
+  applicationName: SITE_NAME,
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml", sizes: "any" },
+      { url: "/icon", type: "image/png", sizes: "512x512" },
+    ],
+    shortcut: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }],
+  },
   keywords: [
     "Malik AI",
     "MalikAI",
@@ -65,18 +75,18 @@ export const metadata: Metadata = {
     type: "website",
     locale: "ru_RU",
     url: `${SITE_URL}/`,
-    siteName: "Malik AI",
-    title: "Malik AI",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
     description: SITE_DESCRIPTION,
   },
   twitter: {
     card: "summary",
-    title: "Malik AI",
+    title: SITE_NAME,
     description: SITE_DESCRIPTION,
   },
   appleWebApp: {
     capable: true,
-    title: "Malik AI",
+    title: SITE_NAME,
     statusBarStyle: "black",
   },
 }
@@ -85,7 +95,7 @@ const websiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   "@id": `${SITE_URL}/#website`,
-  name: "Malik AI",
+  name: SITE_NAME,
   alternateName: ["MalikAI", "Malik AI World"],
   url: `${SITE_URL}/`,
   description: SITE_DESCRIPTION,
@@ -96,7 +106,7 @@ const organizationJsonLd = {
   "@context": "https://schema.org",
   "@type": "Organization",
   "@id": `${SITE_URL}/#organization`,
-  name: "Malik AI",
+  name: SITE_NAME,
   url: `${SITE_URL}/`,
   logo: `${SITE_URL}/icon`,
 }
@@ -109,7 +119,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
         <meta name="theme-color" content="#000000" />
+        <meta name="application-name" content={SITE_NAME} />
+        <meta name="apple-mobile-web-app-title" content={SITE_NAME} />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="msapplication-TileColor" content="#000000" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
+        <link rel="shortcut icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/apple-icon" sizes="180x180" />
+        <link rel="mask-icon" href="/favicon.svg" color="#000000" />
+        <link rel="manifest" href="/manifest.webmanifest" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
