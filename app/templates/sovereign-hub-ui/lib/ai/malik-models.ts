@@ -26,6 +26,8 @@ export type MalikModelDefinition = {
   capabilities: readonly ("text" | "vision" | "code" | "tools" | "reasoning")[]
 }
 
+const MALIK_MODEL_STORAGE_KEY = "malik_selected_model_v2"
+
 export const MALIK_MODELS = [
   {
     id: "malik-20b",
@@ -152,7 +154,7 @@ export function canUseMalikModel(modelId: MalikModelId, plan: AIPlan | string | 
 export function loadMalikModelSelection(): MalikModelId {
   if (typeof window === "undefined") return DEFAULT_MALIK_MODEL_ID
   try {
-    const saved = window.localStorage.getItem("malik_selected_model_v1")
+    const saved = window.localStorage.getItem(MALIK_MODEL_STORAGE_KEY)
     return isMalikModelId(saved) ? saved : DEFAULT_MALIK_MODEL_ID
   } catch {
     return DEFAULT_MALIK_MODEL_ID
@@ -162,7 +164,7 @@ export function loadMalikModelSelection(): MalikModelId {
 export function saveMalikModelSelection(modelId: MalikModelId): void {
   if (typeof window === "undefined") return
   try {
-    window.localStorage.setItem("malik_selected_model_v1", modelId)
+    window.localStorage.setItem(MALIK_MODEL_STORAGE_KEY, modelId)
   } catch {
     // Storage is a preference only; the live React/chat state remains authoritative.
   }
