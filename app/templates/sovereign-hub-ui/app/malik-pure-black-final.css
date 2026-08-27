@@ -87,4 +87,100 @@ body:has(.malik-auth-page),
     background-color: #000 !important;
     background-image: none !important;
   }
+
+  /* Mobile top bar: keep the real desktop product sections instead of showing
+     only the active tab. The strip is horizontally swipeable on narrow phones
+     so no section is deleted or squeezed into unreadable text. */
+  .titan-topbar {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+    box-shadow: none !important;
+  }
+
+  .titan-topbar::before,
+  .titan-topbar::after {
+    content: none !important;
+    display: none !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+
+  .titan-tabs {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    justify-content: flex-start !important;
+    gap: 6px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 0 2px !important;
+    background: #000 !important;
+    scrollbar-width: none !important;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .titan-tabs::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .titan-tab,
+  .titan-tab.is-active {
+    display: inline-flex !important;
+    width: auto !important;
+    min-width: max-content !important;
+    max-width: none !important;
+    height: 34px !important;
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    overflow: visible !important;
+    border-radius: 12px !important;
+    padding: 0 10px !important;
+    font-size: 11px !important;
+    font-weight: 650 !important;
+    letter-spacing: -0.01em !important;
+    white-space: nowrap !important;
+    scroll-snap-align: center;
+  }
+
+  .titan-tab {
+    border: 1px solid rgba(255, 255, 255, 0.07) !important;
+    background: #000 !important;
+    color: #eeeeef !important;
+    box-shadow: none !important;
+  }
+
+  .titan-tab.is-active {
+    border-color: rgba(239, 199, 82, 0.52) !important;
+    background: linear-gradient(180deg, #e9c34f 0%, #cfa12c 100%) !important;
+    color: #151006 !important;
+    box-shadow: 0 4px 14px rgba(201, 152, 47, 0.16) !important;
+  }
+
+  .titan-tab span,
+  .titan-tab.is-active span {
+    display: inline !important;
+  }
+
+  .titan-tab svg,
+  .titan-tab.is-active svg {
+    display: block !important;
+    width: 14px !important;
+    height: 14px !important;
+    flex: 0 0 14px !important;
+  }
+
+  .titan-tab:not(.is-active) svg {
+    color: #e7e7e9 !important;
+  }
+
+  .titan-topbar > .titan-icon-btn:first-child {
+    background: #000 !important;
+    box-shadow: none !important;
+  }
 }
