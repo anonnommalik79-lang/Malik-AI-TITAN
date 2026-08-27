@@ -90,11 +90,11 @@ export function VoiceSettings({ open, voice, personality, speed, expressivity, o
     <div ref={rootRef} className={`${styles.panel} ${open ? styles.open : ""}`} aria-hidden={!open}>
       <div className={styles.columns}>
         <section className={styles.column} aria-label="Выбор голоса">
-          <div className={styles.heading}><span>Голос</span><small>36 Deepgram Flux голосов</small></div>
+          <div className={styles.heading}><span>Голос</span><small>36 Deepgram Flux голосов · English</small></div>
           <div className={styles.list}>
             {VOICES.map((profile) => (
               <button key={profile.name} type="button" className={`${styles.item} ${voice === profile.name ? styles.selected : ""}`} onClick={() => { onVoiceChange(profile.name); onPreviewVoice(profile.name) }}>
-                <span className={styles.itemText}><strong>{profile.name}</strong><small>{profile.description}</small></span>
+                <span className={styles.itemText}><strong>{profile.name} <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">English</span></strong><small>{profile.description}</small></span>
                 <span className={styles.actions}><span className={styles.preview} aria-hidden="true"><Volume2 size={14} /></span>{voice === profile.name ? <Check className={styles.check} size={15} /> : null}</span>
               </button>
             ))}
