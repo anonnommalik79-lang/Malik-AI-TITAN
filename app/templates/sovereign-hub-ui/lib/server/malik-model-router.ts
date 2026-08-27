@@ -116,6 +116,22 @@ function buildMessages(input: {
 }
 
 function providerConfig(model: MalikModelDefinition) {
+  if (model.provider === "cerebras") {
+    const key = env("CEREBRAS_API_KEY")
+    if (!key) {
+      throw new MalikModelRouteError(
+        "PROVIDER_NOT_CONFIGURED",
+        `${model.label} временно недоступна: Cerebras API не настроен.`,
+        503,
+        model.id,
+      )
+    }
+    return {
+      url: `${(env("CEREBRAS_BASE_URL") || "https://api.cerebras.ai/v1").replace(/\/+$/, "")}/chat/completions`,
+      key,
+    }
+  }
+
   if (model.provider === "groq") {
     const key = env("GROQ_API_KEY")
     if (!key) {
