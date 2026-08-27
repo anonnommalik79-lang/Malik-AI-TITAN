@@ -51,7 +51,7 @@ jobs:
         working-directory: app/templates/sovereign-hub-ui
         run: npm run test:voice
 
-      - name: Production build
+      - name: Production build all sections
         working-directory: app/templates/sovereign-hub-ui
         run: npm run build
 
