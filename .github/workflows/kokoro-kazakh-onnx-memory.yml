@@ -17,10 +17,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt onnx==1.18.0 onnxruntime==1.22.1
-      - name: Build quantized Kazakh ONNX
+      - name: Build preprocessed quantized Kazakh ONNX
         run: python app/ai/build_kokoro_kazakh_onnx.py
       - name: Show artifact sizes
-        run: ls -lh app/ai/kokoro_kazakh_runtime
+        run: |
+          ls -lh app/ai/kokoro_kazakh_runtime
+          cat app/ai/kokoro_kazakh_runtime/BUILD_INFO.json
       - name: Low-memory ONNX synthesis smoke
         run: |
           /usr/bin/time -v python - <<'PY'
@@ -43,6 +45,8 @@ jobs:
           opts = ort.SessionOptions()
           opts.intra_op_num_threads = 2
           opts.inter_op_num_threads = 1
+          opts.enable_mem_pattern = False
+          opts.enable_cpu_mem_arena = False
           sess = ort.InferenceSession(str(root / "kokoro_kazakh_q8.onnx"), sess_options=opts, providers=["CPUExecutionProvider"])
           feeds = {
               "input_ids": np.asarray([[0, *ids, 0]], dtype=np.int64),
