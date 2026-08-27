@@ -5,6 +5,7 @@ export type MalikModelId =
   | "malik-20b"
   | "malik-fast-120b"
   | "malik-27b"
+  | "malik-glm-355b"
   | "malik-30b"
   | "malik-vision-26b"
   | "malik-coder-32b"
@@ -46,12 +47,21 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-27b",
-    label: "MalikLLM27B",
-    description: "Код · Vision · Рассуждение",
-    tier: "pro",
+    label: "MalikLLM Qwen3.8 27B",
+    description: "Groq · 2M токенов/день · Быстрый reasoning",
+    tier: "free",
     provider: "groq",
-    providerModel: "qwen/qwen3.6-27b",
+    providerModel: "qwen/qwen3.8-27b",
     capabilities: ["text", "vision", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-glm-355b",
+    label: "MalikLLM x Glm4.7 355B",
+    description: "Cerebras · 355B · Сильный reasoning и код",
+    tier: "free",
+    provider: "cerebras",
+    providerModel: "zai-glm-4.7",
+    capabilities: ["text", "code", "tools", "reasoning"],
   },
   {
     id: "malik-8b",
@@ -118,7 +128,7 @@ export const MALIK_MODELS = [
   },
 ] as const satisfies readonly MalikModelDefinition[]
 
-export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-20b"
+export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-27b"
 export const FREE_MALIK_MODELS = MALIK_MODELS.filter((model) => model.tier === "free")
 export const PRO_MALIK_MODELS = MALIK_MODELS.filter((model) => model.tier === "pro")
 
