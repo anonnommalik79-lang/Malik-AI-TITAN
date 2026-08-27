@@ -35,30 +35,49 @@ import "./mobile-welcome-final.css"
 import "./malik-attachment-tools-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
+const SITE_DESCRIPTION =
+  "Malik AI — AI-платформа для текста, кода, веб-поиска, изображений, видео и презентаций. Общайтесь с ИИ, создавайте контент и работайте с проектами в одном месте."
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Malik AI",
-    template: "%s | Malik AI",
+    absolute: "Malik AI",
   },
-  description: "Malik AI — интеллектуальный AI-ассистент для поиска, исследований, кода, изображений, видео и работы с проектами.",
+  description: SITE_DESCRIPTION,
   generator: "Malik AI",
   applicationName: "Malik AI",
+  creator: "Malik AI",
+  publisher: "Malik AI",
+  keywords: [
+    "Malik AI",
+    "MalikAI",
+    "AI ассистент",
+    "искусственный интеллект",
+    "AI Казахстан",
+    "генерация изображений",
+    "генерация видео",
+    "AI для кода",
+  ],
   alternates: {
     canonical: "/",
   },
   openGraph: {
     type: "website",
-    url: SITE_URL,
+    locale: "ru_RU",
+    url: `${SITE_URL}/`,
     siteName: "Malik AI",
     title: "Malik AI",
-    description: "AI-ассистент для поиска, исследований, кода, изображений, видео и проектов.",
+    description: SITE_DESCRIPTION,
   },
-  icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml", sizes: "any" }],
-    shortcut: "/favicon.svg",
-    apple: "/icon.svg",
+  twitter: {
+    card: "summary",
+    title: "Malik AI",
+    description: SITE_DESCRIPTION,
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Malik AI",
+    statusBarStyle: "black",
   },
 }
 
@@ -67,8 +86,19 @@ const websiteJsonLd = {
   "@type": "WebSite",
   "@id": `${SITE_URL}/#website`,
   name: "Malik AI",
-  alternateName: ["MalikAI"],
+  alternateName: ["MalikAI", "Malik AI World"],
   url: `${SITE_URL}/`,
+  description: SITE_DESCRIPTION,
+  inLanguage: ["ru", "kk", "en"],
+}
+
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "@id": `${SITE_URL}/#organization`,
+  name: "Malik AI",
+  url: `${SITE_URL}/`,
+  logo: `${SITE_URL}/icon`,
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -83,6 +113,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
         />
       </head>
       <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-black font-sans antialiased notranslate">

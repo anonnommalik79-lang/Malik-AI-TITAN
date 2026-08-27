@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Malik AI">
-  <rect width="512" height="512" rx="104" fill="#f7f7f7"/>
-  <path d="M100 324 233 137v187H100Z" fill="#050505"/>
-  <path d="M263 137h128L263 327V137Z" fill="#050505"/>
+  <rect width="512" height="512" fill="#f3f3f3"/>
+  <path d="M68 342 241 168v174H68Z" fill="#000000"/>
+  <path d="M278 168h168L278 345V168Z" fill="#000000"/>
 </svg>
