@@ -22,7 +22,7 @@ jobs:
           cache: npm
           cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
 
-      - name: Apply final patch
+      - name: Apply final patch and compatibility fixes
         run: |
           python .github/scripts/finalize-malik.py
           python .github/scripts/fix-finalize-menu.py
