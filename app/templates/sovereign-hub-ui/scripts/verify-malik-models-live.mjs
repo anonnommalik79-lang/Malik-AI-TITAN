@@ -50,6 +50,7 @@ for (const model of MALIK_MODELS) {
         messages: [{ role: "user", content: "Reply with exactly READY" }],
         max_tokens: 256,
         temperature: 0,
+        ...(model.providerModel === "qwen/qwen3.6-27b" ? { reasoning_effort: "none" } : {}),
       }),
     })
     const payload = await response.json().catch(() => ({}))

@@ -19,6 +19,7 @@ import { prefetchChatShell } from "@/lib/studio-prefetch"
 import { PREFILL_EVENT, takePrefillPrompt, useContextEnabled } from "@/lib/malik-context"
 import { DEFAULT_MALIK_MODEL_ID, type MalikModelId } from "@/lib/ai/malik-models"
 import type { ChatSendOptions } from "@/lib/ai/response-depth"
+import { useWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import type { AIPlan } from "@/lib/ai/types"
 import type { MalikTemplate } from "@/lib/malik-template-registry"
 import { MalikModelSelector } from "../MalikModelSelector"
@@ -255,7 +256,7 @@ function HomeComposer({
       <div className="thome-composer-meta" aria-label="Активные возможности">
         <button type="button" onClick={onToggleWeb} className={cn("thome-meta-chip", webOn && "is-active")}>
           <Globe aria-hidden="true" />
-          {webOn ? "Веб-поиск включён" : "Веб-поиск выключен"}
+          {webOn ? "Веб-поиск: авто" : "Веб-поиск выключен"}
         </button>
         <button type="button" onClick={onToggleMemory} className={cn("thome-meta-chip", memoryOn && "is-active")}>
           <Brain aria-hidden="true" />
@@ -269,7 +270,7 @@ function HomeComposer({
 
 function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [prompt, setPrompt] = useState("")
-  const [webOn, setWebOn] = useState(true)
+  const [webOn, setWebOn] = useWebSearchEnabled()
   const [memoryOn, setMemoryOn] = useContextEnabled()
 
   useEffect(() => {
@@ -344,7 +345,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               memoryOn={memoryOn}
               onPromptChange={setPrompt}
               onSubmit={submit}
-              onToggleWeb={() => setWebOn((on) => !on)}
+              onToggleWeb={() => setWebOn(!webOn)}
               onToggleMemory={() => setMemoryOn(!memoryOn)}
               onOpenPhoto={props.onOpenPhoto}
               onOpenVideo={props.onOpenVideo}

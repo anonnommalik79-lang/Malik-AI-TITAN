@@ -1,17 +1,6 @@
 import { timingSafeEqual } from "node:crypto"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
-
-const DEFAULT_ADMINS = [
-  "amangeldymalik38@gmail.com",
-  "anonnommalik79@gmail.com",
-]
-
-function list(value?: string) {
-  return String(value || "")
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean)
-}
+import { MALIK_OWNER_EMAIL, isOwnerEmail, isVerifiedOwner } from "@/lib/auth/admin-policy"
 
 function safeEqual(left?: string | null, right?: string | null) {
   if (!left || !right) return false
@@ -21,13 +10,11 @@ function safeEqual(left?: string | null, right?: string | null) {
 }
 
 export function malikAdminEmails() {
-  return list(process.env.MALIK_ADMIN_USERS).length
-    ? list(process.env.MALIK_ADMIN_USERS)
-    : DEFAULT_ADMINS
+  return [MALIK_OWNER_EMAIL]
 }
 
 export function isMalikAdminEmail(email?: string | null) {
-  return Boolean(email && malikAdminEmails().includes(email.trim().toLowerCase()))
+  return isOwnerEmail(email)
 }
 
 export function getAdminAccess(request: Request) {
@@ -49,7 +36,7 @@ export async function getAdminAccessAsync(request: Request) {
   try {
     const { user } = await getOptionalWorkOSAuth()
     const email = user?.email?.trim().toLowerCase() || ""
-    const authorized = Boolean(user && isMalikAdminEmail(email))
+    const authorized = isVerifiedOwner(user)
     return {
       email,
       authorized,

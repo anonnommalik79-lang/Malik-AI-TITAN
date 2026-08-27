@@ -471,7 +471,7 @@ function ProjectDetail({
             <div className="mb-3 flex items-center gap-2 text-xs font-medium text-zinc-300"><Bot className="h-3.5 w-3.5 text-amber-300" /> Модель проекта</div>
             <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
               <MalikModelSelector selectedModelId={selectedModelId} plan={plan} onSelect={onSelectModel} onOpenBilling={onOpenBilling} placement="bottom" />
-              <p className="mt-2 truncate text-[10px] text-zinc-600">{model.provider === "groq" ? "Groq" : "Cloudflare"} · серверный API</p>
+              <p className="mt-2 truncate text-[10px] text-zinc-600">{model.provider === "groq" ? "Groq" : model.provider === "cerebras" ? "Cerebras" : "Cloudflare"} · серверный API</p>
             </div>
           </section>
 

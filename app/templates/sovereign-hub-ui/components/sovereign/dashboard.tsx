@@ -9,6 +9,9 @@ import { ChatInvestorBackground } from "./ChatInvestorBackground"
 import { PerformanceGuard } from "./performance-guard"
 import { PreviewPanel } from "./preview-panel"
 import { clearStoredAuthSnapshot, storeWorkOSProfile } from "@/lib/auth/client-session"
+import { MALIK_OWNER_EMAIL, isVerifiedOwner } from "@/lib/auth/admin-policy"
+import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
+import { loadResponseDepth } from "@/lib/ai/response-depth"
 import { FeatureCenter } from "./features/FeatureCenter"
 import { CapabilitiesPanel } from "./capabilities"
 import { MalikCodexModal } from "./codex/malik-codex-modal"
@@ -745,7 +748,7 @@ type StoredChat = Omit<Chat, "timestamp" | "messages"> & {
 }
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
-const AUTH_ADMINS = ["amangeldymalik38@gmail.com", "anonnommalik79@gmail.com", "admin@malik.ai"]
+const AUTH_ADMINS = [MALIK_OWNER_EMAIL]
 
 const isBrowser = () => typeof window !== "undefined"
 
@@ -4390,7 +4393,8 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
   const [errorNotification, setErrorNotification] = useState<string | null>(null)
 
   const [username, setUsername] = useState<string>(safeGetStorage("malik_user", ""))
-  const [isAdmin, setIsAdmin] = useState<boolean>(safeGetStorage("malik_is_admin") === "true")
+  const [isAdmin, setIsAdmin] = useState(false)
+  const canAccessAdmin = !guestMode && !workOSLoading && isVerifiedOwner(workOSUser)
   const [selectedModelId, setSelectedModelId] = useState<MalikModelId>(() => loadMalikModelSelection())
   const [currentPlan, setCurrentPlan] = useState<AIPlan>("free")
   const [planResolved, setPlanResolved] = useState(false)
@@ -4430,14 +4434,14 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
     }
 
     const email = workOSUser.email.trim().toLowerCase()
-    const isOwner = AUTH_ADMINS.includes(email)
+    const isOwner = isVerifiedOwner(workOSUser)
     const snapshot: DashboardAuthSnapshot = {
       email,
       name: workOSUser.name || [workOSUser.firstName, workOSUser.lastName].filter(Boolean).join(" ") || email.split("@")[0],
       avatar: workOSUser.profilePictureUrl || "",
       mode: "workos",
       isAdmin: isOwner,
-      role: email === "amangeldymalik38@gmail.com" ? "creator" : isOwner ? "admin" : "user",
+      role: isOwner ? "creator" : "user",
       lastLoginAt: new Date().toISOString(),
     }
     persistDashboardAuthSnapshot(snapshot)
@@ -4452,8 +4456,9 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
 
   useEffect(() => {
     let alive = true
-    setPlanResolved(false)
-    clientFetchWithTimeout("/api/ai/usage", { cache: "no-store" })
+    const refreshPlan = () => {
+      setPlanResolved(false)
+      clientFetchWithTimeout("/api/ai/usage", { cache: "no-store" })
       .then((response) => response.json())
       .then((payload) => {
         if (!alive) return
@@ -4466,7 +4471,10 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
       .finally(() => {
         if (alive) setPlanResolved(true)
       })
-    return () => { alive = false }
+    }
+    refreshPlan()
+    window.addEventListener("malik-plan-updated", refreshPlan)
+    return () => { alive = false; window.removeEventListener("malik-plan-updated", refreshPlan) }
   }, [username])
 
   useEffect(() => {
@@ -4526,6 +4534,7 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
 
   const safeOpenView = useCallback((view: string, reason: DashboardRouteReason = "manual") => {
     const nextView = normalizeDashboardViewId(view)
+    if (nextView === "command-center" && !canAccessAdmin) return
     const previous = activeViewRef.current || "home"
 
     if (previous !== nextView) {
@@ -4551,7 +4560,7 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
         runtimeId: dashboardRuntimeIdRef.current,
       },
     })
-  }, [])
+  }, [canAccessAdmin])
 
   useEffect(() => {
     const unsubscribe = dashboardEventBus.on((event) => {
@@ -5124,7 +5133,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   if (!cleanContent || isLoading) return
 
   const userPlan = currentPlan
-  const responseDepth = resolveResponseDepth(options?.responseDepth, userPlan)
+  const responseDepth = resolveResponseDepth(options?.responseDepth ?? loadResponseDepth(userPlan), userPlan)
   const depthLimits = responseDepthLimits(responseDepth)
 
   const routeDecision = detectIntentAndRoute(cleanContent, attachments, activeAiMode)
@@ -5196,20 +5205,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     isStreaming: true,
     intentType: inlineMediaKind ? "chat" : isProjReq ? "project" : "chat",
     modelId: selectedModelId,
-    research: options?.research
-      ? {
-          status: "searching",
-          usedWeb: true,
-          steps: [{
-            id: crypto.randomUUID(),
-            kind: "plan",
-            text: "Подключаю поиск по открытым источникам",
-            at: Date.now(),
-          }],
-          sources: [],
-          startedAt: Date.now(),
-        }
-      : undefined,
+    // Research UI starts only when the server actually emits a search event.
+    research: undefined,
     generatedMedia: inlineMediaKind ? createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt) : undefined,
   }
 
@@ -5625,7 +5622,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           expectedOutput: isProjReq ? "single-large-code-block" : isCodeReq ? "code-and-explanation" : "helpful-chat-answer",
         },
         responseDepth,
-        research: options?.research,
+        research: options?.research ?? readWebSearchEnabled(),
         stream: true,
         maxTokens: depthLimits.maxTokens,
         temperature: depthLimits.temperature,
@@ -5959,6 +5956,21 @@ const shouldShowMobilePreviewButton =
     onNewChat: handleNewChat,
   }
 
+  const closeAccountPanel = () => {
+    safeOpenView(["settings", "profile", "billing", "support", "command-center"].includes(previousView) ? "home" : previousView || "home")
+  }
+  const exportConversations = () => {
+    const data = JSON.stringify({ product: "Malik AI", exportedAt: new Date().toISOString(), chats }, null, 2)
+    const url = URL.createObjectURL(new Blob([data], { type: "application/json" }))
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "malik-ai-conversations.json"
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
   const renderActiveView = () => {
     if (activeView === "final-intelligence") {
       return <FinalIntelligenceLab {...studioBridgeProps} />
@@ -5970,7 +5982,7 @@ const shouldShowMobilePreviewButton =
       return <AIGeneratorStudio {...studioBridgeProps} />
     }
     if (activeView === "command-center") {
-      return <CommandCenterStudio {...studioBridgeProps} />
+      return canAccessAdmin ? <CommandCenterStudio {...studioBridgeProps} /> : null
     }
     if (activeView === "business-command-center") {
       return (
@@ -5991,7 +6003,7 @@ const shouldShowMobilePreviewButton =
       );
     }
     if (activeView === "support") {
-      return <SovereignSupportPanel />;
+      return <SovereignSupportPanel onClose={closeAccountPanel} onOpenSettings={() => safeOpenView("settings")} onOpenBilling={() => safeOpenView("billing")} />;
     }
     if (activeView === "features") {
       return <FeatureCenter />;
@@ -6037,10 +6049,10 @@ const shouldShowMobilePreviewButton =
       )
     }
     if (activeView === "billing") {
-      return <SovereignBillingPanel />;
+      return <SovereignBillingPanel plan={currentPlan} authenticated={!guestMode && Boolean(workOSUser)} onClose={closeAccountPanel} />;
     }
     if (activeView === "settings" || activeView === "profile") {
-      return <SovereignSettingsPanel username={userDisplayName || username} onLogout={handleLogout} />;
+      return <SovereignSettingsPanel username={userDisplayName || username} email={guestMode ? undefined : workOSUser?.email} plan={currentPlan} selectedModelId={selectedModelId} onModelChange={handleModelChange} onLogout={handleLogout} onClose={closeAccountPanel} onOpenBilling={() => safeOpenView("billing")} onExport={exportConversations} />;
     }
     if (activeView === "templates") {
       return <TemplateGalleryPanel onLaunchTemplate={launchTemplate} />;
@@ -6439,6 +6451,8 @@ const shouldShowMobilePreviewButton =
       <div className="hidden lg:block z-50">
         <Sidebar
           isCollapsed={sidebarCollapsed}
+          canAccessAdmin={canAccessAdmin}
+          plan={currentPlan}
           onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
           onNewChat={handleNewChat}
           onSelectChat={handleSelectChat}
@@ -6458,6 +6472,8 @@ const shouldShowMobilePreviewButton =
       <div className={cn("malik-mobile-drawer fixed inset-y-0 left-0 z-50 lg:hidden transition-transform duration-300 ease-out", mobileMenuOpen ? "translate-x-0" : "-translate-x-full")}>
         <Sidebar
           isCollapsed={false}
+          canAccessAdmin={canAccessAdmin}
+          plan={currentPlan}
           onToggle={() => setMobileMenuOpen(false)}
           onNewChat={() => { handleNewChat(); setMobileMenuOpen(false) }}
           onSelectChat={(id) => { handleSelectChat(id); setMobileMenuOpen(false) }}

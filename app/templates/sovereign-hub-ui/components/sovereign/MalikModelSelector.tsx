@@ -51,7 +51,7 @@ function ModelRow({
         <span className="malik-model-selector__description">{model.description}</span>
       </span>
       <span className="malik-model-selector__state">
-        {selected ? <Check aria-label="Выбрано" /> : model.tier === "free" ? <span className="is-free">Бесплатно</span> : <span className="is-pro"><Crown /> PRO</span>}
+        {selected ? <Check aria-label="Выбрано" /> : model.tier === "free" ? <span className="is-free">Бесплатно</span> : <span className="is-pro"><Crown /> PLUS</span>}
         {!allowed && model.tier === "pro" ? <Lock className="malik-model-selector__lock" aria-hidden="true" /> : null}
       </span>
     </button>
@@ -182,13 +182,13 @@ export function MalikModelSelector({
           <X />
         </button>
         <span className="malik-model-upgrade__icon"><Crown /></span>
-        <h2 id="malik-model-upgrade-title">{upgradeModel.label} доступна в Malik AI Pro</h2>
+        <h2 id="malik-model-upgrade-title">{upgradeModel.label} доступна в MalikAI Plus</h2>
         <p>Получите доступ к расширенным моделям, агентам и более высоким лимитам.</p>
         <button type="button" className="malik-model-upgrade__button" onClick={() => {
           setUpgradeModel(null)
           onOpenBilling?.()
         }}>
-          Перейти на Pro
+          Перейти на Plus
         </button>
       </section>
     </div>
@@ -210,7 +210,7 @@ export function MalikModelSelector({
         ))}
       </div>
       <div className="malik-model-selector__divider" />
-      <div className="malik-model-selector__section-label is-pro"><Crown /> Pro модели</div>
+      <div className="malik-model-selector__section-label is-pro"><Crown /> Модели Plus</div>
       <div className="malik-model-selector__group">
         {PRO_MALIK_MODELS.map((model) => (
           <ModelRow

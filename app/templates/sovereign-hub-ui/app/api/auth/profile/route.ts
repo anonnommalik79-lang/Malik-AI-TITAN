@@ -1,4 +1,4 @@
-import { isMalikAdminEmail } from "@/lib/server/admin"
+import { isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 
 export const runtime = "nodejs"
@@ -16,7 +16,7 @@ export async function POST() {
       email,
       displayName: user.name || [user.firstName, user.lastName].filter(Boolean).join(" ") || email.split("@")[0],
       avatar: user.profilePictureUrl || "",
-      role: email === "amangeldymalik38@gmail.com" ? "creator" : isMalikAdminEmail(email) ? "admin" : "user",
+      role: isVerifiedOwner(user) ? "creator" : "user",
     },
   })
 }

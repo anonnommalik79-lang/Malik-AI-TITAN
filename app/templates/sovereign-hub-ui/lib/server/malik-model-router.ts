@@ -51,7 +51,7 @@ export async function resolveStrictMalikSelection(request: Request, body: any): 
     const model = getMalikModel(body.model)
     throw new MalikModelRouteError(
       "PRO_MODEL_REQUIRED",
-      `${model.label} доступна в Malik AI Pro.`,
+      `${model.label} доступна в MalikAI Plus.`,
       403,
       body.model,
     )

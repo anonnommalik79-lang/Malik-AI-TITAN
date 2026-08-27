@@ -2,6 +2,7 @@ import type { MalikModelId } from "@/lib/ai/malik-models"
 import type { MalikResearchProgress, MalikWebSource } from "@/lib/ai/web-research-types"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
+import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 
 type ProviderAttempt = {
   provider: string
@@ -116,27 +117,6 @@ function localSmart(prompt: string) {
   if (isIdentity(prompt)) return "Я MALIK AI V6.5 TITAN — твой AI-командный центр для ответов, кода, идей, дизайна, анализа, поиска свежей информации и запуска проектов."
   if (isCapabilities(prompt)) return "Я могу отвечать, писать код, анализировать файлы, искать свежую информацию через открытые источники, помогать с бизнесом, дизайном, проектами и запуском MALIK AI."
   return ""
-}
-
-function shouldUseWeb(prompt: string, body: any) {
-  if (body?.disableResearch === true || body?.research === false) return false
-  if (body?.forceResearch === true || body?.research === true) return true
-  if (isTinyCasual(prompt) || isIdentity(prompt) || isCapabilities(prompt)) return false
-
-  const p = prompt.toLowerCase()
-
-  const explicit =
-    /(search|google|browse|web|source|sources|link|links|wikipedia|wiki|latest|current|today|now|news|deadline|event|hackathon|competition|official source|check online|fresh)/i.test(p) ||
-    /(найди|поищи|загугли|гугл|интернет|открыт|источник|источники|ссылк|википед|свеж|актуальн|сейчас|сегодня|новост|дедлайн|мероприят|хакатон|конкурс|соревн|официальн|проверь онлайн|проверь в сети|кто сейчас|какой сейчас)/i.test(p)
-
-  if (explicit) return true
-
-  const publicFact =
-    /(president|ceo|minister|price|schedule|release date|version|law|rules|ranking|rating|weather|exchange rate|stock|crypto|score|match)/i.test(p) ||
-    /(президент|министр|цена|расписание|релиз|версия|закон|правил|рейтинг|погода|курс валют|акция|крипто|матч|счет)/i.test(p)
-
-  const yearSignal = /\b202[5-9]\b/.test(p)
-  return publicFact || (yearSignal && /(who|what|when|where|кто|что|когда|где|какой|какая|какие|қашан|қайда)/i.test(p))
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 12000) {

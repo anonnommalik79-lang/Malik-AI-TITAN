@@ -27,6 +27,8 @@ import {
 } from "lucide-react"
 import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/auth/client-session"
 import { prefillPrompt } from "@/lib/malik-context"
+import type { AIPlan } from "@/lib/ai/types"
+import { publicPlanTitle } from "@/lib/billing/plans"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
@@ -38,6 +40,8 @@ interface Chat {
 }
 
 interface SidebarProps {
+  canAccessAdmin?: boolean
+  plan?: AIPlan
   isCollapsed: boolean
   onToggle: () => void
   onNewChat?: () => void
@@ -77,11 +81,13 @@ const TOOL_ACTIONS = [
 
 const PROFILE_MENU = [
   { id: "settings", icon: Settings, label: "Настройки" },
-  { id: "billing", icon: CreditCard, label: "Подписка и биллинг" },
+  { id: "billing", icon: CreditCard, label: "Подписка" },
   { id: "support", icon: LifeBuoy, label: "Поддержка" },
 ]
 
 function SidebarInner({
+  canAccessAdmin = false,
+  plan = "free",
   isCollapsed,
   onToggle,
   onNewChat,
@@ -164,8 +170,8 @@ function SidebarInner({
     .join("")
     .slice(0, 2)
     .toUpperCase() || "M"
-  const isPro = Boolean(profile?.isAdmin) || !isGuest
-  const roleLabel = profile?.isAdmin ? "Соло-фаундер" : isGuest ? "Free plan" : "Pro workspace"
+  const isPro = plan === "pro" || plan === "ultra" || plan === "owner"
+  const roleLabel = canAccessAdmin ? "Соло-фаундер" : publicPlanTitle(plan)
 
   const openView = useCallback((view: string) => {
     setProfileMenuOpen(false)
@@ -402,7 +408,7 @@ function SidebarInner({
               return <button key={entry.id} type="button" role="menuitem" onClick={() => openView(entry.id)}><Icon className="h-4 w-4" />{entry.label}</button>
             })}
             <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); onOpenCodex?.() }}><Terminal className="h-4 w-4" />Malik Codex</button>
-            {profile?.isAdmin ? <button type="button" role="menuitem" onClick={() => openView("command-center")}><Shield className="h-4 w-4" />Админ-консоль</button> : null}
+            {canAccessAdmin ? <button type="button" role="menuitem" onClick={() => openView("command-center")}><Shield className="h-4 w-4" />Админ-консоль</button> : null}
             <div className="malik-sidebar-menu-separator" />
             <button type="button" role="menuitem" onClick={handleLogout} className="is-danger"><LogOut className="h-4 w-4" />Выйти</button>
           </div>
@@ -416,7 +422,7 @@ function SidebarInner({
 
         <button type="button" onClick={() => openView("billing")} className="malik-sidebar-premium">
           <span className="malik-sidebar-premium-mark" aria-hidden="true"><svg viewBox="0 0 44 44"><path d="M9 29 L22 15 L22 29 Z" fill="#1b1405" /><path d="M24 15 H38 L24 29 Z" fill="#1b1405" /></svg></span>
-          <span className="min-w-0 flex-1"><span className="malik-sidebar-premium-title">MALIK AI TITAN</span><span className="malik-sidebar-premium-note">{isPro ? "Премиум активен" : "Открыть премиум"}</span></span>
+          <span className="min-w-0 flex-1"><span className="malik-sidebar-premium-title">MalikAI Plus</span><span className="malik-sidebar-premium-note">{isPro ? "Подписка активна" : "Открыть все модели"}</span></span>
           <Crown className="h-4 w-4 shrink-0 text-[var(--malik-accent-bright,#e8c56a)]" />
         </button>
 

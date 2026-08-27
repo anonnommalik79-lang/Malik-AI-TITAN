@@ -1,71 +1,89 @@
-﻿"use client"
+"use client"
 
 import { useState } from "react"
-import { Check, Loader2, Sparkles } from "lucide-react"
-import { PremiumCss, PremiumHero, PremiumScene } from "../../ui/premium-components"
-import { getStoredAuthSnapshot } from "@/lib/auth/client-session"
+import { Check, Loader2 } from "lucide-react"
+import type { AIPlan } from "@/lib/ai/types"
+import { PUBLIC_PLANS } from "@/lib/billing/plans"
+import { AccountDialog } from "../account/AccountDialog"
+import styles from "../account/account-panels.module.css"
 
-export function SovereignBillingPanel() {
-  const [status, setStatus] = useState("Billing safe mode ready")
+export function SovereignBillingPanel({ plan, authenticated, onClose }: { plan: AIPlan; authenticated: boolean; onClose: () => void }) {
+  const [status, setStatus] = useState("")
+  const [error, setError] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [orderId, setOrderId] = useState("")
+  const [checkoutUrl, setCheckoutUrl] = useState("")
+  const plus = plan !== "free"
 
-  const upgrade = async (plan: string) => {
-    if (plan === "Free") return setStatus("Free plan is active")
+  const upgrade = async () => {
+    if (!authenticated) { window.location.assign("/sign-in"); return }
     setLoading(true)
-    setStatus(`Opening ${plan} upgrade...`)
+    setError(false)
     try {
       const response = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: getStoredAuthSnapshot()?.email || "guest@malik.ai", plan: plan === "Max" ? "ultra" : plan.toLowerCase() }),
+        body: JSON.stringify({ plan: "pro" }),
       })
       const data = await response.json()
-      setStatus(data.wallet ? `${data.message} Wallet: ${data.wallet}` : data.message || `${plan} upgrade request prepared`)
-      if (data.checkoutUrl) window.open(data.checkoutUrl, "_blank", "noopener,noreferrer")
-    } catch {
-      setStatus(`${plan} upgrade prepared in local fallback`)
-    } finally {
-      setLoading(false)
-    }
+      if (!response.ok || !data.ok) throw new Error(data.message || "Не удалось создать заявку. Попробуйте позже.")
+      setOrderId(data.order.id)
+      setStatus(data.message)
+      if (typeof data.checkoutUrl === "string" && data.checkoutUrl.startsWith("https://t.me/")) setCheckoutUrl(data.checkoutUrl)
+    } catch (err) {
+      setError(true)
+      setStatus(err instanceof Error ? err.message : "Ошибка соединения. Заявка не подтверждена.")
+    } finally { setLoading(false) }
+  }
+
+  const verify = async () => {
+    setLoading(true)
+    setError(false)
+    try {
+      const response = await fetch("/api/billing/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId }) })
+      const data = await response.json()
+      if (!response.ok) throw new Error("Не удалось проверить заявку. Обратитесь в поддержку с её номером.")
+      const approved = data.order?.status === "approved"
+      setStatus(approved ? "MalikAI Plus активирован." : data.order?.status === "rejected" ? "Заявка отклонена. Уточните причину в поддержке." : "Заявка ещё ожидает подтверждения.")
+      if (approved) window.dispatchEvent(new Event("malik-plan-updated"))
+    } catch (err) {
+      setError(true)
+      setStatus(err instanceof Error ? err.message : "Не удалось проверить статус.")
+    } finally { setLoading(false) }
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-[#030303] p-6 text-white">
-      <PremiumCss />
-      <div className="mx-auto max-w-6xl">
-        <PremiumHero
-          eyebrow="Billing"
-          title="Upgrade Malik AI"
-          subtitle={`${status}. Free, Pro and Max use verified activation only.`}
-          kind="billing"
-          metrics={[
-            { label: "Free", value: "15 chat" },
-            { label: "Pro", value: "300 chat" },
-            { label: "Max", value: "1000 chat" },
-          ]}
-        />
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {["Free", "Pro", "Max"].map((plan, index) => (
-            <div key={plan} className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-2xl shadow-black/30">
-              <PremiumScene kind={index === 0 ? "settings" : index === 1 ? "billing" : "codex"} compact />
-              <div className="p-2">
-              <Sparkles className="h-6 w-6 text-violet-300" />
-              <h2 className="mt-5 text-3xl font-black">{plan}</h2>
-              <p className="mt-2 text-zinc-500">{index === 0 ? "15 chat / 1 image / 0 video" : index === 1 ? "300 chat / 25 image / 5 video" : "1000 chat / 100 image / 20 video"}</p>
-              <div className="mt-5 space-y-2 text-sm text-zinc-300">
-                {["Chat", "Canvas", "Generators", "Codex settings"].map((item) => (
-                  <div key={item} className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-300" />{item}</div>
-                ))}
-              </div>
-              <button type="button" onClick={() => upgrade(plan)} disabled={loading} className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 font-black text-black disabled:opacity-50">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Choose {plan}
-              </button>
-              </div>
-            </div>
-          ))}
+    <AccountDialog title="Выберите свой Malik AI" description="Два тарифа. Одна рабочая область. Выберите доступ, который подходит вашим задачам." onClose={onClose} wide>
+      <div className={styles.scroll}>
+        <div className={styles.plans}>
+          {PUBLIC_PLANS.map((item) => {
+            const isPlus = item.id === "pro"
+            const current = isPlus === plus
+            return (
+              <article key={item.id} className={styles.plan + (isPlus ? " " + styles.plus : "")}>
+                <div className={styles.planHeading}><h2>{item.title}</h2>{current && <span className={styles.badge}>Ваш тариф</span>}</div>
+                <p className={styles.price}>{item.price}</p>
+                <p className={styles.planDescription}>{item.description}</p>
+                <button className={isPlus ? styles.primaryButton : styles.button} onClick={isPlus ? upgrade : undefined} disabled={!isPlus || current || loading || Boolean(orderId)}>
+                  {loading && isPlus && <Loader2 size={16} className="animate-spin" />}
+                  {current ? "Текущий тариф" : isPlus ? orderId ? "Заявка отправлена" : authenticated ? "Подключить Plus" : "Войти и подключить Plus" : "Базовый доступ"}
+                </button>
+                <ul className={styles.features}>{item.features.map((feature) => <li key={feature}><Check size={16} /><span>{feature}</span></li>)}</ul>
+              </article>
+            )
+          })}
         </div>
+        {status && <div className={styles.notice + (error ? " " + styles.error : "")} role={error ? "alert" : "status"}>
+          {status}
+          {orderId && <p className={styles.muted}>Номер: {orderId}</p>}
+          {orderId && !plus && <div className={styles.actions}>
+            {checkoutUrl && <a className={styles.button} href={checkoutUrl} target="_blank" rel="noopener noreferrer">Продолжить в поддержке</a>}
+            <button className={styles.button} disabled={loading} onClick={verify}>Проверить активацию</button>
+          </div>}
+        </div>}
+        <p className={styles.note}>Подключение Plus пока подтверждается вручную. Стоимость согласуется до оплаты. Доступ к моделям зависит также от доступности и лимитов их провайдеров; «безлимит» не обещаем.</p>
       </div>
-    </div>
+    </AccountDialog>
   )
 }
 

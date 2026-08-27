@@ -1,5 +1,7 @@
 ﻿import type { AIPlan } from "./types"
 
+import { MALIK_OWNER_EMAIL, isOwnerEmail } from "../auth/admin-policy"
+
 export type AdminUserLike = {
   email?: string | null
   userEmail?: string | null
@@ -10,34 +12,17 @@ export type AdminUserLike = {
   isOwner?: boolean | null
 }
 
-const DEFAULT_ADMINS = [
-  "amangeldymalik38@gmail.com",
-  "anonnommalik79@gmail.com",
-  "admin@malik.ai",
-]
-
-function parseEmails(raw?: string | null) {
-  return String(raw || "")
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean)
-}
-
 export function normalizeUserEmail(user?: AdminUserLike | string | null) {
   if (typeof user === "string") return user.trim().toLowerCase()
   return String(user?.email || user?.userEmail || user?.username || "").trim().toLowerCase()
 }
 
 export function getAdminEmails() {
-  const raw = process.env.ADMIN_EMAILS || process.env.MALIK_ADMIN_USERS || DEFAULT_ADMINS.join(",")
-  return parseEmails(raw)
+  return [MALIK_OWNER_EMAIL]
 }
 
 export function isAdminUser(user?: AdminUserLike | string | null) {
-  if (typeof user === "object" && user && (user.isAdmin || user.isOwner)) return true
-  const email = normalizeUserEmail(user)
-  if (!email) return false
-  return getAdminEmails().includes(email)
+  return isOwnerEmail(normalizeUserEmail(user))
 }
 
 export function appEnvironment() {

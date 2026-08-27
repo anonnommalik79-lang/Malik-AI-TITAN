@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const email = String(body?.email || "").trim().toLowerCase()
   const plan = String(body?.plan || "").trim().toLowerCase() as AIPlan
-  if (!email.includes("@") || !["free", "pro", "ultra", "owner"].includes(plan)) {
+  if (!email.includes("@") || !["free", "pro"].includes(plan)) {
     return Response.json({ ok: false, error: "invalid_grant" }, { status: 400 })
   }
   const result = await grantPlan(email, plan, guard.access.email)

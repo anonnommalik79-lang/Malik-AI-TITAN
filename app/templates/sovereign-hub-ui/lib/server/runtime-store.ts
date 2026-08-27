@@ -20,9 +20,8 @@ export type BillingOrder = {
 }
 
 export const BILLING_PLANS: BillingPlan[] = [
-  { id: "free", title: "Free", priceLabel: "Current", chat: 15, image: 1, video: 0, project: 2 },
-  { id: "pro", title: "Pro", priceLabel: "Contact", chat: 300, image: 25, video: 5, project: 30 },
-  { id: "ultra", title: "Max", priceLabel: "Contact", chat: 1000, image: 100, video: 20, project: 100 },
+  { id: "free", title: "Бесплатный", priceLabel: "0", chat: 15, image: 1, video: 0, project: 2 },
+  { id: "pro", title: "MalikAI Plus", priceLabel: "По запросу", chat: 300, image: 25, video: 5, project: 30 },
 ]
 
 const orders = new Map<string, BillingOrder>()

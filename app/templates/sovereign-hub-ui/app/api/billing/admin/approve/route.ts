@@ -1,8 +1,8 @@
-import { requireMalikAdmin } from "@/lib/server/admin"
+import { requireMalikAdminAsync } from "@/lib/server/admin"
 import { approveOrder } from "@/lib/server/billing-store"
 
 export async function POST(request: Request) {
-  const guard = requireMalikAdmin(request)
+  const guard = await requireMalikAdminAsync(request)
   if (guard.response) return guard.response
   const body = await request.json().catch(() => ({}))
   const order = await approveOrder(String(body?.orderId || ""), guard.access.email)

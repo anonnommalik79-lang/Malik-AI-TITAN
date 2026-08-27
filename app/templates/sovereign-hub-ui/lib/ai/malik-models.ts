@@ -3,8 +3,8 @@ import type { AIPlan } from "./types"
 export type MalikModelId =
   | "malik-8b"
   | "malik-20b"
-  | "malik-27b"
   | "malik-fast-120b"
+  | "malik-27b"
   | "malik-30b"
   | "malik-vision-26b"
   | "malik-coder-32b"
@@ -28,7 +28,7 @@ export type MalikModelDefinition = {
 export const MALIK_MODELS = [
   {
     id: "malik-20b",
-    label: "MalikLLM20B",
+    label: "MalikAI20B",
     description: "Быстрый · Для повседневных задач",
     tier: "free",
     provider: "groq",
@@ -36,22 +36,22 @@ export const MALIK_MODELS = [
     capabilities: ["text", "reasoning"],
   },
   {
-    id: "malik-27b",
-    label: "MalikLLM27B",
-    description: "Код · Vision · Рассуждение",
-    tier: "free",
-    provider: "groq",
-    providerModel: "qwen/qwen3.6-27b",
-    capabilities: ["text", "vision", "code", "tools", "reasoning"],
-  },
-  {
     id: "malik-fast-120b",
-    label: "MalikLLM120B Fast",
-    description: "120B · Fast · Рассуждение",
+    label: "MalikAI120B Fast",
+    description: "Cerebras · Быстрые ответы и рассуждения",
     tier: "free",
     provider: "cerebras",
     providerModel: "gpt-oss-120b",
     capabilities: ["text", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-27b",
+    label: "MalikLLM27B",
+    description: "Код · Vision · Рассуждение",
+    tier: "pro",
+    provider: "groq",
+    providerModel: "qwen/qwen3.6-27b",
+    capabilities: ["text", "vision", "code", "tools", "reasoning"],
   },
   {
     id: "malik-8b",
