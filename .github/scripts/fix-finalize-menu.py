@@ -27,9 +27,17 @@ old_title = 'await check("two plans; exactly two free models", () => {'
 new_title = 'await check("two plans; three live free MalikLLM models", () => {'
 old_models = 'assert.deepEqual(FREE_MALIK_MODELS.map(m => m.label), ["MalikAI20B", "MalikAI120B Fast"])'
 new_models = 'assert.deepEqual(FREE_MALIK_MODELS.map(m => m.label), ["MalikLLM 20B", "MalikLLM Fast 120B", "MalikLLM Qwen3.8 27B"])'
-if old_title not in account or old_models not in account:
-    raise SystemExit("Expected legacy account/model assertions were not found")
-account = account.replace(old_title, new_title).replace(old_models, new_models)
+old_fallback_title = 'await check("unavailable selected model never falls back", async () => {'
+new_fallback_title = 'await check("unavailable selected model exhausts configured fallback", async () => {'
+old_fallback_count = 'assert.equal(calls.length, count + 1)'
+new_fallback_count = 'assert.equal(calls.length, count + 2)'
+for old in (old_title, old_models, old_fallback_title, old_fallback_count):
+    if old not in account:
+        raise SystemExit(f"Expected legacy account assertion was not found: {old}")
+account = account.replace(old_title, new_title)
+account = account.replace(old_models, new_models)
+account = account.replace(old_fallback_title, new_fallback_title)
+account = account.replace(old_fallback_count, new_fallback_count, 1)
 account_path.write_text(account, encoding="utf-8")
 
-print("Attachment menu, Plugins routing, and account model expectations fixed.")
+print("Attachment menu, Plugins routing, model branding, and fallback tests fixed.")
