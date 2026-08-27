@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   Paperclip,
   Plus,
+  X,
   type LucideIcon,
 } from "lucide-react"
 import { prefetchChatShell } from "@/lib/studio-prefetch"
@@ -28,6 +29,11 @@ import type { AiModeId } from "../power-registry"
 import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
+
+const MAX_HOME_ATTACHMENTS = 4
+const MAX_HOME_VIDEO_SECONDS = 30
+const MAX_HOME_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_HOME_VIDEO_BYTES = 50 * 1024 * 1024
 
 const SOURCE_PLUGINS: Array<{
   id: string
@@ -61,6 +67,97 @@ const SOURCE_PLUGINS: Array<{
   },
 ]
 
+function attachmentId() {
+  try {
+    return crypto.randomUUID()
+  } catch {
+    return `malik-attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  }
+}
+
+function readAsBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "")
+      resolve(dataUrl.includes(",") ? dataUrl.split(",").pop() || "" : dataUrl)
+    }
+    reader.onerror = () => reject(new Error(`Не удалось прочитать ${file.name}.`))
+    reader.readAsDataURL(file)
+  })
+}
+
+function videoDurationSeconds(file: File) {
+  return new Promise<number>((resolve, reject) => {
+    const video = document.createElement("video")
+    const objectUrl = URL.createObjectURL(file)
+    let settled = false
+
+    const cleanup = () => {
+      window.clearTimeout(timer)
+      video.removeAttribute("src")
+      video.load()
+      URL.revokeObjectURL(objectUrl)
+    }
+
+    const finish = (duration?: number, error?: Error) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (error) reject(error)
+      else resolve(duration || 0)
+    }
+
+    const timer = window.setTimeout(() => {
+      finish(undefined, new Error(`Не удалось проверить длительность ${file.name}.`))
+    }, 10_000)
+
+    video.preload = "metadata"
+    video.onloadedmetadata = () => {
+      const duration = Number(video.duration)
+      if (!Number.isFinite(duration) || duration <= 0) {
+        finish(undefined, new Error(`Не удалось проверить длительность ${file.name}.`))
+        return
+      }
+      finish(duration)
+    }
+    video.onerror = () => finish(undefined, new Error(`Не удалось открыть видео ${file.name}.`))
+    video.src = objectUrl
+  })
+}
+
+async function mediaFileToAttachment(file: File): Promise<ChatAttachment> {
+  const mime = file.type || "application/octet-stream"
+  const isImage = mime.startsWith("image/")
+  const isVideo = mime.startsWith("video/")
+
+  if (!isImage && !isVideo) {
+    throw new Error(`${file.name}: выбери фото или видео.`)
+  }
+
+  const sizeLimit = isVideo ? MAX_HOME_VIDEO_BYTES : MAX_HOME_IMAGE_BYTES
+  if (file.size > sizeLimit) {
+    throw new Error(`${file.name}: слишком большой файл. ${isVideo ? "Видео до 50 MB." : "Фото до 10 MB."}`)
+  }
+
+  if (isVideo) {
+    const duration = await videoDurationSeconds(file)
+    if (duration > MAX_HOME_VIDEO_SECONDS + 0.05) {
+      throw new Error(`${file.name}: видео ${Math.ceil(duration)} сек. Максимум 30 сек.`)
+    }
+  }
+
+  const base64 = await readAsBase64(file)
+  return {
+    id: attachmentId(),
+    name: file.name || (isVideo ? "camera-video.mp4" : "image.jpg"),
+    mime,
+    size: file.size,
+    kind: isVideo ? "video" : "image",
+    base64,
+  }
+}
+
 export interface MalikHybridHomeProps {
   onSubmit: (prompt: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => void
   isLoading?: boolean
@@ -89,12 +186,14 @@ function HomeComposer({
   isLoading,
   webOn,
   memoryOn,
+  attachments,
+  attachmentError,
   onPromptChange,
   onSubmit,
   onToggleWeb,
   onToggleMemory,
-  onOpenPhoto,
-  onOpenVideo,
+  onSelectMediaFiles,
+  onRemoveAttachment,
   onOpenCode,
   onOpenCanvas,
   selectedModelId,
@@ -107,12 +206,14 @@ function HomeComposer({
   isLoading?: boolean
   webOn: boolean
   memoryOn: boolean
+  attachments: ChatAttachment[]
+  attachmentError: string
   onPromptChange: (value: string) => void
   onSubmit: () => void
   onToggleWeb: () => void
   onToggleMemory: () => void
-  onOpenPhoto?: () => void
-  onOpenVideo?: () => void
+  onSelectMediaFiles: (files: File[]) => void
+  onRemoveAttachment: (id: string) => void
   onOpenCode?: () => void
   onOpenCanvas?: () => void
   selectedModelId: MalikModelId
@@ -124,6 +225,8 @@ function HomeComposer({
   const [toolsOpen, setToolsOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const toolsRef = useRef<HTMLDivElement>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
+  const cameraVideoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const field = textareaRef.current
@@ -154,12 +257,14 @@ function HomeComposer({
     action?: () => void
   }> = [
     { id: "web", label: "Веб-поиск", icon: Globe, active: webOn, action: onToggleWeb },
-    { id: "image", label: "Изображение", icon: ImageIcon, action: onOpenPhoto },
-    { id: "video", label: "Видео", icon: Film, action: onOpenVideo },
+    { id: "image", label: "Изображение", icon: ImageIcon, action: () => galleryInputRef.current?.click() },
+    { id: "video", label: "Видео", icon: Film, action: () => cameraVideoInputRef.current?.click() },
     { id: "code", label: "Код", icon: Code2, action: onOpenCode },
     { id: "files", label: "Файлы", icon: Paperclip, action: onOpenCanvas },
     { id: "memory", label: "Память", icon: Brain, active: memoryOn, action: onToggleMemory },
   ]
+
+  const hasSendableContent = Boolean(prompt.trim() || attachments.length)
 
   return (
     <section className="thome-composer" aria-label="Новый запрос">
@@ -196,6 +301,33 @@ function HomeComposer({
               })}
             </div>
           ) : null}
+
+          <input
+            ref={galleryInputRef}
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            className="hidden"
+            aria-hidden="true"
+            tabIndex={-1}
+            onChange={(event) => {
+              onSelectMediaFiles(Array.from(event.currentTarget.files || []))
+              event.currentTarget.value = ""
+            }}
+          />
+          <input
+            ref={cameraVideoInputRef}
+            type="file"
+            accept="video/*"
+            capture="environment"
+            className="hidden"
+            aria-hidden="true"
+            tabIndex={-1}
+            onChange={(event) => {
+              onSelectMediaFiles(Array.from(event.currentTarget.files || []))
+              event.currentTarget.value = ""
+            }}
+          />
         </div>
 
         <textarea
@@ -231,27 +363,45 @@ function HomeComposer({
               type="button"
               onClick={onOpenVoice}
               disabled={isLoading}
-              className={cn("thome-voice-entry", prompt.trim() && "is-hidden")}
+              className={cn("thome-voice-entry", hasSendableContent && "is-hidden")}
               aria-label="Открыть голосовой режим"
-              aria-hidden={Boolean(prompt.trim())}
-              tabIndex={prompt.trim() ? -1 : 0}
+              aria-hidden={hasSendableContent}
+              tabIndex={hasSendableContent ? -1 : 0}
             >
               <VoiceWaveIcon />
             </button>
             <button
               type="button"
               onClick={onSubmit}
-              disabled={!prompt.trim() || isLoading}
-              className={cn("thome-submit", !prompt.trim() && "is-hidden")}
+              disabled={!hasSendableContent || isLoading}
+              className={cn("thome-submit", !hasSendableContent && "is-hidden")}
               aria-label={isLoading ? "Malik AI отвечает" : "Отправить запрос"}
-              aria-hidden={!prompt.trim()}
-              tabIndex={prompt.trim() ? 0 : -1}
+              aria-hidden={!hasSendableContent}
+              tabIndex={hasSendableContent ? 0 : -1}
             >
               {isLoading ? <span className="thome-submit-loader" aria-hidden="true" /> : <ArrowUp aria-hidden="true" />}
             </button>
           </span>
         </div>
       </div>
+
+      {attachments.length || attachmentError ? (
+        <div className="thome-attachments" aria-live="polite">
+          {attachments.map((item) => {
+            const Icon = item.kind === "video" ? Film : ImageIcon
+            return (
+              <span key={item.id} className="thome-attachment-pill">
+                <Icon aria-hidden="true" />
+                <span>{item.name}</span>
+                <button type="button" onClick={() => onRemoveAttachment(item.id)} aria-label={`Убрать ${item.name}`}>
+                  <X aria-hidden="true" />
+                </button>
+              </span>
+            )
+          })}
+          {attachmentError ? <span className="thome-attachment-error">{attachmentError}</span> : null}
+        </div>
+      ) : null}
 
       <div className="thome-composer-meta" aria-label="Активные возможности">
         <button type="button" onClick={onToggleWeb} className={cn("thome-meta-chip", webOn && "is-active")}>
@@ -270,6 +420,8 @@ function HomeComposer({
 
 function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [prompt, setPrompt] = useState("")
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([])
+  const [attachmentError, setAttachmentError] = useState("")
   const [webOn, setWebOn] = useWebSearchEnabled()
   const [memoryOn, setMemoryOn] = useContextEnabled()
 
@@ -292,11 +444,43 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     return () => window.removeEventListener(PREFILL_EVENT, fill)
   }, [])
 
+  const addMediaFiles = async (files: File[]) => {
+    if (!files.length) return
+    setAttachmentError("")
+
+    const room = Math.max(0, MAX_HOME_ATTACHMENTS - attachments.length)
+    if (!room) {
+      setAttachmentError(`Можно прикрепить максимум ${MAX_HOME_ATTACHMENTS} фото/видео.`)
+      return
+    }
+
+    const accepted: ChatAttachment[] = []
+    const errors: string[] = []
+    for (const file of files.slice(0, room)) {
+      try {
+        accepted.push(await mediaFileToAttachment(file))
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : `Не удалось добавить ${file.name}.`)
+      }
+    }
+
+    if (files.length > room) errors.push(`Можно прикрепить максимум ${MAX_HOME_ATTACHMENTS} фото/видео.`)
+    if (accepted.length) setAttachments((previous) => [...previous, ...accepted].slice(0, MAX_HOME_ATTACHMENTS))
+    if (errors.length) setAttachmentError(errors[0])
+  }
+
   const submit = () => {
     const text = prompt.trim()
-    if (!text || props.isLoading) return
-    props.onSubmit(text, [], { research: webOn })
+    if ((!text && !attachments.length) || props.isLoading) return
+
+    const mediaPrompt = attachments.some((item) => item.kind === "video")
+      ? "Проанализируй прикреплённое видео и подробно ответь по его содержанию."
+      : "Проанализируй прикреплённое изображение и подробно ответь по его содержанию."
+
+    props.onSubmit(text || mediaPrompt, attachments, { research: webOn })
     setPrompt("")
+    setAttachments([])
+    setAttachmentError("")
   }
 
   const focusPrompt = (value: string) => {
@@ -343,12 +527,17 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               isLoading={props.isLoading}
               webOn={webOn}
               memoryOn={memoryOn}
+              attachments={attachments}
+              attachmentError={attachmentError}
               onPromptChange={setPrompt}
               onSubmit={submit}
               onToggleWeb={() => setWebOn(!webOn)}
               onToggleMemory={() => setMemoryOn(!memoryOn)}
-              onOpenPhoto={props.onOpenPhoto}
-              onOpenVideo={props.onOpenVideo}
+              onSelectMediaFiles={(files) => { void addMediaFiles(files) }}
+              onRemoveAttachment={(id) => {
+                setAttachments((previous) => previous.filter((item) => item.id !== id))
+                setAttachmentError("")
+              }}
               onOpenCode={props.onOpenCode}
               onOpenCanvas={props.onOpenCanvas}
               selectedModelId={props.selectedModelId || DEFAULT_MALIK_MODEL_ID}

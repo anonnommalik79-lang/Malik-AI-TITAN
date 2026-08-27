@@ -1,0 +1,147 @@
+/* MALIK AI — final attachment/tool menu layer.
+   Loaded after the legacy home/mobile passes so the + menu always opens in
+   front of the composer and native media attachments stay readable. */
+
+#malik-root .malik-dashboard-shell .thome-welcome,
+#malik-root .malik-dashboard-shell .thome-launcher {
+  overflow: visible !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-composer,
+#malik-root .malik-dashboard-shell .thome-composer:focus-within {
+  position: relative !important;
+  z-index: 220 !important;
+  overflow: visible !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-composer-row,
+#malik-root .malik-dashboard-shell .thome-tools {
+  overflow: visible !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-tools {
+  position: relative !important;
+  z-index: 240 !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-tools-menu {
+  position: absolute !important;
+  z-index: 9999 !important;
+  top: auto !important;
+  bottom: calc(100% + 12px) !important;
+  left: 0 !important;
+  width: 248px !important;
+  max-width: calc(100vw - 32px) !important;
+  max-height: min(52dvh, 360px) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  border: 1px solid rgba(255,255,255,.11) !important;
+  background: #181818 !important;
+  box-shadow: 0 24px 70px rgba(0,0,0,.72) !important;
+  isolation: isolate !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachments {
+  display: flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  align-items: center !important;
+  gap: 7px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  border-top: 1px solid rgba(255,255,255,.055) !important;
+  padding: 8px 12px 4px !important;
+  scrollbar-width: none !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachments::-webkit-scrollbar {
+  display: none !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachment-pill {
+  display: inline-flex !important;
+  min-width: 0 !important;
+  max-width: 230px !important;
+  height: 34px !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  gap: 7px !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 11px !important;
+  background: rgba(255,255,255,.04) !important;
+  padding: 0 6px 0 9px !important;
+  color: #d7d7da !important;
+  font-size: 11px !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachment-pill > svg {
+  width: 14px !important;
+  height: 14px !important;
+  flex: 0 0 14px !important;
+  color: #d5b250 !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachment-pill > span {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachment-pill > button {
+  display: grid !important;
+  width: 24px !important;
+  height: 24px !important;
+  flex: 0 0 24px !important;
+  place-items: center !important;
+  border-radius: 8px !important;
+  color: #8f8f96 !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachment-pill > button:active,
+#malik-root .malik-dashboard-shell .thome-attachment-pill > button:hover {
+  background: rgba(255,255,255,.07) !important;
+  color: #fff !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachment-pill > button svg {
+  width: 13px !important;
+  height: 13px !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachment-error {
+  flex: 0 0 auto !important;
+  max-width: min(360px, 78vw) !important;
+  color: #ff9d9d !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+  white-space: normal !important;
+}
+
+@media (max-width: 767px) {
+  #malik-root .malik-dashboard-shell .thome-tools-menu {
+    bottom: calc(100% + 10px) !important;
+    left: -4px !important;
+    width: min(258px, calc(100vw - 28px)) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    border-radius: 17px !important;
+    padding: 8px !important;
+    background: #171717 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-tools-item {
+    min-height: 44px !important;
+    height: 44px !important;
+    font-size: 11.5px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-attachments {
+    padding: 7px 9px 3px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-attachment-pill {
+    max-width: 185px !important;
+    height: 32px !important;
+    font-size: 10.5px !important;
+  }
+}
