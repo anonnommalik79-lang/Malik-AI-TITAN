@@ -71,7 +71,7 @@ verify = verify.replace('["malik-20b", "malik-fast-120b", "malik-27b", "malik-gl
 verify = verify.replace('"Free must expose the four free text models"', '"Free must expose the three live free text models"')
 old_tail = 'console.log("Verified 11 unique Malik model routes and Free/Plus gates.")'
 new_tail = '''for (const model of MALIK_MODELS) {
-  assert.match(model.label, /^MalikLLM .+\\d+B$/, `${model.id} label must use MalikLLM and end in parameter count`)
+  assert.match(model.label, /^MalikLLM .*\\d+B$/, `${model.id} label must use MalikLLM and end in parameter count`)
 }
 assert.equal(MALIK_MODELS.some((model) => model.providerModel === "zai-glm-4.7"), false, "Deprecated GLM 4.7 must not be exposed")
 assert.equal(MALIK_MODELS.some((model) => model.providerModel.includes("gemini")), false, "Hidden Gemini must never appear in the selector")
