@@ -153,6 +153,24 @@ try:
     print("вњ… [MALIK] Admin/dev bypass routes connected: /api/ai/admin/status /api/ai/limits/status")
 except Exception as e:
     print("вљ пёЏ [MALIK] Admin/dev bypass routes skipped:", e)
+
+# ---------------- Production Voice runtime (Flask / Render) ----------------
+# The deployed frontend is static and Flask owns /api/* in production.
+# Keep these endpoints in Flask so microphone/STT/TTS do not fall through to
+# browser speechSynthesis when Next server routes are unavailable.
+try:
+    import importlib.util as _voice_importlib_util
+    from pathlib import Path as _VoicePath
+    _voice_runtime_path = _VoicePath(__file__).resolve().parent / "app" / "ai" / "voice_runtime.py"
+    _voice_runtime_spec = _voice_importlib_util.spec_from_file_location("malik_voice_runtime", _voice_runtime_path)
+    if _voice_runtime_spec is None or _voice_runtime_spec.loader is None:
+        raise RuntimeError("Voice runtime module loader unavailable")
+    _voice_runtime_module = _voice_importlib_util.module_from_spec(_voice_runtime_spec)
+    _voice_runtime_spec.loader.exec_module(_voice_runtime_module)
+    app.register_blueprint(_voice_runtime_module.voice_runtime_bp)
+    print("✅ [MALIK] Voice runtime connected: /api/voice/tts /api/voice/turn /api/transcribe /api/voice/deepgram-token")
+except Exception as e:
+    print("⚠️ [MALIK] Voice runtime skipped:", e)
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 PHOTO_STORAGE_DIR = BASE_DIR / "app" / "static" / "storage" / "photos"
 PROJECT_STORAGE_DIR = BASE_DIR / "app" / "static" / "storage" / "projects"

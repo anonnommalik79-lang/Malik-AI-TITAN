@@ -53,6 +53,7 @@ export const VOICES: readonly VoiceProfile[] = [
   { name: "Paige", description: "American feminine · calm, comfortable", deepgramModel: "flux-paige-en", rate: .99, pitch: 1.04, hints: femaleHints },
   { name: "Priya", description: "Indian feminine · confident, empathetic", deepgramModel: "flux-priya-en", rate: .98, pitch: 1.04, hints: femaleHints },
   { name: "Sharon", description: "Australian feminine · formal, relaxed", deepgramModel: "flux-sharon-en", rate: .98, pitch: 1.04, hints: femaleHints },
+  { name: "Kokoro M1", description: "Қазақша · native masculine · local Kokoro 82M", deepgramModel: "kokoro-kazakh-km_m1", rate: 1, pitch: 1, hints: maleHints },
 ] as const
 
 export const PERSONALITIES = ["Assistant", "Therapist", "Storyteller", "Kids Story Time", "Kids Trivia Game", "Meditation", "Motivation", "Romantic", "Argumentative"] as const
@@ -90,11 +91,11 @@ export function VoiceSettings({ open, voice, personality, speed, expressivity, o
     <div ref={rootRef} className={`${styles.panel} ${open ? styles.open : ""}`} aria-hidden={!open}>
       <div className={styles.columns}>
         <section className={styles.column} aria-label="Выбор голоса">
-          <div className={styles.heading}><span>Голос</span><small>36 Deepgram Flux голосов · English</small></div>
+          <div className={styles.heading}><span>Голос</span><small>36 Deepgram Flux · English + Kokoro · Қазақша</small></div>
           <div className={styles.list}>
             {VOICES.map((profile) => (
               <button key={profile.name} type="button" className={`${styles.item} ${voice === profile.name ? styles.selected : ""}`} onClick={() => { onVoiceChange(profile.name); onPreviewVoice(profile.name) }}>
-                <span className={styles.itemText}><strong>{profile.name} <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">English</span></strong><small>{profile.description}</small></span>
+                <span className={styles.itemText}><strong>{profile.name} <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">{profile.deepgramModel.startsWith("kokoro-kazakh") ? "Қазақша" : "English"}</span></strong><small>{profile.description}</small></span>
                 <span className={styles.actions}><span className={styles.preview} aria-hidden="true"><Volume2 size={14} /></span>{voice === profile.name ? <Check className={styles.check} size={15} /> : null}</span>
               </button>
             ))}

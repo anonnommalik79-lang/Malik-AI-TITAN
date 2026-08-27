@@ -224,7 +224,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   const previewVoice = useCallback((profileName: string) => {
     if (!soundEnabled) return
-    void speakReply(`Hello. I'm ${profileName}. How can I help you today?`, profileName)
+    const sample = profileName === "Kokoro M1"
+      ? "Сәлем! Мен қазақша сөйлейтін Malik AI дауысымын."
+      : `Hello. I'm ${profileName}. How can I help you today?`
+    void speakReply(sample, profileName)
   }, [soundEnabled, speakReply])
 
   const stopSpeech = useCallback(() => {
@@ -442,7 +445,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       setFinalTranscript(payload.content)
       setInterimTranscript("")
       setTitle("Отвечаю")
-      setSubtitle(`${voice} · ${payload.language || detectVoiceLanguage(payload.content)}`)
+      setSubtitle(`${payload.language === "kk" ? "Kokoro M1" : voice} · ${payload.language || detectVoiceLanguage(payload.content)}`)
       await speakReply(payload.content)
       if (mountedRef.current && !closingRef.current && !micActiveRef.current) {
         setTitle("Слушаю")
