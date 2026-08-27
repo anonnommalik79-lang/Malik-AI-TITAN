@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Build a low-memory ONNX copy of AnuarSv/kokoro-tts-kazakh.
 
-Run this during the Render build, never on a request.  The source checkpoint is
+Run this during the Render build, never on a request. The source checkpoint is
 Apache-2.0 and remains on Hugging Face; the generated ONNX/numpy artifacts live
 in the service build filesystem and are not committed to Git.
 """
@@ -19,10 +19,18 @@ from kokoro import KModel
 from kokoro.model import KModelForONNX
 from misaki import espeak
 from onnxruntime.quantization import QuantType, quantize_dynamic
+from onnxruntime.quantization.shape_inference import quant_pre_process
 
 REPO = os.environ.get("KOKORO_KK_REPO", "AnuarSv/kokoro-tts-kazakh").strip()
 ROOT = Path(os.environ.get("KOKORO_KK_ONNX_DIR", "app/ai/kokoro_kazakh_runtime")).resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
+
+
+def _clean(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 def main() -> None:
@@ -50,7 +58,10 @@ def main() -> None:
     input_ids = torch.LongTensor([[0, *ids, 0]])
     speed = torch.tensor(1.0, dtype=torch.float32)
     fp32 = ROOT / "kokoro_kazakh_fp32.onnx"
+    preprocessed = ROOT / "kokoro_kazakh_preprocessed.onnx"
     q8 = ROOT / "kokoro_kazakh_q8.onnx"
+    for stale in (fp32, preprocessed, q8):
+        _clean(stale)
 
     with torch.inference_mode():
         torch.onnx.export(
@@ -71,12 +82,36 @@ def main() -> None:
 
     checked = onnx.load(str(fp32))
     onnx.checker.check_model(checked)
+    fp32_bytes = fp32.stat().st_size
 
-    # QInt8 dynamic weight quantization avoids loading the 82M fp32 PyTorch
-    # checkpoint at request time and is dramatically smaller on CPU.
-    quantize_dynamic(str(fp32), str(q8), weight_type=QuantType.QInt8)
+    # ORT explicitly recommends preprocessing before quantization. Kokoro has
+    # Loop/LSTM subgraphs, so skip symbolic shape inference and do not quantize
+    # subgraphs. Restrict quantization to constant-weight MatMul/Gemm nodes;
+    # this avoids corrupting SequenceAt/Loop topology while still shrinking the
+    # large transformer/text-encoder weight matrices substantially.
+    quant_pre_process(
+        str(fp32),
+        str(preprocessed),
+        skip_symbolic_shape=True,
+        auto_merge=True,
+        skip_optimization=False,
+    )
+    pre_model = onnx.load(str(preprocessed))
+    onnx.checker.check_model(pre_model)
+
+    quantize_dynamic(
+        str(preprocessed),
+        str(q8),
+        weight_type=QuantType.QInt8,
+        op_types_to_quantize=["MatMul", "Gemm"],
+        extra_options={
+            "EnableSubgraph": False,
+            "MatMulConstBOnly": True,
+        },
+    )
     q8_model = onnx.load(str(q8))
     onnx.checker.check_model(q8_model)
+    q8_bytes = q8.stat().st_size
 
     np.save(ROOT / "km_m1.npy", voicepack.cpu().numpy().astype(np.float32), allow_pickle=False)
     (ROOT / "config.json").write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
@@ -85,14 +120,16 @@ def main() -> None:
             "repo": REPO,
             "voice": "km_m1",
             "sampleRate": 24000,
-            "fp32Bytes": fp32.stat().st_size,
-            "q8Bytes": q8.stat().st_size,
+            "fp32Bytes": fp32_bytes,
+            "q8Bytes": q8_bytes,
+            "quantization": "QInt8 MatMul/Gemm, subgraphs excluded",
         }, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
-    # Runtime only needs the quantized graph, numpy voicepack and config.
-    fp32.unlink(missing_ok=True)
+    # Runtime only needs q8 graph, numpy voicepack and config.
+    _clean(fp32)
+    _clean(preprocessed)
     for item in source_dir.iterdir():
         if item.is_file() or item.is_symlink():
             item.unlink(missing_ok=True)
@@ -101,7 +138,7 @@ def main() -> None:
     except OSError:
         pass
 
-    print("KOKORO_KK_ONNX_BUILD_OK", q8.stat().st_size)
+    print("KOKORO_KK_ONNX_BUILD_OK", {"fp32": fp32_bytes, "q8": q8_bytes})
 
 
 if __name__ == "__main__":
