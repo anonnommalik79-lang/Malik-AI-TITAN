@@ -113,6 +113,13 @@ body:has(.thome),
   display: none !important;
 }
 
+/* Plugins page: same pure-black canvas as the rest of Malik AI. */
+#malik-root .malik-dashboard-shell .malik-plugin-market {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+}
+
 /* Right dashboard rail has been retired. Keep this hard guard so no old CSS
    can accidentally bring the empty rail back on large screens. */
 .titan-rail {
