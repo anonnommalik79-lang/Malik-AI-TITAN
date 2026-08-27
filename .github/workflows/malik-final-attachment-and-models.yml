@@ -35,7 +35,7 @@ jobs:
         working-directory: app/templates/sovereign-hub-ui
         run: npm run typecheck
 
-      - name: Verify model catalog
+      - name: Verify model catalog and branding
         working-directory: app/templates/sovereign-hub-ui
         run: npm run test:models
 
