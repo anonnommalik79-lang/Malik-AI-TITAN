@@ -40,15 +40,19 @@ export async function POST(request: Request) {
       personality,
       provider: answer.provider,
       model: answer.model,
-    })
+    }, { headers: { "cache-control": "no-store" } })
   } catch (error) {
     console.error("[VOICE_TURN_ERROR]", error instanceof Error ? error.message : error)
-    return Response.json(
-      {
-        ok: false,
-        error: "Voice-модель временно недоступна. Проверь подключение Groq/Cloudflare Voice в Render и попробуй ещё раз.",
-      },
-      { status: 503 },
-    )
+
+    // Never send Voice back into the legacy normal-chat router. That old path
+    // can expose internal provider/env diagnostics in the spoken UI. Keep the
+    // failure inside Voice and give it a short sentence that TTS can say.
+    return Response.json({
+      ok: true,
+      content: "Сейчас не получилось получить ответ. Попробуй сказать ещё раз через секунду.",
+      personality,
+      provider: "voice-local-fallback",
+      model: "none",
+    }, { headers: { "cache-control": "no-store" } })
   }
 }
