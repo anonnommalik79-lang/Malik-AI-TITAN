@@ -27,6 +27,8 @@ import "./mobile-reference-nav-patch.css"
 // True product-wide phone shell. This MUST stay last so legacy mobile rules
 // cannot squeeze desktop geometry back into the phone viewport.
 import "./mobile-app-shell-v3.css"
+// Final surface authority: true black app/auth backgrounds and no right rail.
+import "./malik-pure-black-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 
@@ -67,21 +69,21 @@ const websiteJsonLd = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru" translate="no" suppressHydrationWarning className="bg-background notranslate">
+    <html lang="ru" translate="no" suppressHydrationWarning className="bg-black notranslate">
       <head>
         <meta name="google" content="notranslate" />
         <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
-        <meta name="theme-color" content="#05070d" />
+        <meta name="theme-color" content="#000000" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
       </head>
-      <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-[#0f0f10] font-sans antialiased notranslate">
+      <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-black font-sans antialiased notranslate">
         <AuthKitProvider>
-          <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden bg-[#0f0f10] notranslate">
+          <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden bg-black notranslate">
             {children}
           </div>
         </AuthKitProvider>
