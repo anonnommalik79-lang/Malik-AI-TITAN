@@ -180,6 +180,7 @@
   }
 
   .malik-dashboard-shell .titan-tab.is-active {
+    display: inline-flex !important;
     border-color: rgba(255, 255, 255, .09) !important;
     background: #242425 !important;
     color: #fff !important;
