@@ -23,7 +23,9 @@ jobs:
           cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
 
       - name: Apply final patch
-        run: python .github/scripts/finalize-malik.py
+        run: |
+          python .github/scripts/finalize-malik.py
+          python .github/scripts/fix-finalize-menu.py
 
       - name: Install dependencies
         working-directory: app/templates/sovereign-hub-ui
