@@ -23,7 +23,9 @@ jobs:
           cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
 
       - name: Apply Voice runtime v2 patch
-        run: python .github/scripts/fix-voice-runtime-v2.py
+        run: |
+          python .github/scripts/fix-voice-runtime-v2.py
+          python .github/scripts/fix-voice-runtime-v2-typecheck.py
 
       - name: Install dependencies
         working-directory: app/templates/sovereign-hub-ui
