@@ -4,6 +4,7 @@ export type MalikModelId =
   | "malik-8b"
   | "malik-20b"
   | "malik-27b"
+  | "malik-fast-120b"
   | "malik-30b"
   | "malik-vision-26b"
   | "malik-coder-32b"
@@ -12,7 +13,7 @@ export type MalikModelId =
   | "malik-agent-120b"
 
 export type MalikModelTier = "free" | "pro"
-export type MalikModelProvider = "groq" | "cloudflare"
+export type MalikModelProvider = "groq" | "cloudflare" | "cerebras"
 
 export type MalikModelDefinition = {
   id: MalikModelId
@@ -42,6 +43,15 @@ export const MALIK_MODELS = [
     provider: "groq",
     providerModel: "qwen/qwen3.6-27b",
     capabilities: ["text", "vision", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-fast-120b",
+    label: "MalikLLM120B Fast",
+    description: "120B · Fast · Рассуждение",
+    tier: "free",
+    provider: "cerebras",
+    providerModel: "gpt-oss-120b",
+    capabilities: ["text", "code", "tools", "reasoning"],
   },
   {
     id: "malik-8b",
