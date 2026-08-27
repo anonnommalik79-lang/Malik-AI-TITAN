@@ -191,7 +191,7 @@ export function VoiceDock({
           <Monitor size={20} />
         </button>
 
-        <button type="button" data-voice-settings-trigger className={`${styles.assistantButton} ${settingsOpen ? styles.active : ""}`} onClick={onSettingsToggle} aria-expanded={settingsOpen} aria-label="Настройки Sola Assistant">
+        <button type="button" data-voice-settings-trigger className={`${styles.assistantButton} ${settingsOpen ? styles.active : ""}`} onClick={onSettingsToggle} aria-expanded={settingsOpen} aria-label={`Настройки ${voice} ${personality}`}>
           <SlidersHorizontal size={17} />
           <span>{voice}</span><small>· {personality}</small><ChevronUp size={15} />
         </button>

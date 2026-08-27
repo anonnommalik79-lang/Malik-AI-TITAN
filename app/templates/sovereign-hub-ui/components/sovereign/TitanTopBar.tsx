@@ -177,6 +177,7 @@ function TitanTopBarInner({
         <Menu className="h-[18px] w-[18px]" />
       </button>
 
+      <span className="titan-mobile-brand" aria-hidden="true">Malik AI</span>
       <nav aria-label="Разделы" className="titan-tabs">
         {TABS.map((tab) => {
           const Icon = tab.icon

@@ -203,6 +203,28 @@
 
 .orbSpacer { height: clamp(232px, 20vw, 276px); }
 
+/* Legacy page-card selectors must never paint a rectangle over the orb. */
+:global(#malik-root) .stage[data-voice-mode] > .center,
+:global(#malik-root) .stage[data-voice-mode] > .visuals,
+:global(#malik-root) .stage[data-voice-mode] .orbSpacer,
+:global(#malik-root) .stage[data-voice-mode] .transcript {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+:global(#malik-root) .stage[data-voice-mode] > .dock {
+  background: rgba(23,23,23,.96) !important;
+  border-color: rgba(255,255,255,.13) !important;
+}
+
+:global(#malik-root) .stage[data-voice-mode] .dock > .promptRow,
+:global(#malik-root) .stage[data-voice-mode] .dock > .controls {
+  background: transparent !important;
+  box-shadow: none !important;
+  border-color: rgba(255,255,255,.07) !important;
+}
+
 .center h1 {
   margin: 0;
   font-size: clamp(26px, 3vw, 40px);
@@ -572,6 +594,17 @@
   .settings { right: 8px; bottom: 142px; width: calc(100vw - 16px); }
   .notice { bottom: 150px; }
   .hint { display: none; }
+  :global(#malik-root) .stage[data-voice-mode] .orbWrap {
+    top: calc(34% - 62px) !important;
+    width: min(43vw, 176px) !important;
+  }
+  :global(#malik-root) .stage[data-voice-mode] > .center {
+    top: 34% !important;
+    width: calc(100vw - 32px) !important;
+  }
+  :global(#malik-root) .stage[data-voice-mode] .orbSpacer { height: min(49vw, 200px) !important; }
+  :global(#malik-root) .stage[data-voice-mode] .center h1 { font-size: 25px !important; line-height: 1.15 !important; }
+  :global(#malik-root) .stage[data-voice-mode] .center > p { font-size: 12px !important; line-height: 1.45 !important; }
 }
 
 @media (max-width: 450px) {

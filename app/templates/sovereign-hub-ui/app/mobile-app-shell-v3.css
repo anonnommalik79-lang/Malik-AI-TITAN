@@ -1,3 +1,5 @@
+.titan-mobile-brand { display: none; }
+
 /* ========================================================================
    MALIK AI — RESPONSIVE PHONE SHELL V4
    Same Malik AI product, same visual identity, reflowed for phones.
@@ -733,6 +735,123 @@
 
   #malik-root {
     overflow-x: clip !important;
+  }
+}
+
+/* Match the existing desktop charcoal palette; never recolor /auth. */
+#malik-root .malik-dashboard-shell .thome-composer,
+#malik-root .malik-dashboard-shell .malik-inline-composer {
+  background: #181818 !important;
+  border-color: rgba(255,255,255,.12) !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-composer textarea,
+#malik-root .malik-dashboard-shell .malik-inline-composer textarea,
+#malik-root .malik-dashboard-shell [data-voice-mode] textarea {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  color: #f3f3f3 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-composer:focus-within,
+#malik-root .malik-dashboard-shell .malik-inline-composer:focus-within {
+  border-color: rgba(220,185,100,.42) !important;
+  box-shadow: 0 0 0 1px rgba(220,185,100,.1) !important;
+}
+
+#malik-root .malik-dashboard-shell [aria-label="Бесплатные плагины источников"] > button {
+  background: rgba(25,25,24,.8) !important;
+  border-color: rgba(255,255,255,.1) !important;
+  color: #bdbdbb !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 768px) {
+  #malik-root .malik-dashboard-shell { --malik-mobile-header: 88px; }
+
+  #malik-root .malik-dashboard-shell .titan-topbar {
+    grid-template-columns: 36px minmax(0, 1fr) 36px !important;
+    grid-template-rows: 38px 42px !important;
+    height: calc(88px + env(safe-area-inset-top)) !important;
+    min-height: calc(88px + env(safe-area-inset-top)) !important;
+    max-height: calc(88px + env(safe-area-inset-top)) !important;
+    gap: 0 6px !important;
+    padding: calc(4px + env(safe-area-inset-top)) 8px 4px !important;
+    background: #0f0f0f !important;
+    border-bottom: 1px solid rgba(255,255,255,.08) !important;
+  }
+  #malik-root .malik-dashboard-shell .titan-topbar > .titan-icon-btn {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+  }
+  #malik-root .malik-dashboard-shell .titan-mobile-brand {
+    display: block;
+    grid-column: 2;
+    grid-row: 1;
+    text-align: center;
+    color: #f5f5f5;
+    font-size: 15px;
+    font-weight: 650;
+  }
+  #malik-root .malik-dashboard-shell .titan-topbar-right {
+    grid-column: 3 !important;
+    grid-row: 1 !important;
+    background: transparent !important;
+  }
+  #malik-root .malik-dashboard-shell .titan-tabs {
+    grid-column: 1 / -1 !important;
+    grid-row: 2 !important;
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0,1fr)) !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    gap: 2px !important;
+    overflow: visible !important;
+  }
+  #malik-root .malik-dashboard-shell .titan-tabs .titan-tab {
+    display: inline-flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    gap: 3px !important;
+    padding: 3px 0 !important;
+    border: 0 !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    color: #cecece !important;
+    font-size: 10px !important;
+    line-height: 12px !important;
+    box-shadow: none !important;
+  }
+  #malik-root .malik-dashboard-shell .titan-tabs .titan-tab span { display: inline !important; }
+  #malik-root .malik-dashboard-shell .titan-tabs .titan-tab svg {
+    display: block !important;
+    width: 15px !important;
+    height: 15px !important;
+    flex: 0 0 15px !important;
+    color: inherit !important;
+  }
+  #malik-root .malik-dashboard-shell .titan-tabs .titan-tab.is-active {
+    background: linear-gradient(135deg,#f0d57c,#bf922b) !important;
+    color: #211906 !important;
+  }
+  #malik-root .malik-dashboard-shell main,
+  #malik-root .malik-dashboard-shell .thome-launcher {
+    height: calc(100dvh - 88px - env(safe-area-inset-top)) !important;
+    min-height: 0 !important;
+  }
+  #malik-root .malik-dashboard-shell .thome-welcome h1 {
+    font-size: clamp(26px,7.2vw,32px) !important;
+    line-height: 1.1 !important;
   }
 }
 
