@@ -1,4 +1,5 @@
 import "./auth-isolation.css";
+import "../../components/sovereign/sovereign-mobile-auth-black.css";
 import { AuthBodyLock } from "./auth-body-lock";
 
 export default function AuthLayout({ children }: Readonly<{ children: React.ReactNode }>) {
