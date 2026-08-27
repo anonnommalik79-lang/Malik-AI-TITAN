@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import {
   BookOpen,
   Bot,
+  Camera,
   Check,
   ChevronRight,
   Code,
@@ -21,6 +22,7 @@ import {
   Mic,
   Paperclip,
   Plus,
+  Plug,
   RefreshCw,
   Search,
   SendHorizontal,
@@ -129,6 +131,7 @@ interface ChatViewProps {
   selectedModelId?: MalikModelId
   onModelChange?: (modelId: MalikModelId) => void
   onOpenBilling?: () => void
+  onOpenPlugins?: () => void
   onOpenCodex?: () => void
   onForceCanvas?: () => void
   onOpenVoice?: () => void
@@ -774,7 +777,7 @@ function MessageBubble({
   )
 }
 
-export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenCodex, onForceCanvas, onOpenVoice, projectName, projectDescription }: ChatViewProps) {
+export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, projectName, projectDescription }: ChatViewProps) {
   // One short pulse after the complete answer lands. Passing a number (rather
   // than a pattern) deliberately keeps this to a single haptic event.
   const wasLoading = useRef(false)
@@ -805,10 +808,13 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
   const [isRecording, setIsRecording] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const audioInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
+  const attachButtonRef = useRef<HTMLButtonElement>(null)
+  const attachMenuRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
 
@@ -834,6 +840,24 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
     textareaRef.current.style.height = "auto"
     textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`
   }, [prompt])
+  useEffect(() => {
+    if (!showAttachMenu) return
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (attachButtonRef.current?.contains(target) || attachMenuRef.current?.contains(target)) return
+      setShowAttachMenu(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowAttachMenu(false)
+    }
+    document.addEventListener("pointerdown", closeOnPointerDown)
+    document.addEventListener("keydown", closeOnEscape)
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown)
+      document.removeEventListener("keydown", closeOnEscape)
+    }
+  }, [showAttachMenu])
+
 
   const lastUserPrompt = useMemo(() => lastSubmittedPrompt || [...messages].reverse().find((message) => message.role === "user")?.content || prompt, [lastSubmittedPrompt, messages, prompt])
 
@@ -974,23 +998,32 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
   }
 
   const attachItems = useMemo(() => [
-    { label: "Добавить фото и файлы", icon: Paperclip, action: () => fileInputRef.current?.click() },
-    { label: "Добавить картинку", icon: ImageIcon, action: () => imageInputRef.current?.click() },
-    { label: "Добавить видео", icon: Video, action: () => videoInputRef.current?.click() },
-    { label: "Добавить аудио", icon: Volume2, action: () => audioInputRef.current?.click() },
-    { label: isRecording ? "Остановить запись" : "Записать голос", icon: Mic, action: toggleRecording },
-    { label: "Вставить код", icon: Code, action: () => setCodeModalOpen(true) },
-    { label: "Из URL", icon: LinkIcon, action: () => setUrlModalOpen(true) },
-    { label: "Создать изображение", icon: Wand2, action: () => handleQuickAction("/image") },
-    { label: "Создать видео", icon: Video, action: () => handleQuickAction("/video") },
-    { label: "Глубокое исследование", icon: Search, action: () => handleQuickAction("Проведи глубокое исследование") },
-    { label: "Поиск в сети", icon: Globe, action: () => handleQuickAction("Найди в сети свежую информацию") },
-    { label: "Режим агента", icon: Bot, action: () => handleQuickAction("Включи режим агента и составь план выполнения") },
-    { label: "Холст / Canvas", icon: Layers, action: () => { onForceCanvas?.(); handleQuickAction("Создай проект в canvas") } },
-    { label: "GitHub", icon: Github, action: () => handleQuickAction("Подготовь GitHub-ready структуру") },
-    { label: "Архитектура кода", icon: FolderTree, action: () => handleQuickAction("Спроектируй архитектуру кода и файлы") },
-    { label: "Malik Codex", icon: FilePlus2, action: () => { setShowAttachMenu(false); onOpenCodex?.() } },
-  ], [onOpenCodex, onForceCanvas, isRecording])
+    {
+      label: "Камера",
+      icon: Camera,
+      action: () => { setShowAttachMenu(false); cameraInputRef.current?.click() },
+    },
+    {
+      label: "Фото",
+      icon: ImageIcon,
+      action: () => { setShowAttachMenu(false); imageInputRef.current?.click() },
+    },
+    {
+      label: "Видео",
+      icon: Video,
+      action: () => { setShowAttachMenu(false); videoInputRef.current?.click() },
+    },
+    {
+      label: "Файлы",
+      icon: Paperclip,
+      action: () => { setShowAttachMenu(false); fileInputRef.current?.click() },
+    },
+    {
+      label: "Плагины",
+      icon: Plug,
+      action: () => { setShowAttachMenu(false); onOpenPlugins?.() },
+    },
+  ], [onOpenPlugins])
 
   return (
     <div data-malik-chat-fullwidth="1" className="malik-chat-fullwidth relative z-[2] flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-transparent text-white">
@@ -1068,11 +1101,11 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
       </div>
 
       <div data-composer className="malik-composer-dock relative z-20 w-full shrink-0 bg-transparent px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 md:px-8 md:pb-6 lg:px-10">
-        <div className="malik-composer-panel chat-composer mx-auto w-full max-w-[768px] rounded-[1.55rem] border border-white/10 bg-[#111112] p-3 sm:p-4">
+        <div className="malik-composer-panel chat-composer relative mx-auto w-full max-w-[768px] rounded-[1.55rem] border border-white/10 bg-[#111112] p-3 sm:p-4">
           {localError && <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">{localError}</div>}
           {attachments.length > 0 && <div className="mb-3 flex flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => setAttachments((previous) => previous.filter((item) => item.id !== attachment.id))} />)}</div>}
           <div className="malik-inline-composer">
-            <button type="button" onClick={() => setShowAttachMenu((value) => !value)} className={cn("malik-inline-action", showAttachMenu && "is-active")} aria-label="Добавить файл или инструмент">
+            <button ref={attachButtonRef} type="button" onClick={() => setShowAttachMenu((value) => !value)} className={cn("malik-inline-action", showAttachMenu && "is-active")} aria-label="Добавить" aria-haspopup="menu" aria-expanded={showAttachMenu} aria-controls="malik-attachment-menu">
               <Plus className="h-5 w-5" />
             </button>
             <textarea
@@ -1128,12 +1161,26 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
             <span>Enter — отправить · Shift + Enter — новая строка</span>
           </div>
           {showAttachMenu && (
-            <div className="fixed inset-x-3 bottom-[152px] z-40 max-h-[58dvh] overflow-y-auto rounded-2xl border border-[#1F2937] bg-[#101010] p-2 shadow-2xl md:absolute md:bottom-[170px] md:left-6 md:w-[330px] md:max-w-[330px]">
-              <div className="grid grid-cols-1 gap-1">
+            <div
+              id="malik-attachment-menu"
+              ref={attachMenuRef}
+              role="menu"
+              aria-label="Добавить в чат"
+              className="absolute bottom-[calc(100%+12px)] left-0 z-50 w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-[28px] border border-white/[0.10] bg-[#222222]/95 p-2.5 shadow-[0_24px_80px_rgba(0,0,0,.72)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#222222]/88"
+            >
+              <div className="flex flex-col gap-1">
                 {attachItems.map((item) => (
-                  <button key={item.label} type="button" onClick={item.action} className="flex items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-bold text-slate-200 hover:bg-white/10">
-                    <span className="flex min-w-0 items-center gap-3"><item.icon className="h-4 w-4 shrink-0 text-violet-300" /><span className="truncate">{item.label}</span></span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-600" />
+                  <button
+                    key={item.label}
+                    type="button"
+                    role="menuitem"
+                    onClick={item.action}
+                    className="group flex w-full items-center gap-4 rounded-[20px] px-2.5 py-2.5 text-left text-[17px] font-semibold text-white transition-colors hover:bg-white/[0.07] active:bg-white/[0.11]"
+                  >
+                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white/[0.12] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08)] transition group-hover:bg-white/[0.16]">
+                      <item.icon className="h-[23px] w-[23px] stroke-[1.8]" />
+                    </span>
+                    <span className="truncate">{item.label}</span>
                   </button>
                 ))}
               </div>
@@ -1143,6 +1190,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
         <p className="mt-2 hidden text-center text-xs text-slate-600 sm:block">Malik AI может ошибаться. Проверяйте важную информацию.</p>
       </div>
 
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => handleFiles(event.target.files)} />
       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(event) => handleFiles(event.target.files)} />
       <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => handleFiles(event.target.files)} />
       <input ref={audioInputRef} type="file" accept="audio/*" multiple className="hidden" onChange={(event) => handleFiles(event.target.files)} />

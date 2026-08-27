@@ -76,9 +76,9 @@ try {
 
   const { MALIK_MODELS, FREE_MALIK_MODELS, canUseMalikModel } = basic("lib/ai/malik-models.ts")
   const { PUBLIC_PLANS } = basic("lib/billing/plans.ts")
-  await check("two plans; exactly two free models", () => {
+  await check("two plans; three live free MalikLLM models", () => {
     assert.deepEqual(PUBLIC_PLANS.map(p => p.id), ["free", "pro"])
-    assert.deepEqual(FREE_MALIK_MODELS.map(m => m.label), ["MalikAI20B", "MalikAI120B Fast"])
+    assert.deepEqual(FREE_MALIK_MODELS.map(m => m.label), ["MalikLLM 20B", "MalikLLM Fast 120B", "MalikLLM Qwen3.8 27B"])
     assert.equal(MALIK_MODELS.length, 10)
     for (const model of MALIK_MODELS) {
       assert.equal(canUseMalikModel(model.id, "free"), model.tier === "free")
@@ -156,11 +156,11 @@ try {
       assert.equal(call.body.model, model.providerModel)
     }
   })
-  await check("unavailable selected model never falls back", async () => {
+  await check("unavailable selected model exhausts configured fallback", async () => {
     fail = true
     const count = calls.length
     await assert.rejects(() => router.runStrictMalikModel({ modelId: "malik-fast-120b", prompt: "test", systemPrompt: "test" }), err => err.modelId === "malik-fast-120b" && err.status === 503)
-    assert.equal(calls.length, count + 1)
+    assert.equal(calls.length, count + 2)
   })
 
   let searches = 0

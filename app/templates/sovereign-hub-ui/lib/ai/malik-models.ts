@@ -5,7 +5,6 @@ export type MalikModelId =
   | "malik-20b"
   | "malik-fast-120b"
   | "malik-27b"
-  | "malik-glm-355b"
   | "malik-30b"
   | "malik-vision-26b"
   | "malik-coder-32b"
@@ -31,7 +30,7 @@ const MALIK_MODEL_STORAGE_KEY = "malik_selected_model_v2"
 export const MALIK_MODELS = [
   {
     id: "malik-20b",
-    label: "MalikAI20B",
+    label: "MalikLLM 20B",
     description: "Быстрый · Для повседневных задач",
     tier: "free",
     provider: "groq",
@@ -40,8 +39,8 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-fast-120b",
-    label: "MalikAI120B Fast",
-    description: "Cerebras · Быстрые ответы и рассуждения",
+    label: "MalikLLM Fast 120B",
+    description: "Cerebras · Production · 1M токенов/день",
     tier: "free",
     provider: "cerebras",
     providerModel: "gpt-oss-120b",
@@ -57,17 +56,8 @@ export const MALIK_MODELS = [
     capabilities: ["text", "vision", "code", "tools", "reasoning"],
   },
   {
-    id: "malik-glm-355b",
-    label: "MalikLLM x Glm4.7 355B",
-    description: "Cerebras · 355B · Сильный reasoning и код",
-    tier: "free",
-    provider: "cerebras",
-    providerModel: "zai-glm-4.7",
-    capabilities: ["text", "code", "tools", "reasoning"],
-  },
-  {
     id: "malik-8b",
-    label: "MalikLLM8B",
+    label: "MalikLLM 8B",
     description: "Лёгкая · Быстрые ответы",
     tier: "pro",
     provider: "cloudflare",
@@ -76,7 +66,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-30b",
-    label: "MalikLLM30B",
+    label: "MalikLLM Reason 30B",
     description: "Быстрое рассуждение",
     tier: "pro",
     provider: "cloudflare",
@@ -85,7 +75,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-vision-26b",
-    label: "MalikVision26B",
+    label: "MalikLLM Vision 26B",
     description: "Изображения · Vision",
     tier: "pro",
     provider: "cloudflare",
@@ -94,7 +84,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-coder-32b",
-    label: "MalikCoder32B",
+    label: "MalikLLM Coder 32B",
     description: "Продвинутый код",
     tier: "pro",
     provider: "cloudflare",
@@ -103,7 +93,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-70b",
-    label: "MalikLLM70B",
+    label: "MalikLLM 70B",
     description: "Продвинутый",
     tier: "pro",
     provider: "cloudflare",
@@ -112,7 +102,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-120b",
-    label: "MalikLLM120B",
+    label: "MalikLLM Pro 120B",
     description: "Максимальное рассуждение",
     tier: "pro",
     provider: "groq",
@@ -121,7 +111,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-agent-120b",
-    label: "MalikAgent120B",
+    label: "MalikLLM Agent 120B",
     description: "Агенты · Инструменты",
     tier: "pro",
     provider: "cloudflare",

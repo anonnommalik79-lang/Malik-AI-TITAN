@@ -35,8 +35,7 @@ type StrictMalikResult = {
 }
 
 const TEXT_FALLBACK_MODEL: Partial<Record<MalikModelId, MalikModelId>> = {
-  "malik-27b": "malik-glm-355b",
-  "malik-glm-355b": "malik-fast-120b",
+  "malik-27b": "malik-fast-120b",
   "malik-fast-120b": "malik-20b",
 }
 

@@ -6090,6 +6090,7 @@ const shouldShowMobilePreviewButton =
                 selectedModelId={selectedModelId}
                 onModelChange={handleModelChange}
                 onOpenBilling={() => safeOpenView("billing", "manual")}
+                onOpenPlugins={() => safeOpenView("plugins", "manual")}
                 onOpenCodex={() => setCodexOpen(true)}
                 onForceCanvas={() => safeOpenCanvas(undefined, "project-chat")}
                 onOpenVoice={openVoiceMode}
@@ -6124,6 +6125,7 @@ const shouldShowMobilePreviewButton =
               selectedModelId={selectedModelId}
               onModelChange={handleModelChange}
               onOpenBilling={() => safeOpenView("billing", "manual")}
+              onOpenPlugins={() => safeOpenView("plugins", "manual")}
               onOpenCodex={() => setCodexOpen(true)}
               onForceCanvas={() => safeOpenCanvas(undefined, "chat-force")}
               onOpenVoice={openVoiceMode}
