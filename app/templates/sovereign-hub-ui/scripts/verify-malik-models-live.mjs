@@ -11,23 +11,32 @@ if (fs.existsSync(envPath)) {
   }
 }
 
+const cerebrasKey = process.env.CEREBRAS_API_KEY?.trim()
 const groqKey = process.env.GROQ_API_KEY?.trim()
 const cloudflareToken = process.env.CLOUDFLARE_API_TOKEN?.trim()
 const cloudflareAccountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim()
 
-if (!groqKey || !cloudflareToken || !cloudflareAccountId) {
-  console.error("Missing GROQ_API_KEY, CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID.")
+if (!cerebrasKey || !groqKey || !cloudflareToken || !cloudflareAccountId) {
+  console.error("Missing CEREBRAS_API_KEY, GROQ_API_KEY, CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID.")
   process.exit(1)
 }
 
 let failed = 0
 
 for (const model of MALIK_MODELS) {
-  const groq = model.provider === "groq"
-  const url = groq
-    ? `${(process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/+$/, "")}/chat/completions`
-    : `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(cloudflareAccountId)}/ai/v1/chat/completions`
-  const key = groq ? groqKey : cloudflareToken
+  let url
+  let key
+
+  if (model.provider === "cerebras") {
+    url = `${(process.env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1").replace(/\/+$/, "")}/chat/completions`
+    key = cerebrasKey
+  } else if (model.provider === "groq") {
+    url = `${(process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/+$/, "")}/chat/completions`
+    key = groqKey
+  } else {
+    url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(cloudflareAccountId)}/ai/v1/chat/completions`
+    key = cloudflareToken
+  }
 
   try {
     const response = await fetch(url, {
@@ -59,4 +68,4 @@ if (failed) {
   process.exit(1)
 }
 
-console.log("All 9 Malik model routes passed live inference.")
+console.log("All 10 Malik model routes passed live inference.")
