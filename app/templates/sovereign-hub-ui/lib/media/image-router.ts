@@ -2,7 +2,7 @@ import { imageFreeMode, imageGodOrder } from "./config"
 import { generateWithPollinations } from "./providers/pollinations"
 import { generateWithStability, stabilityConfigured } from "./providers/stability"
 import { awsImageConfigured, falImageConfigured, generateAwsImage, generateFalImage } from "./providers/titan-image"
-import { cloudflareImageConfigured, generateCloudflareImage } from "./providers/cloudflare-image"
+import { cloudflareImageConfigured, compileImagePrompt, generateCloudflareImage } from "./providers/cloudflare-image"
 import { DEFAULT_MALIK_IMAGE_MODEL_ID } from "./image-models"
 import type { ImageGenerateInput, ImageGenerateResult } from "./types"
 
@@ -39,9 +39,8 @@ export async function routeImageGeneration(
   const errors: string[] = []
   const requestedModelId = input.modelId
 
-  // First honor the exact photo model chosen by the user. A transient provider
-  // failure must not end the whole request, though: after the exact attempt we
-  // continue through real image fallbacks instead of returning a dead card.
+  // First honor the exact image model selected by the user. All Cloudflare image
+  // models pass through the same lossless multilingual prompt compiler.
   if (requestedModelId) {
     if (!cloudflareImageConfigured()) {
       errors.push("cloudflare: selected image model is not configured")
@@ -68,10 +67,20 @@ export async function routeImageGeneration(
     }
   }
 
-  const prompt = `${input.prompt}${modeStyle(input.mode)}`.trim()
   const order = requestedModelId
     ? uniqueProviders(["cloudflare", ...effectiveImageOrder(), "pollinations"])
     : effectiveImageOrder()
+
+  let compiledFallbackPrompt: string | null = null
+  const fallbackPrompt = async () => {
+    if (compiledFallbackPrompt) return compiledFallbackPrompt
+    try {
+      compiledFallbackPrompt = await compileImagePrompt(input.prompt, input.mode, options?.signal)
+    } catch {
+      compiledFallbackPrompt = input.prompt
+    }
+    return compiledFallbackPrompt
+  }
 
   for (const provider of order) {
     if (!handlers[provider]?.()) {
@@ -81,8 +90,8 @@ export async function routeImageGeneration(
 
     try {
       if (provider === "cloudflare") {
-        // If the selected model failed, retry through Malik AI's fast default
-        // Cloudflare image model. This is still a real generation, not a demo.
+        // If a selected partner model is unavailable, retry with Malik AI's fast
+        // default Cloudflare model while preserving the exact same prompt intent.
         const result = await generateCloudflareImage({
           prompt: input.prompt,
           aspectRatio: input.aspectRatio,
@@ -99,22 +108,25 @@ export async function routeImageGeneration(
           remainingDailyImages: 0,
         }
       }
+
+      const exactPrompt = `${await fallbackPrompt()}${modeStyle(input.mode)}`.trim()
+
       if (provider === "stability") {
-        const result = await generateWithStability({ prompt, aspectRatio: input.aspectRatio, mode: input.mode, signal: options?.signal })
+        const result = await generateWithStability({ prompt: exactPrompt, aspectRatio: input.aspectRatio, mode: input.mode, signal: options?.signal })
         return { ok: true, provider: "stability", imageUrl: result.imageUrl, base64: result.base64, remainingDailyImages: 0 }
       }
       if (provider === "fal") {
-        const result = await generateFalImage({ prompt, aspectRatio: input.aspectRatio, signal: options?.signal })
+        const result = await generateFalImage({ prompt: exactPrompt, aspectRatio: input.aspectRatio, signal: options?.signal })
         return { ok: true, provider: "fal", imageUrl: result.imageUrl, remainingDailyImages: 0 }
       }
       if (provider === "aws-bedrock") {
-        const result = await generateAwsImage({ prompt, mode: input.mode, signal: options?.signal })
+        const result = await generateAwsImage({ prompt: exactPrompt, mode: input.mode, signal: options?.signal })
         return { ok: true, provider: "aws-bedrock", imageUrl: result.imageUrl, base64: result.base64, remainingDailyImages: 0 }
       }
       if (provider === "pollinations") {
-        // Final real-image safety net. This prevents a mobile network/provider
-        // hiccup from degrading to raw "Load failed" with no generated media.
-        const result = await generateWithPollinations({ prompt, aspectRatio: input.aspectRatio, mode: input.mode, signal: options?.signal })
+        // Pollinations is only the final real-image safety net. It receives the
+        // already-compiled English fidelity prompt and is not allowed to rewrite it.
+        const result = await generateWithPollinations({ prompt: exactPrompt, aspectRatio: input.aspectRatio, mode: input.mode, signal: options?.signal })
         return { ok: true, provider: "pollinations", imageUrl: result.imageUrl, remainingDailyImages: 0 }
       }
     } catch (error) {
