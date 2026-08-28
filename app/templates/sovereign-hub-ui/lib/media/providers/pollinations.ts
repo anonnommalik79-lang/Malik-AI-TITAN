@@ -9,18 +9,11 @@ const SIZE_MAP: Record<ImageAspectRatio, { width: number; height: number }> = {
   "4:5": { width: 864, height: 1080 },
 }
 
-const MODE_HINT: Record<ImageMode, string> = {
-  cinematic: "cinematic",
-  realistic: "photorealistic",
-  product: "product shot",
-  design: "design render",
-}
-
 function pollinationsModel() {
   return process.env.POLLINATIONS_IMAGE_MODEL?.trim() || "flux"
 }
 
-function negativePrompt(prompt: string) {
+function fallbackNegativePrompt(prompt: string) {
   const lower = prompt.toLowerCase()
   if (/(?:transformer|robot|mecha|android|трансформ|робот)/iu.test(lower)) {
     return "unrelated person, woman, girl, man, boy, human portrait, random portrait, unrelated scene, wrong subject, blurry, watermark, text"
@@ -45,20 +38,20 @@ export async function pingPollinations(): Promise<"available" | "unavailable"> {
 
 export async function generateWithPollinations(input: {
   prompt: string
+  negativePrompt?: string
   aspectRatio?: ImageAspectRatio
   mode?: ImageMode
   signal?: AbortSignal
 }): Promise<{ imageUrl: string }> {
   const size = SIZE_MAP[input.aspectRatio || "1:1"]
-  const modeHint = input.mode ? MODE_HINT[input.mode] : ""
-  const prompt = modeHint ? `${input.prompt}, ${modeHint}` : input.prompt
+
+  // The router owns prompt semantics. Pollinations receives that exact strict
+  // prompt and is explicitly forbidden from doing a second AI rewrite.
+  const prompt = input.prompt
   const encoded = encodeURIComponent(prompt.slice(0, 1800))
-  const negative = encodeURIComponent(negativePrompt(prompt))
+  const negative = encodeURIComponent(input.negativePrompt?.trim() || fallbackNegativePrompt(prompt))
   const model = encodeURIComponent(pollinationsModel())
 
-  // `enhance=true` asks Pollinations to rewrite the user's prompt with another
-  // LLM. That can replace the requested subject entirely, so Malik AI always
-  // disables it and sends the already-compiled fidelity prompt verbatim.
   const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${size.width}&height=${size.height}&model=${model}&seed=-1&nologo=true&private=true&enhance=false&negative_prompt=${negative}`
 
   const controller = new AbortController()
@@ -73,9 +66,8 @@ export async function generateWithPollinations(input: {
     const response = await fetch(imageUrl, { method: "GET", signal: controller.signal, redirect: "follow", cache: "no-store" })
     if (!response.ok) throw new Error(`Pollinations returned ${response.status}`)
 
-    // Freeze the exact bytes returned by this generation. Returning the prompt
-    // URL itself caused the browser to issue a second generation request, which
-    // could display a different random image than the server had validated.
+    // Freeze the exact bytes returned by the server. The browser must not issue
+    // a second prompt URL request that could yield a different random image.
     const contentType = response.headers.get("content-type") || "image/jpeg"
     const bytes = Buffer.from(await response.arrayBuffer())
     return { imageUrl: `data:${contentType};base64,${bytes.toString("base64")}` }
