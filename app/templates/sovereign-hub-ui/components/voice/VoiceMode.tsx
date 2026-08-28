@@ -4,7 +4,7 @@ import { X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { VoiceDock, type PickedVoiceFile } from "./VoiceDock"
 import { VoiceOrb } from "./VoiceOrb"
-import { VoiceSettings, VOICES, getVoiceProfile } from "./VoiceSettings"
+import { VoiceSettings, VOICES, defaultVoiceForLanguage, getVoiceProfile, voiceBelongsToLanguage, type VoiceLanguage } from "./VoiceSettings"
 import styles from "./VoiceMode.module.css"
 import { isVoiceSoundEnabled, playVoiceTransitionSound, saveVoiceSoundEnabled } from "@/lib/voice-transition-sound"
 import { FluxTtsSession, detectVoiceLanguage } from "@/lib/voice/flux-tts-client"
@@ -30,7 +30,7 @@ type VoiceWindow = Window & typeof globalThis & {
 type VoiceTurnPayload = { ok?: boolean; content?: string; error?: string; language?: "kk" | "ru" | "en" }
 type TranscribePayload = { ok?: boolean; text?: string; error?: string; remainingSeconds?: number }
 
-const STORAGE_KEY = "malik.voice.preferences.v3"
+const STORAGE_KEY = "malik.voice.preferences.v4"
 
 export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit?: (prompt: string) => void }) {
   const [phase, setPhase] = useState<"enter" | "open" | "leave">("enter")
@@ -40,7 +40,8 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const [soundEnabled, setSoundEnabled] = useState(isVoiceSoundEnabled)
   const [screenActive, setScreenActive] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [voice, setVoice] = useState("Cliff")
+  const [language, setLanguage] = useState<VoiceLanguage>("kk")
+  const [voice, setVoice] = useState(defaultVoiceForLanguage("kk"))
   const [personality, setPersonality] = useState("Assistant")
   const [speed, setSpeed] = useState(1)
   const [expressivity, setExpressivity] = useState(0)
@@ -54,6 +55,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   const energyRef = useRef(.07)
   const speedRef = useRef(1)
+  const languageRef = useRef<VoiceLanguage>("kk")
   const demoRef = useRef(false)
   const micActiveRef = useRef(false)
   const microphoneRef = useRef<MediaStream | null>(null)
@@ -80,6 +82,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const lastSpeechAtRef = useRef(0)
 
   useEffect(() => {
+    languageRef.current = language
+  }, [language])
+
+  useEffect(() => {
     speedRef.current = speed
     fluxSessionRef.current?.configureSpeed(speed)
   }, [speed])
@@ -87,7 +93,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}")
-      if (typeof saved.voice === "string" && VOICES.some((item) => item.name === saved.voice)) setVoice(saved.voice)
+      const savedLanguage: VoiceLanguage = saved.language === "ru" || saved.language === "en" || saved.language === "kk" ? saved.language : "kk"
+      languageRef.current = savedLanguage
+      setLanguage(savedLanguage)
+      if (typeof saved.voice === "string" && voiceBelongsToLanguage(saved.voice, savedLanguage)) setVoice(saved.voice)
+      else setVoice(defaultVoiceForLanguage(savedLanguage))
       if (typeof saved.personality === "string") setPersonality(saved.personality)
       if (typeof saved.speed === "number" && saved.speed >= .85 && saved.speed <= 1.15) setSpeed(saved.speed)
       if (typeof saved.expressivity === "number" && saved.expressivity >= -2 && saved.expressivity <= 2) setExpressivity(Math.round(saved.expressivity))
@@ -95,8 +105,8 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   }, [])
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ voice, personality, speed, expressivity })) } catch {}
-  }, [voice, personality, speed, expressivity])
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ language, voice, personality, speed, expressivity })) } catch {}
+  }, [language, voice, personality, speed, expressivity])
 
   const showNotice = useCallback((message: string) => {
     setNotice(message)
@@ -119,14 +129,13 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     replyPlayingRef.current = false
   }, [])
 
-  const chooseBrowserVoice = useCallback((profileName: string, text: string) => {
+  const chooseBrowserVoice = useCallback((profileName: string, forcedLanguage: VoiceLanguage) => {
     const profile = getVoiceProfile(profileName)
     const voices = window.speechSynthesis?.getVoices?.() || []
     if (!voices.length) return null
-    const language = detectVoiceLanguage(text)
-    let pool = language === "kk" ? voices.filter((item) => /^kk/i.test(item.lang)) : language === "ru" ? voices.filter((item) => /^ru/i.test(item.lang)) : voices.filter((item) => /^en/i.test(item.lang))
-    if (!pool.length && language === "kk") pool = voices.filter((item) => /^ru/i.test(item.lang))
-    if (!pool.length) pool = voices
+    const prefix = forcedLanguage === "kk" ? /^kk/i : forcedLanguage === "ru" ? /^ru/i : /^en/i
+    const pool = voices.filter((item) => prefix.test(item.lang))
+    if (!pool.length) return null
     for (const hint of profile.hints) {
       const match = pool.find((item) => item.name.toLowerCase().includes(hint.toLowerCase()))
       if (match) return match
@@ -134,13 +143,14 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     return pool[0] || null
   }, [])
 
-  const speakBrowser = useCallback((text: string, profileName: string) => new Promise<boolean>((resolve) => {
+  const speakBrowser = useCallback((text: string, profileName: string, forcedLanguage: VoiceLanguage) => new Promise<boolean>((resolve) => {
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") return resolve(false)
     const profile = getVoiceProfile(profileName)
-    const language = detectVoiceLanguage(text)
+    const browserVoice = chooseBrowserVoice(profileName, forcedLanguage)
+    if (!browserVoice) return resolve(false)
     const utterance = new SpeechSynthesisUtterance(text)
-    utterance.voice = chooseBrowserVoice(profileName, text)
-    utterance.lang = language === "kk" ? "kk-KZ" : language === "ru" ? "ru-RU" : "en-US"
+    utterance.voice = browserVoice
+    utterance.lang = forcedLanguage === "kk" ? "kk-KZ" : forcedLanguage === "ru" ? "ru-RU" : "en-US"
     utterance.rate = Math.max(.85, Math.min(1.15, profile.rate * speedRef.current))
     utterance.pitch = profile.pitch
     utterance.volume = 1
@@ -176,16 +186,17 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     void audio.play().catch(() => settle(false))
   }), [])
 
-  const speakReply = useCallback(async (text: string, overrideVoice?: string) => {
+  const speakReply = useCallback(async (text: string, overrideVoice?: string, overrideLanguage?: VoiceLanguage) => {
     if (!soundEnabled || !text.trim()) return false
     stopReplyAudio(false)
     replyInterruptedRef.current = false
     replyPlayingRef.current = true
-    const selectedVoice = overrideVoice || voice
-    const language = detectVoiceLanguage(text)
+    const selectedLanguage = overrideLanguage || languageRef.current
+    const requestedVoice = overrideVoice || voice
+    const selectedVoice = voiceBelongsToLanguage(requestedVoice, selectedLanguage) ? requestedVoice : defaultVoiceForLanguage(selectedLanguage)
 
     try {
-      if (language === "en") {
+      if (selectedLanguage === "en") {
         const session = fluxSessionRef.current || new FluxTtsSession()
         fluxSessionRef.current = session
         const streamed = await session.speak(text, { voice: selectedVoice, speed, expressivity })
@@ -202,10 +213,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       const response = await fetch("/api/voice/tts", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text, voice: selectedVoice, speed, expressivity }),
+        body: JSON.stringify({ text, voice: selectedVoice, language: selectedLanguage, speed, expressivity }),
       })
       const provider = response.headers.get("x-malik-tts-provider")
-      if (response.ok && (provider === "deepgram" || provider === "gemini" || provider === "xai")) {
+      if (response.ok && (provider === "kokoro-kazakh" || provider === "deepgram" || provider === "gemini" || provider === "xai")) {
         const played = await playBlobAudio(await response.blob())
         replyPlayingRef.current = false
         if (played || replyInterruptedRef.current) return played
@@ -216,7 +227,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       replyPlayingRef.current = false
       return false
     }
-    const browserPlayed = await speakBrowser(text, selectedVoice)
+    const browserPlayed = await speakBrowser(text, selectedVoice, selectedLanguage)
     replyPlayingRef.current = false
     if (!browserPlayed) showNotice("Не удалось воспроизвести Voice-ответ")
     return browserPlayed
@@ -224,10 +235,13 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   const previewVoice = useCallback((profileName: string) => {
     if (!soundEnabled) return
-    const sample = profileName === "Kokoro M1"
-      ? "Сәлем! Мен қазақша сөйлейтін Malik AI дауысымын."
-      : `Hello. I'm ${profileName}. How can I help you today?`
-    void speakReply(sample, profileName)
+    const profile = getVoiceProfile(profileName)
+    const sample = profile.language === "kk"
+      ? "Сәлем! Мен қазақша сөйлейтін Malik AI дауысымын. Қалың қалай?"
+      : profile.language === "ru"
+        ? `Привет! Это голос ${profileName}. Чем я могу помочь?`
+        : `Hello. I'm ${profileName}. How can I help you today?`
+    void speakReply(sample, profileName, profile.language)
   }, [soundEnabled, speakReply])
 
   const stopSpeech = useCallback(() => {
@@ -305,7 +319,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     const Recognition = voiceWindow.SpeechRecognition || voiceWindow.webkitSpeechRecognition
     if (!Recognition) return
     const recognition = new Recognition()
-    recognition.lang = navigator.language || "ru-RU"
+    recognition.lang = languageRef.current === "kk" ? "kk-KZ" : languageRef.current === "ru" ? "ru-RU" : "en-US"
     recognition.continuous = true
     recognition.interimResults = true
     recognition.onresult = (event) => {
@@ -412,7 +426,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       micActiveRef.current = true
       setMicActive(true)
       setTitle("Слушаю")
-      setSubtitle("Говори — после паузы я отвечу сам · Қазақша · Русский · English")
+      setSubtitle(languageRef.current === "kk" ? "Қазақша сөйле — жауап тек қазақша болады" : languageRef.current === "ru" ? "Говори по-русски — ответ будет только по-русски" : "Speak English — the reply stays English")
       speechDetectedRef.current = false
       lastSpeechAtRef.current = 0
       startRecorder(stream)
@@ -431,6 +445,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const runVoiceTurn = useCallback(async (prompt: string) => {
     const clean = prompt.trim()
     if (!clean || busy) return
+    const selectedLanguage = languageRef.current
     setBusy(true)
     setTitle("Думаю")
     setSubtitle(`${voice} · ${personality}`)
@@ -438,15 +453,15 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       const response = await fetch("/api/voice/turn", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: clean, personality }),
+        body: JSON.stringify({ text: clean, personality, language: selectedLanguage }),
       })
       const payload = await response.json().catch(() => ({})) as VoiceTurnPayload
       if (!response.ok || !payload.ok || !payload.content) throw new Error(payload.error || "voice turn failed")
       setFinalTranscript(payload.content)
       setInterimTranscript("")
       setTitle("Отвечаю")
-      setSubtitle(`${payload.language === "kk" ? "Kokoro M1" : voice} · ${payload.language || detectVoiceLanguage(payload.content)}`)
-      await speakReply(payload.content)
+      setSubtitle(`${voiceBelongsToLanguage(voice, selectedLanguage) ? voice : defaultVoiceForLanguage(selectedLanguage)} · ${selectedLanguage}`)
+      await speakReply(payload.content, undefined, selectedLanguage)
       if (mountedRef.current && !closingRef.current && !micActiveRef.current) {
         setTitle("Слушаю")
         setSubtitle("Продолжай разговор · можно перебить голос")
@@ -465,13 +480,13 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const transcribeAndRespond = useCallback(async (blob: Blob, durationSec: number, browserFallback: string) => {
     setBusy(true)
     setTitle("Распознаю")
-    setSubtitle("Қазақша · Русский · English · auto")
+    setSubtitle(languageRef.current === "kk" ? "Қазақша · қатаң режим" : languageRef.current === "ru" ? "Русский · строгий режим" : "English · strict mode")
     let prompt = ""
     try {
       const form = new FormData()
       const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm"
       form.append("file", blob, `malik-voice.${extension}`)
-      form.append("language", "auto")
+      form.append("language", languageRef.current)
       form.append("durationSec", String(Math.max(1, Math.round(durationSec * 10) / 10)))
       const response = await fetch("/api/transcribe", { method: "POST", body: form })
       const payload = await response.json().catch(() => ({})) as TranscribePayload
@@ -585,6 +600,24 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   const submitText = useCallback((prompt: string) => { void runVoiceTurn(prompt) }, [runVoiceTurn])
 
+  const changeLanguage = useCallback((nextLanguage: VoiceLanguage) => {
+    if (languageRef.current === nextLanguage) return
+    const shouldRestartMic = micActiveRef.current
+    languageRef.current = nextLanguage
+    setLanguage(nextLanguage)
+    setVoice(defaultVoiceForLanguage(nextLanguage))
+    setFinalTranscript("")
+    setInterimTranscript("")
+    stopReplyAudio(true)
+    setTitle(nextLanguage === "kk" ? "Қазақша" : nextLanguage === "ru" ? "Русский" : "English")
+    setSubtitle(nextLanguage === "kk" ? "Тек қазақша жауап беремін" : nextLanguage === "ru" ? "Отвечаю только по-русски" : "English only")
+    if (shouldRestartMic) {
+      void stopMicrophone().then(() => window.setTimeout(() => {
+        if (mountedRef.current && !closingRef.current) void startMicrophone()
+      }, 90))
+    }
+  }, [startMicrophone, stopMicrophone, stopReplyAudio])
+
   useEffect(() => {
     mountedRef.current = true
     const previousOverflow = document.body.style.overflow
@@ -631,11 +664,13 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
       <VoiceSettings
         open={settingsOpen}
+        language={language}
         voice={voice}
         personality={personality}
         speed={speed}
         expressivity={expressivity}
-        onVoiceChange={setVoice}
+        onLanguageChange={changeLanguage}
+        onVoiceChange={(nextVoice) => { if (voiceBelongsToLanguage(nextVoice, languageRef.current)) setVoice(nextVoice) }}
         onPersonalityChange={setPersonality}
         onSpeedChange={setSpeed}
         onExpressivityChange={setExpressivity}

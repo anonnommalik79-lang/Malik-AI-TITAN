@@ -65,6 +65,7 @@ _GEMINI_VOICE_BY_PROFILE = {
     "heather": "Zephyr", "bree": "Leda", "brittany": "Callirrhoe", "elise": "Erinome",
     "kelsey": "Despina", "maeve": "Pulcherrima", "meena": "Sulafat", "meghan": "Laomedeia",
     "paige": "Umbriel", "priya": "Autonoe", "sharon": "Vindemiatrix",
+    "charon": "Charon", "puck": "Puck", "kore": "Kore", "aoede": "Aoede", "fenrir": "Fenrir",
 }
 
 _PERSONALITY = {
@@ -373,7 +374,7 @@ def _consume_quota(seconds: float) -> float:
         return max(0.0, limit - _USAGE[key])
 
 
-def _groq_transcribe(audio: bytes, filename: str, mime: str):
+def _groq_transcribe(audio: bytes, filename: str, mime: str, language: str = "auto"):
     keys = _unique([_env("GROQ_VOICE_API_KEY"), _env("GROQ_API_KEY")])
     models = _unique([_env("GROQ_WHISPER_PRIMARY") or "whisper-large-v3-turbo", _env("GROQ_WHISPER_FALLBACK") or "whisper-large-v3"])
     for model in models:
@@ -383,7 +384,7 @@ def _groq_transcribe(audio: bytes, filename: str, mime: str):
                     "https://api.groq.com/openai/v1/audio/transcriptions",
                     headers={"Authorization": f"Bearer {key}"},
                     files={"file": (filename, audio, mime or "application/octet-stream")},
-                    data={"model": model, "response_format": "verbose_json"},
+                    data={"model": model, "response_format": "verbose_json", **({"language": language} if language in {"kk", "ru", "en"} else {})},
                     timeout=max(_PROVIDER_TIMEOUT, 30),
                 )
                 payload = response.json() if response.content else {}
@@ -396,7 +397,7 @@ def _groq_transcribe(audio: bytes, filename: str, mime: str):
     return None
 
 
-def _cloudflare_transcribe(audio: bytes):
+def _cloudflare_transcribe(audio: bytes, language: str = "auto"):
     token = _env("CLOUDFLARE_VOICE_API_TOKEN", "CLOUDFLARE_API_TOKEN", "CF_API_TOKEN")
     account = _env("CLOUDFLARE_VOICE_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID", "CF_ACCOUNT_ID")
     if not token or not account:
@@ -407,7 +408,7 @@ def _cloudflare_transcribe(audio: bytes):
             response = requests.post(
                 f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}",
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json={"audio": base64.b64encode(audio).decode("ascii"), "task": "transcribe", "vad_filter": True},
+                json={"audio": base64.b64encode(audio).decode("ascii"), "task": "transcribe", "vad_filter": True, **({"language": language} if language in {"kk", "ru", "en"} else {})},
                 timeout=max(_PROVIDER_TIMEOUT, 30),
             )
             payload = response.json() if response.content else {}
@@ -423,10 +424,10 @@ def _cloudflare_transcribe(audio: bytes):
 
 def _language_instruction(language: str) -> str:
     if language == "kk":
-        return "Respond ONLY in natural modern Kazakh using Cyrillic Kazakh spelling. Do not mix Russian or English except exact brands, code, URLs or proper names. Keep sentences pronunciation-friendly for TTS."
+        return "LANGUAGE LOCK: KAZAKH ONLY. Respond ONLY in natural modern Kazakh using Cyrillic Kazakh spelling. Never answer in English or Russian. Do not mix Russian or English except exact brands, code, URLs or proper names. Keep sentences pronunciation-friendly for TTS."
     if language == "ru":
-        return "Respond ONLY in natural Russian. Do not mix Kazakh or English except exact brands, code, URLs or proper names. Keep sentences pronunciation-friendly for TTS."
-    return "Respond ONLY in natural English. Keep sentences pronunciation-friendly for TTS."
+        return "LANGUAGE LOCK: RUSSIAN ONLY. Respond ONLY in natural Russian. Never answer in English or Kazakh. Do not mix Kazakh or English except exact brands, code, URLs or proper names. Keep sentences pronunciation-friendly for TTS."
+    return "LANGUAGE LOCK: ENGLISH ONLY. Respond ONLY in natural English. Never answer in Russian or Kazakh except exact proper names. Keep sentences pronunciation-friendly for TTS."
 
 
 def _voice_answer(text: str, personality: str, language: str):
@@ -491,6 +492,14 @@ def _voice_answer(text: str, personality: str, language: str):
     return None
 
 
+def _matches_language(text: str, language: str) -> bool:
+    if language == "kk":
+        return bool(_KAZAKH_SPECIAL.search(text) or re.search(r"\b(мен|сен|сіз|бұл|осы|және|үшін|қалай|жақсы|керек|бар|жоқ|иә|рақмет|сәлем|қазақ|қазір|болады)\b", text, re.I))
+    if language == "ru":
+        return bool(_RUSSIAN_CYRILLIC.search(text) and not _KAZAKH_SPECIAL.search(text))
+    return bool(re.search(r"[a-z]", text, re.I) and not re.search(r"[а-яёәіңғүұқөһ]", text, re.I))
+
+
 def _local_voice_fallback(language: str) -> str:
     if language == "kk":
         return "Қазір жауап алу сәтсіз болды. Бір секундтан кейін қайта айтып көр."
@@ -532,32 +541,30 @@ def voice_tts():
     voice = str(body.get("voice") or "Cliff").strip()
     if not text:
         return jsonify({"ok": False, "error": "Пустой текст"}), 400
-    language = _language(text)
+    requested_language = str(body.get("language") or "").strip().lower()
+    language = requested_language if requested_language in {"kk", "ru", "en"} else _language(text)
     speed = _speed(body.get("speed"))
     expressivity = _expressivity(body.get("expressivity"))
 
     if language == "kk":
         try:
             started = time.time()
-            audio = synthesize_kazakh(text, speed)
+            kazakh_speed = speed
+            if voice == "Kokoro M1 Calm":
+                kazakh_speed = max(.85, min(1.15, speed * .93))
+            elif voice == "Kokoro M1 Strong":
+                kazakh_speed = max(.85, min(1.15, speed * 1.05))
+            audio = synthesize_kazakh(text, kazakh_speed)
             print("[VOICE_KOKORO_KK_OK]", {"bytes": len(audio), "latencyMs": int((time.time() - started) * 1000)})
             response = Response(audio, mimetype="audio/wav")
             response.headers["Cache-Control"] = "no-store"
             response.headers["x-malik-tts-provider"] = "kokoro-kazakh"
             response.headers["x-malik-tts-engine"] = _KK_REPO
-            response.headers["x-malik-tts-voice"] = "km_m1"
+            response.headers["x-malik-tts-voice"] = voice if voice.startswith("Kokoro M1") else "Kokoro M1"
             return response
         except Exception as exc:
             print("[VOICE_KOKORO_KK_ERROR]", repr(exc))
-            fallback = _xai_tts(text, language, speed)
-            if fallback:
-                audio, mime, used_voice = fallback
-                response = Response(audio, mimetype=mime)
-                response.headers["x-malik-tts-provider"] = "xai"
-                response.headers["x-malik-tts-voice"] = used_voice
-                response.headers["Cache-Control"] = "no-store"
-                return response
-            return jsonify({"ok": False, "fallback": "browser-language-aware", "language": language, "error": "Kazakh Kokoro TTS unavailable"}), 503
+            return jsonify({"ok": False, "language": language, "error": "Kazakh Kokoro TTS unavailable; wrong-language fallback blocked"}), 503
 
     if language == "en":
         generated = _deepgram_tts(text, voice, speed, expressivity)
@@ -605,9 +612,12 @@ def transcribe():
     if duration > _quota_remaining() + 0.5:
         return jsonify({"ok": False, "error": f"Осталось {int(_quota_remaining())} сек. Voice на сегодня."}), 429
 
-    result = _groq_transcribe(audio, uploaded.filename or "malik-voice.webm", uploaded.mimetype or "audio/webm")
+    requested_language = str(request.form.get("language") or "auto").strip().lower()
+    if requested_language not in {"kk", "ru", "en"}:
+        requested_language = "auto"
+    result = _groq_transcribe(audio, uploaded.filename or "malik-voice.webm", uploaded.mimetype or "audio/webm", requested_language)
     if not result:
-        result = _cloudflare_transcribe(audio)
+        result = _cloudflare_transcribe(audio, requested_language)
     if not result:
         return jsonify({"ok": False, "error": "Не удалось распознать голос. Попробуйте ещё раз."}), 502
 
@@ -633,10 +643,17 @@ def voice_turn():
     personality = str(body.get("personality") or "Assistant")
     if not text:
         return jsonify({"ok": False, "error": "Пустой Voice запрос"}), 400
-    language = _language(text)
+    requested_language = str(body.get("language") or "").strip().lower()
+    language = requested_language if requested_language in {"kk", "ru", "en"} else _language(text)
     answer = _voice_answer(text, personality, language)
     if answer:
         content, provider, model = answer
+        if not _matches_language(content, language):
+            retry = _voice_answer(f"Answer this user request again. Obey the selected language lock exactly. USER REQUEST:\n{text}", personality, language)
+            if retry and _matches_language(retry[0], language):
+                content, provider, model = retry
+            else:
+                content, provider, model = _local_voice_fallback(language), "voice-local-fallback", "none"
     else:
         content, provider, model = _local_voice_fallback(language), "voice-local-fallback", "none"
     response = jsonify({

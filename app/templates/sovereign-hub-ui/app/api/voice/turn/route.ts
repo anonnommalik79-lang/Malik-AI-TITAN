@@ -19,42 +19,25 @@ const PERSONALITY: Record<string, string> = {
 
 function detectVoiceLanguage(text: string): VoiceLanguage {
   const normalized = text.toLowerCase()
-
-  // Kazakh always wins first. Special Kazakh Cyrillic letters are the strongest
-  // signal; common words cover short phrases that may not contain them.
-  if (
-    /[әіңғүұқөһ]/i.test(text) ||
-    /\b(сәлем|салем|қалай|калай|жақсы|жаксы|қазақ|казак|қазақстан|казахстан|рахмет|рақмет|керек|болады|болмайды|иә|ия|жоқ|жок|менің|сенің|біздің|сіздің|қайда|кайда|қанша|канша|неге|осы|бұл|бул)\b/i.test(normalized)
-  ) return "kk"
-
+  if (/[әіңғүұқөһ]/i.test(text) || /\b(сәлем|салем|қалай|калай|жақсы|жаксы|қазақ|казак|қазақстан|казахстан|рахмет|рақмет|керек|болады|болмайды|иә|ия|жоқ|жок|менің|сенің|біздің|сіздің|қайда|кайда|қанша|канша|неге|осы|бұл|бул)\b/i.test(normalized)) return "kk"
   if (/[а-яё]/i.test(text)) return "ru"
   return "en"
 }
 
+function requestedLanguage(value: unknown): VoiceLanguage | null {
+  return value === "kk" || value === "ru" || value === "en" ? value : null
+}
+
 function languageInstruction(language: VoiceLanguage) {
-  if (language === "kk") {
-    return [
-      "Respond ONLY in natural modern Kazakh using Cyrillic Kazakh spelling.",
-      "Do not mix Russian or English words into sentences unless an exact brand, product, code identifier, URL, or proper name requires it.",
-      "Never transliterate Kazakh with Latin or Russian spelling when a normal Kazakh word exists.",
-      "Keep pronunciation-friendly sentences suitable for clear text-to-speech.",
-    ].join(" ")
-  }
+  if (language === "kk") return "LANGUAGE LOCK: KAZAKH ONLY. Respond ONLY in natural modern Kazakh using Cyrillic Kazakh spelling. Never answer in English or Russian. Do not mix Russian or English words except exact brands, code identifiers, URLs or proper names. Use normal Kazakh words whenever they exist. Keep pronunciation-friendly sentences suitable for TTS."
+  if (language === "ru") return "LANGUAGE LOCK: RUSSIAN ONLY. Respond ONLY in natural Russian. Never answer in English or Kazakh. Do not mix other languages except exact brands, code identifiers, URLs or proper names. Keep pronunciation-friendly sentences suitable for TTS."
+  return "LANGUAGE LOCK: ENGLISH ONLY. Respond ONLY in natural English. Never answer in Russian or Kazakh except an exact proper name. Keep pronunciation-friendly sentences suitable for TTS."
+}
 
-  if (language === "ru") {
-    return [
-      "Respond ONLY in natural Russian.",
-      "Do not mix Kazakh or English into sentences unless an exact brand, product, code identifier, URL, or proper name requires it.",
-      "Do not transliterate Russian words into Latin letters.",
-      "Keep pronunciation-friendly sentences suitable for clear text-to-speech.",
-    ].join(" ")
-  }
-
-  return [
-    "Respond ONLY in natural English.",
-    "Do not mix Russian or Kazakh into sentences unless an exact proper name requires it.",
-    "Keep pronunciation-friendly sentences suitable for clear text-to-speech.",
-  ].join(" ")
+function matchesLanguage(text: string, language: VoiceLanguage) {
+  if (language === "kk") return /[әіңғүұқөһ]/i.test(text) || /\b(мен|сен|сіз|бұл|осы|және|үшін|қалай|жақсы|керек|бар|жоқ|иә|рақмет|сәлем|қазақ|қазір|болады)\b/i.test(text)
+  if (language === "ru") return /[а-яё]/i.test(text) && !/[әіңғүұқөһ]/i.test(text)
+  return /[a-z]/i.test(text) && !/[а-яёәіңғүұқөһ]/i.test(text)
 }
 
 function localFallback(language: VoiceLanguage) {
@@ -69,40 +52,34 @@ export async function POST(request: Request) {
   const personality = String(body?.personality || "Assistant")
   if (!text) return Response.json({ ok: false, error: "Пустой Voice запрос" }, { status: 400 })
 
-  const language = detectVoiceLanguage(text)
+  const language = requestedLanguage(body?.language) || detectVoiceLanguage(text)
   const personalityInstruction = PERSONALITY[personality] || PERSONALITY.Assistant
   const instruction = [
     "You are Sola, the Malik AI voice assistant.",
     personalityInstruction,
     languageInstruction(language),
-    "Preserve the user's intended language even when the transcription contains one or two foreign-looking tokens.",
+    "The selected Voice language overrides the language of the user's words. This is mandatory.",
     "Never output mixed-script gibberish or half-transliterated words.",
-    "Never mention GitHub Models, OpenRouter, DeepSeek, Render environment variables, internal provider routing, or missing API keys to the user.",
-    "If a provider is unavailable, the server will handle fallback. Just answer the user's request naturally.",
+    "Never mention internal providers, routing, environment variables, or API keys.",
   ].join(" ")
 
   try {
-    const answer = await voiceLlmAnswer({ text, instruction })
-    const content = String(answer.content || "").trim()
-    if (!content) throw new Error("empty voice answer")
+    let answer = await voiceLlmAnswer({ text, instruction })
+    let content = String(answer.content || "").trim()
 
-    return Response.json({
-      ok: true,
-      content,
-      personality,
-      language,
-      provider: answer.provider,
-      model: answer.model,
-    }, { headers: { "cache-control": "no-store" } })
+    if (!content || !matchesLanguage(content, language)) {
+      answer = await voiceLlmAnswer({
+        text: `Answer this user request again. Obey the selected language lock exactly. USER REQUEST:\n${text}`,
+        instruction: `${instruction} Previous output violated the language lock. A second violation is not allowed.`,
+      })
+      content = String(answer.content || "").trim()
+    }
+
+    if (!content || !matchesLanguage(content, language)) content = localFallback(language)
+
+    return Response.json({ ok: true, content, personality, language, provider: answer.provider, model: answer.model }, { headers: { "cache-control": "no-store" } })
   } catch (error) {
     console.error("[VOICE_TURN_ERROR]", error instanceof Error ? error.message : error)
-    return Response.json({
-      ok: true,
-      content: localFallback(language),
-      personality,
-      language,
-      provider: "voice-local-fallback",
-      model: "none",
-    }, { headers: { "cache-control": "no-store" } })
+    return Response.json({ ok: true, content: localFallback(language), personality, language, provider: "voice-local-fallback", model: "none" }, { headers: { "cache-control": "no-store" } })
   }
 }

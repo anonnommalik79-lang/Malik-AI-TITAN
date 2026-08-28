@@ -49,6 +49,11 @@ const GEMINI_VOICE_BY_PROFILE: Record<string, string> = {
   paige: "Umbriel",
   priya: "Autonoe",
   sharon: "Vindemiatrix",
+  charon: "Charon",
+  puck: "Puck",
+  kore: "Kore",
+  aoede: "Aoede",
+  fenrir: "Fenrir",
 }
 
 function env(name: string) {
@@ -300,7 +305,8 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const text = String(body?.text || "").trim().slice(0, 3500)
   const voice = String(body?.voice || "Cliff")
-  const language = detectLanguage(text)
+  const requestedLanguage = body?.language === "kk" || body?.language === "ru" || body?.language === "en" ? body.language as VoiceLanguage : null
+  const language = requestedLanguage || detectLanguage(text)
   const speed = fluxSpeed(body?.speed)
   const expressivity = fluxExpressivity(body?.expressivity)
 
@@ -316,6 +322,10 @@ export async function POST(request: Request) {
   if (language === "ru") {
     const geminiRussian = await geminiTts(text, voice, "ru", speed, expressivity)
     if (geminiRussian) return geminiRussian
+  }
+
+  if (language === "kk") {
+    return Response.json({ ok: false, language, error: "Kazakh Kokoro TTS is served by the Flask production runtime" }, { status: 503, headers: { "cache-control": "no-store" } })
   }
 
   const multilingual = await multilingualTts(text, language, speed)

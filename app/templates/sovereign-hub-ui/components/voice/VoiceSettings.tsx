@@ -4,10 +4,13 @@ import { Check, Volume2 } from "lucide-react"
 import { useEffect, useRef } from "react"
 import styles from "./VoiceSettingsPanel.module.css"
 
+export type VoiceLanguage = "kk" | "ru" | "en"
+
 export type VoiceProfile = {
   name: string
   description: string
-  deepgramModel: string
+  model: string
+  language: VoiceLanguage
   rate: number
   pitch: number
   hints: readonly string[]
@@ -16,58 +19,93 @@ export type VoiceProfile = {
 const maleHints = ["male", "david", "guy", "daniel", "george", "mark", "alex"] as const
 const femaleHints = ["female", "aria", "jenny", "zira", "samantha", "susan"] as const
 
-export const VOICES: readonly VoiceProfile[] = [
-  { name: "Cliff", description: "American masculine · deep, calm, clear", deepgramModel: "flux-cliff-en", rate: .98, pitch: .86, hints: maleHints },
-  { name: "Kit", description: "British masculine · friendly, energetic", deepgramModel: "flux-kit-en", rate: 1, pitch: .92, hints: maleHints },
-  { name: "Cole", description: "American masculine · clear, engaging", deepgramModel: "flux-cole-en", rate: 1.02, pitch: .96, hints: maleHints },
-  { name: "Colin", description: "British masculine · warm, authoritative", deepgramModel: "flux-colin-en", rate: .98, pitch: .90, hints: maleHints },
-  { name: "Miles", description: "American masculine · calm, professional", deepgramModel: "flux-miles-en", rate: .98, pitch: .90, hints: maleHints },
-  { name: "Sean", description: "British masculine · mature, calming", deepgramModel: "flux-sean-en", rate: .96, pitch: .86, hints: maleHints },
-  { name: "Bruce", description: "American masculine · natural, believable", deepgramModel: "flux-bruce-en", rate: 1, pitch: .90, hints: maleHints },
-  { name: "Conor", description: "British masculine · deep, relaxed", deepgramModel: "flux-conor-en", rate: .97, pitch: .86, hints: maleHints },
-  { name: "Donovan", description: "American masculine · professional, thoughtful", deepgramModel: "flux-donovan-en", rate: .98, pitch: .90, hints: maleHints },
-  { name: "Drew", description: "American masculine · soft, young, calm", deepgramModel: "flux-drew-en", rate: .98, pitch: .92, hints: maleHints },
-  { name: "Jack", description: "British masculine · confident, clear", deepgramModel: "flux-jack-en", rate: 1, pitch: .90, hints: maleHints },
-  { name: "Kai", description: "Singaporean masculine · clear, knowledgeable", deepgramModel: "flux-kai-en", rate: 1, pitch: .92, hints: maleHints },
-  { name: "Marcelo", description: "Filipino masculine · calm, professional", deepgramModel: "flux-marcelo-en", rate: 1, pitch: .92, hints: maleHints },
-  { name: "Marcus", description: "American masculine · smooth, helpful", deepgramModel: "flux-marcus-en", rate: .99, pitch: .90, hints: maleHints },
-  { name: "Naveen", description: "Indian masculine · clear, professional", deepgramModel: "flux-naveen-en", rate: .99, pitch: .92, hints: maleHints },
-  { name: "Rufus", description: "British masculine · confident, intelligent", deepgramModel: "flux-rufus-en", rate: .99, pitch: .90, hints: maleHints },
-  { name: "Tanner", description: "British masculine · professional, calm", deepgramModel: "flux-tanner-en", rate: .98, pitch: .90, hints: maleHints },
-  { name: "Wade", description: "American masculine · warm, confident, clear", deepgramModel: "flux-wade-en", rate: 1, pitch: .92, hints: maleHints },
-  { name: "Wes", description: "American masculine · thoughtful, warm", deepgramModel: "flux-wes-en", rate: .98, pitch: .92, hints: maleHints },
-  { name: "Hannah", description: "American feminine · clear, confident", deepgramModel: "flux-hannah-en", rate: 1, pitch: 1.06, hints: femaleHints },
-  { name: "Alexis", description: "American feminine · professional, calm", deepgramModel: "flux-alexis-en", rate: 1, pitch: 1.05, hints: femaleHints },
-  { name: "Sienna", description: "American feminine · warm, caring", deepgramModel: "flux-sienna-en", rate: .99, pitch: 1.05, hints: femaleHints },
-  { name: "Brooke", description: "American feminine · intelligent, energetic", deepgramModel: "flux-brooke-en", rate: 1.03, pitch: 1.08, hints: femaleHints },
-  { name: "Gemma", description: "British feminine · kind, approachable", deepgramModel: "flux-gemma-en", rate: 1, pitch: 1.06, hints: femaleHints },
-  { name: "Haley", description: "American feminine · clear, caring, calm", deepgramModel: "flux-haley-en", rate: .99, pitch: 1.05, hints: femaleHints },
-  { name: "Heather", description: "American feminine · engaging, energetic", deepgramModel: "flux-heather-en", rate: 1.02, pitch: 1.07, hints: femaleHints },
-  { name: "Bree", description: "American feminine · friendly, sweet", deepgramModel: "flux-bree-en", rate: .99, pitch: 1.06, hints: femaleHints },
-  { name: "Brittany", description: "American feminine · confident, soft", deepgramModel: "flux-brittany-en", rate: .98, pitch: 1.04, hints: femaleHints },
-  { name: "Elise", description: "American feminine · clear, professional", deepgramModel: "flux-elise-en", rate: .99, pitch: 1.05, hints: femaleHints },
-  { name: "Kelsey", description: "American feminine · caring, calm", deepgramModel: "flux-kelsey-en", rate: .99, pitch: 1.05, hints: femaleHints },
-  { name: "Maeve", description: "Irish feminine · confident, gentle", deepgramModel: "flux-maeve-en", rate: .99, pitch: 1.05, hints: femaleHints },
-  { name: "Meena", description: "Indian feminine · empathetic, reassuring", deepgramModel: "flux-meena-en", rate: .98, pitch: 1.04, hints: femaleHints },
-  { name: "Meghan", description: "American feminine · friendly, energetic", deepgramModel: "flux-meghan-en", rate: 1.01, pitch: 1.06, hints: femaleHints },
-  { name: "Paige", description: "American feminine · calm, comfortable", deepgramModel: "flux-paige-en", rate: .99, pitch: 1.04, hints: femaleHints },
-  { name: "Priya", description: "Indian feminine · confident, empathetic", deepgramModel: "flux-priya-en", rate: .98, pitch: 1.04, hints: femaleHints },
-  { name: "Sharon", description: "Australian feminine · formal, relaxed", deepgramModel: "flux-sharon-en", rate: .98, pitch: 1.04, hints: femaleHints },
-  { name: "Kokoro M1", description: "Қазақша · native masculine · local Kokoro 82M", deepgramModel: "kokoro-kazakh-km_m1", rate: 1, pitch: 1, hints: maleHints },
+const KAZAKH_VOICES: readonly VoiceProfile[] = [
+  { name: "Kokoro M1", description: "Қазақша · табиғи ер дауыс", model: "kokoro-kazakh-km_m1", language: "kk", rate: 1, pitch: 1, hints: maleHints },
+  { name: "Kokoro M1 Calm", description: "Қазақша · сабырлы, жұмсақ стиль", model: "kokoro-kazakh-km_m1-calm", language: "kk", rate: .93, pitch: .96, hints: maleHints },
+  { name: "Kokoro M1 Strong", description: "Қазақша · анық, нық стиль", model: "kokoro-kazakh-km_m1-strong", language: "kk", rate: 1.05, pitch: .92, hints: maleHints },
 ] as const
 
+const RUSSIAN_VOICES: readonly VoiceProfile[] = [
+  { name: "Charon", description: "Русский · низкий, спокойный мужской", model: "gemini-charon-ru", language: "ru", rate: .98, pitch: .9, hints: maleHints },
+  { name: "Puck", description: "Русский · живой, дружелюбный мужской", model: "gemini-puck-ru", language: "ru", rate: 1, pitch: .94, hints: maleHints },
+  { name: "Kore", description: "Русский · чистый, уверенный женский", model: "gemini-kore-ru", language: "ru", rate: 1, pitch: 1.04, hints: femaleHints },
+  { name: "Aoede", description: "Русский · мягкий, естественный женский", model: "gemini-aoede-ru", language: "ru", rate: .99, pitch: 1.03, hints: femaleHints },
+  { name: "Fenrir", description: "Русский · энергичный, выразительный мужской", model: "gemini-fenrir-ru", language: "ru", rate: 1.02, pitch: .92, hints: maleHints },
+] as const
+
+const ENGLISH_VOICES: readonly VoiceProfile[] = [
+  { name: "Cliff", description: "American masculine · deep, calm, clear", model: "flux-cliff-en", language: "en", rate: .98, pitch: .86, hints: maleHints },
+  { name: "Kit", description: "British masculine · friendly, energetic", model: "flux-kit-en", language: "en", rate: 1, pitch: .92, hints: maleHints },
+  { name: "Cole", description: "American masculine · clear, engaging", model: "flux-cole-en", language: "en", rate: 1.02, pitch: .96, hints: maleHints },
+  { name: "Colin", description: "British masculine · warm, authoritative", model: "flux-colin-en", language: "en", rate: .98, pitch: .90, hints: maleHints },
+  { name: "Miles", description: "American masculine · calm, professional", model: "flux-miles-en", language: "en", rate: .98, pitch: .90, hints: maleHints },
+  { name: "Sean", description: "British masculine · mature, calming", model: "flux-sean-en", language: "en", rate: .96, pitch: .86, hints: maleHints },
+  { name: "Bruce", description: "American masculine · natural, believable", model: "flux-bruce-en", language: "en", rate: 1, pitch: .90, hints: maleHints },
+  { name: "Conor", description: "British masculine · deep, relaxed", model: "flux-conor-en", language: "en", rate: .97, pitch: .86, hints: maleHints },
+  { name: "Donovan", description: "American masculine · professional, thoughtful", model: "flux-donovan-en", language: "en", rate: .98, pitch: .90, hints: maleHints },
+  { name: "Drew", description: "American masculine · soft, young, calm", model: "flux-drew-en", language: "en", rate: .98, pitch: .92, hints: maleHints },
+  { name: "Jack", description: "British masculine · confident, clear", model: "flux-jack-en", language: "en", rate: 1, pitch: .90, hints: maleHints },
+  { name: "Kai", description: "Singaporean masculine · clear, knowledgeable", model: "flux-kai-en", language: "en", rate: 1, pitch: .92, hints: maleHints },
+  { name: "Marcelo", description: "Filipino masculine · calm, professional", model: "flux-marcelo-en", language: "en", rate: 1, pitch: .92, hints: maleHints },
+  { name: "Marcus", description: "American masculine · smooth, helpful", model: "flux-marcus-en", language: "en", rate: .99, pitch: .90, hints: maleHints },
+  { name: "Naveen", description: "Indian masculine · clear, professional", model: "flux-naveen-en", language: "en", rate: .99, pitch: .92, hints: maleHints },
+  { name: "Rufus", description: "British masculine · confident, intelligent", model: "flux-rufus-en", language: "en", rate: .99, pitch: .90, hints: maleHints },
+  { name: "Tanner", description: "British masculine · professional, calm", model: "flux-tanner-en", language: "en", rate: .98, pitch: .90, hints: maleHints },
+  { name: "Wade", description: "American masculine · warm, confident, clear", model: "flux-wade-en", language: "en", rate: 1, pitch: .92, hints: maleHints },
+  { name: "Wes", description: "American masculine · thoughtful, warm", model: "flux-wes-en", language: "en", rate: .98, pitch: .92, hints: maleHints },
+  { name: "Hannah", description: "American feminine · clear, confident", model: "flux-hannah-en", language: "en", rate: 1, pitch: 1.06, hints: femaleHints },
+  { name: "Alexis", description: "American feminine · professional, calm", model: "flux-alexis-en", language: "en", rate: 1, pitch: 1.05, hints: femaleHints },
+  { name: "Sienna", description: "American feminine · warm, caring", model: "flux-sienna-en", language: "en", rate: .99, pitch: 1.05, hints: femaleHints },
+  { name: "Brooke", description: "American feminine · intelligent, energetic", model: "flux-brooke-en", language: "en", rate: 1.03, pitch: 1.08, hints: femaleHints },
+  { name: "Gemma", description: "British feminine · kind, approachable", model: "flux-gemma-en", language: "en", rate: 1, pitch: 1.06, hints: femaleHints },
+  { name: "Haley", description: "American feminine · clear, caring, calm", model: "flux-haley-en", language: "en", rate: .99, pitch: 1.05, hints: femaleHints },
+  { name: "Heather", description: "American feminine · engaging, energetic", model: "flux-heather-en", language: "en", rate: 1.02, pitch: 1.07, hints: femaleHints },
+  { name: "Bree", description: "American feminine · friendly, sweet", model: "flux-bree-en", language: "en", rate: .99, pitch: 1.06, hints: femaleHints },
+  { name: "Brittany", description: "American feminine · confident, soft", model: "flux-brittany-en", language: "en", rate: .98, pitch: 1.04, hints: femaleHints },
+  { name: "Elise", description: "American feminine · clear, professional", model: "flux-elise-en", language: "en", rate: .99, pitch: 1.05, hints: femaleHints },
+  { name: "Kelsey", description: "American feminine · caring, calm", model: "flux-kelsey-en", language: "en", rate: .99, pitch: 1.05, hints: femaleHints },
+  { name: "Maeve", description: "Irish feminine · confident, gentle", model: "flux-maeve-en", language: "en", rate: .99, pitch: 1.05, hints: femaleHints },
+  { name: "Meena", description: "Indian feminine · empathetic, reassuring", model: "flux-meena-en", language: "en", rate: .98, pitch: 1.04, hints: femaleHints },
+  { name: "Meghan", description: "American feminine · friendly, energetic", model: "flux-meghan-en", language: "en", rate: 1.01, pitch: 1.06, hints: femaleHints },
+  { name: "Paige", description: "American feminine · calm, comfortable", model: "flux-paige-en", language: "en", rate: .99, pitch: 1.04, hints: femaleHints },
+  { name: "Priya", description: "Indian feminine · confident, empathetic", model: "flux-priya-en", language: "en", rate: .98, pitch: 1.04, hints: femaleHints },
+  { name: "Sharon", description: "Australian feminine · formal, relaxed", model: "flux-sharon-en", language: "en", rate: .98, pitch: 1.04, hints: femaleHints },
+] as const
+
+export const VOICES: readonly VoiceProfile[] = [...KAZAKH_VOICES, ...RUSSIAN_VOICES, ...ENGLISH_VOICES]
+
 export const PERSONALITIES = ["Assistant", "Therapist", "Storyteller", "Kids Story Time", "Kids Trivia Game", "Meditation", "Motivation", "Romantic", "Argumentative"] as const
+
+export function voicesForLanguage(language: VoiceLanguage) {
+  return VOICES.filter((item) => item.language === language)
+}
+
+export function defaultVoiceForLanguage(language: VoiceLanguage) {
+  return language === "kk" ? "Kokoro M1" : language === "ru" ? "Charon" : "Cliff"
+}
+
+export function voiceBelongsToLanguage(name: string, language: VoiceLanguage) {
+  return VOICES.some((item) => item.name === name && item.language === language)
+}
 
 export function getVoiceProfile(name: string): VoiceProfile {
   return VOICES.find((item) => item.name === name) || VOICES[0]
 }
 
-export function VoiceSettings({ open, voice, personality, speed, expressivity, onVoiceChange, onPersonalityChange, onSpeedChange, onExpressivityChange, onPreviewVoice, onClose }: {
+const LANGUAGE_BUTTONS: readonly { id: VoiceLanguage; label: string }[] = [
+  { id: "kk", label: "Қазақша" },
+  { id: "ru", label: "Русский" },
+  { id: "en", label: "English" },
+]
+
+export function VoiceSettings({ open, language, voice, personality, speed, expressivity, onLanguageChange, onVoiceChange, onPersonalityChange, onSpeedChange, onExpressivityChange, onPreviewVoice, onClose }: {
   open: boolean
+  language: VoiceLanguage
   voice: string
   personality: string
   speed: number
   expressivity: number
+  onLanguageChange: (language: VoiceLanguage) => void
   onVoiceChange: (voice: string) => void
   onPersonalityChange: (personality: string) => void
   onSpeedChange: (speed: number) => void
@@ -76,6 +114,7 @@ export function VoiceSettings({ open, voice, personality, speed, expressivity, o
   onClose: () => void
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
+  const visibleVoices = voicesForLanguage(language)
 
   useEffect(() => {
     if (!open) return
@@ -89,13 +128,21 @@ export function VoiceSettings({ open, voice, personality, speed, expressivity, o
 
   return (
     <div ref={rootRef} className={`${styles.panel} ${open ? styles.open : ""}`} aria-hidden={!open}>
+      <div className={styles.languageBar} role="tablist" aria-label="Язык Voice">
+        {LANGUAGE_BUTTONS.map((item) => (
+          <button key={item.id} type="button" role="tab" aria-selected={language === item.id} className={`${styles.languageButton} ${language === item.id ? styles.languageSelected : ""}`} onClick={() => onLanguageChange(item.id)}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+
       <div className={styles.columns}>
         <section className={styles.column} aria-label="Выбор голоса">
-          <div className={styles.heading}><span>Голос</span><small>36 Deepgram Flux · English + Kokoro · Қазақша</small></div>
+          <div className={styles.heading}><span>Голос</span><small>{language === "kk" ? "Только Қазақша" : language === "ru" ? "Только Русский" : "Deepgram Flux · English"}</small></div>
           <div className={styles.list}>
-            {VOICES.map((profile) => (
+            {visibleVoices.map((profile) => (
               <button key={profile.name} type="button" className={`${styles.item} ${voice === profile.name ? styles.selected : ""}`} onClick={() => { onVoiceChange(profile.name); onPreviewVoice(profile.name) }}>
-                <span className={styles.itemText}><strong>{profile.name} <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">{profile.deepgramModel.startsWith("kokoro-kazakh") ? "Қазақша" : "English"}</span></strong><small>{profile.description}</small></span>
+                <span className={styles.itemText}><strong>{profile.name} <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">{profile.language === "kk" ? "Қазақша" : profile.language === "ru" ? "Русский" : "English"}</span></strong><small>{profile.description}</small></span>
                 <span className={styles.actions}><span className={styles.preview} aria-hidden="true"><Volume2 size={14} /></span>{voice === profile.name ? <Check className={styles.check} size={15} /> : null}</span>
               </button>
             ))}

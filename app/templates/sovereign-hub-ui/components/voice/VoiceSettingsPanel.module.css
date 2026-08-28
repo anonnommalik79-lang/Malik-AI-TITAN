@@ -24,6 +24,31 @@
   transform: translate(-50%, 0) scale(1);
 }
 
+.languageBar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 4px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 15px;
+  background: rgba(255,255,255,.025);
+}
+
+.languageButton {
+  height: 36px;
+  border: 0;
+  border-radius: 11px;
+  color: rgba(255,255,255,.48);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+.languageButton:hover { color: rgba(255,255,255,.86); background: rgba(255,255,255,.045); }
+.languageSelected { color: #fff; background: rgba(255,255,255,.11); box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
+
 .columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -122,6 +147,8 @@
 
 @media (max-width: 640px) {
   .panel { bottom: 154px; width: calc(100vw - 16px); padding: 8px; border-radius: 20px; }
+  .languageBar { gap: 4px; margin-bottom: 7px; padding: 3px; }
+  .languageButton { height: 33px; font-size: 10px; }
   .columns { gap: 7px; }
   .heading { height: 38px; padding: 0 9px; }
   .heading small { display: none; }
