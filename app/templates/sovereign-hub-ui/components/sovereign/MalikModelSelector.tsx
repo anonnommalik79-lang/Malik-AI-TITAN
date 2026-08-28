@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
-import { Check, ChevronDown, Crown, Lock, X } from "lucide-react"
+import { Check, ChevronDown, Crown, Image as ImageIcon, Lock, MessageSquare, X } from "lucide-react"
 import {
   FREE_MALIK_MODELS,
   PRO_MALIK_MODELS,
@@ -13,16 +13,22 @@ import {
 } from "@/lib/ai/malik-models"
 import {
   DEFAULT_MALIK_IMAGE_MODEL_ID,
+  MALIK_IMAGE_MODELS,
+  canUseMalikImageModel,
+  getMalikImageModel,
   loadMalikImageModeActive,
   loadMalikImageModelSelection,
   saveMalikImageModeActive,
   saveMalikImageModelSelection,
+  type MalikImageModelDefinition,
   type MalikImageModelId,
 } from "@/lib/media/image-models"
 import type { AIPlan } from "@/lib/ai/types"
-import { MalikImageModelSelector } from "./MalikImageModelSelector"
 
 const cn = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ")
+
+type SelectorTab = "models" | "photo"
+type UpgradeTarget = { label: string; image?: boolean }
 
 function MalikMark({ compact = false }: { compact?: boolean }) {
   return (
@@ -75,6 +81,77 @@ function ModelRow({
   )
 }
 
+function OfficialBrandIcon({ model, compact = false }: { model: MalikImageModelDefinition; compact?: boolean }) {
+  const [failed, setFailed] = useState(false)
+
+  if (model.brand === "malik") return <MalikMark compact={compact} />
+  if (failed) {
+    return (
+      <span className={cn("malik-model-selector__mark", compact && "is-compact")} aria-hidden="true">
+        <ImageIcon />
+      </span>
+    )
+  }
+
+  const src = model.brand === "bfl" ? "https://bfl.ai/favicon.ico" : "https://leonardo.ai/favicon.ico"
+  const alt = model.brand === "bfl" ? "Black Forest Labs" : "Leonardo.Ai"
+
+  return (
+    <span
+      className={cn("malik-model-selector__mark", compact && "is-compact")}
+      aria-hidden="true"
+      style={{ overflow: "hidden", background: "#fff" }}
+    >
+      <img
+        src={src}
+        alt={alt}
+        onError={() => setFailed(true)}
+        style={{ width: "100%", height: "100%", display: "block", objectFit: "contain", borderRadius: 7 }}
+      />
+    </span>
+  )
+}
+
+function ImageModelRow({
+  model,
+  selected,
+  allowed,
+  onChoose,
+}: {
+  model: MalikImageModelDefinition
+  selected: boolean
+  allowed: boolean
+  onChoose: () => void
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={selected}
+      className={cn("malik-model-selector__row", selected && "is-selected")}
+      onClick={onChoose}
+    >
+      <OfficialBrandIcon model={model} />
+      <span className="malik-model-selector__copy">
+        <span className="malik-model-selector__name">{model.label}</span>
+        <span className="malik-model-selector__description">{model.description}</span>
+      </span>
+      <span className="malik-model-selector__state">
+        {selected ? (
+          <Check aria-label="Выбрано" />
+        ) : model.tier === "free" ? (
+          <span className="is-free">Бесплатно</span>
+        ) : allowed ? (
+          <span className="is-free">Доступно</span>
+        ) : (
+          <span className="is-pro"><Crown /> PLUS</span>
+        )}
+        {!allowed && model.tier === "premium" ? <Lock className="malik-model-selector__lock" aria-hidden="true" /> : null}
+      </span>
+    </button>
+  )
+}
+
 function setControlledTextareaValue(field: HTMLTextAreaElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set
   if (setter) setter.call(field, value)
@@ -115,7 +192,8 @@ export function MalikModelSelector({
   placement?: "auto" | "bottom"
 }) {
   const [open, setOpen] = useState(false)
-  const [upgradeModel, setUpgradeModel] = useState<MalikModelDefinition | null>(null)
+  const [tab, setTab] = useState<SelectorTab>("models")
+  const [upgradeModel, setUpgradeModel] = useState<UpgradeTarget | null>(null)
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({})
   const [imageModelId, setImageModelId] = useState<MalikImageModelId>(DEFAULT_MALIK_IMAGE_MODEL_ID)
   const [imageModeActive, setImageModeActive] = useState(false)
@@ -124,6 +202,7 @@ export function MalikModelSelector({
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const selectedModel = getMalikModel(selectedModelId)
+  const selectedImageModel = getMalikImageModel(imageModelId)
 
   useEffect(() => {
     const savedModel = loadMalikImageModelSelection()
@@ -138,7 +217,6 @@ export function MalikModelSelector({
     const prefixPrompt = (field: HTMLTextAreaElement) => {
       const value = field.value.trim()
       if (!value || /^\s*\/(image|img|photo|foto|фото|картинка)(?![\p{L}\p{N}_])/iu.test(value)) return false
-      // Respect an explicit non-image slash command instead of silently replacing it.
       if (/^\s*\/[\p{L}\p{N}_-]+/u.test(value)) return false
       setControlledTextareaValue(field, `/image ${value}`)
       return true
@@ -227,12 +305,12 @@ export function MalikModelSelector({
           right: 12,
           bottom: 12,
           width: "auto",
-          maxHeight: Math.min(viewportHeight * 0.76, 620),
+          maxHeight: Math.min(viewportHeight * 0.78, 640),
         })
         return
       }
 
-      const width = Math.min(344, viewportWidth - 24)
+      const width = Math.min(378, viewportWidth - 24)
       const left = Math.min(Math.max(12, rect.left), viewportWidth - width - 12)
 
       if (placement === "bottom") {
@@ -244,7 +322,7 @@ export function MalikModelSelector({
           top,
           bottom: "auto",
           width,
-          maxHeight: Math.max(260, Math.min(viewportHeight - top - 12, 566)),
+          maxHeight: Math.max(280, Math.min(viewportHeight - top - 12, 620)),
         })
         return
       }
@@ -271,24 +349,32 @@ export function MalikModelSelector({
     }
   }, [open, placement])
 
+  const setImageMode = (active: boolean) => {
+    setImageModeActive(active)
+    saveMalikImageModeActive(active)
+  }
+
   const choose = (model: MalikModelDefinition) => {
     if (!canUseMalikModel(model.id, plan)) {
       setOpen(false)
-      setUpgradeModel(model)
+      setUpgradeModel({ label: model.label })
       return
     }
+    setImageMode(false)
     onSelect(model.id)
     setOpen(false)
   }
 
-  const chooseImageModel = (modelId: MalikImageModelId) => {
-    setImageModelId(modelId)
-    saveMalikImageModelSelection(modelId)
-  }
-
-  const setImageMode = (active: boolean) => {
-    setImageModeActive(active)
-    saveMalikImageModeActive(active)
+  const chooseImageModel = (model: MalikImageModelDefinition) => {
+    if (!canUseMalikImageModel(model.id, plan)) {
+      setOpen(false)
+      setUpgradeModel({ label: model.label, image: true })
+      return
+    }
+    setImageModelId(model.id)
+    saveMalikImageModelSelection(model.id)
+    setImageMode(true)
+    setOpen(false)
   }
 
   const upgradeDialog = upgradeModel ? (
@@ -301,7 +387,9 @@ export function MalikModelSelector({
         </button>
         <span className="malik-model-upgrade__icon"><Crown /></span>
         <h2 id="malik-model-upgrade-title">{upgradeModel.label} доступна в MalikAI Plus</h2>
-        <p>Получите доступ к расширенным моделям, агентам и более высоким лимитам.</p>
+        <p>{upgradeModel.image
+          ? "ULTRA-рендер фото с максимальным качеством и точностью сложных промптов."
+          : "Получите доступ к расширенным моделям, агентам и более высоким лимитам."}</p>
         <button type="button" className="malik-model-upgrade__button" onClick={() => {
           setUpgradeModel(null)
           onOpenBilling?.()
@@ -320,55 +408,131 @@ export function MalikModelSelector({
       aria-label="Модели Malik AI"
       style={popoverStyle}
     >
-      <div className="malik-model-selector__title">Модели</div>
-      <div className="malik-model-selector__section-label">Бесплатные</div>
-      <div className="malik-model-selector__group">
-        {FREE_MALIK_MODELS.map((model) => (
-          <ModelRow key={model.id} model={model} selected={model.id === selectedModelId} allowed onChoose={() => choose(model)} />
-        ))}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, padding: "4px 4px 10px" }}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "models"}
+          onClick={() => setTab("models")}
+          style={{
+            minHeight: 38,
+            borderRadius: 12,
+            border: tab === "models" ? "1px solid rgba(255,255,255,.16)" : "1px solid transparent",
+            background: tab === "models" ? "rgba(255,255,255,.08)" : "transparent",
+            color: tab === "models" ? "#fff" : "#a1a1aa",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            fontWeight: 800,
+            fontSize: 13,
+          }}
+        >
+          <MalikMark compact /> Модели
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "photo"}
+          onClick={() => setTab("photo")}
+          style={{
+            minHeight: 38,
+            borderRadius: 12,
+            border: tab === "photo" ? "1px solid rgba(230,190,80,.28)" : "1px solid transparent",
+            background: tab === "photo" ? "rgba(230,190,80,.10)" : "transparent",
+            color: tab === "photo" ? "#f4d675" : "#a1a1aa",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            fontWeight: 800,
+            fontSize: 13,
+          }}
+        >
+          <ImageIcon style={{ width: 15, height: 15 }} /> Фото
+        </button>
       </div>
-      <div className="malik-model-selector__divider" />
-      <div className="malik-model-selector__section-label is-pro"><Crown /> Модели Plus</div>
-      <div className="malik-model-selector__group">
-        {PRO_MALIK_MODELS.map((model) => (
-          <ModelRow
-            key={model.id}
-            model={model}
-            selected={model.id === selectedModelId}
-            allowed={canUseMalikModel(model.id, plan)}
-            onChoose={() => choose(model)}
-          />
-        ))}
-      </div>
+
+      {tab === "models" ? (
+        <>
+          <div className="malik-model-selector__section-label">Бесплатные</div>
+          <div className="malik-model-selector__group">
+            {FREE_MALIK_MODELS.map((model) => (
+              <ModelRow key={model.id} model={model} selected={!imageModeActive && model.id === selectedModelId} allowed onChoose={() => choose(model)} />
+            ))}
+          </div>
+          <div className="malik-model-selector__divider" />
+          <div className="malik-model-selector__section-label is-pro"><Crown /> Модели Plus</div>
+          <div className="malik-model-selector__group">
+            {PRO_MALIK_MODELS.map((model) => (
+              <ModelRow
+                key={model.id}
+                model={model}
+                selected={!imageModeActive && model.id === selectedModelId}
+                allowed={canUseMalikModel(model.id, plan)}
+                onChoose={() => choose(model)}
+              />
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="malik-model-selector__section-label">Модели изображений</div>
+          <div className="malik-model-selector__group">
+            {MALIK_IMAGE_MODELS.map((model) => (
+              <ImageModelRow
+                key={model.id}
+                model={model}
+                selected={imageModeActive && model.id === imageModelId}
+                allowed={canUseMalikImageModel(model.id, plan)}
+                onChoose={() => chooseImageModel(model)}
+              />
+            ))}
+          </div>
+          <div className="malik-model-selector__divider" />
+          <button
+            type="button"
+            role="menuitem"
+            className="malik-model-selector__row"
+            onClick={() => {
+              setImageMode(false)
+              setTab("models")
+            }}
+          >
+            <span className="malik-model-selector__mark" aria-hidden="true"><MessageSquare /></span>
+            <span className="malik-model-selector__copy">
+              <span className="malik-model-selector__name">Обычный чат</span>
+              <span className="malik-model-selector__description">Вернуться к текстовой модели</span>
+            </span>
+            <span className="malik-model-selector__state">{!imageModeActive ? <Check aria-label="Выбрано" /> : null}</span>
+          </button>
+        </>
+      )}
     </div>
   ) : null
 
   return (
     <>
-      <div ref={rootRef} className={cn("malik-model-selector", className)}>
+      <div ref={rootRef} className={cn("malik-model-selector", imageModeActive && "is-image-active", className)}>
         <button
           ref={triggerRef}
           type="button"
           className="malik-model-selector__trigger"
           aria-haspopup="menu"
           aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => {
+            if (!open) setTab(imageModeActive ? "photo" : "models")
+            setOpen((value) => !value)
+          }}
+          style={imageModeActive ? { borderColor: "rgba(230,190,80,.42)", color: "#f4d675" } : undefined}
         >
-          <MalikMark compact />
-          <span>{selectedModel.label}</span>
+          {imageModeActive
+            ? <ImageIcon style={{ width: 16, height: 16, flex: "0 0 auto" }} aria-hidden="true" />
+            : <MalikMark compact />}
+          <span>{imageModeActive ? `Фото · ${selectedImageModel.shortLabel}` : selectedModel.label}</span>
           <ChevronDown className={cn("malik-model-selector__chevron", open && "is-open")} />
         </button>
       </div>
-
-      <MalikImageModelSelector
-        selectedModelId={imageModelId}
-        active={imageModeActive}
-        plan={plan}
-        onSelect={chooseImageModel}
-        onActiveChange={setImageMode}
-        onOpenBilling={onOpenBilling}
-        placement={placement}
-      />
 
       {modelMenu && typeof document !== "undefined" ? createPortal(modelMenu, document.body) : null}
       {upgradeDialog && typeof document !== "undefined" ? createPortal(upgradeDialog, document.body) : null}
