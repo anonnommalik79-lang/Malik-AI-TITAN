@@ -154,11 +154,11 @@ export async function generatePreparedCloudflareImage({
     form.append("height", String(height))
 
     if (modelId === "flux-klein-4b") {
-      form.append("guidance", String(numericEnv("MALIK_IMAGE_KLEIN_GUIDANCE", 8, 0, 10)))
+      form.append("guidance", String(numericEnv("MALIK_IMAGE_KLEIN_GUIDANCE", 7.5, 0, 10)))
     }
     if (modelId === "malik-image-1-premium") {
-      form.append("steps", String(Math.round(numericEnv("MALIK_IMAGE_DEV_STEPS", 18, 1, 50))))
-      form.append("guidance", String(numericEnv("MALIK_IMAGE_DEV_GUIDANCE", 8, 0, 10)))
+      form.append("steps", String(Math.round(numericEnv("MALIK_IMAGE_DEV_STEPS", 16, 1, 50))))
+      form.append("guidance", String(numericEnv("MALIK_IMAGE_DEV_GUIDANCE", 7, 0, 10)))
     }
 
     response = await callCloudflare(model.providerModel, { method: "POST", body: form }, signal)
