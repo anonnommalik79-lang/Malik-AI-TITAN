@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   BarChart3,
   CreditCard,
+  Cpu,
   Crown,
   FolderKanban,
   Languages,
@@ -72,6 +73,7 @@ const PRIMARY_ACTIONS: SidebarAction[] = [
   { id: "library", label: "Библиотека", icon: LayoutTemplate, view: "templates" },
   { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects" },
   { id: "plugins", label: "Плагины", icon: Plug, view: "features" },
+  { id: "compute", label: "Compute", icon: Cpu, view: "compute" },
   { id: "translate", label: "Переводчик", icon: Languages, action: "translate" },
 ]
 

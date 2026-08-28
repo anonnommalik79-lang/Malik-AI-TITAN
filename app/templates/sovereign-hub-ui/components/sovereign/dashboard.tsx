@@ -3,6 +3,7 @@ import dynamic from "next/dynamic"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import { Component, useState, useCallback, useEffect, useRef } from "react"
 import { Sidebar } from "./sidebar"
+const ComputePanel = dynamic(() => import("./compute/ComputePanel"))
 import { WelcomeScreen } from "./welcome-screen"
 import { ChatView } from "./chat-view"
 import { ChatInvestorBackground } from "./ChatInvestorBackground"
@@ -1311,6 +1312,17 @@ type SovereignPowerPack = {
 }
 
 const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
+  compute: {
+    id: "compute",
+    title: "Malik Compute",
+    description: "One balance. Every capability. Every model.",
+    bucket: "workspace",
+    icon: "cpu",
+    status: "stable",
+    mobileMode: "full",
+    fallbackView: "home",
+    keywords: [],
+  },
   home: {
     id: "home",
     title: "Malik AI Home",
@@ -4284,7 +4296,7 @@ function buildDashboardRuntimeDiagnostics() {
 
 
 
-export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
+export function Dashboard({ guestMode = false, initialView = "home" }: { guestMode?: boolean; initialView?: "home" | "compute" }) {
   const { user: workOSUser, loading: workOSLoading } = useAuth()
 // MALIK_LOGOUT_BRIDGE_V1
   useEffect(() => {
@@ -4362,7 +4374,7 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [activeView, setActiveView] = useState("home")
+  const [activeView, setActiveView] = useState<string>(initialView)
   const [previousView, setPreviousView] = useState("home")
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false)
   const [codexOpen, setCodexOpen] = useState(false)
@@ -4374,7 +4386,7 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
   }, [])
   const [activeAiMode, setActiveAiMode] = useState<AiModeId>("auto")
   const [activeGenerationKind, setActiveGenerationKind] = useState<GenerationStatusType>("website")
-  const activeViewRef = useRef("home")
+  const activeViewRef = useRef<string>(initialView)
   const dashboardRuntimeIdRef = useRef(createDashboardRuntimeId("runtime"))
   const dashboardEventUnsubscribeRef = useRef<(() => void) | null>(null)
 
@@ -4500,7 +4512,7 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
         if (parsed?.activeChatId) setActiveChatId(String(parsed.activeChatId))
         if (Array.isArray(parsed?.messages)) setMessages(parsed.messages.map(reviveMessage))
         if (typeof parsed?.generatedCode === "string") setGeneratedCode(parsed.generatedCode)
-        if (typeof parsed?.activeView === "string") setActiveView(parsed.activeView)
+        if (initialView !== "compute" && typeof parsed?.activeView === "string" && parsed.activeView !== "compute") setActiveView(parsed.activeView)
         if (isMalikModelId(parsed?.selectedModelId)) setSelectedModelId(parsed.selectedModelId)
       }
     } catch (err) {
@@ -4508,7 +4520,7 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
     } finally {
       setStorageRestored(true)
     }
-  }, [])
+  }, [initialView])
 
   useEffect(() => {
     if (!storageRestored) return
@@ -4539,8 +4551,15 @@ export function Dashboard({ guestMode = false }: { guestMode?: boolean }) {
   }, [activeView, previousView])
 
   const safeOpenView = useCallback((view: string, reason: DashboardRouteReason = "manual") => {
+    if (view === "compute" && window.location.pathname !== "/compute") {
+      window.location.assign("/compute")
+      return
+    }
     const nextView = normalizeDashboardViewId(view)
     if (nextView === "command-center" && !canAccessAdmin) return
+    if (nextView !== "compute" && window.location.pathname === "/compute") {
+      window.history.replaceState(window.history.state, "", "/dashboard")
+    }
     const previous = activeViewRef.current || "home"
 
     if (previous !== nextView) {
@@ -5986,6 +6005,7 @@ const shouldShowMobilePreviewButton =
   }
 
   const renderActiveView = () => {
+    if (activeView === "compute") return <ComputePanel />
     if (activeView === "final-intelligence") {
       return <FinalIntelligenceLab {...studioBridgeProps} />
     }
