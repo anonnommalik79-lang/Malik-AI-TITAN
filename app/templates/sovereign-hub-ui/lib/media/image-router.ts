@@ -2,17 +2,17 @@ import { imageFreeMode, imageGodOrder } from "./config"
 import { generateWithPollinations } from "./providers/pollinations"
 import { generateWithStability, stabilityConfigured } from "./providers/stability"
 import { awsImageConfigured, falImageConfigured, generateAwsImage, generateFalImage } from "./providers/titan-image"
-import { cloudflareImageConfigured, compileImagePrompt, generateCloudflareImage } from "./providers/cloudflare-image"
+import { compileImagePrompt } from "./providers/cloudflare-image"
+import {
+  generatePreparedCloudflareImage,
+  preparedCloudflareImageConfigured,
+} from "./providers/cloudflare-image-prepared"
 import { DEFAULT_MALIK_IMAGE_MODEL_ID } from "./image-models"
+import { buildUnifiedNegativePrompt, buildUnifiedStrictImagePrompt } from "./strict-image-rules"
 import type { ImageGenerateInput, ImageGenerateResult } from "./types"
 
-function modeStyle(mode?: ImageGenerateInput["mode"]): string {
-  if (!mode) return ""
-  return ` [${mode}]`
-}
-
 const handlers: Record<string, () => boolean> = {
-  cloudflare: cloudflareImageConfigured,
+  cloudflare: preparedCloudflareImageConfigured,
   stability: stabilityConfigured,
   fal: falImageConfigured,
   "aws-bedrock": awsImageConfigured,
@@ -32,6 +32,23 @@ function uniqueProviders(values: string[]) {
   return values.filter((provider, index, list) => Boolean(provider) && list.indexOf(provider) === index)
 }
 
+async function prepareStrictPrompt(input: ImageGenerateInput, signal?: AbortSignal) {
+  let compiled = input.prompt
+  let compilerError = ""
+
+  try {
+    compiled = await compileImagePrompt(input.prompt, input.mode, signal)
+  } catch (error) {
+    compilerError = error instanceof Error ? error.message : "prompt compiler failed"
+  }
+
+  return {
+    strictPrompt: buildUnifiedStrictImagePrompt(compiled, input.prompt, input.mode),
+    negativePrompt: buildUnifiedNegativePrompt(input.prompt),
+    compilerError,
+  }
+}
+
 export async function routeImageGeneration(
   input: ImageGenerateInput,
   options?: { signal?: AbortSignal },
@@ -39,17 +56,21 @@ export async function routeImageGeneration(
   const errors: string[] = []
   const requestedModelId = input.modelId
 
-  // First honor the exact image model selected by the user. All Cloudflare image
-  // models pass through the same lossless multilingual prompt compiler.
+  // Compile exactly ONCE. Every image model and every fallback below receives
+  // this same locked prompt. Providers are not allowed to append their own
+  // semantic rewrite, translation, subject substitution or style instruction.
+  const prepared = await prepareStrictPrompt(input, options?.signal)
+  if (prepared.compilerError) errors.push(`prompt-compiler: ${prepared.compilerError}`)
+
   if (requestedModelId) {
-    if (!cloudflareImageConfigured()) {
+    if (!preparedCloudflareImageConfigured()) {
       errors.push("cloudflare: selected image model is not configured")
     } else {
       try {
-        const result = await generateCloudflareImage({
-          prompt: input.prompt,
+        const result = await generatePreparedCloudflareImage({
+          strictPrompt: prepared.strictPrompt,
+          negativePrompt: prepared.negativePrompt,
           aspectRatio: input.aspectRatio,
-          mode: input.mode,
           modelId: requestedModelId,
           signal: options?.signal,
         })
@@ -71,17 +92,6 @@ export async function routeImageGeneration(
     ? uniqueProviders(["cloudflare", ...effectiveImageOrder(), "pollinations"])
     : effectiveImageOrder()
 
-  let compiledFallbackPrompt: string | null = null
-  const fallbackPrompt = async () => {
-    if (compiledFallbackPrompt) return compiledFallbackPrompt
-    try {
-      compiledFallbackPrompt = await compileImagePrompt(input.prompt, input.mode, options?.signal)
-    } catch {
-      compiledFallbackPrompt = input.prompt
-    }
-    return compiledFallbackPrompt
-  }
-
   for (const provider of order) {
     if (!handlers[provider]?.()) {
       if (provider !== "pollinations") errors.push(`${provider}: not configured`)
@@ -90,12 +100,10 @@ export async function routeImageGeneration(
 
     try {
       if (provider === "cloudflare") {
-        // If a selected partner model is unavailable, retry with Malik AI's fast
-        // default Cloudflare model while preserving the exact same prompt intent.
-        const result = await generateCloudflareImage({
-          prompt: input.prompt,
+        const result = await generatePreparedCloudflareImage({
+          strictPrompt: prepared.strictPrompt,
+          negativePrompt: prepared.negativePrompt,
           aspectRatio: input.aspectRatio,
-          mode: input.mode,
           modelId: DEFAULT_MALIK_IMAGE_MODEL_ID,
           signal: options?.signal,
         })
@@ -109,24 +117,54 @@ export async function routeImageGeneration(
         }
       }
 
-      const exactPrompt = `${await fallbackPrompt()}${modeStyle(input.mode)}`.trim()
-
       if (provider === "stability") {
-        const result = await generateWithStability({ prompt: exactPrompt, aspectRatio: input.aspectRatio, mode: input.mode, signal: options?.signal })
-        return { ok: true, provider: "stability", imageUrl: result.imageUrl, base64: result.base64, remainingDailyImages: 0 }
+        const result = await generateWithStability({
+          prompt: prepared.strictPrompt,
+          aspectRatio: input.aspectRatio,
+          mode: input.mode,
+          signal: options?.signal,
+        })
+        return {
+          ok: true,
+          provider: "stability",
+          imageUrl: result.imageUrl,
+          base64: result.base64,
+          remainingDailyImages: 0,
+        }
       }
+
       if (provider === "fal") {
-        const result = await generateFalImage({ prompt: exactPrompt, aspectRatio: input.aspectRatio, signal: options?.signal })
+        const result = await generateFalImage({
+          prompt: prepared.strictPrompt,
+          aspectRatio: input.aspectRatio,
+          signal: options?.signal,
+        })
         return { ok: true, provider: "fal", imageUrl: result.imageUrl, remainingDailyImages: 0 }
       }
+
       if (provider === "aws-bedrock") {
-        const result = await generateAwsImage({ prompt: exactPrompt, mode: input.mode, signal: options?.signal })
-        return { ok: true, provider: "aws-bedrock", imageUrl: result.imageUrl, base64: result.base64, remainingDailyImages: 0 }
+        const result = await generateAwsImage({
+          prompt: prepared.strictPrompt,
+          mode: input.mode,
+          signal: options?.signal,
+        })
+        return {
+          ok: true,
+          provider: "aws-bedrock",
+          imageUrl: result.imageUrl,
+          base64: result.base64,
+          remainingDailyImages: 0,
+        }
       }
+
       if (provider === "pollinations") {
-        // Pollinations is only the final real-image safety net. It receives the
-        // already-compiled English fidelity prompt and is not allowed to rewrite it.
-        const result = await generateWithPollinations({ prompt: exactPrompt, aspectRatio: input.aspectRatio, mode: input.mode, signal: options?.signal })
+        const result = await generateWithPollinations({
+          prompt: prepared.strictPrompt,
+          negativePrompt: prepared.negativePrompt,
+          aspectRatio: input.aspectRatio,
+          mode: input.mode,
+          signal: options?.signal,
+        })
         return { ok: true, provider: "pollinations", imageUrl: result.imageUrl, remainingDailyImages: 0 }
       }
     } catch (error) {
