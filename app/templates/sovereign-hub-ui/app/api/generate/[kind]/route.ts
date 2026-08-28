@@ -1,4 +1,5 @@
 import { handleGenerateRequest } from "@/lib/generation-route"
+import { handleMalikPhotoGenerationRequest } from "@/lib/media/generate-photo-route"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 import { generationComputeOperation } from "@/lib/malik-compute/policies"
@@ -136,7 +137,11 @@ async function handlePOST(request: Request, context: RouteContext) {
 
   try {
     const startedAt = Date.now()
-    const response = await handleGenerateRequest(request, kind)
+    // Image requests from the chat/home composer use the user's explicitly
+    // selected Malik image model (cookie/modelId), including Premium gating.
+    const response = kind === "photo"
+      ? await handleMalikPhotoGenerationRequest(request)
+      : await handleGenerateRequest(request, kind)
     const wrapped = withCors(response, kind, id)
     wrapped.headers.set("X-Malik-Duration-Ms", String(Date.now() - startedAt))
     return wrapped
@@ -183,8 +188,9 @@ export async function GET(request: Request, context: RouteContext) {
         duration: "optional video/audio duration",
         language: "optional code language",
         quality: "optional quality profile",
+        modelId: "optional Malik image model id for photo generation",
       },
-      delegatedTo: "handleGenerateRequest(request, kind)",
+      delegatedTo: kind === "photo" ? "handleMalikPhotoGenerationRequest(request)" : "handleGenerateRequest(request, kind)",
     },
   }, { status: 200 }, id, kind)
 }
