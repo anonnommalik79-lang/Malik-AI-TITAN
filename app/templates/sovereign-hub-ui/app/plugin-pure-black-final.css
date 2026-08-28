@@ -57,6 +57,54 @@ body:has(.malik-plugin-market) .titan-content::after {
   box-shadow: none !important;
 }
 
+/* Taxi: hard black surface lock on every screen size. No gold aura, gradients,
+   or inherited decorative layers. */
+html:has(.malik-taxi-surface),
+body:has(.malik-taxi-surface),
+body:has(.malik-taxi-surface) #malik-root,
+body:has(.malik-taxi-surface) .malik-dashboard-shell,
+body:has(.malik-taxi-surface) .malik-dashboard-shell > main,
+.malik-taxi-surface,
+.malik-taxi-surface > header,
+.malik-taxi-surface > header > div,
+.malik-taxi-surface > div {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  mix-blend-mode: normal !important;
+}
+
+body:has(.malik-taxi-surface) #malik-investor-aurora {
+  display: none !important;
+}
+
+html:has(.malik-taxi-surface)::before,
+html:has(.malik-taxi-surface)::after,
+body:has(.malik-taxi-surface)::before,
+body:has(.malik-taxi-surface)::after,
+body:has(.malik-taxi-surface) #malik-root::before,
+body:has(.malik-taxi-surface) #malik-root::after,
+body:has(.malik-taxi-surface) .malik-dashboard-shell::before,
+body:has(.malik-taxi-surface) .malik-dashboard-shell::after,
+body:has(.malik-taxi-surface) .malik-dashboard-shell > main::before,
+body:has(.malik-taxi-surface) .malik-dashboard-shell > main::after,
+.malik-taxi-surface::before,
+.malik-taxi-surface::after,
+.malik-taxi-surface > header::before,
+.malik-taxi-surface > header::after,
+.malik-taxi-surface > div::before,
+.malik-taxi-surface > div::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
 /* ==========================================================================
    FINAL PHONE SURFACE LOCK
    This stylesheet is imported last from app/layout.tsx. Keep all phone-only
