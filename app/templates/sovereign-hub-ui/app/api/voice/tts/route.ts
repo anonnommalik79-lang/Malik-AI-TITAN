@@ -14,6 +14,52 @@ const DEEPGRAM_VOICES = new Set([
   "meena", "meghan", "naveen", "paige", "priya", "rufus", "sharon", "tanner", "wade", "wes",
 ])
 
+// Keep the UI voice profiles stable while mapping them to official Gemini voices.
+// Puck remains the default Russian voice because it is natural and conversational.
+const GEMINI_VOICE_BY_PROFILE: Record<string, string> = {
+  charon: "Charon",
+  puck: "Puck",
+  kore: "Kore",
+  aoede: "Aoede",
+  fenrir: "Fenrir",
+  cliff: "Charon",
+  kit: "Puck",
+  cole: "Iapetus",
+  colin: "Rasalgethi",
+  miles: "Schedar",
+  sean: "Gacrux",
+  bruce: "Orus",
+  conor: "Algenib",
+  donovan: "Sadaltager",
+  drew: "Achird",
+  jack: "Alnilam",
+  kai: "Zubenelgenubi",
+  marcelo: "Laomedeia",
+  marcus: "Algieba",
+  naveen: "Enceladus",
+  rufus: "Fenrir",
+  tanner: "Iapetus",
+  wade: "Orus",
+  wes: "Charon",
+  hannah: "Kore",
+  alexis: "Autonoe",
+  sienna: "Vindemiatrix",
+  brooke: "Sadachbia",
+  gemma: "Aoede",
+  haley: "Achernar",
+  heather: "Zephyr",
+  bree: "Leda",
+  brittany: "Callirrhoe",
+  elise: "Erinome",
+  kelsey: "Despina",
+  maeve: "Pulcherrima",
+  meena: "Sulafat",
+  meghan: "Laomedeia",
+  paige: "Umbriel",
+  priya: "Autonoe",
+  sharon: "Vindemiatrix",
+}
+
 function env(name: string) {
   const value = process.env[name]
   return typeof value === "string" ? value.trim() : ""
@@ -21,6 +67,10 @@ function env(name: string) {
 
 function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))]
+}
+
+function requestedLanguage(value: unknown): VoiceLanguage | null {
+  return value === "kk" || value === "ru" || value === "en" ? value : null
 }
 
 function detectLanguage(text: string): VoiceLanguage {
@@ -45,6 +95,12 @@ function isAudio(response: Response, bytes: ArrayBuffer) {
   return bytes.byteLength > 128 && /^(audio\/|application\/octet-stream)/i.test(response.headers.get("content-type") || "")
 }
 
+function isMp3(bytes: ArrayBuffer) {
+  if (bytes.byteLength < 3) return false
+  const audio = new Uint8Array(bytes)
+  return (audio[0] === 0x49 && audio[1] === 0x44 && audio[2] === 0x33) || (audio[0] === 0xff && (audio[1] & 0xe0) === 0xe0)
+}
+
 function pcm16ToWav(pcm: Uint8Array, sampleRate = 24000, channels = 1) {
   const bits = 16
   const header = Buffer.alloc(44)
@@ -64,14 +120,22 @@ function pcm16ToWav(pcm: Uint8Array, sampleRate = 24000, channels = 1) {
   return Buffer.concat([header, Buffer.from(pcm)])
 }
 
-function geminiAudioData(payload: any) {
+function geminiAudioPart(payload: any) {
   const parts = payload?.candidates?.[0]?.content?.parts
-  if (!Array.isArray(parts)) return ""
+  if (!Array.isArray(parts)) return null
   for (const part of parts) {
-    const data = part?.inlineData?.data || part?.inline_data?.data
-    if (typeof data === "string" && data) return data
+    const inline = part?.inlineData || part?.inline_data
+    const data = inline?.data
+    if (typeof data === "string" && data) {
+      return { data, mimeType: String(inline?.mimeType || inline?.mime_type || "audio/L16;rate=24000") }
+    }
   }
-  return ""
+  return null
+}
+
+function geminiVoiceFor(voice: string, language: "ru" | "en") {
+  const mapped = GEMINI_VOICE_BY_PROFILE[String(voice || "").trim().toLowerCase()]
+  return mapped || (language === "ru" ? "Puck" : "Charon")
 }
 
 async function deepgramTts(text: string, voice: string, speed: number, expressivity: number) {
@@ -92,10 +156,10 @@ async function deepgramTts(text: string, voice: string, speed: number, expressiv
       })
       if (!response.ok) continue
       const bytes = await response.arrayBuffer()
-      if (!isAudio(response, bytes)) continue
+      if (!isAudio(response, bytes) || !isMp3(bytes)) continue
       return new Response(bytes, { headers: {
-        "content-type": response.headers.get("content-type") || "audio/mpeg", "cache-control": "no-store",
-        "x-malik-tts-provider": "deepgram", "x-malik-tts-engine": "deepgram-flux-batch", "x-malik-tts-voice": model,
+        "content-type": "audio/mpeg", "cache-control": "no-store",
+        "x-malik-tts-provider": "deepgram", "x-malik-tts-engine": "deepgram-flux-batch", "x-malik-tts-voice": model, "x-malik-tts-language": "en",
       } })
     } catch (error) {
       console.warn("[VOICE_DEEPGRAM_TTS_ERROR]", error instanceof Error ? error.message : error)
@@ -104,22 +168,19 @@ async function deepgramTts(text: string, voice: string, speed: number, expressiv
   return null
 }
 
-async function geminiTts(text: string, language: "ru" | "en", speed: number, expressivity: number) {
+async function geminiTts(text: string, voice: string, language: "ru" | "en", speed: number, expressivity: number) {
   const keys = unique([env("GEMINI_VOICE_API_KEY"), env("GEMINI_API_KEY"), env("GOOGLE_GENERATIVE_AI_API_KEY"), env("GOOGLE_AI_API_KEY")])
   if (!keys.length) return null
 
-  // Russian uses one consistent high-quality voice. 2.5 Flash TTS is tried
-  // first, then configured/3.1 models. This protects Voice from a single
-  // preview-model outage or regression.
-  const voiceName = language === "ru" ? "Puck" : "Charon"
+  const voiceName = geminiVoiceFor(voice, language)
   const models = language === "ru"
-    ? unique([env("GEMINI_RUSSIAN_TTS_MODEL"), "gemini-2.5-flash-preview-tts", env("GEMINI_TTS_MODEL"), "gemini-3.1-flash-tts-preview"])
+    ? unique([env("GEMINI_RUSSIAN_TTS_MODEL"), "gemini-3.1-flash-tts-preview", env("GEMINI_TTS_MODEL"), "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts"])
     : unique([env("GEMINI_TTS_MODEL"), "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"])
   const languageName = language === "ru" ? "Russian" : "English"
   const languageCode = language === "ru" ? "ru-RU" : "en-US"
   const pace = speed <= .9 ? "slightly slower than normal" : speed >= 1.1 ? "slightly faster than normal" : "natural conversational speed"
   const emotion = expressivity <= -1 ? "restrained and calm" : expressivity >= 1 ? "expressive and lively" : "natural and warm"
-  const prompt = `Speak in ${languageName}. Use a ${emotion} delivery at ${pace}. Do not translate, summarize, explain, or add words. Read only TEXT.\nTEXT:\n${text}`
+  const prompt = `Speak in ${languageName}. Use a ${emotion} delivery at ${pace}. Pronounce naturally and clearly. Do not translate, summarize, explain, or add words. Read only TEXT.\nTEXT:\n${text}`
 
   for (const model of models) {
     for (const key of keys) {
@@ -132,20 +193,21 @@ async function geminiTts(text: string, language: "ru" | "en", speed: number, exp
             generationConfig: { responseModalities: ["AUDIO"], speechConfig: { languageCode, voiceConfig: { prebuiltVoiceConfig: { voiceName } } } },
           }),
           cache: "no-store",
-          signal: AbortSignal.timeout(18000),
+          signal: AbortSignal.timeout(model.includes("pro") ? 26000 : 18000),
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           console.warn(`[VOICE_GEMINI_TTS_ERROR] status=${response.status} model=${model} voice=${voiceName}`)
           continue
         }
-        const encoded = geminiAudioData(payload)
-        if (!encoded) continue
-        const pcm = Buffer.from(encoded, "base64")
+        const part = geminiAudioPart(payload)
+        if (!part) continue
+        const pcm = Buffer.from(part.data, "base64")
         if (pcm.byteLength < 128) continue
-        return new Response(pcm16ToWav(pcm), { headers: {
+        const rate = Math.max(8000, Math.min(96000, Number(part.mimeType.match(/rate=(\d+)/i)?.[1] || 24000)))
+        return new Response(pcm16ToWav(pcm, rate), { headers: {
           "content-type": "audio/wav", "cache-control": "no-store",
-          "x-malik-tts-provider": "gemini", "x-malik-tts-engine": model, "x-malik-tts-voice": language === "ru" ? "Malik Russian Puck" : voiceName,
+          "x-malik-tts-provider": "gemini", "x-malik-tts-engine": model, "x-malik-tts-voice": voiceName, "x-malik-tts-language": language,
         } })
       } catch (error) {
         console.warn(`[VOICE_GEMINI_TTS_ERROR] model=${model}`, error instanceof Error ? error.message : error)
@@ -173,11 +235,10 @@ async function elevenlabsTts(text: string, voice: string, language: "ru" | "kk",
     })
     if (!response.ok) return null
     const bytes = await response.arrayBuffer()
-    const audio = new Uint8Array(bytes)
-    const mp3 = (audio[0] === 0x49 && audio[1] === 0x44 && audio[2] === 0x33) || (audio[0] === 0xff && (audio[1] & 0xe0) === 0xe0)
-    if (!isAudio(response, bytes) || !mp3) return null
+    if (!isAudio(response, bytes) || !isMp3(bytes)) return null
     return new Response(bytes, { headers: {
-      "content-type": "audio/mpeg", "cache-control": "no-store", "x-malik-tts-provider": "elevenlabs", "x-malik-tts-engine": "eleven_v3", "x-malik-tts-voice": voiceId,
+      "content-type": "audio/mpeg", "cache-control": "no-store",
+      "x-malik-tts-provider": "elevenlabs", "x-malik-tts-engine": "eleven_v3", "x-malik-tts-voice": voiceId, "x-malik-tts-language": language,
     } })
   } catch {
     return null
@@ -198,9 +259,10 @@ async function multilingualTts(text: string, language: VoiceLanguage, speed: num
       })
       if (!response.ok) continue
       const bytes = await response.arrayBuffer()
-      if (!isAudio(response, bytes)) continue
+      if (!isAudio(response, bytes) || !isMp3(bytes)) continue
       return new Response(bytes, { headers: {
-        "content-type": response.headers.get("content-type") || "audio/mpeg", "cache-control": "no-store", "x-malik-tts-provider": "xai", "x-malik-tts-engine": "xai-multilingual", "x-malik-tts-voice": "leo",
+        "content-type": "audio/mpeg", "cache-control": "no-store",
+        "x-malik-tts-provider": "xai", "x-malik-tts-engine": "xai-multilingual", "x-malik-tts-voice": "leo", "x-malik-tts-language": language,
       } })
     } catch {
       continue
@@ -216,12 +278,18 @@ async function kazakhTts(request: Request, text: string, voice: string, speed: n
     const target = new URL("/api/voice/tts", backend)
     if (!/^https?:$/.test(target.protocol) || target.origin === new URL(request.url).origin) return null
     const response = await fetch(target, {
-      method: "POST", headers: { "content-type": "application/json", "x-malik-voice-proxy": "1" },
-      body: JSON.stringify({ text, voice, language: "kk", speed }), cache: "no-store", signal: AbortSignal.timeout(45000),
+      method: "POST",
+      headers: { "content-type": "application/json", "x-malik-voice-proxy": "1" },
+      body: JSON.stringify({ text, voice, language: "kk", speed }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(45000),
     })
     const bytes = await response.arrayBuffer()
     if (!response.ok || !isAudio(response, bytes)) return null
-    return new Response(bytes, { headers: { "content-type": response.headers.get("content-type") || "audio/wav", "cache-control": "no-store", "x-malik-tts-provider": "kokoro-kazakh", "x-malik-tts-voice": voice } })
+    return new Response(bytes, { headers: {
+      "content-type": response.headers.get("content-type") || "audio/wav", "cache-control": "no-store",
+      "x-malik-tts-provider": "kokoro-kazakh", "x-malik-tts-voice": voice, "x-malik-tts-language": "kk",
+    } })
   } catch {
     return null
   }
@@ -232,17 +300,15 @@ export const POST = withCompute(handlePOST, "voice")
 async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const text = String(body?.text || "").trim().slice(0, 3500)
-  const voice = String(body?.voice || "Cliff")
-  const requested = body?.language === "kk" || body?.language === "ru" || body?.language === "en" ? body.language as VoiceLanguage : null
-  const language = requested || detectLanguage(text)
+  const voice = String(body?.voice || "Puck")
+  const language = requestedLanguage(body?.language) || detectLanguage(text)
   const speed = fluxSpeed(body?.speed)
   const expressivity = fluxExpressivity(body?.expressivity)
   if (!text) return Response.json({ ok: false, error: "Пустой текст" }, { status: 400 })
 
   if (language === "ru") {
-    // Fast dependable Russian path: Gemini 2.5/Puck -> configured Gemini ->
-    // ElevenLabs (when configured) -> xAI. The client still has browser TTS.
-    const gemini = await geminiTts(text, "ru", speed, expressivity)
+    // Russian: current Gemini speech first, then two independent provider fallbacks.
+    const gemini = await geminiTts(text, voice, "ru", speed, expressivity)
     if (gemini) return gemini
     const eleven = await elevenlabsTts(text, voice, "ru", speed, expressivity)
     if (eleven) return eleven
@@ -251,7 +317,7 @@ async function handlePOST(request: Request) {
   } else if (language === "en") {
     const deepgram = await deepgramTts(text, voice, speed, expressivity)
     if (deepgram) return deepgram
-    const gemini = await geminiTts(text, "en", speed, expressivity)
+    const gemini = await geminiTts(text, voice, "en", speed, expressivity)
     if (gemini) return gemini
     const xai = await multilingualTts(text, "en", speed)
     if (xai) return xai
