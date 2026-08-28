@@ -238,4 +238,57 @@ body:has(.malik-plugin-market) .titan-content::after {
   #malik-root .mtpl-card-media {
     background: #0a0a0a !important;
   }
+
+  /* Taxi: phone route must stay pure black too. UberRealRideV1 exposes an
+     accessible Uber logo, which gives us a route-local selector without
+     touching desktop or unrelated pages. */
+  html:has(main svg[aria-label="Uber"]),
+  body:has(main svg[aria-label="Uber"]),
+  body:has(main svg[aria-label="Uber"]) #malik-root,
+  body:has(main svg[aria-label="Uber"]) .malik-dashboard-shell,
+  body:has(main svg[aria-label="Uber"]) .malik-dashboard-shell > main,
+  main:has(svg[aria-label="Uber"]),
+  main:has(svg[aria-label="Uber"]) > header,
+  main:has(svg[aria-label="Uber"]) > header > div,
+  main:has(svg[aria-label="Uber"]) > div {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    mix-blend-mode: normal !important;
+  }
+
+  html:has(main svg[aria-label="Uber"])::before,
+  html:has(main svg[aria-label="Uber"])::after,
+  body:has(main svg[aria-label="Uber"])::before,
+  body:has(main svg[aria-label="Uber"])::after,
+  body:has(main svg[aria-label="Uber"]) #malik-root::before,
+  body:has(main svg[aria-label="Uber"]) #malik-root::after,
+  main:has(svg[aria-label="Uber"])::before,
+  main:has(svg[aria-label="Uber"])::after,
+  main:has(svg[aria-label="Uber"]) > header::before,
+  main:has(svg[aria-label="Uber"]) > header::after {
+    content: none !important;
+    display: none !important;
+    opacity: 0 !important;
+    background: none !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  /* Neutralize any legacy blue/navy utility surface that might leak into the
+     Taxi route on narrow screens. Uber's own black/white brand mark is kept. */
+  main:has(svg[aria-label="Uber"]) [class*="bg-blue"],
+  main:has(svg[aria-label="Uber"]) [class*="bg-sky"],
+  main:has(svg[aria-label="Uber"]) [class*="bg-cyan"],
+  main:has(svg[aria-label="Uber"]) [class*="from-blue"],
+  main:has(svg[aria-label="Uber"]) [class*="via-blue"],
+  main:has(svg[aria-label="Uber"]) [class*="to-blue"] {
+    background: #0a0a0a !important;
+    background-color: #0a0a0a !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
 }
