@@ -10,6 +10,17 @@ function isCodeTask(input: AIRequest) {
   return input.task === "code" || input.task === "debug" || input.task === "project"
 }
 
+function isSitesRequest(input: AIRequest) {
+  return input.metadata?.requestedKind === "website" || input.metadata?.lane === "sites-skill-engine"
+}
+
+function apiKeyFor(input: AIRequest) {
+  if (isSitesRequest(input)) {
+    return process.env.CEREBRAS_SITES_API_KEY || process.env.CEREBRAS_API_KEY
+  }
+  return process.env.CEREBRAS_API_KEY
+}
+
 function completionBudget(input: AIRequest) {
   const fallback = isCodeTask(input)
     ? Number(process.env.MAX_CODE_OUTPUT_TOKENS || 16000)
@@ -29,8 +40,12 @@ export const cerebrasProvider: AIProvider = {
 
   async sendMessage(input: AIRequest): Promise<AIResponse> {
     const started = Date.now()
-    const key = process.env.CEREBRAS_API_KEY
-    if (!key) throw new Error("CEREBRAS_API_KEY not configured")
+    const key = apiKeyFor(input)
+    if (!key) {
+      throw new Error(isSitesRequest(input)
+        ? "CEREBRAS_SITES_API_KEY or CEREBRAS_API_KEY not configured"
+        : "CEREBRAS_API_KEY not configured")
+    }
 
     const model = modelFor("cerebras", input.task || "chat", input.model)
     const glm47 = model === "zai-glm-4.7"
@@ -43,9 +58,9 @@ export const cerebrasProvider: AIProvider = {
     }
 
     if (glm47) {
-      // GLM 4.7 supports long completions and preserved thinking. Keep reasoning
-      // available for difficult coding tasks while giving the final HTML/code
-      // enough output space to finish instead of truncating halfway through.
+      // Sites use GLM only as a planner. Long output remains available for
+      // other coding tasks, while the Sites route normally requests a compact
+      // structured WebsitePlan instead of raw HTML.
       body.top_p = 0.95
       body.max_completion_tokens = Math.min(40_000, budget)
       body.clear_thinking = false
