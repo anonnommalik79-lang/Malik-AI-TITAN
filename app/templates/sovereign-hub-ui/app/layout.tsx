@@ -33,6 +33,8 @@ import "./malik-pure-black-final.css"
 import "./mobile-welcome-final.css"
 // Final attachment/menu authority: native media inputs and foreground tools.
 import "./malik-attachment-tools-final.css"
+// Plugins must stay pure black even when Titan gold surface rules are active.
+import "./plugin-pure-black-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
