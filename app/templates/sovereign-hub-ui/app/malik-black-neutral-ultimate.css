@@ -1,0 +1,251 @@
+/* MALIK AI — FINAL BLACK + NEUTRAL UI AUTHORITY
+ * This stylesheet MUST be imported last from app/layout.tsx.
+ * Goal:
+ * 1) every application/page canvas is true OLED black (#000),
+ * 2) legacy blue/cyan/sky/indigo square surfaces become neutral charcoal,
+ * 3) phone registration/auth can never inherit a navy/non-black backdrop,
+ * 4) native controls do not fall back to the browser's blue accent.
+ *
+ * Brand artwork is intentionally not recolored: SVG path fills (Google, Uber,
+ * provider logos, etc.) remain untouched.
+ */
+
+:root {
+  color-scheme: dark;
+  --malik-bg: #000000 !important;
+  --malik-neutral-control: #1b1b1d;
+  --malik-neutral-control-hover: #242426;
+  --malik-neutral-border: rgba(255, 255, 255, 0.10);
+  --malik-neutral-focus: rgba(255, 255, 255, 0.48);
+}
+
+html,
+body,
+#malik-root {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+  min-height: 100%;
+}
+
+body,
+#malik-root {
+  min-height: 100dvh;
+}
+
+/* Kill legacy page-level atmosphere without flattening cards or brand art. */
+body::before,
+body::after,
+#malik-root::before,
+#malik-root::after,
+#malik-root .malik-dashboard-shell::before,
+#malik-root .malik-dashboard-shell::after,
+#malik-root .titan-main::before,
+#malik-root .titan-main::after,
+#malik-root .titan-content::before,
+#malik-root .titan-content::after,
+#malik-root .malik-dashboard-content::before,
+#malik-root .malik-dashboard-content::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* Product/page canvases. `main` is a page canvas in this app; cards use div,
+ * article, aside, etc., so their intended charcoal surfaces remain intact. */
+#malik-root > main,
+#malik-root .malik-dashboard-shell,
+#malik-root .malik-dashboard-shell > main,
+#malik-root .malik-dashboard-shell main:not([data-voice-mode]),
+#malik-root .malik-main-scroll-host,
+#malik-root .titan-main,
+#malik-root .titan-content,
+#malik-root .malik-dashboard-content,
+#malik-root .malik-mobile-home,
+#malik-root .thome,
+#malik-root .thome-inner,
+#malik-root .thome-launcher,
+#malik-root .malik-ai-chat-bg,
+#malik-root .malik-premium-chat-host,
+#malik-root .malik-chat-legend-bg,
+#malik-root .malik-plugin-market,
+#malik-root .plugin-market-shell,
+#malik-root .mtpl-shell,
+#malik-root .mtpl-content,
+#malik-root .malik-auth-page,
+#malik-root .sma-root,
+#malik-root .sma-hero,
+#malik-root .sma-auth-panel {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+}
+
+/* Remove actual blue/cyan/sky/indigo background utility TOKENS only.
+ * The selectors deliberately avoid hover:bg-* / focus:bg-* strings and do not
+ * touch text/border colors or SVG fills. */
+#malik-root [class^="bg-blue-"],
+#malik-root [class*=" bg-blue-"],
+#malik-root [class^="bg-cyan-"],
+#malik-root [class*=" bg-cyan-"],
+#malik-root [class^="bg-sky-"],
+#malik-root [class*=" bg-sky-"],
+#malik-root [class^="bg-indigo-"],
+#malik-root [class*=" bg-indigo-"] {
+  background: var(--malik-neutral-control) !important;
+  background-color: var(--malik-neutral-control) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* Tailwind gradient tokens can paint blue even when no bg-blue-* class exists. */
+#malik-root [class^="from-blue-"],
+#malik-root [class*=" from-blue-"],
+#malik-root [class^="from-cyan-"],
+#malik-root [class*=" from-cyan-"],
+#malik-root [class^="from-sky-"],
+#malik-root [class*=" from-sky-"],
+#malik-root [class^="from-indigo-"],
+#malik-root [class*=" from-indigo-"],
+#malik-root [class^="via-blue-"],
+#malik-root [class*=" via-blue-"],
+#malik-root [class^="via-cyan-"],
+#malik-root [class*=" via-cyan-"],
+#malik-root [class^="via-sky-"],
+#malik-root [class*=" via-sky-"],
+#malik-root [class^="via-indigo-"],
+#malik-root [class*=" via-indigo-"],
+#malik-root [class^="to-blue-"],
+#malik-root [class*=" to-blue-"],
+#malik-root [class^="to-cyan-"],
+#malik-root [class*=" to-cyan-"],
+#malik-root [class^="to-sky-"],
+#malik-root [class*=" to-sky-"],
+#malik-root [class^="to-indigo-"],
+#malik-root [class*=" to-indigo-"] {
+  --tw-gradient-from: #1b1b1d var(--tw-gradient-from-position) !important;
+  --tw-gradient-via: #1b1b1d var(--tw-gradient-via-position) !important;
+  --tw-gradient-to: #242426 var(--tw-gradient-to-position) !important;
+}
+
+/* Browser-native controls are a common source of the small blue square. */
+#malik-root input[type="checkbox"],
+#malik-root input[type="radio"],
+#malik-root input[type="range"],
+#malik-root progress {
+  accent-color: #8a8a8d !important;
+}
+
+#malik-root input,
+#malik-root textarea,
+#malik-root select,
+#malik-root button,
+#malik-root [role="button"],
+#malik-root [tabindex] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+#malik-root :focus-visible {
+  outline-color: var(--malik-neutral-focus) !important;
+}
+
+#malik-root select,
+#malik-root option {
+  color-scheme: dark;
+}
+
+#malik-root option {
+  background-color: #181818;
+  color: #f5f5f5;
+}
+
+/* Auth / registration gets an extra route-local lock. This protects phones
+ * from old aurora rules, safe-area paint and mobile browser overscroll. */
+html.malik-auth-active,
+body.malik-auth-active,
+html:has(.malik-auth-page),
+body:has(.malik-auth-page),
+body:has(.malik-auth-page) #malik-root,
+#malik-root:has(.malik-auth-page),
+.malik-auth-page,
+.sma-root,
+.sma-hero,
+.sma-auth-panel {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+}
+
+html:has(.malik-auth-page)::before,
+html:has(.malik-auth-page)::after,
+body:has(.malik-auth-page)::before,
+body:has(.malik-auth-page)::after,
+body:has(.malik-auth-page) #malik-root::before,
+body:has(.malik-auth-page) #malik-root::after,
+.malik-auth-page::before,
+.malik-auth-page::after,
+.sma-root::before,
+.sma-root::after,
+.sma-hero::before,
+.sma-hero::after,
+.sma-auth-panel::before,
+.sma-auth-panel::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+@media (max-width: 767px), (max-height: 500px) and (pointer: coarse) {
+  html,
+  body,
+  #malik-root,
+  .malik-auth-page,
+  .sma-root,
+  .sma-hero,
+  .sma-auth-panel,
+  #malik-root .malik-dashboard-shell,
+  #malik-root .malik-dashboard-shell > main,
+  #malik-root .malik-main-scroll-host,
+  #malik-root .titan-main,
+  #malik-root .titan-content,
+  #malik-root .malik-dashboard-content {
+    background: #000000 !important;
+    background-color: #000000 !important;
+    background-image: none !important;
+  }
+
+  html,
+  body,
+  #malik-root,
+  .malik-auth-page,
+  .sma-root {
+    min-height: 100dvh !important;
+    overscroll-behavior: none !important;
+  }
+
+  .sma-root,
+  .sma-hero,
+  .sma-auth-panel {
+    isolation: isolate;
+    opacity: 1 !important;
+    box-shadow: none !important;
+    filter: none !important;
+    mix-blend-mode: normal !important;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  .sma-root,
+  .sma-hero,
+  .sma-auth-panel {
+    background: #000000 !important;
+    background-image: none !important;
+  }
+}

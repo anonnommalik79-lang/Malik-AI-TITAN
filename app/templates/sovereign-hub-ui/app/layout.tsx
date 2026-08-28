@@ -35,6 +35,8 @@ import "./mobile-welcome-final.css"
 import "./malik-attachment-tools-final.css"
 // Plugins must stay pure black even when Titan gold surface rules are active.
 import "./plugin-pure-black-final.css"
+// Absolute final authority: OLED black canvases + neutral non-blue controls.
+import "./malik-black-neutral-ultimate.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
