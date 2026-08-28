@@ -26,8 +26,8 @@ const KAZAKH_VOICES: readonly VoiceProfile[] = [
 ] as const
 
 const RUSSIAN_VOICES: readonly VoiceProfile[] = [
-  { name: "Charon", description: "Русский · низкий, спокойный мужской", model: "gemini-charon-ru", language: "ru", rate: .98, pitch: .9, hints: maleHints },
   { name: "Puck", description: "Русский · живой, дружелюбный мужской", model: "gemini-puck-ru", language: "ru", rate: 1, pitch: .94, hints: maleHints },
+  { name: "Charon", description: "Русский · низкий, спокойный мужской", model: "gemini-charon-ru", language: "ru", rate: .98, pitch: .9, hints: maleHints },
   { name: "Kore", description: "Русский · чистый, уверенный женский", model: "gemini-kore-ru", language: "ru", rate: 1, pitch: 1.04, hints: femaleHints },
   { name: "Aoede", description: "Русский · мягкий, естественный женский", model: "gemini-aoede-ru", language: "ru", rate: .99, pitch: 1.03, hints: femaleHints },
   { name: "Fenrir", description: "Русский · энергичный, выразительный мужской", model: "gemini-fenrir-ru", language: "ru", rate: 1.02, pitch: .92, hints: maleHints },
@@ -81,7 +81,7 @@ export function voicesForLanguage(language: VoiceLanguage) {
 }
 
 export function defaultVoiceForLanguage(language: VoiceLanguage) {
-  return language === "kk" ? "Kokoro M1" : language === "ru" ? "Charon" : "Cliff"
+  return language === "kk" ? "Kokoro M1" : language === "ru" ? "Puck" : "Cliff"
 }
 
 export function voiceBelongsToLanguage(name: string, language: VoiceLanguage) {
