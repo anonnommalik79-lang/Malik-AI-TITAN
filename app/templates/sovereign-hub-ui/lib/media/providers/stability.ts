@@ -5,6 +5,7 @@ const ASPECT_MAP: Record<ImageAspectRatio, string> = {
   "1:1": "1:1",
   "16:9": "16:9",
   "9:16": "9:16",
+  "4:3": "4:3",
   "4:5": "4:5",
 }
 
