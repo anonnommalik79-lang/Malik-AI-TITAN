@@ -102,14 +102,8 @@ async function geminiAttempt(data: ArrayBuffer, filename: string, mime: string, 
 
     const response = await withTimeout("https://generativelanguage.googleapis.com/v1beta/interactions", {
       method: "POST",
-      headers: {
-        "x-goog-api-key": key,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        input: [{ type: "audio", uri, mime_type: mime || "audio/webm" }],
-      }),
+      headers: { "x-goog-api-key": key, "content-type": "application/json" },
+      body: JSON.stringify({ model, input: [{ type: "audio", uri, mime_type: mime || "audio/webm" }] }),
     })
     const payload = await response.json().catch(() => ({}))
     const latencyMs = Date.now() - started
@@ -121,11 +115,7 @@ async function geminiAttempt(data: ArrayBuffer, filename: string, mime: string, 
     return { ok: false as const, error: error instanceof Error ? error.message : "Gemini network error", latencyMs: Date.now() - started }
   } finally {
     if (fileName) {
-      void fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}`, {
-        method: "DELETE",
-        headers: { "x-goog-api-key": key },
-        cache: "no-store",
-      }).catch(() => {})
+      void fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}`, { method: "DELETE", headers: { "x-goog-api-key": key }, cache: "no-store" }).catch(() => {})
     }
   }
 }
@@ -170,11 +160,7 @@ async function cloudflareAttempt(data: ArrayBuffer, model: string, language?: st
   if (!token || !account) return { ok: false as const, skipped: true as const, error: "missing credentials" }
 
   const started = Date.now()
-  const body: Record<string, unknown> = {
-    audio: Buffer.from(data).toString("base64"),
-    task: "transcribe",
-    vad_filter: true,
-  }
+  const body: Record<string, unknown> = { audio: Buffer.from(data).toString("base64"), task: "transcribe", vad_filter: true }
   if (language && language !== "auto") body.language = language
   if (prompt) body.initial_prompt = prompt.slice(0, 800)
 
@@ -221,12 +207,15 @@ export async function transcribeVoiceAudio(
   const cfFallback = env("CLOUDFLARE_WHISPER_FALLBACK") || "@cf/openai/whisper"
   const attempts: NonNullable<VoiceTranscribeResult["attempts"]> = []
 
+  // Fast Voice path first. Groq Whisper accepts the recorded blob directly,
+  // while Gemini requires upload + finalize + interaction. Gemini remains the
+  // last safety net instead of blocking every normal Russian turn up front.
   for (const [provider, model] of [
-    ["gemini", geminiModel],
     ["groq", groqPrimary],
     ["groq", groqFallback],
     ["cloudflare", cfPrimary],
     ["cloudflare", cfFallback],
+    ["gemini", geminiModel],
   ] as const) {
     const result = provider === "gemini"
       ? await geminiAttempt(data, filename, mime, model)
