@@ -9,11 +9,21 @@ import type { ImageAspectRatio, ImageMode } from "../types"
 const PROMPT_COMPILER_MODEL = process.env.CLOUDFLARE_IMAGE_PROMPT_MODEL?.trim() || "@cf/zai-org/glm-4.7-flash"
 
 function cloudflareAccountId(): string {
-  return process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || process.env.CF_ACCOUNT_ID?.trim() || ""
+  return (
+    process.env.CLOUDFLARE_IMAGE_ACCOUNT_ID?.trim() ||
+    process.env.CLOUDFLARE_ACCOUNT_ID?.trim() ||
+    process.env.CF_ACCOUNT_ID?.trim() ||
+    ""
+  )
 }
 
 function cloudflareApiToken(): string {
-  return process.env.CLOUDFLARE_API_TOKEN?.trim() || process.env.CF_API_TOKEN?.trim() || ""
+  return (
+    process.env.CLOUDFLARE_IMAGE_API_TOKEN?.trim() ||
+    process.env.CLOUDFLARE_API_TOKEN?.trim() ||
+    process.env.CF_API_TOKEN?.trim() ||
+    ""
+  )
 }
 
 export function cloudflareImageConfigured(): boolean {
@@ -81,7 +91,7 @@ async function callCloudflare(model: string, init: RequestInit, signal?: AbortSi
   const accountId = cloudflareAccountId()
   const token = cloudflareApiToken()
   if (!accountId || !token) {
-    throw new Error("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are not configured")
+    throw new Error("CLOUDFLARE_IMAGE_ACCOUNT_ID and CLOUDFLARE_IMAGE_API_TOKEN are not configured")
   }
 
   const controller = new AbortController()
@@ -148,7 +158,6 @@ async function compilePrompt(rawPrompt: string, mode?: ImageMode, signal?: Abort
         translated = extractText(payload) || source
       }
     } catch {
-      // FLUX.2 dev is multilingual and the other models can still receive the source prompt.
       translated = source
     }
   }
@@ -207,7 +216,7 @@ export async function generateCloudflareImage({
   signal?: AbortSignal
 }): Promise<{ imageUrl: string; modelId: MalikImageModelId; providerModel: string; compiledPrompt: string }> {
   if (!cloudflareImageConfigured()) {
-    throw new Error("Cloudflare Workers AI is not configured")
+    throw new Error("Cloudflare Workers AI image account is not configured")
   }
 
   const model = getMalikImageModel(modelId)
