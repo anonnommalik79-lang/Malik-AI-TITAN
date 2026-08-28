@@ -276,7 +276,7 @@ export function MalikImageModelSelector({
 
   return (
     <>
-      <div ref={rootRef} className={cn("malik-model-selector", active && "is-image-active")}>
+      <div ref={rootRef} className={cn("malik-model-selector", "malik-image-model-selector", active && "is-image-active")}>
         <button
           ref={triggerRef}
           type="button"

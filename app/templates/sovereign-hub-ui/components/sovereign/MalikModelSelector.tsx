@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, type CSSProperties } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 import { Check, ChevronDown, Crown, Image as ImageIcon, Lock, MessageSquare, X } from "lucide-react"
 import {
@@ -24,11 +24,21 @@ import {
   type MalikImageModelId,
 } from "@/lib/media/image-models"
 import type { AIPlan } from "@/lib/ai/types"
+import { MalikImageModelSelector } from "./MalikImageModelSelector"
 
 const cn = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ")
 
 type SelectorTab = "models" | "photo"
 type UpgradeTarget = { label: string; image?: boolean }
+
+const MOBILE_SELECTOR_QUERY = "(max-width: 768px)"
+const getMobileSnapshot = () => window.matchMedia(MOBILE_SELECTOR_QUERY).matches
+const getServerMobileSnapshot = () => false
+function subscribeMobileSelector(onChange: () => void) {
+  const query = window.matchMedia(MOBILE_SELECTOR_QUERY)
+  query.addEventListener("change", onChange)
+  return () => query.removeEventListener("change", onChange)
+}
 
 function MalikMark({ compact = false }: { compact?: boolean }) {
   return (
@@ -191,6 +201,7 @@ export function MalikModelSelector({
   className?: string
   placement?: "auto" | "bottom"
 }) {
+  const isMobile = useSyncExternalStore(subscribeMobileSelector, getMobileSnapshot, getServerMobileSnapshot)
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<SelectorTab>("models")
   const [upgradeModel, setUpgradeModel] = useState<UpgradeTarget | null>(null)
@@ -203,6 +214,7 @@ export function MalikModelSelector({
   const popoverRef = useRef<HTMLDivElement>(null)
   const selectedModel = getMalikModel(selectedModelId)
   const selectedImageModel = getMalikImageModel(imageModelId)
+  const showImageMode = isMobile && imageModeActive
 
   useEffect(() => {
     const savedModel = loadMalikImageModelSelection()
@@ -296,9 +308,7 @@ export function MalikModelSelector({
       const rect = trigger.getBoundingClientRect()
       const viewportWidth = window.innerWidth
       const viewportHeight = window.innerHeight
-      const mobile = viewportWidth <= 680
-
-      if (mobile) {
+      if (isMobile) {
         setPopoverStyle({
           position: "fixed",
           left: 12,
@@ -310,7 +320,7 @@ export function MalikModelSelector({
         return
       }
 
-      const width = Math.min(378, viewportWidth - 24)
+      const width = Math.min(344, viewportWidth - 24)
       const left = Math.min(Math.max(12, rect.left), viewportWidth - width - 12)
 
       if (placement === "bottom") {
@@ -322,7 +332,7 @@ export function MalikModelSelector({
           top,
           bottom: "auto",
           width,
-          maxHeight: Math.max(280, Math.min(viewportHeight - top - 12, 620)),
+          maxHeight: Math.max(260, Math.min(viewportHeight - top - 12, 566)),
         })
         return
       }
@@ -347,7 +357,7 @@ export function MalikModelSelector({
       window.removeEventListener("resize", updatePosition)
       window.removeEventListener("scroll", updatePosition, true)
     }
-  }, [open, placement])
+  }, [open, placement, isMobile])
 
   const setImageMode = (active: boolean) => {
     setImageModeActive(active)
@@ -360,7 +370,7 @@ export function MalikModelSelector({
       setUpgradeModel({ label: model.label })
       return
     }
-    setImageMode(false)
+    if (isMobile) setImageMode(false)
     onSelect(model.id)
     setOpen(false)
   }
@@ -408,11 +418,10 @@ export function MalikModelSelector({
       aria-label="Модели Malik AI"
       style={popoverStyle}
     >
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, padding: "4px 4px 10px" }}>
+      {isMobile ? <div role="group" aria-label="Тип модели" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, padding: "4px 4px 10px" }}>
         <button
           type="button"
-          role="tab"
-          aria-selected={tab === "models"}
+          aria-pressed={tab === "models"}
           onClick={() => setTab("models")}
           style={{
             minHeight: 38,
@@ -432,8 +441,7 @@ export function MalikModelSelector({
         </button>
         <button
           type="button"
-          role="tab"
-          aria-selected={tab === "photo"}
+          aria-pressed={tab === "photo"}
           onClick={() => setTab("photo")}
           style={{
             minHeight: 38,
@@ -451,14 +459,14 @@ export function MalikModelSelector({
         >
           <ImageIcon style={{ width: 15, height: 15 }} /> Фото
         </button>
-      </div>
+      </div> : <div className="malik-model-selector__title">Модели</div>}
 
-      {tab === "models" ? (
+      {!isMobile || tab === "models" ? (
         <>
           <div className="malik-model-selector__section-label">Бесплатные</div>
           <div className="malik-model-selector__group">
             {FREE_MALIK_MODELS.map((model) => (
-              <ModelRow key={model.id} model={model} selected={!imageModeActive && model.id === selectedModelId} allowed onChoose={() => choose(model)} />
+              <ModelRow key={model.id} model={model} selected={!showImageMode && model.id === selectedModelId} allowed onChoose={() => choose(model)} />
             ))}
           </div>
           <div className="malik-model-selector__divider" />
@@ -468,7 +476,7 @@ export function MalikModelSelector({
               <ModelRow
                 key={model.id}
                 model={model}
-                selected={!imageModeActive && model.id === selectedModelId}
+                selected={!showImageMode && model.id === selectedModelId}
                 allowed={canUseMalikModel(model.id, plan)}
                 onChoose={() => choose(model)}
               />
@@ -513,7 +521,7 @@ export function MalikModelSelector({
 
   return (
     <>
-      <div ref={rootRef} className={cn("malik-model-selector", imageModeActive && "is-image-active", className)}>
+      <div ref={rootRef} className={cn("malik-model-selector", showImageMode && "is-image-active", className)}>
         <button
           ref={triggerRef}
           type="button"
@@ -521,18 +529,31 @@ export function MalikModelSelector({
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={() => {
-            if (!open) setTab(imageModeActive ? "photo" : "models")
+            if (!open) setTab(showImageMode ? "photo" : "models")
             setOpen((value) => !value)
           }}
-          style={imageModeActive ? { borderColor: "rgba(230,190,80,.42)", color: "#f4d675" } : undefined}
+          style={showImageMode ? { borderColor: "rgba(230,190,80,.42)", color: "#f4d675" } : undefined}
         >
-          {imageModeActive
+          {showImageMode
             ? <ImageIcon style={{ width: 16, height: 16, flex: "0 0 auto" }} aria-hidden="true" />
             : <MalikMark compact />}
-          <span>{imageModeActive ? `Фото · ${selectedImageModel.shortLabel}` : selectedModel.label}</span>
+          <span>{showImageMode ? `Фото · ${selectedImageModel.shortLabel}` : selectedModel.label}</span>
           <ChevronDown className={cn("malik-model-selector__chevron", open && "is-open")} />
         </button>
       </div>
+
+      {!isMobile ? <MalikImageModelSelector
+        selectedModelId={imageModelId}
+        active={imageModeActive}
+        plan={plan}
+        onSelect={(modelId) => {
+          setImageModelId(modelId)
+          saveMalikImageModelSelection(modelId)
+        }}
+        onActiveChange={setImageMode}
+        onOpenBilling={onOpenBilling}
+        placement={placement}
+      /> : null}
 
       {modelMenu && typeof document !== "undefined" ? createPortal(modelMenu, document.body) : null}
       {upgradeDialog && typeof document !== "undefined" ? createPortal(upgradeDialog, document.body) : null}

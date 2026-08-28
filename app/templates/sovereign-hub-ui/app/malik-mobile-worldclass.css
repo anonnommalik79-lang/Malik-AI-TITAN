@@ -433,11 +433,14 @@
   }
 
   #malik-root .malik-dashboard-shell .thome-composer-right {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 40px !important;
     grid-area: actions !important;
     width: 100% !important;
+    min-width: 0 !important;
     flex: 0 0 auto !important;
     justify-content: space-between !important;
-    gap: 3px !important;
+    gap: 6px !important;
   }
 
   .malik-dashboard-shell .thome-action-swap,
@@ -451,8 +454,9 @@
   }
 
   #malik-root .malik-dashboard-shell .thome-composer-right .malik-model-selector__trigger {
-    width: auto !important;
-    max-width: 190px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: min(190px, 100%) !important;
     height: 40px !important;
     min-height: 40px !important;
     padding-inline: 8px !important;
@@ -661,23 +665,53 @@
   }
 
   #malik-root .malik-dashboard-shell .malik-inline-composer__right {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 40px !important;
     grid-area: actions !important;
     width: 100% !important;
+    min-width: 0 !important;
+    gap: 6px !important;
     justify-content: space-between !important;
   }
 
   #malik-root .malik-dashboard-shell .malik-inline-composer .malik-model-selector__trigger {
     display: inline-flex !important;
-    width: auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
     height: 36px !important;
     min-height: 36px !important;
-    max-width: 190px !important;
+    max-width: min(190px, 100%) !important;
     font-size: 12px !important;
   }
 
+  #malik-root .malik-dashboard-shell .thome-composer-right .malik-model-selector,
   #malik-root .malik-dashboard-shell .malik-inline-composer__right .malik-model-selector {
     display: block !important;
     width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Keep the desktop-only photo trigger hidden even before hydration. */
+  .malik-image-model-selector,
+  #malik-root .malik-dashboard-shell .thome-composer-right .malik-image-model-selector,
+  #malik-root .malik-dashboard-shell .malik-inline-composer__right .malik-image-model-selector {
+    display: none !important;
+  }
+
+  /* The label shrinks; the send/voice button always keeps its own column. */
+  #malik-root .malik-dashboard-shell .thome-action-swap,
+  #malik-root .malik-dashboard-shell .thome-action-swap > button,
+  #malik-root .malik-dashboard-shell .malik-inline-action-swap,
+  #malik-root .malik-dashboard-shell .malik-inline-action-swap > button {
+    position: relative !important;
+    inset: auto !important;
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    max-width: 40px !important;
+    flex: 0 0 40px !important;
   }
 
   #malik-root .malik-dashboard-shell .thome-action-swap > .is-hidden,
@@ -685,10 +719,7 @@
     display: none !important;
   }
 
-  #malik-root .malik-dashboard-shell .malik-inline-action,
-  #malik-root .malik-dashboard-shell .malik-inline-action-swap,
-  #malik-root .malik-dashboard-shell .malik-voice-entry,
-  #malik-root .malik-dashboard-shell .malik-inline-send {
+  #malik-root .malik-dashboard-shell .malik-inline-action {
     width: 36px !important;
     height: 36px !important;
     min-width: 36px !important;
