@@ -8,6 +8,7 @@ import {
   preparedCloudflareImageConfigured,
 } from "./providers/cloudflare-image-prepared"
 import { DEFAULT_MALIK_IMAGE_MODEL_ID } from "./image-models"
+import { buildImageIntentPlan } from "./image-intent-engine"
 import { buildUnifiedNegativePrompt, buildUnifiedStrictImagePrompt } from "./strict-image-rules"
 import type { ImageGenerateInput, ImageGenerateResult } from "./types"
 
@@ -42,9 +43,16 @@ async function prepareStrictPrompt(input: ImageGenerateInput, signal?: AbortSign
     compilerError = error instanceof Error ? error.message : "prompt compiler failed"
   }
 
+  // Build one deterministic semantic plan from both the original request and
+  // the multilingual compiler output. This stage recovers common typo/accent
+  // noise, locks count/colors/settings/text, and becomes the single source of
+  // truth for every provider and fallback below.
+  const intent = buildImageIntentPlan(input.prompt, compiled, input.mode)
+
   return {
-    strictPrompt: buildUnifiedStrictImagePrompt(compiled, input.prompt, input.mode),
-    negativePrompt: buildUnifiedNegativePrompt(input.prompt),
+    intent,
+    strictPrompt: buildUnifiedStrictImagePrompt(compiled, input.prompt, input.mode, intent),
+    negativePrompt: buildUnifiedNegativePrompt(input.prompt, compiled, input.mode, intent),
     compilerError,
   }
 }
@@ -56,9 +64,9 @@ export async function routeImageGeneration(
   const errors: string[] = []
   const requestedModelId = input.modelId
 
-  // Compile exactly ONCE. Every image model and every fallback below receives
-  // this same locked prompt. Providers are not allowed to append their own
-  // semantic rewrite, translation, subject substitution or style instruction.
+  // Compile and lock intent exactly ONCE. Selected model + every fallback receive
+  // the same semantic contract, fingerprint and exclusions. No provider may
+  // independently reinterpret Russian/Kazakh/English or mixed/noisy wording.
   const prepared = await prepareStrictPrompt(input, options?.signal)
   if (prepared.compilerError) errors.push(`prompt-compiler: ${prepared.compilerError}`)
 
