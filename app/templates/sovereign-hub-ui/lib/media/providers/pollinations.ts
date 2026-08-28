@@ -5,6 +5,7 @@ const SIZE_MAP: Record<ImageAspectRatio, { width: number; height: number }> = {
   "1:1": { width: 1024, height: 1024 },
   "16:9": { width: 1280, height: 720 },
   "9:16": { width: 720, height: 1280 },
+  "4:3": { width: 1152, height: 864 },
   "4:5": { width: 864, height: 1080 },
 }
 
