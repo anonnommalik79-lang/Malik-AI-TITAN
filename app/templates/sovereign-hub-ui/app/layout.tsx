@@ -40,6 +40,8 @@ import "./plugin-pure-black-final.css"
 import "./malik-black-neutral-ultimate.css"
 // Last of all: eliminate blue/navy UI paint on desktop and mobile.
 import "./malik-zero-blue-final.css"
+// Exact user-provided Uber wordmark for Taxi. Must load last so no legacy SVG paint can win.
+import "./uber-wordmark-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
