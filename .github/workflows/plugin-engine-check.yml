@@ -36,3 +36,6 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Live production GitHub plugin smoke test
+        run: bash scripts/prod-plugin-smoke.sh
