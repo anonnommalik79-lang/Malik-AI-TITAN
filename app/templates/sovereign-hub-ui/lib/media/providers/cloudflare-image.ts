@@ -91,14 +91,14 @@ async function callCloudflare(model: string, init: RequestInit, signal?: AbortSi
     else signal.addEventListener("abort", abort, { once: true })
   }
 
+  const headers = new Headers(init.headers)
+  headers.set("authorization", `Bearer ${token}`)
+
   const timer = setTimeout(() => controller.abort(), imageProviderTimeoutMs())
   try {
     return await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`, {
       ...init,
-      headers: {
-        authorization: `Bearer ${token}`,
-        ...(init.headers || {}),
-      },
+      headers,
       signal: controller.signal,
       cache: "no-store",
     })
