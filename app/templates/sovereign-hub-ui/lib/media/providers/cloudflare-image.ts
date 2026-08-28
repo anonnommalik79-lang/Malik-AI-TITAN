@@ -6,7 +6,17 @@ import {
 import { imageProviderTimeoutMs } from "../config"
 import type { ImageAspectRatio, ImageMode } from "../types"
 
-const PROMPT_COMPILER_MODEL = process.env.CLOUDFLARE_IMAGE_PROMPT_MODEL?.trim() || "@cf/zai-org/glm-4.7-flash"
+const DEFAULT_PROMPT_COMPILER_MODELS = [
+  "@cf/zai-org/glm-4.7-flash",
+  "@cf/qwen/qwen3-30b-a3b-fp8",
+] as const
+
+function promptCompilerModels(): string[] {
+  const requested = process.env.CLOUDFLARE_IMAGE_PROMPT_MODEL?.trim()
+  return [requested, ...DEFAULT_PROMPT_COMPILER_MODELS]
+    .filter((value): value is string => Boolean(value))
+    .filter((value, index, list) => list.indexOf(value) === index)
+}
 
 function cloudflareAccountId(): string {
   return (
@@ -83,8 +93,66 @@ function modeInstruction(mode?: ImageMode) {
   if (mode === "realistic") return "Render as a believable photorealistic photograph unless the user explicitly requests another style."
   if (mode === "product") return "Prioritize clean product presentation, accurate materials, readable hierarchy, and controlled studio composition."
   if (mode === "design") return "Prioritize graphic-design precision, clean layout, legible requested text, and exact visual hierarchy."
-  if (mode === "cinematic") return "Prioritize cinematic composition and lighting without changing the requested subject or scene."
+  if (mode === "cinematic") return "Use cinematic composition and lighting, but never change the requested subject, action, setting, count, or identity."
   return ""
+}
+
+function normalizeVisualRequest(value: string) {
+  return String(value || "")
+    .replace(/^\s*\/(?:image|img|photo|foto|фото|картинка)(?![\p{L}\p{N}_])\s*:?\s*/iu, "")
+    .replace(/^\s*(?:привет|салам|здравствуй(?:те)?|hello|hi|hey)[,!\s—-]*/iu, "")
+    .replace(/^\s*(?:пожалуйста|please)[,!\s—-]*/iu, "")
+    .replace(/^\s*(?:сгенерируй|сгенерировать|создай|создать|нарисуй|нарисовать|сделай|сделать|generate|create|draw|make)\s+(?:мне\s+)?/iu, "")
+    .trim()
+}
+
+function normalizeCompilerOutput(value: string) {
+  return String(value || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, " ")
+    .replace(/^```(?:text|json|markdown)?\s*/i, "")
+    .replace(/```$/i, "")
+    .replace(/^\s*(?:final\s+)?(?:image\s+)?prompt\s*:\s*/i, "")
+    .replace(/^\s*["'“”]+|["'“”]+\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function compilerOutputUsable(value: string) {
+  const text = normalizeCompilerOutput(value)
+  if (text.length < 12) return false
+  if (/\b(?:i cannot|i can't|unable to|sorry|as an ai|не могу|извините|отказываюсь)\b/i.test(text)) return false
+  return true
+}
+
+function subjectGuard(source: string) {
+  const lower = source.toLowerCase()
+  const asksHuman = /\b(?:person|people|man|woman|boy|girl|human|portrait)\b/i.test(lower)
+    || /(?:человек|люд|мужчин|женщин|девуш|парен|мальчик|девоч)/iu.test(lower)
+
+  if (/(?:трансформ|робот|android|mecha|transformer|robot)/iu.test(lower) && !asksHuman) {
+    return "MANDATORY SUBJECT: the main visible subject is a non-human humanoid transformer/robot. Do not replace it with a woman, man, child, portrait, animal, or unrelated object."
+  }
+
+  if (/(?:машин|автомоб|car|vehicle|sports car)/iu.test(lower) && !asksHuman) {
+    return "MANDATORY SUBJECT: the requested vehicle must be clearly visible as the main subject. Do not replace it with a human portrait or unrelated scene."
+  }
+
+  if (/(?:футболист|football player|soccer player)/iu.test(lower)) {
+    return "MANDATORY SUBJECT: a football player must be clearly visible as the main subject, with the requested action and setting preserved."
+  }
+
+  return ""
+}
+
+function subjectNegativePrompt(source: string) {
+  const base = "unrelated subject, random scene, wrong object, duplicated subject, wrong count, wrong text, misspelled text, watermark, random logo, malformed anatomy, distorted geometry, low detail"
+  const lower = source.toLowerCase()
+  const asksHuman = /\b(?:person|people|man|woman|boy|girl|human|portrait)\b/i.test(lower)
+    || /(?:человек|люд|мужчин|женщин|девуш|парен|мальчик|девоч)/iu.test(lower)
+  if (/(?:трансформ|робот|android|mecha|transformer|robot)/iu.test(lower) && !asksHuman) {
+    return `${base}, woman, girl, man, boy, human portrait, fashion portrait`
+  }
+  return base
 }
 
 async function callCloudflare(model: string, init: RequestInit, signal?: AbortSignal) {
@@ -118,63 +186,81 @@ async function callCloudflare(model: string, init: RequestInit, signal?: AbortSi
   }
 }
 
-async function compilePrompt(rawPrompt: string, mode?: ImageMode, signal?: AbortSignal): Promise<string> {
-  const source = String(rawPrompt || "").trim().slice(0, 4000)
-  if (!source) return source
+async function compileWithModel(model: string, source: string, mode?: ImageMode, signal?: AbortSignal) {
+  const response = await callCloudflare(
+    model,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: "system",
+            content: [
+              "You are a lossless text-to-image prompt compiler for Russian, Kazakh and English users.",
+              "Convert the user's request into ONE concise natural-English prompt for an image generator.",
+              "The image must depict exactly the requested subject, action, setting, count, identity, pose, colors, materials, camera view and style.",
+              "Never substitute the requested subject category: robot stays robot, vehicle stays vehicle, animal stays animal, person stays person.",
+              "Remove greetings and command words such as hello, please, generate, create, draw, but preserve every visual requirement.",
+              "If the user requests visible text, keep that text verbatim in its original language and spelling.",
+              "Do not invent extra people, scenery, props, brands, logos, text or objects.",
+              modeInstruction(mode),
+              "Return ONLY the final English image prompt. No analysis, no markdown, no labels, no quotation marks.",
+            ].filter(Boolean).join(" "),
+          },
+          { role: "user", content: source },
+        ],
+        max_completion_tokens: 700,
+        temperature: 0,
+      }),
+    },
+    signal,
+  )
 
+  if (!response.ok) throw new Error(`Prompt compiler ${model} returned ${response.status}`)
+  const payload = await response.json().catch(() => ({}))
+  return normalizeCompilerOutput(extractText(payload))
+}
+
+export async function compileImagePrompt(rawPrompt: string, mode?: ImageMode, signal?: AbortSignal): Promise<string> {
+  const raw = String(rawPrompt || "").trim().slice(0, 4000)
+  if (!raw) return raw
+
+  const source = normalizeVisualRequest(raw) || raw
   let translated = source
-  if (hasCyrillic(source) && cloudflareImageConfigured()) {
-    try {
-      const response = await callCloudflare(
-        PROMPT_COMPILER_MODEL,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            messages: [
-              {
-                role: "system",
-                content: [
-                  "You are a lossless image-prompt compiler for Russian and Kazakh users.",
-                  "Translate the user's visual request into concise natural English for a text-to-image model.",
-                  "Do not invent, remove, soften, or replace requested visual details.",
-                  "Preserve exact counts, colors, materials, identities, names, brands, camera instructions, left/right/top/bottom positions, foreground/background relations, poses, actions, ages and visual style.",
-                  "If the user requests visible text, lettering, a title, a sign, UI copy, a logo wordmark, or quotes any text, preserve that visible text VERBATIM in its original language and spelling; do not translate the text that must appear inside the image.",
-                  "Never add decorative objects, people, vehicles, text, logos, watermarks or scenery that the user did not request.",
-                  "Return ONLY the final image prompt. No explanation, no markdown, no quotation wrapper.",
-                ].join(" "),
-              },
-              { role: "user", content: source },
-            ],
-            max_tokens: 900,
-            temperature: 0.05,
-          }),
-        },
-        signal,
-      )
 
-      if (response.ok) {
-        const payload = await response.json().catch(() => ({}))
-        translated = extractText(payload) || source
+  if (hasCyrillic(source) && cloudflareImageConfigured()) {
+    for (const model of promptCompilerModels()) {
+      try {
+        const candidate = await compileWithModel(model, source, mode, signal)
+        if (compilerOutputUsable(candidate)) {
+          translated = candidate
+          break
+        }
+      } catch {
+        // Try the next multilingual compiler. Never silently accept a broken rewrite.
       }
-    } catch {
-      translated = source
     }
   }
 
-  const exactness = [
-    "STRICT FIDELITY RULES:",
-    "Follow the user's requested subject and composition exactly.",
-    "Preserve object counts, colors, positions, spatial relationships, identities, poses and actions.",
-    "Do not add unrequested people, objects, vehicles, words, logos, watermarks or background elements.",
-    "Any requested visible text must be spelled exactly as specified.",
-    "Keep anatomy, perspective, geometry, lighting and materials coherent and high quality.",
+  const guard = subjectGuard(source)
+  const fidelity = [
+    "STRICT FIDELITY:",
+    "depict the requested main subject clearly and prominently;",
+    "preserve the requested action and setting exactly;",
+    "do not replace the subject with an unrelated person, animal, object or scene;",
+    "do not add unrequested subjects or text.",
   ].join(" ")
 
-  return [translated, modeInstruction(mode), exactness].filter(Boolean).join("\n\n")
+  return [
+    `PRIMARY IMAGE REQUEST: ${translated}`,
+    guard,
+    modeInstruction(mode),
+    fidelity,
+  ].filter(Boolean).join("\n\n")
 }
 
-function jsonRequestBody(modelId: MalikImageModelId, prompt: string, width: number, height: number) {
+function jsonRequestBody(modelId: MalikImageModelId, prompt: string, width: number, height: number, rawPrompt: string) {
   if (modelId === "flux-schnell") {
     return {
       prompt,
@@ -187,9 +273,9 @@ function jsonRequestBody(modelId: MalikImageModelId, prompt: string, width: numb
       prompt,
       width,
       height,
-      guidance: numericEnv("MALIK_IMAGE_PHOENIX_GUIDANCE", 7, 2, 10),
-      num_steps: Math.round(numericEnv("MALIK_IMAGE_PHOENIX_STEPS", 25, 1, 50)),
-      negative_prompt: "unrequested objects, extra people, duplicated subjects, wrong count, wrong text, misspelled text, watermark, random logo, malformed anatomy, distorted geometry, low detail",
+      guidance: numericEnv("MALIK_IMAGE_PHOENIX_GUIDANCE", 8.5, 2, 10),
+      num_steps: Math.round(numericEnv("MALIK_IMAGE_PHOENIX_STEPS", 30, 1, 50)),
+      negative_prompt: subjectNegativePrompt(rawPrompt),
     }
   }
 
@@ -197,8 +283,8 @@ function jsonRequestBody(modelId: MalikImageModelId, prompt: string, width: numb
     prompt,
     width,
     height,
-    guidance: numericEnv("MALIK_IMAGE_LUCID_GUIDANCE", 7, 0, 10),
-    num_steps: Math.round(numericEnv("MALIK_IMAGE_LUCID_STEPS", 28, 1, 40)),
+    guidance: numericEnv("MALIK_IMAGE_LUCID_GUIDANCE", 8.5, 0, 10),
+    num_steps: Math.round(numericEnv("MALIK_IMAGE_LUCID_STEPS", 30, 1, 40)),
   }
 }
 
@@ -221,7 +307,7 @@ export async function generateCloudflareImage({
 
   const model = getMalikImageModel(modelId)
   const { width, height } = imageSize(aspectRatio)
-  const compiledPrompt = await compilePrompt(prompt, mode, signal)
+  const compiledPrompt = await compileImagePrompt(prompt, mode, signal)
 
   let response: Response
   if (model.requestKind === "multipart") {
@@ -231,14 +317,11 @@ export async function generateCloudflareImage({
     form.append("height", String(height))
 
     if (modelId === "flux-klein-4b") {
-      form.append("guidance", String(numericEnv("MALIK_IMAGE_KLEIN_GUIDANCE", 4.5, 0, 10)))
+      form.append("guidance", String(numericEnv("MALIK_IMAGE_KLEIN_GUIDANCE", 7.5, 0, 10)))
     }
     if (modelId === "malik-image-1-premium") {
-      // FLUX.2 Dev is intentionally slower than the fast models. Sixteen steps
-      // keeps MalikImage 1.0 in the premium quality lane while avoiding the
-      // long mobile request that previously ended as Safari "Load failed".
       form.append("steps", String(Math.round(numericEnv("MALIK_IMAGE_DEV_STEPS", 16, 1, 50))))
-      form.append("guidance", String(numericEnv("MALIK_IMAGE_DEV_GUIDANCE", 5, 0, 10)))
+      form.append("guidance", String(numericEnv("MALIK_IMAGE_DEV_GUIDANCE", 7, 0, 10)))
     }
 
     response = await callCloudflare(model.providerModel, { method: "POST", body: form }, signal)
@@ -248,7 +331,7 @@ export async function generateCloudflareImage({
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(jsonRequestBody(modelId, compiledPrompt, width, height)),
+        body: JSON.stringify(jsonRequestBody(modelId, compiledPrompt, width, height, prompt)),
       },
       signal,
     )
