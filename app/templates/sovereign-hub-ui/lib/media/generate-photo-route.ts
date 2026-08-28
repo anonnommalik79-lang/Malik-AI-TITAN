@@ -13,6 +13,7 @@ import type { ImageAspectRatio, ImageMode } from "./types"
 
 const ASPECTS = new Set<ImageAspectRatio>(["1:1", "16:9", "9:16", "4:5", "4:3"])
 const MODES = new Set<ImageMode>(["cinematic", "realistic", "product", "design"])
+const IMAGE_COMMAND = /^\s*\/(?:image|img|photo|foto|фото|картинка)(?![\p{L}\p{N}_])\s*:?\s*/iu
 
 function cookieValue(request: Request, name: string): string {
   const raw = request.headers.get("cookie") || ""
@@ -28,9 +29,15 @@ function cookieValue(request: Request, name: string): string {
   return ""
 }
 
+function normalizeImagePrompt(value: unknown): string {
+  return String(value || "").replace(IMAGE_COMMAND, "").trim()
+}
+
 export async function handleMalikPhotoGenerationRequest(request: Request) {
   const body = await request.json().catch(() => ({}))
-  const prompt = String(body?.prompt || body?.message || "").trim()
+  // The chat dashboard deliberately carries /image as explicit media consent.
+  // Remove only that transport command; the user's real visual request remains untouched.
+  const prompt = normalizeImagePrompt(body?.prompt || body?.message)
   const aspectRatio = ASPECTS.has(body?.aspectRatio) ? body.aspectRatio : "1:1"
   const requestedMode = String(body?.mode || body?.style || "").toLowerCase()
   const mode: ImageMode = MODES.has(requestedMode as ImageMode) ? requestedMode as ImageMode : "cinematic"
