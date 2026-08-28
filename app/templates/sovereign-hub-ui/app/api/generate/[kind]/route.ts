@@ -1,5 +1,6 @@
 import { handleGenerateRequest } from "@/lib/generation-route"
 import { handleMalikPhotoGenerationRequest } from "@/lib/media/generate-photo-route"
+import { handleSkillWebsiteGenerationRequest } from "@/lib/sites/generate-site-route"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 import { generationComputeOperation } from "@/lib/malik-compute/policies"
@@ -137,11 +138,13 @@ async function handlePOST(request: Request, context: RouteContext) {
 
   try {
     const startedAt = Date.now()
-    // Image requests from the chat/home composer use the user's explicitly
-    // selected Malik image model (cookie/modelId), including Premium gating.
+    // Photo and Sites have dedicated product pipelines. Everything else keeps
+    // using the shared generation core.
     const response = kind === "photo"
       ? await handleMalikPhotoGenerationRequest(request)
-      : await handleGenerateRequest(request, kind)
+      : kind === "website"
+        ? await handleSkillWebsiteGenerationRequest(request)
+        : await handleGenerateRequest(request, kind)
     const wrapped = withCors(response, kind, id)
     wrapped.headers.set("X-Malik-Duration-Ms", String(Date.now() - startedAt))
     return wrapped
@@ -190,7 +193,11 @@ export async function GET(request: Request, context: RouteContext) {
         quality: "optional quality profile",
         modelId: "optional Malik image model id for photo generation",
       },
-      delegatedTo: kind === "photo" ? "handleMalikPhotoGenerationRequest(request)" : "handleGenerateRequest(request, kind)",
+      delegatedTo: kind === "photo"
+        ? "handleMalikPhotoGenerationRequest(request)"
+        : kind === "website"
+          ? "handleSkillWebsiteGenerationRequest(request)"
+          : "handleGenerateRequest(request, kind)",
     },
   }, { status: 200 }, id, kind)
 }
