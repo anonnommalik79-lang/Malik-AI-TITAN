@@ -1,0 +1,58 @@
+/* Final plugin-market surface authority.
+ * The plugins page must be pure black: no Titan gold aura, gradients, or
+ * inherited decorative pseudo-elements. Cards keep their own dark surfaces.
+ */
+html:has(.malik-plugin-market),
+body:has(.malik-plugin-market),
+body:has(.malik-plugin-market) #malik-root,
+body:has(.malik-plugin-market) .malik-dashboard-shell,
+body:has(.malik-plugin-market) .malik-dashboard-shell main,
+body:has(.malik-plugin-market) .titan-main,
+body:has(.malik-plugin-market) .titan-content,
+body:has(.malik-plugin-market) .malik-dashboard-content {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+}
+
+body:has(.malik-plugin-market) #malik-root::before,
+body:has(.malik-plugin-market) #malik-root::after,
+body:has(.malik-plugin-market) .malik-dashboard-shell::before,
+body:has(.malik-plugin-market) .malik-dashboard-shell::after,
+body:has(.malik-plugin-market) .malik-dashboard-shell main::before,
+body:has(.malik-plugin-market) .malik-dashboard-shell main::after,
+body:has(.malik-plugin-market) .titan-main::before,
+body:has(.malik-plugin-market) .titan-main::after,
+body:has(.malik-plugin-market) .titan-content::before,
+body:has(.malik-plugin-market) .titan-content::after {
+  display: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+.malik-plugin-market {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  isolation: isolate;
+}
+
+.malik-plugin-market::before,
+.malik-plugin-market::after {
+  display: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+.malik-plugin-market .plugin-market-shell,
+.malik-plugin-market .plugin-section,
+.malik-plugin-market .plugin-section-featured,
+.malik-plugin-market .plugin-grid,
+.malik-plugin-market .plugin-grid-featured {
+  background: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
