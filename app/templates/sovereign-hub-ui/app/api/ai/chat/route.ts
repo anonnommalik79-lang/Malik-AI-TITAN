@@ -1,4 +1,5 @@
 import { asJson, malikGodAnswer } from "@/lib/malik-god-router"
+import { parsePluginCommandFromBody, runMalikPlugin } from "@/lib/server/plugin-runtime"
 import {
   MalikModelRouteError,
   malikModelErrorPayload,
@@ -10,6 +11,22 @@ export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
+
+  // Plugin commands are intentionally intercepted before the model router.
+  // This makes a selected plugin a real server-side tool call instead of a
+  // decorative prompt that hallucinates access to an external service.
+  const pluginCommand = parsePluginCommandFromBody(body)
+  if (pluginCommand) {
+    const result = await runMalikPlugin(pluginCommand.id, pluginCommand.query)
+    return Response.json(result, {
+      headers: {
+        "cache-control": "no-store",
+        "x-malik-router": "plugin-runtime-v1",
+        "x-malik-plugin": result.pluginId,
+      },
+    })
+  }
+
   try {
     const selection = await resolveStrictMalikSelection(request, body)
     const answer = await malikGodAnswer(body, selection ? { modelId: selection.modelId } : undefined)
@@ -27,5 +44,5 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  return Response.json({ ok: true, route: "/api/ai/chat", router: "MALIK GITHUB + OPENROUTER + DEEPSEEK V13" })
+  return Response.json({ ok: true, route: "/api/ai/chat", router: "MALIK GITHUB + OPENROUTER + DEEPSEEK V13 + PLUGINS" })
 }
