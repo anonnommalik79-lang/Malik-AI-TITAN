@@ -2,13 +2,18 @@ import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 
 const WORKOS_API = "https://api.workos.com"
 
-type PipesProvider = {
+export type PipesProvider = {
   slug?: string
   name?: string
+  auth_methods?: string[]
+  credentials_type?: string
+  scopes?: string[]
   connected_account?: {
     id?: string
     state?: string
     scopes?: string[]
+    auth_method?: string
+    api_key_last_4?: string | null
   } | null
 }
 
@@ -59,7 +64,8 @@ export async function getPipesProviderState(userId: string, providerSlug: string
   const providers = await listPipesProviders(userId)
   const provider = providers.find((item) => item?.slug === providerSlug) || null
   const connected = provider?.connected_account?.state === "connected"
-  return { provider, configured: Boolean(provider), connected }
+  const authMethods = Array.isArray(provider?.auth_methods) ? provider.auth_methods : []
+  return { provider, configured: Boolean(provider), connected, authMethods }
 }
 
 export async function createPipesAuthorization(userId: string, providerSlug: string, returnTo?: string) {
@@ -77,6 +83,28 @@ export async function createPipesAuthorization(userId: string, providerSlug: str
     throw new Error(reason)
   }
   return url
+}
+
+/**
+ * Stores a user-supplied API key in WorkOS Pipes/Vault. The key is accepted by
+ * our server route, forwarded once to WorkOS over HTTPS and is never persisted
+ * in Malik AI localStorage, cookies, logs, or database.
+ */
+export async function upsertPipesApiKey(userId: string, providerSlug: string, secret: string) {
+  const cleanSecret = String(secret || "").trim()
+  if (!cleanSecret) throw new Error("API key is required")
+  if (cleanSecret.length > 8192) throw new Error("API key is too long")
+
+  const { response, payload } = await workosFetch(`/data-integrations/${encodeURIComponent(providerSlug)}/api-key`, {
+    method: "PUT",
+    body: JSON.stringify({ user_id: userId, secret: cleanSecret }),
+  })
+
+  if (!response.ok) {
+    const reason = String(payload?.message || payload?.error || `WorkOS Pipes returned ${response.status}`)
+    throw new Error(reason)
+  }
+  return payload
 }
 
 /**
