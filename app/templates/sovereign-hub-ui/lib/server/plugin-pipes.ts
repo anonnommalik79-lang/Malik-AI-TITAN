@@ -25,13 +25,19 @@ type PipesCredential = {
   error?: string
 }
 
+/**
+ * Pipes can use a dedicated WorkOS API key from the SAME WorkOS environment.
+ * This keeps plugin traffic isolated from AuthKit traffic while preserving the
+ * same WorkOS user IDs. Falling back to WORKOS_API_KEY keeps existing deploys
+ * working until WORKOS_PIPES_API_KEY is added in Render.
+ */
 function apiKey() {
-  return String(process.env.WORKOS_API_KEY || "").trim()
+  return String(process.env.WORKOS_PIPES_API_KEY || process.env.WORKOS_API_KEY || "").trim()
 }
 
 async function workosFetch(path: string, init: RequestInit = {}) {
   const key = apiKey()
-  if (!key) throw new Error("WORKOS_API_KEY is not configured")
+  if (!key) throw new Error("WORKOS_PIPES_API_KEY / WORKOS_API_KEY is not configured")
 
   const response = await fetch(`${WORKOS_API}${path}`, {
     ...init,
