@@ -1,4 +1,36 @@
 /* Final mobile-auth color authority: registration lives on true black. */
+/* Scoped to this screen: no gold overlays from shared workspace/hero styles. */
+main.sma-root[data-auth-surface="black"],
+main.sma-root[data-auth-surface="black"] .sma-hero,
+main.sma-root[data-auth-surface="black"] .sma-auth-panel {
+  background: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  mix-blend-mode: normal !important;
+  opacity: 1 !important;
+}
+
+main.sma-root[data-auth-surface="black"] {
+  isolation: isolate;
+}
+
+main.sma-root[data-auth-surface="black"]::before,
+main.sma-root[data-auth-surface="black"]::after,
+main.sma-root[data-auth-surface="black"] .sma-hero::before,
+main.sma-root[data-auth-surface="black"] .sma-hero::after,
+main.sma-root[data-auth-surface="black"] .sma-auth-panel::before,
+main.sma-root[data-auth-surface="black"] .sma-auth-panel::after,
+main.sma-root[data-auth-surface="black"] .sma-typewriter::before,
+main.sma-root[data-auth-surface="black"] .sma-typewriter::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+
 @media (max-width: 767px), (max-height: 500px) and (pointer: coarse) {
   .sma-root,
   .sma-hero,

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import "./sovereign-mobile-auth.css";
+import "./sovereign-mobile-auth-black.css";
 
 const PHRASES = [
   "Давайте изучать",
@@ -81,7 +82,7 @@ export function SovereignMobileRegister() {
     ) return false;
 
     try {
-      if (!audioRef.current) {
+      if (!audioRef.current || audioRef.current.state === "closed") {
         const AudioCtor =
           window.AudioContext ||
           (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -93,9 +94,9 @@ export function SovereignMobileRegister() {
         const compressor = ctx.createDynamicsCompressor();
         const toneFilter = ctx.createBiquadFilter();
 
-        master.gain.value = 0.27;
+        master.gain.value = 0.32;
         toneFilter.type = "lowpass";
-        toneFilter.frequency.value = 960;
+        toneFilter.frequency.value = 3600;
         toneFilter.Q.value = 0.42;
 
         compressor.threshold.value = -20;
@@ -135,6 +136,7 @@ export function SovereignMobileRegister() {
       !armedRef.current ||
       !ctx ||
       !master ||
+      document.visibilityState === "hidden" ||
       ctx.state !== "running"
     ) return;
 
@@ -146,8 +148,9 @@ export function SovereignMobileRegister() {
         const bodyGain = ctx.createGain();
 
         body.type = "sine";
-        body.frequency.setValueAtTime(238, at);
-        body.frequency.exponentialRampToValueAtTime(184, at + 0.016);
+        // A short midrange tap stays audible on small phone speakers.
+        body.frequency.setValueAtTime(780, at);
+        body.frequency.exponentialRampToValueAtTime(420, at + 0.016);
         bodyGain.gain.setValueAtTime(0.0001, at);
         bodyGain.gain.exponentialRampToValueAtTime(0.078 * level, at + 0.001);
         bodyGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.021);
@@ -155,13 +158,14 @@ export function SovereignMobileRegister() {
         bodyGain.connect(master);
         body.start(at);
         body.stop(at + 0.023);
+        body.onended = () => { body.disconnect(); bodyGain.disconnect(); };
 
         const edge = ctx.createOscillator();
         const edgeGain = ctx.createGain();
 
         edge.type = "triangle";
-        edge.frequency.setValueAtTime(360, at);
-        edge.frequency.exponentialRampToValueAtTime(288, at + 0.0065);
+        edge.frequency.setValueAtTime(2200, at);
+        edge.frequency.exponentialRampToValueAtTime(1100, at + 0.0065);
         edgeGain.gain.setValueAtTime(0.0001, at);
         edgeGain.gain.exponentialRampToValueAtTime(0.022 * level, at + 0.0007);
         edgeGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.008);
@@ -169,6 +173,7 @@ export function SovereignMobileRegister() {
         edgeGain.connect(master);
         edge.start(at);
         edge.stop(at + 0.009);
+        edge.onended = () => { edge.disconnect(); edgeGain.disconnect(); };
       };
 
       microTap(now, 1);
@@ -232,11 +237,11 @@ export function SovereignMobileRegister() {
     // iPhone Safari requires a real user gesture before WebAudio can become audible.
     // Resume inside that gesture and restart the phrase only after the context runs,
     // so the visible letters and the character sound are synchronized.
-    gestureUnlockedRef.current = true;
     armedRef.current = true;
     const running = await ensureAudio();
 
     if (running && !feedbackStoppedRef.current) {
+      gestureUnlockedRef.current = true;
       setRestartKey((value) => value + 1);
     }
   }, [ensureAudio]);
@@ -268,6 +273,7 @@ export function SovereignMobileRegister() {
 
   useEffect(() => {
     phoneFeedbackRef.current = isPhoneFeedbackDevice();
+    feedbackStoppedRef.current = false;
 
     if (!phoneFeedbackRef.current) {
       // Desktop and laptop stay completely silent.
@@ -351,6 +357,10 @@ export function SovereignMobileRegister() {
       try {
         toneFilterRef.current?.disconnect();
         void audioRef.current?.close();
+        audioRef.current = null;
+        masterRef.current = null;
+        toneFilterRef.current = null;
+        gestureUnlockedRef.current = false;
       } catch {
         // no-op
       }
@@ -386,6 +396,7 @@ export function SovereignMobileRegister() {
   return (
     <main
       className="sma-root"
+      data-auth-surface="black"
       aria-label="Malik AI mobile authentication"
       onTouchStartCapture={(event) => handleFeedbackGesture(event.target)}
       onPointerDownCapture={(event) => handleFeedbackGesture(event.target)}
