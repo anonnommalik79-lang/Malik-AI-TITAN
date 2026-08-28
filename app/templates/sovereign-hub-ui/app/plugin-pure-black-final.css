@@ -56,3 +56,186 @@ body:has(.malik-plugin-market) .titan-content::after {
   background-image: none !important;
   box-shadow: none !important;
 }
+
+/* ==========================================================================
+   FINAL PHONE SURFACE LOCK
+   This stylesheet is imported last from app/layout.tsx. Keep all phone-only
+   surface corrections here so older aurora/mobile rules cannot win later.
+   ========================================================================== */
+@media (max-width: 767px) {
+  /* Auth: hard OLED black. No gold/yellow aura, blur, gradient or blending. */
+  html:has(.malik-auth-page),
+  body:has(.malik-auth-page),
+  body:has(.malik-auth-page) #malik-root,
+  .malik-auth-page,
+  .sma-root,
+  .sma-hero,
+  .sma-auth-panel {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    mix-blend-mode: normal !important;
+  }
+
+  .sma-root {
+    isolation: isolate !important;
+    opacity: 1 !important;
+  }
+
+  html:has(.malik-auth-page)::before,
+  html:has(.malik-auth-page)::after,
+  body:has(.malik-auth-page)::before,
+  body:has(.malik-auth-page)::after,
+  body:has(.malik-auth-page) #malik-root::before,
+  body:has(.malik-auth-page) #malik-root::after,
+  .malik-auth-page::before,
+  .malik-auth-page::after,
+  .sma-root::before,
+  .sma-root::after,
+  .sma-hero::before,
+  .sma-hero::after,
+  .sma-auth-panel::before,
+  .sma-auth-panel::after,
+  .sma-typewriter::before,
+  .sma-typewriter::after {
+    content: none !important;
+    display: none !important;
+    opacity: 0 !important;
+    background: none !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  body:has(.malik-auth-page) #malik-investor-aurora {
+    display: none !important;
+  }
+
+  .sma-typewriter,
+  .sma-type-text,
+  .sma-type-dot {
+    text-shadow: none !important;
+    filter: none !important;
+  }
+
+  /* Home: let the composer reach both phone edges with one small safe gutter. */
+  #malik-root .malik-dashboard-shell .thome-inner {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-launcher {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome {
+    width: 100% !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer,
+  #malik-root .malik-dashboard-shell .thome-composer:focus-within {
+    width: 100% !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Plugins: neutral black/charcoal only. Kill inherited navy surfaces. */
+  body:has(.malik-plugin-market),
+  body:has(.malik-plugin-market) #malik-root,
+  body:has(.malik-plugin-market) .malik-dashboard-shell,
+  body:has(.malik-plugin-market) .malik-dashboard-shell main,
+  #malik-root .malik-plugin-market,
+  #malik-root .malik-plugin-market .plugin-market-shell,
+  #malik-root .malik-plugin-market .plugin-market-header,
+  #malik-root .malik-plugin-market .plugin-market-toolbar,
+  #malik-root .malik-plugin-market .plugin-filter-row,
+  #malik-root .malik-plugin-market .plugin-section,
+  #malik-root .malik-plugin-market .plugin-section-head,
+  #malik-root .malik-plugin-market .plugin-grid,
+  #malik-root .malik-plugin-market .plugin-grid-featured {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .malik-plugin-market .plugin-search,
+  #malik-root .malik-plugin-market .plugin-search:focus-within {
+    background: #181818 !important;
+    background-color: #181818 !important;
+    background-image: none !important;
+    border-color: rgba(255, 255, 255, 0.09) !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .malik-plugin-market .plugin-market-count,
+  #malik-root .malik-plugin-market .plugin-card {
+    background: #141414 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Library: same black canvas as desktop; search/cards stay neutral charcoal. */
+  body:has(.mtpl-shell),
+  body:has(.mtpl-shell) #malik-root,
+  body:has(.mtpl-shell) .malik-dashboard-shell,
+  body:has(.mtpl-shell) .malik-dashboard-shell main,
+  #malik-root .mtpl-shell,
+  #malik-root .mtpl-content,
+  #malik-root .mtpl-header,
+  #malik-root .mtpl-heading,
+  #malik-root .mtpl-controls,
+  #malik-root .mtpl-filters,
+  #malik-root .mtpl-results-head,
+  #malik-root .mtpl-grid {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .mtpl-shell::before,
+  #malik-root .mtpl-shell::after,
+  #malik-root .mtpl-content::before,
+  #malik-root .mtpl-content::after,
+  #malik-root .mtpl-header::before,
+  #malik-root .mtpl-header::after,
+  #malik-root .mtpl-controls::before,
+  #malik-root .mtpl-controls::after {
+    content: none !important;
+    display: none !important;
+    background: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  #malik-root .mtpl-search,
+  #malik-root .mtpl-search:focus-within {
+    background: #181818 !important;
+    background-color: #181818 !important;
+    background-image: none !important;
+    border-color: rgba(255, 255, 255, 0.09) !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .mtpl-card {
+    background: #141414 !important;
+    background-image: none !important;
+  }
+
+  #malik-root .mtpl-card:hover {
+    background: #181818 !important;
+  }
+
+  #malik-root .mtpl-card-media {
+    background: #0a0a0a !important;
+  }
+}
