@@ -27,24 +27,24 @@ Add these only as private server environment variables (for Render, add them in 
 UBER_CLIENT_ID=
 UBER_CLIENT_SECRET=
 UBER_REDIRECT_URI=https://malikaiworld.world/api/taxi/uber/callback
-UBER_SCOPES=profile request places offline_access
+UBER_SCOPES=profile offline_access ride_request.ride_booking ride_request.place ride_request.estimate
 UBER_TOKEN_ENCRYPTION_KEY=
 UBER_API_MODE=sandbox
 ```
 
 `UBER_TOKEN_ENCRYPTION_KEY` should be a long random secret. Malik AI uses AES-256-GCM before any Uber credential is placed in the HttpOnly session cookie.
 
-If Uber's developer dashboard grants a newer/migrated set of Riders API scopes, set `UBER_SCOPES` to exactly the scopes granted to the app instead of changing application code.
+Uber's current Riders API migration table maps `/v1.2/requests*` to `ride_request.ride_booking`, `/v1.2/places/*` to `ride_request.place`, and product/estimate endpoints to `ride_request.estimate`. Always make `UBER_SCOPES` match the scopes actually granted to the Malik AI application in Uber's developer dashboard.
 
 ## Uber developer app
 
 1. Create/configure an Uber developer application.
 2. Register this exact redirect URL: `https://malikaiworld.world/api/taxi/uber/callback`.
-3. Enable the rider permissions needed for profile, saved places and ride requests.
+3. Enable the rider permissions needed for ride booking, saved places and estimates.
 4. Put the client ID and client secret into the server environment.
 5. Keep `UBER_API_MODE=sandbox` while developing.
 6. Connect the founder/developer Uber account through `/taxi` and test the complete flow.
-7. Request Uber Full Access for the privileged ride-request permission before opening real native booking to all Malik AI users.
+7. Request Uber Full Access for the privileged ride-booking permission before opening real native booking to all Malik AI users.
 8. Only after approval, set `UBER_API_MODE=production`.
 
 ## Product rule
@@ -72,8 +72,8 @@ Taxi
 ## Next safe additions
 
 - Place search/autocomplete for arbitrary destinations without an LLM.
-- Airport templates based on geocoded airport IDs.
+- Airport templates based on a real geocoding/place provider.
 - Favorites stored per Malik user.
-- Receipts from Uber after completed trips.
-- Uber map/tracking endpoint for an in-Malik live map.
+- “Open trip in Uber” deep link for provider-native trip/payment details where Uber requires a handoff.
+- Webhook-backed status updates after registering and verifying Uber's signed webhook endpoint.
 - Optional natural-language route parser only when a rider explicitly chooses “Ask Malik”; quick templates remain zero-token.
