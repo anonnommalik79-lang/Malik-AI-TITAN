@@ -117,6 +117,7 @@ import {
   ShieldCheck
 } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
+import { isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
 import {
   DEFAULT_MALIK_MODEL_ID,
   canUseMalikModel,
@@ -250,6 +251,10 @@ function detectInlineMediaGenerationRequest(
 ): "image" | "video" | null {
   const command = parseMediaCommand(prompt)
   if (command) return command.kind
+
+  // Natural-language photo requests are accepted only when the request is an
+  // explicit CREATE-image intent. Mentioning or discussing photos stays chat.
+  if (isExplicitImageGenerationRequest(prompt)) return "image"
 
   // An explicitly chosen composer mode counts as consent; "auto" never does.
   if (mode === "image") return "image"
