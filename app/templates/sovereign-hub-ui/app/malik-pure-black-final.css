@@ -155,6 +155,36 @@ body:has(.malik-auth-page),
   box-shadow: none !important;
 }
 
+/* Voice mode is a fullscreen canvas, not a dashboard card. Old mobile polish
+   styles target the first <section> and can paint a gray/gradient rectangle
+   behind the orb. These guards remove that panel while preserving the WebGL
+   fog canvas and the circular orb itself. */
+#malik-root section[data-voice-mode],
+#malik-root section[data-voice-mode]:first-of-type,
+#malik-root .malik-dashboard-shell section[data-voice-mode] {
+  background: #030304 !important;
+  background-color: #030304 !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#malik-root section[data-voice-mode] > div,
+#malik-root section[data-voice-mode] > div::before,
+#malik-root section[data-voice-mode] > div::after {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+#malik-root section[data-voice-mode] canvas {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
 @media (max-width: 767px) {
   html,
   body,
@@ -265,5 +295,13 @@ body:has(.malik-auth-page),
   .titan-topbar > .titan-icon-btn:first-child {
     background: #000 !important;
     box-shadow: none !important;
+  }
+
+  #malik-root section[data-voice-mode],
+  #malik-root section[data-voice-mode]:first-of-type {
+    padding: 0 !important;
+    min-height: 100dvh !important;
+    background: #030304 !important;
+    background-image: none !important;
   }
 }
