@@ -1,0 +1,279 @@
+/* MALIK AI — ZERO BLUE UI AUTHORITY
+ * MUST load after every other stylesheet.
+ * UI chrome is black + neutral gray on desktop and mobile.
+ * Brand artwork/images keep their own official colors.
+ */
+
+:root {
+  --background: #000000 !important;
+  --secondary: #1b1b1d !important;
+  --accent: #1b1b1d !important;
+  --muted: #141416 !important;
+  --border: #2b2b2e !important;
+  --input: #242426 !important;
+  --ring: #85858a !important;
+  --sidebar: #050505 !important;
+  --sidebar-accent: #1b1b1d !important;
+  --sidebar-border: #2b2b2e !important;
+  --sidebar-ring: #85858a !important;
+  --chart-1: #8d8d92 !important;
+  --malik-bg: #000000 !important;
+  --malik-phone-blue: #747478 !important;
+  --malik-neutral-control: #1b1b1d !important;
+  --malik-neutral-control-hover: #242426 !important;
+}
+
+html,
+body,
+#malik-root,
+#malik-root > main,
+#malik-root .malik-dashboard-shell,
+#malik-root .malik-dashboard-shell > main,
+#malik-root .malik-main-scroll-host,
+#malik-root .titan-main,
+#malik-root .titan-content,
+#malik-root .malik-dashboard-content,
+#malik-root .malik-mobile-home,
+#malik-root .thome,
+#malik-root .thome-inner,
+#malik-root .thome-launcher,
+#malik-root .malik-ai-chat-bg,
+#malik-root .malik-premium-chat-host,
+#malik-root .malik-chat-legend-bg,
+#malik-root .malik-plugin-market,
+#malik-root .plugin-market-shell,
+#malik-root .mtpl-shell,
+#malik-root .mtpl-content,
+#malik-root .malik-auth-page,
+#malik-root .sma-root,
+#malik-root .sma-hero,
+#malik-root .sma-auth-panel {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+}
+
+/* Any Tailwind UI color token that can paint blue/navy becomes neutral. */
+#malik-root [class*="bg-blue-"],
+#malik-root [class*="bg-cyan-"],
+#malik-root [class*="bg-sky-"],
+#malik-root [class*="bg-indigo-"],
+#malik-root [class*="bg-slate-"] {
+  background: #1b1b1d !important;
+  background-color: #1b1b1d !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+#malik-root [class*="from-blue-"],
+#malik-root [class*="from-cyan-"],
+#malik-root [class*="from-sky-"],
+#malik-root [class*="from-indigo-"],
+#malik-root [class*="from-slate-"],
+#malik-root [class*="via-blue-"],
+#malik-root [class*="via-cyan-"],
+#malik-root [class*="via-sky-"],
+#malik-root [class*="via-indigo-"],
+#malik-root [class*="via-slate-"],
+#malik-root [class*="to-blue-"],
+#malik-root [class*="to-cyan-"],
+#malik-root [class*="to-sky-"],
+#malik-root [class*="to-indigo-"],
+#malik-root [class*="to-slate-"] {
+  --tw-gradient-from: #1b1b1d var(--tw-gradient-from-position) !important;
+  --tw-gradient-via: #202022 var(--tw-gradient-via-position) !important;
+  --tw-gradient-to: #262629 var(--tw-gradient-to-position) !important;
+  background-image: none !important;
+  background-color: #1b1b1d !important;
+}
+
+#malik-root [class*="border-blue-"],
+#malik-root [class*="border-cyan-"],
+#malik-root [class*="border-sky-"],
+#malik-root [class*="border-indigo-"],
+#malik-root [class*="border-slate-"] {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+#malik-root [class*="ring-blue-"],
+#malik-root [class*="ring-cyan-"],
+#malik-root [class*="ring-sky-"],
+#malik-root [class*="ring-indigo-"],
+#malik-root [class*="ring-slate-"] {
+  --tw-ring-color: rgba(255, 255, 255, 0.34) !important;
+}
+
+#malik-root [class*="text-blue-"],
+#malik-root [class*="text-cyan-"],
+#malik-root [class*="text-sky-"],
+#malik-root [class*="text-indigo-"] {
+  color: #b9b9bd !important;
+}
+
+#malik-root [class*="fill-blue-"],
+#malik-root [class*="fill-cyan-"],
+#malik-root [class*="fill-sky-"],
+#malik-root [class*="fill-indigo-"] {
+  fill: #9a9a9f !important;
+}
+
+#malik-root [class*="stroke-blue-"],
+#malik-root [class*="stroke-cyan-"],
+#malik-root [class*="stroke-sky-"],
+#malik-root [class*="stroke-indigo-"] {
+  stroke: #9a9a9f !important;
+}
+
+/* Common arbitrary navy backgrounds used by older screens. */
+#malik-root [class*="bg-[#020617"],
+#malik-root [class*="bg-[#030712"],
+#malik-root [class*="bg-[#05070c"],
+#malik-root [class*="bg-[#0b1020"],
+#malik-root [class*="bg-[#0f172a"],
+#malik-root [class*="bg-[#111827"],
+#malik-root [class*="bg-[#172033"],
+#malik-root [class*="bg-[#1e293b"],
+#malik-root [class*="bg-[#1f2937"] {
+  background: #18181a !important;
+  background-color: #18181a !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* Inline style fallbacks for old components. */
+#malik-root [style*="background"][style*="#020617"],
+#malik-root [style*="background"][style*="#030712"],
+#malik-root [style*="background"][style*="#05070c"],
+#malik-root [style*="background"][style*="#0b1020"],
+#malik-root [style*="background"][style*="#0f172a"],
+#malik-root [style*="background"][style*="#111827"],
+#malik-root [style*="background"][style*="#172033"],
+#malik-root [style*="background"][style*="#1e293b"],
+#malik-root [style*="background"][style*="#1f2937"],
+#malik-root [style*="background"][style*="rgb(2, 6, 23)"],
+#malik-root [style*="background"][style*="rgb(15, 23, 42)"],
+#malik-root [style*="background"][style*="rgb(17, 24, 39)"],
+#malik-root [style*="background"][style*="rgb(30, 41, 59)"],
+#malik-root [style*="background"][style*="rgb(31, 41, 55)"] {
+  background: #18181a !important;
+  background-color: #18181a !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* The exact plugin-search artifact from desktop screenshots. Outer and inner
+ * field are the SAME neutral surface, so no navy rectangle can appear. */
+#malik-root .malik-plugin-market .plugin-search,
+#malik-root .malik-plugin-market .plugin-search:focus-within {
+  background: #18181a !important;
+  background-color: #18181a !important;
+  background-image: none !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+#malik-root .malik-plugin-market .plugin-search input,
+#malik-root .malik-plugin-market .plugin-search input:focus,
+#malik-root .malik-plugin-market .plugin-search input:active {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background: #18181a !important;
+  background-color: #18181a !important;
+  background-image: none !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  color: #efeff1 !important;
+}
+
+#malik-root .malik-plugin-market .plugin-search input:-webkit-autofill,
+#malik-root .malik-plugin-market .plugin-search input:-webkit-autofill:hover,
+#malik-root .malik-plugin-market .plugin-search input:-webkit-autofill:focus,
+#malik-root .malik-plugin-market .plugin-search input:-webkit-autofill:active {
+  -webkit-text-fill-color: #efeff1 !important;
+  caret-color: #efeff1 !important;
+  -webkit-box-shadow: 0 0 0 1000px #18181a inset !important;
+  box-shadow: 0 0 0 1000px #18181a inset !important;
+  transition: background-color 999999s ease-out 0s !important;
+}
+
+/* Native browser interaction colors: never system blue. */
+#malik-root input[type="checkbox"],
+#malik-root input[type="radio"],
+#malik-root input[type="range"],
+#malik-root progress {
+  accent-color: #85858a !important;
+}
+
+#malik-root input:focus,
+#malik-root textarea:focus,
+#malik-root select:focus,
+#malik-root button:focus-visible,
+#malik-root [role="button"]:focus-visible {
+  outline-color: rgba(255, 255, 255, 0.42) !important;
+  --tw-ring-color: rgba(255, 255, 255, 0.30) !important;
+}
+
+#malik-root * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Authentication/registration and overscroll remain true OLED black. */
+html.malik-auth-active,
+body.malik-auth-active,
+html:has(.malik-auth-page),
+body:has(.malik-auth-page),
+body:has(.malik-auth-page) #malik-root,
+#malik-root:has(.malik-auth-page),
+.malik-auth-page,
+.sma-root,
+.sma-hero,
+.sma-auth-panel {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+}
+
+@media (max-width: 767px), (max-height: 500px) and (pointer: coarse) {
+  :root {
+    --malik-phone-bg: #000000 !important;
+    --malik-phone-blue: #747478 !important;
+  }
+
+  html,
+  body,
+  #malik-root,
+  #malik-root .malik-dashboard-shell,
+  #malik-root .malik-dashboard-shell > main,
+  #malik-root .malik-main-scroll-host,
+  #malik-root .titan-main,
+  #malik-root .titan-content,
+  #malik-root .malik-dashboard-content,
+  .malik-auth-page,
+  .sma-root,
+  .sma-hero,
+  .sma-auth-panel {
+    background: #000000 !important;
+    background-color: #000000 !important;
+    background-image: none !important;
+  }
+
+  /* Buttons previously tied to --malik-phone-blue become neutral gray. */
+  #malik-root .malik-voice-entry,
+  #malik-root .malik-inline-composer__right button[aria-label*="Отправ"],
+  #malik-root .malik-inline-composer__right button[aria-label*="голос"] {
+    background: #747478 !important;
+    background-color: #747478 !important;
+    background-image: none !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .malik-plugin-market .plugin-search,
+  #malik-root .malik-plugin-market .plugin-search input {
+    background: #18181a !important;
+    background-color: #18181a !important;
+    background-image: none !important;
+  }
+}
