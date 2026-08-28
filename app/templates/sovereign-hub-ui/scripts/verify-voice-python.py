@@ -14,10 +14,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 import wave
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 source = Path(__file__).resolve().parents[3] / "ai" / "voice_runtime.py"
 tree = ast.parse(source.read_text(encoding="utf-8"))
-functions = {"_env", "_unique", "_speed", "_expressivity", "_language", "_wav_from_pcm16", "_gemini_audio_data", "_gemini_tts", "_should_search_voice", "_voice_search", "_matches_language", "_local_voice_fallback", "voice_turn", "voice_tts"}
+functions = {"_env", "_unique", "_speed", "_expressivity", "_language", "_wav_from_pcm16", "_gemini_audio_data", "_gemini_tts", "_elevenlabs_tts", "_should_search_voice", "_voice_search", "_matches_language", "_local_voice_fallback", "voice_turn", "voice_tts"}
 constants = {"_KAZAKH_SPECIAL", "_KAZAKH_WORDS", "_RUSSIAN_CYRILLIC", "_GEMINI_VOICE_BY_PROFILE"}
 nodes = []
 for node in tree.body:
@@ -33,7 +34,7 @@ class Reply:
 
 http = Mock()
 request = SimpleNamespace(method="POST", get_json=Mock())
-namespace = {"Any": object, "os": os, "re": re, "base64": base64, "io": io, "wave": wave, "json": json, "datetime": datetime, "timezone": timezone, "requests": http, "request": request, "Response": Reply, "jsonify": lambda body: Reply(body), "_PROVIDER_TIMEOUT": 1}
+namespace = {"Any": object, "os": os, "re": re, "quote": quote, "base64": base64, "io": io, "wave": wave, "json": json, "datetime": datetime, "timezone": timezone, "requests": http, "request": request, "Response": Reply, "jsonify": lambda body: Reply(body), "_PROVIDER_TIMEOUT": 1}
 exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec"), namespace)
 checks = 0
 def check(name, run):
@@ -91,5 +92,38 @@ with patch.dict(os.environ, {}, clear=True):
         assert gemini.call_args.args[-1] == "en"
         namespace["_xai_tts"].assert_not_called()
     check("Python English TTS falls back while preserving English", english_fallback)
+
+    def elevenlabs_languages():
+        os.environ["ELEVENLABS_API_KEY"] = "test-only"
+        fixture = b"ID3" + b"x" * 1024
+        for language in ("ru", "kk"):
+            http.post.reset_mock()
+            http.post.return_value = SimpleNamespace(ok=True, content=fixture, headers={"content-type": "audio/mpeg"})
+            request.get_json.return_value = {"text": "Сәлем" if language == "kk" else "Привет", "language": language}
+            response = namespace["voice_tts"]()
+            assert response.body == fixture
+            assert response.headers["x-malik-tts-provider"] == "elevenlabs"
+            assert response.headers["x-malik-tts-language"] == language
+            sent = http.post.call_args.kwargs
+            assert sent["json"]["model_id"] == "eleven_v3"
+            assert sent["json"]["language_code"] == language
+            assert sent["headers"]["xi-api-key"] == "test-only"
+            assert http.post.call_count == 1
+    check("Python real route calls ElevenLabs for RU and KK", elevenlabs_languages)
+
+    def elevenlabs_failures():
+        for ok, mime, content in ((False, "audio/mpeg", b"ID3" + b"x" * 200), (True, "application/json", b"x" * 200), (True, "audio/mpeg", b""), (True, "audio/mpeg", b"x" * 200)):
+            http.post.return_value = SimpleNamespace(ok=ok, status_code=401, content=content, headers={"content-type": mime})
+            assert namespace["_elevenlabs_tts"]("Привет", "Puck", "ru", 1, 0) is None
+    check("Python rejects provider errors and invalid audio", elevenlabs_failures)
+
+    def elevenlabs_preset():
+        os.environ["ELEVENLABS_VOICE_ID_KOKORO_M1_CALM"] = "custom/calm"
+        http.post.return_value = SimpleNamespace(ok=True, content=b"ID3" + b"x" * 1024, headers={"content-type": "audio/mpeg"})
+        namespace["_elevenlabs_tts"]("Сәлем", "Kokoro M1 Calm", "kk", 1, 0)
+        assert http.post.call_args.args[0].endswith("/custom%2Fcalm")
+        assert http.post.call_args.kwargs["json"]["voice_settings"]["speed"] == .93
+        assert http.post.call_args.kwargs["json"]["voice_settings"]["stability"] == 1
+    check("Python selected voice and delivery settings reach provider", elevenlabs_preset)
 
 print(f"Python Voice unit checks: {checks}/{checks} PASS (mock boundaries)")

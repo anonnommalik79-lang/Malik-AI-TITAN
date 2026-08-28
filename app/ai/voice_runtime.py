@@ -21,6 +21,7 @@ import time
 import wave
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote
 
 import requests
 from flask import Blueprint, Response, jsonify, request
@@ -352,6 +353,38 @@ def _xai_tts(text: str, language: str, speed: float):
     return None
 
 
+def _elevenlabs_tts(text: str, voice: str, language: str, speed: float, expressivity: int):
+    key = _env("ELEVENLABS_VOICE_API_KEY", "ELEVENLABS_API_KEY")
+    if not key or language not in {"ru", "kk"}:
+        return None
+    profile = re.sub(r"[^A-Z0-9]+", "_", voice.strip().upper())
+    voice_id = _env(f"ELEVENLABS_VOICE_ID_{profile}", f"ELEVENLABS_VOICE_ID_{language.upper()}", "ELEVENLABS_VOICE_ID") or "JBFqnCBsd6RMkjVDRZzb"
+    calm, strong = voice.endswith(" Calm"), voice.endswith(" Strong")
+    adjusted_speed = max(.85, min(1.15, speed * (.93 if calm else 1.05 if strong else 1)))
+    try:
+        response = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{quote(voice_id, safe='')}",
+            params={"output_format": "mp3_44100_128"},
+            headers={"xi-api-key": key, "content-type": "application/json", "accept": "audio/mpeg"},
+            json={
+                "text": text, "model_id": "eleven_v3", "language_code": language,
+                "voice_settings": {"stability": 1 if calm or expressivity < 0 else .5, "similarity_boost": .75, "speed": adjusted_speed},
+            },
+            timeout=25,
+        )
+        if not response.ok:
+            print("[VOICE_ELEVENLABS_TTS_ERROR]", {"status": response.status_code, "language": language})
+            return None
+        audio = response.content
+        mime = response.headers.get("content-type", "")
+        is_mp3 = audio.startswith(b"ID3") or (len(audio) > 1 and audio[0] == 255 and audio[1] & 224 == 224)
+        if len(audio) > 128 and (mime.startswith("audio/") or mime.startswith("application/octet-stream")) and is_mp3:
+            return audio, "audio/mpeg", voice_id
+    except Exception:
+        print("[VOICE_ELEVENLABS_TTS_ERROR] request failed", language)
+    return None
+
+
 def _client_id() -> str:
     forwarded = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
     return request.headers.get("X-Malik-User-Id", "").strip() or forwarded or request.remote_addr or "guest"
@@ -549,6 +582,18 @@ def voice_tts():
     speed = _speed(body.get("speed"))
     expressivity = _expressivity(body.get("expressivity"))
 
+    if language in {"ru", "kk"}:
+        generated = _elevenlabs_tts(text, voice, language, speed, expressivity)
+        if generated:
+            audio, mime, used_voice = generated
+            response = Response(audio, mimetype=mime)
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["x-malik-tts-provider"] = "elevenlabs"
+            response.headers["x-malik-tts-engine"] = "eleven_v3"
+            response.headers["x-malik-tts-voice"] = used_voice
+            response.headers["x-malik-tts-language"] = language
+            return response
+
     if language == "kk":
         try:
             started = time.time()
@@ -567,7 +612,7 @@ def voice_tts():
             return response
         except Exception as exc:
             print("[VOICE_KOKORO_KK_ERROR]", repr(exc))
-            return jsonify({"ok": False, "language": language, "error": "Kazakh Kokoro TTS unavailable; wrong-language fallback blocked"}), 503
+            return jsonify({"ok": False, "language": language, "code": "VOICE_TTS_UNAVAILABLE", "error": "Қазір жауапты дыбыстау мүмкін болмады. Кейінірек қайталап көріңіз."}), 503
 
     if language == "en":
         generated = _deepgram_tts(text, voice, speed, expressivity)
@@ -593,7 +638,7 @@ def voice_tts():
         response.headers["x-malik-tts-voice"] = used_voice
         return response
 
-    return jsonify({"ok": False, "fallback": "browser-language-aware", "language": language, "error": "Сервис озвучки недоступен. Проверь ключ голосового провайдера на сервере."}), 503
+    return jsonify({"ok": False, "fallback": "browser-language-aware", "language": language, "code": "VOICE_TTS_UNAVAILABLE", "error": "Сейчас не удалось озвучить ответ. Попробуйте ещё раз позже."}), 503
 
 
 @voice_runtime_bp.route("/api/transcribe", methods=["GET", "POST", "OPTIONS"])

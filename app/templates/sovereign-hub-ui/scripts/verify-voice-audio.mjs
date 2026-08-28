@@ -36,7 +36,7 @@ const tick = () => new Promise((resolve) => setImmediate(resolve))
 const request = (body) => new Request("https://malik.test/api/voice/tts", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } })
 
 try {
-  for (const key of Object.keys(process.env)) if (/GEMINI|DEEPGRAM|XAI|GOOGLE_AI|GOOGLE_GENERATIVE|SERPER|TAVILY|BRAVE_SEARCH|KOKORO_TTS|MALIK_BACKEND/.test(key)) delete process.env[key]
+  for (const key of Object.keys(process.env)) if (/GEMINI|DEEPGRAM|XAI|ELEVENLABS|GOOGLE_AI|GOOGLE_GENERATIVE|SERPER|TAVILY|BRAVE_SEARCH|KOKORO_TTS|MALIK_BACKEND/.test(key)) delete process.env[key]
   const sources = []
   class FakeContext {
     state = "running"
@@ -222,6 +222,82 @@ try {
     assert.equal((await tts.POST(request({ text: "Сәлем", language: "kk" }))).status, 200)
     process.env.KOKORO_TTS_URL = "https://malik.test"
     assert.equal((await tts.POST(request({ text: "Сәлем", language: "kk" }))).status, 503)
+  })
+  delete process.env.KOKORO_TTS_URL
+  delete process.env.DEEPGRAM_API_KEY
+  const mp3Fixture = Buffer.concat([Buffer.from("ID3"), Buffer.alloc(1024, 3)])
+  for (const language of ["ru", "kk"]) {
+    await check(`ElevenLabs returns MP3 for ${language} without Gemini or a Python server`, async () => {
+      process.env.ELEVENLABS_API_KEY = "test-only-elevenlabs"
+      calls.length = 0
+      globalThis.fetch = async (url, init) => {
+        calls.push(String(url))
+        assert.equal(String(url), "https://api.elevenlabs.io/v1/text-to-speech/JBFqnCBsd6RMkjVDRZzb?output_format=mp3_44100_128")
+        assert.equal(init.headers["xi-api-key"], "test-only-elevenlabs")
+        const body = JSON.parse(init.body)
+        assert.equal(body.model_id, "eleven_v3")
+        assert.equal(body.language_code, language)
+        assert.equal(body.text, language === "kk" ? "Сәлем!" : "Привет!")
+        assert.equal(body.voice_settings.stability, .5)
+        return new Response(mp3Fixture, { headers: { "content-type": "audio/mpeg" } })
+      }
+      const response = await tts.POST(request({ text: language === "kk" ? "Сәлем!" : "Привет!", language }))
+      assert.equal(response.status, 200)
+      assert.equal(response.headers.get("content-type"), "audio/mpeg")
+      assert.equal(response.headers.get("x-malik-tts-provider"), "elevenlabs")
+      assert.equal(response.headers.get("x-malik-tts-language"), language)
+      assert.deepEqual(Buffer.from(await response.arrayBuffer()), mp3Fixture)
+      assert.equal(calls.length, 1)
+    })
+  }
+  await check("ElevenLabs alias, selected voice and calm settings reach the API", async () => {
+    process.env.ELEVENLABS_VOICE_API_KEY = "test-only-voice-key"
+    process.env.ELEVENLABS_VOICE_ID = "custom-default"
+    process.env.ELEVENLABS_VOICE_ID_KK = "custom-kazakh"
+    process.env.ELEVENLABS_VOICE_ID_KOKORO_M1_CALM = "custom-calm"
+    globalThis.fetch = async (url, init) => {
+      assert.match(String(url), /text-to-speech\/custom-calm\?/)
+      assert.equal(init.headers["xi-api-key"], "test-only-voice-key")
+      const body = JSON.parse(init.body)
+      assert.equal(body.voice_settings.stability, 1)
+      assert.equal(body.voice_settings.speed, .93)
+      return new Response(mp3Fixture, { headers: { "content-type": "audio/mpeg" } })
+    }
+    assert.equal((await tts.POST(request({ text: "Сәлем", language: "kk", voice: "Kokoro M1 Calm", speed: 1 }))).status, 200)
+  })
+  await check("ElevenLabs JSON, empty and fake audio never count as speech", async () => {
+    for (const response of [Response.json({ error: "x".repeat(200) }), new Response("", { headers: { "content-type": "audio/mpeg" } }), new Response("x".repeat(300), { headers: { "content-type": "audio/mpeg" } })]) {
+      globalThis.fetch = async () => response
+      const result = await tts.POST(request({ text: "Сәлем", language: "kk" }))
+      assert.equal(result.status, 503)
+      const body = await result.json()
+      assert.equal(body.code, "VOICE_TTS_UNAVAILABLE")
+      assert.doesNotMatch(body.error, /API_KEY|GEMINI|KOKORO/)
+    }
+  })
+  await check("failed ElevenLabs can still use the existing Russian fallback", async () => {
+    process.env.XAI_API_KEY = "test-only-xai"
+    calls.length = 0
+    globalThis.fetch = async (url) => {
+      calls.push(String(url))
+      return String(url).includes("elevenlabs.io") ? new Response("", { status: 401 }) : new Response(mp3Fixture, { headers: { "content-type": "audio/mpeg" } })
+    }
+    const result = await tts.POST(request({ text: "Привет", language: "ru" }))
+    assert.equal(result.headers.get("x-malik-tts-provider"), "xai")
+    assert.equal(calls.length, 2)
+    delete process.env.XAI_API_KEY
+  })
+  await check("English remains on Deepgram even when ElevenLabs is configured", async () => {
+    process.env.DEEPGRAM_API_KEY = "test-only-deepgram"
+    calls.length = 0
+    globalThis.fetch = async (url) => {
+      calls.push(String(url))
+      assert.match(String(url), /api\.deepgram\.com\/v2\/speak/)
+      return new Response(mp3Fixture, { headers: { "content-type": "audio/mpeg" } })
+    }
+    const result = await tts.POST(request({ text: "Hello", language: "en", voice: "Cliff" }))
+    assert.equal(result.headers.get("x-malik-tts-provider"), "deepgram")
+    assert.equal(calls.length, 1)
   })
   console.log(`Voice audio behavior: ${checks}/${checks} PASS (mock audio/providers, not a device listening test)`)
 } finally {

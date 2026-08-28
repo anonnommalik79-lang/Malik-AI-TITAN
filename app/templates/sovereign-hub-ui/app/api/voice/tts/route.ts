@@ -309,6 +309,47 @@ function isAudio(response: Response, bytes: ArrayBuffer) {
   return bytes.byteLength > 128 && /^(audio\/|application\/octet-stream)/i.test(response.headers.get("content-type") || "")
 }
 
+async function elevenlabsTts(text: string, voice: string, language: "ru" | "kk", speed: number, expressivity: number) {
+  const key = env("ELEVENLABS_VOICE_API_KEY") || env("ELEVENLABS_API_KEY")
+  if (!key) return null
+  // v2/Flash do not support Kazakh. Use the multilingual v3 model explicitly.
+  const model = "eleven_v3"
+  const profile = voice.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_")
+  const voiceId = env(`ELEVENLABS_VOICE_ID_${profile}`) || env(`ELEVENLABS_VOICE_ID_${language.toUpperCase()}`) || env("ELEVENLABS_VOICE_ID") || "JBFqnCBsd6RMkjVDRZzb"
+  const calm = voice.endsWith(" Calm")
+  const strong = voice.endsWith(" Strong")
+  const adjustedSpeed = Math.max(.85, Math.min(1.15, speed * (calm ? .93 : strong ? 1.05 : 1)))
+  try {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
+      method: "POST",
+      headers: { "xi-api-key": key, "content-type": "application/json", accept: "audio/mpeg" },
+      body: JSON.stringify({
+        text, model_id: model, language_code: language,
+        voice_settings: { stability: calm || expressivity < 0 ? 1 : .5, similarity_boost: .75, speed: adjustedSpeed },
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(25000),
+    })
+    if (!response.ok) {
+      // Never log provider bodies: they can include submitted text or account details.
+      console.warn(`[VOICE_ELEVENLABS_TTS_ERROR] status=${response.status} language=${language}`)
+      return null
+    }
+    const bytes = await response.arrayBuffer()
+    const audio = new Uint8Array(bytes)
+    const isMp3 = (audio[0] === 0x49 && audio[1] === 0x44 && audio[2] === 0x33) || (audio[0] === 0xff && (audio[1] & 0xe0) === 0xe0)
+    if (!isAudio(response, bytes) || !isMp3) return null
+    return new Response(bytes, { headers: {
+      "content-type": "audio/mpeg", "cache-control": "no-store",
+      "x-malik-tts-provider": "elevenlabs", "x-malik-tts-engine": model,
+      "x-malik-tts-voice": voiceId, "x-malik-tts-language": language,
+    } })
+  } catch {
+    console.warn(`[VOICE_ELEVENLABS_TTS_ERROR] request failed language=${language}`)
+    return null
+  }
+}
+
 async function kazakhTts(request: Request, text: string, voice: string, speed: number) {
   // Node cannot load the Python Kokoro checkpoint. Use the configured Python
   // voice service instead of unconditionally returning 503 for the default language.
@@ -346,6 +387,11 @@ async function handlePOST(request: Request) {
 
   if (!text) return Response.json({ ok: false, error: "Пустой текст" }, { status: 400 })
 
+  if (language === "ru" || language === "kk") {
+    const elevenlabs = await elevenlabsTts(text, voice, language, speed, expressivity)
+    if (elevenlabs) return elevenlabs
+  }
+
   if (language === "en") {
     const deepgram = await deepgramTts(text, voice, speed, expressivity)
     if (deepgram) return deepgram
@@ -361,7 +407,7 @@ async function handlePOST(request: Request) {
   if (language === "kk") {
     const kazakh = request.headers.get("x-malik-voice-proxy") ? null : await kazakhTts(request, text, voice, speed)
     if (kazakh) return kazakh
-    return Response.json({ ok: false, language, error: "Қазақша дауыс сервері қолжетімсіз. Kokoro серверін қосу қажет (KOKORO_TTS_URL)." }, { status: 503, headers: { "cache-control": "no-store" } })
+    return Response.json({ ok: false, language, code: "VOICE_TTS_UNAVAILABLE", error: "Қазір жауапты дыбыстау мүмкін болмады. Кейінірек қайталап көріңіз." }, { status: 503, headers: { "cache-control": "no-store" } })
   }
 
   const multilingual = await multilingualTts(text, language, speed)
@@ -372,7 +418,8 @@ async function handlePOST(request: Request) {
       ok: false,
       fallback: "browser-language-aware",
       language,
-      error: language === "en" ? "Voice audio is unavailable. Check the speech provider key on the server." : "Сервис озвучки недоступен. Проверь GEMINI_VOICE_API_KEY или GEMINI_API_KEY на сервере.",
+      code: "VOICE_TTS_UNAVAILABLE",
+      error: language === "en" ? "Voice audio is unavailable. Please try again later." : "Сейчас не удалось озвучить ответ. Попробуйте ещё раз позже.",
     },
     { status: 503, headers: { "cache-control": "no-store" } },
   )
