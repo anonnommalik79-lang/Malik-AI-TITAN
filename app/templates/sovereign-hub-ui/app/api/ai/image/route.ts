@@ -3,9 +3,12 @@ import { validatePrompt } from "@/lib/ai/safety"
 import { handleGenerateRequest } from "@/lib/generation-route"
 import { bedrockConfigured } from "@/lib/ai/providers/bedrock-provider"
 
+import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 
-export async function POST(request: Request) {
+export const POST = withCompute(handlePOST, "image")
+
+async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const promptCheck = validatePrompt(body?.prompt || body?.message)
   if (!promptCheck.ok) {

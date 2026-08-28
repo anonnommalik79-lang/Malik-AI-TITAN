@@ -1,5 +1,6 @@
 import { runResearch } from "../../../lib/malik-research/research";
 
+import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -7,7 +8,9 @@ function sse(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
-export async function POST(req: Request) {
+export const POST = withCompute(handlePOST, "research")
+
+async function handlePOST(req: Request) {
   const encoder = new TextEncoder();
   let message = "";
 
@@ -22,9 +25,11 @@ export async function POST(req: Request) {
     return Response.json({ error: "message is required" }, { status: 400 });
   }
 
+  let cancelled = false;
   const stream = new ReadableStream({
     async start(controller) {
       const emit = (event: string, data: Record<string, unknown>) => {
+        if (cancelled) return;
         controller.enqueue(
           encoder.encode(
             sse(event, {
@@ -44,9 +49,10 @@ export async function POST(req: Request) {
           text: error instanceof Error ? error.message : "Research failed",
         });
       } finally {
-        controller.close();
+        if (!cancelled) controller.close();
       }
     },
+    cancel() { cancelled = true; },
   });
 
   return new Response(stream, {

@@ -301,11 +301,15 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
   }
 }
 
+import { withCompute } from "@/lib/malik-compute/runtime"
+import { generationComputeOperation } from "@/lib/malik-compute/policies"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
-export async function POST(request: Request) {
+export const POST = withCompute(handlePOST, generationComputeOperation)
+
+async function handlePOST(request: Request) {
   return handleGenerateRequest(request)
 }
 

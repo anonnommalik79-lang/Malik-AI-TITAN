@@ -17,7 +17,7 @@
     "test:models:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-malik-models-live.mjs",
     "test:voice": "node scripts/verify-voice-mode.mjs",
     "test:account": "node scripts/verify-account-and-search.mjs",
-    "test:compute": "node scripts/verify-malik-compute.mjs",
+    "test:compute": "node scripts/verify-malik-compute.mjs && node scripts/verify-malik-compute-live.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build",
     "clean": "node -e \"const fs=require('fs'); for (const p of ['.next','out']) if (fs.existsSync(p)) fs.rmSync(p,{recursive:true,force:true});\"",

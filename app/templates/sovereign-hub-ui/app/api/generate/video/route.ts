@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { compileGodVideoPrompt } from "@/lib/ai/video/god-prompt-compiler"
 import { startAwsNovaReelVideo } from "@/lib/ai/video/aws-nova-reel"
 
+import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -16,7 +17,9 @@ function parseDuration(value: unknown) {
   return Math.max(3, Math.min(n, 12))
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withCompute(handlePOST, "video")
+
+async function handlePOST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const prompt = String(body.prompt || body.message || body.input || "").trim()
   const durationSeconds = parseDuration(body.durationSeconds || body.duration || 5)

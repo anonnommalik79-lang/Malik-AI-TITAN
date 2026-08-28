@@ -2,6 +2,7 @@ import { publicEngineForProvider, publicErrorMessage } from "@/lib/brand-provide
 import { getAIJob, updateAIJob } from "@/lib/ai/jobs"
 import { providerFetch } from "@/lib/ai/providers/base"
 
+import { withComputeVideoStatus } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 
 type PollResult = {
@@ -236,7 +237,9 @@ async function pollProvider(provider: string, raw: Record<string, unknown>): Pro
   return { status: "processing" }
 }
 
-export async function GET(request: Request) {
+export const GET = withComputeVideoStatus(handleGET)
+
+async function handleGET(request: Request) {
   const url = new URL(request.url)
   const jobId = url.searchParams.get("jobId") || ""
   const job = jobId ? getAIJob(jobId) : null

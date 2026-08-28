@@ -3,9 +3,12 @@ import { checkMediaLimit, nextMediaResetAt, recordMediaUsage } from "@/lib/media
 import { resolveMediaUser } from "@/lib/media/request"
 import { routeVideoGeneration } from "@/lib/media/video-router"
 
+import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 
-export async function POST(request: Request) {
+export const POST = withCompute(handlePOST, "video")
+
+async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const prompt = String(body?.prompt || "").trim()
   const imageUrl = typeof body?.imageUrl === "string" ? body.imageUrl : undefined

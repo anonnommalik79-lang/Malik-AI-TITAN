@@ -1,5 +1,7 @@
 import { handleGenerateRequest } from "@/lib/generation-route"
 
+import { withCompute } from "@/lib/malik-compute/runtime"
+import { generationComputeOperation } from "@/lib/malik-compute/policies"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -124,7 +126,9 @@ function invalidKind(kind: string, id: string) {
   }, { status: 400 }, id, kind || "unknown")
 }
 
-export async function POST(request: Request, context: RouteContext) {
+export const POST = withCompute(handlePOST, generationComputeOperation)
+
+async function handlePOST(request: Request, context: RouteContext) {
   const id = request.headers.get("X-Malik-Request-Id") || requestId()
   const kind = await readKind(context)
 

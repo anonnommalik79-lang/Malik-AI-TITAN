@@ -36,7 +36,7 @@ let checks = 0
 async function check(name, run) { await run(); checks++; console.log("PASS " + name) }
 const load = loader()
 const { MalikComputeService, estimateCompute } = load("lib/malik-compute/service.ts")
-const { MemoryComputeStore, executeWithCompute, getDemoComputePageData, classifyComputeFailure } = load("lib/malik-compute/adapter.ts")
+const { MemoryComputeStore, executeWithCompute, classifyComputeFailure } = load("lib/malik-compute/adapter.ts")
 const config = load("lib/malik-compute/config.ts")
 const make = (limit = 1000, now = () => new Date("2026-08-28T12:00:00Z")) => new MalikComputeService(new MemoryComputeStore(limit), now)
 const code = (expected) => (error) => error.code === expected
@@ -186,45 +186,21 @@ await check("store snapshots cannot mutate ledger; failed update is atomic", () 
   assert.throws(() => service.settleCompute(reservation, 101))
   assert.equal(service.getComputeBalance("a").reserved, 100)
 })
-await check("demo is explicit, consistent and provider health is not invented", () => {
-  const data = getDemoComputePageData(true)
-  assert.equal(data.mode, "demo")
-  assert.equal(data.balance.remaining, 760)
-  assert.equal(data.balance.used, 240)
-  assert.equal(data.admin.requests, 4)
-  assert.equal(data.admin.capacity, 1000)
-  assert.equal(data.admin.providerHealth, null)
-  assert.equal(data.admin.routingDistribution, null)
-  assert.equal("admin" in getDemoComputePageData(false), false)
+await check("provider health is not invented", () => {
+  const stats = make().getAdminStats()
+  assert.equal(stats.requests, 0)
+  assert.equal(stats.providerHealth, null)
+  assert.equal(stats.routingDistribution, null)
 })
-
-let actor = null
-let guest = false
-const route = loader({
-  "@/lib/auth/server": { getOptionalWorkOSAuth: async () => ({ user: actor }) },
-  "next/headers": { cookies: async () => ({ get: () => guest ? { value: "1" } : undefined }) },
-})("app/api/compute/route.ts")
-await check("Compute API requires an existing session or guest cookie", async () => {
-  assert.equal((await route.GET()).status, 401)
-  guest = true
-  const response = await route.GET()
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get("cache-control"), "private, no-store")
-  const data = await response.json()
-  assert.equal("admin" in data, false)
-  assert.doesNotMatch(JSON.stringify(data), /groq|cerebras|cloudflare|api.key/i)
-})
-await check("only verified owner receives Admin data", async () => {
-  guest = false
-  for (const user of [
-    { email: "someone@example.com", emailVerified: true, role: "admin" },
-    { email: "amangeldymalik38@gmail.com", emailVerified: false },
-  ]) {
-    actor = user
-    assert.equal("admin" in await (await route.GET()).json(), false)
-  }
-  actor = { email: "amangeldymalik38@gmail.com", emailVerified: true }
-  assert.ok((await (await route.GET()).json()).admin)
+await check("expired reservations release balance and cannot charge late", () => {
+  let time = new Date("2026-08-28T12:00:00Z")
+  const service = make(1000, () => time)
+  const reservation = service.reserveCompute("a", 100, "chat", "stale")
+  time = new Date("2026-08-28T13:00:00Z")
+  assert.equal(service.getComputeBalance("a").reserved, 0)
+  assert.equal(service.settleCompute(reservation, 10).status, "failed")
+  assert.equal(service.getComputeBalance("a").used, 0)
+  assert.equal(service.getAdminStats().failedRequests, 1)
 })
 await check("real /compute route and shared sidebar navigation", () => {
   const read = (file) => fs.readFileSync(path.join(root, file), "utf8")

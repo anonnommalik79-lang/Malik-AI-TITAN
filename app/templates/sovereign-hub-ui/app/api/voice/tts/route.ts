@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer"
 
+import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -301,7 +302,9 @@ async function multilingualTts(text: string, language: VoiceLanguage, speed: num
   return null
 }
 
-export async function POST(request: Request) {
+export const POST = withCompute(handlePOST, "voice")
+
+async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const text = String(body?.text || "").trim().slice(0, 3500)
   const voice = String(body?.voice || "Cliff")

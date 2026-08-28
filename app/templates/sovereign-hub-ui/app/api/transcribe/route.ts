@@ -2,6 +2,7 @@ import { transcribeVoiceAudio, isVoiceTranscribeConfigured } from "@/lib/transcr
 import { getVoiceUsage, consumeVoiceUsage } from "@/lib/voice/usage"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 
+import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -13,7 +14,9 @@ export async function GET(request: Request) {
   return Response.json({ ok: true, configured: isVoiceTranscribeConfigured(), quota })
 }
 
-export async function POST(request: Request) {
+export const POST = withCompute(handlePOST, "voice")
+
+async function handlePOST(request: Request) {
   if (!isVoiceTranscribeConfigured()) {
     return Response.json({ ok: false, error: "Voice STT ещё не настроен в Environment." }, { status: 503 })
   }

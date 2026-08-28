@@ -27,6 +27,9 @@ export interface ComputeReservation {
   actual: number
   refund: number
   failure?: ComputeFailure
+  expiresAt?: string
+  jobId?: string
+  jobRoute?: string
 }
 
 export interface ComputeLedger {
@@ -62,7 +65,9 @@ export interface ComputeAdminStats {
 }
 
 export interface ComputePageData {
-  mode: "demo"
+  mode: "live"
   balance: ComputeBalance
+  guest: boolean
+  storage: "configured-directory" | "local-directory"
   admin?: ComputeAdminStats
 }

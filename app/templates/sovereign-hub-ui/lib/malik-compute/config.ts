@@ -13,3 +13,6 @@ export const COMPUTE_WEIGHTS = Object.freeze({
 export const MAX_AGENT_STEPS = 40
 export const MAX_AGENT_RETRIES = 4
 export const MAX_AGENT_COMPUTE = 150
+
+// An interrupted request must not leave the user's allowance locked forever.
+export const COMPUTE_RESERVATION_TTL_MS = 30 * 60 * 1000

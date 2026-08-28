@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -207,7 +208,9 @@ async function translateClassic(text: string, source: string, target: string) {
   return translatedText.trim()
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withCompute(handlePOST, "chat")
+
+async function handlePOST(request: NextRequest) {
   try {
     const body = await request.json()
     const text = String(body?.text || "").trim()

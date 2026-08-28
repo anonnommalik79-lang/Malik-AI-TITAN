@@ -1,8 +1,11 @@
 import { refreshVideoJobStatus } from "@/lib/media/video-router"
 
+import { withComputeVideoStatus } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 
-export async function GET(request: Request) {
+export const GET = withComputeVideoStatus(handleGET)
+
+async function handleGET(request: Request) {
   const taskId = new URL(request.url).searchParams.get("taskId")?.trim() || ""
   if (!taskId) {
     return Response.json({ ok: false, error: "taskId is required" }, { status: 400 })

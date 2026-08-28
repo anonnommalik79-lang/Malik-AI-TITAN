@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { pollAwsNovaReelVideo } from "@/lib/ai/video/aws-nova-reel"
 
+import { withComputeVideoStatus } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-export async function GET(req: NextRequest) {
+export const GET = withComputeVideoStatus(handleGET)
+
+async function handleGET(req: NextRequest) {
   const url = new URL(req.url)
   const jobId = url.searchParams.get("jobId") || url.searchParams.get("invocationArn") || ""
 

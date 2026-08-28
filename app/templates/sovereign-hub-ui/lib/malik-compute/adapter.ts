@@ -1,8 +1,8 @@
 import { DEFAULT_DAILY_COMPUTE } from "./config"
 import { estimateCompute, MalikComputeError, MalikComputeService } from "./service"
-import type { ComputeFailure, ComputeLedger, ComputeOperation, ComputePageData, ComputeStore } from "./types"
+import type { ComputeFailure, ComputeLedger, ComputeOperation, ComputeStore } from "./types"
 
-// Development/demo only. Not durable, distributed, or a production billing store.
+// Offline tests only. Production uses FileComputeStore.
 export class MemoryComputeStore implements ComputeStore {
   private readonly days = new Map<string, Map<string, ComputeLedger>>()
   constructor(private readonly dailyLimit = DEFAULT_DAILY_COMPUTE) {
@@ -60,23 +60,5 @@ export async function executeWithCompute<T>(input: {
     if (reservation && !reservation.replayed) input.service.failCompute(reservation, classifyComputeFailure(error))
     if (error instanceof MalikComputeError) return { ok: false, code: error.code, message: error.message }
     return { ok: false, code: classifyComputeFailure(error), message: "Malik AI is temporarily unavailable. Please try again. Your Compute was not charged." }
-  }
-}
-
-// TODO production: replace with a durable per-user store and authoritative usage.
-// /api/stream was inspected: it drops usage metadata and also serves cached and
-// multimodal answers. Keep its working behavior intact until those paths can
-// provide a trusted cost and cancellation/expiry policy to executeWithCompute.
-export function getDemoComputePageData(includeAdmin: boolean, now = () => new Date()): ComputePageData {
-  const snapshotTime = now()
-  const service = new MalikComputeService(new MemoryComputeStore(), () => snapshotTime)
-  for (const [operation, amount] of [["chat", 84], ["agent", 50], ["research", 61], ["image", 45]] as const) {
-    const reservation = service.reserveCompute("demo", amount, operation, "demo-" + operation)
-    service.settleCompute(reservation, amount)
-  }
-  return {
-    mode: "demo",
-    balance: service.getComputeBalance("demo"),
-    ...(includeAdmin ? { admin: service.getAdminStats() } : {}),
   }
 }

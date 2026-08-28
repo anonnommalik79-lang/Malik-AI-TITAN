@@ -4,12 +4,15 @@ import { checkMediaLimit, nextMediaResetAt, recordMediaUsage } from "@/lib/media
 import { resolveMediaUser } from "@/lib/media/request"
 import type { ImageAspectRatio, ImageMode } from "@/lib/media/types"
 
+import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 
 const ASPECTS = new Set<ImageAspectRatio>(["1:1", "16:9", "9:16", "4:5"])
 const MODES = new Set<ImageMode>(["cinematic", "realistic", "product", "design"])
 
-export async function POST(request: Request) {
+export const POST = withCompute(handlePOST, "image")
+
+async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const prompt = String(body?.prompt || "").trim()
   const aspectRatio = ASPECTS.has(body?.aspectRatio) ? body.aspectRatio : "1:1"

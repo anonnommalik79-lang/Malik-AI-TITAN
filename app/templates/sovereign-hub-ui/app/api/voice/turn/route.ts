@@ -1,5 +1,6 @@
 import { voiceLlmAnswer } from "@/lib/voice/voice-llm-router"
 
+import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -46,7 +47,9 @@ function localFallback(language: VoiceLanguage) {
   return "I couldn't get a response just now. Try saying it again in a second."
 }
 
-export async function POST(request: Request) {
+export const POST = withCompute(handlePOST, "voice")
+
+async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const text = String(body?.text || body?.message || "").trim().slice(0, 6000)
   const personality = String(body?.personality || "Assistant")

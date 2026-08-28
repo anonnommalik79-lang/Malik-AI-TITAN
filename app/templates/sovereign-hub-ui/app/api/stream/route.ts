@@ -5,6 +5,8 @@ import {
   resolveStrictMalikSelection,
 } from "@/lib/server/malik-model-router"
 
+import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
+import { chatComputeOperation } from "@/lib/malik-compute/policies"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -29,16 +31,17 @@ function liveSseResponse(
 ) {
   const encoder = new TextEncoder()
   const startedAt = Date.now()
+  let cancelled = false
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false
       const send = (event: string, data: Record<string, unknown>) => {
-        if (closed) return
+        if (closed || cancelled) return
         controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify({ ...data, at: Date.now() })}\n\n`))
       }
       const close = () => {
-        if (closed) return
+        if (closed || cancelled) return
         closed = true
         controller.close()
       }
@@ -50,6 +53,7 @@ function liveSseResponse(
         selection ? { modelId: selection.modelId } : undefined,
         (progress) => send("progress", { type: "progress", ...progress }),
       ).then((answer) => {
+        observeComputeResult(answer)
         send("content", {
           type: "content",
           content: asPlainText(answer) || "MALIK AI: empty response prevented.",
@@ -74,6 +78,7 @@ function liveSseResponse(
         close()
       })
     },
+    cancel() { cancelled = true },
   })
 
   return new Response(stream, {
@@ -87,12 +92,15 @@ function liveSseResponse(
   })
 }
 
-export async function POST(request: Request) {
+export const POST = withCompute(handlePOST, chatComputeOperation)
+
+async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
   try {
     const selection = await resolveStrictMalikSelection(request, body)
     if (wantsSse(request, body)) return liveSseResponse(body, selection)
     const answer = await malikGodAnswer(body, selection ? { modelId: selection.modelId } : undefined)
+    observeComputeResult(answer)
     const content = asPlainText(answer)
     return textResponse(content)
   } catch (error) {

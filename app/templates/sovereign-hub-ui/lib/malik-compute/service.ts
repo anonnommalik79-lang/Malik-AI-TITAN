@@ -1,7 +1,7 @@
-import { COMPUTE_WEIGHTS, MAX_AGENT_COMPUTE } from "./config"
+import { COMPUTE_WEIGHTS, COMPUTE_RESERVATION_TTL_MS, MAX_AGENT_COMPUTE } from "./config"
 import type {
   ComputeAdminStats, ComputeBalance, ComputeFailure, ComputeOperation,
-  ComputeReservation, ComputeStore,
+  ComputeReservation, ComputeStore, ComputeLedger,
 } from "./types"
 
 export class MalikComputeError extends Error {
@@ -41,10 +41,23 @@ export class MalikComputeService {
     if (!userId.trim()) throw new MalikComputeError("MALIK_COMPUTE_INVALID_USER", "A user identity is required.")
   }
 
+  private expire(ledger: ComputeLedger) {
+    for (const item of Object.values(ledger.reservations)) {
+      if (item.status === "reserved" && item.expiresAt && Date.parse(item.expiresAt) <= this.now().getTime()) {
+        ledger.reserved -= item.amount
+        ledger.failedRequests += 1
+        Object.assign(item, { status: "failed", actual: 0, refund: item.amount, failure: "PROVIDER_TIMEOUT" })
+      }
+    }
+  }
+
   getComputeBalance(userId: string): ComputeBalance {
     this.identity(userId)
     const day = this.day()
-    const ledger = this.store.read(userId, day)
+    let ledger = this.store.read(userId, day)
+    if (Object.values(ledger.reservations).some((item) => item.status === "reserved" && item.expiresAt && Date.parse(item.expiresAt) <= this.now().getTime())) {
+      ledger = this.store.update(userId, day, (current) => this.expire(current))
+    }
     return {
       day, resetsAt: new Date(Date.parse(day + "T00:00:00Z") + 86400000).toISOString(),
       dailyLimit: ledger.dailyLimit, used: ledger.used, reserved: ledger.reserved,
@@ -69,6 +82,7 @@ export class MalikComputeService {
     const day = this.day()
     let replayed = false
     const ledger = this.store.update(userId, day, (current) => {
+      this.expire(current)
       const existing = current.reservations[requestId]
       if (existing) {
         if (existing.amount !== amount || existing.operation !== operation) {
@@ -82,28 +96,34 @@ export class MalikComputeService {
       current.requests += 1
       current.reservations[requestId] = {
         id: requestId, userId, day, operation, amount, status: "reserved", actual: 0, refund: 0,
+        expiresAt: new Date(this.now().getTime() + COMPUTE_RESERVATION_TTL_MS).toISOString(),
       }
     })
     return { ...ledger.reservations[requestId], replayed }
   }
 
-  settleCompute(reservation: ComputeReservation, actualAmount: number): ComputeReservation {
+  settleCompute(reservation: ComputeReservation, actualAmount: number, operation?: ComputeOperation, fallbackCount = 0): ComputeReservation {
     units(actualAmount)
-    return this.finish(reservation, actualAmount)
+    if (operation) estimateCompute(operation)
+    units(fallbackCount)
+    return this.finish(reservation, actualAmount, undefined, operation, fallbackCount)
   }
 
   failCompute(reservation: ComputeReservation, failure: ComputeFailure): ComputeReservation {
     return this.finish(reservation, 0, failure)
   }
 
-  private finish(reservation: ComputeReservation, actual: number, failure?: ComputeFailure) {
+  private finish(reservation: ComputeReservation, actual: number, failure?: ComputeFailure, operation?: ComputeOperation, fallbackCount = 0) {
     this.identity(reservation.userId)
     // Settle against the reservation's day, even if execution crossed midnight.
     const ledger = this.store.update(reservation.userId, reservation.day, (current) => {
+      this.expire(current)
       const stored = current.reservations[reservation.id]
       if (!stored) throw new MalikComputeError("MALIK_COMPUTE_RESERVATION_MISSING", "Reservation not found.")
       if (stored.status !== "reserved") {
-        if (stored.actual !== actual || stored.failure !== failure) {
+        // Expired/cancelled work can never charge later.
+        if (stored.failure === "PROVIDER_TIMEOUT") return
+        if (stored.actual !== actual || stored.failure !== failure || (operation && operation !== stored.operation)) {
           throw new MalikComputeError("MALIK_COMPUTE_REQUEST_CONFLICT", "Reservation already closed.")
         }
         return
@@ -113,6 +133,8 @@ export class MalikComputeService {
       }
       current.reserved -= stored.amount
       current.used += actual
+      current.fallbackCount += fallbackCount
+      if (operation) stored.operation = operation
       current.usage[stored.operation] += actual
       if (failure) current.failedRequests += 1
       stored.actual = actual
@@ -121,6 +143,25 @@ export class MalikComputeService {
       stored.status = failure ? "failed" : "settled"
     })
     return { ...ledger.reservations[reservation.id] }
+  }
+
+  attachJob(reservation: ComputeReservation, jobId: string, jobRoute: string) {
+    this.store.update(reservation.userId, reservation.day, (ledger) => {
+      const stored = ledger.reservations[reservation.id]
+      if (!stored || stored.status !== "reserved") throw new MalikComputeError("MALIK_COMPUTE_RESERVATION_MISSING", "Reservation not found.")
+      stored.jobId = jobId
+      stored.jobRoute = jobRoute
+    })
+  }
+
+  findJob(userId: string, jobId: string, jobRoute: string) {
+    // Jobs may cross UTC midnight; their reservation still belongs to the old day.
+    for (const date of [this.now(), new Date(this.now().getTime() - 86400000)]) {
+      const ledger = this.store.read(userId, date.toISOString().slice(0, 10))
+      const match = Object.values(ledger.reservations).find((item) => item.jobId === jobId && item.jobRoute === jobRoute)
+      if (match) return { ...match }
+    }
+    return undefined
   }
 
   recordFallback(reservation: ComputeReservation) {
@@ -135,6 +176,7 @@ export class MalikComputeService {
   // Caller must enforce server-side owner authorization before publishing this.
   getAdminStats(): ComputeAdminStats {
     return this.store.list(this.day()).reduce<ComputeAdminStats>((total, ledger) => {
+      this.expire(ledger)
       total.requests += ledger.requests
       total.used += ledger.used
       total.reserved += ledger.reserved
