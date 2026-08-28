@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { getMalikPlugin } from "@/components/sovereign/features/plugin-registry"
 
 /**
  * The "Контекст" switch in the right rail and the "Memory" chip in the composer
@@ -74,6 +75,33 @@ export function formatTokens(count: number): string {
 /** Prefill the home composer from anywhere (sidebar tools, shortcuts). */
 export const PREFILL_EVENT = "malik-prefill-prompt"
 const PREFILL_STORAGE_KEY = "malik.prefill.prompt.v1"
+const PLUGIN_COMMAND = /^\/plugin\s+([a-z0-9_-]+)(?:\s|$)/i
+
+function accountPluginConnectTarget(text: string): string {
+  if (typeof window === "undefined") return ""
+
+  const match = text.trim().match(PLUGIN_COMMAND)
+  if (!match) return ""
+
+  const plugin = getMalikPlugin(match[1])
+  if (!plugin || plugin.runtime !== "pipes") return ""
+
+  const current = new URL(window.location.href)
+  const returnedPlugin = current.searchParams.get("plugin")
+  const returnedStatus = current.searchParams.get("plugin_status")
+
+  // /api/plugins/connect adds these markers when the account is confirmed.
+  // Consume the pending prompt normally after OAuth instead of redirecting again.
+  if (returnedPlugin === plugin.id && returnedStatus === "connected") {
+    current.searchParams.delete("plugin")
+    current.searchParams.delete("plugin_status")
+    window.history.replaceState(window.history.state, "", `${current.pathname}${current.search}${current.hash}`)
+    return ""
+  }
+
+  const returnTo = `${current.pathname}${current.search}${current.hash}` || "/dashboard"
+  return `/api/plugins/connect?id=${encodeURIComponent(plugin.id)}&return_to=${encodeURIComponent(returnTo)}`
+}
 
 export function prefillPrompt(text: string): void {
   if (typeof window === "undefined") return
@@ -85,11 +113,25 @@ export function prefillPrompt(text: string): void {
   window.dispatchEvent(new CustomEvent(PREFILL_EVENT, { detail: text }))
 }
 
-/** Read a template prompt exactly once when the destination workspace mounts. */
+/**
+ * Read a template prompt exactly once when the destination workspace mounts.
+ * Account-backed plugin commands are gated through the real WorkOS connection
+ * route first; public plugins keep the zero-click prefill behavior.
+ */
 export function takePrefillPrompt(): string {
   if (typeof window === "undefined") return ""
   try {
     const value = window.sessionStorage.getItem(PREFILL_STORAGE_KEY) || ""
+    if (!value) return ""
+
+    const connectTarget = accountPluginConnectTarget(value)
+    if (connectTarget) {
+      // Keep the prompt in sessionStorage across the OAuth round trip. Once the
+      // provider is connected, the status marker lets the next mount consume it.
+      window.location.assign(connectTarget)
+      return ""
+    }
+
     window.sessionStorage.removeItem(PREFILL_STORAGE_KEY)
     return value
   } catch {
