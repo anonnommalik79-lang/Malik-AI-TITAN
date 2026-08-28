@@ -234,7 +234,10 @@ export async function generateCloudflareImage({
       form.append("guidance", String(numericEnv("MALIK_IMAGE_KLEIN_GUIDANCE", 4.5, 0, 10)))
     }
     if (modelId === "malik-image-1-premium") {
-      form.append("steps", String(Math.round(numericEnv("MALIK_IMAGE_DEV_STEPS", 25, 1, 50))))
+      // FLUX.2 Dev is intentionally slower than the fast models. Sixteen steps
+      // keeps MalikImage 1.0 in the premium quality lane while avoiding the
+      // long mobile request that previously ended as Safari "Load failed".
+      form.append("steps", String(Math.round(numericEnv("MALIK_IMAGE_DEV_STEPS", 16, 1, 50))))
       form.append("guidance", String(numericEnv("MALIK_IMAGE_DEV_GUIDANCE", 5, 0, 10)))
     }
 
