@@ -51,7 +51,15 @@ function ModelRow({
         <span className="malik-model-selector__description">{model.description}</span>
       </span>
       <span className="malik-model-selector__state">
-        {selected ? <Check aria-label="Выбрано" /> : model.tier === "free" ? <span className="is-free">Бесплатно</span> : <span className="is-pro"><Crown /> PLUS</span>}
+        {selected ? (
+          <Check aria-label="Выбрано" />
+        ) : model.tier === "free" ? (
+          <span className="is-free">Бесплатно</span>
+        ) : allowed ? (
+          <span className="is-free">Доступно</span>
+        ) : (
+          <span className="is-pro"><Crown /> PLUS</span>
+        )}
         {!allowed && model.tier === "pro" ? <Lock className="malik-model-selector__lock" aria-hidden="true" /> : null}
       </span>
     </button>

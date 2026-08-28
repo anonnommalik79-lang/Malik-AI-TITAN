@@ -171,6 +171,22 @@ try:
     print("✅ [MALIK] Voice runtime connected: /api/voice/tts /api/voice/turn /api/transcribe /api/voice/deepgram-token")
 except Exception as e:
     print("⚠️ [MALIK] Voice runtime skipped:", e)
+
+# ---------------- Production Translator runtime (Flask / Render) ----------------
+try:
+    import importlib.util as _translator_importlib_util
+    from pathlib import Path as _TranslatorPath
+    _translator_runtime_path = _TranslatorPath(__file__).resolve().parent / "app" / "ai" / "translator_runtime.py"
+    _translator_runtime_spec = _translator_importlib_util.spec_from_file_location("malik_translator_runtime", _translator_runtime_path)
+    if _translator_runtime_spec is None or _translator_runtime_spec.loader is None:
+        raise RuntimeError("Translator runtime module loader unavailable")
+    _translator_runtime_module = _translator_importlib_util.module_from_spec(_translator_runtime_spec)
+    _translator_runtime_spec.loader.exec_module(_translator_runtime_module)
+    app.register_blueprint(_translator_runtime_module.translator_runtime_bp)
+    print("✅ [MALIK] Translator runtime connected: /api/translator")
+except Exception as e:
+    print("⚠️ [MALIK] Translator runtime skipped:", e)
+
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 PHOTO_STORAGE_DIR = BASE_DIR / "app" / "static" / "storage" / "photos"
 PROJECT_STORAGE_DIR = BASE_DIR / "app" / "static" / "storage" / "projects"

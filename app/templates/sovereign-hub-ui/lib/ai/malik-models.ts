@@ -49,7 +49,7 @@ export const MALIK_MODELS = [
   {
     id: "malik-27b",
     label: "MalikLLM Qwen3.8 27B",
-    description: "Groq · 2M токенов/день · Быстрый reasoning",
+    description: "2M токенов/день · Быстрый reasoning",
     tier: "free",
     provider: "groq",
     providerModel: "qwen/qwen3.8-27b",
