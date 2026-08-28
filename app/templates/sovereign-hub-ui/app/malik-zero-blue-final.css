@@ -1,31 +1,127 @@
-/* MALIK AI — ZERO BLUE UI AUTHORITY
- * MUST load after every other stylesheet.
- * UI chrome is black + neutral gray on desktop and mobile.
- * Brand artwork/images keep their own official colors.
+/* MALIK AI — ABSOLUTE NO-BLUE UI GUARD
+ * Loaded from malik-zero-blue-final.css (already the last stylesheet).
+ * UI chrome is black / neutral gray on desktop + mobile.
+ * Brand artwork/images are intentionally not recolored here.
  */
 
-:root {
+:root,
+.dark,
+html.dark {
+  color-scheme: dark;
+
   --background: #000000 !important;
+  --foreground: #f5f5f5 !important;
+  --card: #111113 !important;
+  --card-foreground: #f5f5f5 !important;
+  --popover: #111113 !important;
+  --popover-foreground: #f5f5f5 !important;
   --secondary: #1b1b1d !important;
-  --accent: #1b1b1d !important;
+  --secondary-foreground: #f5f5f5 !important;
   --muted: #141416 !important;
+  --muted-foreground: #85858a !important;
+  --accent: #1b1b1d !important;
+  --accent-foreground: #f5f5f5 !important;
   --border: #2b2b2e !important;
-  --input: #242426 !important;
-  --ring: #85858a !important;
+  --input: #1b1b1d !important;
+  --ring: #8a8a8f !important;
+
   --sidebar: #050505 !important;
   --sidebar-accent: #1b1b1d !important;
   --sidebar-border: #2b2b2e !important;
-  --sidebar-ring: #85858a !important;
+  --sidebar-ring: #8a8a8f !important;
+
   --chart-1: #8d8d92 !important;
   --malik-bg: #000000 !important;
+  --malik-phone-bg: #000000 !important;
   --malik-phone-blue: #747478 !important;
   --malik-neutral-control: #1b1b1d !important;
   --malik-neutral-control-hover: #242426 !important;
+  --malik-neutral-border: rgba(255, 255, 255, 0.10) !important;
+  --malik-neutral-focus: rgba(255, 255, 255, 0.46) !important;
+
+  --color-blue-50: #f4f4f5 !important;
+  --color-blue-100: #e4e4e7 !important;
+  --color-blue-200: #d4d4d8 !important;
+  --color-blue-300: #a1a1aa !important;
+  --color-blue-400: #71717a !important;
+  --color-blue-500: #52525b !important;
+  --color-blue-600: #3f3f46 !important;
+  --color-blue-700: #303033 !important;
+  --color-blue-800: #27272a !important;
+  --color-blue-900: #18181b !important;
+  --color-blue-950: #09090b !important;
+
+  --color-cyan-50: #f4f4f5 !important;
+  --color-cyan-100: #e4e4e7 !important;
+  --color-cyan-200: #d4d4d8 !important;
+  --color-cyan-300: #a1a1aa !important;
+  --color-cyan-400: #71717a !important;
+  --color-cyan-500: #52525b !important;
+  --color-cyan-600: #3f3f46 !important;
+  --color-cyan-700: #303033 !important;
+  --color-cyan-800: #27272a !important;
+  --color-cyan-900: #18181b !important;
+  --color-cyan-950: #09090b !important;
+
+  --color-sky-50: #f4f4f5 !important;
+  --color-sky-100: #e4e4e7 !important;
+  --color-sky-200: #d4d4d8 !important;
+  --color-sky-300: #a1a1aa !important;
+  --color-sky-400: #71717a !important;
+  --color-sky-500: #52525b !important;
+  --color-sky-600: #3f3f46 !important;
+  --color-sky-700: #303033 !important;
+  --color-sky-800: #27272a !important;
+  --color-sky-900: #18181b !important;
+  --color-sky-950: #09090b !important;
+
+  --color-indigo-50: #f4f4f5 !important;
+  --color-indigo-100: #e4e4e7 !important;
+  --color-indigo-200: #d4d4d8 !important;
+  --color-indigo-300: #a1a1aa !important;
+  --color-indigo-400: #71717a !important;
+  --color-indigo-500: #52525b !important;
+  --color-indigo-600: #3f3f46 !important;
+  --color-indigo-700: #303033 !important;
+  --color-indigo-800: #27272a !important;
+  --color-indigo-900: #18181b !important;
+  --color-indigo-950: #09090b !important;
+
+  --color-slate-50: #fafafa !important;
+  --color-slate-100: #f4f4f5 !important;
+  --color-slate-200: #e4e4e7 !important;
+  --color-slate-300: #d4d4d8 !important;
+  --color-slate-400: #a1a1aa !important;
+  --color-slate-500: #71717a !important;
+  --color-slate-600: #52525b !important;
+  --color-slate-700: #3f3f46 !important;
+  --color-slate-800: #27272a !important;
+  --color-slate-900: #18181b !important;
+  --color-slate-950: #09090b !important;
 }
 
 html,
 body,
-#malik-root,
+#malik-root {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+  min-height: 100dvh !important;
+  overscroll-behavior: none !important;
+}
+
+body::before,
+body::after,
+#malik-root::before,
+#malik-root::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
 #malik-root > main,
 #malik-root .malik-dashboard-shell,
 #malik-root .malik-dashboard-shell > main,
@@ -53,7 +149,6 @@ body,
   background-image: none !important;
 }
 
-/* Any Tailwind UI color token that can paint blue/navy becomes neutral. */
 #malik-root [class*="bg-blue-"],
 #malik-root [class*="bg-cyan-"],
 #malik-root [class*="bg-sky-"],
@@ -114,66 +209,171 @@ body,
 #malik-root [class*="fill-cyan-"],
 #malik-root [class*="fill-sky-"],
 #malik-root [class*="fill-indigo-"] {
-  fill: #9a9a9f !important;
+  fill: #a1a1a6 !important;
 }
 
 #malik-root [class*="stroke-blue-"],
 #malik-root [class*="stroke-cyan-"],
 #malik-root [class*="stroke-sky-"],
 #malik-root [class*="stroke-indigo-"] {
-  stroke: #9a9a9f !important;
+  stroke: #a1a1a6 !important;
 }
 
-/* Common arbitrary navy backgrounds used by older screens. */
+#malik-root [class*="shadow-blue-"],
+#malik-root [class*="shadow-cyan-"],
+#malik-root [class*="shadow-sky-"],
+#malik-root [class*="shadow-indigo-"] {
+  --tw-shadow-color: rgba(0, 0, 0, 0.52) !important;
+  box-shadow: none !important;
+}
+
 #malik-root [class*="bg-[#020617"],
 #malik-root [class*="bg-[#030712"],
 #malik-root [class*="bg-[#05070c"],
+#malik-root [class*="bg-[#07111f"],
+#malik-root [class*="bg-[#081225"],
+#malik-root [class*="bg-[#0a1020"],
 #malik-root [class*="bg-[#0b1020"],
+#malik-root [class*="bg-[#0c1424"],
 #malik-root [class*="bg-[#0f172a"],
 #malik-root [class*="bg-[#111827"],
 #malik-root [class*="bg-[#172033"],
 #malik-root [class*="bg-[#1e293b"],
-#malik-root [class*="bg-[#1f2937"] {
+#malik-root [class*="bg-[#1f2937"],
+#malik-root [class*="bg-[#172554"],
+#malik-root [class*="bg-[#1e3a8a"],
+#malik-root [class*="bg-[#1e40af"],
+#malik-root [class*="bg-[#1d4ed8"],
+#malik-root [class*="bg-[#2563eb"],
+#malik-root [class*="bg-[#3b82f6"],
+#malik-root [class*="bg-[#0c4a6e"],
+#malik-root [class*="bg-[#075985"],
+#malik-root [class*="bg-[#0369a1"],
+#malik-root [class*="bg-[#0284c7"],
+#malik-root [class*="bg-[#0e7490"],
+#malik-root [class*="bg-[#0891b2"],
+#malik-root [class*="bg-[#06b6d4"],
+#malik-root [class*="bg-[#312e81"],
+#malik-root [class*="bg-[#3730a3"],
+#malik-root [class*="bg-[#4338ca"],
+#malik-root [class*="bg-[#4f46e5"] {
   background: #18181a !important;
   background-color: #18181a !important;
   background-image: none !important;
   box-shadow: none !important;
 }
 
-/* Inline style fallbacks for old components. */
-#malik-root [style*="background"][style*="#020617"],
-#malik-root [style*="background"][style*="#030712"],
-#malik-root [style*="background"][style*="#05070c"],
-#malik-root [style*="background"][style*="#0b1020"],
-#malik-root [style*="background"][style*="#0f172a"],
-#malik-root [style*="background"][style*="#111827"],
-#malik-root [style*="background"][style*="#172033"],
-#malik-root [style*="background"][style*="#1e293b"],
-#malik-root [style*="background"][style*="#1f2937"],
-#malik-root [style*="background"][style*="rgb(2, 6, 23)"],
-#malik-root [style*="background"][style*="rgb(15, 23, 42)"],
-#malik-root [style*="background"][style*="rgb(17, 24, 39)"],
-#malik-root [style*="background"][style*="rgb(30, 41, 59)"],
-#malik-root [style*="background"][style*="rgb(31, 41, 55)"] {
-  background: #18181a !important;
+#malik-root [style*="#020617"],
+#malik-root [style*="#030712"],
+#malik-root [style*="#05070c"],
+#malik-root [style*="#0b1020"],
+#malik-root [style*="#0f172a"],
+#malik-root [style*="#111827"],
+#malik-root [style*="#172033"],
+#malik-root [style*="#1e293b"],
+#malik-root [style*="#1f2937"],
+#malik-root [style*="#172554"],
+#malik-root [style*="#1e3a8a"],
+#malik-root [style*="#1e40af"],
+#malik-root [style*="#1d4ed8"],
+#malik-root [style*="#2563eb"],
+#malik-root [style*="#3b82f6"],
+#malik-root [style*="#0284c7"],
+#malik-root [style*="#0891b2"],
+#malik-root [style*="#06b6d4"],
+#malik-root [style*="#4f46e5"],
+#malik-root [style*="rgb(2, 6, 23)"],
+#malik-root [style*="rgb(15, 23, 42)"],
+#malik-root [style*="rgb(17, 24, 39)"],
+#malik-root [style*="rgb(30, 41, 59)"],
+#malik-root [style*="rgb(31, 41, 55)"],
+#malik-root [style*="rgb(59, 130, 246)"],
+#malik-root [style*="rgb(37, 99, 235)"],
+#malik-root [style*="rgb(14, 165, 233)"],
+#malik-root [style*="rgb(6, 182, 212)"],
+#malik-root [style*="rgb(79, 70, 229)"] {
   background-color: #18181a !important;
   background-image: none !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  outline-color: rgba(255, 255, 255, 0.42) !important;
+  color: #b9b9bd !important;
   box-shadow: none !important;
 }
 
-/* The exact plugin-search artifact from desktop screenshots. Outer and inner
- * field are the SAME neutral surface, so no navy rectangle can appear. */
+#malik-root [aria-selected="true"],
+#malik-root [aria-pressed="true"],
+#malik-root [data-state="checked"],
+#malik-root [data-state="on"],
+#malik-root [role="tab"][data-state="active"],
+#malik-root [role="option"][aria-selected="true"] {
+  background-color: #242426 !important;
+  background-image: none !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #f5f5f5 !important;
+  box-shadow: none !important;
+}
+
+#malik-root a:any-link {
+  color: inherit !important;
+  text-decoration-color: currentColor !important;
+}
+
+#malik-root * {
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+#malik-root *:focus,
+#malik-root *:focus-visible {
+  outline-color: rgba(255, 255, 255, 0.44) !important;
+  --tw-ring-color: rgba(255, 255, 255, 0.30) !important;
+}
+
+#malik-root input[type="checkbox"],
+#malik-root input[type="radio"],
+#malik-root input[type="range"],
+#malik-root progress {
+  accent-color: #85858a !important;
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.20) !important;
+  color: #ffffff !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #343438 !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #48484d !important;
+}
+
+#malik-root input:-webkit-autofill,
+#malik-root input:-webkit-autofill:hover,
+#malik-root input:-webkit-autofill:focus,
+#malik-root input:-webkit-autofill:active,
+#malik-root textarea:-webkit-autofill,
+#malik-root select:-webkit-autofill {
+  -webkit-text-fill-color: #f0f0f2 !important;
+  caret-color: #f0f0f2 !important;
+  -webkit-box-shadow: 0 0 0 1000px #18181a inset !important;
+  box-shadow: 0 0 0 1000px #18181a inset !important;
+  transition: background-color 999999s ease-out 0s !important;
+}
+
 #malik-root .malik-plugin-market .plugin-search,
+#malik-root .malik-plugin-market .plugin-search:hover,
 #malik-root .malik-plugin-market .plugin-search:focus-within {
   background: #18181a !important;
   background-color: #18181a !important;
   background-image: none !important;
   border-color: rgba(255, 255, 255, 0.10) !important;
+  outline: 0 !important;
   box-shadow: none !important;
-  outline: none !important;
 }
 
 #malik-root .malik-plugin-market .plugin-search input,
+#malik-root .malik-plugin-market .plugin-search input:hover,
 #malik-root .malik-plugin-market .plugin-search input:focus,
 #malik-root .malik-plugin-market .plugin-search input:active {
   appearance: none !important;
@@ -187,39 +387,6 @@ body,
   color: #efeff1 !important;
 }
 
-#malik-root .malik-plugin-market .plugin-search input:-webkit-autofill,
-#malik-root .malik-plugin-market .plugin-search input:-webkit-autofill:hover,
-#malik-root .malik-plugin-market .plugin-search input:-webkit-autofill:focus,
-#malik-root .malik-plugin-market .plugin-search input:-webkit-autofill:active {
-  -webkit-text-fill-color: #efeff1 !important;
-  caret-color: #efeff1 !important;
-  -webkit-box-shadow: 0 0 0 1000px #18181a inset !important;
-  box-shadow: 0 0 0 1000px #18181a inset !important;
-  transition: background-color 999999s ease-out 0s !important;
-}
-
-/* Native browser interaction colors: never system blue. */
-#malik-root input[type="checkbox"],
-#malik-root input[type="radio"],
-#malik-root input[type="range"],
-#malik-root progress {
-  accent-color: #85858a !important;
-}
-
-#malik-root input:focus,
-#malik-root textarea:focus,
-#malik-root select:focus,
-#malik-root button:focus-visible,
-#malik-root [role="button"]:focus-visible {
-  outline-color: rgba(255, 255, 255, 0.42) !important;
-  --tw-ring-color: rgba(255, 255, 255, 0.30) !important;
-}
-
-#malik-root * {
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Authentication/registration and overscroll remain true OLED black. */
 html.malik-auth-active,
 body.malik-auth-active,
 html:has(.malik-auth-page),
@@ -233,10 +400,34 @@ body:has(.malik-auth-page) #malik-root,
   background: #000000 !important;
   background-color: #000000 !important;
   background-image: none !important;
+  box-shadow: none !important;
+}
+
+html:has(.malik-auth-page)::before,
+html:has(.malik-auth-page)::after,
+body:has(.malik-auth-page)::before,
+body:has(.malik-auth-page)::after,
+.malik-auth-page::before,
+.malik-auth-page::after,
+.sma-root::before,
+.sma-root::after,
+.sma-hero::before,
+.sma-hero::after,
+.sma-auth-panel::before,
+.sma-auth-panel::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
 }
 
 @media (max-width: 767px), (max-height: 500px) and (pointer: coarse) {
-  :root {
+  :root,
+  .dark,
+  html.dark {
     --malik-phone-bg: #000000 !important;
     --malik-phone-blue: #747478 !important;
   }
@@ -259,7 +450,6 @@ body:has(.malik-auth-page) #malik-root,
     background-image: none !important;
   }
 
-  /* Buttons previously tied to --malik-phone-blue become neutral gray. */
   #malik-root .malik-voice-entry,
   #malik-root .malik-inline-composer__right button[aria-label*="Отправ"],
   #malik-root .malik-inline-composer__right button[aria-label*="голос"] {
@@ -274,6 +464,19 @@ body:has(.malik-auth-page) #malik-root,
   #malik-root .malik-plugin-market .plugin-search input {
     background: #18181a !important;
     background-color: #18181a !important;
+    background-image: none !important;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  html,
+  body,
+  #malik-root,
+  .malik-auth-page,
+  .sma-root,
+  .sma-hero,
+  .sma-auth-panel {
+    background: #000000 !important;
     background-image: none !important;
   }
 }

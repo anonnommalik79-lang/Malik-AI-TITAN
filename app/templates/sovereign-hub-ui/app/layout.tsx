@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components"
+import { NoBlueUiGuard } from "@/components/sovereign/NoBlueUiGuard"
 import "./globals.css"
 import "./mobile-polish.css"
 import "./legendary-aurora.css"
@@ -144,6 +145,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         />
       </head>
       <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-black font-sans antialiased notranslate">
+        <NoBlueUiGuard />
         <AuthKitProvider>
           <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden bg-black notranslate">
             {children}
