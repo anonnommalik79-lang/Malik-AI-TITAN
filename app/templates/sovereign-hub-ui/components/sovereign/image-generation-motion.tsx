@@ -42,7 +42,7 @@ function buildTileStyle(index: number): TileStyle {
   const left = 2.5 + column * 16.2 + signed(index, 1, 2.4)
   const top = 2.5 + row * 16.2 + signed(index, 2, 2.4)
   const angle = Math.round(seeded(index, 3) * 360)
-  const duration = 4.7 + seeded(index, 4) * 3.1
+  const duration = 3.25 + seeded(index, 4) * 2.4
   const delay = -(seeded(index, 5) * duration)
 
   return {
@@ -51,16 +51,25 @@ function buildTileStyle(index: number): TileStyle {
     background: `radial-gradient(circle at 20% 18%, rgba(255,255,255,.38), transparent 20%), radial-gradient(circle at 78% 72%, rgba(255,255,255,.15), transparent 20%), linear-gradient(${angle}deg, ${palette[0]}, ${palette[1]} 54%, ${palette[2]})`,
     animationDuration: `${duration}s`,
     animationDelay: `${delay}s`,
-    "--x1": `${signed(index, 6, 34)}px`,
-    "--y1": `${signed(index, 7, 34)}px`,
-    "--x2": `${signed(index, 8, 42)}px`,
-    "--y2": `${signed(index, 9, 42)}px`,
-    "--x3": `${signed(index, 10, 30)}px`,
-    "--y3": `${signed(index, 11, 30)}px`,
+    "--x1": `${signed(index, 6, 50)}px`,
+    "--y1": `${signed(index, 7, 50)}px`,
+    "--x2": `${signed(index, 8, 62)}px`,
+    "--y2": `${signed(index, 9, 62)}px`,
+    "--x3": `${signed(index, 10, 46)}px`,
+    "--y3": `${signed(index, 11, 46)}px`,
     "--r1": `${signed(index, 12, 17)}deg`,
     "--r2": `${signed(index, 13, 22)}deg`,
     "--r3": `${signed(index, 14, 13)}deg`,
   }
+}
+
+function friendlyGenerationError(error?: string) {
+  const raw = String(error || "").trim()
+  if (!raw) return "Не удалось получить готовое изображение. Повторите генерацию."
+  if (/load failed|failed to fetch|network\s*error|network request failed/i.test(raw)) {
+    return "Соединение с генератором прервалось. Повторите генерацию — Malik AI автоматически использует резервный маршрут."
+  }
+  return raw
 }
 
 export function ImageGenerationMotion({
@@ -70,13 +79,36 @@ export function ImageGenerationMotion({
   error,
 }: ImageGenerationMotionProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
+  const [visualProgress, setVisualProgress] = useState(8)
   const tiles = useMemo(() => Array.from({ length: 36 }, (_, index) => buildTileStyle(index)), [])
 
   useEffect(() => {
     setImageLoaded(false)
+    setVisualProgress(resultUrl ? 94 : 8)
   }, [resultUrl])
 
+  useEffect(() => {
+    if (failed) return
+    if (imageLoaded) {
+      setVisualProgress(100)
+      return
+    }
+
+    if (resultUrl) setVisualProgress((value) => Math.max(value, 94))
+
+    const timer = window.setInterval(() => {
+      setVisualProgress((value) => {
+        if (value >= 94) return 94
+        const step = value < 40 ? 3 : value < 72 ? 2 : 1
+        return Math.min(94, value + step)
+      })
+    }, 620)
+
+    return () => window.clearInterval(timer)
+  }, [failed, imageLoaded, resultUrl])
+
   const isGenerating = !failed && (!resultUrl || !imageLoaded)
+  const shownProgress = imageLoaded ? 100 : Math.min(94, Math.max(8, visualProgress))
 
   return (
     <div className="malik-photo-motion w-full max-w-[560px]" aria-live="polite" aria-busy={isGenerating}>
@@ -85,7 +117,10 @@ export function ImageGenerationMotion({
           <img
             src={resultUrl}
             alt={prompt || "Generated image"}
-            onLoad={() => setImageLoaded(true)}
+            onLoad={() => {
+              setImageLoaded(true)
+              setVisualProgress(100)
+            }}
             className={`absolute inset-0 z-20 h-full w-full object-contain transition-[opacity,transform,filter] duration-700 ease-out ${imageLoaded ? "scale-100 opacity-100 blur-0" : "scale-[1.025] opacity-0 blur-md"}`}
           />
         ) : null}
@@ -104,13 +139,24 @@ export function ImageGenerationMotion({
         ) : null}
       </div>
 
-      <p className="mt-4 min-h-6 text-center text-[16px] font-medium tracking-[-0.02em] text-zinc-200 sm:text-[17px]">
-        {failed
-          ? error || "Не удалось создать изображение"
-          : imageLoaded
-            ? "Изображение готово"
-            : <>Генерирую по вашему запросу<span className="malik-photo-motion__dots" aria-hidden="true" /></>}
-      </p>
+      <div className="mt-4 min-h-6 text-center text-[16px] font-medium tracking-[-0.02em] text-zinc-200 sm:text-[17px]">
+        {failed ? (
+          <span>{friendlyGenerationError(error)}</span>
+        ) : imageLoaded ? (
+          <span>Изображение готово · 100%</span>
+        ) : (
+          <span>Генерирую по вашему запросу<span className="malik-photo-motion__dots" aria-hidden="true" /> · <strong className="font-semibold text-white">{shownProgress}%</strong></span>
+        )}
+      </div>
+
+      {!failed ? (
+        <div className="mx-auto mt-3 h-[3px] w-[72%] overflow-hidden rounded-full bg-white/10" aria-hidden="true">
+          <div
+            className="malik-photo-motion__progress-fill h-full rounded-full bg-white transition-[width] duration-500 ease-out"
+            style={{ width: `${shownProgress}%` }}
+          />
+        </div>
+      ) : null}
 
       <style jsx global>{`
         .malik-photo-motion__tile {
@@ -120,10 +166,11 @@ export function ImageGenerationMotion({
           border-radius: 9px;
           opacity: .92;
           will-change: transform, opacity, filter;
+          transform-origin: center;
           animation-name: malik-photo-drift-a;
           animation-timing-function: cubic-bezier(.42, 0, .58, 1);
-          animation-iteration-count: infinite;
-          animation-direction: alternate;
+          animation-iteration-count: infinite !important;
+          animation-direction: alternate !important;
           box-shadow: 0 7px 20px rgba(0,0,0,.34);
         }
 
@@ -136,7 +183,7 @@ export function ImageGenerationMotion({
           display: inline-block;
           width: 20px;
           text-align: left;
-          animation: malik-photo-dots 1.15s steps(4, end) infinite;
+          animation: malik-photo-dots 1.15s steps(4, end) infinite !important;
         }
 
         @keyframes malik-photo-drift-a {
@@ -174,8 +221,19 @@ export function ImageGenerationMotion({
           75%, 100% { content: "..."; }
         }
 
+        /* iOS Reduce Motion previously inherited the global rule that forced
+           every animation to one 0.001ms iteration. This loader is functional
+           progress feedback, so it must remain alive (just slower) there too. */
         @media (prefers-reduced-motion: reduce) {
-          .malik-photo-motion__tile { animation-duration: 12s !important; }
+          .malik-photo-motion__tile {
+            animation-duration: 7s !important;
+            animation-iteration-count: infinite !important;
+            animation-direction: alternate !important;
+          }
+          .malik-photo-motion__dots::after {
+            animation-duration: 1.4s !important;
+            animation-iteration-count: infinite !important;
+          }
         }
       `}</style>
     </div>
