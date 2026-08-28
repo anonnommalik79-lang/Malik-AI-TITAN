@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Bell,
+  CarFront,
   CreditCard,
   FolderKanban,
   Languages,
@@ -32,6 +33,7 @@ type Tab = {
 
 const TABS: Tab[] = [
   { id: "home", label: "Чат", icon: MessageSquare, owns: ["chats"] },
+  { id: "taxi", label: "Taxi", icon: CarFront, href: "/taxi" },
   { id: "features", label: "Плагины", icon: Plug },
   { id: "projects", label: "Проекты", icon: FolderKanban },
   { id: "templates", label: "Библиотека", icon: LibraryBig },
