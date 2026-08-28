@@ -7,10 +7,10 @@ function containsHumanRequest(value: string) {
 }
 
 function modeContract(mode?: ImageMode) {
-  if (mode === "realistic") return "STYLE MODE: photorealistic. Keep the scene believable, natural and physically coherent without changing any requested subject or action."
-  if (mode === "product") return "STYLE MODE: product. Keep the exact requested product/object, materials, colors and visible text; only improve presentation and studio clarity."
-  if (mode === "design") return "STYLE MODE: design. Keep the exact requested content and verbatim text; only improve composition, hierarchy and graphic precision."
-  if (mode === "cinematic") return "STYLE MODE: cinematic. Lighting and camera may be cinematic, but subject, count, identity, action and setting are locked."
+  if (mode === "realistic") return "MODE: photorealistic; improve realism only, never alter requested content."
+  if (mode === "product") return "MODE: product; preserve exact object, materials, colors and requested text."
+  if (mode === "design") return "MODE: design; preserve exact content and verbatim requested text."
+  if (mode === "cinematic") return "MODE: cinematic; lighting/camera may be cinematic, but subject, count, action and setting are locked."
   return ""
 }
 
@@ -18,24 +18,24 @@ export function buildUnifiedStrictImagePrompt(compiledPrompt: string, rawPrompt:
   const source = String(rawPrompt || "").trim()
   const prepared = String(compiledPrompt || source).trim()
 
+  // Put the contract FIRST so providers with shorter prompt limits still receive
+  // every semantic lock before any optional descriptive detail is truncated.
   const contract = [
     "MALIK IMAGE STRICT CONTRACT — HIGHEST PRIORITY:",
-    "1. Depict the user's requested main subject exactly. Never substitute its category, species, identity, gender, age, object type or role.",
-    "2. Preserve every requested action, pose, relationship, setting, location, camera view, color, material, clothing, style and important attribute.",
-    "3. Preserve requested counts exactly. Do not duplicate, remove or replace main subjects.",
-    "4. Do not invent extra people, portraits, animals, vehicles, props, logos, brands, signs or text unless the user explicitly requested them or they are unavoidable minor background detail.",
-    "5. Any visible text requested by the user must remain verbatim in the original language and spelling. Do not translate or rewrite visible text.",
-    "6. Style enhancement may improve quality, lighting and composition only; it must never change semantic content.",
-    "7. If any stylistic hint conflicts with the requested subject or scene, the user's literal request wins.",
-    "8. Never turn a robot into a person, a vehicle into a person, an animal into a human, or any requested object into an unrelated portrait or scene.",
-    "9. Keep the requested main subject large, clear and unmistakable enough that the result can be verified against the request.",
+    "Exact requested subject/category/identity/count; never substitute, remove or duplicate a main subject.",
+    "Preserve action, pose, relationship, setting, camera view, colors, materials, clothing and important attributes.",
+    "Do not invent extra main people, portraits, animals, vehicles, props, logos, brands, signs or text.",
+    "Requested visible text must stay verbatim in its original language and spelling.",
+    "Style may improve quality, lighting and composition only; if style conflicts with content, the literal user request wins.",
+    "Never replace a robot, vehicle, animal or requested object with an unrelated human portrait or scene.",
+    "Keep the requested main subject clear, prominent and unmistakable.",
   ].join("\n")
 
   return [
-    `USER REQUEST (authoritative): ${source}`,
-    `COMPILED IMAGE PROMPT: ${prepared}`,
-    modeContract(mode),
     contract,
+    modeContract(mode),
+    `COMPILED IMAGE PROMPT: ${prepared}`,
+    `ORIGINAL USER REQUEST (authoritative): ${source}`,
   ].filter(Boolean).join("\n\n")
 }
 
