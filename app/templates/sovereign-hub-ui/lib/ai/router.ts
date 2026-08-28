@@ -28,7 +28,7 @@ function normalize(input: AIRequest): AIRequest {
     maxTokens:
       input.maxTokens ||
       (task === "code" || task === "debug" || task === "project"
-        ? Number(process.env.MAX_CODE_OUTPUT_TOKENS || 4000)
+        ? Number(process.env.MAX_CODE_OUTPUT_TOKENS || 16000)
         : Number(process.env.MAX_OUTPUT_TOKENS || 1200)),
     metadata: {
       ...input.metadata,
