@@ -1,4 +1,5 @@
 import { getMalikPlugin } from "@/components/sovereign/features/plugin-registry"
+import { getPublicOrigin } from "@/lib/public-origin"
 import {
   createPipesAuthorization,
   getPipesProviderState,
@@ -9,13 +10,13 @@ import {
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-function safeReturnTo(request: Request, value?: string | null) {
-  const current = new URL(request.url)
-  const fallback = new URL("/dashboard", current.origin)
+function safeReturnTo(_request: Request, value?: string | null) {
+  const publicOrigin = getPublicOrigin()
+  const fallback = new URL("/dashboard", publicOrigin)
   if (!value) return fallback.toString()
   try {
-    const candidate = new URL(value, current.origin)
-    if (candidate.origin !== current.origin) return fallback.toString()
+    const candidate = new URL(value, publicOrigin)
+    if (candidate.origin !== publicOrigin) return fallback.toString()
     return candidate.toString()
   } catch {
     return fallback.toString()
@@ -39,8 +40,7 @@ function escapeHtml(value: string) {
 }
 
 function apiKeyPage(request: Request, pluginId: string, pluginName: string, returnTo: string) {
-  const action = new URL(request.url)
-  action.search = ""
+  const action = new URL("/api/plugins/connect", getPublicOrigin())
   const safeName = escapeHtml(pluginName)
   const safeId = escapeHtml(pluginId)
   const safeReturn = escapeHtml(safeReturnTo(request, returnTo))
@@ -114,7 +114,7 @@ export async function GET(request: Request) {
 
   const user = await getPluginSessionUser()
   if (!user?.id) {
-    const signIn = new URL("/sign-in", url.origin)
+    const signIn = new URL("/sign-in", getPublicOrigin())
     signIn.searchParams.set("returnTo", url.pathname + url.search)
     return Response.redirect(signIn, 302)
   }
@@ -151,9 +151,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const requestUrl = new URL(request.url)
+  const publicOrigin = getPublicOrigin()
   const origin = request.headers.get("origin")
-  if (origin && origin !== requestUrl.origin) {
-    return Response.json({ ok: false, error: "invalid_origin" }, { status: 403 })
+  if (origin) {
+    try {
+      if (new URL(origin).origin !== publicOrigin) {
+        return Response.json({ ok: false, error: "invalid_origin" }, { status: 403 })
+      }
+    } catch {
+      return Response.json({ ok: false, error: "invalid_origin" }, { status: 403 })
+    }
   }
 
   const form = await request.formData().catch(() => null)
@@ -167,7 +174,7 @@ export async function POST(request: Request) {
 
   const user = await getPluginSessionUser()
   if (!user?.id) {
-    const signIn = new URL("/sign-in", requestUrl.origin)
+    const signIn = new URL("/sign-in", publicOrigin)
     signIn.searchParams.set("returnTo", requestUrl.pathname + requestUrl.search)
     return Response.redirect(signIn, 303)
   }
