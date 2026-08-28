@@ -27,9 +27,14 @@ if [[ "$status" != "302" && "$status" != "303" && "$status" != "307" && "$status
   exit 1
 fi
 
-if [[ "$location" != *"/sign-in"* ]]; then
-  echo "Expected redirect to sign-in from unauthenticated connect route" >&2
+if [[ "$location" != https://malikaiworld.world/sign-in* ]]; then
+  echo "Expected canonical Malik AI sign-in redirect, got: $location" >&2
   exit 1
 fi
 
-echo "SMOKE_OK: live GitHub connect route exists and gates through sign-in as expected."
+if [[ "$location" == *"localhost"* || "$location" == *":10000"* ]]; then
+  echo "Render internal origin leaked into public redirect: $location" >&2
+  exit 1
+fi
+
+echo "SMOKE_OK: live GitHub connect route uses the canonical malikaiworld.world sign-in origin."
