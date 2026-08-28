@@ -45,6 +45,8 @@ import { clientFetchWithTimeout } from "@/lib/api-client"
 import { MalikModelSelector } from "./MalikModelSelector"
 import { canUseUltra, loadResponseDepth, type ChatSendOptions, type ResponseDepth } from "@/lib/ai/response-depth"
 import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
+import { isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
+import { ImageGenerationMotion } from "./image-generation-motion"
 
 export type { ChatSendOptions }
 
@@ -169,6 +171,7 @@ function detectGenerationStatusType(text: string): GenerationStatusType {
   // Never auto-route normal chat to paid media generation.
   // Only explicit slash commands show media mode.
   if (value.startsWith("/image ") || value.startsWith("/photo ") || value.startsWith("/img ")) return "image"
+  if (isExplicitImageGenerationRequest(text)) return "image"
   if (value.startsWith("/video ") || value.startsWith("/veo ")) return "video"
   if (value.startsWith("/file ") || value.startsWith("/document ")) return "file"
   if (value.startsWith("/codex ") || value.startsWith("/agent ")) return "codex"
@@ -299,6 +302,20 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
   const realVideo = isVideo && liveMedia.status === "ready" && isRealVideoUrl(url)
   const previewImage = Boolean(url) && !isVideo && (isDataSvgUrl(url) || isImageLikeUrl(url))
   const progress = isVideo && liveMedia.status === "ready" && !realVideo ? 82 : mediaProgress(liveMedia)
+
+  // Photo generation has its own clean, no-glass experience. The moving photo
+  // field stays alive until the browser has actually loaded the final image;
+  // only then does the generated photo fade in and the animation disappear.
+  if (!isVideo) {
+    return (
+      <ImageGenerationMotion
+        prompt={liveMedia.prompt}
+        resultUrl={previewImage ? url : undefined}
+        failed={isFailed}
+        error={liveMedia.error}
+      />
+    )
+  }
 
   const statusLabel: Record<InlineMediaGenerationStatus, string> = {
     queued: "Очередь",
@@ -863,9 +880,8 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
 
   const activeGenerationType = useMemo(() => {
     const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")
-    const attachmentHint = attachments.map((item) => item.kind).join(" ")
-    return detectGenerationStatusType(`${lastUserMessage?.content || prompt} ${attachmentHint}`)
-  }, [attachments, messages, prompt])
+    return detectGenerationStatusType(lastUserMessage?.content || prompt)
+  }, [messages, prompt])
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
