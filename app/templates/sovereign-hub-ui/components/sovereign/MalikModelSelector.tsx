@@ -11,7 +11,16 @@ import {
   type MalikModelDefinition,
   type MalikModelId,
 } from "@/lib/ai/malik-models"
+import {
+  DEFAULT_MALIK_IMAGE_MODEL_ID,
+  loadMalikImageModeActive,
+  loadMalikImageModelSelection,
+  saveMalikImageModeActive,
+  saveMalikImageModelSelection,
+  type MalikImageModelId,
+} from "@/lib/media/image-models"
 import type { AIPlan } from "@/lib/ai/types"
+import { MalikImageModelSelector } from "./MalikImageModelSelector"
 
 const cn = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ")
 
@@ -66,6 +75,30 @@ function ModelRow({
   )
 }
 
+function setControlledTextareaValue(field: HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set
+  if (setter) setter.call(field, value)
+  else field.value = value
+  field.dispatchEvent(new Event("input", { bubbles: true }))
+}
+
+function selectedComposerTextarea(button?: Element | null): HTMLTextAreaElement | null {
+  if (button?.classList.contains("thome-submit")) {
+    return document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")
+  }
+  if (button?.classList.contains("malik-inline-send")) {
+    return document.querySelector<HTMLTextAreaElement>(".malik-composer-textarea")
+  }
+  return document.querySelector<HTMLTextAreaElement>(".thome-composer textarea, .malik-composer-textarea")
+}
+
+function selectedComposerSendButton(field: HTMLTextAreaElement): HTMLButtonElement | null {
+  if (field.matches(".malik-composer-textarea")) {
+    return document.querySelector<HTMLButtonElement>(".malik-inline-send")
+  }
+  return document.querySelector<HTMLButtonElement>(".thome-submit")
+}
+
 export function MalikModelSelector({
   selectedModelId,
   plan,
@@ -84,10 +117,77 @@ export function MalikModelSelector({
   const [open, setOpen] = useState(false)
   const [upgradeModel, setUpgradeModel] = useState<MalikModelDefinition | null>(null)
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({})
+  const [imageModelId, setImageModelId] = useState<MalikImageModelId>(DEFAULT_MALIK_IMAGE_MODEL_ID)
+  const [imageModeActive, setImageModeActive] = useState(false)
+  const bypassImageBridgeRef = useRef(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const selectedModel = getMalikModel(selectedModelId)
+
+  useEffect(() => {
+    const savedModel = loadMalikImageModelSelection()
+    setImageModelId(savedModel)
+    setImageModeActive(loadMalikImageModeActive())
+    saveMalikImageModelSelection(savedModel)
+  }, [])
+
+  useEffect(() => {
+    if (!imageModeActive) return
+
+    const prefixPrompt = (field: HTMLTextAreaElement) => {
+      const value = field.value.trim()
+      if (!value || /^\s*\/(image|img|photo|foto|фото|картинка)(?![\p{L}\p{N}_])/iu.test(value)) return false
+      // Respect an explicit non-image slash command instead of silently replacing it.
+      if (/^\s*\/[\p{L}\p{N}_-]+/u.test(value)) return false
+      setControlledTextareaValue(field, `/image ${value}`)
+      return true
+    }
+
+    const onKeyDownCapture = (event: KeyboardEvent) => {
+      if (bypassImageBridgeRef.current || event.key !== "Enter" || event.shiftKey || event.isComposing) return
+      const field = event.target instanceof HTMLTextAreaElement ? event.target : null
+      if (!field || !field.matches(".thome-composer textarea, .malik-composer-textarea")) return
+      if (!prefixPrompt(field)) return
+
+      const sendButton = selectedComposerSendButton(field)
+      if (!sendButton || sendButton.disabled) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      window.setTimeout(() => {
+        bypassImageBridgeRef.current = true
+        sendButton.click()
+        window.setTimeout(() => { bypassImageBridgeRef.current = false }, 0)
+      }, 0)
+    }
+
+    const onClickCapture = (event: MouseEvent) => {
+      if (bypassImageBridgeRef.current) return
+      const target = event.target instanceof Element ? event.target : null
+      const button = target?.closest(".thome-submit, .malik-inline-send") as HTMLButtonElement | null
+      if (!button || button.disabled) return
+      const field = selectedComposerTextarea(button)
+      if (!field || !prefixPrompt(field)) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      window.setTimeout(() => {
+        bypassImageBridgeRef.current = true
+        button.click()
+        window.setTimeout(() => { bypassImageBridgeRef.current = false }, 0)
+      }, 0)
+    }
+
+    document.addEventListener("keydown", onKeyDownCapture, true)
+    document.addEventListener("click", onClickCapture, true)
+    return () => {
+      document.removeEventListener("keydown", onKeyDownCapture, true)
+      document.removeEventListener("click", onClickCapture, true)
+    }
+  }, [imageModeActive])
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -181,6 +281,16 @@ export function MalikModelSelector({
     setOpen(false)
   }
 
+  const chooseImageModel = (modelId: MalikImageModelId) => {
+    setImageModelId(modelId)
+    saveMalikImageModelSelection(modelId)
+  }
+
+  const setImageMode = (active: boolean) => {
+    setImageModeActive(active)
+    saveMalikImageModeActive(active)
+  }
+
   const upgradeDialog = upgradeModel ? (
     <div className="malik-model-upgrade" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) setUpgradeModel(null)
@@ -248,8 +358,18 @@ export function MalikModelSelector({
           <span>{selectedModel.label}</span>
           <ChevronDown className={cn("malik-model-selector__chevron", open && "is-open")} />
         </button>
-
       </div>
+
+      <MalikImageModelSelector
+        selectedModelId={imageModelId}
+        active={imageModeActive}
+        plan={plan}
+        onSelect={chooseImageModel}
+        onActiveChange={setImageMode}
+        onOpenBilling={onOpenBilling}
+        placement={placement}
+      />
+
       {modelMenu && typeof document !== "undefined" ? createPortal(modelMenu, document.body) : null}
       {upgradeDialog && typeof document !== "undefined" ? createPortal(upgradeDialog, document.body) : null}
     </>
