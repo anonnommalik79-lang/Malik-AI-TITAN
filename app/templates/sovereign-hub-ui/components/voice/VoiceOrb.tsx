@@ -288,11 +288,9 @@ export function VoiceOrb({
       <div className={styles.vignette} aria-hidden="true" />
       <div className={styles.grain} aria-hidden="true" />
       <div className={styles.orbWrap}>
-        <div className={styles.orbHalo} aria-hidden="true" />
         <div className={styles.orbShell}>
           <canvas ref={orbRef} className={styles.orbCanvas} aria-label="Живой голосовой шар Malik AI" />
           <div className={styles.orbGlass} aria-hidden="true" />
-          <div className={styles.orbRing} aria-hidden="true" />
         </div>
         <div className={styles.orbShadow} aria-hidden="true" />
       </div>

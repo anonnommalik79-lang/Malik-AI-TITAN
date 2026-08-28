@@ -253,9 +253,14 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         // replace a high-quality voice with the browser's unrelated system voice.
         errorMessage = "Браузер не запустил звук. Нажми «Озвучить ответ»."
       } else {
-        const payload = await response.json().catch(() => ({}))
+        // Provider diagnostics stay on the server, never in the conversation UI.
+        await response.json().catch(() => null)
         if (!current()) return false
-        errorMessage = String(payload.error || errorMessage)
+        errorMessage = response.status === 401
+          ? "Войди в аккаунт, чтобы продолжить разговор."
+          : response.status === 429
+            ? "Лимит голосового режима достигнут. Попробуй позже."
+            : "Сейчас не удалось озвучить ответ. Попробуй ещё раз."
         if (response.status === 401 || response.status === 429) {
           replyPlayingRef.current = false
           setAudioError(errorMessage)
@@ -504,10 +509,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       setFinalTranscript(payload.content)
       setInterimTranscript("")
       setTitle("Готовлю голос")
-      setSubtitle(`${voiceBelongsToLanguage(voice, selectedLanguage) ? voice : defaultVoiceForLanguage(selectedLanguage)} · ${selectedLanguage}`)
+      setSubtitle(`${voiceBelongsToLanguage(voice, selectedLanguage) ? voice : defaultVoiceForLanguage(selectedLanguage)} · ${selectedLanguage === "kk" ? "Қазақша" : selectedLanguage === "ru" ? "Русский" : "English"}`)
       const played = await speakReply(payload.content, undefined, selectedLanguage)
       if (!played) {
-        if (mountedRef.current && !closingRef.current && !replyInterruptedRef.current) setTitle("Ответ готов — звук не запущен")
+        if (mountedRef.current && !closingRef.current && !replyInterruptedRef.current) setTitle("Не удалось озвучить")
         return
       }
       if (mountedRef.current && !closingRef.current && !micActiveRef.current) {
@@ -516,10 +521,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         window.setTimeout(() => { if (mountedRef.current && !closingRef.current && !micActiveRef.current) void startMicrophone() }, 160)
       }
     } catch {
-      showNotice("Voice-ответ временно недоступен")
+      showNotice("Голосовой ответ временно недоступен")
       onSubmit?.(clean)
       setTitle("Попробуй ещё раз")
-      setSubtitle("Voice автоматически переключит провайдера")
+      setSubtitle("Попробуй повторить вопрос")
     } finally {
       if (mountedRef.current) setBusy(false)
     }
@@ -539,7 +544,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       const response = await fetch("/api/transcribe", { method: "POST", body: form })
       const payload = await response.json().catch(() => ({})) as TranscribePayload
       if (response.status === 429) {
-        showNotice(payload.error || "Лимит Voice на сегодня использован")
+        showNotice("Лимит голосового режима достигнут. Попробуй позже.")
         setTitle("Лимит Voice использован")
         setSubtitle("Доступ восстановится завтра")
         return
@@ -673,7 +678,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       setAudioError(null)
       if (mountedRef.current && !closingRef.current) void startMicrophone()
     } else if (mountedRef.current && !closingRef.current) {
-      setAudioError("Озвучка недоступна. Проверь, что на сервере настроен ключ голосового провайдера.")
+      setAudioError("Сейчас не удалось озвучить ответ. Попробуй ещё раз.")
     }
   }, [busy, playBlobAudio, speakReply, startMicrophone, stopMicrophone])
 
@@ -730,7 +735,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         <div className={styles.transcript} aria-live="polite">
           <span>{finalTranscript}</span>{interimTranscript ? <span className={styles.interim}> {interimTranscript}</span> : null}
         </div>
-        {webGLError ? <div className={styles.inlineError}>WebGL недоступен — управление голосом продолжает работать.</div> : null}
+        {webGLError ? <div className={styles.inlineError}>Анимация недоступна. Можно продолжить разговор.</div> : null}
         {audioError ? <div className={styles.retry} role="status"><span>{audioError}</span><button type="button" disabled={busy} onClick={() => void retryReply()}>Озвучить ответ</button></div> : null}
         {micError ? (
           <div className={styles.retry}>
