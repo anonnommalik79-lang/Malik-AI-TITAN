@@ -1,0 +1,14 @@
+/* Exact user-provided Uber wordmark. Keep the original PNG pixels and only use CSS to place it inside the existing Taxi logo boxes. */
+.malik-taxi-surface svg[aria-label="Uber"] {
+  color: transparent !important;
+  fill: transparent !important;
+  background-image: url("/brands/uber-wordmark.png") !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: contain !important;
+}
+
+.malik-taxi-surface svg[aria-label="Uber"] path {
+  display: none !important;
+  fill: transparent !important;
+}
