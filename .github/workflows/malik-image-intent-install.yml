@@ -1,3 +1,4 @@
+# Retry after completing the existing image aspect-ratio maps.
 name: Install legendary image generation flow
 
 on:
