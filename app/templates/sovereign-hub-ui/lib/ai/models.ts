@@ -31,9 +31,9 @@ export const MODEL_REGISTRY: Record<AIProviderId, Partial<Record<AITaskType, str
   },
   cerebras: {
     chat: process.env.CEREBRAS_MODEL || "gpt-oss-120b",
-    code: process.env.CEREBRAS_CODE_MODEL || process.env.CEREBRAS_MODEL || "gpt-oss-120b",
-    debug: process.env.CEREBRAS_CODE_MODEL || process.env.CEREBRAS_MODEL || "gpt-oss-120b",
-    project: process.env.CEREBRAS_CODE_MODEL || process.env.CEREBRAS_MODEL || "gpt-oss-120b",
+    code: process.env.CEREBRAS_CODE_MODEL || "zai-glm-4.7",
+    debug: process.env.CEREBRAS_CODE_MODEL || "zai-glm-4.7",
+    project: process.env.CEREBRAS_CODE_MODEL || "zai-glm-4.7",
     research: process.env.CEREBRAS_MODEL || "gpt-oss-120b",
     general: process.env.CEREBRAS_MODEL || "gpt-oss-120b",
   },
