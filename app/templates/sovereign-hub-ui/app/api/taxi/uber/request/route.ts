@@ -46,7 +46,7 @@ export async function DELETE(request: Request) {
   try {
     const url = new URL(request.url)
     const result = await cancelUberRide(String(url.searchParams.get("id") || ""))
-    return Response.json({ ok: true, ...result })
+    return Response.json(result)
   } catch (error) {
     const failure = publicUberError(error)
     return Response.json({ ok: false, ...failure }, { status: failure.status })
