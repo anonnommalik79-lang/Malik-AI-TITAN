@@ -6,7 +6,7 @@ import path from "node:path"
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const read = (file) => readFile(path.join(root, file), "utf8")
 
-const [home, chat, dashboard, sidebar, mode, dock, orb, settings, sound, tts, turn, flux, token, transcribe, css, homeCss, chatCss] = await Promise.all([
+const [home, chat, dashboard, sidebar, mode, dock, orb, settings, sound, tts, turn, flux, token, transcribe, css, homeCss, chatCss, playback] = await Promise.all([
   read("components/sovereign/hybrid/MalikHybridHome.tsx"),
   read("components/sovereign/chat-view.tsx"),
   read("components/sovereign/dashboard.tsx"),
@@ -24,6 +24,7 @@ const [home, chat, dashboard, sidebar, mode, dock, orb, settings, sound, tts, tu
   read("components/voice/VoiceMode.module.css"),
   read("app/titan-home.css"),
   read("app/titan-chat.css"),
+  read("lib/voice/audio-playback.ts"),
 ])
 
 const checks = [
@@ -43,13 +44,13 @@ const checks = [
   ["14 Flux WebSocket streams raw audio with persistent session context", () => { assert.match(flux, /wss:\/\/api\.deepgram\.com\/v2\/speak/); assert.match(flux, /new WebSocket\([^\n]+\["bearer", token\]\)/); assert.match(flux, /type: "Speak"/); assert.match(flux, /type: "Flush"/); assert.match(flux, /encoding:\s*"linear16"/); assert.match(flux, /sample_rate:\s*String\(SAMPLE_RATE\)/) }],
   ["15 real Flux Interrupt barge-in is wired", () => { assert.match(flux, /type: "Interrupt"/); assert.match(flux, /playback_offset/); assert.match(flux, /SpeechInterrupted/); assert.match(mode, /fluxSessionRef\.current\?\.isSpeaking\(\)/); assert.match(mode, /stopReplyAudio\(true\)/) }],
   ["16 mid-session speed Configure is wired", () => { assert.match(flux, /type: "Configure"/); assert.match(flux, /configureSpeed/); assert.match(mode, /fluxSessionRef\.current\?\.configureSpeed\(speed\)/) }],
-  ["17 selected language and provider are honored end-to-end", () => { assert.match(mode, /selectedLanguage === "en"/); assert.match(mode, /provider === "kokoro-kazakh"/); assert.match(mode, /language: selectedLanguage/); assert.match(tts, /GEMINI_VOICE_BY_PROFILE/); assert.match(tts, /requestedLanguage/); assert.match(settings, /Қазақша/); assert.match(settings, /Русский/); assert.match(settings, /English/) }],
+  ["17 selected language and real audio are honored end-to-end", () => { assert.match(mode, /selectedLanguage === "en"/); assert.match(mode, /response\.headers\.get\("content-type"\)/); assert.match(mode, /language: selectedLanguage/); assert.match(tts, /GEMINI_VOICE_BY_PROFILE/); assert.match(tts, /requestedLanguage/); assert.match(settings, /Қазақша/); assert.match(settings, /Русский/); assert.match(settings, /English/) }],
   ["18 Kazakh-Russian-English answer language lock is strict", () => { assert.match(turn, /type VoiceLanguage = "kk" \| "ru" \| "en"/); assert.match(turn, /requestedLanguage\(body\?\.language\)/); assert.match(turn, /LANGUAGE LOCK: KAZAKH ONLY/); assert.match(turn, /LANGUAGE LOCK: RUSSIAN ONLY/); assert.match(turn, /LANGUAGE LOCK: ENGLISH ONLY/); assert.match(turn, /matchesLanguage/); assert.match(turn, /second violation is not allowed/i) }],
   ["19 REST fallback passes language, speed and expressivity", () => { assert.match(tts, /speed:\s*String\(speed\)/); assert.match(tts, /expressivity:\s*String\(expressivity\)/); assert.match(mode, /JSON\.stringify\(\{ text, voice: selectedVoice, language: selectedLanguage, speed, expressivity \}\)/) }],
   ["20 file, sound, personality and controls are real", () => { assert.match(dock, /type="file"/); assert.match(settings, /Assistant/); assert.match(settings, /type="range"/); assert.match(sound, /createOscillator/); assert.match(dashboard, /playVoiceTransitionSound\("open"\)/); assert.match(mode, /playVoiceTransitionSound\("close"\)/) }],
   ["21 Esc and unmount release resources", () => { assert.match(mode, /event\.key === "Escape"/); assert.match(mode, /getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/); assert.match(mode, /context\.close\(\)/); assert.match(mode, /fluxSessionRef\.current\?\.close\(\)/); assert.match(orb, /WEBGL_lose_context/) }],
   ["22 responsive layout and DPR caps are present", () => { assert.match(css, /@media \(max-width: 680px\)/); assert.match(css, /@media \(max-width: 450px\)/); assert.match(orb, /resize\(background, backgroundCanvas, 1\.6\)/); assert.match(orb, /resize\(orb, orbCanvas, 2\)/) }],
-  ["23 iPhone blob playback fallback remains available", () => { assert.match(sound, /HTMLMediaElement\.prototype/); assert.match(sound, /sourceUrl\.startsWith\("blob:"\)/); assert.match(sound, /decodeAudioData/); assert.match(sound, /dispatchEvent\(new Event\("ended"\)\)/) }],
+  ["23 replies use a gesture-unlocked player without global media patches", () => { assert.match(sound, /unlockVoiceAudio/); assert.match(playback, /decodeAudioData/); assert.match(playback, /source\.onended/); assert.match(mode, /Озвучить ответ/); assert.doesNotMatch(sound, /HTMLMediaElement\.prototype/) }],
 ]
 
 for (const [name, check] of checks) {

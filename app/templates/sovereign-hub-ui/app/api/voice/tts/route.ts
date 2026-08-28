@@ -152,6 +152,7 @@ async function deepgramTts(text: string, voice: string, speed: number, expressiv
         },
         body: JSON.stringify({ text }),
         cache: "no-store",
+        signal: AbortSignal.timeout(15000),
       })
 
       if (!response.ok) {
@@ -161,7 +162,7 @@ async function deepgramTts(text: string, voice: string, speed: number, expressiv
       }
 
       const bytes = await response.arrayBuffer()
-      if (bytes.byteLength < 128) continue
+      if (!isAudio(response, bytes)) continue
 
       return new Response(bytes, {
         headers: {
@@ -218,6 +219,7 @@ async function geminiTts(text: string, voice: string, language: "ru" | "en", spe
           },
         }),
         cache: "no-store",
+        signal: AbortSignal.timeout(25000),
       })
 
       const payload = await response.json().catch(() => ({}))
@@ -274,6 +276,7 @@ async function multilingualTts(text: string, language: VoiceLanguage, speed: num
           optimize_streaming_latency: 0,
         }),
         cache: "no-store",
+        signal: AbortSignal.timeout(15000),
       })
 
       if (!response.ok) {
@@ -283,7 +286,7 @@ async function multilingualTts(text: string, language: VoiceLanguage, speed: num
       }
 
       const bytes = await response.arrayBuffer()
-      if (bytes.byteLength < 128) continue
+      if (!isAudio(response, bytes)) continue
 
       return new Response(bytes, {
         headers: {
@@ -300,6 +303,34 @@ async function multilingualTts(text: string, language: VoiceLanguage, speed: num
   }
 
   return null
+}
+
+function isAudio(response: Response, bytes: ArrayBuffer) {
+  return bytes.byteLength > 128 && /^(audio\/|application\/octet-stream)/i.test(response.headers.get("content-type") || "")
+}
+
+async function kazakhTts(request: Request, text: string, voice: string, speed: number) {
+  // Node cannot load the Python Kokoro checkpoint. Use the configured Python
+  // voice service instead of unconditionally returning 503 for the default language.
+  const backend = env("KOKORO_TTS_URL") || env("MALIK_BACKEND_URL")
+  if (!backend) return null
+  try {
+    const target = new URL("/api/voice/tts", backend)
+    if (!/^https?:$/.test(target.protocol) || target.origin === new URL(request.url).origin) return null
+    const response = await fetch(target, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-malik-voice-proxy": "1" },
+      body: JSON.stringify({ text, voice, language: "kk", speed }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(45000),
+    })
+    const bytes = await response.arrayBuffer()
+    if (!response.ok || !isAudio(response, bytes)) return null
+    return new Response(bytes, { headers: {
+      "content-type": response.headers.get("content-type") || "audio/wav", "cache-control": "no-store",
+      "x-malik-tts-provider": "kokoro-kazakh", "x-malik-tts-voice": voice,
+    } })
+  } catch { return null }
 }
 
 export const POST = withCompute(handlePOST, "voice")
@@ -328,7 +359,9 @@ async function handlePOST(request: Request) {
   }
 
   if (language === "kk") {
-    return Response.json({ ok: false, language, error: "Kazakh Kokoro TTS is served by the Flask production runtime" }, { status: 503, headers: { "cache-control": "no-store" } })
+    const kazakh = request.headers.get("x-malik-voice-proxy") ? null : await kazakhTts(request, text, voice, speed)
+    if (kazakh) return kazakh
+    return Response.json({ ok: false, language, error: "Қазақша дауыс сервері қолжетімсіз. Kokoro серверін қосу қажет (KOKORO_TTS_URL)." }, { status: 503, headers: { "cache-control": "no-store" } })
   }
 
   const multilingual = await multilingualTts(text, language, speed)
@@ -339,7 +372,7 @@ async function handlePOST(request: Request) {
       ok: false,
       fallback: "browser-language-aware",
       language,
-      error: language === "en" ? "Voice TTS unavailable" : "Multilingual TTS unavailable",
+      error: language === "en" ? "Voice audio is unavailable. Check the speech provider key on the server." : "Сервис озвучки недоступен. Проверь GEMINI_VOICE_API_KEY или GEMINI_API_KEY на сервере.",
     },
     { status: 503, headers: { "cache-control": "no-store" } },
   )

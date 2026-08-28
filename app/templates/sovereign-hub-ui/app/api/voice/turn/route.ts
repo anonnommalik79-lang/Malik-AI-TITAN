@@ -1,4 +1,5 @@
 import { voiceLlmAnswer } from "@/lib/voice/voice-llm-router"
+import { voiceSearchContext, searchUnavailableReply } from "@/lib/voice/web-search"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
@@ -67,20 +68,25 @@ async function handlePOST(request: Request) {
   ].join(" ")
 
   try {
-    let answer = await voiceLlmAnswer({ text, instruction })
+    const search = await voiceSearchContext(text)
+    if (search.requested && !search.sources.length) {
+      return Response.json({ ok: true, content: searchUnavailableReply(language), personality, language, usedWeb: false, searchRequested: true, sources: [] }, { headers: { "cache-control": "no-store" } })
+    }
+    const groundedInstruction = search.context ? `${instruction}\n${search.context}` : instruction
+    let answer = await voiceLlmAnswer({ text, instruction: groundedInstruction })
     let content = String(answer.content || "").trim()
 
     if (!content || !matchesLanguage(content, language)) {
       answer = await voiceLlmAnswer({
         text: `Answer this user request again. Obey the selected language lock exactly. USER REQUEST:\n${text}`,
-        instruction: `${instruction} Previous output violated the language lock. A second violation is not allowed.`,
+        instruction: `${groundedInstruction} Previous output violated the language lock. A second violation is not allowed.`,
       })
       content = String(answer.content || "").trim()
     }
 
     if (!content || !matchesLanguage(content, language)) content = localFallback(language)
 
-    return Response.json({ ok: true, content, personality, language, provider: answer.provider, model: answer.model }, { headers: { "cache-control": "no-store" } })
+    return Response.json({ ok: true, content, personality, language, provider: answer.provider, model: answer.model, usedWeb: search.sources.length > 0, searchRequested: search.requested, sources: search.sources }, { headers: { "cache-control": "no-store" } })
   } catch (error) {
     console.error("[VOICE_TURN_ERROR]", error instanceof Error ? error.message : error)
     return Response.json({ ok: true, content: localFallback(language), personality, language, provider: "voice-local-fallback", model: "none" }, { headers: { "cache-control": "no-store" } })

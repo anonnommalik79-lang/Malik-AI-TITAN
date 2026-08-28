@@ -348,3 +348,14 @@ export async function searchWeb(query: string, limit = 8): Promise<SearchResult[
     limit
   );
 }
+
+/** Voice needs one quick search, not a paid fan-out to every configured service. */
+export async function searchVoiceWeb(query: string, limit = 4): Promise<SearchResult[]> {
+  for (const [name, run] of [
+    ["serper", searchSerper], ["tavily", searchTavily], ["brave", searchBrave],
+  ] as const) {
+    const results = await runProvider(name, () => run(query, limit));
+    if (results.length) return results;
+  }
+  return [];
+}

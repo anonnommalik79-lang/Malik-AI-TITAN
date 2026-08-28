@@ -1,9 +1,12 @@
 "use client"
 
+import { getVoiceAudioContext, readyVoiceAudio } from "./audio-playback"
+
 type FluxConfig = {
   voice: string
   speed: number
   expressivity: number
+  onStarted?: () => void
 }
 
 type TokenPayload = { ok?: boolean; accessToken?: string; error?: string }
@@ -55,11 +58,6 @@ function textChunks(text: string) {
   return chunks.length ? chunks : [text]
 }
 
-function browserAudioContext() {
-  const ctor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  return ctor ? new ctor() : null
-}
-
 export function detectVoiceLanguage(text: string): "kk" | "ru" | "en" {
   const normalized = text.toLowerCase()
   if (
@@ -89,16 +87,24 @@ export class FluxTtsSession {
   private sessionPlayedMs = 0
   private lastInterruptOffset = 0
   private keepAliveTimer: number | null = null
+  private turnTimer: number | null = null
+  private pendingPcm = 0
+  private generation = 0
+  private onStarted: (() => void) | undefined
 
   isSpeaking() {
     return this.speaking
   }
 
   private async getToken() {
-    const response = await fetch("/api/voice/deepgram-token", { cache: "no-store", credentials: "same-origin" })
-    const payload = await response.json().catch(() => ({})) as TokenPayload
-    if (!response.ok || !payload.accessToken) throw new Error(payload.error || "Deepgram token unavailable")
-    return payload.accessToken
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), 7000)
+    try {
+      const response = await fetch("/api/voice/deepgram-token", { cache: "no-store", credentials: "same-origin", signal: controller.signal })
+      const payload = await response.json().catch(() => ({})) as TokenPayload
+      if (!response.ok || !payload.accessToken) throw new Error(payload.error || "Deepgram token unavailable")
+      return payload.accessToken
+    } finally { window.clearTimeout(timer) }
   }
 
   private stopKeepAlive() {
@@ -124,6 +130,8 @@ export class FluxTtsSession {
   }
 
   private finishTurn(ok: boolean) {
+    if (this.turnTimer) window.clearTimeout(this.turnTimer)
+    this.turnTimer = null
     const resolve = this.turnResolve
     this.turnResolve = null
     this.speaking = false
@@ -139,17 +147,19 @@ export class FluxTtsSession {
   }
 
   private maybeFinishTurn() {
-    if (this.speaking && this.metadataReceived && this.sources.size === 0) this.finishTurn(true)
+    if (this.speaking && this.metadataReceived && !this.pendingPcm && this.sources.size === 0) this.finishTurn(this.turnScheduledMs > 0)
   }
 
   private async schedulePcm(data: ArrayBuffer) {
     if (!this.speaking || this.interrupted || data.byteLength < 2) return
-    if (!this.audioContext || this.audioContext.state === "closed") this.audioContext = browserAudioContext()
+    const generation = this.generation
+    if (!this.audioContext || this.audioContext.state === "closed") this.audioContext = getVoiceAudioContext()
     const context = this.audioContext
-    if (!context) return
-    if (context.state === "suspended") {
-      try { await context.resume() } catch {}
+    if (!context || !await readyVoiceAudio(context)) {
+      if (generation === this.generation) this.finishTurn(false)
+      return
     }
+    if (!this.speaking || this.interrupted || generation !== this.generation) return
 
     const sampleCount = Math.floor(data.byteLength / 2)
     if (!sampleCount) return
@@ -164,7 +174,12 @@ export class FluxTtsSession {
     source.connect(context.destination)
 
     const startAt = Math.max(context.currentTime + 0.025, this.audioCursor || 0)
-    if (!this.turnStartContextTime) this.turnStartContextTime = startAt
+    if (!this.turnStartContextTime) {
+      this.turnStartContextTime = startAt
+      this.onStarted?.()
+      if (this.turnTimer) window.clearTimeout(this.turnTimer)
+      this.turnTimer = window.setTimeout(() => { this.stopSources(); this.finishTurn(false) }, 120000)
+    }
     this.audioCursor = startAt + buffer.duration
     this.turnScheduledMs += buffer.duration * 1000
     this.sources.add(source)
@@ -177,18 +192,24 @@ export class FluxTtsSession {
 
   private handleServerMessage(event: MessageEvent) {
     if (event.data instanceof ArrayBuffer) {
-      void this.schedulePcm(event.data)
+      this.pendingPcm += 1
+      void this.schedulePcm(event.data).catch(() => this.finishTurn(false)).finally(() => { this.pendingPcm -= 1; this.maybeFinishTurn() })
       return
     }
     if (event.data instanceof Blob) {
-      void event.data.arrayBuffer().then((data) => this.schedulePcm(data))
+      this.pendingPcm += 1
+      void event.data.arrayBuffer().then((data) => this.schedulePcm(data)).catch(() => this.finishTurn(false)).finally(() => { this.pendingPcm -= 1; this.maybeFinishTurn() })
       return
     }
     if (typeof event.data !== "string") return
 
-    let message: FluxServerMessage | null = null
+    let message: FluxServerMessage | null
     try { message = JSON.parse(event.data) as FluxServerMessage } catch { return }
     if (!message?.type) return
+    if (message.type === "Error" || message.type === "Warning") {
+      if (message.type === "Error") { this.stopSources(); this.finishTurn(false) }
+      return
+    }
 
     if (message.type === "SpeechMetadata") {
       this.metadataReceived = true
@@ -275,7 +296,7 @@ export class FluxTtsSession {
           return false
         }
 
-        socket.onmessage = (event) => this.handleServerMessage(event)
+        socket.onmessage = (event) => { if (this.socket === socket) this.handleServerMessage(event) }
         socket.onerror = () => {
           if (this.speaking) {
             this.stopSources()
@@ -307,11 +328,14 @@ export class FluxTtsSession {
   async speak(text: string, config: FluxConfig) {
     const clean = text.trim()
     if (!clean) return false
+    if (this.speaking) this.interrupt()
+    const generation = ++this.generation
+    this.audioContext = getVoiceAudioContext()
+    if (!this.audioContext || !await readyVoiceAudio(this.audioContext)) return false
     const connected = await this.connect(config)
     const socket = this.socket
-    if (!connected || !socket || socket.readyState !== WebSocket.OPEN) return false
+    if (generation !== this.generation || !connected || !socket || socket.readyState !== WebSocket.OPEN) return false
 
-    if (this.speaking) this.interrupt()
     this.stopSources()
     this.speaking = true
     this.interrupted = false
@@ -319,8 +343,10 @@ export class FluxTtsSession {
     this.metadataDurationMs = 0
     this.turnStartContextTime = 0
     this.turnScheduledMs = 0
+    this.onStarted = config.onStarted
 
     const result = new Promise<boolean>((resolve) => { this.turnResolve = resolve })
+    this.turnTimer = window.setTimeout(() => { this.stopSources(); this.destroySocket(); this.finishTurn(false) }, 10000)
     try {
       for (const chunk of textChunks(clean)) socket.send(JSON.stringify({ type: "Speak", text: chunk }))
       socket.send(JSON.stringify({ type: "Flush" }))
@@ -332,6 +358,7 @@ export class FluxTtsSession {
   }
 
   interrupt() {
+    this.generation += 1
     if (!this.speaking) return false
     const context = this.audioContext
     let elapsed = 0
@@ -363,9 +390,7 @@ export class FluxTtsSession {
     this.interrupt()
     this.stopSources()
     this.destroySocket()
-    if (this.audioContext && this.audioContext.state !== "closed") {
-      try { void this.audioContext.close() } catch {}
-    }
+    // The gesture-unlocked output context is also used by REST audio/chimes.
     this.audioContext = null
   }
 }

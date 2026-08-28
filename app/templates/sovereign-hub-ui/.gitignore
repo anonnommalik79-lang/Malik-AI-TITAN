@@ -1,5 +1,6 @@
 node_modules
 /.data/
+/.voice-check/
 .npm-cache
 .next
 .turbo

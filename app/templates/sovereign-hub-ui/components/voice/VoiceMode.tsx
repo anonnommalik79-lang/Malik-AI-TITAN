@@ -4,10 +4,11 @@ import { X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { VoiceDock, type PickedVoiceFile } from "./VoiceDock"
 import { VoiceOrb } from "./VoiceOrb"
-import { VoiceSettings, VOICES, defaultVoiceForLanguage, getVoiceProfile, voiceBelongsToLanguage, type VoiceLanguage } from "./VoiceSettings"
+import { VoiceSettings, defaultVoiceForLanguage, getVoiceProfile, voiceBelongsToLanguage, type VoiceLanguage } from "./VoiceSettings"
 import styles from "./VoiceMode.module.css"
 import { isVoiceSoundEnabled, playVoiceTransitionSound, saveVoiceSoundEnabled } from "@/lib/voice-transition-sound"
-import { FluxTtsSession, detectVoiceLanguage } from "@/lib/voice/flux-tts-client"
+import { FluxTtsSession } from "@/lib/voice/flux-tts-client"
+import { VoiceAudioPlayer, unlockVoiceAudio } from "@/lib/voice/audio-playback"
 
 type SpeechResult = { isFinal: boolean; 0: { transcript: string } }
 type SpeechResultEvent = { resultIndex: number; results: ArrayLike<SpeechResult> }
@@ -51,6 +52,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const [finalTranscript, setFinalTranscript] = useState("")
   const [interimTranscript, setInterimTranscript] = useState("")
   const [notice, setNotice] = useState<string | null>(null)
+  const [audioError, setAudioError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const energyRef = useRef(.07)
@@ -72,7 +74,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const closingRef = useRef(false)
   const mountedRef = useRef(true)
   const micRequestRef = useRef(0)
-  const replyAudioRef = useRef<HTMLAudioElement | null>(null)
+  const replyPlayerRef = useRef<VoiceAudioPlayer | null>(null)
+  const replyAbortRef = useRef<AbortController | null>(null)
+  const replyVersionRef = useRef(0)
+  const pendingAudioRef = useRef<Blob | null>(null)
+  const lastReplyRef = useRef<{ text: string; voice: string; language: VoiceLanguage } | null>(null)
   const replySettleRef = useRef<((ok: boolean) => void) | null>(null)
   const replyPlayingRef = useRef(false)
   const replyInterruptedRef = useRef(false)
@@ -115,17 +121,16 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   }, [])
 
   const stopReplyAudio = useCallback((interrupted = true) => {
+    replyVersionRef.current += 1
+    replyAbortRef.current?.abort()
+    replyAbortRef.current = null
     if (interrupted && replyPlayingRef.current) replyInterruptedRef.current = true
     window.speechSynthesis?.cancel()
     fluxSessionRef.current?.interrupt()
     const settle = replySettleRef.current
     replySettleRef.current = null
     settle?.(false)
-    const audio = replyAudioRef.current
-    replyAudioRef.current = null
-    if (audio) {
-      try { audio.pause(); audio.src = "" } catch {}
-    }
+    replyPlayerRef.current?.stop()
     replyPlayingRef.current = false
   }, [])
 
@@ -154,52 +159,67 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     utterance.rate = Math.max(.85, Math.min(1.15, profile.rate * speedRef.current))
     utterance.pitch = profile.pitch
     utterance.volume = 1
-    utterance.onend = () => resolve(true)
-    utterance.onerror = () => resolve(false)
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
-  }), [chooseBrowserVoice])
-
-  const playBlobAudio = useCallback((blob: Blob) => new Promise<boolean>((resolve) => {
-    if (blob.size <= 128) return resolve(false)
-    const url = URL.createObjectURL(blob)
-    const audio = new Audio(url)
+    let started = false
     let settled = false
     const settle = (ok: boolean) => {
       if (settled) return
       settled = true
-      window.clearTimeout(timeout)
-      URL.revokeObjectURL(url)
-      if (replyAudioRef.current === audio) replyAudioRef.current = null
+      clearTimeout(timer)
       if (replySettleRef.current === settle) replySettleRef.current = null
+      if (!ok) window.speechSynthesis.cancel()
       resolve(ok)
     }
-    const timeout = window.setTimeout(() => settle(false), 120000)
-    replyAudioRef.current = audio
+    let timer = setTimeout(() => settle(false), 5000)
     replySettleRef.current = settle
-    audio.preload = "auto"
-    audio.volume = 1
-    audio.playbackRate = 1
-    audio.setAttribute("playsinline", "true")
-    audio.onended = () => settle(true)
-    audio.onerror = () => settle(false)
-    void audio.play().catch(() => settle(false))
-  }), [])
+    utterance.onstart = () => {
+      if (settled) return
+      started = true
+      clearTimeout(timer)
+      timer = setTimeout(() => settle(false), 120000)
+      setTitle("Отвечаю")
+    }
+    utterance.onend = () => settle(started)
+    utterance.onerror = () => settle(false)
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+  }), [chooseBrowserVoice])
+
+  const playBlobAudio = useCallback((blob: Blob) => {
+    const player = replyPlayerRef.current || new VoiceAudioPlayer()
+    replyPlayerRef.current = player
+    return player.play(blob, () => { setTitle("Отвечаю"); setAudioError(null) })
+  }, [])
 
   const speakReply = useCallback(async (text: string, overrideVoice?: string, overrideLanguage?: VoiceLanguage) => {
-    if (!soundEnabled || !text.trim()) return false
+    if (!text.trim()) return false
     stopReplyAudio(false)
+    const version = replyVersionRef.current
+    const current = () => version === replyVersionRef.current && mountedRef.current && !closingRef.current
+    const abort = new AbortController()
+    replyAbortRef.current = abort
+    const timeout = window.setTimeout(() => abort.abort(), 60000)
+    setAudioError(null)
+    pendingAudioRef.current = null
     replyInterruptedRef.current = false
     replyPlayingRef.current = true
     const selectedLanguage = overrideLanguage || languageRef.current
     const requestedVoice = overrideVoice || voice
     const selectedVoice = voiceBelongsToLanguage(requestedVoice, selectedLanguage) ? requestedVoice : defaultVoiceForLanguage(selectedLanguage)
+    lastReplyRef.current = { text, voice: selectedVoice, language: selectedLanguage }
+    if (!isVoiceSoundEnabled()) {
+      window.clearTimeout(timeout)
+      replyPlayingRef.current = false
+      setAudioError("Звук выключен. Включи динамик или нажми «Озвучить ответ».")
+      return false
+    }
+    let errorMessage = "Не удалось получить аудио. Проверь подключение и повтори озвучку."
 
     try {
       if (selectedLanguage === "en") {
         const session = fluxSessionRef.current || new FluxTtsSession()
         fluxSessionRef.current = session
-        const streamed = await session.speak(text, { voice: selectedVoice, speed, expressivity })
+        const streamed = await session.speak(text, { voice: selectedVoice, speed, expressivity, onStarted: () => setTitle("Отвечаю") })
+        if (!current()) return false
         if (streamed) {
           replyPlayingRef.current = false
           return true
@@ -214,24 +234,47 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text, voice: selectedVoice, language: selectedLanguage, speed, expressivity }),
+        signal: abort.signal,
       })
-      const provider = response.headers.get("x-malik-tts-provider")
-      if (response.ok && (provider === "kokoro-kazakh" || provider === "deepgram" || provider === "gemini" || provider === "xai")) {
-        const played = await playBlobAudio(await response.blob())
-        replyPlayingRef.current = false
-        if (played || replyInterruptedRef.current) return played
+      if (!current()) return false
+      const mime = response.headers.get("content-type") || ""
+      if (response.ok && /^(audio\/|application\/octet-stream)/i.test(mime)) {
+        const blob = await response.blob()
+        if (!current()) return false
+        pendingAudioRef.current = blob
+        const played = await playBlobAudio(blob)
+        if (!current()) return false
+        if (played) {
+          pendingAudioRef.current = null
+          replyPlayingRef.current = false
+          return true
+        }
+        // Keep the exact neural audio for a gesture-driven retry; do not silently
+        // replace a high-quality voice with the browser's unrelated system voice.
+        errorMessage = "Браузер не запустил звук. Нажми «Озвучить ответ»."
+      } else {
+        const payload = await response.json().catch(() => ({}))
+        if (!current()) return false
+        errorMessage = String(payload.error || errorMessage)
+        if (response.status === 401 || response.status === 429) {
+          replyPlayingRef.current = false
+          setAudioError(errorMessage)
+          return false
+        }
       }
-    } catch {}
+    } catch {} finally { window.clearTimeout(timeout) }
 
+    if (!current()) return false
     if (replyInterruptedRef.current) {
       replyPlayingRef.current = false
       return false
     }
-    const browserPlayed = await speakBrowser(text, selectedVoice, selectedLanguage)
+    const browserPlayed = !pendingAudioRef.current && await speakBrowser(text, selectedVoice, selectedLanguage)
+    if (!current()) return false
     replyPlayingRef.current = false
-    if (!browserPlayed) showNotice("Не удалось воспроизвести Voice-ответ")
+    if (!browserPlayed) setAudioError(errorMessage)
     return browserPlayed
-  }, [expressivity, playBlobAudio, showNotice, soundEnabled, speakBrowser, speed, stopReplyAudio, voice])
+  }, [expressivity, playBlobAudio, speakBrowser, speed, stopReplyAudio, voice])
 
   const previewVoice = useCallback((profileName: string) => {
     if (!soundEnabled) return
@@ -456,12 +499,17 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         body: JSON.stringify({ text: clean, personality, language: selectedLanguage }),
       })
       const payload = await response.json().catch(() => ({})) as VoiceTurnPayload
+      if (!mountedRef.current || closingRef.current || selectedLanguage !== languageRef.current) return
       if (!response.ok || !payload.ok || !payload.content) throw new Error(payload.error || "voice turn failed")
       setFinalTranscript(payload.content)
       setInterimTranscript("")
-      setTitle("Отвечаю")
+      setTitle("Готовлю голос")
       setSubtitle(`${voiceBelongsToLanguage(voice, selectedLanguage) ? voice : defaultVoiceForLanguage(selectedLanguage)} · ${selectedLanguage}`)
-      await speakReply(payload.content, undefined, selectedLanguage)
+      const played = await speakReply(payload.content, undefined, selectedLanguage)
+      if (!played) {
+        if (mountedRef.current && !closingRef.current && !replyInterruptedRef.current) setTitle("Ответ готов — звук не запущен")
+        return
+      }
       if (mountedRef.current && !closingRef.current && !micActiveRef.current) {
         setTitle("Слушаю")
         setSubtitle("Продолжай разговор · можно перебить голос")
@@ -515,6 +563,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   }, [runVoiceTurn, showNotice])
 
   const toggleMicrophone = useCallback(async () => {
+    unlockVoiceAudio()
     if (replyPlayingRef.current || fluxSessionRef.current?.isSpeaking()) {
       stopReplyAudio(true)
       setBusy(false)
@@ -581,12 +630,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const closeMode = useCallback(() => {
     if (closingRef.current) return
     closingRef.current = true
-    if (soundEnabled) playVoiceTransitionSound("close")
+    if (isVoiceSoundEnabled()) playVoiceTransitionSound("close")
     cleanupAll()
     setSettingsOpen(false)
     setPhase("leave")
     closeTimerRef.current = window.setTimeout(onClose, 220)
-  }, [cleanupAll, onClose, soundEnabled])
+  }, [cleanupAll, onClose])
 
   const toggleSound = useCallback(() => {
     setSoundEnabled((current) => {
@@ -598,7 +647,35 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     })
   }, [stopReplyAudio])
 
-  const submitText = useCallback((prompt: string) => { void runVoiceTurn(prompt) }, [runVoiceTurn])
+  const submitText = useCallback((prompt: string) => { unlockVoiceAudio(); void runVoiceTurn(prompt) }, [runVoiceTurn])
+
+  const retryReply = useCallback(async () => {
+    unlockVoiceAudio()
+    const last = lastReplyRef.current
+    if (!last || busy) return
+    await stopMicrophone()
+    setBusy(true)
+    setAudioError(null)
+    saveVoiceSoundEnabled(true)
+    setSoundEnabled(true)
+    // A saved blob can play immediately after the user's gesture, without
+    // paying for another TTS request. A failed request can be retried normally.
+    const blob = pendingAudioRef.current
+    replyInterruptedRef.current = false
+    replyPlayingRef.current = true
+    const version = replyVersionRef.current
+    const played = blob ? await playBlobAudio(blob) : await speakReply(last.text, last.voice, last.language)
+    if (mountedRef.current) setBusy(false)
+    if (!mountedRef.current || closingRef.current || (blob && version !== replyVersionRef.current)) return
+    replyPlayingRef.current = false
+    if (played) {
+      pendingAudioRef.current = null
+      setAudioError(null)
+      if (mountedRef.current && !closingRef.current) void startMicrophone()
+    } else if (mountedRef.current && !closingRef.current) {
+      setAudioError("Озвучка недоступна. Проверь, что на сервере настроен ключ голосового провайдера.")
+    }
+  }, [busy, playBlobAudio, speakReply, startMicrophone, stopMicrophone])
 
   const changeLanguage = useCallback((nextLanguage: VoiceLanguage) => {
     if (languageRef.current === nextLanguage) return
@@ -638,7 +715,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   }, [cleanupAll, closeMode, startMicrophone])
 
   return (
-    <section className={`${styles.stage} ${styles[phase]}`} data-voice-mode role="dialog" aria-modal="true" aria-label="Malik AI Voice Mode">
+    <section className={`${styles.stage} ${styles[phase]}`} onPointerDownCapture={unlockVoiceAudio} data-voice-mode role="dialog" aria-modal="true" aria-label="Malik AI Voice Mode">
       <VoiceOrb energyRef={energyRef} speedRef={speedRef} demoRef={demoRef} onWebGLUnavailable={() => setWebGLError(true)} />
 
       <header className={styles.topbar}>
@@ -654,6 +731,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
           <span>{finalTranscript}</span>{interimTranscript ? <span className={styles.interim}> {interimTranscript}</span> : null}
         </div>
         {webGLError ? <div className={styles.inlineError}>WebGL недоступен — управление голосом продолжает работать.</div> : null}
+        {audioError ? <div className={styles.retry} role="status"><span>{audioError}</span><button type="button" disabled={busy} onClick={() => void retryReply()}>Озвучить ответ</button></div> : null}
         {micError ? (
           <div className={styles.retry}>
             <button type="button" onClick={() => void startMicrophone()}>Разрешить микрофон</button>
