@@ -23,10 +23,11 @@ export async function generateFalImage(input: {
   const model = process.env.FAL_IMAGE_MODEL || "fal-ai/flux/schnell"
   const size = input.aspectRatio === "16:9" ? "landscape_16_9" : input.aspectRatio === "9:16" ? "portrait_16_9" : "square_hd"
 
+  // The router already created the final strict prompt. FAL receives it as-is.
   const response = await fetch(`https://fal.run/${model}`, {
     method: "POST",
     headers: { authorization: `Key ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ prompt: input.prompt.slice(0, 1500), image_size: size, num_images: 1 }),
+    body: JSON.stringify({ prompt: input.prompt.slice(0, 4000), image_size: size, num_images: 1 }),
     signal: input.signal,
   })
   const payload = await response.json().catch(() => ({}))
@@ -41,6 +42,7 @@ export async function generateAwsImage(input: {
   mode?: ImageMode
   signal?: AbortSignal
 }): Promise<{ imageUrl: string; base64?: string }> {
+  // AWS Bedrock Nova Canvas also receives exactly the same strict prompt.
   const result = await awsBedrockProvider.generateImage({
     prompt: input.prompt,
     task: "image",

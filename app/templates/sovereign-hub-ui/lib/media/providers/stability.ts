@@ -9,13 +9,6 @@ const ASPECT_MAP: Record<ImageAspectRatio, string> = {
   "4:5": "4:5",
 }
 
-const MODE_HINT: Record<ImageMode, string> = {
-  cinematic: "cinematic lighting, dramatic composition, film still",
-  realistic: "photorealistic, natural lighting, high detail",
-  product: "product photography, clean background, studio lighting",
-  design: "modern design, crisp edges, premium UI aesthetic",
-}
-
 export function stabilityConfigured(): boolean {
   return Boolean(getStabilityApiKey())
 }
@@ -29,12 +22,13 @@ export async function generateWithStability(input: {
   const key = getStabilityApiKey()
   if (!key) throw new Error("STABILITY_API_KEY not configured")
 
-  const modeHint = input.mode ? MODE_HINT[input.mode] : ""
-  const prompt = modeHint ? `${input.prompt}. Style: ${modeHint}` : input.prompt
+  // The router has already compiled and locked the user's intent. Stability is
+  // deliberately not allowed to append its own style text or rewrite meaning.
+  const prompt = input.prompt
   const aspect = ASPECT_MAP[input.aspectRatio || "1:1"]
 
   const form = new FormData()
-  form.append("prompt", prompt.slice(0, 1500))
+  form.append("prompt", prompt.slice(0, 4000))
   form.append("output_format", "png")
   form.append("aspect_ratio", aspect)
 
