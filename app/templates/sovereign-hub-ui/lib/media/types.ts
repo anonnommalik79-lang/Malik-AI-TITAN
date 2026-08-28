@@ -1,7 +1,9 @@
-export type ImageAspectRatio = "1:1" | "16:9" | "9:16" | "4:5"
+import type { MalikImageModelId } from "./image-models"
+
+export type ImageAspectRatio = "1:1" | "16:9" | "9:16" | "4:5" | "4:3"
 export type ImageMode = "cinematic" | "realistic" | "product" | "design"
 
-export type ImageProviderId = "stability" | "pollinations" | "fal" | "aws-bedrock"
+export type ImageProviderId = "cloudflare" | "stability" | "pollinations" | "fal" | "aws-bedrock"
 
 export type VideoProviderId = "pollo" | "runway" | "fal" | "luma" | "veo"
 
@@ -9,6 +11,7 @@ export type ImageGenerateInput = {
   prompt: string
   aspectRatio?: ImageAspectRatio
   mode?: ImageMode
+  modelId?: MalikImageModelId
   userId?: string
   plan?: string
 }
@@ -17,6 +20,8 @@ export type ImageGenerateResult = {
   ok: boolean
   provider: ImageProviderId
   imageUrl: string
+  modelId?: MalikImageModelId
+  providerModel?: string
   base64?: string
   remainingDailyImages: number
   error?: string
