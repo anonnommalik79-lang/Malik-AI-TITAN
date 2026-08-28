@@ -1,14 +1,14 @@
 import { redirect } from "next/navigation"
-import { UberRealRideV1 } from "@/components/sovereign/taxi/UberRealRideV1"
+import { UberTaxiStudio } from "@/components/sovereign/taxi/UberTaxiStudio"
 import { getOptionalWorkOSAuth, isWorkOSConfigured } from "@/lib/auth/server"
 
 export const dynamic = "force-dynamic"
 
-export default async function TaxiPage() {
+export default async function NativeTaxiPage() {
   if (isWorkOSConfigured()) {
     const { user } = await getOptionalWorkOSAuth()
-    if (!user?.id) redirect("/sign-in?returnTo=/taxi")
+    if (!user?.id) redirect("/sign-in?returnTo=/taxi/native")
   }
 
-  return <UberRealRideV1 />
+  return <UberTaxiStudio />
 }
