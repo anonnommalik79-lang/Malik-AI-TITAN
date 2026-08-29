@@ -75,19 +75,6 @@
     font-size: 11px !important;
   }
 
-  #malik-root .mv[data-view="video-generation"] .mv__library-btn::before {
-    content: "" !important;
-    position: absolute !important;
-    left: -18px !important;
-    top: -4px !important;
-    width: 4px !important;
-    height: 92px !important;
-    border-radius: 999px !important;
-    background: #3b3c45 !important;
-    opacity: .82 !important;
-    pointer-events: none !important;
-  }
-
   #malik-root .mv[data-view="video-generation"] .mv__composer-shell,
   #malik-root .mv[data-view="video-generation"] .mv__discover {
     width: 100% !important;
@@ -320,11 +307,6 @@
     font-size: 10px !important;
   }
 
-  #malik-root .mv[data-view="video-generation"] .mv__library-btn::before {
-    left: -15px !important;
-    height: 84px !important;
-  }
-
   #malik-root .mv[data-view="video-generation"] .mv__notice {
     min-height: 32px !important;
     gap: 5px !important;
@@ -366,4 +348,13 @@
   #malik-root .mv[data-view="video-generation"] .mv__card-copy small {
     font-size: 6px !important;
   }
+}
+
+/* Never render the decorative divider beside Library on any viewport. */
+#malik-root .mv[data-view="video-generation"] .mv__library-btn::before {
+  content: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
 }
