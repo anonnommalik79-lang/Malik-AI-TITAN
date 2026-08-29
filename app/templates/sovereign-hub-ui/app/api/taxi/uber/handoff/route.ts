@@ -10,6 +10,8 @@ type NominatimResult = {
   lon?: string
   display_name?: string
   name?: string
+  category?: string
+  type?: string
 }
 
 function cleanText(value: unknown, max = 180) {
@@ -52,6 +54,8 @@ async function geocodeDestination(query: string) {
       longitude,
       address: cleanText(first?.display_name || query, 260),
       nickname: cleanText(first?.name || query, 80),
+      category: cleanText(first?.category, 48),
+      type: cleanText(first?.type, 48),
     }
   } finally {
     clearTimeout(timeout)

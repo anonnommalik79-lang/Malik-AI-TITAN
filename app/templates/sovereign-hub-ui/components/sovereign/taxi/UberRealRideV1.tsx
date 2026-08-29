@@ -1,17 +1,30 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
+  Building2,
+  Coffee,
   ChevronRight,
   ExternalLink,
+  GraduationCap,
+  Hospital,
+  Hotel,
+  House,
+  Landmark,
   Loader2,
   LocateFixed,
   MapPin,
   Navigation,
+  Plane,
   Route,
+  Search,
   ShieldCheck,
+  ShoppingBag,
   Sparkles,
+  Utensils,
   X,
 } from "lucide-react"
 
@@ -26,7 +39,17 @@ type HandoffResponse = {
     longitude: number
     address: string
     nickname: string
+    category?: string
+    type?: string
   }
+}
+
+type PlaceSuggestion = {
+  id: string
+  label: string
+  address: string
+  category: string
+  type: string
 }
 
 type RideOption = {
@@ -68,6 +91,59 @@ type BusyStage = "agent" | "location" | "route" | "prices" | null
 
 const DRAFT_KEY = "malik_taxi_destination_v2"
 const UBER_PATH = "M0 7.97v4.958c0 1.867 1.302 3.101 3 3.101.826 0 1.562-.316 2.094-.87v.736H6.27V7.97H5.082v4.888c0 1.257-.85 2.106-1.947 2.106-1.11 0-1.946-.827-1.946-2.106V7.971H0zm7.44 0v7.925h1.13v-.725c.521.532 1.257.86 2.06.86a3.006 3.006 0 0 0 3.034-3.01 3.01 3.01 0 0 0-3.033-3.024 2.86 2.86 0 0 0-2.049.861V7.971H7.439zm9.869 2.038c-1.687 0-2.965 1.37-2.965 3 0 1.72 1.334 3.01 3.066 3.01 1.053 0 1.913-.463 2.49-1.233l-.826-.611c-.43.577-.996.847-1.664.847-.973 0-1.753-.7-1.912-1.64h4.697v-.373c0-1.72-1.222-3-2.886-3zm6.295.068c-.634 0-1.098.294-1.381.758v-.713h-1.131v5.774h1.142V12.61c0-.894.544-1.47 1.291-1.47H24v-1.065h-.396zm-6.319.928c.85 0 1.564.588 1.756 1.47H15.52c.203-.882.916-1.47 1.765-1.47zm-6.732.012c1.086 0 1.98.883 1.98 2.004a1.993 1.993 0 0 1-1.98 2.001A1.989 1.989 0 0 1 8.56 13.02a1.99 1.99 0 0 1 1.992-2.004z"
+
+const PLACE_KINDS = {
+  restaurant: { label: "Ресторан или кафе", Icon: Utensils },
+  residential: { label: "Жилой комплекс", Icon: Building2 },
+  airport: { label: "Аэропорт", Icon: Plane },
+  hotel: { label: "Отель", Icon: Hotel },
+  shopping: { label: "Магазин или ТРЦ", Icon: ShoppingBag },
+  medical: { label: "Больница или клиника", Icon: Hospital },
+  education: { label: "Учебное заведение", Icon: GraduationCap },
+  home: { label: "Дом", Icon: House },
+  landmark: { label: "Достопримечательность", Icon: Landmark },
+  cafe: { label: "Кофейня", Icon: Coffee },
+  place: { label: "Место назначения", Icon: MapPin },
+} as const
+
+type PlaceKind = keyof typeof PLACE_KINDS
+
+function detectPlaceKind(value: string, category = "", type = ""): PlaceKind {
+  const text = `${value} ${category} ${type}`.toLocaleLowerCase("ru")
+  if (/кофе|coffee|coffee_shop|кофейн/.test(text)) return "cafe"
+  if (/ресторан|restaurant|food|кафе|cafe|бар\b|пицц|столов/.test(text)) return "restaurant"
+  if (/\bжк\b|жилой|residential|apartments?|квартир|общежит/.test(text)) return "residential"
+  if (/аэропорт|airport|әуежай|аэродром/.test(text)) return "airport"
+  if (/отель|hotel|гостиниц|hostel/.test(text)) return "hotel"
+  if (/трц|торгов|shopping|mall|supermarket|магазин|market/.test(text)) return "shopping"
+  if (/больниц|клиник|hospital|clinic|medical|аптек/.test(text)) return "medical"
+  if (/школ|университет|college|school|education|академ/.test(text)) return "education"
+  if (/дом\b|house|home|коттедж/.test(text)) return "home"
+  if (/museum|музей|театр|парк|monument|landmark|достопримеч/.test(text)) return "landmark"
+  return "place"
+}
+
+function PlaceMark({ value, category = "", type = "", size = "normal" }: {
+  value: string
+  category?: string
+  type?: string
+  size?: "small" | "normal" | "large"
+}) {
+  const presentation = PLACE_KINDS[detectPlaceKind(value, category, type)]
+  const Icon = presentation.Icon
+  const dimensions = size === "large" ? "h-14 w-14 rounded-[18px]" : size === "small" ? "h-9 w-9 rounded-xl" : "h-11 w-11 rounded-[15px]"
+  const iconSize = size === "large" ? "h-6 w-6" : size === "small" ? "h-4 w-4" : "h-5 w-5"
+
+  return (
+    <span
+      className={`grid shrink-0 place-items-center border border-white/[0.10] bg-white/[0.06] text-white ${dimensions}`}
+      title={presentation.label}
+      aria-label={presentation.label}
+    >
+      <Icon className={iconSize} strokeWidth={1.8} />
+    </span>
+  )
+}
 
 function currentPosition(): Promise<Coordinates> {
   if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -113,7 +189,7 @@ function UberLogo({ className = "h-7 w-auto" }: { className?: string }) {
     <svg
       role="img"
       aria-label="Uber"
-      viewBox="0 7 24 10"
+      viewBox="0 7.55 24 8.9"
       preserveAspectRatio="xMidYMid meet"
       className={className}
       fill="currentColor"
@@ -145,6 +221,10 @@ export function UberRealRideV1() {
   const [priceNote, setPriceNote] = useState("")
   const [uberStatus, setUberStatus] = useState<UberStatus | null>(null)
   const [agentMeta, setAgentMeta] = useState<AgentResponse["model"] | null>(null)
+  const [placeSuggestions, setPlaceSuggestions] = useState<PlaceSuggestion[]>([])
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
+  const [searchingPlaces, setSearchingPlaces] = useState(false)
+  const resultRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     try {
@@ -154,6 +234,47 @@ export function UberRealRideV1() {
 
     void refreshUberStatus()
   }, [])
+
+  useEffect(() => {
+    const query = destination.replace(/\s+/g, " ").trim()
+    if (!suggestionsOpen || query.length < 3) {
+      setPlaceSuggestions([])
+      setSearchingPlaces(false)
+      return
+    }
+
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      setSearchingPlaces(true)
+      try {
+        const response = await fetch(`/api/taxi/places?q=${encodeURIComponent(query)}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(String(data?.message || "PLACE_SEARCH_FAILED"))
+        setPlaceSuggestions(Array.isArray(data?.places) ? data.places : [])
+      } catch (caught) {
+        if ((caught as Error)?.name !== "AbortError") setPlaceSuggestions([])
+      } finally {
+        if (!controller.signal.aborted) setSearchingPlaces(false)
+      }
+    }, 420)
+
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [destination, suggestionsOpen])
+
+  useEffect(() => {
+    if (!prepared) return
+    const timer = window.setTimeout(() => {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      resultRef.current?.focus({ preventScroll: true })
+    }, 100)
+    return () => window.clearTimeout(timer)
+  }, [prepared])
 
   const refreshUberStatus = async () => {
     try {
@@ -326,8 +447,8 @@ export function UberRealRideV1() {
         ) : null}
 
         <section className="mb-9 sm:mb-12">
-          <div className="mb-6 inline-flex min-h-20 min-w-36 items-center justify-center rounded-[24px] border border-white/[0.10] bg-[#090909] px-6 text-white">
-            <UberLogo className="h-10 w-auto" />
+          <div className="mb-6 inline-flex h-20 w-40 items-center justify-center rounded-[24px] border border-white/[0.12] bg-[#080808] px-5 text-white">
+            <UberLogo className="h-[34px] w-auto max-w-full" />
           </div>
 
           <div className="mb-4 flex flex-wrap gap-2">
@@ -366,7 +487,12 @@ export function UberRealRideV1() {
                       <p className="mb-2 text-[12px] font-medium text-white/38">Куда едем?</p>
                       <textarea
                         value={destination}
-                        onChange={(event) => setDestination(event.target.value)}
+                        onChange={(event) => {
+                          setDestination(event.target.value)
+                          setSuggestionsOpen(true)
+                        }}
+                        onFocus={() => setSuggestionsOpen(true)}
+                        onBlur={() => window.setTimeout(() => setSuggestionsOpen(false), 160)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" && !event.shiftKey) {
                             event.preventDefault()
@@ -379,6 +505,41 @@ export function UberRealRideV1() {
                       />
                     </div>
                   </div>
+
+                  {suggestionsOpen && destination.trim().length >= 3 ? (
+                    <div className="mx-3 mb-3 overflow-hidden rounded-[22px] border border-white/[0.10] bg-[#080808] sm:mx-4" role="listbox" aria-label="Найденные адреса">
+                      <div className="flex items-center gap-2 border-b border-white/[0.07] px-4 py-3 text-[11px] text-white/42">
+                        {searchingPlaces ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                        {searchingPlaces ? "Ищу адрес…" : placeSuggestions.length ? "Выбери точное место" : "Продолжай вводить адрес"}
+                      </div>
+                      {placeSuggestions.length ? (
+                        <div className="max-h-64 overflow-y-auto overscroll-contain py-1 [scrollbar-color:#454545_#080808]" data-testid="taxi-place-suggestions">
+                          {placeSuggestions.map((place) => (
+                            <button
+                              key={place.id}
+                              type="button"
+                              role="option"
+                              aria-selected="false"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                setDestination(place.address || place.label)
+                                setSuggestionsOpen(false)
+                                setPlaceSuggestions([])
+                              }}
+                              className="flex min-h-[68px] w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.06] focus-visible:bg-white/[0.06] focus-visible:outline-none"
+                            >
+                              <PlaceMark value={`${place.label} ${place.address}`} category={place.category} type={place.type} size="small" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[13px] font-semibold text-white">{place.label}</span>
+                                <span className="mt-0.5 block line-clamp-2 text-[11px] leading-4 text-white/42">{place.address}</span>
+                              </span>
+                              <ChevronRight className="h-4 w-4 shrink-0 text-white/25" />
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="flex flex-col gap-3 border-t border-white/[0.06] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                     <div className="flex flex-wrap gap-2">
@@ -442,15 +603,23 @@ export function UberRealRideV1() {
             </div>
           </section>
         ) : (
-          <section className="mx-auto max-w-[920px]">
+          <section ref={resultRef} tabIndex={-1} className="mx-auto max-w-[920px] scroll-mt-24 outline-none" data-testid="taxi-route-result">
             <Surface className="overflow-hidden">
               <div className="border-b border-white/[0.08] px-5 py-5 sm:px-7 sm:py-6">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/35">Маршрут готов</p>
-                    <h2 className="mt-2 text-[28px] font-semibold tracking-[-0.05em] sm:text-[36px]">
-                      {prepared.destination.nickname || "Uber"}
-                    </h2>
+                    <div className="mt-3 flex items-center gap-3">
+                      <PlaceMark
+                        value={`${prepared.destination.nickname} ${prepared.destination.address}`}
+                        category={prepared.destination.category}
+                        type={prepared.destination.type}
+                        size="large"
+                      />
+                      <h2 className="min-w-0 text-[28px] font-semibold tracking-[-0.05em] sm:text-[36px]">
+                        {prepared.destination.nickname || "Uber"}
+                      </h2>
+                    </div>
                     <p className="mt-2 max-w-2xl text-[13px] leading-6 text-white/55">{prepared.destination.address}</p>
                     {normalizedDestination ? (
                       <p className="mt-3 text-[11px] text-white/35">
@@ -473,10 +642,18 @@ export function UberRealRideV1() {
                       <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/35">Откуда</p>
                       <p className="mt-1 text-[13px] leading-5 text-white">Текущее местоположение</p>
                     </div>
-                    <div className="relative">
+                    <div className="relative flex items-start justify-between gap-3">
                       <span className="absolute -left-8 top-1.5 h-3.5 w-3.5 rounded-[4px] bg-white" />
-                      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/35">Куда</p>
-                      <p className="mt-1 text-[13px] leading-6 text-white">{prepared.destination.address}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/35">Куда</p>
+                        <p className="mt-1 text-[13px] leading-6 text-white">{prepared.destination.address}</p>
+                      </div>
+                      <PlaceMark
+                        value={`${prepared.destination.nickname} ${prepared.destination.address}`}
+                        category={prepared.destination.category}
+                        type={prepared.destination.type}
+                        size="small"
+                      />
                     </div>
                   </div>
                 </div>
@@ -592,6 +769,29 @@ export function UberRealRideV1() {
           Malik AI получает маршрут и, при подключённом Uber, тарифы через Uber API. Пароль Uber и оплату Malik AI не хранит.
         </footer>
       </div>
+
+      {prepared ? (
+        <div className="fixed bottom-5 right-3 z-40 flex flex-col gap-2 sm:bottom-7 sm:right-6" aria-label="Навигация по маршруту">
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="grid h-11 w-11 place-items-center rounded-full border border-white/[0.14] bg-[#0a0a0a] text-white shadow-[0_8px_28px_rgba(0,0,0,.55)] transition hover:bg-[#151515] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/55"
+            aria-label="Наверх"
+            title="Наверх"
+          >
+            <ArrowUp className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="grid h-11 w-11 place-items-center rounded-full border border-white/[0.14] bg-white text-black shadow-[0_8px_28px_rgba(0,0,0,.55)] transition hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/55"
+            aria-label="К подготовленному маршруту"
+            title="К маршруту"
+          >
+            <ArrowDown className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
     </main>
   )
 }

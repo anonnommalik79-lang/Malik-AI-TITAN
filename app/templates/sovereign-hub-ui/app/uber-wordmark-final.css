@@ -1,14 +1,42 @@
-/* Exact user-provided Uber wordmark. Keep the original PNG pixels and only use CSS to place it inside the existing Taxi logo boxes. */
+/* Final Taxi authority. Keep the route pure black and render the official
+ * vector Uber wordmark without the old screenshot-like PNG crop. */
 .malik-taxi-surface svg[aria-label="Uber"] {
-  color: transparent !important;
-  fill: transparent !important;
-  background-image: url("/brands/uber-wordmark.png") !important;
-  background-position: center !important;
-  background-repeat: no-repeat !important;
-  background-size: contain !important;
+  color: currentColor !important;
+  fill: currentColor !important;
+  background: none !important;
+  overflow: visible !important;
+  object-fit: contain !important;
 }
 
 .malik-taxi-surface svg[aria-label="Uber"] path {
+  display: block !important;
+  fill: currentColor !important;
+}
+
+html:has(.malik-taxi-surface),
+body:has(.malik-taxi-surface),
+body:has(.malik-taxi-surface) #malik-root,
+body:has(.malik-taxi-surface) .malik-dashboard-shell,
+body:has(.malik-taxi-surface) .malik-dashboard-shell > main,
+#malik-root .malik-taxi-surface,
+#malik-root .malik-taxi-surface > div,
+#malik-root .malik-taxi-surface section:first-of-type {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+body:has(.malik-taxi-surface)::before,
+body:has(.malik-taxi-surface)::after,
+body:has(.malik-taxi-surface) #malik-root::before,
+body:has(.malik-taxi-surface) #malik-root::after,
+.malik-taxi-surface::before,
+.malik-taxi-surface::after {
+  content: none !important;
   display: none !important;
-  fill: transparent !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
 }
