@@ -457,7 +457,6 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
               <button key={item.id} type="button" className="mv__card" data-active={activeTemplate === index ? "1" : "0"} onClick={() => chooseTemplate(index)}>
                 <AutoLoopVideo src={item.src} poster={item.poster} className="mv__card-video" />
                 <span className="mv__card-shade" />
-                <span className="mv__card-play"><Play size={12} fill="currentColor" /></span>
                 <span className="mv__card-copy"><strong>{item.title}</strong><small>{item.theme} · 1080p</small></span>
               </button>
             ))}
@@ -466,7 +465,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       </section>
 
       <style jsx>{`
-        .mv{min-height:100%;width:100%;display:grid;grid-template-columns:minmax(360px,39vw) minmax(0,1fr);background:#000;color:#f7f7f8;overflow:hidden;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        .mv{min-height:100%;width:100%;display:grid;grid-template-columns:minmax(360px,39vw) minmax(0,1fr);background:#000;color:#f7f7f8;overflow:hidden;color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        .mv button,.mv textarea{font:inherit;-webkit-tap-highlight-color:transparent}
+        .mv button:focus-visible,.mv textarea:focus-visible{outline:1px solid rgba(255,255,255,.52);outline-offset:2px}
         .mv__showcase{position:relative;min-height:100dvh;background:#030303;border-right:1px solid rgba(255,255,255,.08);overflow:hidden}
         .mv__showcase-media{position:sticky;top:0;height:100dvh;min-height:680px;overflow:hidden;background:#030303;display:grid;place-items:center}
         :global(.mv__showcase-video){width:100%;height:100%;display:block;background:#030303;object-position:center center}
@@ -518,7 +519,6 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         :global(.mv__card-video){position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;transition:transform .5s cubic-bezier(.2,.7,.2,1)}
         .mv__card:hover :global(.mv__card-video){transform:scale(1.035)}
         .mv__card-shade{position:absolute;inset:34% 0 0;background:linear-gradient(180deg,transparent,rgba(0,0,0,.9));pointer-events:none}
-        .mv__card-play{position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,.72);color:#fff;backdrop-filter:blur(8px)}
         .mv__card-copy{position:absolute;left:12px;right:12px;bottom:12px;z-index:2;display:flex;flex-direction:column;gap:3px}
         .mv__card-copy strong{font-size:13px;color:#fff;line-height:1.15;text-shadow:0 2px 12px #000}
         .mv__card-copy small{font-size:10px;color:#c8c9cf}
@@ -531,7 +531,64 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv__render-copy{display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center}.mv__render-copy strong{font-size:14px}.mv__render-copy small{font-size:11px;color:#858790}.mv__render-dot{width:7px;height:7px;border-radius:50%;background:#fff;animation:mv-dot 1.2s ease-in-out infinite}
         @keyframes mv-breathe{50%{transform:scale(1.025);box-shadow:0 32px 80px rgba(0,0,0,.65)}}@keyframes mv-grid{to{background-position:28px 28px}}@keyframes mv-scan{to{left:108%}}@keyframes mv-dot{50%{opacity:.35;transform:scale(.75)}}
         @media(max-width:1120px){.mv{grid-template-columns:minmax(300px,34vw) minmax(0,1fr)}.mv__workspace{padding-left:24px;padding-right:24px}.mv__cards{grid-template-columns:repeat(2,minmax(0,1fr))}.mv__card{aspect-ratio:1.25/1}}
-        @media(max-width:820px){.mv{display:block;overflow:visible}.mv__showcase{min-height:52vh;border-right:0;border-bottom:1px solid rgba(255,255,255,.08)}.mv__showcase-media{position:relative;height:52vh;min-height:420px}.mv__workspace{height:auto;min-height:100dvh;padding:28px 16px 40px}.mv__header h1{font-size:42px}.mv__library-btn{display:none}.mv__notice p{display:none}.mv__cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.mv__card{aspect-ratio:.9/1}.mv__statusbar{flex-wrap:wrap}.mv__error{max-width:100%;margin-left:0}}
+        @media(max-width:820px){
+          .mv{display:block;min-height:100svh;overflow:visible;background:#000}
+          .mv__showcase{min-height:clamp(320px,48svh,520px);border-right:0;border-bottom:1px solid rgba(255,255,255,.08);background:#000}
+          .mv__showcase-media{position:relative;top:auto;height:clamp(320px,48svh,520px);min-height:0;background:#000}
+          :global(.mv__showcase-video){object-position:center center}
+          .mv__showcase-vignette{background:linear-gradient(180deg,rgba(0,0,0,.08),transparent 56%,rgba(0,0,0,.38))}
+          .mv__workspace{height:auto;min-height:100svh;overflow:visible;padding:24px 14px max(40px,env(safe-area-inset-bottom));background:#000}
+          .mv__header{margin-bottom:18px;align-items:flex-start}
+          .mv__eyebrow{font-size:9px;letter-spacing:.14em}
+          .mv__header h1{max-width:100%;margin-top:9px;font-size:clamp(34px,10.5vw,48px);line-height:.95;letter-spacing:-.058em;overflow-wrap:anywhere}
+          .mv__library-btn{display:none}
+          .mv__composer-shell,.mv__discover{width:100%;max-width:none}
+          .mv__notice{min-height:43px;padding:0 12px;border-color:rgba(255,255,255,.1);border-radius:18px 18px 0 0;background:#111214}
+          .mv__notice>span{padding:3px 7px}
+          .mv__notice>strong{font-size:11px;white-space:nowrap}
+          .mv__notice p{display:none}
+          .mv__composer{padding:12px;border-color:rgba(255,255,255,.1);border-radius:0 0 18px 18px;background:#171719;box-shadow:none}
+          .mv__composer textarea{min-height:104px;border:0;background:transparent;color:#f5f5f6;font-size:16px;line-height:1.45;caret-color:#fff;box-shadow:none}
+          .mv__composer textarea:focus{outline:0;box-shadow:none}
+          .mv__composer-bottom{margin-top:4px}
+          .mv__plus{width:38px;height:38px;border-radius:11px;background:#111214;color:#a9abb1}
+          .mv__composer-actions{min-width:0}
+          .mv__quality{height:38px;max-width:190px;border-color:rgba(255,255,255,.1);background:#242529;color:#f1f1f3;white-space:nowrap}
+          .mv__send{width:40px;height:40px;flex:0 0 40px;border-radius:12px;background:#f2f2f3;color:#070707}
+          .mv__settings-popover{left:0;right:0;top:194px;width:auto;border-color:rgba(255,255,255,.12);background:#151517}
+          .mv__model-row{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;overscroll-behavior-x:contain}
+          .mv__model-row::-webkit-scrollbar{display:none}
+          .mv__model-row button{height:39px;flex:0 0 auto;background:#111214;border-color:rgba(255,255,255,.09)}
+          .mv__model-row .is-active{background:#191a1d}
+          .mv__statusbar{margin:13px 0 20px;flex-wrap:wrap;gap:7px 8px}
+          .mv__statusbar>span:nth-last-child(1):not(.mv__error){margin-left:0}
+          .mv__error{width:100%;max-width:100%;margin-left:0;white-space:normal}
+          .mv__tabs{margin-bottom:12px;gap:6px;overscroll-behavior-x:contain}
+          .mv__tabs button{height:34px;padding:0 13px;background:transparent;color:#777980}
+          .mv__tabs button[data-active="1"]{background:#1c1d20;color:#fff}
+          .mv__cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+          .mv__card{aspect-ratio:.9/1;border-radius:13px;border-color:rgba(255,255,255,.1);background:#0a0a0b;box-shadow:none}
+          .mv__card:hover{transform:none;box-shadow:none}
+          .mv__card-copy{left:10px;right:10px;bottom:10px}
+          .mv__card-copy strong{font-size:12px}
+          .mv__card-copy small{font-size:9px}
+          .mv__render-state{gap:16px;background:rgba(0,0,0,.8);backdrop-filter:blur(12px)}
+          .mv__render-square{width:min(48vw,210px);border-radius:22px}
+          .mv__render-copy strong{font-size:13px}
+        }
+        @media(max-width:440px){
+          .mv__showcase,.mv__showcase-media{height:42svh;min-height:300px}
+          .mv__workspace{padding:21px 12px max(34px,env(safe-area-inset-bottom))}
+          .mv__header h1{font-size:clamp(32px,10.8vw,42px)}
+          .mv__notice{padding:0 10px}
+          .mv__composer{padding:10px}
+          .mv__composer textarea{min-height:96px}
+          .mv__quality{max-width:168px;padding:0 10px;font-size:12px}
+          .mv__model-row{gap:7px}
+          .mv__model-row button{padding:0 12px;font-size:12px}
+          .mv__cards{gap:8px}
+          .mv__card{aspect-ratio:.84/1}
+        }
       `}</style>
     </main>
   )
