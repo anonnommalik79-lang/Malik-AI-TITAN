@@ -21,6 +21,25 @@ function fallbackNegativePrompt(prompt: string) {
   return "unrelated subject, random scene, wrong subject, blurry, watermark, unwanted text"
 }
 
+function compactStrictPrompt(prompt: string) {
+  const raw = /AUTHORITATIVE USER REQUEST[^:]*:\s*([\s\S]*?)(?:\n\n|$)/i.exec(prompt)?.[1]?.trim()
+  const english = /LOSSLESS ENGLISH DESCRIPTION:\s*([\s\S]*?)(?:\n\n|$)/i.exec(prompt)?.[1]?.trim()
+  const facts = /NON-NEGOTIABLE VISUAL FACTS:\s*([\s\S]*?)(?:\n\n|$)/i.exec(prompt)?.[1]?.trim()
+  return [english || raw || prompt, facts, "One coherent image. Exact subject and action. No collage, no unrelated subject."]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 1200)
+}
+
+function stableSeed(value: string) {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return Math.abs(hash >>> 0) || 1
+}
+
 export async function pingPollinations(): Promise<"available" | "unavailable"> {
   try {
     const controller = new AbortController()
@@ -47,12 +66,13 @@ export async function generateWithPollinations(input: {
 
   // The router owns prompt semantics. Pollinations receives that exact strict
   // prompt and is explicitly forbidden from doing a second AI rewrite.
-  const prompt = input.prompt
-  const encoded = encodeURIComponent(prompt.slice(0, 1800))
-  const negative = encodeURIComponent(input.negativePrompt?.trim() || fallbackNegativePrompt(prompt))
+  const prompt = compactStrictPrompt(input.prompt)
+  const encoded = encodeURIComponent(prompt)
+  const negative = encodeURIComponent((input.negativePrompt?.trim() || fallbackNegativePrompt(prompt)).slice(0, 500))
   const model = encodeURIComponent(pollinationsModel())
+  const seed = stableSeed(prompt)
 
-  const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${size.width}&height=${size.height}&model=${model}&seed=-1&nologo=true&private=true&enhance=false&negative_prompt=${negative}`
+  const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${size.width}&height=${size.height}&model=${model}&seed=${seed}&nologo=true&private=true&enhance=false&negative_prompt=${negative}`
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), pollinationsTimeoutMs())

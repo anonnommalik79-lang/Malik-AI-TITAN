@@ -7,7 +7,7 @@ import {
   generatePreparedCloudflareImage,
   preparedCloudflareImageConfigured,
 } from "./providers/cloudflare-image-prepared"
-import { DEFAULT_MALIK_IMAGE_MODEL_ID } from "./image-models"
+import { DEFAULT_MALIK_IMAGE_MODEL_ID, MALIK_IMAGE_MODELS, type MalikImageModelId } from "./image-models"
 import { buildImageIntentPlan } from "./image-intent-engine"
 import { buildUnifiedNegativePrompt, buildUnifiedStrictImagePrompt } from "./strict-image-rules"
 import type { ImageGenerateInput, ImageGenerateResult } from "./types"
@@ -74,24 +74,35 @@ export async function routeImageGeneration(
     if (!preparedCloudflareImageConfigured()) {
       errors.push("cloudflare: selected image model is not configured")
     } else {
-      try {
-        const result = await generatePreparedCloudflareImage({
-          strictPrompt: prepared.strictPrompt,
-          negativePrompt: prepared.negativePrompt,
-          aspectRatio: input.aspectRatio,
-          modelId: requestedModelId,
-          signal: options?.signal,
-        })
-        return {
-          ok: true,
-          provider: "cloudflare",
-          imageUrl: result.imageUrl,
-          modelId: result.modelId,
-          providerModel: result.providerModel,
-          remainingDailyImages: 0,
+      // The user no longer chooses image models. Try the preferred production
+      // model first, then the other free Cloudflare engines before leaving the
+      // provider. Previously one unavailable model skipped Cloudflare entirely
+      // and silently dropped into a much less faithful public fallback.
+      const automaticModels = [
+        requestedModelId,
+        ...MALIK_IMAGE_MODELS.filter((model) => model.tier === "free").map((model) => model.id),
+      ].filter((modelId, index, list): modelId is MalikImageModelId => list.indexOf(modelId) === index)
+
+      for (const automaticModelId of automaticModels) {
+        try {
+          const result = await generatePreparedCloudflareImage({
+            strictPrompt: prepared.strictPrompt,
+            negativePrompt: prepared.negativePrompt,
+            aspectRatio: input.aspectRatio,
+            modelId: automaticModelId,
+            signal: options?.signal,
+          })
+          return {
+            ok: true,
+            provider: "cloudflare",
+            imageUrl: result.imageUrl,
+            modelId: result.modelId,
+            providerModel: result.providerModel,
+            remainingDailyImages: 0,
+          }
+        } catch (error) {
+          errors.push(`cloudflare/${automaticModelId}: ${error instanceof Error ? error.message : "failed"}`)
         }
-      } catch (error) {
-        errors.push(`cloudflare/${requestedModelId}: ${error instanceof Error ? error.message : "failed"}`)
       }
     }
   }

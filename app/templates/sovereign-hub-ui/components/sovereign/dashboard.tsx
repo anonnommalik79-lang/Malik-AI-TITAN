@@ -128,7 +128,7 @@ import {
   type MalikModelId,
 } from "@/lib/ai/malik-models"
 import type { AIPlan } from "@/lib/ai/types"
-import { loadMalikImageModelSelection } from "@/lib/media/image-models"
+import { persistGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import {
   responseDepthInstruction,
@@ -172,10 +172,16 @@ interface Message {
   timestamp: Date
   generatedCode?: string
   generatedMedia?: InlineMediaGeneration
+  imageConfirmation?: ImageGenerationConfirmation
   isStreaming?: boolean
   intentType?: "chat" | "project"
   modelId?: MalikModelId
   research?: MalikMessageResearch
+}
+
+type ImageGenerationConfirmation = {
+  prompt: string
+  status: "pending" | "confirmed" | "cancelled"
 }
 
 interface ChatAttachment {
@@ -889,6 +895,14 @@ function reviveMessage(message: any): Message {
           jobId: typeof message.generatedMedia.jobId === "string" ? message.generatedMedia.jobId : undefined,
           error: typeof message.generatedMedia.error === "string" ? message.generatedMedia.error : undefined,
           createdAt: typeof message.generatedMedia.createdAt === "string" ? message.generatedMedia.createdAt : undefined,
+        }
+      : undefined,
+    imageConfirmation: message?.imageConfirmation && typeof message.imageConfirmation === "object"
+      ? {
+          prompt: String(message.imageConfirmation.prompt || ""),
+          status: ["pending", "confirmed", "cancelled"].includes(message.imageConfirmation.status)
+            ? message.imageConfirmation.status
+            : "pending",
         }
       : undefined,
     isStreaming: false,
@@ -4595,6 +4609,15 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     const poll = async () => {
       const tasks = pendingMedia().filter((media) => !inFlight.has(media.id))
       await Promise.all(tasks.map(async (media) => {
+        const createdAt = media.createdAt ? Date.parse(media.createdAt) : 0
+        if (media.kind === "image" && createdAt && Date.now() - createdAt > 3 * 60 * 1000) {
+          applyPersistentMediaPatch(media.id, {
+            status: "failed",
+            progress: 100,
+            error: "Генерация заняла больше трёх минут и была остановлена. Повторите запрос — Compute не должен списываться за ошибку.",
+          })
+          return
+        }
         const statusUrl = media.statusUrl || (media.kind === "image" && media.jobId
           ? `/api/ai/job/${encodeURIComponent(media.jobId)}`
           : "")
@@ -5297,8 +5320,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setMobilePreviewOpen(false)
     setGeneratedCode("")
   }
-  const inlineMediaKind = detectInlineMediaGenerationRequest(cleanContent, attachments, activeAiMode)
+  const requestedInlineMediaKind = detectInlineMediaGenerationRequest(cleanContent, attachments, activeAiMode)
   const parsedMediaCommand = parseMediaCommand(cleanContent)
+  const needsImageConfirmation = requestedInlineMediaKind === "image" && !parsedMediaCommand
+  const inlineMediaKind = needsImageConfirmation ? null : requestedInlineMediaKind
   // Shown in the chat card: without the slash command.
   const inlineMediaPrompt = parsedMediaCommand ? parsedMediaCommand.prompt || cleanContent : cleanContent
   // Sent to the API: the server-side cost guard only accepts prompts that carry
@@ -5306,7 +5331,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const inlineMediaApiPrompt = parsedMediaCommand
     ? cleanContent
     : `${inlineMediaKind === "video" ? "/video" : "/image"} ${cleanContent}`
-  setActiveGenerationKind(inlineMediaKind || detectDashboardGenerationKind(cleanContent, attachments, activeAiMode))
+  setActiveGenerationKind(needsImageConfirmation ? "text" : inlineMediaKind || detectDashboardGenerationKind(cleanContent, attachments, activeAiMode))
   const chatId = activeChatId || crypto.randomUUID()
   const title = cleanContent.slice(0, 34) + (cleanContent.length > 34 ? "..." : "")
 
@@ -5330,21 +5355,26 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const userMessage: Message = {
     id: crypto.randomUUID(),
     role: "user",
-    content: cleanContent,
+    content: parsedMediaCommand ? inlineMediaPrompt : cleanContent,
     timestamp: new Date(),
   }
 
   const assistantMessage: Message = {
     id: crypto.randomUUID(),
     role: "assistant",
-    content: inlineMediaKind ? buildInlineMediaAssistantText(createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt)) : "",
+    content: needsImageConfirmation
+      ? "Запрос на изображение распознан. Генерация начнётся только после вашего подтверждения."
+      : inlineMediaKind ? buildInlineMediaAssistantText(createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt)) : "",
     timestamp: new Date(),
-    isStreaming: true,
+    isStreaming: !needsImageConfirmation,
     intentType: inlineMediaKind ? "chat" : isProjReq ? "project" : "chat",
     modelId: selectedModelId,
     // Research UI starts only when the server actually emits a search event.
     research: undefined,
     generatedMedia: inlineMediaKind ? createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt) : undefined,
+    imageConfirmation: needsImageConfirmation
+      ? { prompt: inlineMediaPrompt, status: "pending" }
+      : undefined,
   }
 
   setMessages(prev => [...prev, userMessage, assistantMessage])
@@ -5355,6 +5385,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     if (!nextMessages.some((message) => message.id === assistantMessage.id)) nextMessages.push(assistantMessage)
     return { ...chat, messages: nextMessages }
   }))
+  if (needsImageConfirmation) {
+    setIsLoading(false)
+    setStreamingText("")
+    return
+  }
   setIsLoading(true)
   dashboardEventBus.emit({
     type: "chat:send",
@@ -5553,14 +5588,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       patchInlineMedia({ status: "generating", progress: 36 })
 
       const mediaEndpoint = inlineMediaKind === "video" ? "/api/generate/video" : "/api/ai/image"
-      const response = await fetch(mediaEndpoint, {
+      const response = await clientFetchWithTimeout(mediaEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: inlineMediaApiPrompt,
           stream: false,
           kind: inlineMediaKind === "video" ? "video" : "photo",
-          modelId: inlineMediaKind === "image" ? loadMalikImageModelSelection() : undefined,
           provider: "auto",
           style: "cinematic Gemini-style transparent chat generation",
           aspectRatio: inlineMediaKind === "video" ? "16:9" : "1:1",
@@ -5577,7 +5611,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
             url: item.url,
           })),
         }),
-      })
+      }, inlineMediaKind === "image" ? 120_000 : 190_000)
 
       patchInlineMedia({ status: "rendering", progress: 72 })
       const payload = await response.json().catch(() => ({}))
@@ -5681,6 +5715,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
       if (!mediaUrl && isFallback) {
         throw new Error("Fallback generation failed to produce preview.")
+      }
+
+      if (inlineMediaKind === "image" && mediaUrl) {
+        mediaUrl = await persistGeneratedImageUrl(assistantMessage.generatedMedia.id, mediaUrl)
       }
 
       const readyMedia: InlineMediaGeneration = {
@@ -5993,6 +6031,18 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }
 }, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email])
 
+  const handleImageConfirmation = useCallback((messageId: string, prompt: string, action: "confirm" | "cancel") => {
+    const status: ImageGenerationConfirmation["status"] = action === "confirm" ? "confirmed" : "cancelled"
+    const patch = (items: Message[]) => items.map((message) => message.id === messageId && message.imageConfirmation
+      ? { ...message, imageConfirmation: { ...message.imageConfirmation, status } }
+      : message)
+
+    setMessages((previous) => patch(previous))
+    setChats((previous) => previous.map((chat) => ({ ...chat, messages: patch(chat.messages) })))
+
+    if (action === "confirm") void handleSendMessage(`/image ${prompt}`)
+  }, [handleSendMessage])
+
   const handleUseTemplate = useCallback((prompt: string) => {
     safeOpenView("home", "history")
     setActiveChatId(null);
@@ -6270,6 +6320,7 @@ const shouldShowMobilePreviewButton =
               <ChatView
                 messages={messages}
                 onSendMessage={handleSendMessage}
+                onImageConfirmation={handleImageConfirmation}
                 isLoading={isLoading}
                 streamingText={streamingText}
                 currentUser={username}
@@ -6305,6 +6356,7 @@ const shouldShowMobilePreviewButton =
 <ChatView
               messages={messages}
               onSendMessage={handleSendMessage}
+              onImageConfirmation={handleImageConfirmation}
               isLoading={isLoading}
               streamingText={streamingText}
               currentUser={username}

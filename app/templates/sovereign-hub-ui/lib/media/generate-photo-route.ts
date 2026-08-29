@@ -1,10 +1,8 @@
 import { maxImagePromptLength } from "./config"
 import {
   DEFAULT_MALIK_IMAGE_MODEL_ID,
-  MALIK_IMAGE_MODEL_COOKIE,
   canUseMalikImageModel,
   getMalikImageModel,
-  isMalikImageModelId,
 } from "./image-models"
 import { routeImageGeneration } from "./image-router"
 import { checkMediaLimit, nextMediaResetAt, recordMediaUsage } from "./limits"
@@ -47,20 +45,6 @@ function releaseImageGenerationLock(userId: string, token: string) {
   if (current?.token === token) locks.delete(userId)
 }
 
-function cookieValue(request: Request, name: string): string {
-  const raw = request.headers.get("cookie") || ""
-  for (const chunk of raw.split(";")) {
-    const [key, ...parts] = chunk.trim().split("=")
-    if (key !== name) continue
-    try {
-      return decodeURIComponent(parts.join("="))
-    } catch {
-      return parts.join("=")
-    }
-  }
-  return ""
-}
-
 function normalizeImagePrompt(value: unknown): string {
   return String(value || "").replace(IMAGE_COMMAND, "").trim()
 }
@@ -79,10 +63,10 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     return Response.json({ ok: false, status: "failed", error: "PROMPT_TOO_LONG" }, { status: 400 })
   }
 
-  const bodyModel = isMalikImageModelId(body?.modelId) ? body.modelId : null
-  const cookieModelRaw = cookieValue(request, MALIK_IMAGE_MODEL_COOKIE)
-  const cookieModel = isMalikImageModelId(cookieModelRaw) ? cookieModelRaw : null
-  const modelId = bodyModel || cookieModel || DEFAULT_MALIK_IMAGE_MODEL_ID
+  // Image models are intentionally automatic and hidden from the composer.
+  // Ignore stale browser cookies and old client model ids so every user gets
+  // the same supported production route instead of a surprise Plus error.
+  const modelId = DEFAULT_MALIK_IMAGE_MODEL_ID
   const imageModel = getMalikImageModel(modelId)
   const user = await resolveMediaUser(request, body)
 
@@ -169,15 +153,17 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     }
 
     const imageUrl = storageUrl || result.imageUrl
+    const resolvedModelId = result.modelId || modelId
+    const resolvedImageModel = getMalikImageModel(resolvedModelId)
     return Response.json({
       ok: true,
       status: "ready",
       kind: "photo",
       provider: result.provider,
-      engine: imageModel.label,
-      modelId,
-      modelLabel: imageModel.label,
-      providerModel: result.providerModel || imageModel.providerModel,
+      engine: resolvedImageModel.label,
+      modelId: resolvedModelId,
+      modelLabel: resolvedImageModel.label,
+      providerModel: result.providerModel || resolvedImageModel.providerModel,
       imageUrl,
       url: imageUrl,
       mediaUrl: imageUrl,

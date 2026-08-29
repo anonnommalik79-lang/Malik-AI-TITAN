@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { playImageGenerationCompleteSound, playImageGenerationStartSound } from "@/lib/media/image-generation-sound"
+import { resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 
 type ImageGenerationMotionProps = {
   prompt?: string
@@ -26,27 +27,56 @@ export function ImageGenerationMotion({
   error,
 }: ImageGenerationMotionProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
+  const [resolvedResultUrl, setResolvedResultUrl] = useState("")
+  const [loadError, setLoadError] = useState("")
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [visualProgress, setVisualProgress] = useState(8)
   const [cycle, setCycle] = useState(0)
 
   useEffect(() => {
     setImageLoaded(false)
+    setLoadError("")
+    setElapsedSeconds(0)
+    setResolvedResultUrl("")
     setVisualProgress(resultUrl ? 94 : 8)
+    if (!resultUrl) {
+      return
+    }
+
+    let cancelled = false
+    resolveGeneratedImageUrl(resultUrl)
+      .then((url) => { if (!cancelled) setResolvedResultUrl(url) })
+      .catch((reason) => { if (!cancelled) setLoadError(reason instanceof Error ? reason.message : "Не удалось восстановить изображение.") })
+    return () => { cancelled = true }
   }, [resultUrl])
 
-  useEffect(() => {
-    if (failed || imageLoaded) return
-    playImageGenerationStartSound()
-  }, [failed, imageLoaded])
+  const actuallyFailed = failed || Boolean(loadError)
 
   useEffect(() => {
-    if (failed || imageLoaded) return
+    if (actuallyFailed || imageLoaded) return
+    const timer = window.setInterval(() => setElapsedSeconds((value) => value + 1), 1000)
+    return () => window.clearInterval(timer)
+  }, [actuallyFailed, imageLoaded])
+
+  useEffect(() => {
+    if (!resolvedResultUrl || imageLoaded || actuallyFailed) return
+    const timer = window.setTimeout(() => setLoadError("Готовый файл изображения не загрузился. Повторите генерацию."), 20_000)
+    return () => window.clearTimeout(timer)
+  }, [actuallyFailed, imageLoaded, resolvedResultUrl])
+
+  useEffect(() => {
+    if (actuallyFailed || imageLoaded) return
+    playImageGenerationStartSound()
+  }, [actuallyFailed, imageLoaded])
+
+  useEffect(() => {
+    if (actuallyFailed || imageLoaded) return
     const timer = window.setInterval(() => setCycle((value) => value + 1), 7200)
     return () => window.clearInterval(timer)
-  }, [failed, imageLoaded])
+  }, [actuallyFailed, imageLoaded])
 
   useEffect(() => {
-    if (failed) return
+    if (actuallyFailed) return
     if (imageLoaded) {
       setVisualProgress(100)
       return
@@ -63,28 +93,29 @@ export function ImageGenerationMotion({
     }, 560)
 
     return () => window.clearInterval(timer)
-  }, [failed, imageLoaded, resultUrl])
+  }, [actuallyFailed, imageLoaded, resultUrl])
 
-  const isGenerating = !failed && (!resultUrl || !imageLoaded)
+  const isGenerating = !actuallyFailed && (!resolvedResultUrl || !imageLoaded)
   const shownProgress = imageLoaded ? 100 : Math.min(94, Math.max(8, visualProgress))
 
   return (
     <div className="malik-photo-motion mx-auto" aria-live="polite" aria-busy={isGenerating}>
       <div className={`malik-art-stage ${imageLoaded ? "is-finished" : ""}`}>
-        {resultUrl ? (
+        {resolvedResultUrl ? (
           <img
-            src={resultUrl}
+            src={resolvedResultUrl}
             alt={prompt || "Generated image"}
             onLoad={() => {
               setImageLoaded(true)
               setVisualProgress(100)
               playImageGenerationCompleteSound()
             }}
+            onError={() => setLoadError("Готовый файл изображения повреждён или недоступен. Повторите генерацию.")}
             className={`malik-art-result ${imageLoaded ? "is-visible" : ""}`}
           />
         ) : null}
 
-        {!failed && !imageLoaded ? (
+        {!actuallyFailed && !imageLoaded ? (
           <div key={cycle} className="malik-art-cycle" aria-hidden="true">
             <div className="malik-art-paper" />
 
@@ -180,21 +211,21 @@ export function ImageGenerationMotion({
           </div>
         ) : null}
 
-        {failed ? <div className="absolute inset-0 bg-white" /> : null}
+        {actuallyFailed ? <div className="absolute inset-0 bg-white" /> : null}
         <div className="malik-art-flash" />
       </div>
 
       <div className="malik-art-status">
-        {failed ? (
-          <span>{friendlyGenerationError(error)}</span>
+        {actuallyFailed ? (
+          <span>{friendlyGenerationError(loadError || error)}</span>
         ) : imageLoaded ? (
           <span>Изображение готово · 100%</span>
         ) : (
-          <span>Генерирую по вашему запросу · <strong>{shownProgress}%</strong></span>
+          <span>Генератор обрабатывает точный запрос · <strong>{elapsedSeconds} с</strong></span>
         )}
       </div>
 
-      {!failed ? (
+      {!actuallyFailed ? (
         <div className="malik-art-progress" aria-hidden="true">
           <span style={{ width: `${shownProgress}%` }} />
         </div>

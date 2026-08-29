@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Aperture,
   Camera,
@@ -19,6 +19,7 @@ import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { PHOTO_GALLERY_EXAMPLES, PHOTO_STYLE_PRESETS } from "@/lib/media-library"
 import { takePrefillPrompt } from "@/lib/malik-context"
+import { persistGeneratedImageUrl, resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 
 export type PhotoGenerationStudioProps = {
   username?: string
@@ -29,7 +30,9 @@ export type PhotoGenerationStudioProps = {
 }
 
 type PhotoResult = {
+  id: string
   url: string
+  storedUrl?: string
   prompt?: string
   filename?: string
   fallback?: boolean
@@ -46,6 +49,7 @@ type StylePreset = {
 }
 
 const ENDPOINT = "/api/media/image"
+const PHOTO_RESULTS_STORAGE_KEY = "malik_photo_generation_results_v1"
 
 function styleToMode(styleId: string): "cinematic" | "realistic" | "product" | "design" {
   if (/product|saas|ui|dashboard/i.test(styleId)) return "product"
@@ -99,6 +103,7 @@ export function PhotoGenerationStudio({
   const [error, setError] = useState<string | null>(null)
   const [results, setResults] = useState<PhotoResult[]>([])
   const [providerUsed, setProviderUsed] = useState("")
+  const [storageRestored, setStorageRestored] = useState(false)
 
   const [remainingDaily, setRemainingDaily] = useState<number | null>(null)
 
@@ -108,6 +113,40 @@ export function PhotoGenerationStudio({
   )
 
   const heroPhoto = results[0]?.url ?? styleMeta.photo
+
+  useEffect(() => {
+    let cancelled = false
+    const restore = async () => {
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem(PHOTO_RESULTS_STORAGE_KEY) || "[]") as PhotoResult[]
+        const restored = await Promise.all(parsed.slice(0, 8).map(async (item) => ({
+          ...item,
+          id: String(item.id || crypto.randomUUID()),
+          url: await resolveGeneratedImageUrl(String(item.storedUrl || item.url || "")),
+        })))
+        if (!cancelled) setResults(restored.filter((item) => Boolean(item.url)))
+      } catch {
+        // Missing/corrupt browser storage must not block a new generation.
+      } finally {
+        if (!cancelled) setStorageRestored(true)
+      }
+    }
+    void restore()
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (!storageRestored) return
+    const stored = results.map((item) => {
+      const durableUrl = item.storedUrl || (!item.url.startsWith("data:image/") ? item.url : "")
+      return { ...item, url: durableUrl.startsWith("data:image/") ? "" : durableUrl }
+    }).filter((item) => Boolean(item.url))
+    try {
+      window.localStorage.setItem(PHOTO_RESULTS_STORAGE_KEY, JSON.stringify(stored))
+    } catch {
+      // Current render remains visible even when private storage is full.
+    }
+  }, [results, storageRestored])
 
   const generate = async () => {
     if (!prompt.trim()) {
@@ -142,8 +181,12 @@ export function PhotoGenerationStudio({
       if (!res.ok) throw new Error(data.error || data.message || `Ошибка ${res.status}`)
       const imageUrl = data.imageUrl || data.url
       if (!imageUrl) throw new Error("Сервер не вернул imageUrl")
+      const id = crypto.randomUUID()
+      const storedUrl = await persistGeneratedImageUrl(id, imageUrl)
       const next: PhotoResult = {
+        id,
         url: imageUrl,
+        storedUrl,
         prompt,
         provider: data.provider,
         fallback: data.provider === "pollinations",
@@ -170,6 +213,7 @@ export function PhotoGenerationStudio({
     onNewChat?.()
     setPrompt(DEFAULT_PROMPT)
     setResults([])
+    window.localStorage.removeItem(PHOTO_RESULTS_STORAGE_KEY)
     setError(null)
     setStatus("Студия готова к рендеру")
   }

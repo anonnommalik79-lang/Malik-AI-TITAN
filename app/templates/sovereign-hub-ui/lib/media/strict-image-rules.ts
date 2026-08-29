@@ -68,6 +68,10 @@ function criticalVisualLocks(rawPrompt: string, compiledPrompt: string): Critica
     subjects.push("frog")
     negatives.push("missing frog", "cat instead of frog", "human portrait instead of frog")
   }
+  if (/(?:\bice\s*cream\b|морожен(?:ое|ого|ым|ое|ку)|балмұздақ)/iu.test(text)) {
+    subjects.push("ice cream")
+    negatives.push("missing ice cream", "different food instead of ice cream")
+  }
   if (/(?:\bdragon\b|дракон(?:а|ы|ом)?\b)/iu.test(text)) subjects.push("dragon")
   if (/(?:\bdinosaur\b|динозавр(?:а|ы|ом)?\b)/iu.test(text)) subjects.push("dinosaur")
 
@@ -85,6 +89,10 @@ function criticalVisualLocks(rawPrompt: string, compiledPrompt: string): Critica
   if (/(?:\bswim(?:ming|s)?\b|плывет\b|плывёт\b|плава)/iu.test(text)) actions.push("swimming / moving through water")
   if (/(?:\bdrive|driving\b|за рулем|за рулём|едет на)/iu.test(text)) actions.push("driving")
   if (/(?:\bhold(?:ing|s)?\b|держит\b|держат\b)/iu.test(text)) actions.push("holding the requested object")
+  if (/(?:\beat(?:ing|s)?\b|куша(?:ет|ющий|ют)|ест\b|поеда(?:ет|ющий)|жеп\s*(?:отыр|жатыр)|жейд[іы])/iu.test(text)) {
+    actions.push("active eating is unmistakable: the requested food is raised to and visibly touching the mouth, with a bite or lick in progress")
+    negatives.push("food merely nearby instead of being eaten", "food held away from the mouth")
+  }
 
   const humanIntent = /(?:\bperson\b|\bpeople\b|\bhuman\b|\bwoman\b|\bgirl\b|\bman\b|\bboy\b|\bboxers?\b|\bathlete\b|человек|люди|женщин|девуш|мужчин|парень|боксер|боксёр|спортсмен)/iu.test(text)
   return {
@@ -119,7 +127,7 @@ export function buildUnifiedStrictImagePrompt(
     line("REQUIRED COLORS", plan.colors),
     line("REQUIRED SETTING", plan.settings),
     line("REQUIRED CAMERA", plan.camera),
-    line("MUST NOT INCLUDE", plan.mustNotInclude),
+    line("MUST NOT INCLUDE", unique([...critical.negatives, ...plan.mustNotInclude])),
     line("VISIBLE TEXT — COPY VERBATIM", plan.visibleText),
   ].filter(Boolean).join("\n")
 

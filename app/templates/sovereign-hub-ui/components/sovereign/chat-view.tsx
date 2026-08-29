@@ -93,6 +93,12 @@ interface Message {
   modelId?: MalikModelId
   research?: MalikMessageResearch
   generatedMedia?: InlineMediaGeneration
+  imageConfirmation?: ImageGenerationConfirmation
+}
+
+type ImageGenerationConfirmation = {
+  prompt: string
+  status: "pending" | "confirmed" | "cancelled"
 }
 
 export interface ChatAttachment {
@@ -126,6 +132,7 @@ export type InlineMediaGeneration = {
 interface ChatViewProps {
   messages: Message[]
   onSendMessage: (message: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => void
+  onImageConfirmation?: (messageId: string, prompt: string, action: "confirm" | "cancel") => void
   isLoading?: boolean
   streamingText?: string
   currentUser?: string
@@ -211,6 +218,7 @@ function isImageLikeUrl(url?: string) {
   if (!url || typeof url !== "string") return false
   if (isDataSvgUrl(url)) return true
   if (url.startsWith("data:image/")) return true
+  if (url.startsWith("malik-image://")) return true
   if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) return false
   const value = url.toLowerCase(); if (value.includes("/api/") || value.includes("/status") || value.includes("status?")) return false; return /\.(png|jpg|jpeg|webp|gif|svg)(\?|#|$)/i.test(url) || /image|thumbnail|poster|preview|asset/i.test(url)
 }
@@ -727,6 +735,7 @@ function MessageBubble({
   onShare,
   onFeedback,
   feedback,
+  onImageConfirmation,
 }: {
   message: Message
   onCopy: (id: string, text: string) => void
@@ -738,6 +747,7 @@ function MessageBubble({
   onShare?: (text: string) => void
   onFeedback?: (id: string, value: "up" | "down") => void
   feedback?: "up" | "down" | null
+  onImageConfirmation?: (messageId: string, prompt: string, action: "confirm" | "cancel") => void
 }) {
   const isUser = message.role === "user"
   const isThinking = Boolean(message.isStreaming && !message.content && !message.generatedMedia)
@@ -757,13 +767,13 @@ function MessageBubble({
       <div className={cn("malik-message-stack min-w-0 overflow-hidden", isUser ? "order-first max-w-[80%]" : "w-full")}>
         <div className={cn(
           "malik-message-card break-words text-[15px] leading-7 sm:text-[15.5px]",
-          message.generatedMedia || isThinking
+          message.generatedMedia || message.imageConfirmation || isThinking
             ? "bg-transparent p-0"
             : isUser
               ? "malik-message-card-user whitespace-pre-wrap rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3 text-white sm:px-5 sm:py-4"
               : "malik-message-card-assistant whitespace-pre-wrap text-[#e9e3d6]",
         )}>
-          {responseModel && !message.generatedMedia ? (
+          {responseModel && !message.generatedMedia && !message.imageConfirmation ? (
             <div className="malik-response-model" aria-label={`Ответ модели ${responseModel.label}`}>
               <span className="malik-response-model__mark" aria-hidden="true">
                 <svg viewBox="0 0 44 44"><path d="M9 29 L22 15 L22 29 Z" fill="currentColor" /><path d="M24 15 H38 L24 29 Z" fill="currentColor" /></svg>
@@ -771,14 +781,46 @@ function MessageBubble({
               <span>{responseModel.label}</span>
             </div>
           ) : null}
-          {message.generatedMedia
-            ? <GeminiMediaGenerationCard media={message.generatedMedia} />
-            : displayContent || (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} /> : "")}
+          {message.generatedMedia ? (
+            <GeminiMediaGenerationCard media={message.generatedMedia} />
+          ) : message.imageConfirmation ? (
+            <section className="w-full max-w-[560px] rounded-[1.4rem] border border-white/10 bg-[#111112] p-4 shadow-[0_18px_60px_rgba(0,0,0,.32)] sm:p-5" aria-label="Подтверждение генерации изображения">
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-black"><ImageIcon className="h-5 w-5" /></span>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-white">Создать изображение?</h3>
+                  <p className="mt-1 line-clamp-3 text-sm leading-5 text-zinc-400">{message.imageConfirmation.prompt}</p>
+                </div>
+              </div>
+              {message.imageConfirmation.status === "pending" ? (
+                <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <button
+                    type="button"
+                    onClick={() => onImageConfirmation?.(message.id, message.imageConfirmation!.prompt, "confirm")}
+                    className="min-h-11 rounded-xl bg-white px-4 text-sm font-semibold text-black transition hover:bg-zinc-200"
+                  >
+                    Сгенерировать вам изображение
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onImageConfirmation?.(message.id, message.imageConfirmation!.prompt, "cancel")}
+                    className="min-h-11 rounded-xl border border-white/10 px-5 text-sm font-medium text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
+                  >
+                    Отмена
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm font-medium text-zinc-400">
+                  {message.imageConfirmation.status === "confirmed" ? "Генерация подтверждена." : "Генерация отменена."}
+                </p>
+              )}
+            </section>
+          ) : displayContent || (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} /> : "")}
           {!isUser && !message.isStreaming && message.research?.sources.length ? (
             <SourceDeck research={message.research} />
           ) : null}
         </div>
-        {!isUser && message.content && !message.isStreaming && (
+        {!isUser && message.content && !message.isStreaming && !message.imageConfirmation && (
           <div className={cn("malik-message-actions mt-2 flex items-center gap-2 text-slate-500", Boolean(message.research?.sources.length) && "is-research")}>
             <button type="button" title="Копировать" onClick={() => onCopy(message.id, displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
@@ -794,7 +836,7 @@ function MessageBubble({
   )
 }
 
-export function ChatView({ messages, onSendMessage, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, projectName, projectDescription }: ChatViewProps) {
+export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, projectName, projectDescription }: ChatViewProps) {
   // One short pulse after the complete answer lands. Passing a number (rather
   // than a pattern) deliberately keeps this to a single haptic event.
   const wasLoading = useRef(false)
@@ -1108,6 +1150,7 @@ export function ChatView({ messages, onSendMessage, isLoading, currentUser = "Us
                   onShare={handleShare}
                   onFeedback={handleFeedback}
                   feedback={feedbackMap[message.id] ?? null}
+                  onImageConfirmation={onImageConfirmation}
                 />
               ))}
             </>
