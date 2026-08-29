@@ -89,6 +89,7 @@ export function VideoCancelRuntime() {
 
       delete button.dataset.videoCancel
       delete button.dataset.cancelling
+      if (isBusy() && cancelLocked) button.disabled = true
       if (!isBusy()) {
         cancelLocked = false
         cancelling = false
