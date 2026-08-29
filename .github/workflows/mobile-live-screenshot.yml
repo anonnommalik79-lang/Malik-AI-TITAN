@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - ".github/workflows/mobile-live-screenshot.yml"
-      - "app/templates/sovereign-hub-ui/app/__visual/video/**"
+      - "app/templates/sovereign-hub-ui/app/visual-test/video/**"
       - "app/templates/sovereign-hub-ui/components/sovereign/video-generation/**"
       - "app/templates/sovereign-hub-ui/app/video-mobile-*.css"
   workflow_dispatch:
@@ -45,7 +45,7 @@ jobs:
           npm run dev > /tmp/malik-next.log 2>&1 &
           echo $! > /tmp/malik-next.pid
           for i in {1..60}; do
-            if curl -fsS http://127.0.0.1:3000/__visual/video >/dev/null; then exit 0; fi
+            if curl -fsS http://127.0.0.1:3000/visual-test/video >/dev/null; then exit 0; fi
             sleep 2
           done
           cat /tmp/malik-next.log
@@ -65,7 +65,7 @@ jobs:
             userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1',
           });
           const page = await context.newPage();
-          await page.goto('http://127.0.0.1:3000/__visual/video', { waitUntil: 'networkidle', timeout: 90000 });
+          await page.goto('http://127.0.0.1:3000/visual-test/video', { waitUntil: 'networkidle', timeout: 90000 });
           await page.waitForSelector('[data-view="video-generation"]', { timeout: 30000 });
           await page.waitForTimeout(2500);
           await page.screenshot({ path: 'malikvideo-section-mobile.png', fullPage: true });
