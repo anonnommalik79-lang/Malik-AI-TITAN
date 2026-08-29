@@ -55,6 +55,8 @@ import "./video-mobile-reference-final.css"
 import "./mobile-composer-model-position-final.css"
 // Absolute final MalikVideo phone pass: one-line title, premium controls, clean autoplay cards.
 import "./video-mobile-worldclass-final.css"
+// Last authority for MalikVideo top section: no overlap, no clipped title, clean controls.
+import "./video-mobile-top-clean-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
