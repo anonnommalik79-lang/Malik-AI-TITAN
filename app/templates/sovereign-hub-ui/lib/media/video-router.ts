@@ -1,7 +1,13 @@
 import { polloVideoEnabled, polloVideoModel, videoGodOrder } from "./config"
 import { getVideoJob, patchVideoJob, saveVideoJob } from "./jobs"
 import { createPolloVideoTask, fetchPolloTaskStatus, polloConfigured } from "./providers/pollo"
-import { createTitanVideoJob, fetchTitanVideoStatus, videoProviderConfigured, type TitanVideoProviderId } from "./providers/titan-video"
+import {
+  createTitanVideoJob,
+  dashscopeVideoModel,
+  fetchTitanVideoStatus,
+  videoProviderConfigured,
+  type TitanVideoProviderId,
+} from "./providers/titan-video"
 import type { VideoGenerateInput, VideoGenerateResult, VideoJobStatus } from "./types"
 
 function mapRemoteStatus(status: string): VideoJobStatus {
@@ -63,19 +69,50 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
 
   return {
     ok: false,
-    provider: "pollo",
-    model: polloVideoModel(),
+    provider: "dashscope",
+    model: dashscopeVideoModel(),
     taskId: "",
     status: "disabled",
     remainingDailyVideos: 0,
-    error: errors.join(" → ") || "No video provider configured. Add POLLO/RUNWAY/FAL/LUMA/VEO keys.",
+    error: errors.join(" → ") || "No video provider configured. Add DASHSCOPE_API_KEY.",
   }
 }
 
 export async function refreshVideoJobStatus(taskId: string): Promise<VideoGenerateResult & { videoUrl?: string }> {
   const stored = getVideoJob(taskId)
+
+  // Render/serverless processes can restart between POST and polling. Wan task IDs
+  // remain valid remotely, so allow a direct DashScope status lookup even when
+  // the local in-memory job map was lost.
+  if (!stored && videoProviderConfigured("dashscope")) {
+    try {
+      const remote = await fetchTitanVideoStatus("dashscope", taskId)
+      const status = mapRemoteStatus(remote.status)
+      return {
+        ok: status !== "failed",
+        provider: "dashscope",
+        model: dashscopeVideoModel(),
+        taskId,
+        status,
+        remainingDailyVideos: 0,
+        videoUrl: remote.videoUrl,
+        error: remote.error,
+      }
+    } catch (error) {
+      return {
+        ok: false,
+        provider: "dashscope",
+        model: dashscopeVideoModel(),
+        taskId,
+        status: "failed",
+        remainingDailyVideos: 0,
+        error: error instanceof Error ? error.message : "DashScope status check failed",
+      }
+    }
+  }
+
   if (!stored) {
-    return { ok: false, provider: "pollo", model: polloVideoModel(), taskId, status: "failed", remainingDailyVideos: 0, error: "Video job not found" }
+    return { ok: false, provider: "dashscope", model: dashscopeVideoModel(), taskId, status: "failed", remainingDailyVideos: 0, error: "Video job not found" }
   }
 
   try {

@@ -19,17 +19,18 @@ function readLimit(name: string, fallback: number): number {
 export function getMediaDailyLimits() {
   return {
     guest: { images: readLimit("GUEST_DAILY_IMAGE_LIMIT", 10), videos: readLimit("GUEST_DAILY_VIDEO_LIMIT", 0) },
-    free: { images: readLimit("FREE_DAILY_IMAGE_LIMIT", 50), videos: readLimit("FREE_DAILY_VIDEO_LIMIT", 5) },
-    premium: { images: readLimit("PREMIUM_DAILY_IMAGE_LIMIT", 200), videos: readLimit("PREMIUM_DAILY_VIDEO_LIMIT", 20) },
+    free: { images: readLimit("FREE_DAILY_IMAGE_LIMIT", 50), videos: 1 },
+    premium: { images: readLimit("PREMIUM_DAILY_IMAGE_LIMIT", 200), videos: 1 },
   }
 }
 
 function limitFor(tier: UserTier, kind: MediaKind): number {
   const limits = getMediaDailyLimits()
   if (tier === "owner") return 999_999
-  if (tier === "premium") return kind === "image" ? limits.premium.images : limits.premium.videos
-  if (tier === "free") return kind === "image" ? limits.free.images : limits.free.videos
-  return kind === "image" ? limits.guest.images : limits.guest.videos
+  if (kind === "video") return tier === "guest" ? limits.guest.videos : 1
+  if (tier === "premium") return limits.premium.images
+  if (tier === "free") return limits.free.images
+  return limits.guest.images
 }
 
 function memoryMap(kind: MediaKind) {

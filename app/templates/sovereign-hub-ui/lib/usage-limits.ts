@@ -1,4 +1,4 @@
-﻿export type GenerationLimitType = "image" | "video" | "code" | "website"
+export type GenerationLimitType = "image" | "video" | "code" | "website"
 
 export type UsageState = {
   imageCount: number
@@ -71,7 +71,7 @@ export function canUseGeneration(type: GenerationLimitType, userEmail?: string |
   if (isOwnerUser(userEmail)) return true
   const state = getUsageState()
   if (type === "image") return state.imageCount < 1
-  if (type === "video") return false
+  if (type === "video") return state.videoCount < 1
   return state.codeCount < 1
 }
 
@@ -90,4 +90,3 @@ export function resetUsage() {
   window.localStorage.setItem(RESET_KEY, todayKey())
   return getUsageState()
 }
-

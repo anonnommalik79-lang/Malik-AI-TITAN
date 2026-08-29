@@ -21,7 +21,7 @@ export function imageFreeMode(): boolean {
 }
 
 export function videoProviderPrimary(): string {
-  return process.env.VIDEO_PROVIDER_PRIMARY?.trim() || "pollo"
+  return process.env.VIDEO_PROVIDER_PRIMARY?.trim() || "dashscope"
 }
 
 export function polloVideoModel(): string {
@@ -38,8 +38,8 @@ export function maxImagePromptLength(): number {
 }
 
 export function maxVideoPromptLength(): number {
-  const n = Number(process.env.MAX_VIDEO_PROMPT_LENGTH || 1500)
-  return Number.isFinite(n) && n > 0 ? n : 1500
+  const n = Number(process.env.MAX_VIDEO_PROMPT_LENGTH || 5000)
+  return Number.isFinite(n) && n > 0 ? n : 5000
 }
 
 export function imageProviderTimeoutMs(): number {
@@ -60,7 +60,7 @@ export function imageGodOrder(): string[] {
 }
 
 export function videoGodOrder(): string[] {
-  const raw = process.env.VIDEO_GOD_PROVIDER_ORDER || process.env.VIDEO_PROVIDER_ORDER || "pollo,runway,fal,luma,veo"
+  const raw = process.env.VIDEO_GOD_PROVIDER_ORDER || process.env.VIDEO_PROVIDER_ORDER || "dashscope,pollo,runway,fal,luma,veo"
   return raw.split(",").map((s) => s.trim()).filter(Boolean)
 }
 

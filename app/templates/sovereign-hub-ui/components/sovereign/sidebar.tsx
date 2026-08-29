@@ -25,6 +25,7 @@ import {
   Sparkles,
   Terminal,
   Trash2,
+  Video,
 } from "lucide-react"
 import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/auth/client-session"
 import { prefillPrompt } from "@/lib/malik-context"
@@ -73,13 +74,12 @@ const PRIMARY_ACTIONS: SidebarAction[] = [
   { id: "library", label: "Библиотека", icon: LayoutTemplate, view: "templates" },
   { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects" },
   { id: "plugins", label: "Плагины", icon: Plug, view: "features" },
+  { id: "video-generation", label: "Генерация видео", icon: Video, view: "video-generation" },
   { id: "compute", label: "Compute", icon: Cpu, view: "compute" },
   { id: "translate", label: "Переводчик", icon: Languages, action: "translate" },
 ]
 
-const TOOL_ACTIONS = [
-  { id: "data", label: "Анализ данных", icon: BarChart3 },
-] as const
+const TOOL_ACTIONS = [{ id: "data", label: "Анализ данных", icon: BarChart3 }] as const
 
 const PROFILE_MENU = [
   { id: "settings", icon: Settings, label: "Настройки" },
@@ -104,7 +104,6 @@ function SidebarInner({
   onLogout,
   onOpenCodex,
   onOpenSearch,
-  onOpenVoice,
 }: SidebarProps) {
   const [profile, setProfile] = useState<ReturnType<typeof getStoredAuthSnapshot>>(null)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
@@ -133,28 +132,28 @@ function SidebarInner({
   }, [editingChatId])
 
   useEffect(() => {
-    const closeMenus = (event: MouseEvent) => {
+    const close = (event: MouseEvent) => {
       if (!sidebarRef.current?.contains(event.target as Node)) {
         setProfileMenuOpen(false)
         setChatMenuId(null)
       }
     }
-    const closeOnEscape = (event: KeyboardEvent) => {
+    const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
       setProfileMenuOpen(false)
       setChatMenuId(null)
       setEditingChatId(null)
     }
-    document.addEventListener("mousedown", closeMenus)
-    document.addEventListener("keydown", closeOnEscape)
+    document.addEventListener("mousedown", close)
+    document.addEventListener("keydown", escape)
     return () => {
-      document.removeEventListener("mousedown", closeMenus)
-      document.removeEventListener("keydown", closeOnEscape)
+      document.removeEventListener("mousedown", close)
+      document.removeEventListener("keydown", escape)
     }
   }, [])
 
   const orderedChats = useMemo(
-    () => [...chats].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime()),
+    () => [...chats].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
     [chats],
   )
   const pinnedChats = useMemo(() => orderedChats.filter((chat) => chat.isPinned), [orderedChats])
@@ -165,13 +164,7 @@ function SidebarInner({
   const avatar = profile?.avatar || buildFallbackAvatar(email)
   const isGuest = /guest|anonymous/i.test(email)
   const displayName = isGuest ? "Гостевой доступ" : name
-  const initials = displayName
-    .trim()
-    .split(/\s+/)
-    .map((part) => part.charAt(0))
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "M"
+  const initials = displayName.trim().split(/\s+/).map((part) => part.charAt(0)).join("").slice(0, 2).toUpperCase() || "M"
   const isPro = plan === "pro" || plan === "ultra" || plan === "owner"
   const roleLabel = canAccessAdmin ? "Соло-фаундер" : publicPlanTitle(plan)
 
@@ -187,31 +180,19 @@ function SidebarInner({
   }, [onOpenSearch])
 
   const runAction = useCallback((action: SidebarAction) => {
-    if (action.action === "new") {
-      onNewChat?.()
-      return
-    }
-    if (action.action === "codex") {
-      onOpenCodex?.()
-      return
-    }
-    if (action.action === "voice") {
-      onOpenVoice?.()
-      return
-    }
+    if (action.action === "new") return onNewChat?.()
+    if (action.action === "codex") return onOpenCodex?.()
     if (action.action === "translate") {
       onViewChange?.("home")
       prefillPrompt("Переведи текст ниже на нужный язык, сохрани смысл, факты и тон:\n\n")
       return
     }
     if (action.view) openView(action.view)
-  }, [onNewChat, onOpenCodex, onOpenVoice, onViewChange, openView])
+  }, [onNewChat, onOpenCodex, onViewChange, openView])
 
   const runTool = useCallback((id: (typeof TOOL_ACTIONS)[number]["id"]) => {
     onViewChange?.("home")
-    if (id === "data") {
-      prefillPrompt("Проанализируй данные ниже: найди тренды, аномалии и дай выводы с цифрами.\n\n")
-    }
+    if (id === "data") prefillPrompt("Проанализируй данные ниже: найди тренды, аномалии и дай выводы с цифрами.\n\n")
   }, [onViewChange])
 
   const saveRename = useCallback((chatId: string) => {
@@ -239,18 +220,11 @@ function SidebarInner({
 
   const renderRailButton = (action: SidebarAction) => {
     const Icon = action.icon
-    const isActive = action.view === activeView
+    const active = action.view === activeView
     return (
-      <button
-        key={action.id}
-        type="button"
-        aria-label={action.label}
-        aria-current={isActive ? "page" : undefined}
-        onClick={() => runAction(action)}
-        onMouseEnter={showTooltip(action.label)}
-        onMouseLeave={() => setTooltip(null)}
-        className={cn("malik-sidebar-rail-btn", isActive && "is-active")}
-      >
+      <button key={action.id} type="button" aria-label={action.label} aria-current={active ? "page" : undefined}
+        onClick={() => runAction(action)} onMouseEnter={showTooltip(action.label)} onMouseLeave={() => setTooltip(null)}
+        className={cn("malik-sidebar-rail-btn", active && "is-active")}>
         <Icon className="h-[18px] w-[18px]" />
       </button>
     )
@@ -258,17 +232,15 @@ function SidebarInner({
 
   if (isCollapsed) {
     return (
-      <aside ref={sidebarRef} data-collapsed="true" className="malik-sidebar flex h-[100dvh] w-16 shrink-0 flex-col border-r border-[var(--malik-hairline,rgba(255,255,255,.06))] bg-[#050506] text-white">
+      <aside ref={sidebarRef} data-collapsed="true" className="malik-sidebar flex h-[100dvh] w-16 shrink-0 flex-col border-r border-white/[.06] bg-[#050506] text-white">
         <div className="flex h-14 shrink-0 items-center justify-center">
-          <button type="button" onClick={onToggle} aria-label="Развернуть панель" onMouseEnter={showTooltip("Развернуть панель")} onMouseLeave={() => setTooltip(null)} className="malik-sidebar-icon-btn">
-            <PanelLeft className="h-[18px] w-[18px]" />
-          </button>
+          <button type="button" onClick={onToggle} aria-label="Развернуть панель" className="malik-sidebar-icon-btn"><PanelLeft className="h-[18px] w-[18px]" /></button>
         </div>
-        <nav aria-label="Навигация" className="malik-sidebar-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2">
+        <nav className="malik-sidebar-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2" aria-label="Навигация">
           {PRIMARY_ACTIONS.map(renderRailButton)}
         </nav>
-        <div className="flex shrink-0 flex-col items-center gap-1 border-t border-[var(--malik-hairline,rgba(255,255,255,.06))] p-2">
-          <button type="button" onClick={() => openView("settings")} aria-label="Настройки" className="malik-sidebar-icon-btn"><Settings className="h-[18px] w-[18px]" /></button>
+        <div className="flex shrink-0 flex-col items-center gap-1 border-t border-white/[.06] p-2">
+          <button type="button" onClick={() => openView("settings")} className="malik-sidebar-icon-btn" aria-label="Настройки"><Settings className="h-[18px] w-[18px]" /></button>
           <img src={avatar} alt="" className="mt-1 h-8 w-8 rounded-full object-cover" />
         </div>
         {tooltip ? <div className="malik-sidebar-tooltip" style={{ top: tooltip.top }}>{tooltip.label}</div> : null}
@@ -284,53 +256,28 @@ function SidebarInner({
         <p className="malik-sidebar-group-title">{label}</p>
         <div className="space-y-0.5">
           {list.map((chat) => {
-            const isSelected = chat.id === activeChatId
+            const selected = chat.id === activeChatId
             const menuOpen = chatMenuId === chat.id
             return (
-              <div key={chat.id} className={cn("malik-sidebar-chat-row group", isSelected && "is-active", menuOpen && "is-menu-open")}>
+              <div key={chat.id} className={cn("malik-sidebar-chat-row group", selected && "is-active", menuOpen && "is-menu-open")}>
                 {editingChatId === chat.id ? (
-                  <input
-                    ref={editInputRef}
-                    value={editingTitle}
-                    maxLength={90}
-                    aria-label="Новое название чата"
-                    onChange={(event) => setEditingTitle(event.target.value)}
-                    onBlur={() => saveRename(chat.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") saveRename(chat.id)
-                      if (event.key === "Escape") setEditingChatId(null)
-                    }}
-                    className="malik-sidebar-rename-input"
-                  />
+                  <input ref={editInputRef} value={editingTitle} maxLength={90} className="malik-sidebar-rename-input"
+                    onChange={(event) => setEditingTitle(event.target.value)} onBlur={() => saveRename(chat.id)}
+                    onKeyDown={(event) => { if (event.key === "Enter") saveRename(chat.id); if (event.key === "Escape") setEditingChatId(null) }} />
                 ) : (
-                  <button type="button" onClick={() => { setChatMenuId(null); onSelectChat?.(chat.id) }} className="malik-sidebar-chat-title" title={chat.title}>
-                    {chat.title}
-                  </button>
+                  <button type="button" className="malik-sidebar-chat-title" title={chat.title} onClick={() => { setChatMenuId(null); onSelectChat?.(chat.id) }}>{chat.title}</button>
                 )}
                 {editingChatId !== chat.id ? (
-                  <button
-                    type="button"
-                    aria-label={`Действия с чатом «${chat.title}»`}
-                    aria-haspopup="menu"
-                    aria-expanded={menuOpen}
-                    onClick={(event) => { event.stopPropagation(); setChatMenuId((current) => current === chat.id ? null : chat.id) }}
-                    className="malik-sidebar-chat-more"
-                  >
+                  <button type="button" className="malik-sidebar-chat-more" aria-label={`Действия с чатом «${chat.title}»`}
+                    onClick={(event) => { event.stopPropagation(); setChatMenuId((current) => current === chat.id ? null : chat.id) }}>
                     <MoreHorizontal className="h-4 w-4" />
                   </button>
                 ) : null}
                 {menuOpen ? (
                   <div role="menu" className="malik-sidebar-chat-menu">
-                    <button type="button" role="menuitem" onClick={() => { setEditingChatId(chat.id); setEditingTitle(chat.title); setChatMenuId(null) }}>
-                      <Pencil className="h-3.5 w-3.5" /> Переименовать
-                    </button>
-                    <button type="button" role="menuitem" onClick={() => { onTogglePinChat?.(chat.id); setChatMenuId(null) }}>
-                      {chat.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-                      {chat.isPinned ? "Открепить" : "Закрепить"}
-                    </button>
-                    <button type="button" role="menuitem" className="is-danger" onClick={() => requestDelete(chat)}>
-                      <Trash2 className="h-3.5 w-3.5" /> Удалить
-                    </button>
+                    <button type="button" onClick={() => { setEditingChatId(chat.id); setEditingTitle(chat.title); setChatMenuId(null) }}><Pencil className="h-3.5 w-3.5" />Переименовать</button>
+                    <button type="button" onClick={() => { onTogglePinChat?.(chat.id); setChatMenuId(null) }}>{chat.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}{chat.isPinned ? "Открепить" : "Закрепить"}</button>
+                    <button type="button" className="is-danger" onClick={() => requestDelete(chat)}><Trash2 className="h-3.5 w-3.5" />Удалить</button>
                   </div>
                 ) : null}
               </div>
@@ -342,90 +289,61 @@ function SidebarInner({
   }
 
   return (
-    <aside ref={sidebarRef} data-collapsed="false" className="malik-sidebar relative flex h-[100dvh] w-[250px] max-w-[86vw] shrink-0 flex-col border-r border-[var(--malik-hairline,rgba(255,255,255,.06))] bg-[#050506] text-white">
+    <aside ref={sidebarRef} data-collapsed="false" className="malik-sidebar relative flex h-[100dvh] w-[250px] max-w-[86vw] shrink-0 flex-col border-r border-white/[.06] bg-[#050506] text-white">
       <div className="flex h-14 shrink-0 items-center justify-between gap-2 pl-4 pr-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white">
             <svg viewBox="0 0 44 44" className="h-4 w-4" aria-hidden="true"><path d="M9 29 L22 15 L22 29 Z" fill="#0A0A0C" /><path d="M24 15 H38 L24 29 Z" fill="#0A0A0C" /></svg>
           </span>
-          <span className="min-w-0">
-            <span className="block truncate text-[13px] font-semibold leading-tight tracking-tight">MALIK AI</span>
-            <span className="block truncate text-[10px] leading-tight text-zinc-600">v6.5 Titan</span>
-          </span>
+          <span className="min-w-0"><span className="block truncate text-[13px] font-semibold leading-tight tracking-tight">MALIK AI</span><span className="block truncate text-[10px] leading-tight text-zinc-600">v6.5 Titan</span></span>
         </div>
         <button type="button" onClick={onToggle} aria-label="Свернуть панель" className="malik-sidebar-icon-btn"><PanelLeftClose className="h-[18px] w-[18px]" /></button>
       </div>
 
       <div className="shrink-0 px-2.5 pb-2">
-        <button type="button" onClick={openSearch} className="malik-sidebar-search">
-          <Search className="h-4 w-4" /><span>Поиск</span><kbd>Ctrl K</kbd>
-        </button>
+        <button type="button" onClick={openSearch} className="malik-sidebar-search"><Search className="h-4 w-4" /><span>Поиск</span><kbd>Ctrl K</kbd></button>
       </div>
 
       <nav aria-label="Основная навигация" className="relative z-[60] shrink-0 px-2.5 pb-2">
         {PRIMARY_ACTIONS.map((action) => {
           const Icon = action.icon
-          const isActive = action.view === activeView
-          return (
-            <button key={action.id} type="button" aria-current={isActive ? "page" : undefined} onClick={() => runAction(action)} className={cn("malik-sidebar-primary", isActive && "is-active")}>
-              <Icon className="h-[17px] w-[17px]" /><span>{action.label}</span>
-            </button>
-          )
+          const active = action.view === activeView
+          return <button key={action.id} type="button" aria-current={active ? "page" : undefined} onClick={() => runAction(action)} className={cn("malik-sidebar-primary", active && "is-active")}><Icon className="h-[17px] w-[17px]" /><span>{action.label}</span></button>
         })}
       </nav>
 
       <div className="malik-sidebar-history min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
-        {pinnedChats.length || recentChats.length ? (
-          <>
-            {renderChatGroup("Закреплённые", pinnedChats)}
-            {renderChatGroup("Недавние", recentChats)}
-          </>
-        ) : (
-          <div className="malik-sidebar-empty-history">
-            <span>История пуста</span>
-            <small>Новые диалоги появятся здесь</small>
-          </div>
-        )}
+        {pinnedChats.length || recentChats.length ? <>{renderChatGroup("Закреплённые", pinnedChats)}{renderChatGroup("Недавние", recentChats)}</> : <div className="malik-sidebar-empty-history"><span>История пуста</span><small>Новые диалоги появятся здесь</small></div>}
       </div>
 
       <div className="malik-sidebar-tools shrink-0 px-2.5 py-2">
         <p className="malik-sidebar-group-title">Инструменты</p>
-        {TOOL_ACTIONS.map((tool) => {
-          const Icon = tool.icon
-          return (
-            <button key={tool.id} type="button" onClick={() => runTool(tool.id)} className="malik-sidebar-primary">
-              <Icon className="h-[17px] w-[17px]" /><span>{tool.label}</span>
-            </button>
-          )
-        })}
+        {TOOL_ACTIONS.map((tool) => { const Icon = tool.icon; return <button key={tool.id} type="button" onClick={() => runTool(tool.id)} className="malik-sidebar-primary"><Icon className="h-[17px] w-[17px]" /><span>{tool.label}</span></button> })}
       </div>
 
-      <div className="relative shrink-0 border-t border-[var(--malik-hairline,rgba(255,255,255,.06))] p-2">
+      <div className="relative shrink-0 border-t border-white/[.06] p-2">
         {profileMenuOpen ? (
           <div role="menu" className="malik-sidebar-profile-menu">
             <p>{email}</p>
             <div className="malik-sidebar-menu-separator" />
-            {PROFILE_MENU.map((entry) => {
-              const Icon = entry.icon
-              return <button key={entry.id} type="button" role="menuitem" onClick={() => openView(entry.id)}><Icon className="h-4 w-4" />{entry.label}</button>
-            })}
-            <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); onOpenCodex?.() }}><Terminal className="h-4 w-4" />Malik Codex</button>
-            {canAccessAdmin ? <button type="button" role="menuitem" onClick={() => openView("command-center")}><Shield className="h-4 w-4" />Админ-консоль</button> : null}
+            {PROFILE_MENU.map((entry) => { const Icon = entry.icon; return <button key={entry.id} type="button" onClick={() => openView(entry.id)}><Icon className="h-4 w-4" />{entry.label}</button> })}
+            <button type="button" onClick={() => { setProfileMenuOpen(false); onOpenCodex?.() }}><Terminal className="h-4 w-4" />Malik Codex</button>
+            {canAccessAdmin ? <button type="button" onClick={() => openView("command-center")}><Shield className="h-4 w-4" />Админ-консоль</button> : null}
             <div className="malik-sidebar-menu-separator" />
-            <button type="button" role="menuitem" onClick={handleLogout} className="is-danger"><LogOut className="h-4 w-4" />Выйти</button>
+            <button type="button" className="is-danger" onClick={handleLogout}><LogOut className="h-4 w-4" />Выйти</button>
           </div>
         ) : null}
 
-        <button type="button" aria-haspopup="menu" aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen((open) => !open)} className="malik-sidebar-user">
+        <button type="button" onClick={() => setProfileMenuOpen((value) => !value)} className="malik-sidebar-user">
           <span className="malik-sidebar-user-avatar"><img src={avatar} alt="" /><span>{initials}</span></span>
           <span className="min-w-0 flex-1"><span className="malik-sidebar-user-name">{displayName}</span><span className="malik-sidebar-user-role">{roleLabel}</span></span>
-          <span className="malik-sidebar-user-dot" aria-hidden="true" />
+          <span className="malik-sidebar-user-dot" />
         </button>
 
         <button type="button" onClick={() => openView("billing")} className="malik-sidebar-premium">
-          <span className="malik-sidebar-premium-mark" aria-hidden="true"><svg viewBox="0 0 44 44"><path d="M9 29 L22 15 L22 29 Z" fill="#1b1405" /><path d="M24 15 H38 L24 29 Z" fill="#1b1405" /></svg></span>
+          <span className="malik-sidebar-premium-mark"><svg viewBox="0 0 44 44"><path d="M9 29 L22 15 L22 29 Z" /><path d="M24 15 H38 L24 29 Z" /></svg></span>
           <span className="min-w-0 flex-1"><span className="malik-sidebar-premium-title">MalikAI Plus</span><span className="malik-sidebar-premium-note">{isPro ? "Подписка активна" : "Открыть все модели"}</span></span>
-          <Crown className="h-4 w-4 shrink-0 text-[var(--malik-accent-bright,#e8c56a)]" />
+          <Crown className="h-4 w-4 shrink-0" />
         </button>
 
         <div className="malik-sidebar-quickrow">
@@ -443,104 +361,61 @@ function SidebarInner({
 function SidebarStyles() {
   return (
     <style jsx global>{`
-      .malik-sidebar {
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-      }
-      .malik-sidebar button { font: inherit; }
-      .malik-sidebar-scroll,
-      .malik-sidebar-history { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-      .malik-sidebar-scroll:hover,
-      .malik-sidebar-history:hover { scrollbar-color: rgba(255,255,255,.16) transparent; }
-      .malik-sidebar-scroll::-webkit-scrollbar,
-      .malik-sidebar-history::-webkit-scrollbar { width: 7px; }
-      .malik-sidebar-scroll::-webkit-scrollbar-thumb,
-      .malik-sidebar-history::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background-clip: content-box; }
-      .malik-sidebar-scroll:hover::-webkit-scrollbar-thumb,
-      .malik-sidebar-history:hover::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,.16); }
-
-      .malik-sidebar-search { display:flex; width:100%; height:34px; align-items:center; gap:9px; border:1px solid rgba(255,255,255,.075); border-radius:9px; padding:0 9px; color:#6e6e78; background:rgba(255,255,255,.022); font-size:12.5px; transition:.14s ease; }
-      .malik-sidebar-search:hover { color:#c7c7cf; background:rgba(255,255,255,.045); border-color:rgba(255,255,255,.12); }
+      .malik-sidebar { font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-feature-settings:"cv02","cv03","cv04","cv11"; }
+      .malik-sidebar button { font:inherit; }
+      .malik-sidebar-scroll,.malik-sidebar-history { scrollbar-width:thin; scrollbar-color:transparent transparent; }
+      .malik-sidebar-history:hover { scrollbar-color:rgba(255,255,255,.16) transparent; }
+      .malik-sidebar-search { display:flex; width:100%; height:34px; align-items:center; gap:9px; border:1px solid rgba(255,255,255,.075); border-radius:9px; padding:0 9px; color:#6e6e78; background:rgba(255,255,255,.022); font-size:12.5px; }
+      .malik-sidebar-search:hover { color:#c7c7cf; background:rgba(255,255,255,.045); }
       .malik-sidebar-search span { flex:1; text-align:left; }
       .malik-sidebar-search kbd { border:1px solid rgba(255,255,255,.09); border-radius:5px; padding:1px 5px; font-size:9px; color:#575760; }
-
-      .malik-sidebar-primary { display:flex; width:100%; height:34px; align-items:center; gap:10px; border-radius:8px; padding:0 8px; color:#d2d2d6; font-size:13px; font-weight:450; text-align:left; transition:background-color .13s ease,color .13s ease; }
+      .malik-sidebar-primary { display:flex; width:100%; height:34px; align-items:center; gap:10px; border-radius:8px; padding:0 8px; color:#d2d2d6; font-size:13px; font-weight:450; text-align:left; transition:.13s ease; }
       .malik-sidebar-primary svg { flex-shrink:0; color:#a0a0aa; }
       .malik-sidebar-primary:hover { background:rgba(255,255,255,.055); color:#fff; }
       .malik-sidebar-primary.is-active { background:#202023; color:#fff; font-weight:520; }
       .malik-sidebar-primary.is-active svg { color:#fff; }
-
-      .malik-sidebar-more-menu { position:absolute; z-index:80; top:calc(100% + 5px); left:0; width:216px; max-height:clamp(180px,calc(100dvh - 520px),380px); overflow-y:auto; border:1px solid rgba(255,255,255,.1); border-radius:12px; background:#141416; padding:5px; box-shadow:0 20px 50px rgba(0,0,0,.65); }
-      .malik-sidebar-more-menu button,
-      .malik-sidebar-profile-menu button { display:flex; width:100%; align-items:center; gap:9px; border-radius:8px; padding:7px 9px; color:#d4d4d8; font-size:12.5px; text-align:left; }
-      .malik-sidebar-more-menu button:hover,
-      .malik-sidebar-more-menu button.is-active,
-      .malik-sidebar-profile-menu button:hover { background:rgba(255,255,255,.07); color:#fff; }
-
       .malik-sidebar-history { border-top:1px solid rgba(255,255,255,.055); border-bottom:1px solid rgba(255,255,255,.055); }
       .malik-sidebar-chat-group + .malik-sidebar-chat-group { margin-top:14px; }
-      .malik-sidebar-group-title { margin:0 0 5px; padding:0 7px; color:#72727c; font-size:10.5px; font-weight:520; letter-spacing:.02em; }
-      .malik-sidebar-chat-row { position:relative; display:flex; height:34px; align-items:center; border-radius:8px; padding:0 4px 0 8px; color:#dedee3; transition:background-color .13s ease; }
-      .malik-sidebar-chat-row:hover,
-      .malik-sidebar-chat-row.is-menu-open { background:rgba(255,255,255,.05); }
+      .malik-sidebar-group-title { margin:0 0 5px; padding:0 7px; color:#72727c; font-size:10.5px; font-weight:520; }
+      .malik-sidebar-chat-row { position:relative; display:flex; height:34px; align-items:center; border-radius:8px; padding:0 4px 0 8px; color:#dedee3; }
+      .malik-sidebar-chat-row:hover,.malik-sidebar-chat-row.is-menu-open { background:rgba(255,255,255,.05); }
       .malik-sidebar-chat-row.is-active { background:#202023; color:#fff; }
       .malik-sidebar-chat-title { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; font-size:12.5px; }
-      .malik-sidebar-chat-more { display:flex; height:26px; width:26px; flex-shrink:0; align-items:center; justify-content:center; border-radius:7px; color:#7d7d86; opacity:0; }
-      .malik-sidebar-chat-row:hover .malik-sidebar-chat-more,
-      .malik-sidebar-chat-row.is-active .malik-sidebar-chat-more,
-      .malik-sidebar-chat-row.is-menu-open .malik-sidebar-chat-more,
-      .malik-sidebar-chat-more:focus-visible { opacity:1; }
-      .malik-sidebar-chat-more:hover { background:rgba(255,255,255,.08); color:#fff; }
-      .malik-sidebar-chat-menu { position:absolute; z-index:90; top:31px; right:0; width:164px; border:1px solid rgba(255,255,255,.1); border-radius:10px; background:#171719; padding:4px; box-shadow:0 18px 42px rgba(0,0,0,.7); }
-      .malik-sidebar-chat-menu button { display:flex; width:100%; align-items:center; gap:8px; border-radius:7px; padding:7px 8px; color:#d4d4d8; font-size:12px; text-align:left; }
-      .malik-sidebar-chat-menu button:hover { background:rgba(255,255,255,.07); color:#fff; }
-      .malik-sidebar-chat-menu button.is-danger { color:#fca5a5; }
-      .malik-sidebar-chat-menu button.is-danger:hover { background:rgba(239,68,68,.11); color:#fecaca; }
-      .malik-sidebar-rename-input { min-width:0; flex:1; height:26px; border:1px solid rgba(232,197,106,.48); border-radius:6px; background:#111113; padding:0 7px; color:#fff; font-size:12.5px; outline:none; }
+      .malik-sidebar-chat-more { width:26px; height:26px; display:grid; place-items:center; border-radius:7px; color:#7d7d86; opacity:0; }
+      .malik-sidebar-chat-row:hover .malik-sidebar-chat-more,.malik-sidebar-chat-row.is-menu-open .malik-sidebar-chat-more { opacity:1; }
+      .malik-sidebar-chat-menu { position:absolute; z-index:90; top:31px; right:0; width:170px; border:1px solid rgba(255,255,255,.1); border-radius:10px; background:#171719; padding:4px; box-shadow:0 18px 42px rgba(0,0,0,.7); }
+      .malik-sidebar-chat-menu button,.malik-sidebar-profile-menu button { display:flex; width:100%; align-items:center; gap:8px; border-radius:7px; padding:7px 8px; color:#d4d4d8; font-size:12px; text-align:left; }
+      .malik-sidebar-chat-menu button:hover,.malik-sidebar-profile-menu button:hover { background:rgba(255,255,255,.07); color:#fff; }
+      .malik-sidebar-chat-menu .is-danger,.malik-sidebar-profile-menu .is-danger { color:#fca5a5; }
+      .malik-sidebar-rename-input { min-width:0; flex:1; height:26px; border:1px solid rgba(255,255,255,.25); border-radius:6px; background:#111113; padding:0 7px; color:#fff; font-size:12.5px; outline:none; }
       .malik-sidebar-empty-history { display:flex; height:100%; min-height:88px; flex-direction:column; align-items:center; justify-content:center; text-align:center; color:#777780; }
-      .malik-sidebar-empty-history span { font-size:12px; }
-      .malik-sidebar-empty-history small { margin-top:3px; color:#505058; font-size:10.5px; }
+      .malik-sidebar-empty-history span { font-size:12px; }.malik-sidebar-empty-history small { margin-top:3px; color:#505058; font-size:10.5px; }
       .malik-sidebar-tools { background:#050506; }
-
-      .malik-sidebar-icon-btn { display:flex; height:30px; width:30px; align-items:center; justify-content:center; border-radius:8px; color:#797982; transition:.13s ease; }
+      .malik-sidebar-icon-btn { display:flex; height:30px; width:30px; align-items:center; justify-content:center; border-radius:8px; color:#797982; }
       .malik-sidebar-icon-btn:hover { background:rgba(255,255,255,.06); color:#fff; }
-      .malik-sidebar-icon-btn:focus-visible,
-      .malik-sidebar-primary:focus-visible,
-      .malik-sidebar-search:focus-visible { outline:none; box-shadow:0 0 0 2px rgba(255,255,255,.2); }
-      .malik-sidebar-rail-btn { position:relative; display:flex; height:36px; width:100%; align-items:center; justify-content:center; border-radius:8px; color:#777780; }
-      .malik-sidebar-rail-btn:hover,
-      .malik-sidebar-rail-btn.is-active { background:rgba(255,255,255,.065); color:#fff; }
-      .malik-sidebar-tooltip { position:fixed; left:70px; z-index:120; transform:translateY(-50%); border:1px solid rgba(255,255,255,.09); border-radius:7px; background:#151517; padding:5px 9px; color:#e4e4e7; font-size:12px; white-space:nowrap; pointer-events:none; box-shadow:0 10px 30px rgba(0,0,0,.55); }
-
+      .malik-sidebar-rail-btn { display:flex; height:36px; width:100%; align-items:center; justify-content:center; border-radius:8px; color:#777780; }
+      .malik-sidebar-rail-btn:hover,.malik-sidebar-rail-btn.is-active { background:rgba(255,255,255,.065); color:#fff; }
+      .malik-sidebar-tooltip { position:fixed; left:70px; z-index:120; transform:translateY(-50%); border:1px solid rgba(255,255,255,.09); border-radius:7px; background:#151517; padding:5px 9px; color:#e4e4e7; font-size:12px; white-space:nowrap; pointer-events:none; }
       .malik-sidebar-profile-menu { position:absolute; z-index:100; bottom:calc(100% + 6px); left:8px; right:8px; border:1px solid rgba(255,255,255,.1); border-radius:12px; background:#141416; padding:5px; box-shadow:0 20px 50px rgba(0,0,0,.7); }
-      .malik-sidebar-profile-menu p { overflow:hidden; margin:0; padding:7px 9px; color:#686871; font-size:10.5px; text-overflow:ellipsis; white-space:nowrap; }
-      .malik-sidebar-profile-menu button.is-danger { color:#fca5a5; }
-      .malik-sidebar-profile-menu button.is-danger:hover { background:rgba(239,68,68,.1); }
+      .malik-sidebar-profile-menu p { margin:0; padding:7px 9px; overflow:hidden; color:#686871; font-size:10.5px; text-overflow:ellipsis; white-space:nowrap; }
       .malik-sidebar-menu-separator { height:1px; margin:4px; background:rgba(255,255,255,.07); }
-
       .malik-sidebar-user { display:flex; width:100%; align-items:center; gap:9px; border-radius:10px; padding:7px; text-align:left; }
       .malik-sidebar-user:hover { background:rgba(255,255,255,.04); }
-      .malik-sidebar-user-avatar { position:relative; display:flex; height:30px; width:30px; flex-shrink:0; align-items:center; justify-content:center; overflow:hidden; border:1px solid rgba(212,175,55,.3); border-radius:999px; background:linear-gradient(135deg,#f3de96,#a87c22); color:#1b1405; font-size:10px; font-weight:700; }
-      .malik-sidebar-user-avatar img { position:absolute; inset:0; height:100%; width:100%; object-fit:cover; }
-      .malik-sidebar-user-name { display:block; overflow:hidden; color:#f0ece3; font-size:12.5px; font-weight:520; line-height:1.2; text-overflow:ellipsis; white-space:nowrap; }
-      .malik-sidebar-user-role { display:block; overflow:hidden; margin-top:2px; color:#706b62; font-size:10.5px; line-height:1.2; text-overflow:ellipsis; white-space:nowrap; }
-      .malik-sidebar-user-dot { height:7px; width:7px; flex-shrink:0; border-radius:999px; background:#34d399; box-shadow:0 0 0 2px rgba(52,211,153,.08); }
-
-      .malik-sidebar-premium { display:flex; width:100%; align-items:center; gap:9px; margin-top:5px; border:1px solid rgba(212,175,55,.28); border-radius:11px; background:radial-gradient(140% 120% at 0% 0%,rgba(201,152,47,.18),transparent 62%),#121214; padding:8px 9px; text-align:left; }
-      .malik-sidebar-premium:hover { border-color:rgba(232,197,106,.5); }
-      .malik-sidebar-premium-mark { display:flex; height:25px; width:25px; flex-shrink:0; align-items:center; justify-content:center; border-radius:7px; background:linear-gradient(135deg,#f3de96,#a87c22); }
-      .malik-sidebar-premium-mark svg { height:15px; width:15px; }
-      .malik-sidebar-premium-title { display:block; color:#f3de96; font-size:11.5px; font-weight:620; line-height:1.2; }
-      .malik-sidebar-premium-note { display:block; margin-top:2px; color:#8f887d; font-size:10.5px; line-height:1.2; }
+      .malik-sidebar-user-avatar { position:relative; display:flex; width:30px; height:30px; align-items:center; justify-content:center; overflow:hidden; border:1px solid rgba(255,255,255,.14); border-radius:999px; background:#171719; color:#eee; font-size:10px; font-weight:700; }
+      .malik-sidebar-user-avatar img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+      .malik-sidebar-user-name { display:block; overflow:hidden; color:#f0f0f2; font-size:12.5px; font-weight:520; text-overflow:ellipsis; white-space:nowrap; }
+      .malik-sidebar-user-role { display:block; margin-top:2px; overflow:hidden; color:#706f76; font-size:10.5px; text-overflow:ellipsis; white-space:nowrap; }
+      .malik-sidebar-user-dot { width:7px; height:7px; border-radius:50%; background:#d5d5d7; }
+      .malik-sidebar-premium { display:flex; width:100%; align-items:center; gap:9px; margin-top:5px; border:1px solid rgba(255,255,255,.09); border-radius:11px; background:#111113; padding:8px 9px; text-align:left; }
+      .malik-sidebar-premium:hover { border-color:rgba(255,255,255,.16); background:#151517; }
+      .malik-sidebar-premium-mark { display:grid; width:25px; height:25px; place-items:center; border-radius:7px; background:#f3f3f4; }
+      .malik-sidebar-premium-mark svg { width:15px; height:15px; fill:#111; }
+      .malik-sidebar-premium-title { display:block; color:#efeff1; font-size:11.5px; font-weight:620; }
+      .malik-sidebar-premium-note { display:block; margin-top:2px; color:#777780; font-size:10.5px; }
+      .malik-sidebar-premium > svg { color:#aaaab0; }
       .malik-sidebar-quickrow { display:flex; align-items:center; justify-content:space-between; gap:4px; margin-top:7px; border-top:1px solid rgba(255,255,255,.06); padding-top:7px; }
-      .malik-sidebar-quickrow .is-danger:hover { background:rgba(239,68,68,.1); color:#fca5a5; }
-
-      @media (max-height: 780px) {
-        .malik-sidebar-tools { padding-top:6px; padding-bottom:6px; }
-        .malik-sidebar-primary { height:31px; }
-        .malik-sidebar-premium { display:none; }
-      }
-      @media (prefers-reduced-motion: reduce) { .malik-sidebar * { transition:none !important; } }
+      @media (max-height:780px) { .malik-sidebar-primary{height:31px}.malik-sidebar-tools{padding-top:5px;padding-bottom:5px}.malik-sidebar-premium{display:none} }
+      @media (prefers-reduced-motion:reduce) { .malik-sidebar *{transition:none!important} }
     `}</style>
   )
 }

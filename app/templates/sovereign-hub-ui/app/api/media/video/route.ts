@@ -13,8 +13,9 @@ async function handlePOST(request: Request) {
   const prompt = String(body?.prompt || "").trim()
   const imageUrl = typeof body?.imageUrl === "string" ? body.imageUrl : undefined
   const length = body?.length === 10 ? 10 : 5
-  const resolution = ["480p", "720p", "1080p"].includes(body?.resolution) ? body.resolution : "720p"
-  const generateAudio = Boolean(body?.generateAudio)
+  const resolution = ["480p", "720p", "1080p"].includes(body?.resolution) ? body.resolution : "1080p"
+  const ratio = ["16:9", "9:16", "1:1"].includes(body?.ratio) ? body.ratio : "16:9"
+  const generateAudio = body?.generateAudio !== false
 
   if (!prompt && !imageUrl) {
     return Response.json({ ok: false, error: "Prompt or imageUrl is required" }, { status: 400 })
@@ -46,6 +47,7 @@ async function handlePOST(request: Request) {
     imageUrl,
     length,
     resolution,
+    ratio,
     generateAudio,
     userId: user.userId,
     plan: user.plan,

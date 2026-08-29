@@ -1,19 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import {
-  Clapperboard,
-  Film,
-  Layers,
-  Maximize2,
-  RefreshCw,
-  Sparkles,
-  Timer,
-  Cpu,
-  ChevronRight,
-  Video,
-} from "lucide-react"
-import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { ArrowUp, Camera, Check, ChevronDown, Film, Play, Plus, Sparkles, Volume2 } from "lucide-react"
+import { canUseGeneration, incrementUsage, isOwnerUser } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { VIDEO_AI_TEMPLATES } from "@/lib/media-library"
 import { takePrefillPrompt } from "@/lib/malik-context"
@@ -27,786 +16,168 @@ export type VideoGenerationStudioProps = {
   onNewChat?: () => void
 }
 
-type StylePreset = {
-  id: string
-  title: string
-  body: string
-  tag: string
-  src: string
-  poster: string
-  tint: string
-}
-
-type SceneCard = {
-  title: string
-  body: string
-  duration: string
-  src: string
-  poster: string
-}
+type Ratio = "16:9" | "9:16" | "1:1"
+type Duration = 5 | 10
+type GenerationPhase = "idle" | "queued" | "rendering" | "ready" | "failed"
 
 const ENDPOINT = "/api/media/video"
-const DEFAULT_PROMPT =
-  "Кинематографичный продуктовый ролик для MALIK AI: запуск на Digital Bridge 2026, тёмная студия, неоновый свет, плавные переходы между сценами."
+const DEFAULT_PROMPT = "Ночной Алматы после дождя. Чёрный премиальный автомобиль медленно едет по мокрой улице, отражения городских огней на асфальте, камера низко следует сбоку, реалистичная физика, кинематографичный свет и естественный звук города."
+const CATEGORIES = ["Кино", "Реклама", "Соцсети", "Персонажи", "Эксперимент"] as const
 
-const STYLE_PRESETS: StylePreset[] = VIDEO_AI_TEMPLATES.map((t) => ({
-  id: t.id,
-  title: t.title,
-  body: `${t.theme} · ${t.provider} — ${t.prompt.slice(0, 72)}…`,
-  tag: t.tag,
-  src: t.src,
-  poster: t.poster,
-  tint: t.tint,
-}))
-
-const PROMPT_CHIPS = [
-  "Кинематографичный запуск AI-продукта: hero reveal, интерфейс, финальный CTA",
-  "Тёмная студия с неоновым светом, плавный flythrough по дашборду Malik AI",
-  "Sci-Fi ролик: орбита, посадка, исследование, возвращение — 30 секунд",
-  "Investor demo video: премиальный SaaS, glass UI, драматичный свет",
-]
-
-const STORYBOARD_SCENES: SceneCard[] = VIDEO_AI_TEMPLATES.slice(0, 8).map((t, i) => ({
-  title: t.title,
-  body: t.prompt.slice(0, 90),
-  duration: `00:0${5 + (i % 4)}`,
-  src: t.src,
-  poster: t.poster,
-}))
-
-const RATIOS = ["16:9", "9:16", "1:1", "21:9"] as const
-
-function escapeHtml(value: string) {
-  return value.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] || c)
+function sleep(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)) }
+function formatStatus(phase: GenerationPhase, attempt: number) {
+  if (phase === "queued") return "Ставлю сцену в очередь…"
+  if (phase === "rendering") {
+    if (attempt < 4) return "Собираю сцену и движение камеры…"
+    if (attempt < 12) return "Рендерю движение, свет и детали…"
+    if (attempt < 24) return "Финализирую видео и звук…"
+    return "Финальный рендер — ещё немного…"
+  }
+  if (phase === "ready") return "Видео готово"
+  if (phase === "failed") return "Генерация остановлена"
+  return "Готов к созданию"
 }
 
-function fallbackStoryboard(prompt: string, scenes: SceneCard[]) {
-  const cards = scenes
-    .map(
-      (s) =>
-        `<article style="border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:20px;background:rgba(255,255,255,.03)"><span style="font-size:11px;color:#94a3b8">${s.duration}</span><h3 style="margin:8px 0 6px;font-size:18px">${escapeHtml(s.title)}</h3><p style="margin:0;color:#94a3b8;line-height:1.6">${escapeHtml(s.body)}</p></article>`,
-    )
-    .join("")
-  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Video Generation · Malik Cinema</title>
-<style>:root{color-scheme:dark}body{margin:0;font-family:ui-sans-serif,system-ui,sans-serif;background:#030303;color:#e8eae9;padding:40px 20px}.wrap{max-width:900px;margin:0 auto}h1{font-size:28px}p{color:#94a3b8;line-height:1.6}.grid{display:grid;gap:14px;margin-top:24px}</style></head>
-<body><div class="wrap"><h1>Malik Cinema · Storyboard</h1><p>${escapeHtml(prompt)}</p><div class="grid">${cards}</div></div></body></html>`
-}
-
-export function VideoGenerationStudio({
-  username,
-  onViewChange,
-  onOpenCodex,
-  onOpenCanvas,
-  onNewChat,
-}: VideoGenerationStudioProps) {
+export function VideoGenerationStudio({ username, onViewChange }: VideoGenerationStudioProps) {
   const operator = username?.trim() || "guest@malik.ai"
-
+  const owner = isOwnerUser(operator)
+  const templates = useMemo(() => VIDEO_AI_TEMPLATES.slice(0, 9), [])
   const [prompt, setPrompt] = useState(() => takePrefillPrompt() || DEFAULT_PROMPT)
-  const [activeStyle, setActiveStyle] = useState(STYLE_PRESETS[0].id)
-  const [ratio, setRatio] = useState<(typeof RATIOS)[number]>("16:9")
-  const [loading, setLoading] = useState(false)
-  const [status, setStatus] = useState("Cinema pipeline готов")
-  const [error, setError] = useState<string | null>(null)
-  const [artifact, setArtifact] = useState("")
-  const [fallback, setFallback] = useState(false)
+  const [ratio, setRatio] = useState<Ratio>("16:9")
+  const [duration, setDuration] = useState<Duration>(5)
+  const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("Кино")
+  const [activeTemplate, setActiveTemplate] = useState(0)
+  const [phase, setPhase] = useState<GenerationPhase>("idle")
+  const [attempt, setAttempt] = useState(0)
   const [taskId, setTaskId] = useState("")
   const [videoUrl, setVideoUrl] = useState("")
-  const [providerUsed, setProviderUsed] = useState("")
+  const [error, setError] = useState("")
   const [remainingDaily, setRemainingDaily] = useState<number | null>(null)
+  const [providerLabel, setProviderLabel] = useState("Wan 2.7")
+  const [showControls, setShowControls] = useState(false)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const finishSoundPlayedRef = useRef(false)
+  const hero = templates[activeTemplate] || templates[0]
+  const busy = phase === "queued" || phase === "rendering"
+  const statusText = formatStatus(phase, attempt)
 
-  const styleMeta = useMemo(
-    () => STYLE_PRESETS.find((s) => s.id === activeStyle) ?? STYLE_PRESETS[0],
-    [activeStyle],
-  )
+  useEffect(() => () => { audioContextRef.current?.close().catch(() => {}) }, [])
 
-  const heroClip = styleMeta
-  const safeArtifact = artifact || fallbackStoryboard(prompt, STORYBOARD_SCENES)
+  const armAudio = () => {
+    if (typeof window === "undefined") return
+    const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioCtx) return
+    if (!audioContextRef.current) audioContextRef.current = new AudioCtx()
+    if (audioContextRef.current.state === "suspended") audioContextRef.current.resume().catch(() => {})
+  }
+
+  const playFinishSoundOnce = () => {
+    if (finishSoundPlayedRef.current) return
+    finishSoundPlayedRef.current = true
+    const ctx = audioContextRef.current
+    if (!ctx) return
+    const now = ctx.currentTime
+    const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.16), ctx.sampleRate)
+    const data = buffer.getChannelData(0)
+    for (let i = 0; i < data.length; i += 1) { const fade = 1 - i / data.length; data[i] = (Math.random() * 2 - 1) * fade * fade }
+    const noise = ctx.createBufferSource(); const filter = ctx.createBiquadFilter(); const gain = ctx.createGain()
+    noise.buffer = buffer; filter.type = "highpass"; filter.frequency.value = 1100
+    gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.25, now + 0.008); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15)
+    noise.connect(filter); filter.connect(gain); gain.connect(ctx.destination); noise.start(now); noise.stop(now + 0.16)
+    const click = ctx.createOscillator(); const clickGain = ctx.createGain(); click.type = "triangle"
+    click.frequency.setValueAtTime(380, now); click.frequency.exponentialRampToValueAtTime(120, now + 0.11)
+    clickGain.gain.setValueAtTime(0.0001, now); clickGain.gain.exponentialRampToValueAtTime(0.13, now + 0.006); clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12)
+    click.connect(clickGain); clickGain.connect(ctx.destination); click.start(now); click.stop(now + 0.13)
+  }
 
   const generate = async () => {
-    if (!prompt.trim()) {
-      setError("Введите сценарий видео")
-      return
-    }
+    const cleanPrompt = prompt.trim()
+    if (!cleanPrompt || busy) return
+    armAudio(); finishSoundPlayedRef.current = false; setError(""); setVideoUrl(""); setTaskId(""); setAttempt(0)
     if (!canUseGeneration("video", operator)) {
-      setError("Достигнут лимит бесплатной генерации видео")
-      setStatus("Лимит исчерпан")
-      return
+      setPhase("failed"); setError("Сегодняшняя бесплатная генерация уже использована. Лимит обновится завтра."); return
     }
-    incrementUsage("video")
-    setLoading(true)
-    setError(null)
-    setStatus("Ставлю рендер в очередь…")
+    setPhase("queued")
     try {
-      const res = await clientFetchWithTimeout(
-        ENDPOINT,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt,
-            length: 5,
-            resolution: "720p",
-            generateAudio: false,
-            userEmail: operator,
-          }),
-        },
-        60_000,
-      )
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || data.publicError || data.message || `Ошибка ${res.status}`)
-
-      setProviderUsed(String(data.provider || "pollo"))
-      setRemainingDaily(typeof data.remainingDailyVideos === "number" ? data.remainingDailyVideos : null)
-      setTaskId(String(data.taskId || ""))
-      setStatus(data.status === "disabled" ? "Pollo отключён" : "Видео в очереди Pollo…")
-
-      if (!data.taskId) throw new Error("Pollo не вернул taskId")
-
-      const statusUrl = data.statusUrl || `/api/media/video/status?taskId=${encodeURIComponent(data.taskId)}`
-      for (let attempt = 0; attempt < 24; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 2000 : 5000))
-        setStatus(attempt < 3 ? "queued" : "generating")
-        const statusRes = await clientFetchWithTimeout(statusUrl, { method: "GET" }, 30_000)
-        const statusData = await statusRes.json().catch(() => ({}))
-        if (!statusRes.ok) throw new Error(statusData.error || `Status ${statusRes.status}`)
-        if (statusData.status === "failed") throw new Error(statusData.error || "Pollo render failed")
-        const url = statusData.videoUrl || statusData.url
-        if (url) {
-          setVideoUrl(url)
-          setArtifact(url)
-          setFallback(false)
-          setStatus(`Готово · ${data.model || "pollo-v2-0"}`)
-          return
-        }
+      const response = await clientFetchWithTimeout(ENDPOINT, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: cleanPrompt, length: duration, resolution: "1080p", ratio, generateAudio: true, userEmail: operator }),
+      }, 60_000)
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        if (response.status === 429) throw new Error("Сегодняшняя генерация уже использована. Лимит обновится завтра.")
+        throw new Error(data?.error || data?.publicError || data?.message || `Ошибка ${response.status}`)
       }
-      setStatus("generating — проверьте статус позже")
-      setError("Рендер ещё в процессе. Повторите проверку по taskId.")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Генерация видео недоступна")
-      setStatus("Ошибка или Pollo не настроен")
-    } finally {
-      setLoading(false)
-    }
+      const id = String(data?.taskId || "")
+      if (!id) throw new Error("Видеомодель не вернула taskId")
+      setTaskId(id); setProviderLabel(String(data?.model || "Wan 2.7").replace("wan2.7-t2v-2026-06-12", "Wan 2.7"))
+      setRemainingDaily(typeof data?.remainingDailyVideos === "number" ? data.remainingDailyVideos : null)
+      if (!owner) incrementUsage("video")
+      setPhase("rendering")
+      const statusUrl = String(data?.statusUrl || `/api/media/video/status?taskId=${encodeURIComponent(id)}`)
+      for (let i = 0; i < 72; i += 1) {
+        setAttempt(i); await sleep(i === 0 ? 2500 : 5000)
+        const statusResponse = await clientFetchWithTimeout(statusUrl, { method: "GET" }, 30_000)
+        const statusData = await statusResponse.json().catch(() => ({}))
+        if (!statusResponse.ok) throw new Error(statusData?.error || `Status ${statusResponse.status}`)
+        if (statusData?.status === "failed") throw new Error(statusData?.error || "Видеомодель не смогла завершить рендер")
+        const readyUrl = String(statusData?.videoUrl || statusData?.url || "")
+        if (readyUrl) { setVideoUrl(readyUrl); setPhase("ready"); playFinishSoundOnce(); return }
+      }
+      throw new Error("Видео всё ещё рендерится. Попробуйте проверить задачу позже.")
+    } catch (err) { setPhase("failed"); setError(err instanceof Error ? err.message : "Генерация видео недоступна") }
   }
 
-  const sendCanvas = () => {
-    onOpenCanvas?.(safeArtifact)
-    setStatus("Storyboard отправлен в Canvas")
-  }
-
-  const reset = () => {
-    onNewChat?.()
-    setPrompt(DEFAULT_PROMPT)
-    setArtifact("")
-    setFallback(false)
-    setError(null)
-    setStatus("Cinema pipeline готов")
+  const chooseTemplate = (index: number) => {
+    const item = templates[index]; if (!item) return
+    setActiveTemplate(index); setPrompt(item.prompt); setVideoUrl(""); setPhase("idle"); setError("")
   }
 
   return (
-    <main className="vgs" data-view="video-generation">
-      <div className="vgs__bg" aria-hidden="true" />
-      <div className="vgs__inner">
-
-        <div className="vgs__status">
-          <span className="vgs__status-left">
-            <span className="vgs__dot" />
-            <span className="vgs__status-key">Malik Cinema</span>
-            <strong className="vgs__status-val">Онлайн</strong>
-          </span>
-          <span className="vgs__status-right">
-            Очередь рендера
-            <strong>{loading ? "в работе" : status}</strong>
-            {providerUsed && <strong> · {providerUsed}</strong>}
-            {remainingDaily !== null && <strong> · осталось {remainingDaily}</strong>}
-            {taskId && <strong> · {taskId.slice(0, 8)}</strong>}
-          </span>
+    <main className="mv" data-view="video-generation">
+      <section className="mv__showcase" aria-label="Video inspiration">
+        <div className="mv__showcase-media">
+          {videoUrl ? <video src={videoUrl} controls playsInline autoPlay className="mv__showcase-video" /> : <VideoLoop src={hero.src} poster={hero.poster} className="mv__showcase-video" />}
+          <div className="mv__showcase-vignette" />
+          <div className="mv__showcase-top"><span className="mv__brand-mark"><svg viewBox="0 0 44 44"><path d="M9 29 L22 15 L22 29 Z" /><path d="M24 15 H38 L24 29 Z" /></svg></span><span>MalikVideo</span></div>
+          <div className="mv__showcase-bottom"><span className="mv__showcase-kicker"><Film size={13} /> Showcase</span><strong>{videoUrl ? "Ваше видео готово" : hero.title}</strong><span>{videoUrl ? `${providerLabel} · 1080p` : `${hero.provider} · ${hero.tag}`}</span></div>
+          {busy ? (
+            <div className="mv__render-state" aria-live="polite">
+              <div className="mv__render-square"><div className="mv__grid" /><div className="mv__scan" /><div className="mv__focus-corner mv__focus-corner--tl" /><div className="mv__focus-corner mv__focus-corner--tr" /><div className="mv__focus-corner mv__focus-corner--bl" /><div className="mv__focus-corner mv__focus-corner--br" /><div className="mv__camera"><div className="mv__camera-top" /><div className="mv__camera-lens"><span /></div><i /></div></div>
+              <div className="mv__render-copy"><span className="mv__render-dot" /><strong>{statusText}</strong><small>1080p · {ratio} · {duration}s · sound</small></div>
+            </div>
+          ) : null}
         </div>
+      </section>
 
-        <header className="vgs__head">
-          <span className="vgs__eyebrow"><Clapperboard size={13} /> Кинематографический конвейер</span>
-          <h1 className="vgs__title">Video Generation</h1>
-          <p className="vgs__lede">
-            Премиальная видео-студия для AI-продуктов. Опишите сценарий — получите storyboard, motion-пресеты
-            и кинематографичные кадры с экспортом в Canvas. Каждая полка наполнена тёмными кадрами и постерами,
-            а не пустыми формами.
-          </p>
-        </header>
-
-        {/* Hero — dominant poster/video area */}
-        <section className="vgs__shelf vgs__hero">
-          <div className="vgs__hero-media">
-            {videoUrl ? (
-              <video src={videoUrl} className="vgs__hero-video" controls playsInline />
-            ) : (
-              <VideoLoop src={heroClip.src} poster={heroClip.poster} className="vgs__hero-video" />
-            )}
-            <div className="vgs__hero-overlay" style={{ background: styleMeta.tint }} />
-            <div className="vgs__hero-caption">
-              <span className="vgs__shelf-label"><Film size={13} /> Текущая сцена</span>
-              <h2 className="vgs__shelf-title">{styleMeta.title}</h2>
-              <p>{status}</p>
-            </div>
+      <section className="mv__workspace">
+        <header className="mv__header"><div><span className="mv__eyebrow">MALIK VIDEO · WAN 2.7</span><h1>Что вы хотите создать?</h1></div><button type="button" className="mv__library-btn" onClick={() => onViewChange("templates")}>Библиотека</button></header>
+        <section className="mv__composer-shell">
+          <div className="mv__notice"><span>New</span><strong>MalikVideo 1.0</strong><p>Русский · Қазақша · English → cinematic prompt → 1080p video</p></div>
+          <div className="mv__composer">
+            <div className="mv__thumb"><VideoLoop src={hero.src} poster={hero.poster} className="mv__thumb-video" /></div>
+            <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Опишите сцену, персонажа, камеру, движение и звук. Можно писать по-русски или на казахском…" disabled={busy} />
+            <div className="mv__composer-bottom"><button type="button" className="mv__plus" aria-label="Добавить референс" title="Image-to-video скоро"><Plus size={18} /></button><div className="mv__composer-actions"><button type="button" className="mv__quality" onClick={() => setShowControls((value) => !value)}><Sparkles size={14} /> 1080p · Quality <ChevronDown size={14} /></button><button type="button" className="mv__send" onClick={generate} disabled={busy || !prompt.trim()} aria-label="Сгенерировать видео">{busy ? <Camera size={17} /> : <ArrowUp size={18} />}</button></div></div>
           </div>
-          <div className="vgs__hero-copy">
-            <span className="vgs__shelf-label">Что это и как использовать</span>
-            <h2 className="vgs__shelf-title">От сценария до storyboard</h2>
-            <p>
-              Video Generation — кинематографический конвейер Malik AI. Вы задаёте motion-промпт, выбираете стиль
-              и соотношение, а Cinema pipeline рендерит артефакт через <code>{ENDPOINT}</code> с асинхронной
-              очередью и безопасным storyboard-резервом.
-            </p>
-            <ol className="vgs__steps">
-              <li><span className="vgs__step-num">1</span><div><strong>Напишите сценарий.</strong> Опишите сцены, темп, свет и движение камеры.</div></li>
-              <li><span className="vgs__step-num">2</span><div><strong>Выберите стиль.</strong> Пресеты с постерами задают визуальное направление ролика.</div></li>
-              <li><span className="vgs__step-num">3</span><div><strong>Запустите рендер.</strong> API ставит задачу в очередь и возвращает storyboard или видео-URL.</div></li>
-              <li><span className="vgs__step-num">4</span><div><strong>Презентуйте.</strong> Отправьте storyboard в Canvas или переходите к Website Builder.</div></li>
-            </ol>
-          </div>
+          {showControls ? <div className="mv__settings-popover"><div><span>Формат</span><div className="mv__segmented">{(["16:9", "9:16", "1:1"] as Ratio[]).map((value) => <button key={value} type="button" data-active={ratio === value ? "1" : "0"} onClick={() => setRatio(value)}>{value}</button>)}</div></div><div><span>Длительность</span><div className="mv__segmented">{([5, 10] as Duration[]).map((value) => <button key={value} type="button" data-active={duration === value ? "1" : "0"} onClick={() => setDuration(value)}>{value}s</button>)}</div></div><div className="mv__fixed-setting"><Check size={14} /> 1080p</div><div className="mv__fixed-setting"><Volume2 size={14} /> Sound</div></div> : null}
+          <div className="mv__model-row"><button type="button" className="is-active"><span className="mv__model-icon"><Play size={13} fill="currentColor" /></span> MalikVideo 1.0</button><button type="button"><Volume2 size={15} /> Audio synced</button><button type="button"><Sparkles size={15} /> RU · KZ · EN</button></div>
         </section>
 
-        {/* Prompt lab */}
-        <section className="vgs__shelf vgs__prompt">
-          <div className="vgs__prompt-head">
-            <div>
-              <span className="vgs__shelf-label"><Video size={13} /> Motion-лаборатория</span>
-              <h2 className="vgs__shelf-title">Опишите видео</h2>
-            </div>
-            <div className="vgs__ratio-pills" role="group" aria-label="Соотношение кадра">
-              {RATIOS.map((r) => (
-                <button key={r} type="button" data-active={ratio === r ? "1" : "0"} onClick={() => setRatio(r)}>
-                  {r}
-                </button>
-              ))}
-            </div>
-          </div>
-          <textarea
-            className="vgs__textarea"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={4}
-            placeholder="Сценарий: сцены, темп, свет, движение камеры, финальный CTA…"
-          />
-          <div className="vgs__chips">
-            {PROMPT_CHIPS.map((chip) => (
-              <button key={chip} type="button" onClick={() => setPrompt(chip)}>
-                {chip.slice(0, 54)}…
-              </button>
-            ))}
-          </div>
-          {error ? <p className="vgs__error">{error}</p> : null}
-          <div className="vgs__actions">
-            <button type="button" className="vgs__btn vgs__btn--primary" onClick={generate} disabled={loading}>
-              <Sparkles size={15} />
-              {loading ? "Рендерю…" : "Сгенерировать"}
-            </button>
-            <button type="button" className="vgs__btn vgs__btn--ghost" onClick={sendCanvas}>
-              <Maximize2 size={15} /> В Canvas
-            </button>
-            <button type="button" className="vgs__btn vgs__btn--ghost" onClick={onOpenCodex}>
-              <Cpu size={15} /> Cortex
-            </button>
-            <button type="button" className="vgs__btn vgs__btn--ghost" onClick={reset}>
-              <RefreshCw size={15} /> Сброс
-            </button>
-          </div>
+        <div className="mv__statusbar" data-phase={phase}><span className="mv__status-dot" /><strong>{statusText}</strong>{taskId ? <span>Task {taskId.slice(0, 8)}</span> : null}{owner ? <span>Owner · unlimited</span> : remainingDaily !== null ? <span>Осталось сегодня: {remainingDaily}</span> : <span>1 видео в день</span>}{error ? <span className="mv__error">{error}</span> : null}</div>
+
+        <section className="mv__discover">
+          <div className="mv__tabs" role="tablist" aria-label="Категории видео">{CATEGORIES.map((category) => <button key={category} type="button" data-active={activeCategory === category ? "1" : "0"} onClick={() => setActiveCategory(category)}>{category}</button>)}</div>
+          <div className="mv__cards">{templates.map((item, index) => <button key={item.id} type="button" className="mv__card" data-active={activeTemplate === index ? "1" : "0"} onClick={() => chooseTemplate(index)}><VideoLoop src={item.src} poster={item.poster} className="mv__card-video" /><span className="mv__card-shade" /><span className="mv__card-copy"><strong>{item.title}</strong><small>{item.theme} · 1080p</small></span><span className="mv__card-play"><Play size={14} fill="currentColor" /></span></button>)}</div>
         </section>
+      </section>
 
-        {/* Style presets */}
-        <section className="vgs__styles" aria-label="Стили видео">
-          <div className="vgs__section-head">
-            <div>
-              <span className="vgs__shelf-label"><Layers size={13} /> Стили</span>
-              <h2 className="vgs__shelf-title">20 AI-видео шаблонов — Runway · Kling · Pika</h2>
-            </div>
-          </div>
-          <div className="vgs__style-grid">
-            {STYLE_PRESETS.map((preset) => (
-              <article
-                key={preset.id}
-                data-active={activeStyle === preset.id ? "1" : "0"}
-                onClick={() => {
-                  setActiveStyle(preset.id)
-                  setStatus(`Стиль «${preset.title}» выбран`)
-                }}
-                onKeyDown={(e) => e.key === "Enter" && setActiveStyle(preset.id)}
-                role="button"
-                tabIndex={0}
-              >
-                <div className="vgs__style-photo">
-                  <VideoLoop src={preset.src} poster={preset.poster} className="vgs__style-video" />
-                  <div className="vgs__style-tint" style={{ background: preset.tint }} />
-                  <span className="vgs__style-tag">{preset.tag}</span>
-                  <span className="vgs__style-provider">
-                    {VIDEO_AI_TEMPLATES.find((x) => x.id === preset.id)?.provider}
-                  </span>
-                </div>
-                <div className="vgs__style-body">
-                  <strong>{preset.title}</strong>
-                  <p>{preset.body}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {/* Storyboard scenes */}
-        <section className="vgs__storyboard" aria-label="Storyboard">
-          <div className="vgs__section-head">
-            <div>
-              <span className="vgs__shelf-label"><Timer size={13} /> Storyboard</span>
-              <h2 className="vgs__shelf-title">Сцены ролика</h2>
-            </div>
-            {artifact ? (
-              <span className="vgs__artifact-badge">{fallback ? "Резервный storyboard" : "Артефакт готов"}</span>
-            ) : null}
-          </div>
-          <div className="vgs__scene-grid">
-            {STORYBOARD_SCENES.map((scene) => (
-              <article key={scene.title} className="vgs__scene-card">
-                <div className="vgs__scene-photo">
-                  <VideoLoop src={scene.src} poster={scene.poster} className="vgs__scene-video" />
-                  <span className="vgs__scene-dur">{scene.duration}</span>
-                </div>
-                <div className="vgs__scene-body">
-                  <strong>{scene.title}</strong>
-                  <p>{scene.body}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {/* CTA */}
-        <section className="vgs__shelf vgs__cta">
-          <div className="vgs__cta-copy">
-            <span className="vgs__shelf-label">Кинематографический стандарт</span>
-            <h2 className="vgs__shelf-title">Ролики уровня Digital Bridge.</h2>
-            <p>Каждый storyboard готов к демо-сцене, питч-деку или продуктовой презентации — без доработки в сторонних редакторах.</p>
-          </div>
-          <div className="vgs__actions">
-            <button type="button" className="vgs__btn vgs__btn--primary" onClick={generate} disabled={loading}>
-              <Sparkles size={15} />
-              {loading ? "Рендерю…" : "Сгенерировать ролик"}
-            </button>
-            <button type="button" className="vgs__btn vgs__btn--ghost" onClick={() => onViewChange("website-generation")}>
-              Website Builder <ChevronRight size={15} />
-            </button>
-          </div>
-        </section>
-
-        <footer className="vgs__footer">
-          <span><Clapperboard size={12} /> Malik Cinema pipeline</span>
-          <span>Оператор · {operator}</span>
-          <span>Эндпоинт · {ENDPOINT}</span>
-          <span className="vgs__footer-comp"><Sparkles size={12} /> Async queue · Canvas export</span>
-        </footer>
-      </div>
-
-      <style jsx>{`
-        .vgs {
-          position: relative;
-          width: 100%;
-          height: 100%;
-          overflow-y: auto;
-          overflow-x: hidden;
-          padding: clamp(96px, 8vw, 116px) clamp(16px, 3vw, 44px) 88px;
-          color: #e7eae8;
-          -webkit-font-smoothing: antialiased;
-          scrollbar-width: thin;
-          scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
-        }
-        .vgs::-webkit-scrollbar { width: 6px; }
-        .vgs::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(255, 255, 255, 0.14); }
-        @media (max-width: 920px) { .vgs { padding-top: clamp(20px, 3vw, 32px); } }
-        .vgs__bg {
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          pointer-events: none;
-          background: radial-gradient(55% 40% at 10% 0%, rgba(217, 174, 69, 0.06), transparent 60%),
-            radial-gradient(45% 35% at 92% 6%, rgba(244, 63, 94, 0.05), transparent 62%);
-        }
-        .vgs__inner { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; }
-        .vgs__shelf-label {
-          display: inline-flex;
-          align-items: center;
-          gap: 7px;
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.16em;
-          text-transform: uppercase;
-          color: #b8a3c4;
-        }
-        .vgs__status {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 11px 16px;
-          border-radius: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(255, 255, 255, 0.02);
-          margin-bottom: 30px;
-        }
-        .vgs__status-left { display: inline-flex; align-items: center; gap: 10px; }
-        .vgs__dot { width: 8px; height: 8px; border-radius: 999px; background: #f3de96; }
-        .vgs__status-key { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8a958f; }
-        .vgs__status-val { font-size: 12.5px; font-weight: 700; color: #fdf8e7; }
-        .vgs__status-right { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8a958f; }
-        .vgs__status-right strong { margin-left: 8px; font-weight: 700; color: #e9d5ff; }
-        .vgs__head { max-width: 70ch; margin: 0 0 40px; }
-        .vgs__eyebrow {
-          display: inline-flex;
-          align-items: center;
-          gap: 7px;
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: #b8a3c4;
-          margin-bottom: 18px;
-        }
-        .vgs__title {
-          margin: 0 0 18px;
-          font-size: clamp(38px, 6vw, 64px);
-          font-weight: 600;
-          line-height: 1.02;
-          letter-spacing: -0.03em;
-          color: #f4f6f5;
-        }
-        .vgs__lede {
-          margin: 0;
-          font-size: clamp(16px, 1.7vw, 20px);
-          line-height: 1.55;
-          color: #aab4af;
-          max-width: 60ch;
-        }
-        .vgs__shelf {
-          border-radius: 22px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(255, 255, 255, 0.018);
-          padding: clamp(24px, 3vw, 38px);
-          margin-bottom: 22px;
-        }
-        .vgs__shelf-title {
-          margin: 14px 0 14px;
-          font-size: clamp(20px, 2.3vw, 27px);
-          font-weight: 600;
-          line-height: 1.2;
-          letter-spacing: -0.015em;
-          color: #f1f4f2;
-        }
-        .vgs__hero {
-          display: grid;
-          grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-          gap: clamp(20px, 3vw, 32px);
-          padding: 0;
-          overflow: hidden;
-          border: none;
-          background: transparent;
-        }
-        @media (max-width: 900px) { .vgs__hero { grid-template-columns: 1fr; } }
-        .vgs__hero-media {
-          position: relative;
-          min-height: 360px;
-          border-radius: 22px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          overflow: hidden;
-        }
-        .vgs__hero-video,
-        .vgs__style-video,
-        .vgs__scene-video,
-        .vgs__style-poster {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-        }
-        .vgs__style-poster {
-          background-size: cover;
-          background-position: center;
-        }
-        .vgs__style-tint,
-        .vgs__hero-overlay {
-          z-index: 1;
-        }
-        .vgs__scene-dur,
-        .vgs__style-tag,
-        .vgs__hero-caption {
-          z-index: 2;
-        }
-        .vgs__hero-overlay {
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(180deg, transparent 25%, rgba(3, 3, 3, 0.88) 100%);
-        }
-        .vgs__hero-caption {
-          position: absolute;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          padding: 28px;
-          z-index: 1;
-        }
-        .vgs__hero-caption p { margin: 8px 0 0; font-size: 13px; color: #b8c4be; }
-        .vgs__hero-copy {
-          border-radius: 22px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(255, 255, 255, 0.018);
-          padding: clamp(24px, 3vw, 32px);
-        }
-        .vgs__hero-copy p {
-          margin: 0 0 14px;
-          font-size: 15px;
-          line-height: 1.7;
-          color: #a7b2ac;
-        }
-        .vgs__hero-copy code {
-          font-family: ui-monospace, Menlo, monospace;
-          font-size: 12px;
-          color: #f3de96;
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: 5px;
-          padding: 1px 6px;
-        }
-        .vgs__steps { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
-        .vgs__steps li { display: flex; gap: 14px; align-items: flex-start; }
-        .vgs__step-num {
-          flex-shrink: 0;
-          display: grid;
-          place-items: center;
-          width: 28px;
-          height: 28px;
-          border-radius: 999px;
-          font-size: 13px;
-          font-weight: 700;
-          color: #e9d5ff;
-          border: 1px solid rgba(243, 222, 150, 0.28);
-          background: rgba(217, 174, 69, 0.1);
-        }
-        .vgs__steps li div { font-size: 14px; line-height: 1.6; color: #9aa6a0; }
-        .vgs__steps strong { display: block; color: #e7ece9; font-weight: 600; margin-bottom: 2px; }
-        .vgs__prompt-head {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 16px;
-          flex-wrap: wrap;
-          margin-bottom: 16px;
-        }
-        .vgs__prompt-head .vgs__shelf-title { margin-bottom: 0; }
-        .vgs__ratio-pills { display: flex; gap: 8px; flex-wrap: wrap; }
-        .vgs__ratio-pills button {
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          border-radius: 8px;
-          background: transparent;
-          color: #aab4af;
-          font-size: 12px;
-          font-weight: 600;
-          padding: 7px 12px;
-          cursor: pointer;
-        }
-        .vgs__ratio-pills button[data-active="1"] {
-          border-color: rgba(243, 222, 150, 0.45);
-          background: rgba(217, 174, 69, 0.1);
-          color: #fdf8e7;
-        }
-        .vgs__textarea {
-          width: 100%;
-          resize: vertical;
-          min-height: 110px;
-          border-radius: 14px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(0, 0, 0, 0.25);
-          color: #e7ece9;
-          font-size: 15px;
-          line-height: 1.65;
-          padding: 16px 18px;
-          font-family: inherit;
-        }
-        .vgs__textarea:focus { outline: none; border-color: rgba(243, 222, 150, 0.35); }
-        .vgs__chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-        .vgs__chips button {
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 999px;
-          background: rgba(255, 255, 255, 0.03);
-          color: #9aa6a0;
-          font-size: 12px;
-          padding: 8px 14px;
-          cursor: pointer;
-        }
-        .vgs__chips button:hover { border-color: rgba(255, 255, 255, 0.22); color: #e7ece9; }
-        .vgs__error { margin: 12px 0 0; font-size: 13px; color: #e8a87c; }
-        .vgs__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
-        .vgs__btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          font-weight: 600;
-          font-size: 14px;
-          border-radius: 10px;
-          padding: 11px 18px;
-          cursor: pointer;
-          border: 1px solid transparent;
-        }
-        .vgs__btn--primary { background: #f5f6f5; color: #0c1310; border-color: #f5f6f5; }
-        .vgs__btn--primary:hover:not(:disabled) { background: #e3e6e4; }
-        .vgs__btn--primary:disabled { opacity: 0.45; cursor: not-allowed; }
-        .vgs__btn--ghost {
-          background: transparent;
-          color: #cdd6d1;
-          border-color: rgba(255, 255, 255, 0.16);
-        }
-        .vgs__btn--ghost:hover { background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.28); color: #f1f4f2; }
-        .vgs__section-head {
-          display: flex;
-          align-items: flex-end;
-          justify-content: space-between;
-          gap: 16px;
-          margin-bottom: 18px;
-        }
-        .vgs__section-head .vgs__shelf-title { margin-bottom: 0; }
-        .vgs__artifact-badge {
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: #e9d5ff;
-          border: 1px solid rgba(243, 222, 150, 0.3);
-          border-radius: 999px;
-          padding: 5px 12px;
-        }
-        .vgs__styles, .vgs__storyboard { margin-bottom: 22px; }
-        .vgs__style-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-          gap: 12px;
-          padding-bottom: 10px;
-        }
-        .vgs__style-grid article {
-          min-width: 0;
-          max-width: none;
-          border-radius: 18px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(255, 255, 255, 0.018);
-          overflow: hidden;
-          cursor: pointer;
-          transition: border-color 0.18s, transform 0.18s;
-        }
-        .vgs__style-grid article:hover { border-color: rgba(255, 255, 255, 0.2); transform: translateY(-2px); }
-        .vgs__style-grid article[data-active="1"] { border-color: rgba(243, 222, 150, 0.45); }
-        .vgs__style-photo {
-          position: relative;
-          height: 160px;
-          background-size: cover;
-          background-position: center;
-        }
-        .vgs__style-tint { position: absolute; inset: 0; }
-        .vgs__style-play {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          display: grid;
-          place-items: center;
-          width: 36px;
-          height: 36px;
-          border-radius: 999px;
-          background: rgba(0, 0, 0, 0.5);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          color: #f1f4f2;
-        }
-        .vgs__style-provider {
-          position: absolute;
-          right: 10px;
-          top: 10px;
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: #e9d5ff;
-          padding: 3px 7px;
-          border-radius: 6px;
-          border: 1px solid rgba(243, 222, 150, 0.28);
-          background: rgba(0, 0, 0, 0.45);
-        }
-        .vgs__style-tag {
-          position: absolute;
-          left: 12px;
-          bottom: 12px;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: #f1f4f2;
-          background: rgba(0, 0, 0, 0.45);
-          border-radius: 999px;
-          padding: 4px 10px;
-        }
-        .vgs__style-body { padding: 16px 18px 18px; }
-        .vgs__style-body strong { display: block; font-size: 16px; color: #f1f4f2; margin-bottom: 6px; }
-        .vgs__style-body p { margin: 0; font-size: 13px; line-height: 1.6; color: #9aa6a0; }
-        .vgs__scene-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-          gap: 16px;
-        }
-        .vgs__scene-card {
-          border-radius: 18px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(255, 255, 255, 0.018);
-          overflow: hidden;
-        }
-        .vgs__scene-photo {
-          position: relative;
-          height: 150px;
-          background-size: cover;
-          background-position: center;
-        }
-        .vgs__scene-dur {
-          position: absolute;
-          top: 12px;
-          right: 12px;
-          font-size: 10px;
-          font-weight: 700;
-          font-family: ui-monospace, Menlo, monospace;
-          color: #f1f4f2;
-          background: rgba(0, 0, 0, 0.55);
-          border-radius: 999px;
-          padding: 4px 10px;
-        }
-        .vgs__scene-body { padding: 16px 18px 18px; }
-        .vgs__scene-body strong { display: block; font-size: 15px; color: #f1f4f2; margin-bottom: 6px; }
-        .vgs__scene-body p { margin: 0; font-size: 13px; line-height: 1.6; color: #9aa6a0; }
-        .vgs__cta {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          flex-wrap: wrap;
-          gap: 22px;
-        }
-        .vgs__cta-copy { max-width: 56ch; }
-        .vgs__cta-copy .vgs__shelf-title { margin-bottom: 10px; }
-        .vgs__cta-copy p { margin: 0; font-size: 14.5px; line-height: 1.6; color: #a7b2ac; }
-        .vgs__cta .vgs__actions { margin-top: 0; }
-        .vgs__footer {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          gap: 20px;
-          margin-top: 8px;
-          padding: 16px 18px;
-          border-radius: 13px;
-          border: 1px solid rgba(255, 255, 255, 0.07);
-          background: rgba(255, 255, 255, 0.015);
-          font-size: 11.5px;
-          color: #7e8b85;
-        }
-        .vgs__footer span { display: inline-flex; align-items: center; gap: 6px; }
-        .vgs__footer-comp { margin-left: auto; color: #b8a3c4; }
+      <style jsx global>{`
+        .mv{min-height:100%;width:100%;display:grid;grid-template-columns:minmax(330px,36vw) minmax(0,1fr);background:#000;color:#f7f7f8;overflow:hidden;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.mv button,.mv textarea{font:inherit}.mv__showcase{position:relative;min-height:100dvh;background:#050505;border-right:1px solid rgba(255,255,255,.08);overflow:hidden}.mv__showcase-media{position:sticky;top:0;height:100dvh;min-height:680px;overflow:hidden;background:#090909}.mv__showcase-video{width:100%;height:100%;object-fit:cover;display:block;background:#080808}.mv__showcase-vignette{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.35),transparent 28%,transparent 60%,rgba(0,0,0,.82)),linear-gradient(90deg,rgba(0,0,0,.2),transparent 35%)}.mv__showcase-top{position:absolute;top:24px;left:24px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:650}.mv__brand-mark{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:#fff}.mv__brand-mark svg{width:22px;height:22px;fill:#080808}.mv__showcase-bottom{position:absolute;left:28px;right:28px;bottom:28px;display:flex;flex-direction:column;gap:5px}.mv__showcase-kicker{display:flex;align-items:center;gap:6px;color:rgba(255,255,255,.6);font-size:11px;text-transform:uppercase;letter-spacing:.16em}.mv__showcase-bottom strong{font-size:clamp(24px,2.4vw,40px);line-height:1.02;letter-spacing:-.05em}.mv__showcase-bottom>span:last-child{color:rgba(255,255,255,.62);font-size:12px}
+        .mv__render-state{position:absolute;inset:0;z-index:5;display:grid;place-items:center;align-content:center;gap:22px;background:rgba(0,0,0,.72);backdrop-filter:blur(18px)}.mv__render-square{position:relative;width:min(55%,320px);aspect-ratio:1;border:1px solid rgba(255,255,255,.14);border-radius:30px;background:radial-gradient(circle at 50% 28%,rgba(255,255,255,.08),transparent 30%),#090909;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.55);animation:mv-square-breathe 2.8s ease-in-out infinite}.mv__grid{position:absolute;inset:0;opacity:.3;background-image:linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px);background-size:28px 28px;animation:mv-grid 12s linear infinite}.mv__scan{position:absolute;top:-20%;bottom:-20%;width:25%;left:-30%;transform:skewX(-12deg);background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),transparent);filter:blur(5px);animation:mv-scan 2.1s linear infinite}.mv__focus-corner{position:absolute;width:28px;height:28px;border-color:rgba(255,255,255,.82);border-style:solid}.mv__focus-corner--tl{top:16%;left:16%;border-width:2px 0 0 2px}.mv__focus-corner--tr{top:16%;right:16%;border-width:2px 2px 0 0}.mv__focus-corner--bl{bottom:16%;left:16%;border-width:0 0 2px 2px}.mv__focus-corner--br{bottom:16%;right:16%;border-width:0 2px 2px 0}.mv__camera{position:absolute;width:48%;height:36%;left:26%;top:34%;border-radius:22px;border:1px solid rgba(255,255,255,.16);background:linear-gradient(180deg,#1c1c1d,#0b0b0c);box-shadow:0 20px 45px rgba(0,0,0,.45);animation:mv-camera 2.5s ease-in-out infinite}.mv__camera-top{position:absolute;left:10%;top:-15%;width:34%;height:24%;border-radius:12px 12px 7px 7px;border:1px solid rgba(255,255,255,.12);background:#111}.mv__camera-lens{position:absolute;width:42%;aspect-ratio:1;left:29%;top:25%;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:radial-gradient(circle at 42% 40%,rgba(255,255,255,.42),rgba(255,255,255,.12) 13%,#111 36%,#030303 74%);box-shadow:0 0 0 9px rgba(255,255,255,.035);animation:mv-lens 1.7s ease-in-out infinite}.mv__camera-lens span{position:absolute;inset:22%;border:1px solid rgba(255,255,255,.13);border-radius:50%}.mv__camera>i{position:absolute;right:11%;top:14%;width:8px;height:8px;border-radius:50%;background:#fff;animation:mv-dot 1.2s ease-in-out infinite}.mv__render-copy{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;max-width:85%;text-align:center}.mv__render-copy strong{width:100%;font-size:17px}.mv__render-copy small{color:rgba(255,255,255,.5);font-size:11px}.mv__render-dot{width:7px;height:7px;border-radius:50%;background:#fff;animation:mv-pulse 1.5s ease-in-out infinite}
+        .mv__workspace{min-width:0;height:100dvh;overflow-y:auto;padding:34px clamp(26px,4vw,66px) 48px;background:#000}.mv__header{max-width:980px;margin:0 auto 28px;display:flex;justify-content:space-between;align-items:flex-start;gap:20px}.mv__eyebrow{color:#6f6f78;font-size:10px;font-weight:700;letter-spacing:.16em}.mv__header h1{margin:10px 0 0;font-size:clamp(36px,4.4vw,64px);line-height:.96;letter-spacing:-.065em;font-weight:650}.mv__library-btn{height:38px;padding:0 14px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:#111113;color:#d8d8dc;font-size:12px}.mv__composer-shell{position:relative;max-width:980px;margin:0 auto}.mv__notice{display:flex;min-height:48px;align-items:center;gap:10px;padding:0 16px;border:1px solid rgba(255,255,255,.09);border-bottom:0;border-radius:24px 24px 0 0;background:#121214;color:#dddde1;font-size:12px}.mv__notice>span{border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:3px 9px;font-size:10px}.mv__notice p{margin:0;color:#8c8c95;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mv__composer{border:1px solid rgba(255,255,255,.1);border-radius:0 0 24px 24px;background:#1a1b1e;padding:16px;box-shadow:0 24px 70px rgba(0,0,0,.35)}.mv__thumb{width:96px;height:64px;overflow:hidden;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:#111}.mv__thumb-video{width:100%;height:100%;object-fit:cover}.mv__composer textarea{width:100%;min-height:118px;resize:none;border:0;outline:0;background:transparent;padding:16px 0 12px;color:#f5f5f6;font-size:18px;line-height:1.55}.mv__composer textarea::placeholder{color:#737681}.mv__composer-bottom{display:flex;align-items:center;justify-content:space-between}.mv__plus{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:#9a9ca5}.mv__plus:hover,.mv__quality:hover{background:rgba(255,255,255,.055);color:#fff}.mv__composer-actions{display:flex;align-items:center;gap:9px}.mv__quality{display:flex;height:36px;align-items:center;gap:6px;border-radius:10px;padding:0 11px;color:#d9d9dc;font-size:12px}.mv__send{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:#f5f5f5;color:#050505}.mv__send:disabled{opacity:.35}.mv__settings-popover{position:absolute;z-index:20;top:calc(100% - 54px);right:60px;min-width:360px;display:grid;grid-template-columns:1fr 1fr;gap:14px;border:1px solid rgba(255,255,255,.1);border-radius:16px;background:#121214;padding:14px;box-shadow:0 22px 55px rgba(0,0,0,.7)}.mv__settings-popover>div>span{display:block;margin-bottom:7px;color:#777780;font-size:10px}.mv__segmented{display:flex;gap:4px;padding:3px;border-radius:10px;background:#0b0b0c}.mv__segmented button{flex:1;height:30px;border-radius:7px;color:#8e8e96;font-size:11px}.mv__segmented button[data-active="1"]{background:#242426;color:#fff}.mv__fixed-setting{display:flex;align-items:center;gap:7px;color:#c9c9cf;font-size:11px}.mv__model-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;padding:14px 0}.mv__model-row button{display:flex;height:39px;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.09);border-radius:12px;background:#111113;padding:0 14px;color:#c8c8cd;font-size:12px}.mv__model-row button.is-active{background:#18181b;color:#fff}.mv__model-icon{width:23px;height:23px;display:grid;place-items:center;border-radius:7px;background:#f4f4f4;color:#111}
+        .mv__statusbar{max-width:980px;min-height:36px;margin:16px auto 0;display:flex;align-items:center;gap:9px;flex-wrap:wrap;color:#777780;font-size:11px}.mv__statusbar strong{color:#d7d7db}.mv__status-dot{width:7px;height:7px;border-radius:50%;background:#76767e}.mv__statusbar[data-phase="queued"] .mv__status-dot,.mv__statusbar[data-phase="rendering"] .mv__status-dot{background:#fff;animation:mv-pulse 1.5s infinite}.mv__error{color:#d59a9a}.mv__discover{max-width:1120px;margin:54px auto 0}.mv__tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:14px;scrollbar-width:none}.mv__tabs button{height:36px;white-space:nowrap;border-radius:999px;padding:0 15px;color:#83838c;font-size:12px}.mv__tabs button[data-active="1"]{background:#171719;color:#fff}.mv__cards{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));grid-auto-rows:170px;gap:10px}.mv__card{position:relative;min-width:0;overflow:hidden;border-radius:16px;border:1px solid rgba(255,255,255,.07);background:#0c0c0d;text-align:left}.mv__card:nth-child(1),.mv__card:nth-child(5){grid-column:span 4;grid-row:span 2}.mv__card:nth-child(2),.mv__card:nth-child(3),.mv__card:nth-child(4),.mv__card:nth-child(n+6){grid-column:span 4}.mv__card-video{width:100%;height:100%;object-fit:cover;display:block;transition:transform .55s}.mv__card:hover .mv__card-video{transform:scale(1.035)}.mv__card-shade{position:absolute;inset:0;background:linear-gradient(180deg,transparent 48%,rgba(0,0,0,.85))}.mv__card-copy{position:absolute;left:14px;right:42px;bottom:13px;display:flex;flex-direction:column;gap:3px}.mv__card-copy strong{overflow:hidden;color:#fff;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.mv__card-copy small{color:rgba(255,255,255,.58);font-size:10px}.mv__card-play{position:absolute;right:13px;bottom:13px;width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:rgba(255,255,255,.9);color:#0b0b0c;opacity:0;transition:.18s}.mv__card:hover .mv__card-play,.mv__card[data-active="1"] .mv__card-play{opacity:1}.mv__card[data-active="1"]{border-color:rgba(255,255,255,.24)}
+        @keyframes mv-scan{from{left:-30%}to{left:115%}}@keyframes mv-grid{from{transform:translate(0,0)}to{transform:translate(28px,28px)}}@keyframes mv-square-breathe{50%{transform:scale(1.02)}}@keyframes mv-camera{50%{transform:translateY(-6px)}}@keyframes mv-lens{50%{transform:scale(1.06)}}@keyframes mv-dot{50%{opacity:.25}}@keyframes mv-pulse{50%{box-shadow:0 0 0 9px rgba(255,255,255,0)}}
+        @media(max-width:1100px){.mv{grid-template-columns:300px minmax(0,1fr)}.mv__workspace{padding-left:24px;padding-right:24px}.mv__cards{grid-auto-rows:150px}}@media(max-width:820px){.mv{display:block;overflow:visible}.mv__showcase{min-height:auto;border-right:0;border-bottom:1px solid rgba(255,255,255,.08)}.mv__showcase-media{position:relative;height:44vh;min-height:340px}.mv__workspace{height:auto;overflow:visible;padding:26px 16px 40px}.mv__header h1{font-size:40px}.mv__library-btn{display:none}.mv__settings-popover{position:static;min-width:0;margin-top:10px}.mv__cards{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:170px}.mv__card:nth-child(n){grid-column:span 1;grid-row:span 1}}@media(max-width:520px){.mv__showcase-media{height:38vh;min-height:300px}.mv__header h1{font-size:34px}.mv__notice p{display:none}.mv__composer{padding:12px}.mv__thumb{width:72px;height:48px}.mv__composer textarea{font-size:16px}.mv__settings-popover{grid-template-columns:1fr}.mv__cards{grid-template-columns:1fr;grid-auto-rows:210px}.mv__model-row{justify-content:flex-start;overflow-x:auto;flex-wrap:nowrap}}@media(prefers-reduced-motion:reduce){.mv *{animation-duration:.001ms!important;animation-iteration-count:1!important}}
       `}</style>
     </main>
   )
