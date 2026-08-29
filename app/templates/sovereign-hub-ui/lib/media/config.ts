@@ -61,7 +61,8 @@ export function imageGodOrder(): string[] {
 
 export function videoGodOrder(): string[] {
   const raw = process.env.VIDEO_GOD_PROVIDER_ORDER || process.env.VIDEO_PROVIDER_ORDER || "dashscope,pollo,runway,fal,luma,veo"
-  return raw.split(",").map((s) => s.trim()).filter(Boolean)
+  const order = raw.split(",").map((s) => s.trim()).filter(Boolean)
+  return order.includes("dashscope") ? order : ["dashscope", ...order]
 }
 
 export function godModeEnabled(): boolean {

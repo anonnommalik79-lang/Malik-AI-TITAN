@@ -4,6 +4,12 @@ import type { AIPlan } from "@/lib/ai/types"
 
 type MediaKind = "image" | "video"
 
+const OWNER_MEDIA_IDS = new Set([
+  "amangeldymalik38@gmail.com",
+  "anonnommalik79@gmail.com",
+  "admin@malik.ai",
+])
+
 const memoryImage = new Map<string, number>()
 const memoryVideo = new Map<string, number>()
 
@@ -51,7 +57,9 @@ export async function getMediaUsage(userId: string, kind: MediaKind): Promise<nu
 
 export async function checkMediaLimit(input: { userId?: string; plan?: AIPlan; kind: MediaKind }) {
   const userId = input.userId?.trim() || "guest"
-  const tier = resolveUserTier(userId === "guest" ? undefined : userId, input.plan || "free")
+  const tier = OWNER_MEDIA_IDS.has(userId.toLowerCase())
+    ? "owner"
+    : resolveUserTier(userId === "guest" ? undefined : userId, input.plan || "free")
   const max = limitFor(tier, input.kind)
   const used = await getMediaUsage(userId, input.kind)
   const remaining = Math.max(0, max - used)
