@@ -143,6 +143,25 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <link rel="apple-touch-icon" href="/apple-icon" sizes="180x180" />
         <link rel="mask-icon" href="/favicon.svg" color="#000000" />
         <link rel="manifest" href="/manifest.webmanifest" />
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              #malik-root .mv__header h1 {
+                border-right: 0 !important;
+                caret-color: transparent !important;
+              }
+              #malik-root .mv__header h1::before,
+              #malik-root .mv__header h1::after,
+              #malik-root .mv__header h1 > span {
+                content: none !important;
+                display: none !important;
+                border: 0 !important;
+                box-shadow: none !important;
+                animation: none !important;
+              }
+            `,
+          }}
+        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
