@@ -24,14 +24,14 @@ const DEFAULT_PROMPT = "Ночной Алматы после дождя. Чёр�
 const CATEGORIES = ["Кино", "Реклама", "Соцсети", "Персонажи", "Эксперимент"] as const
 const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
   {
-    id: "malik-transformer-flight",
-    title: "Transformer Flight",
+    id: "malik-animated-city",
+    title: "Animated City",
     provider: "MalikVideo 1.0",
-    tag: "Hero · 1080p",
-    theme: "Трансформер",
-    src: "/videos/malik-showcase/hero-transformer.mp4",
-    poster: "/videos/malik-showcase/hero-transformer.jpg",
-    prompt: "Летящий трансформер над улицами мегаполиса, динамичная камера, кинематографичный свет.",
+    tag: "Restyle · 1080p",
+    theme: "Анимация",
+    src: "/videos/malik-showcase/restyle-2.mp4",
+    poster: "/videos/malik-showcase/restyle-2.jpg",
+    prompt: "Анимационный герой на скейтборде в фантастическом городе, выразительная перспектива и кинематографичное движение.",
     tint: "rgba(10,10,12,.3)",
   },
   {
@@ -76,6 +76,50 @@ const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
     src: "/videos/malik-showcase/alpine-flight.mp4",
     poster: "/videos/malik-showcase/alpine-flight.jpg",
     prompt: "Экстремальный полёт над снежными горами, вертикальный кадр, яркий дневной свет.",
+    tint: "rgba(10,10,12,.3)",
+  },
+  {
+    id: "malik-transformer-flight",
+    title: "Transformer Flight",
+    provider: "MalikVideo 1.0",
+    tag: "Hero · 1080p",
+    theme: "Трансформер",
+    src: "/videos/malik-showcase/hero-transformer.mp4",
+    poster: "/videos/malik-showcase/hero-transformer.jpg",
+    prompt: "Летящий трансформер над улицами мегаполиса, динамичная камера, кинематографичный свет.",
+    tint: "rgba(10,10,12,.3)",
+  },
+  {
+    id: "malik-product-serum",
+    title: "Product Motion",
+    provider: "MalikVideo 1.0",
+    tag: "Product · 1080p",
+    theme: "Реклама",
+    src: "/videos/malik-showcase/product-shot-1.mp4",
+    poster: "/videos/malik-showcase/product-shot-1.jpg",
+    prompt: "Премиальная предметная съёмка синего флакона сыворотки, яркий студийный фон и плавное рекламное движение.",
+    tint: "rgba(10,10,12,.3)",
+  },
+  {
+    id: "malik-storybook-cat",
+    title: "Storybook Cat",
+    provider: "MalikVideo 1.0",
+    tag: "Restyle · 1080p",
+    theme: "Персонаж",
+    src: "/videos/malik-showcase/restyle-3.mp4",
+    poster: "/videos/malik-showcase/restyle-3.jpg",
+    prompt: "Милый чёрный кот в цветочном поле, рисованная анимация, мягкое естественное движение.",
+    tint: "rgba(10,10,12,.3)",
+  },
+  {
+    id: "malik-cloud-road",
+    title: "Road Above Clouds",
+    provider: "MalikVideo 1.0",
+    tag: "Product · 1080p",
+    theme: "Автомобиль",
+    src: "/videos/malik-showcase/product-shot-2.mp4",
+    poster: "/videos/malik-showcase/product-shot-2.jpg",
+    prompt: "Синий спортивный автомобиль едет по дороге над облаками, премиальная реклама и плавное движение камеры.",
     tint: "rgba(10,10,12,.3)",
   },
 ]
@@ -138,7 +182,14 @@ function AutoLoopVideo({
       playsInline
       preload="auto"
       disablePictureInPicture
-      style={{ objectFit: contain ? "contain" : "cover" }}
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "block",
+        objectFit: contain ? "contain" : "cover",
+        objectPosition: "center",
+        background: "#030303",
+      }}
     />
   )
 }
@@ -314,7 +365,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           {videoUrl ? (
             <video src={videoUrl} controls playsInline autoPlay className="mv__showcase-video mv__showcase-video--result" />
           ) : (
-            <AutoLoopVideo src={hero.src} poster={hero.poster} className="mv__showcase-video" contain />
+            <AutoLoopVideo src={hero.src} poster={hero.poster} className="mv__showcase-video" />
           )}
           <div className="mv__showcase-vignette" />
           <div className="mv__showcase-top">
@@ -427,8 +478,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv{min-height:100%;width:100%;display:grid;grid-template-columns:minmax(360px,39vw) minmax(0,1fr);background:#000;color:#f7f7f8;overflow:hidden;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
         .mv__showcase{position:relative;min-height:100dvh;background:#030303;border-right:1px solid rgba(255,255,255,.08);overflow:hidden}
         .mv__showcase-media{position:sticky;top:0;height:100dvh;min-height:680px;overflow:hidden;background:#030303;display:grid;place-items:center}
-        .mv__showcase-video{width:100%;height:100%;display:block;background:#030303;object-position:center center}
-        .mv__showcase-video--result{object-fit:contain}
+        :global(.mv__showcase-video){width:100%;height:100%;display:block;background:#030303;object-position:center center}
+        .mv__showcase-video--result{width:100%;height:100%;display:block;background:#030303;object-fit:contain}
         .mv__showcase-vignette{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.12),transparent 24%,transparent 62%,rgba(0,0,0,.78)),linear-gradient(90deg,rgba(0,0,0,.14),transparent 36%)}
         .mv__showcase-top{position:absolute;top:24px;left:24px;display:flex;align-items:center;gap:10px;z-index:2;font-size:14px;font-weight:720;letter-spacing:-.01em}
         .mv__brand-mark{width:34px;height:34px;border-radius:10px;background:#fff;color:#050505;display:grid;place-items:center;font-size:15px;font-weight:900;box-shadow:0 10px 30px rgba(0,0,0,.25)}
@@ -478,8 +529,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv__card{position:relative;min-width:0;aspect-ratio:.82/1;overflow:hidden;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:#0b0b0d;padding:0;cursor:pointer;text-align:left;transform:translateZ(0);box-shadow:0 12px 30px rgba(0,0,0,.22);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
         .mv__card:hover{transform:translateY(-3px);border-color:rgba(255,255,255,.18);box-shadow:0 20px 42px rgba(0,0,0,.4)}
         .mv__card[data-active="1"]{border-color:rgba(255,255,255,.24)}
-        .mv__card-video{position:absolute;inset:0;width:100%;height:100%;object-position:center;transition:transform .5s cubic-bezier(.2,.7,.2,1)}
-        .mv__card:hover .mv__card-video{transform:scale(1.035)}
+        :global(.mv__card-video){position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;transition:transform .5s cubic-bezier(.2,.7,.2,1)}
+        .mv__card:hover :global(.mv__card-video){transform:scale(1.035)}
         .mv__card-shade{position:absolute;inset:34% 0 0;background:linear-gradient(180deg,transparent,rgba(0,0,0,.9));pointer-events:none}
         .mv__card-play{position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,.72);color:#fff;backdrop-filter:blur(8px)}
         .mv__card-copy{position:absolute;left:12px;right:12px;bottom:12px;z-index:2;display:flex;flex-direction:column;gap:3px}
