@@ -1,0 +1,23 @@
+/* Final desktop sidebar brand-mark authority.
+ * The visible expanded Malik AI mark was 28x28 with a 16x16 glyph, which
+ * becomes visually tiny on wide desktop screens. Keep the header geometry
+ * intact while increasing only the brand tile and its internal glyph.
+ */
+@media (min-width: 768px) {
+  #malik-root .malik-sidebar[data-collapsed="false"] > div:first-child > div:first-child > span:first-child {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    flex: 0 0 40px !important;
+    border-radius: 12px !important;
+  }
+
+  #malik-root .malik-sidebar[data-collapsed="false"] > div:first-child > div:first-child > span:first-child > svg {
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    min-height: 26px !important;
+    display: block !important;
+  }
+}

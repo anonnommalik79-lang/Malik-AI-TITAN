@@ -42,6 +42,8 @@ import "./malik-black-neutral-ultimate.css"
 import "./malik-zero-blue-final.css"
 // Exact user-provided Uber wordmark for Taxi. Must load last so no legacy SVG paint can win.
 import "./uber-wordmark-final.css"
+// Final desktop sidebar brand mark size. Must load after all legacy sidebar rules.
+import "./sidebar-brand-mark-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
