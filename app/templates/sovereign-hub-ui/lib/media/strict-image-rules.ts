@@ -60,6 +60,14 @@ function criticalVisualLocks(rawPrompt: string, compiledPrompt: string): Critica
   if (/(?:\bbicycle\b|\bbike\b|велосипед(?:а|ы|ом)?\b)/iu.test(text)) subjects.push("bicycle")
   if (/(?:\btrain\b|поезд(?:а|ы|ом)?\b)/iu.test(text)) subjects.push("train")
   if (/(?:\btruck\b|грузовик(?:а|и|ом)?\b)/iu.test(text)) subjects.push("truck")
+  if (/(?:\bsports?\s*car\b|\bsupercar\b|спорт\s*кар|спорткар(?:а|ы|ом)?\b)/iu.test(text)) {
+    subjects.push("sports car")
+    negatives.push("cat collage", "unrelated animal", "portrait instead of sports car")
+  }
+  if (/(?:\bfrogs?\b|лягушк(?:а|у|и|ой)?\b|бақа)/iu.test(text)) {
+    subjects.push("frog")
+    negatives.push("missing frog", "cat instead of frog", "human portrait instead of frog")
+  }
   if (/(?:\bdragon\b|дракон(?:а|ы|ом)?\b)/iu.test(text)) subjects.push("dragon")
   if (/(?:\bdinosaur\b|динозавр(?:а|ы|ом)?\b)/iu.test(text)) subjects.push("dinosaur")
 
@@ -116,11 +124,12 @@ export function buildUnifiedStrictImagePrompt(
   ].filter(Boolean).join("\n")
 
   return [
-    `IMAGE TO RENDER — FOLLOW THIS VISUAL DESCRIPTION LITERALLY:\n${visualRequest}`,
+    `AUTHORITATIVE USER REQUEST — RENDER IT LITERALLY:\n${plan.rawRequest}`,
+    visualRequest !== plan.rawRequest ? `LOSSLESS ENGLISH DESCRIPTION:\n${visualRequest}` : "",
     `NON-NEGOTIABLE VISUAL FACTS:\n${hardFacts}`,
     modeContract(mode),
     "FIDELITY RULE: subject, count and action are more important than beauty/style. Never replace the requested subject with an unrelated person, portrait, object or scene. Do not invent a dominant forest/portrait/background when it was not requested.",
-    `ORIGINAL USER REQUEST — AUTHORITATIVE IF ANY DOUBT: ${plan.rawRequest}`,
+    "OUTPUT: one coherent image, never a four-panel collage unless the user explicitly asks for a collage.",
   ].filter(Boolean).join("\n\n")
 }
 
@@ -162,7 +171,7 @@ export function buildUnifiedNegativePrompt(
     base.push("portrait instead of requested vehicle/object", "missing requested vehicle/object")
   }
 
-  if (/(?:cat|dog|horse|bird|dragon|dinosaur)/i.test(subjects) && !critical.humanIntent) {
+  if (/(?:cat|dog|horse|bird|frog|dragon|dinosaur)/i.test(subjects) && !critical.humanIntent) {
     base.push("human instead of requested creature", "missing requested creature")
   }
 

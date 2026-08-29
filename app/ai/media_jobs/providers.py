@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -106,10 +107,142 @@ def _english_prompt(prompt: str, kind: str) -> str:
     return f"{out}. {suffix}"[:1000]
 
 
+def _clean_image_request(prompt: str) -> str:
+    text = str(prompt or "").strip()
+    text = re.sub(r"^\s*/(?:image|img|photo|foto|фото|картинка)\s*:?[\s-]*", "", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"^\s*(?:пожалуйста[,.!\s-]*)?(?:сгенерируй|сгенеруй|сгенерировать|создай|сделай|нарисуй|generate|create|draw|make)\s+(?:мне\s+)?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\s+", " ", text).strip() or str(prompt or "").strip()
+
+
+def _strict_image_prompt(prompt: str) -> str:
+    """Build a short literal prompt without diluting the user's visual nouns.
+
+    Modern image models can read Russian and Kazakh. Keeping the untouched
+    request is safer than a large creative rewrite; small English anchors only
+    recover the most common ASR/typo variants.
+    """
+    request = _clean_image_request(prompt)[:1200]
+    lower = request.lower().replace("ё", "е")
+    anchors: list[str] = []
+
+    if re.search(r"спорт\s*кар|спорткар|sports?\s*car|supercar", lower):
+        anchors.append("one sports car as the main subject")
+    elif re.search(r"машин|автомоб|\bcar\b|vehicle", lower):
+        anchors.append("the requested car or vehicle as the main subject")
+    if re.search(r"лягуш|лягушк|бақа|\bfrog\b", lower):
+        anchors.append("a frog as the main subject")
+    if re.search(r"кот|кошк|мысық|\bcat\b|kitten", lower):
+        anchors.append("a cat as the main subject")
+    if re.search(r"собак|щен|ит\b|\bdog\b|puppy", lower):
+        anchors.append("a dog as the main subject")
+    if re.search(r"робот|трансформ|\brobot\b|mecha|transformer", lower):
+        anchors.append("the requested robot as the main subject")
+    if re.search(r"летящ|летающ|летит|ұшатын|ұшып|\bfly(?:ing)?\b|airborne", lower):
+        anchors.append("clearly flying in the air")
+
+    facts = "; ".join(dict.fromkeys(anchors))
+    fact_line = f" Required visible facts: {facts}." if facts else ""
+    return (
+        f"Create exactly one image from this literal user request: {request}."
+        f"{fact_line} Preserve the exact subject, action, count, colors and setting. "
+        "Do not replace the main subject, do not make a four-panel collage, and do not add unrelated people, animals, text or watermarks."
+    )[:1800]
+
+
 def _save_b64_image(encoded: str, provider: str) -> str:
     filename = f"{provider}_{int(time.time())}_{uuid.uuid4().hex[:8]}.png"
     (PHOTO_STORAGE_DIR / filename).write_bytes(base64.b64decode(encoded))
     return f"/api/storage/photos/{filename}"
+
+
+def _save_image_bytes(content: bytes, provider: str, content_type: str = "image/png") -> str:
+    extension = ".jpg" if "jpeg" in content_type or "jpg" in content_type else ".webp" if "webp" in content_type else ".png"
+    filename = f"{provider}_{int(time.time())}_{uuid.uuid4().hex[:10]}{extension}"
+    (PHOTO_STORAGE_DIR / filename).write_bytes(content)
+    return f"/api/storage/photos/{filename}"
+
+
+def _cloudflare_credentials() -> tuple[str, str]:
+    account = _env("CLOUDFLARE_IMAGE_ACCOUNT_ID") or _env("CLOUDFLARE_ACCOUNT_ID") or _env("CF_ACCOUNT_ID")
+    token = _env("CLOUDFLARE_IMAGE_API_TOKEN") or _env("CLOUDFLARE_API_TOKEN") or _env("CF_API_TOKEN")
+    return account, token
+
+
+def _cloudflare_model(model_id: str) -> tuple[str, str]:
+    models = {
+        "flux-klein-4b": ("@cf/black-forest-labs/flux-2-klein-4b", "multipart"),
+        "flux-schnell": ("@cf/black-forest-labs/flux-1-schnell", "json"),
+        "leonardo-phoenix": ("@cf/leonardo/phoenix-1.0", "json"),
+        "leonardo-lucid": ("@cf/leonardo/lucid-origin", "json"),
+        "malik-image-1-premium": ("@cf/black-forest-labs/flux-2-dev", "multipart"),
+    }
+    return models.get(model_id, models["flux-klein-4b"])
+
+
+def _cloudflare_image(data: dict) -> dict | None:
+    account, token = _cloudflare_credentials()
+    if not account or not token:
+        return None
+
+    model_id = str(data.get("modelId") or "flux-klein-4b").strip()
+    model, request_kind = _cloudflare_model(model_id)
+    prompt = _strict_image_prompt(_prompt(data))
+    width, height = _size(data)
+    endpoint = f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    if request_kind == "multipart":
+        response = requests.post(
+            endpoint,
+            headers=headers,
+            files={"prompt": (None, prompt), "width": (None, str(width)), "height": (None, str(height))},
+            timeout=(10, 55),
+        )
+    else:
+        body = {"prompt": prompt, "width": width, "height": height}
+        if model_id == "flux-schnell":
+            body = {"prompt": prompt, "steps": 4}
+        else:
+            body.update({"num_steps": 22, "guidance": 7.5})
+        response = requests.post(
+            endpoint,
+            headers={**headers, "Content-Type": "application/json"},
+            json=body,
+            timeout=(10, 55),
+        )
+
+    if response.status_code >= 400:
+        raise RuntimeError(f"cloudflare_image_http_{response.status_code}: {response.text[:350]}")
+
+    content_type = response.headers.get("content-type", "")
+    if content_type.startswith("image/"):
+        if len(response.content) < 4096:
+            raise RuntimeError("cloudflare_image_too_small")
+        url = _save_image_bytes(response.content, "cloudflare", content_type)
+    else:
+        payload = response.json()
+        result = payload.get("result") or payload
+        encoded = result.get("image") if isinstance(result, dict) else ""
+        if not encoded:
+            raise RuntimeError("cloudflare_image_empty_result")
+        url = _save_b64_image(encoded, "cloudflare")
+
+    return {
+        "provider": "cloudflare",
+        "model": model,
+        "modelId": model_id,
+        "resultUrl": url,
+        "url": url,
+        "imageUrl": url,
+        "mediaUrl": url,
+        "fallback": False,
+        "prompt": prompt,
+    }
 
 
 def _save_video_plan(plan: dict) -> str:
@@ -119,10 +252,32 @@ def _save_video_plan(plan: dict) -> str:
 
 
 def _pollinations_image(data: dict, errors: list[dict] | None = None) -> dict:
-    prompt = _english_prompt(_prompt(data) or "cinematic football player", "image")
+    prompt = _strict_image_prompt(_prompt(data) or "cinematic subject")
     width, height = _size(data)
-    url = f"https://image.pollinations.ai/prompt/{quote(prompt)}?width={width}&height={height}&nologo=true&enhance=true"
-    return {"provider": "pollinations", "model": "fallback", "resultUrl": url, "url": url, "imageUrl": url, "mediaUrl": url, "fallback": True, "errors": errors or []}
+    seed = int(time.time_ns() % 2_147_483_647)
+    remote_url = (
+        f"https://image.pollinations.ai/prompt/{quote(prompt)}"
+        f"?width={width}&height={height}&model=flux&seed={seed}"
+        "&nologo=true&private=true&enhance=false"
+    )
+    response = requests.get(remote_url, timeout=(10, 50), headers={"Cache-Control": "no-cache"})
+    if response.status_code >= 400:
+        raise RuntimeError(f"pollinations_image_http_{response.status_code}")
+    content_type = response.headers.get("content-type", "image/jpeg")
+    if not content_type.startswith("image/") or len(response.content) < 4096:
+        raise RuntimeError("pollinations_invalid_image_result")
+    url = _save_image_bytes(response.content, "pollinations", content_type)
+    return {
+        "provider": "pollinations",
+        "model": "flux",
+        "resultUrl": url,
+        "url": url,
+        "imageUrl": url,
+        "mediaUrl": url,
+        "fallback": True,
+        "errors": errors or [],
+        "prompt": prompt,
+    }
 
 
 def _openai_image(data: dict) -> dict | None:
@@ -132,8 +287,8 @@ def _openai_image(data: dict) -> dict | None:
     response = requests.post(
         "https://api.openai.com/v1/images/generations",
         headers={"Authorization": f"Bearer {keys[0]}", "Content-Type": "application/json"},
-        json={"model": _env("OPENAI_IMAGE_MODEL", "gpt-image-1"), "prompt": _english_prompt(_prompt(data), "image"), "size": "1024x1024", "n": 1},
-        timeout=120,
+        json={"model": _env("OPENAI_IMAGE_MODEL", "gpt-image-1"), "prompt": _strict_image_prompt(_prompt(data)), "size": "1024x1024", "n": 1},
+        timeout=(10, 75),
     )
     if response.status_code >= 400:
         raise RuntimeError(f"openai_image_http_{response.status_code}: {response.text[:400]}")
@@ -191,7 +346,7 @@ def _aws_image(data: dict) -> dict | None:
     width, height = _size(data)
     body = {
         "taskType": "TEXT_IMAGE",
-        "textToImageParams": {"text": _english_prompt(_prompt(data), "image")},
+        "textToImageParams": {"text": _strict_image_prompt(_prompt(data))},
         "imageGenerationConfig": {"numberOfImages": 1, "quality": "premium", "cfgScale": 8.0, "height": height, "width": width, "seed": int(time.time() % 2147483647)},
     }
     result = _bedrock_client().invoke_model(modelId=model, contentType="application/json", accept="application/json", body=json.dumps(body))
@@ -289,7 +444,9 @@ def generate_image(input_data: dict) -> dict:
     if not _prompt(input_data):
         raise RuntimeError("Prompt is required.")
     errors: list[dict] = []
-    for fn in (_aws_image, _openai_image):
+    # The selected fast Cloudflare model is authoritative. Do not silently
+    # spend minutes rotating through unrelated providers before trying it.
+    for fn in (_cloudflare_image, _openai_image, _aws_image):
         try:
             output = fn(input_data)
             if output:

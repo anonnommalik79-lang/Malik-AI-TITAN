@@ -3,7 +3,7 @@ import {
   getMalikImageModel,
   type MalikImageModelId,
 } from "../image-models"
-import { imageProviderTimeoutMs } from "../config"
+import { imagePromptCompilerTimeoutMs, imageProviderTimeoutMs } from "../config"
 import type { ImageAspectRatio, ImageMode } from "../types"
 
 const DEFAULT_PROMPT_COMPILER_MODELS = [
@@ -155,7 +155,7 @@ function subjectNegativePrompt(source: string) {
   return base
 }
 
-async function callCloudflare(model: string, init: RequestInit, signal?: AbortSignal) {
+async function callCloudflare(model: string, init: RequestInit, signal?: AbortSignal, timeoutMs = imageProviderTimeoutMs()) {
   const accountId = cloudflareAccountId()
   const token = cloudflareApiToken()
   if (!accountId || !token) {
@@ -172,7 +172,7 @@ async function callCloudflare(model: string, init: RequestInit, signal?: AbortSi
   const headers = new Headers(init.headers)
   headers.set("authorization", `Bearer ${token}`)
 
-  const timer = setTimeout(() => controller.abort(), imageProviderTimeoutMs())
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     return await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`, {
       ...init,
@@ -215,6 +215,7 @@ async function compileWithModel(model: string, source: string, mode?: ImageMode,
       }),
     },
     signal,
+    imagePromptCompilerTimeoutMs(),
   )
 
   if (!response.ok) throw new Error(`Prompt compiler ${model} returned ${response.status}`)
@@ -244,19 +245,10 @@ export async function compileImagePrompt(rawPrompt: string, mode?: ImageMode, si
   }
 
   const guard = subjectGuard(source)
-  const fidelity = [
-    "STRICT FIDELITY:",
-    "depict the requested main subject clearly and prominently;",
-    "preserve the requested action and setting exactly;",
-    "do not replace the subject with an unrelated person, animal, object or scene;",
-    "do not add unrequested subjects or text.",
-  ].join(" ")
-
   return [
-    `PRIMARY IMAGE REQUEST: ${translated}`,
+    translated,
     guard,
     modeInstruction(mode),
-    fidelity,
   ].filter(Boolean).join("\n\n")
 }
 

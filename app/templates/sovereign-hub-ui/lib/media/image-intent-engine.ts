@@ -29,7 +29,7 @@ type LexiconEntry = {
 const SUBJECT_LEXICON: LexiconEntry[] = [
   { canonical: "robot", aliases: ["robot", "robots", "робот", "роботы", "робота", "роботом", "mecha", "android", "андроид"], lock: "robot / mecha subject" },
   { canonical: "transformer", aliases: ["transformer", "transformers", "трансформер", "трансформера", "трансформеры", "трансформеров"], lock: "non-human humanoid transformer / robot" },
-  { canonical: "car", aliases: ["car", "cars", "vehicle", "automobile", "машина", "машину", "машины", "машине", "автомобиль", "автомобиля", "авто"], lock: "vehicle / car" },
+  { canonical: "car", aliases: ["car", "cars", "sports car", "sportscar", "supercar", "vehicle", "automobile", "машина", "машину", "машины", "машине", "автомобиль", "автомобиля", "авто", "спорткар", "спорткара"], lock: "sports car / vehicle" },
   { canonical: "motorcycle", aliases: ["motorcycle", "motorbike", "мотоцикл", "мотоцикла", "байк"], lock: "motorcycle" },
   { canonical: "house", aliases: ["house", "home", "дом", "дома", "доме", "здание", "building"], lock: "house / building" },
   { canonical: "football-player", aliases: ["footballer", "football player", "soccer player", "футболист", "футболиста", "футболистка"], lock: "football player" },
@@ -40,6 +40,7 @@ const SUBJECT_LEXICON: LexiconEntry[] = [
   { canonical: "dog", aliases: ["dog", "puppy", "собака", "пес", "собаку", "щенок"], lock: "dog" },
   { canonical: "horse", aliases: ["horse", "лошадь", "лошадь", "конь", "лошадку"], lock: "horse" },
   { canonical: "bird", aliases: ["bird", "птица", "птицу"], lock: "bird" },
+  { canonical: "frog", aliases: ["frog", "frogs", "лягушка", "лягушку", "лягушки", "бақа"], lock: "frog" },
 ]
 
 const COLORS: Array<[string, string[]]> = [

@@ -47,6 +47,11 @@ export function imageProviderTimeoutMs(): number {
   return Number.isFinite(n) && n > 0 ? n : 90_000
 }
 
+export function imagePromptCompilerTimeoutMs(): number {
+  const n = Number(process.env.IMAGE_PROMPT_COMPILER_TIMEOUT_MS || 8_000)
+  return Number.isFinite(n) && n > 0 ? n : 8_000
+}
+
 export function pollinationsTimeoutMs(): number {
   const n = Number(process.env.POLLINATIONS_TIMEOUT_MS || 45_000)
   return Number.isFinite(n) && n > 0 ? n : 45_000

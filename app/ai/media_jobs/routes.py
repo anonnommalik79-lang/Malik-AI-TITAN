@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Thread
 
 from flask import Blueprint, jsonify, request, send_from_directory
 
@@ -25,20 +26,82 @@ def _payload():
     return data, None
 
 
+def _public_job(job: dict | None) -> dict:
+    if not job:
+        return {}
+    raw_status = str(job.get("status") or "queued")
+    status = {
+        "processing": "generating",
+        "completed": "ready",
+        "needs_storage": "rendering",
+    }.get(raw_status, raw_status)
+    output = job.get("output") if isinstance(job.get("output"), dict) else {}
+    url = str(
+        output.get("imageUrl")
+        or output.get("videoUrl")
+        or output.get("mediaUrl")
+        or output.get("url")
+        or ""
+    )
+    public = {
+        "id": job.get("id"),
+        "jobId": job.get("id"),
+        "type": job.get("type"),
+        "status": status,
+        "progress": 100 if status in {"ready", "failed"} else int(job.get("progress") or 12),
+        "provider": job.get("provider"),
+        "model": job.get("model"),
+        "error": job.get("error"),
+        "output": output,
+        "createdAt": job.get("createdAt"),
+        "updatedAt": job.get("updatedAt"),
+    }
+    if url:
+        public.update({"url": url, "mediaUrl": url})
+        if job.get("type") == "image":
+            public["imageUrl"] = url
+        else:
+            public["videoUrl"] = url
+    return public
+
+
+def _run_image_job(job_id: str, data: dict) -> None:
+    update_job(job_id, status="processing", progress=18)
+    try:
+        output = generate_image(data)
+        update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            output=output,
+            provider=output.get("provider"),
+            model=output.get("model"),
+        )
+    except Exception as exc:
+        update_job(job_id, status="failed", progress=100, error=str(exc)[:700])
+
+
 @media_jobs_bp.post("/api/ai/image")
 def create_image_job():
     data, error = _payload()
     if error:
         return jsonify({"ok": False, "error": error[0]}), error[1]
 
+    # The mobile/desktop model selector stores the image model in this cookie.
+    # Carry it into the background worker so the server really uses the model
+    # shown beside “Фото”, instead of silently selecting an unrelated provider.
+    data.setdefault("modelId", request.cookies.get("malik_image_model_v1") or "flux-klein-4b")
+
     job = create_job("image", data)
-    update_job(job["id"], status="processing")
-    try:
-        output = generate_image(data)
-        update_job(job["id"], status="completed", output=output, provider=output.get("provider"), model=output.get("model"))
-    except Exception as exc:
-        update_job(job["id"], status="failed", error=str(exc))
-    return jsonify({"ok": True, "jobId": job["id"], "job": get_job(job["id"])})
+    Thread(target=_run_image_job, args=(job["id"], data), daemon=True, name=job["id"]).start()
+    public = _public_job(get_job(job["id"]))
+    return jsonify({
+        "ok": True,
+        "status": public.get("status", "queued"),
+        "jobId": job["id"],
+        "statusUrl": f"/api/ai/job/{job['id']}",
+        "job": public,
+    }), 202
 
 
 @media_jobs_bp.post("/api/ai/video")
@@ -64,13 +127,14 @@ def read_job(job_id: str):
     job = get_job(job_id)
     if not job:
         return jsonify({"ok": False, "error": "Job not found"}), 404
-    return jsonify({"ok": True, "job": job})
+    public = _public_job(job)
+    return jsonify({"ok": True, **public, "job": public})
 
 
 @media_jobs_bp.get("/api/ai/history")
 def history():
     user_id = request.args.get("userId")
-    return jsonify({"ok": True, "jobs": list_jobs(user_id)})
+    return jsonify({"ok": True, "jobs": [_public_job(job) for job in list_jobs(user_id)]})
 
 
 @media_jobs_bp.get("/api/ai/media/status")

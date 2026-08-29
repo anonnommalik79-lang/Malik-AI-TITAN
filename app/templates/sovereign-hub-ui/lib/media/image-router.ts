@@ -97,7 +97,7 @@ export async function routeImageGeneration(
   }
 
   const order = requestedModelId
-    ? uniqueProviders(["cloudflare", ...effectiveImageOrder(), "pollinations"])
+    ? uniqueProviders([...effectiveImageOrder(), "pollinations"]).filter((provider) => provider !== "cloudflare")
     : effectiveImageOrder()
 
   for (const provider of order) {

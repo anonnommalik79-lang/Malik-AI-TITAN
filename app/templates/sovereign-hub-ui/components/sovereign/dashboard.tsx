@@ -128,6 +128,7 @@ import {
   type MalikModelId,
 } from "@/lib/ai/malik-models"
 import type { AIPlan } from "@/lib/ai/types"
+import { loadMalikImageModelSelection } from "@/lib/media/image-models"
 import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import {
   responseDepthInstruction,
@@ -203,6 +204,10 @@ type InlineMediaGeneration = {
   jobId?: string
   error?: string
   createdAt?: string
+}
+
+function isInlineMediaProcessing(status: InlineMediaGenerationStatus) {
+  return status === "queued" || status === "thinking" || status === "generating" || status === "rendering"
 }
 
 interface Chat {
@@ -4401,6 +4406,8 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [activeProjectWorkspaceId, setActiveProjectWorkspaceId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
+  const messagesRef = useRef<Message[]>([])
+  const chatsRef = useRef<Chat[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isGeneratingTerminal, setIsGeneratingTerminal] = useState(false) // Новое состояние для терминала
   const [generatedCode, setGeneratedCode] = useState<string>("")
@@ -4419,6 +4426,24 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
   const [userAvatar, setUserAvatar] = useState<string>(safeGetStorage("malik_user_avatar", ""))
   const [userDisplayName, setUserDisplayName] = useState<string>(safeGetStorage("malik_user_name", ""))
   const [storageRestored, setStorageRestored] = useState(false)
+
+  useEffect(() => { messagesRef.current = messages }, [messages])
+  useEffect(() => { chatsRef.current = chats }, [chats])
+
+  const applyPersistentMediaPatch = useCallback((mediaId: string, patch: Partial<InlineMediaGeneration>) => {
+    const patchList = (items: Message[]) => items.map((message) => {
+      if (message.generatedMedia?.id !== mediaId) return message
+      const generatedMedia = { ...message.generatedMedia, ...patch }
+      return {
+        ...message,
+        generatedMedia,
+        content: buildInlineMediaAssistantText(generatedMedia),
+        isStreaming: false,
+      }
+    })
+    setMessages((current) => patchList(current))
+    setChats((current) => current.map((chat) => ({ ...chat, messages: patchList(chat.messages) })))
+  }, [])
 
   // WorkOS AuthKit is the only authority for authentication. Local state below is display cache only.
   useEffect(() => {
@@ -4542,6 +4567,88 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
       console.warn("[DASHBOARD SAVE ERROR]", err)
     }
   }, [storageRestored, chats, activeChatId, messages, generatedCode, activeView, selectedModelId])
+
+  // Image jobs live on the server and are keyed to the assistant card. This
+  // poller is intentionally independent of the selected chat: navigating to a
+  // different history or reloading the dashboard does not cancel generation,
+  // and the result is written back into the original conversation.
+  useEffect(() => {
+    if (!storageRestored) return
+    let stopped = false
+    let timer: number | undefined
+    const inFlight = new Set<string>()
+
+    const pendingMedia = () => {
+      const unique = new Map<string, InlineMediaGeneration>()
+      const collect = (items: Message[]) => {
+        for (const message of items) {
+          const media = message.generatedMedia
+          if (!media || !isInlineMediaProcessing(media.status) || (!media.statusUrl && !media.jobId)) continue
+          unique.set(media.id, media)
+        }
+      }
+      collect(messagesRef.current)
+      for (const chat of chatsRef.current) collect(chat.messages)
+      return [...unique.values()]
+    }
+
+    const poll = async () => {
+      const tasks = pendingMedia().filter((media) => !inFlight.has(media.id))
+      await Promise.all(tasks.map(async (media) => {
+        const statusUrl = media.statusUrl || (media.kind === "image" && media.jobId
+          ? `/api/ai/job/${encodeURIComponent(media.jobId)}`
+          : "")
+        if (!statusUrl) return
+        inFlight.add(media.id)
+        try {
+          const response = await fetch(statusUrl, { cache: "no-store" })
+          const payload = await response.json().catch(() => ({}))
+          const rawStatus = String(payload?.status || payload?.job?.status || "").toLowerCase()
+          if (/failed|error|cancelled|canceled/.test(rawStatus) || payload?.ok === false) {
+            applyPersistentMediaPatch(media.id, {
+              status: "failed",
+              progress: 100,
+              error: payload?.publicError || payload?.error || payload?.job?.error || "Генератор не вернул готовое изображение.",
+            })
+            return
+          }
+
+          const mediaUrl = extractInlineMediaUrl(payload, media.kind)
+          if (mediaUrl) {
+            applyPersistentMediaPatch(media.id, {
+              status: "ready",
+              progress: 100,
+              url: mediaUrl,
+              provider: payload?.provider || payload?.job?.provider || media.provider,
+              jobId: payload?.jobId || payload?.id || media.jobId,
+              statusUrl,
+            })
+            return
+          }
+
+          applyPersistentMediaPatch(media.id, {
+            status: rawStatus === "rendering" ? "rendering" : "generating",
+            progress: Math.min(94, Math.max(media.progress || 18, Number(payload?.progress || payload?.job?.progress || 18))),
+            provider: payload?.provider || payload?.job?.provider || media.provider,
+            jobId: payload?.jobId || payload?.id || media.jobId,
+            statusUrl,
+          })
+        } catch {
+          // Network loss is not a generation failure. Keep the animation and
+          // retry; the durable server job continues in the background.
+        } finally {
+          inFlight.delete(media.id)
+        }
+      }))
+      if (!stopped) timer = window.setTimeout(poll, tasks.length ? 2200 : 4200)
+    }
+
+    timer = window.setTimeout(poll, 500)
+    return () => {
+      stopped = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [applyPersistentMediaPatch, storageRestored])
 
   useEffect(() => {
     if (activeViewRef.current === activeView) return
@@ -5241,6 +5348,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }
 
   setMessages(prev => [...prev, userMessage, assistantMessage])
+  setChats((previous) => previous.map((chat) => {
+    if (chat.id !== chatId) return chat
+    const nextMessages = [...chat.messages]
+    if (!nextMessages.some((message) => message.id === userMessage.id)) nextMessages.push(userMessage)
+    if (!nextMessages.some((message) => message.id === assistantMessage.id)) nextMessages.push(assistantMessage)
+    return { ...chat, messages: nextMessages }
+  }))
   setIsLoading(true)
   dashboardEventBus.emit({
     type: "chat:send",
@@ -5371,11 +5485,14 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
               status: media.status === "ready" ? "deployed" : "draft",
               title: c.messages.length === 0 ? title : c.title,
               techStack: [media.provider || "Media API", media.kind === "video" ? "Video" : "Image", "Inline chat"],
-              messages: [
-                ...c.messages,
-                userMessage,
-                finalAssistant,
-              ],
+              messages: (() => {
+                const next = [...c.messages]
+                if (!next.some((message) => message.id === userMessage.id)) next.push(userMessage)
+                const assistantIndex = next.findIndex((message) => message.id === assistantMessage.id)
+                if (assistantIndex >= 0) next[assistantIndex] = finalAssistant
+                else next.push(finalAssistant)
+                return next
+              })(),
             }
           : c
       )
@@ -5394,6 +5511,18 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           : m
       )
     )
+    setChats((previous) => previous.map((chat) => chat.id === chatId
+      ? {
+          ...chat,
+          messages: chat.messages.map((message) => message.id === assistantMessage.id && message.generatedMedia
+            ? {
+                ...message,
+                content: buildInlineMediaAssistantText({ ...message.generatedMedia, ...patch }),
+                generatedMedia: { ...message.generatedMedia, ...patch },
+              }
+            : message),
+        }
+      : chat))
   }
 
   if (cleanContent.toLowerCase().startsWith("/admin_db")) {
@@ -5423,7 +5552,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       await new Promise((resolve) => setTimeout(resolve, 350))
       patchInlineMedia({ status: "generating", progress: 36 })
 
-      const mediaEndpoint = inlineMediaKind === "video" ? "/api/generate/video" : "/api/generate/photo"
+      const mediaEndpoint = inlineMediaKind === "video" ? "/api/generate/video" : "/api/ai/image"
       const response = await fetch(mediaEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -5431,6 +5560,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           prompt: inlineMediaApiPrompt,
           stream: false,
           kind: inlineMediaKind === "video" ? "video" : "photo",
+          modelId: inlineMediaKind === "image" ? loadMalikImageModelSelection() : undefined,
           provider: "auto",
           style: "cinematic Gemini-style transparent chat generation",
           aspectRatio: inlineMediaKind === "video" ? "16:9" : "1:1",
@@ -5478,6 +5608,24 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         typeof finalPayload?.providerJobId === "string" ? finalPayload.providerJobId :
         typeof finalPayload?.output?.jobId === "string" ? finalPayload.output.jobId :
         ""
+
+      const shouldPersistImageJob =
+        inlineMediaKind === "image" &&
+        !isFallback &&
+        !mediaUrl &&
+        (isProcessingStatus(finalPayload?.status) || statusUrl || jobId)
+
+      if (shouldPersistImageJob) {
+        finalizeInlineMedia({
+          ...assistantMessage.generatedMedia,
+          status: "generating",
+          progress: Math.max(18, Number(finalPayload?.progress || finalPayload?.job?.progress || 18)),
+          provider: finalPayload?.provider || finalPayload?.job?.provider || assistantMessage.generatedMedia.provider,
+          statusUrl: statusUrl || (jobId ? `/api/ai/job/${encodeURIComponent(jobId)}` : undefined),
+          jobId: jobId || undefined,
+        })
+        return
+      }
 
       const shouldPollVideo =
         inlineMediaKind === "video" &&

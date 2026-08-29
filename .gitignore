@@ -42,3 +42,4 @@ GPUCache
 .DS_Store
 
 app/templates/sovereign-hub-ui/public/nasa/nasa-cosmic-cliffs.png
+app/data/media_jobs.json
