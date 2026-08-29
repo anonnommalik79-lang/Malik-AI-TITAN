@@ -74,6 +74,7 @@ const PRIMARY_ACTIONS: SidebarAction[] = [
   { id: "library", label: "Библиотека", icon: LayoutTemplate, view: "templates" },
   { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects" },
   { id: "plugins", label: "Плагины", icon: Plug, view: "features" },
+  { id: "websites", label: "Сайты", icon: LayoutTemplate, view: "website-generation" },
   { id: "video-generation", label: "Генерация видео", icon: Video, view: "video-generation" },
   { id: "compute", label: "Compute", icon: Cpu, view: "compute" },
   { id: "translate", label: "Переводчик", icon: Languages, action: "translate" },
