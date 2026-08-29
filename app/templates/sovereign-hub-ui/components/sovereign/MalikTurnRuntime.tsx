@@ -231,7 +231,7 @@ export function MalikTurnRuntime() {
 
     const fieldFromMouseEvent = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target : null
-      const button = target?.closest(SEND_BUTTON_SELECTOR)
+      const button = target?.closest(SEND_BUTTON_SELECTOR) || null
       return composerFieldForButton(button)
     }
 
