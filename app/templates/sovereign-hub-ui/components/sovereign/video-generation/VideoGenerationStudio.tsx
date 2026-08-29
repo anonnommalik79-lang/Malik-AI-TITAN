@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowUp, Camera, Check, ChevronDown, Film, Play, Plus, Sparkles, Volume2 } from "lucide-react"
+import { ArrowUp, Camera, Check, ChevronDown, Play, Plus, Sparkles, Volume2 } from "lucide-react"
 import { canUseGeneration, incrementUsage, isOwnerUser } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import type { VideoAiTemplate } from "@/lib/media-library"
@@ -368,15 +368,6 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             <AutoLoopVideo src={hero.src} poster={hero.poster} className="mv__showcase-video" />
           )}
           <div className="mv__showcase-vignette" />
-          <div className="mv__showcase-top">
-            <span className="mv__brand-mark" aria-hidden="true">M</span>
-            <span>MalikVideo</span>
-          </div>
-          <div className="mv__showcase-bottom">
-            <span className="mv__showcase-kicker"><Film size={13} /> SHOWCASE</span>
-            <strong>{videoUrl ? "Ваше видео готово" : hero.title}</strong>
-            <span>{videoUrl ? `${providerLabel} · 1080p` : `${hero.provider} · ${hero.tag}`}</span>
-          </div>
 
           {busy ? (
             <div className="mv__render-state" aria-live="polite">
@@ -481,13 +472,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         :global(.mv__showcase-video){width:100%;height:100%;display:block;background:#030303;object-position:center center}
         .mv__showcase-video--result{width:100%;height:100%;display:block;background:#030303;object-fit:contain}
         .mv__showcase-vignette{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.12),transparent 24%,transparent 62%,rgba(0,0,0,.78)),linear-gradient(90deg,rgba(0,0,0,.14),transparent 36%)}
-        .mv__showcase-top{position:absolute;top:24px;left:24px;display:flex;align-items:center;gap:10px;z-index:2;font-size:14px;font-weight:720;letter-spacing:-.01em}
-        .mv__brand-mark{width:34px;height:34px;border-radius:10px;background:#fff;color:#050505;display:grid;place-items:center;font-size:15px;font-weight:900;box-shadow:0 10px 30px rgba(0,0,0,.25)}
-        .mv__showcase-bottom{position:absolute;left:28px;right:28px;bottom:30px;z-index:2;display:flex;flex-direction:column;gap:6px;text-shadow:0 2px 20px #000}
-        .mv__showcase-kicker{display:flex;align-items:center;gap:7px;color:rgba(255,255,255,.7);font-size:10px;font-weight:700;letter-spacing:.13em}
-        .mv__showcase-bottom strong{font-size:clamp(28px,3vw,46px);line-height:.98;letter-spacing:-.055em;font-weight:680}
-        .mv__showcase-bottom>span:last-child{font-size:12px;color:rgba(255,255,255,.72)}
-        .mv__workspace{min-width:0;height:100dvh;overflow-y:auto;padding:34px clamp(28px,4vw,64px) 48px;background:#000}
+        .mv__workspace{min-width:0;height:100dvh;overflow-y:auto;padding:34px clamp(28px,4vw,64px) 48px;background:#000;scrollbar-width:none;-ms-overflow-style:none}
+        .mv__workspace::-webkit-scrollbar{display:none}
         .mv__header{max-width:1000px;margin:0 auto 24px;display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
         .mv__eyebrow{color:#656770;font-size:10px;font-weight:750;letter-spacing:.16em}
         .mv__header h1{margin:10px 0 0;font-size:clamp(38px,4.4vw,64px);line-height:.96;letter-spacing:-.065em;font-weight:660}
