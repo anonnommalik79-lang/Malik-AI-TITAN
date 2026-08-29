@@ -48,6 +48,8 @@ import "./malik-zero-blue-final.css"
 import "./uber-wordmark-final.css"
 // Final desktop sidebar brand mark size. Must load after all legacy sidebar rules.
 import "./sidebar-brand-mark-final.css"
+// Final MalikVideo phone geometry. Loaded last so the mobile reference wins.
+import "./video-mobile-reference-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
@@ -122,7 +124,7 @@ const organizationJsonLd = {
   "@type": "Organization",
   "@id": `${SITE_URL}/#organization`,
   name: SITE_NAME,
-  url: `${SITE_URL}/`,
+  url: SITE_URL,
   logo: `${SITE_URL}/icon`,
 }
 
