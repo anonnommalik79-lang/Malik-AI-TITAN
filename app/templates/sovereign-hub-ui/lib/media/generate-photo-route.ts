@@ -14,6 +14,38 @@ import type { ImageAspectRatio, ImageMode } from "./types"
 const ASPECTS = new Set<ImageAspectRatio>(["1:1", "16:9", "9:16", "4:5", "4:3"])
 const MODES = new Set<ImageMode>(["cinematic", "realistic", "product", "design"])
 const IMAGE_COMMAND = /^\s*\/(?:image|img|photo|foto|фото|картинка)(?![\p{L}\p{N}_])\s*:?\s*/iu
+const IMAGE_GENERATION_LOCK_TTL_MS = 3 * 60 * 1000
+
+type ActiveImageGeneration = { token: string; startedAt: number }
+type MalikImageGlobal = typeof globalThis & {
+  __malikActiveImageGenerations?: Map<string, ActiveImageGeneration>
+}
+
+function imageGenerationLocks() {
+  const scope = globalThis as MalikImageGlobal
+  if (!scope.__malikActiveImageGenerations) scope.__malikActiveImageGenerations = new Map()
+  return scope.__malikActiveImageGenerations
+}
+
+function acquireImageGenerationLock(userId: string) {
+  const locks = imageGenerationLocks()
+  const now = Date.now()
+  const existing = locks.get(userId)
+  if (existing && now - existing.startedAt < IMAGE_GENERATION_LOCK_TTL_MS) return null
+  if (existing) locks.delete(userId)
+
+  const token = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${now}-${Math.random().toString(36).slice(2)}`
+  locks.set(userId, { token, startedAt: now })
+  return token
+}
+
+function releaseImageGenerationLock(userId: string, token: string) {
+  const locks = imageGenerationLocks()
+  const current = locks.get(userId)
+  if (current?.token === token) locks.delete(userId)
+}
 
 function cookieValue(request: Request, name: string): string {
   const raw = request.headers.get("cookie") || ""
@@ -79,62 +111,82 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     }, { status: 429 })
   }
 
-  const result = await routeImageGeneration({
-    prompt,
-    aspectRatio,
-    mode,
-    modelId,
-    userId: user.userId,
-    plan: user.plan,
-  }, { signal: request.signal })
-
-  if (!result.ok) {
+  // Hard server-side single-flight guard. The UI already disables Send while a
+  // request is loading, but a very fast double tap can happen before React has
+  // committed that state. Never let a second image request race the first and
+  // make an older result appear under a newer prompt.
+  const generationLock = acquireImageGenerationLock(user.userId)
+  if (!generationLock) {
     return Response.json({
       ok: false,
       status: "failed",
-      error: result.error || "IMAGE_GENERATION_FAILED",
-      publicError: result.error || "Не удалось сгенерировать изображение.",
+      error: "IMAGE_GENERATION_ALREADY_RUNNING",
+      publicError: "Дождитесь завершения текущей генерации фото. Второй запрос не перебьёт первый.",
+      modelId,
+      modelLabel: imageModel.label,
+    }, { status: 409 })
+  }
+
+  try {
+    const result = await routeImageGeneration({
+      prompt,
+      aspectRatio,
+      mode,
+      modelId,
+      userId: user.userId,
+      plan: user.plan,
+    }, { signal: request.signal })
+
+    if (!result.ok) {
+      return Response.json({
+        ok: false,
+        status: "failed",
+        error: result.error || "IMAGE_GENERATION_FAILED",
+        publicError: result.error || "Не удалось сгенерировать изображение.",
+        provider: result.provider,
+        modelId,
+        modelLabel: imageModel.label,
+        providerModel: result.providerModel || imageModel.providerModel,
+        remainingDailyImages: limit.remaining,
+        resetAt: nextMediaResetAt(),
+      }, { status: 502 })
+    }
+
+    await recordMediaUsage(user.userId, "image")
+    const remaining = Math.max(0, limit.remaining - 1)
+
+    let storageUrl: string | undefined
+    if (result.base64 || result.imageUrl.startsWith("data:")) {
+      const { uploadMediaAsset } = await import("@/lib/storage/cloud-upload")
+      const uploaded = await uploadMediaAsset({
+        userId: user.userId,
+        fileName: `generated-${Date.now()}.jpg`,
+        mime: "image/jpeg",
+        base64: result.base64 || result.imageUrl,
+        kind: "image",
+      })
+      if (uploaded.stored) storageUrl = uploaded.publicUrl
+    }
+
+    const imageUrl = storageUrl || result.imageUrl
+    return Response.json({
+      ok: true,
+      status: "ready",
+      kind: "photo",
       provider: result.provider,
+      engine: imageModel.label,
       modelId,
       modelLabel: imageModel.label,
       providerModel: result.providerModel || imageModel.providerModel,
-      remainingDailyImages: limit.remaining,
+      imageUrl,
+      url: imageUrl,
+      mediaUrl: imageUrl,
+      storageUrl,
+      remainingDailyImages: remaining,
       resetAt: nextMediaResetAt(),
-    }, { status: 502 })
-  }
-
-  await recordMediaUsage(user.userId, "image")
-  const remaining = Math.max(0, limit.remaining - 1)
-
-  let storageUrl: string | undefined
-  if (result.base64 || result.imageUrl.startsWith("data:")) {
-    const { uploadMediaAsset } = await import("@/lib/storage/cloud-upload")
-    const uploaded = await uploadMediaAsset({
-      userId: user.userId,
-      fileName: `generated-${Date.now()}.jpg`,
-      mime: "image/jpeg",
-      base64: result.base64 || result.imageUrl,
-      kind: "image",
+      plan: limit.plan,
     })
-    if (uploaded.stored) storageUrl = uploaded.publicUrl
+  } finally {
+    releaseImageGenerationLock(user.userId, generationLock)
   }
-
-  const imageUrl = storageUrl || result.imageUrl
-  return Response.json({
-    ok: true,
-    status: "ready",
-    kind: "photo",
-    provider: result.provider,
-    engine: imageModel.label,
-    modelId,
-    modelLabel: imageModel.label,
-    providerModel: result.providerModel || imageModel.providerModel,
-    imageUrl,
-    url: imageUrl,
-    mediaUrl: imageUrl,
-    storageUrl,
-    remainingDailyImages: remaining,
-    resetAt: nextMediaResetAt(),
-    plan: limit.plan,
-  })
 }

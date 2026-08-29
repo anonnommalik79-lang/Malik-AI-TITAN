@@ -2,6 +2,10 @@
 
 let lastStartedAt = 0
 let activeContext: AudioContext | null = null
+let generationLoopTimer: number | null = null
+let generationLoopActive = false
+
+const GENERATION_SOUND_CYCLE_MS = 7200
 
 function getAudioContextClass() {
   if (typeof window === "undefined") return null
@@ -88,21 +92,86 @@ function ensureContext() {
   return activeContext
 }
 
+function photoAnimationStillBusy() {
+  if (typeof document === "undefined") return generationLoopActive
+  return Boolean(document.querySelector('.malik-photo-motion[aria-busy="true"]'))
+}
+
+function stopGenerationSoundLoop() {
+  generationLoopActive = false
+  if (generationLoopTimer !== null && typeof window !== "undefined") {
+    window.clearTimeout(generationLoopTimer)
+  }
+  generationLoopTimer = null
+}
+
+function scheduleArtSequence(context: AudioContext) {
+  const startAt = context.currentTime + 0.025
+  scheduleScratch(context, startAt, 1.55)
+  scheduleMarkerClick(context, startAt + 1.72)
+  scheduleScratch(context, startAt + 1.86, 0.72)
+  scheduleSpray(context, startAt + 2.75, 1.75)
+}
+
+function playCurrentCycle(context: AudioContext) {
+  if (!generationLoopActive || !photoAnimationStillBusy()) {
+    stopGenerationSoundLoop()
+    return
+  }
+
+  const play = () => {
+    if (!generationLoopActive || !photoAnimationStillBusy()) {
+      stopGenerationSoundLoop()
+      return
+    }
+    scheduleArtSequence(context)
+  }
+
+  if (context.state === "suspended") {
+    void context.resume().then(play).catch(() => undefined)
+  } else {
+    play()
+  }
+
+  generationLoopTimer = window.setTimeout(() => playCurrentCycle(context), GENERATION_SOUND_CYCLE_MS)
+}
+
 export function playImageGenerationStartSound() {
   if (typeof window === "undefined") return
   const now = Date.now()
-  if (now - lastStartedAt < 1200) return
+  if (generationLoopActive || now - lastStartedAt < 300) return
   lastStartedAt = now
 
   const context = ensureContext()
   if (!context) return
 
+  generationLoopActive = true
+  playCurrentCycle(context)
+}
+
+export function playImageGenerationCompleteSound() {
+  if (typeof window === "undefined") return
+  stopGenerationSoundLoop()
+
+  const context = ensureContext()
+  if (!context) return
+
   const play = () => {
-    const startAt = context.currentTime + 0.025
-    scheduleScratch(context, startAt, 1.55)
-    scheduleMarkerClick(context, startAt + 1.72)
-    scheduleScratch(context, startAt + 1.86, 0.72)
-    scheduleSpray(context, startAt + 2.75, 1.75)
+    const startAt = context.currentTime + 0.015
+    ;[523.25, 659.25, 783.99].forEach((frequency, index) => {
+      const oscillator = context.createOscillator()
+      const gain = context.createGain()
+      const noteAt = startAt + index * 0.085
+      oscillator.type = "sine"
+      oscillator.frequency.value = frequency
+      gain.gain.setValueAtTime(0.0001, noteAt)
+      gain.gain.exponentialRampToValueAtTime(0.042, noteAt + 0.015)
+      gain.gain.exponentialRampToValueAtTime(0.0001, noteAt + 0.28)
+      oscillator.connect(gain)
+      gain.connect(context.destination)
+      oscillator.start(noteAt)
+      oscillator.stop(noteAt + 0.3)
+    })
   }
 
   if (context.state === "suspended") {
@@ -111,26 +180,4 @@ export function playImageGenerationStartSound() {
   }
 
   play()
-}
-
-export function playImageGenerationCompleteSound() {
-  if (typeof window === "undefined") return
-  const context = ensureContext()
-  if (!context || context.state === "suspended") return
-
-  const startAt = context.currentTime + 0.015
-  ;[523.25, 659.25, 783.99].forEach((frequency, index) => {
-    const oscillator = context.createOscillator()
-    const gain = context.createGain()
-    const noteAt = startAt + index * 0.085
-    oscillator.type = "sine"
-    oscillator.frequency.value = frequency
-    gain.gain.setValueAtTime(0.0001, noteAt)
-    gain.gain.exponentialRampToValueAtTime(0.042, noteAt + 0.015)
-    gain.gain.exponentialRampToValueAtTime(0.0001, noteAt + 0.28)
-    oscillator.connect(gain)
-    gain.connect(context.destination)
-    oscillator.start(noteAt)
-    oscillator.stop(noteAt + 0.3)
-  })
 }

@@ -2,11 +2,15 @@ import { buildImageIntentPlan, type ImageIntentPlan } from "./image-intent-engin
 import type { ImageMode } from "./types"
 
 function modeContract(mode?: ImageMode) {
-  if (mode === "realistic") return "MODE LOCK: photorealistic; improve realism only, never alter requested content."
-  if (mode === "product") return "MODE LOCK: product photography; preserve exact object, materials, colors and requested text."
-  if (mode === "design") return "MODE LOCK: design; preserve exact content, layout intent and verbatim requested text."
-  if (mode === "cinematic") return "MODE LOCK: cinematic; lighting/camera may be cinematic, but subject, count, action and setting are immutable."
+  if (mode === "realistic") return "STYLE ONLY: photorealistic. Never change the requested subject or action."
+  if (mode === "product") return "STYLE ONLY: product photography. Never change the requested object, materials, colors or text."
+  if (mode === "design") return "STYLE ONLY: design rendering. Never change the requested content or layout intent."
+  if (mode === "cinematic") return "STYLE ONLY: cinematic lighting/composition. Never change the requested subject, count, action or setting."
   return ""
+}
+
+function unique(values: string[]) {
+  return values.map((value) => value.trim()).filter(Boolean).filter((value, index, list) => list.indexOf(value) === index)
 }
 
 function line(label: string, values: string[]) {
@@ -17,6 +21,72 @@ function planFor(compiledPrompt: string, rawPrompt: string, mode?: ImageMode, in
   return intent || buildImageIntentPlan(rawPrompt, compiledPrompt, mode)
 }
 
+type CriticalVisualLocks = {
+  subjects: string[]
+  actions: string[]
+  negatives: string[]
+  humanIntent: boolean
+}
+
+/**
+ * Image diffusion models follow short visual facts better than long policy-like
+ * prose. These locks recover high-value nouns/actions directly from the raw +
+ * compiled request, including common RU/KK/EN wording that may not yet exist in
+ * the deterministic intent lexicon. The compiled description remains the main
+ * source of truth; these are hard anchors against subject substitution.
+ */
+function criticalVisualLocks(rawPrompt: string, compiledPrompt: string): CriticalVisualLocks {
+  const text = `${rawPrompt} ${compiledPrompt}`.toLowerCase().replace(/ё/g, "е")
+  const subjects: string[] = []
+  const actions: string[] = []
+  const negatives: string[] = []
+
+  if (/(?:\bboxers?\b|\bboxing\s+(?:fighter|athlete)s?\b|боксер(?:а|ы|ов|ом|ами)?\b|боксёр(?:а|ы|ов|ом|ами)?\b)/iu.test(text)) {
+    subjects.push("boxer / boxing athlete")
+    negatives.push("fashion portrait instead of boxing", "unrelated lone portrait")
+  }
+  if (/(?:\bboat\b|\bboats\b|\bship\b|\bships\b|\byacht\b|\bwatercraft\b|лодк(?:а|у|и|ой|е)?\b|корабл(?:ь|я|и|ем|ей)\b|катер(?:а|ы|ом)?\b|яхт(?:а|у|ы|ой)?\b)/iu.test(text)) {
+    subjects.push("boat / ship / watercraft")
+    negatives.push("missing boat", "land vehicle instead of boat", "portrait instead of boat")
+  }
+  if (/(?:\bairplane\b|\bplane\b|\baircraft\b|самолет(?:а|ы|ом)?\b|самолёт(?:а|ы|ом)?\b)/iu.test(text)) {
+    subjects.push("airplane / aircraft")
+    negatives.push("missing aircraft", "portrait instead of aircraft")
+  }
+  if (/(?:\bhelicopter\b|вертолет(?:а|ы|ом)?\b|вертолёт(?:а|ы|ом)?\b)/iu.test(text)) {
+    subjects.push("helicopter")
+    negatives.push("missing helicopter", "portrait instead of helicopter")
+  }
+  if (/(?:\bbicycle\b|\bbike\b|велосипед(?:а|ы|ом)?\b)/iu.test(text)) subjects.push("bicycle")
+  if (/(?:\btrain\b|поезд(?:а|ы|ом)?\b)/iu.test(text)) subjects.push("train")
+  if (/(?:\btruck\b|грузовик(?:а|и|ом)?\b)/iu.test(text)) subjects.push("truck")
+  if (/(?:\bdragon\b|дракон(?:а|ы|ом)?\b)/iu.test(text)) subjects.push("dragon")
+  if (/(?:\bdinosaur\b|динозавр(?:а|ы|ом)?\b)/iu.test(text)) subjects.push("dinosaur")
+
+  if (/(?:\bfly(?:ing|ies)?\b|\bairborne\b|\bin the air\b|летающ|летящ|летит\b|в воздухе|ұшып|ұшатын)/iu.test(text)) {
+    actions.push("clearly airborne / visibly flying")
+    negatives.push("grounded when flight is requested", "only floating on water when flight is requested")
+  }
+  if (/(?:\bfight(?:ing|s)?\b|\bboxing match\b|\bboxing bout\b|\bcombat\b|бой\b|дер(?:утся|ется|ущийся)|сража|төбелес)/iu.test(text)) {
+    actions.push("active fight / combat between the requested subjects")
+    negatives.push("passive portrait instead of the requested fight", "subjects not interacting")
+  }
+  if (/(?:\bsit(?:ting|s)?\b|сидит\b|сидящ)/iu.test(text)) actions.push("sitting")
+  if (/(?:\brun(?:ning|s)?\b|бежит\b|бегущ)/iu.test(text)) actions.push("running")
+  if (/(?:\bjump(?:ing|s)?\b|прыга|прыжок)/iu.test(text)) actions.push("jumping")
+  if (/(?:\bswim(?:ming|s)?\b|плывет\b|плывёт\b|плава)/iu.test(text)) actions.push("swimming / moving through water")
+  if (/(?:\bdrive|driving\b|за рулем|за рулём|едет на)/iu.test(text)) actions.push("driving")
+  if (/(?:\bhold(?:ing|s)?\b|держит\b|держат\b)/iu.test(text)) actions.push("holding the requested object")
+
+  const humanIntent = /(?:\bperson\b|\bpeople\b|\bhuman\b|\bwoman\b|\bgirl\b|\bman\b|\bboy\b|\bboxers?\b|\bathlete\b|человек|люди|женщин|девуш|мужчин|парень|боксер|боксёр|спортсмен)/iu.test(text)
+  return {
+    subjects: unique(subjects),
+    actions: unique(actions),
+    negatives: unique(negatives),
+    humanIntent,
+  }
+}
+
 export function buildUnifiedStrictImagePrompt(
   compiledPrompt: string,
   rawPrompt: string,
@@ -24,46 +94,33 @@ export function buildUnifiedStrictImagePrompt(
   intent?: ImageIntentPlan,
 ) {
   const plan = planFor(compiledPrompt, rawPrompt, mode, intent)
+  const critical = criticalVisualLocks(rawPrompt, compiledPrompt)
+  const subjects = unique([...critical.subjects, ...plan.subjectCategories])
+  const visualRequest = String(plan.compiledPrompt || plan.semanticText || plan.normalizedRequest || rawPrompt).trim()
 
-  // Contract is deliberately placed first: if a provider truncates the tail,
-  // semantic locks survive while optional prose is what gets dropped.
-  const contract = [
-    "MALIK IMAGE SEMANTIC LOCK — HIGHEST PRIORITY, NON-NEGOTIABLE:",
-    "Treat the ORIGINAL USER REQUEST as authoritative evidence and the LOCKED INTENT fields below as hard constraints.",
-    "Never substitute, remove, merge, split or duplicate a requested main subject.",
-    "Never change subject category/species/identity, exact count, action, pose, relationship, setting, camera view, requested colors, materials, clothing or important attributes.",
-    "Do not invent extra main people, portraits, animals, vehicles, props, brands, logos, signs or visible text unless explicitly requested.",
-    "Visible text is literal data: keep every requested character, word, language and spelling exactly as provided.",
-    "Style, beauty, lighting and composition are secondary. If any artistic choice conflicts with literal content, literal content wins.",
-    "Do not turn a robot into a person, a vehicle into a portrait, an animal into a human, or any requested object into an unrelated scene.",
-    "If wording is noisy, accented, misspelled or mixed-language, preserve the recovered meaning instead of guessing a different subject.",
-    "When uncertain, choose the interpretation closest to the original words and add nothing that was not requested.",
-  ].join("\n")
-
-  const lockedIntent = [
-    `INTENT FINGERPRINT: ${plan.fingerprint}`,
-    `INPUT LANGUAGE: ${plan.language}`,
-    line("LOCKED SUBJECTS", plan.subjectCategories),
-    plan.count ? `LOCKED MAIN-SUBJECT COUNT: ${plan.count}` : "LOCKED MAIN-SUBJECT COUNT: unspecified — do not duplicate the main subject without evidence",
-    line("LOCKED COLORS", plan.colors),
-    line("LOCKED SETTINGS", plan.settings),
-    line("LOCKED CAMERA", plan.camera),
-    line("LOCKED STYLE", plan.styles),
-    line("MUST INCLUDE", plan.mustInclude),
+  // Keep the actual scene description FIRST and the constraint block SHORT.
+  // Diffusion/image models are not chat LLMs: huge instruction contracts can
+  // dilute the visual nouns. This format maximizes prompt adherence while still
+  // preserving the deterministic locks prepared by Malik AI.
+  const hardFacts = [
+    subjects.length
+      ? `PRIMARY SUBJECT — MUST APPEAR: ${subjects.join(" | ")}`
+      : `PRIMARY SUBJECT — MUST APPEAR: preserve the exact main noun/object from this request: ${plan.semanticText || plan.normalizedRequest}`,
+    plan.count ? `EXACT MAIN-SUBJECT COUNT: ${plan.count}` : "",
+    line("REQUIRED ACTION", critical.actions),
+    line("REQUIRED COLORS", plan.colors),
+    line("REQUIRED SETTING", plan.settings),
+    line("REQUIRED CAMERA", plan.camera),
     line("MUST NOT INCLUDE", plan.mustNotInclude),
-    line("VISIBLE TEXT VERBATIM", plan.visibleText),
-    line("PRIORITY ORDER", plan.priorityOrder),
-    line("AMBIGUITY RULES", plan.ambiguityFlags),
+    line("VISIBLE TEXT — COPY VERBATIM", plan.visibleText),
   ].filter(Boolean).join("\n")
 
   return [
-    contract,
-    lockedIntent,
+    `IMAGE TO RENDER — FOLLOW THIS VISUAL DESCRIPTION LITERALLY:\n${visualRequest}`,
+    `NON-NEGOTIABLE VISUAL FACTS:\n${hardFacts}`,
     modeContract(mode),
-    `SEMANTIC NORMALIZATION (for typo/accent recovery only): ${plan.semanticText}`,
-    `COMPILED IMAGE PROMPT: ${plan.compiledPrompt}`,
-    `ORIGINAL USER REQUEST — AUTHORITATIVE: ${plan.rawRequest}`,
-    "FINAL EXECUTION RULE: render one image that satisfies all locked facts simultaneously. Do not paraphrase the task again before rendering.",
+    "FIDELITY RULE: subject, count and action are more important than beauty/style. Never replace the requested subject with an unrelated person, portrait, object or scene. Do not invent a dominant forest/portrait/background when it was not requested.",
+    `ORIGINAL USER REQUEST — AUTHORITATIVE IF ANY DOUBT: ${plan.rawRequest}`,
   ].filter(Boolean).join("\n\n")
 }
 
@@ -74,54 +131,47 @@ export function buildUnifiedNegativePrompt(
   intent?: ImageIntentPlan,
 ) {
   const plan = planFor(compiledPrompt || rawPrompt, rawPrompt, mode, intent)
+  const critical = criticalVisualLocks(rawPrompt, compiledPrompt)
+  const subjects = unique([...critical.subjects, ...plan.subjectCategories]).join(" ").toLowerCase()
   const base = [
     "unrelated subject",
-    "wrong subject",
+    "wrong main subject",
     "subject substitution",
-    "wrong object category",
-    "wrong species",
-    "wrong identity",
+    "missing requested subject",
     "wrong count",
-    "extra main subject",
-    "duplicated main subject",
-    "missing main subject",
     "wrong action",
-    "wrong relationship",
-    "wrong setting",
-    "wrong pose",
-    "wrong camera view",
-    "wrong colors",
-    "wrong materials",
-    "wrong clothing",
     "random portrait",
-    "unrequested text",
-    "misspelled requested text",
-    "random logo",
-    "random brand",
+    "unrequested dominant scene",
+    "random cloaked figure",
     "watermark",
+    "random text",
     "blurry",
     "low detail",
-    "malformed anatomy",
-    "distorted geometry",
+    ...critical.negatives,
   ]
 
-  const subjects = plan.subjectCategories.join(" ").toLowerCase()
-  const asksHuman = /(?:human|person|woman|girl|man|boy|football player)/i.test(subjects)
-
-  if (!asksHuman) {
-    base.push("random person", "human portrait", "fashion portrait")
+  if (!critical.humanIntent && subjects) {
+    base.push("random woman", "random girl", "random man", "human portrait as main subject", "fashion portrait")
   }
 
-  if (/(?:robot|transformer|mecha)/i.test(subjects) && !asksHuman) {
-    base.push("human face as main subject", "ordinary human body", "person instead of robot", "missing robot")
+  if (/(?:robot|transformer|mecha)/i.test(subjects) && !critical.humanIntent) {
+    base.push("person instead of robot", "human face as main subject", "missing robot")
   }
 
-  if (/(?:vehicle|car|motorcycle)/i.test(subjects) && !asksHuman) {
-    base.push("portrait instead of vehicle", "person instead of vehicle", "missing vehicle")
+  if (/(?:vehicle|car|motorcycle|aircraft|airplane|helicopter|boat|ship|watercraft|train|truck|bicycle)/i.test(subjects) && !critical.humanIntent) {
+    base.push("portrait instead of requested vehicle/object", "missing requested vehicle/object")
   }
 
-  if (/(?:cat|dog|horse|bird)/i.test(subjects) && !asksHuman) {
-    base.push("human instead of animal", "wrong animal species", "missing animal")
+  if (/(?:cat|dog|horse|bird|dragon|dinosaur)/i.test(subjects) && !critical.humanIntent) {
+    base.push("human instead of requested creature", "missing requested creature")
+  }
+
+  if (plan.count === 2) {
+    base.push("only one main subject", "three or more main subjects")
+  }
+
+  if (!plan.settings.some((setting) => /forest/i.test(setting))) {
+    base.push("unrequested forest as dominant background")
   }
 
   for (const excluded of plan.mustNotInclude) {
