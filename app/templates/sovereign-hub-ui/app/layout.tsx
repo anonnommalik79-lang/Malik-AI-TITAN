@@ -51,6 +51,8 @@ import "./uber-wordmark-final.css"
 import "./sidebar-brand-mark-final.css"
 // Final MalikVideo phone geometry. Loaded last so the mobile reference wins.
 import "./video-mobile-reference-final.css"
+// Final home composer geometry: model selector sits beside + on phones.
+import "./mobile-composer-model-position-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
