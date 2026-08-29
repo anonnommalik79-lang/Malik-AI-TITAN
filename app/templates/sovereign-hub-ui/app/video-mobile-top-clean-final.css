@@ -1,0 +1,250 @@
+/* MALIK VIDEO — final top-section cleanup for phones.
+   Keeps the one-line title readable, prevents Library overlap, and gives the
+   composer/model controls one coherent premium rhythm. Video cards below stay untouched. */
+@media (max-width: 820px) {
+  #malik-root .mv[data-view="video-generation"] .mv__workspace {
+    padding-top: 14px !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__header {
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    min-height: 80px !important;
+    margin: 0 0 14px !important;
+    padding: 0 !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__header > div {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding-right: 98px !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__eyebrow {
+    display: block !important;
+    height: 14px !important;
+    color: #777982 !important;
+    font-size: 7.5px !important;
+    font-weight: 760 !important;
+    line-height: 14px !important;
+    letter-spacing: .17em !important;
+    white-space: nowrap !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__header h1 {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 15px 0 0 !important;
+    padding: 0 !important;
+    color: #f7f7f8 !important;
+    font-size: clamp(25px, 6.65vw, 31px) !important;
+    font-weight: 720 !important;
+    line-height: 1.02 !important;
+    letter-spacing: -.048em !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__library-btn {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    z-index: 2 !important;
+    display: inline-flex !important;
+    width: auto !important;
+    height: 34px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 11px !important;
+    border: 1px solid rgba(255,255,255,.09) !important;
+    border-radius: 11px !important;
+    background: #15161a !important;
+    color: #e9e9ec !important;
+    font-size: 10px !important;
+    font-weight: 620 !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__composer-shell {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__notice {
+    min-height: 34px !important;
+    height: 34px !important;
+    gap: 6px !important;
+    padding: 0 10px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(255,255,255,.085) !important;
+    border-bottom: 0 !important;
+    border-radius: 16px 16px 0 0 !important;
+    background: #111216 !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__notice > span {
+    flex: 0 0 auto !important;
+    padding: 2px 6px !important;
+    border-color: rgba(255,255,255,.16) !important;
+    font-size: 7px !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__notice > strong {
+    flex: 0 0 auto !important;
+    font-size: 8.5px !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__notice p {
+    display: block !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    color: #787a83 !important;
+    font-size: 7px !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__composer {
+    min-height: 146px !important;
+    padding: 12px !important;
+    border: 1px solid rgba(255,255,255,.09) !important;
+    border-radius: 0 0 16px 16px !important;
+    background: #15161a !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__composer textarea {
+    display: block !important;
+    width: 100% !important;
+    min-height: 88px !important;
+    max-height: 110px !important;
+    margin: 0 !important;
+    padding: 0 1px !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: #ededf0 !important;
+    font-size: 13px !important;
+    line-height: 1.42 !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__composer-bottom {
+    display: flex !important;
+    min-height: 40px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    margin-top: 4px !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__plus {
+    width: 38px !important;
+    height: 38px !important;
+    flex: 0 0 38px !important;
+    border: 1px solid rgba(255,255,255,.06) !important;
+    border-radius: 11px !important;
+    background: #1a1b1f !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__composer-actions {
+    display: flex !important;
+    min-width: 0 !important;
+    align-items: center !important;
+    gap: 7px !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__quality {
+    height: 38px !important;
+    max-width: 170px !important;
+    padding: 0 10px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(255,255,255,.085) !important;
+    border-radius: 11px !important;
+    background: #1a1b1f !important;
+    color: #e8e8eb !important;
+    font-size: 10px !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__send {
+    width: 40px !important;
+    height: 40px !important;
+    flex: 0 0 40px !important;
+    border-radius: 11px !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__model-row {
+    display: grid !important;
+    grid-template-columns: 1.08fr 1fr .92fr !important;
+    width: 100% !important;
+    gap: 7px !important;
+    margin-top: 9px !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__model-row button {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 36px !important;
+    justify-content: center !important;
+    gap: 5px !important;
+    padding: 0 7px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(255,255,255,.075) !important;
+    border-radius: 11px !important;
+    background: #131418 !important;
+    color: #d9dade !important;
+    font-size: 8.5px !important;
+    font-weight: 560 !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__model-row .is-active {
+    border-color: rgba(255,255,255,.12) !important;
+    background: #18191e !important;
+    color: #fff !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__statusbar {
+    min-height: 18px !important;
+    margin: 9px 2px 11px !important;
+    gap: 6px !important;
+    overflow: hidden !important;
+    font-size: 8px !important;
+    white-space: nowrap !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__statusbar strong {
+    font-size: 8px !important;
+  }
+}
+
+@media (max-width: 430px) {
+  #malik-root .mv[data-view="video-generation"] .mv__header {
+    min-height: 76px !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__header h1 {
+    font-size: clamp(23px, 6.35vw, 27px) !important;
+    letter-spacing: -.045em !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__quality {
+    max-width: 152px !important;
+    font-size: 9.5px !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__model-row button {
+    padding: 0 5px !important;
+    font-size: 8px !important;
+  }
+}
