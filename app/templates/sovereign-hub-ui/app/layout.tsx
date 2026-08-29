@@ -3,6 +3,7 @@ import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components"
 import { NoBlueUiGuard } from "@/components/sovereign/NoBlueUiGuard"
 import { MalikSearchMotion } from "@/components/sovereign/MalikSearchMotion"
 import { MalikTurnRuntime } from "@/components/sovereign/MalikTurnRuntime"
+import { MalikStopPolish } from "@/components/sovereign/MalikStopPolish"
 import "./globals.css"
 import "./mobile-polish.css"
 import "./legendary-aurora.css"
@@ -154,6 +155,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <NoBlueUiGuard />
         <MalikSearchMotion />
         <MalikTurnRuntime />
+        <MalikStopPolish />
         <AuthKitProvider>
           <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden bg-black notranslate">
             {children}
