@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowUp, Camera, Check, ChevronDown, Film, Play, Plus, Sparkles, Volume2 } from "lucide-react"
 import { canUseGeneration, incrementUsage, isOwnerUser } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
-import { VIDEO_AI_TEMPLATES, type VideoAiTemplate } from "@/lib/media-library"
+import type { VideoAiTemplate } from "@/lib/media-library"
 import { takePrefillPrompt } from "@/lib/malik-context"
 
 export type VideoGenerationStudioProps = {
@@ -22,7 +22,63 @@ type GenerationPhase = "idle" | "queued" | "rendering" | "ready" | "failed"
 const ENDPOINT = "/api/media/video"
 const DEFAULT_PROMPT = "Ночной Алматы после дождя. Чёрный премиальный автомобиль медленно едет по мокрой улице, отражения городских огней на асфальте, камера низко следует сбоку, реалистичная физика, кинематографичный свет и естественный звук города."
 const CATEGORIES = ["Кино", "Реклама", "Соцсети", "Персонажи", "Эксперимент"] as const
-const CARD_IDS = ["v06", "v08", "v10", "v04"] as const
+const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
+  {
+    id: "malik-transformer-flight",
+    title: "Transformer Flight",
+    provider: "MalikVideo 1.0",
+    tag: "Hero · 1080p",
+    theme: "Трансформер",
+    src: "/videos/malik-showcase/hero-transformer.mp4",
+    poster: "/videos/malik-showcase/hero-transformer.jpg",
+    prompt: "Летящий трансформер над улицами мегаполиса, динамичная камера, кинематографичный свет.",
+    tint: "rgba(10,10,12,.3)",
+  },
+  {
+    id: "malik-ancient-worlds",
+    title: "Ancient Worlds",
+    provider: "MalikVideo 1.0",
+    tag: "Environment · 1080p",
+    theme: "Руины",
+    src: "/videos/malik-showcase/ancient-ruins.mp4",
+    poster: "/videos/malik-showcase/ancient-ruins.jpg",
+    prompt: "Древние руины на рассвете, мягкий солнечный свет, плавный cinematic flythrough.",
+    tint: "rgba(10,10,12,.3)",
+  },
+  {
+    id: "malik-epic-motion",
+    title: "Epic Motion",
+    provider: "MalikVideo 1.0",
+    tag: "Action · 1080p",
+    theme: "Сражение",
+    src: "/videos/malik-showcase/cinematic-battle.mp4",
+    poster: "/videos/malik-showcase/cinematic-battle.jpg",
+    prompt: "Эпическая сцена сражения, огонь и дым, стремительное движение камеры, кинематограф.",
+    tint: "rgba(10,10,12,.3)",
+  },
+  {
+    id: "malik-mecha-impact",
+    title: "Mecha Impact",
+    provider: "MalikVideo 1.0",
+    tag: "Mecha · 1080p",
+    theme: "Мех",
+    src: "/videos/malik-showcase/mecha-impact.mp4",
+    poster: "/videos/malik-showcase/mecha-impact.jpg",
+    prompt: "Гигантский мех приземляется в городе, искры и пыль, сильный удар камеры.",
+    tint: "rgba(10,10,12,.3)",
+  },
+  {
+    id: "malik-alpine-flight",
+    title: "Alpine Flight",
+    provider: "MalikVideo 1.0",
+    tag: "Vertical · 1080p",
+    theme: "Экшен",
+    src: "/videos/malik-showcase/alpine-flight.mp4",
+    poster: "/videos/malik-showcase/alpine-flight.jpg",
+    prompt: "Экстремальный полёт над снежными горами, вертикальный кадр, яркий дневной свет.",
+    tint: "rgba(10,10,12,.3)",
+  },
+]
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -92,12 +148,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const owner = isOwnerUser(operator)
 
   const hero = useMemo<VideoAiTemplate>(() => {
-    return VIDEO_AI_TEMPLATES.find((item) => item.id === "v01") || VIDEO_AI_TEMPLATES[0]
+    return SHOWCASE_TEMPLATES[0]
   }, [])
 
   const cards = useMemo<VideoAiTemplate[]>(() => {
-    const selected = CARD_IDS.map((id) => VIDEO_AI_TEMPLATES.find((item) => item.id === id)).filter(Boolean) as VideoAiTemplate[]
-    return selected.length === 4 ? selected : VIDEO_AI_TEMPLATES.slice(1, 5)
+    return SHOWCASE_TEMPLATES.slice(1)
   }, [])
 
   const [prompt, setPrompt] = useState(() => takePrefillPrompt() || DEFAULT_PROMPT)
