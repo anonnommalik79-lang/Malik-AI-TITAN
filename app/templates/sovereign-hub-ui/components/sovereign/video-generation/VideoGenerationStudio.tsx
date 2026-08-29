@@ -24,14 +24,14 @@ const DEFAULT_PROMPT = "Ночной Алматы после дождя. Чёр�
 const CATEGORIES = ["Кино", "Реклама", "Соцсети", "Персонажи", "Эксперимент"] as const
 const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
   {
-    id: "malik-animated-city",
-    title: "Animated City",
+    id: "malik-epic-motion",
+    title: "Epic Motion",
     provider: "MalikVideo 1.0",
-    tag: "Restyle · 1080p",
-    theme: "Анимация",
-    src: "/videos/malik-showcase/restyle-2.mp4",
-    poster: "/videos/malik-showcase/restyle-2.jpg",
-    prompt: "Анимационный герой на скейтборде в фантастическом городе, выразительная перспектива и кинематографичное движение.",
+    tag: "Action · 1080p",
+    theme: "Сражение",
+    src: "/videos/malik-showcase/cinematic-battle.mp4",
+    poster: "/videos/malik-showcase/cinematic-battle.jpg",
+    prompt: "Эпическая сцена сражения, огонь и дым, стремительное движение камеры, кинематограф.",
     tint: "rgba(10,10,12,.3)",
   },
   {
@@ -46,14 +46,14 @@ const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
     tint: "rgba(10,10,12,.3)",
   },
   {
-    id: "malik-epic-motion",
-    title: "Epic Motion",
+    id: "malik-animated-city",
+    title: "Animated City",
     provider: "MalikVideo 1.0",
-    tag: "Action · 1080p",
-    theme: "Сражение",
-    src: "/videos/malik-showcase/cinematic-battle.mp4",
-    poster: "/videos/malik-showcase/cinematic-battle.jpg",
-    prompt: "Эпическая сцена сражения, огонь и дым, стремительное движение камеры, кинематограф.",
+    tag: "Restyle · 1080p",
+    theme: "Анимация",
+    src: "/videos/malik-showcase/restyle-2.mp4",
+    poster: "/videos/malik-showcase/restyle-2.jpg",
+    prompt: "Анимационный герой на скейтборде в фантастическом городе, выразительная перспектива и кинематографичное движение.",
     tint: "rgba(10,10,12,.3)",
   },
   {
