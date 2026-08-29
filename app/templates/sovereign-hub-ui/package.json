@@ -22,7 +22,8 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build",
     "clean": "node -e \"const fs=require('fs'); for (const p of ['.next','out']) if (fs.existsSync(p)) fs.rmSync(p,{recursive:true,force:true});\"",
-    "test:attachment-menu": "node scripts/verify-attachment-menu.mjs"
+    "test:attachment-menu": "node scripts/verify-attachment-menu.mjs",
+    "test:media": "node scripts/verify-media-urls.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",

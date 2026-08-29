@@ -46,6 +46,7 @@ import { MalikModelSelector } from "./MalikModelSelector"
 import { canUseUltra, loadResponseDepth, type ChatSendOptions, type ResponseDepth } from "@/lib/ai/response-depth"
 import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 import { isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
+import { isDataSvgUrl, isImageLikeUrl, isRealVideoUrl } from "@/lib/media/media-url"
 import { ImageGenerationMotion } from "./image-generation-motion"
 
 export type { ChatSendOptions }
@@ -122,6 +123,8 @@ export type InlineMediaGeneration = {
   provider?: string
   progress?: number
   url?: string
+  /** Inline copy of the finished image, used only when `url` cannot be loaded. */
+  fallbackUrl?: string
   thumbnailUrl?: string
   jobId?: string
   statusUrl?: string
@@ -201,27 +204,8 @@ function AttachmentPill({ item, onRemove }: { item: ChatAttachment; onRemove: ()
   )
 }
 
-function isDataSvgUrl(url?: string) {
-  return typeof url === "string" && url.startsWith("data:image/svg+xml")
-}
-
-function isRealVideoUrl(url?: string) {
-  if (!url || typeof url !== "string") return false
-  const value = url.toLowerCase()
-  if (value.includes("/status") || value.includes("status?") || value.includes("/api/generate/video/status") || value.includes("/api/ai/video/status") || value.includes("/api/media/video/status")) return false
-  if (url.startsWith("blob:")) return true
-  if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) return false
-  return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url) || /output\.mp4|\.mp4\?|\.webm\?|rendered-video/i.test(url)
-}
-
-function isImageLikeUrl(url?: string) {
-  if (!url || typeof url !== "string") return false
-  if (isDataSvgUrl(url)) return true
-  if (url.startsWith("data:image/")) return true
-  if (url.startsWith("malik-image://")) return true
-  if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) return false
-  const value = url.toLowerCase(); if (value.includes("/api/") || value.includes("/status") || value.includes("status?")) return false; return /\.(png|jpg|jpeg|webp|gif|svg)(\?|#|$)/i.test(url) || /image|thumbnail|poster|preview|asset/i.test(url)
-}
+// Shared with the media pipeline and unit-tested there: a finished file must be
+// told apart from a job/status endpoint. See lib/media/media-url.ts.
 
 function isProcessingStatus(status: InlineMediaGenerationStatus) {
   return status === "queued" || status === "thinking" || status === "generating" || status === "rendering"
@@ -319,6 +303,13 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
       <ImageGenerationMotion
         prompt={liveMedia.prompt}
         resultUrl={previewImage ? url : undefined}
+        fallbackUrl={isImageLikeUrl(liveMedia.fallbackUrl) ? liveMedia.fallbackUrl : undefined}
+        // The card now follows the job's real lifecycle: a job that finished
+        // without a file, or that never finishes at all, ends the animation
+        // instead of looping the sketch forever.
+        status={liveMedia.status}
+        startedAt={liveMedia.createdAt}
+        provider={liveMedia.provider}
         failed={isFailed}
         error={liveMedia.error}
       />

@@ -1,15 +1,33 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { playImageGenerationCompleteSound, playImageGenerationStartSound } from "@/lib/media/image-generation-sound"
 import { resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 
 type ImageGenerationMotionProps = {
   prompt?: string
   resultUrl?: string
+  /** Inline copy of the same image, used only if the durable URL fails to load. */
+  fallbackUrl?: string
+  /** Lifecycle of the underlying job, so the card can stop when the job stops. */
+  status?: "queued" | "thinking" | "generating" | "rendering" | "ready" | "failed"
+  /** ISO timestamp of when the job started, so the watchdog survives a reload. */
+  startedAt?: string
+  provider?: string
   failed?: boolean
   error?: string
 }
+
+// A photo job that has produced nothing after this long is dead. Without a hard
+// stop the sketch loop below repeated forever and the card could never settle,
+// which is exactly what a reloaded chat used to show.
+const GENERATION_WATCHDOG_MS = 3 * 60 * 1000
+const IMAGE_LOAD_TIMEOUT_MS = 25_000
+const CYCLE_MS = 7200
+const MAX_CYCLES = Math.ceil(GENERATION_WATCHDOG_MS / CYCLE_MS)
+
+const WATCHDOG_MESSAGE = "Генерация не завершилась за 3 минуты и была остановлена. Нажмите «Перегенерировать» — Compute за неудачную попытку не списывается."
+const EMPTY_RESULT_MESSAGE = "Генератор закончил работу, но не вернул файл изображения. Повторите генерацию."
 
 function friendlyGenerationError(error?: string) {
   const raw = String(error || "").trim()
@@ -23,20 +41,33 @@ function friendlyGenerationError(error?: string) {
 export function ImageGenerationMotion({
   prompt,
   resultUrl,
+  fallbackUrl,
+  status,
+  startedAt,
+  provider,
   failed = false,
   error,
 }: ImageGenerationMotionProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [resolvedResultUrl, setResolvedResultUrl] = useState("")
+  const [usingFallback, setUsingFallback] = useState(false)
   const [loadError, setLoadError] = useState("")
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [visualProgress, setVisualProgress] = useState(8)
   const [cycle, setCycle] = useState(0)
 
+  // Anchored to the job, not to this mount, so reopening the chat cannot restart
+  // a three-minute countdown on a job that started ten minutes ago.
+  const startedAtMs = useMemo(() => {
+    const parsed = startedAt ? Date.parse(startedAt) : Number.NaN
+    return Number.isFinite(parsed) ? parsed : Date.now()
+  }, [startedAt])
+
   useEffect(() => {
     setImageLoaded(false)
     setLoadError("")
-    setElapsedSeconds(0)
+    setUsingFallback(false)
+    setElapsedSeconds(Math.max(0, Math.round((Date.now() - startedAtMs) / 1000)))
     setResolvedResultUrl("")
     setVisualProgress(resultUrl ? 94 : 8)
     if (!resultUrl) {
@@ -46,23 +77,60 @@ export function ImageGenerationMotion({
     let cancelled = false
     resolveGeneratedImageUrl(resultUrl)
       .then((url) => { if (!cancelled) setResolvedResultUrl(url) })
-      .catch((reason) => { if (!cancelled) setLoadError(reason instanceof Error ? reason.message : "Не удалось восстановить изображение.") })
+      .catch((reason) => {
+        if (cancelled) return
+        // A missing IndexedDB copy is not fatal while an inline copy exists.
+        if (fallbackUrl) {
+          setUsingFallback(true)
+          setResolvedResultUrl(fallbackUrl)
+          return
+        }
+        setLoadError(reason instanceof Error ? reason.message : "Не удалось восстановить изображение.")
+      })
     return () => { cancelled = true }
-  }, [resultUrl])
+  }, [fallbackUrl, resultUrl, startedAtMs])
 
-  const actuallyFailed = failed || Boolean(loadError)
+  const actuallyFailed = failed || status === "failed" || Boolean(loadError)
+
+  // The job reported success but handed over nothing renderable. Say so instead
+  // of animating a result that will never arrive.
+  useEffect(() => {
+    if (actuallyFailed || imageLoaded) return
+    if (status === "ready" && !resultUrl) setLoadError(EMPTY_RESULT_MESSAGE)
+  }, [actuallyFailed, imageLoaded, resultUrl, status])
+
+  // Hard stop. Whatever else goes wrong upstream, the card always reaches a
+  // terminal state the user can act on.
+  useEffect(() => {
+    if (actuallyFailed || imageLoaded) return
+    const remaining = GENERATION_WATCHDOG_MS - (Date.now() - startedAtMs)
+    if (remaining <= 0) {
+      setLoadError(WATCHDOG_MESSAGE)
+      return
+    }
+    const timer = window.setTimeout(() => setLoadError(WATCHDOG_MESSAGE), remaining)
+    return () => window.clearTimeout(timer)
+  }, [actuallyFailed, imageLoaded, startedAtMs])
 
   useEffect(() => {
     if (actuallyFailed || imageLoaded) return
-    const timer = window.setInterval(() => setElapsedSeconds((value) => value + 1), 1000)
+    const timer = window.setInterval(() => setElapsedSeconds(Math.max(0, Math.round((Date.now() - startedAtMs) / 1000))), 1000)
     return () => window.clearInterval(timer)
-  }, [actuallyFailed, imageLoaded])
+  }, [actuallyFailed, imageLoaded, startedAtMs])
 
   useEffect(() => {
     if (!resolvedResultUrl || imageLoaded || actuallyFailed) return
-    const timer = window.setTimeout(() => setLoadError("Готовый файл изображения не загрузился. Повторите генерацию."), 20_000)
+    const timer = window.setTimeout(() => {
+      // One retry through the inline copy before giving up on a slow/blocked file.
+      if (!usingFallback && fallbackUrl && fallbackUrl !== resolvedResultUrl) {
+        setUsingFallback(true)
+        setResolvedResultUrl(fallbackUrl)
+        return
+      }
+      setLoadError("Готовый файл изображения не загрузился. Повторите генерацию.")
+    }, IMAGE_LOAD_TIMEOUT_MS)
     return () => window.clearTimeout(timer)
-  }, [actuallyFailed, imageLoaded, resolvedResultUrl])
+  }, [actuallyFailed, fallbackUrl, imageLoaded, resolvedResultUrl, usingFallback])
 
   useEffect(() => {
     if (actuallyFailed || imageLoaded) return
@@ -70,10 +138,10 @@ export function ImageGenerationMotion({
   }, [actuallyFailed, imageLoaded])
 
   useEffect(() => {
-    if (actuallyFailed || imageLoaded) return
-    const timer = window.setInterval(() => setCycle((value) => value + 1), 7200)
+    if (actuallyFailed || imageLoaded || cycle >= MAX_CYCLES) return
+    const timer = window.setInterval(() => setCycle((value) => Math.min(MAX_CYCLES, value + 1)), CYCLE_MS)
     return () => window.clearInterval(timer)
-  }, [actuallyFailed, imageLoaded])
+  }, [actuallyFailed, cycle, imageLoaded])
 
   useEffect(() => {
     if (actuallyFailed) return
@@ -110,7 +178,14 @@ export function ImageGenerationMotion({
               setVisualProgress(100)
               playImageGenerationCompleteSound()
             }}
-            onError={() => setLoadError("Готовый файл изображения повреждён или недоступен. Повторите генерацию.")}
+            onError={() => {
+              if (!usingFallback && fallbackUrl && fallbackUrl !== resolvedResultUrl) {
+                setUsingFallback(true)
+                setResolvedResultUrl(fallbackUrl)
+                return
+              }
+              setLoadError("Готовый файл изображения повреждён или недоступен. Повторите генерацию.")
+            }}
             className={`malik-art-result ${imageLoaded ? "is-visible" : ""}`}
           />
         ) : null}
@@ -219,7 +294,7 @@ export function ImageGenerationMotion({
         {actuallyFailed ? (
           <span>{friendlyGenerationError(loadError || error)}</span>
         ) : imageLoaded ? (
-          <span>Изображение готово · 100%</span>
+          <span>Изображение готово · 100% · <strong>{elapsedSeconds} с</strong></span>
         ) : (
           <span>Генератор обрабатывает точный запрос · <strong>{elapsedSeconds} с</strong></span>
         )}
@@ -228,6 +303,22 @@ export function ImageGenerationMotion({
       {!actuallyFailed ? (
         <div className="malik-art-progress" aria-hidden="true">
           <span style={{ width: `${shownProgress}%` }} />
+        </div>
+      ) : null}
+
+      {/* The finished card states plainly what was produced. Before this, a
+          completed generation left nothing behind but the picture, so there was
+          no way to tell a real result from an animation frozen at the end. */}
+      {imageLoaded && !actuallyFailed ? (
+        <div className="malik-art-report">
+          <p className="malik-art-report__row">
+            <span>Готово</span>
+            {provider ? <em>{provider}</em> : null}
+          </p>
+          {prompt ? <p className="malik-art-report__prompt">{prompt}</p> : null}
+          <a href={resolvedResultUrl} target="_blank" rel="noreferrer" className="malik-art-report__open">
+            Открыть оригинал
+          </a>
         </div>
       ) : null}
 
@@ -451,6 +542,52 @@ export function ImageGenerationMotion({
           border-radius: inherit;
           background: #fff;
           transition: width .45s ease-out;
+        }
+
+        .malik-art-report {
+          margin: 12px auto 0;
+          width: 100%;
+          padding: 12px 14px;
+          border-radius: 16px;
+          border: 1px solid rgba(255,255,255,.10);
+          background: rgba(255,255,255,.035);
+        }
+        .malik-art-report__row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: .16em;
+          text-transform: uppercase;
+          color: rgba(255,255,255,.62);
+        }
+        .malik-art-report__row em {
+          font-style: normal;
+          font-weight: 700;
+          letter-spacing: .04em;
+          text-transform: none;
+          color: rgba(255,255,255,.45);
+        }
+        .malik-art-report__prompt {
+          margin-top: 7px;
+          font-size: 13.5px;
+          line-height: 1.5;
+          color: #d8d8dc;
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .malik-art-report__open {
+          display: inline-block;
+          margin-top: 10px;
+          font-size: 12.5px;
+          font-weight: 700;
+          color: #fff;
+          text-decoration: underline;
+          text-underline-offset: 3px;
         }
 
         @keyframes malik-art-draw { to { stroke-dashoffset: 0; } }

@@ -1,3 +1,4 @@
+import { saveMediaAsset } from "./asset-store"
 import { maxImagePromptLength } from "./config"
 import {
   DEFAULT_MALIK_IMAGE_MODEL_ID,
@@ -152,7 +153,24 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       if (uploaded.stored) storageUrl = uploaded.publicUrl
     }
 
-    const imageUrl = storageUrl || result.imageUrl
+    // Providers hand back a `data:` URI. Freeze those bytes on disk and answer
+    // with a short, stable URL instead: the chat card, a reload, a second device
+    // and the browser cache all then point at the same finished file. Sending the
+    // raw data URI to the client is what used to overflow localStorage and leave
+    // a reloaded chat stuck on the generation animation.
+    const inlineImageUrl = result.imageUrl
+    let assetId: string | undefined
+    let assetUrl: string | undefined
+    if (!storageUrl && inlineImageUrl.startsWith("data:")) {
+      const stored = saveMediaAsset({ dataUrl: inlineImageUrl })
+      if (stored) {
+        assetId = stored.id
+        assetUrl = stored.url
+      }
+    }
+
+    // Priority: object storage → local durable asset → inline bytes as a last resort.
+    const imageUrl = storageUrl || assetUrl || inlineImageUrl
     const resolvedModelId = result.modelId || modelId
     const resolvedImageModel = getMalikImageModel(resolvedModelId)
     return Response.json({
@@ -168,6 +186,11 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       url: imageUrl,
       mediaUrl: imageUrl,
       storageUrl,
+      assetId,
+      assetUrl,
+      // Kept so the card can still paint something if the durable URL 404s.
+      inlineImageUrl: imageUrl === inlineImageUrl ? undefined : inlineImageUrl,
+      durable: Boolean(storageUrl || assetUrl),
       remainingDailyImages: remaining,
       resetAt: nextMediaResetAt(),
       plan: limit.plan,

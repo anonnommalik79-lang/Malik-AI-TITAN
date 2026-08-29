@@ -205,6 +205,8 @@ type InlineMediaGeneration = {
   provider?: string
   progress?: number
   url?: string
+  /** Inline copy of the finished image, used only when `url` cannot be loaded. */
+  fallbackUrl?: string
   thumbnailUrl?: string
   statusUrl?: string
   jobId?: string
@@ -214,6 +216,37 @@ type InlineMediaGeneration = {
 
 function isInlineMediaProcessing(status: InlineMediaGenerationStatus) {
   return status === "queued" || status === "thinking" || status === "generating" || status === "rendering"
+}
+
+// Mirrors the watchdog inside the chat card. Photo generation is synchronous and
+// capped at two minutes client-side, so three minutes means it is gone. Video is
+// a genuine long-running job, so it keeps a far more generous ceiling.
+const INLINE_IMAGE_MAX_AGE_MS = 3 * 60 * 1000
+const INLINE_VIDEO_MAX_AGE_MS = 60 * 60 * 1000
+const INLINE_MEDIA_TIMEOUT_TEXT = "Генерация не завершилась и была остановлена. Нажмите «Перегенерировать» — Compute за неудачную попытку не списывается."
+const INLINE_MEDIA_INTERRUPTED_TEXT = "Генерация прервалась (страница была перезагружена до получения результата). Повторите запрос."
+
+/**
+ * A processing card can only ever finish if something is left to poll. After a
+ * reload nothing else touches a card without `statusUrl`/`jobId`, so it used to
+ * animate forever; those, and anything past its ceiling, end as failed.
+ */
+function settleStaleInlineMedia(media: InlineMediaGeneration): InlineMediaGeneration {
+  if (!isInlineMediaProcessing(media.status)) return media
+
+  const startedAt = media.createdAt ? Date.parse(media.createdAt) : Number.NaN
+  const age = Number.isFinite(startedAt) ? Date.now() - startedAt : Number.POSITIVE_INFINITY
+  const maxAge = media.kind === "video" ? INLINE_VIDEO_MAX_AGE_MS : INLINE_IMAGE_MAX_AGE_MS
+  const resumable = Boolean(media.statusUrl || media.jobId)
+
+  if (resumable && age <= maxAge) return media
+
+  return {
+    ...media,
+    status: "failed",
+    progress: 100,
+    error: media.error || (resumable ? INLINE_MEDIA_TIMEOUT_TEXT : INLINE_MEDIA_INTERRUPTED_TEXT),
+  }
 }
 
 interface Chat {
@@ -784,6 +817,17 @@ function safeSetStorage(key: string, value: string): void {
   } catch {}
 }
 
+/** Same as safeSetStorage, but the caller can react to a full quota. */
+function trySetStorage(key: string, value: string): boolean {
+  try {
+    if (!isBrowser()) return false
+    window.localStorage.setItem(key, value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function safeRemoveStorage(key: string): void {
   try {
     if (isBrowser()) window.localStorage.removeItem(key)
@@ -874,15 +918,80 @@ function reviveResearch(value: any): MalikMessageResearch | undefined {
 }
 
 
-function reviveMessage(message: any): Message {
+/**
+ * localStorage holds about 5MB for the whole origin, and one generated photo as
+ * a `data:` URI is 1–3MB of that. Writing one in used to throw QuotaExceededError,
+ * which the old silent `catch {}` swallowed — so every later save failed too and
+ * a refresh restored a snapshot from *before* the generation, showing the card
+ * mid-animation instead of the finished result.
+ *
+ * Inline bytes therefore never reach localStorage. The durable copy is the
+ * server asset URL (or the IndexedDB `malik-image://` handle); anything still
+ * carrying raw bytes at save time had no durable copy, so it is recorded as a
+ * failed generation the user can simply re-run.
+ */
+function stripInlineMediaBytes(media: InlineMediaGeneration): InlineMediaGeneration {
+  const heavy = (value?: string) => typeof value === "string" && value.startsWith("data:")
+  if (!heavy(media.url) && !heavy(media.fallbackUrl) && !heavy(media.thumbnailUrl)) return media
+
+  const lostResult = heavy(media.url)
   return {
-    id: String(message?.id || crypto.randomUUID()),
-    role: message?.role === "assistant" ? "assistant" : "user",
-    content: String(message?.content || ""),
-    timestamp: message?.timestamp ? new Date(message.timestamp) : new Date(),
-    generatedCode: typeof message?.generatedCode === "string" ? message.generatedCode : undefined,
-    generatedMedia: message?.generatedMedia && typeof message.generatedMedia === "object"
+    ...media,
+    url: heavy(media.url) ? undefined : media.url,
+    fallbackUrl: heavy(media.fallbackUrl) ? undefined : media.fallbackUrl,
+    thumbnailUrl: heavy(media.thumbnailUrl) ? undefined : media.thumbnailUrl,
+    ...(lostResult
       ? {
+          status: "failed" as InlineMediaGenerationStatus,
+          progress: 100,
+          error: media.error || "Результат не удалось сохранить в этом браузере. Повторите генерацию.",
+        }
+      : {}),
+  }
+}
+
+function toStorableMessage(message: Message): Message {
+  if (!message.generatedMedia) return message
+  const generatedMedia = stripInlineMediaBytes(message.generatedMedia)
+  if (generatedMedia === message.generatedMedia) return message
+  return { ...message, generatedMedia, content: buildInlineMediaAssistantText(generatedMedia) }
+}
+
+/**
+ * Writes the dashboard snapshot, shedding the oldest chats until it fits rather
+ * than failing silently. Losing the tail of the history is recoverable; losing
+ * every future save is not.
+ */
+function persistDashboardState(key: string, state: {
+  chats: Chat[]
+  activeChatId: string | null
+  messages: Message[]
+  generatedCode: string
+  activeView: string
+  selectedModelId: MalikModelId
+}): boolean {
+  const messages = state.messages.map(toStorableMessage)
+  let chats = state.chats.map((chat) => ({ ...chat, messages: chat.messages.map(toStorableMessage) }))
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      if (trySetStorage(key, JSON.stringify({ ...state, chats, messages }))) return true
+    } catch {
+      /* stringify itself failed — fall through to trimming */
+    }
+    if (!chats.length) break
+    // Drop the oldest non-active chat first; the open conversation is the last to go.
+    const droppable = chats.filter((chat) => chat.id !== state.activeChatId)
+    chats = droppable.length ? chats.filter((chat) => chat.id !== droppable[droppable.length - 1].id) : []
+  }
+
+  console.warn("[DASHBOARD SAVE] storage quota exceeded — snapshot could not be written")
+  return false
+}
+
+function reviveMessage(message: any): Message {
+  const generatedMedia = message?.generatedMedia && typeof message.generatedMedia === "object"
+    ? settleStaleInlineMedia({
           id: String(message.generatedMedia.id || crypto.randomUUID()),
           kind: message.generatedMedia.kind === "video" ? "video" : "image",
           status: ["queued", "thinking", "generating", "rendering", "ready", "failed"].includes(message.generatedMedia.status) ? message.generatedMedia.status : "ready",
@@ -890,13 +999,23 @@ function reviveMessage(message: any): Message {
           provider: typeof message.generatedMedia.provider === "string" ? message.generatedMedia.provider : undefined,
           progress: typeof message.generatedMedia.progress === "number" ? message.generatedMedia.progress : undefined,
           url: typeof message.generatedMedia.url === "string" ? message.generatedMedia.url : undefined,
+          fallbackUrl: typeof message.generatedMedia.fallbackUrl === "string" ? message.generatedMedia.fallbackUrl : undefined,
           thumbnailUrl: typeof message.generatedMedia.thumbnailUrl === "string" ? message.generatedMedia.thumbnailUrl : undefined,
           statusUrl: typeof message.generatedMedia.statusUrl === "string" ? message.generatedMedia.statusUrl : undefined,
           jobId: typeof message.generatedMedia.jobId === "string" ? message.generatedMedia.jobId : undefined,
           error: typeof message.generatedMedia.error === "string" ? message.generatedMedia.error : undefined,
-          createdAt: typeof message.generatedMedia.createdAt === "string" ? message.generatedMedia.createdAt : undefined,
-        }
-      : undefined,
+        createdAt: typeof message.generatedMedia.createdAt === "string" ? message.generatedMedia.createdAt : undefined,
+      })
+    : undefined
+
+  return {
+    id: String(message?.id || crypto.randomUUID()),
+    role: message?.role === "assistant" ? "assistant" : "user",
+    // A card that was settled above must not keep saying "запускаю генерацию".
+    content: generatedMedia ? buildInlineMediaAssistantText(generatedMedia) : String(message?.content || ""),
+    timestamp: message?.timestamp ? new Date(message.timestamp) : new Date(),
+    generatedCode: typeof message?.generatedCode === "string" ? message.generatedCode : undefined,
+    generatedMedia,
     imageConfirmation: message?.imageConfirmation && typeof message.imageConfirmation === "object"
       ? {
           prompt: String(message.imageConfirmation.prompt || ""),
@@ -4569,14 +4688,14 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
   useEffect(() => {
     if (!storageRestored) return
     try {
-      safeSetStorage(DASHBOARD_STORAGE_KEY, JSON.stringify({
+      persistDashboardState(DASHBOARD_STORAGE_KEY, {
         chats,
         activeChatId,
         messages,
         generatedCode,
         activeView,
         selectedModelId,
-      }))
+      })
     } catch (err) {
       console.warn("[DASHBOARD SAVE ERROR]", err)
     }
@@ -5717,8 +5836,19 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         throw new Error("Fallback generation failed to produce preview.")
       }
 
+      // The image route now returns a durable /api/media/asset/<id> URL, which
+      // reloads and other devices can fetch. Raw bytes only come back when that
+      // store was unavailable — then IndexedDB is the fallback, as before.
+      let inlineFallbackUrl = typeof finalPayload?.inlineImageUrl === "string" ? finalPayload.inlineImageUrl : ""
       if (inlineMediaKind === "image" && mediaUrl) {
-        mediaUrl = await persistGeneratedImageUrl(assistantMessage.generatedMedia.id, mediaUrl)
+        if (mediaUrl.startsWith("data:")) {
+          inlineFallbackUrl = mediaUrl
+          mediaUrl = await persistGeneratedImageUrl(assistantMessage.generatedMedia.id, mediaUrl)
+        } else if (inlineFallbackUrl.startsWith("data:")) {
+          // Durable URL in hand; keep a local copy so the card still paints if
+          // the asset route is unreachable from this network.
+          void persistGeneratedImageUrl(assistantMessage.generatedMedia.id, inlineFallbackUrl).catch(() => {})
+        }
       }
 
       const readyMedia: InlineMediaGeneration = {
@@ -5726,6 +5856,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         status: finalStatusIsProcessing ? "rendering" : "ready",
         progress: finalStatusIsProcessing ? 92 : 100,
         url: mediaUrl || undefined,
+        fallbackUrl: inlineFallbackUrl && inlineFallbackUrl !== mediaUrl ? inlineFallbackUrl : undefined,
         thumbnailUrl:
           typeof finalPayload?.thumbnailUrl === "string" ? finalPayload.thumbnailUrl :
           typeof finalPayload?.posterUrl === "string" ? finalPayload.posterUrl :
