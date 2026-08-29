@@ -53,6 +53,8 @@ import "./sidebar-brand-mark-final.css"
 import "./video-mobile-reference-final.css"
 // Final home composer geometry: model selector sits beside + on phones.
 import "./mobile-composer-model-position-final.css"
+// Absolute final MalikVideo phone pass: one-line title, premium controls, clean autoplay cards.
+import "./video-mobile-worldclass-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
