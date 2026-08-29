@@ -197,6 +197,7 @@ function AutoLoopVideo({
 export function VideoGenerationStudio({ username, onViewChange }: VideoGenerationStudioProps) {
   const operator = username?.trim() || "guest@malik.ai"
   const owner = isOwnerUser(operator)
+  const ownerTenSecond = operator.trim().toLowerCase() === "amangeldymalik38@gmail.com"
 
   const hero = useMemo<VideoAiTemplate>(() => {
     return SHOWCASE_TEMPLATES[0]
@@ -208,7 +209,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   const [prompt, setPrompt] = useState(() => takePrefillPrompt() || DEFAULT_PROMPT)
   const [ratio, setRatio] = useState<Ratio>("16:9")
-  const [duration, setDuration] = useState<Duration>(5)
+  const [duration, setDuration] = useState<Duration>(() => ownerTenSecond ? 10 : 5)
   const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("Кино")
   const [activeTemplate, setActiveTemplate] = useState(0)
   const [phase, setPhase] = useState<GenerationPhase>("idle")
@@ -227,6 +228,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   useEffect(() => () => {
     audioContextRef.current?.close().catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (ownerTenSecond) setDuration(10)
+  }, [ownerTenSecond])
 
   const armAudio = () => {
     if (typeof window === "undefined") return
@@ -359,7 +364,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   }
 
   return (
-    <main className="mv" data-view="video-generation">
+    <main className="mv" data-view="video-generation" data-result={videoUrl ? "1" : "0"}>
       <section className="mv__showcase" aria-label="MalikVideo showcase">
         <div className="mv__showcase-media">
           {videoUrl ? (
@@ -466,13 +471,15 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
       <style jsx>{`
         .mv{min-height:100%;width:100%;display:grid;grid-template-columns:minmax(360px,39vw) minmax(0,1fr);background:#000;color:#f7f7f8;overflow:hidden;color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        .mv[data-result="1"]{grid-template-columns:minmax(520px,52vw) minmax(0,1fr)}
         .mv button,.mv textarea{font:inherit;-webkit-tap-highlight-color:transparent}
         .mv button:focus-visible,.mv textarea:focus-visible{outline:1px solid rgba(255,255,255,.52);outline-offset:2px}
         .mv__showcase{position:relative;min-height:100dvh;background:#030303;border-right:1px solid rgba(255,255,255,.08);overflow:hidden}
         .mv__showcase-media{position:sticky;top:0;height:100dvh;min-height:680px;overflow:hidden;background:#030303;display:grid;place-items:center}
         :global(.mv__showcase-video){width:100%;height:100%;display:block;background:#030303;object-position:center center}
-        .mv__showcase-video--result{width:100%;height:100%;display:block;background:#030303;object-fit:contain}
+        .mv__showcase-video--result{width:100%;height:100%;display:block;background:#030303;object-fit:cover;object-position:center}
         .mv__showcase-vignette{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.12),transparent 24%,transparent 62%,rgba(0,0,0,.78)),linear-gradient(90deg,rgba(0,0,0,.14),transparent 36%)}
+        .mv[data-result="1"] .mv__showcase-vignette{background:linear-gradient(180deg,rgba(0,0,0,.08),transparent 18%,transparent 78%,rgba(0,0,0,.2))}
         .mv__workspace{min-width:0;height:100dvh;overflow-y:auto;padding:34px clamp(28px,4vw,64px) 48px;background:#000;scrollbar-width:none;-ms-overflow-style:none}
         .mv__workspace::-webkit-scrollbar{display:none}
         .mv__header{max-width:1000px;margin:0 auto 24px;display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
@@ -530,7 +537,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv__focus--tl{top:20px;left:20px;border-top:1px solid;border-left:1px solid}.mv__focus--tr{top:20px;right:20px;border-top:1px solid;border-right:1px solid}.mv__focus--bl{bottom:20px;left:20px;border-bottom:1px solid;border-left:1px solid}.mv__focus--br{bottom:20px;right:20px;border-bottom:1px solid;border-right:1px solid}
         .mv__render-copy{display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center}.mv__render-copy strong{font-size:14px}.mv__render-copy small{font-size:11px;color:#858790}.mv__render-dot{width:7px;height:7px;border-radius:50%;background:#fff;animation:mv-dot 1.2s ease-in-out infinite}
         @keyframes mv-breathe{50%{transform:scale(1.025);box-shadow:0 32px 80px rgba(0,0,0,.65)}}@keyframes mv-grid{to{background-position:28px 28px}}@keyframes mv-scan{to{left:108%}}@keyframes mv-dot{50%{opacity:.35;transform:scale(.75)}}
-        @media(max-width:1120px){.mv{grid-template-columns:minmax(300px,34vw) minmax(0,1fr)}.mv__workspace{padding-left:24px;padding-right:24px}.mv__cards{grid-template-columns:repeat(2,minmax(0,1fr))}.mv__card{aspect-ratio:1.25/1}}
+        @media(max-width:1120px){.mv{grid-template-columns:minmax(300px,34vw) minmax(0,1fr)}.mv[data-result="1"]{grid-template-columns:minmax(420px,46vw) minmax(0,1fr)}.mv__workspace{padding-left:24px;padding-right:24px}.mv__cards{grid-template-columns:repeat(2,minmax(0,1fr))}.mv__card{aspect-ratio:1.25/1}}
         @media(max-width:820px){
           .mv{display:block;min-height:100svh;overflow:visible;background:#000}
           .mv__showcase{min-height:clamp(320px,48svh,520px);border-right:0;border-bottom:1px solid rgba(255,255,255,.08);background:#000}
