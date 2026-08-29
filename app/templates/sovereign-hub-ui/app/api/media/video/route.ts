@@ -6,13 +6,15 @@ import { routeVideoGeneration } from "@/lib/media/video-router"
 import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 
+const OWNER_TEN_SECOND_EMAIL = "amangeldymalik38@gmail.com"
+
 export const POST = withCompute(handlePOST, "video")
 
 async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const prompt = String(body?.prompt || "").trim()
   const imageUrl = typeof body?.imageUrl === "string" ? body.imageUrl : undefined
-  const length = body?.length === 10 ? 10 : 5
+  const requestedLength = body?.length === 10 ? 10 : 5
   const resolution = ["480p", "720p", "1080p"].includes(body?.resolution) ? body.resolution : "1080p"
   const ratio = ["16:9", "9:16", "1:1"].includes(body?.ratio) ? body.ratio : "16:9"
   const generateAudio = body?.generateAudio !== false
@@ -30,6 +32,7 @@ async function handlePOST(request: Request) {
   }
 
   const user = await resolveMediaUser(request, body)
+  const length = user.userId.toLowerCase() === OWNER_TEN_SECOND_EMAIL ? 10 : requestedLength
   const limit = await checkMediaLimit({ userId: user.userId, plan: user.plan, kind: "video" })
   if (!limit.ok) {
     return Response.json({
