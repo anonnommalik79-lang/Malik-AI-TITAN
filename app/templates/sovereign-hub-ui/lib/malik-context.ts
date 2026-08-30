@@ -57,6 +57,133 @@ export function useContextEnabled(): [boolean, (enabled: boolean) => void] {
 }
 
 /**
+ * User-controlled long-term memory. It is deliberately browser-local for now:
+ * no private fact is uploaded merely because it was saved. The chat runtime may
+ * opt in to serialising this context only while the main memory switch is on.
+ */
+export type MalikMemoryItem = {
+  id: string
+  text: string
+  createdAt: string
+  updatedAt: string
+}
+
+const MEMORY_STORAGE_KEY = "malik.memory.items.v1"
+export const MEMORY_EVENT = "malik-memory-changed"
+export const MAX_MEMORY_ITEMS = 40
+export const MAX_MEMORY_ITEM_CHARS = 600
+const MAX_MEMORY_CONTEXT_CHARS = 4200
+
+function normaliseMemoryText(value: string) {
+  return value.replace(/\s+/g, " ").trim().slice(0, MAX_MEMORY_ITEM_CHARS)
+}
+
+function isMemoryItem(value: unknown): value is MalikMemoryItem {
+  if (!value || typeof value !== "object") return false
+  const item = value as Partial<MalikMemoryItem>
+  return typeof item.id === "string"
+    && typeof item.text === "string"
+    && typeof item.createdAt === "string"
+    && typeof item.updatedAt === "string"
+}
+
+function memoryId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID()
+  return `mem_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`
+}
+
+export function readMalikMemories(): MalikMemoryItem[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = window.localStorage.getItem(MEMORY_STORAGE_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter(isMemoryItem)
+      .map((item) => ({ ...item, text: normaliseMemoryText(item.text) }))
+      .filter((item) => Boolean(item.text))
+      .slice(0, MAX_MEMORY_ITEMS)
+  } catch {
+    return []
+  }
+}
+
+function writeMalikMemories(items: MalikMemoryItem[]) {
+  if (typeof window === "undefined") return
+  const safe = items
+    .filter(isMemoryItem)
+    .map((item) => ({ ...item, text: normaliseMemoryText(item.text) }))
+    .filter((item) => Boolean(item.text))
+    .slice(0, MAX_MEMORY_ITEMS)
+  try {
+    window.localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(safe))
+  } catch {
+    /* Storage can be unavailable in private/restricted browser modes. */
+  }
+  window.dispatchEvent(new CustomEvent(MEMORY_EVENT, { detail: safe }))
+}
+
+export function addMalikMemory(text: string): MalikMemoryItem | null {
+  const clean = normaliseMemoryText(text)
+  if (!clean) return null
+  const now = new Date().toISOString()
+  const item: MalikMemoryItem = { id: memoryId(), text: clean, createdAt: now, updatedAt: now }
+  writeMalikMemories([item, ...readMalikMemories()])
+  return item
+}
+
+export function updateMalikMemory(id: string, text: string): boolean {
+  const clean = normaliseMemoryText(text)
+  if (!clean) return false
+  const items = readMalikMemories()
+  let changed = false
+  const next = items.map((item) => {
+    if (item.id !== id) return item
+    changed = true
+    return { ...item, text: clean, updatedAt: new Date().toISOString() }
+  })
+  if (changed) writeMalikMemories(next)
+  return changed
+}
+
+export function removeMalikMemory(id: string): void {
+  writeMalikMemories(readMalikMemories().filter((item) => item.id !== id))
+}
+
+export function clearMalikMemories(): void {
+  writeMalikMemories([])
+}
+
+export function buildMalikMemoryContext(): string {
+  if (!readContextEnabled()) return ""
+  const items = readMalikMemories()
+  if (!items.length) return ""
+  const lines = items.map((item) => `- ${item.text}`)
+  return [
+    "User-controlled Malik AI memory. Use it only when relevant; never claim a remembered fact that is not listed here:",
+    ...lines,
+  ].join("\n").slice(0, MAX_MEMORY_CONTEXT_CHARS)
+}
+
+export function useMalikMemories(): MalikMemoryItem[] {
+  const [items, setItems] = useState<MalikMemoryItem[]>([])
+
+  useEffect(() => {
+    const sync = () => setItems(readMalikMemories())
+    sync()
+    window.addEventListener(MEMORY_EVENT, sync)
+    window.addEventListener("storage", sync)
+    return () => {
+      window.removeEventListener(MEMORY_EVENT, sync)
+      window.removeEventListener("storage", sync)
+    }
+  }, [])
+
+  return items
+}
+
+/**
  * Rough token count for the context meter. Russian and Kazakh run about three
  * characters per token on byte-pair vocabularies, English closer to four; three
  * and a half is a fair middle and keeps the number honest as an estimate rather
