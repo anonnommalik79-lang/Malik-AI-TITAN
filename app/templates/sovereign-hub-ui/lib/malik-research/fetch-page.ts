@@ -1,5 +1,6 @@
 import type { FetchedSource, SearchResult } from "./types";
 import { clampText, cleanTitle, fetchWithTimeout, stripHtml } from "./utils";
+import { assertPublicHttpUrl } from "@/lib/server/request-safety";
 
 function extractTitle(html: string, fallback: string) {
   const m =
@@ -10,8 +11,13 @@ function extractTitle(html: string, fallback: string) {
   return cleanTitle(m?.[1] || fallback);
 }
 
+function safeSourceUrl(result: SearchResult) {
+  return assertPublicHttpUrl(String(result.url || "")).toString();
+}
+
 async function fetchDirect(result: SearchResult): Promise<FetchedSource | null> {
-  const res = await fetchWithTimeout(result.url, {}, 10000);
+  const target = safeSourceUrl(result);
+  const res = await fetchWithTimeout(target, {}, 10000);
   if (!res.ok) return null;
 
   const contentType = res.headers.get("content-type") || "";
@@ -25,14 +31,14 @@ async function fetchDirect(result: SearchResult): Promise<FetchedSource | null> 
   }
 
   const html = await res.text();
-  const title = extractTitle(html, result.title || result.url);
+  const title = extractTitle(html, result.title || target);
   const text = clampText(stripHtml(html), Number(process.env.RESEARCH_MAX_TEXT || 18000));
 
   if (!text || text.length < 280) return null;
 
   return {
     title: title || result.title,
-    url: result.url,
+    url: target,
     domain: result.domain,
     text,
     snippet: result.snippet,
@@ -52,48 +58,48 @@ function parseJinaTitle(markdown: string, fallback: string) {
 async function fetchViaJina(result: SearchResult): Promise<FetchedSource | null> {
   if (process.env.JINA_READER_DISABLED === "true") return null;
 
-  const readerUrl =
-    "https://r.jina.ai/http://r.jina.ai/http://" + result.url.replace(/^https?:\/\//, "");
+  const target = safeSourceUrl(result);
+  const readerUrl = "https://r.jina.ai/http://" + target.replace(/^https?:\/\//, "");
 
-  const simpleReaderUrl =
-    "https://r.jina.ai/http://" + result.url.replace(/^https?:\/\//, "");
-
-  for (const url of [simpleReaderUrl, readerUrl]) {
-    try {
-      const res = await fetchWithTimeout(
-        url,
-        {
-          headers: {
-            accept: "text/plain, text/markdown, */*",
-          },
+  try {
+    const res = await fetchWithTimeout(
+      readerUrl,
+      {
+        headers: {
+          accept: "text/plain, text/markdown, */*",
         },
-        15000
-      );
+      },
+      15000
+    );
 
-      if (!res.ok) continue;
+    if (!res.ok) return null;
 
-      const markdown = await res.text();
-      const text = clampText(stripHtml(markdown), Number(process.env.RESEARCH_MAX_TEXT || 18000));
-      if (!text || text.length < 220) continue;
+    const markdown = await res.text();
+    const text = clampText(stripHtml(markdown), Number(process.env.RESEARCH_MAX_TEXT || 18000));
+    if (!text || text.length < 220) return null;
 
-      return {
-        title: cleanTitle(parseJinaTitle(markdown, result.title)),
-        url: result.url,
-        domain: result.domain,
-        text,
-        snippet: result.snippet,
-        publishedAt: result.publishedAt,
-        provider: result.provider || "jina-reader",
-      };
-    } catch {
-      // try next reader
-    }
+    return {
+      title: cleanTitle(parseJinaTitle(markdown, result.title)),
+      url: target,
+      domain: result.domain,
+      text,
+      snippet: result.snippet,
+      publishedAt: result.publishedAt,
+      provider: result.provider || "jina-reader",
+    };
+  } catch {
+    return null;
   }
-
-  return null;
 }
 
 export async function fetchPageText(result: SearchResult): Promise<FetchedSource | null> {
+  try {
+    // Validate before either the direct reader or the third-party reader sees it.
+    safeSourceUrl(result);
+  } catch {
+    return null;
+  }
+
   try {
     const direct = await fetchDirect(result);
     if (direct) return direct;
@@ -101,9 +107,5 @@ export async function fetchPageText(result: SearchResult): Promise<FetchedSource
     // fallback to reader
   }
 
-  try {
-    return await fetchViaJina(result);
-  } catch {
-    return null;
-  }
+  return fetchViaJina(result);
 }
