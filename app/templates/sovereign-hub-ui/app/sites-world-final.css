@@ -1,0 +1,73 @@
+/* FINAL Sites reference pass: local previews, exact 4x2 geometry, no remote screenshot dependency. */
+#malik-root .sites-world{background:#000!important;color:#fff!important;}
+#malik-root .sites-world__home{width:min(1450px,calc(100% - 46px))!important;padding:34px 0 60px!important;}
+#malik-root .sites-hero{min-height:215px!important;grid-template-columns:minmax(365px,.88fr) 1.12fr auto!important;gap:26px!important;}
+#malik-root .sites-hero-copy{padding-left:0!important;}
+#malik-root .sites-hero h1{font-size:70px!important;line-height:.88!important;margin:13px 0 12px!important;}
+#malik-root .sites-hero p{max-width:610px!important;font-size:15px!important;}
+#malik-root .sites-hero-art{height:205px!important;min-width:460px!important;}
+#malik-root .create-top{margin-top:47px!important;}
+#malik-root .metrics{gap:12px!important;margin:17px 0 15px!important;}
+#malik-root .metric{min-height:108px!important;border-radius:13px!important;background:#090a0c!important;}
+#malik-root .toolbar{margin:14px 0 10px!important;}
+#malik-root .home-chips{padding-bottom:17px!important;}
+#malik-root .section-head{margin-bottom:12px!important;}
+#malik-root .template-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:12px!important;}
+#malik-root .template-card{border-radius:11px!important;background:#090a0c!important;}
+#malik-root .template-image{aspect-ratio:16/8.9!important;background:#0c0d10!important;}
+#malik-root .template-image img{display:none!important;}
+#malik-root .template-image{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;}
+#malik-root .template-card:nth-child(1) .template-image{background-image:url('/sites/templates/modern-saas.svg')!important;}
+#malik-root .template-card:nth-child(2) .template-image{background-image:url('/sites/templates/ai-startup.svg')!important;}
+#malik-root .template-card:nth-child(3) .template-image{background-image:url('/sites/templates/creative-portfolio.svg')!important;}
+#malik-root .template-card:nth-child(4) .template-image{background-image:url('/sites/templates/ecommerce.svg')!important;}
+#malik-root .template-card:nth-child(5) .template-image{background-image:url('/sites/templates/agency.svg')!important;}
+#malik-root .template-card:nth-child(6) .template-image{background-image:url('/sites/templates/blog.svg')!important;}
+#malik-root .template-card:nth-child(7) .template-image{background-image:url('/sites/templates/restaurant.svg')!important;}
+#malik-root .template-card:nth-child(8) .template-image{background-image:url('/sites/templates/fitness.svg')!important;}
+#malik-root .template-glow{display:none!important;}
+#malik-root .template-info{height:36px!important;padding:0 9px!important;}
+#malik-root .template-card:nth-child(7) .template-info strong,#malik-root .template-card:nth-child(8) .template-info strong,#malik-root .template-card:nth-child(7) .template-info em,#malik-root .template-card:nth-child(8) .template-info em{font-size:0!important;}
+#malik-root .template-card:nth-child(7) .template-info strong:after{content:'Restaurant';font-size:11px!important;}
+#malik-root .template-card:nth-child(7) .template-info em:after{content:'Ресторан';font-size:9px!important;}
+#malik-root .template-card:nth-child(8) .template-info strong:after{content:'Fitness / Health';font-size:11px!important;}
+#malik-root .template-card:nth-child(8) .template-info em:after{content:'Здоровье';font-size:9px!important;}
+#malik-root .quick-grid{margin-top:17px!important;gap:12px!important;}
+#malik-root .quick-grid button{min-height:92px!important;border-radius:12px!important;background:#090a0c!important;}
+
+@media(max-width:900px){
+  #malik-root .sites-world__home{width:calc(100% - 24px)!important;padding:22px 0 92px!important;}
+  #malik-root .sites-hero{display:grid!important;grid-template-columns:1fr!important;min-height:auto!important;padding:6px 0 14px!important;overflow:visible!important;}
+  #malik-root .sites-hero-art{height:124px!important;min-width:0!important;order:-1!important;margin:0!important;border-radius:18px!important;overflow:hidden!important;}
+  #malik-root .sites-hero-copy{position:relative!important;z-index:4!important;margin-top:-4px!important;}
+  #malik-root .sites-eyebrow{height:26px!important;padding:0 10px!important;font-size:9px!important;}
+  #malik-root .sites-hero h1{font-size:46px!important;margin:9px 0 7px!important;}
+  #malik-root .sites-hero p{font-size:13px!important;max-width:94%!important;}
+  #malik-root .create-top{position:static!important;width:100%!important;height:46px!important;margin:12px 0 0!important;font-size:13px!important;}
+  #malik-root .metrics{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;margin:10px 0 12px!important;}
+  #malik-root .metric{min-height:92px!important;padding:12px!important;}
+  #malik-root .metric>strong{font-size:25px!important;margin-top:11px!important;}
+  #malik-root .toolbar{display:block!important;margin:8px 0!important;}
+  #malik-root .toolbar>button{display:none!important;}
+  #malik-root .site-search{height:39px!important;width:100%!important;}
+  #malik-root .home-chips{gap:7px!important;padding:2px 0 15px!important;}
+  #malik-root .home-chips button{padding:6px 11px!important;font-size:10px!important;}
+  #malik-root .section-head h2{font-size:17px!important;}
+  #malik-root .section-head p{font-size:10px!important;}
+  #malik-root .template-grid{grid-template-columns:1fr!important;gap:10px!important;}
+  #malik-root .template-image{aspect-ratio:16/6.5!important;}
+  #malik-root .template-info{height:34px!important;}
+  #malik-root .quick-grid{grid-template-columns:1fr 1fr!important;gap:8px!important;}
+  #malik-root .quick-grid button{min-height:104px!important;padding:12px!important;}
+  #malik-root .hero-window-a{width:230px!important;height:130px!important;right:5%!important;top:3px!important;}
+  #malik-root .hero-window-b{width:170px!important;height:104px!important;left:10%!important;top:24px!important;}
+  #malik-root .hero-window-c{width:118px!important;height:80px!important;right:1%!important;top:44px!important;}
+}
+
+@media(max-width:520px){
+  #malik-root .sites-world__home{width:calc(100% - 20px)!important;}
+  #malik-root .sites-hero-art{height:112px!important;}
+  #malik-root .sites-hero h1{font-size:42px!important;}
+  #malik-root .template-image{aspect-ratio:16/7!important;}
+  #malik-root .quick-grid{grid-template-columns:1fr 1fr!important;}
+}
