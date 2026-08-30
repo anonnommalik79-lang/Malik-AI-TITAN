@@ -8,11 +8,12 @@ import { useWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import type { AIPlan } from "@/lib/ai/types"
 import { useContextEnabled } from "@/lib/malik-context"
 import { AccountDialog } from "../account/AccountDialog"
+import { MemoryManager } from "./MemoryManager"
 import styles from "../account/account-panels.module.css"
 
 const TABS = [
   { id: "general", title: "Основные", icon: Settings },
-  { id: "context", title: "Контекст", icon: Brain },
+  { id: "context", title: "Память", icon: Brain },
   { id: "account", title: "Аккаунт", icon: User },
 ] as const
 
@@ -61,10 +62,11 @@ export function SovereignSettingsPanel({ username, email, plan, selectedModelId,
             <div className={styles.row}><div className={styles.rowCopy}><span>Оформление</span><p>Чёрный фон и светлый текст.</p></div><span className={styles.muted}>Тёмное</span></div>
           </>}
           {tab === "context" && <>
-            <h2 className={styles.sectionTitle}>Контекст и веб-поиск</h2>
+            <h2 className={styles.sectionTitle}>Память, контекст и веб</h2>
             <div className={styles.row}><div className={styles.rowCopy}><span id="settings-web-label">Поиск по необходимости</span><p>«Поищи», «что такое» и свежие факты — с источниками. Обычный разговор — без поиска.</p></div><button type="button" role="switch" aria-labelledby="settings-web-label" aria-checked={webOn} onClick={() => setWebOn(!webOn)} className={styles.switch} /></div>
-            <div className={styles.row}><div className={styles.rowCopy}><span id="settings-memory-label">Контекст диалога</span><p>Передавать модели предыдущие сообщения. Если выключить, отправляется только текущий запрос.</p></div><button type="button" role="switch" aria-labelledby="settings-memory-label" aria-checked={memoryOn} onClick={() => setMemoryOn(!memoryOn)} className={styles.switch} /></div>
-            <p className={styles.note}>Выбор модели не меняется автоматически при ошибке провайдера.</p>
+            <div className={styles.row}><div className={styles.rowCopy}><span id="settings-memory-label">Память и контекст диалога</span><p>Передавать модели предыдущий контекст и разрешать использование сохранённой вами памяти. Если выключить, отправляется только текущий запрос.</p></div><button type="button" role="switch" aria-labelledby="settings-memory-label" aria-checked={memoryOn} onClick={() => setMemoryOn(!memoryOn)} className={styles.switch} /></div>
+            <MemoryManager />
+            <p className={styles.note}>Память управляется вами. Выбор модели не меняется автоматически при ошибке провайдера.</p>
           </>}
           {tab === "account" && <>
             <h2 className={styles.sectionTitle}>Ваш аккаунт</h2>
@@ -81,4 +83,3 @@ export function SovereignSettingsPanel({ username, email, plan, selectedModelId,
 }
 
 export default SovereignSettingsPanel
-
