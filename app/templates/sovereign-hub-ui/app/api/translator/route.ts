@@ -1,32 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
+import { TRANSLATOR_LANGUAGES } from "@/lib/translator/languages"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const SUPPORTED = new Set([
-  "auto", "ru", "en", "kk", "tr", "de", "fr", "es", "it", "pt", "uk", "pl", "nl", "ar", "zh-CN", "ja", "ko", "hi",
-])
+// The picker and the validator read the same table, so a language offered in
+// the UI can never come back rejected by the API.
+const SUPPORTED = new Set<string>(["auto", ...TRANSLATOR_LANGUAGES.map((language) => language.code)])
 
-const LANGUAGE_NAMES: Record<string, string> = {
-  ru: "Russian",
-  en: "English",
-  kk: "Kazakh",
-  tr: "Turkish",
-  de: "German",
-  fr: "French",
-  es: "Spanish",
-  it: "Italian",
-  pt: "Portuguese",
-  uk: "Ukrainian",
-  pl: "Polish",
-  nl: "Dutch",
-  ar: "Arabic",
-  "zh-CN": "Simplified Chinese",
-  ja: "Japanese",
-  ko: "Korean",
-  hi: "Hindi",
-}
+const LANGUAGE_NAMES: Record<string, string> = Object.fromEntries(
+  TRANSLATOR_LANGUAGES.map((language) => [language.code, language.english]),
+)
 
 const MAX_TEXT_LENGTH = 5000
 const MAX_SEGMENT_BYTES = 450
