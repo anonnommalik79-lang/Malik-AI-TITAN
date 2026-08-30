@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowUp, Camera, Check, ChevronDown, Clock3, History, Play, Plus, RotateCcw, Sparkles, Volume2 } from "lucide-react"
+import { ArrowUp, Camera, ChevronDown, Clock3, History, Play, Plus, RotateCcw, Sparkles, Volume2 } from "lucide-react"
 import { canUseGeneration, incrementUsage, isOwnerUser } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import type { VideoAiTemplate } from "@/lib/media-library"
@@ -17,6 +17,14 @@ export type VideoGenerationStudioProps = {
 
 type Ratio = "16:9" | "9:16" | "1:1"
 type Duration = 5 | 10
+/**
+ * The studio used to send 1080p on every render, and that is most of why a clip
+ * took five to ten minutes: on Wan, 1080P is roughly three times the render of
+ * 720P. Fast is the default now; Max is one click away in the same popover.
+ */
+type Quality = "fast" | "max"
+const QUALITY_RESOLUTION: Record<Quality, "720p" | "1080p"> = { fast: "720p", max: "1080p" }
+const QUALITY_SHORT: Record<Quality, string> = { fast: "720p", max: "1080p" }
 type GenerationPhase = "idle" | "queued" | "rendering" | "ready" | "failed"
 type ShowcaseVideoTemplate = VideoAiTemplate & { mobileSrc?: string }
 type VideoSessionStatus = Exclude<GenerationPhase, "idle">
@@ -240,7 +248,6 @@ function AutoLoopVideo({
 export function VideoGenerationStudio({ username, onViewChange }: VideoGenerationStudioProps) {
   const operator = username?.trim() || "guest@malik.ai"
   const owner = isOwnerUser(operator)
-  const ownerTenSecond = operator.trim().toLowerCase() === "amangeldymalik38@gmail.com"
 
   const hero = useMemo<ShowcaseVideoTemplate>(() => {
     return SHOWCASE_TEMPLATES[0]
@@ -252,7 +259,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   const [prompt, setPrompt] = useState(() => takePrefillPrompt() || DEFAULT_PROMPT)
   const [ratio, setRatio] = useState<Ratio>("16:9")
-  const [duration, setDuration] = useState<Duration>(() => ownerTenSecond ? 10 : 5)
+  // 1080p is the point of this studio, so it stays the default. Five seconds is
+  // what makes it bearable: duration is a straight multiplier on the render and
+  // costs nothing per frame, unlike dropping to 720p.
+  const [duration, setDuration] = useState<Duration>(5)
+  const [quality, setQuality] = useState<Quality>("max")
   const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("Кино")
   const [activeTemplate, setActiveTemplate] = useState(0)
   const [phase, setPhase] = useState<GenerationPhase>("idle")
@@ -337,9 +348,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     audioContextRef.current?.close().catch(() => {})
   }, [])
 
-  useEffect(() => {
-    if (ownerTenSecond) setDuration(10)
-  }, [ownerTenSecond])
+  // The owner account used to be forced to ten seconds, which doubles the
+  // render. Ten is still available, it is just no longer the starting point.
 
   const armAudio = () => {
     if (typeof window === "undefined") return
@@ -431,7 +441,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           body: JSON.stringify({
             prompt: cleanPrompt,
             length: duration,
-            resolution: "1080p",
+            resolution: QUALITY_RESOLUTION[quality],
             ratio,
             generateAudio: true,
             userEmail: operator,
@@ -462,9 +472,12 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         statusUrl,
         provider: resolvedProvider,
       })
-      for (let i = 0; i < 72; i += 1) {
+      // A fast render can finish inside the first few checks, and a five second
+      // gap between polls used to be added on top of it. Poll tightly at the
+      // start, then settle down so a long render is not hammered.
+      for (let i = 0; i < 96; i += 1) {
         setAttempt(i)
-        await sleep(i === 0 ? 2500 : 5000)
+        await sleep(i === 0 ? 1500 : i < 12 ? 2500 : 5000)
         const statusResponse = await clientFetchWithTimeout(statusUrl, { method: "GET" }, 30_000)
         const statusData = await statusResponse.json().catch(() => ({}))
         if (!statusResponse.ok) throw new Error(statusData?.error || `Status ${statusResponse.status}`)
@@ -538,7 +551,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
               <div className="mv__render-copy">
                 <span className="mv__render-dot" />
                 <strong>{statusText}</strong>
-                <small>1080p · {ratio} · {duration}s · sound</small>
+                <small>{QUALITY_SHORT[quality]} · {ratio} · {duration}s · sound</small>
               </div>
             </div>
           ) : null}
@@ -558,7 +571,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           <div className="mv__notice">
             <span>New</span>
             <strong>MalikVideo 1.0</strong>
-            <p>Русский · Қазақша · English → cinematic prompt → 1080p video</p>
+            <p>Русский · Қазақша · English → cinematic prompt → {QUALITY_SHORT[quality]} video</p>
           </div>
           <div className="mv__composer">
             <textarea
@@ -570,7 +583,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             <div className="mv__composer-bottom">
               <button type="button" className="mv__plus" aria-label="Добавить референс" title="Image-to-video скоро"><Plus size={18} /></button>
               <div className="mv__composer-actions">
-                <button type="button" className="mv__quality" onClick={() => setShowControls((value) => !value)}><Sparkles size={14} /> 1080p · Quality <ChevronDown size={14} /></button>
+                <button type="button" className="mv__quality" onClick={() => setShowControls((value) => !value)}><Sparkles size={14} /> {QUALITY_SHORT[quality]} · {duration}s <ChevronDown size={14} /></button>
                 <button type="button" className="mv__send" onClick={generate} disabled={busy || !prompt.trim()} aria-label="Сгенерировать видео">{busy ? <Camera size={17} /> : <ArrowUp size={18} />}</button>
               </div>
             </div>
@@ -580,7 +593,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             <div className="mv__settings-popover">
               <div><span>Формат</span><div className="mv__segmented">{(["16:9", "9:16", "1:1"] as Ratio[]).map((value) => <button key={value} type="button" data-active={ratio === value ? "1" : "0"} onClick={() => setRatio(value)}>{value}</button>)}</div></div>
               <div><span>Длительность</span><div className="mv__segmented">{([5, 10] as Duration[]).map((value) => <button key={value} type="button" data-active={duration === value ? "1" : "0"} onClick={() => setDuration(value)}>{value}s</button>)}</div></div>
-              <div className="mv__fixed-setting"><Check size={14} /> 1080p</div>
+              <div><span>Качество</span><div className="mv__segmented">{(["fast", "max"] as Quality[]).map((value) => <button key={value} type="button" data-active={quality === value ? "1" : "0"} onClick={() => setQuality(value)}>{value === "fast" ? "720p" : "1080p"}</button>)}</div></div>
+              <p className="mv__hint">{quality === "fast"
+                ? (duration === 5 ? "≈1 минута" : "≈2 минуты")
+                : (duration === 5 ? "≈2–3 минуты · звук" : "≈5–6 минут · звук")}</p>
               <div className="mv__fixed-setting"><Volume2 size={14} /> Sound</div>
             </div>
           ) : null}
@@ -713,6 +729,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv__segmented button{height:32px;border-radius:9px;border:1px solid rgba(255,255,255,.07);background:#101115;color:#9c9ea6;cursor:pointer}
         .mv__segmented button[data-active="1"]{background:#fff;color:#080808;border-color:#fff}
         .mv__fixed-setting{height:34px;border-radius:10px;background:#101115;display:flex;align-items:center;gap:8px;padding:0 10px;color:#c8c9ce;font-size:12px}
+        .mv__hint{margin:0;padding:0 2px;color:#747680;font-size:11px}
         .mv__model-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
         .mv__model-row button{height:40px;padding:0 15px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:#101115;color:#d5d6db;display:flex;align-items:center;gap:8px}
         .mv__model-row .is-active{background:#18191d;color:#fff;font-weight:700}

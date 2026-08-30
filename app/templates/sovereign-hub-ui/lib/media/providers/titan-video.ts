@@ -37,7 +37,7 @@ function dashscopeCompatibleBase() {
 
 async function compileDashscopeVideoPrompt(prompt: string, generateAudio: boolean) {
   const key = dashscopeKey()
-  if (!key || process.env.DASHSCOPE_VIDEO_PROMPT_COMPILER === "false") return prompt
+  if (!key || process.env.DASHSCOPE_VIDEO_PROMPT_COMPILER === "false") return null
 
   try {
     const response = await fetch(`${dashscopeCompatibleBase()}/chat/completions`, {
@@ -47,6 +47,11 @@ async function compileDashscopeVideoPrompt(prompt: string, generateAudio: boolea
         "content-type": "application/json",
       },
       body: JSON.stringify({
+        // This step turns the user's Russian or Kazakh into the English prompt
+        // the renderer actually sees, so it decides whether the video matches
+        // what was asked for. A smaller model saved about five seconds out of
+        // two minutes and put that fidelity at risk, which is not a trade worth
+        // making: the speed comes from clip duration instead.
         model: process.env.DASHSCOPE_PROMPT_MODEL || "qwen-plus",
         temperature: 0.15,
         max_tokens: 900,
@@ -67,14 +72,108 @@ async function compileDashscopeVideoPrompt(prompt: string, generateAudio: boolea
           { role: "user", content: prompt },
         ],
       }),
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(Number(process.env.DASHSCOPE_PROMPT_TIMEOUT_MS || 12_000)),
     })
     const payload = await response.json().catch(() => ({}))
     const compiled = payload?.choices?.[0]?.message?.content
-    return response.ok && typeof compiled === "string" && compiled.trim() ? compiled.trim() : prompt
+    if (response.ok && typeof compiled === "string" && compiled.trim() && keptTheRequest(prompt, compiled)) {
+      return compiled.trim()
+    }
+    // null, not the original: the caller then lets DashScope do the rewrite
+    // itself rather than sending a raw Russian sentence to the renderer.
+    return null
   } catch {
-    return prompt
+    return null
   }
+}
+
+/**
+ * Whether the English rewrite still describes what was actually asked for.
+ *
+ * The rewrite is the only thing the renderer sees, so anything it drops is
+ * simply absent from the video, and there is no way to tell from the result
+ * which step lost it. Three things are checked because they are the ones that
+ * change the meaning of a shot rather than its wording:
+ *
+ * - numbers ("три кота", "1980-е") - a dropped or altered count is a different
+ *   scene;
+ * - quoted dialogue, which the compiler is told to carry over verbatim;
+ * - length, because a one-line answer to a paragraph-long request means the
+ *   model summarised instead of translating.
+ *
+ * A failed check discards the rewrite rather than repairing it: the raw request
+ * then goes to DashScope with its own extender enabled, which is slower but
+ * never silently drops half the scene.
+ */
+export function keptTheRequest(original: string, compiled: string) {
+  const text = compiled.trim()
+  if (!text) return false
+
+  const originalWords = original.trim().split(/\s+/).filter(Boolean).length
+  const compiledWords = text.split(/\s+/).filter(Boolean).length
+  // A cinematic rewrite is normally longer than the request; far shorter means
+  // detail was thrown away.
+  if (originalWords >= 8 && compiledWords < originalWords * 0.6) return false
+
+  const lower = text.toLowerCase()
+
+  // Counts as digits: "1980-е", "5 человек".
+  const digitsIn = (value: string) => (value.match(/\d+/g) || []).filter((n) => n.length <= 4)
+  const wantedDigits = digitsIn(original)
+  if (wantedDigits.length) {
+    const got = new Set(digitsIn(text))
+    // A digit rendered as an English word is a correct translation, not a loss.
+    const spelled = /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|dozen|hundred|thousand)\b/i.test(text)
+    if (wantedDigits.some((n) => !got.has(n)) && !spelled) return false
+  }
+
+  // Counts written as words. "три кота" carries no digit at all, so a rewrite
+  // that says "a cat" passed the digit check while describing a different
+  // scene. One and its forms are left out: they are far more often an article
+  // than a count, and a false rejection costs a slower render for nothing.
+  //
+  // Kazakh numerals are kept in a separate list, checked only when the request
+  // is actually Kazakh. Several of them are ordinary Russian words - "он" is
+  // ten in Kazakh and "he" in Russian, "бес" is five in Kazakh and a demon in
+  // Russian - so checking them unconditionally rejected a correct rewrite of
+  // "он бежит по улице" for not containing the number ten.
+  const RU: Array<[string, string, RegExp]> = [
+    ["2", "two", /(?:^|[^\p{L}])(?:два|две|двое)(?![\p{L}])/iu],
+    ["3", "three", /(?:^|[^\p{L}])(?:три|трое)(?![\p{L}])/iu],
+    ["4", "four", /(?:^|[^\p{L}])(?:четыре|четверо)(?![\p{L}])/iu],
+    ["5", "five", /(?:^|[^\p{L}])(?:пять|пятеро)(?![\p{L}])/iu],
+    ["6", "six", /(?:^|[^\p{L}])шесть(?![\p{L}])/iu],
+    ["7", "seven", /(?:^|[^\p{L}])семь(?![\p{L}])/iu],
+    ["8", "eight", /(?:^|[^\p{L}])восемь(?![\p{L}])/iu],
+    ["9", "nine", /(?:^|[^\p{L}])девять(?![\p{L}])/iu],
+    ["10", "ten", /(?:^|[^\p{L}])десять(?![\p{L}])/iu],
+  ]
+
+  const KK: Array<[string, string, RegExp]> = [
+    ["2", "two", /(?:^|[^\p{L}])екі(?![\p{L}])/iu],
+    ["3", "three", /(?:^|[^\p{L}])үш(?![\p{L}])/iu],
+    ["4", "four", /(?:^|[^\p{L}])төрт(?![\p{L}])/iu],
+    ["5", "five", /(?:^|[^\p{L}])бес(?![\p{L}])/iu],
+    ["6", "six", /(?:^|[^\p{L}])алты(?![\p{L}])/iu],
+    ["7", "seven", /(?:^|[^\p{L}])жеті(?![\p{L}])/iu],
+    ["8", "eight", /(?:^|[^\p{L}])сегіз(?![\p{L}])/iu],
+    ["9", "nine", /(?:^|[^\p{L}])тоғыз(?![\p{L}])/iu],
+  ]
+
+  const looksKazakh = /[әіңғүұқөһ]/u.test(original)
+  for (const [digit, english, pattern] of looksKazakh ? [...RU, ...KK] : RU) {
+    if (!pattern.test(original)) continue
+    if (lower.includes(digit) || new RegExp(`\\b${english}\\b`, "i").test(lower)) continue
+    return false
+  }
+
+  const quoted = original.match(/[«"']([^«»"']{3,})[»"']/g)
+  if (quoted?.length) {
+    const inner = quoted.map((q) => q.replace(/^[«"']|[»"']$/g, "").trim().toLowerCase())
+    if (!inner.every((line) => lower.includes(line))) return false
+  }
+
+  return true
 }
 
 export function videoProviderConfigured(id: TitanVideoProviderId): boolean {
@@ -95,7 +194,10 @@ export async function createTitanVideoJob(provider: TitanVideoProviderId, input:
     if (!key) throw new Error("DASHSCOPE_API_KEY missing")
     const model = dashscopeVideoModel()
     const compiledPrompt = await compileDashscopeVideoPrompt(input.prompt, input.generateAudio !== false)
-    const resolution = input.resolution === "480p" ? "480P" : input.resolution === "720p" ? "720P" : "1080P"
+    // 1080p as before. The studio used to hardcode it with no way to change it;
+    // it is a control now, but the default it starts on is unchanged.
+    const requested = input.resolution || (process.env.VIDEO_DEFAULT_RESOLUTION?.trim() as VideoGenerateInput["resolution"]) || "1080p"
+    const resolution = requested === "480p" ? "480P" : requested === "1080p" ? "1080P" : "720P"
     const ratio = input.ratio || "16:9"
 
     const response = await fetch(`${dashscopeApiBase()}/services/aigc/video-generation/video-synthesis`, {
@@ -108,14 +210,19 @@ export async function createTitanVideoJob(provider: TitanVideoProviderId, input:
       body: JSON.stringify({
         model,
         input: {
-          prompt: compiledPrompt,
+          prompt: compiledPrompt || input.prompt,
           negative_prompt: "low quality, blurry, distorted anatomy, duplicate subjects, unstable camera, flicker, watermark, subtitles",
         },
         parameters: {
           resolution,
           ratio,
           duration: length,
-          prompt_extend: true,
+          // DashScope's own rewrite stays on, exactly as before. It is a second
+          // LLM pass over a prompt we have already compiled and it does add
+          // latency, but it is also part of how the finished shot has always
+          // looked, and the render itself is where the minutes actually go.
+          // DASHSCOPE_PROMPT_EXTEND=false turns it off for a faster render.
+          prompt_extend: process.env.DASHSCOPE_PROMPT_EXTEND?.trim().toLowerCase() !== "false",
           watermark: false,
         },
       }),

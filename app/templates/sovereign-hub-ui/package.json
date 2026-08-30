@@ -27,7 +27,8 @@
     "test:taxi": "node scripts/verify-taxi.mjs",
     "test:image-prompt": "node scripts/verify-image-prompt.mjs",
     "test:sites": "node scripts/verify-sites.mjs",
-    "test:voice:understanding": "node scripts/verify-voice-understanding.mjs"
+    "test:voice:understanding": "node scripts/verify-voice-understanding.mjs",
+    "test:video-speed": "node scripts/verify-video-speed.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",
