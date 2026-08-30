@@ -4,11 +4,15 @@ import {
   malikModelErrorPayload,
   resolveStrictMalikSelection,
 } from "@/lib/server/malik-model-router"
+import { isFeatureDisabled, readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+const MAX_CHAT_BODY_BYTES = 16 * 1024 * 1024
+const MAX_TEXT_CONTEXT_CHARS = 260_000
 
 function wantsSse(request: Request, body: any) {
   const accept = request.headers.get("accept") || ""
@@ -23,6 +27,15 @@ function textResponse(content: string) {
       "x-malik-router": "github-openrouter-deepseek-v13",
     },
   })
+}
+
+function textualContextSize(body: any) {
+  const direct = ["originalQuestion", "prompt", "message", "question", "input", "text", "content"]
+    .reduce((sum, key) => sum + (typeof body?.[key] === "string" ? body[key].length : 0), 0)
+  const messages = Array.isArray(body?.messages)
+    ? body.messages.reduce((sum: number, item: any) => sum + (typeof item?.content === "string" ? item.content.length : 0), 0)
+    : 0
+  return direct + messages
 }
 
 function liveSseResponse(
@@ -95,7 +108,41 @@ function liveSseResponse(
 export const POST = withCompute(handlePOST, chatComputeOperation)
 
 async function handlePOST(request: Request) {
-  const body = await request.json().catch(() => ({}))
+  if (isFeatureDisabled("chat")) {
+    return Response.json({ ok: false, error: "CHAT_TEMPORARILY_DISABLED", message: "Malik AI chat is temporarily paused." }, {
+      status: 503,
+      headers: { "cache-control": "no-store", "retry-after": "60" },
+    })
+  }
+
+  let body: any
+  try {
+    body = await readJsonBodyLimited<any>(request, MAX_CHAT_BODY_BYTES)
+  } catch (error) {
+    if (error instanceof RequestSafetyError) {
+      return Response.json({ ok: false, error: error.code, message: error.message }, {
+        status: error.status,
+        headers: { "cache-control": "no-store" },
+      })
+    }
+    return Response.json({ ok: false, error: "INVALID_REQUEST", message: "Invalid request body." }, {
+      status: 400,
+      headers: { "cache-control": "no-store" },
+    })
+  }
+
+  if (textualContextSize(body) > MAX_TEXT_CONTEXT_CHARS) {
+    return Response.json({
+      ok: false,
+      error: "CONTEXT_TOO_LARGE",
+      message: "Контекст слишком большой. Уменьшите текст или начните новый чат.",
+      maxChars: MAX_TEXT_CONTEXT_CHARS,
+    }, {
+      status: 413,
+      headers: { "cache-control": "no-store" },
+    })
+  }
+
   try {
     const selection = await resolveStrictMalikSelection(request, body)
     if (wantsSse(request, body)) return liveSseResponse(body, selection)
@@ -117,16 +164,12 @@ export async function GET() {
   return Response.json({
     ok: true,
     route: "/api/stream",
-    router: "MALIK GITHUB + OPENROUTER + DEEPSEEK V13",
-    env: {
-      github: Boolean(process.env.GITHUB_TOKEN || process.env.GITHUB_MODELS_TOKEN),
-      githubModel: process.env.GITHUB_MODEL || null,
-      openrouter: Boolean(process.env.OPENROUTER_API_KEY),
-      deepseek: Boolean(process.env.DEEPSEEK_API_KEY),
-      serper: Boolean(process.env.SERPER_API_KEY),
-      tavily: Boolean(process.env.TAVILY_API_KEY),
-      brave: Boolean(process.env.BRAVE_SEARCH_API_KEY),
-      chain: process.env.MALIK_GOD_PROVIDER_CHAIN || null,
+    status: isFeatureDisabled("chat") ? "paused" : "ready",
+    limits: {
+      maxBodyMb: MAX_CHAT_BODY_BYTES / (1024 * 1024),
+      maxTextContextChars: MAX_TEXT_CONTEXT_CHARS,
     },
+  }, {
+    headers: { "cache-control": "no-store" },
   })
 }
