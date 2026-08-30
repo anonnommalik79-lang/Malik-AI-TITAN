@@ -34,6 +34,8 @@ export type WebsitePlanSection = {
 
 export type WebsitePlan = {
   version: "malik-sites/v1"
+  /** One sentence, in the user's language, stating what the planner understood. */
+  understood?: string
   locale: "ru" | "kk" | "en"
   brand: {
     name: string
@@ -270,12 +272,21 @@ export function fallbackWebsitePlan(prompt: string, template = ""): WebsitePlan 
 }
 
 export function buildPlannerPrompt(prompt: string, template: string, skills: SiteSkill[]) {
+  // Names and capability lists tell a model nothing it can act on. The rules do,
+  // so they go in verbatim and become the standard the plan is judged against.
   const skillText = skills
-    .map((skill, index) => `${index + 1}. ${skill.name} [${skill.repo}]\nROLE: ${skill.role}\nCAPABILITIES: ${skill.capabilities.join(", ")}`)
+    .map((skill, index) => [
+      `${index + 1}. ${skill.name} [${skill.source}]`,
+      `ROLE: ${skill.role}`,
+      ...(skill.rules?.length ? skill.rules.map((rule) => `RULE: ${rule}`) : []),
+    ].join("\n"))
     .join("\n\n")
 
   return `You are Malik Sites Planner. You are NOT the renderer and you MUST NOT write HTML, CSS, JSX, React or Markdown.
 Your only job is to convert the user's request into ONE strict JSON WebsitePlan. Malik AI will render the site deterministically from the selected skill system.
+
+FIRST, UNDERSTAND THE REQUEST.
+The user may write in Russian, Kazakh, English or a mix, with typos, slang and missing accents. Read past the spelling and work out the real business, audience and purpose. Put that reading in the "understood" field, one sentence, in the user's own language. Everything else in the plan follows from it.
 
 NON-NEGOTIABLE RULES:
 - Preserve the user's actual business, product, language, requested sections, colors, tone and functions.
@@ -287,12 +298,25 @@ NON-NEGOTIABLE RULES:
 - Use 4-8 meaningful sections; do not add sections that have no job in the user journey.
 - Output JSON ONLY. No code fences. No explanation.
 
+WRITE COPY LIKE A PRODUCT WRITER, NOT A TEMPLATE:
+- The hero title names what this specific thing is and who it is for. Never "Добро пожаловать", "Наш продукт", "Welcome".
+- The hero subtitle is one sentence a real customer would care about: the concrete benefit, not adjectives.
+- Every feature title is 2-5 words, and its body says something only this product could say.
+- Specifics from the request — numbers, prices, menu items, city names, hours, names — must survive into the plan.
+- Section titles are statements, not labels.
+
+DESIGN IS PART OF THE PLAN:
+- Pick theme and accent from the subject, not from habit. A coffee shop, a law firm and a crypto dashboard do not share a palette.
+- accent must be a hex colour that suits the business and stays readable on the chosen theme.
+- style, density and heroLayout must agree: luxury with airy and editorial, technical with dense and split.
+
 SELECTED GITHUB REFERENCE SKILLS:
 ${skillText}
 
 EXACT JSON SHAPE:
 {
   "version":"malik-sites/v1",
+  "understood":"one sentence in the user's language stating what they asked for",
   "locale":"ru|kk|en",
   "brand":{"name":"string","eyebrow":"string"},
   "seo":{"title":"string","description":"string"},
@@ -389,6 +413,7 @@ export function parseWebsitePlan(raw: unknown, prompt: string, template = ""): W
 
   return {
     version: "malik-sites/v1",
+    understood: cleanText((parsed as Record<string, unknown>).understood, "", 400) || undefined,
     locale,
     brand: {
       name: cleanText(brand.name, fallback.brand.name, 64),

@@ -25,7 +25,8 @@
     "test:attachment-menu": "node scripts/verify-attachment-menu.mjs",
     "test:media": "node scripts/verify-media-urls.mjs",
     "test:taxi": "node scripts/verify-taxi.mjs",
-    "test:image-prompt": "node scripts/verify-image-prompt.mjs"
+    "test:image-prompt": "node scripts/verify-image-prompt.mjs",
+    "test:sites": "node scripts/verify-sites.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",
