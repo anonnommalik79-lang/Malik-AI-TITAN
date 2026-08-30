@@ -52,6 +52,32 @@ export async function fetchWithTimeout(input: RequestInfo | URL, init: RequestIn
   }
 }
 
+async function readBodyTextLimited(request: Request, maxBytes: number) {
+  if (!request.body) return ""
+  const reader = request.body.getReader()
+  const decoder = new TextDecoder()
+  let bytes = 0
+  let raw = ""
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      if (!value) continue
+      bytes += value.byteLength
+      if (bytes > maxBytes) {
+        try { await reader.cancel("body-too-large") } catch {}
+        throw new RequestSafetyError("Request body is too large.", 413, "BODY_TOO_LARGE")
+      }
+      raw += decoder.decode(value, { stream: true })
+    }
+    raw += decoder.decode()
+    return raw
+  } finally {
+    try { reader.releaseLock() } catch {}
+  }
+}
+
 export async function readJsonBodyLimited<T = Record<string, unknown>>(
   request: Request,
   maxBytes = DEFAULT_MAX_JSON_BYTES,
@@ -61,11 +87,7 @@ export async function readJsonBodyLimited<T = Record<string, unknown>>(
     throw new RequestSafetyError("Request body is too large.", 413, "BODY_TOO_LARGE")
   }
 
-  const raw = await request.text()
-  const actual = new TextEncoder().encode(raw).byteLength
-  if (actual > maxBytes) {
-    throw new RequestSafetyError("Request body is too large.", 413, "BODY_TOO_LARGE")
-  }
+  const raw = await readBodyTextLimited(request, maxBytes)
   if (!raw.trim()) return {} as T
 
   try {
@@ -79,7 +101,8 @@ function isPrivateHostname(hostname: string) {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "")
   if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true
   if (host === "::1" || host === "0:0:0:0:0:0:0:1") return true
-  if (host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) return true
+  const ipv6 = host.includes(":")
+  if (ipv6 && (host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd"))) return true
   if (PRIVATE_IPV4.some((pattern) => pattern.test(host))) return true
   return host === "metadata.google.internal" || host === "metadata" || host.endsWith(".internal")
 }
@@ -113,5 +136,6 @@ export function requestSafetySnapshot() {
     disabledFeatures: [...disabledFeatures()].sort(),
     urlGuard: true,
     requestTimeouts: true,
+    streamingBodyLimit: true,
   }
 }
