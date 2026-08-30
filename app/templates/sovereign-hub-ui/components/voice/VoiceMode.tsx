@@ -10,6 +10,7 @@ import { isVoiceSoundEnabled, playVoiceTransitionSound, saveVoiceSoundEnabled } 
 import { FluxTtsSession } from "@/lib/voice/flux-tts-client"
 import { VoiceAudioPlayer, unlockVoiceAudio } from "@/lib/voice/audio-playback"
 import { repairTranscript } from "@/lib/voice/speech-vocabulary"
+import { VOICE_HISTORY_TURNS, type VoiceMessage } from "@/lib/voice/conversation"
 
 type SpeechResult = { isFinal: boolean; 0: { transcript: string } }
 type SpeechResultEvent = { resultIndex: number; results: ArrayLike<SpeechResult> }
@@ -91,6 +92,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const replyVersionRef = useRef(0)
   const pendingAudioRef = useRef<Blob | null>(null)
   const lastReplyRef = useRef<{ text: string; voice: string; language: VoiceLanguage; locale?: string } | null>(null)
+  /**
+   * What has been said so far in this session. Sent with every turn so a
+   * follow-up ("а почему?", "короче") has something to refer back to; cleared
+   * when the voice window closes.
+   */
+  const historyRef = useRef<VoiceMessage[]>([])
   const replySettleRef = useRef<((ok: boolean) => void) | null>(null)
   const replyPlayingRef = useRef(false)
   const replyInterruptedRef = useRef(false)
@@ -375,6 +382,9 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   const cleanupAll = useCallback(() => {
     demoRef.current = false
+    // Closing the voice window ends the conversation, so the next one starts
+    // clean rather than continuing yesterday's topic.
+    historyRef.current = []
     stopReplyAudio(false)
     fluxSessionRef.current?.close()
     fluxSessionRef.current = null
@@ -525,11 +535,21 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       const response = await fetch("/api/voice/turn", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: clean, personality, language: selectedLanguage }),
+        body: JSON.stringify({
+          text: clean,
+          personality,
+          language: selectedLanguage,
+          history: historyRef.current.slice(-VOICE_HISTORY_TURNS),
+        }),
       })
       const payload = await response.json().catch(() => ({})) as VoiceTurnPayload
       if (!mountedRef.current || closingRef.current || selectedLanguage !== languageRef.current) return
       if (!response.ok || !payload.ok || !payload.content) throw new Error(payload.error || "voice turn failed")
+      const exchange: VoiceMessage[] = [
+        { role: "user", content: payload.transcript || clean },
+        { role: "assistant", content: payload.content },
+      ]
+      historyRef.current = [...historyRef.current, ...exchange].slice(-VOICE_HISTORY_TURNS)
       setFinalTranscript(payload.content)
       setInterimTranscript("")
       setTitle("Готовлю голос")

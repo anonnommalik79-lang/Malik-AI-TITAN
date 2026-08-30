@@ -2,6 +2,13 @@ import { voiceLlmAnswer } from "@/lib/voice/voice-llm-router"
 import { voiceSearchContext } from "@/lib/voice/web-search"
 import { repairTranscript } from "@/lib/voice/speech-vocabulary"
 import { languageDirective, looksLikeLanguage, resolveVoiceLanguage } from "@/lib/voice/voice-language"
+import {
+  antiRepeatNote,
+  conversationRules,
+  repeatsEarlierAnswer,
+  sanitizeHistory,
+  tierFor,
+} from "@/lib/voice/conversation"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
@@ -49,11 +56,16 @@ async function handlePOST(request: Request) {
   // through /api/transcribe, so the repair has to run on this path too.
   const text = repairTranscript(raw) || raw
 
+  // What was already said. Without it every turn was answered as if it were the
+  // first thing the user had ever said.
+  const history = sanitizeHistory(body?.history)
+
   const language = resolveVoiceLanguage({ text, selected: body?.language })
   const instruction = [
     "You are Sola, the Malik AI voice assistant.",
     PERSONALITY[personality] || PERSONALITY.Assistant,
     COMPREHENSION,
+    conversationRules(history.length > 0),
     languageDirective(language),
     "Never mention internal providers, routing, environment variables or API keys.",
   ].join(" ")
@@ -61,16 +73,41 @@ async function handlePOST(request: Request) {
   try {
     const search = await voiceSearchContext(text)
     const grounded = search.context ? `${instruction}\n${search.context}` : instruction
+    const tier = tierFor(text, search.sources.length > 0)
 
-    let answer = await voiceLlmAnswer({ text, instruction: grounded })
+    let answer = await voiceLlmAnswer({ text, instruction: grounded, history, tier, signal: request.signal })
     let content = String(answer.content || "").trim()
 
     if (!content || !looksLikeLanguage(content, language.code)) {
       answer = await voiceLlmAnswer({
         text: `Answer this user request again, in ${language.english} only. USER REQUEST:\n${text}`,
         instruction: `${grounded} The previous answer was not in ${language.english}. A second miss is not allowed.`,
+        history,
+        tier,
+        signal: request.signal,
       })
       content = String(answer.content || "").trim()
+    }
+
+    // A small model in a spoken loop will happily give the same answer twice.
+    // One retry, told exactly what it already said, with more freedom to vary.
+    let repeated = false
+    if (content && repeatsEarlierAnswer(content, history)) {
+      repeated = true
+      const retry = await voiceLlmAnswer({
+        text,
+        instruction: `${grounded}\n${antiRepeatNote(history)}`,
+        history,
+        tier,
+        temperature: 0.8,
+        signal: request.signal,
+      })
+      const fresh = String(retry.content || "").trim()
+      if (fresh && !repeatsEarlierAnswer(fresh, history) && looksLikeLanguage(fresh, language.code)) {
+        answer = retry
+        content = fresh
+        repeated = false
+      }
     }
 
     if (!content) content = fallbackReply(language.code)
@@ -84,6 +121,9 @@ async function handlePOST(request: Request) {
       languageLocale: language.locale,
       languageSource: language.source,
       transcript: text,
+      turns: history.length,
+      tier,
+      repeated,
       provider: answer.provider,
       model: answer.model,
       usedWeb: search.sources.length > 0,

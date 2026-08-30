@@ -1,6 +1,9 @@
+import { routeAI } from "@/lib/ai/router"
+import type { VoiceMessage, VoiceTier } from "./conversation"
+
 type VoiceLlmResult = {
   content: string
-  provider: "groq" | "cloudflare"
+  provider: string
   model: string
 }
 
@@ -38,20 +41,23 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
-function requestBody(system: string, text: string, model?: string) {
+function requestBody(system: string, text: string, model?: string, history: VoiceMessage[] = [], temperature?: number) {
   return {
     ...(model ? { model } : {}),
     messages: [
       { role: "system", content: system },
+      // Without these the assistant answers every turn as if it were the
+      // first, which is what made follow-up questions land on nothing.
+      ...history.map((message) => ({ role: message.role, content: message.content })),
       { role: "user", content: text },
     ],
     max_tokens: Number(process.env.VOICE_LLM_MAX_OUTPUT_TOKENS || 700),
-    temperature: Number(process.env.VOICE_LLM_TEMPERATURE || 0.45),
+    temperature: temperature ?? Number(process.env.VOICE_LLM_TEMPERATURE || 0.45),
     stream: false,
   }
 }
 
-async function callGroq(system: string, text: string): Promise<VoiceLlmResult | null> {
+async function callGroq(system: string, text: string, history: VoiceMessage[], temperature?: number): Promise<VoiceLlmResult | null> {
   // Important: try BOTH keys. A stale dedicated Voice key must never block a
   // working generic Groq key that already exists in Render.
   const keys = unique([env("GROQ_VOICE_API_KEY"), env("GROQ_API_KEY")])
@@ -71,7 +77,7 @@ async function callGroq(system: string, text: string): Promise<VoiceLlmResult | 
             authorization: `Bearer ${key}`,
             "content-type": "application/json; charset=utf-8",
           },
-          body: JSON.stringify(requestBody(system, text, model)),
+          body: JSON.stringify(requestBody(system, text, model, history, temperature)),
         },
         timeoutMs,
       )
@@ -116,7 +122,7 @@ function cloudflareCredentials(): CfCredential[] {
   })
 }
 
-async function callCloudflare(system: string, text: string): Promise<VoiceLlmResult | null> {
+async function callCloudflare(system: string, text: string, history: VoiceMessage[], temperature?: number): Promise<VoiceLlmResult | null> {
   const credentials = cloudflareCredentials()
   if (!credentials.length) return null
 
@@ -136,7 +142,7 @@ async function callCloudflare(system: string, text: string): Promise<VoiceLlmRes
         {
           method: "POST",
           headers,
-          body: JSON.stringify(requestBody(system, text, model)),
+          body: JSON.stringify(requestBody(system, text, model, history, temperature)),
         },
         timeoutMs,
       )
@@ -160,7 +166,7 @@ async function callCloudflare(system: string, text: string): Promise<VoiceLlmRes
         {
           method: "POST",
           headers,
-          body: JSON.stringify(requestBody(system, text)),
+          body: JSON.stringify(requestBody(system, text, undefined, history, temperature)),
         },
         timeoutMs,
       )
@@ -181,14 +187,71 @@ async function callCloudflare(system: string, text: string): Promise<VoiceLlmRes
   return null
 }
 
+/**
+ * The main router, which every other feature in the app already uses. It knows
+ * which providers are actually configured and falls back across them, so Voice
+ * stops being pinned to whichever one it was written against.
+ *
+ * A "deep" turn is allowed to reach the largest configured model; a "fast" turn
+ * asks for the quick one, because waiting a second for "спасибо" is worse than
+ * a slightly plainer answer.
+ */
+async function callSharedRouter(
+  system: string,
+  text: string,
+  history: VoiceMessage[],
+  tier: VoiceTier,
+  temperature: number | undefined,
+  signal?: AbortSignal,
+): Promise<VoiceLlmResult | null> {
+  try {
+    const result = await routeAI({
+      prompt: text,
+      task: "chat",
+      // No provider and no model are pinned: whatever is configured is eligible.
+      userId: "voice",
+      maxTokens: Number(process.env.VOICE_LLM_MAX_OUTPUT_TOKENS || 700),
+      temperature: temperature ?? Number(process.env.VOICE_LLM_TEMPERATURE || 0.45),
+      messages: [
+        { role: "system", content: system },
+        ...history.map((message) => ({ role: message.role, content: message.content })),
+        { role: "user", content: text },
+      ],
+      signal,
+      metadata: { lane: "voice", tier },
+    })
+
+    if (!result?.success) return null
+    const content = typeof result.output === "string" ? result.output.trim() : ""
+    if (!content) return null
+
+    return { content, provider: String(result.provider || "router"), model: String(result.model || "auto") }
+  } catch (error) {
+    console.error("[VOICE_LLM_ROUTER]", error instanceof Error ? error.message : error)
+    return null
+  }
+}
+
 export async function voiceLlmAnswer(input: {
   text: string
   instruction: string
+  history?: VoiceMessage[]
+  tier?: VoiceTier
+  temperature?: number
+  signal?: AbortSignal
 }): Promise<VoiceLlmResult> {
-  const groq = await callGroq(input.instruction, input.text)
+  const history = input.history || []
+  const tier = input.tier || "fast"
+
+  const routed = await callSharedRouter(input.instruction, input.text, history, tier, input.temperature, input.signal)
+  if (routed) return routed
+
+  // Direct provider calls stay as the safety net, so Voice still answers if the
+  // shared router is rate-limited or misconfigured.
+  const groq = await callGroq(input.instruction, input.text, history, input.temperature)
   if (groq) return groq
 
-  const cloudflare = await callCloudflare(input.instruction, input.text)
+  const cloudflare = await callCloudflare(input.instruction, input.text, history, input.temperature)
   if (cloudflare) return cloudflare
 
   throw new Error("VOICE_LLM_UNAVAILABLE")
