@@ -58,6 +58,8 @@ import "./mobile-composer-model-position-final.css"
 import "./video-mobile-worldclass-final.css"
 // Last authority for MalikVideo top section: no overlap, no clipped title, clean controls.
 import "./video-mobile-top-clean-final.css"
+// Absolute final Sites pass: exact reference geometry + local template previews.
+import "./sites-world-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
