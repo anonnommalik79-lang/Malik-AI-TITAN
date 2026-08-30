@@ -9,6 +9,8 @@ export type VideoAspectRatio = "16:9" | "9:16" | "1:1"
 
 export type ImageGenerateInput = {
   prompt: string
+  /** Description already shown to the user by the understand step. */
+  understood?: string
   aspectRatio?: ImageAspectRatio
   mode?: ImageMode
   modelId?: MalikImageModelId
@@ -20,6 +22,8 @@ export type ImageGenerateResult = {
   ok: boolean
   provider: ImageProviderId
   imageUrl: string
+  /** What Malik understood the request to be, echoed back to the chat card. */
+  understood?: string
   modelId?: MalikImageModelId
   providerModel?: string
   base64?: string

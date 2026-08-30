@@ -125,6 +125,8 @@ export type InlineMediaGeneration = {
   url?: string
   /** Inline copy of the finished image, used only when `url` cannot be loaded. */
   fallbackUrl?: string
+  /** What Malik understood the request to be, shown while the picture renders. */
+  understood?: string
   thumbnailUrl?: string
   jobId?: string
   statusUrl?: string
@@ -310,6 +312,7 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
         status={liveMedia.status}
         startedAt={liveMedia.createdAt}
         provider={liveMedia.provider}
+        understood={liveMedia.understood}
         failed={isFailed}
         error={liveMedia.error}
       />

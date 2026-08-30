@@ -207,6 +207,8 @@ type InlineMediaGeneration = {
   url?: string
   /** Inline copy of the finished image, used only when `url` cannot be loaded. */
   fallbackUrl?: string
+  /** What Malik understood the request to be, shown while the picture renders. */
+  understood?: string
   thumbnailUrl?: string
   statusUrl?: string
   jobId?: string
@@ -1000,6 +1002,7 @@ function reviveMessage(message: any): Message {
           progress: typeof message.generatedMedia.progress === "number" ? message.generatedMedia.progress : undefined,
           url: typeof message.generatedMedia.url === "string" ? message.generatedMedia.url : undefined,
           fallbackUrl: typeof message.generatedMedia.fallbackUrl === "string" ? message.generatedMedia.fallbackUrl : undefined,
+          understood: typeof message.generatedMedia.understood === "string" ? message.generatedMedia.understood : undefined,
           thumbnailUrl: typeof message.generatedMedia.thumbnailUrl === "string" ? message.generatedMedia.thumbnailUrl : undefined,
           statusUrl: typeof message.generatedMedia.statusUrl === "string" ? message.generatedMedia.statusUrl : undefined,
           jobId: typeof message.generatedMedia.jobId === "string" ? message.generatedMedia.jobId : undefined,
@@ -5703,7 +5706,28 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     try {
       setIsGeneratingTerminal(false)
       patchInlineMedia({ status: "thinking", progress: 14 })
-      await new Promise((resolve) => setTimeout(resolve, 350))
+
+      // Step one of the visible flow: say what was understood before spending
+      // forty seconds drawing it. A heavy accent or a typo becomes a line the
+      // user can read and correct immediately, instead of a wrong photograph.
+      let understood = ""
+      if (inlineMediaKind === "image") {
+        try {
+          const understandResponse = await clientFetchWithTimeout("/api/ai/image/understand", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: inlineMediaApiPrompt }),
+          }, 25_000)
+          const understandPayload = await understandResponse.json().catch(() => ({}))
+          if (understandPayload?.ok && typeof understandPayload.understood === "string") {
+            understood = understandPayload.understood
+            patchInlineMedia({ understood, status: "generating", progress: 30 })
+          }
+        } catch {
+          // Understanding is a convenience. The generation route repeats it.
+        }
+      }
+
       patchInlineMedia({ status: "generating", progress: 36 })
 
       const mediaEndpoint = inlineMediaKind === "video" ? "/api/generate/video" : "/api/ai/image"
@@ -5712,6 +5736,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: inlineMediaApiPrompt,
+          // The picture must match the line the user was just shown.
+          understood: understood || undefined,
           stream: false,
           kind: inlineMediaKind === "video" ? "video" : "photo",
           provider: "auto",
@@ -5859,6 +5885,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         progress: finalStatusIsProcessing ? 92 : 100,
         url: mediaUrl || undefined,
         fallbackUrl: inlineFallbackUrl && inlineFallbackUrl !== mediaUrl ? inlineFallbackUrl : undefined,
+        understood: (typeof finalPayload?.understood === "string" ? finalPayload.understood : "") || understood || undefined,
         thumbnailUrl:
           typeof finalPayload?.thumbnailUrl === "string" ? finalPayload.thumbnailUrl :
           typeof finalPayload?.posterUrl === "string" ? finalPayload.posterUrl :

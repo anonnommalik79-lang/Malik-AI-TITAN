@@ -14,6 +14,8 @@ type ImageGenerationMotionProps = {
   /** ISO timestamp of when the job started, so the watchdog survives a reload. */
   startedAt?: string
   provider?: string
+  /** What Malik understood the request to be, shown before the picture lands. */
+  understood?: string
   failed?: boolean
   error?: string
 }
@@ -45,6 +47,7 @@ export function ImageGenerationMotion({
   status,
   startedAt,
   provider,
+  understood,
   failed = false,
   error,
 }: ImageGenerationMotionProps) {
@@ -290,13 +293,25 @@ export function ImageGenerationMotion({
         <div className="malik-art-flash" />
       </div>
 
+      {/* What Malik understood, shown while the picture is still being drawn.
+          A misread accent or typo is visible in a second here, instead of
+          arriving as a wrong photograph forty seconds later. */}
+      {understood && !actuallyFailed ? (
+        <div className="malik-art-understood">
+          <span>Malik понял</span>
+          <p>{understood}</p>
+        </div>
+      ) : null}
+
       <div className="malik-art-status">
         {actuallyFailed ? (
           <span>{friendlyGenerationError(loadError || error)}</span>
         ) : imageLoaded ? (
           <span>Изображение готово · 100% · <strong>{elapsedSeconds} с</strong></span>
+        ) : understood ? (
+          <span>Рисую по этому описанию · <strong>{elapsedSeconds} с</strong></span>
         ) : (
-          <span>Генератор обрабатывает точный запрос · <strong>{elapsedSeconds} с</strong></span>
+          <span>Разбираю запрос · <strong>{elapsedSeconds} с</strong></span>
         )}
       </div>
 
@@ -542,6 +557,28 @@ export function ImageGenerationMotion({
           border-radius: inherit;
           background: #fff;
           transition: width .45s ease-out;
+        }
+
+        .malik-art-understood {
+          margin: 12px auto 0;
+          width: 100%;
+          padding: 10px 14px;
+          border-radius: 14px;
+          border: 1px solid rgba(255,255,255,.10);
+          background: rgba(255,255,255,.035);
+        }
+        .malik-art-understood > span {
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: .16em;
+          text-transform: uppercase;
+          color: rgba(255,255,255,.42);
+        }
+        .malik-art-understood > p {
+          margin-top: 5px;
+          font-size: 13.5px;
+          line-height: 1.5;
+          color: #e8e8ea;
         }
 
         .malik-art-report {

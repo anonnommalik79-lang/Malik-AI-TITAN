@@ -28,7 +28,9 @@ import type { ImageMode } from "./types"
  *      in the provider's own negative_prompt field where negation belongs.
  */
 
-const TRANSLATION_MODEL = "malik-27b" as const
+// Free-tier models only, so understanding never depends on the user's plan.
+// Tried in order until one returns a usable description.
+const TRANSLATION_MODELS = ["malik-27b", "malik-fast-120b", "malik-20b"] as const
 const MAX_SOURCE_LENGTH = 900
 const MAX_DESCRIPTION_LENGTH = 600
 
@@ -113,31 +115,42 @@ const TRANSLATION_SYSTEM_PROMPT = [
   "Never write instructions, rules, labels, quotes or explanations. Output only the description itself, as plain prose.",
 ].join(" ")
 
-async function translateToEnglish(source: string): Promise<{ text: string; translated: boolean }> {
-  if (!source || !hasNonLatinLetters(source)) return { text: source, translated: false }
+/**
+ * Every free text model gets a turn before the request is sent untranslated.
+ *
+ * One model is not enough here: heavy accents, Kazakh, transliteration and
+ * typos are exactly the input a single model is most likely to fumble, and a
+ * fumble means the picture is wrong. If the first model answers with a refusal,
+ * chatter, untranslated text or a collapsed one-word summary, the next one
+ * tries the same request.
+ */
+async function translateToEnglish(source: string): Promise<{ text: string; translated: boolean; model: string }> {
+  if (!source || !hasNonLatinLetters(source)) return { text: source, translated: false, model: "" }
 
-  try {
-    const result = await runStrictMalikModel({
-      modelId: TRANSLATION_MODEL,
-      prompt: source,
-      systemPrompt: TRANSLATION_SYSTEM_PROMPT,
-      maxTokens: 160,
-      temperature: 0,
-    })
+  for (const modelId of TRANSLATION_MODELS) {
+    try {
+      const result = await runStrictMalikModel({
+        modelId,
+        prompt: source,
+        systemPrompt: TRANSLATION_SYSTEM_PROMPT,
+        maxTokens: 160,
+        temperature: 0,
+      })
 
-    const candidate = String(result?.content || "")
-      .replace(/\s+/g, " ")
-      .replace(/^["'`\s]+|["'`\s]+$/g, "")
-      .trim()
+      const candidate = String(result?.content || "")
+        .replace(/\s+/g, " ")
+        .replace(/^["'`\s]+|["'`\s]+$/g, "")
+        .trim()
 
-    if (usableDescription(candidate, source)) return { text: candidate, translated: true }
-  } catch {
-    // A translation outage must never block a generation.
+      if (usableDescription(candidate, source)) return { text: candidate, translated: true, model: modelId }
+    } catch {
+      // This model is down or refused. Try the next one.
+    }
   }
 
   // Faithful original beats a mangled rewrite: flux handles some Cyrillic, and
   // the user's own words are still the closest thing to what they asked for.
-  return { text: source, translated: false }
+  return { text: source, translated: false, model: "" }
 }
 
 /** Two or three words at most, and only when the caller explicitly chose a look. */
@@ -153,22 +166,46 @@ export type VisualPrompt = {
   /** Sent to the image model, and nothing else is. */
   prompt: string
   negativePrompt: string
+  /** What Malik understood, shown to the user before the picture arrives. */
+  understood: string
   /** The user's request after cleanup, for diagnostics and the chat card. */
   source: string
   translated: boolean
+  model: string
 }
 
-export async function buildVisualPrompt(rawPrompt: string, mode?: ImageMode): Promise<VisualPrompt> {
+/**
+ * A description the client already obtained from the understand step. It is
+ * validated rather than trusted: the round trip must not become a way to inject
+ * arbitrary text into the image prompt.
+ */
+export function acceptUnderstoodDescription(value: unknown, source: string) {
+  const text = String(value || "").replace(/\s+/g, " ").trim()
+  if (!text) return ""
+  return usableDescription(text, source) ? text.slice(0, MAX_DESCRIPTION_LENGTH) : ""
+}
+
+export async function buildVisualPrompt(
+  rawPrompt: string,
+  mode?: ImageMode,
+  understoodInput?: string,
+): Promise<VisualPrompt> {
   const source = normalizeVisualRequest(rawPrompt)
   if (!source) {
-    return { prompt: "", negativePrompt: IMAGE_NEGATIVE_PROMPT, source: "", translated: false }
+    return { prompt: "", negativePrompt: IMAGE_NEGATIVE_PROMPT, understood: "", source: "", translated: false, model: "" }
   }
 
-  const { text, translated } = await translateToEnglish(source)
+  // Reuse the description the user already saw. Understanding the same request
+  // twice would cost a second model call and could contradict what was shown.
+  const reused = acceptUnderstoodDescription(understoodInput, source)
+  const { text, translated, model } = reused
+    ? { text: reused, translated: true, model: "reused" }
+    : await translateToEnglish(source)
+
   const suffix = modeSuffix(mode)
 
   // Description first, optional look last. No headers, no rules, no negations.
   const prompt = [text, suffix].filter(Boolean).join(", ").slice(0, MAX_DESCRIPTION_LENGTH)
 
-  return { prompt, negativePrompt: IMAGE_NEGATIVE_PROMPT, source, translated }
+  return { prompt, negativePrompt: IMAGE_NEGATIVE_PROMPT, understood: text, source, translated, model }
 }

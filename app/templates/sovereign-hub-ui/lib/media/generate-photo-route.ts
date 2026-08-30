@@ -115,6 +115,9 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   try {
     const result = await routeImageGeneration({
       prompt,
+      // Reuse the description the chat already showed the user, so the picture
+      // matches the "Malik понял" line instead of a second interpretation.
+      understood: typeof body?.understood === "string" ? body.understood : undefined,
       aspectRatio,
       mode,
       modelId,
@@ -185,6 +188,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       imageUrl,
       url: imageUrl,
       mediaUrl: imageUrl,
+      understood: result.understood,
       storageUrl,
       assetId,
       assetUrl,

@@ -45,7 +45,7 @@ export async function routeImageGeneration(
   const errors: string[] = []
   const requestedModelId = input.modelId
 
-  const visual = await buildVisualPrompt(input.prompt, input.mode)
+  const visual = await buildVisualPrompt(input.prompt, input.mode, input.understood)
   if (!visual.prompt) {
     return {
       ok: false,
@@ -85,6 +85,7 @@ export async function routeImageGeneration(
             imageUrl: result.imageUrl,
             modelId: result.modelId,
             providerModel: result.providerModel,
+            understood: visual.understood,
             remainingDailyImages: 0,
           }
         } catch (error) {
@@ -119,6 +120,7 @@ export async function routeImageGeneration(
           imageUrl: result.imageUrl,
           modelId: result.modelId,
           providerModel: result.providerModel,
+          understood: visual.understood,
           remainingDailyImages: 0,
         }
       }
@@ -135,6 +137,7 @@ export async function routeImageGeneration(
           provider: "stability",
           imageUrl: result.imageUrl,
           base64: result.base64,
+          understood: visual.understood,
           remainingDailyImages: 0,
         }
       }
@@ -145,7 +148,7 @@ export async function routeImageGeneration(
           aspectRatio: input.aspectRatio,
           signal: options?.signal,
         })
-        return { ok: true, provider: "fal", imageUrl: result.imageUrl, remainingDailyImages: 0 }
+        return { ok: true, provider: "fal", imageUrl: result.imageUrl, understood: visual.understood, remainingDailyImages: 0 }
       }
 
       if (provider === "aws-bedrock") {
@@ -159,6 +162,7 @@ export async function routeImageGeneration(
           provider: "aws-bedrock",
           imageUrl: result.imageUrl,
           base64: result.base64,
+          understood: visual.understood,
           remainingDailyImages: 0,
         }
       }
@@ -170,7 +174,7 @@ export async function routeImageGeneration(
           aspectRatio: input.aspectRatio,
           signal: options?.signal,
         })
-        return { ok: true, provider: "pollinations", imageUrl: result.imageUrl, remainingDailyImages: 0 }
+        return { ok: true, provider: "pollinations", imageUrl: result.imageUrl, understood: visual.understood, remainingDailyImages: 0 }
       }
     } catch (error) {
       errors.push(`${provider}: ${error instanceof Error ? error.message : "failed"}`)
