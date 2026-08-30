@@ -10,6 +10,28 @@ const DAILY_LIMITS: Record<AIPlan, Record<"chat" | "image" | "video" | "project"
 }
 
 const minuteBuckets = new Map<string, { count: number; resetAt: number }>()
+const MAX_MINUTE_BUCKETS = 10_000
+let lastCleanupAt = 0
+
+function cleanupBuckets(now = Date.now()) {
+  if (now - lastCleanupAt < 60_000 && minuteBuckets.size < MAX_MINUTE_BUCKETS) return
+  lastCleanupAt = now
+  for (const [key, bucket] of minuteBuckets) {
+    if (bucket.resetAt <= now) minuteBuckets.delete(key)
+  }
+  if (minuteBuckets.size <= MAX_MINUTE_BUCKETS) return
+  let remove = minuteBuckets.size - MAX_MINUTE_BUCKETS
+  for (const key of minuteBuckets.keys()) {
+    minuteBuckets.delete(key)
+    remove -= 1
+    if (remove <= 0) break
+  }
+}
+
+function nextDailyReset() {
+  const now = new Date()
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString()
+}
 
 function category(task: AITaskType): "chat" | "image" | "video" | "project" {
   if (task === "image") return "image"
@@ -19,6 +41,7 @@ function category(task: AITaskType): "chat" | "image" | "video" | "project" {
 }
 
 export function checkRateLimit(input: { userId?: string; ip?: string; plan?: AIPlan; task: AITaskType; user?: AdminUserLike | string | null }) {
+  cleanupBuckets()
   const userId = input.userId || input.ip || (typeof input.user === "string" ? input.user : input.user?.email || input.user?.userEmail) || "guest"
   const trustedUser = typeof input.user === "object" && input.user ? input.user : null
 
@@ -29,7 +52,7 @@ export function checkRateLimit(input: { userId?: string; ip?: string; plan?: AIP
       code: "BYPASS_ACTIVE",
       message: "Admin/dev bypass active.",
       remaining: 999999,
-      resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      resetAt: nextDailyReset(),
     }
   }
 
@@ -50,7 +73,7 @@ export function checkRateLimit(input: { userId?: string; ip?: string; plan?: AIP
       code: "DAILY_LIMIT_REACHED",
       message: "Daily limit reached. Upgrade plan or try again tomorrow.",
       remaining: 0,
-      resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      resetAt: nextDailyReset(),
     }
   }
 
@@ -61,7 +84,7 @@ export function checkRateLimit(input: { userId?: string; ip?: string; plan?: AIP
 
   if (!current || current.resetAt <= now) {
     minuteBuckets.set(bucketKey, { count: 1, resetAt: now + 60_000 })
-    return { ok: true, bypass: false, remaining: dailyLimit - used - 1, resetAt: usage.date }
+    return { ok: true, bypass: false, remaining: Math.max(0, dailyLimit - used - 1), resetAt: nextDailyReset() }
   }
 
   if (current.count >= minuteLimit) {
@@ -76,6 +99,5 @@ export function checkRateLimit(input: { userId?: string; ip?: string; plan?: AIP
   }
 
   current.count += 1
-  return { ok: true, bypass: false, remaining: dailyLimit - used - 1, resetAt: usage.date }
+  return { ok: true, bypass: false, remaining: Math.max(0, dailyLimit - used - 1), resetAt: nextDailyReset() }
 }
-
