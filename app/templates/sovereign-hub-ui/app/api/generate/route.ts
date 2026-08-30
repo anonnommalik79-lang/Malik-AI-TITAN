@@ -49,17 +49,23 @@ export default function MalikGeneratedFeature() {
 `
 }
 
-function imageFallbackUrl(prompt: string) {
-  const safe = escapeHtml((prompt || "Malik AI image").slice(0, 120))
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1344" height="768"><defs><radialGradient id="g" cx="28%" cy="18%" r="90%"><stop stop-color="#7c3aed"/><stop offset=".45" stop-color="#0f172a"/><stop offset="1" stop-color="#020617"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><circle cx="1010" cy="160" r="210" fill="#22d3ee" opacity=".18"/><text x="96" y="150" fill="#fff" font-family="Arial" font-size="46" font-weight="900">Malik Vision Demo</text><foreignObject x="96" y="530" width="1100" height="130"><div xmlns="http://www.w3.org/1999/xhtml" style="color:white;font-family:Arial;font-size:34px;font-weight:900">${safe}</div></foreignObject></svg>`
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+/**
+ * A generation either produced a picture or it did not.
+ *
+ * This route used to answer a failed or rate-limited request with `ok: true`
+ * and a hand-drawn SVG reading "Malik Vision Demo" above the user's own prompt
+ * text. The chat card had no way to tell that apart from a real result, so a
+ * reload showed a caption card where a photograph should be — the "template
+ * with text instead of a photo" people kept reporting. Failures are now
+ * reported as failures.
+ */
+function imageFailure(kind: string, code: string, message: string, status: number, detail?: string) {
+  return Response.json(
+    { ok: false, kind, status: "failed", error: code, message, publicError: detail || message, fallback: false },
+    { status, headers: { "Cache-Control": "no-store" } },
+  )
 }
 
-function videoFallbackPreviewUrl(prompt: string): string {
-  const safe = escapeHtml((prompt || "Malik AI video").slice(0, 100))
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#7c3aed;stop-opacity:1" /><stop offset="50%" style="stop-color:#22d3ee;stop-opacity:.3" /><stop offset="100%" style="stop-color:#1a1a2e;stop-opacity:1" /></linearGradient><pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M 60 0 L 0 0 0 60" fill="none" stroke="#22d3ee" stroke-width="0.5" opacity="0.3"/></pattern></defs><rect width="100%" height="100%" fill="url(#grad)"/><rect width="100%" height="100%" fill="url(#grid)"/><circle cx="640" cy="180" r="120" fill="#22d3ee" opacity="0.15"/><circle cx="200" cy="600" r="150" fill="#7c3aed" opacity="0.1"/><rect x="100" y="280" width="1080" height="200" rx="20" fill="#020308" opacity="0.8" stroke="#22d3ee" stroke-width="2"/><text x="640" y="340" text-anchor="middle" fill="#22d3ee" font-family="Arial" font-size="28" font-weight="900">MALIK AI Video Storyboard</text><text x="640" y="390" text-anchor="middle" fill="#cbd5e1" font-family="Arial" font-size="18">${safe}</text><text x="640" y="450" text-anchor="middle" fill="#64748b" font-family="Arial" font-size="14">Live rendering preparing...</text></svg>`
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
-}
 
 function textPrompt(kind: string, prompt: string) {
   if (kind === "code") return `Create a usable code artifact for this request. Return the complete code, not a placeholder.\n\n${prompt}`
@@ -129,9 +135,8 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
   if (kind === "photo" || kind === "image") {
     const rate = checkRateLimit({ userId: entitlement.userId, plan: entitlement.plan, task: "image" })
     if (!rate.ok) {
-      const url = imageFallbackUrl(prompt)
-      incrementUsage(entitlement.userId, entitlement.plan, "image")
-      return Response.json({ ok: true, kind, engine: publicEngineForProvider("demo-fallback", kind).title, fallbackUsed: true, status: "demo-ready", url, imageUrl: url, fallback: true, artifact: responseArtifact(kind, prompt, undefined, url), message: "Limit reached. Demo preview ready. Upgrade for more daily generations.", publicError: rate.message })
+      // Do not burn a generation on a request that was refused.
+      return imageFailure(kind, "IMAGE_LIMIT_REACHED", rate.message || "Дневной лимит изображений исчерпан.", 429)
     }
     try {
       const result = await generateImageWithRouter({
@@ -154,18 +159,20 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
       incrementUsage(entitlement.userId, entitlement.plan, "image")
       return Response.json({ ok: true, kind, engine: publicEngineForProvider(result.provider, kind).title, fallbackUsed: false, status: "ready", url, imageUrl: url, artifact: responseArtifact(kind, prompt, undefined, url), message: "Image generated." })
     } catch (error) {
-      const url = imageFallbackUrl(prompt)
-      incrementUsage(entitlement.userId, entitlement.plan, "image")
-      return Response.json({ ok: true, kind, engine: publicEngineForProvider("demo-fallback", kind).title, fallbackUsed: true, status: "demo-ready", url, imageUrl: url, fallback: true, artifact: responseArtifact(kind, prompt, undefined, url), message: "Demo image preview ready. Live image generation will work after server provider keys are configured.", publicError: publicErrorMessage(error) })
+      return imageFailure(
+        kind,
+        "IMAGE_GENERATION_FAILED",
+        "Не удалось сгенерировать изображение. Повторите запрос.",
+        502,
+        publicErrorMessage(error),
+      )
     }
   }
 
   if (kind === "video") {
     const rate = checkRateLimit({ userId: entitlement.userId, plan: entitlement.plan, task: "video" })
     if (!rate.ok) {
-      const previewUrl = videoFallbackPreviewUrl(prompt)
-      incrementUsage(entitlement.userId, entitlement.plan, "video")
-      return Response.json({ ok: true, kind, engine: publicEngineForProvider("demo-fallback", kind).title, fallbackUsed: true, status: "storyboard-ready", fallback: true, url: previewUrl, videoUrl: previewUrl, posterUrl: previewUrl, previewUrl: previewUrl, artifact: responseArtifact(kind, prompt, undefined, previewUrl), message: "Limit reached. Demo storyboard ready. Upgrade for more daily generations.", publicError: rate.message })
+      return imageFailure(kind, "VIDEO_LIMIT_REACHED", rate.message || "Дневной лимит видео исчерпан.", 429)
     }
     const videoMetadata = {
       requestedProvider,
@@ -233,24 +240,13 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
         status: "failed",
         error: error instanceof Error ? error.message : String(error),
       })
-      const previewUrl = videoFallbackPreviewUrl(prompt)
-      incrementUsage(entitlement.userId, entitlement.plan, "video")
-      return Response.json({
-        ok: true,
+      return imageFailure(
         kind,
-        engine: publicEngineForProvider("demo-fallback", kind).title,
-        fallbackUsed: true,
-        status: "storyboard-ready",
-        fallback: true,
-        url: previewUrl,
-        videoUrl: previewUrl,
-        posterUrl: previewUrl,
-        previewUrl: previewUrl,
-        jobId: localJob.id,
-        artifact: responseArtifact(kind, prompt, undefined, previewUrl),
-        message: "Demo video storyboard ready. Live video rendering will work after server provider keys are configured.",
-        publicError: publicErrorMessage(error),
-      })
+        "VIDEO_GENERATION_FAILED",
+        "Не удалось отрендерить видео. Повторите запрос.",
+        502,
+        publicErrorMessage(error),
+      )
     }
   }
 

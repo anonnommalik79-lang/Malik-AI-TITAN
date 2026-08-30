@@ -2,15 +2,20 @@ import { imageFreeMode, imageGodOrder } from "./config"
 import { generateWithPollinations } from "./providers/pollinations"
 import { generateWithStability, stabilityConfigured } from "./providers/stability"
 import { awsImageConfigured, falImageConfigured, generateAwsImage, generateFalImage } from "./providers/titan-image"
-import { compileImagePrompt } from "./providers/cloudflare-image"
 import {
   generatePreparedCloudflareImage,
   preparedCloudflareImageConfigured,
 } from "./providers/cloudflare-image-prepared"
 import { DEFAULT_MALIK_IMAGE_MODEL_ID, MALIK_IMAGE_MODELS, type MalikImageModelId } from "./image-models"
-import { buildImageIntentPlan } from "./image-intent-engine"
-import { buildUnifiedNegativePrompt, buildUnifiedStrictImagePrompt } from "./strict-image-rules"
+import { buildVisualPrompt } from "./visual-prompt"
 import type { ImageGenerateInput, ImageGenerateResult } from "./types"
+
+/**
+ * One prompt is prepared once, then handed unchanged to whichever provider is
+ * available. Providers no longer reinterpret it or append rules of their own:
+ * a diffusion model draws the words it is given, so the only words it is given
+ * are the ones describing the picture.
+ */
 
 const handlers: Record<string, () => boolean> = {
   cloudflare: preparedCloudflareImageConfigured,
@@ -33,30 +38,6 @@ function uniqueProviders(values: string[]) {
   return values.filter((provider, index, list) => Boolean(provider) && list.indexOf(provider) === index)
 }
 
-async function prepareStrictPrompt(input: ImageGenerateInput, signal?: AbortSignal) {
-  let compiled = input.prompt
-  let compilerError = ""
-
-  try {
-    compiled = await compileImagePrompt(input.prompt, input.mode, signal)
-  } catch (error) {
-    compilerError = error instanceof Error ? error.message : "prompt compiler failed"
-  }
-
-  // Build one deterministic semantic plan from both the original request and
-  // the multilingual compiler output. This stage recovers common typo/accent
-  // noise, locks count/colors/settings/text, and becomes the single source of
-  // truth for every provider and fallback below.
-  const intent = buildImageIntentPlan(input.prompt, compiled, input.mode)
-
-  return {
-    intent,
-    strictPrompt: buildUnifiedStrictImagePrompt(compiled, input.prompt, input.mode, intent),
-    negativePrompt: buildUnifiedNegativePrompt(input.prompt, compiled, input.mode, intent),
-    compilerError,
-  }
-}
-
 export async function routeImageGeneration(
   input: ImageGenerateInput,
   options?: { signal?: AbortSignal },
@@ -64,20 +45,26 @@ export async function routeImageGeneration(
   const errors: string[] = []
   const requestedModelId = input.modelId
 
-  // Compile and lock intent exactly ONCE. Selected model + every fallback receive
-  // the same semantic contract, fingerprint and exclusions. No provider may
-  // independently reinterpret Russian/Kazakh/English or mixed/noisy wording.
-  const prepared = await prepareStrictPrompt(input, options?.signal)
-  if (prepared.compilerError) errors.push(`prompt-compiler: ${prepared.compilerError}`)
+  const visual = await buildVisualPrompt(input.prompt, input.mode)
+  if (!visual.prompt) {
+    return {
+      ok: false,
+      provider: "pollinations",
+      imageUrl: "",
+      remainingDailyImages: 0,
+      error: "EMPTY_VISUAL_REQUEST",
+    }
+  }
+
+  const prompt = visual.prompt
+  const negativePrompt = visual.negativePrompt
 
   if (requestedModelId) {
     if (!preparedCloudflareImageConfigured()) {
-      errors.push("cloudflare: selected image model is not configured")
+      errors.push("cloudflare: not configured")
     } else {
-      // The user no longer chooses image models. Try the preferred production
-      // model first, then the other free Cloudflare engines before leaving the
-      // provider. Previously one unavailable model skipped Cloudflare entirely
-      // and silently dropped into a much less faithful public fallback.
+      // Image models are automatic. Try the preferred one, then the other free
+      // Cloudflare engines, before leaving the provider entirely.
       const automaticModels = [
         requestedModelId,
         ...MALIK_IMAGE_MODELS.filter((model) => model.tier === "free").map((model) => model.id),
@@ -86,8 +73,8 @@ export async function routeImageGeneration(
       for (const automaticModelId of automaticModels) {
         try {
           const result = await generatePreparedCloudflareImage({
-            strictPrompt: prepared.strictPrompt,
-            negativePrompt: prepared.negativePrompt,
+            strictPrompt: prompt,
+            negativePrompt,
             aspectRatio: input.aspectRatio,
             modelId: automaticModelId,
             signal: options?.signal,
@@ -120,8 +107,8 @@ export async function routeImageGeneration(
     try {
       if (provider === "cloudflare") {
         const result = await generatePreparedCloudflareImage({
-          strictPrompt: prepared.strictPrompt,
-          negativePrompt: prepared.negativePrompt,
+          strictPrompt: prompt,
+          negativePrompt,
           aspectRatio: input.aspectRatio,
           modelId: DEFAULT_MALIK_IMAGE_MODEL_ID,
           signal: options?.signal,
@@ -138,7 +125,7 @@ export async function routeImageGeneration(
 
       if (provider === "stability") {
         const result = await generateWithStability({
-          prompt: prepared.strictPrompt,
+          prompt,
           aspectRatio: input.aspectRatio,
           mode: input.mode,
           signal: options?.signal,
@@ -154,7 +141,7 @@ export async function routeImageGeneration(
 
       if (provider === "fal") {
         const result = await generateFalImage({
-          prompt: prepared.strictPrompt,
+          prompt,
           aspectRatio: input.aspectRatio,
           signal: options?.signal,
         })
@@ -163,7 +150,7 @@ export async function routeImageGeneration(
 
       if (provider === "aws-bedrock") {
         const result = await generateAwsImage({
-          prompt: prepared.strictPrompt,
+          prompt,
           mode: input.mode,
           signal: options?.signal,
         })
@@ -178,10 +165,9 @@ export async function routeImageGeneration(
 
       if (provider === "pollinations") {
         const result = await generateWithPollinations({
-          prompt: prepared.strictPrompt,
-          negativePrompt: prepared.negativePrompt,
+          prompt,
+          negativePrompt,
           aspectRatio: input.aspectRatio,
-          mode: input.mode,
           signal: options?.signal,
         })
         return { ok: true, provider: "pollinations", imageUrl: result.imageUrl, remainingDailyImages: 0 }

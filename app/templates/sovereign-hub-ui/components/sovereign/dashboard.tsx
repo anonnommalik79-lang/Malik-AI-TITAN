@@ -5715,7 +5715,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           stream: false,
           kind: inlineMediaKind === "video" ? "video" : "photo",
           provider: "auto",
-          style: "cinematic Gemini-style transparent chat generation",
+          // Chat sends no style on purpose. "cinematic Gemini-style transparent
+          // chat generation" used to travel into the image prompt and repaint
+          // every request in a look nobody asked for.
           aspectRatio: inlineMediaKind === "video" ? "16:9" : "1:1",
           format: inlineMediaKind === "video" ? "16:9" : "1:1",
           duration: inlineMediaKind === "video" ? 5 : undefined,

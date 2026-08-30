@@ -13,23 +13,11 @@ function pollinationsModel() {
   return process.env.POLLINATIONS_IMAGE_MODEL?.trim() || "flux"
 }
 
-function fallbackNegativePrompt(prompt: string) {
-  const lower = prompt.toLowerCase()
-  if (/(?:transformer|robot|mecha|android|трансформ|робот)/iu.test(lower)) {
-    return "unrelated person, woman, girl, man, boy, human portrait, random portrait, unrelated scene, wrong subject, blurry, watermark, text"
-  }
-  return "unrelated subject, random scene, wrong subject, blurry, watermark, unwanted text"
-}
-
-function compactStrictPrompt(prompt: string) {
-  const raw = /AUTHORITATIVE USER REQUEST[^:]*:\s*([\s\S]*?)(?:\n\n|$)/i.exec(prompt)?.[1]?.trim()
-  const english = /LOSSLESS ENGLISH DESCRIPTION:\s*([\s\S]*?)(?:\n\n|$)/i.exec(prompt)?.[1]?.trim()
-  const facts = /NON-NEGOTIABLE VISUAL FACTS:\s*([\s\S]*?)(?:\n\n|$)/i.exec(prompt)?.[1]?.trim()
-  return [english || raw || prompt, facts, "One coherent image. Exact subject and action. No collage, no unrelated subject."]
-    .filter(Boolean)
-    .join("\n")
-    .slice(0, 1200)
-}
+// The prompt arrives ready to render. This provider used to re-cut it and
+// staple "One coherent image. Exact subject and action. No collage, no
+// unrelated subject." onto the end — words flux then drew into the picture as
+// text. It now sends the description verbatim, and every prohibition travels in
+// the negative field where a diffusion model can actually act on it.
 
 function stableSeed(value: string) {
   let hash = 2166136261
@@ -64,11 +52,10 @@ export async function generateWithPollinations(input: {
 }): Promise<{ imageUrl: string }> {
   const size = SIZE_MAP[input.aspectRatio || "1:1"]
 
-  // The router owns prompt semantics. Pollinations receives that exact strict
-  // prompt and is explicitly forbidden from doing a second AI rewrite.
-  const prompt = compactStrictPrompt(input.prompt)
+  // The router owns prompt semantics. Pollinations renders it as given.
+  const prompt = String(input.prompt || "").replace(/\s+/g, " ").trim().slice(0, 700)
   const encoded = encodeURIComponent(prompt)
-  const negative = encodeURIComponent((input.negativePrompt?.trim() || fallbackNegativePrompt(prompt)).slice(0, 500))
+  const negative = encodeURIComponent(String(input.negativePrompt || "").trim().slice(0, 500))
   const model = encodeURIComponent(pollinationsModel())
   const seed = stableSeed(prompt)
 
