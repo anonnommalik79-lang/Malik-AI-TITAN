@@ -101,7 +101,6 @@ export async function GET() {
   const returningUsers = users.filter((entry) => {
     const created = dateMs(entry.created_at)
     const lastSignIn = dateMs(entry.last_sign_in_at)
-    // A sign-in meaningfully after account creation is treated as a return.
     return created > 0 && lastSignIn - created >= 5 * 60 * 1000
   }).length
 
@@ -117,17 +116,26 @@ export async function GET() {
     return created > 0 && now - created <= 7 * day
   }).length
 
+  // Founder console must always expose the full WorkOS account list, not only
+  // the last 12 users. Active-today accounts naturally sort to the top because
+  // we order by last sign-in time, while every registered email remains visible.
   const recentUsers = [...users]
     .sort((left, right) => dateMs(right.last_sign_in_at || right.created_at) - dateMs(left.last_sign_in_at || left.created_at))
-    .slice(0, 12)
-    .map((entry) => ({
-      id: entry.id || "",
-      email: entry.email || "",
-      name: entry.name || [entry.first_name, entry.last_name].filter(Boolean).join(" ") || "Пользователь",
-      emailVerified: entry.email_verified === true,
-      createdAt: entry.created_at || null,
-      lastSignInAt: entry.last_sign_in_at || null,
-    }))
+    .map((entry) => {
+      const lastSignInAt = entry.last_sign_in_at || null
+      const lastSignIn = dateMs(lastSignInAt)
+      return {
+        id: entry.id || "",
+        email: entry.email || "",
+        name: entry.name || [entry.first_name, entry.last_name].filter(Boolean).join(" ") || "Пользователь",
+        emailVerified: entry.email_verified === true,
+        createdAt: entry.created_at || null,
+        lastSignInAt,
+        activeToday: lastSignIn > 0 && now - lastSignIn <= day,
+      }
+    })
+
+  const activeTodayUsers = recentUsers.filter((entry) => entry.activeToday)
 
   return Response.json({
     ok: true,
@@ -151,8 +159,9 @@ export async function GET() {
     },
     topUsage: usage.topUsers,
     recentUsers,
+    activeTodayUsers,
     scopes: {
-      users: users.length ? "WorkOS AuthKit" : "current Malik AI runtime fallback",
+      users: users.length ? "WorkOS AuthKit · all registered accounts" : "current Malik AI runtime fallback",
       tokenAndGenerationUsage: "current Render runtime / current UTC day",
     },
     warning: workosError || null,
