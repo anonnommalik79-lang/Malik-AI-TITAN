@@ -1,6 +1,7 @@
 import { handleGenerateRequest } from "@/lib/generation-route"
 import { handleMalikPhotoGenerationRequest } from "@/lib/media/generate-photo-route"
 import { handleSkillWebsiteGenerationRequest } from "@/lib/sites/generate-site-route"
+import { isFeatureDisabled } from "@/lib/server/request-safety"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 import { generationComputeOperation } from "@/lib/malik-compute/policies"
@@ -128,6 +129,19 @@ function invalidKind(kind: string, id: string) {
   }, { status: 400 }, id, kind || "unknown")
 }
 
+function disabledKind(kind: string, id: string) {
+  return json({
+    ok: false,
+    publicError: "generation_temporarily_disabled",
+    message: "This Malik AI generation capability is temporarily paused.",
+    kind,
+    requestId: id,
+  }, {
+    status: 503,
+    headers: { "Retry-After": "60", "Cache-Control": "no-store" },
+  }, id, kind)
+}
+
 export const POST = withCompute(handlePOST, generationComputeOperation)
 
 async function handlePOST(request: Request, context: RouteContext) {
@@ -135,6 +149,7 @@ async function handlePOST(request: Request, context: RouteContext) {
   const kind = await readKind(context)
 
   if (!SUPPORTED_KINDS.has(kind)) return invalidKind(kind, id)
+  if (isFeatureDisabled("generation") || isFeatureDisabled(kind)) return disabledKind(kind, id)
 
   try {
     const startedAt = Date.now()
@@ -166,19 +181,22 @@ export async function GET(request: Request, context: RouteContext) {
   const kind = await readKind(context)
   if (!SUPPORTED_KINDS.has(kind)) return invalidKind(kind, id)
 
+  const paused = isFeatureDisabled("generation") || isFeatureDisabled(kind)
   return json({
-    ok: true,
+    ok: !paused,
     product: "MALIK AI 6.5 TITAN",
     route: `/api/generate/${kind}`,
     method: "POST",
     runtime,
     kind,
+    status: paused ? "paused" : "ready",
     explicitKindRouting: true,
     aliases: KIND_ALIASES,
     reliability: {
       cors: true,
       requestId: true,
       safeErrors: true,
+      emergencyKillSwitch: true,
       nodeRuntime: true,
       dynamic: true,
       maxDuration,
@@ -199,20 +217,22 @@ export async function GET(request: Request, context: RouteContext) {
           ? "handleSkillWebsiteGenerationRequest(request)"
           : "handleGenerateRequest(request, kind)",
     },
-  }, { status: 200 }, id, kind)
+  }, { status: paused ? 503 : 200 }, id, kind)
 }
 
 export async function HEAD(request: Request, context: RouteContext) {
   const id = request.headers.get("X-Malik-Request-Id") || requestId()
   const kind = await readKind(context)
+  const supported = SUPPORTED_KINDS.has(kind)
+  const paused = supported && (isFeatureDisabled("generation") || isFeatureDisabled(kind))
   return new Response(null, {
-    status: SUPPORTED_KINDS.has(kind) ? 204 : 400,
+    status: !supported ? 400 : paused ? 503 : 204,
     headers: {
       ...CORS_HEADERS,
       "X-Malik-Request-Id": id,
       "X-Malik-Route": `/api/generate/${kind}`,
       "X-Malik-Kind": kind,
-      "X-Malik-Health": SUPPORTED_KINDS.has(kind) ? "ok" : "unsupported-kind",
+      "X-Malik-Health": !supported ? "unsupported-kind" : paused ? "paused" : "ok",
     },
   })
 }
