@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react"
 import {
   ArrowLeft,
   ArrowRight,
@@ -31,6 +31,7 @@ export type WebsiteGenerationStudioProps = {
 type SkillSource = { id: string; name: string; category: string; source: string; repo: string; url: string; role: string }
 type SavedSite = { id: string; title: string; prompt: string; html: string; createdAt: string; skills?: SkillSource[] }
 type InspirationSite = { name: string; domain: string; url: string; category: string; note: string }
+type WebsiteTemplate = { title: string; category: string; preview: string; inspiration: InspirationSite; prompt: string }
 
 const ENDPOINT = "/api/generate/website"
 const STORAGE_KEY = "malik-sites-v3"
@@ -48,18 +49,18 @@ const INSPIRATION: InspirationSite[] = [
   { name: "Apple", domain: "apple.com", url: "https://www.apple.com", category: "Product", note: "Сильный фокус на продукте, крупный scale и чистый storytelling" },
 ]
 
-const HOME_CATEGORIES = ["Популярные", "Бизнес", "Портфолио", "SaaS", "Лендинг", "Интернет-магазин", "Блог", "Креатив", "Технологии", "Образование", "Медицина", "Другое"]
+const HOME_CATEGORIES = ["Популярные", "Бизнес", "Портфолио", "Спорт", "Лендинг", "Интернет-магазин", "Блог", "Креатив", "Технологии", "Образование", "Медицина", "Другое"]
 
-const TEMPLATE_META = [
-  ["Modern SaaS", "SaaS", INSPIRATION[0]],
-  ["AI Startup", "Технологии", INSPIRATION[2]],
-  ["Creative Portfolio", "Портфолио", INSPIRATION[4]],
-  ["E-commerce", "Интернет-магазин", INSPIRATION[7]],
-  ["Agency", "Бизнес", INSPIRATION[1]],
-  ["Blog / Magazine", "Блог", INSPIRATION[3]],
-  ["Design Studio", "Креатив", INSPIRATION[6]],
-  ["Product Launch", "Лендинг", INSPIRATION[8]],
-] as const
+const TEMPLATE_META: WebsiteTemplate[] = [
+  { title: "Adidas Performance", category: "Спорт", preview: "/sites/template-previews-v2/adidas-v2.png", inspiration: INSPIRATION[7], prompt: "Создай мощный спортивный интернет-магазин: чёрно-белая editorial-подача, динамичная фотография атлетов, каталог обуви и одежды, коллекции, преимущества доставки, карточки товаров и сильные CTA. Сохрани спортивную энергию, но сделай оригинальный бренд и контент." },
+  { title: "Apple Technology", category: "Технологии", preview: "/sites/template-previews-v2/apple-v2.png", inspiration: INSPIRATION[8], prompt: "Создай ультра-премиальный технологический сайт: глубокий чёрный фон, кинематографичная предметная съёмка устройств, точная белая типографика, продуктовые истории, характеристики, сравнение и покупка. Используй принципы Apple, но сделай оригинальный бренд и контент." },
+  { title: "Creative Portfolio", category: "Портфолио", preview: "/sites/template-previews-v2/creative-portfolio-v2.png", inspiration: INSPIRATION[4], prompt: "Создай смелое редакционное портфолио креативной студии: крупная типографика, яркая magenta-палитра, проекты в журнальной сетке, кейсы, награды и понятная форма контакта." },
+  { title: "E-commerce", category: "Интернет-магазин", preview: "/sites/template-previews-v2/ecommerce-v2.png", inspiration: INSPIRATION[7], prompt: "Создай премиальный интернет-магазин парфюмерии: дорогая предметная фотография, каталог, карточки товаров, преимущества, отзывы, корзина и чистая мобильная покупка." },
+  { title: "Agency", category: "Бизнес", preview: "/sites/template-previews-v2/agency-v2.png", inspiration: INSPIRATION[1], prompt: "Создай строгий сайт архитектурного агентства в швейцарской сетке: монохромная палитра, сильная типографика, избранные проекты, услуги, команда, процесс и контактный CTA." },
+  { title: "Blog / Magazine", category: "Блог", preview: "/sites/template-previews-v2/blog-v2.png", inspiration: INSPIRATION[3], prompt: "Создай современный editorial-блог о путешествиях: тёплая светлая палитра, большая обложка, рубрики, карточки статей, авторы, подписка и удобное чтение на телефоне." },
+  { title: "Restaurant", category: "Другое", preview: "/sites/template-previews-v2/restaurant-v2.png", inspiration: INSPIRATION[7], prompt: "Создай атмосферный сайт fine-dining ресторана: выразительные фотографии блюд, меню, история шефа, интерьер, бронирование столика, адрес и часы работы." },
+  { title: "Fitness / Health", category: "Медицина", preview: "/sites/template-previews-v2/fitness-v2.png", inspiration: INSPIRATION[8], prompt: "Создай энергичный сайт фитнес-клуба: контрастная чёрно-лаймовая палитра, тренировки, тренеры, расписание, результаты клиентов, тарифы и запись на пробное занятие." },
+]
 
 function escapeHtmlText(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char] || char))
@@ -91,6 +92,8 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
   const [inspirationQuery, setInspirationQuery] = useState("")
   const [category, setCategory] = useState("Все")
   const [homeCategory, setHomeCategory] = useState("Популярные")
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     try {
@@ -119,9 +122,13 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
   }, [inspirationQuery, category])
 
   const visibleTemplates = useMemo(() => {
-    if (homeCategory === "Популярные") return TEMPLATE_META
-    return TEMPLATE_META.filter((item) => item[1] === homeCategory)
-  }, [homeCategory])
+    const needle = query.trim().toLowerCase()
+    return TEMPLATE_META.filter((item) => {
+      const matchesCategory = homeCategory === "Популярные" || item.category === homeCategory
+      const matchesQuery = !needle || `${item.title} ${item.category} ${item.prompt}`.toLowerCase().includes(needle)
+      return matchesCategory && matchesQuery
+    })
+  }, [homeCategory, query])
 
   const openBuilder = () => {
     setSelectedId(null)
@@ -145,6 +152,36 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
     setPrompt(`Создай оригинальный сайт для моего проекта. Возьми только дизайн-принципы ${site.name} (${site.domain}): ${site.note}. Не копируй их тексты, бренд, изображения или точную верстку. Сделай уникальный Malik AI уровень.`)
     setBuilderOpen(true)
     window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  const useTemplate = (template: WebsiteTemplate) => {
+    setSelectedId(null)
+    setHtml("")
+    setError("")
+    setPrompt(template.prompt)
+    setBuilderOpen(true)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  const importWebsite = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+    const importedHtml = await file.text()
+    if (!importedHtml.trim()) return
+    const site: SavedSite = {
+      id: crypto.randomUUID(),
+      title: file.name.replace(/\.html?$/i, "") || "Импортированный сайт",
+      prompt: `Импортирован из файла ${file.name}`,
+      html: importedHtml,
+      createdAt: new Date().toISOString(),
+    }
+    persist([site, ...sites].slice(0, 24))
+    setSelectedId(site.id)
+    setPrompt(site.prompt)
+    setHtml(site.html)
+    setError("")
+    setBuilderOpen(true)
   }
 
   const generate = async () => {
@@ -239,9 +276,8 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
             <p>Создавайте, управляйте и масштабируйте потрясающие сайты с помощью ИИ.</p>
           </div>
           <div className="sites-hero-art" aria-hidden="true">
-            <div className="hero-window hero-window-a"><span/><strong>Ideas into<br/>extraordinary<br/>websites.</strong><i/></div>
-            <div className="hero-window hero-window-b"><span/><strong>Build.<br/>Design.<br/>Scale.</strong><i/></div>
-            <div className="hero-window hero-window-c"><span/><strong>Malik AI</strong><i/></div>
+            <img className="sites-hero-image" src="/sites/sites-hero-v2.png" alt=""/>
+            <span className="sites-hero-shine"/>
           </div>
           <button className="primary create-top" type="button" onClick={openBuilder}><Plus size={18}/> Создать сайт</button>
         </section>
@@ -253,18 +289,19 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
           <Metric icon={<Settings2/>} label="Среда" value="Live" note="production workspace"/>
         </section>
 
-        <div className="toolbar"><div className="site-search"><Search size={17}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Поиск сайтов и шаблонов..."/></div><button type="button"><LayoutGrid size={16}/> Все категории <ArrowRight size={14}/></button></div>
+        <div className="toolbar"><div className="site-search"><Search size={17}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Поиск сайтов и шаблонов..."/></div><div className="category-control"><button type="button" aria-expanded={categoryMenuOpen} onClick={() => setCategoryMenuOpen((open) => !open)}><LayoutGrid size={16}/> Все категории <ArrowRight size={14}/></button>{categoryMenuOpen ? <div className="category-menu" role="menu">{HOME_CATEGORIES.map((item) => <button type="button" role="menuitem" key={item} className={homeCategory === item ? "active" : ""} onClick={() => { setHomeCategory(item); setCategoryMenuOpen(false) }}>{item}<ArrowRight size={13}/></button>)}</div> : null}</div></div>
 
         <div className="home-chips">{HOME_CATEGORIES.map((item) => <button type="button" key={item} className={homeCategory === item ? "active" : ""} onClick={() => setHomeCategory(item)}>{item}</button>)}</div>
 
         <section className="template-section">
           <div className="section-head"><div><h2>Премиальные шаблоны</h2><p>Готовые визуальные направления для быстрого старта.</p></div><button type="button" onClick={() => setHomeCategory("Популярные")}>Показать все <ArrowRight size={14}/></button></div>
           <div className="template-grid">
-            {visibleTemplates.map(([title, kind, ref]) => <button type="button" className="template-card" key={title} onClick={() => useInspiration(ref)}>
-              <div className="template-image"><img src={shot(ref.url)} alt="" loading="lazy"/><span className="template-glow"/></div>
-              <div className="template-info"><strong>{title}</strong><em>{kind}</em></div>
+            {visibleTemplates.map((template) => <button type="button" className="template-card" key={template.title} onClick={() => useTemplate(template)}>
+              <div className="template-image"><img src={template.preview} alt={`Превью шаблона ${template.title}`} loading="lazy"/><span className="template-glow"/><span className="template-action">Использовать <ArrowRight size={13}/></span></div>
+              <div className="template-info"><strong>{template.title}</strong><em>{template.category}</em></div>
             </button>)}
           </div>
+          {!visibleTemplates.length ? <div className="template-empty"><Search size={18}/><strong>Шаблоны не найдены</strong><span>Измените запрос или выберите другую категорию.</span></div> : null}
         </section>
 
         {filteredSites.length ? <section className="saved-section"><div className="section-head"><div><h2>Ваши сайты</h2><p>Проекты, созданные внутри Malik AI.</p></div></div><div className="saved-list">{filteredSites.map((site) => <article className="saved-row" key={site.id}>
@@ -277,10 +314,11 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
 
         <section className="quick-grid">
           <button type="button" onClick={openBuilder}><span className="quick-icon"><Plus/></span><strong>Создать с нуля</strong><span>Чистый проект с помощью ИИ</span><ArrowRight/></button>
-          <button type="button" onClick={openBuilder}><span className="quick-icon"><Upload/></span><strong>Импортировать</strong><span>Перенести существующий сайт</span><ArrowRight/></button>
+          <button type="button" onClick={() => importInputRef.current?.click()}><span className="quick-icon"><Upload/></span><strong>Импортировать</strong><span>Загрузить готовый HTML-сайт</span><ArrowRight/></button>
           <button type="button" onClick={onOpenCodex}><span className="quick-icon"><Code2/></span><strong>Открыть код</strong><span>Редактирование кода сайта</span><ArrowRight/></button>
           <button type="button" onClick={() => setBuilderOpen(true)}><span className="quick-icon"><Settings2/></span><strong>Настройки проекта</strong><span>Домен, SEO и интеграции</span><ArrowRight/></button>
         </section>
+        <input ref={importInputRef} className="sites-import-input" type="file" accept=".html,.htm,text/html" onChange={importWebsite}/>
       </div>
       <Styles/>
     </main>
