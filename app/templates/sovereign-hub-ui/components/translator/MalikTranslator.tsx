@@ -167,7 +167,7 @@ function LanguageBar({
 
         {open ? (
           <div
-            className={`absolute z-50 mt-2 w-[248px] overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0d0d0f] shadow-[0_24px_70px_rgba(0,0,0,.7)] ${
+            className={`malik-lang-menu absolute z-50 mt-2 w-[248px] overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0d0d0f] ${
               align === "right" ? "right-0" : "left-0"
             }`}
             role="listbox"
@@ -226,6 +226,15 @@ export function MalikTranslator() {
   const [showAllHistory, setShowAllHistory] = useState(false)
 
   useEffect(() => setHistory(readHistory()), [])
+
+  // legendary-aurora.css paints gold radial gradients on body::before and
+  // body::after for every page in the app. Behind this section they read as a
+  // yellow haze over what is meant to be a black page, so the flag below turns
+  // them off while the translator is open and restores them on the way out.
+  useEffect(() => {
+    document.body.setAttribute("data-malik-plain-black", "true")
+    return () => document.body.removeAttribute("data-malik-plain-black")
+  }, [])
 
   const translate = useCallback(async () => {
     const value = text.trim()
@@ -328,7 +337,62 @@ export function MalikTranslator() {
   const visibleHistory = showAllHistory ? history : history.slice(0, 3)
 
   return (
-    <main className="min-h-[100dvh] bg-black text-zinc-100 antialiased">
+    <main className="malik-translator-page min-h-[100dvh] bg-black text-zinc-100 antialiased">
+      <style jsx global>{`
+        /* Pure black behind the translator: no aurora, no gold haze, no tint
+           inherited from the app shell. */
+        body[data-malik-plain-black]::before,
+        body[data-malik-plain-black]::after {
+          content: none !important;
+          display: none !important;
+          background: none !important;
+          box-shadow: none !important;
+          opacity: 0 !important;
+          animation: none !important;
+        }
+        body[data-malik-plain-black],
+        body[data-malik-plain-black] #malik-root {
+          background: #000 !important;
+          background-image: none !important;
+        }
+        .malik-translator-page { background: #000 !important; }
+
+        /* mobile-polish.css paints a warm gradient through
+           "#malik-root section:first-of-type" and a gold glow through
+           "#malik-root section:first-of-type button". The panes and the history
+           block are sections, which is exactly where the haze showed.
+
+           ":first-of-type" counts as a class, so those rules score (1,1,1) and
+           (1,1,2) - the same as an override written with one class. A tie is
+           broken by source order, and styled-jsx injects at runtime, so the haze
+           came and went between loads. Repeating the class name adds a second
+           class to the count and wins outright, whatever the order. */
+        #malik-root .malik-translator-page.malik-translator-page,
+        #malik-root .malik-translator-page.malik-translator-page section,
+        #malik-root .malik-translator-page.malik-translator-page article,
+        #malik-root .malik-translator-page.malik-translator-page header,
+        #malik-root .malik-translator-page.malik-translator-page div,
+        #malik-root .malik-translator-page.malik-translator-page span,
+        #malik-root .malik-translator-page.malik-translator-page button {
+          background-image: none !important;
+        }
+        #malik-root .malik-translator-page.malik-translator-page section,
+        #malik-root .malik-translator-page.malik-translator-page article,
+        #malik-root .malik-translator-page.malik-translator-page header,
+        #malik-root .malik-translator-page.malik-translator-page button,
+        #malik-root .malik-translator-page.malik-translator-page [role="button"],
+        #malik-root .malik-translator-page.malik-translator-page a,
+        #malik-root .malik-translator-page.malik-translator-page label,
+        #malik-root .malik-translator-page.malik-translator-page textarea,
+        #malik-root .malik-translator-page.malik-translator-page input {
+          box-shadow: none !important;
+        }
+        /* The one exception: the language dropdown needs its lift to read as a
+           layer above the pane. Pure black shadow, no warmth in it. */
+        #malik-root .malik-translator-page.malik-translator-page .malik-lang-menu {
+          box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7) !important;
+        }
+      `}</style>
       <header className="border-b border-white/[0.07]">
         <div className="mx-auto flex h-[68px] w-full max-w-[1180px] items-center gap-3 px-4 sm:px-6">
           <button
@@ -356,14 +420,11 @@ export function MalikTranslator() {
             </p>
           </div>
 
-          {/* The badge in the header: a quiet gold accent on an otherwise black page. */}
-          <div className="relative shrink-0 overflow-hidden rounded-[18px] border border-[#c9a227]/25 bg-[#0b0a07] px-5 py-4">
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute -right-10 -top-14 h-32 w-40 rotate-[24deg] bg-[radial-gradient(ellipse_at_center,rgba(228,187,94,.30),transparent_65%)]"
-            />
+          {/* The language-count badge. Black card, white type: the page carries no
+              warm tint anywhere, so the badge does not either. */}
+          <div className="relative shrink-0 overflow-hidden rounded-[18px] border border-white/[0.12] bg-black px-5 py-4">
             <div className="relative flex items-center gap-3">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[#c9a227]/30 bg-[#c9a227]/10 text-[#e4bb5e]">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/[0.14] bg-white/[0.05] text-white">
                 <Globe className="h-[18px] w-[18px]" />
               </span>
               <span className="min-w-0">
@@ -483,7 +544,7 @@ export function MalikTranslator() {
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {FEATURES.map((feature) => (
             <article key={feature.title} className="flex items-start gap-3 rounded-[16px] border border-white/[0.08] bg-[#0a0a0b] p-4">
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[#c9a227]/25 bg-[#c9a227]/[0.08] text-[#e4bb5e]">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/[0.12] bg-white/[0.05] text-white">
                 <feature.icon className="h-[15px] w-[15px]" />
               </span>
               <span className="min-w-0">
