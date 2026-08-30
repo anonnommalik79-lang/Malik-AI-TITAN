@@ -150,17 +150,19 @@ function LanguageBar({
       </div>
 
       <div ref={boxRef} className={`relative shrink-0 ${align === "right" ? "ml-auto" : ""}`}>
+        {/* A framed control, like the design: it reads as "there are more here",
+            not as another chip. */}
         <button
           type="button"
           onClick={() => { setOpen((state) => !state); setQuery("") }}
-          className={`flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium transition ${
-            !isQuick ? "bg-white/[0.10] text-white" : "text-zinc-500 hover:bg-white/[0.05] hover:text-zinc-200"
+          className={`flex h-8 items-center justify-between gap-2 rounded-lg border border-white/[0.10] px-2.5 text-[12px] font-medium transition ${
+            !isQuick ? "bg-white/[0.08] text-white" : "text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200"
           }`}
           aria-haspopup="listbox"
           aria-expanded={open}
         >
-          <span className="max-w-[110px] truncate">{isQuick ? "Ещё" : languageLabel(value)}</span>
-          <ChevronDown className="h-3.5 w-3.5" />
+          <span className="max-w-[104px] truncate">{isQuick ? "Ещё" : languageLabel(value)}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
         </button>
 
         {open ? (
@@ -405,8 +407,10 @@ export function MalikTranslator() {
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-2">
-            <section className="relative border-b border-white/[0.07] lg:border-b-0 lg:border-r lg:border-white/[0.07]">
+          {/* Two separate framed panes with a gap, as in the design — not one
+              surface split by a divider. */}
+          <div className="grid gap-3 p-3 lg:grid-cols-2">
+            <section className="relative rounded-[16px] border border-white/[0.09] bg-[#0e0e10]">
               <textarea
                 value={text}
                 maxLength={MAX_LENGTH}
@@ -418,20 +422,20 @@ export function MalikTranslator() {
                   }
                 }}
                 placeholder="Введите текст или вставьте его сюда..."
-                className="h-[220px] w-full resize-none bg-transparent px-5 pb-14 pt-5 text-[16px] leading-7 text-zinc-100 outline-none placeholder:text-zinc-600 sm:h-[240px]"
+                className="h-[150px] w-full resize-none bg-transparent px-4 pb-12 pt-4 text-[14.5px] leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 sm:h-[168px]"
               />
-              <div className="absolute inset-x-3 bottom-3 flex items-center justify-between">
+              <div className="absolute inset-x-2.5 bottom-2.5 flex items-center justify-between">
                 <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => void paste()} className="inline-flex h-8 items-center gap-2 rounded-lg px-2.5 text-[12px] text-zinc-500 transition hover:bg-white/[0.06] hover:text-white">
-                    <ClipboardPaste className="h-[15px] w-[15px]" />
+                  <button type="button" onClick={() => void paste()} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/[0.09] px-2.5 text-[11.5px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-white">
+                    <ClipboardPaste className="h-[14px] w-[14px]" />
                     Вставить
                   </button>
                   <button type="button" onClick={() => speak(text, source === "auto" ? detectedSource || "ru" : source)} disabled={!text.trim()} className="grid h-8 w-8 place-items-center rounded-lg text-zinc-500 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-25" aria-label="Озвучить текст">
-                    <Volume2 className="h-[15px] w-[15px]" />
+                    <Volume2 className="h-[14px] w-[14px]" />
                   </button>
                   {text ? (
                     <button type="button" onClick={clear} className="grid h-8 w-8 place-items-center rounded-lg text-zinc-500 transition hover:bg-white/[0.06] hover:text-white" aria-label="Очистить">
-                      <X className="h-[15px] w-[15px]" />
+                      <X className="h-[14px] w-[14px]" />
                     </button>
                   ) : null}
                 </div>
@@ -439,20 +443,20 @@ export function MalikTranslator() {
               </div>
             </section>
 
-            <section className="relative bg-[#0c0c0e]">
-              <div className="h-[220px] overflow-y-auto whitespace-pre-wrap px-5 pb-14 pt-5 text-[16px] leading-7 text-zinc-100 sm:h-[240px]">
+            <section className="relative rounded-[16px] border border-white/[0.09] bg-[#0e0e10]">
+              <div className="h-[150px] overflow-y-auto whitespace-pre-wrap px-4 pb-12 pt-4 text-[14.5px] leading-6 text-zinc-100 sm:h-[168px]">
                 {loading ? (
-                  <span className="inline-flex items-center gap-2 text-[14px] text-zinc-500">
+                  <span className="inline-flex items-center gap-2 text-[13.5px] text-zinc-500">
                     <Loader2 className="h-4 w-4 animate-spin" /> Перевожу…
                   </span>
                 ) : result ? result : <span className="text-zinc-600">Здесь появится перевод...</span>}
               </div>
-              <div className="absolute inset-x-3 bottom-3 flex items-center justify-end gap-1">
+              <div className="absolute inset-x-2.5 bottom-2.5 flex items-center justify-end gap-1">
                 <button type="button" onClick={() => speak(result, target)} disabled={!result} className="grid h-8 w-8 place-items-center rounded-lg text-zinc-500 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-25" aria-label="Озвучить перевод">
-                  <Volume2 className="h-[15px] w-[15px]" />
+                  <Volume2 className="h-[14px] w-[14px]" />
                 </button>
-                <button type="button" onClick={() => void copy()} disabled={!result} className="inline-flex h-8 items-center gap-2 rounded-lg px-2.5 text-[12px] text-zinc-500 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-25">
-                  {copied ? <Check className="h-[15px] w-[15px]" /> : <Clipboard className="h-[15px] w-[15px]" />}
+                <button type="button" onClick={() => void copy()} disabled={!result} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/[0.09] px-2.5 text-[11.5px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-25">
+                  {copied ? <Check className="h-[14px] w-[14px]" /> : <Clipboard className="h-[14px] w-[14px]" />}
                   {copied ? "Скопировано" : "Копировать"}
                 </button>
               </div>
@@ -475,14 +479,17 @@ export function MalikTranslator() {
           </div>
         </div>
 
+        {/* Icon on the left, text block beside it — the layout in the design. */}
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {FEATURES.map((feature) => (
-            <article key={feature.title} className="rounded-[18px] border border-white/[0.08] bg-[#0a0a0b] p-4">
-              <span className="grid h-8 w-8 place-items-center rounded-lg border border-[#c9a227]/25 bg-[#c9a227]/[0.08] text-[#e4bb5e]">
+            <article key={feature.title} className="flex items-start gap-3 rounded-[16px] border border-white/[0.08] bg-[#0a0a0b] p-4">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[#c9a227]/25 bg-[#c9a227]/[0.08] text-[#e4bb5e]">
                 <feature.icon className="h-[15px] w-[15px]" />
               </span>
-              <h3 className="mt-3 text-[13.5px] font-semibold tracking-[-0.01em] text-white">{feature.title}</h3>
-              <p className="mt-1 text-[11.5px] leading-5 text-zinc-500">{feature.body}</p>
+              <span className="min-w-0">
+                <h3 className="text-[13px] font-semibold tracking-[-0.01em] text-white">{feature.title}</h3>
+                <p className="mt-1 text-[11px] leading-[17px] text-zinc-500">{feature.body}</p>
+              </span>
             </article>
           ))}
         </div>
