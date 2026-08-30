@@ -140,6 +140,43 @@ export function TemplateGalleryPanel({ onLaunchTemplate }: TemplateGalleryPanelP
           </section>
         )}
       </div>
+
+      <style jsx global>{`
+        /* Final authority: one visual surface only. Global input styles were
+           painting a second rectangle inside the search control. */
+        #malik-root .mtpl-search {
+          overflow: hidden !important;
+          box-shadow: none !important;
+        }
+        #malik-root .mtpl-search input,
+        #malik-root .mtpl-search input[type="search"],
+        #malik-root .mtpl-search input[type="text"] {
+          appearance: none !important;
+          -webkit-appearance: none !important;
+          border: 0 !important;
+          outline: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          background-image: none !important;
+          box-shadow: none !important;
+          filter: none !important;
+          margin: 0 !important;
+          min-height: 0 !important;
+        }
+        #malik-root .mtpl-search input:focus,
+        #malik-root .mtpl-search input:focus-visible,
+        #malik-root .mtpl-search input:hover {
+          border: 0 !important;
+          outline: 0 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        #malik-root .mtpl-search::before,
+        #malik-root .mtpl-search::after {
+          display: none !important;
+          content: none !important;
+        }
+      `}</style>
     </main>
   )
 }
