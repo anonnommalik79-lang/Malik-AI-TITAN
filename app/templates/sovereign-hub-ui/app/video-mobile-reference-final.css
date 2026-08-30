@@ -14,6 +14,26 @@
     display: none !important;
   }
 
+  #malik-root .mv[data-view="video-generation"] .mv__showcase[data-phase="queued"],
+  #malik-root .mv[data-view="video-generation"] .mv__showcase[data-phase="rendering"],
+  #malik-root .mv[data-view="video-generation"] .mv__showcase[data-phase="ready"] {
+    display: block !important;
+    min-height: clamp(320px, 48svh, 520px) !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid rgba(255,255,255,.08) !important;
+    background: #000 !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__showcase[data-phase="queued"] .mv__showcase-media,
+  #malik-root .mv[data-view="video-generation"] .mv__showcase[data-phase="rendering"] .mv__showcase-media,
+  #malik-root .mv[data-view="video-generation"] .mv__showcase[data-phase="ready"] .mv__showcase-media {
+    position: relative !important;
+    top: auto !important;
+    height: clamp(320px, 48svh, 520px) !important;
+    min-height: 0 !important;
+    background: #000 !important;
+  }
+
   #malik-root .mv[data-view="video-generation"] .mv__workspace {
     width: 100% !important;
     height: auto !important;

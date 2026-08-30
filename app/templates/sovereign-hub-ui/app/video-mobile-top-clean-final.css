@@ -13,6 +13,11 @@
     min-height: 80px !important;
     margin: 0 0 14px !important;
     padding: 0 !important;
+    background: #000 !important;
+  }
+
+  #malik-root .mv[data-view="video-generation"] .mv__header > div {
+    background: transparent !important;
   }
 
   #malik-root .mv[data-view="video-generation"] .mv__header > div {
@@ -176,9 +181,10 @@
   }
 
   #malik-root .mv[data-view="video-generation"] .mv__send {
-    width: 40px !important;
+    width: 88px !important;
+    min-width: 88px !important;
     height: 40px !important;
-    flex: 0 0 40px !important;
+    flex: 0 0 88px !important;
     border-radius: 11px !important;
   }
 

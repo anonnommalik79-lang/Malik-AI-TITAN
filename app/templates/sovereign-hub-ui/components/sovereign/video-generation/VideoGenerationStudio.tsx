@@ -18,11 +18,12 @@ export type VideoGenerationStudioProps = {
 type Ratio = "16:9" | "9:16" | "1:1"
 type Duration = 5 | 10
 type GenerationPhase = "idle" | "queued" | "rendering" | "ready" | "failed"
+type ShowcaseVideoTemplate = VideoAiTemplate & { mobileSrc?: string }
 
 const ENDPOINT = "/api/media/video"
 const DEFAULT_PROMPT = "Ночной Алматы после дождя. Чёрный премиальный автомобиль медленно едет по мокрой улице, отражения городских огней на асфальте, камера низко следует сбоку, реалистичная физика, кинематографичный свет и естественный звук города."
 const CATEGORIES = ["Кино", "Реклама", "Соцсети", "Персонажи", "Эксперимент"] as const
-const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
+const SHOWCASE_TEMPLATES: ShowcaseVideoTemplate[] = [
   {
     id: "malik-epic-motion",
     title: "Epic Motion",
@@ -41,6 +42,7 @@ const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
     tag: "Environment · 1080p",
     theme: "Руины",
     src: "/videos/malik-showcase/ancient-ruins.mp4",
+    mobileSrc: "/videos/malik-showcase/mobile/ancient-ruins.mp4",
     poster: "/videos/malik-showcase/ancient-ruins.jpg",
     prompt: "Древние руины на рассвете, мягкий солнечный свет, плавный cinematic flythrough.",
     tint: "rgba(10,10,12,.3)",
@@ -52,6 +54,7 @@ const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
     tag: "Restyle · 1080p",
     theme: "Анимация",
     src: "/videos/malik-showcase/restyle-2.mp4",
+    mobileSrc: "/videos/malik-showcase/mobile/restyle-2.mp4",
     poster: "/videos/malik-showcase/restyle-2.jpg",
     prompt: "Анимационный герой на скейтборде в фантастическом городе, выразительная перспектива и кинематографичное движение.",
     tint: "rgba(10,10,12,.3)",
@@ -63,6 +66,7 @@ const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
     tag: "Mecha · 1080p",
     theme: "Мех",
     src: "/videos/malik-showcase/mecha-impact.mp4",
+    mobileSrc: "/videos/malik-showcase/mobile/mecha-impact.mp4",
     poster: "/videos/malik-showcase/mecha-impact.jpg",
     prompt: "Гигантский мех приземляется в городе, искры и пыль, сильный удар камеры.",
     tint: "rgba(10,10,12,.3)",
@@ -74,6 +78,7 @@ const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
     tag: "Vertical · 1080p",
     theme: "Экшен",
     src: "/videos/malik-showcase/alpine-flight.mp4",
+    mobileSrc: "/videos/malik-showcase/mobile/alpine-flight.mp4",
     poster: "/videos/malik-showcase/alpine-flight.jpg",
     prompt: "Экстремальный полёт над снежными горами, вертикальный кадр, яркий дневной свет.",
     tint: "rgba(10,10,12,.3)",
@@ -85,6 +90,7 @@ const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
     tag: "Hero · 1080p",
     theme: "Трансформер",
     src: "/videos/malik-showcase/hero-transformer.mp4",
+    mobileSrc: "/videos/malik-showcase/mobile/hero-transformer.mp4",
     poster: "/videos/malik-showcase/hero-transformer.jpg",
     prompt: "Летящий трансформер над улицами мегаполиса, динамичная камера, кинематографичный свет.",
     tint: "rgba(10,10,12,.3)",
@@ -96,6 +102,7 @@ const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
     tag: "Product · 1080p",
     theme: "Реклама",
     src: "/videos/malik-showcase/product-shot-1.mp4",
+    mobileSrc: "/videos/malik-showcase/mobile/product-shot-1.mp4",
     poster: "/videos/malik-showcase/product-shot-1.jpg",
     prompt: "Премиальная предметная съёмка синего флакона сыворотки, яркий студийный фон и плавное рекламное движение.",
     tint: "rgba(10,10,12,.3)",
@@ -107,6 +114,7 @@ const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
     tag: "Restyle · 1080p",
     theme: "Персонаж",
     src: "/videos/malik-showcase/restyle-3.mp4",
+    mobileSrc: "/videos/malik-showcase/mobile/restyle-3.mp4",
     poster: "/videos/malik-showcase/restyle-3.jpg",
     prompt: "Милый чёрный кот в цветочном поле, рисованная анимация, мягкое естественное движение.",
     tint: "rgba(10,10,12,.3)",
@@ -118,6 +126,7 @@ const SHOWCASE_TEMPLATES: VideoAiTemplate[] = [
     tag: "Product · 1080p",
     theme: "Автомобиль",
     src: "/videos/malik-showcase/product-shot-2.mp4",
+    mobileSrc: "/videos/malik-showcase/mobile/product-shot-2.mp4",
     poster: "/videos/malik-showcase/product-shot-2.jpg",
     prompt: "Синий спортивный автомобиль едет по дороге над облаками, премиальная реклама и плавное движение камеры.",
     tint: "rgba(10,10,12,.3)",
@@ -143,14 +152,18 @@ function formatStatus(phase: GenerationPhase, attempt: number) {
 
 function AutoLoopVideo({
   src,
+  mobileSrc,
   poster,
   className,
   contain = false,
+  disableOnMobile = false,
 }: {
   src: string
+  mobileSrc?: string
   poster?: string
   className?: string
   contain?: boolean
+  disableOnMobile?: boolean
 }) {
   const ref = useRef<HTMLVideoElement | null>(null)
 
@@ -160,26 +173,36 @@ function AutoLoopVideo({
     video.muted = true
     video.defaultMuted = true
     video.loop = true
-    const play = () => video.play().catch(() => {})
+    video.load()
+    const mobileQuery = window.matchMedia("(max-width: 820px)")
+    const play = () => {
+      if (disableOnMobile && mobileQuery.matches) {
+        video.pause()
+        return
+      }
+      video.play().catch(() => {})
+    }
     play()
     video.addEventListener("canplay", play)
     video.addEventListener("ended", play)
+    mobileQuery.addEventListener("change", play)
     return () => {
       video.removeEventListener("canplay", play)
       video.removeEventListener("ended", play)
+      mobileQuery.removeEventListener("change", play)
     }
-  }, [src])
+  }, [disableOnMobile, mobileSrc, src])
 
   return (
     <video
       ref={ref}
-      src={src}
       poster={poster}
       className={className}
       autoPlay
       muted
       loop
       playsInline
+      controls={false}
       preload="auto"
       disablePictureInPicture
       style={{
@@ -190,7 +213,10 @@ function AutoLoopVideo({
         objectPosition: "center",
         background: "#030303",
       }}
-    />
+    >
+      {mobileSrc ? <source src={mobileSrc} media="(max-width: 820px)" type="video/mp4" /> : null}
+      <source src={src} type="video/mp4" />
+    </video>
   )
 }
 
@@ -199,11 +225,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const owner = isOwnerUser(operator)
   const ownerTenSecond = operator.trim().toLowerCase() === "amangeldymalik38@gmail.com"
 
-  const hero = useMemo<VideoAiTemplate>(() => {
+  const hero = useMemo<ShowcaseVideoTemplate>(() => {
     return SHOWCASE_TEMPLATES[0]
   }, [])
 
-  const cards = useMemo<VideoAiTemplate[]>(() => {
+  const cards = useMemo<ShowcaseVideoTemplate[]>(() => {
     return SHOWCASE_TEMPLATES.slice(1)
   }, [])
 
@@ -224,6 +250,12 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const finishSoundPlayedRef = useRef(false)
   const busy = phase === "queued" || phase === "rendering"
   const statusText = formatStatus(phase, attempt)
+
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 820px)").matches) {
+      setPrompt((current) => current === DEFAULT_PROMPT ? "" : current)
+    }
+  }, [])
 
   useEffect(() => () => {
     audioContextRef.current?.close().catch(() => {})
@@ -365,12 +397,12 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   return (
     <main className="mv" data-view="video-generation" data-result={videoUrl ? "1" : "0"}>
-      <section className="mv__showcase" aria-label="MalikVideo showcase">
+      <section className="mv__showcase" aria-label="MalikVideo showcase" data-phase={phase}>
         <div className="mv__showcase-media">
           {videoUrl ? (
             <video src={videoUrl} controls playsInline autoPlay className="mv__showcase-video mv__showcase-video--result" />
           ) : (
-            <AutoLoopVideo src={hero.src} poster={hero.poster} className="mv__showcase-video" />
+            <AutoLoopVideo src={hero.src} poster={hero.poster} className="mv__showcase-video" disableOnMobile />
           )}
           <div className="mv__showcase-vignette" />
 
@@ -396,7 +428,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       </section>
 
       <section className="mv__workspace">
-        <header className="mv__header">
+        <header className="mv__header" data-preserve-brand-color="true">
           <div>
             <span className="mv__eyebrow">MALIK VIDEO · WAN 2.7</span>
             <h1>Что вы хотите создать?</h1>
@@ -436,9 +468,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           ) : null}
 
           <div className="mv__model-row">
-            <button type="button" className="is-active"><Play size={13} fill="currentColor" /> MalikVideo 1.0</button>
-            <button type="button"><Volume2 size={15} /> Audio synced</button>
-            <button type="button"><Sparkles size={15} /> RU · KZ · EN</button>
+            <button type="button" className="is-active"><Play size={13} fill="currentColor" /><span><strong>MalikVideo 1.0</strong><small>Текущая модель</small></span></button>
+            <button type="button"><Volume2 size={15} /><span><strong>Audio synced</strong><small>Видео + Звук</small></span></button>
+            <button type="button"><Sparkles size={15} /><span><strong>RU · KZ · EN</strong><small>Авто перевод</small></span></button>
           </div>
         </section>
 
@@ -459,8 +491,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
           <div className="mv__cards">
             {cards.map((item, index) => (
-              <button key={item.id} type="button" className="mv__card" data-active={activeTemplate === index ? "1" : "0"} onClick={() => chooseTemplate(index)}>
-                <AutoLoopVideo src={item.src} poster={item.poster} className="mv__card-video" />
+              <button key={item.id} type="button" className="mv__card" data-active={activeTemplate === index ? "1" : "0"} onClick={() => chooseTemplate(index)} aria-label={`Использовать шаблон ${item.title}`}>
+                <AutoLoopVideo src={item.src} mobileSrc={item.mobileSrc} poster={item.poster} className="mv__card-video" />
                 <span className="mv__card-shade" />
                 <span className="mv__card-copy"><strong>{item.title}</strong><small>{item.theme} · 1080p</small></span>
               </button>
@@ -509,6 +541,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv__model-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
         .mv__model-row button{height:40px;padding:0 15px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:#101115;color:#d5d6db;display:flex;align-items:center;gap:8px}
         .mv__model-row .is-active{background:#18191d;color:#fff;font-weight:700}
+        .mv__model-row button span{display:flex;align-items:center;gap:0}.mv__model-row button strong{font:inherit}.mv__model-row button small{display:none}
         .mv__statusbar{max-width:1000px;margin:14px auto 22px;display:flex;align-items:center;gap:9px;min-height:20px;color:#747680;font-size:11px}
         .mv__statusbar strong{color:#bfc0c5;font-weight:620}
         .mv__status-dot{width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 12px rgba(255,255,255,.28)}
@@ -540,61 +573,69 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         @media(max-width:1120px){.mv{grid-template-columns:minmax(300px,34vw) minmax(0,1fr)}.mv[data-result="1"]{grid-template-columns:minmax(420px,46vw) minmax(0,1fr)}.mv__workspace{padding-left:24px;padding-right:24px}.mv__cards{grid-template-columns:repeat(2,minmax(0,1fr))}.mv__card{aspect-ratio:1.25/1}}
         @media(max-width:820px){
           .mv{display:block;min-height:100svh;overflow:visible;background:#000}
-          .mv__showcase{min-height:clamp(320px,48svh,520px);border-right:0;border-bottom:1px solid rgba(255,255,255,.08);background:#000}
-          .mv__showcase-media{position:relative;top:auto;height:clamp(320px,48svh,520px);min-height:0;background:#000}
+          .mv__showcase{display:none}
+          .mv__showcase[data-phase="queued"],.mv__showcase[data-phase="rendering"],.mv__showcase[data-phase="ready"]{display:block;min-height:clamp(320px,48svh,520px);border-right:0;border-bottom:1px solid rgba(255,255,255,.08);background:#000}
+          .mv__showcase[data-phase="queued"] .mv__showcase-media,.mv__showcase[data-phase="rendering"] .mv__showcase-media,.mv__showcase[data-phase="ready"] .mv__showcase-media{position:relative;top:auto;height:clamp(320px,48svh,520px);min-height:0;background:#000}
           :global(.mv__showcase-video){object-position:center center}
           .mv__showcase-vignette{background:linear-gradient(180deg,rgba(0,0,0,.08),transparent 56%,rgba(0,0,0,.38))}
-          .mv__workspace{height:auto;min-height:100svh;overflow:visible;padding:24px 14px max(40px,env(safe-area-inset-bottom));background:#000}
-          .mv__header{margin-bottom:18px;align-items:flex-start}
+          .mv__workspace{height:auto;min-height:100svh;overflow:visible;padding:12px 10px max(34px,env(safe-area-inset-bottom));background:#000}
+          .mv__header{position:relative;margin-bottom:11px;display:block;padding-right:96px}
           .mv__eyebrow{font-size:9px;letter-spacing:.14em}
-          .mv__header h1{max-width:100%;margin-top:9px;font-size:clamp(34px,10.5vw,48px);line-height:.95;letter-spacing:-.058em;overflow-wrap:anywhere}
-          .mv__library-btn{display:none}
+          .mv__header h1{max-width:none;margin-top:4px;font-size:clamp(25px,7vw,31px);line-height:1;letter-spacing:-.055em;white-space:nowrap}
+          .mv__library-btn{display:flex;position:absolute;right:0;top:4px;height:33px;align-items:center;padding:0 11px;border-radius:11px;background:#15161a;color:#eee;font-size:11px}
           .mv__composer-shell,.mv__discover{width:100%;max-width:none}
-          .mv__notice{min-height:43px;padding:0 12px;border-color:rgba(255,255,255,.1);border-radius:18px 18px 0 0;background:#111214}
-          .mv__notice>span{padding:3px 7px}
-          .mv__notice>strong{font-size:11px;white-space:nowrap}
-          .mv__notice p{display:none}
-          .mv__composer{padding:12px;border-color:rgba(255,255,255,.1);border-radius:0 0 18px 18px;background:#171719;box-shadow:none}
-          .mv__composer textarea{min-height:104px;border:0;background:transparent;color:#f5f5f6;font-size:16px;line-height:1.45;caret-color:#fff;box-shadow:none}
+          .mv__notice{min-height:34px;padding:0 10px;border-color:rgba(255,255,255,.1);border-radius:15px 15px 0 0;background:#111214;gap:7px;font-size:9px}
+          .mv__notice>span{padding:2px 6px;font-size:8px}
+          .mv__notice>strong{font-size:9px;white-space:nowrap}
+          .mv__notice p{display:block;font-size:8px;color:#767983;white-space:nowrap}
+          .mv__composer{padding:9px 10px 8px;border-color:rgba(255,255,255,.1);border-radius:0 0 15px 15px;background:#111214;box-shadow:none}
+          .mv__composer textarea{min-height:52px;border:0;background:transparent;color:#f5f5f6;font-size:14px;line-height:1.35;caret-color:#fff;box-shadow:none}
           .mv__composer textarea:focus{outline:0;box-shadow:none}
-          .mv__composer-bottom{margin-top:4px}
-          .mv__plus{width:38px;height:38px;border-radius:11px;background:#111214;color:#a9abb1}
+          .mv__composer-bottom{margin-top:2px}
+          .mv__plus{width:34px;height:34px;border-radius:10px;background:#18191d;color:#c4c5ca}
           .mv__composer-actions{min-width:0}
-          .mv__quality{height:38px;max-width:190px;border-color:rgba(255,255,255,.1);background:#242529;color:#f1f1f3;white-space:nowrap}
-          .mv__send{width:40px;height:40px;flex:0 0 40px;border-radius:12px;background:#f2f2f3;color:#070707}
-          .mv__settings-popover{left:0;right:0;top:194px;width:auto;border-color:rgba(255,255,255,.12);background:#151517}
-          .mv__model-row{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;overscroll-behavior-x:contain}
-          .mv__model-row::-webkit-scrollbar{display:none}
-          .mv__model-row button{height:39px;flex:0 0 auto;background:#111214;border-color:rgba(255,255,255,.09)}
+          .mv__quality{height:34px;max-width:150px;border-color:rgba(255,255,255,.1);background:#1a1b20;color:#f1f1f3;white-space:nowrap;font-size:11px}
+          .mv__send{width:auto;min-width:76px;height:34px;flex:0 0 auto;border-radius:10px;background:#f2f2f3;color:#070707;font-size:11px}
+          .mv__send::after{content:"Создать";margin-left:6px;font-weight:650}
+          .mv__settings-popover{left:0;right:0;top:142px;width:auto;border-color:rgba(255,255,255,.12);background:#151517}
+          .mv__model-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:8px;padding:0;overflow:visible}
+          .mv__model-row button{height:42px;min-width:0;padding:0 8px;justify-content:flex-start;background:#111214;border-color:rgba(255,255,255,.09);gap:7px;border-radius:11px}
           .mv__model-row .is-active{background:#191a1d}
-          .mv__statusbar{margin:13px 0 20px;flex-wrap:wrap;gap:7px 8px}
-          .mv__statusbar>span:nth-last-child(1):not(.mv__error){margin-left:0}
+          .mv__model-row button>svg{flex:0 0 auto}.mv__model-row button span{min-width:0;display:flex;align-items:flex-start;flex-direction:column;gap:1px;text-align:left}.mv__model-row button strong{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px}.mv__model-row button small{display:block;color:#777a83;font-size:7px;white-space:nowrap}
+          .mv__statusbar{margin:8px 1px 9px;min-height:14px;flex-wrap:nowrap;gap:6px;font-size:8px}
+          .mv__statusbar>span:nth-last-child(1):not(.mv__error){margin-left:auto}
+          .mv__status-dot{width:7px;height:7px;background:#19dc78;box-shadow:0 0 10px rgba(25,220,120,.35)}
           .mv__error{width:100%;max-width:100%;margin-left:0;white-space:normal}
-          .mv__tabs{margin-bottom:12px;gap:6px;overscroll-behavior-x:contain}
-          .mv__tabs button{height:34px;padding:0 13px;background:transparent;color:#777980}
+          .mv__tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:8px;gap:5px;overflow:visible}
+          .mv__tabs button{height:29px;min-width:0;padding:0 5px;border:1px solid rgba(255,255,255,.06);border-radius:10px;background:#111214;color:#a5a7ae;font-size:8px;overflow:hidden;text-overflow:ellipsis}
           .mv__tabs button[data-active="1"]{background:#1c1d20;color:#fff}
-          .mv__cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
-          .mv__card{aspect-ratio:.9/1;border-radius:13px;border-color:rgba(255,255,255,.1);background:#0a0a0b;box-shadow:none}
+          .mv__cards{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+          .mv__card{aspect-ratio:.64/1;border-radius:10px;border-color:rgba(255,255,255,.1);background:#0a0a0b;box-shadow:none;pointer-events:auto}
           .mv__card:hover{transform:none;box-shadow:none}
-          .mv__card-copy{left:10px;right:10px;bottom:10px}
-          .mv__card-copy strong{font-size:12px}
-          .mv__card-copy small{font-size:9px}
+          :global(.mv__card-video){transform:none!important}
+          .mv__card-shade{inset:44% 0 0;background:linear-gradient(180deg,transparent,rgba(0,0,0,.94))}
+          .mv__card-copy{left:6px;right:5px;bottom:6px;gap:1px}
+          .mv__card-copy strong{font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+          .mv__card-copy small{font-size:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
           .mv__render-state{gap:16px;background:rgba(0,0,0,.8);backdrop-filter:blur(12px)}
           .mv__render-square{width:min(48vw,210px);border-radius:22px}
           .mv__render-copy strong{font-size:13px}
         }
         @media(max-width:440px){
-          .mv__showcase,.mv__showcase-media{height:42svh;min-height:300px}
-          .mv__workspace{padding:21px 12px max(34px,env(safe-area-inset-bottom))}
-          .mv__header h1{font-size:clamp(32px,10.8vw,42px)}
-          .mv__notice{padding:0 10px}
-          .mv__composer{padding:10px}
-          .mv__composer textarea{min-height:96px}
-          .mv__quality{max-width:168px;padding:0 10px;font-size:12px}
-          .mv__model-row{gap:7px}
-          .mv__model-row button{padding:0 12px;font-size:12px}
-          .mv__cards{gap:8px}
-          .mv__card{aspect-ratio:.84/1}
+          .mv__workspace{padding-left:8px;padding-right:8px}
+          .mv__header h1{font-size:clamp(24px,6.8vw,29px)}
+          .mv__notice{padding:0 9px}
+          .mv__notice p{max-width:170px;overflow:hidden;text-overflow:ellipsis}
+          .mv__quality{max-width:142px;padding:0 9px;font-size:10px}
+          .mv__model-row{gap:5px}
+          .mv__model-row button{padding:0 6px}
+          .mv__cards{gap:4px}
+        }
+        @media(max-width:350px){
+          .mv__header{padding-right:0}.mv__library-btn{display:none}.mv__header h1{white-space:normal}
+          .mv__notice p{display:none}.mv__send{min-width:38px}.mv__send::after{display:none}
+          .mv__cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.mv__card{aspect-ratio:.72/1}
+          .mv__card-copy strong{font-size:10px}.mv__card-copy small{font-size:8px}
         }
       `}</style>
     </main>
