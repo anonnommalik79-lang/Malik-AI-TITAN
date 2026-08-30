@@ -1,5 +1,7 @@
 import { Buffer } from "node:buffer"
 
+import { repairTranscript, speechHintPrompt } from "@/lib/voice/speech-vocabulary"
+
 export type VoiceTranscribeResult = {
   ok: boolean
   text?: string
@@ -55,7 +57,7 @@ function interactionText(payload: any) {
   return ""
 }
 
-async function geminiAttempt(data: ArrayBuffer, filename: string, mime: string, model: string) {
+async function geminiAttempt(data: ArrayBuffer, filename: string, mime: string, model: string, prompt?: string) {
   const key = env("GEMINI_VOICE_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY")
   if (!key) return { ok: false as const, skipped: true as const, error: "missing key" }
   const started = Date.now()
@@ -103,7 +105,15 @@ async function geminiAttempt(data: ArrayBuffer, filename: string, mime: string, 
     const response = await withTimeout("https://generativelanguage.googleapis.com/v1beta/interactions", {
       method: "POST",
       headers: { "x-goog-api-key": key, "content-type": "application/json" },
-      body: JSON.stringify({ model, input: [{ type: "audio", uri, mime_type: mime || "audio/webm" }] }),
+      body: JSON.stringify({
+        model,
+        input: [
+          // The vocabulary hint goes in first so the brand names in it are
+          // spelled rather than sounded out.
+          ...(prompt ? [{ type: "text", text: `Transcribe the audio verbatim. Expected vocabulary: ${prompt.slice(0, 800)}` }] : []),
+          { type: "audio", uri, mime_type: mime || "audio/webm" },
+        ],
+      }),
     })
     const payload = await response.json().catch(() => ({}))
     const latencyMs = Date.now() - started
@@ -200,6 +210,11 @@ export async function transcribeVoiceAudio(
 ): Promise<VoiceTranscribeResult> {
   if (!data?.byteLength) return { ok: false, error: "пустой файл" }
 
+  // Every recognizer here conditions on a prompt. Without one they spell Latin
+  // brand names by sound ("ChatGPT" -> "чат гпт") and the assistant is then
+  // asked about a word that does not exist.
+  const prompt = opts.prompt?.trim() || speechHintPrompt(opts.language)
+
   const geminiModel = env("GEMINI_TRANSCRIBE_MODEL") || "gemini-3.5-transcribe"
   const groqPrimary = env("GROQ_WHISPER_PRIMARY") || "whisper-large-v3-turbo"
   const groqFallback = env("GROQ_WHISPER_FALLBACK") || "whisper-large-v3"
@@ -218,15 +233,17 @@ export async function transcribeVoiceAudio(
     ["gemini", geminiModel],
   ] as const) {
     const result = provider === "gemini"
-      ? await geminiAttempt(data, filename, mime, model)
+      ? await geminiAttempt(data, filename, mime, model, prompt)
       : provider === "groq"
-        ? await groqAttempt(data, filename, mime, model, opts.language, opts.prompt)
-        : await cloudflareAttempt(data, model, opts.language, opts.prompt)
+        ? await groqAttempt(data, filename, mime, model, opts.language, prompt)
+        : await cloudflareAttempt(data, model, opts.language, prompt)
 
     if (result.ok) {
       return {
         ok: true,
-        text: result.text,
+        // Second line of defence: whatever the hint did not prevent gets
+        // normalised before the assistant ever sees it.
+        text: repairTranscript(result.text) || result.text,
         language: typeof (result as any).language === "string" ? (result as any).language : undefined,
         durationSec: typeof (result as any).durationSec === "number" ? (result as any).durationSec : undefined,
         provider,

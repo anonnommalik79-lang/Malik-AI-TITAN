@@ -9,6 +9,7 @@ import styles from "./VoiceMode.module.css"
 import { isVoiceSoundEnabled, playVoiceTransitionSound, saveVoiceSoundEnabled } from "@/lib/voice-transition-sound"
 import { FluxTtsSession } from "@/lib/voice/flux-tts-client"
 import { VoiceAudioPlayer, unlockVoiceAudio } from "@/lib/voice/audio-playback"
+import { repairTranscript } from "@/lib/voice/speech-vocabulary"
 
 type SpeechResult = { isFinal: boolean; 0: { transcript: string } }
 type SpeechResultEvent = { resultIndex: number; results: ArrayLike<SpeechResult> }
@@ -28,7 +29,18 @@ type VoiceWindow = Window & typeof globalThis & {
   webkitSpeechRecognition?: SpeechRecognitionConstructor
   webkitAudioContext?: typeof AudioContext
 }
-type VoiceTurnPayload = { ok?: boolean; content?: string; error?: string; language?: "kk" | "ru" | "en" }
+type VoiceTurnPayload = {
+  ok?: boolean
+  content?: string
+  error?: string
+  /** Any code from the shared language table, not just the three in the picker. */
+  language?: string
+  languageName?: string
+  /** Locale for speech synthesis when the answer is not in the selected language. */
+  languageLocale?: string
+  transcript?: string
+  usedWeb?: boolean
+}
 type TranscribePayload = { ok?: boolean; text?: string; error?: string; remainingSeconds?: number }
 
 const STORAGE_KEY = "malik.voice.preferences.v4"
@@ -78,7 +90,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const replyAbortRef = useRef<AbortController | null>(null)
   const replyVersionRef = useRef(0)
   const pendingAudioRef = useRef<Blob | null>(null)
-  const lastReplyRef = useRef<{ text: string; voice: string; language: VoiceLanguage } | null>(null)
+  const lastReplyRef = useRef<{ text: string; voice: string; language: VoiceLanguage; locale?: string } | null>(null)
   const replySettleRef = useRef<((ok: boolean) => void) | null>(null)
   const replyPlayingRef = useRef(false)
   const replyInterruptedRef = useRef(false)
@@ -134,12 +146,21 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     replyPlayingRef.current = false
   }, [])
 
-  const chooseBrowserVoice = useCallback((profileName: string, forcedLanguage: VoiceLanguage) => {
+  const chooseBrowserVoice = useCallback((profileName: string, forcedLanguage: VoiceLanguage, locale?: string) => {
     const profile = getVoiceProfile(profileName)
     const voices = window.speechSynthesis?.getVoices?.() || []
     if (!voices.length) return null
-    const prefix = forcedLanguage === "kk" ? /^kk/i : forcedLanguage === "ru" ? /^ru/i : /^en/i
-    const pool = voices.filter((item) => prefix.test(item.lang))
+    // The answer can be in any language now, so the installed voice for the
+    // language actually spoken comes first; the picker is only the fallback.
+    const base = String(locale || "").split("-")[0]
+    const prefix = base
+      ? new RegExp(`^${base}`, "i")
+      : forcedLanguage === "kk" ? /^kk/i : forcedLanguage === "ru" ? /^ru/i : /^en/i
+    let pool = voices.filter((item) => prefix.test(item.lang))
+    if (!pool.length && base) {
+      const fallback = forcedLanguage === "kk" ? /^kk/i : forcedLanguage === "ru" ? /^ru/i : /^en/i
+      pool = voices.filter((item) => fallback.test(item.lang))
+    }
     if (!pool.length) return null
     for (const hint of profile.hints) {
       const match = pool.find((item) => item.name.toLowerCase().includes(hint.toLowerCase()))
@@ -148,14 +169,14 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     return pool[0] || null
   }, [])
 
-  const speakBrowser = useCallback((text: string, profileName: string, forcedLanguage: VoiceLanguage) => new Promise<boolean>((resolve) => {
+  const speakBrowser = useCallback((text: string, profileName: string, forcedLanguage: VoiceLanguage, locale?: string) => new Promise<boolean>((resolve) => {
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") return resolve(false)
     const profile = getVoiceProfile(profileName)
-    const browserVoice = chooseBrowserVoice(profileName, forcedLanguage)
+    const browserVoice = chooseBrowserVoice(profileName, forcedLanguage, locale)
     if (!browserVoice) return resolve(false)
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.voice = browserVoice
-    utterance.lang = forcedLanguage === "kk" ? "kk-KZ" : forcedLanguage === "ru" ? "ru-RU" : "en-US"
+    utterance.lang = locale || (forcedLanguage === "kk" ? "kk-KZ" : forcedLanguage === "ru" ? "ru-RU" : "en-US")
     utterance.rate = Math.max(.85, Math.min(1.15, profile.rate * speedRef.current))
     utterance.pitch = profile.pitch
     utterance.volume = 1
@@ -190,7 +211,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     return player.play(blob, () => { setTitle("Отвечаю"); setAudioError(null) })
   }, [])
 
-  const speakReply = useCallback(async (text: string, overrideVoice?: string, overrideLanguage?: VoiceLanguage) => {
+  const speakReply = useCallback(async (text: string, overrideVoice?: string, overrideLanguage?: VoiceLanguage, spokenLocale?: string) => {
     if (!text.trim()) return false
     stopReplyAudio(false)
     const version = replyVersionRef.current
@@ -205,7 +226,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     const selectedLanguage = overrideLanguage || languageRef.current
     const requestedVoice = overrideVoice || voice
     const selectedVoice = voiceBelongsToLanguage(requestedVoice, selectedLanguage) ? requestedVoice : defaultVoiceForLanguage(selectedLanguage)
-    lastReplyRef.current = { text, voice: selectedVoice, language: selectedLanguage }
+    lastReplyRef.current = { text, voice: selectedVoice, language: selectedLanguage, locale: spokenLocale }
     if (!isVoiceSoundEnabled()) {
       window.clearTimeout(timeout)
       replyPlayingRef.current = false
@@ -274,7 +295,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       replyPlayingRef.current = false
       return false
     }
-    const browserPlayed = !pendingAudioRef.current && await speakBrowser(text, selectedVoice, selectedLanguage)
+    const browserPlayed = !pendingAudioRef.current && await speakBrowser(text, selectedVoice, selectedLanguage, spokenLocale)
     if (!current()) return false
     replyPlayingRef.current = false
     if (!browserPlayed) setAudioError(errorMessage)
@@ -378,7 +399,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         if (result.isFinal) completed += `${result[0].transcript} `
         else interim += result[0].transcript
       }
-      if (completed) setFinalTranscript((current) => `${current} ${completed}`.trim())
+      // The browser recognizer takes no vocabulary hint, so its output is the
+      // most likely to spell a brand by sound. Repair it before it is shown or
+      // sent.
+      if (completed) setFinalTranscript((current) => repairTranscript(`${current} ${completed}`.trim()))
       setInterimTranscript(interim)
     }
     recognition.onend = () => {
@@ -509,8 +533,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       setFinalTranscript(payload.content)
       setInterimTranscript("")
       setTitle("Готовлю голос")
-      setSubtitle(`${voiceBelongsToLanguage(voice, selectedLanguage) ? voice : defaultVoiceForLanguage(selectedLanguage)} · ${selectedLanguage === "kk" ? "Қазақша" : selectedLanguage === "ru" ? "Русский" : "English"}`)
-      const played = await speakReply(payload.content, undefined, selectedLanguage)
+      // The answer comes back in whatever language was spoken, which is not
+      // always the one in the picker, so the label follows the answer.
+      const spokenName = payload.languageName
+        || (selectedLanguage === "kk" ? "Қазақша" : selectedLanguage === "ru" ? "Русский" : "English")
+      setSubtitle(`${voiceBelongsToLanguage(voice, selectedLanguage) ? voice : defaultVoiceForLanguage(selectedLanguage)} · ${spokenName}${payload.usedWeb ? " · из интернета" : ""}`)
+      const played = await speakReply(payload.content, undefined, selectedLanguage, payload.languageLocale)
       if (!played) {
         if (mountedRef.current && !closingRef.current && !replyInterruptedRef.current) setTitle("Не удалось озвучить")
         return
@@ -669,7 +697,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     replyInterruptedRef.current = false
     replyPlayingRef.current = true
     const version = replyVersionRef.current
-    const played = blob ? await playBlobAudio(blob) : await speakReply(last.text, last.voice, last.language)
+    const played = blob ? await playBlobAudio(blob) : await speakReply(last.text, last.voice, last.language, last.locale)
     if (mountedRef.current) setBusy(false)
     if (!mountedRef.current || closingRef.current || (blob && version !== replyVersionRef.current)) return
     replyPlayingRef.current = false

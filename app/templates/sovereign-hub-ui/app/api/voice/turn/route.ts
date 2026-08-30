@@ -1,11 +1,11 @@
 import { voiceLlmAnswer } from "@/lib/voice/voice-llm-router"
-import { voiceSearchContext, searchUnavailableReply } from "@/lib/voice/web-search"
+import { voiceSearchContext } from "@/lib/voice/web-search"
+import { repairTranscript } from "@/lib/voice/speech-vocabulary"
+import { languageDirective, looksLikeLanguage, resolveVoiceLanguage } from "@/lib/voice/voice-language"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-
-type VoiceLanguage = "kk" | "ru" | "en"
 
 const PERSONALITY: Record<string, string> = {
   Assistant: "Be a natural, concise voice assistant. Use short spoken sentences and no markdown unless necessary.",
@@ -19,76 +19,88 @@ const PERSONALITY: Record<string, string> = {
   Argumentative: "Challenge claims constructively. Point out weak assumptions, offer counterarguments and stay respectful and evidence-oriented.",
 }
 
-function detectVoiceLanguage(text: string): VoiceLanguage {
-  const normalized = text.toLowerCase()
-  if (/[әіңғүұқөһ]/i.test(text) || /\b(сәлем|салем|қалай|калай|жақсы|жаксы|қазақ|казак|қазақстан|казахстан|рахмет|рақмет|керек|болады|болмайды|иә|ия|жоқ|жок|менің|сенің|біздің|сіздің|қайда|кайда|қанша|канша|неге|осы|бұл|бул)\b/i.test(normalized)) return "kk"
-  if (/[а-яё]/i.test(text)) return "ru"
-  return "en"
-}
+/**
+ * Spoken input is short, accented and full of half-words. The assistant is told
+ * to work out the intent rather than answer the literal string, which is what
+ * people mean when they say it should understand them.
+ */
+const COMPREHENSION = [
+  "The user is speaking, so the text you receive is a transcript.",
+  "It may contain accented pronunciation, missing endings, mixed Russian, Kazakh and English words, or a brand name spelled by sound.",
+  "Work out what the person meant and answer that. Do not comment on the wording and never say you did not understand it.",
+  "Ask a short clarifying question only when the intent is genuinely ambiguous and guessing would be wrong.",
+].join(" ")
 
-function requestedLanguage(value: unknown): VoiceLanguage | null {
-  return value === "kk" || value === "ru" || value === "en" ? value : null
-}
-
-function languageInstruction(language: VoiceLanguage) {
-  if (language === "kk") return "LANGUAGE LOCK: KAZAKH ONLY. Respond ONLY in natural modern Kazakh using Cyrillic Kazakh spelling. Never answer in English or Russian. Do not mix Russian or English words except exact brands, code identifiers, URLs or proper names. Use normal Kazakh words whenever they exist. Keep pronunciation-friendly sentences suitable for TTS."
-  if (language === "ru") return "LANGUAGE LOCK: RUSSIAN ONLY. Respond ONLY in natural Russian. Never answer in English or Kazakh. Do not mix other languages except exact brands, code identifiers, URLs or proper names. Keep pronunciation-friendly sentences suitable for TTS."
-  return "LANGUAGE LOCK: ENGLISH ONLY. Respond ONLY in natural English. Never answer in Russian or Kazakh except an exact proper name. Keep pronunciation-friendly sentences suitable for TTS."
-}
-
-function matchesLanguage(text: string, language: VoiceLanguage) {
-  if (language === "kk") return /[әіңғүұқөһ]/i.test(text) || /\b(мен|сен|сіз|бұл|осы|және|үшін|қалай|жақсы|керек|бар|жоқ|иә|рақмет|сәлем|қазақ|қазір|болады)\b/i.test(text)
-  if (language === "ru") return /[а-яё]/i.test(text) && !/[әіңғүұқөһ]/i.test(text)
-  return /[a-z]/i.test(text) && !/[а-яёәіңғүұқөһ]/i.test(text)
-}
-
-function localFallback(language: VoiceLanguage) {
-  if (language === "kk") return "Қазір жауап алу сәтсіз болды. Бір секундтан кейін қайта айтып көр."
-  if (language === "ru") return "Сейчас не получилось получить ответ. Попробуй сказать ещё раз через секунду."
-  return "I couldn't get a response just now. Try saying it again in a second."
+function fallbackReply(code: string) {
+  if (code === "kk") return "Қазір жауап алу сәтсіз болды. Бір секундтан кейін қайта айтып көр."
+  if (code.startsWith("en")) return "I couldn't get a response just now. Try saying it again in a second."
+  return "Сейчас не получилось получить ответ. Попробуй сказать ещё раз через секунду."
 }
 
 export const POST = withCompute(handlePOST, "voice")
 
 async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
-  const text = String(body?.text || body?.message || "").trim().slice(0, 6000)
+  const raw = String(body?.text || body?.message || "").trim().slice(0, 6000)
   const personality = String(body?.personality || "Assistant")
-  if (!text) return Response.json({ ok: false, error: "Пустой Voice запрос" }, { status: 400 })
+  if (!raw) return Response.json({ ok: false, error: "Пустой Voice запрос" }, { status: 400 })
 
-  const language = requestedLanguage(body?.language) || detectVoiceLanguage(text)
-  const personalityInstruction = PERSONALITY[personality] || PERSONALITY.Assistant
+  // Browser speech recognition sends its text straight here without passing
+  // through /api/transcribe, so the repair has to run on this path too.
+  const text = repairTranscript(raw) || raw
+
+  const language = resolveVoiceLanguage({ text, selected: body?.language })
   const instruction = [
     "You are Sola, the Malik AI voice assistant.",
-    personalityInstruction,
-    languageInstruction(language),
-    "The selected Voice language overrides the language of the user's words. This is mandatory.",
-    "Never output mixed-script gibberish or half-transliterated words.",
-    "Never mention internal providers, routing, environment variables, or API keys.",
+    PERSONALITY[personality] || PERSONALITY.Assistant,
+    COMPREHENSION,
+    languageDirective(language),
+    "Never mention internal providers, routing, environment variables or API keys.",
   ].join(" ")
 
   try {
     const search = await voiceSearchContext(text)
-    if (search.requested && !search.sources.length) {
-      return Response.json({ ok: true, content: searchUnavailableReply(language), personality, language, usedWeb: false, searchRequested: true, sources: [] }, { headers: { "cache-control": "no-store" } })
-    }
-    const groundedInstruction = search.context ? `${instruction}\n${search.context}` : instruction
-    let answer = await voiceLlmAnswer({ text, instruction: groundedInstruction })
+    const grounded = search.context ? `${instruction}\n${search.context}` : instruction
+
+    let answer = await voiceLlmAnswer({ text, instruction: grounded })
     let content = String(answer.content || "").trim()
 
-    if (!content || !matchesLanguage(content, language)) {
+    if (!content || !looksLikeLanguage(content, language.code)) {
       answer = await voiceLlmAnswer({
-        text: `Answer this user request again. Obey the selected language lock exactly. USER REQUEST:\n${text}`,
-        instruction: `${groundedInstruction} Previous output violated the language lock. A second violation is not allowed.`,
+        text: `Answer this user request again, in ${language.english} only. USER REQUEST:\n${text}`,
+        instruction: `${grounded} The previous answer was not in ${language.english}. A second miss is not allowed.`,
       })
       content = String(answer.content || "").trim()
     }
 
-    if (!content || !matchesLanguage(content, language)) content = localFallback(language)
+    if (!content) content = fallbackReply(language.code)
 
-    return Response.json({ ok: true, content, personality, language, provider: answer.provider, model: answer.model, usedWeb: search.sources.length > 0, searchRequested: search.requested, sources: search.sources }, { headers: { "cache-control": "no-store" } })
+    return Response.json({
+      ok: true,
+      content,
+      personality,
+      language: language.code,
+      languageName: language.english,
+      languageLocale: language.locale,
+      languageSource: language.source,
+      transcript: text,
+      provider: answer.provider,
+      model: answer.model,
+      usedWeb: search.sources.length > 0,
+      searchRequested: search.requested,
+      searchReason: search.reason,
+      sources: search.sources,
+    }, { headers: { "cache-control": "no-store" } })
   } catch (error) {
     console.error("[VOICE_TURN_ERROR]", error instanceof Error ? error.message : error)
-    return Response.json({ ok: true, content: localFallback(language), personality, language, provider: "voice-local-fallback", model: "none" }, { headers: { "cache-control": "no-store" } })
+    return Response.json({
+      ok: true,
+      content: fallbackReply(language.code),
+      personality,
+      language: language.code,
+      languageLocale: language.locale,
+      provider: "voice-local-fallback",
+      model: "none",
+    }, { headers: { "cache-control": "no-store" } })
   }
 }
