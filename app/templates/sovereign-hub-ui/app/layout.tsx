@@ -6,6 +6,7 @@ import { MalikTurnRuntime } from "@/components/sovereign/MalikTurnRuntime"
 import { MalikStopPolish } from "@/components/sovereign/MalikStopPolish"
 import { FounderConsoleRuntime } from "@/components/sovereign/FounderConsoleRuntime"
 import { VideoCancelRuntime } from "@/components/sovereign/VideoCancelRuntime"
+import { SitesRouteFixRuntime } from "@/components/sovereign/SitesRouteFixRuntime"
 import "./globals.css"
 import "./mobile-polish.css"
 import "./legendary-aurora.css"
@@ -187,6 +188,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <MalikStopPolish />
         <FounderConsoleRuntime />
         <VideoCancelRuntime />
+        <SitesRouteFixRuntime />
         <AuthKitProvider>
           <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden bg-black notranslate">
             {children}
