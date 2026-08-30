@@ -60,6 +60,8 @@ import "./video-mobile-worldclass-final.css"
 import "./video-mobile-top-clean-final.css"
 // Absolute final Sites pass: exact reference geometry + local template previews.
 import "./sites-world-final.css"
+// Final chat authority: user messages are plain text, no bubble/card surface.
+import "./chat-user-message-clean-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
@@ -174,14 +176,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             `,
           }}
         />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
-        />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }} />
       </head>
       <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-black font-sans antialiased notranslate">
         <NoBlueUiGuard />
