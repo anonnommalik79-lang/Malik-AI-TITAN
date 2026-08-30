@@ -92,6 +92,7 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
   const [inspirationQuery, setInspirationQuery] = useState("")
   const [category, setCategory] = useState("Все")
   const [homeCategory, setHomeCategory] = useState("Популярные")
+  const [showAllTemplates, setShowAllTemplates] = useState(false)
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
 
@@ -129,6 +130,21 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
       return matchesCategory && matchesQuery
     })
   }, [homeCategory, query])
+
+  const displayedTemplates = useMemo(() => {
+    const isDefaultGallery = homeCategory === "Популярные" && !query.trim()
+    return isDefaultGallery && !showAllTemplates ? visibleTemplates.slice(0, 4) : visibleTemplates
+  }, [homeCategory, query, showAllTemplates, visibleTemplates])
+
+  const toggleAllTemplates = () => {
+    if (homeCategory !== "Популярные" || query.trim()) {
+      setHomeCategory("Популярные")
+      setQuery("")
+      setShowAllTemplates(true)
+      return
+    }
+    setShowAllTemplates((open) => !open)
+  }
 
   const openBuilder = () => {
     setSelectedId(null)
@@ -291,12 +307,12 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
 
         <div className="toolbar"><div className="site-search"><Search size={17}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Поиск сайтов и шаблонов..."/></div><div className="category-control"><button type="button" aria-expanded={categoryMenuOpen} onClick={() => setCategoryMenuOpen((open) => !open)}><LayoutGrid size={16}/> Все категории <ArrowRight size={14}/></button>{categoryMenuOpen ? <div className="category-menu" role="menu">{HOME_CATEGORIES.map((item) => <button type="button" role="menuitem" key={item} className={homeCategory === item ? "active" : ""} onClick={() => { setHomeCategory(item); setCategoryMenuOpen(false) }}>{item}<ArrowRight size={13}/></button>)}</div> : null}</div></div>
 
-        <div className="home-chips">{HOME_CATEGORIES.map((item) => <button type="button" key={item} className={homeCategory === item ? "active" : ""} onClick={() => setHomeCategory(item)}>{item}</button>)}</div>
+        <div className="home-chips">{HOME_CATEGORIES.map((item) => <button type="button" key={item} className={homeCategory === item ? "active" : ""} onClick={() => { setHomeCategory(item); if (item === "Популярные") setShowAllTemplates(false) }}>{item}</button>)}</div>
 
         <section className="template-section">
-          <div className="section-head"><div><h2>Премиальные шаблоны</h2><p>Готовые визуальные направления для быстрого старта.</p></div><button type="button" onClick={() => setHomeCategory("Популярные")}>Показать все <ArrowRight size={14}/></button></div>
+          <div className="section-head"><div><h2>Премиальные шаблоны</h2><p>Готовые визуальные направления для быстрого старта.</p></div><button type="button" aria-expanded={showAllTemplates} onClick={toggleAllTemplates}>{showAllTemplates && homeCategory === "Популярные" && !query.trim() ? "Свернуть" : "Показать все"} <ArrowRight size={14}/></button></div>
           <div className="template-grid">
-            {visibleTemplates.map((template) => <button type="button" className="template-card" key={template.title} onClick={() => useTemplate(template)}>
+            {displayedTemplates.map((template) => <button type="button" className="template-card" key={template.title} onClick={() => useTemplate(template)}>
               <div className="template-image"><img src={template.preview} alt={`Превью шаблона ${template.title}`} loading="lazy"/><span className="template-glow"/><span className="template-action">Использовать <ArrowRight size={13}/></span></div>
               <div className="template-info"><strong>{template.title}</strong><em>{template.category}</em></div>
             </button>)}
