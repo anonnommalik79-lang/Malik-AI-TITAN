@@ -62,6 +62,30 @@ async function geocodeDestination(query: string) {
   }
 }
 
+type ResolvedDestination = NonNullable<Awaited<ReturnType<typeof geocodeDestination>>>
+
+/**
+ * When the rider picked a result from the search list, the exact coordinates are
+ * already known — the list came from the same geocoder. Re-resolving the text
+ * would add a second external round trip and, worse, could land on a different
+ * place than the one that was actually tapped.
+ */
+function exactDestination(value: unknown): ResolvedDestination | null {
+  if (!validCoordinates(value)) return null
+  const point = value as Coordinates & Record<string, unknown>
+  const nickname = cleanText(point.nickname, 80)
+  const address = cleanText(point.address, 260)
+  if (!nickname && !address) return null
+  return {
+    latitude: Number(point.latitude),
+    longitude: Number(point.longitude),
+    address: address || nickname,
+    nickname: nickname || address,
+    category: cleanText(point.category, 48),
+    type: cleanText(point.type, 48),
+  }
+}
+
 function buildUberUrl(clientId: string, pickup: Coordinates, destination: Awaited<ReturnType<typeof geocodeDestination>>) {
   if (!destination) throw new Error("DESTINATION_NOT_FOUND")
 
@@ -105,15 +129,17 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null)
     const pickup = body?.pickup
     const destinationQuery = cleanText(body?.destination, 180)
+    const picked = exactDestination(body?.destinationPoint)
 
     if (!validCoordinates(pickup)) {
       return Response.json({ ok: false, code: "PICKUP_REQUIRED", message: "Не удалось определить точку подачи." }, { status: 400 })
     }
-    if (destinationQuery.length < 3) {
+    if (!picked && destinationQuery.length < 3) {
       return Response.json({ ok: false, code: "DESTINATION_REQUIRED", message: "Укажи пункт назначения." }, { status: 400 })
     }
 
-    const destination = await geocodeDestination(destinationQuery)
+    // Tapped a search result → zero external calls. Free text → geocode once.
+    const destination = picked || await geocodeDestination(destinationQuery)
     if (!destination) {
       return Response.json({ ok: false, code: "DESTINATION_NOT_FOUND", message: "Не удалось найти этот адрес. Уточни город, улицу или название места." }, { status: 404 })
     }
@@ -122,6 +148,7 @@ export async function POST(request: Request) {
     return Response.json({
       ok: true,
       mode: "official-handoff",
+      resolvedBy: picked ? "picked" : "geocoder",
       destination,
       ...links,
     }, { headers: { "Cache-Control": "no-store" } })
