@@ -2,6 +2,7 @@ import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 import { isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { getUsageOverview } from "@/lib/ai/usage"
 import { getPersistedUsageOverview } from "@/lib/server/usage-persistence"
+import { fetchWithTimeout, requestSafetySnapshot } from "@/lib/server/request-safety"
 
 export const dynamic = "force-dynamic"
 
@@ -37,13 +38,13 @@ async function listAllWorkOSUsers(apiKey: string) {
     url.searchParams.set("order", "desc")
     if (after) url.searchParams.set("after", after)
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
       },
       cache: "no-store",
-    })
+    }, 8_000)
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "")
@@ -156,6 +157,12 @@ export async function GET() {
       imageGenerations: Math.max(usage.imageCount, persisted.imageCount),
       videoGenerations: Math.max(usage.videoCount, persisted.videoCount),
       uploads: persisted.uploadCount,
+    },
+    runtimeSafety: {
+      ...requestSafetySnapshot(),
+      founderAuth: "server-verified",
+      workosTimeoutMs: 8000,
+      secretsExposed: false,
     },
     topUsage: usage.topUsers,
     recentUsers,
