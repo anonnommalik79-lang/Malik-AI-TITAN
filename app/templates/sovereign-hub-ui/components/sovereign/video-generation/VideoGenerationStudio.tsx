@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowUp, Camera, Check, ChevronDown, Play, Plus, Sparkles, Volume2 } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ArrowUp, Camera, Check, ChevronDown, Clock3, History, Play, Plus, RotateCcw, Sparkles, Volume2 } from "lucide-react"
 import { canUseGeneration, incrementUsage, isOwnerUser } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import type { VideoAiTemplate } from "@/lib/media-library"
@@ -19,10 +19,27 @@ type Ratio = "16:9" | "9:16" | "1:1"
 type Duration = 5 | 10
 type GenerationPhase = "idle" | "queued" | "rendering" | "ready" | "failed"
 type ShowcaseVideoTemplate = VideoAiTemplate & { mobileSrc?: string }
+type VideoSessionStatus = Exclude<GenerationPhase, "idle">
+type VideoGenerationSession = {
+  id: string
+  prompt: string
+  status: VideoSessionStatus
+  createdAt: string
+  updatedAt: string
+  ratio: Ratio
+  duration: Duration
+  provider: string
+  taskId?: string
+  statusUrl?: string
+  videoUrl?: string
+  error?: string
+}
 
 const ENDPOINT = "/api/media/video"
 const DEFAULT_PROMPT = "Ночной Алматы после дождя. Чёрный премиальный автомобиль медленно едет по мокрой улице, отражения городских огней на асфальте, камера низко следует сбоку, реалистичная физика, кинематографичный свет и естественный звук города."
 const CATEGORIES = ["Кино", "Реклама", "Соцсети", "Персонажи", "Эксперимент"] as const
+const VIDEO_SESSION_LIMIT = 12
+const VIDEO_SESSION_STORAGE_PREFIX = "malik-video-generation-sessions:"
 const SHOWCASE_TEMPLATES: ShowcaseVideoTemplate[] = [
   {
     id: "malik-epic-motion",
@@ -246,16 +263,75 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [remainingDaily, setRemainingDaily] = useState<number | null>(null)
   const [providerLabel, setProviderLabel] = useState("Wan 2.7")
   const [showControls, setShowControls] = useState(false)
+  const [showSessionHistory, setShowSessionHistory] = useState(false)
+  const [sessions, setSessions] = useState<VideoGenerationSession[]>([])
+  const [loadedSessionKey, setLoadedSessionKey] = useState("")
   const audioContextRef = useRef<AudioContext | null>(null)
   const finishSoundPlayedRef = useRef(false)
   const busy = phase === "queued" || phase === "rendering"
   const statusText = formatStatus(phase, attempt)
+  const sessionStorageKey = useMemo(
+    () => `${VIDEO_SESSION_STORAGE_PREFIX}${encodeURIComponent(operator.trim().toLowerCase())}`,
+    [operator],
+  )
+
+  const upsertSession = useCallback((session: VideoGenerationSession) => {
+    setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)].slice(0, VIDEO_SESSION_LIMIT))
+  }, [])
+
+  const patchSession = useCallback((id: string, patch: Partial<VideoGenerationSession>) => {
+    setSessions((current) => current.map((item) => (
+      item.id === id ? { ...item, ...patch, updatedAt: new Date().toISOString() } : item
+    )))
+  }, [])
 
   useEffect(() => {
     if (window.matchMedia("(max-width: 820px)").matches) {
       setPrompt((current) => current === DEFAULT_PROMPT ? "" : current)
     }
   }, [])
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(sessionStorageKey)
+      const parsed = raw ? JSON.parse(raw) : []
+      const restored = Array.isArray(parsed)
+        ? parsed.filter((item) => (
+          Boolean(item)
+          && typeof item.id === "string"
+          && typeof item.prompt === "string"
+          && ["queued", "rendering", "ready", "failed"].includes(item.status)
+        )).map((item): VideoGenerationSession => ({
+          id: item.id,
+          prompt: item.prompt,
+          status: item.status,
+          createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
+          updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : new Date().toISOString(),
+          ratio: ["16:9", "9:16", "1:1"].includes(item.ratio) ? item.ratio : "16:9",
+          duration: item.duration === 10 ? 10 : 5,
+          provider: typeof item.provider === "string" ? item.provider : "MalikVideo 1.0",
+          taskId: typeof item.taskId === "string" ? item.taskId : undefined,
+          statusUrl: typeof item.statusUrl === "string" ? item.statusUrl : undefined,
+          videoUrl: typeof item.videoUrl === "string" ? item.videoUrl : undefined,
+          error: typeof item.error === "string" ? item.error : undefined,
+        })).slice(0, VIDEO_SESSION_LIMIT)
+        : []
+      setSessions(restored)
+    } catch {
+      setSessions([])
+    } finally {
+      setLoadedSessionKey(sessionStorageKey)
+    }
+  }, [sessionStorageKey])
+
+  useEffect(() => {
+    if (loadedSessionKey !== sessionStorageKey) return
+    try {
+      window.localStorage.setItem(sessionStorageKey, JSON.stringify(sessions.slice(0, VIDEO_SESSION_LIMIT)))
+    } catch {
+      // History is a convenience feature; generation must continue if storage is unavailable.
+    }
+  }, [loadedSessionKey, sessionStorageKey, sessions])
 
   useEffect(() => () => {
     audioContextRef.current?.close().catch(() => {})
@@ -331,6 +407,20 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       return
     }
 
+    const sessionId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const createdAt = new Date().toISOString()
+    upsertSession({
+      id: sessionId,
+      prompt: cleanPrompt,
+      status: "queued",
+      createdAt,
+      updatedAt: createdAt,
+      ratio,
+      duration,
+      provider: "MalikVideo 1.0",
+    })
     setPhase("queued")
     try {
       const response = await clientFetchWithTimeout(
@@ -358,13 +448,20 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
       const id = String(data?.taskId || "")
       if (!id) throw new Error("Видеомодель не вернула taskId")
+      const resolvedProvider = String(data?.model || "Wan 2.7").replace("wan2.7-t2v-2026-06-12", "Wan 2.7")
       setTaskId(id)
-      setProviderLabel(String(data?.model || "Wan 2.7").replace("wan2.7-t2v-2026-06-12", "Wan 2.7"))
+      setProviderLabel(resolvedProvider)
       setRemainingDaily(typeof data?.remainingDailyVideos === "number" ? data.remainingDailyVideos : null)
       if (!owner) incrementUsage("video")
       setPhase("rendering")
 
       const statusUrl = String(data?.statusUrl || `/api/media/video/status?taskId=${encodeURIComponent(id)}`)
+      patchSession(sessionId, {
+        status: "rendering",
+        taskId: id,
+        statusUrl,
+        provider: resolvedProvider,
+      })
       for (let i = 0; i < 72; i += 1) {
         setAttempt(i)
         await sleep(i === 0 ? 2500 : 5000)
@@ -376,15 +473,36 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         if (readyUrl) {
           setVideoUrl(readyUrl)
           setPhase("ready")
+          patchSession(sessionId, { status: "ready", videoUrl: readyUrl })
           playFinishSoundOnce()
           return
         }
       }
       throw new Error("Видео всё ещё рендерится. Попробуйте проверить задачу позже.")
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Генерация видео недоступна"
       setPhase("failed")
-      setError(err instanceof Error ? err.message : "Генерация видео недоступна")
+      setError(message)
+      patchSession(sessionId, { status: "failed", error: message })
     }
+  }
+
+  const openSession = (session: VideoGenerationSession) => {
+    setPrompt(session.prompt)
+    setRatio(session.ratio)
+    setDuration(session.duration)
+    setProviderLabel(session.provider || "Wan 2.7")
+    setTaskId(session.taskId || "")
+    setAttempt(0)
+    setError("")
+    if (session.status === "ready" && session.videoUrl) {
+      setVideoUrl(session.videoUrl)
+      setPhase("ready")
+    } else {
+      setVideoUrl("")
+      setPhase("idle")
+    }
+    setShowSessionHistory(false)
   }
 
   const chooseTemplate = (index: number) => {
@@ -482,6 +600,63 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           {error ? <span className="mv__error">{error}</span> : null}
         </div>
 
+        <div className="mv__session-bar">
+          <button
+            type="button"
+            className="mv__history-toggle"
+            aria-expanded={showSessionHistory}
+            aria-controls="malik-video-session-history"
+            onClick={() => setShowSessionHistory((value) => !value)}
+          >
+            <History size={15} />
+            <span>История сессий</span>
+            <strong>{sessions.length}</strong>
+            <ChevronDown size={14} data-open={showSessionHistory ? "1" : "0"} />
+          </button>
+          <div className="mv__time-warning" role="note">
+            <Clock3 size={15} />
+            <span>Генерация видео занимает 2–5 минут</span>
+          </div>
+        </div>
+
+        {showSessionHistory ? (
+          <section id="malik-video-session-history" className="mv__history-panel" aria-label="История генерации видео">
+            <header>
+              <div>
+                <strong>Последние сессии</strong>
+                <span>Сохраняются в этом браузере</span>
+              </div>
+              <small>до {VIDEO_SESSION_LIMIT} запусков</small>
+            </header>
+            {sessions.length > 0 ? (
+              <div className="mv__history-list">
+                {sessions.map((session) => {
+                  const canOpen = session.status === "ready" && Boolean(session.videoUrl)
+                  return (
+                    <article key={session.id} className="mv__history-item" data-status={session.status}>
+                      <span className="mv__history-status" />
+                      <div className="mv__history-copy">
+                        <strong title={session.prompt}>{session.prompt}</strong>
+                        <small>{formatSessionDate(session.createdAt)} · {session.ratio} · {session.duration}s · {session.provider}</small>
+                      </div>
+                      <span className="mv__history-state">{formatSessionStatus(session.status)}</span>
+                      <button type="button" onClick={() => openSession(session)}>
+                        {canOpen ? <Play size={12} fill="currentColor" /> : <RotateCcw size={12} />}
+                        {canOpen ? "Открыть" : "Повторить"}
+                      </button>
+                    </article>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="mv__history-empty">
+                <History size={18} />
+                <span>Здесь появятся запросы и готовые видео после первого запуска.</span>
+              </div>
+            )}
+          </section>
+        ) : null}
+
         <section className="mv__discover">
           <div className="mv__tabs" role="tablist" aria-label="Категории видео">
             {CATEGORIES.map((category) => (
@@ -547,6 +722,33 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv__status-dot{width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 12px rgba(255,255,255,.28)}
         .mv__statusbar>span:nth-last-child(1):not(.mv__error){margin-left:auto}
         .mv__error{color:#ff8b8b;margin-left:auto;max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .mv__session-bar{max-width:1000px;margin:-10px auto 18px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+        .mv__history-toggle,.mv__time-warning{height:36px;border:1px solid rgba(255,255,255,.09);border-radius:12px;background:#101114;color:#c9cad0;display:flex;align-items:center;gap:8px;padding:0 11px;font-size:11px}
+        .mv__history-toggle{cursor:pointer;transition:border-color .16s ease,background .16s ease}
+        .mv__history-toggle:hover{background:#15161a;border-color:rgba(255,255,255,.16)}
+        .mv__history-toggle>strong{min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#24252a;color:#fff;display:grid;place-items:center;font-size:10px}
+        .mv__history-toggle>svg:last-child{color:#767881;transition:transform .18s ease}
+        .mv__history-toggle>svg:last-child[data-open="1"]{transform:rotate(180deg)}
+        .mv__time-warning{margin-left:auto;background:transparent;color:#a5a7ae}
+        .mv__time-warning svg{color:#ececf0}
+        .mv__history-panel{max-width:1000px;margin:-8px auto 18px;padding:14px;border:1px solid rgba(255,255,255,.1);border-radius:16px;background:#0d0e10;box-shadow:0 18px 52px rgba(0,0,0,.24)}
+        .mv__history-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:0 2px 11px}
+        .mv__history-panel>header>div{display:flex;flex-direction:column;gap:3px}
+        .mv__history-panel>header strong{font-size:12px;color:#f1f1f3}
+        .mv__history-panel>header span,.mv__history-panel>header small{font-size:9px;color:#696b73}
+        .mv__history-list{display:grid;gap:6px;max-height:250px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#303137 transparent}
+        .mv__history-item{display:grid;grid-template-columns:8px minmax(0,1fr) auto auto;align-items:center;gap:10px;min-height:52px;padding:7px 8px;border:1px solid rgba(255,255,255,.06);border-radius:11px;background:#121316}
+        .mv__history-status{width:7px;height:7px;border-radius:50%;background:#757780}
+        .mv__history-item[data-status="rendering"] .mv__history-status{background:#fff;box-shadow:0 0 10px rgba(255,255,255,.36);animation:mv-dot 1.2s ease-in-out infinite}
+        .mv__history-item[data-status="ready"] .mv__history-status{background:#29d985;box-shadow:0 0 9px rgba(41,217,133,.28)}
+        .mv__history-item[data-status="failed"] .mv__history-status{background:#ff7777}
+        .mv__history-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
+        .mv__history-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d9dae0;font-size:11px;font-weight:600}
+        .mv__history-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6f7179;font-size:9px}
+        .mv__history-state{color:#92949c;font-size:9px;white-space:nowrap}
+        .mv__history-item>button{height:30px;padding:0 10px;border:1px solid rgba(255,255,255,.09);border-radius:9px;background:#1b1c20;color:#e5e5e8;display:flex;align-items:center;gap:6px;cursor:pointer;font-size:9px}
+        .mv__history-item>button:hover{background:#24252a;border-color:rgba(255,255,255,.16)}
+        .mv__history-empty{min-height:62px;border:1px dashed rgba(255,255,255,.09);border-radius:11px;color:#777981;display:flex;align-items:center;justify-content:center;gap:9px;padding:12px;text-align:center;font-size:10px}
         .mv__discover{max-width:1000px;margin:0 auto}
         .mv__tabs{display:flex;align-items:center;gap:12px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none}
         .mv__tabs::-webkit-scrollbar{display:none}
@@ -606,6 +808,21 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           .mv__statusbar>span:nth-last-child(1):not(.mv__error){margin-left:auto}
           .mv__status-dot{width:7px;height:7px;background:#19dc78;box-shadow:0 0 10px rgba(25,220,120,.35)}
           .mv__error{width:100%;max-width:100%;margin-left:0;white-space:normal}
+          .mv__session-bar{margin:0 0 9px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}
+          .mv__history-toggle,.mv__time-warning{width:100%;height:32px;min-width:0;padding:0 8px;border-radius:10px;gap:6px;font-size:8px;white-space:nowrap}
+          .mv__history-toggle{justify-content:flex-start}
+          .mv__history-toggle>strong{min-width:18px;height:18px;padding:0 5px;font-size:8px}
+          .mv__history-toggle>svg:last-child{margin-left:auto}
+          .mv__time-warning{justify-content:flex-start;margin:0;color:#a4a6ad}
+          .mv__session-bar svg{width:13px;height:13px;flex:0 0 auto}
+          .mv__history-panel{margin:0 0 9px;padding:9px;border-radius:12px;background:#0d0e10;box-shadow:none}
+          .mv__history-panel>header{padding:0 1px 8px}.mv__history-panel>header strong{font-size:10px}.mv__history-panel>header span,.mv__history-panel>header small{font-size:7px}
+          .mv__history-list{max-height:216px;gap:5px}
+          .mv__history-item{grid-template-columns:7px minmax(0,1fr) auto;min-height:45px;gap:7px;padding:6px;border-radius:9px}
+          .mv__history-copy strong{font-size:9px}.mv__history-copy small{font-size:7px}
+          .mv__history-state{display:none}
+          .mv__history-item>button{height:27px;padding:0 7px;gap:4px;border-radius:8px;font-size:7px}
+          .mv__history-empty{min-height:54px;padding:9px;font-size:8px}
           .mv__tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:8px;gap:5px;overflow:visible}
           .mv__tabs button{height:29px;min-width:0;padding:0 5px;border:1px solid rgba(255,255,255,.06);border-radius:10px;background:#111214;color:#a5a7ae;font-size:8px;overflow:hidden;text-overflow:ellipsis}
           .mv__tabs button[data-active="1"]{background:#1c1d20;color:#fff}
@@ -634,10 +851,29 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         @media(max-width:350px){
           .mv__header{padding-right:0}.mv__library-btn{display:none}.mv__header h1{white-space:normal}
           .mv__notice p{display:none}.mv__send{min-width:38px}.mv__send::after{display:none}
+          .mv__session-bar{grid-template-columns:1fr}.mv__time-warning{justify-content:center}
           .mv__cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.mv__card{aspect-ratio:.72/1}
           .mv__card-copy strong{font-size:10px}.mv__card-copy small{font-size:8px}
         }
       `}</style>
     </main>
   )
+}
+
+function formatSessionStatus(status: VideoSessionStatus) {
+  if (status === "queued") return "В очереди"
+  if (status === "rendering") return "Генерируется"
+  if (status === "ready") return "Готово"
+  return "Ошибка"
+}
+
+function formatSessionDate(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "Недавно"
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed)
 }
