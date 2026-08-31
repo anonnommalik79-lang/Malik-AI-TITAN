@@ -9,8 +9,9 @@ WORKDIR /opt/malikvideo-enhancer
 COPY requirements.txt ./requirements.txt
 RUN python3 -m pip install --break-system-packages -r requirements.txt
 COPY app.py ./app.py
+COPY install-seedvr2.sh ./install-seedvr2.sh
+RUN chmod +x ./install-seedvr2.sh && mkdir -p /data/malikvideo-enhancer
 
-RUN mkdir -p /data/malikvideo-enhancer
 VOLUME ["/data/malikvideo-enhancer"]
 EXPOSE 8020
 
