@@ -22,7 +22,7 @@ SEEDVR_SCRIPT = os.getenv("MALIKVIDEO_SEEDVR_SCRIPT", "projects/inference_seedvr
 POLL_SECONDS = max(1, int(os.getenv("MALIKVIDEO_ENHANCER_POLL_SECONDS", "2")))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="MalikVideo Enhancer", version="1.0.0")
+app = FastAPI(title="MalikVideo Enhancer", version="1.0.1")
 _stop = threading.Event()
 _thread: threading.Thread | None = None
 
@@ -112,11 +112,19 @@ def run_seedvr(row: sqlite3.Row) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     staged = input_dir / "input.mp4"
     source = Path(row["input_path"])
+    if not source.exists():
+        raise RuntimeError(f"input video missing: {source}")
     if not staged.exists():
         try:
             os.link(source, staged)
         except OSError:
             shutil.copy2(source, staged)
+
+    # A restarted enhancement may have partial output from the interrupted run.
+    # Remove only generated output, never the uploaded source, then rerun from
+    # the durable input so a crash cannot leave a job permanently stuck.
+    for stale in output_dir.rglob("*.mp4"):
+        stale.unlink(missing_ok=True)
 
     width, height = dimensions(row["resolution"], row["ratio"])
     command = [
@@ -149,12 +157,16 @@ def loop() -> None:
     while not _stop.is_set():
         try:
             with db() as conn:
-                row = conn.execute("SELECT * FROM jobs WHERE state = 'queued' ORDER BY created_at ASC LIMIT 1").fetchone()
+                row = conn.execute(
+                    "SELECT * FROM jobs WHERE state IN ('queued','enhancing') ORDER BY created_at ASC LIMIT 1"
+                ).fetchone()
             if row:
-                update_job(row["id"], state="enhancing")
+                update_job(row["id"], state="enhancing", error=None)
+                # Re-fetch so a recovered row carries the latest durable state.
+                row = get_job(row["id"])
                 try:
                     output = run_seedvr(row)
-                    update_job(row["id"], state="completed", output_path=str(output))
+                    update_job(row["id"], state="completed", output_path=str(output), error=None)
                 except Exception as exc:
                     update_job(row["id"], state="failed", error=f"{type(exc).__name__}: {exc}")
         except Exception:
@@ -180,12 +192,19 @@ def shutdown() -> None:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    ready = (SEEDVR_ROOT / SEEDVR_SCRIPT).exists() and shutil.which("torchrun") is not None
+    script_ready = (SEEDVR_ROOT / SEEDVR_SCRIPT).exists()
+    torchrun_ready = shutil.which("torchrun") is not None
+    ready = script_ready and torchrun_ready
+    # `ok` means this service can actually accept a 1080p/2K job. Returning
+    # ok=true before SeedVR2 is installed would make the orchestrator advertise
+    # high-resolution output that cannot yet be produced.
     return {
-        "ok": True,
+        "ok": ready,
         "service": "MalikVideo Enhancer",
         "backend": "seedvr2",
         "ready": ready,
+        "script_ready": script_ready,
+        "torchrun_ready": torchrun_ready,
         "gpus": SEEDVR_GPUS,
         "supported_outputs": ["1080p", "2k"] if ready else [],
     }
@@ -205,6 +224,10 @@ async def enhance(
         raise HTTPException(status_code=400, detail="resolution must be 1080p or 2k")
     if ratio not in {"16:9", "9:16", "1:1"}:
         raise HTTPException(status_code=400, detail="unsupported ratio")
+
+    ready = (SEEDVR_ROOT / SEEDVR_SCRIPT).exists() and shutil.which("torchrun") is not None
+    if not ready:
+        raise HTTPException(status_code=503, detail="SeedVR2 restoration backend is not ready")
 
     job_id = uuid.uuid4().hex
     job_dir = DATA_DIR / job_id
