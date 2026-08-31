@@ -54,6 +54,26 @@ function requestedOutput(resolution?: VideoResolution) {
   return "raw768"
 }
 
+async function assertWorkerOutputReady(base: string, outputResolution: "raw768" | "1080p" | "2k") {
+  if (outputResolution === "raw768") return
+
+  const response = await fetch(`${base}/health`, {
+    method: "GET",
+    headers: h3Headers(),
+    cache: "no-store",
+    signal: AbortSignal.timeout(Number(process.env.MALIKVIDEO_H3_STATUS_TIMEOUT_MS || 15_000)),
+  })
+  const payload = await response.json().catch(() => ({}))
+  const supported = Array.isArray(payload?.supported_outputs)
+    ? payload.supported_outputs.map((value: unknown) => String(value).toLowerCase())
+    : []
+
+  if (!response.ok || payload?.ok === false || !supported.includes(outputResolution)) {
+    const detail = payload?.error || payload?.detail || `worker does not advertise ${outputResolution}`
+    throw new Error(`MalikVideo high-resolution path unavailable: ${String(detail)}`)
+  }
+}
+
 /**
  * Submit to our MalikVideo worker (recommended) or directly to SGLang.
  * H3 Base itself always renders a 768px-short-edge audiovisual master. The
@@ -71,6 +91,10 @@ export async function createMalikH3Job(input: VideoGenerateInput) {
 
   if (mode === "sglang" && outputResolution !== "raw768") {
     throw new Error("Direct H3/SGLang only produces the 768p master. Use MALIKVIDEO_H3_MODE=worker for 1080p/2K.")
+  }
+
+  if (mode === "worker") {
+    await assertWorkerOutputReady(base, outputResolution)
   }
 
   const conditions = input.imageUrl
