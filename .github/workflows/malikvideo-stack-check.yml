@@ -17,8 +17,10 @@ on:
       - "services/malikvideo-worker/**"
       - "services/malikvideo-enhancer/**"
       - "scripts/malikvideo-h3/**"
+      - "docs/malikvideo-h3/**"
       - "app/templates/sovereign-hub-ui/lib/media/**"
       - "app/templates/sovereign-hub-ui/app/api/media/video/**"
+      - ".github/workflows/malikvideo-stack-check.yml"
 
 permissions:
   contents: read
@@ -35,10 +37,12 @@ jobs:
         run: |
           python -m pip install -r services/malikvideo-worker/requirements.txt
           python -m pip install -r services/malikvideo-enhancer/requirements.txt
-      - name: Compile Python workers
+      - name: Compile Python workers and launch tools
         run: |
           python -m py_compile services/malikvideo-worker/app.py
           python -m py_compile services/malikvideo-enhancer/app.py
+          python -m py_compile scripts/malikvideo-h3/verify-final-video.py
+          python -m py_compile scripts/malikvideo-h3/generate-secrets.py
       - name: Check resolution contracts
         env:
           MALIKVIDEO_DATA_DIR: /tmp/malikvideo
@@ -53,6 +57,7 @@ jobs:
               return mod
           worker = load('mv_worker', 'services/malikvideo-worker/app.py')
           enhancer = load('mv_enhancer', 'services/malikvideo-enhancer/app.py')
+          verifier = load('mv_verifier', 'scripts/malikvideo-h3/verify-final-video.py')
           assert worker.normalized_output_resolution('1080p') == '1080p'
           assert worker.normalized_output_resolution('1440p') == '2k'
           assert worker.target_dimensions('1080p', '16:9') == (1920, 1080)
@@ -60,6 +65,9 @@ jobs:
           assert worker.target_dimensions('2k', '9:16') == (1440, 2560)
           assert enhancer.dimensions('1080p', '1:1') == (1080, 1080)
           assert enhancer.dimensions('2k', '16:9') == (2560, 1440)
+          assert verifier.expected_dimensions('1080p', '16:9') == (1920, 1080)
+          assert verifier.expected_dimensions('2k', '16:9') == (2560, 1440)
+          assert verifier.expected_dimensions('2k', '9:16') == (1440, 2560)
           print('MalikVideo resolution contracts OK')
           PY
       - name: Validate shell launchers
@@ -68,6 +76,8 @@ jobs:
           bash -n scripts/malikvideo-h3/smoke-test.sh
           bash -n scripts/malikvideo-h3/smoke-worker.sh
           bash -n scripts/malikvideo-h3/preflight.sh
+          bash -n scripts/malikvideo-h3/host-preflight.sh
+          bash -n scripts/malikvideo-h3/final-launch-gate.sh
           bash -n services/malikvideo-worker/install-seedvr2.sh
           bash -n services/malikvideo-enhancer/install-seedvr2.sh
 
