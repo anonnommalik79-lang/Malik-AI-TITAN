@@ -21,7 +21,9 @@ export function imageFreeMode(): boolean {
 }
 
 export function videoProviderPrimary(): string {
-  return process.env.VIDEO_PROVIDER_PRIMARY?.trim() || "h3"
+  const explicit = process.env.VIDEO_PROVIDER_PRIMARY?.trim()
+  if (explicit) return explicit
+  return process.env.MALIKVIDEO_H3_ENABLED?.trim().toLowerCase() === "true" ? "h3" : "dashscope"
 }
 
 export function polloVideoModel(): string {
@@ -66,7 +68,13 @@ export function imageGodOrder(): string[] {
 
 export function videoGodOrder(): string[] {
   const raw = process.env.VIDEO_GOD_PROVIDER_ORDER || process.env.VIDEO_PROVIDER_ORDER || "h3,dashscope,pollo,runway,fal,luma,veo"
-  return raw.split(",").map((s) => s.trim()).filter(Boolean)
+  const order = raw.split(",").map((s) => s.trim()).filter(Boolean)
+
+  // Preserve the old production behavior for deployments that have not opted
+  // into H3 yet: DashScope remains first. Once `h3` is explicitly present in
+  // the order, its position is respected and DashScope becomes a fallback.
+  if (!order.includes("h3")) return order.includes("dashscope") ? order : ["dashscope", ...order]
+  return order.includes("dashscope") ? order : [...order, "dashscope"]
 }
 
 export function godModeEnabled(): boolean {
