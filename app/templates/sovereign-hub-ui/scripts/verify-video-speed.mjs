@@ -20,9 +20,15 @@ import ts from "typescript"
  */
 
 function codeOf(file) {
+  // Only comments that start their own line are stripped. Matching "/*"
+  // anywhere would also match it inside a string - this file's own providers
+  // send an Accept header of "...,*/*;q=0.8" - and the fake comment then ran to
+  // the next "*/" somewhere far below, silently deleting the very code the
+  // assertions were about. Deleted code cannot fail a grep, so the tests went
+  // green while checking nothing.
   return fs.readFileSync(file, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:])\/\/.*$/gm, "$1")
+    .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "")
 }
 
 let failures = 0

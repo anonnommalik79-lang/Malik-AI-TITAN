@@ -24,9 +24,15 @@ import ts from "typescript"
 
 /** Assertions are about code, not about comments describing what was removed. */
 function codeOf(file) {
+  // Only comments that start their own line are stripped. Matching "/*"
+  // anywhere would also match it inside a string - this file's own providers
+  // send an Accept header of "...,*/*;q=0.8" - and the fake comment then ran to
+  // the next "*/" somewhere far below, silently deleting the very code the
+  // assertions were about. Deleted code cannot fail a grep, so the tests went
+  // green while checking nothing.
   return fs.readFileSync(file, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:])\/\/.*$/gm, "$1")
+    .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "")
 }
 
 async function loadModule(file, stubs = {}) {
@@ -415,6 +421,45 @@ check("the model is chosen by the router, not pinned to one provider", () => {
   assert.match(router, /routeAI/, "voice must use the shared router so Cerebras and Gemini are reachable")
   assert.ok(!/provider:\s*"(?:groq|cerebras|cloudflare)"/.test(router.split("callSharedRouter")[1] || ""),
     "the shared call must not pin a provider")
+})
+
+// ------------------------------------------------------------------- latency
+console.log("\nanswering while the person is still waiting")
+
+check("no speech provider can stall the reply for twenty seconds", () => {
+  const tts = codeOf("app/api/voice/tts/route.ts")
+  assert.ok(!/AbortSignal\.timeout\(25000\)/.test(tts), "ElevenLabs' 25s budget must be gone")
+  assert.ok(!/AbortSignal\.timeout\(45000\)/.test(tts), "the Kazakh backend's 45s budget must be gone")
+  assert.ok(!/AbortSignal\.timeout\(\d{5,}\)/.test(tts), "no five-digit millisecond budget anywhere")
+  assert.match(tts, /VOICE_TTS_TIMEOUT_MS/, "one configurable budget for every provider")
+})
+
+check("a provider that just failed is skipped, not retried every turn", () => {
+  const tts = codeOf("app/api/voice/tts/route.ts")
+  for (const provider of ["gemini", "elevenlabs", "kokoro", "xai"]) {
+    assert.match(tts, new RegExp(`ttsSkipped\\("${provider}"\\)`), `${provider} must honour the cooldown`)
+  }
+  assert.match(tts, /VOICE_TTS_COOLDOWN_MS/, "the cooldown must be configurable")
+})
+
+check("Kazakh speech goes to the provider that is actually configured", () => {
+  const tts = codeOf("app/api/voice/tts/route.ts")
+  // ElevenLabs led the Kazakh chain while being present-but-not-working, so
+  // every Kazakh reply waited out its timeout before anything else was tried.
+  const kazakhBranch = tts.split("} else {")[1] || ""
+  const gemini = kazakhBranch.indexOf('geminiTts(text, voice, "kk"')
+  const eleven = kazakhBranch.indexOf('elevenlabsTts(text, voice, "kk"')
+  assert.ok(gemini >= 0, "Gemini must be able to speak Kazakh")
+  assert.ok(gemini < eleven, "and must be tried before ElevenLabs")
+  assert.match(tts, /kk: \{ name: "Kazakh", code: "kk-KZ" \}/, "with the right locale")
+})
+
+check("the reply is short enough to speak quickly", () => {
+  const router = codeOf("lib/voice/voice-llm-router.ts")
+  assert.ok(!/MAX_OUTPUT_TOKENS \|\| 700/.test(router), "700 tokens is minutes of speech")
+  assert.match(router, /MAX_OUTPUT_TOKENS \|\| 320/)
+  assert.match(conversationRules(false), /two or three sentences/i,
+    "the model must be told to keep a spoken answer short")
 })
 
 // --------------------------------------------------------------------- wiring

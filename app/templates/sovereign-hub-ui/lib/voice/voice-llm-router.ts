@@ -51,7 +51,9 @@ function requestBody(system: string, text: string, model?: string, history: Voic
       ...history.map((message) => ({ role: message.role, content: message.content })),
       { role: "user", content: text },
     ],
-    max_tokens: Number(process.env.VOICE_LLM_MAX_OUTPUT_TOKENS || 700),
+    // Speech is generated only after the whole answer exists, so every extra
+    // sentence is paid for twice: once to write it, once to say it aloud.
+    max_tokens: Number(process.env.VOICE_LLM_MAX_OUTPUT_TOKENS || 320),
     temperature: temperature ?? Number(process.env.VOICE_LLM_TEMPERATURE || 0.45),
     stream: false,
   }
@@ -212,7 +214,7 @@ async function callSharedRouter(
       task: "chat",
       // No provider and no model are pinned: whatever is configured is eligible.
       userId: "voice",
-      maxTokens: Number(process.env.VOICE_LLM_MAX_OUTPUT_TOKENS || 700),
+      maxTokens: Number(process.env.VOICE_LLM_MAX_OUTPUT_TOKENS || 320),
       temperature: temperature ?? Number(process.env.VOICE_LLM_TEMPERATURE || 0.45),
       messages: [
         { role: "system", content: system },

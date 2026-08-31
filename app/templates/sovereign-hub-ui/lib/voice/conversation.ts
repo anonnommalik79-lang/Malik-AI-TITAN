@@ -55,6 +55,10 @@ export function conversationRules(hasHistory: boolean) {
     "Do not end with an offer of further help unless you actually need something from the user.",
     "A follow-up like \"а почему?\", \"короче\", \"а второй?\" refers to your previous answer. Continue from it rather than starting over.",
     "Keep a normal spoken register: contractions, short sentences, no headings, no lists unless the user asked for a list.",
+    // The reply is spoken, and the speech is only generated once the whole
+    // answer exists, so length is felt twice: as a slower reply and as a longer
+    // one to sit through.
+    "Answer in two or three sentences. Go longer only when the user asks for detail, a story or a list.",
   ]
   if (hasHistory) {
     rules.unshift("You have already greeted this user. Do not greet again, do not introduce yourself again.")

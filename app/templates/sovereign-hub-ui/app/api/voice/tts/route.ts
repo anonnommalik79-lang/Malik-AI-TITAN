@@ -7,6 +7,44 @@ export const dynamic = "force-dynamic"
 
 type VoiceLanguage = "kk" | "ru" | "en"
 
+/**
+ * Speech has to arrive while the person is still waiting for it, so every
+ * provider call here is on a short clock and a provider that just failed is
+ * skipped rather than tried again.
+ *
+ * The timeouts were 25s for ElevenLabs and 45s for the Kazakh backend. Both sit
+ * at the front of the Kazakh chain, and ElevenLabs is present-but-not-working on
+ * this deployment, so every Kazakh reply waited out the full 25 seconds before
+ * anything else was even attempted. That is the reported "answer comes 20
+ * seconds later", and it is a configuration state the code has to survive, not
+ * an outage worth stalling for.
+ */
+const TTS_TIMEOUT_MS = Math.max(2000, Number(process.env.VOICE_TTS_TIMEOUT_MS || 8000))
+
+/** How long a failed provider stays skipped. Long enough to matter, short enough to recover. */
+const TTS_COOLDOWN_MS = Math.max(10_000, Number(process.env.VOICE_TTS_COOLDOWN_MS || 120_000))
+
+const ttsUnavailableUntil = new Map<string, number>()
+
+function ttsSkipped(provider: string) {
+  const until = ttsUnavailableUntil.get(provider)
+  if (!until) return false
+  if (Date.now() > until) {
+    ttsUnavailableUntil.delete(provider)
+    return false
+  }
+  return true
+}
+
+function ttsFailed(provider: string) {
+  ttsUnavailableUntil.set(provider, Date.now() + TTS_COOLDOWN_MS)
+  return null
+}
+
+function ttsWorked(provider: string) {
+  ttsUnavailableUntil.delete(provider)
+}
+
 const FLUX_SPEEDS = [0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15] as const
 const DEEPGRAM_VOICES = new Set([
   "hannah", "kit", "alexis", "cliff", "sienna", "cole", "brooke", "colin", "gemma", "haley", "heather", "miles", "sean",
@@ -139,6 +177,7 @@ function geminiVoiceFor(voice: string, language: "ru" | "en") {
 }
 
 async function deepgramTts(text: string, voice: string, speed: number, expressivity: number) {
+  if (ttsSkipped("deepgram")) return null
   const keys = unique([env("DEEPGRAM_VOICE_API_KEY"), env("DEEPGRAM_API_KEY")])
   if (!keys.length) return null
   const id = String(voice || "Cliff").trim().toLowerCase()
@@ -152,11 +191,12 @@ async function deepgramTts(text: string, voice: string, speed: number, expressiv
         headers: { authorization: `Token ${key}`, "content-type": "application/json", accept: "audio/mpeg,application/octet-stream;q=0.9,*/*;q=0.8" },
         body: JSON.stringify({ text }),
         cache: "no-store",
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
       })
       if (!response.ok) continue
       const bytes = await response.arrayBuffer()
       if (!isAudio(response, bytes) || !isMp3(bytes)) continue
+      ttsWorked("deepgram")
       return new Response(bytes, { headers: {
         "content-type": "audio/mpeg", "cache-control": "no-store",
         "x-malik-tts-provider": "deepgram", "x-malik-tts-engine": "deepgram-flux-batch", "x-malik-tts-voice": model, "x-malik-tts-language": "en",
@@ -165,19 +205,25 @@ async function deepgramTts(text: string, voice: string, speed: number, expressiv
       console.warn("[VOICE_DEEPGRAM_TTS_ERROR]", error instanceof Error ? error.message : error)
     }
   }
-  return null
+  return ttsFailed("deepgram")
 }
 
-async function geminiTts(text: string, voice: string, language: "ru" | "en", speed: number, expressivity: number) {
+const GEMINI_LANGUAGE: Record<VoiceLanguage, { name: string; code: string }> = {
+  ru: { name: "Russian", code: "ru-RU" },
+  en: { name: "English", code: "en-US" },
+  kk: { name: "Kazakh", code: "kk-KZ" },
+}
+
+async function geminiTts(text: string, voice: string, language: VoiceLanguage, speed: number, expressivity: number) {
+  if (ttsSkipped("gemini")) return null
   const keys = unique([env("GEMINI_VOICE_API_KEY"), env("GEMINI_API_KEY"), env("GOOGLE_GENERATIVE_AI_API_KEY"), env("GOOGLE_AI_API_KEY")])
   if (!keys.length) return null
 
-  const voiceName = geminiVoiceFor(voice, language)
+  const voiceName = geminiVoiceFor(voice, language === "kk" ? "ru" : language)
   const models = language === "ru"
     ? unique([env("GEMINI_RUSSIAN_TTS_MODEL"), "gemini-3.1-flash-tts-preview", env("GEMINI_TTS_MODEL"), "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts"])
     : unique([env("GEMINI_TTS_MODEL"), "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"])
-  const languageName = language === "ru" ? "Russian" : "English"
-  const languageCode = language === "ru" ? "ru-RU" : "en-US"
+  const { name: languageName, code: languageCode } = GEMINI_LANGUAGE[language]
   const pace = speed <= .9 ? "slightly slower than normal" : speed >= 1.1 ? "slightly faster than normal" : "natural conversational speed"
   const emotion = expressivity <= -1 ? "restrained and calm" : expressivity >= 1 ? "expressive and lively" : "natural and warm"
   const prompt = `Speak in ${languageName}. Use a ${emotion} delivery at ${pace}. Pronounce naturally and clearly. Do not translate, summarize, explain, or add words. Read only TEXT.\nTEXT:\n${text}`
@@ -193,7 +239,7 @@ async function geminiTts(text: string, voice: string, language: "ru" | "en", spe
             generationConfig: { responseModalities: ["AUDIO"], speechConfig: { languageCode, voiceConfig: { prebuiltVoiceConfig: { voiceName } } } },
           }),
           cache: "no-store",
-          signal: AbortSignal.timeout(model.includes("pro") ? 26000 : 18000),
+          signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
@@ -205,6 +251,7 @@ async function geminiTts(text: string, voice: string, language: "ru" | "en", spe
         const pcm = Buffer.from(part.data, "base64")
         if (pcm.byteLength < 128) continue
         const rate = Math.max(8000, Math.min(96000, Number(part.mimeType.match(/rate=(\d+)/i)?.[1] || 24000)))
+        ttsWorked("gemini")
         return new Response(pcm16ToWav(pcm, rate), { headers: {
           "content-type": "audio/wav", "cache-control": "no-store",
           "x-malik-tts-provider": "gemini", "x-malik-tts-engine": model, "x-malik-tts-voice": voiceName, "x-malik-tts-language": language,
@@ -214,10 +261,11 @@ async function geminiTts(text: string, voice: string, language: "ru" | "en", spe
       }
     }
   }
-  return null
+  return ttsFailed("gemini")
 }
 
 async function elevenlabsTts(text: string, voice: string, language: "ru" | "kk", speed: number, expressivity: number) {
+  if (ttsSkipped("elevenlabs")) return null
   const key = env("ELEVENLABS_VOICE_API_KEY") || env("ELEVENLABS_API_KEY")
   if (!key) return null
   const profile = voice.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_")
@@ -231,21 +279,23 @@ async function elevenlabsTts(text: string, voice: string, language: "ru" | "kk",
       headers: { "xi-api-key": key, "content-type": "application/json", accept: "audio/mpeg" },
       body: JSON.stringify({ text, model_id: "eleven_v3", language_code: language, voice_settings: { stability: calm || expressivity < 0 ? 1 : .5, similarity_boost: .75, speed: adjustedSpeed } }),
       cache: "no-store",
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
     })
-    if (!response.ok) return null
+    if (!response.ok) return ttsFailed("elevenlabs")
     const bytes = await response.arrayBuffer()
-    if (!isAudio(response, bytes) || !isMp3(bytes)) return null
+    if (!isAudio(response, bytes) || !isMp3(bytes)) return ttsFailed("elevenlabs")
+    ttsWorked("elevenlabs")
     return new Response(bytes, { headers: {
       "content-type": "audio/mpeg", "cache-control": "no-store",
       "x-malik-tts-provider": "elevenlabs", "x-malik-tts-engine": "eleven_v3", "x-malik-tts-voice": voiceId, "x-malik-tts-language": language,
     } })
   } catch {
-    return null
+    return ttsFailed("elevenlabs")
   }
 }
 
 async function multilingualTts(text: string, language: VoiceLanguage, speed: number) {
+  if (ttsSkipped("xai")) return null
   const keys = unique([env("XAI_VOICE_API_KEY"), env("XAI_API_KEY")])
   if (!keys.length) return null
   for (const key of keys) {
@@ -255,11 +305,12 @@ async function multilingualTts(text: string, language: VoiceLanguage, speed: num
         headers: { authorization: `Bearer ${key}`, "content-type": "application/json", accept: "audio/mpeg,application/octet-stream;q=0.9,*/*;q=0.8" },
         body: JSON.stringify({ text, voice_id: "leo", language: language === "kk" ? "auto" : language, output_format: { codec: "mp3", sample_rate: 44100, bit_rate: 192000 }, speed, text_normalization: true, optimize_streaming_latency: 0 }),
         cache: "no-store",
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
       })
       if (!response.ok) continue
       const bytes = await response.arrayBuffer()
       if (!isAudio(response, bytes) || !isMp3(bytes)) continue
+      ttsWorked("xai")
       return new Response(bytes, { headers: {
         "content-type": "audio/mpeg", "cache-control": "no-store",
         "x-malik-tts-provider": "xai", "x-malik-tts-engine": "xai-multilingual", "x-malik-tts-voice": "leo", "x-malik-tts-language": language,
@@ -268,10 +319,11 @@ async function multilingualTts(text: string, language: VoiceLanguage, speed: num
       continue
     }
   }
-  return null
+  return ttsFailed("xai")
 }
 
 async function kazakhTts(request: Request, text: string, voice: string, speed: number) {
+  if (ttsSkipped("kokoro")) return null
   const backend = env("KOKORO_TTS_URL") || env("MALIK_BACKEND_URL")
   if (!backend) return null
   try {
@@ -282,10 +334,10 @@ async function kazakhTts(request: Request, text: string, voice: string, speed: n
       headers: { "content-type": "application/json", "x-malik-voice-proxy": "1" },
       body: JSON.stringify({ text, voice, language: "kk", speed }),
       cache: "no-store",
-      signal: AbortSignal.timeout(45000),
+      signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
     })
     const bytes = await response.arrayBuffer()
-    if (!response.ok || !isAudio(response, bytes)) return null
+    if (!response.ok || !isAudio(response, bytes)) return ttsFailed("kokoro")
     return new Response(bytes, { headers: {
       "content-type": response.headers.get("content-type") || "audio/wav", "cache-control": "no-store",
       "x-malik-tts-provider": "kokoro-kazakh", "x-malik-tts-voice": voice, "x-malik-tts-language": "kk",
@@ -322,6 +374,12 @@ async function handlePOST(request: Request) {
     const xai = await multilingualTts(text, "en", speed)
     if (xai) return xai
   } else {
+    // Gemini leads for Kazakh too. It is the provider actually configured on
+    // this deployment, and it speaks kk-KZ; ElevenLabs used to be first here
+    // while being present-but-not-working, so every Kazakh reply paid its full
+    // timeout before anything that works was tried.
+    const gemini = await geminiTts(text, voice, "kk", speed, expressivity)
+    if (gemini) return gemini
     const eleven = await elevenlabsTts(text, voice, "kk", speed, expressivity)
     if (eleven) return eleven
     const kokoro = request.headers.get("x-malik-voice-proxy") ? null : await kazakhTts(request, text, voice, speed)
