@@ -1,9 +1,8 @@
-import type { TitanVideoProviderId } from "./providers/titan-video"
-import type { VideoJobStatus } from "./types"
+import type { VideoJobStatus, VideoProviderId } from "./types"
 
 export type StoredVideoJob = {
   taskId: string
-  provider: TitanVideoProviderId
+  provider: VideoProviderId
   userId: string
   prompt: string
   status: VideoJobStatus
