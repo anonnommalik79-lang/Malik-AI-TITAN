@@ -1,0 +1,317 @@
+/* Malik Image result experience — loaded after all chat styles. */
+
+/* Remove the two raw blocks called out in the reference screenshot. */
+#malik-root .malik-art-understood,
+#malik-root .malik-art-report {
+  display: none !important;
+}
+
+#malik-root .malik-art-stage[data-malik-openable="1"] {
+  cursor: zoom-in;
+  outline: none;
+}
+
+#malik-root .malik-art-stage[data-malik-openable="1"]::after {
+  content: "Открыть";
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 999px;
+  background: rgba(0,0,0,.66);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .16s ease, transform .16s ease, background .16s ease;
+  pointer-events: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+#malik-root .malik-art-stage[data-malik-openable="1"]:hover::after,
+#malik-root .malik-art-stage[data-malik-openable="1"]:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#malik-root .malik-image-tools {
+  display: none;
+  width: 100%;
+  margin: 12px auto 0;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 3px;
+  scrollbar-width: none;
+}
+
+#malik-root .malik-image-tools::-webkit-scrollbar {
+  display: none;
+}
+
+#malik-root .malik-photo-motion[data-malik-image-ready="1"] .malik-image-tools {
+  display: flex;
+}
+
+#malik-root .malik-image-tools button {
+  appearance: none;
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 9px;
+  background: #111112;
+  color: #d8d8dc;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 570;
+  line-height: 1;
+  transition: background .14s ease, border-color .14s ease, color .14s ease, transform .14s ease;
+}
+
+#malik-root .malik-image-tools button:hover,
+#malik-root .malik-image-tools button:focus-visible {
+  border-color: rgba(255,255,255,.24);
+  background: #1a1a1c;
+  color: #fff;
+  outline: none;
+}
+
+#malik-root .malik-image-tools button:active {
+  transform: translateY(1px);
+}
+
+#malik-root .malik-image-tools__divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 19px;
+  margin: 0 2px;
+  background: rgba(255,255,255,.09);
+}
+
+/* The finished state should feel clean: picture + one status line + pro dock. */
+#malik-root .malik-photo-motion[data-malik-image-ready="1"] .malik-art-progress {
+  display: none !important;
+}
+
+#malik-root .malik-photo-motion[data-malik-image-ready="1"] .malik-art-status {
+  margin-top: 10px;
+  min-height: 18px;
+  color: rgba(255,255,255,.56);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* Fullscreen viewer. */
+.malik-image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483600;
+  display: grid;
+  grid-template-rows: auto minmax(0,1fr) auto;
+  background: rgba(0,0,0,.96);
+  color: #fff;
+  overscroll-behavior: contain;
+}
+
+.malik-image-viewer__topbar {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  background: rgba(0,0,0,.82);
+}
+
+.malik-image-viewer__meta {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.malik-image-viewer__meta strong {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.malik-image-viewer__meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255,255,255,.42);
+  font-size: 10.5px;
+}
+
+.malik-image-viewer__actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.malik-image-viewer__actions button,
+.malik-image-viewer__bottom button {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,.12);
+  background: #111112;
+  color: #e8e8ea;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 580;
+  transition: background .14s ease, border-color .14s ease, color .14s ease;
+}
+
+.malik-image-viewer__actions button {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 9px;
+}
+
+.malik-image-viewer__actions button:hover,
+.malik-image-viewer__bottom button:hover {
+  background: #1d1d20;
+  border-color: rgba(255,255,255,.24);
+  color: #fff;
+}
+
+.malik-image-viewer__actions .is-close {
+  width: 36px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 22px;
+  font-weight: 300;
+}
+
+.malik-image-viewer__canvas {
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 14px;
+  touch-action: pinch-zoom;
+}
+
+.malik-image-viewer__canvas img {
+  display: block;
+  max-width: min(96vw, 1800px);
+  max-height: calc(100dvh - 150px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.malik-image-viewer__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 10px max(14px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  border-top: 1px solid rgba(255,255,255,.07);
+  background: rgba(0,0,0,.82);
+  scrollbar-width: none;
+}
+
+.malik-image-viewer__bottom::-webkit-scrollbar {
+  display: none;
+}
+
+.malik-image-viewer__bottom button {
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 9px;
+}
+
+.malik-image-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(24px, calc(env(safe-area-inset-bottom) + 14px));
+  z-index: 2147483640;
+  transform: translateX(-50%);
+  max-width: min(88vw, 420px);
+  padding: 9px 13px;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 999px;
+  background: rgba(17,17,18,.95);
+  color: #fff;
+  box-shadow: 0 12px 44px rgba(0,0,0,.45);
+  font-size: 11.5px;
+  font-weight: 580;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  #malik-root .malik-art-stage[data-malik-openable="1"]::after {
+    opacity: 1;
+    transform: none;
+    right: 9px;
+    bottom: 9px;
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: 10.5px;
+  }
+
+  #malik-root .malik-image-tools {
+    width: min(88vw, 390px);
+    max-width: calc(100vw - 36px);
+    margin-top: 9px;
+    gap: 5px;
+  }
+
+  #malik-root .malik-image-tools button {
+    height: 31px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .malik-image-viewer__topbar {
+    min-height: 56px;
+    gap: 8px;
+  }
+
+  .malik-image-viewer__meta span,
+  .malik-image-viewer__actions button:not(.is-close):first-child {
+    display: none;
+  }
+
+  .malik-image-viewer__canvas {
+    padding: 8px;
+  }
+
+  .malik-image-viewer__canvas img {
+    max-width: 100vw;
+    max-height: calc(100dvh - 132px);
+  }
+
+  .malik-image-viewer__bottom {
+    justify-content: flex-start;
+    padding-top: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #malik-root .malik-art-stage[data-malik-openable="1"]::after,
+  #malik-root .malik-image-tools button,
+  .malik-image-viewer__actions button,
+  .malik-image-viewer__bottom button {
+    transition: none !important;
+  }
+}
