@@ -5,6 +5,8 @@ import {
   resolveStrictMalikSelection,
 } from "@/lib/server/malik-model-router"
 import { isFeatureDisabled, readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
+import { prepareMalikActionRuntime } from "@/lib/server/malik-action-runtime"
+import { malikActionPlanMarkdown, malikActionReceiptMarkdown, type MalikActionPlan } from "@/lib/ai/action-os"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
@@ -24,7 +26,7 @@ function textResponse(content: string) {
     headers: {
       "content-type": "text/plain; charset=utf-8",
       "cache-control": "no-store",
-      "x-malik-router": "github-openrouter-deepseek-v13",
+      "x-malik-router": "github-openrouter-deepseek-v13-action-os",
     },
   })
 }
@@ -41,6 +43,7 @@ function textualContextSize(body: any) {
 function liveSseResponse(
   body: any,
   selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>,
+  plan: MalikActionPlan,
 ) {
   const encoder = new TextEncoder()
   const startedAt = Date.now()
@@ -60,6 +63,14 @@ function liveSseResponse(
       }
 
       send("status", { type: "status", text: "Malik AI принял запрос" })
+      const planMarkdown = malikActionPlanMarkdown(plan)
+      if (planMarkdown) {
+        send("content", {
+          type: "content",
+          content: `${planMarkdown}\n\n`,
+          actionPlanId: plan.id,
+        })
+      }
 
       void malikGodAnswer(
         body,
@@ -71,6 +82,14 @@ function liveSseResponse(
           type: "content",
           content: asPlainText(answer) || "MALIK AI: empty response prevented.",
         })
+        const receipt = malikActionReceiptMarkdown(plan)
+        if (receipt) {
+          send("content", {
+            type: "content",
+            content: `\n\n${receipt}`,
+            actionPlanId: plan.id,
+          })
+        }
         send("done", {
           type: "done",
           provider: answer.provider,
@@ -80,6 +99,13 @@ function liveSseResponse(
           sources: answer.sources,
           webSourceCount: answer.sources.length,
           tookMs: Date.now() - startedAt,
+          actionPlan: plan.shouldRender ? {
+            id: plan.id,
+            intent: plan.intent,
+            risk: plan.risk,
+            requiresConfirmation: plan.requiresConfirmation,
+            steps: plan.steps,
+          } : undefined,
         })
         close()
       }).catch((error) => {
@@ -100,7 +126,8 @@ function liveSseResponse(
       "cache-control": "no-cache, no-transform",
       connection: "keep-alive",
       "x-accel-buffering": "no",
-      "x-malik-router": "github-openrouter-deepseek-v13",
+      "x-malik-router": "github-openrouter-deepseek-v13-action-os",
+      "x-malik-action-os": plan.shouldRender ? "active" : "passive",
     },
   })
 }
@@ -143,13 +170,20 @@ async function handlePOST(request: Request) {
     })
   }
 
+  const prepared = prepareMalikActionRuntime(request, body)
+  body = prepared.body
+
   try {
     const selection = await resolveStrictMalikSelection(request, body)
-    if (wantsSse(request, body)) return liveSseResponse(body, selection)
+    if (wantsSse(request, body)) return liveSseResponse(body, selection, prepared.plan)
     const answer = await malikGodAnswer(body, selection ? { modelId: selection.modelId } : undefined)
     observeComputeResult(answer)
-    const content = asPlainText(answer)
-    return textResponse(content)
+    const pieces = [
+      malikActionPlanMarkdown(prepared.plan),
+      asPlainText(answer),
+      malikActionReceiptMarkdown(prepared.plan),
+    ].filter(Boolean)
+    return textResponse(pieces.join("\n\n"))
   } catch (error) {
     const payload = malikModelErrorPayload(error)
     const status = error instanceof MalikModelRouteError ? error.status : 503
@@ -165,6 +199,8 @@ export async function GET() {
     ok: true,
     route: "/api/stream",
     status: isFeatureDisabled("chat") ? "paused" : "ready",
+    actionOS: "malik-action-os-v1",
+    memoryBridge: "same-origin-user-controlled",
     limits: {
       maxBodyMb: MAX_CHAT_BODY_BYTES / (1024 * 1024),
       maxTextContextChars: MAX_TEXT_CONTEXT_CHARS,
