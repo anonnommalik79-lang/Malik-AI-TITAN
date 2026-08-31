@@ -921,3 +921,101 @@ body:has(#malik-root .malik-active-chat-shell),
 #malik-root .malik-dashboard-shell:has(.malik-chat-legend-bg) > main > section {
   background: #000 !important;
 }
+
+/* ── Structured assistant answers ──────────────────────────────────────────
+   The reply used to be one run of pre-wrapped text, so a well-organised answer
+   and a wall of prose looked identical. These are the blocks MalikMarkdown
+   emits; the spacing is what does the work, not decoration. */
+
+#malik-root .malik-md > *:first-child { margin-top: 0 !important; }
+#malik-root .malik-md > *:last-child { margin-bottom: 0 !important; }
+
+#malik-root .malik-md-p {
+  margin: 0 0 0.85em;
+  line-height: 1.7;
+}
+
+#malik-root .malik-md-h {
+  margin: 1.35em 0 0.5em;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+#malik-root .malik-md-h1 { font-size: 1.28em; }
+#malik-root .malik-md-h2 { font-size: 1.15em; }
+#malik-root .malik-md-h3 { font-size: 1.05em; }
+#malik-root .malik-md-h4,
+#malik-root .malik-md-h5,
+#malik-root .malik-md-h6 { font-size: 1em; }
+
+#malik-root .malik-md-ul,
+#malik-root .malik-md-ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.35em;
+}
+#malik-root .malik-md-ul { list-style: disc; }
+#malik-root .malik-md-ol { list-style: decimal; }
+#malik-root .malik-md-ul li,
+#malik-root .malik-md-ol li {
+  margin: 0.3em 0;
+  line-height: 1.65;
+  padding-left: 0.15em;
+}
+#malik-root .malik-md-ul li::marker,
+#malik-root .malik-md-ol li::marker { color: rgba(255, 255, 255, 0.42); }
+
+#malik-root .malik-md-strong { font-weight: 650; color: #fff; }
+#malik-root .malik-md-em { font-style: italic; }
+
+#malik-root .malik-md-link {
+  color: #cfd6e4;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+#malik-root .malik-md-link:hover { color: #fff; }
+
+#malik-root .malik-md-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  padding: 0.12em 0.4em;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  white-space: nowrap;
+}
+
+/* Code has to scroll inside its own box: a long line must never widen the
+   whole conversation column. */
+#malik-root .malik-md-pre {
+  margin: 0 0 0.95em;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: #0c0c0e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-x: auto;
+  max-width: 100%;
+}
+#malik-root .malik-md-pre code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.87em;
+  line-height: 1.6;
+  white-space: pre;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #e9e3d6;
+}
+
+#malik-root .malik-md-quote {
+  margin: 0 0 0.9em;
+  padding: 0.1em 0 0.1em 0.9em;
+  border-left: 2px solid rgba(255, 255, 255, 0.18);
+  color: #c9c6bf;
+}
+
+#malik-root .malik-md-hr {
+  margin: 1.2em 0;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}

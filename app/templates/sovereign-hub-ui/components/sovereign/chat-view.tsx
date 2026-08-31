@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { MalikMarkdown } from "./MalikMarkdown"
 import {
   BookOpen,
   Bot,
@@ -765,7 +766,10 @@ function MessageBubble({
             ? "bg-transparent p-0"
             : isUser
               ? "malik-message-card-user whitespace-pre-wrap rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3 text-white sm:px-5 sm:py-4"
-              : "malik-message-card-assistant whitespace-pre-wrap text-[#e9e3d6]",
+              // No whitespace-pre-wrap on the assistant side any more: its reply
+              // is rendered as structured blocks, and pre-wrap would add the
+              // source newlines on top of the spacing those blocks already have.
+              : "malik-message-card-assistant text-[#e9e3d6]",
         )}>
           {responseModel && !message.generatedMedia && !message.imageConfirmation ? (
             <div className="malik-response-model" aria-label={`Ответ модели ${responseModel.label}`}>
@@ -809,7 +813,9 @@ function MessageBubble({
                 </p>
               )}
             </section>
-          ) : displayContent || (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} /> : "")}
+          ) : displayContent
+            ? (isUser ? displayContent : <MalikMarkdown text={displayContent} />)
+            : (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} /> : "")}
           {!isUser && !message.isStreaming && message.research?.sources.length ? (
             <SourceDeck research={message.research} />
           ) : null}
