@@ -192,9 +192,11 @@ async function callCloudflare(system: string, text: string, history: VoiceMessag
  * which providers are actually configured and falls back across them, so Voice
  * stops being pinned to whichever one it was written against.
  *
- * A "deep" turn is allowed to reach the largest configured model; a "fast" turn
- * asks for the quick one, because waiting a second for "спасибо" is worse than
- * a slightly plainer answer.
+ * Every turn goes to the head of that chain, which is the largest configured
+ * model. `tier` rides along as metadata for logs only - it does not pick a
+ * model, and an earlier comment here claiming it did was wrong. Answering a
+ * Kazakh greeting correctly matters more than shaving a second off "спасибо",
+ * and low-resource languages are exactly where the small models fail.
  */
 async function callSharedRouter(
   system: string,

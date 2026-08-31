@@ -186,6 +186,32 @@ check("Kazakh is not mistaken for Russian", () => {
   assert.equal(detectSpokenLanguage("Привіт, як справи"), "uk")
 })
 
+check("Kazakh written in plain Russian letters is still Kazakh", () => {
+  // The recognizer writes a short Kazakh utterance without the Kazakh letters,
+  // so "қалайсың" arrives as "калайсын". The word list matched whole words
+  // only, and Kazakh glues its endings on, so "калай" never matched
+  // "калайсын" - the greeting was declared Russian and answered as gibberish.
+  for (const said of ["калайсын", "калайсың", "калайсыз", "салем", "рахмет", "жаксы", "кайдасын", "канша турады", "бул не"]) {
+    assert.equal(detectSpokenLanguage(said), "kk", `"${said}" must read as Kazakh`)
+  }
+})
+
+check("a hand-picked language beats a guess, but not proof", () => {
+  // Detection used to outrank the picker unconditionally, including when it had
+  // no evidence at all and simply defaulted to Russian. Someone who chose
+  // Kazakh had their choice overridden by that default.
+  assert.equal(resolveVoiceLanguage({ text: "калайсын", selected: "kk" }).code, "kk")
+  // Confident detection still wins: speaking Spanish to a Kazakh picker
+  // answers Spanish.
+  const spanish = resolveVoiceLanguage({ text: "Hola, ¿qué hora es?", selected: "kk" })
+  assert.equal(spanish.code, "es")
+  assert.equal(spanish.source, "detected")
+  // And a clearly Russian sentence is answered in Russian whatever is picked.
+  for (const said of ["привет как дела", "включи музыку", "погода на завтра", "он бежит по улице"]) {
+    assert.equal(resolveVoiceLanguage({ text: said, selected: "kk" }).code, "ru", `"${said}" must read as Russian`)
+  }
+})
+
 check("Latin languages are told apart by their own words", () => {
   assert.equal(detectSpokenLanguage("Hola, ¿cómo estás?"), "es")
   assert.equal(detectSpokenLanguage("Bonjour, comment ça va"), "fr")
@@ -367,7 +393,13 @@ check("similarity is a share, not a distance", () => {
   assert.ok(similarity("совершенно другой текст здесь", "солнце это звезда центре") < 0.3)
 })
 
-check("simple talk stays fast, real questions get the bigger model", () => {
+check("the tier is telemetry, and does not quietly downgrade the model", () => {
+  const router = codeOf("lib/voice/voice-llm-router.ts")
+  assert.ok(!/provider:\s*["']/.test(router.split("callSharedRouter")[1] || ""),
+    "no turn may be pinned to a smaller provider: Kazakh is where small models fail")
+})
+
+check("the tier still classifies the turn, for logs", () => {
   assert.equal(tierFor("привет", false), "fast")
   assert.equal(tierFor("спасибо большое", false), "fast")
   assert.equal(tierFor("почему небо синее", false), "deep")

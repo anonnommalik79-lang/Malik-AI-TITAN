@@ -163,28 +163,68 @@ const URDU = /[ٹڈڑںھہے]/u
  * one language count as evidence, and where the scripts genuinely overlap the
  * decision falls to function words.
  */
-function cyrillicLanguage(text: string) {
+function cyrillicLanguage(text: string): { code: string; confident: boolean } {
   const lower = text.toLowerCase()
 
-  if (/[ѓѕќџ]/u.test(lower)) return "mk"
-  if (/[ђћњљ]/u.test(lower)) return "sr"
-  if (/[їєґ]/u.test(lower)) return "uk"
-  if (/[әңғүұқөһ]/u.test(lower)) return /[җҫүһ]/u.test(lower) && /[җҫ]/u.test(lower) ? "tt" : "kk"
-  if (/[ў]/u.test(lower)) return "uz"
+  if (/[ѓѕќџ]/u.test(lower)) return { code: "mk", confident: true }
+  if (/[ђћњљ]/u.test(lower)) return { code: "sr", confident: true }
+  if (/[їєґ]/u.test(lower)) return { code: "uk", confident: true }
+  if (/[әңғүұқөһ]/u.test(lower)) {
+    const tatar = /[җҫ]/u.test(lower)
+    return { code: tatar ? "tt" : "kk", confident: true }
+  }
+  if (/[ў]/u.test(lower)) return { code: "uz", confident: true }
 
+  // Stems, not whole words. Kazakh glues its endings on, so "калай" has to
+  // match "калайсың", "калайсыз", "калайсын" - the whole-word version of this
+  // list matched none of them, and a greeting came back as Russian.
+  const stem = (stems: string) => new RegExp(`${OPEN}(?:${stems})\\p{L}*${CLOSE}`, "iu").test(lower)
   const has = (words: string) => new RegExp(`${OPEN}(?:${words})${CLOSE}`, "iu").test(lower)
 
   // "і" without a decisive letter: Ukrainian and Kazakh both reach here.
   if (/і/u.test(lower)) {
-    if (has("як|що|справи|дякую|привіт|будь\\s+ласка|ти|ви|це|тільки")) return "uk"
-    if (has("бір|кім|мен|сен|біз|сіз|бұл|үшін|қалай|жақсы")) return "kk"
-    return "uk"
+    if (has("як|що|справи|дякую|привіт|будь\\s+ласка|ти|ви|це|тільки")) return { code: "uk", confident: true }
+    if (stem("бір|кім|мен|сен|біз|сіз|бұл|үшін|қалай|жақсы|керек")) return { code: "kk", confident: true }
+    return { code: "uk", confident: false }
   }
 
-  if (has("салем|калай|казак|рахмет|бар\\s+ма|жок|осы|бул")) return "kk"
-  if (has("ама|също|защото|какво|благодаря")) return "bg"
-  if (has("як|що|дякую|привіт|справи")) return "uk"
-  return "ru"
+  // Kazakh written in plain Russian letters, which is what the recognizer
+  // produces for a short utterance: "калайсын", "салем", "рахмет", "жаксы".
+  if (stem(
+    "калай|салем|сэлем|рахмет|ракмет|жаксы|жаман|казак|казакша|" +
+    "кайда|канша|канда|неге|калайсы|бар\\s+ма|жок|" +
+    "мен|сен|сиз|биз|бул|осы|солай|керек|болады|болмайды|" +
+    "тусиндир|айтшы|кайталa|кешир|рахат",
+  )) return { code: "kk", confident: true }
+
+  if (has("ама|също|защото|какво|благодаря")) return { code: "bg", confident: true }
+  if (stem("як|що|дякую|привіт|справи")) return { code: "uk", confident: true }
+
+  // Positive evidence that this really is Russian, rather than Cyrillic text we
+  // simply failed to place. Without this every unrecognised Kazakh phrase was
+  // silently declared Russian and overrode the user's own choice of language.
+  //
+  // Content words are matched as stems, but the short function words have to be
+  // whole words: a stem match on "по" would also fire on "почему", "потом" and
+  // half the dictionary.
+  const russian = stem(
+    "привет|здравствуй|спасибо|пожалуйста|сколько|почему|зачем|потому|" +
+    "который|котор|сегодня|сейчас|давай|можешь|хочу|нужно|скажи|расскажи|" +
+    "сделай|покажи|напиши|помоги|бежит|идёт|идет|делает|говорит|смотрит|" +
+    // The imperatives a voice assistant actually receives. Two words with no
+    // preposition ("включи музыку") is otherwise unplaceable Cyrillic.
+    "включ|выключ|открой|закрой|найди|поставь|останов|повтори|продолж|" +
+    "перевед|запиши|отправ|позвони|напомни|посчитай|нарисуй|создай|добавь|" +
+    "удали|прочитай|объясни|сравни|проверь|запусти",
+  ) || has(
+    "что|как|где|когда|это|этот|эта|эти|очень|ещё|еще|тоже|также|" +
+    "меня|тебя|мне|тебе|нас|вам|они|она|мы|вы|его|её|ее|их|" +
+    "на|в|с|к|у|по|из|для|про|над|под|при|без|же|бы|ли|не|или|" +
+    "уже|потом|здесь|там|тут|вот|так|то|" +
+    "был|была|было|будет|есть|нет|да",
+  )
+
+  return { code: "ru", confident: russian }
 }
 
 /** Latin-script languages, by their most common function words. */
@@ -208,50 +248,70 @@ const LATIN_MARKERS: Array<[string, RegExp]> = [
  * short or too neutral to tell, so the caller can fall back to the picker
  * instead of guessing wrong on "ок" or "ага".
  */
-export function detectSpokenLanguage(text: string) {
+/**
+ * Detection with its own certainty attached.
+ *
+ * The certainty is the important half. A script is proof; a function word is
+ * proof; falling off the end of the Cyrillic checks is not. Reporting that last
+ * case as plain "ru" let a guess outrank the language the user had chosen by
+ * hand, which is how "калайсың" got answered in Russian.
+ */
+export function detectSpokenLanguageDetailed(text: string): { code: string; confident: boolean } {
   const value = String(text || "").trim()
-  if (!value) return ""
+  const unknown = { code: "", confident: false }
+  if (!value) return unknown
 
   for (const [code, pattern] of SCRIPTS) {
-    if (pattern.test(value)) return code
+    if (pattern.test(value)) return { code, confident: true }
   }
 
   if (/[؀-ۿ]/u.test(value)) {
-    if (URDU.test(value)) return "ur"
-    if (PERSIAN.test(value)) return "fa"
-    return "ar"
+    if (URDU.test(value)) return { code: "ur", confident: true }
+    if (PERSIAN.test(value)) return { code: "fa", confident: true }
+    return { code: "ar", confident: true }
   }
 
   if (/[Ѐ-ӿ]/u.test(value)) return cyrillicLanguage(value)
 
   if (/[a-z]/i.test(value)) {
     for (const [code, pattern] of LATIN_MARKERS) {
-      if (pattern.test(value)) return code
+      if (pattern.test(value)) return { code, confident: true }
     }
-    // Latin letters with no marker: English is the safe reading, but only once
-    // there are enough words to mean anything.
-    if (value.split(/\s+/).filter(Boolean).length >= 2) return "en"
-    return ""
+    // Latin letters with no marker: English is the safe reading, but it is a
+    // reading, not proof, and only once there are enough words to mean anything.
+    if (value.split(/\s+/).filter(Boolean).length >= 2) return { code: "en", confident: false }
+    return unknown
   }
 
-  return ""
+  return unknown
+}
+
+/** Best guess at the language of one utterance, or "" when it cannot tell. */
+export function detectSpokenLanguage(text: string) {
+  return detectSpokenLanguageDetailed(text).code
 }
 
 /**
- * The language the answer must be in. Explicit request wins, then the language
- * actually spoken, then whatever the picker is set to.
+ * The language the answer must be in.
+ *
+ * An explicit request inside the sentence wins. Then confident detection - a
+ * script, or a word only one language uses. The picker comes next, because a
+ * person who has chosen Kazakh has told us more than a guess can, and only then
+ * an unconfident guess.
  */
 export function resolveVoiceLanguage(input: { text: string; selected?: unknown }): VoiceLanguageDecision {
   const text = String(input.text || "")
-  const selected = typeof input.selected === "string" ? input.selected : ""
+  const raw = typeof input.selected === "string" ? input.selected : ""
+  const selected = raw && raw !== "auto" ? raw : ""
 
   const asked = requestedInSpeech(text)
   if (asked) return decision(asked, "requested-in-speech")
 
-  const detected = detectSpokenLanguage(text)
-  if (detected) return decision(detected, "detected")
+  const detected = detectSpokenLanguageDetailed(text)
+  if (detected.code && detected.confident) return decision(detected.code, "detected")
 
-  if (selected && selected !== "auto") return decision(selected, "selected")
+  if (selected) return decision(selected, "selected")
+  if (detected.code) return decision(detected.code, "detected")
 
   return decision("ru", "default")
 }
