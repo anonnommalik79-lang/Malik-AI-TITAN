@@ -28,7 +28,8 @@
     "test:image-prompt": "node scripts/verify-image-prompt.mjs",
     "test:sites": "node scripts/verify-sites.mjs",
     "test:voice:understanding": "node scripts/verify-voice-understanding.mjs",
-    "test:video-speed": "node scripts/verify-video-speed.mjs"
+    "test:video-speed": "node scripts/verify-video-speed.mjs",
+    "test:coding-models": "node scripts/verify-coding-models.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",

@@ -23,24 +23,48 @@ export const MODEL_REGISTRY: Record<AIProviderId, Partial<Record<AITaskType, str
     code: process.env.NVIDIA_NIM_CODE_MODEL || process.env.NVIDIA_NIM_MODEL || "meta/llama-3.1-70b-instruct",
     enterprise: process.env.NVIDIA_NIM_MODEL || "meta/llama-3.1-70b-instruct",
   },
+  // Gemini's model id is resolved at call time from a candidate list, because a
+  // hardcoded one goes stale and takes the whole provider down with it - this
+  // entry said "gemini-1.5-pro", retired long ago, so every request to the
+  // strongest configured provider returned 404 and the site builder fell
+  // through to its generic local template. See providers/gemini.ts.
   gemini: {
-    chat: process.env.GEMINI_MODEL || "gemini-1.5-pro",
-    code: process.env.GEMINI_CODE_MODEL || "gemini-1.5-pro",
-    file_analysis: process.env.GEMINI_MODEL || "gemini-1.5-pro",
-    research: process.env.GEMINI_MODEL || "gemini-1.5-pro",
+    chat: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    code: process.env.GEMINI_CODE_MODEL || "gemini-2.5-pro",
+    debug: process.env.GEMINI_CODE_MODEL || "gemini-2.5-pro",
+    project: process.env.GEMINI_CODE_MODEL || "gemini-2.5-pro",
+    file_analysis: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    research: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    general: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+  },
+  // Codestral is trained for code rather than talked into it, and the free
+  // allowance is measured in tokens per month, which suits a builder whose one
+  // request is an entire HTML document.
+  mistral: {
+    chat: process.env.MISTRAL_MODEL || "mistral-large-latest",
+    code: process.env.MISTRAL_CODE_MODEL || "codestral-latest",
+    debug: process.env.MISTRAL_CODE_MODEL || "codestral-latest",
+    project: process.env.MISTRAL_CODE_MODEL || "codestral-latest",
+    research: process.env.MISTRAL_MODEL || "mistral-large-latest",
+    general: process.env.MISTRAL_MODEL || "mistral-large-latest",
   },
   cerebras: {
     chat: process.env.CEREBRAS_MODEL || "gpt-oss-120b",
-    code: process.env.CEREBRAS_CODE_MODEL || "zai-glm-4.7",
-    debug: process.env.CEREBRAS_CODE_MODEL || "zai-glm-4.7",
-    project: process.env.CEREBRAS_CODE_MODEL || "zai-glm-4.7",
+    // "zai-glm-4.7" is a Z.AI model; Cerebras does not serve it, so every code
+    // and project request to Cerebras failed. It runs gpt-oss-120b, which is
+    // what its own health check reports.
+    code: process.env.CEREBRAS_CODE_MODEL || "gpt-oss-120b",
+    debug: process.env.CEREBRAS_CODE_MODEL || "gpt-oss-120b",
+    project: process.env.CEREBRAS_CODE_MODEL || "gpt-oss-120b",
     research: process.env.CEREBRAS_MODEL || "gpt-oss-120b",
     general: process.env.CEREBRAS_MODEL || "gpt-oss-120b",
   },
   groq: {
-    chat: process.env.GROQ_MODEL || process.env.DEFAULT_FAST_MODEL || "llama-3.1-70b-versatile",
-    code: process.env.GROQ_CODE_MODEL || "llama-3.1-70b-versatile",
-    general: process.env.GROQ_MODEL || "llama-3.1-70b-versatile",
+    // "llama-3.1-70b-versatile" was decommissioned by Groq. gpt-oss is what the
+    // repo's own Voice router already calls Groq with, so it is known to work.
+    chat: process.env.GROQ_MODEL || process.env.DEFAULT_FAST_MODEL || "openai/gpt-oss-20b",
+    code: process.env.GROQ_CODE_MODEL || "openai/gpt-oss-120b",
+    general: process.env.GROQ_MODEL || "openai/gpt-oss-20b",
   },
   deepseek: {
     chat: process.env.DEEPSEEK_MODEL || "deepseek-chat",
