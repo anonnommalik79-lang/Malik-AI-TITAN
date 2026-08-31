@@ -39,11 +39,35 @@ jobs:
         run: |
           python -m py_compile services/malikvideo-worker/app.py
           python -m py_compile services/malikvideo-enhancer/app.py
+      - name: Check resolution contracts
+        env:
+          MALIKVIDEO_DATA_DIR: /tmp/malikvideo
+          MALIKVIDEO_ENHANCER_DATA_DIR: /tmp/malikvideo-enhancer
+        run: |
+          python - <<'PY'
+          import importlib.util
+          def load(name, path):
+              spec = importlib.util.spec_from_file_location(name, path)
+              mod = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(mod)
+              return mod
+          worker = load('mv_worker', 'services/malikvideo-worker/app.py')
+          enhancer = load('mv_enhancer', 'services/malikvideo-enhancer/app.py')
+          assert worker.normalized_output_resolution('1080p') == '1080p'
+          assert worker.normalized_output_resolution('1440p') == '2k'
+          assert worker.target_dimensions('1080p', '16:9') == (1920, 1080)
+          assert worker.target_dimensions('2k', '16:9') == (2560, 1440)
+          assert worker.target_dimensions('2k', '9:16') == (1440, 2560)
+          assert enhancer.dimensions('1080p', '1:1') == (1080, 1080)
+          assert enhancer.dimensions('2k', '16:9') == (2560, 1440)
+          print('MalikVideo resolution contracts OK')
+          PY
       - name: Validate shell launchers
         run: |
           bash -n scripts/malikvideo-h3/launch-fl2va.sh
           bash -n scripts/malikvideo-h3/smoke-test.sh
           bash -n scripts/malikvideo-h3/smoke-worker.sh
+          bash -n scripts/malikvideo-h3/preflight.sh
           bash -n services/malikvideo-worker/install-seedvr2.sh
           bash -n services/malikvideo-enhancer/install-seedvr2.sh
 
