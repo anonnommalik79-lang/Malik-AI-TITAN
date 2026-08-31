@@ -4,7 +4,7 @@ export type ImageAspectRatio = "1:1" | "16:9" | "9:16" | "4:5" | "4:3"
 export type ImageMode = "cinematic" | "realistic" | "product" | "design"
 
 export type ImageProviderId = "cloudflare" | "stability" | "pollinations" | "fal" | "aws-bedrock"
-export type VideoProviderId = "dashscope" | "pollo" | "runway" | "fal" | "luma" | "veo"
+export type VideoProviderId = "h3" | "dashscope" | "pollo" | "runway" | "fal" | "luma" | "veo"
 export type VideoAspectRatio = "16:9" | "9:16" | "1:1"
 
 export type ImageGenerateInput = {
