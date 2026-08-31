@@ -21,7 +21,7 @@ export function imageFreeMode(): boolean {
 }
 
 export function videoProviderPrimary(): string {
-  return process.env.VIDEO_PROVIDER_PRIMARY?.trim() || "dashscope"
+  return process.env.VIDEO_PROVIDER_PRIMARY?.trim() || "h3"
 }
 
 export function polloVideoModel(): string {
@@ -65,9 +65,8 @@ export function imageGodOrder(): string[] {
 }
 
 export function videoGodOrder(): string[] {
-  const raw = process.env.VIDEO_GOD_PROVIDER_ORDER || process.env.VIDEO_PROVIDER_ORDER || "dashscope,pollo,runway,fal,luma,veo"
-  const order = raw.split(",").map((s) => s.trim()).filter(Boolean)
-  return order.includes("dashscope") ? order : ["dashscope", ...order]
+  const raw = process.env.VIDEO_GOD_PROVIDER_ORDER || process.env.VIDEO_PROVIDER_ORDER || "h3,dashscope,pollo,runway,fal,luma,veo"
+  return raw.split(",").map((s) => s.trim()).filter(Boolean)
 }
 
 export function godModeEnabled(): boolean {
