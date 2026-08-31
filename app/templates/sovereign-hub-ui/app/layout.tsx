@@ -7,6 +7,7 @@ import { MalikStopPolish } from "@/components/sovereign/MalikStopPolish"
 import { FounderConsoleRuntime } from "@/components/sovereign/FounderConsoleRuntime"
 import { VideoCancelRuntime } from "@/components/sovereign/VideoCancelRuntime"
 import { SitesRouteFixRuntime } from "@/components/sovereign/SitesRouteFixRuntime"
+import { ImageResultExperience } from "@/components/sovereign/ImageResultExperience"
 import "./globals.css"
 import "./mobile-polish.css"
 import "./legendary-aurora.css"
@@ -66,6 +67,8 @@ import "./chat-user-message-clean-final.css"
 import "./mobile-black-surface-final.css"
 // Absolute chat authority: pure-black messages and a white chat scrollbar.
 import "./chat-black-surface-final.css"
+// Final image result authority: no raw metadata cards, fullscreen viewer + pro tools.
+import "./image-result-experience.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
@@ -191,6 +194,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <FounderConsoleRuntime />
         <VideoCancelRuntime />
         <SitesRouteFixRuntime />
+        <ImageResultExperience />
         <AuthKitProvider>
           <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden bg-black notranslate">
             {children}
