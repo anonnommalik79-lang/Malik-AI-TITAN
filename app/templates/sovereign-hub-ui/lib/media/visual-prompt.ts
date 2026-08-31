@@ -33,6 +33,18 @@ import type { ImageMode } from "./types"
 const TRANSLATION_MODELS = ["malik-27b", "malik-fast-120b", "malik-20b"] as const
 const MAX_SOURCE_LENGTH = 900
 const MAX_DESCRIPTION_LENGTH = 600
+const EIGHT_K_PATTERN = /(?:^|[^\p{L}\p{N}])8\s*[kк](?![\p{L}\p{N}])/iu
+
+/**
+ * Adds the quality hint only to the provider prompt. Callers keep the original
+ * request and `understood` text for the UI, so this stays invisible to users.
+ */
+export function ensure8KQualityPrompt(value: string, maxLength?: number) {
+  const prompt = String(value || "").replace(/\s+/g, " ").trim()
+  if (!prompt) return ""
+  const enhanced = EIGHT_K_PATTERN.test(prompt) ? prompt : `8K, ${prompt}`
+  return typeof maxLength === "number" ? enhanced.slice(0, Math.max(0, maxLength)).trim() : enhanced
+}
 
 /**
  * Negation only works in a dedicated negative field. Everything here is a thing
@@ -204,8 +216,9 @@ export async function buildVisualPrompt(
 
   const suffix = modeSuffix(mode)
 
-  // Description first, optional look last. No headers, no rules, no negations.
-  const prompt = [text, suffix].filter(Boolean).join(", ").slice(0, MAX_DESCRIPTION_LENGTH)
+  // Description first, optional look last. The short 8K hint is added only to
+  // the provider prompt; `understood` remains exactly what Malik interpreted.
+  const prompt = ensure8KQualityPrompt([text, suffix].filter(Boolean).join(", "), MAX_DESCRIPTION_LENGTH)
 
   return { prompt, negativePrompt: IMAGE_NEGATIVE_PROMPT, understood: text, source, translated, model }
 }

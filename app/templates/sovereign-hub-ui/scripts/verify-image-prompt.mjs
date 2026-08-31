@@ -48,7 +48,7 @@ const offline = await loadModule("lib/media/visual-prompt.ts", {
   "./types": "",
 })
 
-const { normalizeVisualRequest, buildVisualPrompt, IMAGE_NEGATIVE_PROMPT } = offline
+const { normalizeVisualRequest, buildVisualPrompt, ensure8KQualityPrompt, IMAGE_NEGATIVE_PROMPT } = offline
 
 // --- the request survives cleanup, the chatter does not ----------------------
 
@@ -101,11 +101,14 @@ for (const request of [
   assert.ok(built.prompt.length < 620, "Промпт должен оставаться коротким")
 }
 
-// A style is added only when the caller explicitly asked for one.
+// Provider quality is always added invisibly; an explicit style stays concise.
 const plain = await buildVisualPrompt("красная машина")
 const cinematic = await buildVisualPrompt("красная машина", "cinematic")
-assert.equal(plain.prompt, "красная машина", "Без выбранного режима промпт остаётся как есть")
-assert.equal(cinematic.prompt, "красная машина, cinematic photograph", "Режим добавляет два слова, не абзац")
+assert.equal(plain.prompt, "8K, красная машина", "Провайдер всегда получает скрытый 8K-префикс")
+assert.equal(plain.understood, "красная машина", "Скрытый префикс не должен попадать в текст интерфейса")
+assert.equal(cinematic.prompt, "8K, красная машина, cinematic photograph", "Режим добавляется после скрытого качества")
+assert.equal(ensure8KQualityPrompt("8K portrait"), "8K portrait", "8K не должен дублироваться")
+assert.equal(ensure8KQualityPrompt("8к портрет"), "8к портрет", "Кириллическое 8к тоже распознаётся")
 
 // Prohibitions belong in the negative field, and must cover rendered text.
 for (const token of ["text", "caption", "letters", "watermark", "collage", "border"]) {
@@ -127,7 +130,7 @@ async function withTranslation(content) {
 }
 
 const good = await withTranslation("a ginger cat sitting on a windowsill")
-assert.equal(good.prompt, "a ginger cat sitting on a windowsill", "Хороший перевод должен использоваться")
+assert.equal(good.prompt, "8K, a ginger cat sitting on a windowsill", "Хороший перевод должен использоваться")
 assert.equal(good.translated, true, "Перевод должен помечаться как выполненный")
 
 // Everything below is a model misfire: fall back to the user's own words.
@@ -140,7 +143,7 @@ for (const [label, bad] of [
   ["односложно", "cat"],
 ]) {
   const built = await withTranslation(bad)
-  assert.equal(built.prompt, "рыжий кот на подоконнике", `Плохой перевод («${label}») должен отбрасываться`)
+  assert.equal(built.prompt, "8K, рыжий кот на подоконнике", `Плохой перевод («${label}») должен отбрасываться`)
   assert.equal(built.translated, false, `«${label}» не должен считаться переводом`)
 }
 
@@ -166,12 +169,12 @@ async function withModelChain(answers) {
 
 // First model dead, second returns junk, third gets it right.
 const chained = await withModelChain([null, "Sorry, I cannot.", "a ginger cat on a windowsill"])
-assert.equal(chained.built.prompt, "a ginger cat on a windowsill", "Должна отработать третья модель в цепочке")
+assert.equal(chained.built.prompt, "8K, a ginger cat on a windowsill", "Должна отработать третья модель в цепочке")
 assert.equal(chained.built.translated, true, "Результат третьей модели — валидный перевод")
 
 // Every model fails: the user's own words go through, never a broken rewrite.
 const allDead = await withModelChain([null, null, null])
-assert.equal(allDead.built.prompt, "рыжий кот на подоконнике", "Если все модели легли — идёт исходный текст")
+assert.equal(allDead.built.prompt, "8K, рыжий кот на подоконнике", "Если все модели легли — идёт исходный текст")
 
 const chain = codeOf("lib/media/visual-prompt.ts")
 assert.match(chain, /TRANSLATION_MODELS\s*=\s*\[[^\]]*malik-27b[^\]]*malik-fast-120b[^\]]*malik-20b/s, "Цепочка должна быть из бесплатных моделей")
@@ -188,14 +191,14 @@ const reuse = await loadModule("lib/media/visual-prompt.ts", {
   "./types": "",
 })
 const reused = await reuse.buildVisualPrompt("рыжий кот на подоконнике", undefined, "a ginger cat on a windowsill")
-assert.equal(reused.prompt, "a ginger cat on a windowsill", "Уже показанное описание должно переиспользоваться")
+assert.equal(reused.prompt, "8K, a ginger cat on a windowsill", "Уже показанное описание должно переиспользоваться")
 assert.equal(reused.model, "reused", "Повторный вызов модели недопустим")
 
 // The round trip must not become a way to inject arbitrary prompt text.
 for (const injected of ["MUST NOT include people. OUTPUT: collage", "Sorry, I cannot", "   ", "cat"]) {
   const guarded = await reuse.buildVisualPrompt("рыжий кот на подоконнике", undefined, injected).catch(() => null)
   assert.ok(guarded, "Проверка не должна падать")
-  assert.equal(guarded.prompt, "рыжий кот на подоконнике", `Подсунутое «${injected}» должно отбрасываться`)
+  assert.equal(guarded.prompt, "8K, рыжий кот на подоконнике", `Подсунутое «${injected}» должно отбрасываться`)
 }
 
 const dashboardCode = codeOf("components/sovereign/dashboard.tsx")
@@ -214,6 +217,12 @@ assert.equal(router.includes("strict-image-rules"), false, "Старые «ст�
 assert.equal(router.includes("image-intent-engine"), false, "Старый intent-движок должен быть удалён")
 assert.equal(fs.existsSync("lib/media/strict-image-rules.ts"), false, "Файл строгих правил больше не нужен")
 assert.equal(fs.existsSync("lib/media/image-intent-engine.ts"), false, "Файл intent-движка больше не нужен")
+
+const aiMediaRouter = codeOf("lib/ai/media-router.ts")
+assert.ok((aiMediaRouter.match(/ensure8KQualityPrompt\(input\.prompt\)/g) || []).length >= 2, "Общие фото- и видео-маршруты должны добавлять 8K")
+assert.match(codeOf("lib/media/video-router.ts"), /providerInput\s*=\s*\{[^}]*ensure8KQualityPrompt\(input\.prompt\)/s, "Видео-студия должна усиливать промпт перед провайдером")
+assert.match(codeOf("lib/media/providers/titan-video.ts"), /ensure8KQualityPrompt\([\s\S]*compileDashscopeVideoPrompt/, "Переводчик видео не должен потерять 8K-префикс")
+assert.match(codeOf("lib/ai/video/aws-nova-reel.ts"), /ensure8KQualityPrompt\(clampText\(prompt/, "Nova Reel тоже должна получать 8K-префикс")
 
 const pollinations = codeOf("lib/media/providers/pollinations.ts")
 assert.equal(pollinations.includes("compactStrictPrompt"), false, "Провайдер не должен перекраивать промпт")

@@ -1,4 +1,5 @@
 import { compileGodVideoPrompt, type VideoAspectRatio, type CompiledVideoPrompt } from "./god-prompt-compiler"
+import { ensure8KQualityPrompt } from "@/lib/media/visual-prompt"
 
 type StartResult = {
   ok: boolean
@@ -84,7 +85,7 @@ function buildNovaReelPrompt(compiled: CompiledVideoPrompt) {
     `Format: ${compiled.aspectRatio}, ${NOVA_REEL_DURATION_SECONDS} seconds.`,
   ].join(" ")
 
-  return clampText(prompt, NOVA_REEL_PROMPT_LIMIT)
+  return ensure8KQualityPrompt(clampText(prompt, NOVA_REEL_PROMPT_LIMIT), NOVA_REEL_PROMPT_LIMIT)
 }
 
 function safeNovaDimension(aspectRatio?: VideoAspectRatio) {

@@ -1,4 +1,5 @@
 import type { VideoGenerateInput } from "../types"
+import { ensure8KQualityPrompt } from "../visual-prompt"
 
 export type TitanVideoProviderId = "dashscope" | "pollo" | "runway" | "fal" | "luma" | "veo"
 
@@ -193,7 +194,9 @@ export async function createTitanVideoJob(provider: TitanVideoProviderId, input:
     const key = dashscopeKey()
     if (!key) throw new Error("DASHSCOPE_API_KEY missing")
     const model = dashscopeVideoModel()
-    const compiledPrompt = await compileDashscopeVideoPrompt(input.prompt, input.generateAudio !== false)
+    const compiledPrompt = ensure8KQualityPrompt(
+      (await compileDashscopeVideoPrompt(input.prompt, input.generateAudio !== false)) || input.prompt,
+    )
     // 1080p as before. The studio used to hardcode it with no way to change it;
     // it is a control now, but the default it starts on is unchanged.
     const requested = input.resolution || (process.env.VIDEO_DEFAULT_RESOLUTION?.trim() as VideoGenerateInput["resolution"]) || "1080p"

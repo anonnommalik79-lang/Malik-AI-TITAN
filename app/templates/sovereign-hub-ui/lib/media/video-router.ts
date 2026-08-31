@@ -15,6 +15,7 @@ import {
   videoProviderConfigured,
   type TitanVideoProviderId,
 } from "./providers/titan-video"
+import { ensure8KQualityPrompt } from "./visual-prompt"
 import type { VideoGenerateInput, VideoGenerateResult, VideoJobStatus, VideoProviderId } from "./types"
 
 function mapRemoteStatus(status: string): VideoJobStatus {
@@ -27,6 +28,7 @@ function mapRemoteStatus(status: string): VideoJobStatus {
 export async function routeVideoGeneration(input: VideoGenerateInput): Promise<VideoGenerateResult> {
   const errors: string[] = []
   const order = videoGodOrder() as VideoProviderId[]
+  const providerInput = { ...input, prompt: ensure8KQualityPrompt(input.prompt) }
 
   for (const provider of order) {
     try {
@@ -39,7 +41,7 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
           continue
         }
 
-        const created = await createMalikH3Job(input)
+        const created = await createMalikH3Job(providerInput)
         saveVideoJob({
           taskId: created.taskId,
           provider: "h3",
@@ -71,7 +73,7 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
       if (provider === "pollo") {
         if (!polloVideoEnabled()) throw new Error("POLLO_VIDEO_ENABLED=false")
         if (!polloConfigured()) throw new Error("POLLO_API_KEY missing")
-        const created = await createPolloVideoTask(input)
+        const created = await createPolloVideoTask(providerInput)
         saveVideoJob({
           taskId: created.taskId,
           provider: "pollo",
@@ -85,7 +87,7 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
         return { ok: true, provider: "pollo", model: polloVideoModel(), taskId: created.taskId, status: "queued", remainingDailyVideos: 0 }
       }
 
-      const created = await createTitanVideoJob(titanProvider, input)
+      const created = await createTitanVideoJob(titanProvider, providerInput)
       saveVideoJob({
         taskId: created.taskId,
         provider,
