@@ -1,6 +1,8 @@
-import type { VideoGenerateInput } from "../types"
+import type { VideoGenerateInput, VideoResolution } from "../types"
 
 const H3_TASK_PREFIX = "h3:"
+
+type H3Mode = "worker" | "sglang"
 
 function trimSlash(value: string) {
   return value.replace(/\/$/, "")
@@ -12,6 +14,10 @@ export function malikH3BaseUrl() {
 
 function malikH3ApiKey() {
   return process.env.MALIKVIDEO_H3_API_KEY?.trim() || ""
+}
+
+export function malikH3Mode(): H3Mode {
+  return process.env.MALIKVIDEO_H3_MODE?.trim().toLowerCase() === "sglang" ? "sglang" : "worker"
 }
 
 export function malikH3Model() {
@@ -42,12 +48,16 @@ export function malikH3ContentPath(taskId: string) {
   return `/api/media/video/h3-content?taskId=${encodeURIComponent(taskId)}`
 }
 
+function requestedOutput(resolution?: VideoResolution) {
+  if (resolution === "2k") return "2k"
+  if (resolution === "1080p") return "1080p"
+  return "raw768"
+}
+
 /**
- * Submit a job directly to a self-hosted MiniMax H3 Base FL2VA SGLang server.
- *
- * H3 Base itself renders with a 768px short edge. 1080p/2K enhancement is a
- * separate MalikVideo pipeline stage and must not be faked here by merely
- * changing the target number.
+ * Submit to our MalikVideo worker (recommended) or directly to SGLang.
+ * H3 Base itself always renders a 768px-short-edge audiovisual master. The
+ * worker is what turns that master into honest 1080p/2K output via restoration.
  */
 export async function createMalikH3Job(input: VideoGenerateInput) {
   if (!malikH3Configured()) throw new Error("MALIKVIDEO_H3 is not configured")
@@ -56,38 +66,52 @@ export async function createMalikH3Job(input: VideoGenerateInput) {
   const duration = input.length || 5
   const ratio = input.ratio || "16:9"
   const task = input.imageUrl ? "fl2va" : "t2va"
+  const outputResolution = requestedOutput(input.resolution)
+  const mode = malikH3Mode()
+
+  if (mode === "sglang" && outputResolution !== "raw768") {
+    throw new Error("Direct H3/SGLang only produces the 768p master. Use MALIKVIDEO_H3_MODE=worker for 1080p/2K.")
+  }
+
   const conditions = input.imageUrl
-    ? [
-        {
-          type: "image",
-          uri: input.imageUrl,
-          role: "keyframe",
-          frame_index: 0,
-        },
-      ]
+    ? [{ type: "image", uri: input.imageUrl, role: "keyframe", frame_index: 0 }]
     : []
+
+  const baseBody = {
+    task,
+    prompt: input.prompt,
+    conditions,
+    target: {
+      short_edge: 768,
+      aspect_ratio: ratio,
+      duration_seconds: duration,
+    },
+    seed: Number(process.env.MALIKVIDEO_H3_SEED || 0),
+  }
+
+  const body = mode === "worker"
+    ? {
+        ...baseBody,
+        output_resolution: outputResolution,
+        metadata: {
+          requested_resolution: input.resolution || "1080p",
+          generate_audio: input.generateAudio !== false,
+          product: "MalikVideo",
+        },
+      }
+    : baseBody
 
   const response = await fetch(`${base}/v1/videos`, {
     method: "POST",
     headers: h3Headers(),
-    body: JSON.stringify({
-      task,
-      prompt: input.prompt,
-      conditions,
-      target: {
-        short_edge: 768,
-        aspect_ratio: ratio,
-        duration_seconds: duration,
-      },
-      seed: Number(process.env.MALIKVIDEO_H3_SEED || 0),
-    }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(Number(process.env.MALIKVIDEO_H3_SUBMIT_TIMEOUT_MS || 30_000)),
   })
 
   const payload = await response.json().catch(() => ({}))
   const id = payload?.id || payload?.video_id || payload?.task_id
   if (!response.ok || !id) {
-    throw new Error(payload?.error?.message || payload?.message || payload?.detail || `H3 submit failed (${response.status})`)
+    throw new Error(payload?.detail || payload?.error?.message || payload?.message || `H3 submit failed (${response.status})`)
   }
 
   const taskId = `${H3_TASK_PREFIX}${String(id)}`
@@ -120,14 +144,16 @@ export async function fetchMalikH3Status(taskId: string) {
 
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new Error(payload?.error?.message || payload?.message || payload?.detail || `H3 status failed (${response.status})`)
+    throw new Error(payload?.detail || payload?.error?.message || payload?.message || `H3 status failed (${response.status})`)
   }
 
   const status = normalizeH3Status(payload?.status || payload?.state)
   return {
     status,
     videoUrl: status === "succeed" ? malikH3ContentPath(taskId) : undefined,
-    error: status === "failed" ? String(payload?.error?.message || payload?.error || payload?.message || "H3 generation failed") : undefined,
+    stage: typeof payload?.stage === "string" ? payload.stage : undefined,
+    outputResolution: typeof payload?.output_resolution === "string" ? payload.output_resolution : undefined,
+    error: status === "failed" ? String(payload?.detail || payload?.error?.message || payload?.error || payload?.message || "H3 generation failed") : undefined,
   }
 }
 

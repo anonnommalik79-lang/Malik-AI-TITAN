@@ -15,7 +15,7 @@ import {
   videoProviderConfigured,
   type TitanVideoProviderId,
 } from "./providers/titan-video"
-import { ensure8KQualityPrompt } from "./visual-prompt"
+import { compileMalikVideoPrompt } from "./video-prompt"
 import type { VideoGenerateInput, VideoGenerateResult, VideoJobStatus, VideoProviderId } from "./types"
 
 function mapRemoteStatus(status: string): VideoJobStatus {
@@ -28,7 +28,8 @@ function mapRemoteStatus(status: string): VideoJobStatus {
 export async function routeVideoGeneration(input: VideoGenerateInput): Promise<VideoGenerateResult> {
   const errors: string[] = []
   const order = videoGodOrder() as VideoProviderId[]
-  const providerInput = { ...input, prompt: ensure8KQualityPrompt(input.prompt) }
+  const compiledPrompt = await compileMalikVideoPrompt(input.prompt, input.generateAudio !== false)
+  const providerInput = { ...input, prompt: compiledPrompt || input.prompt }
 
   for (const provider of order) {
     try {
@@ -60,6 +61,8 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
           model: created.model,
           taskId: created.taskId,
           status: "queued",
+          stage: "queued",
+          outputResolution: input.resolution || "1080p",
           remainingDailyVideos: 0,
         }
       }
@@ -117,41 +120,42 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
   }
 }
 
+async function refreshH3(taskId: string, model = malikH3Model()): Promise<VideoGenerateResult> {
+  try {
+    const remote = await fetchMalikH3Status(taskId)
+    const status = mapRemoteStatus(remote.status)
+    return {
+      ok: status !== "failed",
+      provider: "h3",
+      model,
+      taskId,
+      status,
+      remainingDailyVideos: 0,
+      videoUrl: remote.videoUrl,
+      stage: remote.stage,
+      outputResolution: remote.outputResolution as VideoGenerateResult["outputResolution"],
+      error: remote.error,
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      provider: "h3",
+      model,
+      taskId,
+      status: "failed",
+      remainingDailyVideos: 0,
+      error: error instanceof Error ? error.message : "H3 status check failed",
+    }
+  }
+}
+
 export async function refreshVideoJobStatus(taskId: string): Promise<VideoGenerateResult & { videoUrl?: string }> {
   const stored = getVideoJob(taskId)
 
-  // H3 task IDs carry a provider prefix. That lets status polling recover even
-  // when a serverless instance restarts and the local in-memory job map is lost.
   if (!stored && isMalikH3TaskId(taskId) && malikH3Configured()) {
-    try {
-      const remote = await fetchMalikH3Status(taskId)
-      const status = mapRemoteStatus(remote.status)
-      return {
-        ok: status !== "failed",
-        provider: "h3",
-        model: malikH3Model(),
-        taskId,
-        status,
-        remainingDailyVideos: 0,
-        videoUrl: remote.videoUrl,
-        error: remote.error,
-      }
-    } catch (error) {
-      return {
-        ok: false,
-        provider: "h3",
-        model: malikH3Model(),
-        taskId,
-        status: "failed",
-        remainingDailyVideos: 0,
-        error: error instanceof Error ? error.message : "H3 status check failed",
-      }
-    }
+    return refreshH3(taskId)
   }
 
-  // Render/serverless processes can restart between POST and polling. Wan task IDs
-  // remain valid remotely, so allow a direct DashScope status lookup even when
-  // the local in-memory job map was lost.
   if (!stored && videoProviderConfigured("dashscope")) {
     try {
       const remote = await fetchTitanVideoStatus("dashscope", taskId)
@@ -183,13 +187,17 @@ export async function refreshVideoJobStatus(taskId: string): Promise<VideoGenera
     return { ok: false, provider: "dashscope", model: dashscopeVideoModel(), taskId, status: "failed", remainingDailyVideos: 0, error: "Video job not found" }
   }
 
+  if (stored.provider === "h3") {
+    const result = await refreshH3(taskId, stored.model)
+    patchVideoJob(taskId, { status: result.status, videoUrl: result.videoUrl, error: result.error })
+    return result
+  }
+
   try {
     const remote =
-      stored.provider === "h3"
-        ? await fetchMalikH3Status(taskId)
-        : stored.provider === "pollo"
-          ? await fetchPolloTaskStatus(taskId)
-          : await fetchTitanVideoStatus(stored.provider as TitanVideoProviderId, taskId, { statusUrl: stored.statusUrl, responseUrl: stored.responseUrl })
+      stored.provider === "pollo"
+        ? await fetchPolloTaskStatus(taskId)
+        : await fetchTitanVideoStatus(stored.provider as TitanVideoProviderId, taskId, { statusUrl: stored.statusUrl, responseUrl: stored.responseUrl })
 
     const status = mapRemoteStatus(remote.status)
     patchVideoJob(taskId, { status, videoUrl: remote.videoUrl, error: remote.error })

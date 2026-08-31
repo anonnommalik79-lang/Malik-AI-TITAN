@@ -30,6 +30,8 @@ async function handleGET(request: Request) {
     model: result.model,
     taskId: result.taskId,
     status: publicStatus,
+    stage: result.stage,
+    outputResolution: result.outputResolution,
     videoUrl: result.videoUrl,
     url: result.videoUrl,
     error: result.error,
