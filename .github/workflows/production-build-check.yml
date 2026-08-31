@@ -38,6 +38,9 @@ jobs:
       - name: Verify Malik model registry
         run: npm run test:models
 
+      - name: Verify Malik Action OS
+        run: npm run test:action-os
+
       - name: Typecheck
         run: npm run typecheck
 
