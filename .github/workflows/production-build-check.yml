@@ -43,3 +43,29 @@ jobs:
 
       - name: Production build
         run: npm run clean && npm run build
+
+      - name: Verify live domain health
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: .
+        shell: bash
+        run: |
+          set +e
+          for attempt in $(seq 1 24); do
+            rm -f /tmp/malik-health.json
+            code=$(curl -L -sS --max-time 12 -o /tmp/malik-health.json -w '%{http_code}' https://malikaiworld.world/api/health)
+            echo "attempt=$attempt http=$code"
+            if [ -f /tmp/malik-health.json ]; then
+              head -c 1200 /tmp/malik-health.json
+              echo
+            fi
+            if [ "$code" = "200" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/malik-health.json 2>/dev/null; then
+              echo "Malik AI live health is OK"
+              echo "Provider configuration snapshot:"
+              curl -L -sS --max-time 12 https://malikaiworld.world/api/health/providers | head -c 3000
+              echo
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Live Malik AI health did not recover during the verification window."
+          exit 1
