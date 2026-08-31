@@ -1,0 +1,45 @@
+name: Production build check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "render.yaml"
+      - "app/templates/sovereign-hub-ui/**"
+      - ".github/workflows/production-build-check.yml"
+  pull_request:
+    paths:
+      - "render.yaml"
+      - "app/templates/sovereign-hub-ui/**"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      - name: Verify Malik model registry
+        run: npm run test:models
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run clean && npm run build
