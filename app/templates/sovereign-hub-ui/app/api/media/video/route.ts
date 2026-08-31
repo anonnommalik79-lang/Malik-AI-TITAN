@@ -2,6 +2,7 @@ import { maxVideoPromptLength } from "@/lib/media/config"
 import { checkMediaLimit, nextMediaResetAt, recordMediaUsage } from "@/lib/media/limits"
 import { resolveMediaUser } from "@/lib/media/request"
 import { routeVideoGeneration } from "@/lib/media/video-router"
+import type { VideoResolution } from "@/lib/media/types"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
@@ -15,7 +16,7 @@ async function handlePOST(request: Request) {
   const prompt = String(body?.prompt || "").trim()
   const imageUrl = typeof body?.imageUrl === "string" ? body.imageUrl : undefined
   const requestedLength = body?.length === 10 ? 10 : 5
-  const resolution = ["480p", "720p", "1080p"].includes(body?.resolution) ? body.resolution : "1080p"
+  const resolution = (["480p", "720p", "1080p", "2k"].includes(body?.resolution) ? body.resolution : "1080p") as VideoResolution
   const ratio = ["16:9", "9:16", "1:1"].includes(body?.ratio) ? body.ratio : "16:9"
   const generateAudio = body?.generateAudio !== false
 
@@ -63,6 +64,8 @@ async function handlePOST(request: Request) {
       provider: result.provider,
       model: result.model,
       status: result.status,
+      stage: result.stage,
+      outputResolution: result.outputResolution,
       remainingDailyVideos: limit.remaining,
       resetAt: nextMediaResetAt(),
       plan: limit.plan,
@@ -78,6 +81,8 @@ async function handlePOST(request: Request) {
     model: result.model,
     taskId: result.taskId,
     status: result.status,
+    stage: result.stage,
+    outputResolution: result.outputResolution || resolution,
     remainingDailyVideos: remaining,
     statusUrl: `/api/media/video/status?taskId=${encodeURIComponent(result.taskId)}`,
     resetAt: nextMediaResetAt(),
