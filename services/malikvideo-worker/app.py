@@ -21,17 +21,20 @@ DATA_DIR = Path(os.getenv("MALIKVIDEO_DATA_DIR", "/data/malikvideo")).resolve()
 DB_PATH = DATA_DIR / "jobs.sqlite3"
 H3_BASE_URL = os.getenv("MALIKVIDEO_UPSTREAM_H3_URL", "http://127.0.0.1:30010").rstrip("/")
 API_KEY = os.getenv("MALIKVIDEO_WORKER_API_KEY", "").strip()
-ENHANCER = os.getenv("MALIKVIDEO_ENHANCER", "seedvr2").strip().lower()
+ENHANCER_URL = os.getenv("MALIKVIDEO_ENHANCER_URL", "").strip().rstrip("/")
+ENHANCER_API_KEY = os.getenv("MALIKVIDEO_ENHANCER_API_KEY", "").strip()
+ENHANCER = os.getenv("MALIKVIDEO_ENHANCER", "remote" if ENHANCER_URL else "seedvr2").strip().lower()
 SEEDVR_ROOT = Path(os.getenv("MALIKVIDEO_SEEDVR_ROOT", "/opt/SeedVR")).resolve()
 SEEDVR_GPUS = max(1, int(os.getenv("MALIKVIDEO_SEEDVR_GPUS", "4")))
 SEEDVR_SCRIPT = os.getenv("MALIKVIDEO_SEEDVR_SCRIPT", "projects/inference_seedvr2_3b.py")
 FFMPEG = os.getenv("FFMPEG_BIN", "ffmpeg")
 POLL_SECONDS = max(2, int(os.getenv("MALIKVIDEO_POLL_SECONDS", "5")))
 HTTP_TIMEOUT = float(os.getenv("MALIKVIDEO_HTTP_TIMEOUT_SECONDS", "30"))
+ENHANCE_TIMEOUT = max(60, int(os.getenv("MALIKVIDEO_ENHANCE_TIMEOUT_SECONDS", "3600")))
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title=APP_NAME, version="1.0.0")
+app = FastAPI(title=APP_NAME, version="1.1.0")
 _stop = threading.Event()
 _worker_thread: threading.Thread | None = None
 
@@ -78,9 +81,7 @@ def init_db() -> None:
 
 
 def require_auth(authorization: str | None) -> None:
-    if not API_KEY:
-        return
-    if authorization != f"Bearer {API_KEY}":
+    if API_KEY and authorization != f"Bearer {API_KEY}":
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
@@ -131,6 +132,10 @@ def h3_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
+def enhancer_headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {ENHANCER_API_KEY}"} if ENHANCER_API_KEY else {}
+
+
 def submit_h3(req: VideoRequest) -> str:
     body = req.model_dump(exclude={"output_resolution", "metadata"})
     target = dict(body.get("target") or {})
@@ -165,6 +170,8 @@ def download_h3(job_id: str, h3_id: str) -> Path:
     job_dir = DATA_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     destination = job_dir / "h3-master.mp4"
+    if destination.exists() and destination.stat().st_size > 0:
+        return destination
     temp = destination.with_suffix(".part")
     with httpx.Client(timeout=None, headers=h3_headers()) as client:
         with client.stream("GET", f"{H3_BASE_URL}/v1/videos/{h3_id}/content") as response:
@@ -176,16 +183,45 @@ def download_h3(job_id: str, h3_id: str) -> Path:
     return destination
 
 
-def run_seedvr2(job_id: str, source: Path, output_resolution: str, ratio: str, seed: int) -> Path:
-    if ENHANCER != "seedvr2":
-        raise RuntimeError(f"enhancer '{ENHANCER}' cannot produce {output_resolution}")
+def mux_h3_audio(restored: Path, source: Path, final: Path) -> Path:
+    if shutil.which(FFMPEG) is None:
+        raise RuntimeError("ffmpeg is not installed")
+    temp = final.with_suffix(".part.mp4")
+    subprocess.run(
+        [
+            FFMPEG,
+            "-y",
+            "-i",
+            str(restored),
+            "-i",
+            str(source),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a?",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-shortest",
+            str(temp),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    temp.replace(final)
+    return final
+
+
+def run_local_seedvr2(job_id: str, source: Path, output_resolution: str, ratio: str, seed: int) -> Path:
     script = SEEDVR_ROOT / SEEDVR_SCRIPT
     if not script.exists():
         raise RuntimeError(f"SeedVR2 script missing: {script}")
     if shutil.which("torchrun") is None:
         raise RuntimeError("torchrun is not installed")
-    if shutil.which(FFMPEG) is None:
-        raise RuntimeError("ffmpeg is not installed")
 
     width, height = target_dimensions(output_resolution, ratio)
     job_dir = DATA_DIR / job_id
@@ -218,43 +254,63 @@ def run_seedvr2(job_id: str, source: Path, output_resolution: str, ratio: str, s
         str(SEEDVR_GPUS),
     ]
     subprocess.run(command, cwd=SEEDVR_ROOT, check=True)
-
     candidates = sorted(output_dir.rglob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not candidates:
         raise RuntimeError("SeedVR2 completed but produced no mp4")
     restored = candidates[0]
-    final = job_dir / f"final-{output_resolution}.mp4"
-    temp = final.with_suffix(".part.mp4")
+    return mux_h3_audio(restored, source, job_dir / f"final-{output_resolution}.mp4")
 
-    # SeedVR2 restores video frames. Keep H3's synchronized soundtrack by muxing
-    # audio from the original master back into the restored frames.
-    subprocess.run(
-        [
-            FFMPEG,
-            "-y",
-            "-i",
-            str(restored),
-            "-i",
-            str(source),
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a?",
-            "-c:v",
-            "copy",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-shortest",
-            str(temp),
-        ],
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    temp.replace(final)
-    return final
+
+def run_remote_enhancer(job_id: str, source: Path, output_resolution: str, ratio: str, seed: int) -> Path:
+    if not ENHANCER_URL:
+        raise RuntimeError("MALIKVIDEO_ENHANCER_URL is missing")
+    headers = enhancer_headers()
+    with source.open("rb") as fh, httpx.Client(timeout=None, headers=headers) as client:
+        response = client.post(
+            f"{ENHANCER_URL}/v1/enhance",
+            files={"video": (source.name, fh, "video/mp4")},
+            data={"resolution": output_resolution, "ratio": ratio, "seed": str(seed)},
+        )
+        response.raise_for_status()
+        payload = response.json()
+    enhance_id = payload.get("id")
+    if not enhance_id:
+        raise RuntimeError("enhancer returned no job id")
+
+    deadline = time.monotonic() + ENHANCE_TIMEOUT
+    while time.monotonic() < deadline:
+        with httpx.Client(timeout=HTTP_TIMEOUT, headers=headers) as client:
+            status_response = client.get(f"{ENHANCER_URL}/v1/enhance/{enhance_id}")
+            status_response.raise_for_status()
+            status_payload = status_response.json()
+        status = str(status_payload.get("status") or "").lower()
+        if status == "failed":
+            raise RuntimeError(status_payload.get("error") or "remote enhancement failed")
+        if status == "completed":
+            break
+        time.sleep(POLL_SECONDS)
+    else:
+        raise RuntimeError(f"enhancement timed out after {ENHANCE_TIMEOUT}s")
+
+    job_dir = DATA_DIR / job_id
+    restored = job_dir / f"restored-{output_resolution}.mp4"
+    temp = restored.with_suffix(".part")
+    with httpx.Client(timeout=None, headers=headers) as client:
+        with client.stream("GET", f"{ENHANCER_URL}/v1/enhance/{enhance_id}/content") as response:
+            response.raise_for_status()
+            with temp.open("wb") as out:
+                for chunk in response.iter_bytes():
+                    out.write(chunk)
+    temp.replace(restored)
+    return mux_h3_audio(restored, source, job_dir / f"final-{output_resolution}.mp4")
+
+
+def run_enhancement(job_id: str, source: Path, output_resolution: str, ratio: str, seed: int) -> Path:
+    if ENHANCER == "remote":
+        return run_remote_enhancer(job_id, source, output_resolution, ratio, seed)
+    if ENHANCER == "seedvr2":
+        return run_local_seedvr2(job_id, source, output_resolution, ratio, seed)
+    raise RuntimeError(f"enhancer '{ENHANCER}' cannot produce {output_resolution}")
 
 
 def process_job(row: sqlite3.Row) -> None:
@@ -276,16 +332,20 @@ def process_job(row: sqlite3.Row) -> None:
         update_job(job_id, state="source_ready", source_path=str(source))
         state = "source_ready"
 
-    if state == "source_ready":
-        source = Path(get_job(job_id)["source_path"])
+    if state in {"source_ready", "enhancing"}:
+        current = get_job(job_id)
+        source = Path(current["source_path"] or "")
+        if not source.exists():
+            source = download_h3(job_id, current["h3_id"])
+            update_job(job_id, source_path=str(source))
         if output_resolution == "raw768":
             update_job(job_id, state="completed", final_path=str(source))
             return
         update_job(job_id, state="enhancing")
         ratio = str((request.get("target") or {}).get("aspect_ratio") or "16:9")
         seed = int(request.get("seed") or 0)
-        final = run_seedvr2(job_id, source, output_resolution, ratio, seed)
-        update_job(job_id, state="completed", final_path=str(final))
+        final = run_enhancement(job_id, source, output_resolution, ratio, seed)
+        update_job(job_id, state="completed", final_path=str(final), error=None)
 
 
 def processing_loop() -> None:
@@ -293,14 +353,14 @@ def processing_loop() -> None:
         try:
             with db() as conn:
                 rows = conn.execute(
-                    "SELECT * FROM jobs WHERE state IN ('queued','generating','source_ready') ORDER BY created_at ASC LIMIT 4"
+                    "SELECT * FROM jobs WHERE state IN ('queued','generating','source_ready','enhancing') ORDER BY created_at ASC LIMIT 4"
                 ).fetchall()
             for row in rows:
                 if _stop.is_set():
                     break
                 try:
                     process_job(row)
-                except Exception as exc:  # recovery is explicit; no silent fake success
+                except Exception as exc:
                     update_job(row["id"], state="failed", error=f"{type(exc).__name__}: {exc}")
         except Exception:
             pass
@@ -325,14 +385,28 @@ def shutdown() -> None:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    seedvr_ready = (SEEDVR_ROOT / SEEDVR_SCRIPT).exists() and shutil.which("torchrun") is not None
+    local_seedvr_ready = (SEEDVR_ROOT / SEEDVR_SCRIPT).exists() and shutil.which("torchrun") is not None
+    remote_ready = False
+    remote_health: dict[str, Any] | None = None
+    if ENHANCER == "remote" and ENHANCER_URL:
+        try:
+            with httpx.Client(timeout=5, headers=enhancer_headers()) as client:
+                response = client.get(f"{ENHANCER_URL}/health")
+                response.raise_for_status()
+                remote_health = response.json()
+                remote_ready = bool(remote_health.get("ready") or remote_health.get("ok"))
+        except Exception as exc:
+            remote_health = {"ok": False, "error": str(exc)}
+    enhancer_ready = remote_ready if ENHANCER == "remote" else local_seedvr_ready if ENHANCER == "seedvr2" else False
     return {
         "ok": True,
         "service": APP_NAME,
         "h3_upstream": H3_BASE_URL,
         "enhancer": ENHANCER,
-        "seedvr_ready": seedvr_ready,
-        "supported_outputs": ["raw768", "1080p", "2k"] if seedvr_ready and ENHANCER == "seedvr2" else ["raw768"],
+        "enhancer_ready": enhancer_ready,
+        "enhancer_url": ENHANCER_URL or None,
+        "enhancer_health": remote_health,
+        "supported_outputs": ["raw768", "1080p", "2k"] if enhancer_ready else ["raw768"],
     }
 
 
@@ -340,7 +414,7 @@ def health() -> dict[str, Any]:
 def create_video(req: VideoRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     require_auth(authorization)
     output_resolution = normalized_output_resolution(req.output_resolution)
-    if output_resolution != "raw768" and ENHANCER == "none":
+    if output_resolution != "raw768" and ENHANCER not in {"remote", "seedvr2"}:
         raise HTTPException(status_code=503, detail="1080p/2K enhancer is not configured")
     try:
         h3_id = submit_h3(req)
