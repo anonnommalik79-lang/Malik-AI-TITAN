@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { getMalikPlugin } from "@/components/sovereign/features/plugin-registry"
+import { encodeMalikMemoryCookie, MALIK_MEMORY_COOKIE } from "@/lib/ai/memory-contract"
 
 /**
  * The "Контекст" switch in the right rail and the "Memory" chip in the composer
@@ -13,7 +14,7 @@ import { getMalikPlugin } from "@/components/sovereign/features/plugin-registry"
 const STORAGE_KEY = "malik.context.enabled.v1"
 const EVENT = "malik-context-changed"
 
-export function readContextEnabled(): boolean {
+function readContextFlag(): boolean {
   if (typeof window === "undefined") return true
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
@@ -23,6 +24,23 @@ export function readContextEnabled(): boolean {
   }
 }
 
+function syncMalikMemoryCookie(items: MalikMemoryItem[], enabled = readContextFlag()) {
+  if (typeof document === "undefined") return
+  const secure = typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : ""
+  if (!enabled || !items.length) {
+    document.cookie = `${MALIK_MEMORY_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`
+    return
+  }
+  const encoded = encodeMalikMemoryCookie(items.map((item) => item.text))
+  document.cookie = `${MALIK_MEMORY_COOKIE}=${encoded}; Path=/; Max-Age=2592000; SameSite=Lax${secure}`
+}
+
+export function readContextEnabled(): boolean {
+  const enabled = readContextFlag()
+  if (typeof window !== "undefined") syncMalikMemoryCookie(readMalikMemories(), enabled)
+  return enabled
+}
+
 export function writeContextEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return
   try {
@@ -30,6 +48,7 @@ export function writeContextEnabled(enabled: boolean): void {
   } catch {
     /* private mode — the setting still applies for this session */
   }
+  syncMalikMemoryCookie(enabled ? readMalikMemories() : [], enabled)
   window.dispatchEvent(new CustomEvent(EVENT, { detail: enabled }))
 }
 
@@ -57,9 +76,10 @@ export function useContextEnabled(): [boolean, (enabled: boolean) => void] {
 }
 
 /**
- * User-controlled long-term memory. It is deliberately browser-local for now:
- * no private fact is uploaded merely because it was saved. The chat runtime may
- * opt in to serialising this context only while the main memory switch is on.
+ * User-controlled long-term memory. The canonical copy remains browser-local.
+ * When Context is enabled, a compact same-origin cookie copy is sent to the
+ * Malik runtime so the selected model can actually use saved memories. Turning
+ * Context off clears that bridge immediately.
  */
 export type MalikMemoryItem = {
   id: string
@@ -121,6 +141,7 @@ function writeMalikMemories(items: MalikMemoryItem[]) {
   } catch {
     /* Storage can be unavailable in private/restricted browser modes. */
   }
+  syncMalikMemoryCookie(safe, readContextFlag())
   window.dispatchEvent(new CustomEvent(MEMORY_EVENT, { detail: safe }))
 }
 
@@ -170,7 +191,11 @@ export function useMalikMemories(): MalikMemoryItem[] {
   const [items, setItems] = useState<MalikMemoryItem[]>([])
 
   useEffect(() => {
-    const sync = () => setItems(readMalikMemories())
+    const sync = () => {
+      const next = readMalikMemories()
+      syncMalikMemoryCookie(next, readContextFlag())
+      setItems(next)
+    }
     sync()
     window.addEventListener(MEMORY_EVENT, sync)
     window.addEventListener("storage", sync)
