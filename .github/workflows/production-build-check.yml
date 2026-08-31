@@ -76,10 +76,21 @@ jobs:
         shell: bash
         run: |
           set -e
+          rm -f /tmp/malik-cookies.txt
+          # Use the same supported guest flow as a real browser so Compute auth,
+          # quotas and model routing are exercised instead of bypassed.
+          curl -sS --max-time 20 -D /tmp/malik-guest-headers.txt \
+            -c /tmp/malik-cookies.txt \
+            -o /dev/null \
+            https://malikaiworld.world/guest
+          grep -q 'malik-guest' /tmp/malik-cookies.txt
+
           for model in malik-20b malik-fast-120b malik-27b; do
             echo "Testing $model"
             rm -f /tmp/malik-model.txt
             code=$(curl -L -sS --max-time 60 \
+              -b /tmp/malik-cookies.txt \
+              -c /tmp/malik-cookies.txt \
               -o /tmp/malik-model.txt \
               -w '%{http_code}' \
               -X POST https://malikaiworld.world/api/stream \
@@ -93,4 +104,4 @@ jobs:
               exit 1
             fi
           done
-          echo "All three free Malik models returned live responses."
+          echo "All three free Malik models returned live responses through guest auth."
