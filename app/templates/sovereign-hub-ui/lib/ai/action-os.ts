@@ -33,18 +33,22 @@ export type MalikActionPlan = {
   capabilities: string[]
 }
 
-const RESEARCH_RE = /\b(найди|ищи|поиск|проверь|исследуй|сравни|research|search|compare|latest|current|актуальн|сегодня|новост|источник)\b/iu
-const CODE_RE = /\b(код|github|репозитор|commit|коммит|typescript|javascript|python|react|next\.?js|api|bug|ошибк|исправь|рефактор|debug|deploy|деплой)\b/iu
-const BUILD_RE = /\b(создай|сделай|построй|собери|разработай|website|сайт|приложен|проект|интерфейс|дизайн|build|create|make)\b/iu
-const MEDIA_RE = /\b(фото|изображен|картин|видео|ролик|image|photo|video|render|рендер|генерир)\b/iu
-const TRAVEL_RE = /\b(поездк|путешеств|отель|гостиниц|билет|рейс|самол[её]т|travel|hotel|flight|маршрут)\b/iu
-const TAXI_RE = /\b(такси|uber|яндекс\s*go|indriver|поехать|подать машину|ride)\b/iu
-const BUSINESS_RE = /\b(бизнес|стартап|инвест|оценк|выручк|arr|mrr|рынок|клиент|продаж|unit economics|valuation|revenue)\b/iu
-const WORKFLOW_RE = /\b(автоматиз|каждый день|каждую неделю|следи|монитор|напомни|агент|workflow|automation|schedule|background)\b/iu
-const DOCUMENT_RE = /\b(документ|отч[её]т|презентац|таблиц|pdf|docx|pptx|xlsx|memo|report|deck)\b/iu
-const EXTERNAL_RE = /\b(закажи|купи|оплати|отправь|публикуй|опубликуй|удали|забронируй|подтверди поездку|send|buy|purchase|pay|publish|delete|book|deploy)\b/iu
-const DESTRUCTIVE_RE = /\b(удали|стереть|снести|drop\s+table|force\s+push|reset\s+--hard|delete|destroy|terminate)\b/iu
-const ACTION_RE = /\b(сделай|создай|найди|проверь|исправь|добавь|собери|запусти|настрой|проанализируй|сравни|организуй|автоматизируй|закажи|купи|отправь|опубликуй|build|create|find|check|fix|add|run|configure|analyze|compare|organize|automate|book|send|publish)\b/iu
+// JavaScript's classic \b boundary is ASCII-centric. Cyrillic/Kazakh stems are
+// intentionally matched without \b; English keywords keep normal word guards.
+const RESEARCH_RE = /(найди|ізде|ищи|поиск|іздеу|проверь|тексер|исследуй|зертте|сравни|салыстыр|актуальн|бүгін|сегодня|новост|жаңалық|источник|дереккөз|\bresearch\b|\bsearch\b|\bcompare\b|\blatest\b|\bcurrent\b)/iu
+const CODE_RE = /(код|репозитор|коммит|ошибк|қате|исправь|түзет|рефактор|деплой|\bgithub\b|\bcommit\b|\btypescript\b|\bjavascript\b|\bpython\b|\breact\b|\bnext\.?js\b|\bapi\b|\bbug\b|\bdebug\b|\bdeploy\b)/iu
+const BUILD_RE = /(создай|жаса|сделай|построй|собери|құрастыр|разработай|сайт|приложен|қосымша|проект|жоба|интерфейс|дизайн|\bwebsite\b|\bbuild\b|\bcreate\b|\bmake\b)/iu
+const MEDIA_RE = /(фото|сурет|изображен|картин|видео|бейне|ролик|рендер|генерир|\bimage\b|\bphoto\b|\bvideo\b|\brender\b)/iu
+const TRAVEL_RE = /(поездк|сапар|путешеств|отель|қонақүй|гостиниц|билет|билет|рейс|ұшақ|самол[её]т|маршрут|бағыт|\btravel\b|\bhotel\b|\bflight\b)/iu
+const TAXI_RE = /(такси|яндекс\s*go|поехать|подать машину|көлік шақыр|\buber\b|\bindriver\b|\bride\b)/iu
+const BUSINESS_RE = /(бизнес|стартап|инвест|оценк|бағалау|выручк|табыс|рынок|нарық|клиент|продаж|сату|\barr\b|\bmrr\b|\bunit economics\b|\bvaluation\b|\brevenue\b)/iu
+const WORKFLOW_RE = /(автоматиз|автоматтандыр|каждый день|күн сайын|каждую неделю|апта сайын|следи|бақыла|монитор|напомни|еске сал|агент|\bworkflow\b|\bautomation\b|\bschedule\b|\bbackground\b)/iu
+const DOCUMENT_RE = /(документ|құжат|отч[её]т|есеп|презентац|таныстырылым|таблиц|кесте|\bpdf\b|\bdocx\b|\bpptx\b|\bxlsx\b|\bmemo\b|\breport\b|\bdeck\b)/iu
+const EXTERNAL_RE = /(закажи|тапсырыс бер|купи|сатып ал|оплати|төле|отправь|жібер|публикуй|опубликуй|жарияла|удали|жой|забронируй|бронда|подтверди поездку|\bsend\b|\bbuy\b|\bpurchase\b|\bpay\b|\bpublish\b|\bdelete\b|\bbook\b|\bdeploy\b)/iu
+const DESTRUCTIVE_RE = /(удали|стереть|снести|жой|өшір|\bdrop\s+table\b|\bforce\s+push\b|\breset\s+--hard\b|\bdelete\b|\bdestroy\b|\bterminate\b)/iu
+const ACTION_RE = /(сделай|жаса|создай|құр|найди|ізде|проверь|тексер|исправь|түзет|добавь|қос|собери|құрастыр|запусти|іске қос|настрой|бапта|проанализируй|талда|сравни|салыстыр|организуй|ұйымдастыр|автоматизируй|автоматтандыр|закажи|тапсырыс бер|купи|сатып ал|отправь|жібер|опубликуй|жарияла|\bbuild\b|\bcreate\b|\bfind\b|\bcheck\b|\bfix\b|\badd\b|\brun\b|\bconfigure\b|\banalyze\b|\bcompare\b|\borganize\b|\bautomate\b|\bbook\b|\bsend\b|\bpublish\b)/iu
+const FRESH_RE = /(актуальн|бүгін|сегодня|цена|баға|\blatest\b|\bcurrent\b|\bprice\b)/iu
+const COMPOUND_RE = /[;\n]|(?:^|\s)и(?:\s|$)|(?:^|\s)және(?:\s|$)|\band\b/giu
 
 function clean(value: unknown, max = 220) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, max)
@@ -105,7 +109,7 @@ export function buildMalikActionPlan(promptValue: unknown, body: any = {}): Mali
   const prompt = clean(promptValue, 4000)
   const intent = inferIntent(prompt)
   const explicitAction = ACTION_RE.test(prompt)
-  const compound = (prompt.match(/[;\n]|\bи\b|\band\b/giu) || []).length >= 2
+  const compound = (prompt.match(COMPOUND_RE) || []).length >= 2
   const shouldRender = explicitAction && (intent !== "chat" || compound || prompt.length > 180)
   const external = EXTERNAL_RE.test(prompt)
   const destructive = DESTRUCTIVE_RE.test(prompt)
@@ -116,7 +120,7 @@ export function buildMalikActionPlan(promptValue: unknown, body: any = {}): Mali
 
   steps.push({ id: "understand", title: "Зафиксировать цель и ограничения", kind: "understand" })
 
-  if (intent === "research" || intent === "travel" || intent === "taxi" || /\b(актуальн|сегодня|latest|current|цена|price)\b/iu.test(prompt)) {
+  if (intent === "research" || intent === "travel" || intent === "taxi" || FRESH_RE.test(prompt)) {
     steps.push({ id: "research", title: "Проверить свежие данные и источники", kind: "research" })
     capabilities.add("web")
   }
