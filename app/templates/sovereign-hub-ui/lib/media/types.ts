@@ -61,6 +61,7 @@ export type VideoGenerateResult = {
 export type MediaProviderHealth = {
   stability: "configured" | "missing"
   pollinations: "available" | "unavailable"
+  h3?: "configured" | "missing"
   dashscope?: "configured" | "missing"
   pollo: "configured" | "missing" | "disabled"
   fal: "configured" | "missing"
