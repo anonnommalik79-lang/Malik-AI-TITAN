@@ -1,14 +1,70 @@
 services:
   - type: web
     name: malik-ai-sovereign
-    env: python
+    env: node
     plan: starter
-    buildCommand: cd app/templates/sovereign-hub-ui && npm install && npm run clean && npm run build && cd ../../.. && pip install -r requirements.txt
-    startCommand: gunicorn run:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 180
+    rootDir: app/templates/sovereign-hub-ui
+    buildCommand: npm ci --legacy-peer-deps && npm run clean && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
     autoDeploy: true
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
+      - key: NODE_VERSION
+        value: "22.14.0"
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://malikaiworld.world
+      - key: MALIK_SITE_URL
+        value: https://malikaiworld.world
+      - key: AI_FREE_MODE
+        value: "true"
+      - key: TEXT_PROVIDER_ORDER
+        value: "cerebras,groq,gemini,openrouter"
+      - key: CODE_PROVIDER_ORDER
+        value: "cerebras,groq,gemini,openrouter"
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: CEREBRAS_BASE_URL
+        value: https://api.cerebras.ai/v1
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_GENERATIVE_AI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_MODEL
+        value: gpt-4o
+      - key: MALIK_GOD_PROVIDER_CHAIN
+        value: "github,openrouter,deepseek"
+      - key: MALIK_GOD_SHOW_PROVIDER
+        value: "false"
+      - key: MALIK_GOD_MAX_OUTPUT_TOKENS
+        value: "2200"
+      - key: MALIK_GOD_PROVIDER_TIMEOUT_MS
+        value: "18000"
+      - key: WORKOS_CLIENT_ID
+        sync: false
+      - key: WORKOS_API_KEY
+        sync: false
+      - key: WORKOS_COOKIE_PASSWORD
+        sync: false
+      - key: WORKOS_REDIRECT_URI
+        value: https://malikaiworld.world/callback
+      - key: NEXT_PUBLIC_WORKOS_REDIRECT_URI
+        value: https://malikaiworld.world/callback
       - key: MALIK_CODEX_PROVIDER_FALLBACK
         value: "0"
       - key: MALIK_CODEX_AUTO_MODE
@@ -38,8 +94,6 @@ services:
       - key: FAL_PRO_VIDEO_URL
         value: "https://fal.run/fal-ai/kling-video/o3/4k/text-to-video"
       - key: GOOGLE_VEO_API_KEY
-        sync: false
-      - key: GEMINI_API_KEY
         sync: false
       - key: GOOGLE_VEO_VIDEO_URL
         value: "https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning"
