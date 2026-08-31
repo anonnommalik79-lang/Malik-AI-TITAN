@@ -34,11 +34,82 @@ import { publicPlanTitle } from "@/lib/billing/plans"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
+type ChatMessagePreview = {
+  role?: "user" | "assistant"
+  content?: string
+}
+
 interface Chat {
   id: string
   title: string
   timestamp: Date
   isPinned?: boolean
+  messages?: ChatMessagePreview[]
+}
+
+const GENERIC_CHAT_TITLE = /^(?:новый\s+(?:проект|чат)|new\s+(?:project|chat)|untitled(?:\s+(?:project|chat))?|без\s+названия)$/iu
+const TITLE_LIMIT = 58
+const TITLE_WORD_LIMIT = 8
+
+function isGenericChatTitle(title?: string | null) {
+  const clean = String(title || "").trim()
+  return !clean || GENERIC_CHAT_TITLE.test(clean)
+}
+
+function capitalizeChatTitle(value: string) {
+  const clean = value.trim()
+  if (!clean) return clean
+  return clean.charAt(0).toLocaleUpperCase() + clean.slice(1)
+}
+
+function deriveChatTopicTitle(chat: Chat) {
+  const current = String(chat.title || "").trim()
+  if (!isGenericChatTitle(current)) return current
+
+  const firstPrompt = chat.messages?.find((message) => message?.role === "user" && String(message?.content || "").trim())?.content
+  if (!firstPrompt) return current || "Новый проект"
+
+  let text = String(firstPrompt)
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/[#>*_~]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  const firstSentence = text.split(/(?:\n|[.!?](?:\s|$))/u)[0]?.trim()
+  if (firstSentence) text = firstSentence
+
+  const fillerPatterns = [
+    /^(?:кароче|короче|слушай|смотри|пожалуйста|плиз|please|pls)[,:\s-]+/iu,
+    /^(?:мне\s+надо|мне\s+нужно|надо|нужно|я\s+хочу|хочу|можешь|можно\s+ли|давай)[,:\s-]+/iu,
+    /^(?:i\s+need|i\s+want|can\s+you|could\s+you|please)[,:\s-]+/i,
+  ]
+  const actionPatterns = [
+    /^(?:сделай|создай|разработай|напиши|сгенерируй|добавь|исправь|улучши|проверь|найди|покажи|объясни|составь|подключи|настрой|перепиши|придумай|сделаем|создадим)[,:\s-]+/iu,
+    /^(?:как\s+(?:сделать|создать|настроить|подключить|исправить))\s+/iu,
+    /^(?:make|create|build|write|generate|add|fix|improve|check|find|show|explain|connect|configure|rewrite|design|set\s+up)[,:\s-]+/i,
+    /^(?:how\s+to\s+(?:make|create|build|configure|connect|fix))\s+/i,
+  ]
+
+  for (let pass = 0; pass < 3; pass += 1) {
+    const before = text
+    for (const pattern of fillerPatterns) text = text.replace(pattern, "")
+    for (const pattern of actionPatterns) text = text.replace(pattern, "")
+    text = text.trim()
+    if (text === before) break
+  }
+
+  if (!text) text = String(firstPrompt).replace(/\s+/g, " ").trim()
+
+  const words = text.split(/\s+/).filter(Boolean)
+  let title = words.slice(0, TITLE_WORD_LIMIT).join(" ")
+  if (title.length > TITLE_LIMIT) {
+    title = title.slice(0, TITLE_LIMIT + 1).replace(/\s+\S*$/, "").trim() || title.slice(0, TITLE_LIMIT).trim()
+  }
+
+  title = title.replace(/^["'«»“”]+|["'«»“”,:;.!?\-–—]+$/g, "").trim()
+  return capitalizeChatTitle(title) || current || "Новый проект"
 }
 
 interface SidebarProps {
@@ -153,6 +224,19 @@ function SidebarInner({
     }
   }, [])
 
+  // Like ChatGPT/Claude: as soon as the first real prompt exists, replace the
+  // generic "Новый проект" label with a short topic title. This is local and
+  // deterministic, so it costs zero model tokens and also repairs old chats.
+  useEffect(() => {
+    if (!onRenameChat) return
+    for (const chat of chats) {
+      if (!isGenericChatTitle(chat.title)) continue
+      const nextTitle = deriveChatTopicTitle(chat)
+      if (!nextTitle || isGenericChatTitle(nextTitle) || nextTitle === chat.title) continue
+      onRenameChat(chat.id, nextTitle)
+    }
+  }, [chats, onRenameChat])
+
   const orderedChats = useMemo(
     () => [...chats].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
     [chats],
@@ -205,7 +289,8 @@ function SidebarInner({
 
   const requestDelete = useCallback((chat: Chat) => {
     setChatMenuId(null)
-    if (window.confirm(`Удалить чат «${chat.title}»? Это действие нельзя отменить.`)) onDeleteChat?.(chat.id)
+    const displayTitle = deriveChatTopicTitle(chat)
+    if (window.confirm(`Удалить чат «${displayTitle}»? Это действие нельзя отменить.`)) onDeleteChat?.(chat.id)
   }, [onDeleteChat])
 
   const handleLogout = async () => {
@@ -259,6 +344,7 @@ function SidebarInner({
           {list.map((chat) => {
             const selected = chat.id === activeChatId
             const menuOpen = chatMenuId === chat.id
+            const displayTitle = deriveChatTopicTitle(chat)
             return (
               <div key={chat.id} className={cn("malik-sidebar-chat-row group", selected && "is-active", menuOpen && "is-menu-open")}>
                 {editingChatId === chat.id ? (
@@ -266,17 +352,17 @@ function SidebarInner({
                     onChange={(event) => setEditingTitle(event.target.value)} onBlur={() => saveRename(chat.id)}
                     onKeyDown={(event) => { if (event.key === "Enter") saveRename(chat.id); if (event.key === "Escape") setEditingChatId(null) }} />
                 ) : (
-                  <button type="button" className="malik-sidebar-chat-title" title={chat.title} onClick={() => { setChatMenuId(null); onSelectChat?.(chat.id) }}>{chat.title}</button>
+                  <button type="button" className="malik-sidebar-chat-title" title={displayTitle} onClick={() => { setChatMenuId(null); onSelectChat?.(chat.id) }}>{displayTitle}</button>
                 )}
                 {editingChatId !== chat.id ? (
-                  <button type="button" className="malik-sidebar-chat-more" aria-label={`Действия с чатом «${chat.title}»`}
+                  <button type="button" className="malik-sidebar-chat-more" aria-label={`Действия с чатом «${displayTitle}»`}
                     onClick={(event) => { event.stopPropagation(); setChatMenuId((current) => current === chat.id ? null : chat.id) }}>
                     <MoreHorizontal className="h-4 w-4" />
                   </button>
                 ) : null}
                 {menuOpen ? (
                   <div role="menu" className="malik-sidebar-chat-menu">
-                    <button type="button" onClick={() => { setEditingChatId(chat.id); setEditingTitle(chat.title); setChatMenuId(null) }}><Pencil className="h-3.5 w-3.5" />Переименовать</button>
+                    <button type="button" onClick={() => { setEditingChatId(chat.id); setEditingTitle(displayTitle); setChatMenuId(null) }}><Pencil className="h-3.5 w-3.5" />Переименовать</button>
                     <button type="button" onClick={() => { onTogglePinChat?.(chat.id); setChatMenuId(null) }}>{chat.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}{chat.isPinned ? "Открепить" : "Закрепить"}</button>
                     <button type="button" className="is-danger" onClick={() => requestDelete(chat)}><Trash2 className="h-3.5 w-3.5" />Удалить</button>
                   </div>
