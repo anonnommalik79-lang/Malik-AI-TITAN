@@ -56,11 +56,8 @@ function requestedOutput(resolution?: VideoResolution) {
 
 /**
  * Submit to our MalikVideo worker (recommended) or directly to SGLang.
- *
  * H3 Base itself always renders a 768px-short-edge audiovisual master. The
- * MalikVideo worker is what turns that master into honest 1080p/2K output via
- * restoration. Direct SGLang mode therefore refuses 1080p/2K instead of
- * silently returning a lower-resolution file.
+ * worker is what turns that master into honest 1080p/2K output via restoration.
  */
 export async function createMalikH3Job(input: VideoGenerateInput) {
   if (!malikH3Configured()) throw new Error("MALIKVIDEO_H3 is not configured")
@@ -70,42 +67,44 @@ export async function createMalikH3Job(input: VideoGenerateInput) {
   const ratio = input.ratio || "16:9"
   const task = input.imageUrl ? "fl2va" : "t2va"
   const outputResolution = requestedOutput(input.resolution)
+  const mode = malikH3Mode()
 
-  if (malikH3Mode() === "sglang" && outputResolution !== "raw768") {
+  if (mode === "sglang" && outputResolution !== "raw768") {
     throw new Error("Direct H3/SGLang only produces the 768p master. Use MALIKVIDEO_H3_MODE=worker for 1080p/2K.")
   }
 
   const conditions = input.imageUrl
-    ? [
-        {
-          type: "image",
-          uri: input.imageUrl,
-          role: "keyframe",
-          frame_index: 0,
-        },
-      ]
+    ? [{ type: "image", uri: input.imageUrl, role: "keyframe", frame_index: 0 }]
     : []
+
+  const baseBody = {
+    task,
+    prompt: input.prompt,
+    conditions,
+    target: {
+      short_edge: 768,
+      aspect_ratio: ratio,
+      duration_seconds: duration,
+    },
+    seed: Number(process.env.MALIKVIDEO_H3_SEED || 0),
+  }
+
+  const body = mode === "worker"
+    ? {
+        ...baseBody,
+        output_resolution: outputResolution,
+        metadata: {
+          requested_resolution: input.resolution || "1080p",
+          generate_audio: input.generateAudio !== false,
+          product: "MalikVideo",
+        },
+      }
+    : baseBody
 
   const response = await fetch(`${base}/v1/videos`, {
     method: "POST",
     headers: h3Headers(),
-    body: JSON.stringify({
-      task,
-      prompt: input.prompt,
-      conditions,
-      target: {
-        short_edge: 768,
-        aspect_ratio: ratio,
-        duration_seconds: duration,
-      },
-      output_resolution: outputResolution,
-      metadata: {
-        requested_resolution: input.resolution || "1080p",
-        generate_audio: input.generateAudio !== false,
-        product: "MalikVideo",
-      },
-      seed: Number(process.env.MALIKVIDEO_H3_SEED || 0),
-    }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(Number(process.env.MALIKVIDEO_H3_SUBMIT_TIMEOUT_MS || 30_000)),
   })
 
