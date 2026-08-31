@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
-import { ProviderRequestError } from "@/lib/ai/provider-registry"
-import { getMalikAIProviderRegistry } from "@/lib/ai/server"
+import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 type WebsiteRequest = {
   prompt?: string
@@ -38,18 +38,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "`prompt` is required" }, { status: 400 })
     }
 
-    const registry = getMalikAIProviderRegistry()
-    const result = await registry.generate({
-      mode: "code",
-      prompt: `${WEBSITE_INSTRUCTION}\n\nUSER BRIEF:\n${prompt}`,
-      stream: false,
+    const result = await runStrictMalikModel({
+      modelId: "malik-fast-120b",
+      prompt: `USER BRIEF:\n${prompt}`,
+      systemPrompt: WEBSITE_INSTRUCTION,
+      maxTokens: 6000,
+      temperature: 0.35,
     })
 
     const html = cleanHtml(result.content)
 
-    if (!html) {
+    if (!html || !/<html[\s>]/i.test(html)) {
       return NextResponse.json(
-        { error: "Website generator returned empty HTML" },
+        { error: "Website generator returned invalid HTML" },
         { status: 502 },
       )
     }
@@ -57,20 +58,12 @@ export async function POST(request: Request) {
     return NextResponse.json({
       html,
       content: html,
-      requestId: result.requestId,
       provider: result.provider,
+      model: result.model,
+      selectedModelId: result.selectedModelId,
       latencyMs: result.latencyMs,
-      qualityScore: result.qualityScore,
-      attempts: result.attempts,
     })
   } catch (error) {
-    if (error instanceof ProviderRequestError) {
-      return NextResponse.json(
-        { error: error.message, provider: error.provider, status: error.status },
-        { status: error.status },
-      )
-    }
-
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Website generation failed" },
       { status: 500 },
