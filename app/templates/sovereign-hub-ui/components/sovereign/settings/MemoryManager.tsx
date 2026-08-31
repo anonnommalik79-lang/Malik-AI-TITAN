@@ -49,7 +49,7 @@ export function MemoryManager() {
         <div className="min-w-0">
           <h3 id="malik-memory-title" className="text-sm font-semibold text-zinc-100">Что Malik AI помнит</h3>
           <p className="mt-1 max-w-xl text-xs leading-5 text-zinc-500">
-            Только то, что вы добавили сами. Память хранится в этом браузере и её можно изменить или удалить в любой момент.
+            Только то, что вы добавили сами. Основная копия хранится в этом браузере; когда «Контекст» включён, компактная копия передаётся только вашему Malik AI runtime для текущих ответов. Любую запись можно изменить или удалить.
           </p>
         </div>
         <span className="shrink-0 pt-1 text-[11px] tabular-nums text-zinc-600">{memories.length}/{MAX_MEMORY_ITEMS}</span>
