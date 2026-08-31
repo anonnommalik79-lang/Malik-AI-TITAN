@@ -33,6 +33,12 @@ import type { ImageMode } from "./types"
 const TRANSLATION_MODELS = ["malik-27b", "malik-fast-120b", "malik-20b"] as const
 const MAX_SOURCE_LENGTH = 900
 const MAX_DESCRIPTION_LENGTH = 600
+/**
+ * The prompt sent to the provider carries the subject plus the camera recipe,
+ * so it needs more room than the description alone. 600 characters truncated
+ * the recipe mid-sentence and the lighting notes never arrived.
+ */
+const PROVIDER_PROMPT_LENGTH = 1100
 const EIGHT_K_PATTERN = /(?:^|[^\p{L}\p{N}])8\s*[kк](?![\p{L}\p{N}])/iu
 
 /**
@@ -165,13 +171,77 @@ async function translateToEnglish(source: string): Promise<{ text: string; trans
   return { text: source, translated: false, model: "" }
 }
 
-/** Two or three words at most, and only when the caller explicitly chose a look. */
-function modeSuffix(mode?: ImageMode) {
-  if (mode === "cinematic") return "cinematic photograph"
-  if (mode === "realistic") return "realistic photograph"
-  if (mode === "product") return "studio product photograph"
-  if (mode === "design") return "graphic design illustration"
-  return ""
+/**
+ * What the picture was shot with, rather than how good it is meant to be.
+ *
+ * The whole quality direction used to be two words - "cinematic photograph" -
+ * next to an "8K" hint. A diffusion model has no notion of resolution, so "8K",
+ * "ultra HD" and "masterpiece" mostly pull the image toward the stock-render
+ * look those words sit beside in the training captions. What actually produces
+ * fine detail is the vocabulary of a real photograph: a focal length, an
+ * aperture, where the light comes from, what the surface is made of. Those
+ * words appear in captions of real photographs, so they pull toward one.
+ *
+ * "8K" stays at the front, but it is no longer doing the work by itself.
+ */
+function renderRecipe(mode?: ImageMode) {
+  if (mode === "cinematic") {
+    return "cinematic film still, anamorphic 40mm lens, motivated key light with deep falloff shadows, "
+      + "Kodak Vision3 colour response, fine film grain, shallow depth of field, volumetric atmosphere"
+  }
+  if (mode === "product") {
+    return "studio product photograph, 100mm macro lens at f/8, large softbox key with white bounce fill, "
+      + "seamless sweep background, crisp specular highlights, visible surface micro-texture, edge-to-edge sharpness"
+  }
+  if (mode === "design") {
+    return "graphic design illustration, crisp clean edges, deliberate flat colour palette, "
+      + "balanced negative space, even studio lighting"
+  }
+  // "realistic" and the unset default share a recipe: a photograph is what
+  // people mean when they do not say otherwise.
+  return "natural light photograph, 50mm lens at f/2, true-to-life texture with visible pores and fabric weave, "
+    + "subtle filmic colour grading, sharp focus on the subject with gentle background falloff"
+}
+
+/**
+ * Whether a camera recipe belongs on this request at all.
+ *
+ * No screen in the app sends a mode, so the unset path is the one everybody
+ * actually uses - which means the default has to be smart rather than safe. A
+ * photographic recipe is right for almost every request and badly wrong for a
+ * few: "нарисуй логотип" does not want a 50mm lens at f/2, and asking for pores
+ * and film grain on a flat vector icon actively damages it.
+ */
+const WANTS_FLAT_ART = new RegExp(
+  "(?:^|[^\\p{L}\\p{N}])(?:"
+  + "логотип|лого|иконк|иконы|вектор|векторн|схем|диаграмм|инфографик|чертёж|чертеж|"
+  + "иллюстрац|рисунок|рисунк|мультф|аниме|комикс|скетч|эскиз|плакат|афиш|"
+  + "logo|icon|vector|diagram|schematic|infographic|blueprint|wireframe|"
+  + "illustration|cartoon|anime|comic|sketch|painting|drawing|poster|flat design"
+  + ")",
+  "iu",
+)
+
+export function looksLikeFlatArt(description: string) {
+  return WANTS_FLAT_ART.test(String(description || ""))
+}
+
+/** Detail language that helps in every mode. Short on purpose: a long tail dilutes the subject. */
+const DETAIL_CLAUSE = "intricate fine detail, accurate materials, crisp micro-contrast"
+
+/**
+ * Negation only works in the negative field, and it has to know the mode: a
+ * photograph wants "3d render" pushed away, an illustration does not.
+ */
+export function negativeFor(mode?: ImageMode, description?: string) {
+  if (mode === "design" || (!mode && looksLikeFlatArt(description || ""))) return IMAGE_NEGATIVE_PROMPT
+  return [
+    IMAGE_NEGATIVE_PROMPT,
+    "plastic skin", "waxy", "airbrushed", "doll-like", "uncanny",
+    "overprocessed", "HDR halo", "blown highlights", "muddy shadows",
+    "asymmetric eyes", "melted edges", "duplicated features",
+    "3d render", "cgi", "cartoon", "painting",
+  ].join(", ")
 }
 
 export type VisualPrompt = {
@@ -214,11 +284,17 @@ export async function buildVisualPrompt(
     ? { text: reused, translated: true, model: "reused" }
     : await translateToEnglish(source)
 
-  const suffix = modeSuffix(mode)
+  // Subject first, then how it was shot, then the detail language. Order
+  // matters to a diffusion model: the earliest tokens carry the most weight, so
+  // the thing being drawn stays in front and the camera notes trail it.
+  const flat = !mode && looksLikeFlatArt(text)
+  const recipe = flat ? "" : renderRecipe(mode)
+  const detail = flat ? "clean crisp edges, deliberate composition" : DETAIL_CLAUSE
 
-  // Description first, optional look last. The short 8K hint is added only to
-  // the provider prompt; `understood` remains exactly what Malik interpreted.
-  const prompt = ensure8KQualityPrompt([text, suffix].filter(Boolean).join(", "), MAX_DESCRIPTION_LENGTH)
+  const prompt = ensure8KQualityPrompt(
+    [text, recipe, detail].filter(Boolean).join(", "),
+    PROVIDER_PROMPT_LENGTH,
+  )
 
-  return { prompt, negativePrompt: IMAGE_NEGATIVE_PROMPT, understood: text, source, translated, model }
+  return { prompt, negativePrompt: negativeFor(mode, text), understood: text, source, translated, model }
 }
