@@ -34,9 +34,13 @@ type StrictMalikResult = {
   usage?: any
 }
 
-const TEXT_FALLBACK_MODEL: Partial<Record<MalikModelId, MalikModelId>> = {
-  "malik-27b": "malik-fast-120b",
-  "malik-fast-120b": "malik-20b",
+// Keep the public free tier alive when one upstream is rate-limited, missing,
+// or temporarily unhealthy. A fallback request never recursively falls back,
+// so a provider outage cannot create a loop between Groq and Cerebras.
+const TEXT_FALLBACK_MODELS: Partial<Record<MalikModelId, readonly MalikModelId[]>> = {
+  "malik-27b": ["malik-fast-120b", "malik-20b"],
+  "malik-fast-120b": ["malik-20b", "malik-27b"],
+  "malik-20b": ["malik-fast-120b", "malik-27b"],
 }
 
 export class MalikModelRouteError extends Error {
@@ -196,24 +200,36 @@ async function runFallback(input: {
   maxTokens?: number
   temperature?: number
 }): Promise<StrictMalikResult | null> {
-  const fallbackModelId = TEXT_FALLBACK_MODEL[input.failedModelId]
-  if (!fallbackModelId) return null
-  console.warn("[MALIK_MODEL_ROUTE]", JSON.stringify({
-    selectedModelId: input.originalModelId,
-    failedModelId: input.failedModelId,
-    fallbackModelId,
-    stage: "fallback",
-  }))
-  const result = await runStrictMalikModel({
-    modelId: fallbackModelId,
-    prompt: input.prompt,
-    systemPrompt: input.systemPrompt,
-    history: input.history,
-    attachments: input.attachments,
-    maxTokens: input.maxTokens,
-    temperature: input.temperature,
-  })
-  return { ...result, selectedModelId: input.originalModelId }
+  const fallbackModelIds = TEXT_FALLBACK_MODELS[input.failedModelId] || []
+  for (const fallbackModelId of fallbackModelIds) {
+    console.warn("[MALIK_MODEL_ROUTE]", JSON.stringify({
+      selectedModelId: input.originalModelId,
+      failedModelId: input.failedModelId,
+      fallbackModelId,
+      stage: "fallback",
+    }))
+    try {
+      const result = await runStrictMalikModel({
+        modelId: fallbackModelId,
+        prompt: input.prompt,
+        systemPrompt: input.systemPrompt,
+        history: input.history,
+        attachments: input.attachments,
+        maxTokens: input.maxTokens,
+        temperature: input.temperature,
+      }, { allowFallback: false })
+      return { ...result, selectedModelId: input.originalModelId }
+    } catch (error) {
+      console.warn("[MALIK_MODEL_ROUTE]", JSON.stringify({
+        selectedModelId: input.originalModelId,
+        failedModelId: input.failedModelId,
+        fallbackModelId,
+        stage: "fallback-failed",
+        error: error instanceof Error ? error.message : String(error),
+      }))
+    }
+  }
+  return null
 }
 
 export async function runStrictMalikModel(input: {
@@ -224,7 +240,7 @@ export async function runStrictMalikModel(input: {
   attachments?: MalikAttachment[]
   maxTokens?: number
   temperature?: number
-}): Promise<StrictMalikResult> {
+}, options: { allowFallback?: boolean } = {}): Promise<StrictMalikResult> {
   if (hasHiddenGeminiMedia(input.attachments)) {
     const started = Date.now()
     try {
@@ -334,25 +350,27 @@ export async function runStrictMalikModel(input: {
       usage: payload?.usage,
     }
   } catch (error) {
-    try {
-      const fallback = await runFallback({
-        failedModelId: model.id,
-        originalModelId: input.modelId,
-        prompt: input.prompt,
-        systemPrompt: input.systemPrompt,
-        history: input.history,
-        attachments: input.attachments,
-        maxTokens: input.maxTokens,
-        temperature: input.temperature,
-      })
-      if (fallback) return fallback
-    } catch (fallbackError) {
-      console.error("[MALIK_MODEL_ROUTE]", JSON.stringify({
-        selectedModelId: input.modelId,
-        failedModelId: model.id,
-        stage: "fallback-exhausted",
-        error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
-      }))
+    if (options.allowFallback !== false) {
+      try {
+        const fallback = await runFallback({
+          failedModelId: model.id,
+          originalModelId: input.modelId,
+          prompt: input.prompt,
+          systemPrompt: input.systemPrompt,
+          history: input.history,
+          attachments: input.attachments,
+          maxTokens: input.maxTokens,
+          temperature: input.temperature,
+        })
+        if (fallback) return fallback
+      } catch (fallbackError) {
+        console.error("[MALIK_MODEL_ROUTE]", JSON.stringify({
+          selectedModelId: input.modelId,
+          failedModelId: model.id,
+          stage: "fallback-exhausted",
+          error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+        }))
+      }
     }
 
     if (error instanceof MalikModelRouteError) throw error
