@@ -119,3 +119,116 @@
 #malik-root .malik-ai-chat-bg .malik-chat-scroll::-webkit-scrollbar-thumb:hover {
   background: #fff !important;
 }
+
+/* Copy-ready code and real comparison tables in assistant answers. */
+#malik-root .malik-md-codeblock {
+  max-width: 100%;
+  margin: 0 0 0.95em;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 13px;
+  background: #090909;
+}
+
+#malik-root .malik-md-codebar {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px 0 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  color: #8d8d93;
+  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-transform: lowercase;
+}
+
+#malik-root .malik-md-codebar button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #c8c8cc;
+  font: 600 11px/1 system-ui, sans-serif;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+#malik-root .malik-md-codebar button:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+
+#malik-root .malik-md-codebar button svg {
+  width: 14px;
+  height: 14px;
+}
+
+#malik-root .malik-md-codeblock .malik-md-pre {
+  margin: 0;
+  padding: 0.9rem 1rem 1rem;
+  border: 0;
+  border-radius: 0;
+  background: #090909;
+}
+
+#malik-root .malik-md-table-wrap {
+  max-width: 100%;
+  margin: 0 0 1em;
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 13px;
+  background: #050505;
+}
+
+#malik-root .malik-md-table {
+  width: 100%;
+  min-width: 420px;
+  border-collapse: collapse;
+  color: #dedee1;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+#malik-root .malik-md-table th,
+#malik-root .malik-md-table td {
+  padding: 10px 12px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+#malik-root .malik-md-table th {
+  background: #121212;
+  color: #fff;
+  font-weight: 680;
+}
+
+#malik-root .malik-md-table tr:last-child td {
+  border-bottom: 0;
+}
+
+#malik-root .malik-md-table th:last-child,
+#malik-root .malik-md-table td:last-child {
+  border-right: 0;
+}
+
+@media (max-width: 680px) {
+  #malik-root .malik-md-codebar {
+    min-height: 36px;
+  }
+
+  #malik-root .malik-md-table {
+    min-width: 360px;
+    font-size: 12px;
+  }
+
+  #malik-root .malik-md-table th,
+  #malik-root .malik-md-table td {
+    padding: 9px 10px;
+  }
+}

@@ -6,6 +6,8 @@ import { createRequire } from "node:module"
 const require_ = createRequire(import.meta.url)
 const React = require_("react")
 const { renderToStaticMarkup } = require_("react-dom/server")
+const icon = (name) => function TestIcon() { return React.createElement("svg", { "data-icon": name }) }
+const lucide = { Check: icon("check"), Copy: icon("copy") }
 
 /**
  * The chat printed the model's reply into a `whitespace-pre-wrap` div, so every
@@ -32,7 +34,10 @@ const js = ts.transpileModule(source, {
 
 const box = { exports: {} }
 new Function("require", "module", "exports", "React", js.replace(/require\("react"\)/g, "React"))(
-  (name) => { throw new Error(`unexpected require(${name})`) }, box, box.exports, React,
+  (name) => {
+    if (name === "lucide-react") return lucide
+    throw new Error(`unexpected require(${name})`)
+  }, box, box.exports, React,
 )
 const { MalikMarkdown } = box.exports
 const render = (text) => renderToStaticMarkup(React.createElement(MalikMarkdown, { text }))
@@ -78,9 +83,18 @@ check("bold, italic and inline code are rendered, not printed as symbols", () =>
 check("a fenced block becomes a code block with its own scroll", () => {
   const html = render("Команда:\n\n```bash\nnpm run build\n```")
   assert.match(html, /<pre[^>]*class="malik-md-pre"/)
+  assert.match(html, /class="malik-md-codebar"/)
+  assert.match(html, /Копировать/)
   assert.match(html, /npm run build/)
   const css = fs.readFileSync("app/titan-chat.css", "utf8")
   assert.match(css, /malik-md-pre[\s\S]{0,400}overflow-x: auto/, "a long line must not widen the conversation")
+})
+
+check("a Markdown comparison becomes an accessible table", () => {
+  const html = render("| Модель | Скорость |\n| --- | --- |\n| Fast | Высокая |\n| Pro | Средняя |")
+  assert.match(html, /<table class="malik-md-table">/)
+  assert.equal((html.match(/<th/g) || []).length, 3) // thead + two header cells
+  assert.equal((html.match(/<td/g) || []).length, 4)
 })
 
 check("headings become headings", () => {

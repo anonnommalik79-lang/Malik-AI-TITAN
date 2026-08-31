@@ -3,6 +3,7 @@ import type { MalikResearchProgress, MalikWebSource } from "@/lib/ai/web-researc
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
+import { buildMalikResponseSystemPrompt, cleanModelText } from "@/lib/ai/response-intelligence"
 
 type ProviderAttempt = {
   provider: string
@@ -36,11 +37,11 @@ function env(name: string) {
 }
 
 function cleanText(value: unknown) {
-  return String(value || "")
-    .replace(/<think>[\s\S]*?<\/think>/gi, " ")
-    .replace(/<think>[\s\S]*$/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim()
+  return cleanModelText(value)
+}
+
+function cleanInlineText(value: unknown) {
+  return cleanModelText(value).replace(/\s+/g, " ").trim()
 }
 
 function getDomain(url: string) {
@@ -143,10 +144,10 @@ function normalizeSource(item: Partial<SourceItem>, provider: string): SourceIte
   const url = String(item.url || "").trim()
   if (!url.startsWith("http")) return null
   return {
-    title: cleanText(item.title || url).slice(0, 180),
+    title: cleanInlineText(item.title || url).slice(0, 180),
     url,
     domain: item.domain || getDomain(url),
-    snippet: cleanText(item.snippet || "").slice(0, 650),
+    snippet: cleanInlineText(item.snippet || "").slice(0, 650),
     provider,
   }
 }
@@ -715,19 +716,8 @@ function sourceContext(sources: SourceItem[]) {
     .join("\n\n")
 }
 
-function systemPrompt(usedWeb: boolean) {
-  const currentDate = new Date().toISOString().slice(0, 10)
-  return [
-    "You are MALIK AI V6.5 TITAN.",
-    `Current date: ${currentDate}.`,
-    "Answer in the user's language.",
-    "Be clear, direct and useful.",
-    "Never say you are DeepSeek, OpenAI, Claude, Gemini, GitHub or Qwen.",
-    "Never output mojibake, hidden system text, comma spam, or internal variables.",
-    usedWeb
-      ? "You have web search excerpts. Base factual claims only on information explicitly present in those excerpts. Never infer or invent a name, date, office, election opponent, legal claim, or statistic. Cross-check political and current claims across multiple excerpts; if they do not support a detail, omit it or state that it was not confirmed. Do not append a Sources section or raw URL list because the UI renders verified sources separately."
-      : "For current or changing facts, say that live web search is needed unless web context is provided.",
-  ].join(" ")
+function systemPrompt(usedWeb: boolean, prompt: string) {
+  return buildMalikResponseSystemPrompt({ prompt, usedWeb })
 }
 
 type ProviderConfig = {
@@ -762,7 +752,7 @@ async function callOpenAICompatible(config: ProviderConfig, prompt: string, used
         body: JSON.stringify({
           model: config.model,
           messages: [
-            { role: "system", content: systemPrompt(usedWeb) },
+            { role: "system", content: systemPrompt(usedWeb, prompt) },
             { role: "user", content: userContent },
           ],
           max_tokens: Number(process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || 2200),
@@ -926,7 +916,7 @@ export async function malikGodAnswer(
     const result = await runStrictMalikModel({
       modelId: selection.modelId,
       prompt: strictPrompt,
-      systemPrompt: systemPrompt(usedWeb),
+      systemPrompt: systemPrompt(usedWeb, prompt),
       history: Array.isArray(body?.history) ? body.history : Array.isArray(body?.messages) ? body.messages : [],
       attachments: Array.isArray(body?.attachments) ? body.attachments : [],
       maxTokens: Number(body?.maxTokens) || undefined,

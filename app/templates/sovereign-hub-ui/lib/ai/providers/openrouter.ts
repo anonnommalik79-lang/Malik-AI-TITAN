@@ -1,5 +1,6 @@
 import type { AIMessage, AIProvider, AIRequest, AIResponse } from "../types"
 import { hasEnv, health, providerFetch, responseType } from "./base"
+import { buildMalikResponseSystemPrompt } from "../response-intelligence"
 
 function modelForInput(input: AIRequest) {
   if (input.model) return input.model
@@ -43,6 +44,8 @@ function buildSystemPrompt(input: AIRequest) {
     "For security topics, help only with lawful defensive and educational work.",
     `CURRENT MODE: ${mode}`,
     `CURRENT TASK: ${task}`,
+    "",
+    buildMalikResponseSystemPrompt({ prompt: input.prompt, usedWeb: input.task === "research" }),
   ].join("\n")
 }
 

@@ -1,6 +1,7 @@
 "use client"
 
-import { Fragment, type ReactNode } from "react"
+import { Fragment, useState, type ReactNode } from "react"
+import { Check, Copy } from "lucide-react"
 
 /**
  * Renders an assistant answer as structured text.
@@ -62,8 +63,22 @@ type Block =
   | { kind: "ul"; items: string[] }
   | { kind: "ol"; items: string[] }
   | { kind: "code"; language: string; lines: string[] }
+  | { kind: "table"; headers: string[]; rows: string[][] }
   | { kind: "quote"; lines: string[] }
   | { kind: "hr" }
+
+function tableCells(line: string) {
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim())
+}
+
+function isTableSeparator(line: string) {
+  const cells = tableCells(line)
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))
+}
+
+function isTableStart(lines: string[], index: number) {
+  return Boolean(lines[index]?.includes("|") && lines[index + 1]?.includes("|") && isTableSeparator(lines[index + 1]))
+}
 
 /** Groups the answer into blocks. Line-based, because that is how models write. */
 function parseBlocks(source: string): Block[] {
@@ -97,6 +112,19 @@ function parseBlocks(source: string): Block[] {
     if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) {
       blocks.push({ kind: "hr" })
       index += 1
+      continue
+    }
+
+    if (isTableStart(lines, index)) {
+      const headers = tableCells(lines[index])
+      const rows: string[][] = []
+      index += 2
+      while (index < lines.length && lines[index].includes("|") && lines[index].trim()) {
+        const cells = tableCells(lines[index])
+        rows.push(headers.map((_, cellIndex) => cells[cellIndex] || ""))
+        index += 1
+      }
+      blocks.push({ kind: "table", headers, rows })
       continue
     }
 
@@ -142,6 +170,7 @@ function parseBlocks(source: string): Block[] {
       index < lines.length
       && lines[index].trim()
       && !/^\s*(#{1,6}\s|[-*•]\s|\d+[.)]\s|>|```)/.test(lines[index])
+      && !isTableStart(lines, index)
     ) {
       paragraph.push(lines[index])
       index += 1
@@ -150,6 +179,35 @@ function parseBlocks(source: string): Block[] {
   }
 
   return blocks
+}
+
+function CodeBlock({ language, code }: { language: string; code: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1400)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <div className="malik-md-codeblock">
+      <div className="malik-md-codebar">
+        <span>{language || "code"}</span>
+        <button type="button" onClick={() => void copy()} aria-label="Копировать код">
+          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+          {copied ? "Скопировано" : "Копировать"}
+        </button>
+      </div>
+      <pre className="malik-md-pre" data-language={language || undefined}>
+        <code>{code}</code>
+      </pre>
+    </div>
+  )
 }
 
 export function MalikMarkdown({ text, className }: Props) {
@@ -161,10 +219,25 @@ export function MalikMarkdown({ text, className }: Props) {
         const key = `b${position}`
 
         if (block.kind === "code") {
+          return <CodeBlock key={key} language={block.language} code={block.lines.join("\n")} />
+        }
+
+        if (block.kind === "table") {
           return (
-            <pre key={key} className="malik-md-pre" data-language={block.language || undefined}>
-              <code>{block.lines.join("\n")}</code>
-            </pre>
+            <div key={key} className="malik-md-table-wrap">
+              <table className="malik-md-table">
+                <thead>
+                  <tr>{block.headers.map((header, cellIndex) => <th key={`${key}-h${cellIndex}`}>{inline(header, `${key}-h${cellIndex}`)}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr key={`${key}-r${rowIndex}`}>
+                      {row.map((cell, cellIndex) => <td key={`${key}-r${rowIndex}-c${cellIndex}`}>{inline(cell, `${key}-r${rowIndex}-c${cellIndex}`)}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )
         }
 

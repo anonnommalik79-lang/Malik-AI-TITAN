@@ -5379,8 +5379,9 @@ const normalizeStreamChunk = (parsed: any): string | null => {
 /**
  * Some providers return the completed answer in one SSE event. Reveal that
  * payload in a compact burst so the answer reads like a live response instead
- * of popping onto the page as one large block. Long answers are capped below
- * one second; reduced-motion users still receive the complete text at once.
+ * of popping onto the page as one large block. Checkpoints end on word
+ * boundaries and are capped to avoid reparsing Markdown sixty times a second.
+ * Reduced-motion users still receive the complete text at once.
  */
 async function revealAssistantTextQuickly(text: string, onFrame: (visible: string) => void) {
   const answer = String(text || "")
@@ -5393,19 +5394,22 @@ async function revealAssistantTextQuickly(text: string, onFrame: (visible: strin
     return
   }
 
-  const durationMs = Math.min(900, Math.max(280, answer.length * 0.72))
-  const frameCount = Math.max(4, Math.ceil(durationMs / 16))
-  const charsPerFrame = Math.max(1, Math.ceil(answer.length / frameCount))
+  const tokens = answer.match(/\S+\s*|\s+/g) || [answer]
+  const frameTarget = Math.min(24, Math.max(4, Math.ceil(answer.length / 90)))
+  const tokensPerFrame = Math.max(1, Math.ceil(tokens.length / frameTarget))
+  const checkpoints: string[] = []
+  let visible = ""
 
-  for (let end = charsPerFrame; end < answer.length; end += charsPerFrame) {
-    onFrame(answer.slice(0, end))
-    await new Promise<void>((resolve) => {
-      if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
-        window.requestAnimationFrame(() => resolve())
-      } else {
-        setTimeout(resolve, 16)
-      }
-    })
+  for (let index = 0; index < tokens.length; index += tokensPerFrame) {
+    visible += tokens.slice(index, index + tokensPerFrame).join("")
+    checkpoints.push(visible)
+  }
+
+  const durationMs = Math.min(650, Math.max(180, answer.length * 0.42))
+  const frameDelay = Math.max(16, Math.round(durationMs / Math.max(1, checkpoints.length)))
+  for (const checkpoint of checkpoints.slice(0, -1)) {
+    onFrame(checkpoint)
+    await new Promise<void>((resolve) => setTimeout(resolve, frameDelay))
   }
   onFrame(answer)
 }

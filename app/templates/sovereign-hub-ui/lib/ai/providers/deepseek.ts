@@ -1,5 +1,6 @@
 import type { AIMessage, AIProvider, AIRequest, AIResponse } from "../types"
 import { hasEnv, health, providerFetch, responseType } from "./base"
+import { buildMalikResponseSystemPrompt } from "../response-intelligence"
 
 function modelForInput(input: AIRequest) {
   if (input.model) return input.model
@@ -72,6 +73,8 @@ function buildMalikSystemPrompt(input: AIRequest) {
     "- Business task: clear decision, plan, risks and next actions.",
     "- Medical task: safe education, red flags and doctor-next-steps.",
     "- If uncertain, say what is uncertain and how to verify it.",
+    "",
+    buildMalikResponseSystemPrompt({ prompt: input.prompt, usedWeb: input.task === "research" }),
   ].join("\n")
 }
 
