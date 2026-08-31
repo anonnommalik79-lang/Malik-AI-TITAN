@@ -1,0 +1,112 @@
+/*
+ * Final mobile-only surface cleanup.
+ * Desktop geometry and colours are intentionally untouched.
+ */
+@media (max-width: 768px) {
+  /* The phone composer must be one surface, not a panel nested in a panel. */
+  #malik-root
+    .malik-dashboard-shell
+    .malik-ai-chat-bg
+    [data-composer].malik-composer-dock
+    > .malik-composer-panel.chat-composer {
+    padding: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root
+    .malik-dashboard-shell
+    .malik-ai-chat-bg
+    [data-composer].malik-composer-dock
+    > .malik-composer-panel.chat-composer::before,
+  #malik-root
+    .malik-dashboard-shell
+    .malik-ai-chat-bg
+    [data-composer].malik-composer-dock
+    > .malik-composer-panel.chat-composer::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  #malik-root
+    .malik-dashboard-shell
+    .malik-ai-chat-bg
+    [data-composer].malik-composer-dock
+    > .malik-composer-panel.chat-composer
+    > .malik-inline-composer {
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 24px !important;
+    background: #181818 !important;
+    background-color: #181818 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Translator: remove every inherited Titan glow on the phone canvas. */
+  html:has(#malik-root .malik-translator-page),
+  body:has(#malik-root .malik-translator-page),
+  body:has(#malik-root .malik-translator-page) #malik-root,
+  #malik-root .malik-translator-page {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+  }
+
+  body[data-malik-plain-black] #malik-root::before,
+  body[data-malik-plain-black] #malik-root::after,
+  body:has(#malik-root .malik-translator-page) #malik-root::before,
+  body:has(#malik-root .malik-translator-page) #malik-root::after {
+    content: none !important;
+    display: none !important;
+    background: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    opacity: 0 !important;
+    animation: none !important;
+  }
+
+  #malik-root .malik-translator-page,
+  #malik-root .malik-translator-page header,
+  #malik-root .malik-translator-page section,
+  #malik-root .malik-translator-page article,
+  #malik-root .malik-translator-page div,
+  #malik-root .malik-translator-page label,
+  #malik-root .malik-translator-page textarea,
+  #malik-root .malik-translator-page input,
+  #malik-root .malik-translator-page button {
+    background-image: none !important;
+    text-shadow: none !important;
+  }
+
+  #malik-root .malik-translator-page::before,
+  #malik-root .malik-translator-page::after,
+  #malik-root .malik-translator-page *::before,
+  #malik-root .malik-translator-page *::after {
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  #malik-root .malik-translator-page .malik-translator-stat,
+  #malik-root .malik-translator-page .malik-translator-workspace,
+  #malik-root .malik-translator-page .malik-translator-pane,
+  #malik-root .malik-translator-page .malik-translator-feature,
+  #malik-root .malik-translator-page .malik-translator-history-item {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .malik-translator-page .malik-lang-menu {
+    background: #080808 !important;
+    background-color: #080808 !important;
+    background-image: none !important;
+    box-shadow: 0 24px 70px #000 !important;
+  }
+}

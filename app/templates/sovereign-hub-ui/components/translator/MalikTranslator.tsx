@@ -422,7 +422,7 @@ export function MalikTranslator() {
 
           {/* The language-count badge. Black card, white type: the page carries no
               warm tint anywhere, so the badge does not either. */}
-          <div className="relative shrink-0 overflow-hidden rounded-[18px] border border-white/[0.12] bg-black px-5 py-4">
+          <div className="malik-translator-stat relative shrink-0 overflow-hidden rounded-[18px] border border-white/[0.12] bg-black px-5 py-4">
             <div className="relative flex items-center gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/[0.14] bg-white/[0.05] text-white">
                 <Globe className="h-[18px] w-[18px]" />
@@ -437,7 +437,7 @@ export function MalikTranslator() {
           </div>
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-[22px] border border-white/[0.10] bg-[#0a0a0b]">
+        <div className="malik-translator-workspace mt-6 overflow-hidden rounded-[22px] border border-white/[0.10] bg-[#0a0a0b]">
           <div className="flex flex-col gap-2 border-b border-white/[0.07] px-3 py-3 sm:flex-row sm:items-center sm:gap-3">
             <div className="min-w-0 flex-1">
               <LanguageBar
@@ -471,7 +471,7 @@ export function MalikTranslator() {
           {/* Two separate framed panes with a gap, as in the design — not one
               surface split by a divider. */}
           <div className="grid gap-3 p-3 lg:grid-cols-2">
-            <section className="relative rounded-[16px] border border-white/[0.09] bg-[#0e0e10]">
+            <section className="malik-translator-pane relative rounded-[16px] border border-white/[0.09] bg-[#0e0e10]">
               <textarea
                 value={text}
                 maxLength={MAX_LENGTH}
@@ -504,7 +504,7 @@ export function MalikTranslator() {
               </div>
             </section>
 
-            <section className="relative rounded-[16px] border border-white/[0.09] bg-[#0e0e10]">
+            <section className="malik-translator-pane relative rounded-[16px] border border-white/[0.09] bg-[#0e0e10]">
               <div className="h-[150px] overflow-y-auto whitespace-pre-wrap px-4 pb-12 pt-4 text-[14.5px] leading-6 text-zinc-100 sm:h-[168px]">
                 {loading ? (
                   <span className="inline-flex items-center gap-2 text-[13.5px] text-zinc-500">
@@ -543,7 +543,7 @@ export function MalikTranslator() {
         {/* Icon on the left, text block beside it — the layout in the design. */}
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {FEATURES.map((feature) => (
-            <article key={feature.title} className="flex items-start gap-3 rounded-[16px] border border-white/[0.08] bg-[#0a0a0b] p-4">
+            <article key={feature.title} className="malik-translator-feature flex items-start gap-3 rounded-[16px] border border-white/[0.08] bg-[#0a0a0b] p-4">
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/[0.12] bg-white/[0.05] text-white">
                 <feature.icon className="h-[15px] w-[15px]" />
               </span>
@@ -578,7 +578,7 @@ export function MalikTranslator() {
                 key={entry.id}
                 type="button"
                 onClick={() => restore(entry)}
-                className="grid w-full grid-cols-1 items-center gap-2 rounded-[16px] border border-white/[0.08] bg-[#0a0a0b] px-4 py-3.5 text-left transition hover:border-white/20 hover:bg-[#0f0f11] sm:grid-cols-[1fr_1fr_auto] sm:gap-4"
+                className="malik-translator-history-item grid w-full grid-cols-1 items-center gap-2 rounded-[16px] border border-white/[0.08] bg-[#0a0a0b] px-4 py-3.5 text-left transition hover:border-white/20 hover:bg-[#0f0f11] sm:grid-cols-[1fr_1fr_auto] sm:gap-4"
               >
                 <span className="min-w-0">
                   <span className="block truncate text-[13.5px] text-white">{entry.text}</span>
@@ -595,7 +595,7 @@ export function MalikTranslator() {
             ))}
 
             {!history.length ? (
-              <p className="rounded-[16px] border border-white/[0.08] bg-[#0a0a0b] px-4 py-8 text-center text-[13px] text-zinc-600">
+              <p className="malik-translator-history-item rounded-[16px] border border-white/[0.08] bg-[#0a0a0b] px-4 py-8 text-center text-[13px] text-zinc-600">
                 Пока пусто. Переведите первый текст — он появится здесь.
               </p>
             ) : null}

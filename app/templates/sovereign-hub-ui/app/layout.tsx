@@ -62,6 +62,8 @@ import "./video-mobile-top-clean-final.css"
 import "./sites-world-final.css"
 // Final chat authority: user messages are plain text, no bubble/card surface.
 import "./chat-user-message-clean-final.css"
+// Final phone-only surface cleanup: one composer shell and a pure-black translator.
+import "./mobile-black-surface-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
