@@ -10,6 +10,7 @@ import {
   videoProviderPrimary,
 } from "./config"
 import { getMediaDailyLimits } from "./limits"
+import { malikH3Configured } from "./providers/malik-h3"
 import { pingPollinations } from "./providers/pollinations"
 import { pingPollo } from "./providers/pollo"
 import { pingStability } from "./providers/stability"
@@ -29,6 +30,7 @@ export async function getMediaProviderHealth(): Promise<MediaProviderHealth> {
   return {
     stability,
     pollinations,
+    h3: malikH3Configured() ? "configured" : "missing",
     pollo,
     fal: falImageConfigured() ? "configured" : "missing",
     runway: videoProviderConfigured("runway") ? "configured" : "missing",
