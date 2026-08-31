@@ -64,6 +64,8 @@ import "./sites-world-final.css"
 import "./chat-user-message-clean-final.css"
 // Final phone-only surface cleanup: one composer shell and a pure-black translator.
 import "./mobile-black-surface-final.css"
+// Absolute chat authority: pure-black messages and a white chat scrollbar.
+import "./chat-black-surface-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"

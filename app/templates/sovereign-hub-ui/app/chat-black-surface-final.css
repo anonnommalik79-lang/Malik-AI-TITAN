@@ -1,0 +1,121 @@
+/*
+ * Final chat colour authority.
+ * Removes the remaining Titan gold wash without changing chat geometry.
+ */
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-premium-chat-host,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-chat-fullwidth,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-chat-scroll {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+#malik-root .malik-ai-chat-bg .malik-message-list,
+#malik-root .malik-ai-chat-bg .malik-message-row,
+#malik-root .malik-ai-chat-bg .malik-message-stack,
+#malik-root .malik-ai-chat-bg .malik-message-card,
+#malik-root .malik-ai-chat-bg .malik-message-card-assistant,
+#malik-root .malik-ai-chat-bg .malik-message-card-user,
+#malik-root .malik-ai-chat-bg .malik-source-inline {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+#malik-root .malik-ai-chat-bg .malik-message-card::before,
+#malik-root .malik-ai-chat-bg .malik-message-card::after,
+#malik-root .malik-ai-chat-bg .malik-message-card-assistant::before,
+#malik-root .malik-ai-chat-bg .malik-message-card-assistant::after,
+#malik-root .malik-ai-chat-bg .malik-message-card-user::before,
+#malik-root .malik-ai-chat-bg .malik-message-card-user::after,
+#malik-root .malik-ai-chat-bg .malik-source-inline::before,
+#malik-root .malik-ai-chat-bg .malik-source-inline::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+
+#malik-root .malik-ai-chat-bg .malik-message-card-assistant,
+#malik-root .malik-ai-chat-bg .malik-source-inline,
+#malik-root .malik-ai-chat-bg .malik-source-inline__links,
+#malik-root .malik-ai-chat-bg .malik-source-inline__links strong,
+#malik-root .malik-ai-chat-bg .malik-source-inline__links a,
+#malik-root .malik-ai-chat-bg .malik-source-inline__links a:hover {
+  color: #f5f5f5 !important;
+  text-decoration-color: rgba(255, 255, 255, 0.62) !important;
+  text-shadow: none !important;
+}
+
+#malik-root .malik-ai-chat-bg .malik-source-pill,
+#malik-root .malik-ai-chat-bg .malik-message-actions button {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  background: #181818 !important;
+  background-color: #181818 !important;
+  background-image: none !important;
+  color: #b8b8bd !important;
+  box-shadow: none !important;
+}
+
+#malik-root .malik-ai-chat-bg .malik-source-pill:hover,
+#malik-root .malik-ai-chat-bg .malik-message-actions button:hover {
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  background: #242424 !important;
+  color: #fff !important;
+}
+
+@media (min-width: 769px) {
+  #malik-root .malik-ai-chat-bg .malik-composer-panel.chat-composer {
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    background: #181818 !important;
+    background-color: #181818 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .malik-ai-chat-bg .malik-composer-panel.chat-composer::before,
+  #malik-root .malik-ai-chat-bg .malik-composer-panel.chat-composer::after {
+    content: none !important;
+    display: none !important;
+  }
+}
+
+#malik-root .malik-ai-chat-bg .malik-composer-context-row button {
+  color: #d4d4d8 !important;
+  text-shadow: none !important;
+}
+
+/* The chat's own scroll area: white thumb, black track, no gold. */
+#malik-root .malik-ai-chat-bg .malik-chat-scroll {
+  scrollbar-width: thin !important;
+  scrollbar-color: #f5f5f5 #000 !important;
+}
+
+#malik-root .malik-ai-chat-bg .malik-chat-scroll::-webkit-scrollbar {
+  width: 6px !important;
+  background: #000 !important;
+}
+
+#malik-root .malik-ai-chat-bg .malik-chat-scroll::-webkit-scrollbar-track {
+  background: #000 !important;
+  box-shadow: none !important;
+}
+
+#malik-root .malik-ai-chat-bg .malik-chat-scroll::-webkit-scrollbar-thumb {
+  min-height: 46px;
+  border: 1px solid #000 !important;
+  border-radius: 999px !important;
+  background: #f5f5f5 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+#malik-root .malik-ai-chat-bg .malik-chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: #fff !important;
+}
