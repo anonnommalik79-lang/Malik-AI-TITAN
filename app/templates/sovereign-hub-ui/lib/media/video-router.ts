@@ -15,7 +15,7 @@ import {
   videoProviderConfigured,
   type TitanVideoProviderId,
 } from "./providers/titan-video"
-import { ensure8KQualityPrompt } from "./visual-prompt"
+import { compileMalikVideoPrompt } from "./video-prompt"
 import type { VideoGenerateInput, VideoGenerateResult, VideoJobStatus, VideoProviderId } from "./types"
 
 function mapRemoteStatus(status: string): VideoJobStatus {
@@ -28,7 +28,8 @@ function mapRemoteStatus(status: string): VideoJobStatus {
 export async function routeVideoGeneration(input: VideoGenerateInput): Promise<VideoGenerateResult> {
   const errors: string[] = []
   const order = videoGodOrder() as VideoProviderId[]
-  const providerInput = { ...input, prompt: ensure8KQualityPrompt(input.prompt) }
+  const compiledPrompt = await compileMalikVideoPrompt(input.prompt, input.generateAudio !== false)
+  const providerInput = { ...input, prompt: compiledPrompt || input.prompt }
 
   for (const provider of order) {
     try {
@@ -151,15 +152,10 @@ async function refreshH3(taskId: string, model = malikH3Model()): Promise<VideoG
 export async function refreshVideoJobStatus(taskId: string): Promise<VideoGenerateResult & { videoUrl?: string }> {
   const stored = getVideoJob(taskId)
 
-  // H3 task IDs carry a provider prefix. That lets status polling recover even
-  // when a serverless instance restarts and the local in-memory job map is lost.
   if (!stored && isMalikH3TaskId(taskId) && malikH3Configured()) {
     return refreshH3(taskId)
   }
 
-  // Render/serverless processes can restart between POST and polling. Wan task IDs
-  // remain valid remotely, so allow a direct DashScope status lookup even when
-  // the local in-memory job map was lost.
   if (!stored && videoProviderConfigured("dashscope")) {
     try {
       const remote = await fetchTitanVideoStatus("dashscope", taskId)
