@@ -69,3 +69,28 @@ jobs:
           done
           echo "Live Malik AI health did not recover during the verification window."
           exit 1
+
+      - name: Smoke test live free Malik models
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: .
+        shell: bash
+        run: |
+          set -e
+          for model in malik-20b malik-fast-120b malik-27b; do
+            echo "Testing $model"
+            rm -f /tmp/malik-model.txt
+            code=$(curl -L -sS --max-time 60 \
+              -o /tmp/malik-model.txt \
+              -w '%{http_code}' \
+              -X POST https://malikaiworld.world/api/stream \
+              -H 'content-type: application/json' \
+              --data "{\"prompt\":\"Ответь только одним словом: OK\",\"model\":\"$model\",\"stream\":false}")
+            echo "http=$code"
+            head -c 800 /tmp/malik-model.txt || true
+            echo
+            if [ "$code" != "200" ] || [ ! -s /tmp/malik-model.txt ]; then
+              echo "$model failed live smoke test"
+              exit 1
+            fi
+          done
+          echo "All three free Malik models returned live responses."
