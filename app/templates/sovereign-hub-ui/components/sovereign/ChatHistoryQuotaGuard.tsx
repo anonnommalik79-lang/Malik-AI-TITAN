@@ -31,13 +31,15 @@ export function ChatHistoryQuotaGuard() {
     const proto = Storage.prototype
     const original = proto.setItem
 
-    const guardedSetItem: Storage["setItem"] = function (key: string, value: string) {
+    const guardedSetItem = function (this: Storage, key: string, value: string): void {
       if (this !== storage || key !== DASHBOARD_STORAGE_KEY) {
-        return original.call(this, key, value)
+        original.call(this, key, value)
+        return
       }
 
       try {
-        return original.call(this, key, value)
+        original.call(this, key, value)
+        return
       } catch (error) {
         if (!isQuotaError(error)) throw error
       }
@@ -48,14 +50,13 @@ export function ChatHistoryQuotaGuard() {
       }
 
       try {
-        return original.call(this, key, value)
+        original.call(this, key, value)
       } catch (error) {
         if (!isQuotaError(error)) throw error
         // Intentionally do not throw. The old complete snapshot is still valid.
         // Throwing would activate dashboard.tsx's legacy "drop oldest chats"
         // loop. A later smaller write can succeed without destroying history.
         console.warn("[CHAT HISTORY GUARD] quota is full; preserved previous complete snapshot")
-        return
       }
     }
 
