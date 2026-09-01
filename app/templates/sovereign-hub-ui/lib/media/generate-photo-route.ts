@@ -209,7 +209,14 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     const imageUrl = storageUrl || assetUrl || finalInlineUrl
     const resolvedModelId = result.modelId || requestedModelId
     const resolvedImageModel = resolvedModelId ? getMalikImageModel(resolvedModelId) : undefined
+    const durable = Boolean(storageUrl || assetUrl)
 
+    // Memory safety: once a short durable URL exists, never duplicate the same
+    // multi-megabyte 2K image as base64 inside the JSON response. That duplicate
+    // used to be copied into fetch JSON, React state and image history at once,
+    // which could crash Chromium tabs with Out of Memory and then leave the chat
+    // snapshot unable to save. A data URL is used only as the last-resort primary
+    // result when persistence itself is unavailable.
     return Response.json({
       ok: true,
       status: "ready",
@@ -241,9 +248,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       storageUrl,
       assetId,
       assetUrl,
-      // The browser only receives inline bytes when no durable short URL exists.
-      inlineImageUrl: imageUrl === finalInlineUrl ? undefined : finalInlineUrl,
-      durable: Boolean(storageUrl || assetUrl),
+      durable,
       remainingDailyImages: remaining,
       resetAt: nextMediaResetAt(),
       plan: limit.plan,
