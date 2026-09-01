@@ -38,6 +38,9 @@ jobs:
       - name: Verify Malik model registry
         run: npm run test:models
 
+      - name: Verify image memory safety
+        run: npm run test:image-memory
+
       - name: Typecheck
         run: npm run typecheck
 
