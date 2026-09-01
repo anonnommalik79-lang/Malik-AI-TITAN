@@ -41,6 +41,46 @@
   height: 26px;
 }
 
+/* Compact final receipt: not the old raw metadata box, just one clean proof line. */
+#malik-root .malik-photo-motion[data-malik-image-ready="1"] .malik-art-report {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: rgba(255,255,255,.58);
+}
+
+#malik-root .malik-photo-motion[data-malik-image-ready="1"] .malik-art-report__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+
+#malik-root .malik-photo-motion[data-malik-image-ready="1"] .malik-art-report__row span {
+  color: #f2f2f3;
+  font-weight: 680;
+}
+
+#malik-root .malik-photo-motion[data-malik-image-ready="1"] .malik-art-report__row em {
+  color: rgba(255,255,255,.38);
+  font-style: normal;
+  font-weight: 520;
+}
+
+/* Prompt/Open are already available in the pro dock; don't recreate the two raw boxes. */
+#malik-root .malik-photo-motion[data-malik-image-ready="1"] .malik-art-report__prompt,
+#malik-root .malik-photo-motion[data-malik-image-ready="1"] .malik-art-report__open {
+  display: none !important;
+}
+
 .malik-image-history {
   position: fixed;
   inset: 0;

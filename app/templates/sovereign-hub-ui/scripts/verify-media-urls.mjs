@@ -75,9 +75,11 @@ assert.equal(
   "Dashboard state must go through the quota-aware writer",
 )
 
-// The image route must hand back a durable URL, not multi-megabyte inline bytes.
+// The image route must hand back one short durable URL whenever persistence works.
+// It must not duplicate the same 2K bytes into an inlineImageUrl response field.
 const photoRoute = fs.readFileSync("lib/media/generate-photo-route.ts", "utf8")
 assert.match(photoRoute, /saveMediaAsset/, "Generated photos must be stored durably server-side")
-assert.match(photoRoute, /storageUrl \|\| assetUrl \|\| inlineImageUrl/, "Durable URLs must win over inline bytes")
+assert.match(photoRoute, /storageUrl \|\| assetUrl \|\| finalInlineUrl/, "Durable URLs must win over the last-resort inline result")
+assert.equal(/inlineImageUrl\s*:/.test(photoRoute), false, "A durable image must not carry a duplicate base64 fallback")
 
 console.log("✅ media URL + photo card regression checks passed")

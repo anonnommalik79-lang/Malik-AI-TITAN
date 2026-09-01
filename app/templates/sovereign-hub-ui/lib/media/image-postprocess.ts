@@ -8,6 +8,7 @@ const MAX_SOURCE_BYTES = 24 * 1024 * 1024
 const REMOTE_IMAGE_TIMEOUT_MS = 20_000
 
 export type ImagePostProcessResult = {
+  /** Original provider URL. Processed bytes live in `buffer` until persistence. */
   imageUrl: string
   buffer?: Buffer
   mime?: string
@@ -54,8 +55,11 @@ async function sourceBytes(imageUrl: string): Promise<{ buffer: Buffer; mime: st
  * Provider render and delivery resolution are deliberately separate.
  * Models can stay inside their safe native size while Malik delivers a clean
  * 2048px long edge using Lanczos resampling plus a restrained detail pass.
- * This does not pretend to invent missing content: metadata says exactly when
- * the final file was post-processed and when it remained native.
+ *
+ * Important memory invariant: Sharp returns a Buffer, not a base64 data URI.
+ * Turning a 2K result into base64 before it is persisted creates an extra ~33%
+ * payload plus large JS strings. The route converts bytes to base64 only in the
+ * exceptional case where every durable store is unavailable.
  */
 export async function postProcessGeneratedImage(input: {
   imageUrl: string
@@ -104,9 +108,10 @@ export async function postProcessGeneratedImage(input: {
       .webp({ quality: input.quality === "ultra" ? 96 : 94, effort: 4, smartSubsample: true })
       .toBuffer({ resolveWithObject: true })
 
-    const dataUrl = `data:image/webp;base64,${data.toString("base64")}`
     return {
-      imageUrl: dataUrl,
+      // Keep only the provider reference here. The processed 2K master is the
+      // Buffer below and will be written directly to storage by the route.
+      imageUrl: input.imageUrl,
       buffer: data,
       mime: "image/webp",
       width: info.width,
