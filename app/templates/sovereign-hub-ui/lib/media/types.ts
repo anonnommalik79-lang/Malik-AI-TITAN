@@ -1,4 +1,5 @@
 import type { MalikImageModelId } from "./image-models"
+import type { MalikImageDeliveryResolution, MalikImageQuality } from "./image-quality-presets"
 
 export type ImageAspectRatio = "1:1" | "16:9" | "9:16" | "4:5" | "4:3"
 export type ImageMode = "cinematic" | "realistic" | "product" | "design"
@@ -15,6 +16,14 @@ export type ImageGenerateInput = {
   aspectRatio?: ImageAspectRatio
   mode?: ImageMode
   modelId?: MalikImageModelId
+  quality?: MalikImageQuality
+  /** Optional advanced overrides are clamped to the selected model's capability envelope. */
+  steps?: number
+  guidance?: number
+  seed?: number
+  detailBoost?: boolean
+  artifactCleanup?: boolean
+  preserveFaces?: boolean
   userId?: string
   plan?: string
 }
@@ -25,10 +34,25 @@ export type ImageGenerateResult = {
   imageUrl: string
   /** What Malik understood the request to be, echoed back to the chat card. */
   understood?: string
+  /** Final prompt actually given to the image provider. */
+  enhancedPrompt?: string
+  negativePrompt?: string
   modelId?: MalikImageModelId
   providerModel?: string
   base64?: string
   remainingDailyImages: number
+  quality?: MalikImageQuality
+  steps?: number
+  guidance?: number
+  width?: number
+  height?: number
+  sourceWidth?: number
+  sourceHeight?: number
+  deliveryResolution?: MalikImageDeliveryResolution
+  postProcessed?: boolean
+  upscaleApplied?: boolean
+  processor?: "sharp" | "passthrough"
+  routeReason?: string
   error?: string
   resetAt?: string
   storageUrl?: string

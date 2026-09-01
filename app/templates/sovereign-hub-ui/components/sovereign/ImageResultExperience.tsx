@@ -3,24 +3,51 @@
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { prefillPrompt } from "@/lib/malik-context"
+import { readMalikImageQuality } from "@/lib/media/image-client-settings"
+import {
+  MALIK_IMAGE_HISTORY_EVENT,
+  isMalikImageFavorite,
+  readMalikImageHistory,
+  rememberMalikImage,
+  toggleMalikImageFavorite,
+  type MalikImageHistoryItem,
+} from "@/lib/media/image-history"
 
 type ViewerImage = {
   src: string
   prompt: string
   provider: string
+  quality?: string
 }
 
-type ImageAction = "open" | "download" | "copy" | "variation" | "enhance" | "cinematic" | "wide"
+type ImageAction =
+  | "open"
+  | "download"
+  | "copy"
+  | "favorite"
+  | "history"
+  | "variation"
+  | "enhance"
+  | "detail"
+  | "remaster"
+  | "cinematic"
+  | "wide"
+  | "portrait"
 
 const TOOLBAR_HTML = `
   <button type="button" data-malik-image-action="open" aria-label="Открыть изображение">Открыть</button>
   <button type="button" data-malik-image-action="download" aria-label="Скачать изображение">Скачать</button>
   <button type="button" data-malik-image-action="copy" aria-label="Копировать промпт">Промпт</button>
+  <button type="button" data-malik-image-action="favorite" aria-label="Добавить в избранное">☆</button>
   <span class="malik-image-tools__divider" aria-hidden="true"></span>
   <button type="button" data-malik-image-action="variation">Вариация</button>
-  <button type="button" data-malik-image-action="enhance">Ultra 8K</button>
+  <button type="button" data-malik-image-action="enhance">Ultra 2K</button>
+  <button type="button" data-malik-image-action="detail">Detail+</button>
+  <button type="button" data-malik-image-action="remaster">Remaster</button>
   <button type="button" data-malik-image-action="cinematic">Cinema</button>
   <button type="button" data-malik-image-action="wide">16:9</button>
+  <button type="button" data-malik-image-action="portrait">9:16</button>
+  <button type="button" data-malik-image-action="history">История</button>
 `
 
 function readImageFromCard(card: HTMLElement): ViewerImage | null {
@@ -35,7 +62,7 @@ function readImageFromCard(card: HTMLElement): ViewerImage | null {
   ).trim()
 
   const provider = String(card.querySelector<HTMLElement>(".malik-art-report__row em")?.textContent || "").trim()
-  return { src, prompt, provider }
+  return { src, prompt, provider, quality: readMalikImageQuality() }
 }
 
 function stripImageCommand(prompt: string) {
@@ -50,16 +77,25 @@ function nextPrompt(action: ImageAction, sourcePrompt: string) {
   const prompt = stripImageCommand(sourcePrompt) || "сохрани главный объект и композицию исходного кадра"
 
   if (action === "variation") {
-    return `/image ${prompt}. Сделай новую премиальную вариацию: сохрани главный объект и идею, но улучши композицию, свет, глубину и детали. Без текста и водяных знаков.`
+    return `/image ${prompt}. Сделай новую премиальную вариацию: сохрани главный объект и идею, но улучши композицию, свет, глубину и мелкие детали. Без текста и водяных знаков.`
   }
   if (action === "enhance") {
-    return `/image ${prompt}. Ultra 8K master: фотореализм, микродетали, натуральные материалы, чистые края, точная перспектива, профессиональный свет, высокий динамический диапазон, без артефактов и пересвечивания.`
+    return `/image ${prompt}. Ultra 2K master: максимальная реалистичность, точные микротекстуры, натуральные материалы, чистые края, корректные отражения, точная перспектива, профессиональный свет, высокий динамический диапазон, без артефактов.`
+  }
+  if (action === "detail") {
+    return `/image ${prompt}. Detail master: сохрани сцену, усили микродетали поверхностей, фактуру материалов, естественные края, реалистичные отражения, локальный контраст и резкость главного объекта. Без перешарпа, шума, текста и артефактов.`
+  }
+  if (action === "remaster") {
+    return `/image ${prompt}. Remaster: пересобери этот замысел как финальный premium master, сохрани главный объект и смысл, исправь геометрию, перспективу, материалы, свет, глубину, мелкие дефекты и визуальные артефакты.`
   }
   if (action === "cinematic") {
     return `/image ${prompt}. Cinematic master: дорогая кино-композиция, реалистичная оптика, естественная глубина резкости, объёмный свет, film color grading, premium commercial photography, без текста и водяных знаков.`
   }
   if (action === "wide") {
-    return `/image ${prompt}. Пересобери сцену в кинематографическом формате 16:9, сохрани главный объект полностью в кадре, добавь естественное пространство по краям, premium composition, без текста.`
+    return `/image ${prompt}. Пересобери сцену в формате 16:9, сохрани главный объект полностью в кадре, добавь естественное пространство по краям, premium composition, без текста.`
+  }
+  if (action === "portrait") {
+    return `/image ${prompt}. Пересобери сцену в вертикальном формате 9:16, сохрани главный объект полностью в кадре, оптимизируй композицию под экран телефона, premium composition, без текста.`
   }
   return ""
 }
@@ -68,7 +104,7 @@ function safeDownload(src: string) {
   if (typeof document === "undefined" || !src) return
   const anchor = document.createElement("a")
   anchor.href = src
-  anchor.download = `malik-ai-${Date.now()}.png`
+  anchor.download = `malik-ai-${Date.now()}.webp`
   anchor.target = "_blank"
   anchor.rel = "noopener noreferrer"
   document.body.appendChild(anchor)
@@ -98,6 +134,19 @@ async function copyText(text: string) {
 export function ImageResultExperience() {
   const [viewer, setViewer] = useState<ViewerImage | null>(null)
   const [notice, setNotice] = useState("")
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [history, setHistory] = useState<MalikImageHistoryItem[]>([])
+
+  useEffect(() => {
+    const syncHistory = () => setHistory(readMalikImageHistory())
+    syncHistory()
+    window.addEventListener(MALIK_IMAGE_HISTORY_EVENT, syncHistory)
+    window.addEventListener("storage", syncHistory)
+    return () => {
+      window.removeEventListener(MALIK_IMAGE_HISTORY_EVENT, syncHistory)
+      window.removeEventListener("storage", syncHistory)
+    }
+  }, [])
 
   useEffect(() => {
     const enhanceCard = (card: HTMLElement) => {
@@ -112,6 +161,8 @@ export function ImageResultExperience() {
         stage.setAttribute("role", "button")
         stage.setAttribute("tabindex", "0")
         stage.setAttribute("aria-label", "Открыть изображение на весь экран")
+        const item = readImageFromCard(card)
+        if (item) rememberMalikImage(item)
       } else {
         delete stage.dataset.malikOpenable
         stage.removeAttribute("role")
@@ -126,6 +177,14 @@ export function ImageResultExperience() {
         tools.setAttribute("aria-label", "Инструменты изображения")
         tools.innerHTML = TOOLBAR_HTML
         card.appendChild(tools)
+      }
+
+      const item = ready ? readImageFromCard(card) : null
+      const favorite = card.querySelector<HTMLButtonElement>("[data-malik-image-action='favorite']")
+      if (favorite && item) {
+        const active = isMalikImageFavorite(item.src)
+        favorite.textContent = active ? "★" : "☆"
+        favorite.setAttribute("aria-label", active ? "Убрать из избранного" : "Добавить в избранное")
       }
     }
 
@@ -157,7 +216,7 @@ export function ImageResultExperience() {
       }
       if (action === "download") {
         safeDownload(image.src)
-        setNotice("Изображение готово к скачиванию")
+        setNotice("Файл готов к скачиванию")
         return
       }
       if (action === "copy") {
@@ -165,11 +224,31 @@ export function ImageResultExperience() {
         setNotice(ok ? "Промпт скопирован" : "Не удалось скопировать промпт")
         return
       }
+      if (action === "favorite") {
+        const favorite = toggleMalikImageFavorite(image.src)
+        if (actionButton) actionButton.textContent = favorite ? "★" : "☆"
+        setNotice(favorite ? "Добавлено в избранное" : "Убрано из избранного")
+        return
+      }
+      if (action === "history") {
+        setHistory(readMalikImageHistory())
+        setHistoryOpen(true)
+        return
+      }
 
       const prompt = nextPrompt(action, image.prompt)
       if (prompt) {
         prefillPrompt(prompt)
-        setNotice(action === "variation" ? "Вариация подготовлена" : action === "enhance" ? "Ultra 8K подготовлен" : action === "cinematic" ? "Cinema-версия подготовлена" : "Формат 16:9 подготовлен")
+        const label: Record<string, string> = {
+          variation: "Вариация подготовлена",
+          enhance: "Ultra 2K подготовлен",
+          detail: "Detail+ подготовлен",
+          remaster: "Remaster подготовлен",
+          cinematic: "Cinema-версия подготовлена",
+          wide: "Формат 16:9 подготовлен",
+          portrait: "Формат 9:16 подготовлен",
+        }
+        setNotice(label[action] || "Новая версия подготовлена")
       }
     }
 
@@ -200,18 +279,20 @@ export function ImageResultExperience() {
   }, [notice])
 
   useEffect(() => {
-    if (!viewer) return
+    if (!viewer && !historyOpen) return
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = "hidden"
     const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setViewer(null)
+      if (event.key !== "Escape") return
+      if (viewer) setViewer(null)
+      else setHistoryOpen(false)
     }
     window.addEventListener("keydown", close)
     return () => {
       document.body.style.overflow = previousOverflow
       window.removeEventListener("keydown", close)
     }
-  }, [viewer])
+  }, [viewer, historyOpen])
 
   const overlay = viewer && typeof document !== "undefined"
     ? createPortal(
@@ -220,6 +301,7 @@ export function ImageResultExperience() {
             <div className="malik-image-viewer__meta">
               <strong>Malik Image</strong>
               {viewer.provider ? <span>{viewer.provider}</span> : null}
+              {viewer.quality ? <span>{viewer.quality}</span> : null}
             </div>
             <div className="malik-image-viewer__actions">
               <button type="button" onClick={() => copyText(viewer.prompt).then((ok) => setNotice(ok ? "Промпт скопирован" : "Не удалось скопировать"))}>Промпт</button>
@@ -233,11 +315,44 @@ export function ImageResultExperience() {
           </div>
 
           <div className="malik-image-viewer__bottom">
+            <button type="button" onClick={() => { const favorite = toggleMalikImageFavorite(viewer.src); setNotice(favorite ? "Добавлено в избранное" : "Убрано из избранного") }}>{isMalikImageFavorite(viewer.src) ? "★ Избранное" : "☆ Избранное"}</button>
             <button type="button" onClick={() => { prefillPrompt(nextPrompt("variation", viewer.prompt)); setViewer(null) }}>Вариация</button>
-            <button type="button" onClick={() => { prefillPrompt(nextPrompt("enhance", viewer.prompt)); setViewer(null) }}>Ultra 8K</button>
+            <button type="button" onClick={() => { prefillPrompt(nextPrompt("enhance", viewer.prompt)); setViewer(null) }}>Ultra 2K</button>
+            <button type="button" onClick={() => { prefillPrompt(nextPrompt("detail", viewer.prompt)); setViewer(null) }}>Detail+</button>
+            <button type="button" onClick={() => { prefillPrompt(nextPrompt("remaster", viewer.prompt)); setViewer(null) }}>Remaster</button>
             <button type="button" onClick={() => { prefillPrompt(nextPrompt("cinematic", viewer.prompt)); setViewer(null) }}>Cinema</button>
             <button type="button" onClick={() => { prefillPrompt(nextPrompt("wide", viewer.prompt)); setViewer(null) }}>16:9</button>
+            <button type="button" onClick={() => { prefillPrompt(nextPrompt("portrait", viewer.prompt)); setViewer(null) }}>9:16</button>
+            <button type="button" onClick={() => { setViewer(null); setHistory(readMalikImageHistory()); setHistoryOpen(true) }}>История</button>
           </div>
+        </div>,
+        document.body,
+      )
+    : null
+
+  const historyOverlay = historyOpen && typeof document !== "undefined"
+    ? createPortal(
+        <div className="malik-image-history" role="dialog" aria-modal="true" aria-label="История изображений" onMouseDown={(event) => { if (event.currentTarget === event.target) setHistoryOpen(false) }}>
+          <section className="malik-image-history__panel">
+            <header className="malik-image-history__head">
+              <div><strong>Malik Image Library</strong><span>{history.length} изображений</span></div>
+              <button type="button" onClick={() => setHistoryOpen(false)} aria-label="Закрыть">×</button>
+            </header>
+            <div className="malik-image-history__grid">
+              {history.length ? history.map((item) => (
+                <article key={item.id} className="malik-image-history__item">
+                  <button type="button" onClick={() => setViewer({ src: item.src, prompt: item.prompt, provider: item.provider, quality: item.quality })} aria-label="Открыть изображение">
+                    <img src={item.src} alt={item.prompt || "Malik AI image"} loading="lazy" />
+                  </button>
+                  <button type="button" className={`malik-image-history__favorite ${item.favorite ? "is-active" : ""}`} onClick={() => { toggleMalikImageFavorite(item.src); setHistory(readMalikImageHistory()) }} aria-label="Избранное">{item.favorite ? "★" : "☆"}</button>
+                  <div className="malik-image-history__meta">
+                    <p>{item.prompt || "Без названия"}</p>
+                    <small>{[item.provider, item.quality].filter(Boolean).join(" · ") || "Malik Image"}</small>
+                  </div>
+                </article>
+              )) : <div className="malik-image-history__empty">Готовые изображения появятся здесь автоматически.</div>}
+            </div>
+          </section>
         </div>,
         document.body,
       )
@@ -246,6 +361,7 @@ export function ImageResultExperience() {
   return (
     <>
       {overlay}
+      {historyOverlay}
       {notice && typeof document !== "undefined"
         ? createPortal(<div className="malik-image-toast" role="status">{notice}</div>, document.body)
         : null}

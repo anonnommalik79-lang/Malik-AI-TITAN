@@ -8,6 +8,7 @@ import { FounderConsoleRuntime } from "@/components/sovereign/FounderConsoleRunt
 import { VideoCancelRuntime } from "@/components/sovereign/VideoCancelRuntime"
 import { SitesRouteFixRuntime } from "@/components/sovereign/SitesRouteFixRuntime"
 import { ImageResultExperience } from "@/components/sovereign/ImageResultExperience"
+import { ImageQualityRuntime } from "@/components/sovereign/ImageQualityRuntime"
 import "./globals.css"
 import "./mobile-polish.css"
 import "./legendary-aurora.css"
@@ -69,6 +70,8 @@ import "./mobile-black-surface-final.css"
 import "./chat-black-surface-final.css"
 // Final image result authority: no raw metadata cards, fullscreen viewer + pro tools.
 import "./image-result-experience.css"
+// Malik Image Ultra: 2K quality selector, library and favorites.
+import "./image-ultra-stack.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
@@ -195,6 +198,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <VideoCancelRuntime />
         <SitesRouteFixRuntime />
         <ImageResultExperience />
+        <ImageQualityRuntime />
         <AuthKitProvider>
           <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden bg-black notranslate">
             {children}
