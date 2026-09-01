@@ -32,7 +32,8 @@
     "test:video-speed": "node scripts/verify-video-speed.mjs",
     "test:coding-models": "node scripts/verify-coding-models.mjs",
     "test:answer-format": "node scripts/verify-answer-format.mjs",
-    "test:responses": "node scripts/verify-response-quality.mjs"
+    "test:responses": "node scripts/verify-response-quality.mjs",
+    "test:action-os": "node scripts/verify-action-os.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",

@@ -49,6 +49,7 @@ import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 import { isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
 import { isDataSvgUrl, isImageLikeUrl, isRealVideoUrl } from "@/lib/media/media-url"
 import { ImageGenerationMotion } from "./image-generation-motion"
+import type { MalikActionPlan, MalikActionTarget } from "@/lib/ai/action-os"
 
 export type { ChatSendOptions }
 
@@ -96,6 +97,7 @@ interface Message {
   research?: MalikMessageResearch
   generatedMedia?: InlineMediaGeneration
   imageConfirmation?: ImageGenerationConfirmation
+  actionPlan?: MalikActionPlan
 }
 
 type ImageGenerationConfirmation = {
@@ -150,6 +152,7 @@ interface ChatViewProps {
   onOpenCodex?: () => void
   onForceCanvas?: () => void
   onOpenVoice?: () => void
+  onOpenActionTarget?: (target: MalikActionTarget) => void
   projectName?: string
   projectDescription?: string
 }
@@ -720,6 +723,87 @@ function SourceDeck({ research }: { research: MalikMessageResearch }) {
     </section>
   )
 }
+
+function MalikActionPlanCard({ plan, onOpenTarget }: { plan: MalikActionPlan; onOpenTarget?: (target: MalikActionTarget) => void }) {
+  const [expanded, setExpanded] = useState(plan.status === "running")
+  const completed = plan.steps.filter((step) => step.status === "done").length
+  const statusLabel = plan.status === "running"
+    ? "Выполняется"
+    : plan.status === "awaiting-confirmation"
+      ? "Ждёт подтверждения"
+      : plan.status === "failed"
+        ? "Остановлено"
+        : plan.status === "completed"
+          ? "Завершено"
+          : "Готово к продолжению"
+
+  return (
+    <section className="mb-4 w-full max-w-[680px] overflow-hidden rounded-2xl border border-white/10 bg-[#090909] text-left shadow-[0_20px_70px_rgba(0,0,0,.28)]" aria-label="План Malik Action OS">
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.035]"
+        aria-expanded={expanded}
+      >
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-black">
+          {plan.status === "running" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <strong className="block truncate text-[13px] font-semibold text-white">{plan.title}</strong>
+          <small className="block truncate text-[11px] text-zinc-500">{completed}/{plan.steps.length} выполнено · {statusLabel}</small>
+        </span>
+        <ChevronRight className={cn("h-4 w-4 shrink-0 text-zinc-600 transition-transform", expanded && "rotate-90")} />
+      </button>
+
+      {expanded ? (
+        <div className="border-t border-white/[0.07] px-4 py-3">
+          <div className="space-y-1.5">
+            {plan.steps.map((step, index) => (
+              <div key={step.id} className="group flex min-h-10 items-center gap-3 rounded-xl px-2 py-1.5 hover:bg-white/[0.025]">
+                <span className={cn(
+                  "grid h-6 w-6 shrink-0 place-items-center rounded-full border text-[10px] font-semibold",
+                  step.status === "done" && "border-white bg-white text-black",
+                  step.status === "running" && "border-white/30 bg-white/[0.08] text-white",
+                  step.status === "ready" && "border-white/20 bg-transparent text-zinc-300",
+                  step.status === "blocked" && "border-red-400/25 bg-red-400/[0.06] text-red-300",
+                  step.status === "queued" && "border-white/10 bg-transparent text-zinc-600",
+                )}>
+                  {step.status === "done" ? <Check className="h-3.5 w-3.5" /> : step.status === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : index + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <strong className="block text-xs font-medium text-zinc-200">{step.title}</strong>
+                  <small className="line-clamp-1 block text-[10px] leading-4 text-zinc-600">{step.detail}</small>
+                </span>
+                {step.target && step.status === "ready" ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenTarget?.(step.target!)}
+                    className="shrink-0 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-zinc-300 transition hover:bg-white hover:text-black"
+                  >
+                    Открыть
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          {plan.receipt ? (
+            <div className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5">
+              <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+                <span>Action receipt</span>
+                <span>Внешних действий: {plan.receipt.externalActionsPerformed}</span>
+              </div>
+              <p className="mt-1.5 text-[11px] leading-4 text-zinc-400">{plan.receipt.note}</p>
+            </div>
+          ) : plan.requiresConfirmation ? (
+            <p className="mt-3 text-[11px] leading-4 text-zinc-500">Платные и внешние действия не запускаются без вашего подтверждения.</p>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 function MessageBubble({
   message,
   onCopy,
@@ -731,6 +815,7 @@ function MessageBubble({
   onFeedback,
   feedback,
   onImageConfirmation,
+  onOpenActionTarget,
 }: {
   message: Message
   onCopy: (id: string, text: string) => void
@@ -743,6 +828,7 @@ function MessageBubble({
   onFeedback?: (id: string, value: "up" | "down") => void
   feedback?: "up" | "down" | null
   onImageConfirmation?: (messageId: string, prompt: string, action: "confirm" | "cancel") => void
+  onOpenActionTarget?: (target: MalikActionTarget) => void
 }) {
   const isUser = message.role === "user"
   const isThinking = Boolean(message.isStreaming && !message.content && !message.generatedMedia)
@@ -779,6 +865,7 @@ function MessageBubble({
               <span>{responseModel.label}</span>
             </div>
           ) : null}
+          {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
           {message.generatedMedia ? (
             <GeminiMediaGenerationCard media={message.generatedMedia} />
           ) : message.imageConfirmation ? (
@@ -836,7 +923,7 @@ function MessageBubble({
   )
 }
 
-export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, projectName, projectDescription }: ChatViewProps) {
+export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, onOpenActionTarget, projectName, projectDescription }: ChatViewProps) {
   // One short pulse after the complete answer lands. Passing a number (rather
   // than a pattern) deliberately keeps this to a single haptic event.
   const wasLoading = useRef(false)
@@ -1151,6 +1238,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                   onFeedback={handleFeedback}
                   feedback={feedbackMap[message.id] ?? null}
                   onImageConfirmation={onImageConfirmation}
+                  onOpenActionTarget={onOpenActionTarget}
                 />
               ))}
             </>
