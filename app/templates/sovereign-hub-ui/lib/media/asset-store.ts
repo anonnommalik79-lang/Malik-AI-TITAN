@@ -88,11 +88,16 @@ export function mediaAssetExtension(mime: string) {
 
 /** Parses `data:image/png;base64,...` into raw bytes. Returns null for anything else. */
 export function decodeDataUrl(value: string): { buffer: Buffer; mime: string } | null {
-  const match = /^data:([^;,]+)(;base64)?,([\s\S]*)$/i.exec(String(value || ""))
+  // Providers are allowed to add parameters before `;base64` (for example
+  // `data:image/jpeg;charset=utf-8;base64,...`). The old parser rejected that
+  // perfectly valid form, so a megabyte-long URI leaked into React/IndexedDB
+  // instead of becoming a short durable asset URL.
+  const match = /^data:([^;,]+)((?:;[^,]*)*),([\s\S]*)$/i.exec(String(value || ""))
   if (!match) return null
   const mime = normalizeMime(match[1])
   try {
-    const buffer = match[2]
+    const isBase64 = /(?:^|;)base64(?:;|$)/i.test(match[2] || "")
+    const buffer = isBase64
       ? Buffer.from(match[3], "base64")
       : Buffer.from(decodeURIComponent(match[3]), "utf8")
     return buffer.length ? { buffer, mime } : null

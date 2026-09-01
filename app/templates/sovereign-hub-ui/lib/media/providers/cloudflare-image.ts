@@ -86,7 +86,7 @@ function extractImage(payload: any): string {
   const value = candidates.find((candidate) => typeof candidate === "string" && candidate.trim())
   if (!value) return ""
   if (value.startsWith("http") || value.startsWith("data:")) return value
-  return `data:image/jpeg;charset=utf-8;base64,${value}`
+  return `data:image/jpeg;base64,${value}`
 }
 
 function modeInstruction(mode?: ImageMode) {

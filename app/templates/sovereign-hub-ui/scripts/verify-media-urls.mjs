@@ -61,7 +61,9 @@ assert.equal(isRealVideoUrl("/api/storage/photos/a.png"), false, "A photo is not
 // The card must always be able to reach a terminal state.
 const motion = fs.readFileSync("components/sovereign/image-generation-motion.tsx", "utf8")
 assert.match(motion, /GENERATION_WATCHDOG_MS/, "Photo card must keep a hard watchdog")
-assert.match(motion, /MAX_CYCLES/, "Sketch animation must be capped, never endless")
+assert.equal(motion.includes("setCycle"), false, "Photo animation must not remount a heavy scene in a loop")
+assert.match(motion, /will-change:\s*transform/, "Photo animation should stay on the compositor")
+assert.equal(motion.includes("malik-coded-hand"), false, "Heavy hand SVG animation must stay removed")
 assert.match(motion, /status === "ready" && !resultUrl/, "A finished job with no file must end as an error")
 
 // Raw image bytes must never reach localStorage.
@@ -81,5 +83,14 @@ const photoRoute = fs.readFileSync("lib/media/generate-photo-route.ts", "utf8")
 assert.match(photoRoute, /saveMediaAsset/, "Generated photos must be stored durably server-side")
 assert.match(photoRoute, /storageUrl \|\| assetUrl \|\| finalInlineUrl/, "Durable URLs must win over the last-resort inline result")
 assert.equal(/inlineImageUrl\s*:/.test(photoRoute), false, "A durable image must not carry a duplicate base64 fallback")
+
+const assetStore = fs.readFileSync("lib/media/asset-store.ts", "utf8")
+assert.match(assetStore, /\(\?:;\[\^,\]\*\)\*/, "Data URL parser must accept provider parameters such as charset")
+assert.match(assetStore, /isBase64/, "Parameterized base64 data URLs must still decode as bytes")
+assert.equal(
+  fs.readFileSync("lib/media/providers/cloudflare-image-prepared.ts", "utf8").includes("charset=utf-8;base64"),
+  false,
+  "Cloudflare image bytes should use a canonical data URL",
+)
 
 console.log("✅ media URL + photo card regression checks passed")

@@ -16,6 +16,7 @@ import {
   type TitanVideoProviderId,
 } from "./providers/titan-video"
 import { compileMalikVideoPrompt } from "./video-prompt"
+import { ensure8KQualityPrompt } from "./visual-prompt"
 import type { VideoGenerateInput, VideoGenerateResult, VideoJobStatus, VideoProviderId } from "./types"
 
 function mapRemoteStatus(status: string): VideoJobStatus {
@@ -29,7 +30,7 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
   const errors: string[] = []
   const order = videoGodOrder() as VideoProviderId[]
   const compiledPrompt = await compileMalikVideoPrompt(input.prompt, input.generateAudio !== false)
-  const providerInput = { ...input, prompt: compiledPrompt || input.prompt }
+  const providerInput = { ...input, prompt: compiledPrompt || ensure8KQualityPrompt(input.prompt) }
 
   for (const provider of order) {
     try {
