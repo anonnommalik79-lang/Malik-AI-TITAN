@@ -1,0 +1,147 @@
+/* MALIK AI — FINAL COMPUTE + VIDEO OLED BLACK AUTHORITY
+ * Scope: only Compute and MalikVideo workspaces.
+ * Goal: kill legacy Titan gold/yellow paint and remove the outer gray scrollbar
+ * on Video without disabling wheel/touch scrolling.
+ */
+
+/* ---------- Compute: absolute black canvas ---------- */
+#malik-root [data-malik-compute],
+#malik-root [data-malik-compute]::before,
+#malik-root [data-malik-compute]::after {
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+#malik-root .malik-main-scroll-host:has([data-malik-compute]),
+#malik-root .titan-main:has([data-malik-compute]),
+#malik-root .titan-content:has([data-malik-compute]),
+#malik-root .malik-dashboard-content:has([data-malik-compute]),
+#malik-root main:has([data-malik-compute]) {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+#malik-root .malik-main-scroll-host:has([data-malik-compute])::before,
+#malik-root .malik-main-scroll-host:has([data-malik-compute])::after,
+#malik-root .titan-main:has([data-malik-compute])::before,
+#malik-root .titan-main:has([data-malik-compute])::after,
+#malik-root .titan-content:has([data-malik-compute])::before,
+#malik-root .titan-content:has([data-malik-compute])::after,
+#malik-root .malik-dashboard-content:has([data-malik-compute])::before,
+#malik-root .malik-dashboard-content:has([data-malik-compute])::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* Keep Compute cards neutral — no gold/yellow cast from legacy theme rules. */
+#malik-root [data-malik-compute] section,
+#malik-root [data-malik-compute] nav,
+#malik-root [data-malik-compute] button,
+#malik-root [data-malik-compute] details {
+  --tw-ring-color: rgba(255,255,255,.30) !important;
+  --tw-shadow-color: transparent !important;
+}
+
+#malik-root [data-malik-compute] section {
+  background-image: none !important;
+}
+
+/* ---------- MalikVideo: absolute black workspace ---------- */
+#malik-root .mv,
+#malik-root .mv__workspace,
+#malik-root .mv__header,
+#malik-root .mv__composer-shell,
+#malik-root .mv__discover {
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* Kill inherited Titan gold/yellow page paint behind/around Video. */
+#malik-root .malik-main-scroll-host:has(.mv),
+#malik-root .titan-main:has(.mv),
+#malik-root .titan-content:has(.mv),
+#malik-root .malik-dashboard-content:has(.mv),
+#malik-root main:has(.mv) {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+#malik-root .malik-main-scroll-host:has(.mv)::before,
+#malik-root .malik-main-scroll-host:has(.mv)::after,
+#malik-root .titan-main:has(.mv)::before,
+#malik-root .titan-main:has(.mv)::after,
+#malik-root .titan-content:has(.mv)::before,
+#malik-root .titan-content:has(.mv)::after,
+#malik-root .malik-dashboard-content:has(.mv)::before,
+#malik-root .malik-dashboard-content:has(.mv)::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* Neutralize the remaining warm/gold chrome while preserving video/poster imagery. */
+#malik-root .mv__header,
+#malik-root .mv__workspace,
+#malik-root .mv__composer-shell,
+#malik-root .mv__statusbar,
+#malik-root .mv__session-bar,
+#malik-root .mv__discover,
+#malik-root .mv__tabs {
+  border-color: rgba(255,255,255,.08) !important;
+}
+
+/* The circled gray vertical pill is the outer scroll thumb. Destroy it.
+ * Scrolling still works with mouse wheel, trackpad and touch.
+ */
+#malik-root .mv,
+#malik-root .mv__workspace,
+#malik-root .malik-main-scroll-host:has(.mv),
+#malik-root .titan-main:has(.mv),
+#malik-root .titan-content:has(.mv),
+#malik-root .malik-dashboard-content:has(.mv),
+#malik-root main:has(.mv) {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+#malik-root .mv::-webkit-scrollbar,
+#malik-root .mv__workspace::-webkit-scrollbar,
+#malik-root .malik-main-scroll-host:has(.mv)::-webkit-scrollbar,
+#malik-root .titan-main:has(.mv)::-webkit-scrollbar,
+#malik-root .titan-content:has(.mv)::-webkit-scrollbar,
+#malik-root .malik-dashboard-content:has(.mv)::-webkit-scrollbar,
+#malik-root main:has(.mv)::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}
+
+#malik-root .mv::-webkit-scrollbar-thumb,
+#malik-root .mv__workspace::-webkit-scrollbar-thumb,
+#malik-root .malik-main-scroll-host:has(.mv)::-webkit-scrollbar-thumb,
+#malik-root .titan-main:has(.mv)::-webkit-scrollbar-thumb,
+#malik-root .titan-content:has(.mv)::-webkit-scrollbar-thumb,
+#malik-root .malik-dashboard-content:has(.mv)::-webkit-scrollbar-thumb,
+#malik-root main:has(.mv)::-webkit-scrollbar-thumb {
+  display: none !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
