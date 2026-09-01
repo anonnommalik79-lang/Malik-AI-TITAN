@@ -24,12 +24,6 @@ function hash(value: string) {
   return Math.abs(h >>> 0).toString(36)
 }
 
-/**
- * localStorage is for metadata, never media bytes. A 2K data URI can be several
- * megabytes; storing even one there can exhaust the origin quota, make the chat
- * snapshot fail, and force the browser to keep multiple giant UTF-16 copies in
- * memory. Durable /api URLs, https URLs and IndexedDB handles are tiny and safe.
- */
 export function isPersistableMalikImageReference(value: unknown): value is string {
   const src = String(value || "").trim()
   if (!src || src.length > 4096) return false
@@ -71,8 +65,6 @@ export function readMalikImageHistory(): MalikImageHistoryItem[] {
     if (!Array.isArray(parsed)) return []
     const safe = parsed.map(cleanItem).filter((item): item is MalikImageHistoryItem => Boolean(item)).slice(0, MAX_HISTORY)
 
-    // One-time self-heal for builds that used to store data:/blob: image bytes.
-    // Rewriting the cleaned list immediately gives that quota back to chat history.
     if (safe.length !== parsed.length || raw.length > 750_000) writeRaw(safe)
     return safe
   } catch {
@@ -85,8 +77,6 @@ function write(items: MalikImageHistoryItem[]) {
   if (typeof window === "undefined") return
   let safe = items.map(cleanItem).filter((item): item is MalikImageHistoryItem => Boolean(item)).slice(0, MAX_HISTORY)
 
-  // Image history is disposable metadata. If the browser quota is tight, shrink
-  // this list itself; never consume the space needed by the user's chat history.
   if (!writeRaw(safe)) {
     safe = safe.slice(0, 16)
     if (!writeRaw(safe)) {
@@ -103,12 +93,30 @@ export function rememberMalikImage(input: Omit<MalikImageHistoryItem, "id" | "cr
   const current = readMalikImageHistory()
   const id = String(input.id || `img_${hash(src)}`).slice(0, 120)
   const existing = current.find((item) => item.id === id || item.src === src)
+  const prompt = String(input.prompt || "").replace(/\s+/g, " ").trim().slice(0, MAX_PROMPT_CHARS)
+  const provider = String(input.provider || "").trim().slice(0, 80)
+  const quality = String(input.quality || "").trim().slice(0, 32) || undefined
+
+  // ImageResultExperience can inspect the same ready card more than once while
+  // React is streaming nearby DOM. Rewriting localStorage + dispatching an event
+  // for an identical record creates needless main-thread work and can cascade
+  // into more renders. Identical memories are now a true no-op.
+  if (
+    existing &&
+    existing.src === src &&
+    existing.prompt === prompt &&
+    existing.provider === provider &&
+    existing.quality === quality
+  ) {
+    return existing
+  }
+
   const next: MalikImageHistoryItem = {
     id,
     src,
-    prompt: String(input.prompt || "").replace(/\s+/g, " ").trim().slice(0, MAX_PROMPT_CHARS),
-    provider: String(input.provider || "").trim().slice(0, 80),
-    quality: String(input.quality || "").trim().slice(0, 32) || undefined,
+    prompt,
+    provider,
+    quality,
     createdAt: existing?.createdAt || new Date().toISOString(),
     favorite: existing?.favorite || false,
   }
