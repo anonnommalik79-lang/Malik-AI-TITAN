@@ -6,6 +6,7 @@ const history = fs.readFileSync("lib/media/image-history.ts", "utf8")
 const post = fs.readFileSync("lib/media/image-postprocess.ts", "utf8")
 const resultCss = fs.readFileSync("app/image-result-experience.css", "utf8")
 const quotaGuard = fs.readFileSync("components/sovereign/ChatHistoryQuotaGuard.tsx", "utf8")
+const motion = fs.readFileSync("components/sovereign/image-generation-motion.tsx", "utf8")
 const layout = fs.readFileSync("app/layout.tsx", "utf8")
 
 // A durable 2K result must not be duplicated as a base64 fallback in response JSON.
@@ -21,6 +22,7 @@ assert.match(post, /buffer:\s*data/, "post-process must hand the processed buffe
 assert.match(history, /\^\(\?:data\|blob\):/i, "history must reject data/blob references")
 assert.match(history, /raw\.length\s*>\s*750_000/, "history must self-heal oversized legacy snapshots")
 assert.match(history, /slice\(0, 16\)/, "history should shrink itself before competing with chat storage")
+assert.match(history, /Identical memories are now a true no-op/, "re-inspecting a ready card must not rewrite localStorage")
 
 // If the origin quota is still full, protect the last complete chat snapshot
 // instead of allowing dashboard.tsx to enter its legacy drop-old-chats loop.
@@ -33,4 +35,11 @@ assert.match(layout, /<ChatHistoryQuotaGuard\s*\/>/, "quota guard must mount bef
 assert.match(resultCss, /:has\(\.malik-photo-motion\)[\s\S]*\.malik-ai-avatar\.is-working[\s\S]*display:\s*none/i, "image streaming avatar must be hidden")
 assert.match(resultCss, /\.malik-photo-motion \.malik-art-result[\s\S]*filter:\s*none\s*!important/i, "2K reveal must be crisp")
 
-console.log("Malik image memory + chat history safety: OK")
+// The in-chat waiting UI must stay tiny. The old component remounted a large SVG
+// scene every 7.2 seconds; after several cycles Chromium could stop responding.
+assert.equal(/CYCLE_MS|MAX_CYCLES|setCycle\(/.test(motion), false, "photo waiting UI must not run remount cycles")
+assert.equal(/<svg|malik-coded-hand|malik-spray-rig|blur\(/i.test(motion), false, "photo waiting UI must not render the old heavy SVG/fog stack")
+assert.match(motion, /setInterval\([\s\S]*1000\)/, "photo progress updates should be capped to one tick per second")
+assert.match(motion, /data-malik-image-ready=\{imageLoaded \? "1" : "0"\}/, "ready state must remain compatible with result tools")
+
+console.log("Malik image memory + chat history + main-thread safety: OK")
