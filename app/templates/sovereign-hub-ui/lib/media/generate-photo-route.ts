@@ -1,10 +1,17 @@
-import { saveMediaAsset } from "./asset-store"
+import { mediaAssetExtension, saveMediaAsset } from "./asset-store"
 import { maxImagePromptLength } from "./config"
 import {
-  DEFAULT_MALIK_IMAGE_MODEL_ID,
   canUseMalikImageModel,
   getMalikImageModel,
+  isMalikImageModelId,
+  MALIK_IMAGE_MODEL_COOKIE,
+  type MalikImageModelId,
 } from "./image-models"
+import {
+  readImageQualityCookie,
+  resolveMalikImageQuality,
+} from "./image-quality-presets"
+import { postProcessGeneratedImage } from "./image-postprocess"
 import { routeImageGeneration } from "./image-router"
 import { checkMediaLimit, nextMediaResetAt, recordMediaUsage } from "./limits"
 import { resolveMediaUser } from "./request"
@@ -50,6 +57,24 @@ function normalizeImagePrompt(value: unknown): string {
   return String(value || "").replace(IMAGE_COMMAND, "").trim()
 }
 
+function cookieValue(request: Request, name: string) {
+  const header = request.headers.get("cookie") || ""
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const match = header.match(new RegExp(`(?:^|;\\s*)${escaped}=([^;]+)`, "i"))
+  if (!match) return ""
+  try { return decodeURIComponent(match[1]) } catch { return "" }
+}
+
+function requestedImageModel(request: Request, body: any): MalikImageModelId | undefined {
+  const candidates = [body?.imageModelId, body?.imageModel, cookieValue(request, MALIK_IMAGE_MODEL_COOKIE)]
+  return candidates.find(isMalikImageModelId)
+}
+
+function optionalNumber(value: unknown) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 export async function handleMalikPhotoGenerationRequest(request: Request) {
   const body = await request.json().catch(() => ({}))
   // The chat dashboard deliberately carries /image as explicit media consent.
@@ -58,27 +83,25 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   const aspectRatio = ASPECTS.has(body?.aspectRatio) ? body.aspectRatio : "1:1"
   const requestedMode = String(body?.mode || body?.style || "").toLowerCase()
   const mode: ImageMode = MODES.has(requestedMode as ImageMode) ? requestedMode as ImageMode : "cinematic"
+  const quality = resolveMalikImageQuality(body?.quality || readImageQualityCookie(request))
 
   if (!prompt) return Response.json({ ok: false, status: "failed", error: "Prompt is required" }, { status: 400 })
   if (prompt.length > maxImagePromptLength()) {
     return Response.json({ ok: false, status: "failed", error: "PROMPT_TOO_LONG" }, { status: 400 })
   }
 
-  // Image models are intentionally automatic and hidden from the composer.
-  // Ignore stale browser cookies and old client model ids so every user gets
-  // the same supported production route instead of a surprise Plus error.
-  const modelId = DEFAULT_MALIK_IMAGE_MODEL_ID
-  const imageModel = getMalikImageModel(modelId)
   const user = await resolveMediaUser(request, body)
-
-  if (!canUseMalikImageModel(modelId, user.plan)) {
+  const requestedModelId = requestedImageModel(request, body)
+  if (requestedModelId && !canUseMalikImageModel(requestedModelId, user.plan)) {
+    const lockedModel = getMalikImageModel(requestedModelId)
     return Response.json({
       ok: false,
       status: "failed",
       error: "IMAGE_MODEL_REQUIRES_PLUS",
-      publicError: `${imageModel.label} доступна в MalikAI Plus.`,
-      modelId,
-      modelLabel: imageModel.label,
+      publicError: `${lockedModel.label} доступна в MalikAI Plus.`,
+      modelId: requestedModelId,
+      modelLabel: lockedModel.label,
+      quality,
     }, { status: 403 })
   }
 
@@ -91,15 +114,14 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       publicError: limit.error,
       resetAt: limit.resetAt,
       remainingDailyImages: 0,
-      modelId,
-      modelLabel: imageModel.label,
+      modelId: requestedModelId,
+      modelLabel: requestedModelId ? getMalikImageModel(requestedModelId).label : "MalikImage Auto",
+      quality,
     }, { status: 429 })
   }
 
-  // Hard server-side single-flight guard. The UI already disables Send while a
-  // request is loading, but a very fast double tap can happen before React has
-  // committed that state. Never let a second image request race the first and
-  // make an older result appear under a newer prompt.
+  // Hard server-side single-flight guard. A second click must never race the
+  // first render and make an older image appear under a newer prompt.
   const generationLock = acquireImageGenerationLock(user.userId)
   if (!generationLock) {
     return Response.json({
@@ -107,20 +129,25 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       status: "failed",
       error: "IMAGE_GENERATION_ALREADY_RUNNING",
       publicError: "Дождитесь завершения текущей генерации фото. Второй запрос не перебьёт первый.",
-      modelId,
-      modelLabel: imageModel.label,
+      modelId: requestedModelId,
+      quality,
     }, { status: 409 })
   }
 
   try {
     const result = await routeImageGeneration({
       prompt,
-      // Reuse the description the chat already showed the user, so the picture
-      // matches the "Malik понял" line instead of a second interpretation.
       understood: typeof body?.understood === "string" ? body.understood : undefined,
       aspectRatio,
       mode,
-      modelId,
+      modelId: requestedModelId,
+      quality,
+      steps: optionalNumber(body?.steps),
+      guidance: optionalNumber(body?.guidance ?? body?.cfg),
+      seed: optionalNumber(body?.seed),
+      detailBoost: typeof body?.detailBoost === "boolean" ? body.detailBoost : undefined,
+      artifactCleanup: typeof body?.artifactCleanup === "boolean" ? body.artifactCleanup : undefined,
+      preserveFaces: typeof body?.preserveFaces === "boolean" ? body.preserveFaces : undefined,
       userId: user.userId,
       plan: user.plan,
     }, { signal: request.signal })
@@ -132,68 +159,90 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
         error: result.error || "IMAGE_GENERATION_FAILED",
         publicError: result.error || "Не удалось сгенерировать изображение.",
         provider: result.provider,
-        modelId,
-        modelLabel: imageModel.label,
-        providerModel: result.providerModel || imageModel.providerModel,
+        modelId: result.modelId || requestedModelId,
+        modelLabel: result.modelId ? getMalikImageModel(result.modelId).label : "MalikImage Auto",
+        providerModel: result.providerModel,
+        quality,
+        routeReason: result.routeReason,
         remainingDailyImages: limit.remaining,
         resetAt: nextMediaResetAt(),
       }, { status: 502 })
     }
 
+    // Every provider now enters the same delivery pipeline. Quality/Ultra
+    // renders are materialised, Lanczos-upscaled to a 2048px long edge when
+    // needed, lightly sharpened, and then persisted as one immutable result.
+    const delivered = await postProcessGeneratedImage({ imageUrl: result.imageUrl, quality })
+
     await recordMediaUsage(user.userId, "image")
     const remaining = Math.max(0, limit.remaining - 1)
 
     let storageUrl: string | undefined
-    if (result.base64 || result.imageUrl.startsWith("data:")) {
+    if (delivered.buffer?.length) {
       const { uploadMediaAsset } = await import("@/lib/storage/cloud-upload")
+      const mime = delivered.mime || "image/webp"
       const uploaded = await uploadMediaAsset({
         userId: user.userId,
-        fileName: `generated-${Date.now()}.jpg`,
-        mime: "image/jpeg",
-        base64: result.base64 || result.imageUrl,
+        fileName: `generated-${Date.now()}.${mediaAssetExtension(mime)}`,
+        mime,
+        buffer: delivered.buffer,
         kind: "image",
       })
       if (uploaded.stored) storageUrl = uploaded.publicUrl
     }
 
-    // Providers hand back a `data:` URI. Freeze those bytes on disk and answer
-    // with a short, stable URL instead: the chat card, a reload, a second device
-    // and the browser cache all then point at the same finished file. Sending the
-    // raw data URI to the client is what used to overflow localStorage and leave
-    // a reloaded chat stuck on the generation animation.
-    const inlineImageUrl = result.imageUrl
     let assetId: string | undefined
     let assetUrl: string | undefined
-    if (!storageUrl && inlineImageUrl.startsWith("data:")) {
-      const stored = saveMediaAsset({ dataUrl: inlineImageUrl })
+    if (!storageUrl) {
+      const stored = delivered.buffer?.length
+        ? saveMediaAsset({ buffer: delivered.buffer, mime: delivered.mime })
+        : delivered.imageUrl.startsWith("data:")
+          ? saveMediaAsset({ dataUrl: delivered.imageUrl })
+          : null
       if (stored) {
         assetId = stored.id
         assetUrl = stored.url
       }
     }
 
-    // Priority: object storage → local durable asset → inline bytes as a last resort.
-    const imageUrl = storageUrl || assetUrl || inlineImageUrl
-    const resolvedModelId = result.modelId || modelId
-    const resolvedImageModel = getMalikImageModel(resolvedModelId)
+    const finalInlineUrl = delivered.imageUrl
+    const imageUrl = storageUrl || assetUrl || finalInlineUrl
+    const resolvedModelId = result.modelId || requestedModelId
+    const resolvedImageModel = resolvedModelId ? getMalikImageModel(resolvedModelId) : undefined
+
     return Response.json({
       ok: true,
       status: "ready",
       kind: "photo",
       provider: result.provider,
-      engine: resolvedImageModel.label,
+      engine: resolvedImageModel?.label || "MalikImage Auto",
       modelId: resolvedModelId,
-      modelLabel: resolvedImageModel.label,
-      providerModel: result.providerModel || resolvedImageModel.providerModel,
+      modelLabel: resolvedImageModel?.label || "MalikImage Auto",
+      providerModel: result.providerModel || resolvedImageModel?.providerModel,
       imageUrl,
       url: imageUrl,
       mediaUrl: imageUrl,
       understood: result.understood,
+      originalPrompt: prompt,
+      enhancedPrompt: result.enhancedPrompt,
+      negativePrompt: result.negativePrompt,
+      quality,
+      steps: result.steps,
+      guidance: result.guidance,
+      width: delivered.width,
+      height: delivered.height,
+      sourceWidth: delivered.sourceWidth,
+      sourceHeight: delivered.sourceHeight,
+      deliveryResolution: delivered.deliveryResolution,
+      postProcessed: delivered.postProcessed,
+      upscaleApplied: delivered.upscaleApplied,
+      processor: delivered.processor,
+      routeReason: result.routeReason,
       storageUrl,
       assetId,
       assetUrl,
-      // Kept so the card can still paint something if the durable URL 404s.
-      inlineImageUrl: imageUrl === inlineImageUrl ? undefined : inlineImageUrl,
+      // The browser only receives inline bytes when no durable short URL exists.
+      inlineImageUrl: imageUrl === finalInlineUrl ? undefined : finalInlineUrl,
       durable: Boolean(storageUrl || assetUrl),
       remainingDailyImages: remaining,
       resetAt: nextMediaResetAt(),

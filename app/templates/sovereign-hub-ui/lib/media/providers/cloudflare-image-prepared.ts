@@ -4,6 +4,7 @@ import {
   type MalikImageModelId,
 } from "../image-models"
 import { imageProviderTimeoutMs } from "../config"
+import type { ProviderQualityTuning } from "../image-quality-presets"
 import type { ImageAspectRatio } from "../types"
 
 function cloudflareAccountId(): string {
@@ -98,11 +99,12 @@ function jsonRequestBody(
   negativePrompt: string,
   width: number,
   height: number,
+  tuning?: ProviderQualityTuning,
 ) {
   if (modelId === "flux-schnell") {
     return {
       prompt,
-      steps: Math.round(numericEnv("MALIK_IMAGE_SCHNELL_STEPS", 4, 1, 8)),
+      steps: tuning?.steps ?? Math.round(numericEnv("MALIK_IMAGE_SCHNELL_STEPS", 4, 1, 8)),
     }
   }
 
@@ -111,8 +113,8 @@ function jsonRequestBody(
       prompt,
       width,
       height,
-      guidance: numericEnv("MALIK_IMAGE_PHOENIX_GUIDANCE", 8.5, 2, 10),
-      num_steps: Math.round(numericEnv("MALIK_IMAGE_PHOENIX_STEPS", 30, 1, 50)),
+      guidance: tuning?.guidance ?? numericEnv("MALIK_IMAGE_PHOENIX_GUIDANCE", 8.5, 2, 10),
+      num_steps: tuning?.steps ?? Math.round(numericEnv("MALIK_IMAGE_PHOENIX_STEPS", 30, 1, 50)),
       negative_prompt: negativePrompt,
     }
   }
@@ -121,8 +123,8 @@ function jsonRequestBody(
     prompt,
     width,
     height,
-    guidance: numericEnv("MALIK_IMAGE_LUCID_GUIDANCE", 8.5, 0, 10),
-    num_steps: Math.round(numericEnv("MALIK_IMAGE_LUCID_STEPS", 30, 1, 40)),
+    guidance: tuning?.guidance ?? numericEnv("MALIK_IMAGE_LUCID_GUIDANCE", 8.5, 0, 10),
+    num_steps: tuning?.steps ?? Math.round(numericEnv("MALIK_IMAGE_LUCID_STEPS", 30, 1, 40)),
   }
 }
 
@@ -131,14 +133,22 @@ export async function generatePreparedCloudflareImage({
   negativePrompt,
   aspectRatio = "1:1",
   modelId = DEFAULT_MALIK_IMAGE_MODEL_ID,
+  tuning,
   signal,
 }: {
   strictPrompt: string
   negativePrompt: string
   aspectRatio?: ImageAspectRatio
   modelId?: MalikImageModelId
+  tuning?: ProviderQualityTuning
   signal?: AbortSignal
-}): Promise<{ imageUrl: string; modelId: MalikImageModelId; providerModel: string }> {
+}): Promise<{
+  imageUrl: string
+  modelId: MalikImageModelId
+  providerModel: string
+  steps?: number
+  guidance?: number
+}> {
   if (!preparedCloudflareImageConfigured()) {
     throw new Error("Cloudflare Workers AI image account is not configured")
   }
@@ -154,11 +164,11 @@ export async function generatePreparedCloudflareImage({
     form.append("height", String(height))
 
     if (modelId === "flux-klein-4b") {
-      form.append("guidance", String(numericEnv("MALIK_IMAGE_KLEIN_GUIDANCE", 7.5, 0, 10)))
+      form.append("guidance", String(tuning?.guidance ?? numericEnv("MALIK_IMAGE_KLEIN_GUIDANCE", 7.5, 0, 10)))
     }
     if (modelId === "malik-image-1-premium") {
-      form.append("steps", String(Math.round(numericEnv("MALIK_IMAGE_DEV_STEPS", 16, 1, 50))))
-      form.append("guidance", String(numericEnv("MALIK_IMAGE_DEV_GUIDANCE", 7, 0, 10)))
+      form.append("steps", String(tuning?.steps ?? Math.round(numericEnv("MALIK_IMAGE_DEV_STEPS", 16, 1, 50))))
+      form.append("guidance", String(tuning?.guidance ?? numericEnv("MALIK_IMAGE_DEV_GUIDANCE", 7, 0, 10)))
     }
 
     response = await callCloudflare(model.providerModel, { method: "POST", body: form }, signal)
@@ -168,7 +178,7 @@ export async function generatePreparedCloudflareImage({
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(jsonRequestBody(modelId, strictPrompt, negativePrompt, width, height)),
+        body: JSON.stringify(jsonRequestBody(modelId, strictPrompt, negativePrompt, width, height, tuning)),
       },
       signal,
     )
@@ -182,6 +192,8 @@ export async function generatePreparedCloudflareImage({
       imageUrl: `data:${contentType};base64,${bytes.toString("base64")}`,
       modelId,
       providerModel: model.providerModel,
+      steps: tuning?.steps,
+      guidance: tuning?.guidance,
     }
   }
 
@@ -193,5 +205,11 @@ export async function generatePreparedCloudflareImage({
 
   const imageUrl = extractImage(payload)
   if (!imageUrl) throw new Error(`${model.label} returned no image payload`)
-  return { imageUrl, modelId, providerModel: model.providerModel }
+  return {
+    imageUrl,
+    modelId,
+    providerModel: model.providerModel,
+    steps: tuning?.steps,
+    guidance: tuning?.guidance,
+  }
 }
