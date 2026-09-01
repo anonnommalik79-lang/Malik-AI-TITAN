@@ -1,0 +1,163 @@
+/* Malik Image Ultra Stack — neutral, compact, production UI. */
+
+#malik-root .malik-image-quality {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px 0 10px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 10px;
+  background: #111112;
+  color: rgba(255,255,255,.55);
+  font-size: 10.5px;
+  font-weight: 620;
+  white-space: nowrap;
+}
+
+#malik-root .malik-image-quality select {
+  min-width: 92px;
+  height: 28px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  color-scheme: dark;
+  cursor: pointer;
+}
+
+#malik-root .malik-image-quality--compact {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding-left: 9px;
+  border-radius: 9px;
+}
+
+#malik-root .malik-image-quality--compact select {
+  min-width: 82px;
+  height: 26px;
+}
+
+.malik-image-history {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483590;
+  display: grid;
+  place-items: center;
+  padding: max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  background: rgba(0,0,0,.9);
+  color: #fff;
+}
+
+.malik-image-history__panel {
+  width: min(960px, 96vw);
+  max-height: min(820px, 92dvh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 20px;
+  background: #0b0b0c;
+  box-shadow: 0 36px 120px rgba(0,0,0,.72);
+}
+
+.malik-image-history__head {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px 11px 17px;
+  border-bottom: 1px solid rgba(255,255,255,.075);
+}
+
+.malik-image-history__head strong { font-size: 14px; font-weight: 680; }
+.malik-image-history__head span { margin-left: 8px; color: rgba(255,255,255,.4); font-size: 10.5px; }
+.malik-image-history__head button {
+  width: 36px; height: 36px; border: 1px solid rgba(255,255,255,.1); border-radius: 50%;
+  background: #151516; color: #fff; font-size: 21px; cursor: pointer;
+}
+
+.malik-image-history__grid {
+  min-height: 180px;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.malik-image-history__item {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  background: #111112;
+}
+
+.malik-image-history__item > button:first-child {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: #050505;
+  cursor: zoom-in;
+}
+
+.malik-image-history__item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1/1;
+  object-fit: cover;
+}
+
+.malik-image-history__meta { padding: 9px 10px 10px; }
+.malik-image-history__meta p {
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  color: #d7d7db;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.malik-image-history__meta small { display:block; margin-top:6px; color:rgba(255,255,255,.36); font-size:9.5px; }
+
+.malik-image-history__favorite {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 31px;
+  height: 31px;
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 50%;
+  background: rgba(0,0,0,.72);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+.malik-image-history__favorite.is-active { background:#fff; color:#000; }
+
+.malik-image-history__empty {
+  grid-column: 1/-1;
+  display:grid;
+  place-items:center;
+  min-height:260px;
+  color:rgba(255,255,255,.42);
+  font-size:12px;
+}
+
+@media (max-width: 700px) {
+  #malik-root .pgs__ratio-pills + .malik-image-quality { margin-top: 8px; }
+  #malik-root .malik-image-quality > span { display:none; }
+  #malik-root .malik-image-quality select { min-width: 82px; }
+  .malik-image-history { padding: 0; place-items: end center; }
+  .malik-image-history__panel { width:100%; max-height:88dvh; border-radius:22px 22px 0 0; }
+  .malik-image-history__grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap:7px; padding:8px; }
+  .malik-image-history__item { border-radius:11px; }
+}
