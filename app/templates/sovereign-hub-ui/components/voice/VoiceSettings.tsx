@@ -25,8 +25,10 @@ const KAZAKH_VOICES: readonly VoiceProfile[] = [
   { name: "Kokoro M1 Strong", description: "Қазақша · анық, нық стиль", model: "kokoro-kazakh-km_m1-strong", language: "kk", rate: 1.05, pitch: .92, hints: maleHints },
 ] as const
 
+// Charon leads and is the default. Puck is gone: it is the livelier read, and
+// on a long Russian answer that liveliness turns into a sing-song the listener
+// has to sit through.
 const RUSSIAN_VOICES: readonly VoiceProfile[] = [
-  { name: "Puck", description: "Русский · живой, дружелюбный мужской", model: "gemini-puck-ru", language: "ru", rate: 1, pitch: .94, hints: maleHints },
   { name: "Charon", description: "Русский · низкий, спокойный мужской", model: "gemini-charon-ru", language: "ru", rate: .98, pitch: .9, hints: maleHints },
   { name: "Kore", description: "Русский · чистый, уверенный женский", model: "gemini-kore-ru", language: "ru", rate: 1, pitch: 1.04, hints: femaleHints },
   { name: "Aoede", description: "Русский · мягкий, естественный женский", model: "gemini-aoede-ru", language: "ru", rate: .99, pitch: 1.03, hints: femaleHints },
@@ -81,7 +83,7 @@ export function voicesForLanguage(language: VoiceLanguage) {
 }
 
 export function defaultVoiceForLanguage(language: VoiceLanguage) {
-  return language === "kk" ? "Kokoro M1" : language === "ru" ? "Puck" : "Cliff"
+  return language === "kk" ? "Kokoro M1" : language === "ru" ? "Charon" : "Cliff"
 }
 
 export function voiceBelongsToLanguage(name: string, language: VoiceLanguage) {

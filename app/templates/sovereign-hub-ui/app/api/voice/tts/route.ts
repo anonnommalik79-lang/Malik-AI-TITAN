@@ -53,7 +53,9 @@ const DEEPGRAM_VOICES = new Set([
 ])
 
 // Keep the UI voice profiles stable while mapping them to official Gemini voices.
-// Puck remains the default Russian voice because it is natural and conversational.
+// Charon is the default Russian voice: calm and low, which holds up over a long
+// answer where Puck's livelier read turns sing-song. Puck stays in the map only
+// so a saved preference from before the change still resolves to something.
 const GEMINI_VOICE_BY_PROFILE: Record<string, string> = {
   charon: "Charon",
   puck: "Puck",
@@ -173,7 +175,9 @@ function geminiAudioPart(payload: any) {
 
 function geminiVoiceFor(voice: string, language: "ru" | "en") {
   const mapped = GEMINI_VOICE_BY_PROFILE[String(voice || "").trim().toLowerCase()]
-  return mapped || (language === "ru" ? "Puck" : "Charon")
+  // Charon on both sides: it is the default Russian voice now, and the
+  // fallback should not quietly hand back a voice the picker no longer offers.
+  return mapped || "Charon"
 }
 
 async function deepgramTts(text: string, voice: string, speed: number, expressivity: number) {
@@ -352,7 +356,7 @@ export const POST = withCompute(handlePOST, "voice")
 async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const text = String(body?.text || "").trim().slice(0, 3500)
-  const voice = String(body?.voice || "Puck")
+  const voice = String(body?.voice || "Charon")
   const language = requestedLanguage(body?.language) || detectLanguage(text)
   const speed = fluxSpeed(body?.speed)
   const expressivity = fluxExpressivity(body?.expressivity)

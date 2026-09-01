@@ -462,6 +462,90 @@ check("the reply is short enough to speak quickly", () => {
     "the model must be told to keep a spoken answer short")
 })
 
+// ------------------------------------------------------------- speaking early
+const chunks = await loadModule("lib/voice/speech-chunks.ts")
+const { speechChunks } = chunks
+
+console.log("\nspeaking the first sentence before the last one is made")
+
+check("a multi-sentence answer is split so playback can start early", () => {
+  const answer = "Рендер — это превращение сцены в изображение. В 3D это финальный этап, движок считает свет. "
+    + "Применяется в кино, играх и архитектуре. Один кадр может считаться часами."
+  const parts = speechChunks(answer)
+  assert.ok(parts.length >= 2, "the whole answer must not be one synthesis request")
+  assert.ok(parts[0].length <= 200, "the first piece is the only one the user waits for")
+})
+
+check("nothing is lost in the split", () => {
+  const answer = "Первое предложение здесь. Второе предложение тут. Третье предложение вот."
+  const joined = speechChunks(answer).join(" ").replace(/\s+/g, " ")
+  for (const word of ["Первое", "Второе", "Третье", "здесь", "тут", "вот"]) {
+    assert.ok(joined.includes(word), `"${word}" must survive the split`)
+  }
+})
+
+check("a one-line answer stays a single request", () => {
+  assert.deepEqual(speechChunks("Да, работает."), ["Да, работает."])
+  assert.deepEqual(speechChunks(""), [])
+})
+
+check("a sentence longer than a chunk breaks at a comma, not mid-word", () => {
+  const long = "Это очень длинное предложение без точки, которое приходится делить где-то, "
+    + "и делить его нужно на запятой, потому что разрыв посреди слова слышно сразу, "
+    + "а пауза на запятой звучит естественно для слушателя."
+  for (const part of speechChunks(long)) {
+    assert.ok(!/\s$/.test(part) && part.trim() === part, "no ragged edges")
+    assert.ok(!/[а-яё]-$/i.test(part), "must not break inside a word")
+  }
+})
+
+check("the microphone does not cut the user off mid-thought", () => {
+  // One threshold and 1050ms of silence truncated people constantly: a pause
+  // inside a sentence is about a second, longer when choosing words in a second
+  // language - which is this product's whole audience.
+  const client = codeOf("components/voice/VoiceMode.tsx")
+  const silence = Number(client.match(/const SILENCE_MS = (\d+)/)?.[1] || 0)
+  assert.ok(silence >= 1500, `a natural pause is about a second; ${silence}ms cuts it`)
+  assert.ok(!/>= 1050/.test(client), "the old cutoff must be gone")
+})
+
+check("the quiet tail of a sentence still counts as speech", () => {
+  const client = codeOf("components/voice/VoiceMode.tsx")
+  const start = Number(client.match(/SPEECH_START_RMS = ([\d.]+)/)?.[1] || 0)
+  const cont = Number(client.match(/SPEECH_CONTINUE_RMS = ([\d.]+)/)?.[1] || 0)
+  assert.ok(start > 0 && cont > 0, "both thresholds must exist")
+  assert.ok(cont < start, "continuing must be easier than starting, or the last word is lost")
+  assert.match(client, /started \? SPEECH_CONTINUE_RMS : SPEECH_START_RMS/, "and they must actually be used that way")
+})
+
+check("the microphone is opened at the rate the recognizer wants", () => {
+  const client = codeOf("components/voice/VoiceMode.tsx")
+  assert.match(client, /channelCount: 1/, "mono: the recognizer discards the second channel anyway")
+  assert.match(client, /sampleRate: 16000/)
+})
+
+check("the client speaks pieces instead of waiting for the whole answer", () => {
+  const client = codeOf("components/voice/VoiceMode.tsx")
+  assert.match(client, /speechChunks\(text\)/, "the reply must be chunked")
+  assert.match(client, /ahead = index \+ 1 < chunks\.length/, "the next piece must be requested before the current one plays")
+})
+
+check("the recognizer is no longer forced into the picker's language", () => {
+  // Whisper treats the language as a fact. With the picker on Kazakh a Russian
+  // sentence was decoded as Kazakh and came back as nonsense, and vice versa.
+  const client = codeOf("components/voice/VoiceMode.tsx")
+  assert.match(client, /form\.append\("language", "auto"\)/, "detection must be left to the recognizer")
+  assert.ok(!/form\.append\("language", languageRef\.current\)/.test(client), "the picker must not dictate what was heard")
+})
+
+check("Charon is the Russian voice, and Puck is not offered", () => {
+  const settings = codeOf("components/voice/VoiceSettings.tsx")
+  assert.match(settings, /language === "ru" \? "Charon"/, "Charon is the default")
+  assert.ok(!/name: "Puck"/.test(settings), "Puck must not be in the picker")
+  const tts = codeOf("app/api/voice/tts/route.ts")
+  assert.match(tts, /body\?\.voice \|\| "Charon"/, "and the server default follows it")
+})
+
 // --------------------------------------------------------------------- wiring
 console.log("\nwiring")
 

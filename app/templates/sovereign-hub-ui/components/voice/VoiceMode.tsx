@@ -10,6 +10,7 @@ import { isVoiceSoundEnabled, playVoiceTransitionSound, saveVoiceSoundEnabled } 
 import { FluxTtsSession } from "@/lib/voice/flux-tts-client"
 import { VoiceAudioPlayer, unlockVoiceAudio } from "@/lib/voice/audio-playback"
 import { repairTranscript } from "@/lib/voice/speech-vocabulary"
+import { speechChunks } from "@/lib/voice/speech-chunks"
 import { VOICE_HISTORY_TURNS, type VoiceMessage } from "@/lib/voice/conversation"
 
 type SpeechResult = { isFinal: boolean; 0: { transcript: string } }
@@ -45,6 +46,21 @@ type VoiceTurnPayload = {
 type TranscribePayload = { ok?: boolean; text?: string; error?: string; remainingSeconds?: number }
 
 const STORAGE_KEY = "malik.voice.preferences.v4"
+
+/**
+ * When the microphone decides you have stopped talking.
+ *
+ * This was one threshold and 1050ms of silence, which cuts people off
+ * mid-thought: a natural pause inside a sentence is around a second, and it is
+ * longer when someone is choosing words in a second language - exactly the case
+ * this product exists for. Waiting a little longer costs a moment before the
+ * answer; cutting early costs half the question.
+ */
+const SILENCE_MS = 1700
+/** Loud enough to be speech rather than the room. */
+const SPEECH_START_RMS = 0.020
+/** Quiet enough to still be the tail of a word. */
+const SPEECH_CONTINUE_RMS = 0.008
 
 export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit?: (prompt: string) => void }) {
   const [phase, setPhase] = useState<"enter" | "open" | "leave">("enter")
@@ -258,29 +274,59 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         }
       }
 
-      const response = await fetch("/api/voice/tts", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text, voice: selectedVoice, language: selectedLanguage, speed, expressivity }),
-        signal: abort.signal,
-      })
-      if (!current()) return false
-      const mime = response.headers.get("content-type") || ""
-      if (response.ok && /^(audio\/|application\/octet-stream)/i.test(mime)) {
-        const blob = await response.blob()
+      // Speech is synthesized in pieces and played as each arrives. The whole
+      // answer used to be rendered before a single word was heard, and the
+      // screen sat on "Готовлю голос" for all of it. Only the first piece is
+      // actually waited for now; the rest is made while earlier audio plays,
+      // which is the entire difference between this and an assistant that
+      // answers instantly.
+      const chunks = speechChunks(text)
+      const speakChunk = async (part: string) => {
+        const response = await fetch("/api/voice/tts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: part, voice: selectedVoice, language: selectedLanguage, speed, expressivity }),
+          signal: abort.signal,
+        })
+        const type = response.headers.get("content-type") || ""
+        const audio = response.ok && /^(audio\/|application\/octet-stream)/i.test(type)
+        return { response, blob: audio ? await response.blob() : null }
+      }
+
+      let ahead: ReturnType<typeof speakChunk> | null = chunks.length ? speakChunk(chunks[0]) : null
+      let firstResponse: Response | null = null
+      let spoke = false
+
+      for (let index = 0; index < chunks.length && ahead; index += 1) {
+        const piece = await ahead
+        // Ask for the next piece before playing this one, so the provider works
+        // during playback instead of after it.
+        ahead = index + 1 < chunks.length ? speakChunk(chunks[index + 1]) : null
+
+        if (index === 0) firstResponse = piece.response
         if (!current()) return false
-        pendingAudioRef.current = blob
-        const played = await playBlobAudio(blob)
+        if (!piece.blob) break
+
+        pendingAudioRef.current = piece.blob
+        const played = await playBlobAudio(piece.blob)
         if (!current()) return false
-        if (played) {
-          pendingAudioRef.current = null
-          replyPlayingRef.current = false
-          return true
+        if (!played) {
+          // Keep the exact neural audio for a gesture-driven retry; never
+          // silently swap a good voice for the browser's system one.
+          errorMessage = "Браузер не запустил звук. Нажми «Озвучить ответ»."
+          break
         }
-        // Keep the exact neural audio for a gesture-driven retry; do not silently
-        // replace a high-quality voice with the browser's unrelated system voice.
-        errorMessage = "Браузер не запустил звук. Нажми «Озвучить ответ»."
-      } else {
+        spoke = true
+        pendingAudioRef.current = null
+      }
+
+      if (spoke) {
+        replyPlayingRef.current = false
+        return true
+      }
+
+      const response = firstResponse
+      if (response && !response.ok) {
         // Provider diagnostics stay on the server, never in the conversation UI.
         await response.json().catch(() => null)
         if (!current()) return false
@@ -448,10 +494,18 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       energyRef.current = Math.min(1, average * 4.9 + peak / 255 * .36)
 
       const now = performance.now()
-      if (rms >= .016) {
+
+      // Two thresholds, not one. A single level has to be high enough not to
+      // trigger on room noise, and that same level is above the tail of an
+      // ordinary sentence - voices trail off at the end of a phrase - so the
+      // last word kept being counted as silence and cut. Speech now has to be
+      // clearly present to start, and only has to stay faintly present to
+      // continue.
+      const started = speechDetectedRef.current
+      if (rms >= (started ? SPEECH_CONTINUE_RMS : SPEECH_START_RMS)) {
         speechDetectedRef.current = true
         lastSpeechAtRef.current = now
-      } else if (speechDetectedRef.current && now - lastSpeechAtRef.current >= 1050 && Date.now() - recordingStartedAtRef.current >= 700) {
+      } else if (started && now - lastSpeechAtRef.current >= SILENCE_MS && Date.now() - recordingStartedAtRef.current >= 700) {
         speechDetectedRef.current = false
         autoSubmitRef.current?.()
         return
@@ -490,7 +544,18 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       return
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      // Mono at 16 kHz is what the recognizer resamples to anyway; asking for it
+      // here means the browser does the conversion with the raw signal instead
+      // of the encoder throwing away detail first.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 16000,
+        },
+      })
       if (!mountedRef.current || closingRef.current || micRequestRef.current !== requestId) {
         stream.getTracks().forEach((track) => track.stop())
         return
@@ -587,7 +652,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       const form = new FormData()
       const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm"
       form.append("file", blob, `malik-voice.${extension}`)
-      form.append("language", languageRef.current)
+      // Never force the recognizer into the language of the picker. Whisper
+      // treats this as a fact, not a hint: with the picker on Kazakh, a Russian
+      // sentence was decoded as if it were Kazakh and came back as nonsense -
+      // and the same in reverse. Its own detection is better than the guess a
+      // dropdown makes, and this was the whole "it hears something else" bug.
+      form.append("language", "auto")
       form.append("durationSec", String(Math.max(1, Math.round(durationSec * 10) / 10)))
       const response = await fetch("/api/transcribe", { method: "POST", body: form })
       const payload = await response.json().catch(() => ({})) as TranscribePayload
