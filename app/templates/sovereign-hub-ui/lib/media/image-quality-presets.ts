@@ -1,8 +1,8 @@
 import type { MalikImageModelId } from "./image-models"
 import { getMalikImageModelCapability } from "./image-model-capabilities"
 
-export type MalikImageQuality = "draft" | "balanced" | "quality" | "ultra"
-export type MalikImageDeliveryResolution = "native" | "2k"
+export type MalikImageQuality = "draft" | "balanced" | "quality" | "ultra" | "ultra4k" | "ultra8k" | "ultra16k"
+export type MalikImageDeliveryResolution = "native" | "2k" | "4k" | "8k" | "16k"
 
 export type MalikImageQualityProfile = {
   id: MalikImageQuality
@@ -20,7 +20,20 @@ export type MalikImageQualityProfile = {
 
 export const MALIK_IMAGE_QUALITY_STORAGE_KEY = "malik_image_quality_v2"
 export const MALIK_IMAGE_QUALITY_COOKIE = "malik_image_quality_v2"
-export const DEFAULT_MALIK_IMAGE_QUALITY: MalikImageQuality = "ultra"
+/**
+ * Every prompt gets the high tier without asking for it.
+ *
+ * 8K rather than 16K, and that is a deliberate stop. 8K adds about four seconds
+ * and lands a 15MB file; 16K adds eleven and lands thirty, and on a small
+ * instance it gets clamped back down to roughly 8K anyway. So 8K is the most
+ * that can be given silently to every single generation without the person
+ * noticing the cost. Anyone who wants more types "16к" in the prompt.
+ *
+ * Note what is *not* done here: the words "8K" and "16K" never reach the model.
+ * They are a delivery instruction, and as prompt text they are a stock-render
+ * cue that makes the picture worse. See image-resolution-intent.ts.
+ */
+export const DEFAULT_MALIK_IMAGE_QUALITY: MalikImageQuality = "ultra8k"
 
 export const MALIK_IMAGE_QUALITY_PRESETS: Record<MalikImageQuality, MalikImageQualityProfile> = {
   draft: {
@@ -75,10 +88,55 @@ export const MALIK_IMAGE_QUALITY_PRESETS: Record<MalikImageQuality, MalikImageQu
     targetLongEdge: 2048,
     sharpen: 0.82,
   },
+  // Above 2K the picture is no longer what the model drew - it is that render
+  // enlarged. Detail is reconstructed, not recovered, so these tiers raise the
+  // pixel count and the print size, not the amount of real information. Sharpen
+  // falls as the factor climbs: the same amount of it on an 8x enlargement
+  // reads as crunch rather than crispness.
+  ultra4k: {
+    id: "ultra4k",
+    label: "Ultra 4K",
+    description: "3840px по длинной стороне · ступенчатое увеличение",
+    stepsRatio: 1,
+    guidanceDelta: 0.5,
+    detailBoost: true,
+    artifactCleanup: true,
+    preserveFaces: true,
+    deliveryResolution: "4k",
+    targetLongEdge: 3840,
+    sharpen: 0.7,
+  },
+  ultra8k: {
+    id: "ultra8k",
+    label: "Ultra 8K",
+    description: "7680px · для печати и кропа",
+    stepsRatio: 1,
+    guidanceDelta: 0.5,
+    detailBoost: true,
+    artifactCleanup: true,
+    preserveFaces: true,
+    deliveryResolution: "8k",
+    targetLongEdge: 7680,
+    sharpen: 0.5,
+  },
+  ultra16k: {
+    id: "ultra16k",
+    label: "Ultra 16K",
+    description: "15360px · большой формат, файл десятки мегабайт",
+    stepsRatio: 1,
+    guidanceDelta: 0.5,
+    detailBoost: true,
+    artifactCleanup: true,
+    preserveFaces: true,
+    deliveryResolution: "16k",
+    targetLongEdge: 15360,
+    sharpen: 0.35,
+  },
 }
 
 export function isMalikImageQuality(value: unknown): value is MalikImageQuality {
-  return value === "draft" || value === "balanced" || value === "quality" || value === "ultra"
+  return value === "draft" || value === "balanced" || value === "quality"
+    || value === "ultra" || value === "ultra4k" || value === "ultra8k" || value === "ultra16k"
 }
 
 export function resolveMalikImageQuality(value: unknown): MalikImageQuality {

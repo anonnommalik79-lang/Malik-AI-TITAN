@@ -8,10 +8,12 @@ import {
   type MalikImageModelId,
 } from "./image-models"
 import {
+  getMalikImageQualityProfile,
   readImageQualityCookie,
   resolveMalikImageQuality,
 } from "./image-quality-presets"
 import { postProcessGeneratedImage } from "./image-postprocess"
+import { resolveRequestedQuality } from "./image-resolution-intent"
 import { routeImageGeneration } from "./image-router"
 import { checkMediaLimit, nextMediaResetAt, recordMediaUsage } from "./limits"
 import { resolveMediaUser } from "./request"
@@ -79,11 +81,21 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   const body = await request.json().catch(() => ({}))
   // The chat dashboard deliberately carries /image as explicit media consent.
   // Remove only that transport command; the user's real visual request remains untouched.
-  const prompt = normalizeImagePrompt(body?.prompt || body?.message)
+  const rawPrompt = normalizeImagePrompt(body?.prompt || body?.message)
   const aspectRatio = ASPECTS.has(body?.aspectRatio) ? body.aspectRatio : "1:1"
   const requestedMode = String(body?.mode || body?.style || "").toLowerCase()
   const mode: ImageMode = MODES.has(requestedMode as ImageMode) ? requestedMode as ImageMode : "cinematic"
-  const quality = resolveMalikImageQuality(body?.quality || readImageQualityCookie(request))
+
+  // "кот в 8к" is a delivery instruction wearing a prompt's clothes. It is read
+  // as one and then taken out of the text, because "8K" left in a prompt is a
+  // stock-render cue to every diffusion model and drags the picture toward the
+  // exact plastic look the person was asking to avoid.
+  const requested = resolveRequestedQuality(
+    rawPrompt,
+    resolveMalikImageQuality(body?.quality || readImageQualityCookie(request)),
+  )
+  const prompt = requested.prompt
+  const quality = requested.quality
 
   if (!prompt) return Response.json({ ok: false, status: "failed", error: "Prompt is required" }, { status: 400 })
   if (prompt.length > maxImagePromptLength()) {
@@ -241,6 +253,12 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       sourceWidth: delivered.sourceWidth,
       sourceHeight: delivered.sourceHeight,
       deliveryResolution: delivered.deliveryResolution,
+      // What was asked for and what came out are reported separately: a 16K
+      // request on a small host is clamped, and it must say 8K rather than
+      // claim a size the file does not have.
+      requestedResolution: getMalikImageQualityProfile(quality).deliveryResolution,
+      qualityFromPrompt: requested.fromPrompt,
+      deliveryMs: delivered.elapsedMs,
       postProcessed: delivered.postProcessed,
       upscaleApplied: delivered.upscaleApplied,
       processor: delivered.processor,

@@ -6,6 +6,14 @@ const QUALITY_SUFFIX: Record<MalikImageQuality, string> = {
   balanced: "high detail, clean composition, crisp subject focus",
   quality: "high fidelity, fine surface texture, crisp micro-details, clean edges, realistic tonal range, artifact-free finish",
   ultra: "ultra high fidelity, precise micro-textures, physically plausible materials, realistic reflections, controlled highlights, natural tonal range, clean edges, crisp micro-details, artifact-free professional finish",
+  // The 4K/8K/16K tiers render at the same native size as ultra - the model has
+  // one ceiling and asking it for more only produces duplicated limbs. They
+  // differ in what happens after the render, so they ask the model for the same
+  // thing: the cleanest possible source for an enlargement, which above all
+  // means no noise and no soft edges to be multiplied.
+  ultra4k: "ultra high fidelity, precise micro-textures, physically plausible materials, controlled highlights, natural tonal range, razor-clean edges, zero noise, artifact-free professional finish",
+  ultra8k: "ultra high fidelity, precise micro-textures, physically plausible materials, controlled highlights, natural tonal range, razor-clean edges, zero noise, artifact-free professional finish",
+  ultra16k: "ultra high fidelity, precise micro-textures, physically plausible materials, controlled highlights, natural tonal range, razor-clean edges, zero noise, artifact-free professional finish",
 }
 
 const MODE_SUFFIX: Record<ImageMode, string> = {

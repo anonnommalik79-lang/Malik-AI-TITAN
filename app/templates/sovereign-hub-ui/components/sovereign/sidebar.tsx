@@ -12,6 +12,7 @@ import {
   LifeBuoy,
   LogOut,
   MessageSquarePlus,
+  Mic,
   MoreHorizontal,
   PanelLeft,
   PanelLeftClose,
@@ -142,6 +143,10 @@ type SidebarAction = {
 
 const PRIMARY_ACTIONS: SidebarAction[] = [
   { id: "new", label: "Новый чат", icon: MessageSquarePlus, action: "new" },
+  // The sidebar declared this prop and this action and wired neither, so on
+  // mobile - where the sidebar is the only navigation - there was no way to
+  // reach Voice at all.
+  { id: "voice", label: "Голосовой режим", icon: Mic, action: "voice" },
   { id: "library", label: "Библиотека", icon: LayoutTemplate, view: "templates" },
   { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects" },
   { id: "plugins", label: "Плагины", icon: Plug, view: "features" },
@@ -176,6 +181,7 @@ function SidebarInner({
   onLogout,
   onOpenCodex,
   onOpenSearch,
+  onOpenVoice,
 }: SidebarProps) {
   const [profile, setProfile] = useState<ReturnType<typeof getStoredAuthSnapshot>>(null)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
@@ -267,13 +273,14 @@ function SidebarInner({
   const runAction = useCallback((action: SidebarAction) => {
     if (action.action === "new") return onNewChat?.()
     if (action.action === "codex") return onOpenCodex?.()
+    if (action.action === "voice") return onOpenVoice?.()
     if (action.action === "translate") {
       onViewChange?.("home")
       prefillPrompt("Переведи текст ниже на нужный язык, сохрани смысл, факты и тон:\n\n")
       return
     }
     if (action.view) openView(action.view)
-  }, [onNewChat, onOpenCodex, onViewChange, openView])
+  }, [onNewChat, onOpenCodex, onOpenVoice, onViewChange, openView])
 
   const runTool = useCallback((id: (typeof TOOL_ACTIONS)[number]["id"]) => {
     onViewChange?.("home")

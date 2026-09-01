@@ -179,18 +179,36 @@ try {
     instruction = "not called"
     const result = await (await turn.POST(request({ text: "Поищи погоду", language: "ru" }))).json()
     assert.equal(result.usedWeb, false)
-    assert.equal(instruction, "not called")
-    assert.match(result.content, /не удалось/)
+    assert.ok(!result.sources?.length, "no source may be invented when the search failed")
+    // This used to assert the model was never called at all, and that the person
+    // got a canned apology. Refusing to answer a question it already knows the
+    // answer to is the "тупой" failure the voice work was about, so the model is
+    // asked anyway - it is simply told that nothing came back, and told to admit
+    // that rather than state a stale number as current. The invariant this check
+    // exists for is untouched: no invented sources, and usedWeb stays false.
+    assert.match(instruction, /WEB SEARCH RETURNED NOTHING/)
+    assert.match(instruction, /may be out of date/)
   })
 
-  const tts = load("app/api/voice/tts/route.ts")
+  // The TTS route remembers which providers just failed and skips them for a
+  // cooldown - that is what removed the 20-second wait on "Готовлю голос". That
+  // memory is module state, so without a reload every check inherits the
+  // failures of the ones before it and the results depend on the order they are
+  // written in. Each check gets a fresh module.
+  const loadTts = () => {
+    cache.delete(path.resolve(root, "app/api/voice/tts/route.ts"))
+    return load("app/api/voice/tts/route.ts")
+  }
+  let tts = loadTts()
   await check("missing TTS credentials returns an honest 503, not pretend audio", async () => {
+    tts = loadTts()
     globalThis.fetch = async () => { throw new Error("unexpected network") }
     const result = await tts.POST(request({ text: "Привет", language: "ru" }))
     assert.equal(result.status, 503)
     assert.equal((await result.json()).ok, false)
   })
   await check("Gemini PCM is returned as a valid 24kHz WAV", async () => {
+    tts = loadTts()
     process.env.GEMINI_API_KEY = "test-only-gemini"
     globalThis.fetch = async (url, init) => {
       assert.match(String(url), /generativelanguage.googleapis.com/)
@@ -207,12 +225,14 @@ try {
     assert.equal(audio.readUInt32LE(40), 4800)
   })
   await check("wrong MIME from TTS is not playable success", async () => {
+    tts = loadTts()
     delete process.env.GEMINI_API_KEY
     process.env.DEEPGRAM_API_KEY = "test-only-deepgram"
     globalThis.fetch = async () => Response.json({ error: "x".repeat(150) })
     assert.equal((await tts.POST(request({ text: "Hello", language: "en" }))).status, 503)
   })
   await check("Kazakh audio uses a configured Python service without looping", async () => {
+    tts = loadTts()
     process.env.KOKORO_TTS_URL = "https://voice.example"
     globalThis.fetch = async (url, init) => {
       assert.equal(String(url), "https://voice.example/api/voice/tts")
@@ -251,6 +271,7 @@ try {
     })
   }
   await check("ElevenLabs alias, selected voice and calm settings reach the API", async () => {
+    tts = loadTts()
     process.env.ELEVENLABS_VOICE_API_KEY = "test-only-voice-key"
     process.env.ELEVENLABS_VOICE_ID = "custom-default"
     process.env.ELEVENLABS_VOICE_ID_KK = "custom-kazakh"
@@ -266,6 +287,7 @@ try {
     assert.equal((await tts.POST(request({ text: "Сәлем", language: "kk", voice: "Kokoro M1 Calm", speed: 1 }))).status, 200)
   })
   await check("ElevenLabs JSON, empty and fake audio never count as speech", async () => {
+    tts = loadTts()
     for (const response of [Response.json({ error: "x".repeat(200) }), new Response("", { headers: { "content-type": "audio/mpeg" } }), new Response("x".repeat(300), { headers: { "content-type": "audio/mpeg" } })]) {
       globalThis.fetch = async () => response
       const result = await tts.POST(request({ text: "Сәлем", language: "kk" }))
@@ -276,6 +298,7 @@ try {
     }
   })
   await check("failed ElevenLabs can still use the existing Russian fallback", async () => {
+    tts = loadTts()
     process.env.XAI_API_KEY = "test-only-xai"
     calls.length = 0
     globalThis.fetch = async (url) => {
@@ -288,6 +311,7 @@ try {
     delete process.env.XAI_API_KEY
   })
   await check("English remains on Deepgram even when ElevenLabs is configured", async () => {
+    tts = loadTts()
     process.env.DEEPGRAM_API_KEY = "test-only-deepgram"
     calls.length = 0
     globalThis.fetch = async (url) => {
