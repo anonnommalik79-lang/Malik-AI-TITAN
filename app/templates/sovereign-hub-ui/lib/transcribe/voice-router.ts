@@ -1,12 +1,15 @@
 import { Buffer } from "node:buffer"
 
 import { repairTranscript, speechHintPrompt } from "@/lib/voice/speech-vocabulary"
+import { transcriptConfidence } from "@/lib/voice/transcript-choice"
 
 export type VoiceTranscribeResult = {
   ok: boolean
   text?: string
   language?: string
   durationSec?: number
+  /** -1 to 1; 0 when the provider reports nothing. */
+  confidence?: number
   provider?: "gemini" | "groq" | "cloudflare"
   model?: string
   latencyMs?: number
@@ -157,6 +160,10 @@ async function groqAttempt(data: ArrayBuffer, filename: string, mime: string, mo
       text,
       language: payload?.language ? String(payload.language) : undefined,
       durationSec: typeof payload?.duration === "number" ? payload.duration : undefined,
+      // verbose_json was already being requested and only `text` was read out of
+      // it. How sure the model was is the difference between trusting this
+      // transcript and preferring the browser's second opinion.
+      confidence: transcriptConfidence(payload),
       latencyMs,
     }
   } catch (error) {
@@ -246,6 +253,7 @@ export async function transcribeVoiceAudio(
         text: repairTranscript(result.text) || result.text,
         language: typeof (result as any).language === "string" ? (result as any).language : undefined,
         durationSec: typeof (result as any).durationSec === "number" ? (result as any).durationSec : undefined,
+        confidence: typeof (result as any).confidence === "number" ? (result as any).confidence : undefined,
         provider,
         model,
         latencyMs: result.latencyMs,

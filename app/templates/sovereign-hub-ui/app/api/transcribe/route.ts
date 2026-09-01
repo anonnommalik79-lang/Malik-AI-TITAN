@@ -66,6 +66,9 @@ async function handlePOST(request: Request) {
     ok: true,
     text: result.text,
     language: result.language,
+    // How sure the recognizer was, so the client can weigh this against the
+    // browser's own live transcript instead of discarding one of the two.
+    confidence: result.confidence,
     durationSec: measuredDuration,
     remainingSeconds: quota.remainingSeconds,
   })

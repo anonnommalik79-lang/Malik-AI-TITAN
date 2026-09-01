@@ -11,6 +11,7 @@ import { FluxTtsSession } from "@/lib/voice/flux-tts-client"
 import { VoiceAudioPlayer, unlockVoiceAudio } from "@/lib/voice/audio-playback"
 import { repairTranscript } from "@/lib/voice/speech-vocabulary"
 import { speechChunks } from "@/lib/voice/speech-chunks"
+import { chooseTranscript, conversationHint } from "@/lib/voice/transcript-choice"
 import { VOICE_HISTORY_TURNS, type VoiceMessage } from "@/lib/voice/conversation"
 
 type SpeechResult = { isFinal: boolean; 0: { transcript: string } }
@@ -43,7 +44,7 @@ type VoiceTurnPayload = {
   transcript?: string
   usedWeb?: boolean
 }
-type TranscribePayload = { ok?: boolean; text?: string; error?: string; remainingSeconds?: number }
+type TranscribePayload = { ok?: boolean; text?: string; error?: string; remainingSeconds?: number; confidence?: number }
 
 const STORAGE_KEY = "malik.voice.preferences.v4"
 
@@ -648,6 +649,8 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     setTitle("Распознаю")
     setSubtitle(languageRef.current === "kk" ? "Қазақша · қатаң режим" : languageRef.current === "ru" ? "Русский · строгий режим" : "English · strict mode")
     let prompt = ""
+    let whisperText = ""
+    let whisperConfidence = 0
     try {
       const form = new FormData()
       const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm"
@@ -658,6 +661,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       // and the same in reverse. Its own detection is better than the guess a
       // dropdown makes, and this was the whole "it hears something else" bug.
       form.append("language", "auto")
+      // What has already been said in this conversation. Whisper conditions on
+      // its prompt, so words used a moment ago become far more likely to be
+      // recognised now - which is what makes the second mention of a name land
+      // when the first one did not.
+      const hint = conversationHint(historyRef.current)
+      if (hint) form.append("prompt", hint)
       form.append("durationSec", String(Math.max(1, Math.round(durationSec * 10) / 10)))
       const response = await fetch("/api/transcribe", { method: "POST", body: form })
       const payload = await response.json().catch(() => ({})) as TranscribePayload
@@ -667,12 +676,21 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         setSubtitle("Доступ восстановится завтра")
         return
       }
-      if (response.ok && payload.ok && payload.text) {
-        prompt = payload.text.trim()
+      if (response.ok && payload.ok) {
+        whisperText = String(payload.text || "").trim()
+        whisperConfidence = typeof payload.confidence === "number" ? payload.confidence : 0
         if (typeof payload.remainingSeconds === "number") showNotice(`Осталось ${Math.max(0, Math.floor(payload.remainingSeconds))} сек. Voice сегодня`)
       }
     } catch {}
-    if (!prompt) prompt = browserFallback.trim()
+
+    // Two recognizers ran on this utterance and only one of them used to count.
+    // They fail differently, so the disagreement is information rather than a
+    // problem: see lib/voice/transcript-choice.ts.
+    prompt = chooseTranscript({
+      whisper: whisperText,
+      browser: browserFallback,
+      confidence: whisperConfidence,
+    }).text
     setBusy(false)
     if (!prompt) {
       setTitle("Не расслышал")

@@ -462,6 +462,79 @@ check("the reply is short enough to speak quickly", () => {
     "the model must be told to keep a spoken answer short")
 })
 
+// -------------------------------------------------- two recognizers, one answer
+const choice = await loadModule("lib/voice/transcript-choice.ts")
+const { chooseTranscript, transcriptConfidence, agreement, conversationHint } = choice
+
+console.log("\nusing both recognizers instead of throwing one away")
+
+check("the browser's transcript is no longer only a fallback", () => {
+  const client = codeOf("components/voice/VoiceMode.tsx")
+  assert.match(client, /chooseTranscript\(/, "both results must be weighed")
+  assert.ok(!/if \(!prompt\) prompt = browserFallback/.test(client),
+    "the live transcript must not be discarded whenever Whisper answered at all")
+})
+
+check("when the two agree, the punctuated version wins", () => {
+  const picked = chooseTranscript({
+    whisper: "Расскажи про эту площадку.",
+    browser: "расскажи про эту площадку",
+    confidence: 0.5,
+  })
+  assert.equal(picked.source, "agreed")
+  assert.equal(picked.text, "Расскажи про эту площадку.")
+})
+
+check("a truncated decode loses to the recognizer that heard the whole thing", () => {
+  // Whisper dropping the end of a long question is the common failure.
+  const picked = chooseTranscript({
+    whisper: "мне нужно",
+    browser: "мне нужно сделать сайт для кофейни в центре города",
+    confidence: 0.4,
+  })
+  assert.equal(picked.source, "browser")
+})
+
+check("a fluent sentence produced at low confidence is not trusted", () => {
+  const picked = chooseTranscript({
+    whisper: "Спасибо за просмотр, подпишитесь на канал.",
+    browser: "калайсын бауырым",
+    confidence: -0.6,
+  })
+  assert.equal(picked.source, "browser", "the classic Whisper hallucination must not win")
+})
+
+check("either one alone still works", () => {
+  assert.equal(chooseTranscript({ whisper: "привет" }).text, "привет")
+  assert.equal(chooseTranscript({ browser: "привет" }).text, "привет")
+  assert.equal(chooseTranscript({}).text, "")
+})
+
+check("confidence is read from what the recognizer already reported", () => {
+  const sure = transcriptConfidence({ segments: [{ avg_logprob: -0.15, no_speech_prob: 0.01 }] })
+  const unsure = transcriptConfidence({ segments: [{ avg_logprob: -1.1, no_speech_prob: 0.6 }] })
+  assert.ok(sure > unsure, "a clean decode must score above a guess")
+  assert.equal(transcriptConfidence({}), 0, "no data means no opinion, not low confidence")
+  const router = codeOf("lib/transcribe/voice-router.ts")
+  assert.match(router, /transcriptConfidence\(payload\)/, "verbose_json was requested; it must be read")
+})
+
+check("agreement is measured, not guessed", () => {
+  assert.ok(agreement("кот сидит на окне", "кот сидит на окне") > 0.99)
+  assert.ok(agreement("кот сидит на окне", "собака бежит по полю") < 0.2)
+})
+
+check("the conversation primes the recognizer for what comes next", () => {
+  const hint = conversationHint([
+    { role: "user", content: "расскажи про ChatGPT" },
+    { role: "assistant", content: "ChatGPT это ассистент от OpenAI" },
+  ])
+  assert.match(hint, /ChatGPT/, "words just used must be fed back as context")
+  assert.equal(conversationHint([]), "", "an empty conversation adds nothing")
+  const client = codeOf("components/voice/VoiceMode.tsx")
+  assert.match(client, /conversationHint\(historyRef\.current\)/)
+})
+
 // ------------------------------------------------------------- speaking early
 const chunks = await loadModule("lib/voice/speech-chunks.ts")
 const { speechChunks } = chunks
