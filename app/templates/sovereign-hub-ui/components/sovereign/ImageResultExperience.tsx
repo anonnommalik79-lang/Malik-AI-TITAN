@@ -226,7 +226,7 @@ export function ImageResultExperience() {
       }
       if (action === "favorite") {
         const favorite = toggleMalikImageFavorite(image.src)
-        actionButton.textContent = favorite ? "★" : "☆"
+        if (actionButton) actionButton.textContent = favorite ? "★" : "☆"
         setNotice(favorite ? "Добавлено в избранное" : "Убрано из избранного")
         return
       }
