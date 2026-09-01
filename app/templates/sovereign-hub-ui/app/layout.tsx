@@ -9,6 +9,7 @@ import { VideoCancelRuntime } from "@/components/sovereign/VideoCancelRuntime"
 import { SitesRouteFixRuntime } from "@/components/sovereign/SitesRouteFixRuntime"
 import { ImageResultExperience } from "@/components/sovereign/ImageResultExperience"
 import { ImageQualityRuntime } from "@/components/sovereign/ImageQualityRuntime"
+import { ChatHistoryQuotaGuard } from "@/components/sovereign/ChatHistoryQuotaGuard"
 import "./globals.css"
 import "./mobile-polish.css"
 import "./legendary-aurora.css"
@@ -190,6 +191,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }} />
       </head>
       <body translate="no" suppressHydrationWarning className="min-h-[100dvh] overflow-x-hidden bg-black font-sans antialiased notranslate">
+        <ChatHistoryQuotaGuard />
         <NoBlueUiGuard />
         <MalikSearchMotion />
         <MalikTurnRuntime />
