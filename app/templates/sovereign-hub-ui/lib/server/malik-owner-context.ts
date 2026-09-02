@@ -28,7 +28,7 @@ function cleanPrompt(body: any): string {
 
 function languageOf(prompt: string): "ru" | "kk" | "en" {
   const lower = prompt.toLowerCase()
-  if (/[әіңғүұқөһ]/iu.test(prompt) || /(?:^|\s)(сәлем|кім|мені|компания|негізін|құрды)(?:\s|$)/iu.test(lower)) return "kk"
+  if (/[әіңғүұқөһ]/iu.test(prompt) || /(?:^|\s)(сәлем|кім|мені|негізін|құрды|жасады|қай|қандай)(?:\s|$)/iu.test(lower)) return "kk"
   if (/[а-яё]/iu.test(prompt)) return "ru"
   return "en"
 }
@@ -132,11 +132,17 @@ export function withVerifiedOwnerChatContext(body: any): any {
     .slice(-10)
     .map((item: any) => ({ role: item.role, content: item.content }))
 
-  history.push({ role: "assistant", content: OWNER_CONTEXT })
+  const ownerMessage: ChatHistoryMessage = { role: "assistant", content: OWNER_CONTEXT }
+  if (history.at(-1)?.role === "user") {
+    // Keep the current user turn last so malik-model-router can remove the
+    // duplicate history copy before adding the clean current prompt.
+    history.splice(Math.max(0, history.length - 1), 0, ownerMessage)
+  } else {
+    history.push(ownerMessage)
+  }
 
   return {
     ...body,
     history,
-    messages: history,
   }
 }
