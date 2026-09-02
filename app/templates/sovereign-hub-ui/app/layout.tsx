@@ -73,6 +73,8 @@ import "./chat-black-surface-final.css"
 import "./image-result-experience.css"
 // Malik Image Ultra: 2K quality selector, library and favorites.
 import "./image-ultra-stack.css"
+// Absolute final surface authority: remove every legacy gold/yellow background glow.
+import "./malik-oled-black-no-gold-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
