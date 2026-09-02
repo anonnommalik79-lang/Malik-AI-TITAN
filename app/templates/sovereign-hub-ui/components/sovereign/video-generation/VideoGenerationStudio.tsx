@@ -560,7 +560,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
       <section className="mv__workspace">
         <header className="mv__header" data-preserve-brand-color="true">
-          <div>
+          <div className="mv__header-title">
             <span className="mv__eyebrow">MALIK VIDEO · WAN 2.7</span>
             <h1>Что вы хотите создать?</h1>
           </div>
@@ -703,6 +703,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv__showcase-video--result{width:100%;height:100%;display:block;background:#030303;object-fit:cover;object-position:center}
         .mv__showcase-vignette{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.12),transparent 24%,transparent 62%,rgba(0,0,0,.78)),linear-gradient(90deg,rgba(0,0,0,.14),transparent 36%)}
         .mv[data-result="1"] .mv__showcase-vignette{background:linear-gradient(180deg,rgba(0,0,0,.08),transparent 18%,transparent 78%,rgba(0,0,0,.2))}
+        .mv__header-title{overflow:visible!important;min-height:0}
+        .mv__header-title h1{margin-block-end:0}
         .mv__workspace{min-width:0;height:100dvh;overflow-y:auto;padding:34px clamp(28px,4vw,64px) 48px;background:#000;scrollbar-width:none;-ms-overflow-style:none}
         .mv__workspace::-webkit-scrollbar{display:none}
         .mv__header{max-width:1000px;margin:0 auto 24px;display:flex;justify-content:space-between;align-items:flex-start;gap:20px}

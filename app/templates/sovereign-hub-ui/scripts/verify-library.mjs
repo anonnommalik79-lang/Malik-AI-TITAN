@@ -129,8 +129,9 @@ check("a style can be handed to the site generator", () => {
   assert.ok(prompt.includes(template.category.toLowerCase()))
   assert.ok(prompt.includes(library.LIBRARY_STYLES[template.category].accent))
   assert.match(prompt, /Не копируй чужие логотипы/, "the direction, not a copy of the brand")
-  // And the panel must actually offer it.
-  assert.match(panel, /onUseStyle\?\.\(libraryPrompt\(template\), template\)/)
+  // The panel offers it from inside the opened template, not from the card -
+  // see "opening a template from the Library never navigates away" below.
+  assert.match(panel, /onUseStyle\?\.\(libraryPrompt\(t\), t\)/)
   const dashboard = codeOf("components/sovereign/dashboard.tsx")
   assert.match(dashboard, /<SiteLibraryPanel/)
   assert.match(dashboard, /safeOpenView\("website-generation", "template"\)/, "the hand-off must reach the generator")
@@ -170,6 +171,47 @@ for (const [label, file] of [
       "the caption must not be forced visible on mobile")
   })
 }
+
+console.log("\nthe template opens, and it is a template")
+
+check("both galleries open a running site, not a photograph of one", () => {
+  const sites = codeOf("components/sovereign/website-generation/WebsiteGenerationStudio.tsx")
+  // The Сайты gallery used to open a lightbox containing the card image. A
+  // picture of a homepage is not a template you can look at.
+  assert.match(sites, /<iframe[\s\S]{0,220}srcDoc=\{zoomedHtml\}/)
+  assert.match(sites, /buildTemplateSite/)
+  assert.match(sites, /GALLERY_STYLES/)
+  assert.match(panel, /<iframe[\s\S]{0,220}srcDoc=\{openedHtml\}/)
+})
+
+check("every category in the Сайты gallery can build a real site", () => {
+  const sites = fs.readFileSync("components/sovereign/website-generation/WebsiteGenerationStudio.tsx", "utf8")
+  const categories = new Set([...sites.matchAll(/\["[a-z0-9-]+", "[^"]+", "[^"]+", "([^"]+)",/g)].map((m) => m[1]))
+  const styled = new Set([...sites.matchAll(/^  "([^"]+)": \{ accent:/gm)].map((m) => m[1]))
+  assert.ok(categories.size >= 10, `expected the gallery's categories, found ${categories.size}`)
+  for (const category of categories) {
+    assert.ok(styled.has(category), `${category} has no colour or voice, so its templates cannot open`)
+  }
+})
+
+check("opening a template from the Library never navigates away", () => {
+  // A card action that jumped to the site generator meant a click anywhere near
+  // the bottom of a card threw the person out of the Library.
+  const actions = /<span className="libActions">([\s\S]*?)<\/span>/.exec(panel)?.[1] || ""
+  assert.ok(actions, "the card actions must still exist")
+  assert.doesNotMatch(actions, /onUseStyle/, "a card must not navigate")
+  assert.match(actions, /setOpened\(template\)/)
+  // Using a style stays available - inside the opened template, deliberately.
+  assert.match(panel, /libViewerActions[\s\S]{0,600}onUseStyle/)
+})
+
+check("a title is not something that scrolls", () => {
+  // An 8px scrollbar was being drawn beside "Что вы хотите создать?" because the
+  // div holding it inherited overflow-y:auto and its content stood 11px proud.
+  const video = codeOf("components/sovereign/video-generation/VideoGenerationStudio.tsx")
+  assert.match(video, /className="mv__header-title"/)
+  assert.match(video, /\.mv__header-title\{overflow:visible!important/)
+})
 
 console.log(failures ? `\n${failures} failing\n` : "\nall library checks passed\n")
 process.exit(failures ? 1 : 0)

@@ -201,9 +201,39 @@ export function libraryPrompt(template: LibraryTemplate) {
  * an iframe preview, a new browser tab, and a file the person downloads and
  * opens from their disk while still online.
  */
+/**
+ * What the builder needs to know. Deliberately not LibraryTemplate: the Сайты
+ * gallery has its own thirty templates with their own categories, and they get
+ * to be real working sites too rather than pictures of sites.
+ */
+export type SiteDescriptor = {
+  name: string
+  category: string
+  subcategory: string
+  preview: string
+  accent: string
+  headline: string
+  tagline: string
+  number: string
+}
+
 export function buildLibrarySite(template: LibraryTemplate, origin = "") {
   const style = LIBRARY_STYLES[template.category]
-  const number = String(template.id).padStart(3, "0")
+  return buildTemplateSite({
+    name: template.name,
+    category: template.category,
+    subcategory: template.subcategory,
+    preview: template.preview,
+    accent: style.accent,
+    headline: style.headline,
+    tagline: style.tagline,
+    number: String(template.id).padStart(3, "0"),
+  }, origin)
+}
+
+export function buildTemplateSite(template: SiteDescriptor, origin = "") {
+  const style = { accent: template.accent, headline: template.headline, tagline: template.tagline }
+  const number = template.number
   const name = escapeHtml(template.name)
   const base = origin.replace(/\/+$/, "")
 

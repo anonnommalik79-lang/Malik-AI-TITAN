@@ -217,9 +217,14 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
                   <b>{template.name}</b>
                   <small>{template.subcategory}</small>
                   <em style={{ ["--accent" as string]: LIBRARY_STYLES[template.category].accent }}>{template.category}</em>
+                  {/* Only one action on the card, and it opens the site. The
+                      second button used to be "use this style", which navigated
+                      to the generator - so a click anywhere near the bottom of a
+                      card threw the person out of the Library they were
+                      browsing. Using a style is now a decision made inside the
+                      open template, where it is unambiguous. */}
                   <span className="libActions">
-                    <button type="button" onClick={() => setOpened(template)}>Открыть</button>
-                    <button type="button" className="is-primary" onClick={() => onUseStyle?.(libraryPrompt(template), template)}>Использовать стиль</button>
+                    <button type="button" className="is-primary" onClick={() => setOpened(template)}>Открыть шаблон</button>
                   </span>
                 </span>
               </article>

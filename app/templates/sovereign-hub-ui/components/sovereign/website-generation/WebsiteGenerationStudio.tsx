@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import { ArrowLeft, Code2, ExternalLink, Globe2, Loader2, Plus, Search, Trash2, Upload } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
+import { buildTemplateSite } from "@/lib/library/site-library"
 
 export type WebsiteGenerationStudioProps = {
   username?: string
@@ -51,6 +52,53 @@ const SEEDS = [
   ["civitas-studio", "Civitas Studio", "Sustainable architecture", "Архитектура", "sustainable architecture, smart home, clean future, premium studio"],
   ["aegean-escape", "Aegean Escape", "Island travel", "Путешествия", "mediterranean island, white architecture, sea, premium travel editorial"],
 ] as const
+
+/**
+ * Every template here opens as a working website, not as a photograph.
+ *
+ * The card image is a mock-up of a homepage; on its own it is a picture and
+ * nothing more. Each category carries a colour and a voice, and those turn the
+ * shared site builder into thirty real, responsive, standalone pages - the same
+ * machinery the Library uses for its hundred.
+ */
+const GALLERY_STYLES: Record<string, { accent: string; headline: string; tagline: string }> = {
+  "Люкс": { accent: "#e8c274", headline: "TIMELESS BY DESIGN.", tagline: "Precision, character and craftsmanship made to outlive trends." },
+  "Авто": { accent: "#ffc107", headline: "BEYOND LIMITS.", tagline: "Performance engineered for a world that refuses to stand still." },
+  "Бренды": { accent: "#ff5f4d", headline: "MADE TO MOVE.", tagline: "A brand built on performance, presence and the will to keep going." },
+  "Аромат": { accent: "#d8a35f", headline: "A SIGNATURE IN THE AIR.", tagline: "A distinctive experience created with detail, depth and lasting presence." },
+  "Технологии": { accent: "#7cc7ff", headline: "BUILT FOR TOMORROW.", tagline: "Intelligent technology, refined for the way the future should feel." },
+  "Одежда": { accent: "#f1c6d9", headline: "ICONIC STYLE.", tagline: "A modern collection built around form, confidence and unmistakable identity." },
+  "Недвижимость": { accent: "#d9ba7c", headline: "OWN THE HORIZON.", tagline: "Exceptional spaces, considered architecture and a new standard of living." },
+  "Здоровье": { accent: "#7ce8b0", headline: "STRONGER, EVERY DAY.", tagline: "Training, recovery and nutrition built into one honest system." },
+  "Образование": { accent: "#9caeff", headline: "LEARN LIKE IT MATTERS.", tagline: "Serious teaching, modern tools and a path that actually finishes." },
+  "Еда": { accent: "#f0ad6a", headline: "TASTE, REIMAGINED.", tagline: "A cinematic dining experience where craft, atmosphere and flavour meet." },
+  "Путешествия": { accent: "#83d4ff", headline: "GO BEYOND.", tagline: "Extraordinary destinations designed around effortless, memorable travel." },
+  "Красота": { accent: "#e8a8c9", headline: "SKIN, HONESTLY.", tagline: "Formulated with restraint, tested properly and made to be used daily." },
+  "Финансы": { accent: "#a9b7c9", headline: "QUIET CONFIDENCE.", tagline: "Considered decisions, long horizons and a standard that does not move." },
+  "Интерьер": { accent: "#d7b48a", headline: "ROOMS THAT HOLD.", tagline: "Materials, light and proportion arranged so a space feels finished." },
+  "Спорт": { accent: "#b6ff4e", headline: "MOVE WITHOUT LIMITS.", tagline: "Performance, precision and energy engineered for the next move." },
+  "Архитектура": { accent: "#cfd6de", headline: "STRUCTURE AS INTENT.", tagline: "Sustainable building where every line answers to how people live." },
+}
+
+const FALLBACK_STYLE = { accent: "#e8c274", headline: "MAKE IT LEGENDARY.", tagline: "A premium interface system built around one clear idea." }
+
+function galleryStyle(category: string) {
+  return GALLERY_STYLES[category] || FALLBACK_STYLE
+}
+
+function templateSite(template: Template, origin: string) {
+  const style = galleryStyle(template.category)
+  return buildTemplateSite({
+    name: template.title,
+    category: template.category,
+    subcategory: template.subtitle,
+    preview: `/sites/gallery/${template.id}.webp`,
+    accent: style.accent,
+    headline: style.headline,
+    tagline: style.tagline,
+    number: String(template.index + 1).padStart(3, "0"),
+  }, origin)
+}
 
 const TEMPLATES: Template[] = SEEDS.map(([id, title, subtitle, category, direction], index) => ({
   id,
@@ -166,6 +214,28 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
       (!q || `${item.title} ${item.subtitle} ${item.category}`.toLowerCase().includes(q)),
     )
   }, [query, category])
+
+  const origin = typeof window === "undefined" ? "" : window.location.origin
+  const zoomedHtml = zoomed ? templateSite(zoomed, origin) : ""
+
+  const openTemplateInTab = () => {
+    if (!zoomedHtml) return
+    const url = URL.createObjectURL(new Blob([zoomedHtml], { type: "text/html" }))
+    window.open(url, "_blank", "noopener,noreferrer")
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+
+  const downloadTemplate = () => {
+    if (!zoomed || !zoomedHtml) return
+    const url = URL.createObjectURL(new Blob([zoomedHtml], { type: "text/html" }))
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `${zoomed.id}.html`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
 
   const useTemplate = (template: Template) => {
     setPrompt(template.prompt)
@@ -319,11 +389,14 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
               <div className="shotLightboxHead">
                 <div><b>{zoomed.title}</b><small>{zoomed.subtitle} · {zoomed.category}</small></div>
                 <div className="shotLightboxActions">
+                  <button className="secondaryButton" onClick={openTemplateInTab}>В новой вкладке</button>
+                  <button className="secondaryButton" onClick={downloadTemplate}>Скачать HTML</button>
                   <button className="primaryButton" onClick={() => { setZoomed(null); useTemplate(zoomed) }}>Использовать стиль</button>
                   <button className="secondaryButton" onClick={() => setZoomed(null)} aria-label="Закрыть">Закрыть ✕</button>
                 </div>
               </div>
-              <img src={`/sites/gallery/${zoomed.id}.webp`} alt={zoomed.title} width={1440} height={810} />
+              {/* The template, running. It used to be a photograph of one. */}
+              <iframe title={`Шаблон ${zoomed.title}`} srcDoc={zoomedHtml} sandbox="allow-scripts allow-popups" />
             </div>
           </div>
         )}
@@ -339,8 +412,8 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
 function SitesCss() {
   return <style jsx global>{`
     .malikSites{width:100%;height:100%;overflow:auto;background:#000;color:#f7f7f8;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}.malikSites *{box-sizing:border-box}.malikSites button,.malikSites input,.malikSites textarea{font:inherit}.malikSites button{cursor:pointer}.sitesWorkspace{width:calc(100% - 30px);max-width:1760px;margin:0 auto;padding:20px 0 64px}.galleryHero,.builderHero{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:4px 2px 18px;border-bottom:1px solid #17191d}.galleryHero>div>span,.builderTitle>div>span{display:block;margin-bottom:6px;color:#747a84;font-size:10px}.galleryHero h1,.builderHero h1{margin:0;font-size:clamp(38px,4vw,54px);line-height:.95;letter-spacing:-.055em}.galleryHero p,.builderHero p{max-width:800px;margin:8px 0 0;color:#8d929b;font-size:12px;line-height:1.55}.primaryButton,.secondaryButton{min-height:40px;border-radius:11px;padding:0 15px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:800}.primaryButton{border:0;background:#fff;color:#000}.secondaryButton{border:1px solid #30343b;background:#0d0f12;color:#fff}.primaryButton svg,.secondaryButton svg{width:16px;height:16px}.primaryButton:disabled,.secondaryButton:disabled{opacity:.45;cursor:not-allowed}.galleryTools{display:flex;align-items:center;gap:9px;padding-top:14px}.searchField{height:40px;flex:1;display:flex;align-items:center;gap:9px;border:1px solid #2b2f36;background:#121417;border-radius:11px;padding:0 12px}.searchField svg{width:16px;color:#777d87}.searchField input{width:100%;border:0;outline:0;background:transparent;color:#fff}.templateCount{height:40px;display:inline-flex;align-items:center;border:1px solid #292d34;background:#0c0e10;border-radius:11px;padding:0 12px;color:#a9aeb7;font-size:10px;white-space:nowrap}.categoryRow{display:flex;gap:7px;overflow-x:auto;padding:10px 0 2px}.categoryRow button{height:31px;border:1px solid #292d33;background:#0c0e10;color:#aeb2ba;border-radius:999px;padding:0 11px;font-size:10px;white-space:nowrap}.categoryRow button.active{background:#fff;border-color:#fff;color:#000;font-weight:850}.galleryHeading{margin:16px 0 10px}.galleryHeading h2,.savedSites h2{margin:0;font-size:24px;letter-spacing:-.03em}.galleryHeading p{margin:4px 0 0;color:#747a84;font-size:10px}
-    .templateGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;background:#000}.templateCard{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;padding:0;border:1px solid #15181c;border-radius:0;background:#0a0b0d;color:#fff;text-align:left;isolation:isolate}.templateShot{position:absolute;inset:0;width:100%;height:100%;padding:0;margin:0;border:0;background:#0a0b0d;cursor:zoom-in;display:block}.shotViewport{position:absolute;inset:0;display:block;overflow:hidden;background:#0a0b0d}.shotImage{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;object-position:center;max-width:none!important;margin:0!important;padding:0!important;border:0!important;pointer-events:none;user-select:none;transform:scale(1);transition:transform .5s cubic-bezier(.22,.61,.36,1)}.templateCard:hover .shotImage,.templateCard:focus-within .shotImage{transform:scale(1.045)}.templateShot:focus-visible{outline:2px solid #fff;outline-offset:-2px}.templateShade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,0) 34%,rgba(0,0,0,.34) 56%,rgba(0,0,0,.8) 78%,rgba(0,0,0,.96) 100%);opacity:0;transition:opacity .16s ease}.templateOverlay{position:absolute;left:0;right:0;bottom:0;padding:44px 10px 9px;display:grid;grid-template-columns:1fr auto;gap:3px 8px;opacity:0;transform:translateY(8px);transition:opacity .16s ease,transform .16s ease}.templateOverlay b{font-size:12px}.templateOverlay small{grid-column:1;color:#d2d5da;font-size:8px}.templateOverlay em{grid-column:2;grid-row:1/3;border:1px solid rgba(255,255,255,.22);background:rgba(0,0,0,.55);border-radius:999px;padding:3px 6px;font-size:7px;font-style:normal}.templateOverlay strong{grid-column:1/-1;height:30px;margin-top:5px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.96);color:#000;border-radius:7px;font-size:9px;font-weight:850;cursor:pointer;pointer-events:auto;transition:transform .14s ease}.templateOverlay strong:hover{transform:translateY(-1px)}.templateOverlay strong:focus-visible{outline:2px solid #fff;outline-offset:2px}.templateOverlay{pointer-events:none}.templateCard:hover .templateShade,.templateCard:hover .templateOverlay,.templateCard:focus-within .templateShade,.templateCard:focus-within .templateOverlay,.templateCard.is-open .templateShade,.templateCard.is-open .templateOverlay{opacity:1;transform:none}.shotLightbox{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.93);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:shotFade .16s ease}@keyframes shotFade{from{opacity:0}to{opacity:1}}.shotLightboxBox{width:min(1320px,96vw);max-height:94vh;overflow:auto;background:#08090a;border:1px solid #2b2f36;border-radius:16px;padding:12px}.shotLightboxHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap}.shotLightboxHead b{display:block;font-size:15px;letter-spacing:-.02em}.shotLightboxHead small{display:block;margin-top:2px;color:#828892;font-size:10px}.shotLightboxActions{display:flex;gap:8px;flex-wrap:wrap}.shotLightboxBox img{width:100%;height:auto;display:block;border-radius:10px;background:#0a0b0d}.savedSites{margin-top:28px}.savedRow{display:grid;grid-template-columns:1fr auto;border-top:1px solid #1b1e23;padding:8px 0}.savedRow button{border:0;background:transparent;color:#fff;text-align:left}.savedRow small{display:block;margin-top:3px;color:#6f7580;font-size:9px}.deleteSite svg{width:16px}
+    .templateGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;background:#000}.templateCard{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;padding:0;border:1px solid #15181c;border-radius:0;background:#0a0b0d;color:#fff;text-align:left;isolation:isolate}.templateShot{position:absolute;inset:0;width:100%;height:100%;padding:0;margin:0;border:0;background:#0a0b0d;cursor:zoom-in;display:block}.shotViewport{position:absolute;inset:0;display:block;overflow:hidden;background:#0a0b0d}.shotImage{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;object-position:center;max-width:none!important;margin:0!important;padding:0!important;border:0!important;pointer-events:none;user-select:none;transform:scale(1);transition:transform .5s cubic-bezier(.22,.61,.36,1)}.templateCard:hover .shotImage,.templateCard:focus-within .shotImage{transform:scale(1.045)}.templateShot:focus-visible{outline:2px solid #fff;outline-offset:-2px}.templateShade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,0) 34%,rgba(0,0,0,.34) 56%,rgba(0,0,0,.8) 78%,rgba(0,0,0,.96) 100%);opacity:0;transition:opacity .16s ease}.templateOverlay{position:absolute;left:0;right:0;bottom:0;padding:44px 10px 9px;display:grid;grid-template-columns:1fr auto;gap:3px 8px;opacity:0;transform:translateY(8px);transition:opacity .16s ease,transform .16s ease}.templateOverlay b{font-size:12px}.templateOverlay small{grid-column:1;color:#d2d5da;font-size:8px}.templateOverlay em{grid-column:2;grid-row:1/3;border:1px solid rgba(255,255,255,.22);background:rgba(0,0,0,.55);border-radius:999px;padding:3px 6px;font-size:7px;font-style:normal}.templateOverlay strong{grid-column:1/-1;height:30px;margin-top:5px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.96);color:#000;border-radius:7px;font-size:9px;font-weight:850;cursor:pointer;pointer-events:auto;transition:transform .14s ease}.templateOverlay strong:hover{transform:translateY(-1px)}.templateOverlay strong:focus-visible{outline:2px solid #fff;outline-offset:2px}.templateOverlay{pointer-events:none}.templateCard:hover .templateShade,.templateCard:hover .templateOverlay,.templateCard:focus-within .templateShade,.templateCard:focus-within .templateOverlay,.templateCard.is-open .templateShade,.templateCard.is-open .templateOverlay{opacity:1;transform:none}.shotLightbox{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.93);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:shotFade .16s ease}@keyframes shotFade{from{opacity:0}to{opacity:1}}.shotLightboxBox{width:min(1400px,97vw);height:min(92vh,980px);display:flex;flex-direction:column;overflow:hidden;background:#08090a;border:1px solid #2b2f36;border-radius:16px;padding:0}.shotLightboxBox iframe{flex:1;width:100%;border:0;display:block;background:#000}.shotLightboxHead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border-bottom:1px solid #1e2229;flex-wrap:wrap}.shotLightboxHead b{display:block;font-size:15px;letter-spacing:-.02em}.shotLightboxHead small{display:block;margin-top:2px;color:#828892;font-size:10px}.shotLightboxActions{display:flex;gap:8px;flex-wrap:wrap}.savedSites{margin-top:28px}.savedRow{display:grid;grid-template-columns:1fr auto;border-top:1px solid #1b1e23;padding:8px 0}.savedRow button{border:0;background:transparent;color:#fff;text-align:left}.savedRow small{display:block;margin-top:3px;color:#6f7580;font-size:9px}.deleteSite svg{width:16px}
     .builderTitle{display:flex;gap:12px;align-items:flex-start}.backButton{width:40px;height:40px;flex:0 0 auto;display:grid;place-items:center;border-radius:11px;border:1px solid #292d34;background:#0d0f12;color:#fff}.backButton svg{width:17px}.builderPanel{margin-top:12px;border:1px solid #1d2025;background:linear-gradient(180deg,#070708,#040404);border-radius:16px;padding:14px}.stepTitle{display:flex;align-items:flex-start;gap:10px;margin-bottom:11px}.stepTitle>b{width:26px;height:26px;flex:0 0 auto;display:grid;place-items:center;border-radius:50%;background:#fff;color:#000;font-size:11px}.stepTitle strong{display:block;font-size:14px}.stepTitle small{display:block;margin-top:3px;color:#737985;font-size:10px}.promptBox{width:100%;min-height:105px;resize:vertical;border:1px solid #30343c;background:#15171a;color:#fff;border-radius:11px;padding:13px;outline:none}.promptBox:focus{border-color:#4c515c}.siteError{margin:9px 0 0;color:#ff7b7b;font-size:10px}.quickGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.quickGrid button{position:relative;aspect-ratio:16/9;overflow:hidden;border:1px solid #15181c;background:#000;border-radius:0;padding:0;color:#fff}.quickGrid span:not(.shotViewport){position:absolute;left:0;right:0;bottom:0;padding:28px 8px 7px;background:linear-gradient(transparent,rgba(0,0,0,.92));text-align:left;font-size:9px;font-weight:800}.builderActions{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px}.livePreview{margin-top:13px;overflow:hidden;border:1px solid #242830;border-radius:14px}.browserBar{height:36px;display:flex;align-items:center;gap:6px;padding:0 10px;border-bottom:1px solid #24272d;background:#101216}.browserBar i{width:7px;height:7px;border-radius:50%;background:#4b5058}.browserBar span{margin-left:6px;color:#777d87;font-size:9px}.livePreview iframe{width:100%;height:650px;display:block;border:0;background:#fff}.spin{animation:siteSpin 1s linear infinite}@keyframes siteSpin{to{transform:rotate(360deg)}}
-    @media(max-width:1120px){.templateGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:720px){.sitesWorkspace{width:calc(100% - 16px);padding-top:12px}.galleryHero{display:block;padding-bottom:14px}.galleryHero h1,.builderHero h1{font-size:34px}.createButton{display:inline-flex;width:100%;margin-top:12px;height:44px}.templateCard{border-radius:12px;border-color:#1b1f24}.templateGrid{gap:10px}.templateOverlay{padding:64px 12px 12px}.templateOverlay b{font-size:15px;text-shadow:0 1px 10px rgba(0,0,0,.85)}.templateOverlay small{font-size:10.5px;color:#e6e8ec;text-shadow:0 1px 8px rgba(0,0,0,.85)}.templateOverlay em{font-size:8.5px;background:rgba(0,0,0,.68);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}.templateOverlay strong{height:38px;font-size:11.5px}.shotLightboxBox{padding:10px;border-radius:14px}.shotLightboxActions{width:100%}.shotLightboxActions .primaryButton{flex:1}.galleryTools{display:block}.templateCount{margin-top:8px;height:31px}.templateGrid{grid-template-columns:1fr;gap:6px}.templateShade{background:linear-gradient(180deg,rgba(0,0,0,0) 22%,rgba(0,0,0,.42) 48%,rgba(0,0,0,.82) 74%,rgba(0,0,0,.96) 100%)}.templateCard{border-radius:12px}.templateGrid{gap:10px}.templateShot::after{content:"";position:absolute;right:10px;bottom:10px;width:30px;height:30px;border-radius:50%;background:rgba(8,9,11,.62) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.2-3.2M11 8v6M8 11h6'/%3E%3C/svg%3E") center/16px no-repeat;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.16);opacity:.92;transition:opacity .16s ease}.templateCard.is-open .templateShot::after{opacity:0}.quickGrid{grid-template-columns:1fr;gap:6px}.builderActions .primaryButton,.builderActions .secondaryButton{flex:1 1 145px}.livePreview iframe{height:480px}}
+    @media(max-width:1120px){.templateGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:720px){.sitesWorkspace{width:calc(100% - 16px);padding-top:12px}.galleryHero{display:block;padding-bottom:14px}.galleryHero h1,.builderHero h1{font-size:34px}.createButton{display:inline-flex;width:100%;margin-top:12px;height:44px}.templateCard{border-radius:12px;border-color:#1b1f24}.templateGrid{gap:10px}.templateOverlay{padding:64px 12px 12px}.templateOverlay b{font-size:15px;text-shadow:0 1px 10px rgba(0,0,0,.85)}.templateOverlay small{font-size:10.5px;color:#e6e8ec;text-shadow:0 1px 8px rgba(0,0,0,.85)}.templateOverlay em{font-size:8.5px;background:rgba(0,0,0,.68);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}.templateOverlay strong{height:38px;font-size:11.5px}.shotLightboxBox{width:100%;height:94vh;border-radius:14px}.shotLightboxActions{width:100%}.shotLightboxActions .primaryButton{flex:1}.galleryTools{display:block}.templateCount{margin-top:8px;height:31px}.templateGrid{grid-template-columns:1fr;gap:6px}.templateShade{background:linear-gradient(180deg,rgba(0,0,0,0) 22%,rgba(0,0,0,.42) 48%,rgba(0,0,0,.82) 74%,rgba(0,0,0,.96) 100%)}.templateCard{border-radius:12px}.templateGrid{gap:10px}.templateShot::after{content:"";position:absolute;right:10px;bottom:10px;width:30px;height:30px;border-radius:50%;background:rgba(8,9,11,.62) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.2-3.2M11 8v6M8 11h6'/%3E%3C/svg%3E") center/16px no-repeat;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.16);opacity:.92;transition:opacity .16s ease}.templateCard.is-open .templateShot::after{opacity:0}.quickGrid{grid-template-columns:1fr;gap:6px}.builderActions .primaryButton,.builderActions .secondaryButton{flex:1 1 145px}.livePreview iframe{height:480px}}
   `}</style>
 }
