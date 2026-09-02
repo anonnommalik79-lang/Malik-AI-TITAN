@@ -124,7 +124,8 @@ export function SovereignVideoAuth() {
   return (
     <>
       <SovereignMobileRegister />
-      <main className="sva-root sva-desktop-only">
+      {/* Keep the original desktop TITAN artwork out of the neutral dashboard color guard. */}
+      <main className="sva-root sva-desktop-only" data-preserve-brand-color="true">
       <div className="sva-bg-layer" aria-hidden="true" />
       <img
         className="sva-bg"

@@ -53,75 +53,9 @@ html.malik-auth-active #malik-investor-aurora,
     display: none !important;
   }
 
-  /* Desktop only: restore the original TITAN dragon scene. */
-  html:has(#malik-root .sva-desktop-only),
-  body:has(#malik-root .sva-desktop-only),
-  #malik-root:has(.sva-desktop-only) {
-    background: #01030a !important;
-    background-color: #01030a !important;
-  }
-
-  #malik-root .sva-desktop-only.sva-root {
-    position: relative !important;
-    min-height: 100dvh !important;
-    overflow: hidden !important;
-    isolation: isolate !important;
-    background: #01030a !important;
-  }
-
-  #malik-root .sva-desktop-only .sva-bg {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    position: absolute !important;
-    inset: 0 !important;
-    z-index: 1 !important;
-    width: 100% !important;
-    height: 100% !important;
-    max-width: none !important;
-    object-fit: cover !important;
-    object-position: 67% 45% !important;
-    mix-blend-mode: normal !important;
-    filter: brightness(1.22) contrast(1.08) saturate(1.24) !important;
-  }
-
-  #malik-root .sva-desktop-only .sva-bg-layer {
-    z-index: 0 !important;
-    background: #01030a !important;
-    opacity: 1 !important;
-  }
-
-  /* Darken only the form side; never paint over the dragon half. */
-  #malik-root .sva-desktop-only .sva-left-shadow {
-    z-index: 2 !important;
-    opacity: 1 !important;
-    background:
-      radial-gradient(ellipse 520px 330px at 5% 8%, rgba(0,0,0,.70) 0%, rgba(0,0,0,.38) 45%, transparent 76%),
-      linear-gradient(90deg, rgba(0,0,0,.72) 0%, rgba(0,0,0,.46) 24%, rgba(0,0,0,.10) 46%, transparent 62%) !important;
-  }
-
-  #malik-root .sva-desktop-only .sva-top-clear {
-    z-index: 3 !important;
-    opacity: 1 !important;
-    background: linear-gradient(180deg, rgba(0,0,0,.08), transparent 24%, transparent 82%, rgba(0,0,0,.08)) !important;
-  }
-
-  #malik-root .sva-desktop-only .sva-dragon-aura {
-    z-index: 4 !important;
-    opacity: 1 !important;
-    background:
-      radial-gradient(ellipse 36% 38% at 72% 36%, rgba(36,214,255,.12), transparent 72%),
-      radial-gradient(ellipse 38% 44% at 79% 60%, rgba(220,53,255,.13), transparent 74%) !important;
-  }
-
-  #malik-root .sva-desktop-only .sva-wind {
-    opacity: .92 !important;
-    visibility: visible !important;
-  }
-
-  #malik-root .sva-desktop-only .sva-shell,
+  /* Keep the glass surface from 68af0a6; mobile-polish's generic first-section
+     gold background must not replace the original desktop registration card. */
   #malik-root .sva-desktop-only .sva-card {
-    position: relative !important;
-    z-index: 10 !important;
+    background: linear-gradient(168deg, rgba(8,12,28,.88) 0%, rgba(6,8,22,.78) 38%, rgba(10,6,24,.72) 100%) !important;
   }
 }
