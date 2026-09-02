@@ -81,6 +81,8 @@ import "./image-ultra-stack.css"
 import "./malik-oled-black-no-gold-final.css"
 // Zero-token MALIK response DNA + requested ⚡ reaction. Pure black/neutral surfaces only.
 import "./malik-cognitive-response-final.css"
+// Absolute final chat icon authority: crisp Malik mark + centered response model badge.
+import "./chat-icon-alignment-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
