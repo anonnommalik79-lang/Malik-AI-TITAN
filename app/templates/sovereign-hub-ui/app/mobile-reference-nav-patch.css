@@ -46,8 +46,13 @@
     color: #fff !important;
   }
 
-  /* Avoid exposing the old AI-prefill Translator duplicate in the phone drawer. */
-  nav[aria-label="Основная навигация"] .malik-sidebar-primary:nth-child(5) {
-    display: none !important;
-  }
+  /* A rule here used to hide .malik-sidebar-primary:nth-child(5), written to
+     remove a duplicated Translator entry from the phone drawer. It counted
+     positions in a list that has changed since. The fifth item was Сайты, so
+     the entire Sites section vanished from mobile navigation - and once Voice
+     was added to the list it started hiding Плагины instead.
+
+     A menu item is not its position. If an entry ever needs hiding again, hide
+     it by [data-action-id="..."], which cannot drift when the list is
+     reordered. */
 }

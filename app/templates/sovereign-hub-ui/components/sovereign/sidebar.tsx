@@ -402,7 +402,7 @@ function SidebarInner({
         {PRIMARY_ACTIONS.map((action) => {
           const Icon = action.icon
           const active = action.view === activeView
-          return <button key={action.id} type="button" aria-current={active ? "page" : undefined} onClick={() => runAction(action)} className={cn("malik-sidebar-primary", active && "is-active")}><Icon className="h-[17px] w-[17px]" /><span>{action.label}</span></button>
+          return <button key={action.id} data-action-id={action.id} type="button" aria-current={active ? "page" : undefined} onClick={() => runAction(action)} className={cn("malik-sidebar-primary", active && "is-active")}><Icon className="h-[17px] w-[17px]" /><span>{action.label}</span></button>
         })}
       </nav>
 

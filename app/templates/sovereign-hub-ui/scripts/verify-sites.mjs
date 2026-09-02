@@ -189,3 +189,53 @@ assert.match(engine, /understood/, "Планировщик обязан отчи
 assert.match(engine, /Never "Добро пожаловать"/, "Промпт должен прямо запрещать шаблонные заголовки")
 
 console.log(`✅ Sites: планировщик без привязки к модели, ${SITE_SKILLS.length} скиллов с правилами, качество плана проверяется`)
+
+/**
+ * The gallery shows thirty photographs, one per template.
+ *
+ * They used to be a single 42KB sprite blown up to 300%x1000% and shifted by
+ * CSS so one tile showed through. Thirty tiles inside 42KB is about 1.4KB each,
+ * which is why every card looked soft and grey: there was nothing in there to
+ * show.
+ */
+{
+  const fsx = await import("node:fs")
+  const studio = fsx.readFileSync("components/sovereign/website-generation/WebsiteGenerationStudio.tsx", "utf8")
+  const ids = [...studio.matchAll(/\["([a-z0-9-]+)", "[^"]+", "[^"]+", "[^"]+",/g)].map((m) => m[1])
+
+  assert.equal(ids.length, 30, "thirty templates")
+  for (const id of ids) {
+    const file = `public/sites/gallery/${id}.webp`
+    assert.ok(fsx.existsSync(file), `${id} has no preview photograph`)
+    const bytes = fsx.statSync(file).size
+    // A real photograph, not a placeholder or a slice of a sprite.
+    assert.ok(bytes > 20_000, `${id} preview is only ${bytes} bytes`)
+    assert.ok(bytes < 400_000, `${id} preview is ${Math.round(bytes / 1024)}KB - too heavy for a card`)
+  }
+  console.log("30 template previews -> PASS")
+
+  assert.doesNotMatch(studio, /templates-sprite|spriteImage|spriteViewport/, "the sprite must be gone")
+  assert.ok(!fsx.existsSync("public/sites/legendary-gallery/templates-sprite.jpg"), "the sprite file must be gone")
+  console.log("sprite removed -> PASS")
+
+  // Photographs below the fold must not be fetched until they are needed.
+  assert.match(studio, /loading=\{priority \? "eager" : "lazy"\}/)
+  assert.match(studio, /width=\{1440\}[\s\S]{0,80}height=\{810\}/, "intrinsic size stops the grid jumping")
+  console.log("lazy loading and stable layout -> PASS")
+
+  // Clicking a photograph opens it large; the button under it picks the style.
+  assert.match(studio, /shotLightbox/)
+  assert.match(studio, /event\.key === "Escape"/, "Escape must close the lightbox")
+  assert.match(studio, /document\.body\.style\.overflow = "hidden"/, "the page must not scroll behind it")
+  console.log("photo lightbox -> PASS")
+
+  // The Sites entry disappeared from the phone drawer because a CSS rule hid
+  // the fifth item by position, and the list had changed underneath it.
+  const navPatch = fsx.readFileSync("app/mobile-reference-nav-patch.css", "utf8")
+  assert.doesNotMatch(navPatch, /malik-sidebar-primary:nth-child\(\d+\)\s*\{[^}]*display:\s*none/,
+    "menu items must never be hidden by their position in the list")
+  const sidebar = fsx.readFileSync("components/sovereign/sidebar.tsx", "utf8")
+  assert.match(sidebar, /data-action-id=\{action\.id\}/, "nav items need a stable identity to target")
+  assert.match(sidebar, /id: "websites", label: "Сайты"/)
+  console.log("Сайты reachable on mobile -> PASS")
+}
