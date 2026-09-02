@@ -45,11 +45,11 @@ export function maxVideoPromptLength(): number {
 }
 
 export function imageProviderTimeoutMs(): number {
-  // This is an availability ceiling, not a quality knob. Successful renders use
-  // exactly the same model, steps, guidance and prompt as before. A dead image
-  // endpoint simply stops holding the whole sequential fallback chain for 90s.
-  const n = Number(process.env.IMAGE_PROVIDER_TIMEOUT_MS || 20_000)
-  return Number.isFinite(n) && n > 0 ? n : 20_000
+  // Provider-level safety net. image-router gives the preferred quality model a
+  // 50s route window and only shortens *fallback* attempts, so normal renders do
+  // not lose model time or fidelity while dead endpoints can no longer stall UI.
+  const n = Number(process.env.IMAGE_PROVIDER_TIMEOUT_MS || 60_000)
+  return Number.isFinite(n) && n > 0 ? n : 60_000
 }
 
 export function imagePromptCompilerTimeoutMs(): number {
