@@ -66,6 +66,12 @@ const WebsiteGenerationStudio = dynamic(
   () => import("./website-generation/WebsiteGenerationStudio").then((mod) => mod.WebsiteGenerationStudio),
   { ssr: false },
 )
+// A hundred previews and a hundred rendered sites: loaded when the Library is
+// opened, not on every page view.
+const SiteLibraryPanel = dynamic(
+  () => import("./library/SiteLibraryPanel").then((mod) => mod.SiteLibraryPanel),
+  { ssr: false },
+)
 const DigitalBridgeSectionExperience = dynamic(
   () => import("./digital-bridge-sections").then((mod) => mod.DigitalBridgeSectionExperience),
   { ssr: false },
@@ -6522,7 +6528,16 @@ const shouldShowMobilePreviewButton =
       return <SovereignSettingsPanel username={userDisplayName || username} email={guestMode ? undefined : workOSUser?.email} plan={currentPlan} selectedModelId={selectedModelId} onModelChange={handleModelChange} onLogout={handleLogout} onClose={closeAccountPanel} onOpenBilling={() => safeOpenView("billing")} onExport={exportConversations} />;
     }
     if (activeView === "templates") {
-      return <TemplateGalleryPanel onLaunchTemplate={launchTemplate} />;
+      // The Library hands a style straight to the site generator. Without that
+      // it is a hundred pictures nobody can do anything with.
+      return (
+        <SiteLibraryPanel
+          onUseStyle={(prompt) => {
+            prefillPrompt(prompt)
+            safeOpenView("website-generation", "template")
+          }}
+        />
+      );
     }
     if (activeView === "projects") {
       const projectChats = chats.filter((chat) =>
