@@ -53,36 +53,109 @@ html.malik-auth-active #malik-investor-aurora,
     display: none !important;
   }
 
-  /* Use the supplied image without filters or the old dragon's effects. */
-  #malik-root .sva-desktop-only {
-    --auth-art-width: max(100vw, calc(100dvh * 1717 / 916));
-    --auth-art-height: max(100dvh, calc(100vw * 916 / 1717));
+  #malik-root .sva-desktop-only.sva-root {
+    background: #000;
+  }
+
+  /* One uniformly scaled canvas: the entire original image always fits, and
+     the live form covers its printed counterpart at every desktop size. */
+  #malik-root .sva-desktop-only .sva-scene {
+    --sva-scene-scale: 1;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 1717px;
+    height: 916px;
+    transform: translate(-50%, -50%) scale(var(--sva-scene-scale));
+    transform-origin: center;
+  }
+
+  @supports (transform: scale(calc(100vw / 1px))) {
+    #malik-root .sva-desktop-only .sva-scene {
+      --sva-scene-scale: min(calc(100vw / 1717px), calc(100dvh / 916px));
+    }
   }
 
   #malik-root .sva-desktop-only .sva-bg {
+    object-fit: contain;
     object-position: center;
     filter: none;
   }
 
+  #malik-root .sva-desktop-only .sva-left-shadow,
   #malik-root .sva-desktop-only .sva-top-clear,
   #malik-root .sva-desktop-only .sva-dragon-aura,
-  #malik-root .sva-desktop-only .sva-wind {
+  #malik-root .sva-desktop-only .sva-wind,
+  #malik-root .sva-desktop-only .sva-card-header-veil,
+  #malik-root .sva-desktop-only .sva-card-corner-mask,
+  #malik-root .sva-desktop-only .sva-card-glow,
+  #malik-root .sva-desktop-only .sva-card-aura,
+  #malik-root .sva-desktop-only .sva-card-line {
     display: none;
   }
 
-  /* Cover only the form printed into the supplied image. The real form stays
-     interactive above it; the image file itself is not edited or recompressed. */
-  #malik-root .sva-desktop-only .sva-left-shadow {
+  #malik-root .sva-desktop-only .sva-shell {
     inset: auto;
-    left: calc((100vw - var(--auth-art-width)) / 2 + var(--auth-art-width) * 49 / 1717);
-    top: calc((100dvh - var(--auth-art-height)) / 2 + var(--auth-art-height) * 159 / 916);
-    width: calc(var(--auth-art-width) * 440 / 1717);
-    height: calc(var(--auth-art-height) * 510 / 916);
-    border-radius: 20px;
-    background: #060912;
+    left: 49px;
+    top: 159px;
+    width: 440px;
+    height: 510px;
+    padding: 0;
+    align-items: stretch;
   }
 
   #malik-root .sva-desktop-only .sva-card {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    padding: 22px 28px 24px;
+    border-radius: 20px;
     background: linear-gradient(168deg, #080c1c 0%, #060816 38%, #0a0618 100%) !important;
+    box-shadow: none;
+    animation: none;
+    scrollbar-width: thin;
   }
+
+  #malik-root .sva-desktop-only .sva-hero { margin-bottom: 10px; }
+  #malik-root .sva-desktop-only .sva-pill {
+    height: 22px;
+    padding: 4px 10px;
+    font-size: 9px;
+    line-height: 12px;
+  }
+  #malik-root .sva-desktop-only .sva-h1 {
+    margin: 14px 0 0;
+    font-size: 36px;
+    line-height: 1;
+  }
+  #malik-root .sva-desktop-only .sva-tagline {
+    display: block;
+    margin: 8px 0 0;
+    font-size: 10px;
+    line-height: 14px;
+  }
+  #malik-root .sva-desktop-only .sva-mode-toggle {
+    margin-top: 6px;
+    font-size: 10px;
+    line-height: 14px;
+  }
+  #malik-root .sva-desktop-only .sva-field { gap: 4px; margin-bottom: 10px; }
+  #malik-root .sva-desktop-only .sva-field > span { font-size: 9px; line-height: 12px; }
+  #malik-root .sva-desktop-only .sva-field input {
+    height: 38px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+  #malik-root .sva-desktop-only .sva-cta { height: 38px; margin-top: 2px; border-radius: 10px; }
+  #malik-root .sva-desktop-only .sva-cta span { font-size: 13px; }
+  #malik-root .sva-desktop-only .sva-divider { margin: 10px 0 8px; }
+  #malik-root .sva-desktop-only .sva-divider small { font-size: 9px; line-height: 12px; }
+  #malik-root .sva-desktop-only .sva-socials { margin-bottom: 5px; }
+  #malik-root .sva-desktop-only .sva-socials button,
+  #malik-root .sva-desktop-only .sva-guest {
+    height: 32px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+  #malik-root .sva-desktop-only .sva-guest { margin: 0; }
 }

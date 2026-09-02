@@ -1,6 +1,6 @@
 "use client";
 
-import React, { FormEvent, useCallback, useRef, useState } from "react";
+import React, { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronRight, Eye, EyeOff, Lock, Mail, User } from "lucide-react";
 import SovereignMobileRegister from "@/components/sovereign/SovereignMobileRegister";
 import { AUTH_DRAGON_BACKGROUND, AUTH_DRAGON_JPG } from "@/lib/brand-assets";
@@ -121,11 +121,23 @@ export function SovereignVideoAuth() {
     window.location.assign("/guest");
   }, [isOpening]);
 
+  const sceneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The artwork and real form share one coordinate system, so they cannot drift.
+    const fitScene = () => sceneRef.current?.style.setProperty(
+      "--sva-scene-scale", String(Math.min(window.innerWidth / 1717, window.innerHeight / 916)),
+    );
+    fitScene();
+    window.addEventListener("resize", fitScene);
+    return () => window.removeEventListener("resize", fitScene);
+  }, []);
+
   return (
     <>
       <SovereignMobileRegister />
       {/* Keep the original desktop TITAN artwork out of the neutral dashboard color guard. */}
       <main className="sva-root sva-desktop-only" data-preserve-brand-color="true">
+      <div className="sva-scene" ref={sceneRef}>
       <div className="sva-bg-layer" aria-hidden="true" />
       <img
         className="sva-bg"
@@ -274,6 +286,7 @@ export function SovereignVideoAuth() {
             {message && <p className="sva-message">{message}</p>}
           </form>
         </section>
+      </div>
       </div>
 
       <style>{styles}</style>

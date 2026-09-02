@@ -16,6 +16,11 @@ assert.match(auth, /\.sva-shell\s*\{\s*position: absolute;/)
 assert.match(auth, /@media \(max-width: 980px\)\s*\{\s*\.sva-desktop-only\s*\{ display: none !important;/)
 assert.doesNotMatch(isolation, /position:\s*relative\s*!important/)
 assert.doesNotMatch(isolation, /opacity:\s*\.92\s*!important/)
+assert.match(auth, /Math\.min\(window\.innerWidth \/ 1717, window\.innerHeight \/ 916\)/)
+assert.match(auth, /<div className="sva-scene" ref=\{sceneRef\}>/)
+assert.match(isolation, /object-fit: contain;/)
+assert.match(isolation, /left: 49px;\s*top: 159px;\s*width: 440px;\s*height: 510px;/)
+assert.doesNotMatch(isolation, /--auth-art-width|--auth-art-height/)
 
 assert.ok(isolation.includes("background: linear-gradient(168deg, #080c1c 0%, #060816 38%, #0a0618 100%) !important;"), "The real form must cover the printed form in the artwork")
 
