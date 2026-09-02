@@ -1,0 +1,1 @@
+V7 loader must use its own demo assets, never /library/gallery. Progress UI must remain visible below the square while generation is active.
