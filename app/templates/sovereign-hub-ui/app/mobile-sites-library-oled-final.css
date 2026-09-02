@@ -1,0 +1,188 @@
+/* Absolute mobile authority for Sites + Site Library.
+   Goal: OLED black surfaces, five category chips per page + next arrow,
+   and no grey rails/pills on preview cards. */
+@media (max-width: 820px) {
+  #malik-root .malikSites,
+  #malik-root .malikSites .sitesWorkspace,
+  #malik-root .malikSites .galleryHero,
+  #malik-root .malikSites .galleryTools,
+  #malik-root .malikSites .galleryHeading,
+  #malik-root .malikSites .templateGrid,
+  #malik-root .malikLibrary,
+  #malik-root .malikLibrary .libWorkspace,
+  #malik-root .malikLibrary .libHero,
+  #malik-root .malikLibrary .libTools,
+  #malik-root .malikLibrary .libHeading,
+  #malik-root .malikLibrary .libGrid {
+    background: #000 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .malikSites .galleryHero,
+  #malik-root .malikLibrary .libHero {
+    border-color: #111 !important;
+  }
+
+  /* Search/filter surfaces: dark enough to read as black, not grey cards. */
+  #malik-root .malikSites .searchField,
+  #malik-root .malikSites .templateCount,
+  #malik-root .malikLibrary .libSearch,
+  #malik-root .malikLibrary .libSort,
+  #malik-root .malikLibrary .libFavFilter {
+    background: #050505 !important;
+    background-image: none !important;
+    border-color: #202020 !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .malikSites .searchField input,
+  #malik-root .malikLibrary .libSearch input {
+    background: transparent !important;
+  }
+
+  /* The runtime marks exactly five category buttons visible and appends the arrow. */
+  #malik-root .categoryRow,
+  #malik-root .libCategories {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) 34px !important;
+    align-items: center !important;
+    gap: 5px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    padding: 9px 0 4px !important;
+    background: #000 !important;
+    scrollbar-width: none !important;
+  }
+
+  #malik-root .categoryRow::-webkit-scrollbar,
+  #malik-root .libCategories::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  #malik-root .categoryRow > button:not(.malik-category-next),
+  #malik-root .libCategories > button:not(.malik-category-next) {
+    display: block !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 32px !important;
+    margin: 0 !important;
+    padding: 0 4px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    border-radius: 999px !important;
+    border: 1px solid #202020 !important;
+    background: #080808 !important;
+    color: #aaaeb5 !important;
+    font-size: 8.5px !important;
+    line-height: 30px !important;
+    text-align: center !important;
+  }
+
+  #malik-root .categoryRow > button[data-malik-category-visible="0"],
+  #malik-root .libCategories > button[data-malik-category-visible="0"] {
+    display: none !important;
+  }
+
+  #malik-root .categoryRow > button.active,
+  #malik-root .libCategories > button.is-active {
+    background: #fff !important;
+    border-color: #fff !important;
+    color: #000 !important;
+    font-weight: 800 !important;
+  }
+
+  #malik-root .categoryRow > .malik-category-next,
+  #malik-root .libCategories > .malik-category-next {
+    display: grid !important;
+    place-items: center !important;
+    min-width: 34px !important;
+    width: 34px !important;
+    max-width: 34px !important;
+    height: 32px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 999px !important;
+    border: 1px solid #242424 !important;
+    background: #080808 !important;
+    color: #fff !important;
+    font-size: 23px !important;
+    line-height: 1 !important;
+  }
+
+  #malik-root .categoryRow > .malik-category-next span,
+  #malik-root .libCategories > .malik-category-next span {
+    display: block !important;
+    transform: translateY(-1px) !important;
+  }
+
+  /* Site preview cards: image edge meets pure black, with no grey footer/rail. */
+  #malik-root .malikSites .templateGrid,
+  #malik-root .malikSites .templateCard,
+  #malik-root .malikSites .templateShot,
+  #malik-root .malikSites .shotViewport,
+  #malik-root .malikLibrary .libGrid,
+  #malik-root .malikLibrary .libCard,
+  #malik-root .malikLibrary .libShot {
+    background: #000 !important;
+    box-shadow: none !important;
+    scrollbar-width: none !important;
+  }
+
+  #malik-root .malikSites .templateCard::-webkit-scrollbar,
+  #malik-root .malikSites .templateShot::-webkit-scrollbar,
+  #malik-root .malikLibrary .libCard::-webkit-scrollbar,
+  #malik-root .malikLibrary .libShot::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  #malik-root .malikSites .templateCard,
+  #malik-root .malikLibrary .libCard {
+    border-color: #141414 !important;
+  }
+
+  #malik-root .malikSites .templateShade,
+  #malik-root .malikLibrary .libShade {
+    background: linear-gradient(180deg, transparent 48%, rgba(0,0,0,.38) 68%, #000 100%) !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .malikSites .templateOverlay,
+  #malik-root .malikLibrary .libMeta {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Remove the tall grey/category pill that was sitting on the right side of thumbnails. */
+  #malik-root .malikLibrary .libMeta em,
+  #malik-root .malikSites .templateOverlay em {
+    display: none !important;
+  }
+
+  /* Keep a clean picture until the user explicitly opens the card. */
+  #malik-root .malikSites .templateCard:not(.is-open) .templateShade,
+  #malik-root .malikSites .templateCard:not(.is-open) .templateOverlay,
+  #malik-root .malikLibrary .libCard:not(.is-open) .libShade,
+  #malik-root .malikLibrary .libCard:not(.is-open) .libMeta {
+    opacity: 0 !important;
+    transform: none !important;
+  }
+
+  #malik-root .malikLibrary .libFav {
+    display: none !important;
+  }
+
+  #malik-root .malikSites .galleryHeading,
+  #malik-root .malikLibrary .libHeading {
+    border: 0 !important;
+    box-shadow: none !important;
+    margin-top: 10px !important;
+  }
+}
