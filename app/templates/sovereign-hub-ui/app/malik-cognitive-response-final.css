@@ -1,0 +1,161 @@
+/* MALIK COGNITIVE RESPONSE — zero-token UI layer.
+ * Pure black / neutral only. The only gold-like element is the literal ⚡ emoji
+ * requested as Malik's reaction; no page glow or yellow background is added.
+ */
+
+#malik-root .malik-message-row-user .malik-message-stack {
+  position: relative;
+  overflow: visible !important;
+}
+
+#malik-root .malik-user-lightning-reaction {
+  position: absolute;
+  right: 2px;
+  bottom: -18px;
+  z-index: 5;
+  display: inline-grid;
+  min-width: 29px;
+  height: 29px;
+  place-items: center;
+  padding: 0 6px;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 999px;
+  background: #111 !important;
+  background-image: none !important;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  box-shadow: 0 7px 22px rgba(0,0,0,.48) !important;
+  user-select: none;
+  animation: malikLightningIn 180ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+@keyframes malikLightningIn {
+  from { opacity: 0; transform: translateY(4px) scale(.72); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+#malik-root .malik-cognitive-response {
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 0;
+  background: transparent !important;
+  background-image: none !important;
+  color: #a7a7ad;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+#malik-root .malik-cognitive-strip {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 9.5px;
+  font-weight: 760;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+#malik-root .malik-cognitive-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #f5f5f5;
+}
+
+#malik-root .malik-cognitive-brand b {
+  font-size: 12px;
+  line-height: 1;
+}
+
+#malik-root .malik-cognitive-brand strong {
+  font: inherit;
+  color: #f5f5f5;
+}
+
+#malik-root .malik-cognitive-mode {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 999px;
+  padding: 0 7px;
+  background: #0d0d0e !important;
+  background-image: none !important;
+  color: #929298;
+  box-shadow: none !important;
+}
+
+#malik-root .malik-cognitive-flow {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 0 2px;
+  color: #77777d;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#malik-root .malik-cognitive-flow::-webkit-scrollbar {
+  display: none;
+}
+
+#malik-root .malik-cognitive-node {
+  display: inline-flex;
+  min-height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 8px;
+  padding: 0 8px;
+  background: #090909 !important;
+  background-image: none !important;
+  color: #a8a8ad;
+  font-size: 10px;
+  font-weight: 620;
+  letter-spacing: -.005em;
+  box-shadow: none !important;
+}
+
+#malik-root .malik-cognitive-flow > i {
+  flex: 0 0 auto;
+  color: #55555a;
+  font-size: 11px;
+  font-style: normal;
+}
+
+@media (max-width: 700px) {
+  #malik-root .malik-user-lightning-reaction {
+    right: 0;
+    bottom: -17px;
+    min-width: 27px;
+    height: 27px;
+    font-size: 14px;
+  }
+
+  #malik-root .malik-cognitive-response {
+    margin-bottom: 8px;
+  }
+
+  #malik-root .malik-cognitive-strip {
+    gap: 6px;
+    font-size: 9px;
+  }
+
+  #malik-root .malik-cognitive-node {
+    min-height: 23px;
+    padding-inline: 7px;
+    font-size: 9.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #malik-root .malik-user-lightning-reaction {
+    animation: none !important;
+  }
+}
