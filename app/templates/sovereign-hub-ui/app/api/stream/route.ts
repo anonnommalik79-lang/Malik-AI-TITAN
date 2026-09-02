@@ -4,6 +4,8 @@ import {
   malikModelErrorPayload,
   resolveStrictMalikSelection,
 } from "@/lib/server/malik-model-router"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
 import { isFeatureDisabled, readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
@@ -25,6 +27,37 @@ function textResponse(content: string) {
       "content-type": "text/plain; charset=utf-8",
       "cache-control": "no-store",
       "x-malik-router": "github-openrouter-deepseek-v13",
+    },
+  })
+}
+
+function identitySseResponse(content: string, selectedModelId?: string) {
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(`event: content\ndata: ${JSON.stringify({ type: "content", content, at: Date.now() })}\n\n`))
+      controller.enqueue(encoder.encode(`event: done\ndata: ${JSON.stringify({
+        type: "done",
+        provider: "malik-identity-core",
+        model: "verified-brand-profile",
+        selectedModelId,
+        usedWeb: false,
+        sources: [],
+        webSourceCount: 0,
+        tookMs: 0,
+        at: Date.now(),
+      })}\n\n`))
+      controller.close()
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-transform",
+      connection: "keep-alive",
+      "x-accel-buffering": "no",
+      "x-malik-router": "verified-founder-identity",
     },
   })
 }
@@ -145,8 +178,20 @@ async function handlePOST(request: Request) {
 
   try {
     const selection = await resolveStrictMalikSelection(request, body)
-    if (wantsSse(request, body)) return liveSseResponse(body, selection)
-    const answer = await malikGodAnswer(body, selection ? { modelId: selection.modelId } : undefined)
+    const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
+    const ownerMode = entitlement.plan === "owner"
+
+    const identity = malikIdentityAnswer(body, ownerMode)
+    if (identity) {
+      if (wantsSse(request, body)) return identitySseResponse(identity, selection?.modelId)
+      return textResponse(identity)
+    }
+
+    // Founder recognition is granted only from the verified WorkOS session.
+    // User-controlled email/name fields in the request are intentionally ignored.
+    const routedBody = ownerMode ? withVerifiedOwnerChatContext(body) : body
+    if (wantsSse(request, body)) return liveSseResponse(routedBody, selection)
+    const answer = await malikGodAnswer(routedBody, selection ? { modelId: selection.modelId } : undefined)
     observeComputeResult(answer)
     const content = asPlainText(answer)
     return textResponse(content)
