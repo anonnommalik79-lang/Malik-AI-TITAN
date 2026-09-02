@@ -85,6 +85,8 @@ import "./malik-cognitive-response-final.css"
 import "./chat-icon-alignment-final.css"
 // Absolute last Sites/Library mobile pass: OLED black + 5 category chips and paging arrow.
 import "./mobile-sites-library-oled-final.css"
+// Final home authority: approved cinematic Malik scene + reflective floor + compact controls.
+import "./mobile-unicorn-home-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
