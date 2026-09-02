@@ -6,6 +6,7 @@ import { MalikTurnRuntime } from "@/components/sovereign/MalikTurnRuntime"
 import { MalikStopPolish } from "@/components/sovereign/MalikStopPolish"
 import { FounderConsoleRuntime } from "@/components/sovereign/FounderConsoleRuntime"
 import { VideoCancelRuntime } from "@/components/sovereign/VideoCancelRuntime"
+import { MalikVideoModelRuntime } from "@/components/sovereign/MalikVideoModelRuntime"
 import { SitesRouteFixRuntime } from "@/components/sovereign/SitesRouteFixRuntime"
 import { ImageResultExperience } from "@/components/sovereign/ImageResultExperience"
 import { ImageQualityRuntime } from "@/components/sovereign/ImageQualityRuntime"
@@ -62,6 +63,8 @@ import "./mobile-composer-model-position-final.css"
 import "./video-mobile-worldclass-final.css"
 // Last authority for MalikVideo top section: no overlap, no clipped title, clean controls.
 import "./video-mobile-top-clean-final.css"
+// Final MalikVideo model catalog: own mark + Pro model icons, with the repo's 8 videos locked into place.
+import "./video-model-selector-final.css"
 // Absolute final Sites pass: exact reference geometry + local template previews.
 import "./sites-world-final.css"
 // Final chat authority: user messages are plain text, no bubble/card surface.
@@ -203,6 +206,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <MalikStopPolish />
         <FounderConsoleRuntime />
         <VideoCancelRuntime />
+        <MalikVideoModelRuntime />
         <SitesRouteFixRuntime />
         <ImageResultExperience />
         <ImageQualityRuntime />

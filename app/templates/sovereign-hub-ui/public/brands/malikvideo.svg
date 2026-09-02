@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 650" role="img" aria-labelledby="title desc">
+  <title id="title">MalikVideo 1.0 mark</title>
+  <desc id="desc">Two black geometric wedges based on the supplied MalikVideo reference mark.</desc>
+  <rect width="900" height="650" rx="0" fill="#f4f4f4"/>
+  <path d="M128 465 443 149v316H128Z" fill="#020202"/>
+  <path d="M508 154h302L508 469V154Z" fill="#020202"/>
+</svg>
