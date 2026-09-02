@@ -21,9 +21,15 @@ function normalize(input: AIRequest): AIRequest {
     ...input,
     task,
     messages: (() => {
-      const windowed = input.messages?.slice(-Number(process.env.CHAT_HISTORY_WINDOW || 12)) || []
-      const hasSystem = windowed.some((message) => message.role === "system")
-      return hasSystem ? windowed : [{ role: "system" as const, content: strictSystemPrompt }, ...windowed]
+      // Window the conversation, not the server's instructions. Voice keeps
+      // twenty turns: slicing the whole array silently removed its language,
+      // comprehension and search instructions after the twelfth message.
+      const messages = input.messages || []
+      const system = messages.filter((message) => message.role === "system")
+      const configured = Number(process.env.CHAT_HISTORY_WINDOW || 12)
+      const limit = Number.isFinite(configured) ? Math.max(1, Math.floor(configured)) : 12
+      const windowed = messages.filter((message) => message.role !== "system").slice(-limit)
+      return [...(system.length ? system : [{ role: "system" as const, content: strictSystemPrompt }]), ...windowed]
     })(),
     maxTokens:
       input.maxTokens ||

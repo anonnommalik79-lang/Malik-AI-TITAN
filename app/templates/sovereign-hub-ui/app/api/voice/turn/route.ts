@@ -2,6 +2,7 @@ import { voiceLlmAnswer } from "@/lib/voice/voice-llm-router"
 import { voiceSearchContext } from "@/lib/voice/web-search"
 import { repairTranscript } from "@/lib/voice/speech-vocabulary"
 import { languageDirective, looksLikeLanguage, resolveVoiceLanguage } from "@/lib/voice/voice-language"
+import { answersKazakhGreeting, kazakhGreeting, kazakhGreetingFallback, spokenIntentInstruction } from "@/lib/voice/spoken-intent"
 import {
   antiRepeatNote,
   conversationRules,
@@ -34,7 +35,7 @@ const PERSONALITY: Record<string, string> = {
 const COMPREHENSION = [
   "The user is speaking, so the text you receive is a transcript.",
   "It may contain accented pronunciation, missing endings, mixed Russian, Kazakh and English words, or a brand name spelled by sound.",
-  "Work out what the person meant and answer that. Do not comment on the wording and never say you did not understand it.",
+  "Work out what the person meant and answer that. Do not give an etymology or invent a person's name when the user is simply talking to you.",
   "Ask a short clarifying question only when the intent is genuinely ambiguous and guessing would be wrong.",
 ].join(" ")
 
@@ -60,13 +61,15 @@ async function handlePOST(request: Request) {
   // first thing the user had ever said.
   const history = sanitizeHistory(body?.history)
 
-  const language = resolveVoiceLanguage({ text, selected: body?.language })
+  const greeting = kazakhGreeting(text)
+  const language = resolveVoiceLanguage({ text: greeting ? "Қалайсың?" : text, selected: body?.language })
   const instruction = [
     "You are Sola, the Malik AI voice assistant.",
     PERSONALITY[personality] || PERSONALITY.Assistant,
     COMPREHENSION,
     conversationRules(history.length > 0),
     languageDirective(language),
+    spokenIntentInstruction(text, language.code),
     "Never mention internal providers, routing, environment variables or API keys.",
   ].join(" ")
 
@@ -77,6 +80,15 @@ async function handlePOST(request: Request) {
 
     let answer = await voiceLlmAnswer({ text, instruction: grounded, history, tier, signal: request.signal })
     let content = String(answer.content || "").trim()
+    let correctedGreeting = false
+
+    // A wrong answer can contain Kazakh letters and still miss the meaning.
+    // Keep the normal model response when it fits; repair this narrow social
+    // intent without another paid request if it invents a name/definition.
+    if (greeting && (!looksLikeLanguage(content, language.code) || !answersKazakhGreeting(content))) {
+      content = kazakhGreetingFallback(greeting)
+      correctedGreeting = true
+    }
 
     if (!content || !looksLikeLanguage(content, language.code)) {
       answer = await voiceLlmAnswer({
@@ -92,7 +104,7 @@ async function handlePOST(request: Request) {
     // A small model in a spoken loop will happily give the same answer twice.
     // One retry, told exactly what it already said, with more freedom to vary.
     let repeated = false
-    if (content && repeatsEarlierAnswer(content, history)) {
+    if (content && !greeting && repeatsEarlierAnswer(content, history)) {
       repeated = true
       const retry = await voiceLlmAnswer({
         text,
@@ -110,7 +122,7 @@ async function handlePOST(request: Request) {
       }
     }
 
-    if (!content) content = fallbackReply(language.code)
+    if (!content || !looksLikeLanguage(content, language.code)) content = fallbackReply(language.code)
 
     return Response.json({
       ok: true,
@@ -124,6 +136,7 @@ async function handlePOST(request: Request) {
       turns: history.length,
       tier,
       repeated,
+      correctedGreeting,
       provider: answer.provider,
       model: answer.model,
       usedWeb: search.sources.length > 0,

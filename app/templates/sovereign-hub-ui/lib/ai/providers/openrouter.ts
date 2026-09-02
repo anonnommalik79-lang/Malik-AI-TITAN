@@ -26,6 +26,12 @@ function temperatureFor(input: AIRequest) {
 }
 
 function buildSystemPrompt(input: AIRequest) {
+  // Voice already supplies its language, personality and grounded context.
+  // The text-chat default below incorrectly treats all Cyrillic as Russian.
+  const voiceSystem = input.metadata?.lane === "voice"
+    ? input.messages?.filter((message) => message.role === "system").map((message) => message.content).join("\n")
+    : ""
+  if (voiceSystem) return voiceSystem
   const task = input.task || "chat"
   const mode = String(input.metadata?.malikMode || task)
   return [

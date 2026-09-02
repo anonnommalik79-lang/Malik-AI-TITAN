@@ -68,13 +68,24 @@ export function SovereignMobileRegister() {
 
   const phoneFeedbackRef = useRef(false);
   const armedRef = useRef(false);
-  const gestureUnlockedRef = useRef(false);
+  const audioRunningRef = useRef(false);
   const feedbackStoppedRef = useRef(false);
   const audioRef = useRef<AudioContext | null>(null);
   const masterRef = useRef<GainNode | null>(null);
   const toneFilterRef = useRef<BiquadFilterNode | null>(null);
 
-  const ensureAudio = useCallback(async () => {
+  const syncAudioState = useCallback((ctx: AudioContext) => {
+    if (ctx !== audioRef.current || feedbackStoppedRef.current) return;
+    const running = ctx.state === "running";
+    if (running && !audioRunningRef.current) {
+      // Applies equally to permitted autoplay and a real gesture. Restart only
+      // once when sound actually starts, not once per pointer/touch/click event.
+      setRestartKey((value) => value + 1);
+    }
+    audioRunningRef.current = running;
+  }, []);
+
+  const ensureAudio = useCallback(() => {
     if (
       typeof window === "undefined" ||
       !phoneFeedbackRef.current ||
@@ -112,20 +123,23 @@ export function SovereignMobileRegister() {
         audioRef.current = ctx;
         masterRef.current = master;
         toneFilterRef.current = toneFilter;
+        ctx.onstatechange = () => syncAudioState(ctx);
       }
 
       const ctx = audioRef.current;
       const state = String(ctx.state);
       if (state !== "running" && state !== "closed") {
-        await ctx.resume();
+        // A denied autoplay resume may stay pending until a future gesture.
+        // Never await it on the animation path or consider it proof of sound.
+        void ctx.resume().then(() => syncAudioState(ctx)).catch(() => {});
       }
-
+      syncAudioState(ctx);
       return String(ctx.state) === "running";
     } catch {
       // Feedback is enhancement-only. Auth must never depend on it.
       return false;
     }
-  }, []);
+  }, [syncAudioState]);
 
   const playCharacterSound = useCallback(() => {
     const ctx = audioRef.current;
@@ -227,23 +241,14 @@ export function SovereignMobileRegister() {
     playCharacterSound();
   }, [playCharacterSound]);
 
-  const armFeedback = useCallback(async () => {
+  const armFeedback = useCallback(() => {
     if (
       !phoneFeedbackRef.current ||
-      feedbackStoppedRef.current ||
-      gestureUnlockedRef.current
+      feedbackStoppedRef.current
     ) return;
 
-    // iPhone Safari requires a real user gesture before WebAudio can become audible.
-    // Resume inside that gesture and restart the phrase only after the context runs,
-    // so the visible letters and the character sound are synchronized.
     armedRef.current = true;
-    const running = await ensureAudio();
-
-    if (running && !feedbackStoppedRef.current) {
-      gestureUnlockedRef.current = true;
-      setRestartKey((value) => value + 1);
-    }
+    ensureAudio();
   }, [ensureAudio]);
 
   const stopFeedback = useCallback(() => {
@@ -282,33 +287,41 @@ export function SovereignMobileRegister() {
       return;
     }
 
-    // Android and browsers that allow it can start immediately. iPhone will
-    // remain silent until the first real touch, then armFeedback restarts text.
-    armedRef.current = true;
-    void ensureAudio();
-  }, [ensureAudio]);
+    // Try immediately on entry. If the browser denies audible autoplay, the
+    // same path is retried from a real gesture; no fake clicks or mute tricks.
+    armFeedback();
+  }, [armFeedback]);
 
   useEffect(() => {
     if (!phoneFeedbackRef.current || feedbackStoppedRef.current) return;
 
     const resumeWhenVisible = () => {
-      if (document.visibilityState !== "visible" || feedbackStoppedRef.current) return;
-      void ensureAudio();
+      if (feedbackStoppedRef.current) return;
+      if (document.visibilityState === "hidden") {
+        void audioRef.current?.suspend().catch(() => {});
+        return;
+      }
+      armFeedback();
     };
 
     document.addEventListener("visibilitychange", resumeWhenVisible);
-    return () => document.removeEventListener("visibilitychange", resumeWhenVisible);
-  }, [ensureAudio]);
+    window.addEventListener("pageshow", resumeWhenVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", resumeWhenVisible);
+      window.removeEventListener("pageshow", resumeWhenVisible);
+    };
+  }, [armFeedback]);
 
   useEffect(() => {
     let cancelled = false;
-    const timers: number[] = [];
+    const timers = new Set<number>();
 
     const later = (callback: () => void, ms: number) => {
       const id = window.setTimeout(() => {
+        timers.delete(id);
         if (!cancelled) callback();
       }, ms);
-      timers.push(id);
+      timers.add(id);
     };
 
     const runPhrase = (phraseIndex: number) => {
@@ -348,19 +361,21 @@ export function SovereignMobileRegister() {
 
     return () => {
       cancelled = true;
-      timers.forEach(window.clearTimeout);
+      timers.forEach((id) => window.clearTimeout(id));
     };
   }, [pulseCharacter, restartKey]);
 
   useEffect(() => {
     return () => {
       try {
+        feedbackStoppedRef.current = true;
+        if (audioRef.current) audioRef.current.onstatechange = null;
         toneFilterRef.current?.disconnect();
         void audioRef.current?.close();
         audioRef.current = null;
         masterRef.current = null;
         toneFilterRef.current = null;
-        gestureUnlockedRef.current = false;
+        audioRunningRef.current = false;
       } catch {
         // no-op
       }

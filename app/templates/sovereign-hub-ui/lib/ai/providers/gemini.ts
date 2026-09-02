@@ -69,6 +69,14 @@ export const geminiProvider: AIProvider = {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          // System messages are excluded from contents below, so they must be
+          // sent in Gemini's dedicated field rather than silently discarded.
+          ...(input.messages?.some((message) => message.role === "system") ? {
+            systemInstruction: {
+              parts: input.messages.filter((message) => message.role === "system")
+                .map((message) => ({ text: message.content })),
+            },
+          } : {}),
           contents: geminiContents(input),
           generationConfig: {
             temperature: input.temperature ?? 0.35,

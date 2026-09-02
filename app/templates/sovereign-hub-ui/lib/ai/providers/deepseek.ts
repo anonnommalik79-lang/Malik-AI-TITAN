@@ -43,6 +43,10 @@ function attachmentContext(input: AIRequest) {
 }
 
 function buildMalikSystemPrompt(input: AIRequest) {
+  const voiceSystem = input.metadata?.lane === "voice"
+    ? input.messages?.filter((message) => message.role === "system").map((message) => message.content).join("\n")
+    : ""
+  if (voiceSystem) return voiceSystem
   const task = input.task || "chat"
   const mode = String(input.metadata?.malikMode || task)
 

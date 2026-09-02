@@ -80,7 +80,7 @@ const checks = [
   // The lock is still strict; it is now generated for whichever language was
   // actually detected, and the reply is still checked against it by script.
   ["18 the answer is locked to the language that was spoken, whichever it is", () => {
-    assert.match(turn, /resolveVoiceLanguage\(\{ text, selected: body\?\.language \}\)/)
+    assert.match(turn, /resolveVoiceLanguage\(\{ text: greeting \? "Қалайсың\?" : text, selected: body\?\.language \}\)/)
     assert.match(turn, /languageDirective/)
     assert.match(turn, /looksLikeLanguage/)
     assert.match(directive, /LANGUAGE: answer only in \$\{english\}/)
