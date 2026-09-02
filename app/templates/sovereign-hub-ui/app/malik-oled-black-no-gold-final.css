@@ -1,0 +1,172 @@
+/* MALIK AI — ABSOLUTE OLED BLACK / NO GOLD GLOW AUTHORITY
+ * This file must be imported LAST from app/layout.tsx.
+ * It removes only legacy page-level gold/yellow atmosphere and glow while
+ * preserving component geometry, media, typography and the active nav fill.
+ */
+
+html,
+body,
+#malik-root {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+}
+
+/* Legacy atmosphere layers that were still visible behind chat/video on phones. */
+#malik-root .malik-dashboard-shell #malik-investor-aurora,
+#malik-root .malik-dashboard-shell .malik-ai-background,
+#malik-root .malik-dashboard-shell .malik-space-bg,
+#malik-root .malik-dashboard-shell .malik-space-bg__aurora,
+#malik-root .malik-dashboard-shell .malik-space-bg__core,
+#malik-root .malik-dashboard-shell .malik-space-bg__horizon,
+#malik-root .malik-dashboard-shell .malik-space-bg__glow {
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  animation: none !important;
+}
+
+/* True-black product canvases. Voice keeps its own dedicated scene. */
+#malik-root .malik-dashboard-shell,
+#malik-root .malik-dashboard-shell > main:not(:has([data-voice-mode])),
+#malik-root .malik-dashboard-shell main:not(:has([data-voice-mode])),
+#malik-root .malik-dashboard-shell .malik-main-scroll-host,
+#malik-root .malik-dashboard-shell .titan-main,
+#malik-root .malik-dashboard-shell .titan-content,
+#malik-root .malik-dashboard-shell .malik-dashboard-content,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg,
+#malik-root .malik-dashboard-shell .malik-premium-chat-host,
+#malik-root .malik-dashboard-shell .malik-chat-fullwidth,
+#malik-root .malik-dashboard-shell .malik-chat-scroll,
+#malik-root .malik-dashboard-shell .mv,
+#malik-root .malik-dashboard-shell .mv__workspace,
+#malik-root .malik-dashboard-shell .mv__header,
+#malik-root .malik-dashboard-shell .mv__discover {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  filter: none !important;
+}
+
+/* mobile-polish.css used section:first-of-type to repaint the whole first screen. */
+#malik-root .malik-dashboard-shell main:not(:has([data-voice-mode])) > section:first-of-type {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* Remove page-level pseudo-element auroras without touching component artwork. */
+#malik-root .malik-dashboard-shell::before,
+#malik-root .malik-dashboard-shell::after,
+#malik-root .malik-dashboard-shell main:not(:has([data-voice-mode]))::before,
+#malik-root .malik-dashboard-shell main:not(:has([data-voice-mode]))::after,
+#malik-root .malik-main-scroll-host::before,
+#malik-root .malik-main-scroll-host::after,
+#malik-root .titan-main::before,
+#malik-root .titan-main::after,
+#malik-root .titan-content::before,
+#malik-root .titan-content::after,
+#malik-root .malik-dashboard-content::before,
+#malik-root .malik-dashboard-content::after,
+#malik-root .malik-ai-chat-bg::before,
+#malik-root .malik-ai-chat-bg::after,
+#malik-root .malik-premium-chat-host::before,
+#malik-root .malik-premium-chat-host::after,
+#malik-root .mv::before,
+#malik-root .mv::after,
+#malik-root .mv__workspace::before,
+#malik-root .mv__workspace::after,
+#malik-root .mv__discover::before,
+#malik-root .mv__discover::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  animation: none !important;
+}
+
+/* mobile-polish also injected a gold glow into every button in the first screen. */
+#malik-root .malik-dashboard-shell button,
+#malik-root .malik-dashboard-shell [role="button"],
+#malik-root .malik-dashboard-shell textarea,
+#malik-root .malik-dashboard-shell input,
+#malik-root .malik-dashboard-shell select {
+  text-shadow: none !important;
+}
+
+#malik-root .malik-dashboard-shell button,
+#malik-root .malik-dashboard-shell [role="button"],
+#malik-root .malik-dashboard-shell textarea {
+  box-shadow: none !important;
+}
+
+/* Chat/image generation: no yellow haze around the confirmation/result stack. */
+#malik-root .malik-ai-chat-bg .malik-message-list,
+#malik-root .malik-ai-chat-bg .malik-message-row,
+#malik-root .malik-ai-chat-bg .malik-message-stack,
+#malik-root .malik-ai-chat-bg .malik-photo-motion {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+#malik-root .malik-photo-stage,
+#malik-root .malik-photo-forge {
+  background: #050505 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+#malik-root .malik-photo-understood,
+#malik-root .malik-photo-report {
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* MalikVideo: keep cards/controls neutral, but remove the surrounding gold wash. */
+#malik-root .mv__composer-shell,
+#malik-root .mv__statusbar,
+#malik-root .mv__session-bar,
+#malik-root .mv__tabs {
+  background-image: none !important;
+  border-color: rgba(255,255,255,.10) !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* Kill the broad legacy mobile rule that painted the second section gold. */
+@media (max-width: 820px) {
+  #malik-root .malik-dashboard-shell main:not(:has([data-voice-mode])) > section,
+  #malik-root .malik-dashboard-shell .malik-main-scroll-host,
+  #malik-root .malik-dashboard-shell .malik-ai-chat-bg,
+  #malik-root .malik-dashboard-shell .malik-premium-chat-host,
+  #malik-root .malik-dashboard-shell .mv,
+  #malik-root .malik-dashboard-shell .mv__workspace,
+  #malik-root .malik-dashboard-shell .mv__discover {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .mv__composer-shell,
+  #malik-root .malik-dashboard-shell .mv__statusbar,
+  #malik-root .malik-dashboard-shell .mv__session-bar,
+  #malik-root .malik-dashboard-shell .mv__tabs,
+  #malik-root .malik-dashboard-shell .malik-photo-stage,
+  #malik-root .malik-dashboard-shell .malik-photo-understood {
+    box-shadow: none !important;
+    filter: none !important;
+  }
+}
