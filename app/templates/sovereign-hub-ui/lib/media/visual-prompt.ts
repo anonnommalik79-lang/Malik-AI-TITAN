@@ -1,5 +1,4 @@
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
-import { imagePromptCompilerTimeoutMs } from "./config"
 import type { ImageMode } from "./types"
 
 /**
@@ -41,6 +40,11 @@ const MAX_DESCRIPTION_LENGTH = 600
  */
 const PROVIDER_PROMPT_LENGTH = 1100
 const EIGHT_K_PATTERN = /(?:^|[^\p{L}\p{N}])8\s*[kк](?![\p{L}\p{N}])/iu
+
+function promptCompilerTimeoutMs() {
+  const value = Number(process.env.IMAGE_PROMPT_COMPILER_TIMEOUT_MS || 8_000)
+  return Number.isFinite(value) && value > 0 ? value : 8_000
+}
 
 /**
  * Adds the quality hint only to the provider prompt. Callers keep the original
@@ -167,7 +171,7 @@ async function withinPromptCompilerBudget<T>(promise: Promise<T>, timeoutMs: num
 async function translateToEnglish(source: string): Promise<{ text: string; translated: boolean; model: string }> {
   if (!source || !hasNonLatinLetters(source)) return { text: source, translated: false, model: "" }
 
-  const deadline = Date.now() + imagePromptCompilerTimeoutMs()
+  const deadline = Date.now() + promptCompilerTimeoutMs()
 
   for (const modelId of TRANSLATION_MODELS) {
     const remaining = deadline - Date.now()
