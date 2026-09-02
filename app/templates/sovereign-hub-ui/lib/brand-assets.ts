@@ -7,8 +7,8 @@ export const EARTH_BACKGROUND_URL =
 /** Restored AI chat background. */
 export const CHAT_BACKGROUND_URL = "/images/malik-chat-legend-space.png"
 
-/** Auth dragon: put your JPG at /public/images/titan-auth-bg.jpg; SVG fallback ships in repo. */
-export const AUTH_DRAGON_JPG = "/images/titan-auth-bg.jpg"
+/** Desktop auth: the owner's supplied artwork, kept at its original quality. */
+export const AUTH_DRAGON_JPG = "/images/sovereign-auth-founder.png"
 export const AUTH_DRAGON_BACKGROUND = "/auth-titan-poster.svg"
 
 export const BRAND_NAME = "MALIK AI"

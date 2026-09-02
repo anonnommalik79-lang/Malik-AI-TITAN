@@ -9,7 +9,7 @@ const guard = read("components/sovereign/NoBlueUiGuard.tsx")
 
 // Only the desktop scene is brand-safe; mobile stays outside that subtree.
 assert.match(auth, /<SovereignMobileRegister\s*\/>[\s\S]*?<main className="sva-root sva-desktop-only" data-preserve-brand-color="true">/)
-assert.match(read("lib/brand-assets.ts"), /AUTH_DRAGON_JPG\s*=\s*"\/images\/titan-auth-bg\.jpg"/)
+assert.match(read("lib/brand-assets.ts"), /AUTH_DRAGON_JPG\s*=\s*"\/images\/sovereign-auth-founder\.png"/)
 assert.match(auth, /useState\(AUTH_DRAGON_JPG\)/)
 assert.match(auth, /\.sva-root\s*\{\s*position: fixed;/)
 assert.match(auth, /\.sva-shell\s*\{\s*position: absolute;/)
@@ -17,8 +17,7 @@ assert.match(auth, /@media \(max-width: 980px\)\s*\{\s*\.sva-desktop-only\s*\{ d
 assert.doesNotMatch(isolation, /position:\s*relative\s*!important/)
 assert.doesNotMatch(isolation, /opacity:\s*\.92\s*!important/)
 
-const cardSurface = auth.match(/\.sva-card\s*\{[^}]*background: ([^;]+);/)[1]
-assert.ok(isolation.includes(`background: ${cardSurface} !important;`), "The desktop card must retain its original glass surface")
+assert.ok(isolation.includes("background: linear-gradient(168deg, #080c1c 0%, #060816 38%, #0a0618 100%) !important;"), "The real form must cover the printed form in the artwork")
 
 // Exercise the real guard in memory. No browser, credentials or network needed.
 const compiled = ts.transpileModule(`${guard}\nexport { neutralizeElement };`, {

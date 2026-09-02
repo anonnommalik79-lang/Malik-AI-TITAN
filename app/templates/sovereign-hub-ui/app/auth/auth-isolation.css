@@ -53,9 +53,36 @@ html.malik-auth-active #malik-investor-aurora,
     display: none !important;
   }
 
-  /* Keep the glass surface from 68af0a6; mobile-polish's generic first-section
-     gold background must not replace the original desktop registration card. */
+  /* Use the supplied image without filters or the old dragon's effects. */
+  #malik-root .sva-desktop-only {
+    --auth-art-width: max(100vw, calc(100dvh * 1717 / 916));
+    --auth-art-height: max(100dvh, calc(100vw * 916 / 1717));
+  }
+
+  #malik-root .sva-desktop-only .sva-bg {
+    object-position: center;
+    filter: none;
+  }
+
+  #malik-root .sva-desktop-only .sva-top-clear,
+  #malik-root .sva-desktop-only .sva-dragon-aura,
+  #malik-root .sva-desktop-only .sva-wind {
+    display: none;
+  }
+
+  /* Cover only the form printed into the supplied image. The real form stays
+     interactive above it; the image file itself is not edited or recompressed. */
+  #malik-root .sva-desktop-only .sva-left-shadow {
+    inset: auto;
+    left: calc((100vw - var(--auth-art-width)) / 2 + var(--auth-art-width) * 49 / 1717);
+    top: calc((100dvh - var(--auth-art-height)) / 2 + var(--auth-art-height) * 159 / 916);
+    width: calc(var(--auth-art-width) * 440 / 1717);
+    height: calc(var(--auth-art-height) * 510 / 916);
+    border-radius: 20px;
+    background: #060912;
+  }
+
   #malik-root .sva-desktop-only .sva-card {
-    background: linear-gradient(168deg, rgba(8,12,28,.88) 0%, rgba(6,8,22,.78) 38%, rgba(10,6,24,.72) 100%) !important;
+    background: linear-gradient(168deg, #080c1c 0%, #060816 38%, #0a0618 100%) !important;
   }
 }
