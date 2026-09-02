@@ -162,7 +162,16 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       preserveFaces: typeof body?.preserveFaces === "boolean" ? body.preserveFaces : undefined,
       userId: user.userId,
       plan: user.plan,
-    }, { signal: request.signal })
+      // Deliberately not tied to request.signal.
+      //
+      // A picture takes about seventeen seconds. Passing the client's signal
+      // here meant that a dropped connection - a closed tab, a phone that slept,
+      // a browser reclaiming a backgrounded page - cancelled the generation
+      // mid-flight and threw away the work and the quota that had been spent on
+      // it. The generation now runs to completion and the result is persisted
+      // below, so it is waiting when the person comes back. The per-user
+      // single-flight lock above is what stops this from piling up.
+    })
 
     if (!result.ok) {
       return Response.json({

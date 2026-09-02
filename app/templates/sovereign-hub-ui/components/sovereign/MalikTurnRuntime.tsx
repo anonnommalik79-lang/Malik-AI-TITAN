@@ -18,6 +18,33 @@ const TURN_FETCH_PATHS = new Set([
 ])
 const PRIMARY_TURN_PATHS = new Set([
   "/api/stream",
+])
+
+/**
+ * Generating a picture or a video is not part of a chat turn, and tying it to
+ * one was the bug behind "Фото не создано - Fetch is aborted".
+ *
+ * A photo takes about seventeen seconds on the server, measured. A chat turn is
+ * over in a second or two, and when it ends this runtime abandons its
+ * controller and aborts it - which killed the picture that was still being
+ * made. Worse, "is a turn running" is worked out by watching whether a send
+ * button is disabled in the DOM, so the moment the composer re-enabled, the
+ * next request through here aborted whatever shared controller was in flight.
+ *
+ * So media generation gets its own controller with its own lifetime. Nothing
+ * cancels it except the person: not a new message, not switching to another
+ * section, not backgrounding the app to read a notification.
+ */
+const MEDIA_TURN_PATHS = new Set([
+  "/api/generate/photo",
+  "/api/generate/video",
+  "/api/ai/video/status",
+  "/api/generate/video/status",
+  "/api/media/video/status",
+])
+
+/** The two that start new work. The rest only ask how the work is going. */
+const MEDIA_START_PATHS = new Set([
   "/api/generate/photo",
   "/api/generate/video",
 ])
@@ -184,6 +211,8 @@ export function MalikTurnRuntime() {
   const [busy, setBusy] = useState(false)
   const [stopping, setStopping] = useState(false)
   const activeControllerRef = useRef<AbortController | null>(null)
+  const mediaControllerRef = useRef<AbortController | null>(null)
+  const mediaStopRequestedRef = useRef(false)
   const stopRequestedRef = useRef(false)
   const protectedFieldsRef = useRef(new WeakMap<HTMLTextAreaElement, string>())
   const busyRef = useRef(false)
@@ -273,6 +302,33 @@ export function MalikTurnRuntime() {
       const path = pathFromFetchInput(input)
       if (!TURN_FETCH_PATHS.has(path)) return nativeFetch(input, init)
 
+      // Media generation runs on its own controller and is never touched by the
+      // chat turn's lifecycle. See MEDIA_TURN_PATHS above.
+      if (MEDIA_TURN_PATHS.has(path)) {
+        if (MEDIA_START_PATHS.has(path)) {
+          mediaStopRequestedRef.current = false
+          mediaControllerRef.current = new AbortController()
+        } else if (mediaStopRequestedRef.current) {
+          // A status poll for work the person already cancelled. Do not let a
+          // timer that was already in flight bring it back.
+          throw stoppedError()
+        }
+
+        let media = mediaControllerRef.current
+        if (!media || media.signal.aborted) {
+          media = new AbortController()
+          mediaControllerRef.current = media
+        }
+
+        const mediaSignal = media.signal
+        try {
+          return await nativeFetch(input, { ...(init || {}), signal: mergeSignals(existingSignal(input, init), mediaSignal) })
+        } catch (error) {
+          if (mediaSignal.aborted || mediaStopRequestedRef.current) throw stoppedError()
+          throw error
+        }
+      }
+
       let controller = activeControllerRef.current
       if (!controller || controller.signal.aborted) {
         // If this is a delayed network step from a turn the user already
@@ -319,6 +375,8 @@ export function MalikTurnRuntime() {
       document.documentElement.removeEventListener("click", onHtmlClick, true)
       try { activeControllerRef.current?.abort() } catch {}
       activeControllerRef.current = null
+      // mediaControllerRef is deliberately left alone. A picture that is being
+      // made must survive this component remounting; only the person stops it.
     }
   }, [])
 
@@ -385,6 +443,12 @@ export function MalikTurnRuntime() {
     const controller = activeControllerRef.current
     if (controller && !controller.signal.aborted) {
       try { controller.abort() } catch {}
+    }
+    // This button is the only thing that may cancel a picture or a video.
+    mediaStopRequestedRef.current = true
+    const media = mediaControllerRef.current
+    if (media && !media.signal.aborted) {
+      try { media.abort() } catch {}
     }
   }
 
