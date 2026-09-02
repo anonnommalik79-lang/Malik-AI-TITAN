@@ -51,6 +51,45 @@ function clampNumber(value: unknown, min: number, max: number) {
   return Math.min(max, Math.max(min, number))
 }
 
+function timeoutFromEnv(name: string, fallback: number, min: number, max: number) {
+  const value = Number(process.env[name] || fallback)
+  if (!Number.isFinite(value)) return fallback
+  return Math.min(max, Math.max(min, value))
+}
+
+/**
+ * The chosen model is the quality route and gets a generous window. Only models
+ * reached after that route has failed use the short failover window. This keeps
+ * normal output identical while preventing four dead Cloudflare endpoints from
+ * consuming four full provider timeouts in sequence.
+ */
+function cloudflareAttemptTimeoutMs(preferred: boolean) {
+  return preferred
+    ? timeoutFromEnv("IMAGE_PREFERRED_MODEL_TIMEOUT_MS", 50_000, 10_000, 90_000)
+    : timeoutFromEnv("IMAGE_FALLBACK_MODEL_TIMEOUT_MS", 8_000, 2_000, 30_000)
+}
+
+async function withAttemptSignal<T>(
+  parentSignal: AbortSignal | undefined,
+  timeoutMs: number,
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController()
+  const abortFromParent = () => controller.abort(parentSignal?.reason)
+  if (parentSignal) {
+    if (parentSignal.aborted) abortFromParent()
+    else parentSignal.addEventListener("abort", abortFromParent, { once: true })
+  }
+  const timer = setTimeout(() => controller.abort(new Error("IMAGE_PROVIDER_ATTEMPT_TIMEOUT")), timeoutMs)
+
+  try {
+    return await run(controller.signal)
+  } finally {
+    clearTimeout(timer)
+    parentSignal?.removeEventListener("abort", abortFromParent)
+  }
+}
+
 function tunedForModel(
   modelId: MalikImageModelId,
   input: ImageGenerateInput,
@@ -119,16 +158,21 @@ export async function routeImageGeneration(
     ].filter((modelId, index, list): modelId is MalikImageModelId => list.indexOf(modelId) === index)
 
     for (const automaticModelId of automaticModels) {
+      const preferred = automaticModelId === preferredModelId
       try {
         const tuning = tunedForModel(automaticModelId, { ...input, quality })
-        const result = await generatePreparedCloudflareImage({
-          strictPrompt: prompt,
-          negativePrompt,
-          aspectRatio: input.aspectRatio,
-          modelId: automaticModelId,
-          tuning,
-          signal: options?.signal,
-        })
+        const result = await withAttemptSignal(
+          options?.signal,
+          cloudflareAttemptTimeoutMs(preferred),
+          (signal) => generatePreparedCloudflareImage({
+            strictPrompt: prompt,
+            negativePrompt,
+            aspectRatio: input.aspectRatio,
+            modelId: automaticModelId,
+            tuning,
+            signal,
+          }),
+        )
         return {
           ok: true,
           provider: "cloudflare",
@@ -141,7 +185,7 @@ export async function routeImageGeneration(
           quality,
           steps: result.steps ?? tuning.steps,
           guidance: result.guidance ?? tuning.guidance,
-          routeReason: automaticModelId === preferredModelId ? decision.reason : `${decision.reason}; cloudflare fallback`,
+          routeReason: preferred ? decision.reason : `${decision.reason}; cloudflare fallback`,
           remainingDailyImages: 0,
         }
       } catch (error) {
