@@ -1,0 +1,1 @@
+Exact V7 demo images are stored beside this file as demo-01.jpg ... demo-08.jpg. They are used only by the image-generation loader and must not point at /library/gallery.
