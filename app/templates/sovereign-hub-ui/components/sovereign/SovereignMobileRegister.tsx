@@ -384,9 +384,22 @@ export function SovereignMobileRegister() {
     }
   }, [stopFeedback]);
 
+  /**
+   * The first touch has to start the sound, wherever it lands.
+   *
+   * This used to stop the feedback as soon as a touch began on one of the auth
+   * buttons. On iPhone that meant it was never heard at all: WebAudio stays
+   * muted until a gesture in this document, and the only gesture most people
+   * make here is tapping a button - which arrived at this handler and switched
+   * the whole thing off before a single tick had played.
+   *
+   * So the first gesture always arms, including on a button. Stopping is left
+   * to the button's own onClick, once the person has actually chosen to sign in
+   * and the page is navigating away.
+   */
   const handleFeedbackGesture = useCallback((target: EventTarget | null) => {
     const element = target instanceof Element ? target : null;
-    if (element?.closest(".sma-auth-button, .sma-close")) {
+    if (element?.closest(".sma-close")) {
       stopFeedback();
       return;
     }
@@ -420,8 +433,6 @@ export function SovereignMobileRegister() {
           className="sma-auth-button sma-auth-button--apple"
           type="button"
           disabled={navigating}
-          onPointerDown={stopFeedback}
-          onTouchStart={stopFeedback}
           onClick={openSignIn}
         >
           <span className="sma-auth-icon"><AppleIcon /></span>
@@ -432,8 +443,6 @@ export function SovereignMobileRegister() {
           className="sma-auth-button sma-auth-button--dark"
           type="button"
           disabled={navigating}
-          onPointerDown={stopFeedback}
-          onTouchStart={stopFeedback}
           onClick={openSignIn}
         >
           <span className="sma-auth-icon"><GoogleIcon /></span>
@@ -444,8 +453,6 @@ export function SovereignMobileRegister() {
           className="sma-auth-button sma-auth-button--dark"
           type="button"
           disabled={navigating}
-          onPointerDown={stopFeedback}
-          onTouchStart={stopFeedback}
           onClick={openSignIn}
         >
           <span className="sma-auth-icon"><MailIcon /></span>

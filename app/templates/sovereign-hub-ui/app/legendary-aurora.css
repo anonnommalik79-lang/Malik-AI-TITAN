@@ -13,12 +13,12 @@
   100% { transform: translate3d(-.5%, -.4vh, 0) scale(1.015); opacity: .86; }
 }
 
+/* The original gold-over-navy page background. Black now, at the source,
+   rather than through another file painting over it. */
 html,
 body,
 #malik-root {
-  background:
-    radial-gradient(ellipse at 50% 118%, rgba(177, 132, 44,.38) 0%, rgba(134, 99, 31,.22) 20%, rgba(3,7,18,.06) 42%, transparent 68%),
-    linear-gradient(180deg,#020205 0%,#030712 54%,#07152f 100%) !important;
+  background: #000 !important;
 }
 
 body {
@@ -146,9 +146,7 @@ body::after {
   html,
   body,
   #malik-root {
-    background:
-      radial-gradient(ellipse at 50% 112%, rgba(177, 132, 44,.64) 0%, rgba(134, 99, 31,.38) 23%, rgba(7,22,51,.19) 47%, transparent 72%),
-      linear-gradient(180deg,#020205 0%,#020713 54%,#071d48 100%) !important;
+    background: #000 !important;
   }
 
   body::before {

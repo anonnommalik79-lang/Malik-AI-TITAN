@@ -16,10 +16,13 @@
   --creator-violet: 139, 92, 246;
 }
 
+/* #02050d is a navy-black, and it is the rule that actually won in the built
+   CSS - which is why the app still read faintly blue after every pure-black
+   pass. Black is #000. */
 html,
 body,
 #malik-root {
-  background: #02050d !important;
+  background: #000 !important;
   overflow-x: hidden;
 }
 
