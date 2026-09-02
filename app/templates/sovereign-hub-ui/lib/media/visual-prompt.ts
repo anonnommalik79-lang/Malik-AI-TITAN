@@ -1,4 +1,5 @@
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
+import { imagePromptCompilerTimeoutMs } from "./config"
 import type { ImageMode } from "./types"
 
 /**
@@ -133,6 +134,21 @@ const TRANSLATION_SYSTEM_PROMPT = [
   "Never write instructions, rules, labels, quotes or explanations. Output only the description itself, as plain prose.",
 ].join(" ")
 
+async function withinPromptCompilerBudget<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  if (timeoutMs <= 0) throw new Error("IMAGE_PROMPT_COMPILER_TIMEOUT")
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("IMAGE_PROMPT_COMPILER_TIMEOUT")), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 /**
  * Every free text model gets a turn before the request is sent untranslated.
  *
@@ -141,19 +157,30 @@ const TRANSLATION_SYSTEM_PROMPT = [
  * fumble means the picture is wrong. If the first model answers with a refusal,
  * chatter, untranslated text or a collapsed one-word summary, the next one
  * tries the same request.
+ *
+ * This loop is already the fallback policy. runStrictMalikModel therefore has
+ * its own generic fallback disabled here; nesting both fallback systems could
+ * multiply one image request into many 30-second text-model calls before a
+ * single pixel was rendered. The whole understanding stage also shares one
+ * short budget, so a dead text provider can never hold photo generation hostage.
  */
 async function translateToEnglish(source: string): Promise<{ text: string; translated: boolean; model: string }> {
   if (!source || !hasNonLatinLetters(source)) return { text: source, translated: false, model: "" }
 
+  const deadline = Date.now() + imagePromptCompilerTimeoutMs()
+
   for (const modelId of TRANSLATION_MODELS) {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+
     try {
-      const result = await runStrictMalikModel({
+      const result = await withinPromptCompilerBudget(runStrictMalikModel({
         modelId,
         prompt: source,
         systemPrompt: TRANSLATION_SYSTEM_PROMPT,
         maxTokens: 160,
         temperature: 0,
-      })
+      }, { allowFallback: false }), remaining)
 
       const candidate = String(result?.content || "")
         .replace(/\s+/g, " ")
@@ -162,7 +189,8 @@ async function translateToEnglish(source: string): Promise<{ text: string; trans
 
       if (usableDescription(candidate, source)) return { text: candidate, translated: true, model: modelId }
     } catch {
-      // This model is down or refused. Try the next one.
+      // This model is down, refused, or exhausted the shared compiler budget.
+      if (Date.now() >= deadline) break
     }
   }
 
