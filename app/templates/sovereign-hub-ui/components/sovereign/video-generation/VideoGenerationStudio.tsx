@@ -147,11 +147,11 @@ const SHOWCASE_TEMPLATES: ShowcaseVideoTemplate[] = [
 
 const MODELS = [
   { id: "malik", name: "MalikVideo 1.0", subtitle: "Бесплатно", tier: "Free", icon: "/brands/malikvideo.svg", active: true },
-  { id: "kling21", name: "Kling 2.1", subtitle: "Лучшее качество", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://klingai.com" },
-  { id: "kling16", name: "Kling 1.6", subtitle: "Стабильная", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://klingai.com" },
-  { id: "runway", name: "Runway Gen-3", subtitle: "Реалистичные", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://runwayml.com" },
-  { id: "luma", name: "Luma Dream Machine", subtitle: "Креативные", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://lumalabs.ai" },
-  { id: "pika", name: "Pika 2.0", subtitle: "Быстрые", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://pika.art" },
+  { id: "kling21", name: "Kling 2.1", subtitle: "Лучшее качество", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://klingai.com", active: false },
+  { id: "kling16", name: "Kling 1.6", subtitle: "Стабильная", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://klingai.com", active: false },
+  { id: "runway", name: "Runway Gen-3", subtitle: "Реалистичные", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://runwayml.com", active: false },
+  { id: "luma", name: "Luma Dream Machine", subtitle: "Креативные", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://lumalabs.ai", active: false },
+  { id: "pika", name: "Pika 2.0", subtitle: "Быстрые", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://pika.art", active: false },
 ] as const
 
 const CATEGORIES = ["Популярное", "Кинематографичные", "Анимация", "Реалистичные", "Природа", "Технологии", "Люди", "Продукты"] as const
