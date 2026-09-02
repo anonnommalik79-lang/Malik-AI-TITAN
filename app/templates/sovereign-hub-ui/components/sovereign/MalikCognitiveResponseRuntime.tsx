@@ -22,6 +22,18 @@ type CognitivePlan = {
   flow: string[]
 }
 
+type DualCopy = {
+  title: string
+  subtitle: string
+  answerOne: string
+  answerTwo: string
+  full: string
+  concise: string
+  prefer: string
+  selected: string
+  mobileHint: string
+}
+
 const MODE_COPY: Record<CognitiveLocale, Record<CognitiveMode, { label: string; flow: string[] }>> = {
   ru: {
     direct: { label: "DIRECT", flow: ["Ответ", "Главное"] },
@@ -58,6 +70,42 @@ const MODE_COPY: Record<CognitiveLocale, Record<CognitiveMode, { label: string; 
     business: { label: "STRATEGY", flow: ["Value", "Risk", "Decision", "Action"] },
     research: { label: "EVIDENCE", flow: ["Facts", "Sources", "Conclusion"] },
     numeric: { label: "NUMBERS", flow: ["Inputs", "Math", "Result"] },
+  },
+}
+
+const DUAL_COPY: Record<CognitiveLocale, DualCopy> = {
+  ru: {
+    title: "Какой ответ вам полезнее?",
+    subtitle: "Для важных запросов Malik показывает две версии из одного ответа — без второго вызова модели.",
+    answerOne: "Ответ 1",
+    answerTwo: "Ответ 2",
+    full: "Полный",
+    concise: "Сжатый",
+    prefer: "Я предпочитаю этот ответ",
+    selected: "Выбрано",
+    mobileHint: "Смахните, чтобы сравнить",
+  },
+  kk: {
+    title: "Қай жауап пайдалырақ?",
+    subtitle: "Маңызды сұрауларда Malik бір жауаптан екі нұсқа көрсетеді — модельді екінші рет шақырмай.",
+    answerOne: "Жауап 1",
+    answerTwo: "Жауап 2",
+    full: "Толық",
+    concise: "Қысқа",
+    prefer: "Осы жауапты таңдаймын",
+    selected: "Таңдалды",
+    mobileHint: "Салыстыру үшін сырғытыңыз",
+  },
+  en: {
+    title: "Which answer is more useful?",
+    subtitle: "For important questions Malik shows two views from one answer, with no second model call.",
+    answerOne: "Answer 1",
+    answerTwo: "Answer 2",
+    full: "Full",
+    concise: "Focused",
+    prefer: "I prefer this answer",
+    selected: "Selected",
+    mobileHint: "Swipe to compare",
   },
 }
 
@@ -184,21 +232,203 @@ function addCognitiveStrip(assistantRow: HTMLElement) {
   card.parentElement?.insertBefore(shell, card)
 }
 
+function importantForDual(plan: CognitivePlan, request: string, responseText: string, markdown: HTMLElement) {
+  if (responseText.length < 280 || markdown.children.length < 4) return false
+  if (markdown.querySelector(".malik-md-codeblock")) return false
+  if (/\b(кратко|коротко|brief|short|concise|қысқа)\b/iu.test(request)) return false
+
+  if (["compare", "decision", "business", "research", "numeric"].includes(plan.mode)) return true
+  return plan.mode === "explain" && request.length >= 170 && responseText.length >= 520
+}
+
+function scrubClone(root: HTMLElement) {
+  root.removeAttribute("id")
+  root.querySelectorAll<HTMLElement>("[id]").forEach((node) => node.removeAttribute("id"))
+  root.querySelectorAll<HTMLButtonElement>("button").forEach((button) => button.remove())
+}
+
+function focusedClone(source: HTMLElement) {
+  const clone = source.cloneNode(true) as HTMLElement
+  scrubClone(clone)
+
+  const blocks = Array.from(clone.children) as HTMLElement[]
+  if (blocks.length <= 4) return clone
+
+  const decisive = /(итог|вывод|решен|рекоменд|лучше|побед|риск|следующ|главн|вердикт|қорытынды|шешім|ұсын|тәуекел|келесі|негізгі|verdict|conclusion|recommend|winner|best|risk|next|key point)/iu
+  const keep = new Set<number>([0, 1])
+
+  let anchor = -1
+  for (let index = 1; index < blocks.length; index += 1) {
+    if (decisive.test(blocks[index].textContent || "")) {
+      anchor = index
+      break
+    }
+  }
+
+  if (anchor >= 0) {
+    keep.add(anchor)
+    if (anchor + 1 < blocks.length) keep.add(anchor + 1)
+    if (anchor + 2 < blocks.length && keep.size < 5) keep.add(anchor + 2)
+  } else {
+    keep.add(2)
+    if (blocks.length > 4) keep.add(3)
+  }
+
+  const last = blocks.length - 1
+  if (decisive.test(blocks[last].textContent || "") || keep.size < 4) keep.add(last)
+
+  blocks.forEach((block, index) => {
+    if (!keep.has(index)) block.remove()
+  })
+  return clone
+}
+
+function preferenceKey(request: string, response: string) {
+  const value = `${request}\u0000${response.slice(0, 320)}`
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `malik-dual-pref:${(hash >>> 0).toString(36)}`
+}
+
+function makeCandidate(
+  index: 1 | 2,
+  body: HTMLElement,
+  copy: DualCopy,
+  compact: boolean,
+) {
+  const card = document.createElement("article")
+  card.className = "malik-dual-card"
+  card.setAttribute("data-answer", String(index))
+
+  const header = document.createElement("header")
+  header.className = "malik-dual-card__header"
+
+  const identity = document.createElement("span")
+  identity.className = "malik-dual-card__identity"
+  const mark = document.createElement("i")
+  mark.textContent = "⚡"
+  mark.setAttribute("aria-hidden", "true")
+  const label = document.createElement("strong")
+  label.textContent = index === 1 ? copy.answerOne : copy.answerTwo
+  identity.append(mark, label)
+
+  const kind = document.createElement("span")
+  kind.className = "malik-dual-card__kind"
+  kind.textContent = compact ? copy.concise : copy.full
+  header.append(identity, kind)
+
+  const content = document.createElement("div")
+  content.className = "malik-dual-card__content"
+  content.appendChild(body)
+
+  const choose = document.createElement("button")
+  choose.type = "button"
+  choose.className = "malik-dual-card__choose"
+  choose.textContent = copy.prefer
+
+  card.append(header, content, choose)
+  return { card, choose }
+}
+
+function addDualAnswer(assistantRow: HTMLElement) {
+  if (assistantRow.querySelector(":scope .malik-dual-answer")) return
+  if (!isCompletedAssistant(assistantRow)) return
+
+  const card = assistantRow.querySelector(".malik-message-card-assistant") as HTMLElement | null
+  const markdown = card?.querySelector(":scope .malik-md") as HTMLElement | null
+  if (!card || !markdown) return
+
+  const userRow = previousUserRow(assistantRow)
+  const request = userRow?.textContent?.replace("⚡", "").trim() || ""
+  if (!request) return
+
+  const plan = planFor(request)
+  const responseText = markdown.textContent?.trim() || ""
+  if (!importantForDual(plan, request, responseText, markdown)) return
+
+  const locale = localeFor(request)
+  const copy = DUAL_COPY[locale]
+  const full = markdown.cloneNode(true) as HTMLElement
+  scrubClone(full)
+  const focused = focusedClone(markdown)
+
+  const shell = document.createElement("section")
+  shell.className = "malik-dual-answer"
+  shell.setAttribute("aria-label", copy.title)
+
+  const intro = document.createElement("div")
+  intro.className = "malik-dual-intro"
+  const title = document.createElement("strong")
+  title.textContent = copy.title
+  const subtitle = document.createElement("span")
+  subtitle.textContent = copy.subtitle
+  const mobileHint = document.createElement("small")
+  mobileHint.textContent = copy.mobileHint
+  intro.append(title, subtitle, mobileHint)
+
+  const grid = document.createElement("div")
+  grid.className = "malik-dual-grid"
+
+  const one = makeCandidate(1, full, copy, false)
+  const two = makeCandidate(2, focused, copy, true)
+  grid.append(one.card, two.card)
+  shell.append(intro, grid)
+
+  const storageKey = preferenceKey(request, responseText)
+  const applySelection = (selected: "1" | "2" | null) => {
+    const pairs = [one, two] as const
+    pairs.forEach((candidate, position) => {
+      const value = String(position + 1) as "1" | "2"
+      const active = selected === value
+      candidate.card.setAttribute("data-selected", active ? "1" : "0")
+      candidate.choose.textContent = active ? copy.selected : copy.prefer
+      candidate.choose.setAttribute("aria-pressed", active ? "true" : "false")
+    })
+  }
+
+  let saved: "1" | "2" | null = null
+  try {
+    const value = window.localStorage.getItem(storageKey)
+    saved = value === "1" || value === "2" ? value : null
+  } catch {
+    saved = null
+  }
+  applySelection(saved)
+
+  one.choose.addEventListener("click", () => {
+    try { window.localStorage.setItem(storageKey, "1") } catch { /* best effort */ }
+    applySelection("1")
+  })
+  two.choose.addEventListener("click", () => {
+    try { window.localStorage.setItem(storageKey, "2") } catch { /* best effort */ }
+    applySelection("2")
+  })
+
+  markdown.classList.add("malik-dual-source-hidden")
+  card.insertBefore(shell, markdown)
+}
+
 function decorateMalikChat() {
   const root = document.getElementById("malik-root")
   if (!root) return
 
   root.querySelectorAll<HTMLElement>('[data-malik-message="user"]').forEach(addLightningReaction)
-  root.querySelectorAll<HTMLElement>('[data-malik-message="assistant"]').forEach(addCognitiveStrip)
+  root.querySelectorAll<HTMLElement>('[data-malik-message="assistant"]').forEach((row) => {
+    addCognitiveStrip(row)
+    addDualAnswer(row)
+  })
 }
 
 /**
  * Zero-token presentation layer.
  *
- * The model still makes one normal request. This runtime only reads the already
- * rendered user/assistant turns and adds Malik's task-native response DNA plus
- * the ⚡ reaction in the browser. No second LLM call, no hidden prompt, no
- * extra provider tokens.
+ * The model still makes one normal request. This runtime reads the already
+ * rendered turn and adds Malik response DNA, the ⚡ reaction and — for important
+ * questions — a full + focused two-answer comparison. No second LLM call, no
+ * hidden provider request and no extra provider tokens are used.
  */
 export function MalikCognitiveResponseRuntime() {
   useEffect(() => {
