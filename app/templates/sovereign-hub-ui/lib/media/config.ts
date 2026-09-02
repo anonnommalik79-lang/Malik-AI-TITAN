@@ -45,8 +45,11 @@ export function maxVideoPromptLength(): number {
 }
 
 export function imageProviderTimeoutMs(): number {
-  const n = Number(process.env.IMAGE_PROVIDER_TIMEOUT_MS || 90_000)
-  return Number.isFinite(n) && n > 0 ? n : 90_000
+  // This is an availability ceiling, not a quality knob. Successful renders use
+  // exactly the same model, steps, guidance and prompt as before. A dead image
+  // endpoint simply stops holding the whole sequential fallback chain for 90s.
+  const n = Number(process.env.IMAGE_PROVIDER_TIMEOUT_MS || 20_000)
+  return Number.isFinite(n) && n > 0 ? n : 20_000
 }
 
 export function imagePromptCompilerTimeoutMs(): number {
@@ -55,8 +58,10 @@ export function imagePromptCompilerTimeoutMs(): number {
 }
 
 export function pollinationsTimeoutMs(): number {
-  const n = Number(process.env.POLLINATIONS_TIMEOUT_MS || 45_000)
-  return Number.isFinite(n) && n > 0 ? n : 45_000
+  // Pollinations is the last-resort route. Keep it inside the same browser
+  // request window instead of letting the UI time out while the server carries on.
+  const n = Number(process.env.POLLINATIONS_TIMEOUT_MS || 18_000)
+  return Number.isFinite(n) && n > 0 ? n : 18_000
 }
 
 export const POLLO_API_BASE = "https://pollo.ai/api/platform"
