@@ -5,6 +5,8 @@ import {
   malikModelErrorPayload,
   resolveStrictMalikSelection,
 } from "@/lib/server/malik-model-router"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
@@ -33,7 +35,34 @@ async function handlePOST(request: Request) {
 
   try {
     const selection = await resolveStrictMalikSelection(request, body)
-    const answer = await malikGodAnswer(body, selection ? { modelId: selection.modelId } : undefined)
+    const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
+    const ownerMode = entitlement.plan === "owner"
+
+    // Founder/company identity is deterministic. Providers never get a chance
+    // to invent a developer team or another company for MALIK AI.
+    const identity = malikIdentityAnswer(body, ownerMode)
+    if (identity) {
+      return Response.json({
+        ok: true,
+        content: identity,
+        provider: "malik-identity-core",
+        model: "verified-brand-profile",
+        selectedModelId: selection?.modelId,
+        usedWeb: false,
+        sources: [],
+        attempts: [],
+      }, {
+        headers: {
+          "cache-control": "no-store",
+          "x-malik-router": "verified-founder-identity",
+        },
+      })
+    }
+
+    // Only a server-verified owner session receives this context. Client body
+    // fields such as email/username can never grant founder mode.
+    const routedBody = ownerMode ? withVerifiedOwnerChatContext(body) : body
+    const answer = await malikGodAnswer(routedBody, selection ? { modelId: selection.modelId } : undefined)
     return Response.json(asJson(answer), {
       headers: {
         "cache-control": "no-store",
