@@ -144,6 +144,78 @@ body,
   filter: none !important;
 }
 
+/* Desktop MalikVideo cleanup requested from the live screenshot.
+ * 1) remove the stray gray cursor/bar beside the title (and any nested scroll thumb),
+ * 2) force the strip below the model buttons back to true OLED black.
+ */
+#malik-root .mv[data-view="video-generation"] .mv__header h1 {
+  border: 0 !important;
+  border-right: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  caret-color: transparent !important;
+  animation: none !important;
+}
+
+#malik-root .mv[data-view="video-generation"] .mv__header h1::before,
+#malik-root .mv[data-view="video-generation"] .mv__header h1::after,
+#malik-root .mv[data-view="video-generation"] .mv__header h1 > *::before,
+#malik-root .mv[data-view="video-generation"] .mv__header h1 > *::after {
+  content: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+#malik-root .mv[data-view="video-generation"] .mv__workspace,
+#malik-root .mv[data-view="video-generation"] .mv__composer textarea {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+#malik-root .mv[data-view="video-generation"] .mv__workspace::-webkit-scrollbar,
+#malik-root .mv[data-view="video-generation"] .mv__composer textarea::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}
+
+#malik-root .mv[data-view="video-generation"] .mv__model-row,
+#malik-root .mv[data-view="video-generation"] .mv__statusbar,
+#malik-root .mv[data-view="video-generation"] .mv__session-bar,
+#malik-root .mv[data-view="video-generation"] .mv__discover,
+#malik-root .mv[data-view="video-generation"] .mv__tabs {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+#malik-root .mv[data-view="video-generation"] .mv__model-row::before,
+#malik-root .mv[data-view="video-generation"] .mv__model-row::after,
+#malik-root .mv[data-view="video-generation"] .mv__statusbar::before,
+#malik-root .mv[data-view="video-generation"] .mv__statusbar::after,
+#malik-root .mv[data-view="video-generation"] .mv__session-bar::before,
+#malik-root .mv[data-view="video-generation"] .mv__session-bar::after,
+#malik-root .mv[data-view="video-generation"] .mv__discover::before,
+#malik-root .mv[data-view="video-generation"] .mv__discover::after,
+#malik-root .mv[data-view="video-generation"] .mv__tabs::before,
+#malik-root .mv[data-view="video-generation"] .mv__tabs::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
 /* Kill the broad legacy mobile rule that painted the second section gold. */
 @media (max-width: 820px) {
   #malik-root .malik-dashboard-shell main:not(:has([data-voice-mode])) > section,
