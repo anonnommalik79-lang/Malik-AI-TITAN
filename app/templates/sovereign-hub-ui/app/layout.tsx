@@ -10,6 +10,7 @@ import { SitesRouteFixRuntime } from "@/components/sovereign/SitesRouteFixRuntim
 import { ImageResultExperience } from "@/components/sovereign/ImageResultExperience"
 import { ImageQualityRuntime } from "@/components/sovereign/ImageQualityRuntime"
 import { ChatHistoryQuotaGuard } from "@/components/sovereign/ChatHistoryQuotaGuard"
+import { MalikCognitiveResponseRuntime } from "@/components/sovereign/MalikCognitiveResponseRuntime"
 import "./globals.css"
 import "./mobile-polish.css"
 import "./legendary-aurora.css"
@@ -75,6 +76,8 @@ import "./image-result-experience.css"
 import "./image-ultra-stack.css"
 // Absolute final surface authority: remove every legacy gold/yellow background glow.
 import "./malik-oled-black-no-gold-final.css"
+// Zero-token MALIK response DNA + requested ⚡ reaction. Pure black/neutral surfaces only.
+import "./malik-cognitive-response-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
@@ -203,6 +206,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <SitesRouteFixRuntime />
         <ImageResultExperience />
         <ImageQualityRuntime />
+        <MalikCognitiveResponseRuntime />
         <AuthKitProvider>
           <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden bg-black notranslate">
             {children}
