@@ -3,10 +3,15 @@
 import { useLayoutEffect } from "react"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
+const DASHBOARD_ACCOUNT_STORAGE_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
 const DISPOSABLE_MEDIA_KEYS = [
   "malik_image_history_v2",
   "malik_photo_generation_results_v1",
 ]
+
+function isDashboardStorageKey(key: string) {
+  return key === DASHBOARD_STORAGE_KEY || key.startsWith(DASHBOARD_ACCOUNT_STORAGE_PREFIX)
+}
 
 function isQuotaError(error: unknown) {
   const value = error as { name?: string; code?: number; message?: string } | null
@@ -16,12 +21,10 @@ function isQuotaError(error: unknown) {
 }
 
 /**
- * The dashboard's legacy quota fallback deletes old chats until a snapshot fits.
- * That is the wrong tradeoff when the quota was consumed by generated image
- * bytes. Intercept only the dashboard key: first reclaim disposable media cache,
- * retry the complete snapshot, and if the origin is genuinely full keep the
- * previous complete snapshot instead of allowing the writer to replace it with
- * a version that silently dropped conversations.
+ * Chat history is user data; disposable media indexes are only caches. Guard
+ * both the legacy dashboard key and the account-scoped V7 keys so a full
+ * browser quota never silently replaces a complete conversation snapshot with
+ * a truncated one.
  */
 export function ChatHistoryQuotaGuard() {
   useLayoutEffect(() => {
@@ -32,7 +35,7 @@ export function ChatHistoryQuotaGuard() {
     const original = proto.setItem
 
     const guardedSetItem = function (this: Storage, key: string, value: string): void {
-      if (this !== storage || key !== DASHBOARD_STORAGE_KEY) {
+      if (this !== storage || !isDashboardStorageKey(key)) {
         original.call(this, key, value)
         return
       }
@@ -44,7 +47,6 @@ export function ChatHistoryQuotaGuard() {
         if (!isQuotaError(error)) throw error
       }
 
-      // Media history is a convenience cache; chat history is user data.
       for (const disposableKey of DISPOSABLE_MEDIA_KEYS) {
         try { storage.removeItem(disposableKey) } catch {}
       }
@@ -53,9 +55,6 @@ export function ChatHistoryQuotaGuard() {
         original.call(this, key, value)
       } catch (error) {
         if (!isQuotaError(error)) throw error
-        // Intentionally do not throw. The old complete snapshot is still valid.
-        // Throwing would activate dashboard.tsx's legacy "drop oldest chats"
-        // loop. A later smaller write can succeed without destroying history.
         console.warn("[CHAT HISTORY GUARD] quota is full; preserved previous complete snapshot")
       }
     }

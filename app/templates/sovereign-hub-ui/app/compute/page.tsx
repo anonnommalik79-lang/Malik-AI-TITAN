@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import Dashboard from "@/components/sovereign/dashboard"
+import { AccountChatPersistence } from "@/components/sovereign/AccountChatPersistence"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 
 export const dynamic = "force-dynamic"
@@ -12,5 +13,11 @@ export default async function ComputePage() {
   const guestMode = (await cookies()).get("malik-guest")?.value === "1"
   if (!user && !guestMode) redirect("/auth")
 
-  return <Dashboard guestMode={!user && guestMode} initialView="compute" />
+  const accountId = user?.id || user?.email || "guest"
+
+  return (
+    <AccountChatPersistence accountId={accountId}>
+      <Dashboard guestMode={!user && guestMode} initialView="compute" />
+    </AccountChatPersistence>
+  )
 }

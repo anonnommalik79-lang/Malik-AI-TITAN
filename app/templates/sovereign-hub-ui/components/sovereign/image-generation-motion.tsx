@@ -1,411 +1,233 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { playImageGenerationCompleteSound, playImageGenerationStartSound } from "@/lib/media/image-generation-sound"
 import { resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 
+type Status = "queued" | "thinking" | "generating" | "rendering" | "ready" | "failed"
 type ImageGenerationMotionProps = {
   prompt?: string
   resultUrl?: string
   fallbackUrl?: string
-  status?: "queued" | "thinking" | "generating" | "rendering" | "ready" | "failed"
+  status?: Status
   startedAt?: string
   provider?: string
   understood?: string
   failed?: boolean
   error?: string
+  progress?: number
 }
 
 const GENERATION_WATCHDOG_MS = 3 * 60 * 1000
-const IMAGE_LOAD_TIMEOUT_MS = 25_000
-const WATCHDOG_MESSAGE = "Генерация не завершилась за 3 минуты и была остановлена. Повторите запрос — лимит за неудачную попытку не списывается."
-const EMPTY_RESULT_MESSAGE = "Генератор закончил работу, но не вернул файл изображения. Повторите генерацию."
+const READY_RESULT_GRACE_MS = 8_000
+const DEMOS = Array.from({ length: 8 }, (_, i) => `/library/gallery/${String(i + 1).padStart(3, "0")}.webp`)
+const HAND = "/malik/image-loader/hand.webp"
+const clamp = (n: number, a = 0, b = 1) => Math.max(a, Math.min(b, n))
+const smooth = (n: number) => n * n * (3 - 2 * n)
+const ease = (n: number) => 1 - (1 - n) * (1 - n)
 
-const REFERENCE_FRAMES = [
-  { label: "Scene", src: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=520&q=76" },
-  { label: "Space", src: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=520&q=76" },
-  { label: "Mood", src: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=520&q=76" },
-  { label: "Light", src: "https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=520&q=76" },
-  { label: "Human", src: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=520&q=76" },
-  { label: "Object", src: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=520&q=76" },
-  { label: "Depth", src: "https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=520&q=76" },
-  { label: "Detail", src: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=520&q=76" },
-  { label: "Balance", src: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=520&q=76" },
-] as const
-
-function friendlyGenerationError(error?: string) {
-  const raw = String(error || "").trim()
-  if (!raw) return "Не удалось получить готовое изображение. Повторите генерацию."
-  if (/load failed|failed to fetch|network\s*error|network request failed/i.test(raw)) {
-    return "Соединение с генератором прервалось. Повторите запрос — Malik AI автоматически выберет резервный маршрут."
-  }
-  return raw
-}
-
-function statusProgress(status?: ImageGenerationMotionProps["status"]) {
-  if (status === "thinking") return 22
-  if (status === "generating") return 58
-  if (status === "rendering") return 82
+function statusProgress(status?: Status) {
   if (status === "ready") return 96
-  if (status === "failed") return 100
-  return 8
+  if (status === "rendering") return 72
+  if (status === "generating") return 36
+  if (status === "thinking") return 14
+  if (status === "queued") return 6
+  return 4
+}
+function statusText(status?: Status, done = false) {
+  if (done) return "Готово"
+  if (status === "rendering" || status === "ready") return "Финальная детализация"
+  if (status === "generating") return "Прорисовка изображения"
+  if (status === "thinking") return "Анализ промпта"
+  if (status === "queued") return "Подготовка модели"
+  return "Генерация изображения"
+}
+function loadImage(src: string, timeout = 25_000) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.decoding = "async"
+    const timer = window.setTimeout(() => reject(new Error("image timeout")), timeout)
+    image.onload = () => { window.clearTimeout(timer); resolve(image) }
+    image.onerror = () => { window.clearTimeout(timer); reject(new Error("image failed")) }
+    image.src = src
+  })
 }
 
-function generationPhase(progress: number, status?: ImageGenerationMotionProps["status"], understood?: string) {
-  if (status === "rendering" || progress >= 91) return "Финализирую 2K master"
-  if (progress >= 76) return "Собираю финальный кадр"
-  if (progress >= 58) return "Синтезирую материалы"
-  if (progress >= 38) return "Рассчитываю свет"
-  if (progress >= 18) return "Собираю форму сцены"
-  return understood ? "Анализирую визуальные слои" : "Понимаю сцену"
-}
-
-export function ImageGenerationMotion({
-  prompt,
-  resultUrl,
-  fallbackUrl,
-  status,
-  startedAt,
-  provider,
-  understood,
-  failed = false,
-  error,
-}: ImageGenerationMotionProps) {
-  const [imageLoaded, setImageLoaded] = useState(false)
+export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedAt, failed, error, progress }: ImageGenerationMotionProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const finalUrlRef = useRef("")
+  const failedRef = useRef(false)
   const [resolvedResultUrl, setResolvedResultUrl] = useState("")
-  const [usingFallback, setUsingFallback] = useState(false)
-  const [loadError, setLoadError] = useState("")
-  const [elapsedSeconds, setElapsedSeconds] = useState(0)
-  const [visualProgress, setVisualProgress] = useState(() => statusProgress(status))
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [seconds, setSeconds] = useState(0)
+  const [timedOut, setTimedOut] = useState(false)
+  const [readyWithoutResult, setReadyWithoutResult] = useState(false)
+  const [assetError, setAssetError] = useState("")
 
-  const startedAtMs = useMemo(() => {
-    const parsed = startedAt ? Date.parse(startedAt) : Number.NaN
-    return Number.isFinite(parsed) ? parsed : Date.now()
-  }, [startedAt])
-
-  useEffect(() => {
-    let cancelled = false
-    setImageLoaded(false)
-    setLoadError("")
-    setUsingFallback(false)
-    setResolvedResultUrl("")
-    setVisualProgress((value) => Math.max(value, resultUrl ? 94 : 8))
-    if (!resultUrl) return () => { cancelled = true }
-
-    resolveGeneratedImageUrl(resultUrl)
-      .then((url) => { if (!cancelled) setResolvedResultUrl(url) })
-      .catch((reason) => {
-        if (cancelled) return
-        if (fallbackUrl) {
-          setUsingFallback(true)
-          setResolvedResultUrl(fallbackUrl)
-          return
-        }
-        setLoadError(reason instanceof Error ? reason.message : "Не удалось восстановить изображение.")
-      })
-
-    return () => { cancelled = true }
-  }, [fallbackUrl, resultUrl])
-
-  const actuallyFailed = failed || status === "failed" || Boolean(loadError)
+  const missingReadyResult = status === "ready" && !resultUrl && !fallbackUrl
+  const actuallyFailed = Boolean(failed || status === "failed" || timedOut || readyWithoutResult)
 
   useEffect(() => {
-    if (!actuallyFailed && !imageLoaded && status === "ready" && !resultUrl) setLoadError(EMPTY_RESULT_MESSAGE)
-  }, [actuallyFailed, imageLoaded, resultUrl, status])
-
-  useEffect(() => {
-    if (actuallyFailed || imageLoaded) return
-    const remaining = GENERATION_WATCHDOG_MS - (Date.now() - startedAtMs)
-    if (remaining <= 0) {
-      setLoadError(WATCHDOG_MESSAGE)
-      return
-    }
-    const timer = window.setTimeout(() => setLoadError(WATCHDOG_MESSAGE), remaining)
-    return () => window.clearTimeout(timer)
-  }, [actuallyFailed, imageLoaded, startedAtMs])
-
-  // One cheap one-second tick owns both elapsed time and progress. No scene is
-  // ever remounted, no canvas is redrawn and no animation state grows over time.
-  useEffect(() => {
-    if (actuallyFailed || imageLoaded) return
+    const start = Number.isFinite(Date.parse(startedAt || "")) ? Date.parse(startedAt || "") : Date.now()
     const tick = () => {
-      setElapsedSeconds(Math.max(0, Math.round((Date.now() - startedAtMs) / 1000)))
-      setVisualProgress((value) => {
-        const floor = Math.max(statusProgress(status), resultUrl ? 94 : 8)
-        return Math.min(resultUrl ? 96 : 94, Math.max(value, floor) + 1)
-      })
+      const elapsed = Date.now() - start
+      setSeconds(Math.max(0, Math.floor(elapsed / 1000)))
+      if (!imageLoaded && !actuallyFailed && elapsed >= GENERATION_WATCHDOG_MS) setTimedOut(true)
     }
     tick()
     const timer = window.setInterval(tick, 1000)
     return () => window.clearInterval(timer)
-  }, [actuallyFailed, imageLoaded, resultUrl, startedAtMs, status])
+  }, [startedAt, imageLoaded, actuallyFailed])
 
   useEffect(() => {
-    if (!resolvedResultUrl || imageLoaded || actuallyFailed) return
-    const timer = window.setTimeout(() => {
-      if (!usingFallback && fallbackUrl && fallbackUrl !== resolvedResultUrl) {
-        setUsingFallback(true)
-        setResolvedResultUrl(fallbackUrl)
-        return
-      }
-      setLoadError("Готовый файл изображения не загрузился. Повторите генерацию.")
-    }, IMAGE_LOAD_TIMEOUT_MS)
+    if (!missingReadyResult) { setReadyWithoutResult(false); return }
+    const timer = window.setTimeout(() => setReadyWithoutResult(true), READY_RESULT_GRACE_MS)
     return () => window.clearTimeout(timer)
-  }, [actuallyFailed, fallbackUrl, imageLoaded, resolvedResultUrl, usingFallback])
+  }, [missingReadyResult])
 
   useEffect(() => {
-    if (!actuallyFailed && !imageLoaded) playImageGenerationStartSound()
-  }, [actuallyFailed, imageLoaded])
+    let cancelled = false
+    const candidate = resultUrl || fallbackUrl || ""
+    if (!candidate) { setResolvedResultUrl(""); setImageLoaded(false); return }
+    resolveGeneratedImageUrl(candidate).then((url) => {
+      if (!cancelled) { setResolvedResultUrl(url); setAssetError("") }
+    }).catch(() => {
+      if (!cancelled && fallbackUrl && fallbackUrl !== candidate) setResolvedResultUrl(fallbackUrl)
+      else if (!cancelled) setAssetError("Сохранённое изображение недоступно.")
+    })
+    return () => { cancelled = true }
+  }, [resultUrl, fallbackUrl])
 
-  const isGenerating = !actuallyFailed && !imageLoaded
-  const shownProgress = imageLoaded ? 100 : Math.min(96, Math.max(statusProgress(status), visualProgress))
-  const mergeProgress = shownProgress < 68
-    ? 0
-    : Math.min(resultUrl ? 1 : 0.55, (shownProgress - 68) / 28)
-  const mergeCount = Math.min(REFERENCE_FRAMES.length, Math.floor(mergeProgress * REFERENCE_FRAMES.length))
-  const activeReference = Math.min(
-    REFERENCE_FRAMES.length - 1,
-    Math.floor((Math.min(shownProgress, 90) / 90) * REFERENCE_FRAMES.length),
-  )
+  useEffect(() => { finalUrlRef.current = resolvedResultUrl }, [resolvedResultUrl])
+  useEffect(() => { failedRef.current = actuallyFailed }, [actuallyFailed])
+  useEffect(() => { if (!actuallyFailed && !imageLoaded) playImageGenerationStartSound() }, [actuallyFailed, imageLoaded])
+  useEffect(() => { if (imageLoaded) playImageGenerationCompleteSound() }, [imageLoaded])
 
-  return (
-    <section
-      className="malik-photo-motion"
-      data-malik-image-ready={imageLoaded ? "1" : "0"}
-      aria-live="polite"
-      aria-busy={isGenerating}
-    >
-      <div className={`malik-photo-stage ${imageLoaded ? "is-ready" : ""} ${actuallyFailed ? "is-failed" : ""}`}>
-        {resolvedResultUrl ? (
-          <img
-            src={resolvedResultUrl}
-            alt={prompt || "Изображение, созданное Malik AI"}
-            className={`malik-art-result malik-photo-result ${imageLoaded ? "is-visible" : ""}`}
-            onLoad={() => {
-              setImageLoaded(true)
-              setVisualProgress(100)
-              playImageGenerationCompleteSound()
-            }}
-            onError={() => {
-              if (!usingFallback && fallbackUrl && fallbackUrl !== resolvedResultUrl) {
-                setUsingFallback(true)
-                setResolvedResultUrl(fallbackUrl)
-                return
-              }
-              setLoadError("Готовый файл изображения повреждён или недоступен. Повторите генерацию.")
-            }}
-          />
-        ) : null}
+  const shownProgress = useMemo(() => {
+    if (imageLoaded || actuallyFailed) return 100
+    if (typeof progress === "number" && Number.isFinite(progress)) return Math.round(clamp(progress, 4, 96))
+    return statusProgress(status)
+  }, [imageLoaded, actuallyFailed, progress, status])
+  const shownStage = actuallyFailed ? "Генерация остановлена" : statusText(status, imageLoaded)
 
-        {isGenerating ? (
-          <div className="malik-photo-forge" aria-hidden="true">
-            <div className="malik-photo-forge__top">
-              <span><i />Malik Image</span>
-              <em>Ultra 2K</em>
-            </div>
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || actuallyFailed) return
+    const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true })
+    if (!ctx) return
 
-            <div className="malik-photo-forge__grid">
-              {REFERENCE_FRAMES.map((frame, index) => (
-                <figure
-                  key={frame.label}
-                  className={`malik-photo-forge__ref ref-${index + 1} ${index === activeReference ? "is-active" : ""} ${index < mergeCount ? "is-merge" : ""}`}
-                >
-                  <img src={frame.src} alt="" loading="eager" decoding="async" referrerPolicy="no-referrer" />
-                  <span>{frame.label}</span>
-                  <b>{String(index + 1).padStart(2, "0")}</b>
-                </figure>
-              ))}
-            </div>
+    const source = document.createElement("canvas"), sourceCtx = source.getContext("2d", { alpha: false })!
+    const mask = document.createElement("canvas"), maskCtx = mask.getContext("2d", { alpha: true })!
+    const reveal = document.createElement("canvas"), revealCtx = reveal.getContext("2d", { alpha: true })!
+    const brush = document.createElement("canvas"), brushCtx = brush.getContext("2d", { alpha: true })!
+    let disposed = false, token = 1, width = 1, height = 1, dpr = 1, lastDemo = -1
+    let hand: HTMLImageElement | null = null, demos: HTMLImageElement[] = [], lastPoint: { x: number; y: number } | null = null
+    let particles: Array<{x:number;y:number;vx:number;vy:number;r:number;life:number}> = []
+    const reduced = (navigator.hardwareConcurrency || 8) <= 4
 
-            <div className={`malik-photo-forge__fusion ${mergeProgress > 0 ? "is-on" : ""}`}><i /></div>
+    const roundRect = (c: CanvasRenderingContext2D, x:number,y:number,w:number,h:number,r:number) => {
+      c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath()
+    }
+    const border = () => { ctx.save(); roundRect(ctx,.5,.5,width-1,height-1,28); ctx.strokeStyle="rgba(218,174,76,.94)"; ctx.lineWidth=1; ctx.stroke(); ctx.restore() }
+    const black = () => { ctx.fillStyle="#000"; ctx.fillRect(0,0,width,height); border() }
+    const makeBrush = () => {
+      brush.width = brush.height = 256
+      const g = brushCtx.createRadialGradient(128,128,0,128,128,128)
+      g.addColorStop(0,"#fff"); g.addColorStop(.58,"rgba(255,255,255,.98)"); g.addColorStop(.84,"rgba(255,255,255,.55)"); g.addColorStop(1,"rgba(255,255,255,0)")
+      brushCtx.clearRect(0,0,256,256); brushCtx.fillStyle=g; brushCtx.fillRect(0,0,256,256)
+    }
+    const resize = () => {
+      const r = canvas.parentElement?.getBoundingClientRect(); if (!r) return
+      width=Math.max(1,Math.round(r.width)); height=Math.max(1,Math.round(r.height)); dpr=Math.min(devicePixelRatio||1,1.45)
+      for (const c of [canvas,source,mask,reveal]) { c.width=Math.round(width*dpr); c.height=Math.round(height*dpr) }
+      for (const c of [ctx,sourceCtx,maskCtx,revealCtx]) { c.setTransform(dpr,0,0,dpr,0,0); c.imageSmoothingEnabled=true; c.imageSmoothingQuality="high" }
+      makeBrush(); black()
+    }
+    const contain = (img:HTMLImageElement) => {
+      const k=Math.min(width/img.naturalWidth,height/img.naturalHeight), w=img.naturalWidth*k, h=img.naturalHeight*k
+      return {x:(width-w)/2,y:(height-h)/2,w,h}
+    }
+    const prepare = (img:HTMLImageElement) => {
+      sourceCtx.fillStyle="#000"; sourceCtx.fillRect(0,0,width,height); const q=contain(img); sourceCtx.drawImage(img,q.x,q.y,q.w,q.h)
+      maskCtx.clearRect(0,0,width,height); lastPoint=null; particles=[]
+    }
+    const stamp = (x:number,y:number,size=1) => { const z=(reduced?154:172)*size; maskCtx.drawImage(brush,x-z/2,y-z/2,z,z) }
+    const lineStamp = (x:number,y:number,size=1) => {
+      if (!lastPoint) { stamp(x,y,size); lastPoint={x,y}; return }
+      const dx=x-lastPoint.x,dy=y-lastPoint.y,n=Math.max(1,Math.ceil(Math.hypot(dx,dy)/(reduced?19:14)))
+      for(let i=1;i<=n;i++){const t=i/n;stamp(lastPoint.x+dx*t,lastPoint.y+dy*t,size)} lastPoint={x,y}
+    }
+    const spawn = (x:number,y:number,dir:number) => {
+      for(let i=0;i<(reduced?4:7);i++) particles.push({x,y,vx:-dir*(.4+Math.random()*1.4),vy:(Math.random()-.5)*1.4,r:.7+Math.random()*2,life:18+Math.random()*18})
+      if(particles.length>(reduced?70:120)) particles.splice(0,particles.length-(reduced?70:120))
+    }
+    const drawParticles = () => {
+      for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.life--;if(p.life<=0){particles.splice(i,1);continue}ctx.fillStyle=`rgba(255,214,119,${clamp(p.life/20)})`;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill()}
+    }
+    const drawHand = (x:number,y:number,dir:number,phase:number,alpha=1) => {
+      if(!hand)return; const w=width*(reduced?.285:.31),h=w*(hand.naturalHeight/hand.naturalWidth)
+      ctx.save();ctx.translate(x,y);ctx.scale(dir,1);ctx.rotate(dir*Math.sin(phase*Math.PI*2)*.018);ctx.globalAlpha=alpha;ctx.drawImage(hand,-.242*w,-.045*h,w,h);ctx.restore()
+    }
+    const composite = (x:number,y:number,dir:number,t:number,handAlpha=1) => {
+      revealCtx.clearRect(0,0,width,height); revealCtx.globalCompositeOperation="source-over"; revealCtx.drawImage(source,0,0,width,height); revealCtx.globalCompositeOperation="destination-in"; revealCtx.drawImage(mask,0,0,width,height); revealCtx.globalCompositeOperation="source-over"
+      ctx.fillStyle="#000";ctx.fillRect(0,0,width,height);ctx.save();roundRect(ctx,0,0,width,height,28);ctx.clip();ctx.drawImage(reveal,0,0,width,height);drawParticles();drawHand(x,y,dir,t,handAlpha);ctx.restore();border()
+    }
+    const lane = (t:number,lanes=6) => {
+      const raw=clamp(t)*lanes,index=Math.min(lanes-1,Math.floor(raw)),local=smooth(raw-index),dir=index%2===0?-1:1,left=width*.07,right=width*.93,top=height*.075,bottom=height*.925
+      return {x:dir===-1?right+(left-right)*local:left+(right-left)*local,y:top+(bottom-top)*(index/(lanes-1)),dir,index}
+    }
+    const still = (img:HTMLImageElement,alpha=1) => { ctx.fillStyle="#000";ctx.fillRect(0,0,width,height);const q=contain(img);ctx.save();roundRect(ctx,0,0,width,height,28);ctx.clip();ctx.globalAlpha=alpha;ctx.drawImage(img,q.x,q.y,q.w,q.h);ctx.restore();border() }
+    const cycle = (img:HTMLImageElement,duration:number,final=false,hold=430) => new Promise<void>((resolve) => {
+      const local=token,start=performance.now();let lastLane=-1;prepare(img)
+      const frame=(now:number)=>{if(disposed||local!==token||failedRef.current)return resolve();const t=clamp((now-start)/duration),p=lane(ease(t),final?5:6);if(p.index!==lastLane){lastPoint=null;lastLane=p.index}lineStamp(p.x,p.y,final?1.1:1.04);if(t>.82){const fill=clamp((t-.82)/.18);for(let i=0;i<Math.floor(fill*25);i++){const col=i%5,row=Math.floor(i/5);stamp(width*(col+.5)/5,height*(row+.5)/5,1.3)}}if(t>=.995){maskCtx.fillStyle="#fff";maskCtx.fillRect(0,0,width,height)}spawn(p.x,p.y,p.dir);composite(p.x,p.y,p.dir,t,t>.97?clamp((1-t)/.03):1);if(t<1)return requestAnimationFrame(frame);still(img);window.setTimeout(resolve,hold)};requestAnimationFrame(frame)
+    })
+    const fade = (img:HTMLImageElement) => new Promise<void>((resolve)=>{const start=performance.now();const f=(now:number)=>{const t=clamp((now-start)/190);still(img,1-smooth(t));if(t<1)requestAnimationFrame(f);else{black();resolve()}};requestAnimationFrame(f)})
+    const pickDemo=()=>{let i=Math.floor(Math.random()*demos.length);while(demos.length>1&&i===lastDemo)i=Math.floor(Math.random()*demos.length);lastDemo=i;return demos[i]}
 
-            <div className="malik-photo-forge__focus">
-              <i className="corner tl" />
-              <i className="corner tr" />
-              <i className="corner bl" />
-              <i className="corner br" />
-              <i className="focus-ring" />
-              <i className="focus-dot" />
-            </div>
-
-            <div className="malik-photo-forge__sweeps">
-              <i className="beam horizontal top-down" />
-              <i className="beam horizontal bottom-up" />
-              <i className="beam vertical left-right" />
-              <i className="beam vertical right-left" />
-            </div>
-
-            <div className="malik-photo-forge__badge">9 universal HQ references · 4-way scan</div>
-          </div>
-        ) : null}
-
-        {actuallyFailed ? (
-          <div className="malik-photo-failure">
-            <span>!</span>
-            <strong>Фото не создано</strong>
-            <p>{friendlyGenerationError(loadError || error)}</p>
-          </div>
-        ) : null}
-
-        {isGenerating ? (
-          <div className="malik-photo-stage__caption">
-            <span>{generationPhase(shownProgress, status, understood)}</span>
-            <strong>{shownProgress}%</strong>
-          </div>
-        ) : null}
-      </div>
-
-      {understood && !actuallyFailed ? (
-        <div className="malik-photo-understood"><span>Malik понял</span><p>{understood}</p></div>
-      ) : null}
-
-      <div className="malik-photo-status">
-        {actuallyFailed ? <span>Генерация остановлена</span> : imageLoaded ? (
-          <span>Изображение готово · 100% · <strong>{elapsedSeconds} с</strong></span>
-        ) : (
-          <span>{understood ? "Рисую по этому описанию" : "Разбираю запрос"} · <strong>{elapsedSeconds} с</strong></span>
-        )}
-      </div>
-
-      {!actuallyFailed ? <div className="malik-photo-progress" aria-hidden="true"><span style={{ width: `${shownProgress}%` }} /></div> : null}
-
-      {imageLoaded && !actuallyFailed ? (
-        <div className="malik-photo-report">
-          <p><span>Готово</span>{provider ? <em>{provider}</em> : null}</p>
-          {prompt ? <small>{prompt}</small> : null}
-          <a href={resolvedResultUrl} target="_blank" rel="noreferrer">Открыть оригинал</a>
-        </div>
-      ) : null}
-
-      <style jsx global>{`
-        .malik-photo-motion { width: min(100%, 680px); max-width: calc(100vw - 28px); margin-inline: auto; }
-        .malik-photo-stage { position: relative; width: 100%; aspect-ratio: 16 / 10; overflow: hidden; border: 1px solid #242424; border-radius: 24px; background: #050505; box-shadow: 0 22px 66px rgba(0,0,0,.38); isolation: isolate; }
-
-        .malik-photo-forge { position: absolute; inset: 0; overflow: hidden; background: #050505; }
-        .malik-photo-forge__top { position: absolute; z-index: 20; inset: 0 0 auto 0; height: 45px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 13px; border-bottom: 1px solid rgba(255,255,255,.06); background: #070707; }
-        .malik-photo-forge__top span { display: inline-flex; align-items: center; gap: 8px; color: #f3f3f3; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-        .malik-photo-forge__top span i { width: 7px; height: 7px; border-radius: 50%; background: #fff; box-shadow: 0 0 14px rgba(255,255,255,.25); }
-        .malik-photo-forge__top em { color: #aaa; font-size: 10px; font-style: normal; }
-
-        .malik-photo-forge__grid { position: absolute; z-index: 4; inset: 55px 12px 62px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); grid-template-rows: repeat(3, minmax(0,1fr)); gap: 7px; }
-        .malik-photo-forge__ref { position: relative; min-width: 0; min-height: 0; margin: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.075); border-radius: 12px; background: #0a0a0a; opacity: .72; transform: translate3d(0,0,0) scale(.985); transition: opacity .3s ease, transform .55s cubic-bezier(.16,.84,.24,1), border-color .2s ease; will-change: transform, opacity; }
-        .malik-photo-forge__ref img { width: 100%; height: 100%; display: block; object-fit: cover; opacity: .75; transform: scale(1.035); transition: opacity .28s ease, transform .7s cubic-bezier(.22,.9,.2,1); }
-        .malik-photo-forge__ref::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(255,255,255,.018), transparent 35%, rgba(0,0,0,.30)); }
-        .malik-photo-forge__ref.is-active { z-index: 2; opacity: 1; transform: scale(1); border-color: rgba(255,255,255,.30); }
-        .malik-photo-forge__ref.is-active img { opacity: 1; transform: scale(1.005); }
-        .malik-photo-forge__ref span { position: absolute; z-index: 2; left: 8px; bottom: 7px; color: rgba(255,255,255,.78); font-size: 8px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-        .malik-photo-forge__ref b { position: absolute; z-index: 2; right: 7px; top: 7px; display: grid; place-items: center; min-width: 21px; height: 21px; padding: 0 6px; border: 1px solid rgba(255,255,255,.09); border-radius: 999px; background: #090909; color: #c5c5c5; font-size: 8px; font-weight: 700; }
-
-        .malik-photo-forge__ref.ref-1.is-merge { opacity: 0; transform: translate(105%,105%) scale(.14); }
-        .malik-photo-forge__ref.ref-2.is-merge { opacity: 0; transform: translate(0,105%) scale(.14); }
-        .malik-photo-forge__ref.ref-3.is-merge { opacity: 0; transform: translate(-105%,105%) scale(.14); }
-        .malik-photo-forge__ref.ref-4.is-merge { opacity: 0; transform: translate(105%,0) scale(.14); }
-        .malik-photo-forge__ref.ref-5.is-merge { opacity: 0; transform: scale(.14); }
-        .malik-photo-forge__ref.ref-6.is-merge { opacity: 0; transform: translate(-105%,0) scale(.14); }
-        .malik-photo-forge__ref.ref-7.is-merge { opacity: 0; transform: translate(105%,-105%) scale(.14); }
-        .malik-photo-forge__ref.ref-8.is-merge { opacity: 0; transform: translate(0,-105%) scale(.14); }
-        .malik-photo-forge__ref.ref-9.is-merge { opacity: 0; transform: translate(-105%,-105%) scale(.14); }
-
-        .malik-photo-forge__fusion { position: absolute; z-index: 12; left: 50%; top: 49%; width: 64px; height: 64px; transform: translate(-50%,-50%) scale(.68); border: 1px solid rgba(255,255,255,.14); border-radius: 50%; opacity: 0; transition: opacity .2s ease, transform .38s cubic-bezier(.22,.9,.2,1); }
-        .malik-photo-forge__fusion::after { content: ""; position: absolute; inset: 14px; border: 1px solid rgba(255,255,255,.30); border-radius: 50%; }
-        .malik-photo-forge__fusion i { position: absolute; z-index: 2; left: 50%; top: 50%; width: 6px; height: 6px; transform: translate(-50%,-50%); border-radius: 50%; background: #fff; box-shadow: 0 0 0 7px rgba(255,255,255,.045); }
-        .malik-photo-forge__fusion.is-on { opacity: 1; transform: translate(-50%,-50%) scale(1); }
-
-        .malik-photo-forge__focus { position: absolute; z-index: 13; left: 50%; top: 49%; width: 148px; height: 104px; transform: translate(-50%,-50%); pointer-events: none; }
-        .malik-photo-forge__focus .corner { position: absolute; width: 24px; height: 24px; border-color: rgba(255,255,255,.58); }
-        .malik-photo-forge__focus .tl { left: 0; top: 0; border-left: 1px solid; border-top: 1px solid; border-radius: 7px 0 0 0; }
-        .malik-photo-forge__focus .tr { right: 0; top: 0; border-right: 1px solid; border-top: 1px solid; border-radius: 0 7px 0 0; }
-        .malik-photo-forge__focus .bl { left: 0; bottom: 0; border-left: 1px solid; border-bottom: 1px solid; border-radius: 0 0 0 7px; }
-        .malik-photo-forge__focus .br { right: 0; bottom: 0; border-right: 1px solid; border-bottom: 1px solid; border-radius: 0 0 7px 0; }
-        .malik-photo-forge__focus .focus-dot { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; transform: translate(-50%,-50%); border-radius: 50%; background: #fff; opacity: .72; }
-        .malik-photo-forge__focus .focus-ring { position: absolute; left: 50%; top: 50%; width: 42px; height: 42px; transform: translate(-50%,-50%) scale(.84); border: 1px solid rgba(255,255,255,.14); border-radius: 50%; animation: malik-photo-focus-ring 1.9s ease-in-out infinite; will-change: transform, opacity; }
-
-        .malik-photo-forge__sweeps { position: absolute; z-index: 10; inset: 45px 0 0; overflow: hidden; pointer-events: none; }
-        .malik-photo-forge__sweeps .beam { position: absolute; opacity: 0; will-change: transform, opacity; }
-        .malik-photo-forge__sweeps .horizontal { left: -10%; width: 120%; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.92) 48%, rgba(255,255,255,.92) 52%, transparent); }
-        .malik-photo-forge__sweeps .vertical { top: -10%; height: 120%; width: 1px; background: linear-gradient(180deg, transparent, rgba(255,255,255,.92) 48%, rgba(255,255,255,.92) 52%, transparent); }
-        .malik-photo-forge__sweeps .top-down { top: -1px; animation: malik-photo-top-down 8s linear infinite; }
-        .malik-photo-forge__sweeps .bottom-up { bottom: -1px; animation: malik-photo-bottom-up 8s linear infinite; }
-        .malik-photo-forge__sweeps .left-right { left: -1px; animation: malik-photo-left-right 8s linear infinite; }
-        .malik-photo-forge__sweeps .right-left { right: -1px; animation: malik-photo-right-left 8s linear infinite; }
-
-        .malik-photo-forge__badge { position: absolute; z-index: 18; right: 12px; top: 54px; padding: 6px 8px; border: 1px solid rgba(255,255,255,.07); border-radius: 999px; background: #090909; color: #919191; font-size: 8px; }
-
-        .malik-photo-stage__caption { position: absolute; z-index: 30; left: 12px; right: 12px; bottom: 11px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 11px; color: #d7d7d7; font-size: 11px; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: #090909; }
-        .malik-photo-stage__caption strong { color: #fff; font-variant-numeric: tabular-nums; }
-
-        .malik-photo-result { position: absolute; z-index: 25; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; background: #050505; filter: none !important; transform: scale(1.008); transition: opacity .28s linear, transform .38s ease; }
-        .malik-photo-result.is-visible { opacity: 1; transform: scale(1); }
-
-        .malik-photo-failure { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 30px; color: #fff; text-align: center; background: #070707; }
-        .malik-photo-failure > span { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid #3a3a3a; border-radius: 50%; color: #d5d5d5; }
-        .malik-photo-failure strong { font-size: 16px; }
-        .malik-photo-failure p { max-width: 330px; margin: 0; color: #9b9b9b; font-size: 12px; line-height: 1.55; }
-
-        .malik-photo-understood, .malik-photo-report { margin-top: 10px; border: 1px solid #252525; border-radius: 15px; background: #0b0b0b; }
-        .malik-photo-understood { padding: 12px 14px; }
-        .malik-photo-understood span { display: block; margin-bottom: 4px; color: #777; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-        .malik-photo-understood p { margin: 0; color: #d7d7d7; font-size: 13px; line-height: 1.45; }
-        .malik-photo-status { display: flex; justify-content: center; padding: 11px 4px 7px; color: #888; font-size: 12px; }
-        .malik-photo-status strong { color: #ddd; font-weight: 650; font-variant-numeric: tabular-nums; }
-        .malik-photo-progress { height: 2px; overflow: hidden; border-radius: 999px; background: #1d1d1d; }
-        .malik-photo-progress span { display: block; height: 100%; border-radius: inherit; background: #f2f2f2; transition: width .65s ease; }
-        .malik-photo-report { padding: 13px 14px; }
-        .malik-photo-report p { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 8px; color: #fff; font-size: 13px; }
-        .malik-photo-report em { color: #888; font-size: 11px; font-style: normal; }
-        .malik-photo-report small { display: block; color: #979797; font-size: 11px; line-height: 1.45; }
-        .malik-photo-report a { display: inline-flex; margin-top: 10px; color: #f4f4f4; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
-
-        @keyframes malik-photo-focus-ring {
-          0%,100% { opacity: .16; transform: translate(-50%,-50%) scale(.82); }
-          50% { opacity: .5; transform: translate(-50%,-50%) scale(1.06); }
+    const run=async()=>{
+      resize()
+      try{[hand,...demos]=await Promise.all([loadImage(HAND),...DEMOS.map((s)=>loadImage(s))]);setAssetError("")}catch{setAssetError("Не удалось загрузить анимацию изображения.");return}
+      while(!disposed&&!failedRef.current){
+        const demo=pickDemo(); if(!demo) return
+        await cycle(demo,reduced?3900:3400,false,460)
+        if(disposed||failedRef.current)return
+        if(finalUrlRef.current){
+          try{const final=await loadImage(finalUrlRef.current);await cycle(final,reduced?2350:1950,true,0);if(disposed)return;still(final);setImageLoaded(true);return}catch{ /* keep cycling until the final file is reachable */ }
         }
-        @keyframes malik-photo-top-down {
-          0%,2% { transform: translateY(-5px); opacity: 0; }
-          4% { opacity: .74; }
-          23% { transform: translateY(430px); opacity: .74; }
-          25%,100% { transform: translateY(430px); opacity: 0; }
-        }
-        @keyframes malik-photo-bottom-up {
-          0%,25% { transform: translateY(5px); opacity: 0; }
-          27% { opacity: .68; }
-          48% { transform: translateY(-430px); opacity: .68; }
-          50%,100% { transform: translateY(-430px); opacity: 0; }
-        }
-        @keyframes malik-photo-left-right {
-          0%,50% { transform: translateX(-5px); opacity: 0; }
-          52% { opacity: .7; }
-          73% { transform: translateX(690px); opacity: .7; }
-          75%,100% { transform: translateX(690px); opacity: 0; }
-        }
-        @keyframes malik-photo-right-left {
-          0%,75% { transform: translateX(5px); opacity: 0; }
-          77% { opacity: .64; }
-          98% { transform: translateX(-690px); opacity: .64; }
-          100% { transform: translateX(-690px); opacity: 0; }
-        }
+        await fade(demo)
+      }
+    }
+    const observer=new ResizeObserver(resize);observer.observe(canvas.parentElement||canvas);void run()
+    return()=>{disposed=true;token++;observer.disconnect()}
+  }, [actuallyFailed])
 
-        @media (max-width: 640px) {
-          .malik-photo-motion { max-width: calc(100vw - 18px); }
-          .malik-photo-stage { aspect-ratio: 1 / 1; border-radius: 18px; }
-          .malik-photo-forge__top { height: 41px; padding-inline: 10px; }
-          .malik-photo-forge__grid { inset: 49px 8px 58px; gap: 5px; }
-          .malik-photo-forge__ref { border-radius: 9px; }
-          .malik-photo-forge__ref span { left: 6px; bottom: 5px; font-size: 7px; }
-          .malik-photo-forge__ref b { right: 5px; top: 5px; min-width: 18px; height: 18px; font-size: 7px; }
-          .malik-photo-forge__focus { width: 112px; height: 82px; top: 48%; }
-          .malik-photo-forge__focus .corner { width: 20px; height: 20px; }
-          .malik-photo-forge__badge { display: none; }
-          .malik-photo-stage__caption { left: 8px; right: 8px; bottom: 8px; padding: 8px 9px; font-size: 10px; }
-          .malik-photo-forge__sweeps { top: 41px; }
-        }
+  const failureText = error || assetError || (timedOut ? "Генерация заняла больше трёх минут и была остановлена. Повторите запрос." : readyWithoutResult ? "Провайдер завершил задачу, но не вернул файл изображения." : "Генерация изображения не завершилась.")
 
-        @media (prefers-reduced-motion: reduce) {
-          .malik-photo-forge__focus .focus-ring,
-          .malik-photo-forge__sweeps .beam { animation: none !important; }
-          .malik-photo-forge__ref, .malik-photo-forge__ref img, .malik-photo-result { transition: none !important; }
-        }
-      `}</style>
-    </section>
-  )
+  return <section className="malik-photo-motion malik-hand-loader-v7" data-malik-image-ready={imageLoaded?"1":"0"}>
+    <div className={`malik-photo-stage malik-art-stage ${imageLoaded?"is-finished":"is-generating"}`}>
+      {!actuallyFailed&&!imageLoaded?<canvas ref={canvasRef} className="malik-hand-loader-v7__canvas"/>:null}
+      {imageLoaded&&resolvedResultUrl?<img className="malik-art-result is-visible" src={resolvedResultUrl} alt="Сгенерированное изображение Malik AI" draggable={false}/>:null}
+      {actuallyFailed?<div className="malik-hand-loader-v7__failure"><strong>Генерация остановлена</strong><span>{failureText}</span></div>:null}
+    </div>
+    <div className="malik-hand-loader-v7__progress malik-art-report" aria-live="polite">
+      <div className="malik-hand-loader-v7__meta"><span>{shownStage}</span><strong>{shownProgress}%</strong></div>
+      <div className="malik-hand-loader-v7__track"><span style={{width:`${shownProgress}%`}}/></div>
+      <div className="malik-hand-loader-v7__status">{imageLoaded?`Готово за ${seconds} с`:actuallyFailed?failureText:`${seconds} с · ${shownStage}`}</div>
+    </div>
+    <style jsx global>{`
+      .malik-photo-motion.malik-hand-loader-v7{width:min(100%,680px)!important;max-width:680px!important;margin:2px 0 0!important;padding:0!important;display:grid!important;gap:12px!important;background:#000!important;border:0!important;box-shadow:none!important;color:#fff!important}
+      .malik-hand-loader-v7 .malik-photo-stage,.malik-hand-loader-v7 .malik-art-stage{position:relative!important;width:100%!important;aspect-ratio:1/1!important;min-height:0!important;overflow:hidden!important;border-radius:28px!important;border:1px solid rgba(218,174,76,.94)!important;background:#000!important;box-shadow:0 0 0 1px rgba(255,227,163,.04) inset!important;isolation:isolate!important}
+      .malik-hand-loader-v7__canvas,.malik-hand-loader-v7 .malik-art-result{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;display:block!important;border:0!important;border-radius:27px!important;background:#000!important;object-fit:contain!important;object-position:50% 50%!important}
+      .malik-hand-loader-v7__canvas{will-change: transform;transform:translateZ(0)}
+      .malik-hand-loader-v7 .malik-art-result{opacity:1!important;filter:none!important;transform:none!important;animation:malik-v7-in 180ms ease-out both!important}@keyframes malik-v7-in{from{opacity:.82}to{opacity:1}}
+      .malik-hand-loader-v7__progress{width:100%!important;display:grid!important;gap:7px!important;padding:0 1px!important;margin:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
+      .malik-hand-loader-v7__meta{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;font-size:12px!important;line-height:1.2!important;color:rgba(255,255,255,.88)!important}.malik-hand-loader-v7__meta strong{font-size:12px!important;font-weight:650!important;color:#fff!important;font-variant-numeric:tabular-nums!important}
+      .malik-hand-loader-v7__track{width:100%!important;height:3px!important;overflow:hidden!important;border-radius:999px!important;background:rgba(255,255,255,.16)!important}.malik-hand-loader-v7__track>span{display:block!important;height:100%!important;border-radius:inherit!important;background:#fff!important;transition:width 220ms linear!important}
+      .malik-hand-loader-v7__status{min-height:16px!important;font-size:11px!important;line-height:1.35!important;color:rgba(255,255,255,.58)!important}.malik-hand-loader-v7__failure{position:absolute!important;inset:0!important;display:grid!important;place-content:center!important;gap:8px!important;padding:28px!important;text-align:center!important;background:#000!important;color:#fff!important}.malik-hand-loader-v7__failure span{max-width:440px!important;font-size:12px!important;line-height:1.55!important;color:rgba(255,255,255,.58)!important}
+      @media(max-width:640px){.malik-photo-motion.malik-hand-loader-v7{width:100%!important;max-width:none!important;gap:10px!important}.malik-hand-loader-v7 .malik-photo-stage,.malik-hand-loader-v7 .malik-art-stage{border-radius:22px!important}.malik-hand-loader-v7__canvas,.malik-hand-loader-v7 .malik-art-result{border-radius:21px!important}}
+      @media(prefers-reduced-motion:reduce){.malik-hand-loader-v7__track>span,.malik-hand-loader-v7 .malik-art-result{transition:none!important;animation:none!important}}
+    `}</style>
+  </section>
 }
+
+export default ImageGenerationMotion
