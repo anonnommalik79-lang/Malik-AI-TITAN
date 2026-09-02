@@ -83,6 +83,8 @@ import "./malik-oled-black-no-gold-final.css"
 import "./malik-cognitive-response-final.css"
 // Absolute final chat icon authority: crisp Malik mark + centered response model badge.
 import "./chat-icon-alignment-final.css"
+// Absolute last Sites/Library mobile pass: OLED black + 5 category chips and paging arrow.
+import "./mobile-sites-library-oled-final.css"
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
