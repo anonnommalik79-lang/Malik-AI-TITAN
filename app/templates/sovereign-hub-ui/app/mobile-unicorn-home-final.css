@@ -1,7 +1,8 @@
 /* MALIK AI — final cinematic home authority.
-   Mobile V5 owns phone geometry; desktop final owns the approved PC scene.
-   Repair keeps the real Sidebar; release is the final interaction/handoff layer. */
+   Mobile V5 owns base phone geometry; desktop remains independent.
+   V6 is intentionally imported last to match the approved iPhone screen and bypass stale hero rendering. */
 @import "./mobile-unicorn-home-v5.css";
 @import "./desktop-unicorn-home-final.css";
 @import "./desktop-unicorn-home-repair.css";
 @import "./unicorn-home-release.css";
+@import "./mobile-unicorn-home-v6-livefix.css";
