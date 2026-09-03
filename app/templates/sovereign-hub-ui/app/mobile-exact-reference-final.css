@@ -1,0 +1,70 @@
+/* MALIK AI — exact approved mobile visual.
+   Uses the approved mobile reference artwork for the phone body while keeping the real top bar
+   and guest sign-in control live. Desktop is untouched. */
+@media (max-width: 767px) {
+  body:has(#malik-root .thome) #malik-root .malik-main-scroll-host,
+  body:has(#malik-root .thome) #malik-root .titan-main,
+  body:has(#malik-root .thome) #malik-root .titan-content,
+  #malik-root .malik-dashboard-shell .malik-mobile-home {
+    overflow: hidden !important;
+    background: #000 !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome,
+  html body #malik-root .malik-dashboard-shell .thome-inner,
+  html body #malik-root .malik-dashboard-shell .thome-launcher,
+  html body #malik-root .malik-dashboard-shell .thome-welcome {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background-color: #000 !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-welcome {
+    display: block !important;
+    max-width: none !important;
+    background-image: url("/api/mobile-home-exact?v=1") !important;
+    background-repeat: no-repeat !important;
+    background-position: center center !important;
+    background-size: 100% 100% !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-welcome::before,
+  html body #malik-root .malik-dashboard-shell .thome-welcome::after {
+    content: none !important;
+    display: none !important;
+    background: none !important;
+  }
+
+  /* The approved visual already contains hero, actions, composer and footer. */
+  html body #malik-root .malik-dashboard-shell .thome-welcome > * {
+    display: none !important;
+  }
+
+  /* Keep the real guest entry above the approved artwork. */
+  html body #malik-root .malik-dashboard-shell .titan-mobile-signin {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 62px !important;
+    height: 34px !important;
+    padding: 0 12px !important;
+    border: 1px solid rgba(255,255,255,.72) !important;
+    border-radius: 7px !important;
+    background: rgba(13,17,23,.96) !important;
+    color: #f0f6fc !important;
+    text-decoration: none !important;
+    font-size: 13px !important;
+    line-height: 1 !important;
+    font-weight: 650 !important;
+    box-shadow: 0 1px 0 rgba(255,255,255,.08) inset !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .titan-topbar-right > .titan-mobile-signin:last-child {
+    display: inline-flex !important;
+  }
+}
