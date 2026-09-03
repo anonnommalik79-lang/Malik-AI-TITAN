@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import "./sovereign-mobile-auth.css";
 import "./sovereign-mobile-auth-black.css";
 
@@ -17,18 +17,6 @@ const TYPE_MS = 42;
 const HOLD_MS = 420;
 const FINAL_HOLD_MS = 980;
 const GAP_MS = 105;
-
-function isPhoneFeedbackDevice() {
-  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
-
-  const ua = navigator.userAgent || "";
-  const iphone = /iPhone|iPod/i.test(ua);
-  const androidPhone = /Android/i.test(ua) && /Mobile/i.test(ua);
-  const otherPhone = /IEMobile|Windows Phone|Opera Mini/i.test(ua);
-
-  // Never enable this effect on desktop/laptop, even with a narrow browser window.
-  return (iphone || androidPhone || otherPhone) && window.innerWidth <= 900;
-}
 
 function AppleIcon() {
   return (
@@ -52,11 +40,11 @@ function GoogleIcon() {
   );
 }
 
-function MailIcon() {
+function GuestIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4.4 6.5h15.2c.8 0 1.4.6 1.4 1.4v8.2c0 .8-.6 1.4-1.4 1.4H4.4c-.8 0-1.4-.6-1.4-1.4V7.9c0-.8.6-1.4 1.4-1.4Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
-      <path d="m4.2 7.4 7.1 5.4c.4.3 1 .3 1.4 0l7.1-5.4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M12 12.2a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M5.2 20c.7-3.3 3.1-5.2 6.8-5.2s6.1 1.9 6.8 5.2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -64,253 +52,6 @@ function MailIcon() {
 export function SovereignMobileRegister() {
   const [typed, setTyped] = useState("");
   const [navigating, setNavigating] = useState(false);
-  const [restartKey, setRestartKey] = useState(0);
-
-  const phoneFeedbackRef = useRef(false);
-  const armedRef = useRef(false);
-  const audioRunningRef = useRef(false);
-  const feedbackStoppedRef = useRef(false);
-  const audioRef = useRef<AudioContext | null>(null);
-  const masterRef = useRef<GainNode | null>(null);
-  const toneFilterRef = useRef<BiquadFilterNode | null>(null);
-
-  const syncAudioState = useCallback((ctx: AudioContext) => {
-    if (ctx !== audioRef.current || feedbackStoppedRef.current) return;
-    const running = ctx.state === "running";
-    if (running && !audioRunningRef.current) {
-      // Applies equally to permitted autoplay and a real gesture. Restart only
-      // once when sound actually starts, not once per pointer/touch/click event.
-      setRestartKey((value) => value + 1);
-    }
-    audioRunningRef.current = running;
-  }, []);
-
-  const ensureAudio = useCallback(() => {
-    if (
-      typeof window === "undefined" ||
-      !phoneFeedbackRef.current ||
-      feedbackStoppedRef.current
-    ) return false;
-
-    try {
-      if (!audioRef.current || audioRef.current.state === "closed") {
-        const AudioCtor =
-          window.AudioContext ||
-          (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-
-        if (!AudioCtor) return false;
-
-        const ctx = new AudioCtor();
-        const master = ctx.createGain();
-        const compressor = ctx.createDynamicsCompressor();
-        const toneFilter = ctx.createBiquadFilter();
-
-        master.gain.value = 0.32;
-        toneFilter.type = "lowpass";
-        toneFilter.frequency.value = 3600;
-        toneFilter.Q.value = 0.42;
-
-        compressor.threshold.value = -20;
-        compressor.knee.value = 11;
-        compressor.ratio.value = 2.7;
-        compressor.attack.value = 0.001;
-        compressor.release.value = 0.05;
-
-        master.connect(toneFilter);
-        toneFilter.connect(compressor);
-        compressor.connect(ctx.destination);
-
-        audioRef.current = ctx;
-        masterRef.current = master;
-        toneFilterRef.current = toneFilter;
-        ctx.onstatechange = () => syncAudioState(ctx);
-      }
-
-      const ctx = audioRef.current;
-      const state = String(ctx.state);
-      if (state !== "running" && state !== "closed") {
-        // A denied autoplay resume may stay pending until a future gesture.
-        // Never await it on the animation path or consider it proof of sound.
-        void ctx.resume().then(() => syncAudioState(ctx)).catch(() => {});
-      }
-      syncAudioState(ctx);
-      return String(ctx.state) === "running";
-    } catch {
-      // Feedback is enhancement-only. Auth must never depend on it.
-      return false;
-    }
-  }, [syncAudioState]);
-
-  const playCharacterSound = useCallback(() => {
-    const ctx = audioRef.current;
-    const master = masterRef.current;
-    if (
-      !phoneFeedbackRef.current ||
-      feedbackStoppedRef.current ||
-      !armedRef.current ||
-      !ctx ||
-      !master ||
-      document.visibilityState === "hidden" ||
-      ctx.state !== "running"
-    ) return;
-
-    try {
-      const now = ctx.currentTime;
-
-      const microTap = (at: number, level: number) => {
-        const body = ctx.createOscillator();
-        const bodyGain = ctx.createGain();
-
-        body.type = "sine";
-        // A short midrange tap stays audible on small phone speakers.
-        body.frequency.setValueAtTime(780, at);
-        body.frequency.exponentialRampToValueAtTime(420, at + 0.016);
-        bodyGain.gain.setValueAtTime(0.0001, at);
-        bodyGain.gain.exponentialRampToValueAtTime(0.078 * level, at + 0.001);
-        bodyGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.021);
-        body.connect(bodyGain);
-        bodyGain.connect(master);
-        body.start(at);
-        body.stop(at + 0.023);
-        body.onended = () => { body.disconnect(); bodyGain.disconnect(); };
-
-        const edge = ctx.createOscillator();
-        const edgeGain = ctx.createGain();
-
-        edge.type = "triangle";
-        edge.frequency.setValueAtTime(2200, at);
-        edge.frequency.exponentialRampToValueAtTime(1100, at + 0.0065);
-        edgeGain.gain.setValueAtTime(0.0001, at);
-        edgeGain.gain.exponentialRampToValueAtTime(0.022 * level, at + 0.0007);
-        edgeGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.008);
-        edge.connect(edgeGain);
-        edgeGain.connect(master);
-        edge.start(at);
-        edge.stop(at + 0.009);
-        edge.onended = () => { edge.disconnect(); edgeGain.disconnect(); };
-      };
-
-      microTap(now, 1);
-      microTap(now + 0.012, 0.5);
-    } catch {
-      // Ignore browsers that reject an individual audio node.
-    }
-  }, []);
-
-  const pulseCharacter = useCallback(() => {
-    if (
-      typeof window === "undefined" ||
-      !phoneFeedbackRef.current ||
-      feedbackStoppedRef.current
-    ) return;
-
-    let nativeHandled = false;
-    const bridge = window as typeof window & {
-      nativeHapticTick?: () => void;
-      webkit?: {
-        messageHandlers?: {
-          malikHaptics?: { postMessage: (payload: unknown) => void };
-        };
-      };
-    };
-
-    try {
-      if (bridge.nativeHapticTick) {
-        bridge.nativeHapticTick();
-        nativeHandled = true;
-      } else if (bridge.webkit?.messageHandlers?.malikHaptics) {
-        bridge.webkit.messageHandlers.malikHaptics.postMessage({
-          type: "character",
-          intensity: 0.36,
-          sharpness: 0.5,
-        });
-        nativeHandled = true;
-      }
-    } catch {
-      nativeHandled = false;
-    }
-
-    if (!nativeHandled && typeof navigator.vibrate === "function") {
-      try {
-        navigator.vibrate([3, 5, 3]);
-      } catch {
-        // iOS Safari has no normal web-vibration support; sound remains primary.
-      }
-    }
-
-    playCharacterSound();
-  }, [playCharacterSound]);
-
-  const armFeedback = useCallback(() => {
-    if (
-      !phoneFeedbackRef.current ||
-      feedbackStoppedRef.current
-    ) return;
-
-    armedRef.current = true;
-    ensureAudio();
-  }, [ensureAudio]);
-
-  const stopFeedback = useCallback(() => {
-    feedbackStoppedRef.current = true;
-    armedRef.current = false;
-
-    try {
-      if (phoneFeedbackRef.current && typeof navigator.vibrate === "function") {
-        navigator.vibrate(0);
-      }
-    } catch {
-      // no-op
-    }
-
-    try {
-      const ctx = audioRef.current;
-      const master = masterRef.current;
-      if (ctx && master) {
-        const now = ctx.currentTime;
-        master.gain.cancelScheduledValues(now);
-        master.gain.setValueAtTime(0.0001, now);
-      }
-    } catch {
-      // no-op
-    }
-  }, []);
-
-  useEffect(() => {
-    phoneFeedbackRef.current = isPhoneFeedbackDevice();
-    feedbackStoppedRef.current = false;
-
-    if (!phoneFeedbackRef.current) {
-      // Desktop and laptop stay completely silent.
-      feedbackStoppedRef.current = true;
-      armedRef.current = false;
-      return;
-    }
-
-    // Try immediately on entry. If the browser denies audible autoplay, the
-    // same path is retried from a real gesture; no fake clicks or mute tricks.
-    armFeedback();
-  }, [armFeedback]);
-
-  useEffect(() => {
-    if (!phoneFeedbackRef.current || feedbackStoppedRef.current) return;
-
-    const resumeWhenVisible = () => {
-      if (feedbackStoppedRef.current) return;
-      if (document.visibilityState === "hidden") {
-        void audioRef.current?.suspend().catch(() => {});
-        return;
-      }
-      armFeedback();
-    };
-
-    document.addEventListener("visibilitychange", resumeWhenVisible);
-    window.addEventListener("pageshow", resumeWhenVisible);
-    return () => {
-      document.removeEventListener("visibilitychange", resumeWhenVisible);
-      window.removeEventListener("pageshow", resumeWhenVisible);
-    };
-  }, [armFeedback]);
 
   useEffect(() => {
     let cancelled = false;
@@ -326,110 +67,47 @@ export function SovereignMobileRegister() {
 
     const runPhrase = (phraseIndex: number) => {
       if (cancelled) return;
-
       const phrase = PHRASES[phraseIndex];
       setTyped("");
       let cursor = 0;
 
       const typeNext = () => {
         if (cancelled) return;
-
         cursor += 1;
         setTyped(phrase.slice(0, cursor));
-
-        const character = phrase[cursor - 1];
-        if (character && character.trim()) {
-          pulseCharacter();
-        }
-
         if (cursor < phrase.length) {
           later(typeNext, TYPE_MS);
           return;
         }
-
-        const hold = phraseIndex === PHRASES.length - 1 ? FINAL_HOLD_MS : HOLD_MS;
         later(() => {
           setTyped("");
           later(() => runPhrase((phraseIndex + 1) % PHRASES.length), GAP_MS);
-        }, hold);
+        }, phraseIndex === PHRASES.length - 1 ? FINAL_HOLD_MS : HOLD_MS);
       };
 
       later(typeNext, 80);
     };
 
     runPhrase(0);
-
     return () => {
       cancelled = true;
       timers.forEach((id) => window.clearTimeout(id));
     };
-  }, [pulseCharacter, restartKey]);
-
-  useEffect(() => {
-    return () => {
-      try {
-        feedbackStoppedRef.current = true;
-        if (audioRef.current) audioRef.current.onstatechange = null;
-        toneFilterRef.current?.disconnect();
-        void audioRef.current?.close();
-        audioRef.current = null;
-        masterRef.current = null;
-        toneFilterRef.current = null;
-        audioRunningRef.current = false;
-      } catch {
-        // no-op
-      }
-    };
   }, []);
 
-  const openSignIn = useCallback(() => {
+  const go = useCallback((path: string) => {
     if (navigating) return;
-    stopFeedback();
     setNavigating(true);
-    window.location.assign("/sign-in");
-  }, [navigating, stopFeedback]);
+    window.location.assign(path);
+  }, [navigating]);
 
   const close = useCallback(() => {
-    stopFeedback();
-
-    if (window.history.length > 1) {
-      window.history.back();
-    } else {
-      window.location.assign("/");
-    }
-  }, [stopFeedback]);
-
-  /**
-   * The first touch has to start the sound, wherever it lands.
-   *
-   * This used to stop the feedback as soon as a touch began on one of the auth
-   * buttons. On iPhone that meant it was never heard at all: WebAudio stays
-   * muted until a gesture in this document, and the only gesture most people
-   * make here is tapping a button - which arrived at this handler and switched
-   * the whole thing off before a single tick had played.
-   *
-   * So the first gesture always arms, including on a button. Stopping is left
-   * to the button's own onClick, once the person has actually chosen to sign in
-   * and the page is navigating away.
-   */
-  const handleFeedbackGesture = useCallback((target: EventTarget | null) => {
-    const element = target instanceof Element ? target : null;
-    if (element?.closest(".sma-close")) {
-      stopFeedback();
-      return;
-    }
-    void armFeedback();
-  }, [armFeedback, stopFeedback]);
+    if (window.history.length > 1) window.history.back();
+    else window.location.assign("/");
+  }, []);
 
   return (
-    <main
-      className="sma-root"
-      data-auth-surface="black"
-      aria-label="Malik AI mobile authentication"
-      onTouchStartCapture={(event) => handleFeedbackGesture(event.target)}
-      onPointerDownCapture={(event) => handleFeedbackGesture(event.target)}
-      onClickCapture={(event) => handleFeedbackGesture(event.target)}
-    >
+    <main className="sma-root" data-auth-surface="black" aria-label="Malik AI mobile authentication">
       <button className="sma-close" type="button" aria-label="Закрыть" onClick={close}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M7 7l10 10M17 7 7 17" />
@@ -445,33 +123,33 @@ export function SovereignMobileRegister() {
 
       <section className="sma-auth-panel" aria-label="Способы входа">
         <button
+          className="sma-auth-button sma-auth-button--dark"
+          type="button"
+          disabled={navigating}
+          onClick={() => go("/sign-in")}
+        >
+          <span className="sma-auth-icon"><GoogleIcon /></span>
+          <span>{navigating ? "Открываю..." : "Продолжить с Google"}</span>
+        </button>
+
+        <button
           className="sma-auth-button sma-auth-button--apple"
           type="button"
           disabled={navigating}
-          onClick={openSignIn}
+          onClick={() => go("/sign-in")}
         >
           <span className="sma-auth-icon"><AppleIcon /></span>
-          <span>Продолжить с Apple</span>
+          <span>{navigating ? "Открываю..." : "Продолжить с Apple"}</span>
         </button>
 
         <button
           className="sma-auth-button sma-auth-button--dark"
           type="button"
           disabled={navigating}
-          onClick={openSignIn}
+          onClick={() => go("/guest")}
         >
-          <span className="sma-auth-icon"><GoogleIcon /></span>
-          <span>Продолжить с Google</span>
-        </button>
-
-        <button
-          className="sma-auth-button sma-auth-button--dark"
-          type="button"
-          disabled={navigating}
-          onClick={openSignIn}
-        >
-          <span className="sma-auth-icon"><MailIcon /></span>
-          <span>{navigating ? "Открываю..." : "Войти или зарегистрироваться"}</span>
+          <span className="sma-auth-icon"><GuestIcon /></span>
+          <span>{navigating ? "Открываю..." : "Войти через гостя"}</span>
         </button>
       </section>
     </main>
