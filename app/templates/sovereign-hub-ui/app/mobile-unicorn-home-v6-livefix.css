@@ -1,6 +1,7 @@
-/* MALIK AI mobile Home V6 — live iPhone authority.
+/* MALIK AI mobile Home V7 — live iPhone authority.
    Directly paints the approved cinematic image on the real Home element (not a pseudo-element),
-   keeps the entire launcher inside the visual viewport, and restores + / model / voice geometry.
+   keeps the entire launcher inside the visual viewport, restores + / model / voice geometry,
+   and keeps the hero at native aspect ratio for a sharper mobile render.
    Desktop is intentionally untouched. */
 @media (max-width: 767px) {
   html,
@@ -29,7 +30,7 @@
   }
 
   /* Paint the real element so Safari cannot lose the hero through ::before cleanup rules.
-     The v=6 query also bypasses any cached 404/old asset from the previous deployment. */
+     v=7 bypasses stale mobile caches. The artwork is fit by height instead of being stretched. */
   html body #malik-root .malik-dashboard-shell .thome-welcome {
     position: relative !important;
     isolation: isolate !important;
@@ -43,10 +44,12 @@
     background-color: #000 !important;
     background-image:
       linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 69%, rgba(0,0,0,.10) 78%, rgba(0,0,0,.50) 90%, rgba(0,0,0,.92) 100%),
-      url("/images/malik-unicorn-home-final.webp?v=6") !important;
+      url("/images/malik-unicorn-home-final.webp?v=7") !important;
     background-repeat: no-repeat, no-repeat !important;
-    background-position: center center, center 50% !important;
-    background-size: 100% 100%, cover !important;
+    background-position: center center, center center !important;
+    background-size: 100% 100%, auto 100% !important;
+    background-origin: border-box !important;
+    background-clip: border-box !important;
   }
 
   html body #malik-root .malik-dashboard-shell .thome-welcome::before {
