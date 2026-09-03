@@ -1,0 +1,160 @@
+/* FINAL PC HOME REPAIR — preserve the approved cinematic home, but keep the real desktop sidebar open. */
+@media (min-width: 768px) {
+  /* The previous desktop pass replaced the desktop Sidebar with the mobile drawer.
+     Undo that: on PC the GitHub Sidebar is visible and starts expanded. */
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell > div.hidden.lg\:block {
+    display: block !important;
+  }
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .malik-mobile-drawer,
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell > div[class*="z-[45]"] {
+    display: none !important;
+  }
+
+  /* The Sidebar already has its own collapse button. Do not open a duplicate drawer from the top bar. */
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-topbar > .titan-icon-btn:first-child {
+    display: none !important;
+  }
+
+  /* Center the real product tabs inside the workspace, with the real search/actions on the right. */
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-topbar {
+    position: relative !important;
+    display: flex !important;
+    height: 60px !important;
+    min-height: 60px !important;
+    max-height: 60px !important;
+    padding: 0 16px !important;
+    border-bottom: 1px solid rgba(255,255,255,.10) !important;
+    background: #000 !important;
+    background-image: none !important;
+    overflow: visible !important;
+  }
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tabs {
+    position: absolute !important;
+    left: 50% !important;
+    top: 50% !important;
+    width: max-content !important;
+    max-width: calc(100% - 390px) !important;
+    height: 44px !important;
+    transform: translate(-50%,-50%) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+  }
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-topbar-right {
+    position: relative !important;
+    z-index: 4 !important;
+    margin-left: auto !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-search {
+    display: flex !important;
+    width: clamp(170px,15vw,225px) !important;
+    height: 36px !important;
+    border: 1px solid rgba(255,255,255,.15) !important;
+    border-radius: 11px !important;
+    background: #050505 !important;
+    color: #eee !important;
+  }
+
+  /* Approved image and exact one-screen composition. */
+  #malik-root .malik-dashboard-shell .thome,
+  #malik-root .malik-dashboard-shell .thome-inner,
+  #malik-root .malik-dashboard-shell .thome-launcher,
+  #malik-root .malik-dashboard-shell .thome-welcome {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: transparent !important;
+  }
+  #malik-root .malik-dashboard-shell .thome {
+    position: relative !important;
+    isolation: isolate !important;
+    background: #000 !important;
+  }
+  #malik-root .malik-dashboard-shell .thome::before {
+    content: "" !important;
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 0 !important;
+    display: block !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+    background: #000 url("/images/malik-unicorn-home-final.webp?v=7") center center / 100% 100% no-repeat !important;
+    filter: saturate(1.02) contrast(1.015) !important;
+  }
+  #malik-root .malik-dashboard-shell .thome-inner,
+  #malik-root .malik-dashboard-shell .thome-launcher,
+  #malik-root .malik-dashboard-shell .thome-welcome {
+    position: relative !important;
+    z-index: 2 !important;
+    overflow: visible !important;
+  }
+  #malik-root .malik-dashboard-shell .thome-welcome-logo,
+  #malik-root .malik-dashboard-shell .thome-welcome > h1,
+  #malik-root .malik-dashboard-shell .thome-welcome-subtitle {
+    display: none !important;
+  }
+
+  /* Real composer from MalikHybridHome. */
+  #malik-root .malik-dashboard-shell .thome-composer,
+  #malik-root .malik-dashboard-shell .thome-composer:focus-within {
+    position: absolute !important;
+    left: 50% !important;
+    bottom: 67px !important;
+    z-index: 8 !important;
+    width: min(1030px,74vw) !important;
+    min-height: 112px !important;
+    margin: 0 !important;
+    transform: translateX(-50%) !important;
+    border: 1px solid rgba(255,255,255,.15) !important;
+    border-radius: 25px !important;
+    background: #181818 !important;
+    background-image: none !important;
+    box-shadow: 0 22px 64px rgba(0,0,0,.46) !important;
+  }
+
+  /* Only the four REAL source buttons. No fake Create/Research/Help/More row. */
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] {
+    position: absolute !important;
+    left: 50% !important;
+    bottom: 12px !important;
+    z-index: 8 !important;
+    display: grid !important;
+    grid-template-columns: repeat(4,minmax(0,1fr)) !important;
+    gap: 8px !important;
+    width: min(930px,68vw) !important;
+    height: 44px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transform: translateX(-50%) !important;
+  }
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button {
+    width: 100% !important;
+    height: 44px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    border: 1px solid rgba(255,255,255,.15) !important;
+    border-radius: 12px !important;
+    background: rgba(5,5,5,.96) !important;
+    color: #eee !important;
+    box-shadow: none !important;
+  }
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button > svg,
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button > span {
+    display: initial !important;
+  }
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button::before,
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button::after {
+    content: none !important;
+    display: none !important;
+  }
+}
