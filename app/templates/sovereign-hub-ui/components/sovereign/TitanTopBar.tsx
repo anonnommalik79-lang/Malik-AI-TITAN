@@ -46,6 +46,7 @@ type RuntimeSignal = { label: string; value: string; ok: boolean }
 
 interface TitanTopBarProps {
   activeView: string
+  guestMode?: boolean
   onViewChange: (view: string) => void
   onOpenSearch: () => void
   onMenuClick: () => void
@@ -78,6 +79,7 @@ function useDismissable(open: boolean, close: () => void) {
 
 function TitanTopBarInner({
   activeView,
+  guestMode = false,
   onViewChange,
   onOpenSearch,
   onMenuClick,
@@ -312,8 +314,15 @@ function TitanTopBarInner({
           ) : null}
         </div>
 
-        {!profile ? (
-          <a href="/sign-in" className="titan-mobile-signin" aria-label="Войти в Malik AI">Вход</a>
+        {guestMode ? (
+          <a
+            href="/sign-in"
+            className="titan-mobile-signin"
+            aria-label="Войти в Malik AI"
+            data-testid="mobile-guest-signin"
+          >
+            Вход
+          </a>
         ) : null}
       </div>
 
@@ -459,6 +468,15 @@ function TitanTopBarInner({
         @media (max-width: 767px) {
           .titan-mobile-signin {
             display: inline-flex !important;
+            position: fixed !important;
+            top: 12px !important;
+            top: max(12px, env(safe-area-inset-top)) !important;
+            right: 12px !important;
+            right: max(12px, env(safe-area-inset-right)) !important;
+            z-index: 2147483646 !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
             min-width: 64px;
             height: 34px;
             padding: 0 13px;

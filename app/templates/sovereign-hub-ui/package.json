@@ -37,7 +37,8 @@
     "test:action-os": "node scripts/verify-action-os.mjs",
     "test:image-quality": "node scripts/verify-image-quality.mjs",
     "test:generation-survives": "node scripts/verify-generation-survives.mjs",
-    "test:library": "node scripts/verify-library.mjs"
+    "test:library": "node scripts/verify-library.mjs",
+    "test:mobile-guest": "node scripts/verify-mobile-guest-home.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",

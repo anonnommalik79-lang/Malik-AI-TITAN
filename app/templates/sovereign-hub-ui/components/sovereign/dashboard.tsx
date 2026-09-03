@@ -6981,6 +6981,7 @@ const shouldShowMobilePreviewButton =
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <TitanTopBar
           activeView={activeView}
+          guestMode={guestMode}
           onViewChange={(view) => safeOpenView(view, "topbar")}
           onOpenSearch={() => setCommandPaletteOpen(true)}
           onMenuClick={() => setMobileMenuOpen(true)}
@@ -8919,7 +8920,6 @@ function ChatsListView({
 // merge-map-344: ai-generator bridge preserved; runtime cost: zero; fallback: photo-generation; canvas handoff: safeOpenCanvas.
 
 export default Dashboard
-
 
 
 

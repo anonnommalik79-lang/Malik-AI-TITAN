@@ -54,7 +54,7 @@
     overflow: hidden !important;
     pointer-events: none !important;
     background-color: #000 !important;
-    background-image: url("/api/mobile-home-exact?v=3") !important;
+    background-image: url("/images/malik-mobile-home-exact-8k.avif?v=2") !important;
     background-repeat: no-repeat !important;
     background-position: top center !important;
     background-size: contain !important;
@@ -86,7 +86,7 @@
   html body #malik-root .malik-dashboard-shell .titan-topbar {
     position: fixed !important;
     inset: 0 0 auto 0 !important;
-    z-index: 120 !important;
+    z-index: 2147483000 !important;
     height: 58px !important;
     border: 0 !important;
     background: transparent !important;
@@ -103,9 +103,14 @@
   html body #malik-root .malik-dashboard-shell .titan-topbar-right {
     position: absolute !important;
     top: 12px !important;
+    top: max(12px, env(safe-area-inset-top)) !important;
     right: 12px !important;
-    z-index: 130 !important;
+    right: max(12px, env(safe-area-inset-right)) !important;
+    z-index: 2147483100 !important;
     display: flex !important;
+    width: auto !important;
+    min-width: 0 !important;
+    overflow: visible !important;
     pointer-events: auto !important;
   }
 
@@ -113,6 +118,12 @@
   html body #malik-root .malik-dashboard-shell .titan-mobile-signin,
   html body #malik-root .malik-dashboard-shell .titan-topbar-right > .titan-mobile-signin:last-child {
     display: inline-flex !important;
+    position: fixed !important;
+    top: 12px !important;
+    top: max(12px, env(safe-area-inset-top)) !important;
+    right: 12px !important;
+    right: max(12px, env(safe-area-inset-right)) !important;
+    z-index: 2147483646 !important;
     visibility: visible !important;
     opacity: 1 !important;
     pointer-events: auto !important;

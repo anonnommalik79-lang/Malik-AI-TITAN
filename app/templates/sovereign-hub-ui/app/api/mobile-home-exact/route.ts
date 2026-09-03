@@ -1,16 +1,13 @@
-export async function GET(request: Request) {
-  const assetUrl = new URL("/images/malik-mobile-home-exact.b64", request.url)
-  const source = await fetch(assetUrl, { cache: "no-store" })
-  if (!source.ok) return new Response("Not found", { status: 404 })
+import { NextResponse } from "next/server"
 
-  const base64 = (await source.text()).trim()
-  const binary = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
-
-  return new Response(binary, {
-    headers: {
-      "Content-Type": "image/avif",
-      "Cache-Control": "public, max-age=300, must-revalidate",
-      "X-Malik-Mobile-Reference": "exact-8k-v2",
-    },
-  })
+export function GET(request: Request) {
+  // Keep the legacy endpoint alive for already-cached CSS, but send it to the
+  // complete binary asset. The previous embedded base64 payload was truncated.
+  const response = NextResponse.redirect(
+    new URL("/images/malik-mobile-home-exact-8k.avif?v=2", request.url),
+    307,
+  )
+  response.headers.set("Cache-Control", "public, max-age=300, must-revalidate")
+  response.headers.set("X-Malik-Mobile-Reference", "exact-8k-avif-v4")
+  return response
 }
