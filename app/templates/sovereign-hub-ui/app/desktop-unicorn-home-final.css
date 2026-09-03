@@ -1,0 +1,390 @@
+/* MALIK AI — desktop cinematic home authority.
+   Desktop only. Uses the real TitanTopBar, real Sidebar drawer, real search,
+   existing HomeComposer and real ChatView transition after submit. */
+
+@media (min-width: 768px) {
+  /* Home is full-width on desktop. The existing GitHub Sidebar is not replaced:
+     it opens from the real hamburger as the existing drawer. */
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell > div.hidden.lg\:block {
+    display: none !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .malik-mobile-drawer {
+    display: block !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell > div[class*="z-[45]"] {
+    display: block !important;
+  }
+
+  /* ----------------------------- real top bar ----------------------------- */
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-topbar {
+    position: relative !important;
+    z-index: 100 !important;
+    display: grid !important;
+    grid-template-columns: 44px minmax(0, 1fr) auto !important;
+    align-items: center !important;
+    width: 100% !important;
+    height: 60px !important;
+    min-height: 60px !important;
+    max-height: 60px !important;
+    flex: 0 0 60px !important;
+    gap: 12px !important;
+    padding: 0 18px !important;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
+    background: #000 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-topbar > .titan-icon-btn:first-child {
+    display: inline-grid !important;
+    grid-column: 1 !important;
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    place-items: center !important;
+    justify-self: start !important;
+    border: 0 !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    color: #f4f4f5 !important;
+    box-shadow: none !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-topbar > .titan-icon-btn:first-child:hover {
+    background: rgba(255, 255, 255, 0.07) !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-mobile-brand {
+    display: none !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tabs {
+    grid-column: 2 !important;
+    display: flex !important;
+    width: max-content !important;
+    max-width: min(100%, 780px) !important;
+    min-width: 0 !important;
+    height: 44px !important;
+    justify-self: center !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    scrollbar-width: none !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tabs::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab,
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab.is-active,
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab[aria-current="page"] {
+    display: inline-flex !important;
+    width: auto !important;
+    min-width: max-content !important;
+    height: 36px !important;
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+    padding: 0 12px !important;
+    border-radius: 999px !important;
+    border: 1px solid transparent !important;
+    background: transparent !important;
+    background-image: none !important;
+    color: #f2f2f3 !important;
+    box-shadow: none !important;
+    filter: none !important;
+    font-size: 12px !important;
+    font-weight: 650 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab svg {
+    width: 14px !important;
+    height: 14px !important;
+    min-width: 14px !important;
+    color: currentColor !important;
+    stroke: currentColor !important;
+    stroke-width: 1.85 !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab:hover {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background: rgba(255, 255, 255, 0.045) !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab.is-active,
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab[aria-current="page"] {
+    border-color: rgba(255, 255, 255, 0.62) !important;
+    background: #090909 !important;
+    color: #fff !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab.is-active svg,
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab[aria-current="page"] svg {
+    color: #fff !important;
+    stroke: #fff !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-topbar-right {
+    grid-column: 3 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+    width: auto !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-search {
+    display: flex !important;
+    width: clamp(170px, 15vw, 230px) !important;
+    height: 36px !important;
+    align-items: center !important;
+    gap: 9px !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 11px !important;
+    background: #050505 !important;
+    color: #ededee !important;
+    box-shadow: none !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-search:hover {
+    border-color: rgba(255, 255, 255, 0.28) !important;
+    background: #0a0a0a !important;
+  }
+
+  /* ---------------------------- cinematic home --------------------------- */
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell main,
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell main > section {
+    background: #000 !important;
+    background-image: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome {
+    position: relative !important;
+    isolation: isolate !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    background: #000 !important;
+    background-image: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome::before {
+    content: "" !important;
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 0 !important;
+    display: block !important;
+    pointer-events: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    background-color: #000 !important;
+    background-image: url("/images/malik-unicorn-home-final.webp?v=desktop-final") !important;
+    background-repeat: no-repeat !important;
+    background-position: center center !important;
+    background-size: 100% 100% !important;
+    transform: translateZ(0) !important;
+    filter: saturate(1.035) contrast(1.025) brightness(1.015) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 1 !important;
+    display: block !important;
+    pointer-events: none !important;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 68%, rgba(0,0,0,.06) 78%, rgba(0,0,0,.20) 100%) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-inner,
+  #malik-root .malik-dashboard-shell .thome-launcher,
+  #malik-root .malik-dashboard-shell .thome-welcome {
+    position: relative !important;
+    z-index: 2 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+    background-image: none !important;
+    transform: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-launcher {
+    display: block !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome-logo,
+  #malik-root .malik-dashboard-shell .thome-welcome > h1,
+  #malik-root .malik-dashboard-shell .thome-welcome-subtitle {
+    display: none !important;
+  }
+
+  /* The four big Create / Research / Help / More buttons are intentionally NOT
+     rendered on desktop. Only the real source buttons remain below composer. */
+
+  #malik-root .malik-dashboard-shell .thome-composer,
+  #malik-root .malik-dashboard-shell .thome-composer:focus-within {
+    position: absolute !important;
+    left: 50% !important;
+    bottom: 68px !important;
+    z-index: 8 !important;
+    width: min(1040px, 72vw) !important;
+    min-height: 112px !important;
+    max-width: none !important;
+    margin: 0 !important;
+    transform: translateX(-50%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 26px !important;
+    background: #181818 !important;
+    background-image: none !important;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer-row {
+    min-height: 74px !important;
+    padding: 9px 12px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer textarea {
+    min-height: 48px !important;
+    max-height: 130px !important;
+    padding: 11px 10px !important;
+    color: #f7f7f8 !important;
+    font-size: 17px !important;
+    line-height: 25px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer textarea::placeholder {
+    color: #929298 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer-meta {
+    min-height: 37px !important;
+    padding: 6px 15px 8px 17px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] {
+    position: absolute !important;
+    left: 50% !important;
+    bottom: 12px !important;
+    z-index: 8 !important;
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: min(940px, 66vw) !important;
+    max-width: none !important;
+    height: 44px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transform: translateX(-50%) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button {
+    width: 100% !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 12px !important;
+    background: rgba(5, 5, 5, 0.96) !important;
+    background-image: none !important;
+    color: #eeeeef !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.30) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    font-size: 12px !important;
+    font-weight: 560 !important;
+    transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, transform 140ms ease !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button svg {
+    display: block !important;
+    width: 15px !important;
+    height: 15px !important;
+    min-width: 15px !important;
+    color: #d7d7da !important;
+    stroke: currentColor !important;
+    stroke-width: 1.8 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button span {
+    display: inline !important;
+    color: inherit !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button::before,
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button:hover {
+    border-color: rgba(255, 255, 255, 0.34) !important;
+    background: #101010 !important;
+    color: #fff !important;
+    transform: translateY(-1px) !important;
+  }
+
+  /* Keep the model / voice controls crisp and neutral. */
+  #malik-root .malik-dashboard-shell .thome .malik-model-selector__trigger {
+    border: 1px solid rgba(255, 255, 255, 0.07) !important;
+    background: #242424 !important;
+    color: #fff !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome .thome-voice-entry,
+  #malik-root .malik-dashboard-shell .thome .thome-submit {
+    background: #fff !important;
+    color: #050505 !important;
+    box-shadow: none !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1180px) {
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-search {
+    width: 160px !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab {
+    padding-inline: 9px !important;
+    gap: 5px !important;
+    font-size: 11px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer {
+    width: min(980px, 82vw) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] {
+    width: min(900px, 78vw) !important;
+  }
+}

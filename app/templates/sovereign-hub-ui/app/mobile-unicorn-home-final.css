@@ -1,3 +1,5 @@
-/* MALIK AI — production mobile home authority.
-   Keep this file as the final imported entry; V5 owns the complete one-screen mobile composition. */
+/* MALIK AI — final cinematic home authority.
+   Mobile V5 owns phone geometry; desktop final owns the approved PC scene.
+   Keep this wrapper as the last imported stylesheet. */
 @import "./mobile-unicorn-home-v5.css";
+@import "./desktop-unicorn-home-final.css";
