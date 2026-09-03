@@ -67,6 +67,13 @@ const SOURCE_PLUGINS: Array<{
   },
 ]
 
+const MOBILE_EXACT_ACTIONS = [
+  { id: "create", label: "Создать", prompt: "Создай изображение уровня мирового продукта" },
+  { id: "research", label: "Исследовать", prompt: "Проведи глубокое исследование", web: true },
+  { id: "help", label: "Помощь", prompt: "Помоги мне решить задачу" },
+  { id: "more", label: "Больше", prompt: "Покажи больше возможностей Malik AI" },
+] as const
+
 function attachmentId() {
   try {
     return crypto.randomUUID()
@@ -267,7 +274,11 @@ function HomeComposer({
   const hasSendableContent = Boolean(prompt.trim() || attachments.length)
 
   return (
-    <section className="thome-composer" aria-label="Новый запрос">
+    <section
+      className="thome-composer"
+      aria-label="Новый запрос"
+      data-has-content={hasSendableContent ? "true" : "false"}
+    >
       <div className="thome-composer-row">
         <div className="thome-tools" ref={toolsRef}>
           <button
@@ -431,7 +442,8 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
       if (typeof text !== "string") return
       setPrompt(text)
       window.setTimeout(() => {
-        const field = document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")
+        const field = Array.from(document.querySelectorAll<HTMLTextAreaElement>(".thome-composer textarea"))
+          .find((candidate) => candidate.getClientRects().length > 0)
         field?.focus()
         field?.setSelectionRange(text.length, text.length)
       }, 0)
@@ -486,7 +498,8 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const focusPrompt = (value: string) => {
     setPrompt(value)
     window.setTimeout(() => {
-      const field = document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")
+      const field = Array.from(document.querySelectorAll<HTMLTextAreaElement>(".thome-composer textarea"))
+        .find((candidate) => candidate.getClientRects().length > 0)
       field?.focus()
       field?.setSelectionRange(value.length, value.length)
     }, 0)
@@ -565,6 +578,63 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                   </button>
                 )
               })}
+            </div>
+
+            <div
+              className="thome-mobile-exact-layer"
+              aria-label="Интерактивный мобильный главный экран Malik AI"
+              data-testid="mobile-exact-interactive-layer"
+            >
+              <div className="thome-mobile-story-actions" aria-label="Возможности Malik AI">
+                <button type="button" aria-label="Исследовать всё" onClick={() => { setWebOn(true); focusPrompt("Исследуй тему подробно и покажи актуальные источники: ") }} />
+                <button type="button" aria-label="Создавать без ограничений" onClick={() => focusPrompt("Помоги создать новый проект без ограничений: ")} />
+                <button type="button" aria-label="Знания в реальном времени" onClick={() => { setWebOn(true); focusPrompt("Найди актуальную информацию в реальном времени по теме: ") }} />
+                <button type="button" aria-label="Превратить идею в результат" onClick={() => focusPrompt("Преврати мою идею в готовый результат: ")} />
+                <button type="button" aria-label="Решить сложную задачу" onClick={() => focusPrompt("Реши сложную задачу пошагово: ")} />
+                <button type="button" aria-label="Создать более красивый мир" onClick={() => props.onOpenPhoto?.()} />
+              </div>
+
+              <nav className="thome-mobile-quick-actions" aria-label="Быстрые действия Malik AI">
+                {MOBILE_EXACT_ACTIONS.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    aria-label={action.label}
+                    data-testid={`mobile-quick-${action.id}`}
+                    onClick={() => {
+                      if ("web" in action && action.web) setWebOn(true)
+                      focusPrompt(action.prompt)
+                    }}
+                  />
+                ))}
+              </nav>
+
+              <div className="thome-mobile-exact-composer">
+                <HomeComposer
+                  prompt={prompt}
+                  isLoading={props.isLoading}
+                  webOn={webOn}
+                  memoryOn={memoryOn}
+                  attachments={attachments}
+                  attachmentError={attachmentError}
+                  onPromptChange={setPrompt}
+                  onSubmit={submit}
+                  onToggleWeb={() => setWebOn(!webOn)}
+                  onToggleMemory={() => setMemoryOn(!memoryOn)}
+                  onSelectMediaFiles={(files) => { void addMediaFiles(files) }}
+                  onRemoveAttachment={(id) => {
+                    setAttachments((previous) => previous.filter((item) => item.id !== id))
+                    setAttachmentError("")
+                  }}
+                  onOpenCode={props.onOpenCode}
+                  onOpenCanvas={props.onOpenCanvas}
+                  selectedModelId={props.selectedModelId || DEFAULT_MALIK_MODEL_ID}
+                  userPlan={props.userPlan || "free"}
+                  onModelChange={props.onModelChange || (() => {})}
+                  onOpenBilling={props.onOpenBilling}
+                  onOpenVoice={props.onOpenVoice}
+                />
+              </div>
             </div>
           </div>
         </section>

@@ -1,6 +1,10 @@
 /* MALIK AI — FINAL MOBILE AUTHORITY.
    Imported last. The approved 8K artwork is the primary phone surface and is never cropped.
    Desktop remains untouched. */
+.thome-mobile-exact-layer {
+  display: none;
+}
+
 @media (max-width: 767px) {
   html,
   body,
@@ -74,30 +78,520 @@
     background: none !important;
   }
 
-  /* The artwork already contains the complete Home composition. */
-  html body #malik-root .malik-dashboard-shell .thome-welcome > * {
+  /* Hide the legacy desktop composition, but keep the real controls aligned
+     with the matching elements painted into the supplied artwork. */
+  html body #malik-root .malik-dashboard-shell .thome-welcome > *:not(.thome-mobile-exact-layer) {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
     pointer-events: none !important;
   }
 
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-layer {
+    position: absolute !important;
+    top: 0 !important;
+    left: 50% !important;
+    z-index: 90 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: min(100vw, calc(100dvh * .58203125)) !important;
+    height: min(100dvh, calc(100vw * 1.7181208054)) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    pointer-events: none !important;
+    transform: translateX(-50%) !important;
+  }
+
+  /* The six story cards in the image are genuine launch targets. */
+  html body #malik-root .malik-dashboard-shell .thome-mobile-story-actions {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-story-actions > button {
+    position: absolute !important;
+    z-index: 1 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: transparent !important;
+    pointer-events: auto !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-story-actions > button:nth-child(1) { left: 0; top: 30.2%; width: 24.5%; height: 16.5%; }
+  html body #malik-root .malik-dashboard-shell .thome-mobile-story-actions > button:nth-child(2) { left: 0; top: 46.2%; width: 24.5%; height: 11.5%; }
+  html body #malik-root .malik-dashboard-shell .thome-mobile-story-actions > button:nth-child(3) { left: 0; top: 57.4%; width: 24.5%; height: 13.2%; }
+  html body #malik-root .malik-dashboard-shell .thome-mobile-story-actions > button:nth-child(4) { right: 0; top: 29.5%; width: 24.5%; height: 16.8%; }
+  html body #malik-root .malik-dashboard-shell .thome-mobile-story-actions > button:nth-child(5) { right: 0; top: 45.6%; width: 24.5%; height: 11.7%; }
+  html body #malik-root .malik-dashboard-shell .thome-mobile-story-actions > button:nth-child(6) { right: 0; top: 57.1%; width: 24.5%; height: 13.5%; }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-story-actions > button:focus-visible,
+  html body #malik-root .malik-dashboard-shell .thome-mobile-story-actions > button:active {
+    outline: 1px solid rgba(255,255,255,.72) !important;
+    outline-offset: -2px !important;
+    background: rgba(255,255,255,.08) !important;
+  }
+
+  /* Exact prompts and behavior from app.js in the supplied ZIP. */
+  html body #malik-root .malik-dashboard-shell .thome-mobile-quick-actions {
+    position: absolute !important;
+    top: 77.05% !important;
+    left: 3.25% !important;
+    z-index: 3 !important;
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 93.5% !important;
+    height: 5.55% !important;
+    grid-template-columns: 1.06fr .99fr 1.01fr 1.06fr !important;
+    gap: 1.15% !important;
+    pointer-events: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-quick-actions > button {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    pointer-events: auto !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-quick-actions > button:focus-visible,
+  html body #malik-root .malik-dashboard-shell .thome-mobile-quick-actions > button:active {
+    outline: 1px solid rgba(255,255,255,.8) !important;
+    outline-offset: -2px !important;
+    background: rgba(255,255,255,.1) !important;
+  }
+
+  /* Reuse Malik AI's production composer instead of the demo-only app.js.
+     Its transparent hit areas sit exactly over the controls in the artwork;
+     menus, typed text, attachments, models, voice and send remain live. */
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer {
+    position: absolute !important;
+    top: 83.55% !important;
+    left: 3.25% !important;
+    z-index: 5 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 93.5% !important;
+    height: 11.35% !important;
+    overflow: visible !important;
+    pointer-events: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer > .thome-composer,
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer > .thome-composer:focus-within {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 1 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    pointer-events: auto !important;
+    transform: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer > .thome-composer::before,
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer > .thome-composer::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-composer-row {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer textarea {
+    position: absolute !important;
+    top: 7% !important;
+    left: 3.3% !important;
+    z-index: 4 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 93.4% !important;
+    max-width: none !important;
+    height: 34% !important;
+    min-height: 0 !important;
+    max-height: 34% !important;
+    resize: none !important;
+    margin: 0 !important;
+    padding: 3px 7px !important;
+    overflow: auto !important;
+    border: 0 !important;
+    border-radius: 7px !important;
+    outline: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #f4f5f6 !important;
+    caret-color: #fff !important;
+    font: 500 clamp(12px, 3.4vw, 15px)/1.25 Inter, "Segoe UI", Arial, sans-serif !important;
+    letter-spacing: -.015em !important;
+    pointer-events: auto !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer textarea::placeholder {
+    color: transparent !important;
+    opacity: 0 !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-composer:focus-within textarea,
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-composer[data-has-content="true"] textarea {
+    background: rgba(22,25,29,.96) !important;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.1) inset !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-composer:focus-within textarea::placeholder {
+    color: #aeb3ba !important;
+    opacity: 1 !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-tools {
+    position: absolute !important;
+    top: 45% !important;
+    left: 3.2% !important;
+    z-index: 8 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 10.5% !important;
+    height: 43% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    pointer-events: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-plus-button {
+    position: absolute !important;
+    inset: 0 !important;
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: transparent !important;
+    pointer-events: auto !important;
+    transform: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-plus-button > svg {
+    opacity: 0 !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-plus-button:focus-visible,
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-plus-button:active {
+    outline: 1px solid rgba(255,255,255,.8) !important;
+    outline-offset: -2px !important;
+    background: rgba(255,255,255,.1) !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-tools-menu {
+    position: absolute !important;
+    left: 0 !important;
+    bottom: calc(100% + 8px) !important;
+    z-index: 2147483200 !important;
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: min(230px, 72vw) !important;
+    max-height: min(330px, 52dvh) !important;
+    overflow-y: auto !important;
+    border: 1px solid rgba(255,255,255,.13) !important;
+    border-radius: 14px !important;
+    background: rgba(17,18,20,.98) !important;
+    box-shadow: 0 20px 60px rgba(0,0,0,.65) !important;
+    pointer-events: auto !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-composer-right {
+    position: static !important;
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .malik-model-selector {
+    position: absolute !important;
+    top: 45% !important;
+    left: 13.6% !important;
+    z-index: 7 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 43.5% !important;
+    height: 43% !important;
+    margin: 0 !important;
+    pointer-events: auto !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .malik-model-selector__trigger {
+    position: absolute !important;
+    inset: 0 !important;
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: transparent !important;
+    pointer-events: auto !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .malik-model-selector__trigger > * {
+    opacity: 0 !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .malik-model-selector__trigger:focus-visible,
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .malik-model-selector__trigger:active,
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .malik-model-selector__trigger[aria-expanded="true"] {
+    outline: 1px solid rgba(255,255,255,.8) !important;
+    outline-offset: -2px !important;
+    background: rgba(255,255,255,.1) !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-action-swap {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 7 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    pointer-events: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-action-swap > button {
+    position: absolute !important;
+    top: 43% !important;
+    left: 79.2% !important;
+    right: auto !important;
+    bottom: auto !important;
+    display: grid !important;
+    visibility: visible !important;
+    width: 18.8% !important;
+    height: 45% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: transparent !important;
+    pointer-events: auto !important;
+    transform: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-action-swap > button > * {
+    opacity: 0 !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-action-swap > button.is-hidden {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-action-swap > button:not(.is-hidden) {
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-action-swap > button:focus-visible,
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-action-swap > button:active {
+    outline: 1px solid rgba(255,255,255,.85) !important;
+    outline-offset: -2px !important;
+    background: rgba(255,255,255,.1) !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-composer-meta {
+    display: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-attachments {
+    position: absolute !important;
+    left: 0 !important;
+    bottom: calc(100% + 7px) !important;
+    z-index: 9 !important;
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-height: 72px !important;
+    overflow: auto !important;
+    border-radius: 10px !important;
+    background: rgba(10,10,11,.94) !important;
+    pointer-events: auto !important;
+  }
+
   /* Make the live header transparent so it cannot cover the approved artwork. */
   html body #malik-root .malik-dashboard-shell .titan-topbar {
     position: fixed !important;
-    inset: 0 0 auto 0 !important;
+    top: 0 !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: 50% !important;
     z-index: 2147483000 !important;
-    height: 58px !important;
+    width: min(100vw, calc(100dvh * .58203125)) !important;
+    height: min(100dvh, calc(100vw * 1.7181208054)) !important;
+    padding: 0 !important;
     border: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
     pointer-events: none !important;
+    transform: translateX(-50%) !important;
   }
 
   html body #malik-root .malik-dashboard-shell .titan-topbar > *:not(.titan-topbar-right),
   html body #malik-root .malik-dashboard-shell .titan-topbar-right > *:not(.titan-mobile-signin) {
     visibility: hidden !important;
     pointer-events: none !important;
+  }
+
+  /* Menu and the five supplied navigation tabs are invisible live hit areas
+     over their exact visual counterparts in the artwork. */
+  html body #malik-root .malik-dashboard-shell .titan-topbar > .titan-icon-btn:first-child {
+    position: absolute !important;
+    top: .45% !important;
+    left: 1.6% !important;
+    z-index: 5 !important;
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 10.5% !important;
+    height: 4.25% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: transparent !important;
+    pointer-events: auto !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .titan-topbar > .titan-icon-btn:first-child svg {
+    opacity: 0 !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tabs {
+    position: absolute !important;
+    top: 4.3% !important;
+    left: 2.35% !important;
+    z-index: 4 !important;
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 95.3% !important;
+    height: 6.05% !important;
+    grid-template-columns: 1.05fr .9fr 1.05fr 1.05fr 1.08fr !important;
+    gap: .35% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    pointer-events: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tab {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border: 0 !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: transparent !important;
+    pointer-events: auto !important;
+    transform: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tab > * {
+    opacity: 0 !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tab:nth-child(n+6) {
+    display: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .titan-topbar > .titan-icon-btn:first-child:focus-visible,
+  html body #malik-root .malik-dashboard-shell .titan-topbar > .titan-icon-btn:first-child:active,
+  html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tab:focus-visible,
+  html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tab:active {
+    outline: 1px solid rgba(255,255,255,.8) !important;
+    outline-offset: -2px !important;
+    background: rgba(255,255,255,.1) !important;
   }
 
   html body #malik-root .malik-dashboard-shell .titan-topbar-right {
