@@ -424,6 +424,21 @@
     pointer-events: none !important;
   }
 
+  /* Beat the older high-specificity mobile composer geometry. */
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-composer .thome-composer-row .thome-composer-right .thome-action-swap {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    pointer-events: none !important;
+    transform: none !important;
+  }
+
   html body #malik-root .malik-dashboard-shell .thome-mobile-exact-composer .thome-action-swap > button {
     position: absolute !important;
     top: 43% !important;
@@ -554,7 +569,17 @@
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
     pointer-events: none !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tabs::before,
+  html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tabs::after {
+    content: none !important;
+    display: none !important;
+    background: none !important;
   }
 
   html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tab {
@@ -579,6 +604,20 @@
 
   html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tab > * {
     opacity: 0 !important;
+  }
+
+  /* Older V5 rules intentionally painted the active tab white. Here the
+     approved artwork already contains that state, so every live tab is clear. */
+  html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tabs > .titan-tab.is-active,
+  html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tabs > .titan-tab[aria-current="page"] {
+    border-color: transparent !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    color: transparent !important;
+    filter: none !important;
+    text-shadow: none !important;
   }
 
   html body #malik-root .malik-dashboard-shell .titan-topbar .titan-tab:nth-child(n+6) {
