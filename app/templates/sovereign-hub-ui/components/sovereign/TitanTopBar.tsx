@@ -311,6 +311,10 @@ function TitanTopBarInner({
             </div>
           ) : null}
         </div>
+
+        {!profile ? (
+          <a href="/sign-in" className="titan-mobile-signin" aria-label="Войти в Malik AI">Вход</a>
+        ) : null}
       </div>
 
       <style jsx global>{`
@@ -444,12 +448,35 @@ function TitanTopBarInner({
         }
         .titan-avatar img { position: absolute; inset: 0; height: 100%; width: 100%; object-fit: cover; z-index: 1; }
         .titan-avatar-initials { position: relative; z-index: 0; }
+        .titan-mobile-signin { display: none; }
         @media (min-width: 1180px) { .titan-search { display: flex; } }
         @media (max-width: 900px) {
           .titan-topbar { padding: 0 8px; gap: 6px; }
           .titan-tab { padding: 0 10px; font-size: 12px; }
           .titan-tab span { display: none; }
           .titan-tab.is-active span { display: inline; }
+        }
+        @media (max-width: 767px) {
+          .titan-mobile-signin {
+            display: inline-flex !important;
+            min-width: 64px;
+            height: 34px;
+            padding: 0 13px;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255,255,255,.72);
+            border-radius: 7px;
+            background: rgba(13,17,23,.96);
+            color: #f0f6fc;
+            text-decoration: none;
+            font-size: 13px;
+            line-height: 1;
+            font-weight: 600;
+            letter-spacing: -.01em;
+            box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 6px 18px rgba(0,0,0,.32);
+            -webkit-tap-highlight-color: transparent;
+          }
+          .titan-mobile-signin:active { transform: scale(.97); background: #161b22; }
         }
       `}</style>
     </header>
