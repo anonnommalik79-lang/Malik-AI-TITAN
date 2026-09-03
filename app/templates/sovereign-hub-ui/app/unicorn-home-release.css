@@ -1,0 +1,209 @@
+/* MALIK AI — cinematic Home release authority.
+   This layer is intentionally imported last. It does not replace product logic:
+   it only hardens interaction, responsive geometry and the Home -> Chat handoff. */
+
+@media (min-width: 768px) {
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-topbar {
+    z-index: 120 !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tabs {
+    z-index: 3 !important;
+    pointer-events: auto !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab,
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-search,
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-topbar-right button {
+    position: relative !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab {
+    transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, transform 120ms ease, box-shadow 140ms ease !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab:hover {
+    border-color: rgba(255,255,255,.18) !important;
+    background: rgba(255,255,255,.055) !important;
+    color: #fff !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab:active {
+    transform: translateY(1px) scale(.985) !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab:focus-visible,
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-search:focus-visible,
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-topbar-right button:focus-visible {
+    outline: 2px solid rgba(255,255,255,.72) !important;
+    outline-offset: 2px !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab.is-active,
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab[aria-current="page"] {
+    border-color: rgba(255,255,255,.58) !important;
+    background: #0b0b0b !important;
+    color: #fff !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 8px 24px rgba(0,0,0,.24) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer,
+  #malik-root .malik-dashboard-shell .thome-composer:focus-within {
+    pointer-events: auto !important;
+    overflow: visible !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer textarea,
+  #malik-root .malik-dashboard-shell .thome-composer button,
+  #malik-root .malik-dashboard-shell .thome-composer [role="button"],
+  #malik-root .malik-dashboard-shell .thome-composer [role="menuitem"] {
+    pointer-events: auto !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer button:not(:disabled),
+  #malik-root .malik-dashboard-shell .thome-composer [role="button"],
+  #malik-root .malik-dashboard-shell .thome-composer [role="menuitem"] {
+    cursor: pointer !important;
+    touch-action: manipulation !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-tools-menu,
+  #malik-root .malik-dashboard-shell .thome [role="menu"] {
+    z-index: 80 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] {
+    pointer-events: auto !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button {
+    position: relative !important;
+    isolation: isolate !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent !important;
+    user-select: none !important;
+    transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, transform 110ms ease, box-shadow 140ms ease !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button > * {
+    pointer-events: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button:hover {
+    border-color: rgba(255,255,255,.38) !important;
+    background: #111 !important;
+    color: #fff !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 12px 32px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.05) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button:active {
+    transform: translateY(0) scale(.985) !important;
+    background: #171717 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button:focus-visible {
+    outline: 2px solid rgba(255,255,255,.72) !important;
+    outline-offset: 2px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-submit:not(:disabled):active,
+  #malik-root .malik-dashboard-shell .thome-voice-entry:not(:disabled):active,
+  #malik-root .malik-dashboard-shell .thome-plus-button:not(:disabled):active {
+    transform: scale(.94) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-submit:disabled,
+  #malik-root .malik-dashboard-shell .thome-voice-entry:disabled {
+    cursor: default !important;
+  }
+}
+
+/* Tablet / narrow desktop: keep centered tabs clear of the live search/actions. */
+@media (min-width: 768px) and (max-width: 1180px) {
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tabs {
+    max-width: calc(100% - 320px) !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-search {
+    width: 148px !important;
+  }
+
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tab {
+    padding-inline: 8px !important;
+    gap: 5px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  #malik-root .malik-dashboard-shell .thome-composer,
+  #malik-root .malik-dashboard-shell .thome-composer:focus-within {
+    pointer-events: auto !important;
+    overflow: visible !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-tools-menu,
+  #malik-root .malik-dashboard-shell .thome [role="menu"] {
+    z-index: 140 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"],
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button {
+    pointer-events: auto !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button {
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent !important;
+    transition: transform 100ms ease, border-color 120ms ease, background-color 120ms ease !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button > * {
+    pointer-events: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] > button:active {
+    transform: scale(.975) !important;
+    border-color: rgba(255,255,255,.34) !important;
+    background: #18181a !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-composer button,
+  #malik-root .malik-dashboard-shell .thome-composer textarea,
+  #malik-root .malik-dashboard-shell .titan-tab,
+  #malik-root .malik-dashboard-shell .titan-topbar button {
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+  }
+}
+
+/* The cinematic image exists only on the empty Home. Once a message is sent,
+   Dashboard swaps to ChatView; harden that surface so no Home image or old glow
+   can leak through during the handoff. */
+#malik-root .malik-dashboard-shell .malik-active-chat-shell,
+#malik-root .malik-dashboard-shell .malik-premium-chat-host,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg {
+  background: #000 !important;
+  background-image: none !important;
+}
+
+#malik-root .malik-dashboard-shell .malik-active-chat-shell {
+  animation: malikHomeToChat 180ms ease-out both;
+}
+
+@keyframes malikHomeToChat {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #malik-root .malik-dashboard-shell .malik-active-chat-shell {
+    animation: none !important;
+  }
+}
