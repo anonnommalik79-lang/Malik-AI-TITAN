@@ -7,6 +7,7 @@ const post = fs.readFileSync("lib/media/image-postprocess.ts", "utf8")
 const preview = fs.readFileSync("lib/media/image-display-preview.ts", "utf8")
 const quality = fs.readFileSync("lib/media/image-quality-presets.ts", "utf8")
 const resultExperience = fs.readFileSync("components/sovereign/ImageResultExperience.tsx", "utf8")
+const studio = fs.readFileSync("components/sovereign/photo-generation/PhotoGenerationStudio.tsx", "utf8")
 const resultCss = fs.readFileSync("app/image-result-experience.css", "utf8")
 const quotaGuard = fs.readFileSync("components/sovereign/ChatHistoryQuotaGuard.tsx", "utf8")
 const motion = fs.readFileSync("components/sovereign/image-generation-motion.tsx", "utf8")
@@ -28,6 +29,9 @@ assert.match(route, /previewUrl,/, "API must expose the display derivative")
 assert.match(route, /#malik-master=/, "display URL must carry a master download reference")
 assert.match(resultExperience, /function masterImageUrl/, "result tools must resolve the master URL")
 assert.match(resultExperience, /fullQualitySrc\s*=\s*masterImageUrl\(src\)/, "downloads must use full quality")
+assert.match(studio, /const displayUrl = data\.url \|\| data\.previewUrl \|\| data\.imageUrl/, "photo studio must paint the display derivative")
+assert.match(studio, /const masterUrl = data\.masterUrl \|\| data\.imageUrl \|\| displayUrl/, "photo studio must preserve the full-resolution master")
+assert.match(studio, /results\[0\]\?\.masterUrl \?\? results\[0\]\?\.url/, "explicit Canvas export should use the master")
 
 // Sharp must keep the high-resolution master as bytes until persistence; eagerly creating a
 // data URI adds ~33% and creates huge JS strings before the browser even sees it.
