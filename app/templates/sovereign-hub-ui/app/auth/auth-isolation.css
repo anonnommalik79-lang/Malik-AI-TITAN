@@ -160,29 +160,35 @@ html.malik-auth-active #malik-investor-aurora,
   #malik-root .sva-desktop-only .sva-guest { margin: 0; }
 }
 
-/* Large ultrawide desktops only: keep the normal desktop/mobile layouts intact,
-   but make the live registration panel feel correctly proportioned on 21:9/32:9 displays. */
-@media (min-width: 2200px) and (min-aspect-ratio: 2/1) {
+/* Large ultrawide desktops only. The previous 2200px gate could miss a 21:9
+   monitor when Windows/browser scaling reports a smaller CSS viewport. This
+   gate keys primarily off the ultrawide shape, while still requiring a large
+   desktop viewport, so normal 16:9/16:10 PCs, laptops and mobile stay intact. */
+@media (min-width: 1600px) and (min-aspect-ratio: 19/10) {
   #malik-root .sva-desktop-only.sva-root::before {
     content: "";
     position: absolute;
-    inset: -56px;
+    inset: -72px;
     z-index: 0;
     pointer-events: none;
     background:
-      linear-gradient(90deg, rgba(0,0,0,.26) 0%, transparent 18%, transparent 82%, rgba(0,0,0,.26) 100%),
+      linear-gradient(90deg, rgba(0,0,0,.18) 0%, transparent 16%, transparent 84%, rgba(0,0,0,.18) 100%),
       url("/images/sovereign-auth-founder.png") center / cover no-repeat;
-    filter: blur(26px) brightness(.58) saturate(1.14);
-    transform: scale(1.04);
-    opacity: .9;
+    filter: blur(22px) brightness(.64) saturate(1.16);
+    transform: scale(1.06);
+    opacity: .96;
   }
 
+  /* Make the whole TITAN artwork visibly larger without deforming it. */
   #malik-root .sva-desktop-only .sva-scene {
     z-index: 1;
+    transform: translate(-50%, -50%) scale(var(--sva-scene-scale)) scale(1.12);
   }
 
+  /* The registration panel gets its own extra upscale so it no longer looks
+     tiny on 34/49-inch ultrawide displays. */
   #malik-root .sva-desktop-only .sva-shell {
-    transform: scale(1.18);
+    transform: scale(1.28);
     transform-origin: left center;
   }
 }
