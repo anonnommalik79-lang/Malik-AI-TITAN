@@ -7,5 +7,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "daily",
       priority: 1,
     },
+    {
+      url: "https://malikaiworld.world/business",
+      changeFrequency: "weekly",
+      priority: 0.9,
+    },
   ]
 }
