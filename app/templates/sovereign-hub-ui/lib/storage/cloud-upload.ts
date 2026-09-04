@@ -24,7 +24,8 @@ function config() {
   const bucket = first(process.env.MEDIA_STORAGE_BUCKET, process.env.R2_BUCKET, process.env.CLOUDFLARE_R2_BUCKET, process.env.S3_BUCKET, process.env.STORAGE_BUCKET)
   const accessKeyId = first(process.env.MEDIA_STORAGE_ACCESS_KEY_ID, process.env.AWS_ACCESS_KEY_ID)
   const secretAccessKey = first(process.env.MEDIA_STORAGE_SECRET_ACCESS_KEY, process.env.AWS_SECRET_ACCESS_KEY)
-  if (!bucket || !accessKeyId || !secretAccessKey) return null
+  const publicBaseUrl = first(process.env.MEDIA_STORAGE_PUBLIC_BASE_URL)
+  if (!bucket || !accessKeyId || !secretAccessKey || !publicBaseUrl) return null
   return {
     bucket,
     accessKeyId,
@@ -32,7 +33,7 @@ function config() {
     sessionToken: first(process.env.MEDIA_STORAGE_SESSION_TOKEN, process.env.AWS_SESSION_TOKEN) || undefined,
     region: first(process.env.MEDIA_STORAGE_REGION, process.env.AWS_REGION) || "auto",
     endpoint: first(process.env.MEDIA_STORAGE_ENDPOINT) || undefined,
-    publicBaseUrl: first(process.env.MEDIA_STORAGE_PUBLIC_BASE_URL) || undefined,
+    publicBaseUrl,
   }
 }
 
@@ -111,9 +112,7 @@ export async function uploadMediaAsset(input: {
       CacheControl: "public, max-age=31536000, immutable",
       Metadata: { owner, kind },
     }))
-    const base = storage.cfg.publicBaseUrl?.replace(/\/+$/, "")
-    const publicUrl = base ? `${base}/${key.split("/").map(encodeURIComponent).join("/")}` : ""
-    if (!publicUrl) return { stored: false, reason: "MEDIA_STORAGE_PUBLIC_BASE_URL is required for stable account media URLs.", publicUrl: "", path: key, bucket: storage.cfg.bucket }
+    const publicUrl = `${storage.cfg.publicBaseUrl.replace(/\/+$/, "")}/${key.split("/").map(encodeURIComponent).join("/")}`
 
     // Generated masters become account-owned library records immediately. The
     // preview is deliberately excluded so one generation never appears twice.
