@@ -159,3 +159,30 @@ html.malik-auth-active #malik-investor-aurora,
   }
   #malik-root .sva-desktop-only .sva-guest { margin: 0; }
 }
+
+/* Large ultrawide desktops only: keep the normal desktop/mobile layouts intact,
+   but make the live registration panel feel correctly proportioned on 21:9/32:9 displays. */
+@media (min-width: 2200px) and (min-aspect-ratio: 2/1) {
+  #malik-root .sva-desktop-only.sva-root::before {
+    content: "";
+    position: absolute;
+    inset: -56px;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(0,0,0,.26) 0%, transparent 18%, transparent 82%, rgba(0,0,0,.26) 100%),
+      url("/images/sovereign-auth-founder.png") center / cover no-repeat;
+    filter: blur(26px) brightness(.58) saturate(1.14);
+    transform: scale(1.04);
+    opacity: .9;
+  }
+
+  #malik-root .sva-desktop-only .sva-scene {
+    z-index: 1;
+  }
+
+  #malik-root .sva-desktop-only .sva-shell {
+    transform: scale(1.18);
+    transform-origin: left center;
+  }
+}
