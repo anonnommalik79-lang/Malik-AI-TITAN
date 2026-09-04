@@ -1,15 +1,33 @@
 /* MALIK AI — final Home authority.
-   Mobile intentionally falls back to the classic welcome composition from
-   mobile-reference-final.css + mobile-welcome-final.css (logo, welcome copy,
-   black canvas and bottom composer). The cinematic/photo home is disabled on
-   phones only. Desktop cinematic styling stays untouched. */
+   The approved high-density artwork is the empty-chat surface on phones.
+   The real buttons and composer stay interactive above the painted design. */
 
 @import "./desktop-unicorn-home-final.css";
 @import "./desktop-unicorn-home-repair.css";
 @import "./unicorn-home-release.css";
+@import "./mobile-exact-reference-final.css";
 
-/* The interactive overlay belonged to the removed mobile artwork. Keep it out
-   of layout so the classic mobile Home does not get duplicate controls. */
-.thome-mobile-exact-layer {
-  display: none !important;
+@media (max-width: 767px) {
+  /* Fill every phone viewport from top to bottom. The source is 4470×7680,
+     so it remains sharp far beyond the device's physical pixel density. */
+  html body #malik-root .malik-dashboard-shell .thome-welcome {
+    background-size: 100% 100% !important;
+    background-position: center !important;
+    animation: malikMobileHomeEntrance 420ms cubic-bezier(.22,.72,.2,1) both !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .thome-mobile-exact-layer {
+    display: block !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+  }
+}
+
+@keyframes malikMobileHomeEntrance {
+  from { opacity: 0; transform: scale(1.018); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html body #malik-root .malik-dashboard-shell .thome-welcome { animation: none !important; }
 }
