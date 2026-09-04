@@ -1,0 +1,32 @@
+name: Malik Business system check
+
+on:
+  pull_request:
+    paths:
+      - "app/templates/sovereign-hub-ui/app/business/**"
+      - "app/templates/sovereign-hub-ui/components/sovereign/business/**"
+      - "app/templates/sovereign-hub-ui/app/api/business/**"
+      - "app/templates/sovereign-hub-ui/scripts/verify-business-system.mjs"
+      - "database/business_leads.sql"
+  push:
+    branches: [main]
+    paths:
+      - "app/templates/sovereign-hub-ui/app/business/**"
+      - "app/templates/sovereign-hub-ui/components/sovereign/business/**"
+      - "app/templates/sovereign-hub-ui/app/api/business/**"
+      - "app/templates/sovereign-hub-ui/scripts/verify-business-system.mjs"
+      - "database/business_leads.sql"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-business:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Malik Business file contracts
+        run: node scripts/verify-business-system.mjs
