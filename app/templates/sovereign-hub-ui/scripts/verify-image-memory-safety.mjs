@@ -4,18 +4,34 @@ import fs from "node:fs"
 const route = fs.readFileSync("lib/media/generate-photo-route.ts", "utf8")
 const history = fs.readFileSync("lib/media/image-history.ts", "utf8")
 const post = fs.readFileSync("lib/media/image-postprocess.ts", "utf8")
+const preview = fs.readFileSync("lib/media/image-display-preview.ts", "utf8")
+const quality = fs.readFileSync("lib/media/image-quality-presets.ts", "utf8")
+const resultExperience = fs.readFileSync("components/sovereign/ImageResultExperience.tsx", "utf8")
 const resultCss = fs.readFileSync("app/image-result-experience.css", "utf8")
 const quotaGuard = fs.readFileSync("components/sovereign/ChatHistoryQuotaGuard.tsx", "utf8")
 const motion = fs.readFileSync("components/sovereign/image-generation-motion.tsx", "utf8")
 const layout = fs.readFileSync("app/layout.tsx", "utf8")
 
-// A durable 2K result must not be duplicated as a base64 fallback in response JSON.
+// A durable high-resolution result must not be duplicated as a base64 fallback in response JSON.
 assert.equal(/inlineImageUrl\s*:/.test(route), false, "photo route must not return duplicate inlineImageUrl")
 assert.match(route, /durable\s*=\s*Boolean\(storageUrl \|\| assetUrl\)/, "route must expose durable state")
 
-// Sharp must keep the 2K master as bytes until persistence; eagerly creating a
+// Quality is not the performance tradeoff. The default master stays Ultra 8K;
+// the browser gets a separate 1600px display derivative and download resolves
+// back to the untouched master.
+assert.match(quality, /DEFAULT_MALIK_IMAGE_QUALITY:\s*MalikImageQuality\s*=\s*["']ultra8k["']/, "default image master must remain Ultra 8K")
+assert.match(preview, /MALIK_IMAGE_DISPLAY_PREVIEW_LONG_EDGE\s*=\s*1600/, "chat preview must stay bounded")
+assert.match(preview, /withoutEnlargement:\s*true/, "preview must never upscale small originals")
+assert.match(route, /masterUrl:\s*imageUrl/, "API must expose the untouched master")
+assert.match(route, /url:\s*displayUrl/, "chat must receive the lightweight display URL")
+assert.match(route, /previewUrl,/, "API must expose the display derivative")
+assert.match(route, /#malik-master=/, "display URL must carry a master download reference")
+assert.match(resultExperience, /function masterImageUrl/, "result tools must resolve the master URL")
+assert.match(resultExperience, /fullQualitySrc\s*=\s*masterImageUrl\(src\)/, "downloads must use full quality")
+
+// Sharp must keep the high-resolution master as bytes until persistence; eagerly creating a
 // data URI adds ~33% and creates huge JS strings before the browser even sees it.
-assert.equal(/data\.toString\(["']base64["']\)/.test(post), false, "post-process must not eagerly base64 encode 2K output")
+assert.equal(/data\.toString\(["']base64["']\)/.test(post), false, "post-process must not eagerly base64 encode output")
 assert.match(post, /buffer:\s*data/, "post-process must hand the processed buffer to persistence")
 
 // Browser image history is metadata only. Old data:/blob: entries are migrated out.
@@ -33,13 +49,18 @@ assert.match(layout, /<ChatHistoryQuotaGuard\s*\/>/, "quota guard must mount bef
 
 // Image generation should not show the white assistant avatar or expensive fog blur.
 assert.match(resultCss, /:has\(\.malik-photo-motion\)[\s\S]*\.malik-ai-avatar\.is-working[\s\S]*display:\s*none/i, "image streaming avatar must be hidden")
-assert.match(resultCss, /\.malik-photo-motion \.malik-art-result[\s\S]*filter:\s*none\s*!important/i, "2K reveal must be crisp")
+assert.match(resultCss, /\.malik-photo-motion \.malik-art-result[\s\S]*filter:\s*none\s*!important/i, "high-quality reveal must be crisp")
 
-// The in-chat waiting UI must stay tiny. The old component remounted a large SVG
-// scene every 7.2 seconds; after several cycles Chromium could stop responding.
+// The in-chat waiting UI stays bounded and becomes completely idle when finished.
 assert.equal(/CYCLE_MS|MAX_CYCLES|setCycle\(/.test(motion), false, "photo waiting UI must not run remount cycles")
 assert.equal(/<svg|malik-coded-hand|malik-spray-rig|blur\(/i.test(motion), false, "photo waiting UI must not render the old heavy SVG/fog stack")
-assert.match(motion, /setInterval\([\s\S]*1000\)/, "photo progress updates should be capped to one tick per second")
+assert.match(motion, /if\s*\(imageLoaded\s*\|\|\s*actuallyFailed\)\s*return[\s\S]*setInterval\(tick,\s*1000\)/, "finished cards must stop timers and active cards must update at 1 Hz")
+assert.match(motion, /now\s*-\s*lastFrameAt\s*<\s*32/, "canvas reveal must be capped near 30fps")
 assert.match(motion, /data-malik-image-ready=\{imageLoaded \? "1" : "0"\}/, "ready state must remain compatible with result tools")
 
-console.log("Malik image memory + chat history + main-thread safety: OK")
+// Result enhancement must not rescan every photo whenever an unrelated class changes.
+assert.equal(/new MutationObserver\(\(\)\s*=>\s*enhanceAll\(\)\)/.test(resultExperience), false, "result observer must be mutation-targeted")
+assert.match(resultExperience, /const pending = new Set<HTMLElement>\(\)/, "result work must be frame-batched")
+assert.match(resultExperience, /malikRememberedSrc/, "ready cards must not re-read history repeatedly")
+
+console.log("Malik image quality + memory + main-thread safety: OK")
