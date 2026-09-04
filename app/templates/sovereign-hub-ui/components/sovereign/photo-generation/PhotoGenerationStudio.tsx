@@ -31,8 +31,12 @@ export type PhotoGenerationStudioProps = {
 
 type PhotoResult = {
   id: string
+  /** Lightweight browser/display reference. */
   url: string
+  /** Durable display reference used after reload. */
   storedUrl?: string
+  /** Untouched full-resolution master; used only for explicit export. */
+  masterUrl?: string
   prompt?: string
   filename?: string
   fallback?: boolean
@@ -139,7 +143,8 @@ export function PhotoGenerationStudio({
     if (!storageRestored) return
     const stored = results.map((item) => {
       const durableUrl = item.storedUrl || (!item.url.startsWith("data:image/") ? item.url : "")
-      return { ...item, url: durableUrl.startsWith("data:image/") ? "" : durableUrl }
+      const durableMaster = item.masterUrl && !item.masterUrl.startsWith("data:image/") ? item.masterUrl : undefined
+      return { ...item, url: durableUrl.startsWith("data:image/") ? "" : durableUrl, masterUrl: durableMaster }
     }).filter((item) => Boolean(item.url))
     try {
       window.localStorage.setItem(PHOTO_RESULTS_STORAGE_KEY, JSON.stringify(stored))
@@ -179,14 +184,19 @@ export function PhotoGenerationStudio({
       )
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || data.message || `Ошибка ${res.status}`)
-      const imageUrl = data.imageUrl || data.url
-      if (!imageUrl) throw new Error("Сервер не вернул imageUrl")
+
+      // Paint only the lightweight derivative. The 8K master is kept separately
+      // and is never decoded by the studio until the user explicitly exports it.
+      const displayUrl = data.url || data.previewUrl || data.imageUrl
+      const masterUrl = data.masterUrl || data.imageUrl || displayUrl
+      if (!displayUrl) throw new Error("Сервер не вернул imageUrl")
       const id = crypto.randomUUID()
-      const storedUrl = await persistGeneratedImageUrl(id, imageUrl)
+      const storedUrl = await persistGeneratedImageUrl(id, displayUrl)
       const next: PhotoResult = {
         id,
-        url: imageUrl,
+        url: displayUrl,
         storedUrl,
+        masterUrl: typeof masterUrl === "string" ? masterUrl : undefined,
         prompt,
         provider: data.provider,
         fallback: data.provider === "pollinations",
@@ -204,7 +214,7 @@ export function PhotoGenerationStudio({
   }
 
   const sendCanvas = () => {
-    const url = results[0]?.url ?? heroPhoto
+    const url = results[0]?.masterUrl ?? results[0]?.url ?? heroPhoto
     onOpenCanvas?.(canvasArtifact(prompt, url, operator))
     setStatus("Кадр отправлен в Canvas")
   }
