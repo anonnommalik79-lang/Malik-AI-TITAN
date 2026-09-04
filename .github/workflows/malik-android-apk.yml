@@ -1,0 +1,61 @@
+name: Build Malik AI Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "native/android-shell/**"
+      - ".github/workflows/malik-android-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Capacitor Android
+        working-directory: native/android-shell
+        run: npm install --no-audit --no-fund
+
+      - name: Generate native Android project
+        working-directory: native/android-shell
+        run: |
+          rm -rf android
+          npx cap add android
+          npx cap sync android
+          node prepare-android.mjs
+
+      - name: Build installable APK
+        working-directory: native/android-shell/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK
+        run: cp native/android-shell/android/app/build/outputs/apk/debug/app-debug.apk Malik-AI.apk
+
+      - name: Upload Malik AI APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Malik-AI-Android-APK
+          path: Malik-AI.apk
+          if-no-files-found: error
+          retention-days: 14
