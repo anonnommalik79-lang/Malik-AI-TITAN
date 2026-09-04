@@ -1,9 +1,15 @@
-/* MALIK AI — final cinematic home authority.
-   Mobile V5 owns base phone geometry; desktop remains independent.
-   V6 is intentionally imported last to match the approved iPhone screen and bypass stale hero rendering. */
-@import "./mobile-unicorn-home-v5.css";
+/* MALIK AI — final Home authority.
+   Mobile intentionally falls back to the classic welcome composition from
+   mobile-reference-final.css + mobile-welcome-final.css (logo, welcome copy,
+   black canvas and bottom composer). The cinematic/photo home is disabled on
+   phones only. Desktop cinematic styling stays untouched. */
+
 @import "./desktop-unicorn-home-final.css";
 @import "./desktop-unicorn-home-repair.css";
 @import "./unicorn-home-release.css";
-@import "./mobile-unicorn-home-v6-livefix.css";
-@import "./mobile-exact-reference-final.css";
+
+/* The interactive overlay belonged to the removed mobile artwork. Keep it out
+   of layout so the classic mobile Home does not get duplicate controls. */
+.thome-mobile-exact-layer {
+  display: none !important;
+}
