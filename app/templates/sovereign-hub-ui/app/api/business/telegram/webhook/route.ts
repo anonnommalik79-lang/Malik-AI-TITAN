@@ -2,13 +2,29 @@ import { timingSafeEqual } from "node:crypto"
 
 export const runtime = "nodejs"
 
+type TelegramUser = {
+  id?: number
+  first_name?: string
+  last_name?: string
+  username?: string
+  language_code?: string
+}
+
+type TelegramMessage = {
+  message_id?: number
+  chat?: { id?: number; type?: string }
+  from?: TelegramUser
+  text?: string
+  contact?: { phone_number?: string; first_name?: string; last_name?: string; user_id?: number }
+}
+
 type TelegramUpdate = {
-  message?: {
-    message_id?: number
-    chat?: { id?: number; type?: string }
-    from?: { id?: number; first_name?: string; last_name?: string; username?: string; language_code?: string }
-    text?: string
-    contact?: { phone_number?: string; first_name?: string; last_name?: string; user_id?: number }
+  message?: TelegramMessage
+  callback_query?: {
+    id?: string
+    data?: string
+    from?: TelegramUser
+    message?: TelegramMessage
   }
 }
 
@@ -25,49 +41,57 @@ function config() {
   return token && secret ? { token, secret } : null
 }
 
-async function telegramSend(token: string, chatId: number, text: string) {
-  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+async function telegramCall(token: string, method: string, body: Record<string, unknown>) {
+  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "Сайт + AI + бот", callback_data: "full_system" },
-            { text: "AI-бот", callback_data: "ai_bot" },
-          ],
-          [{ text: "Получить прототип", url: "https://malikaiworld.world/business#apply" }],
-        ],
-      },
-    }),
+    body: JSON.stringify(body),
     cache: "no-store",
   })
   return response.ok
 }
 
-async function storeInboundLead(update: TelegramUpdate, text: string) {
+async function telegramSend(token: string, chatId: number, text: string) {
+  return telegramCall(token, "sendMessage", {
+    chat_id: chatId,
+    text,
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "Сайт + AI + бот", callback_data: "full_system" },
+          { text: "AI-бот", callback_data: "ai_bot" },
+        ],
+        [{ text: "Получить прототип", url: "https://malikaiworld.world/business#apply" }],
+      ],
+    },
+  })
+}
+
+async function storeInboundLead(args: {
+  chatId: number
+  from?: TelegramUser
+  contactPhone?: string
+  contactFirstName?: string
+  contactLastName?: string
+  text: string
+}) {
   const supabaseUrl = process.env.SUPABASE_URL?.trim()?.replace(/\/$/, "")
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
-  const message = update.message
-  const chatId = message?.chat?.id
-  if (!supabaseUrl || !serviceKey || !chatId) return
+  if (!supabaseUrl || !serviceKey) return
 
-  const from = message?.from
-  const contact = message?.contact?.phone_number || (from?.username ? `@${from.username}` : `telegram:${chatId}`)
-  const name = [message?.contact?.first_name || from?.first_name, message?.contact?.last_name || from?.last_name].filter(Boolean).join(" ") || "Telegram lead"
+  const contact = args.contactPhone || (args.from?.username ? `@${args.from.username}` : `telegram:${args.chatId}`)
+  const name = [args.contactFirstName || args.from?.first_name, args.contactLastName || args.from?.last_name].filter(Boolean).join(" ") || "Telegram lead"
 
   const row = {
-    external_id: `telegram:${chatId}`,
+    external_id: `telegram:${args.chatId}`,
     name,
     company: "Telegram inbound",
     contact,
     niche: "Website + AI + Bot",
     website: "",
-    message: text.slice(0, 1200),
+    message: args.text.slice(0, 1200),
     source: "telegram-bot",
-    lang: from?.language_code?.toLowerCase().startsWith("kk") ? "kk" : "ru",
+    lang: args.from?.language_code?.toLowerCase().startsWith("kk") ? "kk" : "ru",
     status: "new",
     priority: "normal",
     updated_at: new Date().toISOString(),
@@ -100,8 +124,12 @@ export async function POST(request: Request) {
   }
 
   const update = (await request.json().catch(() => ({}))) as TelegramUpdate
-  const chatId = update.message?.chat?.id
-  const text = String(update.message?.text || "").trim()
+  const callback = update.callback_query
+  const message = update.message || callback?.message
+  const from = update.message?.from || callback?.from
+  const chatId = message?.chat?.id
+  const callbackData = String(callback?.data || "").trim()
+  const text = String(update.message?.text || callbackData || "").trim()
   const phone = update.message?.contact?.phone_number
   if (!chatId) return Response.json({ ok: true, ignored: true })
 
@@ -110,6 +138,10 @@ export async function POST(request: Request) {
 
   if (normalized === "/start") {
     reply = "Здравствуйте! 👋 Я Malik Business Bot.\n\nМогу показать, как для вашего бизнеса будет работать связка:\n• премиальный сайт\n• AI-консультант 24/7\n• Telegram/WhatsApp-бот\n• сбор и квалификация заявок\n\nНапишите вашу нишу — например: стоматология, салон, обучение, автосервис."
+  } else if (callbackData === "full_system") {
+    reply = "Полная система включает сайт + AI-консультанта + Telegram/WhatsApp-бот + Lead OS. Ориентир — от 690 000 ₸. Напишите нишу и текущий сайт, если он есть — подготовим персональный прототип."
+  } else if (callbackData === "ai_bot") {
+    reply = "AI-бот отвечает на типовые вопросы, аккуратно квалифицирует запрос и передаёт контакт человеку. Для старта напишите вашу нишу и 3 главные услуги."
   } else if (phone) {
     reply = "Спасибо! Контакт принят. Заявка передана в Malik Lead OS. Мы используем его только для связи по вашему запросу."
   } else if (/стомат|clinic|dental|медицин|клиник/i.test(text)) {
@@ -120,10 +152,21 @@ export async function POST(request: Request) {
     reply = "Ориентир: Website от 180 000 ₸, Website + Bot от 390 000 ₸, полный AI Business System от 690 000 ₸. Финальная цена зависит от интеграций. Какой формат нужен вам?"
   }
 
-  await Promise.all([
+  const tasks: Promise<unknown>[] = [
     telegramSend(cfg.token, chatId, reply),
-    storeInboundLead(update, text || (phone ? `Shared phone: ${phone}` : "Telegram interaction")),
-  ])
+    storeInboundLead({
+      chatId,
+      from,
+      contactPhone: phone,
+      contactFirstName: update.message?.contact?.first_name,
+      contactLastName: update.message?.contact?.last_name,
+      text: text || (phone ? `Shared phone: ${phone}` : "Telegram interaction"),
+    }),
+  ]
+  if (callback?.id) {
+    tasks.push(telegramCall(cfg.token, "answerCallbackQuery", { callback_query_id: callback.id }))
+  }
+  await Promise.all(tasks)
 
   return Response.json({ ok: true })
 }
