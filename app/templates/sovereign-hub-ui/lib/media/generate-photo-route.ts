@@ -260,7 +260,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     let previewAssetUrl: string | undefined
     if (!previewStorageUrl && displayPreview?.buffer.length) {
       const storedPreview = saveMediaAsset({ buffer: displayPreview.buffer, mime: displayPreview.mime })
-      previewAssetUrl = storedPreview.url
+      if (storedPreview) previewAssetUrl = storedPreview.url
     }
 
     const finalInlineUrl = delivered.imageUrl
