@@ -1,5 +1,6 @@
 import { mediaAssetExtension, saveMediaAsset } from "./asset-store"
 import { maxImagePromptLength } from "./config"
+import { createMalikImageDisplayPreview } from "./image-display-preview"
 import {
   canUseMalikImageModel,
   getMalikImageModel,
@@ -23,6 +24,7 @@ const ASPECTS = new Set<ImageAspectRatio>(["1:1", "16:9", "9:16", "4:5", "4:3"])
 const MODES = new Set<ImageMode>(["cinematic", "realistic", "product", "design"])
 const IMAGE_COMMAND = /^\s*\/(?:image|img|photo|foto|фото|картинка)(?![\p{L}\p{N}_])\s*:?\s*/iu
 const IMAGE_GENERATION_LOCK_TTL_MS = 3 * 60 * 1000
+const MASTER_FRAGMENT = "#malik-master="
 
 type ActiveImageGeneration = { token: string; startedAt: number }
 type MalikImageGlobal = typeof globalThis & {
@@ -75,6 +77,16 @@ function requestedImageModel(request: Request, body: any): MalikImageModelId | u
 function optionalNumber(value: unknown) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function canEmbedMasterReference(value: string) {
+  const src = String(value || "")
+  return Boolean(src && src.length < 2048 && !/^(?:data|blob):/i.test(src))
+}
+
+function displayImageReference(previewUrl: string | undefined, masterUrl: string) {
+  if (!previewUrl || previewUrl === masterUrl || !canEmbedMasterReference(masterUrl)) return masterUrl
+  return `${previewUrl}${MASTER_FRAGMENT}${encodeURIComponent(masterUrl)}`
 }
 
 export async function handleMalikPhotoGenerationRequest(request: Request) {
@@ -190,15 +202,23 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       }, { status: 502 })
     }
 
-    // Every provider now enters the same delivery pipeline. Quality/Ultra
-    // renders are materialised, Lanczos-upscaled to a 2048px long edge when
-    // needed, lightly sharpened, and then persisted as one immutable result.
+    // The master keeps the exact requested quality (8K by default). A separate
+    // 1600px derivative is created only for the browser UI so a phone never has
+    // to decode hundreds of megabytes of 8K pixels just to paint a 680px card.
     const delivered = await postProcessGeneratedImage({ imageUrl: result.imageUrl, quality })
+    const displayPreview = delivered.buffer?.length
+      ? await createMalikImageDisplayPreview({
+          buffer: delivered.buffer,
+          width: delivered.width,
+          height: delivered.height,
+        })
+      : null
 
     await recordMediaUsage(user.userId, "image")
     const remaining = Math.max(0, limit.remaining - 1)
 
     let storageUrl: string | undefined
+    let previewStorageUrl: string | undefined
     if (delivered.buffer?.length) {
       const { uploadMediaAsset } = await import("@/lib/storage/cloud-upload")
       const mime = delivered.mime || "image/webp"
@@ -210,6 +230,17 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
         kind: "image",
       })
       if (uploaded.stored) storageUrl = uploaded.publicUrl
+
+      if (displayPreview?.buffer.length) {
+        const previewUploaded = await uploadMediaAsset({
+          userId: user.userId,
+          fileName: `generated-preview-${Date.now()}.webp`,
+          mime: displayPreview.mime,
+          buffer: displayPreview.buffer,
+          kind: "image",
+        })
+        if (previewUploaded.stored) previewStorageUrl = previewUploaded.publicUrl
+      }
     }
 
     let assetId: string | undefined
@@ -226,18 +257,23 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       }
     }
 
+    let previewAssetUrl: string | undefined
+    if (!previewStorageUrl && displayPreview?.buffer.length) {
+      const storedPreview = saveMediaAsset({ buffer: displayPreview.buffer, mime: displayPreview.mime })
+      previewAssetUrl = storedPreview.url
+    }
+
     const finalInlineUrl = delivered.imageUrl
     const imageUrl = storageUrl || assetUrl || finalInlineUrl
+    const previewUrl = previewStorageUrl || previewAssetUrl
+    const displayUrl = displayImageReference(previewUrl, imageUrl)
     const resolvedModelId = result.modelId || requestedModelId
     const resolvedImageModel = resolvedModelId ? getMalikImageModel(resolvedModelId) : undefined
     const durable = Boolean(storageUrl || assetUrl)
 
     // Memory safety: once a short durable URL exists, never duplicate the same
-    // multi-megabyte 2K image as base64 inside the JSON response. That duplicate
-    // used to be copied into fetch JSON, React state and image history at once,
-    // which could crash Chromium tabs with Out of Memory and then leave the chat
-    // snapshot unable to save. A data URL is used only as the last-resort primary
-    // result when persistence itself is unavailable.
+    // multi-megabyte master inside JSON. `imageUrl/masterUrl` stay full quality;
+    // `url/mediaUrl` are the lightweight display derivative used by chat cards.
     return Response.json({
       ok: true,
       status: "ready",
@@ -248,8 +284,13 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       modelLabel: resolvedImageModel?.label || "MalikImage Auto",
       providerModel: result.providerModel || resolvedImageModel?.providerModel,
       imageUrl,
-      url: imageUrl,
-      mediaUrl: imageUrl,
+      masterUrl: imageUrl,
+      url: displayUrl,
+      mediaUrl: displayUrl,
+      previewUrl,
+      thumbnailUrl: previewUrl,
+      previewWidth: displayPreview?.width,
+      previewHeight: displayPreview?.height,
       understood: result.understood,
       originalPrompt: prompt,
       enhancedPrompt: result.enhancedPrompt,
