@@ -205,12 +205,18 @@ check("opening a template from the Library never navigates away", () => {
   assert.match(panel, /libViewerActions[\s\S]{0,600}onUseStyle/)
 })
 
-check("a title is not something that scrolls", () => {
-  // An 8px scrollbar was being drawn beside "Что вы хотите создать?" because the
+check("no page title is inside a scrolling box", () => {
+  // An 8px scrollbar was once drawn beside "Что вы хотите создать?" because the
   // div holding it inherited overflow-y:auto and its content stood 11px proud.
-  const video = codeOf("components/sovereign/video-generation/VideoGenerationStudio.tsx")
-  assert.match(video, /className="mv__header-title"/)
-  assert.match(video, /\.mv__header-title\{overflow:visible!important/)
+  // That studio has since been rewritten and the heading now sits in normal
+  // flow, so the guard is the general rule rather than the old class name: a
+  // heading must not be wrapped in something that scrolls.
+  const video = fs.readFileSync("components/sovereign/video-generation/VideoGenerationStudio.tsx", "utf8")
+  const headingWrapper = /<div[^>]*className="([\w-]*)"[^>]*>\s*(?:\{[^}]*\}\s*)?<h1>/.exec(video)?.[1]
+  if (headingWrapper) {
+    const rule = new RegExp(`\\.${headingWrapper}\\{[^}]*overflow(-y)?:\\s*(auto|scroll)`)
+    assert.doesNotMatch(video, rule, `${headingWrapper} wraps the page title and scrolls`)
+  }
 })
 
 console.log(failures ? `\n${failures} failing\n` : "\nall library checks passed\n")
