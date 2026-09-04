@@ -1,0 +1,20 @@
+{
+  "name": "malik-ai-android-shell",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native Android shell for Malik AI",
+  "scripts": {
+    "android:add": "npx cap add android",
+    "android:sync": "npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:prepare": "node prepare-android.mjs",
+    "android:update": "npx cap sync android && node prepare-android.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.1",
+    "@capacitor/core": "8.5.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.1"
+  }
+}
