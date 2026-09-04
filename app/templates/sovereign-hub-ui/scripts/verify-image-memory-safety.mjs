@@ -6,6 +6,7 @@ const history = fs.readFileSync("lib/media/image-history.ts", "utf8")
 const post = fs.readFileSync("lib/media/image-postprocess.ts", "utf8")
 const preview = fs.readFileSync("lib/media/image-display-preview.ts", "utf8")
 const capacity = fs.readFileSync("lib/media/image-processing-capacity.ts", "utf8")
+const assetStore = fs.readFileSync("lib/media/asset-store.ts", "utf8")
 const quality = fs.readFileSync("lib/media/image-quality-presets.ts", "utf8")
 const resultExperience = fs.readFileSync("components/sovereign/ImageResultExperience.tsx", "utf8")
 const studio = fs.readFileSync("components/sovereign/photo-generation/PhotoGenerationStudio.tsx", "utf8")
@@ -44,6 +45,16 @@ assert.match(capacity, /IMAGE_POSTPROCESS_CONCURRENCY/, "capacity should be oper
 assert.match(capacity, /HOST_MEMORY_GIB\s*>=\s*24[\s\S]*return 3/, "large hosts should be allowed more delivery concurrency")
 assert.match(capacity, /const next = state\.waiters\.shift\(\)[\s\S]*if \(next\)[\s\S]*queueMicrotask\(next\)[\s\S]*return/, "queued work must receive a slot directly without an oversubscription race")
 
+// High-resolution persistence must not block the Node event loop after a render.
+// 64MB also leaves headroom for genuine Ultra 16K JPEG masters around 30MB,
+// instead of silently discarding that master on a host without cloud storage.
+assert.match(assetStore, /MAX_ASSET_BYTES\s*=\s*64\s*\*\s*1024\s*\*\s*1024/, "asset store must accept large 16K masters")
+assert.match(assetStore, /export async function saveMediaAssetAsync/, "asset store must expose async persistence")
+assert.match(assetStore, /await import\(["']node:fs\/promises["']\)/, "large asset writes must use async fs")
+assert.match(assetStore, /setImmediate\(\(\)\s*=>/, "retention bookkeeping must stay off the response critical path")
+assert.match(route, /await saveMediaAssetAsync\(\{ buffer: delivered\.buffer/, "generated masters must use async persistence")
+assert.match(route, /await saveMediaAssetAsync\(\{ buffer: displayPreview\.buffer/, "generated previews must use async persistence")
+
 // Sharp must keep the high-resolution master as bytes until persistence; eagerly creating a
 // data URI adds ~33% and creates huge JS strings before the browser even sees it.
 assert.equal(/data\.toString\(["']base64["']\)/.test(post), false, "post-process must not eagerly base64 encode output")
@@ -80,4 +91,4 @@ assert.equal(/new MutationObserver\(\(\)\s*=>\s*enhanceAll\(\)\)/.test(resultExp
 assert.match(resultExperience, /const pending = new Set<HTMLElement>\(\)/, "result work must be frame-batched")
 assert.match(resultExperience, /malikRememberedSrc/, "ready cards must not re-read history repeatedly")
 
-console.log("Malik image quality + capacity + memory + main-thread safety: OK")
+console.log("Malik image quality + capacity + persistence + memory + main-thread safety: OK")
