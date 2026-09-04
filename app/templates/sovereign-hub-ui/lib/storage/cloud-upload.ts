@@ -114,6 +114,20 @@ export async function uploadMediaAsset(input: {
     const base = storage.cfg.publicBaseUrl?.replace(/\/+$/, "")
     const publicUrl = base ? `${base}/${key.split("/").map(encodeURIComponent).join("/")}` : ""
     if (!publicUrl) return { stored: false, reason: "MEDIA_STORAGE_PUBLIC_BASE_URL is required for stable account media URLs.", publicUrl: "", path: key, bucket: storage.cfg.bucket }
+
+    // Generated masters become account-owned library records immediately. The
+    // preview is deliberately excluded so one generation never appears twice.
+    if (kind === "image" && !/preview/i.test(input.fileName)) {
+      await recordCloudImageHistory(input.userId, {
+        id: key,
+        src: publicUrl,
+        prompt: "",
+        provider: "MalikImage",
+        createdAt: new Date().toISOString(),
+        favorite: false,
+      })
+    }
+
     return { stored: true, reason: "", publicUrl, path: key, bucket: storage.cfg.bucket }
   } catch (error) {
     return { stored: false, reason: error instanceof Error ? error.message : "Cloud upload failed.", publicUrl: "", path: "", bucket: storage.cfg.bucket }
