@@ -33,6 +33,8 @@
  * and the two-recognizer arbitration in transcript-choice.ts stays with it.
  */
 
+import { DcBlocker, PauseTracker, PreEmphasis, Resampler } from "./dsp"
+
 export type ListenPhase = "idle" | "connecting" | "open" | "closed" | "failed"
 
 export type ListenEvents = {
@@ -58,6 +60,12 @@ export type ListenOptions = ListenEvents & {
   utteranceEndMs?: number
   /** The language to decode as. See `streamLanguage` for why this is not always "multi". */
   language?: string
+  /**
+   * This speaker's pauses, kept by the caller so the estimate survives a turn.
+   * A tracker owned by the socket would forget everything every time the
+   * microphone stopped, which is once per sentence.
+   */
+  pauses?: PauseTracker
 }
 
 /**
@@ -96,28 +104,6 @@ function pcm16(input: Float32Array): ArrayBuffer {
     out[i] = s < 0 ? s * 0x8000 : s * 0x7fff
   }
   return out.buffer
-}
-
-/**
- * Resample by averaging the samples that fall inside each output sample.
- *
- * Picking every third sample instead (48k to 16k) aliases everything above
- * 8kHz down into the speech band as a hiss, and a recognizer hears that as
- * consonants that were never said. Averaging is a crude low-pass, but it is the
- * difference between clean speech and speech with invented sibilants.
- */
-export function downsample(input: Float32Array, from: number, to: number): Float32Array {
-  if (from === to) return input
-  const ratio = from / to
-  const out = new Float32Array(Math.floor(input.length / ratio))
-  for (let i = 0; i < out.length; i++) {
-    const start = Math.floor(i * ratio)
-    const end = Math.min(input.length, Math.floor((i + 1) * ratio))
-    let sum = 0
-    for (let j = start; j < end; j++) sum += input[j]
-    out[i] = end > start ? sum / (end - start) : 0
-  }
-  return out
 }
 
 function url(options: { keyterms?: string[]; utteranceEndMs: number; withKeyterms: boolean; language: string }) {
@@ -160,6 +146,17 @@ export class DeepgramListener {
   private source: MediaStreamAudioSourceNode | null = null
   private processor: ScriptProcessorNode | null = null
   private buffer: Float32Array = new Float32Array(0)
+  /**
+   * The front end. A DC blocker, then pre-emphasis, then a designed low-pass
+   * decimator - each holding its state across callbacks, because the audio
+   * arrives in 2048-sample blocks and a filter reset at every boundary is 23
+   * clicks a second going into the recognizer.
+   */
+  private dc: DcBlocker | null = null
+  private emphasis: PreEmphasis | null = null
+  private resampler: Resampler | null = null
+  /** This speaker's own pauses, which decide when a turn is over. */
+  readonly pauses: PauseTracker
   private events: ListenEvents
   private options: ListenOptions
   private stopped = false
@@ -171,6 +168,7 @@ export class DeepgramListener {
   constructor(options: ListenOptions) {
     this.options = options
     this.events = options
+    this.pauses = options.pauses || new PauseTracker()
   }
 
   isOpen() {
@@ -220,7 +218,11 @@ export class DeepgramListener {
         socket = new WebSocket(
           url({
             keyterms: this.options.keyterms,
-            utteranceEndMs: this.options.utteranceEndMs ?? 1100,
+            // Measured from this speaker rather than fixed: a constant is
+            // wrong for everybody, and the two people it is most wrong for are
+            // the fast talker who waits for every reply and the one choosing
+            // words in a third language who gets cut off.
+            utteranceEndMs: this.options.utteranceEndMs ?? this.pauses.endpointMs(),
             withKeyterms: !this.keytermsRejected,
             language: this.options.language || "multi",
           }),
@@ -312,6 +314,7 @@ export class DeepgramListener {
 
     // The backstop end-of-turn: no clear final word, just a long enough pause.
     if (message.type === "UtteranceEnd") {
+      this.pauses.reset()
       this.events.onTurnEnd?.()
       return
     }
@@ -327,6 +330,7 @@ export class DeepgramListener {
     }
 
     if (text) {
+      this.pauses.mark()
       this.events.onFinal?.(text, {
         confidence: typeof alternative?.confidence === "number" ? alternative.confidence : 0,
         speechFinal: Boolean(message.speech_final),
@@ -336,7 +340,10 @@ export class DeepgramListener {
 
     // speech_final is the recognizer saying it heard the end of the sentence,
     // which is earlier and more accurate than any pause timer.
-    if (message.speech_final) this.events.onTurnEnd?.()
+    if (message.speech_final) {
+      this.pauses.reset()
+      this.events.onTurnEnd?.()
+    }
   }
 
   private attachAudio(stream: MediaStream, context: AudioContext) {
@@ -349,10 +356,16 @@ export class DeepgramListener {
       // thing that can fail between tapping the microphone and being heard.
       this.processor = context.createScriptProcessor(FRAME, 1, 1)
 
+      this.dc = new DcBlocker()
+      this.emphasis = new PreEmphasis()
+      this.resampler = new Resampler(context.sampleRate, TARGET_RATE)
+
       this.processor.onaudioprocess = (event) => {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return
         const input = event.inputBuffer.getChannelData(0)
-        const resampled = downsample(input, context.sampleRate, TARGET_RATE)
+        const levelled = this.dc!.process(input)
+        const tilted = this.emphasis!.process(levelled)
+        const resampled = this.resampler!.process(tilted)
 
         const merged = new Float32Array(this.buffer.length + resampled.length)
         merged.set(this.buffer, 0)

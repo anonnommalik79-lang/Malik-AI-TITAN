@@ -13,6 +13,8 @@ import { repairTranscript, VOICE_BRAND_TERMS } from "@/lib/voice/speech-vocabula
 import { DeepgramListener, streamLanguage, streamedTranscriptIsTrusted } from "@/lib/voice/deepgram-listen"
 import { speechChunks } from "@/lib/voice/speech-chunks"
 import { askAgainPhrase, chooseTranscript, conversationHint, shouldAskAgain } from "@/lib/voice/transcript-choice"
+import { fuseTranscripts } from "@/lib/voice/rover"
+import { PauseTracker } from "@/lib/voice/dsp"
 import { detectSpokenLanguageDetailed } from "@/lib/voice/voice-language"
 import { VOICE_HISTORY_TURNS, type VoiceMessage } from "@/lib/voice/conversation"
 
@@ -111,6 +113,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const streamTextRef = useRef("")
   /** Lowest confidence seen in this turn - one unsure word makes the turn unsure. */
   const streamConfidenceRef = useRef(1)
+  /**
+   * How long this person pauses inside a sentence, learned over the whole
+   * conversation. The socket is rebuilt every turn, so the tracker cannot live
+   * inside it or it would forget after every sentence.
+   */
+  const pausesRef = useRef(new PauseTracker())
   const recorderChunksRef = useRef<Blob[]>([])
   const recordingStartedAtRef = useRef(0)
   const audioFrameRef = useRef(0)
@@ -574,11 +582,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       // told these words exist spells them; one that has not writes down what
       // they sounded like, which is where "чат гпт" came from.
       keyterms: VOICE_BRAND_TERMS,
-      utteranceEndMs: 1100,
       // Kazakh is not in the code-switching set, so a Kazakh speaker gets a
       // Kazakh stream. The language actually spoken last turn beats the picker,
       // because the picker is what people forget to change.
       language: streamLanguage(spokenLanguageRef.current, languageRef.current),
+      pauses: pausesRef.current,
       onInterim: (text) => {
         if (!micActiveRef.current) return
         setInterimTranscript(text)
@@ -780,7 +788,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     await runVoiceTurn(prompt)
   }, [runVoiceTurn])
 
-  const transcribeAndRespond = useCallback(async (blob: Blob, durationSec: number, browserFallback: string) => {
+  const transcribeAndRespond = useCallback(async (blob: Blob, durationSec: number, browserFallback: string, streamedText = "", streamedConfidence = 0) => {
     setBusy(true)
     setTitle("Распознаю")
     setSubtitle(languageRef.current === "kk" ? "Қазақша · қатаң режим" : languageRef.current === "ru" ? "Русский · строгий режим" : "English · strict mode")
@@ -828,6 +836,33 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       confidence: whisperConfidence,
     })
     prompt = choice.text
+
+    // Three transcripts of the same seconds of audio, and they fail in
+    // different places: the stream drops a quiet ending, Whisper invents a
+    // fluent clause, the browser mangles a name but keeps the grammar. Voting
+    // word by word beats picking one of them whole, because a mistake only one
+    // recognizer made is outvoted by the two that did not make it.
+    //
+    // Two hypotheses cannot outvote anything, so with only two the older rules
+    // stand - they encode specific failures that were found the hard way.
+    const hypotheses = [
+      streamedText ? { text: streamedText, weight: Math.max(0, Math.min(1, streamedConfidence)), source: "stream" } : null,
+      whisperText ? { text: whisperText, weight: Math.max(0, Math.min(1, (whisperConfidence + 1) / 2)), source: "whisper" } : null,
+      // The live recognizer reports no confidence. It is decoding in the
+      // language it was told to expect, which makes it reliable on short
+      // utterances and mediocre on long ones - a middling constant is the
+      // honest weight for that.
+      browserFallback ? { text: browserFallback, weight: 0.55, source: "browser" } : null,
+    ].filter(Boolean) as Array<{ text: string; weight: number; source: string }>
+
+    if (hypotheses.length >= 3) {
+      const fused = fuseTranscripts(hypotheses)
+      if (fused.text) {
+        prompt = repairTranscript(fused.text) || fused.text
+        choice.agreement = fused.agreement
+        choice.source = "agreed"
+      }
+    }
     setBusy(false)
 
     // Two words, both recognizers unsure, and they do not agree. Answering that
@@ -897,7 +932,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     // Unsure, or no stream at all. This is where the two other recognizers get
     // to disagree about the recording, which is slower and worth it exactly
     // here - a doubtful transcript is the one worth a second opinion.
-    if (blob && blob.size > 200) await transcribeAndRespond(blob, durationSec, fallback || streamed)
+    if (blob && blob.size > 200) await transcribeAndRespond(blob, durationSec, fallback, streamed, streamConfidence)
     else if (streamed || fallback) await answerTranscript(streamed || fallback)
     else showNotice("Скажи что-нибудь и нажми микрофон ещё раз")
   }, [answerTranscript, busy, collectRecorder, finalTranscript, interimTranscript, showNotice, startMicrophone, stopMicrophone, stopReplyAudio, transcribeAndRespond])

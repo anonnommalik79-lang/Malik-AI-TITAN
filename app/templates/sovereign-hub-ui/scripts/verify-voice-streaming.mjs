@@ -90,16 +90,25 @@ check("the brand names are given to the recognizer, not repaired afterwards", ()
   assert.match(listenSource, /keytermsRejected/)
 })
 
-check("resampling averages instead of dropping samples", () => {
-  // Decimating 48k to 16k folds everything above 8kHz back into the speech band
-  // as hiss, and a recognizer hears hiss as consonants nobody said.
-  const from = 48000, to = 16000
-  const input = new Float32Array(480)
-  for (let i = 0; i < input.length; i++) input[i] = Math.sin(i * 2.3) // above Nyquist for 16k
-  const out = listen.downsample(input, from, to)
-  assert.equal(out.length, 160)
-  const energy = out.reduce((sum, v) => sum + v * v, 0) / out.length
-  assert.ok(energy < 0.2, `aliased energy ${energy.toFixed(3)} - this is decimation, not resampling`)
+check("the audio front end is a designed chain, not an average", () => {
+  // The numbers behind this are measured in verify-voice-accuracy.mjs; this
+  // only checks the chain is wired, in order, with its state kept between the
+  // 2048-sample blocks the browser delivers.
+  assert.match(listenSource, /new DcBlocker\(\)/)
+  assert.match(listenSource, /new PreEmphasis\(\)/)
+  assert.match(listenSource, /new Resampler\(context\.sampleRate, TARGET_RATE\)/)
+  assert.match(listenSource, /this\.dc!\.process\(input\)[\s\S]{0,200}this\.emphasis!\.process\(levelled\)[\s\S]{0,200}this\.resampler!\.process\(tilted\)/)
+})
+
+check("the end of a turn is measured from this speaker, not fixed", () => {
+  assert.match(listenSource, /this\.pauses\.endpointMs\(\)/)
+  assert.match(listenSource, /this\.pauses\.mark\(\)/)
+  assert.match(voiceMode, /pauses: pausesRef\.current/)
+})
+
+check("three transcripts are voted on, not chosen between", () => {
+  assert.match(voiceMode, /fuseTranscripts\(hypotheses\)/)
+  assert.match(voiceMode, /hypotheses\.length >= 3/)
 })
 
 check("a keep-alive holds the socket open while someone thinks", () => {
@@ -169,7 +178,9 @@ check("spoken output rules reach the model", () => {
 console.log("\nnothing regressed when the fast path was added")
 
 check("Whisper and the browser recognizer are still the fallback", () => {
-  assert.match(voiceMode, /transcribeAndRespond\(blob, durationSec, fallback \|\| streamed\)/)
+  // All three hypotheses reach the slow path now, because that is where they
+  // get to vote on each other.
+  assert.match(voiceMode, /transcribeAndRespond\(blob, durationSec, fallback, streamed, streamConfidence\)/)
   assert.match(voiceMode, /chooseTranscript\(\{/)
   // And a stream that never comes up must leave the old path working.
   assert.match(listenSource, /Returns false rather than throwing/)
