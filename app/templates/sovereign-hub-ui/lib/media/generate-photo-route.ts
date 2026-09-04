@@ -1,4 +1,4 @@
-import { mediaAssetExtension, saveMediaAssetAsync } from "./asset-store"
+import { mediaAssetExtension } from "./asset-store"
 import { maxImagePromptLength } from "./config"
 import { createMalikImageDisplayPreview } from "./image-display-preview"
 import { withMalikImageProcessingSlot } from "./image-processing-capacity"
@@ -92,17 +92,11 @@ function displayImageReference(previewUrl: string | undefined, masterUrl: string
 
 export async function handleMalikPhotoGenerationRequest(request: Request) {
   const body = await request.json().catch(() => ({}))
-  // The chat dashboard deliberately carries /image as explicit media consent.
-  // Remove only that transport command; the user's real visual request remains untouched.
   const rawPrompt = normalizeImagePrompt(body?.prompt || body?.message)
   const aspectRatio = ASPECTS.has(body?.aspectRatio) ? body.aspectRatio : "1:1"
   const requestedMode = String(body?.mode || body?.style || "").toLowerCase()
   const mode: ImageMode = MODES.has(requestedMode as ImageMode) ? requestedMode as ImageMode : "cinematic"
 
-  // "кот в 8к" is a delivery instruction wearing a prompt's clothes. It is read
-  // as one and then taken out of the text, because "8K" left in a prompt is a
-  // stock-render cue to every diffusion model and drags the picture toward the
-  // exact plastic look the person was asking to avoid.
   const requested = resolveRequestedQuality(
     rawPrompt,
     resolveMalikImageQuality(body?.quality || readImageQualityCookie(request)),
@@ -145,8 +139,6 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     }, { status: 429 })
   }
 
-  // Hard server-side single-flight guard. A second click must never race the
-  // first render and make an older image appear under a newer prompt.
   const generationLock = acquireImageGenerationLock(user.userId)
   if (!generationLock) {
     return Response.json({
@@ -175,15 +167,6 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       preserveFaces: typeof body?.preserveFaces === "boolean" ? body.preserveFaces : undefined,
       userId: user.userId,
       plan: user.plan,
-      // Deliberately not tied to request.signal.
-      //
-      // A picture takes about seventeen seconds. Passing the client's signal
-      // here meant that a dropped connection - a closed tab, a phone that slept,
-      // a browser reclaiming a backgrounded page - cancelled the generation
-      // mid-flight and threw away the work and the quota that had been spent on
-      // it. The generation now runs to completion and the result is persisted
-      // below, so it is waiting when the person comes back. The per-user
-      // single-flight lock above is what stops this from piling up.
     })
 
     if (!result.ok) {
@@ -203,10 +186,6 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       }, { status: 502 })
     }
 
-    // Start the lightweight UI derivative from the provider-native image. This
-    // work is tiny compared with the 8K master and does not occupy the heavy
-    // delivery queue. Meanwhile the full requested master goes through the
-    // host-aware slot so simultaneous high-resolution jobs cannot freeze Next.js.
     const nativePreviewPromise = createMalikImageDisplayPreview({ sourceUrl: result.imageUrl })
     const delivered = await withMalikImageProcessingSlot(() =>
       postProcessGeneratedImage({ imageUrl: result.imageUrl, quality }),
@@ -214,8 +193,6 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
 
     let displayPreview = await nativePreviewPromise
     if (!displayPreview && delivered.buffer?.length) {
-      // Rare fallback: if the provider URL expired before the preview fetch,
-      // derive it from the stored master under the same RAM-safe gate.
       displayPreview = await withMalikImageProcessingSlot(() =>
         createMalikImageDisplayPreview({
           buffer: delivered.buffer,
@@ -230,66 +207,53 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
 
     let storageUrl: string | undefined
     let previewStorageUrl: string | undefined
+    let cloudStorageConfigured = false
+    let persistenceError: string | undefined
+
     if (delivered.buffer?.length) {
-      const { uploadMediaAsset } = await import("@/lib/storage/cloud-upload")
+      const { isCloudStorageConfigured, uploadMediaAsset } = await import("@/lib/storage/cloud-upload")
+      cloudStorageConfigured = isCloudStorageConfigured()
       const mime = delivered.mime || "image/webp"
 
-      // The two files are independent after processing. Upload them together so
-      // the response is not held up by a second serial network round trip.
-      const [uploaded, previewUploaded] = await Promise.all([
-        uploadMediaAsset({
-          userId: user.userId,
-          fileName: `generated-${Date.now()}.${mediaAssetExtension(mime)}`,
-          mime,
-          buffer: delivered.buffer,
-          kind: "image",
-        }),
-        displayPreview?.buffer.length
-          ? uploadMediaAsset({
-              userId: user.userId,
-              fileName: `generated-preview-${Date.now()}.webp`,
-              mime: displayPreview.mime,
-              buffer: displayPreview.buffer,
-              kind: "image",
-            })
-          : Promise.resolve(null),
-      ])
+      if (cloudStorageConfigured) {
+        const [uploaded, previewUploaded] = await Promise.all([
+          uploadMediaAsset({
+            userId: user.userId,
+            fileName: `generated-${Date.now()}.${mediaAssetExtension(mime)}`,
+            mime,
+            buffer: delivered.buffer,
+            kind: "image",
+          }),
+          displayPreview?.buffer.length
+            ? uploadMediaAsset({
+                userId: user.userId,
+                fileName: `generated-preview-${Date.now()}.webp`,
+                mime: displayPreview.mime,
+                buffer: displayPreview.buffer,
+                kind: "image",
+              })
+            : Promise.resolve(null),
+        ])
 
-      if (uploaded.stored) storageUrl = uploaded.publicUrl
-      if (previewUploaded?.stored) previewStorageUrl = previewUploaded.publicUrl
-    }
-
-    let assetId: string | undefined
-    let assetUrl: string | undefined
-    if (!storageUrl) {
-      const stored = delivered.buffer?.length
-        ? await saveMediaAssetAsync({ buffer: delivered.buffer, mime: delivered.mime })
-        : delivered.imageUrl.startsWith("data:")
-          ? await saveMediaAssetAsync({ dataUrl: delivered.imageUrl })
-          : null
-      if (stored) {
-        assetId = stored.id
-        assetUrl = stored.url
+        if (uploaded.stored) storageUrl = uploaded.publicUrl
+        else persistenceError = uploaded.reason || "Cloud media upload failed."
+        if (previewUploaded?.stored) previewStorageUrl = previewUploaded.publicUrl
+      } else {
+        persistenceError = "Cloud media storage is not configured."
       }
     }
 
-    let previewAssetUrl: string | undefined
-    if (!previewStorageUrl && displayPreview?.buffer.length) {
-      const storedPreview = await saveMediaAssetAsync({ buffer: displayPreview.buffer, mime: displayPreview.mime })
-      if (storedPreview) previewAssetUrl = storedPreview.url
-    }
-
-    const finalInlineUrl = delivered.imageUrl
-    const imageUrl = storageUrl || assetUrl || finalInlineUrl
-    const previewUrl = previewStorageUrl || previewAssetUrl
+    // Never persist generated account media on Render's local filesystem.
+    // Render disks are ephemeral and are the wrong ownership boundary for chat
+    // history. Durable account media belongs in object storage under
+    // users/<account-hash>/..., while the browser only receives short URLs.
+    const imageUrl = storageUrl || delivered.imageUrl
+    const previewUrl = previewStorageUrl
     const displayUrl = displayImageReference(previewUrl, imageUrl)
     const resolvedModelId = result.modelId || requestedModelId
     const resolvedImageModel = resolvedModelId ? getMalikImageModel(resolvedModelId) : undefined
-    const durable = Boolean(storageUrl || assetUrl)
+    const durable = Boolean(storageUrl)
 
-    // Memory safety: once a short durable URL exists, never duplicate the same
-    // multi-megabyte master inside JSON. `imageUrl/masterUrl` stay full quality;
-    // `url/mediaUrl` are the lightweight display derivative used by chat cards.
     return Response.json({
       ok: true,
       status: "ready",
@@ -319,9 +283,6 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       sourceWidth: delivered.sourceWidth,
       sourceHeight: delivered.sourceHeight,
       deliveryResolution: delivered.deliveryResolution,
-      // What was asked for and what came out are reported separately: a 16K
-      // request on a small host is clamped, and it must say 8K rather than
-      // claim a size the file does not have.
       requestedResolution: getMalikImageQualityProfile(quality).deliveryResolution,
       qualityFromPrompt: requested.fromPrompt,
       deliveryMs: delivered.elapsedMs,
@@ -330,9 +291,9 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       processor: delivered.processor,
       routeReason: result.routeReason,
       storageUrl,
-      assetId,
-      assetUrl,
       durable,
+      cloudStorageConfigured,
+      persistenceError,
       remainingDailyImages: remaining,
       resetAt: nextMediaResetAt(),
       plan: limit.plan,
