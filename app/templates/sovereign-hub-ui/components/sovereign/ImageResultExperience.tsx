@@ -34,6 +34,8 @@ type ImageAction =
   | "wide"
   | "portrait"
 
+const MASTER_FRAGMENT = "#malik-master="
+
 const TOOLBAR_HTML = `
   <button type="button" data-malik-image-action="open" aria-label="Открыть изображение">Открыть</button>
   <button type="button" data-malik-image-action="download" aria-label="Скачать изображение">Скачать</button>
@@ -50,9 +52,24 @@ const TOOLBAR_HTML = `
   <button type="button" data-malik-image-action="history">История</button>
 `
 
+function masterImageUrl(src: string) {
+  const value = String(src || "").trim()
+  const marker = value.lastIndexOf(MASTER_FRAGMENT)
+  if (marker < 0) return value
+  const encoded = value.slice(marker + MASTER_FRAGMENT.length)
+  try {
+    return decodeURIComponent(encoded) || value.slice(0, marker)
+  } catch {
+    return value.slice(0, marker)
+  }
+}
+
 function readImageFromCard(card: HTMLElement): ViewerImage | null {
   const image = card.querySelector<HTMLImageElement>(".malik-art-result.is-visible, .malik-art-result")
-  const src = String(image?.currentSrc || image?.src || "").trim()
+  // Keep the literal src attribute first. currentSrc is useful for srcset, but
+  // browsers may normalise URL fragments; the fragment carries the full-quality
+  // master reference while the actual painted resource is the small preview.
+  const src = String(image?.getAttribute("src") || image?.src || image?.currentSrc || "").trim()
   if (!src) return null
 
   const prompt = String(
@@ -102,9 +119,15 @@ function nextPrompt(action: ImageAction, sourcePrompt: string) {
 
 function safeDownload(src: string) {
   if (typeof document === "undefined" || !src) return
+  const fullQualitySrc = masterImageUrl(src)
   const anchor = document.createElement("a")
-  anchor.href = src
-  anchor.download = `malik-ai-${Date.now()}.webp`
+  anchor.href = fullQualitySrc
+  const extension = /\.jpe?g(?:\?|#|$)/i.test(fullQualitySrc)
+    ? "jpg"
+    : /\.png(?:\?|#|$)/i.test(fullQualitySrc)
+      ? "png"
+      : "webp"
+  anchor.download = `malik-ai-${Date.now()}.${extension}`
   anchor.target = "_blank"
   anchor.rel = "noopener noreferrer"
   document.body.appendChild(anchor)
@@ -162,7 +185,12 @@ export function ImageResultExperience() {
         stage.setAttribute("tabindex", "0")
         stage.setAttribute("aria-label", "Открыть изображение на весь экран")
         const item = readImageFromCard(card)
-        if (item) rememberMalikImage(item)
+        // A ready card is immutable. Do not re-read/parse image history every
+        // time an unrelated class changes elsewhere in the chat.
+        if (item && card.dataset.malikRememberedSrc !== item.src) {
+          rememberMalikImage(item)
+          card.dataset.malikRememberedSrc = item.src
+        }
       } else {
         delete stage.dataset.malikOpenable
         stage.removeAttribute("role")
@@ -188,13 +216,46 @@ export function ImageResultExperience() {
       }
     }
 
-    const enhanceAll = () => {
-      document.querySelectorAll<HTMLElement>(".malik-photo-motion").forEach(enhanceCard)
+    // The old observer ran querySelectorAll over every image card whenever ANY
+    // class/src changed anywhere in the app. Streaming chat changes classes a
+    // lot, so that became a permanent main-thread tax after the first photo.
+    // Queue only the card touched by a mutation and batch work to one animation frame.
+    const pending = new Set<HTMLElement>()
+    let frame = 0
+
+    const flush = () => {
+      frame = 0
+      const cards = Array.from(pending)
+      pending.clear()
+      cards.forEach(enhanceCard)
     }
 
-    enhanceAll()
-    const observer = new MutationObserver(() => enhanceAll())
-    observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "src"] })
+    const queueCard = (card: HTMLElement | null) => {
+      if (!card) return
+      pending.add(card)
+      if (!frame) frame = window.requestAnimationFrame(flush)
+    }
+
+    const queueFromNode = (node: Node) => {
+      if (!(node instanceof Element)) return
+      if (node.matches(".malik-photo-motion")) queueCard(node as HTMLElement)
+      else queueCard(node.closest<HTMLElement>(".malik-photo-motion"))
+      node.querySelectorAll<HTMLElement>(".malik-photo-motion").forEach(queueCard)
+    }
+
+    document.querySelectorAll<HTMLElement>(".malik-photo-motion").forEach(queueCard)
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        queueFromNode(mutation.target)
+        if (mutation.type === "childList") mutation.addedNodes.forEach(queueFromNode)
+      }
+    })
+    observer.observe(document.body || document.documentElement, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["class", "src"],
+    })
 
     const onClick = async (event: MouseEvent) => {
       const target = event.target as HTMLElement | null
@@ -267,6 +328,8 @@ export function ImageResultExperience() {
     document.addEventListener("keydown", onKeyDown)
     return () => {
       observer.disconnect()
+      pending.clear()
+      if (frame) window.cancelAnimationFrame(frame)
       document.removeEventListener("click", onClick)
       document.removeEventListener("keydown", onKeyDown)
     }
@@ -311,7 +374,7 @@ export function ImageResultExperience() {
           </div>
 
           <div className="malik-image-viewer__canvas" onDoubleClick={() => setViewer(null)}>
-            <img src={viewer.src} alt={viewer.prompt || "Malik AI generated image"} draggable={false} />
+            <img src={viewer.src} alt={viewer.prompt || "Malik AI generated image"} draggable={false} decoding="async" />
           </div>
 
           <div className="malik-image-viewer__bottom">
@@ -342,7 +405,7 @@ export function ImageResultExperience() {
               {history.length ? history.map((item) => (
                 <article key={item.id} className="malik-image-history__item">
                   <button type="button" onClick={() => setViewer({ src: item.src, prompt: item.prompt, provider: item.provider, quality: item.quality })} aria-label="Открыть изображение">
-                    <img src={item.src} alt={item.prompt || "Malik AI image"} loading="lazy" />
+                    <img src={item.src} alt={item.prompt || "Malik AI image"} loading="lazy" decoding="async" />
                   </button>
                   <button type="button" className={`malik-image-history__favorite ${item.favorite ? "is-active" : ""}`} onClick={() => { toggleMalikImageFavorite(item.src); setHistory(readMalikImageHistory()) }} aria-label="Избранное">{item.favorite ? "★" : "☆"}</button>
                   <div className="malik-image-history__meta">
