@@ -36,6 +36,13 @@ if (typeof window !== "undefined") {
   // primary navigation item and must be ready on the very first deliberate click.
   void preloadVoiceMode()
 
+  // Generated image bytes live in durable object storage, while localStorage is
+  // only a tiny UI cache of short URLs/metadata. Refreshing, logging out and
+  // logging back in therefore rehydrates the user's library instead of losing it.
+  void import("./lib/media/image-history")
+    .then(({ syncMalikImageHistoryFromAccount }) => syncMalikImageHistoryFromAccount())
+    .catch(() => {})
+
   if (!window.__malikHomeEntryPrepared) {
     window.__malikHomeEntryPrepared = true
     try {
