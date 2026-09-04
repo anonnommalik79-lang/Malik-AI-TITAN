@@ -107,11 +107,28 @@ export function chooseTranscript(input: {
   // casing, and the agreement itself is the evidence that it is right.
   if (overlap >= 0.7) return { text: whisper, source: "agreed", confidence, agreement: overlap }
 
+  // A greeting is where this went wrong.
+  //
+  // Say "калайсың" and the live recognizer, locked to kk-KZ, gets it. Whisper
+  // gets a word and a half of audio with no context to condition on, returns
+  // something else entirely, and used to win anyway - so the screen showed
+  // "калайсың" while the model was answering a different word. The person sees
+  // the right transcript and a reply to something they never said, which reads
+  // as the assistant being stupid rather than mishearing.
+  //
+  // Two or three words is exactly where Whisper is weakest and the browser is
+  // strongest, and total disagreement on an utterance that short means one of
+  // them is simply wrong. The live recognizer heard it in the language it was
+  // told to expect, so it wins unless Whisper is clearly sure of itself.
+  if (browserWords > 0 && whisperWords <= 3 && browserWords <= 3 && overlap === 0 && confidence < 0.35) {
+    return { text: browser, source: "browser", confidence, agreement: overlap }
+  }
+
   // Whisper was unsure and the two do not agree at all. A fluent, well-formed
   // sentence produced at low confidence is the classic hallucination - on quiet
   // or non-English audio it emits subtitle boilerplate it saw in training - and
   // the browser's clumsier text is the safer of the two.
-  if (confidence < -0.15 && browserWords >= 2 && overlap < 0.3) {
+  if (confidence < -0.15 && browserWords >= 1 && overlap < 0.3) {
     return { text: browser, source: "browser", confidence, agreement: overlap }
   }
 

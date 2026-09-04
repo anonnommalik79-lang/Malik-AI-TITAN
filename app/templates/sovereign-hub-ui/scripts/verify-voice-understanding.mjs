@@ -23,6 +23,33 @@ import ts from "typescript"
  */
 
 /** Assertions are about code, not about comments describing what was removed. */
+import path from "node:path"
+import { createRequire } from "node:module"
+
+const nativeRequire = createRequire(import.meta.url)
+const moduleCache = new Map()
+
+/**
+ * Loads a TypeScript module and its local imports, so a check can call the real
+ * function instead of asserting against the shape of its source text.
+ */
+function load(file) {
+  const absolute = path.resolve(file.endsWith(".ts") ? file : `${file}.ts`)
+  if (moduleCache.has(absolute)) return moduleCache.get(absolute).exports
+  const code = ts.transpileModule(fs.readFileSync(absolute, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const box = { exports: {} }
+  moduleCache.set(absolute, box)
+  const require_ = (name) => {
+    if (name.startsWith("@/")) return load(path.join(process.cwd(), name.slice(2)))
+    if (name.startsWith(".")) return load(path.resolve(path.dirname(absolute), name))
+    return nativeRequire(name)
+  }
+  new Function("require", "module", "exports", code)(require_, box, box.exports)
+  return box.exports
+}
+
 function codeOf(file) {
   // Only comments that start their own line are stripped. Matching "/*"
   // anywhere would also match it inside a string - this file's own providers
@@ -644,6 +671,64 @@ check("the client speaks the answer in the answered language", () => {
   const client = codeOf("components/voice/VoiceMode.tsx")
   assert.match(client, /languageLocale/, "the reply locale must reach speech synthesis")
 })
+
+
+// A greeting is where the two recognizers used to fight and the wrong one won.
+//
+// "калайсың" is a word and a half of audio. The live recognizer, told to expect
+// Kazakh, gets it; Whisper has almost nothing to condition on and returns
+// something else. Whisper used to win regardless, so the screen showed the right
+// transcript while the model answered a different word - which reads as the
+// assistant being stupid rather than mishearing.
+{
+  const choice = load("lib/voice/transcript-choice.ts")
+
+  const greeting = choice.chooseTranscript({ whisper: "Клисн", browser: "калайсың", confidence: 0.1 })
+  assert.equal(greeting.text, "калайсың", "a short greeting must not be overridden by an unsure Whisper")
+  assert.equal(greeting.source, "browser")
+
+  // Whisper genuinely sure of itself still wins: this is a tie-break, not a veto.
+  assert.equal(choice.chooseTranscript({ whisper: "Клисн", browser: "калайсың", confidence: 0.8 }).source, "whisper")
+
+  // Agreement is still agreement, and a long sentence is still Whisper's.
+  assert.equal(choice.chooseTranscript({
+    whisper: "сделай сайт для кофейни в центре города",
+    browser: "сделай сайт для кофейни в центре города",
+    confidence: 0.5,
+  }).source, "agreed")
+  assert.equal(choice.chooseTranscript({
+    whisper: "покажи мне погоду в алматы на завтра",
+    browser: "покажи мне погоду",
+    confidence: 0.5,
+  }).source, "whisper", "a longer utterance stays with Whisper")
+
+  console.log("short-utterance arbitration -> PASS")
+}
+
+// The live recognizer has to be told a language before it hears anything, and
+// the picker is a poor guess for someone who speaks two. Left on Russian, a
+// Kazakh greeting is decoded as Russian syllables and the turn is lost before
+// Whisper is even asked.
+{
+  const mode = fs.readFileSync("components/voice/VoiceMode.tsx", "utf8")
+  assert.match(mode, /spokenLanguageRef/, "what was actually spoken must be remembered")
+  assert.match(mode, /const listenLanguage = heard \|\| languageRef\.current/)
+  assert.match(mode, /recognition\.lang = listenLanguage === "kk" \? "kk-KZ"/)
+  // Choosing a language by hand is a statement of intent and must win again.
+  assert.match(mode, /spokenLanguageRef\.current = null/)
+  console.log("recognizer follows the spoken language -> PASS")
+}
+
+// And the detector itself has to place a bare Kazakh greeting, with or without
+// the letters that only Kazakh has.
+{
+  const language = load("lib/voice/voice-language.ts")
+  for (const text of ["калайсың", "калайсын", "қалайсың", "салем", "рахмет"]) {
+    const decision = language.resolveVoiceLanguage({ text, selected: "ru" })
+    assert.equal(decision.code, "kk", `${text} must be heard as Kazakh even with the picker on Russian`)
+  }
+  console.log("bare Kazakh greetings are placed -> PASS")
+}
 
 console.log(failures ? `\n${failures} failing\n` : "\nall voice checks passed\n")
 process.exit(failures ? 1 : 0)

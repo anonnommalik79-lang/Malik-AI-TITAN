@@ -12,6 +12,7 @@ import { VoiceAudioPlayer, unlockVoiceAudio } from "@/lib/voice/audio-playback"
 import { repairTranscript } from "@/lib/voice/speech-vocabulary"
 import { speechChunks } from "@/lib/voice/speech-chunks"
 import { chooseTranscript, conversationHint } from "@/lib/voice/transcript-choice"
+import { detectSpokenLanguageDetailed } from "@/lib/voice/voice-language"
 import { VOICE_HISTORY_TURNS, type VoiceMessage } from "@/lib/voice/conversation"
 
 type SpeechResult = { isFinal: boolean; 0: { transcript: string } }
@@ -88,6 +89,8 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const energyRef = useRef(.07)
   const speedRef = useRef(1)
   const languageRef = useRef<VoiceLanguage>("kk")
+  /** The language the person actually spoke last turn, which is what to listen for next. */
+  const spokenLanguageRef = useRef<VoiceLanguage | null>(null)
   const demoRef = useRef(false)
   const micActiveRef = useRef(false)
   const microphoneRef = useRef<MediaStream | null>(null)
@@ -445,7 +448,17 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     const Recognition = voiceWindow.SpeechRecognition || voiceWindow.webkitSpeechRecognition
     if (!Recognition) return
     const recognition = new Recognition()
-    recognition.lang = languageRef.current === "kk" ? "kk-KZ" : languageRef.current === "ru" ? "ru-RU" : "en-US"
+    // The live recognizer can only be told one language, and it must be told
+    // before it hears anything. The picker is a poor guess for a bilingual
+    // person: with it left on Russian, a Kazakh greeting is decoded as Russian
+    // syllables and the whole turn is lost before Whisper is even asked.
+    //
+    // What the person was actually speaking last turn is the better guess, so
+    // the language of the previous utterance wins over the picker until they
+    // switch back. The picker still decides the language of the reply.
+    const heard = spokenLanguageRef.current
+    const listenLanguage = heard || languageRef.current
+    recognition.lang = listenLanguage === "kk" ? "kk-KZ" : listenLanguage === "ru" ? "ru-RU" : "en-US"
     recognition.continuous = true
     recognition.interimResults = true
     recognition.onresult = (event) => {
@@ -700,6 +713,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     }
     setFinalTranscript(prompt)
     setInterimTranscript("")
+    const spoken = detectSpokenLanguageDetailed(prompt)
+    if (spoken.confident && (spoken.code === "kk" || spoken.code === "ru" || spoken.code === "en")) {
+      spokenLanguageRef.current = spoken.code
+    }
     await runVoiceTurn(prompt)
   }, [runVoiceTurn, showNotice])
 
@@ -820,6 +837,8 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   const changeLanguage = useCallback((nextLanguage: VoiceLanguage) => {
     if (languageRef.current === nextLanguage) return
+    // Choosing a language by hand overrides what was heard last turn.
+    spokenLanguageRef.current = null
     const shouldRestartMic = micActiveRef.current
     languageRef.current = nextLanguage
     setLanguage(nextLanguage)

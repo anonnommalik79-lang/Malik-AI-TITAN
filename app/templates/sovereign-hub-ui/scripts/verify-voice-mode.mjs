@@ -53,7 +53,21 @@ const checks = [
     const silence = Number(/SILENCE_MS = (\d+)/.exec(mode)?.[1])
     assert.ok(silence >= 1200, `a pause shorter than ${silence}ms cuts people off mid-thought`)
   }],
-  ["08 browser recognition follows the selected language", () => { assert.match(mode, /webkitSpeechRecognition/); assert.match(mode, /languageRef\.current === "kk" \? "kk-KZ"/); assert.match(mode, /"ru-RU"/); assert.match(mode, /"en-US"/); assert.match(mode, /interimResults = true/) }],
+  // This used to require the recognizer be set from the language picker. The
+  // picker is a poor guess for someone who speaks two: left on Russian, a
+  // Kazakh greeting is decoded as Russian syllables and the turn is lost before
+  // Whisper is even asked - which is how "калайсың" came back as a name. The
+  // recognizer now follows the language of the previous utterance and falls back
+  // to the picker; the picker still decides the language of the reply.
+  ["08 browser recognition follows the language actually being spoken", () => {
+    assert.match(mode, /webkitSpeechRecognition/)
+    assert.match(mode, /const heard = spokenLanguageRef\.current/)
+    assert.match(mode, /const listenLanguage = heard \|\| languageRef\.current/)
+    assert.match(mode, /listenLanguage === "kk" \? "kk-KZ"/)
+    assert.match(mode, /"ru-RU"/); assert.match(mode, /"en-US"/); assert.match(mode, /interimResults = true/)
+    // Choosing a language by hand is a statement of intent and wins again.
+    assert.match(mode, /spokenLanguageRef\.current = null/)
+  }],
   // This used to require the opposite: that the language picker be sent to
   // Whisper as the language of the audio. That was the bug behind "он казахский
   // я говорю он по другому слушает". Whisper treats `language` as a fact, not a
