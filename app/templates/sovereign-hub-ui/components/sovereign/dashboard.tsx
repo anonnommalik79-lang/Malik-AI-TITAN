@@ -4699,10 +4699,19 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
         const parsed = JSON.parse(raw)
         const restoredChats = Array.isArray(parsed?.chats) ? parsed.chats.map(reviveChat) : []
         if (restoredChats.length) setChats(restoredChats)
-        if (parsed?.activeChatId) setActiveChatId(String(parsed.activeChatId))
-        if (Array.isArray(parsed?.messages)) setMessages(parsed.messages.map(reviveMessage))
-        if (typeof parsed?.generatedCode === "string") setGeneratedCode(parsed.generatedCode)
-        if (initialView !== "compute" && typeof parsed?.activeView === "string" && parsed.activeView !== "compute") setActiveView(parsed.activeView)
+        // Reopening Malik starts on the welcome artwork, not inside the last
+        // conversation. Restore the full history above without selecting it.
+        // Explicit deep links (for example Compute) retain their own entry view.
+        if (initialView === "home") {
+          setActiveChatId(null)
+          setMessages([])
+          setGeneratedCode("")
+          setActiveView("home")
+        } else {
+          if (parsed?.activeChatId) setActiveChatId(String(parsed.activeChatId))
+          if (Array.isArray(parsed?.messages)) setMessages(parsed.messages.map(reviveMessage))
+          if (typeof parsed?.generatedCode === "string") setGeneratedCode(parsed.generatedCode)
+        }
         if (isMalikModelId(parsed?.selectedModelId)) setSelectedModelId(parsed.selectedModelId)
       }
     } catch (err) {
