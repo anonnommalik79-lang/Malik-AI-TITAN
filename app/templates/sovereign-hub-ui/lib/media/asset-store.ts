@@ -19,7 +19,11 @@ import path from "node:path"
  * stable `/api/media/asset/<id>` URL that survives reloads and works everywhere.
  */
 
-const MAX_ASSET_BYTES = 24 * 1024 * 1024
+// Ultra 16K masters can be around 30MB. The previous 24MB ceiling meant a
+// successful high-quality render could silently fall back to the provider's
+// lower-resolution source on hosts without cloud storage. 64MB keeps the exact
+// requested master while the global store budget below still limits total disk.
+const MAX_ASSET_BYTES = 64 * 1024 * 1024
 const MAX_STORE_BYTES = 2 * 1024 * 1024 * 1024
 const MAX_STORE_ENTRIES = 4000
 const MAX_ASSET_AGE_MS = 30 * 24 * 60 * 60 * 1000
@@ -171,16 +175,11 @@ function pruneIndex(entries: IndexEntry[]): IndexEntry[] {
   return live
 }
 
-/**
- * Writes bytes to the store and returns the stable public URL, or null when the
- * filesystem is unavailable (read-only serverless FS, full disk). Callers must
- * treat null as "keep using the inline data URL" rather than as a failure.
- */
-export function saveMediaAsset(input: {
+function prepareAssetInput(input: {
   buffer?: Buffer
   dataUrl?: string
   mime?: string
-}): StoredMediaAsset | null {
+}) {
   let buffer = input.buffer
   let mime = normalizeMime(input.mime)
 
@@ -192,6 +191,22 @@ export function saveMediaAsset(input: {
   }
 
   if (!buffer?.length || buffer.length > MAX_ASSET_BYTES) return null
+  return { buffer, mime }
+}
+
+/**
+ * Writes bytes to the store and returns the stable public URL, or null when the
+ * filesystem is unavailable (read-only serverless FS, full disk). Callers must
+ * treat null as "keep using the inline data URL" rather than as a failure.
+ */
+export function saveMediaAsset(input: {
+  buffer?: Buffer
+  dataUrl?: string
+  mime?: string
+}): StoredMediaAsset | null {
+  const prepared = prepareAssetInput(input)
+  if (!prepared) return null
+  const { buffer, mime } = prepared
 
   try {
     const directory = mediaAssetDirectory()
@@ -216,6 +231,56 @@ export function saveMediaAsset(input: {
 
     return { id, url: mediaAssetUrl(id), mime, bytes: buffer.length }
   } catch {
+    return null
+  }
+}
+
+/**
+ * Async persistence path for large generated masters. `writeFileSync()` on a
+ * 15-30MB 8K/16K image pauses the Node event loop while the file hits disk, so
+ * every request on the same Next.js process can feel frozen right after image
+ * generation. The bytes and resulting URL are identical; only I/O scheduling is
+ * different. Small index maintenance is deferred after the asset is already safe.
+ */
+export async function saveMediaAssetAsync(input: {
+  buffer?: Buffer
+  dataUrl?: string
+  mime?: string
+}): Promise<StoredMediaAsset | null> {
+  const prepared = prepareAssetInput(input)
+  if (!prepared) return null
+  const { buffer, mime } = prepared
+
+  const id = randomUUID()
+  const directory = mediaAssetDirectory()
+  const target = assetFile(id)
+  const temporary = `${target}.${process.pid}.${Date.now()}.tmp`
+
+  try {
+    const fs = await import("node:fs/promises")
+    await fs.mkdir(directory, { recursive: true, mode: 0o700 })
+    await fs.writeFile(temporary, buffer, { mode: 0o600 })
+    await fs.rename(temporary, target)
+
+    const createdAt = Date.now()
+    await fs.writeFile(metaFile(id), JSON.stringify({ id, mime, bytes: buffer.length, createdAt }), { mode: 0o600 })
+
+    // Retention bookkeeping is tiny compared with the master write and need not
+    // sit on the response critical path.
+    setImmediate(() => {
+      try {
+        writeIndex(pruneIndex([...readIndex(), { id, mime, bytes: buffer.length, at: createdAt }]))
+      } catch {
+        /* retention is best effort */
+      }
+    })
+
+    return { id, url: mediaAssetUrl(id), mime, bytes: buffer.length }
+  } catch {
+    try {
+      const fs = await import("node:fs/promises")
+      await fs.unlink(temporary).catch(() => {})
+    } catch {}
     return null
   }
 }
