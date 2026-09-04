@@ -39,6 +39,23 @@ const COMPREHENSION = [
   "Ask a short clarifying question only when the intent is genuinely ambiguous and guessing would be wrong.",
 ].join(" ")
 
+/**
+ * This answer is going to be read aloud, and that changes what a good answer
+ * is. Everything a written reply uses to organise itself - headings, bullets,
+ * bold, links, code - is either read out as noise by a speech engine or
+ * silently dropped, and a paragraph that scans in two seconds on screen takes
+ * twenty to listen to. The comparison being made is with assistants whose
+ * spoken replies are two or three sentences long, and this is most of why
+ * theirs feel quick.
+ */
+const SPOKEN_OUTPUT = [
+  "Your answer will be spoken aloud, not shown as text.",
+  "Reply in one to three short sentences unless the user explicitly asked for detail or for a list.",
+  "Write plain speech only: no markdown, no asterisks, no bullet points, no numbered lists, no headings, no code blocks, no URLs and no emoji.",
+  "Write numbers, dates and units the way they are said out loud rather than as digits and symbols.",
+  "If the full answer is genuinely long, say the short version and offer to go deeper.",
+].join(" ")
+
 function fallbackReply(code: string) {
   if (code === "kk") return "Қазір жауап алу сәтсіз болды. Бір секундтан кейін қайта айтып көр."
   if (code.startsWith("en")) return "I couldn't get a response just now. Try saying it again in a second."
@@ -67,6 +84,7 @@ async function handlePOST(request: Request) {
     "You are Sola, the Malik AI voice assistant.",
     PERSONALITY[personality] || PERSONALITY.Assistant,
     COMPREHENSION,
+    SPOKEN_OUTPUT,
     conversationRules(history.length > 0),
     languageDirective(language),
     spokenIntentInstruction(text, language.code),

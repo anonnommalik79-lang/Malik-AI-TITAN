@@ -9,9 +9,10 @@ import styles from "./VoiceMode.module.css"
 import { isVoiceSoundEnabled, playVoiceTransitionSound, saveVoiceSoundEnabled } from "@/lib/voice-transition-sound"
 import { FluxTtsSession } from "@/lib/voice/flux-tts-client"
 import { VoiceAudioPlayer, unlockVoiceAudio } from "@/lib/voice/audio-playback"
-import { repairTranscript } from "@/lib/voice/speech-vocabulary"
+import { repairTranscript, VOICE_BRAND_TERMS } from "@/lib/voice/speech-vocabulary"
+import { DeepgramListener, streamedTranscriptIsTrusted } from "@/lib/voice/deepgram-listen"
 import { speechChunks } from "@/lib/voice/speech-chunks"
-import { chooseTranscript, conversationHint } from "@/lib/voice/transcript-choice"
+import { askAgainPhrase, chooseTranscript, conversationHint, shouldAskAgain } from "@/lib/voice/transcript-choice"
 import { detectSpokenLanguageDetailed } from "@/lib/voice/voice-language"
 import { VOICE_HISTORY_TURNS, type VoiceMessage } from "@/lib/voice/conversation"
 
@@ -99,6 +100,17 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const analyserRef = useRef<AnalyserNode | null>(null)
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
+  /**
+   * The streaming recognizer. When it is up it owns turn-taking: the level
+   * meter below still drives the orb, but it no longer decides when someone has
+   * finished a sentence, because a level cannot tell a pause from an ending.
+   */
+  const listenerRef = useRef<DeepgramListener | null>(null)
+  const streamingRef = useRef(false)
+  /** Finished utterances from the stream, joined into this turn's question. */
+  const streamTextRef = useRef("")
+  /** Lowest confidence seen in this turn - one unsure word makes the turn unsure. */
+  const streamConfidenceRef = useRef(1)
   const recorderChunksRef = useRef<Blob[]>([])
   const recordingStartedAtRef = useRef(0)
   const audioFrameRef = useRef(0)
@@ -109,6 +121,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const micRequestRef = useRef(0)
   const replyPlayerRef = useRef<VoiceAudioPlayer | null>(null)
   const replyAbortRef = useRef<AbortController | null>(null)
+  /**
+   * The request that is writing the answer. Stopping the audio used to leave
+   * this running, so interrupting silenced the voice and then let the model
+   * finish and speak the reply to the sentence that had just been abandoned.
+   */
+  const turnAbortRef = useRef<AbortController | null>(null)
   const replyVersionRef = useRef(0)
   const pendingAudioRef = useRef<Blob | null>(null)
   const lastReplyRef = useRef<{ text: string; voice: string; language: VoiceLanguage; locale?: string } | null>(null)
@@ -163,6 +181,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     replyVersionRef.current += 1
     replyAbortRef.current?.abort()
     replyAbortRef.current = null
+    // Being interrupted means the answer is no longer wanted, not that it
+    // should be finished quietly.
+    turnAbortRef.current?.abort()
+    turnAbortRef.current = null
     if (interrupted && replyPlayingRef.current) replyInterruptedRef.current = true
     window.speechSynthesis?.cancel()
     fluxSessionRef.current?.interrupt()
@@ -410,6 +432,9 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const stopMicrophone = useCallback(async () => {
     micRequestRef.current += 1
     stopSpeech()
+    streamingRef.current = false
+    listenerRef.current?.stop()
+    listenerRef.current = null
     discardRecorder()
     cancelAnimationFrame(audioFrameRef.current)
     microphoneRef.current?.getTracks().forEach((track) => track.stop())
@@ -521,14 +546,77 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         lastSpeechAtRef.current = now
       } else if (started && now - lastSpeechAtRef.current >= SILENCE_MS && Date.now() - recordingStartedAtRef.current >= 700) {
         speechDetectedRef.current = false
-        autoSubmitRef.current?.()
-        return
+        // Only when there is no streaming recognizer. It decides the end of a
+        // turn from the words it heard, which is both earlier and right; this
+        // timer decides it from a volume, which is why it used to cut people
+        // off mid-thought.
+        if (!streamingRef.current) {
+          autoSubmitRef.current?.()
+          return
+        }
       }
 
       audioFrameRef.current = requestAnimationFrame(tick)
     }
     audioFrameRef.current = requestAnimationFrame(tick)
   }, [])
+
+  /**
+   * Brings the streaming recognizer up for this microphone session.
+   *
+   * Failure here is not an error state: everything below still works through
+   * the recorder and Whisper, only slower. So this reports and returns rather
+   * than showing the person anything.
+   */
+  const startStreaming = useCallback(async (stream: MediaStream, context: AudioContext) => {
+    const listener = new DeepgramListener({
+      // The same terms Whisper is conditioned on. A recognizer that has been
+      // told these words exist spells them; one that has not writes down what
+      // they sounded like, which is where "чат гпт" came from.
+      keyterms: VOICE_BRAND_TERMS,
+      utteranceEndMs: 1100,
+      onInterim: (text) => {
+        if (!micActiveRef.current) return
+        setInterimTranscript(text)
+      },
+      onFinal: (text, info) => {
+        if (!micActiveRef.current) return
+        const repaired = repairTranscript(text) || text
+        streamTextRef.current = `${streamTextRef.current} ${repaired}`.trim()
+        streamConfidenceRef.current = Math.min(streamConfidenceRef.current, info.confidence)
+        setFinalTranscript(streamTextRef.current)
+        setInterimTranscript("")
+      },
+      onTurnEnd: () => {
+        if (!micActiveRef.current || !streamTextRef.current) return
+        autoSubmitRef.current?.()
+      },
+      onSpeechStarted: () => {
+        // Talking over the assistant stops it, the way it does with a person.
+        // The microphone stays open through playback for this to be possible,
+        // which is what echoCancellation in getUserMedia is there to survive.
+        if (replyPlayingRef.current || fluxSessionRef.current?.isSpeaking()) {
+          stopReplyAudio(true)
+        }
+      },
+      onPhase: (phase) => {
+        streamingRef.current = phase === "open"
+      },
+    })
+
+    listenerRef.current = listener
+    const started = await listener.start(stream, context)
+    if (!started) {
+      streamingRef.current = false
+      listenerRef.current = null
+      return
+    }
+    if (!micActiveRef.current) {
+      listener.stop()
+      listenerRef.current = null
+      streamingRef.current = false
+    }
+  }, [stopReplyAudio])
 
   const startRecorder = useCallback((stream: MediaStream) => {
     if (typeof MediaRecorder === "undefined") return
@@ -590,9 +678,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       setSubtitle(languageRef.current === "kk" ? "Қазақша сөйле — жауап тек қазақша болады" : languageRef.current === "ru" ? "Говори по-русски — ответ будет только по-русски" : "Speak English — the reply stays English")
       speechDetectedRef.current = false
       lastSpeechAtRef.current = 0
+      streamTextRef.current = ""
+      streamConfidenceRef.current = 1
       startRecorder(stream)
       startAudioLoop(analyser)
       startSpeech()
+      void startStreaming(stream, context)
     } catch {
       setMicActive(false)
       micActiveRef.current = false
@@ -601,7 +692,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       setTitle("Разреши доступ к микрофону")
       setSubtitle("Или включи демо — живой туман продолжит двигаться")
     }
-  }, [startAudioLoop, startRecorder, startSpeech, stopMicrophone])
+  }, [startAudioLoop, startRecorder, startSpeech, startStreaming, stopMicrophone])
 
   const runVoiceTurn = useCallback(async (prompt: string) => {
     const clean = prompt.trim()
@@ -610,10 +701,16 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     setBusy(true)
     setTitle("Думаю")
     setSubtitle(`${voice} · ${personality}`)
+    // Held so that talking over the assistant cancels the answer as well as
+    // the voice reading it out.
+    const controller = new AbortController()
+    turnAbortRef.current?.abort()
+    turnAbortRef.current = controller
     try {
       const response = await fetch("/api/voice/turn", {
         method: "POST",
         headers: { "content-type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           text: clean,
           personality,
@@ -647,15 +744,37 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         setSubtitle("Продолжай разговор · можно перебить голос")
         window.setTimeout(() => { if (mountedRef.current && !closingRef.current && !micActiveRef.current) void startMicrophone() }, 160)
       }
-    } catch {
+    } catch (error) {
+      // Being interrupted is not a failure and must not be reported as one:
+      // the person is already talking, and a notice about an unavailable voice
+      // over their own sentence is worse than saying nothing.
+      if ((error as Error)?.name === "AbortError" || controller.signal.aborted) return
       showNotice("Голосовой ответ временно недоступен")
       onSubmit?.(clean)
       setTitle("Попробуй ещё раз")
       setSubtitle("Попробуй повторить вопрос")
     } finally {
+      if (turnAbortRef.current === controller) turnAbortRef.current = null
       if (mountedRef.current) setBusy(false)
     }
   }, [busy, onSubmit, personality, showNotice, speakReply, startMicrophone, voice])
+
+  /**
+   * What happens once the words are settled, whichever recognizer settled them.
+   *
+   * The language is taken from what was actually said rather than from the
+   * picker, so the next turn is listened for in the language this one was
+   * spoken in.
+   */
+  const answerTranscript = useCallback(async (prompt: string) => {
+    setFinalTranscript(prompt)
+    setInterimTranscript("")
+    const spoken = detectSpokenLanguageDetailed(prompt)
+    if (spoken.confident && (spoken.code === "kk" || spoken.code === "ru" || spoken.code === "en")) {
+      spokenLanguageRef.current = spoken.code
+    }
+    await runVoiceTurn(prompt)
+  }, [runVoiceTurn])
 
   const transcribeAndRespond = useCallback(async (blob: Blob, durationSec: number, browserFallback: string) => {
     setBusy(true)
@@ -699,26 +818,36 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     // Two recognizers ran on this utterance and only one of them used to count.
     // They fail differently, so the disagreement is information rather than a
     // problem: see lib/voice/transcript-choice.ts.
-    prompt = chooseTranscript({
+    const choice = chooseTranscript({
       whisper: whisperText,
       browser: browserFallback,
       confidence: whisperConfidence,
-    }).text
+    })
+    prompt = choice.text
     setBusy(false)
+
+    // Two words, both recognizers unsure, and they do not agree. Answering that
+    // is a guess, and a wrong guess here is what reads as stupidity. Ask.
+    if (shouldAskAgain(choice)) {
+      const spokenCode = prompt ? detectSpokenLanguageDetailed(prompt).code : languageRef.current
+      const phrase = askAgainPhrase(spokenCode || languageRef.current)
+      setFinalTranscript(prompt)
+      setInterimTranscript("")
+      setTitle("Не расслышал")
+      setSubtitle("Скажи ещё раз")
+      await speakReply(phrase, undefined, languageRef.current)
+      if (mountedRef.current && !closingRef.current && !micActiveRef.current) void startMicrophone()
+      return
+    }
+
     if (!prompt) {
       setTitle("Не расслышал")
       setSubtitle("Попробуй сказать ещё раз")
       showNotice("Не удалось распознать голос")
       return
     }
-    setFinalTranscript(prompt)
-    setInterimTranscript("")
-    const spoken = detectSpokenLanguageDetailed(prompt)
-    if (spoken.confident && (spoken.code === "kk" || spoken.code === "ru" || spoken.code === "en")) {
-      spokenLanguageRef.current = spoken.code
-    }
-    await runVoiceTurn(prompt)
-  }, [runVoiceTurn, showNotice])
+    await answerTranscript(prompt)
+  }, [answerTranscript, showNotice, speakReply, startMicrophone])
 
   const toggleMicrophone = useCallback(async () => {
     unlockVoiceAudio()
@@ -737,12 +866,37 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     }
     const fallback = `${finalTranscript} ${interimTranscript}`.trim()
     const durationSec = recordingStartedAtRef.current ? (Date.now() - recordingStartedAtRef.current) / 1000 : 0
+
+    // Ask the stream for anything it is still holding. Tapping the microphone
+    // usually happens a moment before the recognizer has committed the last
+    // word, and without this that word is lost.
+    if (streamingRef.current) {
+      listenerRef.current?.finish()
+      await new Promise((resolve) => window.setTimeout(resolve, 220))
+    }
+    const streamed = streamTextRef.current.trim()
+    const streamConfidence = streamConfidenceRef.current
+
     const blob = await collectRecorder()
     await stopMicrophone()
-    if (blob && blob.size > 200) await transcribeAndRespond(blob, durationSec, fallback)
-    else if (fallback) await runVoiceTurn(fallback)
+
+    // The fast path. The words are already here and the recognizer was sure of
+    // them, so there is nothing to upload and nothing to decode: the model gets
+    // the question about a quarter of a second after the sentence ends, which
+    // is the entire difference between this and waiting for a file to be
+    // transcribed.
+    if (streamed && streamedTranscriptIsTrusted(streamed, streamConfidence)) {
+      await answerTranscript(streamed)
+      return
+    }
+
+    // Unsure, or no stream at all. This is where the two other recognizers get
+    // to disagree about the recording, which is slower and worth it exactly
+    // here - a doubtful transcript is the one worth a second opinion.
+    if (blob && blob.size > 200) await transcribeAndRespond(blob, durationSec, fallback || streamed)
+    else if (streamed || fallback) await answerTranscript(streamed || fallback)
     else showNotice("Скажи что-нибудь и нажми микрофон ещё раз")
-  }, [busy, collectRecorder, finalTranscript, interimTranscript, runVoiceTurn, showNotice, startMicrophone, stopMicrophone, stopReplyAudio, transcribeAndRespond])
+  }, [answerTranscript, busy, collectRecorder, finalTranscript, interimTranscript, showNotice, startMicrophone, stopMicrophone, stopReplyAudio, transcribeAndRespond])
 
   useEffect(() => {
     autoSubmitRef.current = () => { void toggleMicrophone() }

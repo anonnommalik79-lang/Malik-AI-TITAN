@@ -155,3 +155,32 @@ export function conversationHint(history: Array<{ role: string; content: string 
   // Newest last: it is the closest context to whatever is about to be said.
   return recent.join(" ").slice(-limit)
 }
+
+/**
+ * When to ask again instead of answering.
+ *
+ * The worst failure in a voice assistant is not mishearing - it is answering
+ * confidently to something that was never said. The person watches a reply to a
+ * different question arrive and concludes the thing is stupid, when all that
+ * happened is that two seconds of audio were ambiguous and nobody checked.
+ *
+ * Every assistant worth comparing this to asks again here. The bar is
+ * deliberately narrow: short utterance, both recognizers unsure, and no
+ * agreement between them. A long sentence carries enough context to be worth
+ * attempting even at low confidence.
+ */
+export function shouldAskAgain(choice: TranscriptChoice): boolean {
+  const words = choice.text.split(/\s+/).filter(Boolean).length
+  if (!words) return true
+  if (words > 4) return false
+  if (choice.source === "agreed") return false
+  return choice.confidence < -0.05 && choice.agreement < 0.34
+}
+
+/** Said out loud, in the language the person was speaking. */
+export function askAgainPhrase(code: string): string {
+  const language = String(code || "").toLowerCase()
+  if (language.startsWith("kk")) return "Кешір, естімей қалдым. Тағы бір рет айтасың ба?"
+  if (language.startsWith("en")) return "Sorry, I didn't catch that. Say it again?"
+  return "Прости, не расслышал. Скажи ещё раз?"
+}
