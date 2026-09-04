@@ -1,0 +1,19 @@
+{
+  "name": "malik-ai-ios-shell",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native iOS shell for Malik AI",
+  "scripts": {
+    "ios:add": "npx cap add ios",
+    "ios:sync": "npx cap sync ios",
+    "ios:open": "npx cap open ios",
+    "ios:update": "npx cap sync ios && npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.5.1",
+    "@capacitor/ios": "8.5.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.1"
+  }
+}
