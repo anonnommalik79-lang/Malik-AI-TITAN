@@ -245,14 +245,12 @@ check("the filter keeps its state across blocks", () => {
   return `largest step ${worst.toFixed(3)}`
 })
 
-check("pre-emphasis lifts consonants over vowels", () => {
-  // Speech loses about 6dB per octave on the way out of a mouth, so the
-  // consonants that tell words apart are quieter than the vowels that do not.
-  const rate = 16000
-  const low = db(rms(new dsp.PreEmphasis().process(tone(300, rate, 16000))))
-  const high = db(rms(new dsp.PreEmphasis().process(tone(4000, rate, 16000))))
-  assert.ok(high - low > 10, `only ${(high - low).toFixed(1)}dB of tilt`)
-  return `${(high - low).toFixed(1)}dB tilt toward fricatives`
+check("nothing tilts the signal before the recognizer sees it", () => {
+  // Pre-emphasis is in every ASR front end, which is exactly why it must not be
+  // here: Deepgram applies its own, and applying it twice cost a 440Hz tone
+  // 24dB - most of a vowel - before anyone tried to recognise it. Measured, and
+  // then removed.
+  assert.equal(typeof dsp.PreEmphasis, "undefined", "pre-emphasis is back in the signal path")
 })
 
 check("the DC blocker removes an offset and leaves speech alone", () => {

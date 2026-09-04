@@ -33,7 +33,7 @@
  * and the two-recognizer arbitration in transcript-choice.ts stays with it.
  */
 
-import { DcBlocker, PauseTracker, PreEmphasis, Resampler } from "./dsp"
+import { DcBlocker, PauseTracker, Resampler } from "./dsp"
 
 export type ListenPhase = "idle" | "connecting" | "open" | "closed" | "failed"
 
@@ -94,8 +94,12 @@ export const MULTILINGUAL_CODES = ["en", "es", "fr", "de", "hi", "ru", "pt", "ja
 
 const ENDPOINT = "wss://api.deepgram.com/v1/listen"
 const TARGET_RATE = 16000
-/** Roughly 125ms of audio per message: small enough to be live, large enough not to thrash. */
-const FRAME = 2048
+/**
+ * How much audio the browser hands over at a time: 2048 samples at the device
+ * rate, about 43ms. Smaller risks the callback missing its deadline and
+ * dropping audio; larger is latency for nothing.
+ */
+const CAPTURE_BLOCK = 2048
 
 function pcm16(input: Float32Array): ArrayBuffer {
   const out = new Int16Array(input.length)
@@ -145,15 +149,13 @@ export class DeepgramListener {
   private context: AudioContext | null = null
   private source: MediaStreamAudioSourceNode | null = null
   private processor: ScriptProcessorNode | null = null
-  private buffer: Float32Array = new Float32Array(0)
   /**
-   * The front end. A DC blocker, then pre-emphasis, then a designed low-pass
-   * decimator - each holding its state across callbacks, because the audio
-   * arrives in 2048-sample blocks and a filter reset at every boundary is 23
-   * clicks a second going into the recognizer.
+   * The front end: a DC blocker and a designed low-pass decimator, each
+   * holding its state across callbacks, because the audio arrives in
+   * 2048-sample blocks and a filter reset at every boundary is 23 clicks a
+   * second going into the recognizer.
    */
   private dc: DcBlocker | null = null
-  private emphasis: PreEmphasis | null = null
   private resampler: Resampler | null = null
   /** This speaker's own pauses, which decide when a turn is over. */
   readonly pauses: PauseTracker
@@ -354,30 +356,23 @@ export class DeepgramListener {
       // works everywhere this ships, Safari included. An AudioWorklet would
       // need a separate module fetched over the network, which is one more
       // thing that can fail between tapping the microphone and being heard.
-      this.processor = context.createScriptProcessor(FRAME, 1, 1)
+      this.processor = context.createScriptProcessor(CAPTURE_BLOCK, 1, 1)
 
       this.dc = new DcBlocker()
-      this.emphasis = new PreEmphasis()
       this.resampler = new Resampler(context.sampleRate, TARGET_RATE)
 
       this.processor.onaudioprocess = (event) => {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return
         const input = event.inputBuffer.getChannelData(0)
         const levelled = this.dc!.process(input)
-        const tilted = this.emphasis!.process(levelled)
-        const resampled = this.resampler!.process(tilted)
+        const resampled = this.resampler!.process(levelled)
+        if (!resampled.length) return
 
-        const merged = new Float32Array(this.buffer.length + resampled.length)
-        merged.set(this.buffer, 0)
-        merged.set(resampled, this.buffer.length)
-
-        // Send whole frames only; keep the remainder for the next callback so
-        // no sample is dropped at a boundary.
-        const frames = Math.floor(merged.length / FRAME)
-        for (let i = 0; i < frames; i++) {
-          try { this.socket.send(pcm16(merged.subarray(i * FRAME, (i + 1) * FRAME))) } catch { return }
-        }
-        this.buffer = merged.slice(frames * FRAME)
+        // Sent as it comes, without collecting it into larger frames first.
+        // Buffering to a fixed frame size was 128ms of audio held back on every
+        // message - latency bought for nothing, since the recognizer is happy
+        // with anything from about 20ms upward.
+        try { this.socket.send(pcm16(resampled)) } catch { return }
       }
 
       this.source.connect(this.processor)
@@ -414,7 +409,6 @@ export class DeepgramListener {
     try { this.source?.disconnect() } catch {}
     this.processor = null
     this.source = null
-    this.buffer = new Float32Array(0)
     if (this.socket?.readyState === WebSocket.OPEN) {
       try { this.socket.send(JSON.stringify({ type: "CloseStream" })) } catch {}
       try { this.socket.close() } catch {}

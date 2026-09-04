@@ -95,9 +95,11 @@ check("the audio front end is a designed chain, not an average", () => {
   // only checks the chain is wired, in order, with its state kept between the
   // 2048-sample blocks the browser delivers.
   assert.match(listenSource, /new DcBlocker\(\)/)
-  assert.match(listenSource, /new PreEmphasis\(\)/)
   assert.match(listenSource, /new Resampler\(context\.sampleRate, TARGET_RATE\)/)
-  assert.match(listenSource, /this\.dc!\.process\(input\)[\s\S]{0,200}this\.emphasis!\.process\(levelled\)[\s\S]{0,200}this\.resampler!\.process\(tilted\)/)
+  assert.match(listenSource, /this\.dc!\.process\(input\)[\s\S]{0,200}this\.resampler!\.process\(levelled\)/)
+  // And nothing tilts the signal: the recognizer at the far end applies its own
+  // pre-emphasis, and applying it twice cost a vowel 24dB.
+  assert.doesNotMatch(listenSource, /PreEmphasis/)
 })
 
 check("the end of a turn is measured from this speaker, not fixed", () => {

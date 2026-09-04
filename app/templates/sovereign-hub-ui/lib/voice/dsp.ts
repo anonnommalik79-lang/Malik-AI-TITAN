@@ -18,10 +18,13 @@
  * block boundary produced a discontinuity - 23 clicks a second, evenly spaced,
  * straight into the recognizer.
  *
- * And there was no pre-emphasis. Speech loses about 6dB per octave above 500Hz
- * on the way out of a mouth, so the consonants that distinguish words carry far
- * less energy than the vowels that do not. Every ASR front end since the
- * seventies tilts that back before doing anything else. It is one line.
+ * What is deliberately NOT here is pre-emphasis. Every ASR front end applies it
+ * - and that is the point: the recognizer at the other end of this socket
+ * applies its own. Tilting the signal before sending it means the tilt is
+ * applied twice, and a 440Hz tone measured 24dB down on the way out, which is
+ * most of a vowel's energy thrown away before anyone tried to recognise it. It
+ * belongs inside a local feature extractor, and there is no local feature
+ * extractor here.
  */
 
 /**
@@ -48,34 +51,6 @@ export class DcBlocker {
       this.lastIn = x
       this.lastOut = y
       out[i] = y
-    }
-    return out
-  }
-}
-
-/**
- * Pre-emphasis: y[n] = x[n] - a*x[n-1].
- *
- * A first-order high-pass that lifts the top of the spectrum by roughly 6dB per
- * octave, cancelling the tilt that speech acquires on its way out of a mouth.
- * a = 0.97 is the value the entire field has used since MFCCs were invented,
- * and it is worth about a percent of word error on fricatives - which are
- * exactly the sounds that turn "площадка" into "плошадка".
- *
- * The state carries across buffers. Without that, the first sample of every
- * block is emphasised against zero instead of against its predecessor, which
- * puts a spike at every boundary.
- */
-export class PreEmphasis {
-  private last = 0
-  private readonly a: number
-  constructor(a = 0.97) { this.a = a }
-
-  process(input: Float32Array): Float32Array {
-    const out = new Float32Array(input.length)
-    for (let i = 0; i < input.length; i++) {
-      out[i] = input[i] - this.a * this.last
-      this.last = input[i]
     }
     return out
   }
