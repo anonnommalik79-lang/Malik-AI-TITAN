@@ -1,4 +1,4 @@
-import { mediaAssetExtension, saveMediaAsset } from "./asset-store"
+import { mediaAssetExtension, saveMediaAssetAsync } from "./asset-store"
 import { maxImagePromptLength } from "./config"
 import { createMalikImageDisplayPreview } from "./image-display-preview"
 import { withMalikImageProcessingSlot } from "./image-processing-capacity"
@@ -263,9 +263,9 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     let assetUrl: string | undefined
     if (!storageUrl) {
       const stored = delivered.buffer?.length
-        ? saveMediaAsset({ buffer: delivered.buffer, mime: delivered.mime })
+        ? await saveMediaAssetAsync({ buffer: delivered.buffer, mime: delivered.mime })
         : delivered.imageUrl.startsWith("data:")
-          ? saveMediaAsset({ dataUrl: delivered.imageUrl })
+          ? await saveMediaAssetAsync({ dataUrl: delivered.imageUrl })
           : null
       if (stored) {
         assetId = stored.id
@@ -275,7 +275,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
 
     let previewAssetUrl: string | undefined
     if (!previewStorageUrl && displayPreview?.buffer.length) {
-      const storedPreview = saveMediaAsset({ buffer: displayPreview.buffer, mime: displayPreview.mime })
+      const storedPreview = await saveMediaAssetAsync({ buffer: displayPreview.buffer, mime: displayPreview.mime })
       if (storedPreview) previewAssetUrl = storedPreview.url
     }
 
