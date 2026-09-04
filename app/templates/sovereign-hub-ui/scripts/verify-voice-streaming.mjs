@@ -64,11 +64,22 @@ check("the recognizer decides the end of the turn, not a level meter", () => {
     "the silence timer must not end a turn while the stream is up")
 })
 
-check("one stream carries Russian, Kazakh and English together", () => {
-  // This is the "калайсың" failure. A per-clip language guess gets two words of
-  // Kazakh wrong and returns fluent nonsense with high confidence.
-  assert.match(listenSource, /language: "multi"/)
+check("Kazakh gets a Kazakh stream, everything else code-switches", () => {
+  // The trap, and it was live for a day: "multi" is the code-switching mode and
+  // it covers ten languages - Kazakh is not one of them. Opening a multi stream
+  // for a Kazakh speaker renders every sentence as whichever of those ten the
+  // sounds resembled, which is the original "слышит другое" bug reintroduced
+  // one layer lower. Nova-3 does Kazakh perfectly well under "kk".
   assert.match(listenSource, /model: "nova-3"/)
+  assert.ok(!listen.MULTILINGUAL_CODES.includes("kk"),
+    "if Deepgram ever adds Kazakh to multi, this test is the place to notice")
+  assert.equal(listen.streamLanguage("kk", "ru"), "kk")
+  assert.equal(listen.streamLanguage("kk-KZ", null), "kk")
+  assert.equal(listen.streamLanguage(null, "kk"), "kk")
+  assert.equal(listen.streamLanguage("ru", "kk"), "multi", "what was spoken beats the picker")
+  assert.equal(listen.streamLanguage(null, "en"), "multi")
+  assert.equal(listen.streamLanguage(null, null), "multi")
+  assert.match(voiceMode, /language: streamLanguage\(spokenLanguageRef\.current, languageRef\.current\)/)
 })
 
 check("the brand names are given to the recognizer, not repaired afterwards", () => {

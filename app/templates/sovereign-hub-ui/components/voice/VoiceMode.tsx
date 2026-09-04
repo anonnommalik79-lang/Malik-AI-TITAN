@@ -10,7 +10,7 @@ import { isVoiceSoundEnabled, playVoiceTransitionSound, saveVoiceSoundEnabled } 
 import { FluxTtsSession } from "@/lib/voice/flux-tts-client"
 import { VoiceAudioPlayer, unlockVoiceAudio } from "@/lib/voice/audio-playback"
 import { repairTranscript, VOICE_BRAND_TERMS } from "@/lib/voice/speech-vocabulary"
-import { DeepgramListener, streamedTranscriptIsTrusted } from "@/lib/voice/deepgram-listen"
+import { DeepgramListener, streamLanguage, streamedTranscriptIsTrusted } from "@/lib/voice/deepgram-listen"
 import { speechChunks } from "@/lib/voice/speech-chunks"
 import { askAgainPhrase, chooseTranscript, conversationHint, shouldAskAgain } from "@/lib/voice/transcript-choice"
 import { detectSpokenLanguageDetailed } from "@/lib/voice/voice-language"
@@ -575,6 +575,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       // they sounded like, which is where "чат гпт" came from.
       keyterms: VOICE_BRAND_TERMS,
       utteranceEndMs: 1100,
+      // Kazakh is not in the code-switching set, so a Kazakh speaker gets a
+      // Kazakh stream. The language actually spoken last turn beats the picker,
+      // because the picker is what people forget to change.
+      language: streamLanguage(spokenLanguageRef.current, languageRef.current),
       onInterim: (text) => {
         if (!micActiveRef.current) return
         setInterimTranscript(text)

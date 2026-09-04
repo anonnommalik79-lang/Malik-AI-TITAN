@@ -56,7 +56,33 @@ export type ListenOptions = ListenEvents & {
    * second-language speaker is still choosing a word.
    */
   utteranceEndMs?: number
+  /** The language to decode as. See `streamLanguage` for why this is not always "multi". */
+  language?: string
 }
+
+/**
+ * Which language code to open the stream with.
+ *
+ * `multi` is the code-switching mode and it is the right default - but it
+ * covers ten languages, and Kazakh is not one of them. Nova-3 transcribes
+ * Kazakh perfectly well under `kk`; it just cannot do it inside `multi`. Open a
+ * `multi` stream for a Kazakh speaker and the recognizer will render every
+ * sentence as whichever of its ten languages the sounds resembled, which is
+ * the exact failure this whole path exists to remove, reintroduced one layer
+ * lower.
+ *
+ * So Kazakh gets its own stream and everything else gets code-switching. The
+ * cost is that a Russian sentence inside a Kazakh conversation is decoded by
+ * the Kazakh model - and that is what the recorded-audio fallback and the
+ * two-recognizer arbitration behind it are for.
+ */
+export function streamLanguage(spoken?: string | null, selected?: string | null): string {
+  const code = String(spoken || selected || "").toLowerCase()
+  return code.startsWith("kk") ? "kk" : "multi"
+}
+
+/** The languages `multi` actually decodes. Kazakh is deliberately absent. */
+export const MULTILINGUAL_CODES = ["en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"]
 
 const ENDPOINT = "wss://api.deepgram.com/v1/listen"
 const TARGET_RATE = 16000
@@ -94,14 +120,13 @@ export function downsample(input: Float32Array, from: number, to: number): Float
   return out
 }
 
-function url(options: { keyterms?: string[]; utteranceEndMs: number; withKeyterms: boolean }) {
+function url(options: { keyterms?: string[]; utteranceEndMs: number; withKeyterms: boolean; language: string }) {
   const query = new URLSearchParams({
     model: "nova-3",
-    // One stream, three languages, and a switch inside a sentence. This is the
-    // single most important parameter here: it is what makes "калайсың" in the
-    // middle of a Russian conversation come back as Kazakh instead of as a
-    // Russian word that sounds a bit like it.
-    language: "multi",
+    // "multi" is code-switching across ten languages and Kazakh is not one of
+    // them, so a Kazakh speaker gets a Kazakh stream instead. See
+    // streamLanguage() - getting this wrong reproduces the original bug.
+    language: options.language,
     encoding: "linear16",
     sample_rate: String(TARGET_RATE),
     channels: "1",
@@ -197,6 +222,7 @@ export class DeepgramListener {
             keyterms: this.options.keyterms,
             utteranceEndMs: this.options.utteranceEndMs ?? 1100,
             withKeyterms: !this.keytermsRejected,
+            language: this.options.language || "multi",
           }),
           ["bearer", token],
         )
