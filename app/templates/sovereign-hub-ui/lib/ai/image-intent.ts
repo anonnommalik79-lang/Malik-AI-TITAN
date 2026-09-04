@@ -3,10 +3,14 @@ const VIDEO_COMMAND_PATTERN = /^\s*\/(?:video|veo|видео)(?![\p{L}\p{N}_])/i
 
 const IMAGE_NOUN_PATTERN = /(?:фото(?:графи(?:ю|я|и))?|фотк(?:у|а|и)?|картинк(?:у|а|и)?|изображени(?:е|я|ю)|постер(?:а|у)?|обложк(?:у|а|и)?|аватар(?:ку|а)?|иллюстраци(?:ю|я|и)|баннер(?:а|у)?|арт(?![\p{L}\p{N}_])|сурет(?:ті|ке|тер)?|image(?:s)?(?![\p{L}\p{N}_])|photo(?:s)?(?![\p{L}\p{N}_])|picture(?:s)?(?![\p{L}\p{N}_])|poster(?:s)?(?![\p{L}\p{N}_])|cover(?:s)?(?![\p{L}\p{N}_])|avatar(?:s)?(?![\p{L}\p{N}_])|illustration(?:s)?(?![\p{L}\p{N}_])|artwork(?:s)?(?![\p{L}\p{N}_])|banner(?:s)?(?![\p{L}\p{N}_]))/iu
 
-const IMAGE_CREATE_VERB_PATTERN = /(?:сгенер[\p{L}-]*|генерир[\p{L}-]*|созд[\p{L}-]*|сдел[\p{L}-]*|нарис[\p{L}-]*|изобраз[\p{L}-]*|рендер[\p{L}-]*|жаса(?:п)?|жасашы|генерацияла[\p{L}-]*|сал(?:ып)?\s+бер|generate(?:d|s|ing)?|create(?:d|s|ing)?|make|draw|render(?:ed|s|ing)?)(?![\p{L}\p{N}_])/iu
+// Direct photo intent must survive natural typing/voice mistakes. In particular,
+// mobile users often type "сгененируй фото" instead of "сгенерируй фото", and
+// "делай фото" is also an explicit creation command. Both must open the real
+// confirmation card instead of falling through to the chat model.
+const IMAGE_CREATE_VERB_PATTERN = /(?:сген(?:ер|ен)[\p{L}-]*|генерир[\p{L}-]*|созд[\p{L}-]*|сдел[\p{L}-]*|дела(?:й|йте)|нарис[\p{L}-]*|изобраз[\p{L}-]*|рендер[\p{L}-]*|жаса(?:п)?|жасашы|генерацияла[\p{L}-]*|сал(?:ып)?\s+бер|generate(?:d|s|ing)?|create(?:d|s|ing)?|make|draw|render(?:ed|s|ing)?)(?![\p{L}\p{N}_])/iu
 
 const EXPLANATION_START_PATTERN = /^\s*(?:как|почему|зачем|что\s+такое|объясни(?:те)?|расскажи(?:те)?|покажи(?:те)?\s+как|инструкци[яию]|гайд|how\s+to|why|what\s+is|explain|tell\s+me\s+how|do\s+you\s+know\s+how)(?![\p{L}\p{N}_])/iu
-const EXPLANATION_BEFORE_CREATE_PATTERN = /(?:объясн[\p{L}-]*|расскаж[\p{L}-]*|покаж[\p{L}-]*\s+как|как\s+)(?:.{0,90}?)(?:сгенер|генерир|созд|сдел|нарис|generate|create|draw|render)/iu
+const EXPLANATION_BEFORE_CREATE_PATTERN = /(?:объясн[\p{L}-]*|расскаж[\p{L}-]*|покаж[\p{L}-]*\s+как|как\s+)(?:.{0,90}?)(?:сген|генерир|созд|сдел|дела(?:й|йте)|нарис|generate|create|draw|render)/iu
 
 const NON_IMAGE_OBJECT_PATTERN = /(?:код(?:а|ом)?|промпт(?:а|ом)?|prompt|текст(?:а|ом)?|пост(?:а|ом)?(?!ер)|стать[яию]|описани[еяю]|интерфейс(?:а|ом)?|анимаци[яию]|лоадер(?:а|ом)?|loader|кнопк(?:у|а|и)|раздел(?:а|ом)?|функци[яию]|сайт(?:а|ом)?|website|компонент(?:а|ом)?|api|html|css|javascript|typescript|react)(?![\p{L}\p{N}_])/iu
 const META_TASK_PREFIX_PATTERN = /^\s*(?:напиши(?:те)?|дай(?:те)?|подготовь(?:те)?|составь(?:те)?|write|give\s+me|prepare)(?![\p{L}\p{N}_])/iu
