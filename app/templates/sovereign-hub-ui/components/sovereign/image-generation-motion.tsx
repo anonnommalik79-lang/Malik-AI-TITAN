@@ -66,7 +66,6 @@ function stageFor(status?: Status) {
 
 export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedAt, failed, error, progress }: ImageGenerationMotionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const finalUrlRef = useRef("")
   const phaseStartedAtRef = useRef(Date.now())
   const lastStatusRef = useRef<Status | undefined>(status)
   const [resolvedResultUrl, setResolvedResultUrl] = useState("")
@@ -96,9 +95,8 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     }
 
     tick()
-    // Once a card is finished it becomes completely idle. The previous 500ms
-    // timer kept every generated-image message re-rendering forever, so one 8K
-    // result could make the rest of the application feel stuck.
+    // Finished cards are truly idle: no timer continues to wake React after a
+    // generated image has appeared.
     if (imageLoaded || actuallyFailed) return
     const timer = window.setInterval(tick, 1000)
     return () => window.clearInterval(timer)
@@ -123,7 +121,25 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     return () => { cancelled = true }
   }, [resultUrl, fallbackUrl])
 
-  useEffect(() => { finalUrlRef.current = resolvedResultUrl }, [resolvedResultUrl])
+  // Decode the final display derivative once, asynchronously. The old loader
+  // decoded the result and then redrew it through multiple canvases for another
+  // 2.1 seconds. Even with a preview that was needless work precisely at the
+  // moment the user wants the rest of the app to become responsive again.
+  useEffect(() => {
+    if (!resolvedResultUrl || imageLoaded || actuallyFailed) return
+    let cancelled = false
+    loadImage(resolvedResultUrl)
+      .then(() => {
+        if (cancelled) return
+        setAssetError("")
+        setImageLoaded(true)
+      })
+      .catch(() => {
+        if (!cancelled) setAssetError("Сохранённое изображение недоступно.")
+      })
+    return () => { cancelled = true }
+  }, [resolvedResultUrl, imageLoaded, actuallyFailed])
+
   useEffect(() => { if (!actuallyFailed && !imageLoaded) playImageGenerationStartSound() }, [actuallyFailed, imageLoaded])
   useEffect(() => { if (imageLoaded) playImageGenerationCompleteSound() }, [imageLoaded])
 
@@ -149,8 +165,6 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     let demos: HTMLImageElement[] = []
     let demoIndex = Math.floor(Math.random() * DEMOS.length)
     let cycleStarted = performance.now()
-    let lastFinalUrl = ""
-    let finalImage: HTMLImageElement | null = null
     let lastFrameAt = 0
 
     const source = document.createElement("canvas")
@@ -176,7 +190,8 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
       if (!rect) return
       width = Math.max(1, Math.round(rect.width))
       height = Math.max(1, Math.round(rect.height))
-      dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+      const mobileCap = window.innerWidth <= 640 ? 1.25 : 1.5
+      dpr = Math.min(window.devicePixelRatio || 1, mobileCap)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -233,27 +248,20 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     const loop = (now: number) => {
       if (disposed) return
 
-      // 30fps is visually smooth for this reveal and halves the canvas paint
-      // pressure versus an uncapped 60/120Hz loop on modern phones.
+      // 30fps is visually smooth for the waiting scene and prevents 60/120Hz
+      // phones from doubling or quadrupling canvas paint work.
       if (now - lastFrameAt < 32) {
         requestAnimationFrame(loop)
         return
       }
       lastFrameAt = now
 
-      const finalUrl = finalUrlRef.current
-      if (finalUrl && finalUrl !== lastFinalUrl) {
-        lastFinalUrl = finalUrl
-        loadImage(finalUrl).then((img) => { if (!disposed) { finalImage = img; cycleStarted = performance.now() } }).catch(() => {})
-      }
-
-      const duration = finalImage ? 2100 : 3600
+      const duration = 3600
       const t = clamp((now - cycleStarted) / duration, 0, 1)
-      const current = finalImage || demos[demoIndex]
+      const current = demos[demoIndex]
       if (current) renderReveal(current, t)
 
       if (t >= 1) {
-        if (finalImage) { setImageLoaded(true); return }
         demoIndex = (demoIndex + 1) % demos.length
         cycleStarted = now + 180
       }
