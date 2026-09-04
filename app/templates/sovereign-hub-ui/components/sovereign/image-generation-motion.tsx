@@ -94,8 +94,13 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
       setPhaseSeconds(Math.max(0, Math.floor((now - phaseStartedAtRef.current) / 1000)))
       if (!imageLoaded && !actuallyFailed && elapsed >= GENERATION_WATCHDOG_MS) setTimedOut(true)
     }
+
     tick()
-    const timer = window.setInterval(tick, 500)
+    // Once a card is finished it becomes completely idle. The previous 500ms
+    // timer kept every generated-image message re-rendering forever, so one 8K
+    // result could make the rest of the application feel stuck.
+    if (imageLoaded || actuallyFailed) return
+    const timer = window.setInterval(tick, 1000)
     return () => window.clearInterval(timer)
   }, [startedAt, imageLoaded, actuallyFailed])
 
@@ -146,6 +151,7 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     let cycleStarted = performance.now()
     let lastFinalUrl = ""
     let finalImage: HTMLImageElement | null = null
+    let lastFrameAt = 0
 
     const source = document.createElement("canvas")
     const sourceCtx = source.getContext("2d", { alpha: false })!
@@ -226,6 +232,15 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
 
     const loop = (now: number) => {
       if (disposed) return
+
+      // 30fps is visually smooth for this reveal and halves the canvas paint
+      // pressure versus an uncapped 60/120Hz loop on modern phones.
+      if (now - lastFrameAt < 32) {
+        requestAnimationFrame(loop)
+        return
+      }
+      lastFrameAt = now
+
       const finalUrl = finalUrlRef.current
       if (finalUrl && finalUrl !== lastFinalUrl) {
         lastFinalUrl = finalUrl
@@ -271,7 +286,7 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     <section className="malik-photo-motion malik-hand-loader-v7" data-malik-image-ready={imageLoaded ? "1" : "0"} data-malik-loader-assets="final-zip-v7">
       <div className={`malik-photo-stage malik-art-stage ${imageLoaded ? "is-finished" : "is-generating"}`}>
         {!actuallyFailed && !imageLoaded ? <canvas ref={canvasRef} className="malik-hand-loader-v7__canvas" /> : null}
-        {imageLoaded && resolvedResultUrl ? <img className="malik-art-result is-visible" src={resolvedResultUrl} alt="Сгенерированное изображение Malik AI" draggable={false} /> : null}
+        {imageLoaded && resolvedResultUrl ? <img className="malik-art-result is-visible" src={resolvedResultUrl} alt="Сгенерированное изображение Malik AI" draggable={false} decoding="async" /> : null}
         {actuallyFailed ? <div className="malik-hand-loader-v7__failure"><strong>Генерация остановлена</strong><span>{failureText}</span></div> : null}
       </div>
 
@@ -288,7 +303,7 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
         .malik-photo-motion.malik-hand-loader-v7{width:min(100%,680px)!important;max-width:680px!important;margin:2px 0 0!important;padding:0!important;display:grid!important;gap:12px!important;background:#000!important;border:0!important;box-shadow:none!important;color:#fff!important}
         .malik-hand-loader-v7 .malik-photo-stage,.malik-hand-loader-v7 .malik-art-stage{position:relative!important;width:100%!important;aspect-ratio:1/1!important;min-height:0!important;overflow:hidden!important;border-radius:28px!important;border:1px solid rgba(218,174,76,.94)!important;background:#000!important;box-shadow:0 0 0 1px rgba(255,227,163,.04) inset!important;isolation:isolate!important}
         .malik-hand-loader-v7__canvas,.malik-hand-loader-v7 .malik-art-result{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;display:block!important;border:0!important;border-radius:27px!important;background:#000!important;object-fit:contain!important;object-position:50% 50%!important}
-        .malik-hand-loader-v7__canvas{will-change: transform;transform:translateZ(0)}
+        .malik-hand-loader-v7__canvas{will-change:transform;transform:translateZ(0)}
         .malik-hand-loader-v7 .malik-art-result{opacity:1!important;filter:none!important;transform:none!important;animation:malik-v7-in 180ms ease-out both!important}@keyframes malik-v7-in{from{opacity:.82}to{opacity:1}}
         #malik-root .malik-photo-motion.malik-hand-loader-v7 .malik-hand-loader-v7__progress{width:100%!important;display:grid!important;visibility:visible!important;opacity:1!important;gap:7px!important;padding:0 1px!important;margin:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
         .malik-hand-loader-v7__meta{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;font-size:12px!important;line-height:1.2!important;color:rgba(255,255,255,.92)!important}.malik-hand-loader-v7__meta strong{font-size:12px!important;font-weight:700!important;color:#fff!important;font-variant-numeric:tabular-nums!important}
