@@ -15,6 +15,12 @@ const LeadSchema = z.object({
   company_site: z.string().max(0).optional().default(""),
 })
 
+const PatchSchema = z.object({
+  id: z.string().uuid(),
+  status: z.enum(["new", "qualified", "contacted", "proposal", "won", "lost"]).optional(),
+  priority: z.enum(["low", "normal", "high", "hot"]).optional(),
+}).refine((value) => Boolean(value.status || value.priority), "patch_required")
+
 type Bucket = { count: number; resetAt: number }
 const buckets = new Map<string, Bucket>()
 const RATE_WINDOW_MS = 10 * 60 * 1000
@@ -143,4 +149,39 @@ export async function GET(request: Request) {
 
   const leads = await response.json().catch(() => [])
   return Response.json({ ok: true, leads })
+}
+
+export async function PATCH(request: Request) {
+  const admin = await requireMalikAdminAsync(request)
+  if (admin.response) return admin.response
+
+  const raw = await request.json().catch(() => ({}))
+  const parsed = PatchSchema.safeParse(raw)
+  if (!parsed.success) {
+    return Response.json({ ok: false, error: "invalid_patch" }, { status: 400 })
+  }
+
+  const config = supabaseConfig()
+  if (!config) {
+    return Response.json({ ok: false, error: "supabase_not_configured" }, { status: 503 })
+  }
+
+  const { id, ...patch } = parsed.data
+  const response = await fetch(`${config.url}/rest/v1/business_leads?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: {
+      apikey: config.key,
+      authorization: `Bearer ${config.key}`,
+      "content-type": "application/json",
+      prefer: "return=minimal",
+    },
+    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    return Response.json({ ok: false, error: "lead_update_failed" }, { status: 502 })
+  }
+
+  return Response.json({ ok: true, id, ...patch })
 }
