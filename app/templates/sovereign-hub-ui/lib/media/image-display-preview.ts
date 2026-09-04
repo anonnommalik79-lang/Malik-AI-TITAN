@@ -9,7 +9,7 @@ import { decodeDataUrl } from "./asset-store"
  * decoded GPU/RAM use by an order of magnitude on phones.
  */
 export const MALIK_IMAGE_DISPLAY_PREVIEW_LONG_EDGE = 1600
-const PREVIEW_SOURCE_TIMEOUT_MS = 12_000
+const PREVIEW_SOURCE_TIMEOUT_MS = 4_000
 const MAX_PREVIEW_SOURCE_BYTES = 24 * 1024 * 1024
 
 export type MalikImageDisplayPreview = {
