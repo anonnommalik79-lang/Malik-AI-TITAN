@@ -1,6 +1,7 @@
 import { mediaAssetExtension, saveMediaAsset } from "./asset-store"
 import { maxImagePromptLength } from "./config"
 import { createMalikImageDisplayPreview } from "./image-display-preview"
+import { withMalikImageProcessingSlot } from "./image-processing-capacity"
 import {
   canUseMalikImageModel,
   getMalikImageModel,
@@ -202,17 +203,21 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       }, { status: 502 })
     }
 
-    // The master keeps the exact requested quality (8K by default). A separate
-    // 1600px derivative is created only for the browser UI so a phone never has
-    // to decode hundreds of megabytes of 8K pixels just to paint a 680px card.
-    const delivered = await postProcessGeneratedImage({ imageUrl: result.imageUrl, quality })
-    const displayPreview = delivered.buffer?.length
-      ? await createMalikImageDisplayPreview({
-          buffer: delivered.buffer,
-          width: delivered.width,
-          height: delivered.height,
-        })
-      : null
+    // Keep full requested master quality, but do the RAM/CPU-heavy delivery work
+    // through a host-aware queue. On a small host this prevents two simultaneous
+    // 8K Sharp pipelines from freezing the entire Next.js process. The preview
+    // is built from the provider's native render whenever possible, so we avoid
+    // decoding the finished 8K master a second time just for a 680px chat card.
+    const { delivered, displayPreview } = await withMalikImageProcessingSlot(async () => {
+      const delivered = await postProcessGeneratedImage({ imageUrl: result.imageUrl, quality })
+      const displayPreview = await createMalikImageDisplayPreview({
+        sourceUrl: result.imageUrl,
+        buffer: delivered.buffer,
+        width: delivered.width,
+        height: delivered.height,
+      })
+      return { delivered, displayPreview }
+    })
 
     await recordMediaUsage(user.userId, "image")
     const remaining = Math.max(0, limit.remaining - 1)
@@ -222,25 +227,30 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     if (delivered.buffer?.length) {
       const { uploadMediaAsset } = await import("@/lib/storage/cloud-upload")
       const mime = delivered.mime || "image/webp"
-      const uploaded = await uploadMediaAsset({
-        userId: user.userId,
-        fileName: `generated-${Date.now()}.${mediaAssetExtension(mime)}`,
-        mime,
-        buffer: delivered.buffer,
-        kind: "image",
-      })
-      if (uploaded.stored) storageUrl = uploaded.publicUrl
 
-      if (displayPreview?.buffer.length) {
-        const previewUploaded = await uploadMediaAsset({
+      // The two files are independent after processing. Upload them together so
+      // the response is not held up by a second serial network round trip.
+      const [uploaded, previewUploaded] = await Promise.all([
+        uploadMediaAsset({
           userId: user.userId,
-          fileName: `generated-preview-${Date.now()}.webp`,
-          mime: displayPreview.mime,
-          buffer: displayPreview.buffer,
+          fileName: `generated-${Date.now()}.${mediaAssetExtension(mime)}`,
+          mime,
+          buffer: delivered.buffer,
           kind: "image",
-        })
-        if (previewUploaded.stored) previewStorageUrl = previewUploaded.publicUrl
-      }
+        }),
+        displayPreview?.buffer.length
+          ? uploadMediaAsset({
+              userId: user.userId,
+              fileName: `generated-preview-${Date.now()}.webp`,
+              mime: displayPreview.mime,
+              buffer: displayPreview.buffer,
+              kind: "image",
+            })
+          : Promise.resolve(null),
+      ])
+
+      if (uploaded.stored) storageUrl = uploaded.publicUrl
+      if (previewUploaded?.stored) previewStorageUrl = previewUploaded.publicUrl
     }
 
     let assetId: string | undefined
