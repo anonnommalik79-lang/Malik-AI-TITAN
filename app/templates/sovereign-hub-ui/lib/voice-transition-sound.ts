@@ -20,10 +20,7 @@ export function saveVoiceSoundEnabled(enabled: boolean) {
   } catch {}
 }
 
-export function playVoiceTransitionSound(kind: "open" | "close") {
-  if (typeof window === "undefined") return
-  if (kind === "open") unlockVoiceAudio()
-  if (!isVoiceSoundEnabled()) return
+function playTone(kind: "open" | "close") {
   try {
     const context = getVoiceAudioContext()
     if (!context) return
@@ -62,4 +59,18 @@ export function playVoiceTransitionSound(kind: "open" | "close") {
   } catch {
     // Audio feedback is enhancement-only; Voice Mode must still open and close.
   }
+}
+
+export function playVoiceTransitionSound(kind: "open" | "close") {
+  if (typeof window === "undefined") return
+
+  // Audio unlock must stay inside the user's gesture so browsers allow sound,
+  // but oscillator/filter setup should never hold up React state that opens the
+  // actual Voice Mode. Deferring the decorative tone makes the first click feel
+  // instant even on slower laptops/browsers.
+  if (kind === "open") unlockVoiceAudio()
+  if (!isVoiceSoundEnabled()) return
+
+  if (typeof queueMicrotask === "function") queueMicrotask(() => playTone(kind))
+  else window.setTimeout(() => playTone(kind), 0)
 }
