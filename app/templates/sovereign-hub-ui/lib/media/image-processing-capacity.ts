@@ -67,15 +67,20 @@ async function acquireImageProcessingSlot() {
     return
   }
 
+  // A queued waiter receives the slot directly from release(). `active` stays
+  // unchanged during that handoff, so a brand-new request cannot steal the gap
+  // and temporarily push the process above its RAM-safe capacity.
   await new Promise<void>((resolve) => state.waiters.push(resolve))
-  state.active += 1
 }
 
 function releaseImageProcessingSlot() {
   const state = processingState()
-  state.active = Math.max(0, state.active - 1)
   const next = state.waiters.shift()
-  if (next) queueMicrotask(next)
+  if (next) {
+    queueMicrotask(next)
+    return
+  }
+  state.active = Math.max(0, state.active - 1)
 }
 
 export async function withMalikImageProcessingSlot<T>(work: () => Promise<T>): Promise<T> {
