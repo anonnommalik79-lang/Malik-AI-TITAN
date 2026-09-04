@@ -11,5 +11,5 @@ export default async function BusinessDashboardPage() {
     redirect("/sign-in?returnTo=/business/dashboard")
   }
 
-  return <BusinessDashboardClient ownerEmail={user.email || ""} />
+  return <BusinessDashboardClient ownerEmail={user?.email || ""} />
 }
