@@ -203,21 +203,27 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       }, { status: 502 })
     }
 
-    // Keep full requested master quality, but do the RAM/CPU-heavy delivery work
-    // through a host-aware queue. On a small host this prevents two simultaneous
-    // 8K Sharp pipelines from freezing the entire Next.js process. The preview
-    // is built from the provider's native render whenever possible, so we avoid
-    // decoding the finished 8K master a second time just for a 680px chat card.
-    const { delivered, displayPreview } = await withMalikImageProcessingSlot(async () => {
-      const delivered = await postProcessGeneratedImage({ imageUrl: result.imageUrl, quality })
-      const displayPreview = await createMalikImageDisplayPreview({
-        sourceUrl: result.imageUrl,
-        buffer: delivered.buffer,
-        width: delivered.width,
-        height: delivered.height,
-      })
-      return { delivered, displayPreview }
-    })
+    // Start the lightweight UI derivative from the provider-native image. This
+    // work is tiny compared with the 8K master and does not occupy the heavy
+    // delivery queue. Meanwhile the full requested master goes through the
+    // host-aware slot so simultaneous high-resolution jobs cannot freeze Next.js.
+    const nativePreviewPromise = createMalikImageDisplayPreview({ sourceUrl: result.imageUrl })
+    const delivered = await withMalikImageProcessingSlot(() =>
+      postProcessGeneratedImage({ imageUrl: result.imageUrl, quality }),
+    )
+
+    let displayPreview = await nativePreviewPromise
+    if (!displayPreview && delivered.buffer?.length) {
+      // Rare fallback: if the provider URL expired before the preview fetch,
+      // derive it from the stored master under the same RAM-safe gate.
+      displayPreview = await withMalikImageProcessingSlot(() =>
+        createMalikImageDisplayPreview({
+          buffer: delivered.buffer,
+          width: delivered.width,
+          height: delivered.height,
+        }),
+      )
+    }
 
     await recordMediaUsage(user.userId, "image")
     const remaining = Math.max(0, limit.remaining - 1)
