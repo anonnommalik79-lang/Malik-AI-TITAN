@@ -1,0 +1,13 @@
+{
+  "appId": "world.malikai.app",
+  "appName": "Malik AI",
+  "webDir": "www",
+  "server": {
+    "url": "https://malikaiworld.world",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "never",
+    "preferredContentMode": "mobile"
+  }
+}
