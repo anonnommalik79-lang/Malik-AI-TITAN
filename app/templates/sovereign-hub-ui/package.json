@@ -15,7 +15,7 @@
     "lint": "eslint .",
     "test:models": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-malik-models.mjs",
     "test:models:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-malik-models-live.mjs",
-    "test:voice": "node scripts/verify-voice-mode.mjs && node scripts/verify-voice-audio.mjs && node scripts/verify-voice-intent.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-streaming.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-accuracy.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-path.mjs",
+    "test:voice": "node scripts/verify-voice-mode.mjs && node scripts/verify-voice-audio.mjs && node scripts/verify-voice-intent.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-streaming.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-accuracy.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-path.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-answer.mjs",
     "test:auth-audio": "node scripts/verify-auth-audio.mjs",
     "test:voice:live": "node scripts/verify-voice-live.mjs",
     "test:account": "node scripts/verify-account-and-search.mjs",
@@ -41,7 +41,8 @@
     "test:mobile-guest": "node scripts/verify-mobile-guest-home.mjs",
     "test:voice-streaming": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-streaming.mjs",
     "test:voice-accuracy": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-accuracy.mjs",
-    "test:voice-live-path": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-path.mjs"
+    "test:voice-live-path": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-path.mjs",
+    "test:voice-answer": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-answer.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",

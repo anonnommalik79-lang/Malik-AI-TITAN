@@ -207,12 +207,23 @@ async function callSharedRouter(
   tier: VoiceTier,
   temperature: number | undefined,
   signal?: AbortSignal,
+  languageCode?: string,
 ): Promise<VoiceLlmResult | null> {
+  // Kazakh is the exception to "whatever is fastest". The head of the chain is
+  // an open-weights model that has seen very little of it, and what comes back
+  // is grammatical mush - which is the whole "тупой especially in Kazakh"
+  // complaint, and nothing in the recognizer or the speech engine can repair an
+  // answer that was written badly. Gemini speaks it properly, so Kazakh asks
+  // for Gemini and falls back to the usual chain if it is not there.
+  const kazakh = String(languageCode || "").toLowerCase().startsWith("kk")
+    && process.env.VOICE_LLM_KAZAKH_PROVIDER !== "off"
+
   try {
     const result = await routeAI({
       prompt: text,
       task: "chat",
-      // No provider and no model are pinned: whatever is configured is eligible.
+      // Nothing is pinned except for Kazakh; everything else keeps the fast chain.
+      ...(kazakh ? { provider: process.env.VOICE_LLM_KAZAKH_PROVIDER || "gemini" } : {}),
       userId: "voice",
       maxTokens: Number(process.env.VOICE_LLM_MAX_OUTPUT_TOKENS || 320),
       temperature: temperature ?? Number(process.env.VOICE_LLM_TEMPERATURE || 0.45),
@@ -243,11 +254,13 @@ export async function voiceLlmAnswer(input: {
   tier?: VoiceTier
   temperature?: number
   signal?: AbortSignal
+  /** Which language the answer has to be in. Kazakh changes who is asked. */
+  languageCode?: string
 }): Promise<VoiceLlmResult> {
   const history = input.history || []
   const tier = input.tier || "fast"
 
-  const routed = await callSharedRouter(input.instruction, input.text, history, tier, input.temperature, input.signal)
+  const routed = await callSharedRouter(input.instruction, input.text, history, tier, input.temperature, input.signal, input.languageCode)
   if (routed) return routed
 
   // Direct provider calls stay as the safety net, so Voice still answers if the

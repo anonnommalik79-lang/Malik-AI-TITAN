@@ -1,8 +1,10 @@
 import { voiceLlmAnswer } from "@/lib/voice/voice-llm-router"
+import { streamVoiceAnswer, takeSentence } from "@/lib/voice/voice-llm-stream"
 import { voiceSearchContext } from "@/lib/voice/web-search"
 import { repairTranscript } from "@/lib/voice/speech-vocabulary"
 import { languageDirective, looksLikeLanguage, resolveVoiceLanguage } from "@/lib/voice/voice-language"
 import { answersKazakhGreeting, kazakhGreeting, kazakhGreetingFallback, spokenIntentInstruction } from "@/lib/voice/spoken-intent"
+import type { VoiceMessage } from "@/lib/voice/conversation"
 import {
   antiRepeatNote,
   conversationRules,
@@ -62,6 +64,155 @@ function fallbackReply(code: string) {
   return "Сейчас не получилось получить ответ. Попробуй сказать ещё раз через секунду."
 }
 
+/**
+ * The streaming answer.
+ *
+ * The response goes out before the model has finished, and the pieces follow as
+ * they are written - that is the point, and the first version of this file got
+ * it wrong by awaiting the whole answer and then sending it in one go, which is
+ * the old behaviour wearing a stream's clothes.
+ *
+ * The guard is on the server. The first sentence is held back until it has been
+ * checked - right language, not a repeat of something already said - and only
+ * then does anything leave for the speech engine. So the client never has to
+ * un-say a sentence: either the stream was good, or the guard caught it and the
+ * answer is rewritten here, on the same connection, before a word is spoken.
+ */
+function streamingResponse(input: {
+  instruction: string
+  text: string
+  history: VoiceMessage[]
+  language: ReturnType<typeof resolveVoiceLanguage>
+  personality: string
+  tier: ReturnType<typeof tierFor>
+  search: Awaited<ReturnType<typeof voiceSearchContext>>
+  signal: AbortSignal
+}): Response {
+  const { instruction, text, history, language, personality, tier, search, signal } = input
+  const encoder = new TextEncoder()
+  const frame = (event: string, data: unknown) => encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: unknown) => {
+        try { controller.enqueue(frame(event, data)) } catch {}
+      }
+
+      send("meta", {
+        language: language.code,
+        languageName: language.english,
+        languageLocale: language.locale,
+        transcript: text,
+        personality,
+      })
+
+      let pending = ""
+      let cleared = false
+      let abandoned = false
+      let spoken = ""
+
+      const answer = await streamVoiceAnswer({
+        instruction,
+        text,
+        history,
+        languageCode: language.code,
+        signal,
+        onDelta: (piece) => {
+          if (abandoned) return
+          if (cleared) {
+            spoken += piece
+            send("delta", { text: piece })
+            return
+          }
+
+          pending += piece
+          const { sentence, rest } = takeSentence(pending)
+          if (!sentence) return
+
+          // The two checks worth stopping for, both local and both cheap: the
+          // wrong language, and an answer already given a moment ago.
+          if (!looksLikeLanguage(sentence, language.code) || repeatsEarlierAnswer(sentence, history)) {
+            abandoned = true
+            return
+          }
+
+          cleared = true
+          pending = rest
+          const opening = sentence + (rest ? " " : "")
+          spoken += opening
+          send("delta", { text: opening })
+        },
+      }).catch(() => null)
+
+      let content = ""
+      let provider = "stream"
+      let model = "auto"
+
+      if (!abandoned && answer) {
+        // Whatever followed the last full stop never passed through the guard.
+        content = (cleared ? spoken + pending : answer.content).trim()
+        if (!cleared && content) send("delta", { text: content })
+        else if (pending.trim()) send("delta", { text: pending })
+        provider = answer.provider
+        model = answer.model
+      }
+
+      // The stream was refused, or it said the wrong thing in the wrong
+      // language. Nothing has been spoken yet, so the answer is simply written
+      // again - once, told exactly what it got wrong.
+      if (!content || !looksLikeLanguage(content, language.code)) {
+        try {
+          const retry = await voiceLlmAnswer({
+            text,
+            instruction: abandoned
+              ? `${instruction} The previous attempt answered in the wrong language or repeated an earlier answer. Answer in ${language.english}, and say something new.`
+              : instruction,
+            history,
+            tier,
+            temperature: abandoned ? 0.8 : undefined,
+            signal,
+            languageCode: language.code,
+          })
+          const fresh = String(retry.content || "").trim()
+          content = fresh && looksLikeLanguage(fresh, language.code) ? fresh : fallbackReply(language.code)
+          provider = retry.provider
+          model = retry.model
+        } catch {
+          content = fallbackReply(language.code)
+          provider = "voice-local-fallback"
+          model = "none"
+        }
+        send("delta", { text: content })
+      }
+
+      send("done", {
+        ok: true,
+        content,
+        personality,
+        language: language.code,
+        languageName: language.english,
+        languageLocale: language.locale,
+        transcript: text,
+        turns: history.length,
+        tier,
+        provider,
+        model,
+        usedWeb: search.sources.length > 0,
+        sources: search.sources,
+      })
+      controller.close()
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-store, no-transform",
+      "x-accel-buffering": "no",
+    },
+  })
+}
+
 export const POST = withCompute(handlePOST, "voice")
 
 async function handlePOST(request: Request) {
@@ -96,7 +247,21 @@ async function handlePOST(request: Request) {
     const grounded = search.context ? `${instruction}\n${search.context}` : instruction
     const tier = tierFor(text, search.sources.length > 0)
 
-    let answer = await voiceLlmAnswer({ text, instruction: grounded, history, tier, signal: request.signal })
+    // Speech can start on the first sentence instead of on the last one, which
+    // is the whole of the "долго готовит голос" complaint: the pieces were
+    // always pipelined, so the only thing between the question ending and the
+    // first sound was the model finishing a paragraph nobody had heard.
+    //
+    // A Kazakh greeting is the one case that opts out. Its answer is repaired
+    // after the fact when the model misses the intent, and a repair cannot be
+    // applied to something already spoken aloud.
+    if (body?.stream && !greeting) {
+      return streamingResponse({
+        instruction: grounded, text, history, language, personality, tier, search, signal: request.signal,
+      })
+    }
+
+    let answer = await voiceLlmAnswer({ text, instruction: grounded, history, tier, signal: request.signal, languageCode: language.code })
     let content = String(answer.content || "").trim()
     let correctedGreeting = false
 
@@ -115,6 +280,7 @@ async function handlePOST(request: Request) {
         history,
         tier,
         signal: request.signal,
+        languageCode: language.code,
       })
       content = String(answer.content || "").trim()
     }
@@ -131,6 +297,7 @@ async function handlePOST(request: Request) {
         tier,
         temperature: 0.8,
         signal: request.signal,
+        languageCode: language.code,
       })
       const fresh = String(retry.content || "").trim()
       if (fresh && !repeatsEarlierAnswer(fresh, history) && looksLikeLanguage(fresh, language.code)) {

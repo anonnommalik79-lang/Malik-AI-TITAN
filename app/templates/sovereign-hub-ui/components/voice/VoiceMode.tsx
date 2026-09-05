@@ -14,6 +14,7 @@ import { DeepgramListener, streamLanguage, streamedTranscriptIsTrusted } from "@
 import { speechChunks } from "@/lib/voice/speech-chunks"
 import { askAgainPhrase, chooseTranscript, conversationHint, shouldAskAgain } from "@/lib/voice/transcript-choice"
 import { fuseTranscripts } from "@/lib/voice/rover"
+import { takeSentence } from "@/lib/voice/voice-llm-stream"
 import { PauseTracker } from "@/lib/voice/dsp"
 import { detectSpokenLanguageDetailed } from "@/lib/voice/voice-language"
 import { VOICE_HISTORY_TURNS, type VoiceMessage } from "@/lib/voice/conversation"
@@ -267,6 +268,102 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     replyPlayerRef.current = player
     return player.play(blob, () => { setTitle("Отвечаю"); setAudioError(null) })
   }, [])
+
+  /**
+   * Speaks an answer that is still being written.
+   *
+   * speakReply below takes a finished answer and pipelines the pieces, which
+   * removed the wait for the *speech* - but the wait for the *answer* was still
+   * there, and it is the larger half. This one is fed sentences as the model
+   * produces them: the first one is synthesized while the second is still being
+   * written, so the reply starts about as soon as the model has decided how it
+   * begins.
+   *
+   * Same primitives as speakReply, deliberately: one fetch per piece, the next
+   * piece requested before the current one plays. Nothing new to go wrong in
+   * the audio path.
+   */
+  const speakStream = useCallback(() => {
+    const version = replyVersionRef.current
+    const current = () => version === replyVersionRef.current && mountedRef.current && !closingRef.current
+    const abort = new AbortController()
+    replyAbortRef.current = abort
+
+    const selectedLanguage = languageRef.current
+    const requestedVoice = voice
+    const selectedVoice = voiceBelongsToLanguage(requestedVoice, selectedLanguage) ? requestedVoice : defaultVoiceForLanguage(selectedLanguage)
+
+    const queue: string[] = []
+    let finished = false
+    let wake: (() => void) | null = null
+    const waitForMore = () => new Promise<void>((resolve) => { wake = resolve })
+
+    const synth = async (part: string): Promise<Blob | null> => {
+      try {
+        const response = await fetch("/api/voice/tts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: part, voice: selectedVoice, language: selectedLanguage, speed, expressivity }),
+          signal: abort.signal,
+        })
+        const type = response.headers.get("content-type") || ""
+        if (!response.ok || !/^(audio\/|application\/octet-stream)/i.test(type)) return null
+        return await response.blob()
+      } catch {
+        return null
+      }
+    }
+
+    const worker = (async () => {
+      let spoke = false
+      let ahead: { text: string; blob: Promise<Blob | null> } | null = null
+      replyPlayingRef.current = true
+
+      for (;;) {
+        while (!queue.length && !finished) await waitForMore()
+        if (!queue.length) break
+        if (!current()) return false
+
+        const part = queue.shift() as string
+        const pending = ahead && ahead.text === part ? ahead.blob : synth(part)
+        // Ask for the next piece before playing this one, so the provider works
+        // during playback instead of after it.
+        ahead = queue.length ? { text: queue[0], blob: synth(queue[0]) } : null
+
+        const blob = await pending
+        if (!current()) return false
+        if (!blob) break
+
+        const played = await playBlobAudio(blob)
+        if (!current()) return false
+        if (!played) break
+        spoke = true
+      }
+
+      replyPlayingRef.current = false
+      return spoke
+    })()
+
+    return {
+      /** A finished sentence, ready to be said out loud. */
+      push(sentence: string) {
+        const value = sentence.trim()
+        if (!value) return
+        queue.push(value)
+        wake?.()
+        wake = null
+      },
+      /** No more sentences are coming. */
+      end() {
+        finished = true
+        wake?.()
+        wake = null
+      },
+      /** Resolves true if anything was actually heard. */
+      done: worker,
+      voice: selectedVoice,
+    }
+  }, [expressivity, playBlobAudio, speed, voice])
 
   const speakReply = useCallback(async (text: string, overrideVoice?: string, overrideLanguage?: VoiceLanguage, spokenLocale?: string) => {
     if (!text.trim()) return false
@@ -706,6 +803,105 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     }
   }, [startAudioLoop, startRecorder, startSpeech, startStreaming, stopMicrophone])
 
+  /**
+   * Reads the streamed answer and speaks it as it is written.
+   *
+   * Returns false when nothing usable came through, so the caller can fall back
+   * to the request that waits for a finished answer.
+   */
+  const runStreamedTurn = useCallback(async (response: Response, asked: string, selectedLanguage: VoiceLanguage) => {
+    const body = response.body
+    if (!body) return false
+
+    stopReplyAudio(false)
+    const speaker = speakStream()
+    const decoder = new TextDecoder()
+    const reader = body.getReader()
+
+    let raw = ""
+    let answer = ""
+    let pending = ""
+    let done: VoiceTurnPayload | null = null
+    let spokeAnything = false
+
+    const flush = (force: boolean) => {
+      for (;;) {
+        const { sentence, rest } = takeSentence(pending, force)
+        if (!sentence) break
+        pending = rest
+        speaker.push(sentence)
+        spokeAnything = true
+        if (!force) continue
+        if (!pending.trim()) break
+      }
+    }
+
+    try {
+      for (;;) {
+        const { done: finishedReading, value } = await reader.read()
+        if (finishedReading) break
+        raw += decoder.decode(value, { stream: true })
+
+        let split = raw.indexOf("\n\n")
+        while (split !== -1) {
+          const frame = raw.slice(0, split)
+          raw = raw.slice(split + 2)
+          split = raw.indexOf("\n\n")
+
+          const event = /^event: (.+)$/m.exec(frame)?.[1]
+          const data = /^data: ([\s\S]+)$/m.exec(frame)?.[1]
+          if (!event || !data) continue
+          let parsed: Record<string, unknown>
+          try { parsed = JSON.parse(data) } catch { continue }
+
+          if (event === "meta") {
+            if (!mountedRef.current || closingRef.current) return false
+            setTitle("Отвечаю")
+            const name = String(parsed.languageName || "")
+            setSubtitle(`${speaker.voice}${name ? ` · ${name}` : ""}`)
+            setBusy(false)
+          } else if (event === "delta") {
+            const piece = String(parsed.text || "")
+            if (!piece) continue
+            answer += piece
+            pending += piece
+            setFinalTranscript(answer)
+            setInterimTranscript("")
+            flush(false)
+          } else if (event === "done") {
+            done = parsed as VoiceTurnPayload
+          }
+        }
+      }
+    } catch {
+      speaker.end()
+      return spokeAnything
+    }
+
+    flush(true)
+    speaker.end()
+    await speaker.done
+
+    if (!mountedRef.current || closingRef.current || selectedLanguage !== languageRef.current) return true
+
+    const content = String(done?.content || answer).trim()
+    if (!content) return false
+
+    historyRef.current = [
+      ...historyRef.current,
+      { role: "user", content: done?.transcript || asked },
+      { role: "assistant", content },
+    ].slice(-VOICE_HISTORY_TURNS) as VoiceMessage[]
+
+    setFinalTranscript(content)
+    if (!micActiveRef.current) {
+      setTitle("Слушаю")
+      setSubtitle("Продолжай разговор · можно перебить голос")
+      window.setTimeout(() => { if (mountedRef.current && !closingRef.current && !micActiveRef.current) void startMicrophone() }, 160)
+    }
+    return true
+  }, [speakStream, startMicrophone, stopReplyAudio])
+
   const runVoiceTurn = useCallback(async (prompt: string) => {
     const clean = prompt.trim()
     if (!clean || busy) return
@@ -728,9 +924,23 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
           personality,
           language: selectedLanguage,
           history: historyRef.current.slice(-VOICE_HISTORY_TURNS),
+          stream: true,
         }),
       })
-      const payload = await response.json().catch(() => ({})) as VoiceTurnPayload
+
+      // The answer arrives sentence by sentence and is spoken as it arrives.
+      // The server holds the first sentence back until it has checked it, so
+      // anything that reaches here is safe to say out loud.
+      if (response.ok && (response.headers.get("content-type") || "").includes("text/event-stream")) {
+        const finished = await runStreamedTurn(response, clean, selectedLanguage)
+        if (finished) return
+        // The stream produced nothing usable. Fall through: the same request
+        // without `stream` still answers, just later.
+      }
+
+      const payload = response.bodyUsed
+        ? {} as VoiceTurnPayload
+        : await response.json().catch(() => ({})) as VoiceTurnPayload
       if (!mountedRef.current || closingRef.current || selectedLanguage !== languageRef.current) return
       if (!response.ok || !payload.ok || !payload.content) throw new Error(payload.error || "voice turn failed")
       const exchange: VoiceMessage[] = [
