@@ -964,7 +964,16 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages])
+  useEffect(() => {
+    if (!window.matchMedia("(max-width: 767px)").matches) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      return
+    }
+    // Scroll the thread only. scrollIntoView can also pan Safari's document
+    // while the keyboard is up, pulling the header and composer off screen.
+    const thread = messagesEndRef.current?.closest<HTMLElement>(".malik-chat-scroll")
+    thread?.scrollTo({ top: thread.scrollHeight, behavior: "smooth" })
+  }, [messages])
   useEffect(() => {
     setEffectivePlan(userPlan)
     if (!currentUser || currentUser === "User") return
@@ -983,8 +992,9 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   }, [effectivePlan])
   useEffect(() => {
     if (!textareaRef.current) return
-    textareaRef.current.style.height = "auto"
-    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`
+    const priority = window.matchMedia("(max-width: 767px)").matches ? "important" : ""
+    textareaRef.current.style.setProperty("height", "auto", priority)
+    textareaRef.current.style.setProperty("height", `${Math.min(textareaRef.current.scrollHeight, 160)}px`, priority)
   }, [prompt])
   useEffect(() => {
     if (!showAttachMenu) return
@@ -1373,7 +1383,4 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
 }
 
 export default ChatView
-
-
-
 

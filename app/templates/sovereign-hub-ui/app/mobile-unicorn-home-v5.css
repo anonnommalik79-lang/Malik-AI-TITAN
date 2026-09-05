@@ -195,9 +195,9 @@
   body:has(#malik-root .thome) #malik-root .titan-main,
   body:has(#malik-root .thome) #malik-root .titan-content,
   #malik-root .malik-dashboard-shell .malik-mobile-home {
-    height: calc(100dvh - var(--malik-mobile-topbar-h)) !important;
+    height: 100% !important;
     min-height: 0 !important;
-    max-height: calc(100dvh - var(--malik-mobile-topbar-h)) !important;
+    max-height: 100% !important;
     overflow: hidden !important;
     background: #000 !important;
   }
@@ -371,9 +371,9 @@
     grid-column: 1 / -1 !important;
     grid-row: 1 !important;
     width: 100% !important;
-    height: 35px !important;
-    min-height: 35px !important;
-    max-height: 35px !important;
+    height: auto;
+    min-height: 44px !important;
+    max-height: 160px !important;
     margin: 0 !important;
     padding: 2px 6px !important;
     resize: none !important;
@@ -568,10 +568,10 @@
     }
 
     #malik-root .malik-dashboard-shell .thome-composer textarea {
-      height: 31px !important;
-      min-height: 31px !important;
-      max-height: 31px !important;
-      font-size: 13px !important;
+      height: auto;
+      min-height: 44px !important;
+      max-height: 160px !important;
+      font-size: 16px !important;
     }
 
     #malik-root .malik-dashboard-shell .thome-tools,

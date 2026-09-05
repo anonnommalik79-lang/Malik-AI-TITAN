@@ -13,6 +13,12 @@ const nextConfig = {
     root: projectRoot,
   },
   outputFileTracingRoot: projectRoot,
+  async headers() {
+    return [{
+      source: "/images/malik-mobile-cinematic-v2.webp",
+      headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+    }];
+  },
 };
 
 export default nextConfig;

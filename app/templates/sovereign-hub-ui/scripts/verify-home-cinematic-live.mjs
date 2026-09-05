@@ -56,6 +56,10 @@ try {
         welcome: rect(welcome),
         composer: rect(composer),
         actions: rect(actions),
+        actionsDisplay: getComputedStyle(actions).display,
+        inputFontSize: parseFloat(getComputedStyle(composer.querySelector("textarea")).fontSize),
+        model: rect(composer.querySelector(".malik-model-selector")),
+        voice: rect(composer.querySelector(".thome-action-swap")),
         heroBackground: hero.backgroundImage,
         heroSize: hero.backgroundSize,
         exactLayerDisplay: layer ? getComputedStyle(layer).display : "missing",
@@ -109,13 +113,16 @@ try {
       }
     })
 
-    assert.match(state.heroBackground, /malik-mobile-cinematic-portrait\.png/)
+    assert.match(state.heroBackground, /malik-mobile-cinematic-v2\.webp/)
     assert.match(state.heroSize, /cover/)
     assert.equal(state.exactLayerDisplay, "none")
     assert.equal(state.signInDisplay, "none")
     assert.ok(state.home.y >= 0 && Math.abs(state.home.bottom - state.clientHeight) < 2, JSON.stringify({ width, height, state }))
     assert.ok(state.welcome.y >= 0 && Math.abs(state.welcome.bottom - state.clientHeight) < 2, JSON.stringify({ width, height, state }))
-    assert.ok(state.actions.y >= 0 && state.actions.bottom <= state.clientHeight + 1, JSON.stringify({ width, height, state }))
+    assert.equal(state.actionsDisplay, "none")
+    assert.ok(state.inputFontSize >= 16, "iOS inputs must not trigger focus zoom")
+    assert.ok(state.model.x + state.model.width <= state.voice.x, "model must not overlap voice")
+    assert.ok(state.voice.x + state.voice.width <= width - 10, "voice must remain inside the composer")
     assert.ok(state.composer.y >= 0 && state.composer.bottom <= state.clientHeight + 1, JSON.stringify({ width, height, state }))
     assert.ok(state.composer.bottom >= state.clientHeight - 24, JSON.stringify({ width, height, state }))
     if (process.env.MALIK_TEST_SCREENSHOT) {
@@ -123,7 +130,7 @@ try {
     }
 
     await context.close()
-    console.log(`PASS ${width}x${height}: live V5 layout, portrait hero, no black tail`)
+    console.log(`PASS ${width}x${height}: portrait hero, input bounds, hidden quick actions`)
   }
 
   if (process.env.MALIK_SKIP_CHAT_HANDOFF === "1") {

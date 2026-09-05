@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components"
 import { NoBlueUiGuard } from "@/components/sovereign/NoBlueUiGuard"
 import { MalikSearchMotion } from "@/components/sovereign/MalikSearchMotion"
@@ -57,8 +57,6 @@ import "./uber-wordmark-final.css"
 import "./sidebar-brand-mark-final.css"
 // Final MalikVideo phone geometry. Loaded last so the mobile reference wins.
 import "./video-mobile-reference-final.css"
-// Final home composer geometry: model selector sits beside + on phones.
-import "./mobile-composer-model-position-final.css"
 // Absolute final MalikVideo phone pass: one-line title, premium controls, clean autoplay cards.
 import "./video-mobile-worldclass-final.css"
 // Last authority for MalikVideo top section: no overlap, no clipped title, clean controls.
@@ -87,6 +85,17 @@ import "./chat-icon-alignment-final.css"
 import "./mobile-sites-library-oled-final.css"
 // Final home authority: approved cinematic Malik scene + reflective floor + compact controls.
 import "./mobile-unicorn-home-final.css"
+import "./mobile-viewport.css"
+
+// Let Next emit one viewport tag. Read the visible area separately on iOS,
+// where the keyboard does not resize dvh. Keep deliberate pinch zoom available.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-visual",
+  themeColor: "#000000",
+}
 
 const SITE_URL = "https://malikaiworld.world"
 const SITE_NAME = "Malik AI"
@@ -171,8 +180,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <meta name="google" content="notranslate" />
         <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
-        <meta name="theme-color" content="#000000" />
+        <link rel="preload" as="image" href="/images/malik-mobile-cinematic-v2.webp" type="image/webp" media="(max-width: 767px)" fetchPriority="high" />
         <meta name="application-name" content={SITE_NAME} />
         <meta name="apple-mobile-web-app-title" content={SITE_NAME} />
         <meta name="mobile-web-app-capable" content="yes" />

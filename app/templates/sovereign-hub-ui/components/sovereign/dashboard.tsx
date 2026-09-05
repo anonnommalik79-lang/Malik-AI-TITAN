@@ -3,6 +3,7 @@ import dynamic from "next/dynamic"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import { Component, useState, useCallback, useEffect, useRef } from "react"
 import { Sidebar } from "./sidebar"
+import { MobileViewport } from "./MobileViewport"
 const ComputePanel = dynamic(() => import("./compute/ComputePanel"))
 import { WelcomeScreen } from "./welcome-screen"
 import { ChatView } from "./chat-view"
@@ -6676,6 +6677,7 @@ const shouldShowMobilePreviewButton =
   return (
     <DashboardCrashBoundary>
       <div className="malik-dashboard-shell flex h-[100dvh] w-full overflow-hidden bg-[var(--malik-bg,#0a0a0b)] text-[var(--malik-text,#f5f2ea)] font-sans relative isolate">
+        <MobileViewport />
         <PerformanceGuard />
 
 <style>{`
@@ -6943,7 +6945,7 @@ const shouldShowMobilePreviewButton =
 )}
 
 {mobileMenuOpen && (
-  <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[45] lg:hidden" onClick={() => setMobileMenuOpen(false)} />
+  <div className="malik-mobile-drawer-backdrop fixed inset-0 bg-black/80 backdrop-blur-sm z-[45] lg:hidden" onClick={() => setMobileMenuOpen(false)} />
 )}
       <div className="hidden lg:block z-50">
         <Sidebar
@@ -6966,7 +6968,7 @@ const shouldShowMobilePreviewButton =
           onOpenVoice={openVoiceMode}
         />
       </div>
-      <div className={cn("malik-mobile-drawer fixed inset-y-0 left-0 z-50 lg:hidden transition-transform duration-300 ease-out", mobileMenuOpen ? "translate-x-0" : "-translate-x-full")}>
+      <div inert={!mobileMenuOpen} aria-hidden={!mobileMenuOpen} data-open={mobileMenuOpen} className={cn("malik-mobile-drawer fixed inset-y-0 left-0 z-50 lg:hidden transition-transform duration-300 ease-out", mobileMenuOpen ? "translate-x-0" : "-translate-x-full")}>
         <Sidebar
           isCollapsed={false}
           canAccessAdmin={canAccessAdmin}
@@ -8929,7 +8931,6 @@ function ChatsListView({
 // merge-map-344: ai-generator bridge preserved; runtime cost: zero; fallback: photo-generation; canvas handoff: safeOpenCanvas.
 
 export default Dashboard
-
 
 
 

@@ -131,13 +131,15 @@ export function MalikModelSelector({
       const viewportWidth = window.innerWidth
       const viewportHeight = window.innerHeight
       if (isMobile) {
+        const visible = window.visualViewport
+        const visibleHeight = visible?.height || viewportHeight
         setPopoverStyle({
           position: "fixed",
           left: 12,
           right: 12,
-          bottom: 12,
+          bottom: Math.max(12, viewportHeight - visibleHeight - (visible?.offsetTop || 0) + 12),
           width: "auto",
-          maxHeight: Math.min(viewportHeight * 0.78, 640),
+          maxHeight: Math.min(visibleHeight - 24, 640),
         })
         return
       }
@@ -175,9 +177,13 @@ export function MalikModelSelector({
     updatePosition()
     window.addEventListener("resize", updatePosition)
     window.addEventListener("scroll", updatePosition, true)
+    window.visualViewport?.addEventListener("resize", updatePosition)
+    window.visualViewport?.addEventListener("scroll", updatePosition)
     return () => {
       window.removeEventListener("resize", updatePosition)
       window.removeEventListener("scroll", updatePosition, true)
+      window.visualViewport?.removeEventListener("resize", updatePosition)
+      window.visualViewport?.removeEventListener("scroll", updatePosition)
     }
   }, [open, placement, isMobile])
 

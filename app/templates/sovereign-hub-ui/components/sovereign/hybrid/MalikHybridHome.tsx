@@ -238,8 +238,10 @@ function HomeComposer({
   useEffect(() => {
     const field = textareaRef.current
     if (!field) return
-    field.style.height = "0px"
-    field.style.height = `${Math.min(Math.max(field.scrollHeight, 54), 220)}px`
+    const mobile = window.matchMedia("(max-width: 767px)").matches
+    const priority = mobile ? "important" : ""
+    field.style.setProperty("height", "0px", priority)
+    field.style.setProperty("height", `${Math.min(Math.max(field.scrollHeight, mobile ? 44 : 54), 220)}px`, priority)
   }, [prompt])
 
   useEffect(() => {
