@@ -36,11 +36,16 @@ type StrictMalikResult = {
 
 // Keep the public free tier alive when one upstream is rate-limited, missing,
 // or temporarily unhealthy. A fallback request never recursively falls back,
-// so a provider outage cannot create a loop between Groq and Cerebras.
+// so a provider outage cannot create a loop between providers.
 const TEXT_FALLBACK_MODELS: Partial<Record<MalikModelId, readonly MalikModelId[]>> = {
-  "malik-27b": ["malik-fast-120b", "malik-20b"],
-  "malik-fast-120b": ["malik-20b", "malik-27b"],
-  "malik-20b": ["malik-fast-120b", "malik-27b"],
+  "malik-qwen-397b": ["malik-flash-53", "malik-fast-120b", "malik-20b"],
+  "malik-reason-753b": ["malik-qwen-397b", "malik-flash-53", "malik-fast-120b"],
+  "malik-core-300b": ["malik-qwen-397b", "malik-flash-53", "malik-20b"],
+  "malik-flash-53": ["malik-qwen-397b", "malik-fast-120b", "malik-20b"],
+  "malik-vision-k3": ["malik-qwen-397b", "malik-flash-53", "malik-fast-120b"],
+  "malik-27b": ["malik-qwen-397b", "malik-fast-120b", "malik-20b"],
+  "malik-fast-120b": ["malik-qwen-397b", "malik-20b", "malik-27b"],
+  "malik-20b": ["malik-qwen-397b", "malik-fast-120b", "malik-27b"],
 }
 
 export class MalikModelRouteError extends Error {
@@ -133,6 +138,38 @@ function buildMessages(input: {
 }
 
 function providerConfig(model: MalikModelDefinition) {
+  if (model.provider === "modelscope") {
+    const key = env("MODELSCOPE_API_KEY")
+    if (!key) {
+      throw new MalikModelRouteError(
+        "PROVIDER_NOT_CONFIGURED",
+        `${model.label} временно недоступна: ModelScope API не настроен.`,
+        503,
+        model.id,
+      )
+    }
+    return {
+      url: `${(env("MODELSCOPE_BASE_URL") || "https://api-inference.modelscope.cn/v1").replace(/\/+$/, "")}/chat/completions`,
+      key,
+    }
+  }
+
+  if (model.provider === "aihubmix") {
+    const key = env("AIHUBMIX_API_KEY")
+    if (!key) {
+      throw new MalikModelRouteError(
+        "PROVIDER_NOT_CONFIGURED",
+        `${model.label} временно недоступна: AIHubMix API не настроен.`,
+        503,
+        model.id,
+      )
+    }
+    return {
+      url: `${(env("AIHUBMIX_BASE_URL") || "https://aihubmix.com/v1").replace(/\/+$/, "")}/chat/completions`,
+      key,
+    }
+  }
+
   if (model.provider === "cerebras") {
     const key = env("CEREBRAS_API_KEY")
     if (!key) {
