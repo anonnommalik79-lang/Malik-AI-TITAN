@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import mimetypes
 import os
@@ -30,7 +31,7 @@ S3_ACCESS_KEY = os.getenv("MALIK_SHORTS_S3_ACCESS_KEY_ID", "").strip()
 S3_SECRET_KEY = os.getenv("MALIK_SHORTS_S3_SECRET_ACCESS_KEY", "").strip()
 PUBLIC_BASE = os.getenv("MALIK_SHORTS_PUBLIC_CDN_URL", "").strip().rstrip("/")
 
-CLAIM_TYPES = ["probe", "thumbnail", "transcode_hls"]
+CLAIM_TYPES = ["probe", "fingerprint", "thumbnail", "transcode_hls"]
 BITRATES = {360: 800, 540: 1500, 720: 2800, 1080: 5000}
 
 
@@ -60,7 +61,7 @@ def worker_headers() -> dict[str, str]:
         "Authorization": f"Bearer {TOKEN}",
         "X-Worker-Id": WORKER_ID,
         "Content-Type": "application/json",
-        "User-Agent": "MalikShortsMediaWorker/1.0",
+        "User-Agent": "MalikShortsMediaWorker/1.1",
     }
 
 
@@ -206,6 +207,85 @@ def output_dimensions(width: int, height: int, short_edge: int) -> tuple[int, in
     return out_width, out_height
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def perceptual_video_fingerprint(path: Path) -> str | None:
+    command = [
+        FFMPEG, "-v", "error", "-i", str(path),
+        "-vf", "fps=1/5,scale=9:8:flags=area,format=gray",
+        "-frames:v", "64",
+        "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1",
+    ]
+    proc = subprocess.run(command, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0 or not proc.stdout:
+        return None
+    frame_size = 9 * 8
+    hashes: list[str] = []
+    raw = proc.stdout
+    for offset in range(0, len(raw) - frame_size + 1, frame_size):
+        frame = raw[offset:offset + frame_size]
+        bits = 0
+        for row in range(8):
+            base = row * 9
+            for col in range(8):
+                bits = (bits << 1) | int(frame[base + col] > frame[base + col + 1])
+        hashes.append(f"{bits:016x}")
+    if not hashes:
+        return None
+    return hashlib.sha256("|".join(hashes).encode("ascii")).hexdigest()
+
+
+def audio_energy_fingerprint(path: Path) -> str | None:
+    command = [
+        FFMPEG, "-v", "error", "-i", str(path),
+        "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "pipe:1",
+    ]
+    proc = subprocess.run(command, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    pcm = proc.stdout
+    if proc.returncode != 0 or len(pcm) < 3200:
+        return None
+    window_bytes = 8000 * 2
+    buckets: list[int] = []
+    for offset in range(0, min(len(pcm), window_bytes * 180), window_bytes):
+        chunk = pcm[offset:offset + window_bytes]
+        if len(chunk) < 400:
+            break
+        total = 0
+        count = 0
+        for index in range(0, len(chunk) - 1, 2):
+            sample = int.from_bytes(chunk[index:index + 2], "little", signed=True)
+            total += abs(sample)
+            count += 1
+        average = total / max(1, count)
+        buckets.append(min(255, int(average / 128)))
+    if not buckets:
+        return None
+    return hashlib.sha256(bytes(buckets)).hexdigest()
+
+
+def fingerprint_media(source: Path, asset: dict[str, Any]) -> dict[str, Any]:
+    probe = probe_file(source, asset)
+    kind = str(asset.get("kind") or "")
+    result: dict[str, Any] = {
+        "exactSha256": sha256_file(source),
+        "durationMs": int(probe.get("durationMs") or 0),
+        "width": int(probe.get("width") or 0),
+        "height": int(probe.get("height") or 0),
+        "algorithmVersion": "malik-fp-v1",
+    }
+    if kind == "video":
+        result["videoFingerprint"] = perceptual_video_fingerprint(source)
+        if probe.get("hasAudio"):
+            result["audioFingerprint"] = audio_energy_fingerprint(source)
+    return result
+
+
 def make_thumbnail(source: Path, asset: dict[str, Any], workdir: Path) -> dict[str, Any]:
     probe = probe_file(source, asset)
     width = int(probe.get("width") or 0)
@@ -329,7 +409,40 @@ def transcode_hls(source: Path, asset: dict[str, Any], workdir: Path) -> dict[st
     master.write_text("\n".join(master_lines) + "\n", encoding="utf-8")
     master_key = f"{base_key}/master.m3u8"
     master_url = upload(master, master_key, "application/vnd.apple.mpegurl", "public, max-age=300")
-    return {"masterKey": master_key, "masterUrl": master_url, "variants": variants}
+
+    fallback_target = 720 if 720 in targets else max(targets)
+    fallback_width, fallback_height = output_dimensions(source_width, source_height, fallback_target)
+    fallback_bitrate = BITRATES.get(fallback_target, max(900, int(fallback_target * 4)))
+    fallback = workdir / "progressive.mp4"
+    subprocess.run([
+        FFMPEG, "-y", "-i", str(source),
+        "-map", "0:v:0", "-map", "0:a?",
+        "-vf", f"scale={fallback_width}:{fallback_height}",
+        "-c:v", "libx264", "-preset", "veryfast", "-profile:v", "high", "-pix_fmt", "yuv420p",
+        "-crf", "21", "-maxrate", f"{fallback_bitrate}k", "-bufsize", f"{fallback_bitrate * 2}k",
+        "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "48000",
+        "-movflags", "+faststart",
+        str(fallback),
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    if not fallback.exists() or fallback.stat().st_size <= 0:
+        raise RuntimeError("ffmpeg produced no progressive fallback")
+    fallback_key = f"shorts/renditions/{asset_id}/progressive.mp4"
+    fallback_url = upload(fallback, fallback_key, "video/mp4")
+
+    return {
+        "masterKey": master_key,
+        "masterUrl": master_url,
+        "variants": variants,
+        "fallback": {
+            "storageKey": fallback_key,
+            "publicUrl": fallback_url,
+            "width": fallback_width,
+            "height": fallback_height,
+            "bitrateKbps": fallback_bitrate,
+            "codec": "h264+aac",
+            "bytes": fallback.stat().st_size,
+        },
+    }
 
 
 def process_job(client: httpx.Client, job: dict[str, Any], asset: dict[str, Any]) -> dict[str, Any]:
@@ -341,6 +454,8 @@ def process_job(client: httpx.Client, job: dict[str, Any], asset: dict[str, Any]
         source = download_source(client, asset, workdir / f"source{suffix}")
         if job_type == "probe":
             return probe_file(source, asset)
+        if job_type == "fingerprint":
+            return fingerprint_media(source, asset)
         if job_type == "thumbnail":
             return make_thumbnail(source, asset, workdir)
         if job_type == "transcode_hls":
