@@ -280,26 +280,33 @@
 
 .promptTop { display: flex; gap: 12px; align-items: flex-start; }
 
-/* Says out loud what the template actually did, because the valuable half of
-   it - the industry brief handed to all eight agents - is invisible otherwise:
-   filling the composer looks like the whole effect, and it is the smaller half. */
-.playbookBadge {
+/* The instruction itself, on the screen, in full.
+   The earlier version of this was a one-line badge announcing that eight rules
+   would be applied, without ever showing them - which asks to be trusted about
+   the single most important thing on the page. Here the text is the thing: it
+   is what gets sent, and it is editable, so someone who knows his own market
+   can strike out a line instead of arguing with a summary. */
+.instruction {
+  margin: 10px 0 0;
+  border: 1px solid #333333;
+  border-radius: 11px;
+  background: #121212;
+  overflow: hidden;
+}
+
+.instructionHead {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 10px 0 0;
-  padding: 9px 12px;
-  border: 1px solid #333333;
-  border-radius: 10px;
-  background: #121212;
+  padding: 10px 12px;
 }
 
-.playbookBadge > svg { width: 15px; height: 15px; flex: none; color: #3ddc84; }
-.playbookBadge > span { flex: 1; min-width: 0; }
-.playbookBadge b { display: block; font-size: 12.5px; font-weight: 640; }
-.playbookBadge small { display: block; margin-top: 2px; font-size: 11px; color: #8a8a8a; }
+.instructionHead > svg { width: 15px; height: 15px; flex: none; color: #3ddc84; }
+.instructionHead > span { flex: 1; min-width: 0; }
+.instructionHead b { display: block; font-size: 12.5px; font-weight: 640; }
+.instructionHead small { display: block; margin-top: 2px; font-size: 11px; color: #8a8a8a; }
 
-.playbookBadge > button {
+.instructionToggle {
   flex: none;
   height: 27px;
   padding: 0 11px;
@@ -312,11 +319,37 @@
   cursor: pointer;
 }
 
-.playbookBadge > button:hover { border-color: #4a4a4a; color: var(--text); }
+.instructionToggle:hover { border-color: #4a4a4a; color: var(--text); }
+
+/* Generously spaced: this is read line by line, and a line is the unit someone
+   edits or strikes out.
+
+   The composer's own textarea rules are scoped to .promptTop, not to the whole
+   .promptPanel, precisely because of this box. A descendant selector there
+   (0,1,1) outranks this class (0,1,0), so the composer's 132px cap was silently
+   cropping the instruction to four lines. */
+.instructionText {
+  display: block;
+  width: 100%;
+  min-height: 210px;
+  max-height: 46vh;
+  border: 0;
+  border-top: 1px solid #292929;
+  outline: 0;
+  background: #0c0c0c;
+  color: #d6d6d6;
+  padding: 13px 14px 15px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.62;
+  resize: vertical;
+}
+
+.instructionText:focus { background: #0f0f0f; }
 .spark { color: #ececec; margin-top: 8px; }
 .spark svg { width: 20px; height: 20px; }
 
-.promptPanel textarea {
+.promptTop textarea {
   flex: 1;
   min-height: 50px;
   max-height: 132px;
@@ -331,7 +364,7 @@
   padding: 8px 0;
 }
 
-.promptPanel textarea::placeholder { color: #8d979f; }
+.promptTop textarea::placeholder { color: #8d979f; }
 
 .promptActions {
   display: flex;

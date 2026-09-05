@@ -47,6 +47,7 @@ import {
   BUSINESS_TEMPLATES,
   TEMPLATE_CATEGORIES,
   agentInput,
+  templateInstruction,
   type AutonomousAgent,
   type BusinessTemplate,
   type TemplateCategory,
@@ -113,10 +114,15 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   const [steps, setSteps] = useState<Step[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [runError, setRunError] = useState<string | null>(null)
-  // Which template's playbook is steering the run. Kept after the fields are
-  // filled, because the playbook is about the kind of business, not about the
-  // exact words left in the composer - the person is expected to edit those.
+  // Which template is steering the run, and the instruction it produced.
+  //
+  // The instruction is state, not something derived at send time, because it is
+  // editable: what stands in that box is what the eight agents get. Someone who
+  // knows his own market can strike out the line that is wrong for it, and the
+  // run will honour that rather than quietly re-adding it.
   const [activeTemplate, setActiveTemplate] = useState<BusinessTemplate | null>(null)
+  const [instruction, setInstruction] = useState("")
+  const [instructionOpen, setInstructionOpen] = useState(true)
   const [query, setQuery] = useState("")
   // State, not a ref: the header button reads this during render, and a ref
   // would leave "Остановить" on screen after the run had already finished.
@@ -166,6 +172,8 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
 
   const applyTemplate = useCallback((template: BusinessTemplate) => {
     setActiveTemplate(template)
+    setInstruction(templateInstruction(template))
+    setInstructionOpen(true)
     setPrompt(template.prompt)
     if (template.market) setMarket(template.market)
     if (template.country) setCountry(template.country)
@@ -177,6 +185,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
 
   const startCustom = useCallback(() => {
     setActiveTemplate(null)
+    setInstruction("")
     setPrompt("")
     setMarket("")
     setCountry("")
@@ -240,7 +249,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
             signal: controller.signal,
             body: JSON.stringify({
               mode: agent.mode,
-              input: agentInput(agent, brief, done, activeTemplate),
+              input: agentInput(agent, brief, done, instruction),
               context,
               language: "ru",
               modelId,
@@ -282,7 +291,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
 
     runningRef.current = false
     setRunning(false)
-  }, [activeTemplate, budget, country, market, modelId, prompt, requirements])
+  }, [budget, country, instruction, market, modelId, prompt, requirements])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -396,19 +405,40 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
               {/* There is no attach button and no microphone here on purpose:
                   /api/business/run takes text, and a control that looks like it
                   works but does nothing is worse than one that is absent. */}
-              {activeTemplate && (
-                <div className={styles.playbookBadge}>
-                  <Check strokeWidth={2.4} />
-                  <span>
-                    <b>{activeTemplate.title}</b>
-                    <small>
-                      {activeTemplate.playbook.length} отраслевых правил и {activeTemplate.metrics.length} ключевых цифр
-                      {" "}уйдут каждому из восьми агентов
-                    </small>
-                  </span>
-                  <button type="button" onClick={() => setActiveTemplate(null)} aria-label="Убрать отраслевой бриф">
-                    Убрать
-                  </button>
+              {instruction && (
+                <div className={styles.instruction}>
+                  <div className={styles.instructionHead}>
+                    <Check strokeWidth={2.4} />
+                    <span>
+                      <b>Инструкция{activeTemplate ? ` · ${activeTemplate.title}` : ""}</b>
+                      <small>Уходит каждому из восьми агентов. Правь свободно — отправится ровно то, что здесь написано.</small>
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.instructionToggle}
+                      onClick={() => setInstructionOpen((open) => !open)}
+                      aria-expanded={instructionOpen}
+                    >
+                      {instructionOpen ? "Свернуть" : "Показать"}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.instructionToggle}
+                      onClick={() => { setInstruction(""); setActiveTemplate(null) }}
+                    >
+                      Убрать
+                    </button>
+                  </div>
+                  {instructionOpen && (
+                    <textarea
+                      className={styles.instructionText}
+                      value={instruction}
+                      onChange={(event) => setInstruction(event.target.value)}
+                      spellCheck={false}
+                      aria-label="Отраслевая инструкция для восьми агентов"
+                      rows={14}
+                    />
+                  )}
                 </div>
               )}
 

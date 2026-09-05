@@ -140,15 +140,22 @@ for (const block of templateBlocks) {
   check(`${id}: invents no figures`, !invented, invented ? invented.join(", ") : "")
 }
 
-check("the playbook reaches every agent, not only the first",
-  autonomous.includes("template?: BusinessTemplate | null")
-  && autonomous.includes("ОТРАСЛЕВОЙ БРИФ"))
-check("the run passes the chosen template through",
-  component.includes("agentInput(agent, brief, done, activeTemplate)"))
+check("the instruction reaches every agent, not only the first",
+  autonomous.includes("instruction?: string | null")
+  && autonomous.includes("ОТРАСЛЕВАЯ ИНСТРУКЦИЯ"))
+check("the run sends the instruction that is on screen",
+  component.includes("agentInput(agent, brief, done, instruction)"))
 check("choosing a template is visible on the card",
   component.includes("templateCardActive"))
-check("the industry brief is disclosed, not silent",
-  component.includes("playbookBadge"))
+// The instruction must be shown in full and be editable. A summary of it -
+// "eight rules will be applied" - is the thing this replaced: it asked to be
+// trusted about the most important text on the page without ever printing it.
+check("the instruction is shown as text, not summarised",
+  component.includes("styles.instructionText") && component.includes("<textarea"))
+check("the instruction is editable and the edit is what is sent",
+  component.includes("onChange={(event) => setInstruction(event.target.value)}"))
+check("no template writes a bare prompt with no instruction behind it",
+  !component.includes("playbookBadge"))
 
 /* --------------------------------------------------------------- 5. palette */
 

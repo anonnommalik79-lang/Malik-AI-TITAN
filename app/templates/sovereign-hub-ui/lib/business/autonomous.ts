@@ -477,11 +477,35 @@ export const BUSINESS_TEMPLATES: BusinessTemplate[] = [
 ]
 
 /**
- * The full brief handed to one agent: the idea, its industry, its context, and
- * what the agents before it produced.
+ * The template's instruction, as text a person can read and change.
  *
- * The template's playbook goes to every agent, not just the first one. That is
- * the point of it: if only the researcher were told that a coffee shop lives or
+ * This is deliberately not assembled at send time out of hidden fields. It is
+ * built once, shown in full on the screen, and whatever stands there is exactly
+ * what the eight agents receive. A panel that says "eight industry rules will
+ * be applied" and never shows them is asking to be trusted; showing them asks
+ * nothing, and lets the person who actually knows his market cross out the line
+ * that is wrong for it.
+ */
+export function templateInstruction(template: BusinessTemplate): string {
+  return [
+    `ОТРАСЛЕВАЯ ИНСТРУКЦИЯ — ${template.title.toUpperCase()}`,
+    "",
+    "На чём этот бизнес держится и на чём он ломается. Учитывай в каждой рекомендации:",
+    template.playbook.map((line) => `— ${line}`).join("\n"),
+    "",
+    "Цифры, которые решают исход. Посчитай их и покажи расчёт:",
+    template.metrics.map((line) => `— ${line}`).join("\n"),
+    "",
+    "Не подставляй вымышленные суммы аренды, зарплат, цен, комиссий и норм закона. Где данных нет — назови величину, скажи, как её посчитать и где проверить.",
+  ].join("\n")
+}
+
+/**
+ * The full brief handed to one agent: the idea, the instruction, the context,
+ * and what the agents before it produced.
+ *
+ * The instruction goes to every agent, not just the first one. That is the
+ * point of it: if only the researcher were told that a coffee shop lives or
  * dies on rent as a share of revenue, the eight documents would drift apart
  * again, each one arguing from a different idea of the business.
  */
@@ -489,29 +513,16 @@ export function agentInput(
   agent: AutonomousAgent,
   brief: string,
   previous: Array<{ agent: AutonomousAgent; content: string }>,
-  template?: BusinessTemplate | null,
+  instruction?: string | null,
 ) {
   const earlier = previous
     .slice(-3)
     .map((step) => `### ${step.agent.name} (${step.agent.role})\n${step.content.slice(0, 1400)}`)
     .join("\n\n")
 
-  const industry = template
-    ? [
-      `ОТРАСЛЕВОЙ БРИФ — ${template.title.toUpperCase()}.`,
-      "Это то, на чём этот бизнес действительно держится и на чём он обычно ломается. Учитывай при любой рекомендации:",
-      template.playbook.map((line) => `— ${line}`).join("\n"),
-      "",
-      "ЦИФРЫ, КОТОРЫЕ РЕШАЮТ ИСХОД:",
-      template.metrics.map((line) => `— ${line}`).join("\n"),
-      "",
-      "Не подставляй вымышленные суммы аренды, зарплат, цен, комиссий и норм. Где данных нет — назови величину, скажи, как её посчитать и где проверить.",
-    ].join("\n")
-    : ""
-
   return [
     `ИДЕЯ БИЗНЕСА:\n${brief}`,
-    industry,
+    instruction?.trim() || "",
     earlier ? `УЖЕ СДЕЛАНО ДРУГИМИ АГЕНТАМИ:\n${earlier}` : "",
     `ТВОЯ ЗАДАЧА (${agent.name} · ${agent.role}):\n${agent.brief}`,
     "Не повторяй то, что уже написали другие агенты. Продолжай с того места, где они остановились.",
