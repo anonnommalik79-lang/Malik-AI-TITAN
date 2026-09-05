@@ -10,26 +10,16 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
-import boto3
 import httpx
-from botocore.config import Config
 
 BASE_URL = os.getenv("MALIK_SHORTS_WORKER_BASE_URL", "https://malikaiworld.world").rstrip("/")
 TOKEN = os.getenv("MALIK_SHORTS_WORKER_TOKEN", "").strip()
 WORKER_ID = os.getenv("MALIK_SHORTS_WORKER_ID", "media-ffmpeg-1").strip() or "media-ffmpeg-1"
 POLL_SECONDS = max(1.0, float(os.getenv("MALIK_SHORTS_MEDIA_POLL_SECONDS", "3")))
-HTTP_TIMEOUT = max(15.0, float(os.getenv("MALIK_SHORTS_MEDIA_HTTP_TIMEOUT_SECONDS", "120")))
+HTTP_TIMEOUT = max(15.0, float(os.getenv("MALIK_SHORTS_MEDIA_HTTP_TIMEOUT_SECONDS", "180")))
 FFMPEG = os.getenv("FFMPEG_BIN", "ffmpeg").strip() or "ffmpeg"
 FFPROBE = os.getenv("FFPROBE_BIN", "ffprobe").strip() or "ffprobe"
-
-S3_ENDPOINT = os.getenv("MALIK_SHORTS_S3_ENDPOINT", "").strip()
-S3_REGION = os.getenv("MALIK_SHORTS_S3_REGION", "auto").strip() or "auto"
-S3_BUCKET = os.getenv("MALIK_SHORTS_S3_BUCKET", "").strip()
-S3_ACCESS_KEY = os.getenv("MALIK_SHORTS_S3_ACCESS_KEY_ID", "").strip()
-S3_SECRET_KEY = os.getenv("MALIK_SHORTS_S3_SECRET_ACCESS_KEY", "").strip()
-PUBLIC_BASE = os.getenv("MALIK_SHORTS_PUBLIC_CDN_URL", "").strip().rstrip("/")
 
 CLAIM_TYPES = ["probe", "fingerprint", "thumbnail", "transcode_hls"]
 BITRATES = {360: 800, 540: 1500, 720: 2800, 1080: 5000}
@@ -39,15 +29,6 @@ def require_runtime() -> None:
     missing = []
     if len(TOKEN) < 32:
         missing.append("MALIK_SHORTS_WORKER_TOKEN")
-    for name, value in [
-        ("MALIK_SHORTS_S3_ENDPOINT", S3_ENDPOINT),
-        ("MALIK_SHORTS_S3_BUCKET", S3_BUCKET),
-        ("MALIK_SHORTS_S3_ACCESS_KEY_ID", S3_ACCESS_KEY),
-        ("MALIK_SHORTS_S3_SECRET_ACCESS_KEY", S3_SECRET_KEY),
-        ("MALIK_SHORTS_PUBLIC_CDN_URL", PUBLIC_BASE),
-    ]:
-        if not value:
-            missing.append(name)
     if shutil.which(FFMPEG) is None:
         missing.append(f"ffmpeg({FFMPEG})")
     if shutil.which(FFPROBE) is None:
@@ -61,7 +42,7 @@ def worker_headers() -> dict[str, str]:
         "Authorization": f"Bearer {TOKEN}",
         "X-Worker-Id": WORKER_ID,
         "Content-Type": "application/json",
-        "User-Agent": "MalikShortsMediaWorker/1.1",
+        "User-Agent": "MalikShortsMediaWorker/1.2",
     }
 
 
@@ -89,6 +70,31 @@ def finish(client: httpx.Client, job_id: str, success: bool, result: dict[str, A
     })
     if not payload.get("ok"):
         raise RuntimeError(f"worker finish rejected for job {job_id}")
+
+
+def sign_output(client: httpx.Client, asset_id: str, key: str, content_type: str) -> dict[str, Any]:
+    response = client.post(
+        f"{BASE_URL}/api/shorts/workers/storage",
+        headers=worker_headers(),
+        json={"assetId": asset_id, "key": key, "contentType": content_type},
+    )
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict) or not data.get("uploadUrl") or not data.get("publicUrl"):
+        raise RuntimeError(f"signed output URL missing for {key}")
+    return data
+
+
+def upload(client: httpx.Client, asset_id: str, path: Path, key: str, content_type: str) -> str:
+    signed = sign_output(client, asset_id, key, content_type)
+    with path.open("rb") as handle:
+        response = client.put(
+            str(signed["uploadUrl"]),
+            headers={"Content-Type": str(signed.get("contentType") or content_type)},
+            content=handle,
+        )
+    response.raise_for_status()
+    return str(signed["publicUrl"])
 
 
 def run_json(command: list[str]) -> dict[str, Any]:
@@ -163,31 +169,6 @@ def download_source(client: httpx.Client, asset: dict[str, Any], destination: Pa
     if not destination.exists() or destination.stat().st_size <= 0:
         raise RuntimeError("downloaded media is empty")
     return destination
-
-
-def s3_client():
-    return boto3.client(
-        "s3",
-        endpoint_url=S3_ENDPOINT,
-        region_name=S3_REGION,
-        aws_access_key_id=S3_ACCESS_KEY,
-        aws_secret_access_key=S3_SECRET_KEY,
-        config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
-    )
-
-
-def public_url(key: str) -> str:
-    return f"{PUBLIC_BASE}/{quote(key, safe='/')}"
-
-
-def upload(path: Path, key: str, content_type: str, cache_control: str = "public, max-age=31536000, immutable") -> str:
-    s3_client().upload_file(
-        str(path),
-        S3_BUCKET,
-        key,
-        ExtraArgs={"ContentType": content_type, "CacheControl": cache_control},
-    )
-    return public_url(key)
 
 
 def even(value: float | int) -> int:
@@ -286,7 +267,7 @@ def fingerprint_media(source: Path, asset: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def make_thumbnail(source: Path, asset: dict[str, Any], workdir: Path) -> dict[str, Any]:
+def make_thumbnail(client: httpx.Client, source: Path, asset: dict[str, Any], workdir: Path) -> dict[str, Any]:
     probe = probe_file(source, asset)
     width = int(probe.get("width") or 0)
     height = int(probe.get("height") or 0)
@@ -316,11 +297,11 @@ def make_thumbnail(source: Path, asset: dict[str, Any], workdir: Path) -> dict[s
     if not asset_id:
         raise RuntimeError("asset id missing")
     key = f"shorts/renditions/{asset_id}/poster.jpg"
-    url = upload(poster, key, "image/jpeg")
+    url = upload(client, asset_id, poster, key, "image/jpeg")
     return {"storageKey": key, "publicUrl": url, "width": out_width, "height": out_height}
 
 
-def transcode_hls(source: Path, asset: dict[str, Any], workdir: Path) -> dict[str, Any]:
+def transcode_hls(client: httpx.Client, source: Path, asset: dict[str, Any], workdir: Path) -> dict[str, Any]:
     probe = probe_file(source, asset)
     source_width = int(probe.get("width") or 0)
     source_height = int(probe.get("height") or 0)
@@ -380,6 +361,7 @@ def transcode_hls(source: Path, asset: dict[str, Any], workdir: Path) -> dict[st
             raise RuntimeError(f"ffmpeg produced no HLS playlist for {target}")
 
         variant_prefix = f"{base_key}/{variant_name}"
+        playlist_url = ""
         for file in sorted(variant_dir.iterdir()):
             if not file.is_file():
                 continue
@@ -389,10 +371,14 @@ def transcode_hls(source: Path, asset: dict[str, Any], workdir: Path) -> dict[st
                 content_type = "application/vnd.apple.mpegurl"
             else:
                 continue
-            upload(file, f"{variant_prefix}/{file.name}", content_type)
+            key = f"{variant_prefix}/{file.name}"
+            uploaded_url = upload(client, asset_id, file, key, content_type)
+            if file.name == "index.m3u8":
+                playlist_url = uploaded_url
 
         playlist_key = f"{variant_prefix}/index.m3u8"
-        playlist_url = public_url(playlist_key)
+        if not playlist_url:
+            raise RuntimeError(f"variant playlist upload missing for {target}")
         bandwidth = (bitrate + 128) * 1000
         master_lines.append(f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},AVERAGE-BANDWIDTH={int(bandwidth * 0.9)},RESOLUTION={out_width}x{out_height},CODECS="avc1.64001f,mp4a.40.2"')
         master_lines.append(f"{variant_name}/index.m3u8")
@@ -408,7 +394,7 @@ def transcode_hls(source: Path, asset: dict[str, Any], workdir: Path) -> dict[st
     master = workdir / "master.m3u8"
     master.write_text("\n".join(master_lines) + "\n", encoding="utf-8")
     master_key = f"{base_key}/master.m3u8"
-    master_url = upload(master, master_key, "application/vnd.apple.mpegurl", "public, max-age=300")
+    master_url = upload(client, asset_id, master, master_key, "application/vnd.apple.mpegurl")
 
     fallback_target = 720 if 720 in targets else max(targets)
     fallback_width, fallback_height = output_dimensions(source_width, source_height, fallback_target)
@@ -427,7 +413,7 @@ def transcode_hls(source: Path, asset: dict[str, Any], workdir: Path) -> dict[st
     if not fallback.exists() or fallback.stat().st_size <= 0:
         raise RuntimeError("ffmpeg produced no progressive fallback")
     fallback_key = f"shorts/renditions/{asset_id}/progressive.mp4"
-    fallback_url = upload(fallback, fallback_key, "video/mp4")
+    fallback_url = upload(client, asset_id, fallback, fallback_key, "video/mp4")
 
     return {
         "masterKey": master_key,
@@ -457,9 +443,9 @@ def process_job(client: httpx.Client, job: dict[str, Any], asset: dict[str, Any]
         if job_type == "fingerprint":
             return fingerprint_media(source, asset)
         if job_type == "thumbnail":
-            return make_thumbnail(source, asset, workdir)
+            return make_thumbnail(client, source, asset, workdir)
         if job_type == "transcode_hls":
-            return transcode_hls(source, asset, workdir)
+            return transcode_hls(client, source, asset, workdir)
         raise RuntimeError(f"unsupported job type for ffmpeg worker: {job_type}")
 
 
