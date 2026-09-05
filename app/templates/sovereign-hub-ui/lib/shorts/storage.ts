@@ -35,14 +35,12 @@ function client() {
 export async function createShortsUploadUrl(args: {
   key: string
   contentType: string
-  contentLength: number
 }) {
   const { config, s3 } = client()
   const command = new PutObjectCommand({
     Bucket: config.bucket,
     Key: args.key,
     ContentType: args.contentType,
-    ContentLength: args.contentLength,
     CacheControl: "public, max-age=31536000, immutable",
   })
   const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 10 * 60 })
