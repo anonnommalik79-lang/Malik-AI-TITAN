@@ -12,6 +12,10 @@ const EVENT_TYPES = new Set([
   "report","block","mute","dm_share","live_join","live_leave","remix_open","remix_publish",
 ])
 
+const LEARNING_EVENTS = new Set([
+  "25","50","75","complete","rewatch","skip","like","comment","comment_reply","save","repost","share","follow","not_interested","report",
+])
+
 function boundedInt(value: unknown, max = 86_400_000) {
   const number = Math.floor(Number(value))
   if (!Number.isFinite(number)) return null
@@ -83,6 +87,17 @@ export async function POST(request: NextRequest) {
       headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
       body: JSON.stringify(rows),
     })
+
+    if (user?.id) {
+      const learning = rows
+        .filter((row) => row.post_id && LEARNING_EVENTS.has(row.event_type))
+        .slice(0, 20)
+      await Promise.all(learning.map((row) => shortsSupabaseRequest("rpc/malik_shorts_apply_interest_signal", {
+        method: "POST",
+        body: JSON.stringify({ p_user_key: user.id, p_post_id: row.post_id, p_event_type: row.event_type }),
+      }).catch(() => null)))
+    }
+
     return NextResponse.json({ accepted: rows.length, sessionId: defaultSession, requestId: defaultRequest })
   } catch (error) {
     console.error("[Malik Shorts] event gateway failed", error)
