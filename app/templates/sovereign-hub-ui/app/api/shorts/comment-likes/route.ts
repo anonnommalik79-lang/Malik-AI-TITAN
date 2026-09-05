@@ -14,25 +14,13 @@ export async function POST(request: NextRequest) {
   const commentId = safeText(input.commentId, 80)
   if (!/^[0-9a-f-]{36}$/i.test(commentId)) return NextResponse.json({ error: "INVALID_COMMENT_ID" }, { status: 400 })
 
-  const me = encodeURIComponent(user.id)
   try {
-    if (input.liked) {
-      await shortsSupabaseRequest("malik_shorts_comment_likes?on_conflict=comment_id,user_key", {
-        method: "POST",
-        headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
-        body: JSON.stringify({ comment_id: commentId, user_key: user.id }),
-      })
-    } else {
-      await shortsSupabaseRequest(`malik_shorts_comment_likes?comment_id=eq.${commentId}&user_key=eq.${me}`, { method: "DELETE" })
-    }
-    const rows = await shortsSupabaseRequest<any[]>(`malik_shorts_comment_likes?select=user_key&comment_id=eq.${commentId}&limit=5000`).catch(() => [])
-    const likes = rows.length
-    await shortsSupabaseRequest(`malik_shorts_comments?id=eq.${commentId}`, {
-      method: "PATCH",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ like_count: likes, updated_at: new Date().toISOString() }),
+    const response = await shortsSupabaseRequest<any>("rpc/malik_shorts_comment_like_atomic", {
+      method: "POST",
+      body: JSON.stringify({ p_user_key: user.id, p_comment_id: commentId, p_like: Boolean(input.liked) }),
     })
-    return NextResponse.json({ ok: true, liked: Boolean(input.liked), likes })
+    const row = Array.isArray(response) ? response[0] : response
+    return NextResponse.json({ ok: true, liked: Boolean(row?.liked), likes: Number(row?.likes || 0) })
   } catch (error) {
     console.error("[Malik Shorts] comment like failed", error)
     return NextResponse.json({ error: "COMMENT_LIKE_FAILED" }, { status: 500 })
