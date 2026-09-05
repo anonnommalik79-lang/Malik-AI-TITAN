@@ -15,6 +15,16 @@ function generatedUsername(email: string, id: string) {
   return `${local}.${suffix}`.slice(0, 32)
 }
 
+function mimeFromKey(key: string) {
+  const ext = key.split(".").pop()?.toLowerCase()
+  if (ext === "mp4") return "video/mp4"
+  if (ext === "webm") return "video/webm"
+  if (ext === "mov") return "video/quicktime"
+  if (ext === "png") return "image/png"
+  if (ext === "webp") return "image/webp"
+  return "image/jpeg"
+}
+
 export async function POST(request: NextRequest) {
   const { user } = await getOptionalWorkOSAuth()
   if (!user) return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 })
@@ -82,7 +92,32 @@ export async function POST(request: NextRequest) {
       }),
     })
     const post = rows?.[0]
-    return NextResponse.json({ ok: true, post }, { status: 201 })
+    if (!post?.id) throw new Error("POST_INSERT_EMPTY")
+
+    const kind = key.includes("/video/") ? "video" : "image"
+    const assetRows = await shortsSupabaseRequest<any[]>("malik_shorts_media_assets", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ owner_key: user.id, post_id: post.id, kind, storage_key: key, source_url: mediaUrl, mime_type: mimeFromKey(key), duration_ms: durationSeconds == null ? null : durationSeconds * 1000, status: "uploaded" }),
+    }).catch(() => [])
+    const asset = assetRows?.[0] || null
+
+    await shortsSupabaseRequest("malik_shorts_rights_provenance?on_conflict=post_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ post_id: post.id, source_provider: "malik", canonical_url: `https://malikaiworld.world/shorts/malik/${post.id}`, provider_owner_id: user.id, provider_owner_name: displayName, ingestion_method: "native_upload", rights_basis: "creator_owned", attribution_required: false, download_allowed: false, remix_allowed: input.canRemix !== false, commercial_use_allowed: false, takedown_status: "clear" }),
+    }).catch(() => undefined)
+
+    if (asset?.id) {
+      const jobs = (kind === "video"
+        ? ["virus_scan", "probe", "thumbnail", "transcode_hls", "caption", "moderation", "embedding"]
+        : ["virus_scan", "thumbnail", "moderation", "embedding"])
+        .map((jobType, index) => ({ asset_id: asset.id, job_type: jobType, status: "queued", priority: 50 + index * 10, payload: { postId: post.id, language: safeText(input.language, 16) || "ru", region: safeText(input.region, 16) || "KZ" } }))
+      await shortsSupabaseRequest("malik_shorts_media_jobs", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(jobs) }).catch(() => undefined)
+      await shortsSupabaseRequest(`malik_shorts_posts?id=eq.${post.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: "processing" }) }).catch(() => undefined)
+    }
+
+    return NextResponse.json({ ok: true, post: asset ? { ...post, status: "processing" } : post, assetId: asset?.id || null, processingQueued: Boolean(asset?.id) }, { status: 201 })
   } catch (error) {
     console.error("[Malik Shorts] publish failed", error)
     return NextResponse.json({ error: "PUBLISH_FAILED" }, { status: 500 })
