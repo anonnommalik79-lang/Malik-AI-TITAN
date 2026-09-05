@@ -16,6 +16,26 @@ const LEARNING_EVENTS = new Set([
   "25","50","75","complete","rewatch","skip","like","comment","comment_reply","save","repost","share","follow","not_interested","report",
 ])
 
+type EventRow = {
+  event_id: string
+  user_key: string | null
+  anonymous_key: string | null
+  post_id: string | null
+  creator_key: string | null
+  source: string | null
+  event_type: string
+  position_ms: number | null
+  duration_ms: number | null
+  watch_ms: number | null
+  session_id: string
+  request_id: string
+  device_hint: string
+  locale: string | null
+  region: string | null
+  network_hint: string | null
+  metadata: Record<string, unknown>
+}
+
 function boundedInt(value: unknown, max = 86_400_000) {
   const number = Math.floor(Number(value))
   if (!Number.isFinite(number)) return null
@@ -55,7 +75,7 @@ export async function POST(request: NextRequest) {
   const defaultRequest = safeText(payload?.requestId, 160) || randomUUID()
   const deviceHint = safeText(request.headers.get("sec-ch-ua-mobile") === "?1" ? "mobile" : request.headers.get("user-agent"), 220)
 
-  const rows = rawEvents.flatMap((event: any) => {
+  const rows: EventRow[] = rawEvents.flatMap((event: any): EventRow[] => {
     const eventType = safeText(event?.eventType || event?.type, 40)
     if (!EVENT_TYPES.has(eventType)) return []
     return [{
