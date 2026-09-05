@@ -37,6 +37,14 @@ export function groqBackupConfigured(): boolean {
   return envPresent("GROQ_API_KEY_BACKUP")
 }
 
+export function modelScopeConfigured(): boolean {
+  return envPresent("MODELSCOPE_API_KEY")
+}
+
+export function aiHubMixConfigured(): boolean {
+  return envPresent("AIHUBMIX_API_KEY")
+}
+
 export function openaiConfigured(): boolean {
   return envPresent("OPENAI_API_KEY")
 }
@@ -79,6 +87,8 @@ export function modelsConfigured(): boolean {
     envPresent("BEDROCK_PRO_MODEL_ID") ||
     envPresent("BEDROCK_CODE_MODEL_ID") ||
     envPresent("AWS_BEDROCK_TEXT_MODEL") ||
+    modelScopeConfigured() ||
+    aiHubMixConfigured() ||
     cerebrasConfigured() ||
     groqConfigured()
   )
@@ -88,6 +98,8 @@ export function getSafeEnvSnapshot() {
   return {
     bedrockPrimaryConfigured: bedrockPrimaryConfigured(),
     bedrockBackupConfigured: bedrockBackupConfigured(),
+    modelscopeConfigured: modelScopeConfigured(),
+    aihubmixConfigured: aiHubMixConfigured(),
     cerebrasConfigured: cerebrasConfigured(),
     groqConfigured: groqConfigured(),
     groqBackupConfigured: groqBackupConfigured(),
