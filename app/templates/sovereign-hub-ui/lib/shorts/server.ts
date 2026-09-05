@@ -41,6 +41,13 @@ export function getYouTubeShortsConfig() {
   return apiKey ? { apiKey } : null
 }
 
+export function getYouTubeOAuthConfig() {
+  const clientId = trim(process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID)
+  const clientSecret = trim(process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET)
+  const redirectUri = trim(process.env.YOUTUBE_REDIRECT_URI) || "https://malikaiworld.world/api/youtube/callback"
+  return clientId && clientSecret ? { clientId, clientSecret, redirectUri } : null
+}
+
 export function getTikTokShortsConfig() {
   const mode = trim(process.env.TIKTOK_ENV).toLowerCase() === "production" ? "production" : "sandbox"
   const clientKey = trim(

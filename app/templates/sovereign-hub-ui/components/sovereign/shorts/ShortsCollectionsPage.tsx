@@ -1,0 +1,17 @@
+"use client"
+
+import Link from "next/link"
+import { useCallback, useEffect, useState } from "react"
+import { ArrowLeft, FolderPlus, Play, Trash2 } from "lucide-react"
+import styles from "./MalikShortsSections.module.css"
+
+export function ShortsCollectionsPage() {
+  const [items, setItems] = useState<any[]>([])
+  const [name, setName] = useState("")
+  const [loading, setLoading] = useState(true)
+  const load = useCallback(() => fetch("/api/shorts/collections", { cache: "no-store" }).then((r) => r.json()).then((json) => setItems(Array.isArray(json?.items) ? json.items : [])).finally(() => setLoading(false)), [])
+  useEffect(() => { load() }, [load])
+  const create = async () => { const clean = name.trim(); if (!clean) return; await fetch("/api/shorts/collections", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name: clean, private: true }) }); setName(""); await load() }
+  const remove = async (id: string) => { await fetch("/api/shorts/collections", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", collectionId: id }) }); await load() }
+  return <div style={{ minHeight: "100vh", background: "#050505", color: "#fff", padding: "26px max(14px,4vw) 70px", fontFamily: "Inter,system-ui,sans-serif" }}><div style={{ maxWidth: 1180, margin: "0 auto" }}><Link href="/shorts/library" style={{ display: "inline-flex", gap: 7, alignItems: "center", color: "#888", textDecoration: "none", fontSize: 12 }}><ArrowLeft size={14} /> Библиотека</Link><h1 style={{ fontSize: 31, letterSpacing: "-.04em", margin: "18px 0 5px" }}>Коллекции</h1><p style={{ color: "#777", fontSize: 13 }}>Свои папки сохранённых Shorts. Коллекции приватные по умолчанию.</p><div className={styles.composer} style={{ display: "flex", gap: 8, marginTop: 20 }}><input className={styles.search} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") create() }} placeholder="Новая коллекция" /><button className={styles.btn} onClick={create}><FolderPlus size={14} /> Создать</button></div>{loading ? <div className={styles.loading}>Загружаю коллекции…</div> : items.length ? <div style={{ display: "grid", gap: 14 }}>{items.map((collection) => <section key={collection.id} className={styles.insight}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}><div><strong style={{ color: "#fff" }}>{collection.name}</strong><div className={styles.muted}>{collection.posts?.length || 0} роликов · {collection.private ? "приватная" : "публичная"}</div></div><button className={styles.btnGhost} onClick={() => remove(collection.id)}><Trash2 size={13} /></button></div>{collection.posts?.length ? <div className={styles.grid} style={{ marginTop: 14 }}>{collection.posts.slice(0, 8).map((post: any) => <Link key={post.id} href={`/shorts/${post.source}/${encodeURIComponent(post.source === "malik" ? post.id : (post.sourceId || post.id))}`} className={styles.card} style={{ textDecoration: "none", color: "inherit" }}><div className={styles.posterWrap}>{post.posterUrl ? <img src={post.posterUrl} alt="" className={styles.poster} /> : <div className={styles.posterFallback}><Play size={22} /></div>}</div><div className={styles.cardBody}><div className={styles.caption}>{post.caption || "Short"}</div></div></Link>)}</div> : null}</section>)}</div> : <div className={styles.empty}>Создай первую коллекцию.</div>}</div></div>
+}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
+import { moderateShortsText } from "@/lib/shorts/moderation"
 import { getShortsSupabaseConfig, safeText, shortsSupabaseRequest } from "@/lib/shorts/server"
 import { getShortsStorageConfig, publicShortsObjectUrl } from "@/lib/shorts/storage"
 
@@ -13,6 +14,16 @@ function generatedUsername(email: string, id: string) {
   const local = email.split("@")[0]?.replace(/[^A-Za-z0-9._]/g, "").slice(0, 20) || "malik"
   const suffix = id.replace(/[^A-Za-z0-9]/g, "").slice(-7).toLowerCase() || "user"
   return `${local}.${suffix}`.slice(0, 32)
+}
+
+function mimeFromKey(key: string) {
+  const ext = key.split(".").pop()?.toLowerCase()
+  if (ext === "mp4") return "video/mp4"
+  if (ext === "webm") return "video/webm"
+  if (ext === "mov") return "video/quicktime"
+  if (ext === "png") return "image/png"
+  if (ext === "webp") return "image/webp"
+  return "image/jpeg"
 }
 
 export async function POST(request: NextRequest) {
@@ -38,6 +49,16 @@ export async function POST(request: NextRequest) {
   if (!/\/(?:video|image)\//.test(key)) return NextResponse.json({ error: "INVALID_MEDIA_KIND" }, { status: 400 })
 
   const caption = safeText(input.caption, 2200)
+  const language = safeText(input.language, 16) || "ru"
+  const region = safeText(input.region, 16) || "KZ"
+  const moderation = await moderateShortsText(caption, { kind: "post", userKey: user.id, locale: language })
+  if (moderation.action === "block") {
+    return NextResponse.json({
+      error: "CONTENT_BLOCKED",
+      moderation: { action: moderation.action, labels: moderation.labels, score: moderation.score },
+    }, { status: 422 })
+  }
+
   const durationSeconds = Number.isFinite(Number(input.durationSeconds))
     ? Math.max(0, Math.min(86400, Math.floor(Number(input.durationSeconds))))
     : null
@@ -54,8 +75,8 @@ export async function POST(request: NextRequest) {
         username: generatedUsername(email, user.id),
         display_name: displayName,
         avatar_url: user.profilePictureUrl || null,
-        locale: "ru",
-        region: "KZ",
+        locale: language,
+        region,
       }),
     })
 
@@ -70,10 +91,10 @@ export async function POST(request: NextRequest) {
         media_url: mediaUrl,
         caption,
         hashtags: hashtags(caption),
-        language: safeText(input.language, 16) || "ru",
-        region: safeText(input.region, 16) || "KZ",
+        language,
+        region,
         duration_seconds: durationSeconds,
-        status: "published",
+        status: moderation.action === "review" ? "limited" : "published",
         visibility,
         can_remix: input.canRemix !== false,
         can_download: false,
@@ -82,7 +103,70 @@ export async function POST(request: NextRequest) {
       }),
     })
     const post = rows?.[0]
-    return NextResponse.json({ ok: true, post }, { status: 201 })
+    if (!post?.id) throw new Error("POST_INSERT_EMPTY")
+
+    if (moderation.action === "review") {
+      await shortsSupabaseRequest("malik_shorts_moderation_cases", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({
+          post_id: post.id,
+          profile_key: user.id,
+          source: "automated",
+          severity: moderation.score >= .72 ? "high" : "medium",
+          labels: { text: moderation.labels, score: moderation.score, provider: moderation.provider },
+          status: "open",
+          notes: moderation.reason || "Automated publish preflight queued this Short for review.",
+        }),
+      }).catch(() => undefined)
+    }
+
+    const kind = key.includes("/video/") ? "video" : "image"
+    const assetRows = await shortsSupabaseRequest<any[]>("malik_shorts_media_assets", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ owner_key: user.id, post_id: post.id, kind, storage_key: key, source_url: mediaUrl, mime_type: mimeFromKey(key), duration_ms: durationSeconds == null ? null : durationSeconds * 1000, status: "uploaded" }),
+    }).catch(() => [])
+    const asset = assetRows?.[0] || null
+
+    await shortsSupabaseRequest("malik_shorts_rights_provenance?on_conflict=post_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ post_id: post.id, source_provider: "malik", canonical_url: `https://malikaiworld.world/shorts/malik/${post.id}`, provider_owner_id: user.id, provider_owner_name: displayName, ingestion_method: "native_upload", rights_basis: "creator_owned", attribution_required: false, download_allowed: false, remix_allowed: input.canRemix !== false, commercial_use_allowed: false, takedown_status: "clear" }),
+    }).catch(() => undefined)
+
+    if (asset?.id) {
+      const jobTypes = kind === "video"
+        ? ["virus_scan", "probe", "fingerprint", "thumbnail", "transcode_hls", "caption", "moderation", "embedding"]
+        : ["virus_scan", "fingerprint", "thumbnail", "moderation", "embedding"]
+      const makeJobs = (types: string[]) => types.map((jobType, index) => ({
+        asset_id: asset.id,
+        job_type: jobType,
+        status: "queued",
+        priority: 50 + index * 10,
+        payload: { postId: post.id, language, region },
+      }))
+      await shortsSupabaseRequest("malik_shorts_media_jobs", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify(makeJobs(jobTypes)),
+      }).catch(async () => {
+        // Backward-compatible deployment path while the v3 DB migration rolls out.
+        await shortsSupabaseRequest("malik_shorts_media_jobs", {
+          method: "POST",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify(makeJobs(jobTypes.filter((type) => type !== "fingerprint"))),
+        }).catch(() => undefined)
+      })
+    }
+
+    return NextResponse.json({
+      ok: true,
+      post,
+      assetId: asset?.id || null,
+      processingQueued: Boolean(asset?.id),
+      moderation: { action: moderation.action, labels: moderation.labels, score: moderation.score },
+    }, { status: 201 })
   } catch (error) {
     console.error("[Malik Shorts] publish failed", error)
     return NextResponse.json({ error: "PUBLISH_FAILED" }, { status: 500 })

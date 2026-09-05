@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
+import { rankAndDiversify, type RankingContext } from "@/lib/shorts/ranking"
 import {
   clampInt,
   getShortsSupabaseConfig,
@@ -57,6 +59,8 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
     : row.playback_kind === "tiktok"
       ? { kind: "tiktok" as const, videoId: String(row.source_id || ""), canonicalUrl: row.source_url || undefined }
       : { kind: "native" as const, url: String(row.media_url || ""), poster: row.poster_url || undefined }
+  const creatorKey = String(row.creator_key || "")
+  const providerShadowCreator = creatorKey.startsWith(`${source}:`)
 
   return {
     id: String(row.id),
@@ -65,14 +69,14 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
     sourceUrl: row.source_url || undefined,
     posterUrl: row.poster_url || undefined,
     creator: {
-      id: String(row.creator_key),
+      id: creatorKey,
       username: String(row.username || "creator"),
       displayName: String(row.display_name || row.username || "Creator"),
       avatarUrl: row.avatar_url || undefined,
       bio: row.bio || undefined,
       verified: Boolean(row.verified),
       external: source !== "malik",
-      claimed: source === "malik" || source === "tiktok",
+      claimed: source === "malik" || !providerShadowCreator,
     },
     playback,
     caption: String(row.caption || ""),
@@ -113,7 +117,7 @@ async function fetchYouTubeCandidates(limit: number, language: string, region: s
   const searchUrl = new URL("https://www.googleapis.com/youtube/v3/search")
   searchUrl.searchParams.set("part", "snippet")
   searchUrl.searchParams.set("type", "video")
-  searchUrl.searchParams.set("maxResults", String(Math.min(24, Math.max(8, limit))))
+  searchUrl.searchParams.set("maxResults", String(Math.min(24, Math.max(8, limit * 2))))
   searchUrl.searchParams.set("regionCode", region.slice(0, 2).toUpperCase() || "KZ")
   searchUrl.searchParams.set("relevanceLanguage", language === "kk" ? "kk" : language === "en" ? "en" : "ru")
   searchUrl.searchParams.set("safeSearch", "moderate")
@@ -302,49 +306,122 @@ function uniqueBySource(items: MalikShortItem[]) {
   })
 }
 
-function mixSources(items: MalikShortItem[], limit: number) {
-  const buckets: Record<MalikShortSource, MalikShortItem[]> = { malik: [], tiktok: [], youtube: [] }
-  for (const item of items) buckets[item.source].push(item)
-  const pattern: MalikShortSource[] = ["malik", "youtube", "malik", "tiktok", "youtube"]
-  const output: MalikShortItem[] = []
-  let guard = 0
-  while (output.length < limit && guard < limit * 10) {
-    const source = pattern[guard % pattern.length]
-    const item = buckets[source].shift()
-    if (item) output.push(item)
-    else {
-      const fallback = buckets.malik.shift() || buckets.tiktok.shift() || buckets.youtube.shift()
-      if (fallback) output.push(fallback)
-      else break
-    }
-    guard += 1
+async function buildRankingContext(items: MalikShortItem[], userKey: string | undefined, language: string, region: string): Promise<RankingContext> {
+  const context: RankingContext = { language, region }
+  if (!userKey || !getShortsSupabaseConfig()) return context
+  const encodedUser = encodeURIComponent(userKey)
+  const ids = items.map((item) => item.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+  const inIds = ids.length ? `(${ids.join(",")})` : ""
+
+  const [events, interests, blocks, mutes, topics, features] = await Promise.all([
+    shortsSupabaseRequest<any[]>(`malik_shorts_event_stream_v2?select=post_id,creator_key,source,event_type,watch_ms,duration_ms,created_at&user_key=eq.${encodedUser}&order=created_at.desc&limit=1200`).catch(() => []),
+    shortsSupabaseRequest<any[]>(`malik_shorts_user_interests?select=weight,malik_shorts_topics(slug)&user_key=eq.${encodedUser}&order=weight.desc&limit=200`).catch(() => []),
+    shortsSupabaseRequest<any[]>(`malik_shorts_blocks?select=blocked_key&blocker_key=eq.${encodedUser}&limit=1000`).catch(() => []),
+    shortsSupabaseRequest<any[]>(`malik_shorts_mutes?select=muted_key&muter_key=eq.${encodedUser}&limit=1000`).catch(() => []),
+    inIds ? shortsSupabaseRequest<any[]>(`malik_shorts_post_topics?select=post_id,malik_shorts_topics(slug)&post_id=in.${inIds}&limit=2000`).catch(() => []) : Promise.resolve([]),
+    inIds ? shortsSupabaseRequest<any[]>(`malik_shorts_post_features?select=post_id,quality_score,safety_score,novelty_score,creator_quality&post_id=in.${inIds}&limit=500`).catch(() => []) : Promise.resolve([]),
+  ])
+
+  const creatorAffinity = new Map<string, number>()
+  const sourceAffinity = new Map<MalikShortSource, number>()
+  const notInterestedPosts = new Set<string>()
+  const eventWeight: Record<string, number> = {
+    complete: .18, rewatch: .28, like: .2, comment: .32, comment_reply: .36, save: .38,
+    share: .42, follow: .55, profile_view: .16, skip: -.18, not_interested: -1, report: -1,
   }
-  return output
+  for (const event of events) {
+    const weight = eventWeight[String(event.event_type)] || 0
+    if (event.creator_key && weight) creatorAffinity.set(String(event.creator_key), Math.max(-1, Math.min(1, (creatorAffinity.get(String(event.creator_key)) || 0) + weight)))
+    const source = String(event.source || "") as MalikShortSource
+    if (["malik", "youtube", "tiktok"].includes(source) && weight) sourceAffinity.set(source, Math.max(-1, Math.min(1, (sourceAffinity.get(source) || 0) + weight * .5)))
+    if (event.post_id && String(event.event_type) === "not_interested") notInterestedPosts.add(String(event.post_id))
+  }
+
+  const topicAffinity = new Map<string, number>()
+  for (const row of interests) {
+    const slug = String(row?.malik_shorts_topics?.slug || "")
+    if (slug) topicAffinity.set(slug, Math.max(-1, Math.min(1, Number(row.weight || 0) / 10)))
+  }
+  const postTopics = new Map<string, string[]>()
+  for (const row of topics) {
+    const postId = String(row.post_id || "")
+    const slug = String(row?.malik_shorts_topics?.slug || "")
+    if (!postId || !slug) continue
+    postTopics.set(postId, [...(postTopics.get(postId) || []), slug])
+  }
+  const postFeatures = new Map<string, { quality?: number; safety?: number; novelty?: number; creatorQuality?: number }>()
+  for (const row of features) postFeatures.set(String(row.post_id), {
+    quality: Number(row.quality_score), safety: Number(row.safety_score), novelty: Number(row.novelty_score), creatorQuality: Number(row.creator_quality),
+  })
+
+  return {
+    ...context,
+    creatorAffinity,
+    sourceAffinity,
+    topicAffinity,
+    postTopics,
+    postFeatures,
+    blockedCreators: new Set(blocks.map((row) => String(row.blocked_key))),
+    mutedCreators: new Set(mutes.map((row) => String(row.muted_key))),
+    notInterestedPosts,
+  }
+}
+
+async function recordImpressions(items: ReturnType<typeof rankAndDiversify>, userKey: string | undefined, sessionId: string, requestId: string) {
+  if (!getShortsSupabaseConfig() || !items.length) return
+  const rows = items.flatMap((entry, index) => /^[0-9a-f-]{36}$/i.test(entry.item.id) ? [{
+    user_key: userKey || null,
+    anonymous_key: userKey ? null : `session:${sessionId}`,
+    session_id: sessionId,
+    request_id: requestId,
+    post_id: entry.item.id,
+    source: entry.item.source,
+    rank_position: index,
+    score: entry.score,
+    model_version: "malik-ranker-v2.1",
+    reasons: entry.reasons,
+    experiment_buckets: {},
+  }] : [])
+  if (!rows.length) return
+  await shortsSupabaseRequest("malik_shorts_recommendation_impressions", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(rows),
+  }).catch(() => undefined)
 }
 
 export async function GET(request: NextRequest) {
   const limit = clampInt(request.nextUrl.searchParams.get("limit"), 6, 30, 16)
   const language = request.nextUrl.searchParams.get("lang") || "ru"
   const region = request.nextUrl.searchParams.get("region") || "KZ"
+  const sessionId = String(request.nextUrl.searchParams.get("sessionId") || randomUUID()).slice(0, 160)
+  const requestId = randomUUID()
   const { user } = await getOptionalWorkOSAuth()
 
   let dbItems: MalikShortItem[] = []
   if (getShortsSupabaseConfig()) {
     const rows = await shortsSupabaseRequest<DbFeedRow[]>(
-      `malik_shorts_feed_v1?select=*&source=in.(malik,tiktok)&order=published_at.desc.nullslast,created_at.desc&limit=${Math.min(limit * 2, 50)}`,
+      `malik_shorts_feed_v1?select=*&source=in.(malik,youtube,tiktok)&order=published_at.desc.nullslast,created_at.desc&limit=${Math.min(limit * 5, 120)}`,
     ).catch(() => [] as DbFeedRow[])
     dbItems = rows.map(mapDbRow)
   }
 
-  const youtubeCandidates: YouTubeCandidate[] = await fetchYouTubeCandidates(limit, language, region).catch(() => [] as YouTubeCandidate[])
+  const youtubeCandidates = await fetchYouTubeCandidates(limit * 2, language, region).catch(() => [] as YouTubeCandidate[])
   const youtubeIdMap = await materializeYouTube(youtubeCandidates).catch(() => new Map<string, string>())
-  const youtubeItems: MalikShortItem[] = youtubeCandidates.map((item: YouTubeCandidate) => mapYouTubeCandidate(item, youtubeIdMap.get(item.videoId)))
+  const youtubeItems = youtubeCandidates.map((item) => mapYouTubeCandidate(item, youtubeIdMap.get(item.videoId)))
 
-  const mixed = mixSources(uniqueBySource([...dbItems, ...youtubeItems]), limit)
-  const items = await hydrateViewerState(mixed, user?.id)
-  const payload: MalikShortFeedResponse = {
+  const candidates = uniqueBySource([...dbItems, ...youtubeItems])
+  const hydrated = await hydrateViewerState(candidates, user?.id)
+  const rankingContext = await buildRankingContext(hydrated, user?.id, language, region)
+  const ranked = rankAndDiversify(hydrated, rankingContext, limit)
+  const items = ranked.map((entry) => entry.item)
+  void recordImpressions(ranked, user?.id, sessionId, requestId)
+
+  const payload: MalikShortFeedResponse & { requestId: string; modelVersion: string } = {
     items,
     generatedAt: new Date().toISOString(),
+    requestId,
+    modelVersion: "malik-ranker-v2.1",
     sources: {
       malik: items.some((item) => item.source === "malik"),
       youtube: items.some((item) => item.source === "youtube"),

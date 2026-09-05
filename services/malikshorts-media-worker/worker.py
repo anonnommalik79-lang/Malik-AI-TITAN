@@ -1,0 +1,488 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import mimetypes
+import os
+import shutil
+import subprocess
+import tempfile
+import time
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+BASE_URL = os.getenv("MALIK_SHORTS_WORKER_BASE_URL", "https://malikaiworld.world").rstrip("/")
+TOKEN = os.getenv("MALIK_SHORTS_WORKER_TOKEN", "").strip()
+WORKER_ID = os.getenv("MALIK_SHORTS_WORKER_ID", "media-ffmpeg-1").strip() or "media-ffmpeg-1"
+POLL_SECONDS = max(1.0, float(os.getenv("MALIK_SHORTS_MEDIA_POLL_SECONDS", "3")))
+HTTP_TIMEOUT = max(15.0, float(os.getenv("MALIK_SHORTS_MEDIA_HTTP_TIMEOUT_SECONDS", "180")))
+FFMPEG = os.getenv("FFMPEG_BIN", "ffmpeg").strip() or "ffmpeg"
+FFPROBE = os.getenv("FFPROBE_BIN", "ffprobe").strip() or "ffprobe"
+
+CLAIM_TYPES = ["probe", "fingerprint", "thumbnail", "transcode_hls"]
+BITRATES = {360: 800, 540: 1500, 720: 2800, 1080: 5000}
+
+
+def require_runtime() -> None:
+    missing = []
+    if len(TOKEN) < 32:
+        missing.append("MALIK_SHORTS_WORKER_TOKEN")
+    if shutil.which(FFMPEG) is None:
+        missing.append(f"ffmpeg({FFMPEG})")
+    if shutil.which(FFPROBE) is None:
+        missing.append(f"ffprobe({FFPROBE})")
+    if missing:
+        raise RuntimeError("Missing media-worker runtime requirements: " + ", ".join(missing))
+
+
+def worker_headers() -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {TOKEN}",
+        "X-Worker-Id": WORKER_ID,
+        "Content-Type": "application/json",
+        "User-Agent": "MalikShortsMediaWorker/1.2",
+    }
+
+
+def api_post(client: httpx.Client, payload: dict[str, Any]) -> dict[str, Any]:
+    response = client.post(f"{BASE_URL}/api/shorts/workers/media", headers=worker_headers(), json=payload)
+    response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, dict) else {}
+
+
+def claim(client: httpx.Client) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    payload = api_post(client, {"action": "claim", "jobTypes": CLAIM_TYPES})
+    job = payload.get("job")
+    asset = payload.get("asset")
+    return (job if isinstance(job, dict) else None, asset if isinstance(asset, dict) else None)
+
+
+def finish(client: httpx.Client, job_id: str, success: bool, result: dict[str, Any] | None = None, error: str | None = None) -> None:
+    payload = api_post(client, {
+        "action": "finish",
+        "jobId": job_id,
+        "success": success,
+        "result": result or {},
+        "error": (error or "")[:4000],
+    })
+    if not payload.get("ok"):
+        raise RuntimeError(f"worker finish rejected for job {job_id}")
+
+
+def sign_output(client: httpx.Client, asset_id: str, key: str, content_type: str) -> dict[str, Any]:
+    response = client.post(
+        f"{BASE_URL}/api/shorts/workers/storage",
+        headers=worker_headers(),
+        json={"assetId": asset_id, "key": key, "contentType": content_type},
+    )
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict) or not data.get("uploadUrl") or not data.get("publicUrl"):
+        raise RuntimeError(f"signed output URL missing for {key}")
+    return data
+
+
+def upload(client: httpx.Client, asset_id: str, path: Path, key: str, content_type: str) -> str:
+    signed = sign_output(client, asset_id, key, content_type)
+    with path.open("rb") as handle:
+        response = client.put(
+            str(signed["uploadUrl"]),
+            headers={"Content-Type": str(signed.get("contentType") or content_type)},
+            content=handle,
+        )
+    response.raise_for_status()
+    return str(signed["publicUrl"])
+
+
+def run_json(command: list[str]) -> dict[str, Any]:
+    proc = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    data = json.loads(proc.stdout or "{}")
+    return data if isinstance(data, dict) else {}
+
+
+def parse_fraction(value: Any) -> float | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        if "/" in raw:
+            left, right = raw.split("/", 1)
+            denominator = float(right)
+            return float(left) / denominator if denominator else None
+        return float(raw)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+def probe_file(path: Path, asset: dict[str, Any]) -> dict[str, Any]:
+    payload = run_json([
+        FFPROBE,
+        "-v", "error",
+        "-print_format", "json",
+        "-show_format",
+        "-show_streams",
+        str(path),
+    ])
+    streams = payload.get("streams") if isinstance(payload.get("streams"), list) else []
+    video = next((stream for stream in streams if isinstance(stream, dict) and stream.get("codec_type") == "video"), {})
+    audio = next((stream for stream in streams if isinstance(stream, dict) and stream.get("codec_type") == "audio"), {})
+    fmt = payload.get("format") if isinstance(payload.get("format"), dict) else {}
+
+    duration_seconds = 0.0
+    for candidate in [video.get("duration"), fmt.get("duration")]:
+        try:
+            duration_seconds = max(duration_seconds, float(candidate or 0))
+        except (TypeError, ValueError):
+            pass
+
+    width = int(video.get("width") or 0)
+    height = int(video.get("height") or 0)
+    size = path.stat().st_size
+    mime = str(asset.get("mime_type") or mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+    fps = parse_fraction(video.get("avg_frame_rate") or video.get("r_frame_rate"))
+
+    return {
+        "width": width,
+        "height": height,
+        "bytes": size,
+        "durationMs": max(0, int(duration_seconds * 1000)),
+        "mimeType": mime,
+        "codec": str(video.get("codec_name") or ""),
+        "audioCodec": str(audio.get("codec_name") or ""),
+        "hasAudio": bool(audio),
+        "fps": round(fps, 4) if fps is not None else None,
+    }
+
+
+def download_source(client: httpx.Client, asset: dict[str, Any], destination: Path) -> Path:
+    source_url = str(asset.get("source_url") or "").strip()
+    if not source_url.startswith(("https://", "http://")):
+        raise RuntimeError("asset source_url is missing or invalid")
+    with client.stream("GET", source_url, follow_redirects=True) as response:
+        response.raise_for_status()
+        with destination.open("wb") as handle:
+            for chunk in response.iter_bytes(1024 * 1024):
+                handle.write(chunk)
+    if not destination.exists() or destination.stat().st_size <= 0:
+        raise RuntimeError("downloaded media is empty")
+    return destination
+
+
+def even(value: float | int) -> int:
+    number = max(2, int(round(float(value))))
+    return number if number % 2 == 0 else number - 1
+
+
+def output_dimensions(width: int, height: int, short_edge: int) -> tuple[int, int]:
+    if width <= 0 or height <= 0:
+        raise RuntimeError("media has no video dimensions")
+    if width <= height:
+        out_width = even(short_edge)
+        out_height = even(height * out_width / width)
+    else:
+        out_height = even(short_edge)
+        out_width = even(width * out_height / height)
+    return out_width, out_height
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def perceptual_video_fingerprint(path: Path) -> str | None:
+    command = [
+        FFMPEG, "-v", "error", "-i", str(path),
+        "-vf", "fps=1/5,scale=9:8:flags=area,format=gray",
+        "-frames:v", "64",
+        "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1",
+    ]
+    proc = subprocess.run(command, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0 or not proc.stdout:
+        return None
+    frame_size = 9 * 8
+    hashes: list[str] = []
+    raw = proc.stdout
+    for offset in range(0, len(raw) - frame_size + 1, frame_size):
+        frame = raw[offset:offset + frame_size]
+        bits = 0
+        for row in range(8):
+            base = row * 9
+            for col in range(8):
+                bits = (bits << 1) | int(frame[base + col] > frame[base + col + 1])
+        hashes.append(f"{bits:016x}")
+    if not hashes:
+        return None
+    return hashlib.sha256("|".join(hashes).encode("ascii")).hexdigest()
+
+
+def audio_energy_fingerprint(path: Path) -> str | None:
+    command = [
+        FFMPEG, "-v", "error", "-i", str(path),
+        "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "pipe:1",
+    ]
+    proc = subprocess.run(command, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    pcm = proc.stdout
+    if proc.returncode != 0 or len(pcm) < 3200:
+        return None
+    window_bytes = 8000 * 2
+    buckets: list[int] = []
+    for offset in range(0, min(len(pcm), window_bytes * 180), window_bytes):
+        chunk = pcm[offset:offset + window_bytes]
+        if len(chunk) < 400:
+            break
+        total = 0
+        count = 0
+        for index in range(0, len(chunk) - 1, 2):
+            sample = int.from_bytes(chunk[index:index + 2], "little", signed=True)
+            total += abs(sample)
+            count += 1
+        average = total / max(1, count)
+        buckets.append(min(255, int(average / 128)))
+    if not buckets:
+        return None
+    return hashlib.sha256(bytes(buckets)).hexdigest()
+
+
+def fingerprint_media(source: Path, asset: dict[str, Any]) -> dict[str, Any]:
+    probe = probe_file(source, asset)
+    kind = str(asset.get("kind") or "")
+    result: dict[str, Any] = {
+        "exactSha256": sha256_file(source),
+        "durationMs": int(probe.get("durationMs") or 0),
+        "width": int(probe.get("width") or 0),
+        "height": int(probe.get("height") or 0),
+        "algorithmVersion": "malik-fp-v1",
+    }
+    if kind == "video":
+        result["videoFingerprint"] = perceptual_video_fingerprint(source)
+        if probe.get("hasAudio"):
+            result["audioFingerprint"] = audio_energy_fingerprint(source)
+    return result
+
+
+def make_thumbnail(client: httpx.Client, source: Path, asset: dict[str, Any], workdir: Path) -> dict[str, Any]:
+    probe = probe_file(source, asset)
+    width = int(probe.get("width") or 0)
+    height = int(probe.get("height") or 0)
+    if width <= 0 or height <= 0:
+        raise RuntimeError("thumbnail source has no decodable image/video stream")
+
+    target_short = min(720, min(width, height))
+    out_width, out_height = output_dimensions(width, height, target_short)
+    poster = workdir / "poster.jpg"
+    duration_ms = int(probe.get("durationMs") or 0)
+    seek = min(2.0, max(0.0, duration_ms / 1000.0 * 0.1))
+    command = [FFMPEG, "-y"]
+    if duration_ms > 0:
+        command += ["-ss", f"{seek:.3f}"]
+    command += [
+        "-i", str(source),
+        "-frames:v", "1",
+        "-vf", f"scale={out_width}:{out_height}",
+        "-q:v", "2",
+        str(poster),
+    ]
+    subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    if not poster.exists() or poster.stat().st_size <= 0:
+        raise RuntimeError("ffmpeg produced no poster")
+
+    asset_id = str(asset.get("id") or "").strip()
+    if not asset_id:
+        raise RuntimeError("asset id missing")
+    key = f"shorts/renditions/{asset_id}/poster.jpg"
+    url = upload(client, asset_id, poster, key, "image/jpeg")
+    return {"storageKey": key, "publicUrl": url, "width": out_width, "height": out_height}
+
+
+def transcode_hls(client: httpx.Client, source: Path, asset: dict[str, Any], workdir: Path) -> dict[str, Any]:
+    probe = probe_file(source, asset)
+    source_width = int(probe.get("width") or 0)
+    source_height = int(probe.get("height") or 0)
+    if source_width <= 0 or source_height <= 0:
+        raise RuntimeError("transcode source has no decodable video stream")
+
+    source_short = min(source_width, source_height)
+    targets = [value for value in (360, 540, 720, 1080) if value <= source_short]
+    if not targets:
+        targets = [max(144, even(source_short))]
+
+    asset_id = str(asset.get("id") or "").strip()
+    if not asset_id:
+        raise RuntimeError("asset id missing")
+    base_key = f"shorts/renditions/{asset_id}/hls"
+    variants: list[dict[str, Any]] = []
+    master_lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-INDEPENDENT-SEGMENTS"]
+
+    for target in targets:
+        bitrate = BITRATES.get(target, max(500, int(target * 4)))
+        out_width, out_height = output_dimensions(source_width, source_height, target)
+        variant_name = f"v{target}"
+        variant_dir = workdir / variant_name
+        variant_dir.mkdir(parents=True, exist_ok=True)
+        playlist = variant_dir / "index.m3u8"
+        segment_pattern = variant_dir / "seg_%05d.ts"
+
+        command = [
+            FFMPEG, "-y",
+            "-i", str(source),
+            "-map", "0:v:0",
+            "-map", "0:a?",
+            "-vf", f"scale={out_width}:{out_height}",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-profile:v", "high",
+            "-pix_fmt", "yuv420p",
+            "-crf", "21",
+            "-maxrate", f"{bitrate}k",
+            "-bufsize", f"{bitrate * 2}k",
+            "-g", "60",
+            "-keyint_min", "60",
+            "-sc_threshold", "0",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-ac", "2",
+            "-ar", "48000",
+            "-f", "hls",
+            "-hls_time", "4",
+            "-hls_playlist_type", "vod",
+            "-hls_flags", "independent_segments",
+            "-hls_segment_filename", str(segment_pattern),
+            str(playlist),
+        ]
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        if not playlist.exists():
+            raise RuntimeError(f"ffmpeg produced no HLS playlist for {target}")
+
+        variant_prefix = f"{base_key}/{variant_name}"
+        playlist_url = ""
+        for file in sorted(variant_dir.iterdir()):
+            if not file.is_file():
+                continue
+            if file.suffix == ".ts":
+                content_type = "video/mp2t"
+            elif file.suffix == ".m3u8":
+                content_type = "application/vnd.apple.mpegurl"
+            else:
+                continue
+            key = f"{variant_prefix}/{file.name}"
+            uploaded_url = upload(client, asset_id, file, key, content_type)
+            if file.name == "index.m3u8":
+                playlist_url = uploaded_url
+
+        playlist_key = f"{variant_prefix}/index.m3u8"
+        if not playlist_url:
+            raise RuntimeError(f"variant playlist upload missing for {target}")
+        bandwidth = (bitrate + 128) * 1000
+        master_lines.append(f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},AVERAGE-BANDWIDTH={int(bandwidth * 0.9)},RESOLUTION={out_width}x{out_height},CODECS="avc1.64001f,mp4a.40.2"')
+        master_lines.append(f"{variant_name}/index.m3u8")
+        variants.append({
+            "storageKey": playlist_key,
+            "publicUrl": playlist_url,
+            "width": out_width,
+            "height": out_height,
+            "bitrateKbps": bitrate,
+            "codec": "h264+aac",
+        })
+
+    master = workdir / "master.m3u8"
+    master.write_text("\n".join(master_lines) + "\n", encoding="utf-8")
+    master_key = f"{base_key}/master.m3u8"
+    master_url = upload(client, asset_id, master, master_key, "application/vnd.apple.mpegurl")
+
+    fallback_target = 720 if 720 in targets else max(targets)
+    fallback_width, fallback_height = output_dimensions(source_width, source_height, fallback_target)
+    fallback_bitrate = BITRATES.get(fallback_target, max(900, int(fallback_target * 4)))
+    fallback = workdir / "progressive.mp4"
+    subprocess.run([
+        FFMPEG, "-y", "-i", str(source),
+        "-map", "0:v:0", "-map", "0:a?",
+        "-vf", f"scale={fallback_width}:{fallback_height}",
+        "-c:v", "libx264", "-preset", "veryfast", "-profile:v", "high", "-pix_fmt", "yuv420p",
+        "-crf", "21", "-maxrate", f"{fallback_bitrate}k", "-bufsize", f"{fallback_bitrate * 2}k",
+        "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "48000",
+        "-movflags", "+faststart",
+        str(fallback),
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    if not fallback.exists() or fallback.stat().st_size <= 0:
+        raise RuntimeError("ffmpeg produced no progressive fallback")
+    fallback_key = f"shorts/renditions/{asset_id}/progressive.mp4"
+    fallback_url = upload(client, asset_id, fallback, fallback_key, "video/mp4")
+
+    return {
+        "masterKey": master_key,
+        "masterUrl": master_url,
+        "variants": variants,
+        "fallback": {
+            "storageKey": fallback_key,
+            "publicUrl": fallback_url,
+            "width": fallback_width,
+            "height": fallback_height,
+            "bitrateKbps": fallback_bitrate,
+            "codec": "h264+aac",
+            "bytes": fallback.stat().st_size,
+        },
+    }
+
+
+def process_job(client: httpx.Client, job: dict[str, Any], asset: dict[str, Any]) -> dict[str, Any]:
+    job_type = str(job.get("job_type") or "")
+    asset_id = str(asset.get("id") or "")
+    suffix = Path(str(asset.get("storage_key") or "media.bin")).suffix or ".bin"
+    with tempfile.TemporaryDirectory(prefix=f"malik-shorts-{asset_id[:8]}-") as temp:
+        workdir = Path(temp)
+        source = download_source(client, asset, workdir / f"source{suffix}")
+        if job_type == "probe":
+            return probe_file(source, asset)
+        if job_type == "fingerprint":
+            return fingerprint_media(source, asset)
+        if job_type == "thumbnail":
+            return make_thumbnail(client, source, asset, workdir)
+        if job_type == "transcode_hls":
+            return transcode_hls(client, source, asset, workdir)
+        raise RuntimeError(f"unsupported job type for ffmpeg worker: {job_type}")
+
+
+def main() -> None:
+    require_runtime()
+    print(f"[Malik Shorts] media worker online id={WORKER_ID} base={BASE_URL} jobs={','.join(CLAIM_TYPES)}", flush=True)
+    with httpx.Client(timeout=httpx.Timeout(HTTP_TIMEOUT, connect=20.0), follow_redirects=True) as client:
+        while True:
+            try:
+                job, asset = claim(client)
+                if not job:
+                    time.sleep(POLL_SECONDS)
+                    continue
+                job_id = str(job.get("id") or "")
+                job_type = str(job.get("job_type") or "")
+                if not asset:
+                    finish(client, job_id, False, error="asset not found")
+                    continue
+                print(f"[Malik Shorts] processing job={job_id} type={job_type} asset={asset.get('id')}", flush=True)
+                try:
+                    result = process_job(client, job, asset)
+                    finish(client, job_id, True, result=result)
+                    print(f"[Malik Shorts] completed job={job_id} type={job_type}", flush=True)
+                except Exception as exc:
+                    message = f"{type(exc).__name__}: {exc}"
+                    print(f"[Malik Shorts] failed job={job_id} type={job_type}: {message}", flush=True)
+                    try:
+                        finish(client, job_id, False, error=message)
+                    except Exception as finish_exc:
+                        print(f"[Malik Shorts] finish callback failed job={job_id}: {finish_exc}", flush=True)
+            except KeyboardInterrupt:
+                print("[Malik Shorts] media worker stopped", flush=True)
+                return
+            except Exception as exc:
+                print(f"[Malik Shorts] worker loop error: {type(exc).__name__}: {exc}", flush=True)
+                time.sleep(max(POLL_SECONDS, 5.0))
+
+
+if __name__ == "__main__":
+    main()

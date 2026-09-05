@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
-import { MalikShortsApp } from "@/components/sovereign/shorts/MalikShortsApp"
+import { MalikShortsAppV2 } from "@/components/sovereign/shorts/MalikShortsAppV2"
+import { ShortsNavigationBridge } from "@/components/sovereign/shorts/ShortsNavigationBridge"
+import { ShortsOnboardingGate } from "@/components/sovereign/shorts/ShortsOnboardingGate"
 
 export const dynamic = "force-dynamic"
 
@@ -16,5 +18,9 @@ export const metadata: Metadata = {
 }
 
 export default function MalikShortsPage() {
-  return <MalikShortsApp />
+  return <>
+    <MalikShortsAppV2 />
+    <ShortsNavigationBridge />
+    <ShortsOnboardingGate />
+  </>
 }
