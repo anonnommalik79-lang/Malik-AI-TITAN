@@ -45,6 +45,7 @@ export type MalikShortItem = {
   source: MalikShortSource
   sourceId?: string
   sourceUrl?: string
+  posterUrl?: string
   creator: MalikShortCreator
   playback: MalikShortPlayback
   caption: string
