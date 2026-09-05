@@ -12,8 +12,10 @@ import {
   sanitizeHistory,
   tierFor,
 } from "@/lib/voice/conversation"
-
+import { getOptionalWorkOSAuth } from "@/lib/auth/server"
+import { appendFounderMessage } from "@/lib/server/founder-message-log"
 import { withCompute } from "@/lib/malik-compute/runtime"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -73,6 +75,33 @@ function fallbackReply(code: string) {
   return "Сейчас не получилось получить ответ. Попробуй сказать ещё раз через секунду."
 }
 
+function voiceIdentity(user: Awaited<ReturnType<typeof getOptionalWorkOSAuth>>["user"]) {
+  if (!user?.email) return { authenticated: false, userId: "guest" }
+  if (!user.emailVerified) return { authenticated: true, userId: `workos:${user.id}` }
+  return { authenticated: true, userId: user.email.trim().toLowerCase() }
+}
+
+async function recordVoiceTurn(input: {
+  authenticated: boolean
+  userId: string
+  text: string
+  content: string
+  provider: string
+  model: string
+}) {
+  if (!input.authenticated) return
+  await appendFounderMessage({
+    userId: input.userId,
+    source: "voice",
+    userText: input.text,
+    assistantText: input.content,
+    provider: input.provider,
+    model: input.model,
+  }).catch((error) => {
+    console.warn("[FOUNDER MESSAGE LOG] voice write skipped", error instanceof Error ? error.message : error)
+  })
+}
+
 /**
  * The streaming answer.
  *
@@ -96,8 +125,10 @@ function streamingResponse(input: {
   tier: ReturnType<typeof tierFor>
   search: Awaited<ReturnType<typeof voiceSearchContext>>
   signal: AbortSignal
+  authenticated: boolean
+  userId: string
 }): Response {
-  const { instruction, text, history, language, personality, tier, search, signal } = input
+  const { instruction, text, history, language, personality, tier, search, signal, authenticated, userId } = input
   const encoder = new TextEncoder()
   const frame = (event: string, data: unknown) => encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
 
@@ -180,6 +211,7 @@ function streamingResponse(input: {
             tier,
             temperature: abandoned ? 0.8 : undefined,
             signal,
+            userId,
             languageCode: language.code,
           })
           const fresh = String(retry.content || "").trim()
@@ -193,6 +225,8 @@ function streamingResponse(input: {
         }
         send("delta", { text: content })
       }
+
+      await recordVoiceTurn({ authenticated, userId, text, content, provider, model })
 
       send("done", {
         ok: true,
@@ -230,6 +264,9 @@ async function handlePOST(request: Request) {
   const personality = String(body?.personality || "Assistant")
   if (!raw) return Response.json({ ok: false, error: "Пустой Voice запрос" }, { status: 400 })
 
+  const { user } = await getOptionalWorkOSAuth()
+  const identity = voiceIdentity(user)
+
   // Browser speech recognition sends its text straight here without passing
   // through /api/transcribe, so the repair has to run on this path too.
   const text = repairTranscript(raw) || raw
@@ -266,11 +303,28 @@ async function handlePOST(request: Request) {
     // applied to something already spoken aloud.
     if (body?.stream && !greeting) {
       return streamingResponse({
-        instruction: grounded, text, history, language, personality, tier, search, signal: request.signal,
+        instruction: grounded,
+        text,
+        history,
+        language,
+        personality,
+        tier,
+        search,
+        signal: request.signal,
+        authenticated: identity.authenticated,
+        userId: identity.userId,
       })
     }
 
-    let answer = await voiceLlmAnswer({ text, instruction: grounded, history, tier, signal: request.signal, languageCode: language.code })
+    let answer = await voiceLlmAnswer({
+      text,
+      instruction: grounded,
+      history,
+      tier,
+      signal: request.signal,
+      userId: identity.userId,
+      languageCode: language.code,
+    })
     let content = String(answer.content || "").trim()
     let correctedGreeting = false
 
@@ -289,6 +343,7 @@ async function handlePOST(request: Request) {
         history,
         tier,
         signal: request.signal,
+        userId: identity.userId,
         languageCode: language.code,
       })
       content = String(answer.content || "").trim()
@@ -306,6 +361,7 @@ async function handlePOST(request: Request) {
         tier,
         temperature: 0.8,
         signal: request.signal,
+        userId: identity.userId,
         languageCode: language.code,
       })
       const fresh = String(retry.content || "").trim()
@@ -317,6 +373,15 @@ async function handlePOST(request: Request) {
     }
 
     if (!content || !looksLikeLanguage(content, language.code)) content = fallbackReply(language.code)
+
+    await recordVoiceTurn({
+      authenticated: identity.authenticated,
+      userId: identity.userId,
+      text,
+      content,
+      provider: answer.provider,
+      model: answer.model,
+    })
 
     return Response.json({
       ok: true,
@@ -340,9 +405,18 @@ async function handlePOST(request: Request) {
     }, { headers: { "cache-control": "no-store" } })
   } catch (error) {
     console.error("[VOICE_TURN_ERROR]", error instanceof Error ? error.message : error)
+    const content = fallbackReply(language.code)
+    await recordVoiceTurn({
+      authenticated: identity.authenticated,
+      userId: identity.userId,
+      text,
+      content,
+      provider: "voice-local-fallback",
+      model: "none",
+    })
     return Response.json({
       ok: true,
-      content: fallbackReply(language.code),
+      content,
       personality,
       language: language.code,
       languageLocale: language.locale,
