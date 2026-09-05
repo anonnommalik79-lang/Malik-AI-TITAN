@@ -20,9 +20,27 @@ services:
       - key: AI_FREE_MODE
         value: "true"
       - key: TEXT_PROVIDER_ORDER
-        value: "cerebras,groq,gemini,openrouter"
+        value: "modelscope,aihubmix,cerebras,groq,gemini,openrouter"
       - key: CODE_PROVIDER_ORDER
-        value: "cerebras,groq,gemini,openrouter"
+        value: "aihubmix,modelscope,cerebras,groq,gemini,openrouter"
+      - key: MODELSCOPE_API_KEY
+        sync: false
+      - key: MODELSCOPE_BASE_URL
+        value: https://api-inference.modelscope.cn/v1
+      - key: MALIK_QWEN_MODEL
+        value: Qwen/Qwen3.5-397B-A17B
+      - key: MALIK_REASON_MODEL
+        value: ZhipuAI/GLM-5.2
+      - key: MALIK_ERNIE_MODEL
+        value: PaddlePaddle/ERNIE-4.5-300B-A47B-PT
+      - key: AIHUBMIX_API_KEY
+        sync: false
+      - key: AIHUBMIX_BASE_URL
+        value: https://aihubmix.com/v1
+      - key: AIHUBMIX_PRIMARY_MODEL
+        value: coding-glm-5.3-free
+      - key: AIHUBMIX_VISION_MODEL
+        value: coding-kimi-k3-free
       - key: CEREBRAS_API_KEY
         sync: false
       - key: CEREBRAS_BASE_URL
