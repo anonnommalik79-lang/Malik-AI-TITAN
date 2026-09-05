@@ -4,11 +4,12 @@ import { isAuthorizedShortsWorker, shortsWorkerConfigured, workerName } from "@/
 
 export const dynamic = "force-dynamic"
 const UUID = /^[0-9a-f-]{36}$/i
-const MEDIA_JOB_TYPES = new Set(["virus_scan","probe","transcode_hls","thumbnail","caption","moderation","embedding","cleanup"])
+const HEX64 = /^[0-9a-f]{64}$/i
+const MEDIA_JOB_TYPES = new Set(["virus_scan","probe","fingerprint","transcode_hls","thumbnail","caption","moderation","embedding","cleanup"])
 
 type WorkerResult = Record<string, unknown>
 type JobRow = { id: string; asset_id: string; job_type: string }
-type AssetRow = { id: string; post_id?: string | null }
+type AssetRow = { id: string; post_id?: string | null; owner_key?: string | null }
 
 function positiveInt(value: unknown, max = 2_000_000_000) {
   const number = Math.floor(Number(value))
@@ -24,8 +25,98 @@ function safeUrl(value: unknown) {
   } catch { return null }
 }
 
+function safeFingerprint(value: unknown) {
+  const text = safeText(value, 256).toLowerCase()
+  return HEX64.test(text) ? text : null
+}
+
+async function persistFingerprint(asset: AssetRow, result: WorkerResult) {
+  const exactSha256 = safeFingerprint(result.exactSha256)
+  const videoFingerprint = safeFingerprint(result.videoFingerprint)
+  const audioFingerprint = safeFingerprint(result.audioFingerprint)
+  if (!exactSha256 && !videoFingerprint && !audioFingerprint) return
+
+  const durationMs = positiveInt(result.durationMs, 86_400_000)
+  const width = positiveInt(result.width, 100_000)
+  const height = positiveInt(result.height, 100_000)
+  const algorithmVersion = safeText(result.algorithmVersion, 80) || "malik-fp-v1"
+
+  await shortsSupabaseRequest("malik_shorts_media_fingerprints?on_conflict=asset_id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({
+      asset_id: asset.id,
+      post_id: asset.post_id || null,
+      exact_sha256: exactSha256,
+      video_fingerprint: videoFingerprint,
+      audio_fingerprint: audioFingerprint,
+      duration_ms: durationMs,
+      width,
+      height,
+      algorithm_version: algorithmVersion,
+      metadata: { workerRecordedAt: new Date().toISOString() },
+    }),
+  }).catch(() => undefined)
+
+  if (exactSha256) {
+    await shortsSupabaseRequest(`malik_shorts_media_assets?id=eq.${asset.id}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ sha256: exactSha256, updated_at: new Date().toISOString() }),
+    }).catch(() => undefined)
+  }
+
+  const matches: Array<{ asset_id: string; match_kind: "exact" | "video_fingerprint" | "audio_fingerprint"; score: number }> = []
+  if (exactSha256) {
+    const rows = await shortsSupabaseRequest<any[]>(`malik_shorts_media_fingerprints?select=asset_id&exact_sha256=eq.${exactSha256}&asset_id=neq.${asset.id}&limit=8`).catch(() => [])
+    for (const row of rows) if (UUID.test(String(row.asset_id || ""))) matches.push({ asset_id: String(row.asset_id), match_kind: "exact", score: 1 })
+  }
+  if (!matches.length && videoFingerprint) {
+    const rows = await shortsSupabaseRequest<any[]>(`malik_shorts_media_fingerprints?select=asset_id&video_fingerprint=eq.${videoFingerprint}&asset_id=neq.${asset.id}&limit=8`).catch(() => [])
+    for (const row of rows) if (UUID.test(String(row.asset_id || ""))) matches.push({ asset_id: String(row.asset_id), match_kind: "video_fingerprint", score: .96 })
+  }
+  if (!matches.length && audioFingerprint) {
+    const rows = await shortsSupabaseRequest<any[]>(`malik_shorts_media_fingerprints?select=asset_id&audio_fingerprint=eq.${audioFingerprint}&asset_id=neq.${asset.id}&limit=8`).catch(() => [])
+    for (const row of rows) if (UUID.test(String(row.asset_id || ""))) matches.push({ asset_id: String(row.asset_id), match_kind: "audio_fingerprint", score: .9 })
+  }
+
+  if (!matches.length) return
+  const deduped = Array.from(new Map(matches.map((match) => [`${match.asset_id}:${match.match_kind}`, match])).values()).slice(0, 8)
+  await shortsSupabaseRequest("malik_shorts_duplicate_matches?on_conflict=source_asset_id,matched_asset_id,match_kind", {
+    method: "POST",
+    headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
+    body: JSON.stringify(deduped.map((match) => ({
+      source_asset_id: asset.id,
+      matched_asset_id: match.asset_id,
+      match_kind: match.match_kind,
+      score: match.score,
+      status: "review",
+      metadata: { algorithmVersion, detectedAt: new Date().toISOString() },
+    }))),
+  }).catch(() => undefined)
+
+  if (asset.post_id) {
+    await shortsSupabaseRequest("malik_shorts_moderation_cases", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        post_id: asset.post_id,
+        profile_key: asset.owner_key || null,
+        source: "copyright",
+        severity: deduped.some((match) => match.match_kind === "exact") ? "high" : "medium",
+        labels: {
+          duplicateCandidates: deduped.map((match) => ({ assetId: match.asset_id, kind: match.match_kind, score: match.score })),
+          algorithmVersion,
+        },
+        status: "open",
+        notes: "Automated fingerprint match. Human/rights review required before enforcement.",
+      }),
+    }).catch(() => undefined)
+  }
+}
+
 async function persistWorkerResult(job: JobRow, result: WorkerResult) {
-  const assets = await shortsSupabaseRequest<AssetRow[]>(`malik_shorts_media_assets?select=id,post_id&id=eq.${job.asset_id}&limit=1`).catch(() => [])
+  const assets = await shortsSupabaseRequest<AssetRow[]>(`malik_shorts_media_assets?select=id,post_id,owner_key&id=eq.${job.asset_id}&limit=1`).catch(() => [])
   const asset = assets[0]
   if (!asset) return
 
@@ -54,6 +145,11 @@ async function persistWorkerResult(job: JobRow, result: WorkerResult) {
     return
   }
 
+  if (job.job_type === "fingerprint") {
+    await persistFingerprint(asset, result)
+    return
+  }
+
   if (job.job_type === "thumbnail") {
     const publicUrl = safeUrl(result.publicUrl)
     const storageKey = safeText(result.storageKey, 1000)
@@ -77,6 +173,9 @@ async function persistWorkerResult(job: JobRow, result: WorkerResult) {
     const masterUrl = safeUrl(result.masterUrl)
     const masterKey = safeText(result.masterKey, 1000)
     const variants = Array.isArray(result.variants) ? result.variants.slice(0, 8) : []
+    const fallback = result.fallback && typeof result.fallback === "object" && !Array.isArray(result.fallback)
+      ? result.fallback as Record<string, unknown>
+      : null
     const rows: Record<string, unknown>[] = []
     if (masterUrl && masterKey) rows.push({ asset_id: asset.id, kind: "hls_master", storage_key: masterKey, public_url: masterUrl, width: 0, height: 0, bitrate_kbps: 0, container: "hls", status: "ready" })
     for (const variant of variants) {
@@ -90,14 +189,41 @@ async function persistWorkerResult(job: JobRow, result: WorkerResult) {
       if (!publicUrl || !storageKey || width == null || height == null || bitrateKbps == null) continue
       rows.push({ asset_id: asset.id, kind: "hls_variant", storage_key: storageKey, public_url: publicUrl, width, height, bitrate_kbps: bitrateKbps, codec: safeText(row.codec, 80) || "h264", container: "hls", status: "ready" })
     }
+
+    let fallbackUrl: string | null = null
+    if (fallback) {
+      fallbackUrl = safeUrl(fallback.publicUrl)
+      const storageKey = safeText(fallback.storageKey, 1000)
+      const width = positiveInt(fallback.width, 100_000)
+      const height = positiveInt(fallback.height, 100_000)
+      const bitrateKbps = positiveInt(fallback.bitrateKbps, 500_000)
+      const bytes = positiveInt(fallback.bytes, 20_000_000_000)
+      if (fallbackUrl && storageKey && width != null && height != null && bitrateKbps != null) {
+        rows.push({ asset_id: asset.id, kind: "mp4", storage_key: storageKey, public_url: fallbackUrl, width, height, bitrate_kbps: bitrateKbps, codec: safeText(fallback.codec, 80) || "h264+aac", container: "mp4", bytes, status: "ready" })
+      }
+    }
+
     if (rows.length) {
       await shortsSupabaseRequest("malik_shorts_media_renditions?on_conflict=asset_id,kind,width,height,bitrate_kbps", {
         method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(rows),
       }).catch(() => undefined)
     }
     await shortsSupabaseRequest(`malik_shorts_media_assets?id=eq.${asset.id}`, {
-      method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: "ready", updated_at: new Date().toISOString(), metadata: { hlsMasterUrl: masterUrl, transcodedAt: new Date().toISOString() } }),
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        status: "ready",
+        updated_at: new Date().toISOString(),
+        metadata: { hlsMasterUrl: masterUrl, progressiveUrl: fallbackUrl, transcodedAt: new Date().toISOString() },
+      }),
     }).catch(() => undefined)
+    if (asset.post_id && fallbackUrl) {
+      await shortsSupabaseRequest(`malik_shorts_posts?id=eq.${asset.post_id}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ media_url: fallbackUrl }),
+      }).catch(() => undefined)
+    }
   }
 }
 
