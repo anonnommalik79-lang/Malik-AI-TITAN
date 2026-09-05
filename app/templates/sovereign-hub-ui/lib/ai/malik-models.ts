@@ -1,6 +1,11 @@
 import type { AIPlan } from "./types"
 
 export type MalikModelId =
+  | "malik-qwen-397b"
+  | "malik-reason-753b"
+  | "malik-core-300b"
+  | "malik-flash-53"
+  | "malik-vision-k3"
   | "malik-8b"
   | "malik-20b"
   | "malik-fast-120b"
@@ -13,7 +18,7 @@ export type MalikModelId =
   | "malik-agent-120b"
 
 export type MalikModelTier = "free" | "pro"
-export type MalikModelProvider = "groq" | "cloudflare" | "cerebras"
+export type MalikModelProvider = "modelscope" | "aihubmix" | "groq" | "cloudflare" | "cerebras"
 
 export type MalikModelDefinition = {
   id: MalikModelId
@@ -25,9 +30,56 @@ export type MalikModelDefinition = {
   capabilities: readonly ("text" | "vision" | "code" | "tools" | "reasoning")[]
 }
 
-const MALIK_MODEL_STORAGE_KEY = "malik_selected_model_v2"
+// v3 intentionally resets the old saved Qwen3.8/Groq default so existing users
+// land on the new ModelScope flagship after this rollout.
+const MALIK_MODEL_STORAGE_KEY = "malik_selected_model_v3"
 
 export const MALIK_MODELS = [
+  {
+    id: "malik-qwen-397b",
+    label: "MalikLLM397B Qwen 3.5",
+    description: "ModelScope · 397B · Основная мощная модель",
+    tier: "free",
+    provider: "modelscope",
+    providerModel: "Qwen/Qwen3.5-397B-A17B",
+    capabilities: ["text", "vision", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-reason-753b",
+    label: "MalikReason753B GLM 5.2",
+    description: "ModelScope · Тяжёлый reasoning и код",
+    tier: "free",
+    provider: "modelscope",
+    providerModel: "ZhipuAI/GLM-5.2",
+    capabilities: ["text", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-core-300b",
+    label: "MalikCore300B ERNIE 4.5",
+    description: "ModelScope · 300B · Резервный большой brain",
+    tier: "free",
+    provider: "modelscope",
+    providerModel: "PaddlePaddle/ERNIE-4.5-300B-A47B-PT",
+    capabilities: ["text", "code", "reasoning"],
+  },
+  {
+    id: "malik-flash-53",
+    label: "MalikFlash GLM 5.3",
+    description: "AIHubMix · Free · Код и reasoning",
+    tier: "free",
+    provider: "aihubmix",
+    providerModel: "coding-glm-5.3-free",
+    capabilities: ["text", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-vision-k3",
+    label: "MalikVision Kimi K3",
+    description: "AIHubMix · Free · Фото, файлы и multimodal",
+    tier: "free",
+    provider: "aihubmix",
+    providerModel: "coding-kimi-k3-free",
+    capabilities: ["text", "vision", "code", "tools", "reasoning"],
+  },
   {
     id: "malik-20b",
     label: "MalikLLM 20B",
@@ -120,7 +172,7 @@ export const MALIK_MODELS = [
   },
 ] as const satisfies readonly MalikModelDefinition[]
 
-export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-27b"
+export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-qwen-397b"
 export const FREE_MALIK_MODELS = MALIK_MODELS.filter((model) => model.tier === "free")
 export const PRO_MALIK_MODELS = MALIK_MODELS.filter((model) => model.tier === "pro")
 
