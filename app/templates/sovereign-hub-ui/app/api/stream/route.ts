@@ -21,8 +21,20 @@ function wantsSse(request: Request, body: any) {
   return accept.includes("text/event-stream") || body?.stream === true
 }
 
+/**
+ * dashboard.tsx still contains a legacy artifact extractor that recognizes only
+ * LF-terminated ``` fences and removes them from normal chat/code replies after
+ * the answer finishes. The chat renderer already normalizes CR back to LF before
+ * parsing Markdown, so using CR on fence lines is a lossless transport guard:
+ * the dashboard leaves the code alone and MalikMarkdown renders the same block.
+ */
+function protectChatCodeFences(content: string) {
+  const text = content || "MALIK AI: empty response prevented."
+  return text.replace(/```([a-zA-Z0-9_+\-]*)[ \t]*\n/g, "```$1\r")
+}
+
 function textResponse(content: string) {
-  return new Response(content || "MALIK AI: empty response prevented.", {
+  return new Response(protectChatCodeFences(content), {
     headers: {
       "content-type": "text/plain; charset=utf-8",
       "cache-control": "no-store",
@@ -102,7 +114,7 @@ function liveSseResponse(
         observeComputeResult(answer)
         send("content", {
           type: "content",
-          content: asPlainText(answer) || "MALIK AI: empty response prevented.",
+          content: protectChatCodeFences(asPlainText(answer)),
         })
         send("done", {
           type: "done",
