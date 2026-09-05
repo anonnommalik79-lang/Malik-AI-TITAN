@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
+import { shortsExternalModerationConfigured } from "@/lib/shorts/moderation"
 import { getShortsSupabaseConfig, getTikTokShortsConfig, getYouTubeOAuthConfig, getYouTubeShortsConfig } from "@/lib/shorts/server"
+import { shortsWorkerConfigured } from "@/lib/shorts/workers"
 
 export const dynamic = "force-dynamic"
 
@@ -16,24 +18,35 @@ function storageReady() {
 
 export async function GET() {
   const { user } = await getOptionalWorkOSAuth()
+  const database = Boolean(getShortsSupabaseConfig())
+  const worker = shortsWorkerConfigured()
   return NextResponse.json({
     authenticated: Boolean(user),
     capabilities: {
-      database: Boolean(getShortsSupabaseConfig()),
+      database,
       nativeUpload: storageReady(),
       youtubeDiscovery: Boolean(getYouTubeShortsConfig()),
       youtubeCreatorOAuth: Boolean(getYouTubeOAuthConfig()),
       tiktokCreatorOAuth: Boolean(getTikTokShortsConfig()),
       instagramCreatorOAuth: false,
-      recommendationV2: Boolean(getShortsSupabaseConfig()),
-      messaging: Boolean(getShortsSupabaseConfig()),
-      liveMetadata: Boolean(getShortsSupabaseConfig()),
+      recommendationV2: database,
+      messaging: database,
+      liveMetadata: database,
       liveStreamingTransport: false,
-      creatorEconomyLedger: Boolean(getShortsSupabaseConfig()),
+      creatorEconomyLedger: database,
+      mediaWorker: worker,
+      adaptiveHlsTranscoding: worker && storageReady(),
+      progressivePlaybackFallback: worker && storageReady(),
+      mediaFingerprinting: worker && database,
+      duplicateRightsReview: database,
+      localTextModeration: true,
+      externalModerationProvider: shortsExternalModerationConfigured(),
     },
     notes: {
       instagramCreatorOAuth: "Provider adapter is reserved; enable only after approved Meta credentials and policy review.",
       liveStreamingTransport: "Live session/chat metadata exists; RTMP/WebRTC ingest + transcoding/CDN is a separate infrastructure service.",
+      mediaFingerprinting: "Exact, lightweight video and audio fingerprints create review candidates; they are not a substitute for a licensed global Content-ID catalog.",
+      moderation: "Local preflight is always available; an optional HTTPS moderation provider can add semantic safety decisions server-side.",
     },
   }, { headers: { "Cache-Control": "private, no-store" } })
 }
