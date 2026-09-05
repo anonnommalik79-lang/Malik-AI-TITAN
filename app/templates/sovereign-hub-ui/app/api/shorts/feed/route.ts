@@ -7,7 +7,7 @@ import {
   shortsSupabaseRequest,
   stableShortId,
 } from "@/lib/shorts/server"
-import type { MalikShortFeedResponse, MalikShortItem } from "@/lib/shorts/types"
+import type { MalikShortFeedResponse, MalikShortItem, MalikShortSource } from "@/lib/shorts/types"
 
 export const dynamic = "force-dynamic"
 
@@ -41,16 +41,17 @@ function isoDurationSeconds(value?: string) {
   return Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0)
 }
 
-function compactNumber(value: unknown) {
+function count(value: unknown) {
   const numeric = Number(value || 0)
   return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : 0
 }
 
 function extractHashtags(text: string) {
-  return Array.from(new Set((text.match(/#[\p{L}\p{N}_]{2,50}/gu) || []).map((tag) => tag.slice(1).toLowerCase()))).slice(0, 12)
+  return Array.from(new Set((String(text || "").match(/#[\p{L}\p{N}_]{2,50}/gu) || []).map((tag) => tag.slice(1).toLowerCase()))).slice(0, 12)
 }
 
 function mapDbRow(row: DbFeedRow): MalikShortItem {
+  const source = (["malik", "youtube", "tiktok"].includes(row.source) ? row.source : "malik") as MalikShortSource
   const playback = row.playback_kind === "youtube"
     ? { kind: "youtube" as const, videoId: String(row.source_id || "") }
     : row.playback_kind === "tiktok"
@@ -59,9 +60,10 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
 
   return {
     id: String(row.id),
-    source: row.source,
+    source,
     sourceId: row.source_id || undefined,
     sourceUrl: row.source_url || undefined,
+    posterUrl: row.poster_url || undefined,
     creator: {
       id: String(row.creator_key),
       username: String(row.username || "creator"),
@@ -69,8 +71,8 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
       avatarUrl: row.avatar_url || undefined,
       bio: row.bio || undefined,
       verified: Boolean(row.verified),
-      external: row.source !== "malik",
-      claimed: row.source === "malik",
+      external: source !== "malik",
+      claimed: source === "malik" || source === "tiktok",
     },
     playback,
     caption: String(row.caption || ""),
@@ -81,24 +83,24 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
     publishedAt: row.published_at || undefined,
     createdAt: row.created_at || undefined,
     metrics: {
-      views: compactNumber(row.views),
-      likes: compactNumber(row.likes),
-      comments: compactNumber(row.comments),
-      reposts: compactNumber(row.reposts),
-      saves: compactNumber(row.saves),
-      shares: compactNumber(row.shares),
+      views: count(row.views),
+      likes: count(row.likes),
+      comments: count(row.comments),
+      reposts: count(row.reposts),
+      saves: count(row.saves),
+      shares: count(row.shares),
       external: {
-        views: row.external_views == null ? undefined : compactNumber(row.external_views),
-        likes: row.external_likes == null ? undefined : compactNumber(row.external_likes),
-        comments: row.external_comments == null ? undefined : compactNumber(row.external_comments),
-        shares: row.external_shares == null ? undefined : compactNumber(row.external_shares),
+        views: row.external_views == null ? undefined : count(row.external_views),
+        likes: row.external_likes == null ? undefined : count(row.external_likes),
+        comments: row.external_comments == null ? undefined : count(row.external_comments),
+        shares: row.external_shares == null ? undefined : count(row.external_shares),
       },
     },
     viewer: { liked: false, saved: false, reposted: false, following: false },
     rights: {
       canRemix: Boolean(row.can_remix),
       canDownload: Boolean(row.can_download),
-      canCrossPost: row.source === "malik",
+      canCrossPost: source === "malik",
       attributionRequired: Boolean(row.attribution_required),
     },
   }
@@ -112,7 +114,7 @@ async function fetchYouTubeCandidates(limit: number, language: string, region: s
   searchUrl.searchParams.set("part", "snippet")
   searchUrl.searchParams.set("type", "video")
   searchUrl.searchParams.set("maxResults", String(Math.min(24, Math.max(8, limit))))
-  searchUrl.searchParams.set("regionCode", region === "KZ" ? "KZ" : region.slice(0, 2).toUpperCase())
+  searchUrl.searchParams.set("regionCode", region.slice(0, 2).toUpperCase() || "KZ")
   searchUrl.searchParams.set("relevanceLanguage", language === "kk" ? "kk" : language === "en" ? "en" : "ru")
   searchUrl.searchParams.set("safeSearch", "moderate")
   searchUrl.searchParams.set("videoEmbeddable", "true")
@@ -125,8 +127,10 @@ async function fetchYouTubeCandidates(limit: number, language: string, region: s
   const searchResponse = await fetch(searchUrl, { next: { revalidate: 180 } })
   if (!searchResponse.ok) return [] as YouTubeCandidate[]
   const searchJson = await searchResponse.json()
-  const searchItems = Array.isArray(searchJson?.items) ? searchJson.items : []
-  const ids = searchItems.map((item: any) => item?.id?.videoId).filter(Boolean).slice(0, 24)
+  const ids = (Array.isArray(searchJson?.items) ? searchJson.items : [])
+    .map((item: any) => item?.id?.videoId)
+    .filter(Boolean)
+    .slice(0, 24)
   if (!ids.length) return [] as YouTubeCandidate[]
 
   const videoUrl = new URL("https://www.googleapis.com/youtube/v3/videos")
@@ -136,10 +140,10 @@ async function fetchYouTubeCandidates(limit: number, language: string, region: s
   const videoResponse = await fetch(videoUrl, { next: { revalidate: 180 } })
   if (!videoResponse.ok) return [] as YouTubeCandidate[]
   const videoJson = await videoResponse.json()
-  const byId = new Map((videoJson?.items || []).map((item: any) => [item.id, item]))
+  const byId = new Map<string, any>((videoJson?.items || []).map((item: any) => [String(item.id), item]))
 
   return ids.flatMap((videoId: string) => {
-    const item: any = byId.get(videoId)
+    const item = byId.get(videoId)
     if (!item || item?.status?.embeddable === false) return []
     const durationSeconds = isoDurationSeconds(item?.contentDetails?.duration)
     if (durationSeconds && durationSeconds > 240) return []
@@ -148,15 +152,15 @@ async function fetchYouTubeCandidates(limit: number, language: string, region: s
     return [{
       videoId,
       channelId: String(snippet.channelId || "unknown"),
-      channelTitle: decodeEntities(String(snippet.channelTitle || "YouTube creator")),
+      channelTitle: decodeEntities(String(snippet.channelTitle || "Creator")),
       title: decodeEntities(String(snippet.title || "")),
       description: decodeEntities(String(snippet.description || "")),
       publishedAt: snippet.publishedAt,
       thumbnail: snippet?.thumbnails?.maxres?.url || snippet?.thumbnails?.high?.url || snippet?.thumbnails?.medium?.url,
       durationSeconds,
-      views: compactNumber(stats.viewCount),
-      likes: compactNumber(stats.likeCount),
-      comments: compactNumber(stats.commentCount),
+      views: count(stats.viewCount),
+      likes: count(stats.likeCount),
+      comments: count(stats.commentCount),
     } satisfies YouTubeCandidate]
   })
 }
@@ -172,7 +176,6 @@ async function materializeYouTube(candidates: YouTubeCandidate[]) {
     locale: "ru",
     region: "KZ",
   }])).values())
-
   await shortsSupabaseRequest("malik_shorts_profiles?on_conflict=user_key", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -198,7 +201,6 @@ async function materializeYouTube(candidates: YouTubeCandidate[]) {
     attribution_required: true,
     published_at: item.publishedAt || new Date().toISOString(),
   }))
-
   const saved = await shortsSupabaseRequest<any[]>("malik_shorts_posts?on_conflict=source,source_id", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=representation" },
@@ -207,7 +209,6 @@ async function materializeYouTube(candidates: YouTubeCandidate[]) {
 
   const idMap = new Map<string, string>()
   for (const row of saved || []) if (row?.source_id && row?.id) idMap.set(String(row.source_id), String(row.id))
-
   const counters = candidates.flatMap((item) => {
     const postId = idMap.get(item.videoId)
     return postId ? [{
@@ -234,6 +235,7 @@ function mapYouTubeCandidate(item: YouTubeCandidate, dbId?: string): MalikShortI
     source: "youtube",
     sourceId: item.videoId,
     sourceUrl: `https://www.youtube.com/watch?v=${encodeURIComponent(item.videoId)}`,
+    posterUrl: item.thumbnail,
     creator: {
       id: `youtube:${item.channelId}`,
       username: `yt.${item.channelId.replace(/[^A-Za-z0-9._]/g, "").slice(-24)}`.slice(0, 32),
@@ -264,22 +266,60 @@ function mapYouTubeCandidate(item: YouTubeCandidate, dbId?: string): MalikShortI
 
 async function hydrateViewerState(items: MalikShortItem[], userKey?: string) {
   if (!userKey || !getShortsSupabaseConfig()) return items
-  const uuidIds = items.map((item) => item.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id))
-  if (!uuidIds.length) return items
-  const encodedIds = encodeURIComponent(`(${uuidIds.join(",")})`)
+  const ids = items.map((item) => item.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+  if (!ids.length) return items
+  const inIds = `(${ids.join(",")})`
+  const encodedUser = encodeURIComponent(userKey)
 
-  const [likes, saves, reposts] = await Promise.all([
-    shortsSupabaseRequest<any[]>(`malik_shorts_likes?select=post_id&user_key=eq.${encodeURIComponent(userKey)}&post_id=in.${encodedIds}`).catch(() => []),
-    shortsSupabaseRequest<any[]>(`malik_shorts_saves?select=post_id&user_key=eq.${encodeURIComponent(userKey)}&post_id=in.${encodedIds}`).catch(() => []),
-    shortsSupabaseRequest<any[]>(`malik_shorts_reposts?select=post_id&user_key=eq.${encodeURIComponent(userKey)}&post_id=in.${encodedIds}`).catch(() => []),
+  const [likes, saves, reposts, follows] = await Promise.all([
+    shortsSupabaseRequest<any[]>(`malik_shorts_likes?select=post_id&user_key=eq.${encodedUser}&post_id=in.${inIds}`).catch(() => []),
+    shortsSupabaseRequest<any[]>(`malik_shorts_saves?select=post_id&user_key=eq.${encodedUser}&post_id=in.${inIds}`).catch(() => []),
+    shortsSupabaseRequest<any[]>(`malik_shorts_reposts?select=post_id&user_key=eq.${encodedUser}&post_id=in.${inIds}`).catch(() => []),
+    shortsSupabaseRequest<any[]>(`malik_shorts_follows?select=following_key&follower_key=eq.${encodedUser}&limit=500`).catch(() => []),
   ])
   const liked = new Set(likes.map((row) => String(row.post_id)))
   const saved = new Set(saves.map((row) => String(row.post_id)))
   const reposted = new Set(reposts.map((row) => String(row.post_id)))
+  const following = new Set(follows.map((row) => String(row.following_key)))
   return items.map((item) => ({
     ...item,
-    viewer: { ...item.viewer, liked: liked.has(item.id), saved: saved.has(item.id), reposted: reposted.has(item.id) },
+    viewer: {
+      liked: liked.has(item.id),
+      saved: saved.has(item.id),
+      reposted: reposted.has(item.id),
+      following: following.has(item.creator.id),
+    },
   }))
+}
+
+function uniqueBySource(items: MalikShortItem[]) {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const key = `${item.source}:${item.sourceId || item.id}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function mixSources(items: MalikShortItem[], limit: number) {
+  const buckets: Record<MalikShortSource, MalikShortItem[]> = { malik: [], tiktok: [], youtube: [] }
+  for (const item of items) buckets[item.source].push(item)
+  const pattern: MalikShortSource[] = ["malik", "youtube", "malik", "tiktok", "youtube"]
+  const output: MalikShortItem[] = []
+  let guard = 0
+  while (output.length < limit && guard < limit * 10) {
+    const source = pattern[guard % pattern.length]
+    const item = buckets[source].shift()
+    if (item) output.push(item)
+    else {
+      const fallback = buckets.malik.shift() || buckets.tiktok.shift() || buckets.youtube.shift()
+      if (fallback) output.push(fallback)
+      else break
+    }
+    guard += 1
+  }
+  return output
 }
 
 export async function GET(request: NextRequest) {
@@ -288,37 +328,29 @@ export async function GET(request: NextRequest) {
   const region = request.nextUrl.searchParams.get("region") || "KZ"
   const { user } = await getOptionalWorkOSAuth()
 
-  let malikItems: MalikShortItem[] = []
+  let dbItems: MalikShortItem[] = []
   if (getShortsSupabaseConfig()) {
     const rows = await shortsSupabaseRequest<DbFeedRow[]>(
-      `malik_shorts_feed_v1?select=*&source=eq.malik&order=published_at.desc.nullslast,created_at.desc&limit=${Math.min(limit, 20)}`,
+      `malik_shorts_feed_v1?select=*&source=in.(malik,tiktok)&order=published_at.desc.nullslast,created_at.desc&limit=${Math.min(limit * 2, 50)}`,
     ).catch(() => [])
-    malikItems = rows.map(mapDbRow)
+    dbItems = rows.map(mapDbRow)
   }
 
   const youtubeCandidates = await fetchYouTubeCandidates(limit, language, region).catch(() => [])
   const youtubeIdMap = await materializeYouTube(youtubeCandidates).catch(() => new Map<string, string>())
   const youtubeItems = youtubeCandidates.map((item) => mapYouTubeCandidate(item, youtubeIdMap.get(item.videoId)))
 
-  const mixed: MalikShortItem[] = []
-  const max = Math.max(malikItems.length, youtubeItems.length)
-  for (let index = 0; index < max && mixed.length < limit; index += 1) {
-    if (malikItems[index]) mixed.push(malikItems[index])
-    if (youtubeItems[index] && mixed.length < limit) mixed.push(youtubeItems[index])
-  }
-
+  const mixed = mixSources(uniqueBySource([...dbItems, ...youtubeItems]), limit)
   const items = await hydrateViewerState(mixed, user?.id)
   const payload: MalikShortFeedResponse = {
     items,
     generatedAt: new Date().toISOString(),
     sources: {
-      malik: malikItems.length > 0,
-      youtube: youtubeItems.length > 0,
-      tiktok: false,
+      malik: items.some((item) => item.source === "malik"),
+      youtube: items.some((item) => item.source === "youtube"),
+      tiktok: items.some((item) => item.source === "tiktok"),
     },
   }
 
-  return NextResponse.json(payload, {
-    headers: { "Cache-Control": "private, no-store, max-age=0" },
-  })
+  return NextResponse.json(payload, { headers: { "Cache-Control": "private, no-store, max-age=0" } })
 }
