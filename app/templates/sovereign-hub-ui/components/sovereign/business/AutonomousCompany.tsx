@@ -113,6 +113,11 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   const [steps, setSteps] = useState<Step[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [runError, setRunError] = useState<string | null>(null)
+  // Which template's playbook is steering the run. Kept after the fields are
+  // filled, because the playbook is about the kind of business, not about the
+  // exact words left in the composer - the person is expected to edit those.
+  const [activeTemplate, setActiveTemplate] = useState<BusinessTemplate | null>(null)
+  const [query, setQuery] = useState("")
   // State, not a ref: the header button reads this during render, and a ref
   // would leave "Остановить" on screen after the run had already finished.
   const [running, setRunning] = useState(false)
@@ -127,12 +132,22 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   )
 
   const templates = useMemo(() => {
-    if (category === "Все") return BUSINESS_TEMPLATES
     // "Мои шаблоны" has nothing saved yet; showing the whole catalogue there
     // would be a lie about what it is.
-    if (category === "Мои") return []
-    return BUSINESS_TEMPLATES.filter((item) => item.category === category)
-  }, [category])
+    const byCategory = category === "Мои"
+      ? []
+      : category === "Все"
+        ? BUSINESS_TEMPLATES
+        : BUSINESS_TEMPLATES.filter((item) => item.category === category)
+
+    const needle = query.trim().toLowerCase()
+    if (!needle) return byCategory
+    // Searches the playbook too: someone looking for "отток" or "фудкост" is
+    // looking for the business those words belong to.
+    return byCategory.filter((item) => [
+      item.title, item.description, item.category, item.market || "", ...item.playbook, ...item.metrics,
+    ].join(" ").toLowerCase().includes(needle))
+  }, [category, query])
 
   useEffect(() => () => { abortRef.current?.abort() }, [])
 
@@ -150,6 +165,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   }, [])
 
   const applyTemplate = useCallback((template: BusinessTemplate) => {
+    setActiveTemplate(template)
     setPrompt(template.prompt)
     if (template.market) setMarket(template.market)
     if (template.country) setCountry(template.country)
@@ -160,6 +176,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   }, [])
 
   const startCustom = useCallback(() => {
+    setActiveTemplate(null)
     setPrompt("")
     setMarket("")
     setCountry("")
@@ -223,7 +240,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
             signal: controller.signal,
             body: JSON.stringify({
               mode: agent.mode,
-              input: agentInput(agent, brief, done),
+              input: agentInput(agent, brief, done, activeTemplate),
               context,
               language: "ru",
               modelId,
@@ -265,7 +282,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
 
     runningRef.current = false
     setRunning(false)
-  }, [budget, country, market, modelId, prompt, requirements])
+  }, [activeTemplate, budget, country, market, modelId, prompt, requirements])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -379,6 +396,22 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
               {/* There is no attach button and no microphone here on purpose:
                   /api/business/run takes text, and a control that looks like it
                   works but does nothing is worse than one that is absent. */}
+              {activeTemplate && (
+                <div className={styles.playbookBadge}>
+                  <Check strokeWidth={2.4} />
+                  <span>
+                    <b>{activeTemplate.title}</b>
+                    <small>
+                      {activeTemplate.playbook.length} отраслевых правил и {activeTemplate.metrics.length} ключевых цифр
+                      {" "}уйдут каждому из восьми агентов
+                    </small>
+                  </span>
+                  <button type="button" onClick={() => setActiveTemplate(null)} aria-label="Убрать отраслевой бриф">
+                    Убрать
+                  </button>
+                </div>
+              )}
+
               <div className={styles.promptActions} onPointerDown={(event) => event.stopPropagation()}>
                 <div className={styles.menuWrap}>
                   <button
@@ -473,23 +506,40 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
               <div className={styles.sectionStat}><b>{BUSINESS_TEMPLATES.length}</b><span>готовых сценариев</span></div>
             </div>
 
-            <nav className={styles.categories} aria-label="Категории шаблонов">
-              {TEMPLATE_CATEGORIES.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`${styles.category} ${category === item.id ? styles.categoryActive : ""}`}
-                  onClick={() => setCategory(item.id)}
-                  aria-pressed={category === item.id}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
+            <div className={styles.filters}>
+              <nav className={styles.categories} aria-label="Категории шаблонов">
+                {TEMPLATE_CATEGORIES.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`${styles.category} ${category === item.id ? styles.categoryActive : ""}`}
+                    onClick={() => setCategory(item.id)}
+                    aria-pressed={category === item.id}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </nav>
+              <label className={styles.search}>
+                <Search strokeWidth={1.8} />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Найти шаблон"
+                  aria-label="Поиск по шаблонам"
+                />
+              </label>
+            </div>
 
             <section className={styles.grid}>
               {templates.map((template) => (
-                <button key={template.id} type="button" className={styles.templateCard} onClick={() => applyTemplate(template)}>
+                <button
+                  key={template.id}
+                  type="button"
+                  className={`${styles.templateCard} ${activeTemplate?.id === template.id ? styles.templateCardActive : ""}`}
+                  onClick={() => applyTemplate(template)}
+                  aria-pressed={activeTemplate?.id === template.id}
+                >
                   <Image src={template.image} alt={template.title} width={320} height={200} sizes="(max-width: 900px) 50vw, 16vw" />
                   <span className={styles.templateBody}>
                     <span className={styles.templateTitle}>{template.title}</span>
@@ -498,6 +548,14 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                   </span>
                 </button>
               ))}
+              {category === "Мои" && !templates.length && (
+                <p className={styles.emptyNote}>
+                  Здесь появятся шаблоны, которые ты сохранишь сам. Пока их нет — начни со «Своего шаблона» справа.
+                </p>
+              )}
+              {category !== "Мои" && query.trim() && !templates.length && (
+                <p className={styles.emptyNote}>По запросу «{query.trim()}» ничего не нашлось.</p>
+              )}
               <button type="button" className={`${styles.templateCard} ${styles.customCard}`} onClick={startCustom}>
                 <span className={styles.customPlus}><Plus strokeWidth={1.8} /></span>
                 <span>

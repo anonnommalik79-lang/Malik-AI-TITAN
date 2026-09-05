@@ -108,7 +108,49 @@ for (const src of images) {
 const hero = (() => { try { return readFileSync(join(ROOT, "public/business/hero.webp")) } catch { return null } })()
 check("the intro photograph is a real WebP", Boolean(hero) && hero.toString("ascii", 8, 12) === "WEBP")
 
-/* --------------------------------------------------------------- 4. palette */
+/* ------------------------------------------------------------- 4. playbooks */
+
+// The playbook is the whole reason a template beats an empty box. It is also
+// the easiest place for a fabricated number to enter the run and be treated as
+// established by all eight agents, so it is checked for exactly that.
+console.log("\nPlaybooks")
+// Scoped to BUSINESS_TEMPLATES: the agents above it are also objects with an
+// `id`, and matching those made the whole section report on the wrong things.
+const templateSource = autonomous.slice(
+  autonomous.indexOf("export const BUSINESS_TEMPLATES"),
+  autonomous.indexOf("export function agentInput"),
+)
+const templateBlocks = [...templateSource.matchAll(/\{\n    id: "([a-z]+)",[\s\S]*?\n  \},/g)]
+check("every template has a playbook and metrics", templateBlocks.length === images.length
+  && templateBlocks.every((b) => b[0].includes("playbook: [") && b[0].includes("metrics: [")),
+  `${templateBlocks.length} blocks`)
+
+for (const block of templateBlocks) {
+  const id = block[1]
+  const playbook = (block[0].match(/playbook: \[([\s\S]*?)\n    \]/)?.[1] || "")
+  const metrics = (block[0].match(/metrics: \[([\s\S]*?)\n    \]/)?.[1] || "")
+  const lines = playbook.split("\n").filter((l) => l.trim().startsWith('"'))
+  const metricLines = metrics.split("\n").filter((l) => l.trim().startsWith('"'))
+  check(`${id}: playbook has real substance`, lines.length >= 6
+    && lines.every((l) => l.length > 60), `${lines.length} lines`)
+  check(`${id}: has metrics that decide the outcome`, metricLines.length >= 5, `${metricLines.length}`)
+  // Money amounts and percentages inside a playbook are invented facts: the
+  // currency and rate figures belong to the founder's real market, not to us.
+  const invented = (playbook + metrics).match(/\d[\d\s.,]*\s*(₸|тенге|руб|\$|%|процент)/gi)
+  check(`${id}: invents no figures`, !invented, invented ? invented.join(", ") : "")
+}
+
+check("the playbook reaches every agent, not only the first",
+  autonomous.includes("template?: BusinessTemplate | null")
+  && autonomous.includes("ОТРАСЛЕВОЙ БРИФ"))
+check("the run passes the chosen template through",
+  component.includes("agentInput(agent, brief, done, activeTemplate)"))
+check("choosing a template is visible on the card",
+  component.includes("templateCardActive"))
+check("the industry brief is disclosed, not silent",
+  component.includes("playbookBadge"))
+
+/* --------------------------------------------------------------- 5. palette */
 
 // NoBlueUiGuard rewrites, at runtime, any colour with hue 178-250 and
 // saturation >= 0.12. Cool dark greys land squarely inside that window, and the
@@ -148,7 +190,7 @@ for (const m of css.matchAll(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/g)) {
 console.log("\nPalette")
 check("no colour NoBlueUiGuard would overwrite", offenders.length === 0, offenders.join(" "))
 
-/* ------------------------------------------------------- 5. the shell's CSS */
+/* ------------------------------------------------------- 6. the shell's CSS */
 
 // .malik-dashboard-shell styles `header *` and hides `header > div:nth-of-type(2)`
 // for its own top bar. A <header> inside a view inherits all of it.

@@ -279,6 +279,40 @@
 }
 
 .promptTop { display: flex; gap: 12px; align-items: flex-start; }
+
+/* Says out loud what the template actually did, because the valuable half of
+   it - the industry brief handed to all eight agents - is invisible otherwise:
+   filling the composer looks like the whole effect, and it is the smaller half. */
+.playbookBadge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border: 1px solid #333333;
+  border-radius: 10px;
+  background: #121212;
+}
+
+.playbookBadge > svg { width: 15px; height: 15px; flex: none; color: #3ddc84; }
+.playbookBadge > span { flex: 1; min-width: 0; }
+.playbookBadge b { display: block; font-size: 12.5px; font-weight: 640; }
+.playbookBadge small { display: block; margin-top: 2px; font-size: 11px; color: #8a8a8a; }
+
+.playbookBadge > button {
+  flex: none;
+  height: 27px;
+  padding: 0 11px;
+  border: 1px solid #333333;
+  border-radius: 8px;
+  background: transparent;
+  color: #c0c0c0;
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.playbookBadge > button:hover { border-color: #4a4a4a; color: var(--text); }
 .spark { color: #ececec; margin-top: 8px; }
 .spark svg { width: 20px; height: 20px; }
 
@@ -485,7 +519,52 @@
 .sectionStat { color: #7f8a93; font-size: 12px; display: flex; align-items: baseline; gap: 6px; }
 .sectionStat b { color: #ebebeb; font-size: 15px; }
 
-.categories { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+/* Categories and the search share one row: the search is a way of filtering,
+   not a separate feature, and putting it anywhere else implies otherwise. */
+.filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.categories { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 33px;
+  flex: none;
+  width: min(240px, 30vw);
+  padding: 0 12px;
+  border: 1px solid #292929;
+  border-radius: 9px;
+  background: #0e0e0e;
+  color: #8a8a8a;
+}
+
+.search:focus-within { border-color: #4a4a4a; }
+.search svg { width: 15px; height: 15px; flex: none; }
+
+.search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.emptyNote {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  color: #8a8a8a;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
 
 .category {
   height: 33px;
@@ -523,6 +602,13 @@
 
 .templateCard:hover { border-color: #4a4a4a; transform: translateY(-2px); }
 .templateCard:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.7); outline-offset: 2px; }
+
+/* The chosen template stays marked. Without it the click filled a field far up
+   the page and gave no sign it had happened at all. */
+.templateCardActive {
+  border-color: #f6f6f6;
+  box-shadow: inset 0 0 0 1px #f6f6f6;
+}
 
 .templateCard img {
   width: 100%;
@@ -689,4 +775,6 @@
   .flow::-webkit-scrollbar { display: none; }
 
   .sectionHead { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .filters { flex-direction: column; align-items: stretch; gap: 10px; }
+  .search { width: 100%; }
 }
