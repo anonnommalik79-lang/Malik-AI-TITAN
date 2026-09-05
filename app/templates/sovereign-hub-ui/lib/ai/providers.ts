@@ -13,8 +13,11 @@ import { kimiProvider } from "./providers/kimi"
 import { grokProvider } from "./providers/grok"
 import { nvidiaNimProvider } from "./providers/nvidia-nim"
 import { mistralProvider } from "./providers/mistral"
+import { aiHubMixProvider, modelScopeProvider } from "./providers/daily-openai"
 
 export const WORLD_TITANS_PROVIDERS: AIProvider[] = [
+  modelScopeProvider,
+  aiHubMixProvider,
   geminiProvider,
   mistralProvider,
   cerebrasProvider,
@@ -31,33 +34,22 @@ export const WORLD_TITANS_PROVIDERS: AIProvider[] = [
 ]
 
 /**
- * Order matters more than the list does: whatever sits first is what writes the
- * code, and everything after it only runs when the one before failed.
- *
- * Anything that builds - code, debug, project, and so the website builder -
- * now leads with Gemini and then Codestral. Gemini is the strongest thing
- * configured on this deployment and the best of them at front-end work;
- * Codestral is trained for code rather than talked into it. Both have free
- * tiers that renew, which is what makes them a sane default rather than a
- * one-off.
- *
- * Cerebras stays in the list as a fast fallback, but it no longer leads: it was
- * first for every building task while being asked for a model it does not
- * serve, so it failed on every request and dragged the whole chain down to the
- * generic local template.
+ * Free daily providers now lead the automatic chain when they are configured.
+ * ModelScope carries the large Qwen/GLM/ERNIE pool. AIHubMix carries the
+ * zero-cost daily GLM/Kimi fallbacks and becomes the first code/file lane.
  */
 const ROUTING_ORDER: Record<AITaskType, string[]> = {
-  chat: ["gemini", "cerebras", "groq", "mistral", "openrouter", "deepseek", "kimi", "openai", "claude", "grok", "aws-bedrock", "nvidia-nim", "azure"],
-  code: ["gemini", "mistral", "cerebras", "groq", "deepseek", "openrouter", "openai", "kimi", "claude", "grok", "nvidia-nim", "aws-bedrock", "azure"],
-  debug: ["gemini", "mistral", "cerebras", "deepseek", "openrouter", "openai", "kimi", "claude", "grok", "aws-bedrock"],
-  project: ["gemini", "mistral", "cerebras", "deepseek", "openrouter", "openai", "kimi", "claude", "grok", "aws-bedrock", "azure"],
+  chat: ["modelscope", "aihubmix", "gemini", "cerebras", "groq", "mistral", "openrouter", "deepseek", "kimi", "openai", "claude", "grok", "aws-bedrock", "nvidia-nim", "azure"],
+  code: ["aihubmix", "modelscope", "gemini", "mistral", "cerebras", "groq", "deepseek", "openrouter", "openai", "kimi", "claude", "grok", "nvidia-nim", "aws-bedrock", "azure"],
+  debug: ["aihubmix", "modelscope", "gemini", "mistral", "cerebras", "deepseek", "openrouter", "openai", "kimi", "claude", "grok", "aws-bedrock"],
+  project: ["aihubmix", "modelscope", "gemini", "mistral", "cerebras", "deepseek", "openrouter", "openai", "kimi", "claude", "grok", "aws-bedrock", "azure"],
   image: ["aws-bedrock"],
   video: [],
-  file_analysis: ["gemini", "deepseek", "openrouter", "openai", "claude", "aws-bedrock", "azure"],
-  research: ["gemini", "cerebras", "groq", "mistral", "deepseek", "openrouter", "openai", "claude", "aws-bedrock"],
+  file_analysis: ["aihubmix", "modelscope", "gemini", "deepseek", "openrouter", "openai", "claude", "aws-bedrock", "azure"],
+  research: ["modelscope", "aihubmix", "gemini", "cerebras", "groq", "mistral", "deepseek", "openrouter", "openai", "claude", "aws-bedrock"],
   voice: [],
-  general: ["gemini", "cerebras", "groq", "mistral", "openrouter", "deepseek", "openai", "claude"],
-  enterprise: ["gemini", "mistral", "deepseek", "openrouter", "aws-bedrock", "nvidia-nim", "azure", "openai", "claude"],
+  general: ["modelscope", "aihubmix", "gemini", "cerebras", "groq", "mistral", "openrouter", "deepseek", "openai", "claude"],
+  enterprise: ["modelscope", "aihubmix", "gemini", "mistral", "deepseek", "openrouter", "aws-bedrock", "nvidia-nim", "azure", "openai", "claude"],
 }
 
 export function providersForTask(task: AITaskType, requestedProvider?: string, allowedProviderIds?: string[]) {
