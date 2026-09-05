@@ -144,33 +144,39 @@ export function MalikModelSelector({
         return
       }
 
-      const width = Math.min(344, viewportWidth - 24)
-      const left = Math.min(Math.max(12, rect.left), viewportWidth - width - 12)
+      const edge = 12
+      const gap = 10
+      const width = Math.min(344, viewportWidth - edge * 2)
+      const left = Math.min(Math.max(edge, rect.left), viewportWidth - width - edge)
+      const measuredHeight = popoverRef.current?.scrollHeight || 566
+      const heightCap = placement === "bottom" ? 566 : 620
+      const desiredHeight = Math.max(96, Math.min(measuredHeight, heightCap, viewportHeight - edge * 2))
+      const belowTop = rect.bottom + gap
+      const aboveTop = rect.top - gap - desiredHeight
+      const fitsBelow = belowTop + desiredHeight <= viewportHeight - edge
+      const fitsAbove = aboveTop >= edge
 
-      if (placement === "bottom") {
-        const top = rect.bottom + 10
-        setPopoverStyle({
-          position: "fixed",
-          left,
-          right: "auto",
-          top,
-          bottom: "auto",
-          width,
-          maxHeight: Math.max(260, Math.min(viewportHeight - top - 12, 566)),
-        })
-        return
+      let top: number
+      if (placement === "bottom" && fitsBelow) {
+        top = belowTop
+      } else if (fitsAbove) {
+        top = aboveTop
+      } else if (fitsBelow) {
+        top = belowTop
+      } else {
+        // On short browser windows keep the whole menu inside the viewport
+        // instead of letting it fall behind the browser/Windows bottom bar.
+        top = Math.max(edge, Math.min(belowTop, viewportHeight - desiredHeight - edge))
       }
-
-      const bottom = Math.max(12, viewportHeight - rect.top + 10)
-      const availableAbove = Math.max(280, rect.top - 24)
 
       setPopoverStyle({
         position: "fixed",
         left,
         right: "auto",
-        bottom,
+        top,
+        bottom: "auto",
         width,
-        maxHeight: Math.min(viewportHeight * 0.72, 620, availableAbove),
+        maxHeight: desiredHeight,
       })
     }
 
