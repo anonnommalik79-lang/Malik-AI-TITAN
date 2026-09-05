@@ -1,10 +1,30 @@
-﻿import type { AIProviderId, AITaskType } from "./types"
+import type { AIProviderId, AITaskType } from "./types"
 
 export const MODEL_REGISTRY: Record<AIProviderId, Partial<Record<AITaskType, string>>> = {
   cloudflare: { image: process.env.CLOUDFLARE_IMAGE_MODEL || "@cf/black-forest-labs/flux-1-schnell" },
   local: {},
   "malik-identity": {},
   "demo-fallback": {},
+  modelscope: {
+    chat: process.env.MALIK_QWEN_MODEL || process.env.MODELSCOPE_CHAT_MODEL || "Qwen/Qwen3.5-397B-A17B",
+    code: process.env.MALIK_REASON_MODEL || process.env.MODELSCOPE_REASON_MODEL || process.env.MALIK_QWEN_MODEL || "Qwen/Qwen3.5-397B-A17B",
+    debug: process.env.MALIK_REASON_MODEL || process.env.MODELSCOPE_REASON_MODEL || process.env.MALIK_QWEN_MODEL || "Qwen/Qwen3.5-397B-A17B",
+    project: process.env.MALIK_REASON_MODEL || process.env.MODELSCOPE_REASON_MODEL || process.env.MALIK_QWEN_MODEL || "Qwen/Qwen3.5-397B-A17B",
+    file_analysis: process.env.MALIK_QWEN_MODEL || process.env.MODELSCOPE_CHAT_MODEL || "Qwen/Qwen3.5-397B-A17B",
+    research: process.env.MALIK_REASON_MODEL || process.env.MODELSCOPE_REASON_MODEL || process.env.MALIK_QWEN_MODEL || "Qwen/Qwen3.5-397B-A17B",
+    general: process.env.MALIK_QWEN_MODEL || process.env.MODELSCOPE_CHAT_MODEL || "Qwen/Qwen3.5-397B-A17B",
+    enterprise: process.env.MALIK_REASON_MODEL || process.env.MODELSCOPE_REASON_MODEL || process.env.MALIK_QWEN_MODEL || "Qwen/Qwen3.5-397B-A17B",
+  },
+  aihubmix: {
+    chat: process.env.AIHUBMIX_PRIMARY_MODEL || "coding-glm-5.3-free",
+    code: process.env.AIHUBMIX_PRIMARY_MODEL || "coding-glm-5.3-free",
+    debug: process.env.AIHUBMIX_PRIMARY_MODEL || "coding-glm-5.3-free",
+    project: process.env.AIHUBMIX_PRIMARY_MODEL || "coding-glm-5.3-free",
+    file_analysis: process.env.AIHUBMIX_VISION_MODEL || "coding-kimi-k3-free",
+    research: process.env.AIHUBMIX_PRIMARY_MODEL || "coding-glm-5.3-free",
+    general: process.env.AIHUBMIX_PRIMARY_MODEL || "coding-glm-5.3-free",
+    enterprise: process.env.AIHUBMIX_PRIMARY_MODEL || "coding-glm-5.3-free",
+  },
   kimi: {
     chat: process.env.KIMI_MODEL || "kimi-k2.5",
     code: process.env.KIMI_CODE_MODEL || process.env.KIMI_MODEL || "kimi-k2.5",
@@ -115,6 +135,3 @@ export const MODEL_REGISTRY: Record<AIProviderId, Partial<Record<AITaskType, str
 export function modelFor(provider: AIProviderId, task: AITaskType, override?: string) {
   return override || MODEL_REGISTRY[provider]?.[task] || MODEL_REGISTRY[provider]?.chat || "default"
 }
-
-
-
