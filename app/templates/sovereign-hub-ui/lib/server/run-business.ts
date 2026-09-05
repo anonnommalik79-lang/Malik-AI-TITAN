@@ -1,5 +1,7 @@
 import { applyFreeModeRequest } from "@/lib/ai/free-mode"
+import { canUseMalikModel, getMalikModel, isMalikModelId } from "@/lib/ai/malik-models"
 import { routeAI } from "@/lib/ai/router"
+import type { AIRequest } from "@/lib/ai/types"
 import { buildBusinessPrompt, getBusinessMode } from "@/lib/business/modes"
 import type { BusinessRunContext } from "@/lib/business/types"
 import { publicEngineForProvider, publicErrorMessage, sanitizePublicText } from "@/lib/brand-provider-map"
@@ -14,6 +16,8 @@ export type BusinessRunBody = {
   message?: string
   context?: BusinessRunContext
   language?: "ru" | "kz" | "en"
+  /** Malik model the caller asked for. Ignored when unknown, or not on the caller's plan. */
+  modelId?: string
 }
 
 export async function runBusinessEngine(request: Request, body: BusinessRunBody) {
@@ -44,17 +48,48 @@ export async function runBusinessEngine(request: Request, body: BusinessRunBody)
   }
 
   const fullPrompt = buildBusinessPrompt(mode, input, context)
-  const result = await routeAI(
-    applyFreeModeRequest({
-      prompt: fullPrompt,
-      task: "research",
-      userId: entitlement.userId,
-      userEmail: entitlement.userId,
-      plan: entitlement.plan,
-      signal: request.signal,
-      metadata: { businessMode: mode.id, businessSection: mode.sectionId },
-    }),
-  )
+  const base: AIRequest = applyFreeModeRequest({
+    prompt: fullPrompt,
+    task: "research",
+    userId: entitlement.userId,
+    userEmail: entitlement.userId,
+    plan: entitlement.plan,
+    signal: request.signal,
+    metadata: { businessMode: mode.id, businessSection: mode.sectionId },
+  })
+
+  /*
+   * A chosen model is a preference, not a promise.
+   *
+   * routeAI applies `model` to whichever provider ends up running, so setting
+   * it globally would hand a Groq model id to Gemini the moment Groq fails and
+   * poison the fallback chain that has always made this endpoint reliable.
+   * So the pinned model is tried alone, against its own provider, and if that
+   * attempt fails the original automatic call runs exactly as before. The
+   * response reports the provider and model that actually answered, so the UI
+   * can show what ran rather than what was asked for.
+   */
+  const requested = body?.modelId
+  const pinned = isMalikModelId(requested) && canUseMalikModel(requested, entitlement.plan)
+    ? getMalikModel(requested)
+    : null
+  const freeModeAllows = Array.isArray(base.metadata?.allowedProviders)
+    ? (base.metadata?.allowedProviders as string[]).includes(pinned?.provider || "")
+    : true
+
+  let result = pinned && freeModeAllows
+    ? await routeAI({
+      ...base,
+      provider: pinned.provider,
+      model: pinned.providerModel,
+      metadata: { ...base.metadata, allowedProviders: [pinned.provider], pinnedModelId: pinned.id },
+    })
+    : null
+
+  // A rate limit is the same answer from every provider; retrying only burns time.
+  if (!result || (!result.success && result.error !== "DAILY_LIMIT_REACHED" && result.error !== "RATE_LIMIT")) {
+    result = await routeAI(base)
+  }
 
   const engine = publicEngineForProvider(result.provider, "research")
   const fallbackUsed = !result.success || Boolean(result.fallbackUsed)

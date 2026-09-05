@@ -81,7 +81,7 @@ const VoiceMode = dynamic(
   () => import("@/components/voice/VoiceMode").then((mod) => mod.VoiceMode),
   { ssr: false },
 )
-import { BusinessCommandCenter } from "./business/BusinessCommandCenter"
+import { AutonomousCompany } from "./business/AutonomousCompany"
 import { NewsroomStudio } from "./media/NewsroomStudio"
 import { GenerationAnimation } from "./generation-animation"
 import type { GenerationStatusType } from "./generation-status"
@@ -1576,14 +1576,14 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
   },
   "business-command-center": {
     id: "business-command-center",
-    title: "Бизнес-центр",
-    description: "Business modes: decisions, x-ray, pricing, go-to-market.",
+    title: "Бизнес под ключ",
+    description: "Autonomous Company: одна идея — восемь агентов — работающий бизнес.",
     bucket: "core",
     icon: "briefcase",
     status: "stable",
     mobileMode: "full",
     fallbackView: "home",
-    keywords: ["business", "бизнес", "стратегия", "выручка", "маркетинг"],
+    keywords: ["business", "бизнес", "под ключ", "autonomous", "компания", "стратегия", "выручка", "маркетинг"],
   },
   "media-newsroom": {
     id: "media-newsroom",
@@ -6469,7 +6469,7 @@ const shouldShowMobilePreviewButton =
     }
     if (activeView === "business-command-center") {
       return (
-        <BusinessCommandCenter
+        <AutonomousCompany
           username={username}
           onViewChange={(view) => safeOpenView(view, "sidebar")}
           onNewChat={handleNewChat}

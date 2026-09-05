@@ -1,0 +1,692 @@
+/* Autonomous Company.
+ *
+ * A CSS module, not another global stylesheet. This section is a full-bleed
+ * surface inside an app whose global CSS has thirty-odd files fighting over
+ * .thome and every dark surface in it; a module cannot be reached by any of
+ * them and cannot reach back.
+ *
+ * Sizes are taken off the two reference screens at their own width - 1450px of
+ * content beside the app's sidebar - and expressed against that, so the whole
+ * thing scales instead of breaking at one resolution.
+ *
+ * Every colour here is a true neutral - equal R, G and B - and must stay that
+ * way. NoBlueUiGuard walks the live DOM and overwrites any background, border
+ * or text colour whose hue lands between 178 and 250 with saturation at or
+ * above 0.12, which is exactly where a "cool dark grey" like #0d1216 sits. The
+ * first draft of this file used those greys and the guard flattened forty-three
+ * of them to a single #1b1b1d at runtime, so panels, chips and cards all came
+ * out the same shade. Neutral greys are left alone.
+ */
+
+.root {
+  --line: #2b2b2b;
+  --line-soft: #202020;
+  --panel: #0e0e0e;
+  --panel-2: #121212;
+  --text: #f6f6f6;
+  --muted: #9ba5ad;
+
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #060606;
+  color: var(--text);
+  scrollbar-width: thin;
+  scrollbar-color: #343b41 transparent;
+}
+
+/* ============================================================ INTRO */
+
+/* Two columns, the photograph taking a little over half. The reference puts
+   the split at 55/45 with a 34px gutter, and the whole thing is vertically
+   centred rather than pinned to the top - which is what makes it read as a
+   product page and not a dashboard. */
+.intro {
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr);
+  gap: clamp(20px, 2.4vw, 36px);
+  align-items: center;
+  padding: clamp(18px, 2.2vh, 30px) clamp(18px, 2vw, 34px);
+}
+
+.introArt {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0d0d0d;
+  aspect-ratio: 775 / 874;
+  max-height: calc(100vh - 96px);
+}
+
+.introArt img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.introPanel {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.2vh, 16px);
+  min-width: 0;
+  padding-right: clamp(0px, 1vw, 18px);
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: #8d979f;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.introTitle {
+  margin: 2px 0 0;
+  font-size: clamp(30px, 3.1vw, 46px);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+.introLead {
+  margin: 0 0 clamp(6px, 1vh, 12px);
+  font-size: clamp(14px, 1.05vw, 17px);
+  color: #bebebe;
+}
+
+.cards {
+  display: grid;
+  gap: clamp(8px, 0.9vh, 12px);
+}
+
+/* Each card is a button because each one is a way into the same flow: it opens
+   the workspace with that part of the pipeline already in mind. A row of five
+   things that look like controls and do nothing is the cheapest way to make a
+   product feel fake. */
+.card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: clamp(12px, 1.5vh, 18px) 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s, background-color 0.16s, transform 0.12s;
+}
+
+.card:hover {
+  border-color: #454545;
+  background: var(--panel-2);
+}
+
+.card:active { transform: translateY(1px); }
+
+.card:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.72);
+  outline-offset: 2px;
+}
+
+.cardIcon {
+  width: clamp(38px, 3vw, 46px);
+  height: clamp(38px, 3vw, 46px);
+  display: grid;
+  place-items: center;
+  border: 1px solid #333333;
+  border-radius: 11px;
+  background: #121212;
+  color: #e4e4e4;
+}
+
+.cardIcon svg { width: 20px; height: 20px; }
+
+.cardTitle {
+  /* Both of these live inside a <span> (the card is a button, which may not
+     contain <div>), so they need to be told to be blocks - otherwise the title
+     and the description render as one run-on line. */
+  display: block;
+  font-size: clamp(14px, 1.05vw, 17px);
+  font-weight: 640;
+  line-height: 1.25;
+}
+
+.cardDesc {
+  display: block;
+  margin-top: 2px;
+  font-size: clamp(12px, 0.86vw, 14px);
+  color: #8d979f;
+  line-height: 1.3;
+}
+
+.cardArrow { color: #6f7982; display: grid; place-items: center; }
+.cardArrow svg { width: 18px; height: 18px; }
+
+.introFooter {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: clamp(6px, 1vh, 14px);
+}
+
+/* The one white thing on the screen, which is what makes it the one thing to
+   press. */
+.launch {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: clamp(14px, 1.7vh, 19px) clamp(20px, 1.8vw, 30px);
+  border: 0;
+  border-radius: 13px;
+  background: #fff;
+  color: #08090a;
+  font-size: clamp(14px, 1.05vw, 17px);
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.16s;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.launch:hover { transform: translateY(-1px); box-shadow: 0 14px 38px rgba(0, 0, 0, 0.55); }
+.launch:active { transform: translateY(0); }
+.launch svg { width: 17px; height: 17px; }
+
+.launchNote {
+  font-size: clamp(12px, 0.86vw, 14px);
+  color: #8d979f;
+  line-height: 1.35;
+}
+
+/* ============================================================ WORKSPACE */
+
+.workspace {
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 16px clamp(16px, 1.6vw, 26px) 34px;
+}
+
+.hero { text-align: center; margin-bottom: 14px; }
+
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: #8d979f;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3ddc84;
+  box-shadow: 0 0 0 3px rgba(61, 220, 132, 0.15);
+}
+
+.briefcase {
+  width: 48px;
+  height: 48px;
+  margin: 12px auto 8px;
+  border: 1px solid #3f3f3f;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  background: #0c0c0c;
+  color: #ebebeb;
+}
+
+.briefcase svg { width: 22px; height: 22px; }
+
+.heroTitle {
+  margin: 0;
+  font-size: clamp(22px, 2vw, 30px);
+  line-height: 1.06;
+  font-weight: 660;
+  letter-spacing: 0.2px;
+}
+
+.heroLead { margin: 6px 0 0; color: #929da5; font-size: clamp(13px, 1vw, 15px); }
+
+.heroMeta {
+  margin-top: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #6f7982;
+  font-size: 12px;
+}
+
+.heroMeta i { width: 3px; height: 3px; border-radius: 50%; background: #4a545c; }
+
+.promptPanel {
+  border: 1px solid #343434;
+  border-radius: 15px;
+  background: #0c0c0c;
+  padding: 12px 14px 10px;
+}
+
+.promptTop { display: flex; gap: 12px; align-items: flex-start; }
+.spark { color: #ececec; margin-top: 8px; }
+.spark svg { width: 20px; height: 20px; }
+
+.promptPanel textarea {
+  flex: 1;
+  min-height: 50px;
+  max-height: 132px;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f5f5f5;
+  font: inherit;
+  font-size: clamp(15px, 1.2vw, 18px);
+  line-height: 1.4;
+  padding: 8px 0;
+}
+
+.promptPanel textarea::placeholder { color: #8d979f; }
+
+.promptActions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.iconButton {
+  width: 37px;
+  height: 37px;
+  border: 1px solid #2c2c2c;
+  background: #121212;
+  border-radius: 10px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: #cfcfcf;
+}
+
+.iconButton:hover { border-color: #4a4a4a; }
+.iconButton svg { width: 17px; height: 17px; }
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 37px;
+  padding: 0 13px;
+  border: 1px solid #2c2c2c;
+  background: #121212;
+  border-radius: 10px;
+  color: #d8d8d8;
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 260px;
+}
+
+.control:hover { border-color: #4a4a4a; }
+.control svg { width: 15px; height: 15px; flex: none; }
+.control span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.controlSet { border-color: #4a555d; background: #191919; color: #fff; }
+
+.modelSelect {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 37px;
+  padding: 0 11px;
+  border: 1px solid #2c2c2c;
+  background: #121212;
+  border-radius: 10px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.modelSelect:hover { border-color: #4a4a4a; }
+.modelMark { width: 21px; height: 21px; border-radius: 6px; overflow: hidden; flex: none; }
+.modelMark svg { width: 100%; height: 100%; display: block; }
+.modelText { display: grid; text-align: left; line-height: 1.1; }
+.modelName { font-size: 13px; font-weight: 620; }
+.modelMini { font-size: 10.5px; color: #7f8a93; }
+.chevron { width: 14px; height: 14px; color: #8d979f; }
+
+.spacer { flex: 1 1 auto; }
+
+.send {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 0;
+  background: #fff;
+  color: #08090a;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.send:disabled { opacity: 0.45; cursor: default; }
+.send svg { width: 19px; height: 19px; }
+
+/* The menu behind Рынок / Страна / Бюджет / Особые требования. */
+.menuWrap { position: relative; }
+
+.menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  min-width: 260px;
+  padding: 8px;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  background: #101010;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  display: grid;
+  gap: 4px;
+}
+
+.menu button {
+  border: 0;
+  background: transparent;
+  color: #dddddd;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.menu button:hover { background: #1b1b1b; }
+.menu input {
+  border: 1px solid #2c2c2c;
+  background: #0c0c0c;
+  color: #f2f2f2;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.menu input:focus { border-color: #4a555d; }
+
+/* ============================================================ AGENTS */
+
+.strip {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 11px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 13px;
+  background: #0a0a0a;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.strip::-webkit-scrollbar { display: none; }
+
+.stripLabel { display: flex; align-items: center; gap: 9px; flex: none; }
+.stripLabel b { font-size: 13px; font-weight: 640; display: block; }
+.stripLabel small { font-size: 11.5px; color: #7f8a93; display: block; }
+
+.flow { display: flex; align-items: center; gap: 8px; flex: none; }
+.flow em { color: #49535a; font-style: normal; font-size: 13px; }
+
+.chip {
+  display: grid;
+  padding: 7px 12px;
+  border: 1px solid #292929;
+  border-radius: 9px;
+  background: #0f0f0f;
+  line-height: 1.15;
+  flex: none;
+}
+
+.chip b { font-size: 12.5px; font-weight: 640; }
+.chip small { font-size: 10.5px; color: #7f8a93; }
+
+.chipActive { border-color: #7d8890; background: #1a1a1a; }
+.chipDone { border-color: #2f6a48; background: #0c1512; }
+.chipFailed { border-color: #7a3b3b; background: #170e0e; }
+
+/* ============================================================ TEMPLATES */
+
+.sectionHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 22px 0 12px;
+}
+
+.sectionEyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  color: #6f7982;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.sectionHead h2 { margin: 5px 0 0; font-size: clamp(17px, 1.4vw, 21px); font-weight: 660; }
+.sectionStat { color: #7f8a93; font-size: 12px; display: flex; align-items: baseline; gap: 6px; }
+.sectionStat b { color: #ebebeb; font-size: 15px; }
+
+.categories { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+
+.category {
+  height: 33px;
+  padding: 0 13px;
+  border: 1px solid #292929;
+  border-radius: 9px;
+  background: #0e0e0e;
+  color: #c0c0c0;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.category:hover { border-color: #424242; }
+.categoryActive { background: #f6f6f6; border-color: #f6f6f6; color: #0c0c0c; font-weight: 620; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.templateCard {
+  border: 1px solid #242424;
+  border-radius: 13px;
+  background: #0e0e0e;
+  overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.16s, transform 0.12s;
+}
+
+.templateCard:hover { border-color: #4a4a4a; transform: translateY(-2px); }
+.templateCard:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.7); outline-offset: 2px; }
+
+.templateCard img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  display: block;
+  background: #151515;
+}
+
+.templateBody { padding: 11px 12px 12px; position: relative; flex: 1; }
+.templateTitle { display: block; font-size: 13.5px; font-weight: 640; }
+.templateDesc { display: block; margin-top: 3px; font-size: 11.5px; color: #7f8a93; line-height: 1.32; padding-right: 16px; }
+.templateArrow { position: absolute; right: 11px; bottom: 11px; color: #6f7982; font-size: 14px; }
+
+.customCard {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  min-height: 100%;
+  padding: 18px 14px;
+  border-style: dashed;
+  border-color: #333333;
+  text-align: center;
+}
+
+.customPlus {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid #3b3b3b;
+  display: grid;
+  place-items: center;
+  color: #d6d6d6;
+}
+
+/* ============================================================ RUNNING */
+
+.run { display: grid; gap: 14px; margin-top: 14px; }
+
+.runHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 13px;
+  background: #0a0a0a;
+}
+
+.runBrief { min-width: 0; }
+.runBrief b { display: block; font-size: 13px; font-weight: 640; }
+.runBrief span { display: block; font-size: 12px; color: #7f8a93; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 62ch; }
+
+.progressTrack { height: 4px; border-radius: 999px; background: #1c1c1c; overflow: hidden; margin-top: 10px; }
+.progressFill { height: 100%; background: #ececec; transition: width 0.4s ease; }
+
+.ghost {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #333333;
+  background: #101010;
+  border-radius: 10px;
+  color: #e3e3e3;
+  cursor: pointer;
+  font-size: 13px;
+  flex: none;
+}
+
+.ghost:hover { border-color: #48525a; }
+
+.steps { display: grid; gap: 10px; }
+
+.step {
+  border: 1px solid var(--line-soft);
+  border-radius: 13px;
+  background: #0a0a0a;
+  overflow: hidden;
+}
+
+.stepHead {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 13px 15px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stepBadge {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid #333333;
+  background: #121212;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #cfcfcf;
+}
+
+.stepBadgeActive { border-color: #7d8890; color: #fff; }
+.stepBadgeDone { border-color: #2f6a48; background: #0c1512; color: #6ee7a8; }
+.stepBadgeFailed { border-color: #7a3b3b; background: #170e0e; color: #f6a6a6; }
+
+.stepName { display: block; font-size: 13.5px; font-weight: 640; }
+.stepRole { display: block; font-size: 11.5px; color: #7f8a93; margin-top: 2px; }
+.stepState { font-size: 11.5px; color: #7f8a93; text-align: right; }
+
+.stepBody {
+  padding: 0 15px 15px 58px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #d6d6d6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.stepError { color: #f2b4b4; }
+.stepMeta { margin-top: 9px; font-size: 11px; color: #6f7982; }
+
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation: none; }
+}
+
+/* ============================================================ NARROW */
+
+@media (max-width: 1200px) {
+  .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  /* Stacked, and no longer asked to fill the screen.
+     `min-height: 100%` made the grid's block size definite, and because the
+     photograph is an aspect-ratio box with `overflow: hidden` its automatic
+     minimum size is zero - so the grid was free to squeeze its row from 243px
+     down to 69px to make the text column fit the viewport, and the photo
+     overflowed the row and sat underneath the first card. An explicit height
+     gives the row something it cannot argue with. */
+  .intro { grid-template-columns: minmax(0, 1fr); align-items: start; min-height: 0; }
+  .introArt { aspect-ratio: auto; height: 44vh; min-height: 190px; max-height: none; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .introFooter { flex-direction: column; align-items: stretch; gap: 10px; }
+  .launch { justify-content: center; }
+
+  /* The meta line is three separate facts, not one sentence: let it wrap into
+     rows instead of stretching one fact across the whole width. */
+  .heroMeta { flex-wrap: wrap; justify-content: center; gap: 4px 10px; font-size: 11.5px; }
+
+  /* The label above the agents rather than beside them - side by side, the
+     eight chips push it out of the strip's scrollable row. */
+  .strip { flex-direction: column; align-items: stretch; gap: 10px; overflow: visible; }
+  .flow { overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .flow::-webkit-scrollbar { display: none; }
+
+  .sectionHead { flex-direction: column; align-items: flex-start; gap: 4px; }
+}
