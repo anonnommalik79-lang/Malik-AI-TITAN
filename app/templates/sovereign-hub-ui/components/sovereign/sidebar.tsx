@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   BarChart3,
+  Briefcase,
   CreditCard,
   Cpu,
   Crown,
@@ -149,6 +150,7 @@ const PRIMARY_ACTIONS: SidebarAction[] = [
   { id: "voice", label: "Голосовой режим", icon: Mic, action: "voice" },
   { id: "library", label: "Библиотека", icon: LayoutTemplate, view: "templates" },
   { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects" },
+  { id: "business-autonomous", label: "Бизнес под ключ", icon: Briefcase, view: "business-command-center" },
   { id: "plugins", label: "Плагины", icon: Plug, view: "features" },
   { id: "websites", label: "Сайты", icon: LayoutTemplate, view: "website-generation" },
   { id: "video-generation", label: "Генерация видео", icon: Video, view: "video-generation" },
