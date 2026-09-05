@@ -106,9 +106,9 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
   }
 }
 
-async function fetchYouTubeCandidates(limit: number, language: string, region: string) {
+async function fetchYouTubeCandidates(limit: number, language: string, region: string): Promise<YouTubeCandidate[]> {
   const config = getYouTubeShortsConfig()
-  if (!config) return [] as YouTubeCandidate[]
+  if (!config) return []
 
   const searchUrl = new URL("https://www.googleapis.com/youtube/v3/search")
   searchUrl.searchParams.set("part", "snippet")
@@ -125,20 +125,20 @@ async function fetchYouTubeCandidates(limit: number, language: string, region: s
   searchUrl.searchParams.set("key", config.apiKey)
 
   const searchResponse = await fetch(searchUrl, { next: { revalidate: 180 } })
-  if (!searchResponse.ok) return [] as YouTubeCandidate[]
+  if (!searchResponse.ok) return []
   const searchJson = await searchResponse.json()
   const ids = (Array.isArray(searchJson?.items) ? searchJson.items : [])
     .map((item: any) => item?.id?.videoId)
     .filter(Boolean)
     .slice(0, 24)
-  if (!ids.length) return [] as YouTubeCandidate[]
+  if (!ids.length) return []
 
   const videoUrl = new URL("https://www.googleapis.com/youtube/v3/videos")
   videoUrl.searchParams.set("part", "snippet,statistics,contentDetails,status")
   videoUrl.searchParams.set("id", ids.join(","))
   videoUrl.searchParams.set("key", config.apiKey)
   const videoResponse = await fetch(videoUrl, { next: { revalidate: 180 } })
-  if (!videoResponse.ok) return [] as YouTubeCandidate[]
+  if (!videoResponse.ok) return []
   const videoJson = await videoResponse.json()
   const byId = new Map<string, any>((videoJson?.items || []).map((item: any) => [String(item.id), item]))
 
@@ -332,13 +332,13 @@ export async function GET(request: NextRequest) {
   if (getShortsSupabaseConfig()) {
     const rows = await shortsSupabaseRequest<DbFeedRow[]>(
       `malik_shorts_feed_v1?select=*&source=in.(malik,tiktok)&order=published_at.desc.nullslast,created_at.desc&limit=${Math.min(limit * 2, 50)}`,
-    ).catch(() => [])
+    ).catch(() => [] as DbFeedRow[])
     dbItems = rows.map(mapDbRow)
   }
 
-  const youtubeCandidates = await fetchYouTubeCandidates(limit, language, region).catch(() => [])
+  const youtubeCandidates: YouTubeCandidate[] = await fetchYouTubeCandidates(limit, language, region).catch(() => [] as YouTubeCandidate[])
   const youtubeIdMap = await materializeYouTube(youtubeCandidates).catch(() => new Map<string, string>())
-  const youtubeItems = youtubeCandidates.map((item) => mapYouTubeCandidate(item, youtubeIdMap.get(item.videoId)))
+  const youtubeItems: MalikShortItem[] = youtubeCandidates.map((item: YouTubeCandidate) => mapYouTubeCandidate(item, youtubeIdMap.get(item.videoId)))
 
   const mixed = mixSources(uniqueBySource([...dbItems, ...youtubeItems]), limit)
   const items = await hydrateViewerState(mixed, user?.id)
