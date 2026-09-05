@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
   const key = `shorts/${userPart}/${kind}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${extension(filename, mime)}`
 
   try {
-    const signed = await createShortsUploadUrl({ key, contentType: mime, contentLength: size })
+    const signed = await createShortsUploadUrl({ key, contentType: mime })
     return NextResponse.json({
       key,
       uploadUrl: signed.uploadUrl,
