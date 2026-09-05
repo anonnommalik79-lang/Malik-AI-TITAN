@@ -67,6 +67,39 @@ const FORMATS: Record<BusinessOutputFormat, string> = {
 ## Что НЕ делать сейчас
 `.trim(),
 
+  /*
+   * The stress test.
+   *
+   * Deliberately has no score out of a hundred. Every other format that grades
+   * something produces a number the model invented, and a made-up score is the
+   * first thing an investor stops believing. What survives scrutiny is the
+   * opposite shape: the assumptions the plan silently rests on, the number that
+   * settles each one, the cheapest way to find that number out this week, and
+   * the result at which the plan is dead. A plan that can name what would
+   * disprove it is worth more than a plan that scores itself 87.
+   */
+  stress: `
+## Приговор
+(1 строка: план проверяемый или это красивый текст — и почему)
+
+## На чём всё держится
+| Допущение | Цифра, которая его решает | Как проверить за неделю | При каком результате план мёртв |
+|---|---|---|---|
+(минимум 5 строк. Каждое допущение бери из самого плана и цитируй его формулировку, а не из общих мест про бизнес)
+
+## Что план утверждает, но не доказал
+- ...
+
+## Предсмертный разбор
+(Прошёл год. Бизнес мёртв. Самая вероятная причина смерти, затем вторая. Пиши как о свершившемся факте)
+
+## Первый вопрос инвестора
+(Самый неудобный вопрос по этому плану — и отвечает ли план на него прямо сейчас: да, нет, или частично)
+
+## Что сделать до того, как тратить деньги
+- [ ] ...
+`.trim(),
+
   battle: `
 ## Вердикт
 ## Роль: жюри / инвестор

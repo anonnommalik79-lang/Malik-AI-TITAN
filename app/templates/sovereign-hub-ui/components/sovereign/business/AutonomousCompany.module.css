@@ -763,12 +763,148 @@
   font-size: 13px;
   line-height: 1.55;
   color: #d6d6d6;
-  white-space: pre-wrap;
   word-break: break-word;
 }
 
+/* Errors are plain text and keep their line breaks; rendered answers are real
+   elements and must not be pre-wrapped, or every block gains a blank line. */
+.stepError { white-space: pre-wrap; }
+
 .stepError { color: #f2b4b4; }
 .stepMeta { margin-top: 9px; font-size: 11px; color: #6f7982; }
+
+/* ======================================================== STRESS TEST */
+
+/* Set apart from the eight steps on purpose. Everything above it is the plan;
+   this is the plan being argued with, and it should not read as a ninth
+   paragraph of the same document. */
+.stress {
+  margin-top: 6px;
+  border: 1px solid #3b3b3b;
+  border-radius: 14px;
+  background: #101010;
+  overflow: hidden;
+}
+
+.stressHead {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 16px;
+}
+
+.stressHead > div { flex: 1; min-width: 0; }
+.stressHead b { display: block; font-size: 14.5px; font-weight: 660; }
+.stressHead small { display: block; margin-top: 3px; font-size: 12px; color: #8a8a8a; }
+
+.stressIcon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  place-items: center;
+  border: 1px solid #3b3b3b;
+  border-radius: 11px;
+  background: #171717;
+  color: #ebebeb;
+}
+
+.stressIcon svg { width: 19px; height: 19px; }
+
+.stressRun {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 37px;
+  flex: none;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #f6f6f6;
+  color: #0c0c0c;
+  font-size: 13px;
+  font-weight: 640;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.stressRun:hover { background: #ffffff; }
+.stressRun:disabled { opacity: 0.6; cursor: default; }
+
+.stressLead {
+  margin: 0;
+  padding: 0 16px 15px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #8a8a8a;
+}
+
+.stressFailed { color: #f2b4b4; }
+
+.stressBody {
+  border-top: 1px solid #292929;
+  padding: 15px 16px 17px;
+  background: #0c0c0c;
+  font-size: 13px;
+  line-height: 1.62;
+  color: #d6d6d6;
+  word-break: break-word;
+}
+
+/* ============================================================ MARKDOWN */
+
+.richHeading {
+  margin: 17px 0 7px;
+  font-size: 13px;
+  font-weight: 680;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ebebeb;
+}
+
+.richHeading:first-child { margin-top: 0; }
+.richParagraph { margin: 0 0 9px; }
+.richParagraph:last-child { margin-bottom: 0; }
+
+.richNumbered { margin: 0 0 7px; display: flex; gap: 9px; }
+.richNumbered > span:first-child { flex: none; color: #8a8a8a; font-variant-numeric: tabular-nums; }
+
+.richList { margin: 0 0 10px; padding: 0; list-style: none; display: grid; gap: 6px; }
+.richList li { display: flex; gap: 9px; }
+.richList li::before { content: "—"; flex: none; color: #6f6f6f; }
+.richTask::before { content: none !important; }
+
+.richBox {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 3px;
+  place-items: center;
+  border: 1px solid #4a4a4a;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1;
+  color: #3ddc84;
+}
+
+/* Tables scroll inside themselves. The stress test's main table has four
+   columns of prose and would otherwise push the whole page sideways. */
+.richTableWrap { margin: 0 0 12px; overflow-x: auto; border: 1px solid #292929; border-radius: 9px; }
+
+.richTable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+
+.richTable th,
+.richTable td {
+  padding: 9px 11px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #202020;
+  min-width: 120px;
+}
+
+.richTable th { background: #151515; color: #ebebeb; font-weight: 640; white-space: nowrap; }
+.richTable tr:last-child td { border-bottom: 0; }
 
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -809,5 +945,7 @@
 
   .sectionHead { flex-direction: column; align-items: flex-start; gap: 4px; }
   .filters { flex-direction: column; align-items: stretch; gap: 10px; }
+  .stressHead { flex-wrap: wrap; }
+  .stressRun { width: 100%; justify-content: center; }
   .search { width: 100%; }
 }

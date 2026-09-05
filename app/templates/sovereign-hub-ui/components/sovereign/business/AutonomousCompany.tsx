@@ -36,6 +36,7 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  ShieldAlert,
   Sparkles,
   TriangleAlert,
   Users,
@@ -46,7 +47,9 @@ import {
   AUTONOMOUS_AGENTS,
   BUSINESS_TEMPLATES,
   TEMPLATE_CATEGORIES,
+  STRESS_TEST,
   agentInput,
+  stressTestInput,
   templateInstruction,
   type AutonomousAgent,
   type BusinessTemplate,
@@ -95,6 +98,110 @@ function MalikMark() {
   )
 }
 
+/**
+ * Renders the markdown the business modes actually emit, and nothing else.
+ *
+ * The app has a full renderer in NoBlueUiGuard, but it builds DOM imperatively
+ * and is bound to the chat's assistant cards; reaching into it from here would
+ * be fragile in both directions. The output formats in output-templates.ts are
+ * a closed set - headings, tables, bullets, checkboxes, numbered lines - so
+ * this parses that set and leaves anything else as a paragraph. Raw "## Приговор"
+ * and "|---|---|" on screen is the difference between a finished product and a
+ * debug view, and this block is the one someone is shown first.
+ */
+function Rich({ text }: { text: string }) {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n")
+  const blocks: React.ReactNode[] = []
+  let i = 0
+
+  const inline = (value: string, key: string): React.ReactNode =>
+    value.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((part, index) => (
+      part.startsWith("**") && part.endsWith("**")
+        ? <b key={`${key}-${index}`}>{part.slice(2, -2)}</b>
+        : <span key={`${key}-${index}`}>{part}</span>
+    ))
+
+  while (i < lines.length) {
+    const line = lines[i].trim()
+
+    if (!line) { i += 1; continue }
+
+    const heading = line.match(/^(#{1,4})\s+(.+)$/)
+    if (heading) {
+      blocks.push(<h4 key={i} className={styles.richHeading}>{heading[2]}</h4>)
+      i += 1
+      continue
+    }
+
+    if (line.startsWith("|")) {
+      const rows: string[][] = []
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        const cells = lines[i].trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim())
+        // The |---|---| separator carries no data; it only tells markdown where
+        // the header ends, which we already know from being the first row.
+        if (!cells.every((c) => /^:?-{2,}:?$/.test(c))) rows.push(cells)
+        i += 1
+      }
+      if (rows.length) {
+        const [head, ...body] = rows
+        blocks.push(
+          <div key={`t${i}`} className={styles.richTableWrap}>
+            <table className={styles.richTable}>
+              <thead><tr>{head.map((c, n) => <th key={n}>{inline(c, `h${i}-${n}`)}</th>)}</tr></thead>
+              <tbody>
+                {body.map((row, r) => (
+                  <tr key={r}>{head.map((_, n) => <td key={n}>{inline(row[n] || "", `c${i}-${r}-${n}`)}</td>)}</tr>
+                ))}
+              </tbody>
+            </table>
+          </div>,
+        )
+      }
+      continue
+    }
+
+    if (/^[-*•]\s*\[[ xX]\]/.test(line) || /^[-*•]\s+/.test(line)) {
+      const items: Array<{ text: string; checked: boolean | null }> = []
+      while (i < lines.length) {
+        const item = lines[i].trim()
+        const box = item.match(/^[-*•]\s*\[([ xX])\]\s*(.*)$/)
+        const bullet = item.match(/^[-*•]\s+(.+)$/)
+        if (box) items.push({ text: box[2], checked: box[1].toLowerCase() === "x" })
+        else if (bullet) items.push({ text: bullet[1], checked: null })
+        else break
+        i += 1
+      }
+      blocks.push(
+        <ul key={`l${i}`} className={styles.richList}>
+          {items.map((item, n) => (
+            <li key={n} className={item.checked === null ? "" : styles.richTask}>
+              {item.checked !== null && <span className={styles.richBox} aria-hidden>{item.checked ? "✓" : ""}</span>}
+              {inline(item.text, `li${i}-${n}`)}
+            </li>
+          ))}
+        </ul>,
+      )
+      continue
+    }
+
+    const numbered = line.match(/^(\d{1,2})[.)]\s+(.+)$/)
+    if (numbered) {
+      blocks.push(
+        <p key={i} className={styles.richNumbered}>
+          <span>{numbered[1]}.</span>{inline(numbered[2], `n${i}`)}
+        </p>,
+      )
+      i += 1
+      continue
+    }
+
+    blocks.push(<p key={i} className={styles.richParagraph}>{inline(line, `p${i}`)}</p>)
+    i += 1
+  }
+
+  return <>{blocks}</>
+}
+
 export type AutonomousCompanyProps = {
   username?: string
   onViewChange?: (view: string) => void
@@ -127,6 +234,13 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   // State, not a ref: the header button reads this during render, and a ref
   // would leave "Остановить" on screen after the run had already finished.
   const [running, setRunning] = useState(false)
+
+  // The stress test: its own state, because it is its own call and its own
+  // failure. A run that produced eight documents is still a success when the
+  // ninth stage cannot be reached.
+  const [stress, setStress] = useState("")
+  const [stressBusy, setStressBusy] = useState(false)
+  const [stressError, setStressError] = useState<string | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
   const runningRef = useRef(false)
@@ -212,6 +326,8 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     setRunning(true)
 
     setRunError(null)
+    setStress("")
+    setStressError(null)
     setStage("running")
     setSteps(AUTONOMOUS_AGENTS.map((agent) => ({ agent, state: "waiting", content: "" })))
     setExpanded(AUTONOMOUS_AGENTS[0].id)
@@ -293,6 +409,67 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     setRunning(false)
   }, [budget, country, instruction, market, modelId, prompt, requirements])
 
+  /**
+   * Runs the stress test against what the eight agents actually wrote.
+   *
+   * The prompt cap is per plan - 3000 characters for a guest, 6000 free - and
+   * the client has no way to know which applies. So it asks with the generous
+   * budget and, if the server says the input is too long, reads the real cap out
+   * of the refusal and asks again at that size. The refusal happens in
+   * checkPromptLength, before any provider is called, so the retry costs a round
+   * trip and not a model call.
+   */
+  const runStressTest = useCallback(async () => {
+    const done = steps
+      .filter((step) => step.state === "done" && step.content)
+      .map((step) => ({ agent: step.agent, content: step.content }))
+    if (!done.length || stressBusy) return
+
+    setStressBusy(true)
+    setStressError(null)
+    setStress("")
+
+    const ask = async (budget: number) => {
+      const response = await clientFetchWithTimeout(
+        ENDPOINT,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: STRESS_TEST.mode,
+            input: stressTestInput(prompt.trim(), done, budget),
+            context: { language: "ru" as const, industry: market || undefined },
+            language: "ru",
+            modelId,
+          }),
+        },
+        120_000,
+      )
+      return { response, data: await response.json().catch(() => ({})) }
+    }
+
+    try {
+      let { response, data } = await ask(11_000)
+
+      if (data?.code === "PROMPT_TOO_LONG") {
+        const cap = Number(String(data.error || "").match(/\/(\d+)\s*chars/)?.[1])
+        if (!Number.isFinite(cap)) throw new Error(data.error || "Запрос слишком длинный")
+        ;({ response, data } = await ask(Math.max(900, cap - 400)))
+      }
+
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.error || data.publicError || `HTTP ${response.status}`)
+      }
+      const content = String(data.content || data.text || "").trim()
+      if (!content) throw new Error("Пустой ответ от модели")
+      setStress(content)
+    } catch (error) {
+      setStressError(error instanceof Error ? error.message : "Не удалось выполнить проверку")
+    } finally {
+      setStressBusy(false)
+    }
+  }, [market, modelId, prompt, steps, stressBusy])
+
   const stop = useCallback(() => {
     abortRef.current?.abort()
     runningRef.current = false
@@ -308,6 +485,8 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     setRunning(false)
     setSteps([])
     setRunError(null)
+    setStress("")
+    setStressError(null)
     setStage("workspace")
     onNewChat?.()
   }, [onNewChat])
@@ -678,7 +857,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
 
                     {open && (step.content || step.error) && (
                       <div className={`${styles.stepBody} ${step.error ? styles.stepError : ""}`}>
-                        {step.error || step.content}
+                        {step.error ? step.error : <Rich text={step.content} />}
                         {step.state === "done" && (step.provider || step.model) && (
                           <div className={styles.stepMeta}>
                             {[step.provider, step.model].filter(Boolean).join(" · ")}
@@ -690,6 +869,42 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                 )
               })}
             </div>
+
+            {/* The stress test lives at the bottom of the run, because it has
+                nothing to read until the agents have written something. */}
+            {completed > 0 && !running && (
+              <section className={styles.stress}>
+                <div className={styles.stressHead}>
+                  <span className={styles.stressIcon}><ShieldAlert strokeWidth={1.8} /></span>
+                  <div>
+                    <b>{STRESS_TEST.title}</b>
+                    <small>{STRESS_TEST.subtitle}</small>
+                  </div>
+                  <button type="button" className={styles.stressRun} onClick={() => void runStressTest()} disabled={stressBusy}>
+                    {stressBusy
+                      ? <><Loader2 size={14} className={styles.spin} /> Разбираю план…</>
+                      : stress ? "Проверить заново" : "Проверить план"}
+                  </button>
+                </div>
+
+                {!stress && !stressError && !stressBusy && (
+                  <p className={styles.stressLead}>
+                    План разберут на допущения: что должно оказаться правдой, какая цифра это решает,
+                    как проверить её за неделю и при каком результате план не работает.
+                    {completed < AUTONOMOUS_AGENTS.length && ` Сейчас готово ${completed} из ${AUTONOMOUS_AGENTS.length} — проверка пройдёт по тому, что есть.`}
+                  </p>
+                )}
+
+                {stressError && (
+                  <p className={`${styles.stressLead} ${styles.stressFailed}`}>
+                    <TriangleAlert size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
+                    {stressError}
+                  </p>
+                )}
+
+                {stress && <div className={styles.stressBody}><Rich text={stress} /></div>}
+              </section>
+            )}
           </div>
         )}
       </div>

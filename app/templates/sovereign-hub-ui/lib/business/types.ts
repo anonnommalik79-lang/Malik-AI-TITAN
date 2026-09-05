@@ -27,6 +27,7 @@ export type BusinessOutputFormat =
   | "pitch-deck"
   | "demo-script"
   | "social-pack"
+  | "stress"
 
 export type BusinessModeId =
   | "ceo-decision"
@@ -54,6 +55,7 @@ export type BusinessModeId =
   | "feature-priority"
   | "investor-qa"
   | "pitch-battle"
+  | "reality-check"
   | "crisis-commander"
   | "reputation-defender"
   | "automation-finder"
