@@ -5,6 +5,7 @@ import { MalikSearchMotion } from "@/components/sovereign/MalikSearchMotion"
 import { MalikTurnRuntime } from "@/components/sovereign/MalikTurnRuntime"
 import { MalikStopPolish } from "@/components/sovereign/MalikStopPolish"
 import { FounderConsoleRuntime } from "@/components/sovereign/FounderConsoleRuntime"
+import { FounderMessageHistoryRuntime } from "@/components/sovereign/FounderMessageHistoryRuntime"
 import { VideoCancelRuntime } from "@/components/sovereign/VideoCancelRuntime"
 import { MalikVideoModelRuntime } from "@/components/sovereign/MalikVideoModelRuntime"
 import { SitesRouteFixRuntime } from "@/components/sovereign/SitesRouteFixRuntime"
@@ -219,6 +220,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <MalikTurnRuntime />
         <MalikStopPolish />
         <FounderConsoleRuntime />
+        <FounderMessageHistoryRuntime />
         <VideoCancelRuntime />
         <MalikVideoModelRuntime />
         <SitesRouteFixRuntime />
