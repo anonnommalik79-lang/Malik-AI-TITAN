@@ -1,7 +1,7 @@
 import { getProviderRows, envGroupConfigured } from "@/lib/provider-status"
 import type { AIProviderId } from "./types"
 
-export const FREE_PROVIDER_IDS: AIProviderId[] = ["gemini", "mistral", "cerebras", "groq", "openrouter"]
+export const FREE_PROVIDER_IDS: AIProviderId[] = ["modelscope", "aihubmix", "gemini", "mistral", "cerebras", "groq", "openrouter"]
 
 export const PREMIUM_PROVIDER_IDS: AIProviderId[] = [
   "openai",
@@ -27,12 +27,21 @@ export function getTitanProviderStatus() {
   return {
     freeModeActive: freeMode,
     providers: {
+      modelscope: {
+        id: "modelscope",
+        configured: Boolean(process.env.MODELSCOPE_API_KEY?.trim()),
+        ready: Boolean(process.env.MODELSCOPE_API_KEY?.trim()),
+        title: "ModelScope Daily Titans",
+      },
+      aihubmix: {
+        id: "aihubmix",
+        configured: Boolean(process.env.AIHUBMIX_API_KEY?.trim()),
+        ready: Boolean(process.env.AIHUBMIX_API_KEY?.trim()),
+        title: "AIHubMix Daily Free",
+      },
       cerebras: mapId("cerebras"),
       groq: mapId("groq"),
       gemini: mapId("gemini"),
-      // Free allowance is measured in tokens per month rather than requests per
-      // day, which is the right shape for a builder whose single request is a
-      // whole HTML document.
       mistral: {
         id: "mistral",
         configured: Boolean(process.env.MISTRAL_API_KEY?.trim()),
