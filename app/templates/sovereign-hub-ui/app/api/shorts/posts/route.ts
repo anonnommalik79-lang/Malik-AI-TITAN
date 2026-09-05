@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
+import { moderateShortsText } from "@/lib/shorts/moderation"
 import { getShortsSupabaseConfig, safeText, shortsSupabaseRequest } from "@/lib/shorts/server"
 import { getShortsStorageConfig, publicShortsObjectUrl } from "@/lib/shorts/storage"
 
@@ -48,6 +49,16 @@ export async function POST(request: NextRequest) {
   if (!/\/(?:video|image)\//.test(key)) return NextResponse.json({ error: "INVALID_MEDIA_KIND" }, { status: 400 })
 
   const caption = safeText(input.caption, 2200)
+  const language = safeText(input.language, 16) || "ru"
+  const region = safeText(input.region, 16) || "KZ"
+  const moderation = await moderateShortsText(caption, { kind: "post", userKey: user.id, locale: language })
+  if (moderation.action === "block") {
+    return NextResponse.json({
+      error: "CONTENT_BLOCKED",
+      moderation: { action: moderation.action, labels: moderation.labels, score: moderation.score },
+    }, { status: 422 })
+  }
+
   const durationSeconds = Number.isFinite(Number(input.durationSeconds))
     ? Math.max(0, Math.min(86400, Math.floor(Number(input.durationSeconds))))
     : null
@@ -64,8 +75,8 @@ export async function POST(request: NextRequest) {
         username: generatedUsername(email, user.id),
         display_name: displayName,
         avatar_url: user.profilePictureUrl || null,
-        locale: "ru",
-        region: "KZ",
+        locale: language,
+        region,
       }),
     })
 
@@ -80,10 +91,10 @@ export async function POST(request: NextRequest) {
         media_url: mediaUrl,
         caption,
         hashtags: hashtags(caption),
-        language: safeText(input.language, 16) || "ru",
-        region: safeText(input.region, 16) || "KZ",
+        language,
+        region,
         duration_seconds: durationSeconds,
-        status: "published",
+        status: moderation.action === "review" ? "limited" : "published",
         visibility,
         can_remix: input.canRemix !== false,
         can_download: false,
@@ -93,6 +104,22 @@ export async function POST(request: NextRequest) {
     })
     const post = rows?.[0]
     if (!post?.id) throw new Error("POST_INSERT_EMPTY")
+
+    if (moderation.action === "review") {
+      await shortsSupabaseRequest("malik_shorts_moderation_cases", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({
+          post_id: post.id,
+          profile_key: user.id,
+          source: "automated",
+          severity: moderation.score >= .72 ? "high" : "medium",
+          labels: { text: moderation.labels, score: moderation.score, provider: moderation.provider },
+          status: "open",
+          notes: moderation.reason || "Automated publish preflight queued this Short for review.",
+        }),
+      }).catch(() => undefined)
+    }
 
     const kind = key.includes("/video/") ? "video" : "image"
     const assetRows = await shortsSupabaseRequest<any[]>("malik_shorts_media_assets", {
@@ -109,14 +136,37 @@ export async function POST(request: NextRequest) {
     }).catch(() => undefined)
 
     if (asset?.id) {
-      const jobs = (kind === "video"
-        ? ["virus_scan", "probe", "thumbnail", "transcode_hls", "caption", "moderation", "embedding"]
-        : ["virus_scan", "thumbnail", "moderation", "embedding"])
-        .map((jobType, index) => ({ asset_id: asset.id, job_type: jobType, status: "queued", priority: 50 + index * 10, payload: { postId: post.id, language: safeText(input.language, 16) || "ru", region: safeText(input.region, 16) || "KZ" } }))
-      await shortsSupabaseRequest("malik_shorts_media_jobs", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(jobs) }).catch(() => undefined)
+      const jobTypes = kind === "video"
+        ? ["virus_scan", "probe", "fingerprint", "thumbnail", "transcode_hls", "caption", "moderation", "embedding"]
+        : ["virus_scan", "fingerprint", "thumbnail", "moderation", "embedding"]
+      const makeJobs = (types: string[]) => types.map((jobType, index) => ({
+        asset_id: asset.id,
+        job_type: jobType,
+        status: "queued",
+        priority: 50 + index * 10,
+        payload: { postId: post.id, language, region },
+      }))
+      await shortsSupabaseRequest("malik_shorts_media_jobs", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify(makeJobs(jobTypes)),
+      }).catch(async () => {
+        // Backward-compatible deployment path while the v3 DB migration rolls out.
+        await shortsSupabaseRequest("malik_shorts_media_jobs", {
+          method: "POST",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify(makeJobs(jobTypes.filter((type) => type !== "fingerprint"))),
+        }).catch(() => undefined)
+      })
     }
 
-    return NextResponse.json({ ok: true, post, assetId: asset?.id || null, processingQueued: Boolean(asset?.id) }, { status: 201 })
+    return NextResponse.json({
+      ok: true,
+      post,
+      assetId: asset?.id || null,
+      processingQueued: Boolean(asset?.id),
+      moderation: { action: moderation.action, labels: moderation.labels, score: moderation.score },
+    }, { status: 201 })
   } catch (error) {
     console.error("[Malik Shorts] publish failed", error)
     return NextResponse.json({ error: "PUBLISH_FAILED" }, { status: 500 })
