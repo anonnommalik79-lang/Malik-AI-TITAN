@@ -6,7 +6,7 @@ const history = fs.readFileSync("lib/media/image-history.ts", "utf8")
 const post = fs.readFileSync("lib/media/image-postprocess.ts", "utf8")
 const preview = fs.readFileSync("lib/media/image-display-preview.ts", "utf8")
 const capacity = fs.readFileSync("lib/media/image-processing-capacity.ts", "utf8")
-const assetStore = fs.readFileSync("lib/media/asset-store.ts", "utf8")
+const cloudUpload = fs.readFileSync("lib/storage/cloud-upload.ts", "utf8")
 const quality = fs.readFileSync("lib/media/image-quality-presets.ts", "utf8")
 const resultExperience = fs.readFileSync("components/sovereign/ImageResultExperience.tsx", "utf8")
 const studio = fs.readFileSync("components/sovereign/photo-generation/PhotoGenerationStudio.tsx", "utf8")
@@ -17,7 +17,7 @@ const layout = fs.readFileSync("app/layout.tsx", "utf8")
 
 // A durable high-resolution result must not be duplicated as a base64 fallback in response JSON.
 assert.equal(/inlineImageUrl\s*:/.test(route), false, "photo route must not return duplicate inlineImageUrl")
-assert.match(route, /durable\s*=\s*Boolean\(storageUrl \|\| assetUrl\)/, "route must expose durable state")
+assert.match(route, /durable\s*=\s*Boolean\(storageUrl\)/, "route must expose cloud durable state")
 
 // Quality is not the performance tradeoff. The default master stays Ultra 8K;
 // the browser gets a separate 1600px display derivative and download resolves
@@ -37,37 +37,35 @@ assert.match(studio, /const displayUrl = data\.url \|\| data\.previewUrl \|\| da
 assert.match(studio, /const masterUrl = data\.masterUrl \|\| data\.imageUrl \|\| displayUrl/, "photo studio must preserve the full-resolution master")
 assert.match(studio, /results\[0\]\?\.masterUrl \?\? results\[0\]\?\.url/, "explicit Canvas export should use the master")
 
-// Full-quality post-processing is gated by host capacity instead of lowering
-// resolution. Small machines queue heavy Sharp work; large machines may overlap
-// a few jobs and an environment override can tune known hardware.
+// Full-quality post-processing is gated by host capacity instead of lowering resolution.
 assert.match(route, /withMalikImageProcessingSlot/, "8K delivery must use the capacity gate")
 assert.match(capacity, /IMAGE_POSTPROCESS_CONCURRENCY/, "capacity should be operator-tunable")
 assert.match(capacity, /HOST_MEMORY_GIB\s*>=\s*24[\s\S]*return 3/, "large hosts should be allowed more delivery concurrency")
 assert.match(capacity, /const next = state\.waiters\.shift\(\)[\s\S]*if \(next\)[\s\S]*queueMicrotask\(next\)[\s\S]*return/, "queued work must receive a slot directly without an oversubscription race")
 
-// High-resolution persistence must not block the Node event loop after a render.
-// 64MB also leaves headroom for genuine Ultra 16K JPEG masters around 30MB,
-// instead of silently discarding that master on a host without cloud storage.
-assert.match(assetStore, /MAX_ASSET_BYTES\s*=\s*64\s*\*\s*1024\s*\*\s*1024/, "asset store must accept large 16K masters")
-assert.match(assetStore, /export async function saveMediaAssetAsync/, "asset store must expose async persistence")
-assert.match(assetStore, /await import\(["']node:fs\/promises["']\)/, "large asset writes must use async fs")
-assert.match(assetStore, /setImmediate\(\(\)\s*=>/, "retention bookkeeping must stay off the response critical path")
-assert.match(route, /await saveMediaAssetAsync\(\{ buffer: delivered\.buffer/, "generated masters must use async persistence")
-assert.match(route, /await saveMediaAssetAsync\(\{ buffer: displayPreview\.buffer/, "generated previews must use async persistence")
+// Generated account media must leave Render memory through object storage and never
+// be persisted to the service's ephemeral local filesystem.
+assert.match(route, /isCloudStorageConfigured, uploadMediaAsset/, "photo route must use object storage")
+assert.match(route, /uploadMediaAsset\(\{[\s\S]*buffer:\s*delivered\.buffer[\s\S]*kind:\s*["']image["']/, "generated masters must upload directly to object storage")
+assert.match(route, /uploadMediaAsset\(\{[\s\S]*buffer:\s*displayPreview\.buffer[\s\S]*kind:\s*["']image["']/, "generated previews must upload directly to object storage")
+assert.equal(/saveMediaAssetAsync\(/.test(route), false, "photo route must not persist generated media on Render local disk")
+assert.match(cloudUpload, /MAX_MEDIA_BYTES\s*=\s*64\s*\*\s*1024\s*\*\s*1024/, "cloud upload must accept large 16K masters")
+assert.match(cloudUpload, /PutObjectCommand/, "cloud upload must persist media through S3-compatible storage")
+assert.match(cloudUpload, /users\/\$\{owner\}\/\$\{kind\}\//, "cloud objects must be partitioned by account owner")
+assert.match(cloudUpload, /publicBaseUrl/, "cloud upload must return short public CDN URLs")
 
-// Sharp must keep the high-resolution master as bytes until persistence; eagerly creating a
-// data URI adds ~33% and creates huge JS strings before the browser even sees it.
+// Sharp must keep the high-resolution master as bytes until persistence.
 assert.equal(/data\.toString\(["']base64["']\)/.test(post), false, "post-process must not eagerly base64 encode output")
 assert.match(post, /buffer:\s*data/, "post-process must hand the processed buffer to persistence")
 
-// Browser image history is metadata only. Old data:/blob: entries are migrated out.
+// Browser image history is metadata only. Old data:/blob: entries are rejected,
+// oversized snapshots are compacted, and duplicate cards are a no-op.
 assert.match(history, /\^\(\?:data\|blob\):/i, "history must reject data/blob references")
-assert.match(history, /raw\.length\s*>\s*750_000/, "history must self-heal oversized legacy snapshots")
-assert.match(history, /slice\(0, 16\)/, "history should shrink itself before competing with chat storage")
-assert.match(history, /Identical memories are now a true no-op/, "re-inspecting a ready card must not rewrite localStorage")
+assert.match(history, /raw\.length\s*>\s*1_500_000/, "history must self-heal oversized legacy snapshots")
+assert.match(history, /safe\s*=\s*safe\.slice\(0,\s*80\)/, "history should shrink itself before competing with chat storage")
+assert.match(history, /existing\s*&&[\s\S]*existing\.src\s*===\s*src[\s\S]*return existing/, "re-inspecting an identical ready card must not rewrite localStorage")
 
-// If the origin quota is still full, protect the last complete chat snapshot
-// instead of allowing dashboard.tsx to enter its legacy drop-old-chats loop.
+// If the origin quota is still full, protect the last complete chat snapshot.
 assert.match(quotaGuard, /DASHBOARD_STORAGE_KEY\s*=\s*["']malik_dashboard_state_v3["']/, "quota guard must target dashboard storage only")
 assert.match(quotaGuard, /DISPOSABLE_MEDIA_KEYS/, "quota guard should reclaim disposable media first")
 assert.match(quotaGuard, /preserved previous complete snapshot/, "quota guard must preserve the previous full snapshot on hard quota exhaustion")
@@ -91,4 +89,4 @@ assert.equal(/new MutationObserver\(\(\)\s*=>\s*enhanceAll\(\)\)/.test(resultExp
 assert.match(resultExperience, /const pending = new Set<HTMLElement>\(\)/, "result work must be frame-batched")
 assert.match(resultExperience, /malikRememberedSrc/, "ready cards must not re-read history repeatedly")
 
-console.log("Malik image quality + capacity + persistence + memory + main-thread safety: OK")
+console.log("Malik image quality + cloud persistence + memory + main-thread safety: OK")
