@@ -16,6 +16,8 @@ export type AIProviderId =
   | "local"
   | "malik-identity"
   | "demo-fallback"
+  | "modelscope"
+  | "aihubmix"
   | "kimi"
   | "grok"
   | "nvidia-nim"
