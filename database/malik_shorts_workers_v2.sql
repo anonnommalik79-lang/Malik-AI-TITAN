@@ -32,6 +32,42 @@ begin
 end;
 $$;
 
+-- Filtered claim used by dedicated workers so the FFmpeg worker never steals
+-- caption/moderation/embedding jobs and vice versa.
+create or replace function malik_shorts_claim_media_job_v2(p_worker text, p_job_types text[])
+returns setof malik_shorts_media_jobs
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_id uuid;
+begin
+  if p_job_types is null or cardinality(p_job_types) = 0 then return; end if;
+
+  select id into v_id
+  from malik_shorts_media_jobs
+  where status = 'queued'
+    and run_after <= now()
+    and attempts < max_attempts
+    and job_type = any(p_job_types)
+  order by priority asc, created_at asc
+  for update skip locked
+  limit 1;
+
+  if v_id is null then return; end if;
+
+  return query
+  update malik_shorts_media_jobs
+  set status = 'running',
+      locked_at = now(),
+      locked_by = left(coalesce(p_worker, 'worker'), 120),
+      attempts = attempts + 1,
+      updated_at = now()
+  where id = v_id
+  returning *;
+end;
+$$;
+
 create or replace function malik_shorts_finish_media_job(
   p_job_id uuid,
   p_worker text,
@@ -118,10 +154,12 @@ end;
 $$;
 
 revoke all on function malik_shorts_claim_media_job(text) from public, anon, authenticated;
+revoke all on function malik_shorts_claim_media_job_v2(text,text[]) from public, anon, authenticated;
 revoke all on function malik_shorts_finish_media_job(uuid,text,boolean,jsonb,text) from public, anon, authenticated;
 revoke all on function malik_shorts_claim_agent_run(text) from public, anon, authenticated;
 revoke all on function malik_shorts_claim_scheduled_draft() from public, anon, authenticated;
 grant execute on function malik_shorts_claim_media_job(text) to service_role;
+grant execute on function malik_shorts_claim_media_job_v2(text,text[]) to service_role;
 grant execute on function malik_shorts_finish_media_job(uuid,text,boolean,jsonb,text) to service_role;
 grant execute on function malik_shorts_claim_agent_run(text) to service_role;
 grant execute on function malik_shorts_claim_scheduled_draft() to service_role;
