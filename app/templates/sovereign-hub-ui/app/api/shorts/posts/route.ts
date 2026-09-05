@@ -114,10 +114,9 @@ export async function POST(request: NextRequest) {
         : ["virus_scan", "thumbnail", "moderation", "embedding"])
         .map((jobType, index) => ({ asset_id: asset.id, job_type: jobType, status: "queued", priority: 50 + index * 10, payload: { postId: post.id, language: safeText(input.language, 16) || "ru", region: safeText(input.region, 16) || "KZ" } }))
       await shortsSupabaseRequest("malik_shorts_media_jobs", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(jobs) }).catch(() => undefined)
-      await shortsSupabaseRequest(`malik_shorts_posts?id=eq.${post.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: "processing" }) }).catch(() => undefined)
     }
 
-    return NextResponse.json({ ok: true, post: asset ? { ...post, status: "processing" } : post, assetId: asset?.id || null, processingQueued: Boolean(asset?.id) }, { status: 201 })
+    return NextResponse.json({ ok: true, post, assetId: asset?.id || null, processingQueued: Boolean(asset?.id) }, { status: 201 })
   } catch (error) {
     console.error("[Malik Shorts] publish failed", error)
     return NextResponse.json({ error: "PUBLISH_FAILED" }, { status: 500 })
