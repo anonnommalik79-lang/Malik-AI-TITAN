@@ -35,20 +35,30 @@ export async function POST(request: NextRequest) {
 
   const source = input.source && ["malik", "youtube", "tiktok"].includes(input.source) ? input.source : null
   const sessionId = safeText(input.sessionId, 120) || null
+  const positionMs = intOrNull(input.positionMs)
+  const durationMs = intOrNull(input.durationMs)
 
   try {
-    const rows = await shortsSupabaseRequest<any[]>("rpc/malik_shorts_interact", {
-      method: "POST",
-      body: JSON.stringify({
-        p_user_key: user.id,
-        p_post_id: shortId,
-        p_action: action,
-        p_position_ms: intOrNull(input.positionMs),
-        p_duration_ms: intOrNull(input.durationMs),
-        p_session_id: sessionId,
-        p_source: source,
-      }),
-    })
+    const endpoint = action === "view" ? "rpc/malik_shorts_record_view" : "rpc/malik_shorts_interact"
+    const body = action === "view"
+      ? {
+          p_user_key: user.id,
+          p_post_id: shortId,
+          p_position_ms: positionMs,
+          p_duration_ms: durationMs,
+          p_session_id: sessionId,
+          p_source: source,
+        }
+      : {
+          p_user_key: user.id,
+          p_post_id: shortId,
+          p_action: action,
+          p_position_ms: positionMs,
+          p_duration_ms: durationMs,
+          p_session_id: sessionId,
+          p_source: source,
+        }
+    const rows = await shortsSupabaseRequest<any>(endpoint, { method: "POST", body: JSON.stringify(body) })
     const result = Array.isArray(rows) ? rows[0] : rows
     return NextResponse.json({ ok: true, ...(result || {}) })
   } catch (error) {
