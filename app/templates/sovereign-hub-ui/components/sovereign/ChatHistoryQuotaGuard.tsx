@@ -1,6 +1,7 @@
 "use client"
 
 import { useLayoutEffect } from "react"
+import { MalikShortsSidebarRuntime } from "@/components/sovereign/MalikShortsSidebarRuntime"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const DASHBOARD_ACCOUNT_STORAGE_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
@@ -65,7 +66,7 @@ export function ChatHistoryQuotaGuard() {
     }
   }, [])
 
-  return null
+  return <MalikShortsSidebarRuntime />
 }
 
 export default ChatHistoryQuotaGuard
