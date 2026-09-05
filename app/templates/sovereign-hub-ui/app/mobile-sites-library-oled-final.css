@@ -185,4 +185,53 @@
     box-shadow: none !important;
     margin-top: 10px !important;
   }
+
+  /* FINAL SITES OLED LOCK.
+     Sites is rendered with its own late global style block, so use a deliberately
+     stronger selector here. This removes only the grey slabs marked in the phone
+     screenshot; the white Create Site button and template imagery stay untouched. */
+  html body #malik-root#malik-root .malikSites,
+  html body #malik-root#malik-root .malikSites .sitesWorkspace,
+  html body #malik-root#malik-root .malikSites .galleryHero,
+  html body #malik-root#malik-root .malikSites .galleryHero > div,
+  html body #malik-root#malik-root .malikSites .galleryTools,
+  html body #malik-root#malik-root .malikSites .categoryRow,
+  html body #malik-root#malik-root .malikSites .galleryHeading,
+  html body #malik-root#malik-root .malikSites .galleryHeading > div,
+  html body #malik-root#malik-root .malikSites .templateGrid {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  html body #malik-root#malik-root .malikSites .galleryHero::before,
+  html body #malik-root#malik-root .malikSites .galleryHero::after,
+  html body #malik-root#malik-root .malikSites .galleryTools::before,
+  html body #malik-root#malik-root .malikSites .galleryTools::after,
+  html body #malik-root#malik-root .malikSites .galleryHeading::before,
+  html body #malik-root#malik-root .malikSites .galleryHeading::after {
+    content: none !important;
+    display: none !important;
+    background: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  html body #malik-root#malik-root .malikSites .searchField,
+  html body #malik-root#malik-root .malikSites .searchField:focus-within,
+  html body #malik-root#malik-root .malikSites .templateCount {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+    border-color: #202020 !important;
+    box-shadow: none !important;
+  }
+
+  html body #malik-root#malik-root .malikSites .categoryRow > button:not(.active):not(.malik-category-next) {
+    background: #000 !important;
+    background-color: #000 !important;
+    background-image: none !important;
+  }
 }
