@@ -19,12 +19,13 @@ function storageReady() {
 export async function GET() {
   const { user } = await getOptionalWorkOSAuth()
   const database = Boolean(getShortsSupabaseConfig())
+  const storage = storageReady()
   const worker = shortsWorkerConfigured()
   return NextResponse.json({
     authenticated: Boolean(user),
     capabilities: {
       database,
-      nativeUpload: storageReady(),
+      nativeUpload: storage,
       youtubeDiscovery: Boolean(getYouTubeShortsConfig()),
       youtubeCreatorOAuth: Boolean(getYouTubeOAuthConfig()),
       tiktokCreatorOAuth: Boolean(getTikTokShortsConfig()),
@@ -32,11 +33,13 @@ export async function GET() {
       recommendationV2: database,
       messaging: database,
       liveMetadata: database,
-      liveStreamingTransport: false,
+      liveStreamingTransport: database && storage,
+      nativeChunkLiveTransport: database && storage,
+      rtmpWebrtcIngest: false,
       creatorEconomyLedger: database,
       mediaWorker: worker,
-      adaptiveHlsTranscoding: worker && storageReady(),
-      progressivePlaybackFallback: worker && storageReady(),
+      adaptiveHlsTranscoding: worker && storage,
+      progressivePlaybackFallback: worker && storage,
       mediaFingerprinting: worker && database,
       duplicateRightsReview: database,
       localTextModeration: true,
@@ -44,7 +47,7 @@ export async function GET() {
     },
     notes: {
       instagramCreatorOAuth: "Provider adapter is reserved; enable only after approved Meta credentials and policy review.",
-      liveStreamingTransport: "Live session/chat metadata exists; RTMP/WebRTC ingest + transcoding/CDN is a separate infrastructure service.",
+      liveStreamingTransport: "Malik native camera-to-CDN chunk transport is implemented when DB + storage are configured. RTMP/WebRTC ingest remains an optional scale-up transport.",
       mediaFingerprinting: "Exact, lightweight video and audio fingerprints create review candidates; they are not a substitute for a licensed global Content-ID catalog.",
       moderation: "Local preflight is always available; an optional HTTPS moderation provider can add semantic safety decisions server-side.",
     },
