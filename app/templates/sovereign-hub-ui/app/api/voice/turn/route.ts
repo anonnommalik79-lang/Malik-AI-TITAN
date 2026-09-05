@@ -39,6 +39,15 @@ const COMPREHENSION = [
   "It may contain accented pronunciation, missing endings, mixed Russian, Kazakh and English words, or a brand name spelled by sound.",
   "Work out what the person meant and answer that. Do not give an etymology or invent a person's name when the user is simply talking to you.",
   "Ask a short clarifying question only when the intent is genuinely ambiguous and guessing would be wrong.",
+  // The repair table upstream can only fix spellings that are not real words.
+  // "чат гпт" heard as "чаче" cannot be rewritten there - "чаче" is a real
+  // Russian word - so the model is told what these conversations are about and
+  // resolves it from context, which is what a person does with a mumbled name.
+  "A garbled word in a sentence about AI, models or software is almost always one of these:",
+  "ChatGPT, GPT, Claude, Gemini, DeepSeek, Copilot, Perplexity, Midjourney, Stable Diffusion, Malik AI,",
+  "GitHub, Figma, Notion, Telegram, WhatsApp, Instagram, TikTok, YouTube, Kaspi, JavaScript, TypeScript, Python, React, Next.js.",
+  "Read it as the one that fits and answer about that, without commenting on the mishearing.",
+  "\"Чем Claude отличается от чаче\" is a question about ChatGPT.",
 ].join(" ")
 
 /**

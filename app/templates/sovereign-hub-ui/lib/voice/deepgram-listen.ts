@@ -137,7 +137,15 @@ function url(options: { keyterms?: string[]; utteranceEndMs: number; withKeyterm
 
   if (options.withKeyterms) {
     for (const term of options.keyterms || []) {
-      if (term) query.append("keyterm", term)
+      if (!term) continue
+      // Two spellings of the same idea, because they are not supported on the
+      // same models: `keyterm` is Nova-3's, and on the English model it is the
+      // one that works; `keywords` is what the multilingual and single-language
+      // models understand. A parameter a model does not know is ignored, and
+      // sending the one it does know is the difference between "Claude" and
+      // whatever the sounds resembled.
+      query.append("keyterm", term)
+      query.append("keywords", `${term}:2`)
     }
   }
 

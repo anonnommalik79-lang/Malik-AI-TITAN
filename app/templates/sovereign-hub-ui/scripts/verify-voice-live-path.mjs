@@ -114,6 +114,10 @@ await check("it fetches a token, opens the stream, and asks for the right thing"
   assert.equal(url.searchParams.get("interim_results"), "true")
   assert.equal(url.searchParams.get("vad_events"), "true")
   assert.deepEqual(url.searchParams.getAll("keyterm"), ["Malik AI", "Kaspi"])
+  // The same hints under the name the multilingual models understand. Sending
+  // only `keyterm` meant the Russian stream got no hints at all, which is how
+  // "чат гпт" came back as "чаче".
+  assert.deepEqual(url.searchParams.getAll("keywords"), ["Malik AI:2", "Kaspi:2"])
   // Token auth goes in the subprotocol, not a header - a browser cannot set
   // headers on a WebSocket at all.
   assert.deepEqual(socket.protocols, ["bearer", "tok_live"])
