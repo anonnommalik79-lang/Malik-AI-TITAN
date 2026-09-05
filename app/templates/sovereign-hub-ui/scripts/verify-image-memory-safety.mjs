@@ -54,16 +54,16 @@ assert.match(cloudUpload, /PutObjectCommand/, "cloud upload must persist media t
 assert.match(cloudUpload, /users\/\$\{owner\}\/\$\{kind\}\//, "cloud objects must be partitioned by account owner")
 assert.match(cloudUpload, /publicBaseUrl/, "cloud upload must return short public CDN URLs")
 
-// Sharp must keep the high-resolution master as bytes until persistence; eagerly creating a
-// data URI adds ~33% and creates huge JS strings before the browser even sees it.
+// Sharp must keep the high-resolution master as bytes until persistence.
 assert.equal(/data\.toString\(["']base64["']\)/.test(post), false, "post-process must not eagerly base64 encode output")
 assert.match(post, /buffer:\s*data/, "post-process must hand the processed buffer to persistence")
 
-// Browser image history is metadata only. Old data:/blob: entries are migrated out.
+// Browser image history is metadata only. Old data:/blob: entries are rejected,
+// oversized snapshots are compacted, and duplicate cards are a no-op.
 assert.match(history, /\^\(\?:data\|blob\):/i, "history must reject data/blob references")
-assert.match(history, /raw\.length\s*>\s*750_000/, "history must self-heal oversized legacy snapshots")
-assert.match(history, /slice\(0, 16\)/, "history should shrink itself before competing with chat storage")
-assert.match(history, /Identical memories are now a true no-op/, "re-inspecting a ready card must not rewrite localStorage")
+assert.match(history, /raw\.length\s*>\s*1_500_000/, "history must self-heal oversized legacy snapshots")
+assert.match(history, /safe\s*=\s*safe\.slice\(0,\s*80\)/, "history should shrink itself before competing with chat storage")
+assert.match(history, /existing\s*&&[\s\S]*existing\.src\s*===\s*src[\s\S]*return existing/, "re-inspecting an identical ready card must not rewrite localStorage")
 
 // If the origin quota is still full, protect the last complete chat snapshot.
 assert.match(quotaGuard, /DASHBOARD_STORAGE_KEY\s*=\s*["']malik_dashboard_state_v3["']/, "quota guard must target dashboard storage only")
