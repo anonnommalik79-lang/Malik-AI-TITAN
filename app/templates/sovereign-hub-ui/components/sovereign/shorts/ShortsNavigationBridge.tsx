@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect } from "react"
+import { prefillPrompt } from "@/lib/malik-context"
 
 const routes: Record<string, string> = {
   "Обзор": "/shorts/explore",
@@ -10,13 +11,53 @@ const routes: Record<string, string> = {
   "Профиль": "/shorts/profile",
 }
 
+function richPrompt(context: any) {
+  const short = context?.short || {}
+  const topics = (context?.topics || []).map((topic: any) => topic.name || topic.slug).filter(Boolean).slice(0, 12).join(", ")
+  const objects = (context?.detected?.objects || []).slice(0, 12).map((item: any) => typeof item === "string" ? item : item?.name || item?.label).filter(Boolean).join(", ")
+  const comments = [...(context?.malikComments || []), ...(context?.externalComments || [])].slice(0, 12).map((item: any) => `- ${item.author?.display_name || item.author?.username || item.author || "user"}: ${item.body}`).join("\n")
+  const transcript = String(context?.transcript?.body || "").slice(0, 12000)
+  return [
+    "Ты получил богатый контекст из Malik Shorts. Отвечай по содержанию ролика и не выдумывай то, чего нет в данных.",
+    `Автор: @${short.creator?.username || "creator"} (${short.creator?.displayName || "Creator"}).`,
+    `Источник: ${short.source || "malik"}.`,
+    `Описание: ${short.caption || "без описания"}.`,
+    topics ? `Темы: ${topics}.` : "",
+    objects ? `Объекты/сущности: ${objects}.` : "",
+    transcript ? `\nТранскрипт/субтитры:\n${transcript}` : "",
+    comments ? `\nКонтекст обсуждения:\n${comments}` : "",
+    "\nПомоги мне с этим роликом: ",
+  ].filter(Boolean).join("\n")
+}
+
 export function ShortsNavigationBridge() {
   useEffect(() => {
-    const handler = (event: MouseEvent) => {
+    const handler = async (event: MouseEvent) => {
       const target = event.target as HTMLElement | null
       const button = target?.closest("button")
       if (!button) return
-      const label = String(button.textContent || "").replace(/\s+/g, " ").trim()
+      const text = String(button.textContent || "").replace(/\s+/g, " ").trim()
+      const aria = String(button.getAttribute("aria-label") || "").trim()
+      const label = text || aria
+
+      if (aria === "Спросить Malik" || label === "Спросить Malik") {
+        const article = button.closest<HTMLElement>("[data-short-id]")
+        const shortId = article?.dataset.shortId || ""
+        if (!/^[0-9a-f-]{36}$/i.test(shortId)) return
+        event.preventDefault()
+        event.stopPropagation()
+        try {
+          const response = await fetch(`/api/shorts/context?shortId=${encodeURIComponent(shortId)}`, { cache: "no-store" })
+          const context = await response.json().catch(() => null)
+          if (response.ok && context) prefillPrompt(richPrompt(context))
+          else prefillPrompt("Разбери этот Malik Short и помоги мне с ним.")
+        } catch {
+          prefillPrompt("Разбери этот Malik Short и помоги мне с ним.")
+        }
+        window.location.assign("/dashboard")
+        return
+      }
+
       const route = routes[label]
       if (!route) return
       event.preventDefault()
