@@ -4,7 +4,7 @@ import { getShortsSupabaseConfig, shortsSupabaseRequest } from "@/lib/shorts/ser
 
 export const dynamic = "force-dynamic"
 
-const KINDS = new Set(["saved", "liked", "reposted", "mine"])
+const KINDS = new Set(["saved", "liked", "reposted", "mine", "history"])
 
 export async function GET(request: NextRequest) {
   const { user } = await getOptionalWorkOSAuth()
@@ -20,6 +20,18 @@ export async function GET(request: NextRequest) {
       `malik_shorts_posts?select=id&creator_key=eq.${encodeURIComponent(user.id)}&order=created_at.desc&limit=120`,
     ).catch(() => [])
     postIds = rows.map((row) => String(row.id))
+  } else if (kind === "history") {
+    const rows = await shortsSupabaseRequest<any[]>(
+      `malik_shorts_event_stream_v2?select=post_id,created_at&user_key=eq.${encodeURIComponent(user.id)}&post_id=not.is.null&event_type=in.(view,complete,rewatch)&order=created_at.desc&limit=500`,
+    ).catch(() => [])
+    const seen = new Set<string>()
+    for (const row of rows) {
+      const id = String(row.post_id || "")
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      postIds.push(id)
+      if (postIds.length >= 120) break
+    }
   } else {
     const table = kind === "saved" ? "malik_shorts_saves" : kind === "liked" ? "malik_shorts_likes" : "malik_shorts_reposts"
     const rows = await shortsSupabaseRequest<any[]>(
