@@ -1,0 +1,94 @@
+name: Malik Shorts real runtime screenshots
+
+on:
+  push:
+    branches:
+      - feat/malik-shorts-platform-v2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+
+      - name: Install
+        run: npm install --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
+
+      - name: Start runtime
+        run: |
+          nohup npm run start -- -p 3000 > /tmp/malik-shorts-runtime.log 2>&1 &
+          echo $! > /tmp/malik-shorts-runtime.pid
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:3000/shorts >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/malik-shorts-runtime.log
+          exit 1
+
+      - name: Capture actual rendered pages
+        run: |
+          set -e
+          mkdir -p real-screens
+          CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME" ]; then
+            echo "No Chromium/Chrome browser found on runner"
+            exit 1
+          fi
+          capture() {
+            NAME="$1"
+            URL="$2"
+            "$CHROME" \
+              --headless=new \
+              --no-sandbox \
+              --disable-gpu \
+              --hide-scrollbars \
+              --window-size=1440,1000 \
+              --force-device-scale-factor=1 \
+              --virtual-time-budget=4500 \
+              --screenshot="real-screens/${NAME}.png" \
+              "http://127.0.0.1:3000${URL}"
+            test -s "real-screens/${NAME}.png"
+          }
+          capture 01-feed /shorts
+          capture 02-explore /shorts/explore
+          capture 03-following /shorts/following
+          capture 04-library /shorts/library
+          capture 05-inbox /shorts/inbox
+          capture 06-profile /shorts/profile
+          capture 07-analytics /shorts/analytics
+          capture 08-live /shorts/live
+          capture 09-messages /shorts/messages
+          ls -lh real-screens
+
+      - name: Runtime log
+        if: always()
+        run: tail -n 250 /tmp/malik-shorts-runtime.log || true
+
+      - name: Upload real screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: malik-shorts-real-runtime-screens
+          path: app/templates/sovereign-hub-ui/real-screens/*.png
+          if-no-files-found: error
+          retention-days: 14
