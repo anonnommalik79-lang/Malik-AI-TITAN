@@ -10,7 +10,7 @@
   inset: 0;
   z-index: 40;
   display: grid;
-  grid-template-columns: 230px minmax(420px, 1fr) 310px;
+  grid-template-columns: 248px minmax(400px, 1fr) 348px;
   background: var(--ms-bg);
   color: var(--ms-white);
   overflow: hidden;
@@ -34,8 +34,8 @@
   display: flex;
   align-items: center;
   gap: 11px;
-  height: 48px;
-  padding: 0 8px 16px;
+  min-height: 48px;
+  padding: 0 4px;
   text-decoration: none;
   color: #fff;
 }
@@ -63,9 +63,22 @@
 .mark::before { top: 4px; transform: rotate(-22deg); }
 .mark::after { bottom: 4px; transform: rotate(22deg); }
 
-.brandText { min-width: 0; line-height: 1; }
-.brandMain { font-size: 15px; font-weight: 800; letter-spacing: .02em; }
-.brandSub { margin-top: 4px; font-size: 10px; font-weight: 700; letter-spacing: .18em; color: var(--ms-muted); }
+/* Two lines, not two inline runs. The subtitle used to be a wide-tracked
+   "SHORTS" that sat happily beside the name; the reference's real sentence
+   under it wraps into the name unless both are told to be blocks. */
+.brandText { min-width: 0; display: grid; gap: 3px; line-height: 1.15; }
+.brandMain { display: block; font-size: 15px; font-weight: 800; letter-spacing: .01em; white-space: nowrap; }
+.brandSub {
+  display: block;
+  margin-top: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ms-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .nav { display: grid; gap: 5px; margin-top: 14px; }
 .navButton,
@@ -406,3 +419,221 @@
 @media (prefers-reduced-motion: reduce) {
   .root *, .root *::before, .root *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* ==================================================================
+   The rail, the destinations and the panel beside the player.
+
+   Everything below exists because the left rail stopped being five
+   labels that answered a click with an apology. Each destination is a
+   real screen now, so each one needed somewhere to live.
+   ================================================================== */
+
+.railSearch {
+  margin-top: 14px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 11px;
+  border: 1px solid var(--ms-border);
+  border-radius: 11px;
+  background: #0a0a0a;
+  color: var(--ms-muted);
+}
+
+.railSearch input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #fff; font-size: 12px; }
+.railSearch kbd { flex: none; font: inherit; font-size: 9.5px; color: var(--ms-muted); border: 1px solid var(--ms-border); border-radius: 5px; padding: 2px 5px; }
+
+.navBadge {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.14);
+  color: #fff;
+}
+
+.navButtonActive .navBadge { background: rgba(0,0,0,.12); color: #000; }
+
+.proCard {
+  width: 100%;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--ms-border);
+  border-radius: 14px;
+  background: #0b0b0b;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.proCard:hover { background: #111; }
+.proCard > span:nth-child(2) { flex: 1; min-width: 0; }
+.proCard strong { display: block; font-size: 12.5px; font-weight: 800; }
+.proCard small { display: block; margin-top: 3px; font-size: 10.5px; line-height: 1.35; color: var(--ms-muted); }
+
+.proIcon { display: grid; width: 32px; height: 32px; flex: none; place-items: center; border-radius: 10px; background: #191919; color: #fff; }
+
+.railSection { display: flex; align-items: baseline; justify-content: space-between; margin: 18px 2px 8px; font-size: 11px; font-weight: 800; color: var(--ms-soft); }
+.railSection button { border: 0; background: transparent; color: var(--ms-muted); font-size: 10.5px; cursor: pointer; }
+.railSection button:hover { color: #fff; }
+
+.subsList { display: grid; gap: 2px; }
+.subsItem { display: flex; align-items: center; gap: 9px; width: 100%; padding: 6px 6px; border: 0; border-radius: 10px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.subsItem:hover { background: rgba(255,255,255,.07); }
+.subsName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.subsEmpty { display: block; padding: 4px 6px; font-size: 10.5px; line-height: 1.45; color: var(--ms-muted); }
+
+/* ---------------------------------------------------- destinations */
+
+.panel { position: absolute; inset: 0; overflow-y: auto; padding: 22px 24px 92px; scrollbar-width: thin; }
+.panelHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.panelHead h2 { margin: 0; font-size: 21px; font-weight: 820; }
+.panelHead p { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--ms-soft); max-width: 60ch; }
+.panelCount { flex: none; font-size: 20px; font-weight: 820; color: var(--ms-muted); }
+
+.tabRow { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
+.tab { height: 32px; padding: 0 13px; border: 1px solid var(--ms-border); border-radius: 9px; background: #0d0d0d; color: rgba(255,255,255,.78); font-size: 12px; cursor: pointer; }
+.tab:hover { border-color: rgba(255,255,255,.28); }
+.tabActive { background: #fff; border-color: #fff; color: #000; font-weight: 750; }
+
+.gridEmpty { padding: 34px 4px; font-size: 12.5px; line-height: 1.55; color: var(--ms-soft); max-width: 56ch; }
+.linkButton { border: 0; background: transparent; color: #fff; font-size: 12.5px; text-decoration: underline; cursor: pointer; padding: 0; }
+
+.cardGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 14px; }
+
+.card { border: 1px solid var(--ms-border); border-radius: 14px; background: #0a0a0a; overflow: hidden; padding: 0; color: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; }
+.card:hover { border-color: rgba(255,255,255,.26); }
+.cardMedia { position: relative; display: block; aspect-ratio: 9 / 14; background: #141414; }
+.cardMedia img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cardBlank { display: grid; place-items: center; width: 100%; height: 100%; color: var(--ms-muted); }
+.cardViews { position: absolute; left: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border-radius: 999px; background: rgba(0,0,0,.62); font-size: 10px; font-weight: 700; color: #fff; }
+.cardBody { display: block; padding: 9px 10px 11px; }
+.cardCaption { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 11.5px; line-height: 1.4; }
+.cardMeta { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 10px; color: var(--ms-muted); }
+
+.profileHead { display: flex; gap: 18px; align-items: flex-start; margin-bottom: 22px; }
+.profileBig { width: 88px; height: 88px; border-radius: 50%; flex: 0 0 88px; display: grid; place-items: center; overflow: hidden; background: #181818; border: 1px solid rgba(255,255,255,.14); font-size: 26px; font-weight: 800; }
+.profileBig img { width: 100%; height: 100%; object-fit: cover; }
+.profileHeadBody { min-width: 0; }
+.profileHeadName { display: flex; align-items: center; gap: 8px; }
+.profileHeadName h2 { margin: 0; font-size: 22px; font-weight: 820; }
+.profileBio { margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ms-soft); max-width: 62ch; }
+
+.statRow { display: flex; gap: 22px; margin-top: 12px; }
+.statRow span { display: grid; font-size: 10.5px; color: var(--ms-muted); }
+.statRow b { font-size: 16px; font-weight: 820; color: #fff; }
+
+/* ------------------------------------------------------ right rail */
+
+.rightTop { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.proPill, .ghostPill { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 10px; font-size: 11.5px; font-weight: 750; cursor: pointer; white-space: nowrap; }
+.proPill { border: 1px solid rgba(255,255,255,.24); background: #101010; color: #fff; }
+.ghostPill { border: 1px solid var(--ms-border); background: transparent; color: rgba(255,255,255,.82); }
+.proPill:hover, .ghostPill:hover { background: #1a1a1a; }
+
+.iconPill { position: relative; display: grid; width: 34px; height: 34px; flex: none; place-items: center; border: 1px solid var(--ms-border); border-radius: 10px; background: #0b0b0b; color: #fff; cursor: pointer; }
+.iconPill:hover { background: #161616; }
+.dot { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: #ff4d4f; }
+.topAvatar { margin-left: auto; padding: 0; border: 0; background: transparent; cursor: pointer; }
+
+.inboxList { display: grid; gap: 2px; margin-top: 10px; }
+.inboxItem { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 6px; border: 0; border-radius: 10px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.inboxItem:hover { background: rgba(255,255,255,.07); }
+.inboxItem > span { flex: 1; min-width: 0; }
+.inboxItem b { display: block; font-size: 11.5px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inboxItem small { display: block; margin-top: 2px; font-size: 10.5px; color: var(--ms-muted); }
+.inboxItem time { flex: none; font-size: 10px; color: var(--ms-muted); }
+.inboxUnread { background: rgba(255,255,255,.05); }
+
+.meRow { display: flex; align-items: center; gap: 11px; }
+.meAvatar { width: 46px; height: 46px; border-radius: 50%; flex: 0 0 46px; display: grid; place-items: center; overflow: hidden; background: #181818; border: 1px solid rgba(255,255,255,.14); font-weight: 800; }
+.meAvatar img { width: 100%; height: 100%; object-fit: cover; }
+.meBody { flex: 1; min-width: 0; }
+.meName { display: flex; align-items: center; font-size: 13.5px; font-weight: 790; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meHandle { margin-top: 2px; font-size: 11px; color: var(--ms-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.metaRow { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 10.5px; color: var(--ms-muted); }
+.metaLink { color: rgba(255,255,255,.86); }
+
+.creatorStrip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 12px; }
+.creatorThumb { position: relative; aspect-ratio: 3 / 4; padding: 0; border: 1px solid var(--ms-border); border-radius: 9px; overflow: hidden; background: #141414; cursor: pointer; }
+.creatorThumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.creatorThumb:hover { border-color: rgba(255,255,255,.3); }
+.creatorThumb .cardViews { left: 4px; bottom: 4px; padding: 2px 5px; font-size: 8.5px; }
+
+.sourceMark { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border-radius: 10px; font-size: 12px; font-weight: 850; color: #fff; background: #1a1a1a; border: 1px solid var(--ms-border); }
+.sourceMark[data-source="youtube"] { background: #2a0e0e; border-color: rgba(255,80,80,.34); }
+.sourceMark[data-source="tiktok"] { background: #0e1a1a; border-color: rgba(120,255,235,.24); }
+
+.toolGrid { display: grid; gap: 7px; margin-top: 11px; }
+.tool { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 1px solid var(--ms-border); border-radius: 11px; background: #0c0c0c; color: inherit; text-align: left; cursor: pointer; }
+.tool:hover:not(:disabled) { background: #141414; border-color: rgba(255,255,255,.24); }
+.tool:disabled { opacity: .45; cursor: default; }
+.tool > span:nth-child(2) { flex: 1; min-width: 0; }
+.tool strong { display: block; font-size: 11.5px; font-weight: 780; }
+.tool small { display: block; margin-top: 2px; font-size: 10px; color: var(--ms-muted); }
+.toolIcon { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 9px; background: #191919; color: #fff; }
+
+.quickRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 11px; }
+.quick { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 36px; padding: 0 6px; border: 1px solid var(--ms-border); border-radius: 10px; background: #0c0c0c; color: #fff; font-size: 10.5px; font-weight: 700; cursor: pointer; }
+.quick:hover:not(:disabled) { background: #161616; }
+.quick:disabled { opacity: .45; cursor: default; }
+.quickOn { background: #fff; border-color: #fff; color: #000; }
+
+.toolBody { flex: 1; overflow-y: auto; padding: 16px 18px; font-size: 13px; line-height: 1.6; color: rgba(255,255,255,.9); white-space: pre-wrap; word-break: break-word; }
+
+.mobileDot { position: absolute; top: 6px; right: calc(50% - 14px); width: 6px; height: 6px; border-radius: 50%; background: #ff4d4f; }
+
+.brandRow { display: flex; align-items: center; gap: 10px; padding-bottom: 14px; }
+.brandRow .brand { flex: 1; min-width: 0; }
+.subsMore { display: grid; width: 31px; height: 31px; flex: 0 0 31px; place-items: center; border-radius: 50%; background: #141414; border: 1px solid var(--ms-border); color: var(--ms-muted); }
+
+/* The source badge and the mute control, both from the reference. The badge
+   used to appear only on Malik-hosted videos, which meant the one thing a
+   viewer wants to know first - where this came from - was missing on exactly
+   the videos that came from somewhere else. */
+.malikBadge[data-source] { display: inline-flex; align-items: center; gap: 8px; }
+.sourceDot { display: grid; width: 21px; height: 21px; flex: none; place-items: center; border-radius: 6px; font-size: 9px; font-weight: 850; background: #fff; color: #000; }
+.sourceDot[data-source="youtube"] { background: #ff0033; color: #fff; }
+.sourceDot[data-source="tiktok"] { background: #0b0b0b; color: #fff; border: 1px solid rgba(255,255,255,.3); }
+
+.muteButton {
+  /* .videoTop is pointer-events:none so the overlay never eats a tap meant for
+     the video. The one control inside it has to opt back in. */
+  pointer-events: auto;
+  display: grid;
+  width: 38px; height: 38px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0,0,0,.5);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  cursor: pointer;
+}
+
+.muteButton:hover { background: rgba(0,0,0,.72); }
+
+.remixSource { display: flex; align-items: center; gap: 11px; margin-bottom: 16px; padding: 12px; border: 1px solid var(--ms-border); border-radius: 13px; background: #0a0a0a; }
+.remixSource > span:last-child { min-width: 0; }
+.remixSource b { display: block; font-size: 12.5px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remixSource small { display: block; margin-top: 3px; font-size: 10.5px; color: var(--ms-muted); }
+.remixBody { padding: 16px 18px; border: 1px solid var(--ms-border); border-radius: 14px; background: #0a0a0a; font-size: 13px; line-height: 1.62; white-space: pre-wrap; word-break: break-word; color: rgba(255,255,255,.9); }
+.remixActions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 14px; }
+
+.liveState { flex: none; padding: 5px 11px; border: 1px solid var(--ms-border); border-radius: 999px; font-size: 10.5px; font-weight: 750; color: var(--ms-muted); }
+.liveOn { border-color: rgba(80,255,160,.4); color: #6ef0ab; }
+.liveGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.liveTile { display: flex; align-items: center; gap: 11px; padding: 14px; border: 1px solid var(--ms-border); border-radius: 14px; background: #0a0a0a; color: inherit; text-decoration: none; }
+a.liveTile:hover { background: #131313; border-color: rgba(255,255,255,.24); }
+.liveTile > span:nth-child(2) { flex: 1; min-width: 0; }
+.liveTile strong { display: block; font-size: 13px; font-weight: 780; }
+.liveTile small { display: block; margin-top: 3px; font-size: 11px; color: var(--ms-muted); }
