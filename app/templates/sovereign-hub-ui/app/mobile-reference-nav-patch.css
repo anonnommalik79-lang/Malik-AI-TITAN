@@ -3,6 +3,15 @@
    Translator action is hidden because it still points at the old chat-prefill
    flow; the topbar Translator opens the standalone /translator page. */
 
+/* Newsroom is intentionally removed from the sidebar on every viewport.
+   Target the stable action id in the expanded sidebar and aria-label in the
+   collapsed desktop rail so the item cannot reappear when navigation order
+   changes. */
+html body #malik-root .malik-dashboard-shell .malik-sidebar [data-action-id="newsroom"],
+html body #malik-root .malik-dashboard-shell .malik-sidebar button[aria-label="Newsroom"] {
+  display: none !important;
+}
+
 @media (max-width: 767px) {
   .titan-tabs {
     width: 202px !important;
