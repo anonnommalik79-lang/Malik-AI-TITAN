@@ -11,6 +11,7 @@ import { MalikVideoModelRuntime } from "@/components/sovereign/MalikVideoModelRu
 import { SitesRouteFixRuntime } from "@/components/sovereign/SitesRouteFixRuntime"
 import { ImageResultExperience } from "@/components/sovereign/ImageResultExperience"
 import { ImageQualityRuntime } from "@/components/sovereign/ImageQualityRuntime"
+import { ImageJobRuntime } from "@/components/sovereign/ImageJobRuntime"
 import { ChatHistoryQuotaGuard } from "@/components/sovereign/ChatHistoryQuotaGuard"
 import { MalikCognitiveResponseRuntime } from "@/components/sovereign/MalikCognitiveResponseRuntime"
 import "./globals.css"
@@ -228,6 +229,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <SitesRouteFixRuntime />
         <ImageResultExperience />
         <ImageQualityRuntime />
+        <ImageJobRuntime />
         <MalikCognitiveResponseRuntime />
         <AuthKitProvider>
           <div id="malik-root" translate="no" className="min-h-[100dvh] overflow-x-hidden bg-black notranslate">
