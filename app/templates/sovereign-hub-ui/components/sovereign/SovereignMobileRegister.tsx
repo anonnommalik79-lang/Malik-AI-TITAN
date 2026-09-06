@@ -40,11 +40,13 @@ function GoogleIcon() {
   );
 }
 
-function GuestIcon() {
+function MicrosoftIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 12.2a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M5.2 20c.7-3.3 3.1-5.2 6.8-5.2s6.1 1.9 6.8 5.2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path fill="#F25022" d="M1 1h10v10H1z" />
+      <path fill="#7FBA00" d="M13 1h10v10H13z" />
+      <path fill="#00A4EF" d="M1 13h10v10H1z" />
+      <path fill="#FFB900" d="M13 13h10v10H13z" />
     </svg>
   );
 }
@@ -146,10 +148,10 @@ export function SovereignMobileRegister() {
           className="sma-auth-button sma-auth-button--dark"
           type="button"
           disabled={navigating}
-          onClick={() => go("/guest")}
+          onClick={() => go("/sign-in")}
         >
-          <span className="sma-auth-icon"><GuestIcon /></span>
-          <span>{navigating ? "Открываю..." : "Войти через гостя"}</span>
+          <span className="sma-auth-icon"><MicrosoftIcon /></span>
+          <span>{navigating ? "Открываю..." : "Продолжить с Microsoft"}</span>
         </button>
       </section>
     </main>
