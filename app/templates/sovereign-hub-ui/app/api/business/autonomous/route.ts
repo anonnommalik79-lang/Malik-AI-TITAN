@@ -1,3 +1,4 @@
+import { getMalikModel, isMalikModelId, type MalikModelId } from "@/lib/ai/malik-models"
 import { checkPromptLength } from "@/lib/limits/rate-limit"
 import { resolveUserTier } from "@/lib/limits/user-plan"
 import { MalikModelRouteError, runStrictMalikModel } from "@/lib/server/malik-model-router"
@@ -6,8 +7,16 @@ import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const AUTONOMOUS_MODEL_ID = "malik-27b" as const
-const MODEL_LABEL = "MalikLLM Qwen3.8 27B"
+const DEFAULT_AUTONOMOUS_MODEL_ID: MalikModelId = "malik-27b"
+const BUSINESS_MODEL_IDS: readonly MalikModelId[] = [
+  "malik-reason-753b",
+  "malik-core-300b",
+  "malik-flash-53",
+  "malik-vision-k3",
+  "malik-20b",
+  "malik-fast-120b",
+  "malik-27b",
+]
 
 type AutonomousBody = {
   idea?: string
@@ -22,6 +31,11 @@ type AutonomousBody = {
 
 function clean(value: unknown, max = 1200) {
   return String(value || "").trim().slice(0, max)
+}
+
+function resolveBusinessModelId(value: unknown): MalikModelId {
+  if (isMalikModelId(value) && BUSINESS_MODEL_IDS.includes(value)) return value
+  return DEFAULT_AUTONOMOUS_MODEL_ID
 }
 
 function systemPrompt(language: AutonomousBody["language"]) {
@@ -49,6 +63,8 @@ export async function POST(request: Request) {
   const country = clean(body.country, 180) || "Не указана"
   const budget = clean(body.budget, 180) || "Не указан"
   const requirements = clean(body.requirements, 1600) || "Полный запуск бизнеса"
+  const selectedModelId = resolveBusinessModelId(body.modelId)
+  const selectedModel = getMalikModel(selectedModelId)
 
   const entitlement = await resolveRequestEntitlement(request)
   const tier = resolveUserTier(entitlement.userId, entitlement.plan)
@@ -71,7 +87,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await runStrictMalikModel({
-      modelId: AUTONOMOUS_MODEL_ID,
+      modelId: selectedModelId,
       prompt,
       systemPrompt: systemPrompt(body.language),
       maxTokens: 2600,
@@ -81,8 +97,8 @@ export async function POST(request: Request) {
     return Response.json({
       ok: true,
       status: "ready",
-      selectedModelId: AUTONOMOUS_MODEL_ID,
-      selectedModel: MODEL_LABEL,
+      selectedModelId,
+      selectedModel: selectedModel.label,
       provider: result.provider,
       model: result.model,
       content: result.content,
@@ -94,9 +110,9 @@ export async function POST(request: Request) {
     return Response.json({
       ok: false,
       error: error instanceof MalikModelRouteError ? error.code : "AUTONOMOUS_COMPANY_UNAVAILABLE",
-      message: error instanceof Error ? error.message : `${MODEL_LABEL} временно недоступна.`,
-      selectedModelId: AUTONOMOUS_MODEL_ID,
-      selectedModel: MODEL_LABEL,
+      message: error instanceof Error ? error.message : `${selectedModel.label} временно недоступна.`,
+      selectedModelId,
+      selectedModel: selectedModel.label,
     }, { status, headers: { "cache-control": "no-store" } })
   }
 }
