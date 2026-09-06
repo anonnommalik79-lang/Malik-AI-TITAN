@@ -40,8 +40,9 @@
   transform: translateY(0);
 }
 
+/* User-requested final cleanup: never render the action dock below a generated image. */
 #malik-root .malik-image-tools {
-  display: none;
+  display: none !important;
   width: 100%;
   margin: 12px auto 0;
   align-items: center;
@@ -56,7 +57,7 @@
 }
 
 #malik-root .malik-photo-motion[data-malik-image-ready="1"] .malik-image-tools {
-  display: flex;
+  display: none !important;
 }
 
 #malik-root .malik-image-tools button {
