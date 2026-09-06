@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { MalikShortsApp } from "@/components/sovereign/shorts/MalikShortsApp"
 import { ShortsAutoSync } from "./ShortsAutoSync"
 import "./shorts-final.css"
+import "./shorts-profile-layout-fix.css"
 
 export const dynamic = "force-dynamic"
 
@@ -21,7 +22,9 @@ export default function MalikShortsPage() {
   return (
     <>
       <ShortsAutoSync />
-      <MalikShortsApp />
+      <div data-malik-shorts-page="1">
+        <MalikShortsApp />
+      </div>
     </>
   )
 }
