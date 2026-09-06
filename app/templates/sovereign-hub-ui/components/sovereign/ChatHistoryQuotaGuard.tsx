@@ -1,6 +1,7 @@
 "use client"
 
 import { useLayoutEffect } from "react"
+import { ChatAutoScrollRuntime } from "@/components/sovereign/ChatAutoScrollRuntime"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const DASHBOARD_ACCOUNT_STORAGE_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
@@ -65,7 +66,7 @@ export function ChatHistoryQuotaGuard() {
     }
   }, [])
 
-  return null
+  return <ChatAutoScrollRuntime />
 }
 
 export default ChatHistoryQuotaGuard
