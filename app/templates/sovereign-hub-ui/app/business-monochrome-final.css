@@ -1,0 +1,159 @@
+/* Autonomous Company — final monochrome authority.
+   This file is deliberately loaded after every legacy Titan/business stylesheet.
+   The product must read like ChatGPT dark mode: OLED black, neutral gray layers,
+   white type and no warm/gold/brown tint. Brand artwork/images keep their own
+   colours because only UI chrome is neutralised here. */
+
+#malik-root main[data-view="business-autonomous"] {
+  --line: #2b2b2b !important;
+  --line-soft: #202020 !important;
+  --panel: #0a0a0a !important;
+  --panel-2: #111111 !important;
+  --text: #f5f5f5 !important;
+  --muted: #a1a1aa !important;
+  background: #000 !important;
+  color: #f5f5f5 !important;
+  color-scheme: dark !important;
+  scrollbar-color: #525252 transparent !important;
+}
+
+/* Kill the old warm/gold surface treatments without flattening photos or model
+   artwork. Containers stay black; borders provide the hierarchy. */
+#malik-root main[data-view="business-autonomous"] :where(div, section, article, nav, header, footer, aside) {
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+#malik-root main[data-view="business-autonomous"] :where(section, article, [role="group"], [role="listbox"]) {
+  border-color: rgba(255,255,255,.12) !important;
+}
+
+#malik-root main[data-view="business-autonomous"] :where(h1, h2, h3, h4, strong, b) {
+  color: #f5f5f5 !important;
+}
+
+#malik-root main[data-view="business-autonomous"] :where(p, small, em) {
+  color: #a1a1aa !important;
+}
+
+/* Neutral controls, matching the ChatGPT dark palette. */
+#malik-root main[data-view="business-autonomous"] :where(button, input, textarea) {
+  border-color: rgba(255,255,255,.12) !important;
+  background-color: #111111 !important;
+  color: #f5f5f5 !important;
+  box-shadow: none !important;
+}
+
+#malik-root main[data-view="business-autonomous"] :where(input, textarea)::placeholder {
+  color: #737373 !important;
+  opacity: 1 !important;
+}
+
+#malik-root main[data-view="business-autonomous"] :where(button, input, textarea):focus-visible {
+  outline-color: rgba(255,255,255,.62) !important;
+}
+
+#malik-root main[data-view="business-autonomous"] button:hover:not(:disabled) {
+  border-color: rgba(255,255,255,.22) !important;
+  background-color: #171717 !important;
+}
+
+/* Primary launch remains the one bright ChatGPT-style action. */
+#malik-root main[data-view="business-autonomous"] button[aria-label="Запустить Autonomous Company"] {
+  background: #f4f4f5 !important;
+  border-color: #f4f4f5 !important;
+  color: #090909 !important;
+}
+
+#malik-root main[data-view="business-autonomous"] button[aria-label="Запустить Autonomous Company"]:hover:not(:disabled) {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #000 !important;
+}
+
+/* Selected tabs/templates use neutral white/gray only. */
+#malik-root main[data-view="business-autonomous"] button[aria-pressed="true"],
+#malik-root main[data-view="business-autonomous"] button[aria-selected="true"] {
+  border-color: rgba(255,255,255,.34) !important;
+  background-color: #262626 !important;
+  color: #ffffff !important;
+}
+
+/* Running screen: the exact area from the screenshot. Every plate is now a
+   neutral near-black, while the progress fill is plain white. */
+#malik-root main[data-view="business-autonomous"][data-stage="running"] :where([role="group"], article, section) {
+  background-color: #0a0a0a !important;
+  border-color: #262626 !important;
+}
+
+#malik-root main[data-view="business-autonomous"][data-stage="running"] article > button {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+#malik-root main[data-view="business-autonomous"][data-stage="running"] article > button:hover {
+  background: #0f0f0f !important;
+}
+
+#malik-root main[data-view="business-autonomous"][data-stage="running"] :where(span, div) {
+  text-shadow: none !important;
+}
+
+/* The pipeline/status palette is deliberately monochrome too: no green, red,
+   amber or blue plates. State is still communicated by icon/text/position. */
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="chip"],
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="stepBadge"] {
+  border-color: #3a3a3a !important;
+  background: #121212 !important;
+  color: #f5f5f5 !important;
+  box-shadow: none !important;
+}
+
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="stepState"],
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="stepRole"],
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="stepMeta"],
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="runBrief"] span,
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="stripLabel"] small,
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="chip"] small {
+  color: #8e8e93 !important;
+}
+
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="progressTrack"] {
+  background: #242424 !important;
+}
+
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="progressFill"] {
+  background: #ffffff !important;
+}
+
+/* Error copy stays readable without reintroducing a warm red/brown tint. */
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="stepError"],
+#malik-root main[data-view="business-autonomous"][data-stage="running"] [class*="stressFailed"] {
+  color: #d4d4d8 !important;
+}
+
+/* Workspace surfaces are neutral as well, so switching back from a run never
+   reveals the old tinted controls. */
+#malik-root main[data-view="business-autonomous"][data-stage="workspace"] :where(section, [role="group"], [role="listbox"]) {
+  background-color: #0a0a0a !important;
+  border-color: #262626 !important;
+}
+
+#malik-root main[data-view="business-autonomous"][data-stage="workspace"] [class*="chip"],
+#malik-root main[data-view="business-autonomous"][data-stage="workspace"] [class*="control"],
+#malik-root main[data-view="business-autonomous"][data-stage="workspace"] [class*="category"] {
+  border-color: #303030 !important;
+  background-color: #111111 !important;
+  color: #e5e5e5 !important;
+}
+
+#malik-root main[data-view="business-autonomous"][data-stage="workspace"] [class*="categoryActive"] {
+  border-color: #f4f4f5 !important;
+  background: #f4f4f5 !important;
+  color: #0a0a0a !important;
+}
+
+/* Keep real images/artwork untouched. */
+#malik-root main[data-view="business-autonomous"] :where(img, picture, video, canvas) {
+  filter: none !important;
+}
