@@ -23,10 +23,10 @@ const GENERATION_WATCHDOG_MS = 3 * 60 * 1000
 const READY_RESULT_GRACE_MS = 8_000
 const HAND = "/malik/image-loader/hand.webp"
 const DEMOS = [
-  "/malik/image-loader/demo-01.webp",
-  "/malik/image-loader/demo-02.webp",
-  "/malik/image-loader/demo-03.webp",
-  "/malik/image-loader/demo-04.webp",
+  "/images/malik-mobile-cinematic-v2.webp",
+  "/images/malik-unicorn-home-final.webp",
+  "/images/welcome-earth-orbit.jpg",
+  "/images/titan-auth-bg.jpg",
 ] as const
 
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value))
@@ -200,15 +200,20 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
       sizeTo(source); sizeTo(mask)
     }
 
-    const drawContain = (c: CanvasRenderingContext2D, img: HTMLImageElement) => {
-      const k = Math.min(width / img.naturalWidth, height / img.naturalHeight)
+    const drawCover = (c: CanvasRenderingContext2D, img: HTMLImageElement) => {
+      const k = Math.max(width / img.naturalWidth, height / img.naturalHeight)
       const w = img.naturalWidth * k
       const h = img.naturalHeight * k
       c.drawImage(img, (width - w) / 2, (height - h) / 2, w, h)
     }
 
     const prepareSource = (img: HTMLImageElement) => {
-      sourceCtx.fillStyle = "#000"; sourceCtx.fillRect(0, 0, width, height); drawContain(sourceCtx, img)
+      sourceCtx.fillStyle = "#000"
+      sourceCtx.fillRect(0, 0, width, height)
+      sourceCtx.save()
+      sourceCtx.filter = "saturate(1.14) contrast(1.06) brightness(1.04)"
+      drawCover(sourceCtx, img)
+      sourceCtx.restore()
       maskCtx.clearRect(0, 0, width, height)
     }
 
@@ -291,7 +296,7 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
       : "Генерация изображения не завершилась.")
 
   return (
-    <section className="malik-photo-motion malik-hand-loader-v7" data-malik-image-ready={imageLoaded ? "1" : "0"} data-malik-loader-assets="final-zip-v7">
+    <section className="malik-photo-motion malik-hand-loader-v7" data-malik-image-motion="1" data-malik-image-ready={imageLoaded ? "1" : "0"} data-malik-loader-assets="cinematic-v8">
       <div className={`malik-photo-stage malik-art-stage ${imageLoaded ? "is-finished" : "is-generating"}`}>
         {!actuallyFailed && !imageLoaded ? <canvas ref={canvasRef} className="malik-hand-loader-v7__canvas" /> : null}
         {imageLoaded && resolvedResultUrl ? <img className="malik-art-result is-visible" src={resolvedResultUrl} alt="Сгенерированное изображение Malik AI" draggable={false} decoding="async" /> : null}
