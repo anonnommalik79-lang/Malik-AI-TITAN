@@ -21,12 +21,18 @@ type ImageGenerationMotionProps = {
 
 const GENERATION_WATCHDOG_MS = 3 * 60 * 1000
 const READY_RESULT_GRACE_MS = 8_000
-const HAND = "/malik/image-loader/hand.webp"
+
+// Waiting animation uses only public NASA space imagery. No hands, characters,
+// fantasy art or app mockups are allowed back into this loader.
 const DEMOS = [
-  "/images/malik-mobile-cinematic-v2.webp",
-  "/images/malik-unicorn-home-final.webp",
-  "/images/welcome-earth-orbit.jpg",
-  "/images/titan-auth-bg.jpg",
+  "https://images-assets.nasa.gov/image/PIA15985/PIA15985~large.jpg",
+  "https://images-assets.nasa.gov/image/PIA10957/PIA10957~large.jpg",
+  "https://images-assets.nasa.gov/image/PIA04222/PIA04222~large.jpg",
+  "https://images-assets.nasa.gov/image/PIA07905/PIA07905~large.jpg",
+  "https://images-assets.nasa.gov/image/PIA04628/PIA04628~large.jpg",
+  "https://images-assets.nasa.gov/image/PIA04230/PIA04230~large.jpg",
+  "https://images-assets.nasa.gov/image/PIA04921/PIA04921~large.jpg",
+  "https://images-assets.nasa.gov/image/PIA21923/PIA21923~large.jpg",
 ] as const
 
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value))
@@ -35,6 +41,7 @@ function loadImage(src: string, timeout = 25_000) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image()
     image.decoding = "async"
+    image.referrerPolicy = "no-referrer"
     const timer = window.setTimeout(() => reject(new Error("image timeout")), timeout)
     image.onload = () => { window.clearTimeout(timer); resolve(image) }
     image.onerror = () => { window.clearTimeout(timer); reject(new Error("image failed")) }
@@ -95,8 +102,6 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     }
 
     tick()
-    // Finished cards are truly idle: no timer continues to wake React after a
-    // generated image has appeared.
     if (imageLoaded || actuallyFailed) return
     const timer = window.setInterval(tick, 1000)
     return () => window.clearInterval(timer)
@@ -121,10 +126,6 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     return () => { cancelled = true }
   }, [resultUrl, fallbackUrl])
 
-  // Decode the final display derivative once, asynchronously. The old loader
-  // decoded the result and then redrew it through multiple canvases for another
-  // 2.1 seconds. Even with a preview that was needless work precisely at the
-  // moment the user wants the rest of the app to become responsive again.
   useEffect(() => {
     if (!resolvedResultUrl || imageLoaded || actuallyFailed) return
     let cancelled = false
@@ -161,9 +162,8 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     let width = 1
     let height = 1
     let dpr = 1
-    let hand: HTMLImageElement | null = null
     let demos: HTMLImageElement[] = []
-    let demoIndex = Math.floor(Math.random() * DEMOS.length)
+    let demoIndex = 0
     let cycleStarted = performance.now()
     let lastFrameAt = 0
 
@@ -211,22 +211,15 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
       sourceCtx.fillStyle = "#000"
       sourceCtx.fillRect(0, 0, width, height)
       sourceCtx.save()
-      sourceCtx.filter = "saturate(1.14) contrast(1.06) brightness(1.04)"
+      sourceCtx.filter = "saturate(1.22) contrast(1.08) brightness(1.05)"
       drawCover(sourceCtx, img)
       sourceCtx.restore()
       maskCtx.clearRect(0, 0, width, height)
     }
 
-    const drawHand = (x: number, y: number, dir: number, alpha: number) => {
-      if (!hand) return
-      const w = Math.min(210, width * 0.31)
-      const h = w * (hand.naturalHeight / hand.naturalWidth)
-      ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y); ctx.scale(dir, 1); ctx.drawImage(hand, -w * 0.24, -h * 0.06, w, h); ctx.restore()
-    }
-
     const renderReveal = (img: HTMLImageElement, t: number) => {
       prepareSource(img)
-      const rows = 6
+      const rows = 7
       const active = clamp(t, 0, 1) * rows
       for (let row = 0; row < rows; row++) {
         const amount = clamp(active - row, 0, 1)
@@ -238,37 +231,41 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
         maskCtx.fillStyle = "#fff"
         maskCtx.fillRect(leftToRight ? 0 : width - w, y, w, h)
       }
-      ctx.fillStyle = "#000"; ctx.fillRect(0, 0, width, height)
-      ctx.save(); roundRect(ctx, 0, 0, width, height, 28); ctx.clip(); ctx.drawImage(source, 0, 0, width, height); ctx.globalCompositeOperation = "destination-in"; ctx.drawImage(mask, 0, 0, width, height); ctx.globalCompositeOperation = "source-over"
-      const rawRow = Math.min(rows - 1, Math.floor(clamp(t, 0, .999) * rows))
-      const rowT = clamp(t * rows - rawRow, 0, 1)
-      const dir = rawRow % 2 === 0 ? 1 : -1
-      const x = dir === 1 ? width * rowT : width * (1 - rowT)
-      const y = (rawRow + .56) * (height / rows)
-      drawHand(x, y, dir, t > .96 ? clamp((1 - t) / .04, 0, 1) : 1)
+
+      ctx.fillStyle = "#000"
+      ctx.fillRect(0, 0, width, height)
+      ctx.save()
+      roundRect(ctx, 0, 0, width, height, 28)
+      ctx.clip()
+      ctx.drawImage(source, 0, 0, width, height)
+      ctx.globalCompositeOperation = "destination-in"
+      ctx.drawImage(mask, 0, 0, width, height)
+      ctx.globalCompositeOperation = "source-over"
       ctx.restore()
-      ctx.save(); roundRect(ctx, .5, .5, width - 1, height - 1, 28); ctx.strokeStyle = "rgba(218,174,76,.94)"; ctx.lineWidth = 1; ctx.stroke(); ctx.restore()
+      ctx.save()
+      roundRect(ctx, .5, .5, width - 1, height - 1, 28)
+      ctx.strokeStyle = "rgba(218,174,76,.94)"
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.restore()
     }
 
     const loop = (now: number) => {
       if (disposed) return
-
-      // 30fps is visually smooth for the waiting scene and prevents 60/120Hz
-      // phones from doubling or quadrupling canvas paint work.
       if (now - lastFrameAt < 32) {
         requestAnimationFrame(loop)
         return
       }
       lastFrameAt = now
 
-      const duration = 3600
+      const duration = 4200
       const t = clamp((now - cycleStarted) / duration, 0, 1)
       const current = demos[demoIndex]
       if (current) renderReveal(current, t)
 
-      if (t >= 1) {
+      if (t >= 1 && demos.length) {
         demoIndex = (demoIndex + 1) % demos.length
-        cycleStarted = now + 180
+        cycleStarted = now + 140
       }
       requestAnimationFrame(loop)
     }
@@ -276,15 +273,20 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     const observer = new ResizeObserver(resize)
     observer.observe(canvas.parentElement || canvas)
     resize()
-    Promise.all([loadImage(HAND), ...DEMOS.map((src) => loadImage(src))])
-      .then(([loadedHand, ...loadedDemos]) => {
+
+    Promise.allSettled(DEMOS.map((src) => loadImage(src)))
+      .then((results) => {
         if (disposed) return
-        hand = loadedHand
-        demos = loadedDemos
+        demos = results
+          .filter((result): result is PromiseFulfilledResult<HTMLImageElement> => result.status === "fulfilled")
+          .map((result) => result.value)
+        if (!demos.length) {
+          setAssetError("Не удалось загрузить космическую анимацию изображения.")
+          return
+        }
         setAssetError("")
         requestAnimationFrame(loop)
       })
-      .catch(() => setAssetError("Не удалось загрузить V7-анимацию изображения."))
 
     return () => { disposed = true; observer.disconnect() }
   }, [actuallyFailed, imageLoaded])
@@ -296,7 +298,7 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
       : "Генерация изображения не завершилась.")
 
   return (
-    <section className="malik-photo-motion malik-hand-loader-v7" data-malik-image-motion="1" data-malik-image-ready={imageLoaded ? "1" : "0"} data-malik-loader-assets="cinematic-v8">
+    <section className="malik-photo-motion malik-hand-loader-v7" data-malik-image-motion="1" data-malik-image-ready={imageLoaded ? "1" : "0"} data-malik-loader-assets="nasa-space-sequence-v1">
       <div className={`malik-photo-stage malik-art-stage ${imageLoaded ? "is-finished" : "is-generating"}`}>
         {!actuallyFailed && !imageLoaded ? <canvas ref={canvasRef} className="malik-hand-loader-v7__canvas" /> : null}
         {imageLoaded && resolvedResultUrl ? <img className="malik-art-result is-visible" src={resolvedResultUrl} alt="Сгенерированное изображение Malik AI" draggable={false} decoding="async" /> : null}
