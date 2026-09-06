@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
 import { MalikShortsApp } from "@/components/sovereign/shorts/MalikShortsApp"
+import { ShortsAutoSync } from "./ShortsAutoSync"
+import "./shorts-final.css"
 
 export const dynamic = "force-dynamic"
 
@@ -16,5 +18,10 @@ export const metadata: Metadata = {
 }
 
 export default function MalikShortsPage() {
-  return <MalikShortsApp />
+  return (
+    <>
+      <ShortsAutoSync />
+      <MalikShortsApp />
+    </>
+  )
 }
