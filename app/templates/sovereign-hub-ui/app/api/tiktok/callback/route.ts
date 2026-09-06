@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 import { getShortsSupabaseConfig, shortsSupabaseRequest } from "@/lib/shorts/server"
-import { exchangeTikTokCode, fetchTikTokUser, fetchTikTokVideos, materializeTikTokVideos, storeTikTokConnection } from "@/lib/shorts/tiktok"
+import { exchangeTikTokCode, fetchTikTokUser, fetchTikTokVideos, materializeTikTokVideos, recordTikTokSyncResult, storeTikTokConnection } from "@/lib/shorts/tiktok"
 
 export const dynamic = "force-dynamic"
 
@@ -73,6 +73,9 @@ export async function GET(request: NextRequest) {
     // import already carries the real avatar and display name instead of
     // re-reading the connection row we are in the middle of writing.
     await materializeTikTokVideos(user.id, videoPage.videos, tiktokUser)
+    // Connection day counts as a sync, so the feed's opportunistic import stays
+    // quiet for the freshness window instead of re-importing on the first load.
+    await recordTikTokSyncResult(user.id, { ok: true, imported: videoPage.videos.length })
 
     const response = NextResponse.redirect(shortsRedirect({ connected: "tiktok", imported: String(videoPage.videos.length) }))
     response.cookies.delete(STATE_COOKIE)

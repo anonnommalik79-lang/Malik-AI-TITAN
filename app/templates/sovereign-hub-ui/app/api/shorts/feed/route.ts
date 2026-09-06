@@ -7,9 +7,16 @@ import {
   shortsSupabaseRequest,
   stableShortId,
 } from "@/lib/shorts/server"
-import { buildRotatedFeed, usesExternalMetrics } from "@/lib/shorts/feed-rotation"
-import { hasProviderConnection } from "@/lib/shorts/provider-accounts"
-import { fetchTikTokUser, fetchTikTokVideos, getFreshTikTokAccessToken, getTikTokCreatorKey, materializeTikTokVideos } from "@/lib/shorts/tiktok"
+import { buildRotatedFeed } from "@/lib/shorts/feed-rotation"
+import { buildShortMetrics } from "@/lib/shorts/metrics"
+import {
+  fetchTikTokUser,
+  fetchTikTokVideos,
+  getFreshTikTokAccessToken,
+  materializeTikTokVideos,
+  recordTikTokSyncResult,
+  shouldSyncViewerTikTok,
+} from "@/lib/shorts/tiktok"
 import type { MalikShortFeedResponse, MalikShortItem, MalikShortSource } from "@/lib/shorts/types"
 
 export const dynamic = "force-dynamic"
@@ -73,15 +80,6 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
       ? { kind: "tiktok" as const, videoId: String(row.source_id || ""), canonicalUrl: row.source_url || undefined }
       : { kind: "native" as const, url: String(row.media_url || ""), poster: row.poster_url || undefined }
 
-  // An imported video's numbers belong to the platform it came from - the same
-  // rule YouTube already followed, now stated once for every external source so
-  // a TikTok with 40k views stops rendering as 0 beside the icons.
-  const external = usesExternalMetrics(source)
-  const externalViews = row.external_views == null ? undefined : count(row.external_views)
-  const externalLikes = row.external_likes == null ? undefined : count(row.external_likes)
-  const externalComments = row.external_comments == null ? undefined : count(row.external_comments)
-  const externalShares = row.external_shares == null ? undefined : count(row.external_shares)
-
   return {
     id: String(row.id),
     source,
@@ -106,26 +104,14 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
     durationSeconds: row.duration_seconds == null ? undefined : Number(row.duration_seconds),
     publishedAt: row.published_at || undefined,
     createdAt: row.created_at || undefined,
-    metrics: {
-      // For imported videos these are the public counters from YouTube or
-      // TikTok, not Malik-local interaction rows. The old mapping put the real
-      // numbers only in `external`, while the action rail renders these
-      // top-level fields, which is why an imported Short showed 0 beside the
-      // icons. Reposts and saves stay local on purpose: neither platform
-      // exposes them, and a repost here is a Malik action, not a TikTok one.
-      views: external ? count(externalViews) : count(row.views),
-      likes: external ? count(externalLikes) : count(row.likes),
-      comments: external ? count(externalComments) : count(row.comments),
-      reposts: count(row.reposts),
-      saves: count(row.saves),
-      shares: external && externalShares != null ? count(externalShares) : count(row.shares),
-      external: {
-        views: externalViews,
-        likes: externalLikes,
-        comments: externalComments,
-        shares: externalShares,
-      },
-    },
+    // Display is external plus local, and both halves travel with the item so
+    // an interaction response can replace one without erasing the other.
+    // buildShortMetrics is the only place that arithmetic lives - see
+    // lib/shorts/metrics.ts for why it is not a per-source branch.
+    metrics: buildShortMetrics(
+      { views: row.views, likes: row.likes, comments: row.comments, reposts: row.reposts, saves: row.saves, shares: row.shares },
+      { views: row.external_views, likes: row.external_likes, comments: row.external_comments, shares: row.external_shares },
+    ),
     viewer: { liked: false, saved: false, reposted: false, following: false },
     rights: {
       canRemix: Boolean(row.can_remix),
@@ -316,15 +302,11 @@ function mapYouTubeCandidate(item: YouTubeCandidate, dbId?: string): MalikShortI
     region: "KZ",
     durationSeconds: item.durationSeconds,
     publishedAt: item.publishedAt,
-    metrics: {
-      views: item.views,
-      likes: item.likes,
-      comments: item.comments,
-      reposts: 0,
-      saves: 0,
-      shares: 0,
-      external: { views: item.views, likes: item.likes, comments: item.comments },
-    },
+    // A candidate straight off the YouTube API has no Malik-local history yet -
+    // if it is already materialised the database copy wins deduplication and
+    // brings the local counters with it. Same builder either way, so the two
+    // paths cannot drift into showing different numbers for one video.
+    metrics: buildShortMetrics(null, { views: item.views, likes: item.likes, comments: item.comments }),
     viewer: { liked: false, saved: false, reposted: false, following: false },
     rights: { canRemix: false, canDownload: false, canCrossPost: false, attributionRequired: true },
   }
@@ -379,27 +361,38 @@ async function loadDbFeed(limit: number) {
 /**
  * Opportunistic import of the viewer's own TikTok.
  *
- * The trigger used to be "the pool has no TikTok at all", which broke as soon
- * as a second creator connected: once anyone's videos were in the shared pool,
- * nobody else's were ever imported. The condition is now the right one - does
- * *this* viewer have a TikTok connection whose videos are not in the pool yet.
+ * Whether to run at all is decided by shouldSyncViewerTikTok, which asks about
+ * this creator's materialised posts directly and honours a freshness window and
+ * an error cooldown. Two earlier versions of that question were wrong: "does
+ * the pool contain any TikTok" stopped importing everyone after the first
+ * creator connected, and "is a TikTok in the loaded feed page" depended on
+ * `limit` and re-hit the API on every page load.
  *
- * Everything is caught. A TikTok outage, an expired refresh token or a revoked
- * app must not take the feed down with it: YouTube and Malik posts are already
- * loaded by this point and are returned regardless.
+ * Failures are recorded, not just logged. The stamp is what stops a revoked app
+ * or an expired refresh token from producing one doomed TikTok call per
+ * request, and the viewer keeps getting YouTube and Malik posts throughout -
+ * both are already loaded before this runs.
  */
-async function pullOwnTikTok(userKey: string) {
+async function pullOwnTikTok(userKey: string, creatorKey: string) {
   try {
     const accessToken = await getFreshTikTokAccessToken(userKey)
     const [creator, page] = await Promise.all([
       fetchTikTokUser(accessToken),
       fetchTikTokVideos(accessToken, 20),
     ])
-    if (!page.videos.length) return 0
+    if (!page.videos.length) {
+      // An empty account is a successful sync. Without the stamp it would look
+      // never-synced forever and call TikTok on every single request.
+      await recordTikTokSyncResult(userKey, { ok: true, imported: 0 })
+      return 0
+    }
     const rows = await materializeTikTokVideos(userKey, page.videos, creator)
+    await recordTikTokSyncResult(userKey, { ok: true, imported: rows.length })
     return rows.length
   } catch (error) {
-    console.warn("[Malik Shorts] TikTok feed refresh skipped", String(error instanceof Error ? error.message : error).slice(0, 160))
+    const message = String(error instanceof Error ? error.message : error).slice(0, 200)
+    console.warn(`[Malik Shorts] tiktok import failed provider=tiktok user=${userKey} creator=${creatorKey}: ${message}`)
+    await recordTikTokSyncResult(userKey, { ok: false, error: message })
     return 0
   }
 }
@@ -413,14 +406,13 @@ export async function GET(request: NextRequest) {
   let dbItems = await loadDbFeed(limit)
 
   if (user?.id && getShortsSupabaseConfig()) {
-    // Ask about this viewer's own connection, not about the pool: another
-    // creator's TikToks being present says nothing about whether ours are.
-    const connected = await hasProviderConnection(user.id, "tiktok").catch(() => false)
-    const mine = connected
-      ? await getTikTokCreatorKey(user.id)
-      : null
-    if (mine && !dbItems.some((item) => item.source === "tiktok" && item.creator.id === mine)) {
-      const imported = await pullOwnTikTok(user.id)
+    // Ask about this viewer's own connection and its freshness, never about
+    // what happens to be in the loaded page: another creator's TikToks being
+    // present says nothing about whether this viewer's are, and a page of 18
+    // rows says nothing about what is materialised.
+    const { state, decision } = await shouldSyncViewerTikTok(user.id)
+    if (decision.sync && state.creatorKey) {
+      const imported = await pullOwnTikTok(user.id, state.creatorKey)
       if (imported > 0) dbItems = await loadDbFeed(limit)
     }
   }

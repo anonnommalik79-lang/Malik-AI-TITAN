@@ -44,6 +44,7 @@ import {
   X,
 } from "lucide-react"
 import { prefillPrompt } from "@/lib/malik-context"
+import { applyLocalCounters, bumpLocalCounter } from "@/lib/shorts/metrics"
 import type { MalikShortComment, MalikShortFeedResponse, MalikShortInteractionAction, MalikShortItem, MalikShortSource } from "@/lib/shorts/types"
 import styles from "./MalikShortsApp.module.css"
 
@@ -672,9 +673,15 @@ export function MalikShortsApp() {
       }
       const json = await response.json().catch(() => null)
       if (!response.ok) throw new Error(json?.error || "interaction")
+      // malik_shorts_interact answers with Malik's own counters and nothing
+      // else - it has no idea what the video did on TikTok. Spreading that
+      // answer over the item is what dropped a 40,000-like TikTok to 1: the
+      // response said `likes: 1` and it landed on the field the rail renders.
+      // applyLocalCounters replaces only the local half and recomputes the
+      // visible number from both, so external counters survive every tap.
       setFeed((items) => items.map((item) => item.id === short.id ? {
         ...item,
-        metrics: json?.metrics ? { ...item.metrics, ...json.metrics } : item.metrics,
+        metrics: applyLocalCounters(item.metrics, json?.metrics),
         viewer: json?.viewer ? { ...item.viewer, ...json.viewer } : item.viewer,
       } : item))
       return json
@@ -909,7 +916,10 @@ export function MalikShortsApp() {
       }
       if (!response.ok) throw new Error("comment")
       await openComments(drawer.short)
-      setFeed((items) => items.map((item) => item.id === drawer.short.id ? { ...item, metrics: { ...item.metrics, comments: item.metrics.comments + 1 } } : item))
+      // A new comment is a Malik-local event, so it moves the local half and
+      // the visible total follows. Incrementing the display field directly
+      // would double-count it against the external comment count on reload.
+      setFeed((items) => items.map((item) => item.id === drawer.short.id ? { ...item, metrics: bumpLocalCounter(item.metrics, "comments", 1) } : item))
     } catch {
       setCommentText(body)
       notify("Комментарий не отправлен")

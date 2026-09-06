@@ -24,19 +24,35 @@ try {
 }
 
 const here = dirname(fileURLToPath(import.meta.url))
-const source = readFileSync(resolve(here, "../lib/shorts/feed-rotation.ts"), "utf8")
 
-// Compiled with the repo's own TypeScript rather than regex-stripped, so this
-// check tests the file that ships instead of a rewritten copy of it. The helper
-// has no runtime imports - only a type-only one, which the compiler drops - so
-// nothing needs resolving and the stub require is never called.
-const compiled = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText
+/**
+ * Load a pure lib module by compiling the file that actually ships.
+ *
+ * Compiled with the repo's own TypeScript rather than regex-stripped, so these
+ * checks test the shipped source instead of a rewritten copy of it. Every
+ * module loaded here is import-free at runtime by design - only type imports,
+ * which the compiler drops - so the stub require is never called.
+ */
+function loadLib(relativePath) {
+  const source = readFileSync(resolve(here, relativePath), "utf8")
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const loaded = {}
+  new Function("exports", "require", compiled)(loaded, () => ({}))
+  return { exports: loaded, source }
+}
 
-const loaded = {}
-new Function("exports", "require", compiled)(loaded, () => ({}))
-const { rotateBySource, dedupeBySource, buildRotatedFeed, usesExternalMetrics } = loaded
+const rotation = loadLib("../lib/shorts/feed-rotation.ts")
+const metricsLib = loadLib("../lib/shorts/metrics.ts")
+const identity = loadLib("../lib/shorts/tiktok-identity.ts")
+const policy = loadLib("../lib/shorts/tiktok-sync-policy.ts")
+
+const source = rotation.source
+const { dedupeBySource, buildRotatedFeed } = rotation.exports
+const { buildShortMetrics, applyLocalCounters, bumpLocalCounter, usesExternalMetrics } = metricsLib.exports
+const { parseTikTokHandle, tiktokUsernameCandidates, tiktokCreatorKey, USERNAME_PATTERN } = identity.exports
+const { decideTikTokSync, freshnessLabel, FRESH_WINDOW_MS, ERROR_COOLDOWN_MS } = policy.exports
 
 let failures = 0
 let checks = 0
@@ -182,19 +198,218 @@ check(
   "2",
 )
 
-console.log("\nСчётчики внешних видео")
+console.log("\nВторой круг ротации")
+
+// Case A: the bug the first version of rotateBySource shipped with. It advanced
+// the starting provider between rounds, so round two began at TikTok and the
+// feed read YT TK TK YT while YouTube still had items.
+const secondLap = buildRotatedFeed(["YT1", "YT2", "TK1", "TK2"].map(item), 4)
+check("YT1 TK1 YT2 TK2 — не YT TK TK YT", labels(secondLap), "YT1 TK1 YT2 TK2")
+check(
+  "длинный прогон не сбивается на границе круга",
+  labels(buildRotatedFeed(["YT1", "YT2", "YT3", "YT4", "TK1", "TK2", "TK3", "TK4"].map(item), 8)),
+  "YT1 TK1 YT2 TK2 YT3 TK3 YT4 TK4",
+)
+
+console.log("\nСчётчики: внешние и локальные не смешиваются")
 
 check("youtube берёт внешние счётчики", String(usesExternalMetrics("youtube")), "true")
 check("tiktok берёт внешние счётчики", String(usesExternalMetrics("tiktok")), "true")
 check("malik остаётся на локальных", String(usesExternalMetrics("malik")), "false")
 
+// Case D, the whole life cycle of one like on an imported TikTok.
+const tiktokPost = buildShortMetrics(
+  { views: 0, likes: 0, comments: 0, reposts: 0, saves: 0, shares: 0 },
+  { views: 900000, likes: 40000, comments: 1200, shares: 300 },
+)
+check("external=40000 local=0 → показываем 40000", String(tiktokPost.likes), "40000")
+check("external хранится отдельно", String(tiktokPost.external.likes), "40000")
+check("local хранится отдельно", String(tiktokPost.local.likes), "0")
+
+// The RPC answers with local counters only - this is the exact payload
+// malik_shorts_interact returns after a like.
+const afterLike = applyLocalCounters(tiktokPost, { views: 0, likes: 1, comments: 0, reposts: 0, saves: 0, shares: 0 })
+check("после локального лайка → 40001", String(afterLike.likes), "40001")
+check("внешний счётчик не изменился", String(afterLike.external.likes), "40000")
+
+const afterUnlike = applyLocalCounters(afterLike, { views: 0, likes: 0, comments: 0, reposts: 0, saves: 0, shares: 0 })
+check("после снятия лайка → 40000", String(afterUnlike.likes), "40000")
+
+// Reload: the feed rebuilds from the database, where local likes = 1.
+const afterReload = buildShortMetrics(
+  { views: 0, likes: 1, comments: 0, reposts: 0, saves: 0, shares: 0 },
+  { views: 900000, likes: 40000, comments: 1200, shares: 300 },
+)
+check("после перезагрузки те же 40001", String(afterReload.likes), "40001")
+
+check("комментарий поднимает локальный счётчик", String(bumpLocalCounter(tiktokPost, "comments", 1).comments), "1201")
+check("bump не трогает внешний", String(bumpLocalCounter(tiktokPost, "comments", 1).external.comments), "1200")
+
+// Malik-native: no external half, so display is simply local. Same code path.
+const malikPost = buildShortMetrics({ views: 10, likes: 3, comments: 2, reposts: 1, saves: 4, shares: 0 }, null)
+check("malik-native показывает свои локальные", String(malikPost.likes), "3")
+check("malik-native не выдумывает external", String(malikPost.external === undefined), "true")
+check(
+  "malik-native после лайка → 4",
+  String(applyLocalCounters(malikPost, { views: 10, likes: 4, comments: 2, reposts: 1, saves: 4, shares: 0 }).likes),
+  "4",
+)
+
+// A response without metrics (follow, share, an optimistic fallback) must not
+// rebuild the object - React should see no change where nothing moved.
+check("ответ без metrics ничего не меняет", String(applyLocalCounters(tiktokPost, null) === tiktokPost), "true")
+
+// reposts and saves have no external half anywhere.
+check("reposts остаются локальными", String(tiktokPost.reposts), "0")
+
 checks += 1
-const routeSource = feedRoute
-if (/views: external \? count\(externalViews\)/.test(routeSource) && /shares: external && externalShares/.test(routeSource)) {
-  console.log("  ok   feed/route.ts отдаёт внешние счётчики для tiktok")
-} else {
+if (/\{ \.\.\.item\.metrics, \.\.\.json\.metrics \}/.test(codeOnly(readFileSync(resolve(here, "../components/sovereign/shorts/MalikShortsApp.tsx"), "utf8")))) {
   failures += 1
-  console.log("  FAIL feed/route.ts всё ещё показывает локальные нули для tiktok")
+  console.log("  FAIL клиент всё ещё затирает metrics ответом RPC")
+} else {
+  console.log("  ok   клиент не затирает внешние счётчики ответом RPC")
+}
+
+console.log("\nTikTok: handle и username")
+
+// Case G: a Malik user already owns @malik; the TikTok creator @malik must not
+// collide with them. The tt. namespace is what removes that class of clash.
+check("handle из profile_deep_link", String(parseTikTokHandle("https://www.tiktok.com/@cristiano")), "cristiano")
+check("handle с точкой и подчёркиванием", String(parseTikTokHandle("https://www.tiktok.com/@almaty.travels")), "almaty.travels")
+check("ссылки нет → null", String(parseTikTokHandle(null)), "null")
+check("чужая ссылка → null", String(parseTikTokHandle("https://example.com/@x")), "null")
+check("мусор вместо ссылки → null", String(parseTikTokHandle("не ссылка")), "null")
+
+const malikCollision = tiktokUsernameCandidates("open-id-1", "malik")
+check("первый кандидат в своём namespace", malikCollision[0], "tt.malik")
+check("есть запасной с хэшем", String(malikCollision.length >= 2), "true")
+check("все кандидаты проходят regex таблицы", String(malikCollision.every((name) => USERNAME_PATTERN.test(name))), "true")
+check("все кандидаты ≤ 32 символов", String(malikCollision.every((name) => name.length <= 32)), "true")
+
+// Case H: the same open id, twice, must produce the same key and the same list.
+check("тот же creator_key при повторном sync", tiktokCreatorKey("open-id-1"), "tiktok:open-id-1")
+check(
+  "тот же username при повторном sync",
+  tiktokUsernameCandidates("open-id-1", "malik").join("|"),
+  malikCollision.join("|"),
+)
+check(
+  "разные open_id — разные запасные имена",
+  String(tiktokUsernameCandidates("open-id-1", "malik")[1] !== tiktokUsernameCandidates("open-id-2", "malik")[1]),
+  "true",
+)
+
+const longHandle = tiktokUsernameCandidates("open-id-3", "a".repeat(40))
+check("длинный handle обрезается до лимита", String(longHandle.every((name) => USERNAME_PATTERN.test(name))), "true")
+const noHandle = tiktokUsernameCandidates("open-id-4", null)
+check("без handle всё равно есть валидное имя", String(noHandle.length >= 1 && USERNAME_PATTERN.test(noHandle[0])), "true")
+check("имя без handle детерминировано", noHandle[0], tiktokUsernameCandidates("open-id-4", null)[0])
+
+checks += 1
+if (/follower_count|total_likes/.test(codeOnly(readFileSync(resolve(here, "../lib/shorts/tiktok.ts"), "utf8")).split("materializeTikTokProfile")[1]?.split("export async function getTikTokCreatorKey")[0] || "")) {
+  failures += 1
+  console.log("  FAIL TikTok-профиль всё ещё пишет follower_count/total_likes поверх Malik social graph")
+} else {
+  console.log("  ok   TikTok-профиль не трогает Malik social graph")
+}
+
+console.log("\nЧастота обращений к TikTok API")
+
+const HOUR = 60 * 60 * 1000
+const now = Date.parse("2026-09-06T12:00:00Z")
+const iso = (msAgo) => new Date(now - msAgo).toISOString()
+
+check(
+  "нет подключения — не синкаем",
+  decideTikTokSync({ connected: false, creatorKey: null, hasPosts: false }, now).reason,
+  "not-connected",
+)
+check(
+  "подключён, никогда не синкали — синкаем",
+  String(decideTikTokSync({ connected: true, creatorKey: "tiktok:x", hasPosts: false }, now).sync),
+  "true",
+)
+
+// Case E: posts exist outside the first feed page. The check is by creator key,
+// not by what the feed loaded, so no API call happens.
+check(
+  "посты есть и свежие — НЕ дёргаем API",
+  String(decideTikTokSync({ connected: true, creatorKey: "tiktok:x", hasPosts: true, lastSyncAt: iso(HOUR) }, now).sync),
+  "false",
+)
+check(
+  "посты есть, метки времени нет — берём дату поста",
+  decideTikTokSync({ connected: true, creatorKey: "tiktok:x", hasPosts: true, newestPostAt: iso(HOUR) }, now).reason,
+  "fresh",
+)
+check(
+  "импорт устарел — синкаем",
+  decideTikTokSync({ connected: true, creatorKey: "tiktok:x", hasPosts: true, lastSyncAt: iso(FRESH_WINDOW_MS + HOUR) }, now).reason,
+  "stale",
+)
+check(
+  "недавняя ошибка — ждём, не зацикливаемся",
+  decideTikTokSync({ connected: true, creatorKey: "tiktok:x", hasPosts: false, lastErrorAt: iso(60_000) }, now).reason,
+  "error-cooldown",
+)
+check(
+  "ошибка остыла — пробуем снова",
+  String(decideTikTokSync({ connected: true, creatorKey: "tiktok:x", hasPosts: false, lastErrorAt: iso(ERROR_COOLDOWN_MS + 60_000) }, now).sync),
+  "true",
+)
+
+// Case F: creator X being present must not block viewer Y's own import. The
+// decision takes no argument describing the pool at all, which is the fix.
+check(
+  "чужой TikTok в пуле не блокирует мой импорт",
+  String(decideTikTokSync({ connected: true, creatorKey: "tiktok:Y", hasPosts: false }, now).sync),
+  "true",
+)
+
+check("метка свежести: никогда", freshnessLabel({ connected: true, creatorKey: "tiktok:x", hasPosts: false }, now), "never")
+check("метка свежести: свежо", freshnessLabel({ connected: true, creatorKey: "tiktok:x", hasPosts: true, lastSyncAt: iso(HOUR) }, now), "fresh")
+check("метка свежести: устарело", freshnessLabel({ connected: true, creatorKey: "tiktok:x", hasPosts: true, lastSyncAt: iso(FRESH_WINDOW_MS + HOUR) }, now), "stale")
+check("метка свежести: падает", freshnessLabel({ connected: true, creatorKey: "tiktok:x", hasPosts: true, lastSyncAt: iso(2 * HOUR), lastErrorAt: iso(HOUR) }, now), "failing")
+
+checks += 1
+if (/dbItems\.some\(\(item\) => item\.source === "tiktok"\)/.test(codeOnly(feedRoute))) {
+  failures += 1
+  console.log("  FAIL лента снова решает по загруженной странице, а не по creator")
+} else {
+  console.log("  ok   решение о синке не зависит от feed limit")
+}
+
+console.log("\nProvider endpoint не отдаёт секреты")
+
+// Case I. The same row holds encrypted tokens, so a `select=*` here would put
+// credentials one response away from the browser.
+// codeOnly, because the SECURITY comment in that file names the very patterns
+// these checks look for - the rule is about the code, not about explaining it.
+const accountsLib = codeOnly(readFileSync(resolve(here, "../lib/shorts/provider-accounts.ts"), "utf8"))
+const forbidden = ["access_token", "refresh_token", "client_secret", "service_role", "_encrypted"]
+for (const field of forbidden) {
+  checks += 1
+  // Named in the SECURITY comment on purpose; the code must not select it.
+  if (new RegExp(`select=[^\`\\n]*${field}`).test(accountsLib)) {
+    failures += 1
+    console.log(`  FAIL provider-accounts выбирает ${field}`)
+  } else {
+    console.log(`  ok   ${field} не выбирается`)
+  }
+}
+checks += 1
+if (/select=\*/.test(accountsLib)) {
+  failures += 1
+  console.log("  FAIL provider-accounts использует select=*")
+} else {
+  console.log("  ok   выборка полей — белый список, не select=*")
+}
+checks += 1
+if (/metadata: (row|meta)\b|\.\.\.\(?row\?\.metadata/.test(codeOnly(accountsLib))) {
+  failures += 1
+  console.log("  FAIL metadata отдаётся целиком")
+} else {
+  console.log("  ok   metadata не отдаётся целиком")
 }
 
 console.log(`\n${checks - failures}/${checks} проверок пройдено`)

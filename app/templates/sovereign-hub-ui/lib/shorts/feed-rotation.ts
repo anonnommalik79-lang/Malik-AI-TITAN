@@ -101,17 +101,4 @@ export function buildRotatedFeed<T extends { source: MalikShortSource; sourceId?
   return rotateBySource(dedupeBySource(items), limit)
 }
 
-/**
- * Which counters the UI should show for a given source.
- *
- * An imported video's numbers belong to the platform it came from: a TikTok
- * with 40k views has 40k views in Malik Shorts too, and showing the Malik-local
- * interaction count (zero, until somebody likes it here) reads as a broken
- * feed. Malik-native posts are the opposite case - their local counters are the
- * real ones, and there is no external number to prefer.
- */
-export function usesExternalMetrics(source: MalikShortSource) {
-  return source === "youtube" || source === "tiktok"
-}
-
 export type { MalikShortItem }
