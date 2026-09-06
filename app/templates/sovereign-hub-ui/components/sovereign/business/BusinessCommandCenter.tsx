@@ -29,6 +29,11 @@ import {
 } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { takePrefillPrompt } from "@/lib/malik-context"
+import {
+  BusinessModelSelector,
+  DEFAULT_BUSINESS_MODEL_ID,
+  getBusinessModelChoice,
+} from "./BusinessModelSelector"
 
 export type BusinessCommandCenterProps = {
   username?: string
@@ -47,7 +52,6 @@ type AgentDef = {
   icon: typeof Brain
 }
 
-const MODEL_LABEL = "MalikLLM Qwen3.8 27B"
 const ENDPOINT = "/api/business/autonomous"
 
 const AGENTS: AgentDef[] = [
@@ -112,6 +116,7 @@ export function BusinessCommandCenter({ username, onNewChat }: BusinessCommandCe
   const [country, setCountry] = useState("Казахстан")
   const [budget, setBudget] = useState("$0–500")
   const [requirements, setRequirements] = useState("Сайт, оффер, контент, лиды, продажи и аналитика")
+  const [selectedModelId, setSelectedModelId] = useState(DEFAULT_BUSINESS_MODEL_ID)
   const [runState, setRunState] = useState<RunState>("idle")
   const [activeAgent, setActiveAgent] = useState(0)
   const [result, setResult] = useState("")
@@ -120,6 +125,7 @@ export function BusinessCommandCenter({ username, onNewChat }: BusinessCommandCe
   const [error, setError] = useState("")
   const [copied, setCopied] = useState(false)
   const timerRef = useRef<number | null>(null)
+  const selectedModel = useMemo(() => getBusinessModelChoice(selectedModelId), [selectedModelId])
 
   const progress = useMemo(() => {
     if (runState === "done") return 100
@@ -175,7 +181,7 @@ export function BusinessCommandCenter({ username, onNewChat }: BusinessCommandCe
             budget,
             requirements,
             language: "ru",
-            modelId: "malik-27b",
+            modelId: selectedModelId,
             operator,
           }),
         },
@@ -266,7 +272,7 @@ export function BusinessCommandCenter({ username, onNewChat }: BusinessCommandCe
               <button type="button" className="ac-primary ac-primary-large" onClick={() => setStage("configure")}>
                 <Play size={17} fill="currentColor" /> Запустить бизнес
               </button>
-              <div className="ac-model-chip"><MalikMark compact /><span><b>{MODEL_LABEL}</b><small>Основной мозг · 8 агентов</small></span></div>
+              <div className="ac-model-chip"><MalikMark compact /><span><b>{selectedModel.label}</b><small>Основной мозг · 8 агентов</small></span></div>
             </div>
           </section>
         </div>
@@ -291,10 +297,7 @@ export function BusinessCommandCenter({ username, onNewChat }: BusinessCommandCe
               <h1>Что будем запускать?</h1>
               <p>Опишите идею. Malik AI соберёт стратегию, продукт, бренд, маркетинг, продажи, поддержку и аналитику в один запуск.</p>
             </div>
-            <div className="ac-model-card">
-              <MalikMark />
-              <span><small>Основная модель</small><strong>{MODEL_LABEL}</strong><em>Groq · Qwen · API</em></span>
-            </div>
+            <BusinessModelSelector value={selectedModelId} onChange={setSelectedModelId} />
           </div>
 
           <section className="ac-config-grid">
@@ -370,7 +373,7 @@ export function BusinessCommandCenter({ username, onNewChat }: BusinessCommandCe
             <h1>{runState === "done" ? "Компания собрана" : "Строим компанию"}</h1>
             <p>{idea}</p>
           </div>
-          <div className="ac-run-model"><MalikMark /><span><small>Primary brain</small><strong>{MODEL_LABEL}</strong><em>{providerModel || "qwen/qwen3.8-27b"}</em></span></div>
+          <div className="ac-run-model"><MalikMark /><span><small>Primary brain</small><strong>{selectedModel.label}</strong><em>{providerModel || selectedModel.providerModel}</em></span></div>
         </section>
 
         <div className="ac-progress-card">
@@ -409,7 +412,7 @@ export function BusinessCommandCenter({ username, onNewChat }: BusinessCommandCe
               <div className="ac-output-error"><strong>Запуск остановлен</strong><p>{error}</p><button type="button" className="ac-secondary" onClick={launchCompany}>Повторить</button></div>
             ) : (
               <>
-                <div className="ac-output-engine"><span>API</span><strong>{provider || "Malik AI"}</strong><span>Model</span><strong>{providerModel || MODEL_LABEL}</strong></div>
+                <div className="ac-output-engine"><span>API</span><strong>{provider || "Malik AI"}</strong><span>Model</span><strong>{providerModel || selectedModel.label}</strong></div>
                 <pre>{result || "Модель завершила запуск без текстового результата."}</pre>
               </>
             )}
