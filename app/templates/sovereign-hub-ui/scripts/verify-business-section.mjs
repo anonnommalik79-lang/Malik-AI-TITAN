@@ -21,6 +21,15 @@ const read = (p) => readFileSync(join(ROOT, p), "utf8").replace(/\r\n/g, "\n")
 
 let failures = 0
 let checks = 0
+let skipped = 0
+
+// A check that could not run is neither a pass nor a failure, and pretending
+// otherwise is how a suite rots: counted as green it hides a hole, counted as
+// red it goes red on a machine where nothing is wrong.
+function skip(name, why) {
+  skipped += 1
+  console.log(`  skip ${name} — ${why}`)
+}
 function check(name, condition, detail = "") {
   checks += 1
   if (condition) {
@@ -157,7 +166,52 @@ check("the instruction is editable and the edit is what is sent",
 check("no template writes a bare prompt with no instruction behind it",
   !component.includes("playbookBadge"))
 
-/* --------------------------------------------------------------- 5. palette */
+/* ----------------------------------------------------------- 5. stress test */
+
+// The ninth stage only means something if it reads what the eight actually
+// produced and stays inside the prompt cap while doing it. Both are checked by
+// running the real builder, not by looking at it.
+console.log("\nStress test")
+const modes5 = read("lib/business/modes.ts")
+const templates5 = read("lib/business/output-templates.ts")
+
+check("reality-check is a registered mode", modes5.includes('id: "reality-check"'))
+check("its id is a declared BusinessModeId", types.includes('| "reality-check"'))
+check("its output format is declared", types.includes('| "stress"') && templates5.includes("  stress: `"))
+check("the stress format demands a kill criterion, not a score",
+  /При каком результате план мёртв/.test(templates5)
+  && !/stress: `[\s\S]*?Оценка \/100/.test(templates5))
+check("it runs on the same endpoint as everything else",
+  component.includes("mode: STRESS_TEST.mode") && component.includes("ENDPOINT,"))
+check("a too-long input is resized from the server's own limit, not guessed",
+  component.includes('data?.code === "PROMPT_TOO_LONG"') && component.includes("cap - 400"))
+check("a failed stress test does not fail the run",
+  component.includes("setStressError") && component.includes("stressBusy"))
+
+// Imported rather than reimplemented: a budget test that checks a copy of the
+// function proves nothing about the one that ships. Needs a Node that strips
+// types (22.6+); older ones skip these rather than fail.
+const { stressTestInput } = await import(join(ROOT, "lib/business/autonomous.ts"))
+  .catch(() => ({ stressTestInput: null }))
+
+if (stressTestInput) {
+  const fake = Array.from({ length: 8 }, (_, i) => ({
+    agent: { name: `A${i}`, role: `R${i}` },
+    content: "Предложение номер один. ".repeat(200),
+  }))
+  for (const budget of [3000, 6000, 12000]) {
+    const built = stressTestInput("Кофейня в Алматы", fake, budget)
+    check(`fits a ${budget}-character cap`, built.length <= budget, `${built.length}`)
+    check(`still carries all eight stages at ${budget}`,
+      fake.every((f) => built.includes(`## ${f.agent.name}`)))
+  }
+  const short = stressTestInput("Кофейня", [{ agent: { name: "CEO", role: "Стратегия" }, content: "Короткий вывод." }], 6000)
+  check("a short plan is not padded or truncated", short.includes("Короткий вывод.") && !short.includes("[…]"))
+} else {
+  skip("stressTestInput fits the prompt cap", `this Node (${process.version}) cannot import .ts directly`)
+}
+
+/* --------------------------------------------------------------- 6. palette */
 
 // NoBlueUiGuard rewrites, at runtime, any colour with hue 178-250 and
 // saturation >= 0.12. Cool dark greys land squarely inside that window, and the
@@ -197,7 +251,7 @@ for (const m of css.matchAll(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/g)) {
 console.log("\nPalette")
 check("no colour NoBlueUiGuard would overwrite", offenders.length === 0, offenders.join(" "))
 
-/* ------------------------------------------------------- 6. the shell's CSS */
+/* ------------------------------------------------------- 7. the shell's CSS */
 
 // .malik-dashboard-shell styles `header *` and hides `header > div:nth-of-type(2)`
 // for its own top bar. A <header> inside a view inherits all of it.
@@ -211,7 +265,7 @@ check("it is reachable from the navigation",
 
 /* ------------------------------------------------------------------ result */
 
-console.log(`\n${checks - failures}/${checks} checks passed`)
+console.log(`\n${checks - failures}/${checks} checks passed${skipped ? `, ${skipped} skipped` : ""}`)
 if (failures) {
   console.error(`${failures} failed`)
   process.exit(1)

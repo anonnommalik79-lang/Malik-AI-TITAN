@@ -531,3 +531,67 @@ export function agentInput(
     "Подготовка документа не означает запуск бизнеса: не утверждай, что сайт опубликован, письмо отправлено или оплата получена. Такие действия требуют отдельного инструмента и подтверждения пользователя.",
   ].filter(Boolean).join("\n\n")
 }
+
+/* ============================================================ STRESS TEST */
+
+/**
+ * The ninth stage: the plan is attacked with what the plan itself said.
+ *
+ * The eight agents build. This one tries to break what they built, and it can
+ * only exist because they built it in stages: there are eight real documents to
+ * interrogate, so the assumptions it names are quoted out of this plan rather
+ * than borrowed from general advice about startups. One prompt to one model
+ * cannot do that - it has nothing to read but its own answer.
+ *
+ * It is a separate button, not a ninth automatic step, because it costs another
+ * call and because the interesting moment is choosing to have your own plan
+ * taken apart.
+ */
+export const STRESS_TEST = {
+  mode: "reality-check" as BusinessModeId,
+  title: "Проверка на прочность",
+  subtitle: "План разбирают на допущения — как это сделает инвестор",
+}
+
+/**
+ * Builds the stress-test input inside a character budget.
+ *
+ * The budget is real and it bites: checkPromptLength caps the input at 3000
+ * characters for a guest and 6000 for a free account, and eight finished
+ * documents are far past both. So each stage is given an equal share of what is
+ * left after the framing, cut at a sentence boundary rather than mid-word, and
+ * the model is told plainly that it is reading excerpts - otherwise it treats a
+ * truncated document as a plan that simply stops.
+ */
+export function stressTestInput(
+  brief: string,
+  done: Array<{ agent: AutonomousAgent; content: string }>,
+  budget: number,
+): string {
+  const framing = [
+    `БИЗНЕС: ${brief}`,
+    "",
+    `НИЖЕ — ПЛАН, КОТОРЫЙ СОБРАЛИ ${done.length} АГЕНТОВ. Это выдержки, а не полные документы.`,
+    "Разбери именно этот план. Каждое допущение цитируй из текста ниже. Не пиши общих истин про бизнес — они здесь бесполезны.",
+    "Не выдумывай суммы, ставки и нормы. Если цифры нет — так и скажи, и укажи, где её взять.",
+    "",
+  ].join("\n")
+
+  const share = Math.max(120, Math.floor((budget - framing.length - 200) / Math.max(1, done.length)))
+
+  const body = done.map((step) => {
+    const header = `## ${step.agent.name} — ${step.agent.role}\n`
+    const room = Math.max(80, share - header.length)
+    let text = step.content.trim()
+    if (text.length > room) {
+      const cut = text.slice(0, room)
+      // Cut at the last sentence end, so the excerpt reads as an excerpt and not
+      // as a thought the agent abandoned halfway.
+      const stop = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("\n"), cut.lastIndexOf("! "), cut.lastIndexOf("? "))
+      text = `${(stop > room * 0.5 ? cut.slice(0, stop + 1) : cut).trim()} […]`
+    }
+    return header + text
+  }).join("\n\n")
+
+  return `${framing}${body}`
+}
