@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 import { getShortsSupabaseConfig, shortsSupabaseRequest } from "@/lib/shorts/server"
+import { rowMetrics, rowPublicHandle } from "@/lib/shorts/feed-row"
 
 export const dynamic = "force-dynamic"
 
@@ -49,14 +50,17 @@ export async function GET(request: NextRequest) {
       creator: {
         userKey: row.creator_key,
         username: row.username,
+        // The stored username is a Malik row key for imported creators
+        // (`tt.cristiano`); the real @ comes from the share_url TikTok issued.
+        handle: rowPublicHandle(row),
         displayName: row.display_name,
         avatarUrl: row.avatar_url,
         verified: Boolean(row.verified),
       },
-      metrics: {
-        views: Number(row.views || 0), likes: Number(row.likes || 0), comments: Number(row.comments || 0),
-        reposts: Number(row.reposts || 0), saves: Number(row.saves || 0), shares: Number(row.shares || 0),
-      },
+      // Same formula as the feed - external plus local. This used to read the
+      // local columns alone, so a saved TikTok showed 7 likes here and 40,007
+      // one screen away.
+      metrics: rowMetrics(row),
       publishedAt: row.published_at,
     })),
   }, { headers: { "Cache-Control": "private, no-store" } })

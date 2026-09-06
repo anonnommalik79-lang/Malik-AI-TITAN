@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 import { getShortsSupabaseConfig, safeText, shortsSupabaseRequest } from "@/lib/shorts/server"
+import { rowMetrics, rowPublicHandle } from "@/lib/shorts/feed-row"
+import { parseTikTokHandle, resolvePublicHandle } from "@/lib/shorts/tiktok-identity"
 
 export const dynamic = "force-dynamic"
 
-function profileShape(row: any) {
+/**
+ * `handle` is the platform's real @, when it is known.
+ *
+ * malik_shorts_profiles.username for an imported creator is a Malik row key
+ * (`tt.cristiano`) - unique across every profile, which a real TikTok @ cannot
+ * be - so rendering it after an @ would show a handle that does not exist on
+ * TikTok. The real one is parsed out of a TikTok-issued URL and passed in; when
+ * there is none the field stays null and the UI shows the display name with no
+ * @ rather than inventing one.
+ */
+function profileShape(row: any, handle: string | null = null) {
   return {
     userKey: String(row.user_key),
     username: String(row.username),
+    handle,
     displayName: String(row.display_name || row.username),
     avatarUrl: row.avatar_url || null,
     bio: String(row.bio || ""),
@@ -49,8 +62,16 @@ export async function GET(request: NextRequest) {
     ? await shortsSupabaseRequest<any[]>(`malik_shorts_follows?select=follower_key&follower_key=eq.${encodeURIComponent(user.id)}&following_key=eq.${encodeURIComponent(row.user_key)}&limit=1`).catch(() => [])
     : []
 
+  // The creator's own posts are already loaded, and every imported TikTok row
+  // carries the share_url TikTok issued - so the real @ is read from the data
+  // in hand rather than from a second request or from the row key.
+  const handle = resolvePublicHandle({
+    handle: posts.map((post) => parseTikTokHandle(post.source_url)).find(Boolean) || null,
+    username: row.username,
+  })
+
   return NextResponse.json({
-    profile: profileShape(row),
+    profile: profileShape(row, handle),
     viewer: { isSelf: user?.id === row.user_key, following: followRows.length > 0 },
     private: false,
     posts: posts.map((post) => ({
@@ -64,10 +85,11 @@ export async function GET(request: NextRequest) {
       hashtags: post.hashtags || [],
       durationSeconds: post.duration_seconds,
       publishedAt: post.published_at,
-      metrics: {
-        views: Number(post.views || 0), likes: Number(post.likes || 0), comments: Number(post.comments || 0),
-        reposts: Number(post.reposts || 0), saves: Number(post.saves || 0), shares: Number(post.shares || 0),
-      },
+      // Same formula as the feed - external plus local. Reading only the local
+      // columns here made one imported TikTok show 40,007 likes in the feed and
+      // 7 on its author's profile.
+      metrics: rowMetrics(post),
+      creatorHandle: rowPublicHandle(post),
     })),
   }, { headers: { "Cache-Control": "private, no-store" } })
 }

@@ -1,20 +1,32 @@
 import type { Metadata } from "next"
-import { ShortsPage } from "./ShortsPage"
+import { MalikShortsApp } from "@/components/sovereign/shorts/MalikShortsApp"
+import { ShortsAutoSync } from "./ShortsAutoSync"
+import { ShortsUXFixes } from "./ShortsUXFixes"
+import "./shorts-final.css"
+import "./shorts-profile-layout-fix.css"
 
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
   title: "Malik Shorts",
-  description: "Malik Shorts — клиент YouTube внутри Malik AI: видео, авторы, подписки и библиотека.",
+  description: "Malik Shorts — короткие видео, авторы, рекомендации и AI-инструменты внутри Malik AI.",
   alternates: { canonical: "/shorts" },
   openGraph: {
     title: "Malik Shorts",
-    description: "Смотрите YouTube и управляйте своими подписками и библиотекой внутри Malik AI.",
+    description: "Короткие видео и AI-социальная сеть внутри Malik AI.",
     url: "https://malikaiworld.world/shorts",
     type: "website",
   },
 }
 
 export default function MalikShortsPage() {
-  return <ShortsPage path="/shorts" />
+  return (
+    <>
+      <ShortsAutoSync />
+      <ShortsUXFixes />
+      <div data-malik-shorts-page="1">
+        <MalikShortsApp />
+      </div>
+    </>
+  )
 }

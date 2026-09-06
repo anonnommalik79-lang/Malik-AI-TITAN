@@ -1,7 +1,11 @@
 import "server-only"
 
 import { getTikTokShortsConfig, shortsSupabaseRequest } from "@/lib/shorts/server"
+import { parseTikTokHandle, tiktokCreatorKey, tiktokUsernameCandidates } from "@/lib/shorts/tiktok-identity"
+import { decideTikTokSync, type TikTokSyncState } from "@/lib/shorts/tiktok-sync-policy"
 import { decryptShortsToken, encryptShortsToken } from "@/lib/shorts/token-vault"
+
+export { tiktokCreatorKey }
 
 const TIKTOK_API = "https://open.tiktokapis.com"
 
@@ -149,6 +153,114 @@ function hashtags(text: string) {
   return Array.from(new Set((String(text || "").match(/#[\p{L}\p{N}_]{2,50}/gu) || []).map((tag) => tag.slice(1).toLowerCase()))).slice(0, 12)
 }
 
+/**
+ * Pick the username this creator will keep.
+ *
+ * Two rules make it safe. A profile that already exists keeps the username it
+ * has - resolution runs once, on first import, and never churns afterwards.
+ * And a name already owned by somebody else is skipped rather than written,
+ * because malik_shorts_profiles.username is unique and a clash would fail the
+ * whole import over a name that nobody sees.
+ *
+ * The candidate list is deterministic (lib/shorts/tiktok-identity.ts) and its
+ * last entry is derived from the open id alone, so this cannot run out.
+ */
+export async function resolveTikTokUsername(creatorKey: string, openId: string, handle?: string | null) {
+  const existing = await shortsSupabaseRequest<any[]>(
+    `malik_shorts_profiles?select=username&user_key=eq.${encodeURIComponent(creatorKey)}&limit=1`,
+  ).catch(() => [] as any[])
+  if (existing?.[0]?.username) return String(existing[0].username)
+
+  const candidates = tiktokUsernameCandidates(openId, handle)
+  const taken = await shortsSupabaseRequest<any[]>(
+    `malik_shorts_profiles?select=username,user_key&username=in.(${candidates.map((name) => `"${name}"`).join(",")})`,
+  ).catch(() => [] as any[])
+
+  const owners = new Map((taken || []).map((row) => [String(row.username), String(row.user_key)]))
+  for (const candidate of candidates) {
+    const owner = owners.get(candidate)
+    if (!owner || owner === creatorKey) return candidate
+  }
+  // Unreachable in practice - the hash candidate is unique per open id - but a
+  // name is still needed if it ever happens, and this one is deterministic too.
+  return candidates[candidates.length - 1]
+}
+
+/**
+ * Give the TikTok creator a profile row before their videos reference it.
+ *
+ * malik_shorts_posts.creator_key is a foreign key into malik_shorts_profiles,
+ * so importing videos without this insert fails the whole batch - and it failed
+ * quietly, because the import path only logged. The row also carries what other
+ * viewers see: a TikTok in the shared feed shows the TikTok creator's name and
+ * avatar, not the Malik account that happened to connect it.
+ *
+ * follower_count, following_count and total_likes are deliberately NOT written
+ * here. malik_shorts_interact and the follow RPC increment those same columns
+ * for the Malik social graph, so writing TikTok's numbers into them would make
+ * every sync silently undo every follow and like earned inside Malik. TikTok's
+ * own figures live in the connection's metadata, which nothing else mutates.
+ */
+export async function materializeTikTokProfile(user: TikTokUser) {
+  const key = tiktokCreatorKey(user.open_id)
+  const handle = parseTikTokHandle(user.profile_deep_link)
+  const username = await resolveTikTokUsername(key, user.open_id, handle)
+
+  await shortsSupabaseRequest("malik_shorts_profiles?on_conflict=user_key", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify([{
+      user_key: key,
+      username,
+      // The real @handle, when TikTok gave one, is shown here rather than in
+      // the username - the username is a Malik-namespaced key, the display name
+      // is what a person reads.
+      display_name: String(user.display_name || handle || "TikTok").slice(0, 120),
+      avatar_url: user.avatar_large_url || user.avatar_url_100 || user.avatar_url || null,
+      bio: String(user.bio_description || "").slice(0, 500),
+      verified: Boolean(user.is_verified),
+      updated_at: new Date().toISOString(),
+    }]),
+  })
+  return key
+}
+
+/**
+ * The profile key this Malik user's TikToks are filed under, or null when the
+ * account is not connected. One cheap read; no TikTok call.
+ */
+export async function getTikTokCreatorKey(userKey: string): Promise<string | null> {
+  const connection = await getStoredTikTokConnection(userKey).catch(() => null)
+  return connection?.provider_user_id ? tiktokCreatorKey(String(connection.provider_user_id)) : null
+}
+
+/**
+ * Rebuild the creator from what the connection row already stored.
+ *
+ * The import path is reached from the feed too, where re-calling user/info on
+ * every request would spend a TikTok rate-limit slot to learn something that is
+ * sitting in our own table.
+ */
+export async function tiktokCreatorFromConnection(userKey: string): Promise<TikTokUser | null> {
+  const connection = await getStoredTikTokConnection(userKey).catch(() => null)
+  if (!connection?.provider_user_id) return null
+  const meta = connection.metadata || {}
+  return {
+    open_id: String(connection.provider_user_id),
+    union_id: meta.union_id || undefined,
+    avatar_url: connection.avatar_url || undefined,
+    avatar_large_url: connection.avatar_url || undefined,
+    display_name: connection.display_name || connection.username || undefined,
+    profile_deep_link: meta.profile_deep_link || undefined,
+    bio_description: meta.bio_description || undefined,
+    is_verified: Boolean(meta.is_verified),
+    follower_count: Number(meta.follower_count || 0),
+    following_count: Number(meta.following_count || 0),
+    likes_count: Number(meta.likes_count || 0),
+    video_count: Number(meta.video_count || 0),
+  }
+}
+
 export async function storeTikTokConnection(args: {
   userKey: string
   token: TikTokTokenResponse
@@ -193,10 +305,30 @@ export async function storeTikTokConnection(args: {
   })
 }
 
-export async function materializeTikTokVideos(userKey: string, videos: TikTokVideo[]) {
+/**
+ * Import a creator's public TikToks into the shared Malik Shorts pool.
+ *
+ * `creator` is optional: pass it right after an OAuth exchange, when the fresh
+ * user/info response is already in hand, and leave it out anywhere else - the
+ * stored connection row has everything needed.
+ *
+ * The posts land in malik_shorts_posts as public, published rows exactly like
+ * imported YouTube videos, which is what puts them in every viewer's feed. Only
+ * the creator needs a TikTok connection; nobody needs one to watch. Rights stay
+ * closed - no remix, no download, attribution required - because these are
+ * somebody else's videos being shown under TikTok's terms, not ours to reuse.
+ */
+export async function materializeTikTokVideos(userKey: string, videos: TikTokVideo[], creator?: TikTokUser) {
   if (!videos.length) return [] as any[]
+
+  const owner = creator || await tiktokCreatorFromConnection(userKey)
+  if (!owner?.open_id) throw new Error("TIKTOK_CREATOR_UNKNOWN")
+
+  // The profile has to exist first: posts.creator_key is a foreign key into it.
+  const creatorKey = await materializeTikTokProfile(owner)
+
   const posts = videos.map((video) => ({
-    creator_key: userKey,
+    creator_key: creatorKey,
     source: "tiktok",
     source_id: video.id,
     source_url: video.share_url || null,
@@ -244,6 +376,70 @@ export async function getStoredTikTokConnection(userKey: string) {
     `malik_shorts_external_accounts?select=*&user_key=eq.${encodeURIComponent(userKey)}&provider=eq.tiktok&limit=1`,
   )
   return rows?.[0] || null
+}
+
+/**
+ * Everything the sync policy needs, in two reads and no TikTok call.
+ *
+ * The post lookup is by creator key with `limit=1`, so the answer does not
+ * depend on how many rows the feed happened to load - the old check searched
+ * the current page of the feed and concluded "not imported" whenever a
+ * creator's videos sat past row 18.
+ */
+export async function readTikTokSyncState(userKey: string): Promise<TikTokSyncState> {
+  const connection = await getStoredTikTokConnection(userKey).catch(() => null)
+  if (!connection?.provider_user_id) {
+    return { connected: false, creatorKey: null, hasPosts: false }
+  }
+
+  const creatorKey = tiktokCreatorKey(String(connection.provider_user_id))
+  const meta = connection.metadata || {}
+
+  const newest = await shortsSupabaseRequest<any[]>(
+    `malik_shorts_posts?select=created_at&source=eq.tiktok&creator_key=eq.${
+      encodeURIComponent(creatorKey)
+    }&order=created_at.desc&limit=1`,
+  ).catch(() => [] as any[])
+
+  return {
+    connected: true,
+    creatorKey,
+    lastSyncAt: meta.last_sync_at || null,
+    lastErrorAt: meta.last_sync_error_at || null,
+    hasPosts: Boolean(newest?.length),
+    newestPostAt: newest?.[0]?.created_at || null,
+  }
+}
+
+/**
+ * Stamp the outcome of an import onto the connection's metadata.
+ *
+ * Read-modify-write because PostgREST cannot merge jsonb in a PATCH body, and
+ * the whole object is small. A failure timestamp is what stops a revoked app
+ * from producing one doomed TikTok call per feed request.
+ */
+export async function recordTikTokSyncResult(userKey: string, outcome: { ok: boolean; error?: string; imported?: number }) {
+  const connection = await getStoredTikTokConnection(userKey).catch(() => null)
+  if (!connection) return
+  const now = new Date().toISOString()
+  const metadata = {
+    ...(connection.metadata || {}),
+    ...(outcome.ok
+      ? { last_sync_at: now, last_sync_error_at: null, last_sync_error: null, last_sync_imported: Number(outcome.imported || 0) }
+      : { last_sync_error_at: now, last_sync_error: String(outcome.error || "unknown").slice(0, 200) }),
+  }
+  await shortsSupabaseRequest(
+    `malik_shorts_external_accounts?user_key=eq.${encodeURIComponent(userKey)}&provider=eq.tiktok`,
+    { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ metadata, updated_at: now }) },
+  ).catch((error) => {
+    console.warn("[Malik Shorts] TikTok sync stamp failed", String(error instanceof Error ? error.message : error).slice(0, 160))
+  })
+}
+
+/** Should the feed import this viewer's TikTok right now, and why. */
+export async function shouldSyncViewerTikTok(userKey: string, now = Date.now()) {
+  const state = await readTikTokSyncState(userKey).catch(() => ({ connected: false, creatorKey: null, hasPosts: false } as TikTokSyncState))
+  return { state, decision: decideTikTokSync(state, now) }
 }
 
 export async function getFreshTikTokAccessToken(userKey: string) {

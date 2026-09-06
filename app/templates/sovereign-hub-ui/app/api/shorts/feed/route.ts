@@ -7,7 +7,17 @@ import {
   shortsSupabaseRequest,
   stableShortId,
 } from "@/lib/shorts/server"
-import { fetchTikTokVideos, getFreshTikTokAccessToken, materializeTikTokVideos } from "@/lib/shorts/tiktok"
+import { buildRotatedFeed } from "@/lib/shorts/feed-rotation"
+import { buildShortMetrics } from "@/lib/shorts/metrics"
+import { parseTikTokHandle } from "@/lib/shorts/tiktok-identity"
+import {
+  fetchTikTokUser,
+  fetchTikTokVideos,
+  getFreshTikTokAccessToken,
+  materializeTikTokVideos,
+  recordTikTokSyncResult,
+  shouldSyncViewerTikTok,
+} from "@/lib/shorts/tiktok"
 import type { MalikShortFeedResponse, MalikShortItem, MalikShortSource } from "@/lib/shorts/types"
 
 export const dynamic = "force-dynamic"
@@ -71,12 +81,6 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
       ? { kind: "tiktok" as const, videoId: String(row.source_id || ""), canonicalUrl: row.source_url || undefined }
       : { kind: "native" as const, url: String(row.media_url || ""), poster: row.poster_url || undefined }
 
-  const youtube = source === "youtube"
-  const externalViews = row.external_views == null ? undefined : count(row.external_views)
-  const externalLikes = row.external_likes == null ? undefined : count(row.external_likes)
-  const externalComments = row.external_comments == null ? undefined : count(row.external_comments)
-  const externalShares = row.external_shares == null ? undefined : count(row.external_shares)
-
   return {
     id: String(row.id),
     source,
@@ -86,6 +90,11 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
     creator: {
       id: String(row.creator_key),
       username: String(row.username || "creator"),
+      // The real @ comes out of the video's own share_url
+      // (tiktok.com/@handle/video/...), which TikTok issued - the stored
+      // username is `tt.<name>`, a Malik row key, and showing it as an @ would
+      // put a handle in front of people that does not exist on TikTok.
+      handle: source === "tiktok" ? parseTikTokHandle(row.source_url) : null,
       displayName: String(row.display_name || row.username || "Creator"),
       avatarUrl: row.avatar_url || undefined,
       bio: row.bio || undefined,
@@ -101,24 +110,14 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
     durationSeconds: row.duration_seconds == null ? undefined : Number(row.duration_seconds),
     publishedAt: row.published_at || undefined,
     createdAt: row.created_at || undefined,
-    metrics: {
-      // For imported YouTube videos these are the public counters from YouTube,
-      // not Malik-local interaction rows. The old mapping put the real numbers
-      // only in `external`, while the action rail renders these top-level fields,
-      // which is why every YouTube Short showed 0 beside the icons.
-      views: youtube ? count(externalViews) : count(row.views),
-      likes: youtube ? count(externalLikes) : count(row.likes),
-      comments: youtube ? count(externalComments) : count(row.comments),
-      reposts: count(row.reposts),
-      saves: count(row.saves),
-      shares: count(row.shares),
-      external: {
-        views: externalViews,
-        likes: externalLikes,
-        comments: externalComments,
-        shares: externalShares,
-      },
-    },
+    // Display is external plus local, and both halves travel with the item so
+    // an interaction response can replace one without erasing the other.
+    // buildShortMetrics is the only place that arithmetic lives - see
+    // lib/shorts/metrics.ts for why it is not a per-source branch.
+    metrics: buildShortMetrics(
+      { views: row.views, likes: row.likes, comments: row.comments, reposts: row.reposts, saves: row.saves, shares: row.shares },
+      { views: row.external_views, likes: row.external_likes, comments: row.external_comments, shares: row.external_shares },
+    ),
     viewer: { liked: false, saved: false, reposted: false, following: false },
     rights: {
       canRemix: Boolean(row.can_remix),
@@ -309,15 +308,11 @@ function mapYouTubeCandidate(item: YouTubeCandidate, dbId?: string): MalikShortI
     region: "KZ",
     durationSeconds: item.durationSeconds,
     publishedAt: item.publishedAt,
-    metrics: {
-      views: item.views,
-      likes: item.likes,
-      comments: item.comments,
-      reposts: 0,
-      saves: 0,
-      shares: 0,
-      external: { views: item.views, likes: item.likes, comments: item.comments },
-    },
+    // A candidate straight off the YouTube API has no Malik-local history yet -
+    // if it is already materialised the database copy wins deduplication and
+    // brings the local counters with it. Same builder either way, so the two
+    // paths cannot drift into showing different numbers for one video.
+    metrics: buildShortMetrics(null, { views: item.views, likes: item.likes, comments: item.comments }),
     viewer: { liked: false, saved: false, reposted: false, following: false },
     rights: { canRemix: false, canDownload: false, canCrossPost: false, attributionRequired: true },
   }
@@ -351,53 +346,15 @@ async function hydrateViewerState(items: MalikShortItem[], userKey?: string) {
   }))
 }
 
-function uniqueBySource(items: MalikShortItem[]) {
-  const seen = new Set<string>()
-  return items.filter((item) => {
-    const key = `${item.source}:${item.sourceId || item.id}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-function shuffle<T>(items: T[]) {
-  const result = [...items]
-  for (let i = result.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[result[i], result[j]] = [result[j], result[i]]
-  }
-  return result
-}
-
-function mixSources(items: MalikShortItem[], limit: number) {
-  const buckets: Record<MalikShortSource, MalikShortItem[]> = { malik: [], tiktok: [], youtube: [] }
-  for (const item of items) buckets[item.source].push(item)
-  buckets.malik = shuffle(buckets.malik)
-  buckets.youtube = shuffle(buckets.youtube)
-  buckets.tiktok = shuffle(buckets.tiktok)
-
-  const patterns: MalikShortSource[][] = [
-    ["youtube", "tiktok", "malik", "youtube", "tiktok", "malik"],
-    ["tiktok", "youtube", "malik", "tiktok", "youtube", "malik"],
-    ["malik", "youtube", "tiktok", "youtube", "malik", "tiktok"],
-  ]
-  const pattern = patterns[Math.floor(Math.random() * patterns.length)]
-  const output: MalikShortItem[] = []
-  let guard = 0
-  while (output.length < limit && guard < limit * 12) {
-    const source = pattern[guard % pattern.length]
-    const item = buckets[source].shift()
-    if (item) output.push(item)
-    else {
-      const fallback = buckets.tiktok.shift() || buckets.youtube.shift() || buckets.malik.shift()
-      if (fallback) output.push(fallback)
-      else break
-    }
-    guard += 1
-  }
-  return output
-}
+/*
+ * Dedupe and provider rotation live in lib/shorts/feed-rotation.ts.
+ *
+ * They used to be here, built on Math.random - one of three hard-coded patterns
+ * picked per request, with each bucket shuffled first. That made the order
+ * unexplainable to a viewer refreshing the page and untestable for us. The
+ * helper is deterministic round-robin and has its own test script; this route
+ * just calls it.
+ */
 
 async function loadDbFeed(limit: number) {
   if (!getShortsSupabaseConfig()) return [] as MalikShortItem[]
@@ -407,15 +364,41 @@ async function loadDbFeed(limit: number) {
   return rows.map(mapDbRow)
 }
 
-async function pullTikTokIfMissing(userKey: string) {
+/**
+ * Opportunistic import of the viewer's own TikTok.
+ *
+ * Whether to run at all is decided by shouldSyncViewerTikTok, which asks about
+ * this creator's materialised posts directly and honours a freshness window and
+ * an error cooldown. Two earlier versions of that question were wrong: "does
+ * the pool contain any TikTok" stopped importing everyone after the first
+ * creator connected, and "is a TikTok in the loaded feed page" depended on
+ * `limit` and re-hit the API on every page load.
+ *
+ * Failures are recorded, not just logged. The stamp is what stops a revoked app
+ * or an expired refresh token from producing one doomed TikTok call per
+ * request, and the viewer keeps getting YouTube and Malik posts throughout -
+ * both are already loaded before this runs.
+ */
+async function pullOwnTikTok(userKey: string, creatorKey: string) {
   try {
     const accessToken = await getFreshTikTokAccessToken(userKey)
-    const page = await fetchTikTokVideos(accessToken, 20)
-    if (!page.videos.length) return 0
-    const rows = await materializeTikTokVideos(userKey, page.videos)
+    const [creator, page] = await Promise.all([
+      fetchTikTokUser(accessToken),
+      fetchTikTokVideos(accessToken, 20),
+    ])
+    if (!page.videos.length) {
+      // An empty account is a successful sync. Without the stamp it would look
+      // never-synced forever and call TikTok on every single request.
+      await recordTikTokSyncResult(userKey, { ok: true, imported: 0 })
+      return 0
+    }
+    const rows = await materializeTikTokVideos(userKey, page.videos, creator)
+    await recordTikTokSyncResult(userKey, { ok: true, imported: rows.length })
     return rows.length
   } catch (error) {
-    console.warn("[Malik Shorts] TikTok feed refresh skipped", String(error instanceof Error ? error.message : error).slice(0, 160))
+    const message = String(error instanceof Error ? error.message : error).slice(0, 200)
+    console.warn(`[Malik Shorts] tiktok import failed provider=tiktok user=${userKey} creator=${creatorKey}: ${message}`)
+    await recordTikTokSyncResult(userKey, { ok: false, error: message })
     return 0
   }
 }
@@ -428,16 +411,23 @@ export async function GET(request: NextRequest) {
 
   let dbItems = await loadDbFeed(limit)
 
-  if (user?.id && getShortsSupabaseConfig() && !dbItems.some((item) => item.source === "tiktok")) {
-    const imported = await pullTikTokIfMissing(user.id)
-    if (imported > 0) dbItems = await loadDbFeed(limit)
+  if (user?.id && getShortsSupabaseConfig()) {
+    // Ask about this viewer's own connection and its freshness, never about
+    // what happens to be in the loaded page: another creator's TikToks being
+    // present says nothing about whether this viewer's are, and a page of 18
+    // rows says nothing about what is materialised.
+    const { state, decision } = await shouldSyncViewerTikTok(user.id)
+    if (decision.sync && state.creatorKey) {
+      const imported = await pullOwnTikTok(user.id, state.creatorKey)
+      if (imported > 0) dbItems = await loadDbFeed(limit)
+    }
   }
 
   const youtubeCandidates: YouTubeCandidate[] = await fetchYouTubeCandidates(limit, language, region).catch(() => [] as YouTubeCandidate[])
   const youtubeIdMap = await materializeYouTube(youtubeCandidates).catch(() => new Map<string, string>())
   const youtubeItems: MalikShortItem[] = youtubeCandidates.map((item: YouTubeCandidate) => mapYouTubeCandidate(item, youtubeIdMap.get(item.videoId)))
 
-  const mixed = mixSources(uniqueBySource([...dbItems, ...youtubeItems]), limit)
+  const mixed = buildRotatedFeed([...dbItems, ...youtubeItems], limit)
   const items = await hydrateViewerState(mixed, user?.id)
   const payload: MalikShortFeedResponse = {
     items,

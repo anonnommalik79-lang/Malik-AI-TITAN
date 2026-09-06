@@ -7,7 +7,18 @@ export type MalikShortPlayback =
 
 export type MalikShortCreator = {
   id: string
+  /**
+   * The row key in malik_shorts_profiles. For an imported creator this is a
+   * Malik-internal, collision-safe name (`tt.cristiano`) - not something to
+   * render as an @.
+   */
   username: string
+  /**
+   * The platform's real public handle, parsed from a TikTok-issued URL, or null
+   * when unknown. lib/shorts/tiktok-identity.ts#resolvePublicHandle decides
+   * what to display; it is never guessed from the username or display name.
+   */
+  handle?: string | null
   displayName: string
   avatarUrl?: string
   bio?: string
@@ -16,6 +27,14 @@ export type MalikShortCreator = {
   claimed?: boolean
 }
 
+/**
+ * Top-level counters are what the UI shows: external plus local.
+ *
+ * `local` and `external` are the two halves, kept apart so neither can
+ * overwrite the other - malik_shorts_interact answers with the local half only,
+ * and spreading that answer over the item is what used to drop a TikTok from
+ * 40,000 likes to 1. lib/shorts/metrics.ts owns every operation on this shape.
+ */
 export type MalikShortMetrics = {
   views: number
   likes: number
@@ -25,6 +44,16 @@ export type MalikShortMetrics = {
   shares: number
   watchTimeMs?: number
   completionRate?: number
+  /** Malik's own counters for this post. Zero for a freshly imported video. */
+  local?: {
+    views: number
+    likes: number
+    comments: number
+    reposts: number
+    saves: number
+    shares: number
+  }
+  /** What the source platform reports. Absent for Malik-native posts. */
   external?: {
     views?: number
     likes?: number

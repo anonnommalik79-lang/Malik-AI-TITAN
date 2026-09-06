@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 import { clampInt, getShortsSupabaseConfig, safeText, shortsSupabaseRequest } from "@/lib/shorts/server"
-import { isYouTubePost } from "@/lib/shorts/legacy-source"
 
 export const dynamic = "force-dynamic"
 
@@ -14,9 +13,6 @@ export async function GET(request: NextRequest) {
   const limit = clampInt(request.nextUrl.searchParams.get("limit"), 1, 80, 40)
   if (!validUuid(shortId)) return NextResponse.json({ error: "INVALID_SHORT_ID" }, { status: 400 })
   if (!getShortsSupabaseConfig()) return NextResponse.json({ items: [], persistence: false })
-
-  try { if (await isYouTubePost(shortId)) return NextResponse.json({ error: "YOUTUBE_OAUTH_REQUIRED", message: "Open official YouTube comments in the connected client." }, { status: 409 }) }
-  catch { return NextResponse.json({ error: "SHORT_UNAVAILABLE" }, { status: 503 }) }
 
   const rows = await shortsSupabaseRequest<any[]>(
     `malik_shorts_comments?select=id,post_id,parent_id,body,like_count,created_at,user_key,malik_shorts_profiles!inner(username,display_name,avatar_url,verified)&post_id=eq.${encodeURIComponent(shortId)}&status=eq.visible&order=created_at.desc&limit=${limit}`,
@@ -61,7 +57,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    if (await isYouTubePost(shortId)) return NextResponse.json({ error: "YOUTUBE_OAUTH_REQUIRED", message: "Local comments cannot be posted to YouTube." }, { status: 409 })
     const response = await shortsSupabaseRequest<any>("rpc/malik_shorts_create_comment", {
       method: "POST",
       body: JSON.stringify({
