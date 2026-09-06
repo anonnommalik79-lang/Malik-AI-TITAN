@@ -16,7 +16,7 @@ import type { AIPlan } from "@/lib/ai/types"
 const cn = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ")
 
 type UpgradeTarget = { label: string }
-type BrandIcon = { label: string; url: string; fallback: string }
+type BrandIcon = { label: string; urls: readonly string[]; fallback: string }
 
 const MOBILE_SELECTOR_QUERY = "(max-width: 768px)"
 const getMobileSnapshot = () => window.matchMedia(MOBILE_SELECTOR_QUERY).matches
@@ -27,27 +27,37 @@ function subscribeMobileSelector(onChange: () => void) {
   return () => query.removeEventListener("change", onChange)
 }
 
+// Every model uses the first-party brand mark of the model family itself.
+// A second first-party URL is kept where the vendor exposes more than one
+// canonical host so a temporary favicon/CDN failure does not turn the selector
+// into generic letter tiles.
 const MODEL_BRANDS: Record<MalikModelId, BrandIcon> = {
-  "malik-qwen-397b": { label: "Qwen", url: "https://qwen.ai/favicon.ico", fallback: "Q" },
-  "malik-reason-753b": { label: "Z.ai GLM", url: "https://z.ai/favicon.ico", fallback: "Z" },
-  "malik-core-300b": { label: "Baidu ERNIE", url: "https://ernie.baidu.com/favicon.ico", fallback: "E" },
-  "malik-flash-53": { label: "Z.ai GLM", url: "https://z.ai/favicon.ico", fallback: "Z" },
-  "malik-vision-k3": { label: "Kimi", url: "https://www.kimi.com/favicon.ico", fallback: "K" },
-  "malik-8b": { label: "Meta Llama", url: "https://www.meta.com/favicon.ico", fallback: "M" },
-  "malik-20b": { label: "OpenAI", url: "https://openai.com/favicon.ico", fallback: "O" },
-  "malik-fast-120b": { label: "OpenAI GPT-OSS", url: "https://openai.com/favicon.ico", fallback: "O" },
-  "malik-27b": { label: "Qwen", url: "https://qwen.ai/favicon.ico", fallback: "Q" },
-  "malik-30b": { label: "Qwen", url: "https://qwen.ai/favicon.ico", fallback: "Q" },
-  "malik-vision-26b": { label: "Google Gemma", url: "https://www.google.com/favicon.ico", fallback: "G" },
-  "malik-coder-32b": { label: "Qwen", url: "https://qwen.ai/favicon.ico", fallback: "Q" },
-  "malik-70b": { label: "Meta Llama", url: "https://www.meta.com/favicon.ico", fallback: "M" },
-  "malik-120b": { label: "OpenAI GPT-OSS", url: "https://openai.com/favicon.ico", fallback: "O" },
-  "malik-agent-120b": { label: "NVIDIA Nemotron", url: "https://www.nvidia.com/favicon.ico", fallback: "N" },
+  "malik-qwen-397b": { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
+  "malik-reason-753b": { label: "Z.ai GLM", urls: ["https://chat.z.ai/favicon.ico", "https://z.ai/favicon.ico"], fallback: "Z" },
+  "malik-core-300b": { label: "Baidu ERNIE", urls: ["https://ernie.baidu.com/favicon.ico", "https://www.baidu.com/favicon.ico"], fallback: "E" },
+  "malik-flash-53": { label: "Z.ai GLM", urls: ["https://chat.z.ai/favicon.ico", "https://z.ai/favicon.ico"], fallback: "Z" },
+  "malik-vision-k3": { label: "Kimi", urls: ["https://www.kimi.com/favicon.ico", "https://kimi.moonshot.cn/favicon.ico"], fallback: "K" },
+  "malik-8b": { label: "Meta Llama", urls: ["https://www.meta.com/favicon.ico"], fallback: "M" },
+  "malik-20b": { label: "OpenAI", urls: ["https://openai.com/favicon.ico"], fallback: "O" },
+  "malik-fast-120b": { label: "OpenAI GPT-OSS", urls: ["https://openai.com/favicon.ico"], fallback: "O" },
+  "malik-27b": { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
+  "malik-30b": { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
+  "malik-vision-26b": { label: "Google Gemma", urls: ["https://www.google.com/favicon.ico"], fallback: "G" },
+  "malik-coder-32b": { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
+  "malik-70b": { label: "Meta Llama", urls: ["https://www.meta.com/favicon.ico"], fallback: "M" },
+  "malik-120b": { label: "OpenAI GPT-OSS", urls: ["https://openai.com/favicon.ico"], fallback: "O" },
+  "malik-agent-120b": { label: "NVIDIA Nemotron", urls: ["https://www.nvidia.com/favicon.ico"], fallback: "N" },
 }
 
 function ModelBrandIcon({ model, compact = false }: { model: MalikModelDefinition; compact?: boolean }) {
-  const [failed, setFailed] = useState(false)
+  const [sourceIndex, setSourceIndex] = useState(0)
   const brand = MODEL_BRANDS[model.id]
+
+  useEffect(() => setSourceIndex(0), [model.id])
+
+  const source = brand.urls[sourceIndex]
+  const failed = !source
+
   return (
     <span
       className={cn("malik-model-selector__brand", compact && "is-compact")}
@@ -58,11 +68,11 @@ function ModelBrandIcon({ model, compact = false }: { model: MalikModelDefinitio
         <span className="malik-model-selector__brand-fallback" aria-hidden="true">{brand.fallback}</span>
       ) : (
         <img
-          src={brand.url}
-          alt=""
+          src={source}
+          alt={brand.label}
           loading="eager"
           referrerPolicy="no-referrer"
-          onError={() => setFailed(true)}
+          onError={() => setSourceIndex((index) => index + 1)}
         />
       )}
     </span>
@@ -107,7 +117,7 @@ export function MalikModelSelector({
   onSelect,
   onOpenBilling,
   className,
-  placement = "bottom",
+  placement = "auto",
 }: {
   selectedModelId: MalikModelId
   plan: AIPlan
@@ -120,6 +130,7 @@ export function MalikModelSelector({
   const [open, setOpen] = useState(false)
   const [upgradeModel, setUpgradeModel] = useState<UpgradeTarget | null>(null)
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({})
+  const [resolvedPlacement, setResolvedPlacement] = useState<"top" | "bottom">("bottom")
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
@@ -157,6 +168,7 @@ export function MalikModelSelector({
       if (isMobile) {
         const visible = window.visualViewport
         const visibleHeight = visible?.height || viewportHeight
+        setResolvedPlacement("bottom")
         setPopoverStyle({
           position: "fixed",
           left: 12,
@@ -168,25 +180,42 @@ export function MalikModelSelector({
         return
       }
 
-      // Desktop rule: the list never flips above the selector. It always opens
-      // from the lower edge exactly like the final Malik UI reference.
       const edge = 12
       const gap = 8
       const width = Math.min(356, viewportWidth - edge * 2)
       const left = Math.min(Math.max(edge, rect.left), viewportWidth - width - edge)
-      const top = rect.bottom + gap
-      const availableBelow = Math.max(120, viewportHeight - top - edge)
-      const measuredHeight = popoverRef.current?.scrollHeight || 520
-      const desiredHeight = Math.min(measuredHeight, 520, availableBelow)
+      const measuredHeight = Math.min(popoverRef.current?.scrollHeight || 520, 520)
+      const spaceBelow = Math.max(0, viewportHeight - rect.bottom - gap - edge)
+      const spaceAbove = Math.max(0, rect.top - gap - edge)
+      const openAbove = placement === "auto" && spaceAbove > spaceBelow
+      const available = openAbove ? spaceAbove : spaceBelow
+      const desiredHeight = Math.min(measuredHeight, Math.max(96, available))
+
+      setResolvedPlacement(openAbove ? "top" : "bottom")
+
+      if (openAbove) {
+        setPopoverStyle({
+          position: "fixed",
+          left,
+          right: "auto",
+          top: "auto",
+          bottom: Math.max(edge, viewportHeight - rect.top + gap),
+          width,
+          maxHeight: desiredHeight,
+          transformOrigin: "bottom left",
+        })
+        return
+      }
 
       setPopoverStyle({
         position: "fixed",
         left,
         right: "auto",
-        top,
+        top: rect.bottom + gap,
         bottom: "auto",
         width,
         maxHeight: desiredHeight,
+        transformOrigin: "top left",
       })
     }
 
@@ -237,10 +266,11 @@ export function MalikModelSelector({
   const modelMenu = open ? (
     <div
       ref={popoverRef}
-      className="malik-model-selector__popover is-bottom"
+      className={cn("malik-model-selector__popover", resolvedPlacement === "top" ? "is-top" : "is-bottom")}
       role="menu"
       aria-label="Модели Malik AI"
       data-requested-placement={placement}
+      data-resolved-placement={resolvedPlacement}
       style={popoverStyle}
     >
       <div className="malik-model-selector__group">
