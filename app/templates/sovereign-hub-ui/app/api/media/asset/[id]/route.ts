@@ -7,7 +7,7 @@ import { isValidMediaAssetId, mediaAssetDirectory } from "@/lib/media/asset-stor
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-type RouteContext = { params: Promise<{ id?: string }> | { id?: string } }
+type RouteContext = { params: Promise<{ id: string }> }
 type AssetInfo = { file: string; mime: string; bytes: number }
 
 async function resolveId(context: RouteContext) {

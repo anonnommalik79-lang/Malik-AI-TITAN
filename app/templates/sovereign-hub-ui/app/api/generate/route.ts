@@ -117,7 +117,7 @@ function localVideoStatusUrl(jobId: string) {
   return `/api/ai/video/status?jobId=${encodeURIComponent(jobId)}`
 }
 
-export async function handleGenerateRequest(request: Request, routeKind?: string) {
+async function handleGenerateRequest(request: Request, routeKind?: string) {
   const body = (await request.json().catch(() => ({}))) as GenerationBody
   const entitlement = await resolveRequestEntitlement(request)
   const kind = String(routeKind || body.kind || "code").toLowerCase()
