@@ -984,6 +984,19 @@ export function MalikShortsApp() {
   const activeShort = useMemo(() => feed.find((item) => item.id === activeId) || null, [feed, activeId])
 
   /**
+   * Who to draw on the profile screen.
+   *
+   * /api/shorts/profile answers 503 when the Shorts tables are not configured,
+   * and the screen printed that as a sentence about a database - to a signed-in
+   * user looking at their own page. But identity never came from those tables:
+   * /api/shorts/me already returns the WorkOS name, handle and avatar with
+   * `persistence: false`, and the right rail has been drawing it all along. So
+   * the profile falls back to the same object the rail uses, and only the parts
+   * that genuinely need storage - published videos, counters - stay empty.
+   */
+  const profileView = me?.profile || profile
+
+  /**
    * The author of whatever is on screen, loaded as it changes.
    *
    * No new endpoint was needed: the feed already materialises every YouTube
@@ -1340,11 +1353,25 @@ export function MalikShortsApp() {
               </article>
             )
           }) : (
+            /* An empty feed has two different causes and they need different
+               sentences. With storage connected it means nobody has posted yet,
+               and «Создать ролик» is the answer. Without it the upload dialog
+               would fail on submit, so offering that button is a dead end - the
+               honest line is that no video source is connected, which is a
+               deployment setting and not something the viewer can fix here. */
             <div className={styles.empty}>
               <div className={styles.emptyBox}>
-                <div className={styles.emptyTitle}>{feedMode === "following" ? "Подпишись на авторов — и они появятся здесь" : "Лента готова к первому ролику"}</div>
-                <div className={styles.emptyText}>Создай или загрузи видео. Malik Shorts не требует отдельной регистрации: используется твой аккаунт Malik AI.</div>
-                <button type="button" className={styles.connectButton} onClick={() => setCreateOpen(true)}>Создать ролик</button>
+                <div className={styles.emptyTitle}>{feedMode === "following"
+                  ? "Подпишись на авторов — и они появятся здесь"
+                  : liveReady === false ? "Источник видео не подключён" : "Лента готова к первому ролику"}</div>
+                <div className={styles.emptyText}>{liveReady === false
+                  ? "Лента наполняется из подключённых источников. Пока ни один не настроен, показывать нечего — интерфейс при этом работает целиком."
+                  : "Создай или загрузи видео. Malik Shorts не требует отдельной регистрации: используется твой аккаунт Malik AI."}</div>
+                {liveReady === false ? (
+                  <button type="button" className={styles.connectButton} onClick={() => loadFeed()}>Обновить ленту</button>
+                ) : (
+                  <button type="button" className={styles.connectButton} onClick={() => setCreateOpen(true)}>Создать ролик</button>
+                )}
               </div>
             </div>
           )}
@@ -1517,29 +1544,31 @@ export function MalikShortsApp() {
                   Профиль привязан к аккаунту Malik AI.{" "}
                   <button type="button" className={styles.linkButton} onClick={() => window.location.assign(`/sign-in?returnTo=${encodeURIComponent("/shorts")}`)}>Войти</button>
                 </div>
-              ) : meState === "nodb" || !me ? (
-                <div className={styles.gridEmpty}>База Malik Shorts не подключена — профиль негде хранить.</div>
+              ) : !profileView ? (
+                <div className={styles.gridEmpty}>Профиль не загрузился. Обнови страницу.</div>
               ) : (
                 <>
                   <header className={styles.profileHead}>
-                    <Avatar src={me.profile.avatarUrl} name={me.profile.displayName} className={styles.profileBig} />
+                    <Avatar src={profileView.avatarUrl} name={profileView.displayName} className={styles.profileBig} />
                     <div className={styles.profileHeadBody}>
                       <div className={styles.profileHeadName}>
-                        <h2>{me.profile.displayName}</h2>
-                        {me.profile.verified ? <span className={styles.verified} data-preserve-brand-color="true"><Check size={11} /></span> : null}
+                        <h2>{profileView.displayName}</h2>
+                        {profileView.verified ? <span className={styles.verified} data-preserve-brand-color="true"><Check size={11} /></span> : null}
                       </div>
-                      <div className={styles.profileHandle}>@{me.profile.username}</div>
+                      <div className={styles.profileHandle}>@{profileView.username}</div>
                       <div className={styles.statRow}>
-                        <span><b>{compact(me.profile.postCount)}</b>Видео</span>
-                        <span><b>{compact(me.profile.followerCount)}</b>Подписчики</span>
-                        <span><b>{compact(me.profile.followingCount)}</b>Подписки</span>
+                        <span><b>{compact(profileView.postCount)}</b>Видео</span>
+                        <span><b>{compact(profileView.followerCount)}</b>Подписчики</span>
+                        <span><b>{compact(profileView.followingCount)}</b>Подписки</span>
                       </div>
-                      {me.profile.bio ? <p className={styles.profileBio}>{me.profile.bio}</p> : null}
+                      {profileView.bio ? <p className={styles.profileBio}>{profileView.bio}</p> : null}
                     </div>
                   </header>
                   <ShortGrid
-                    items={me.posts}
-                    empty={<>Ты ещё ничего не опубликовал. Нажми «Создать» — ролик появится здесь.</>}
+                    items={me?.posts || []}
+                    empty={me
+                      ? <>Ты ещё ничего не опубликовал. Нажми «Создать» — ролик появится здесь.</>
+                      : <>Публикация роликов включится, когда будет подключено хранилище Malik Shorts. Профиль и лента работают уже сейчас.</>}
                     onOpen={(item) => { goto("foryou"); setActiveId(item.id) }}
                   />
                 </>
