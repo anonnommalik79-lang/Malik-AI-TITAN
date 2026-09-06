@@ -11,6 +11,7 @@ try {
     const context = await browser.newContext({ viewport })
     const page = await context.newPage(), errors = []
     page.on("pageerror", (e) => errors.push(e.message))
+    page.on("console", (message) => { if (message.type() === "error" && /hydration|hydrated|didn't match/i.test(message.text())) errors.push(message.text()) })
     let rating = "none", fail = false, saved = false, subscribed = false, posts = 0
     await page.addInitScript(() => {
       window.__testPlayers = []

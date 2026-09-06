@@ -40,6 +40,8 @@ Do not roll this change into production until the migration and OAuth configurat
 
 Previous playback is paused/destroyed on switching. Hidden-document playback pauses. Pause is never undone by a timer/observer. Sound preference is remembered for the current browser session, not reset on each clip. Autoplay failure asks the user to press native Play. Opening comments pauses without replacing the player. The UI does not cover native controls.
 
+The root uses the existing `data-preserve-brand-color` opt-out so the legacy global `NoBlueUiGuard` does not rewrite React-owned Shorts styles during hydration. Other sections keep their existing guard behavior.
+
 The former local comments/interactions routes reject YouTube posts after looking up the authoritative post source in the database; a caller cannot bypass this by sending `source=malik`. Legacy non-YouTube storage is retained, not deleted.
 
 Unsupported controls were removed from this connected UI: fake Live, notifications, reposts, uploads without a real upload workflow. Comment likes are read-only; returned `viewerRating` is displayed when available. There is no private API, cookie scraping or browser-automated YouTube action.
@@ -133,6 +135,7 @@ For a Brand account, select the intended YouTube identity in Google's authorizat
 - `npx tsc --noEmit --incremental false`: passed after compatibility fixes.
 - Scoped lint for new YouTube implementation: no errors; five React effect warnings remain. Full-project lint was run and found **28 errors** in the pre-existing wider project, including old scripts/routes. Full-project lint is not green.
 - Production build through Webpack: **passed**, including TypeScript, 83 static pages and route/build tracing. The default Turbopack build could not resolve this worktree's external `node_modules` junction. The first Webpack retry also hit local disk exhaustion; only this worktree's rebuildable `.next/cache` was cleared, then the build was verified with caching disabled. No user media/source files were deleted.
+- Production-server smoke check: `/shorts` and a valid video deep link redirect an anonymous user to WorkOS sign-in; `/api/youtube/me` returns 401; `/visual-test/shorts` returns 404.
 
 Repeat locally with Node 22.13+ (verification here used the installed Node 24 runtime):
 

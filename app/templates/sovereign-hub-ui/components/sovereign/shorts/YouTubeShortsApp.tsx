@@ -81,7 +81,7 @@ export default function YouTubeShortsApp() {
   const history = useCallback((id: string, progress: number) => { if (progress > 0) void api("/api/shorts/history", "POST", { videoId: id, progress }).catch(error) }, [error])
   const connect = `/api/youtube/connect?returnTo=${encodeURIComponent(path + (query.size ? `?${query}` : ""))}`
   const nav = [["/shorts", "Главная", Home], ["/shorts?view=following", "Подписки", Users], ["/shorts/library", "Библиотека", Library], ["/shorts/history", "История", History]] as const
-  return <div className={`${s.root} ${s.connectedRoot}`}>
+  return <div data-preserve-brand-color="true" className={`${s.root} ${s.connectedRoot}`}>
     <aside className={s.left}>
       <Link href="/dashboard" className={s.brand}><ArrowLeft size={20} /><div><b>Malik Shorts</b><div className={s.brandSub}>YouTube connected</div></div></Link>
       <nav className={s.nav}>{nav.map(([href, title, Icon]) => <Link key={href} href={href} className={s.navButton}><Icon size={20} />{title}</Link>)}</nav>
