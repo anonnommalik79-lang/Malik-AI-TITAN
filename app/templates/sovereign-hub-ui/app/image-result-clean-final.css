@@ -1,0 +1,6 @@
+/* Final image-result cleanup.
+   Generated images stay directly clickable for fullscreen viewing, but the
+   legacy post-generation action toolbar must never appear under the image. */
+.malik-image-tools {
+  display: none !important;
+}
