@@ -15,6 +15,7 @@ import {
   MessageSquarePlus,
   Mic,
   MoreHorizontal,
+  Newspaper,
   PanelLeft,
   PanelLeftClose,
   Pencil,
@@ -151,6 +152,10 @@ const PRIMARY_ACTIONS: SidebarAction[] = [
   { id: "library", label: "Библиотека", icon: LayoutTemplate, view: "templates" },
   { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects" },
   { id: "business-autonomous", label: "Бизнес под ключ", icon: Briefcase, view: "business-command-center" },
+  // Newsroom is 1000 lines of working editorial tooling — sixteen modes on the
+  // same endpoint as the business section — and nothing in the app opened it.
+  // It linked out to other sections; nothing linked in.
+  { id: "newsroom", label: "Newsroom", icon: Newspaper, view: "media-newsroom" },
   { id: "plugins", label: "Плагины", icon: Plug, view: "features" },
   { id: "websites", label: "Сайты", icon: LayoutTemplate, view: "website-generation" },
   { id: "video-generation", label: "Генерация видео", icon: Video, view: "video-generation" },
@@ -277,8 +282,10 @@ function SidebarInner({
     if (action.action === "codex") return onOpenCodex?.()
     if (action.action === "voice") return onOpenVoice?.()
     if (action.action === "translate") {
-      onViewChange?.("home")
-      prefillPrompt("Переведи текст ниже на нужный язык, сохрани смысл, факты и тон:\n\n")
+      // The app has a real translator — 600 lines against /api/translator — and
+      // the top bar already opens it. This rail carried the same label and did
+      // something else: dropped a prompt into the chat. Same label, same tool.
+      window.location.assign("/translator")
       return
     }
     if (action.view) openView(action.view)
