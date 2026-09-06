@@ -24,7 +24,7 @@
 .left {
   min-width: 0;
   border-right: 1px solid var(--ms-border);
-  background: #020202;
+  background: #080808;
   display: flex;
   flex-direction: column;
   padding: 18px 14px 14px;
@@ -100,8 +100,11 @@
 }
 .navButton:hover, .profileButton:hover { background: rgba(255,255,255,.07); }
 .navButton:active, .profileButton:active { transform: scale(.985); }
-.navButtonActive { background: #1e1e20; color: #fff !important; font-weight: 750; }
-.navButtonActive:hover { background: #242427; }
+/* #2e3139, taken off the reference with an eyedropper. Its saturation is 0.107
+   — just under NoBlueUiGuard's 0.12 threshold — so this one survives as sampled
+   and does not need the brand-colour exemption. */
+.navButtonActive { background: #2e3139; color: #fff !important; font-weight: 750; }
+.navButtonActive:hover { background: #363a43; }
 .navIcon { width: 20px; height: 20px; flex: 0 0 20px; }
 .createButton { margin-top: 16px; background: #fff; color: #000 !important; justify-content: center; font-weight: 800; }
 .createButton:hover { background: #ececec; }
@@ -300,7 +303,7 @@
 .right {
   min-width: 0;
   border-left: 1px solid var(--ms-border);
-  background: #020202;
+  background: #070707;
   padding: 18px 16px;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -317,7 +320,7 @@
   color: var(--ms-muted);
 }
 .searchBox input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #fff; font-size: 12px; }
-.sideCard { margin-top: 18px; padding: 14px; border: 1px solid var(--ms-border); border-radius: 16px; background: #080808; }
+.sideCard { margin-top: 18px; padding: 14px; border: 1px solid var(--ms-border); border-radius: 16px; background: #0a0a0a; }
 .sideCardTitle { font-size: 12px; font-weight: 790; }
 .sideCardText { margin-top: 7px; font-size: 11px; line-height: 1.45; color: var(--ms-soft); }
 .connectButton,
@@ -459,7 +462,7 @@
   padding: 0 11px;
   border: 1px solid var(--ms-border);
   border-radius: 11px;
-  background: #0a0a0a;
+  background: #0d0d0d;
   color: var(--ms-muted);
 }
 
@@ -489,7 +492,7 @@
   padding: 12px;
   border: 1px solid var(--ms-border);
   border-radius: 14px;
-  background: #0b0b0b;
+  background: #0e0e0e;
   color: inherit;
   text-align: left;
   cursor: pointer;
@@ -595,7 +598,7 @@
 .sourceMark[data-source="tiktok"] { background: #0e1a1a; border-color: rgba(120,255,235,.24); }
 
 .toolGrid { display: grid; gap: 7px; margin-top: 11px; }
-.tool { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 1px solid var(--ms-border); border-radius: 11px; background: #0c0c0c; color: inherit; text-align: left; cursor: pointer; }
+.tool { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 1px solid var(--ms-border); border-radius: 11px; background: #090909; color: inherit; text-align: left; cursor: pointer; }
 .tool:hover:not(:disabled) { background: #141414; border-color: rgba(255,255,255,.24); }
 .tool:disabled { opacity: .45; cursor: default; }
 .tool > span:nth-child(2) { flex: 1; min-width: 0; }
@@ -717,27 +720,27 @@ a.liveTile:hover { background: #131313; border-color: rgba(255,255,255,.24); }
    ================================================================== */
 
 .proPill[data-preserve-brand-color] {
-  border-color: rgba(60, 120, 255, .55);
-  background: rgba(38, 84, 214, .18);
-  color: #cddcff;
+  border-color: #3452c8;
+  background: rgba(52, 82, 200, .16);
+  color: #dbe4ff;
 }
 
-.proPill[data-preserve-brand-color]:hover { background: rgba(38, 84, 214, .3); }
-.crown { color: #f4c453; }
+.proPill[data-preserve-brand-color]:hover { background: rgba(52, 82, 200, .3); }
+.crown { color: #ffb840; }
 
 .proIcon[data-preserve-brand-color] { background: #16171b; }
 
 .navBadge[data-preserve-brand-color] {
-  background: #2f6bfd;
+  background: #3d5bff;
   color: #fff;
 }
 
-.navButtonActive .navBadge[data-preserve-brand-color] { background: #2f6bfd; color: #fff; }
+.navButtonActive .navBadge[data-preserve-brand-color] { background: #3d5bff; color: #fff; }
 
 /* The tick is the platform mark, not a decoration: white-on-black read as
    a UI glyph, and the blue disc is what people actually recognise. */
 .verified[data-preserve-brand-color] {
-  background: #2f8fff;
+  background: #137eff;
   color: #fff;
 }
 
@@ -746,19 +749,19 @@ a.liveTile:hover { background: #131313; border-color: rgba(255,255,255,.24); }
    matter how specific it looks. Matching that id and going one class further is
    what it takes. */
 :global(#malik-root) .metaLink[data-preserve-brand-color] {
-  color: #6aa8ff !important;
+  color: #7fb7ff !important;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.tags[data-preserve-brand-color] { color: #6aa8ff; }
+.tags[data-preserve-brand-color] { color: #57a7ff; }
 
-.sourceMark[data-source="youtube"][data-preserve-brand-color] { background: #ff0033; border-color: #ff0033; color: #fff; }
+.sourceMark[data-source="youtube"][data-preserve-brand-color] { background: #fb0219; border-color: #fb0219; color: #fff; }
 .sourceMark[data-source="tiktok"][data-preserve-brand-color] { background: #010101; border-color: rgba(37, 244, 238, .5); color: #25f4ee; }
-.sourceDot[data-source="youtube"][data-preserve-brand-color] { background: #ff0033; color: #fff; }
+.sourceDot[data-source="youtube"][data-preserve-brand-color] { background: #fb0219; color: #fff; }
 .sourceDot[data-source="tiktok"][data-preserve-brand-color] { background: #010101; color: #25f4ee; border: 1px solid rgba(37, 244, 238, .5); }
 
-.dot[data-preserve-brand-color] { background: #ff3b30; }
+.dot[data-preserve-brand-color] { background: #fd223c; }
 
 .onlineDot {
   position: absolute;
@@ -767,10 +770,10 @@ a.liveTile:hover { background: #131313; border-color: rgba(255,255,255,.24); }
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #34d399;
-  border: 2px solid #020202;
+  background: #11fe8a;
+  border: 2px solid #070707;
 }
 
 .topAvatar { position: relative; }
 
-.liveDot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #ff3b30; }
+.liveDot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #ff2342; }
