@@ -52,7 +52,7 @@ function getDomain(url: string) {
   }
 }
 
-function extractPrompt(body: any) {
+export function extractPrompt(body: any) {
   // Dashboard sends its orchestration instructions in `question`, but live
   // search and the selected model must receive the user's clean request. This
   // prevents internal runtime text from polluting search queries or being

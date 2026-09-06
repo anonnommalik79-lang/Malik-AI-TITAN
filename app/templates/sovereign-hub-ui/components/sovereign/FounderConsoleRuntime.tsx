@@ -138,6 +138,30 @@ function SafetyItem({ label, value, ok = true }: { label: string; value: string;
   )
 }
 
+type ActivityRow = {
+  id: string
+  source: "chat" | "voice"
+  userText: string
+  assistantText: string
+  createdAt: string
+  provider?: string
+  model?: string
+  userId: string
+  userEmail: string
+  userName: string
+}
+
+type ActivityPayload = {
+  ok?: boolean
+  items?: ActivityRow[]
+  total?: number
+  today?: number
+  accountsScanned?: number
+  storage?: string
+  warning?: string | null
+  error?: string
+}
+
 export function FounderConsoleRuntime() {
   const [founder, setFounder] = useState(false)
   const [navTarget, setNavTarget] = useState<HTMLElement | null>(null)
@@ -148,6 +172,14 @@ export function FounderConsoleRuntime() {
   const [error, setError] = useState("")
   const [mobile, setMobile] = useState(false)
   const [userQuery, setUserQuery] = useState("")
+  const [activity, setActivity] = useState<ActivityPayload | null>(null)
+  const [activityLoading, setActivityLoading] = useState(false)
+  const [activityQuery, setActivityQuery] = useState("")
+  const [activityError, setActivityError] = useState("")
+  /* Requests are shown one line each and opened on click. A page of forty full
+     conversations is unreadable, and the founder question is usually "who is
+     using this and roughly what for", not "read me every answer". */
+  const [openRow, setOpenRow] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     if (!founder) return
@@ -162,6 +194,22 @@ export function FounderConsoleRuntime() {
       setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить аналитику")
     } finally {
       setLoading(false)
+    }
+  }, [founder])
+
+  const refreshActivity = useCallback(async () => {
+    if (!founder) return
+    setActivityLoading(true)
+    setActivityError("")
+    try {
+      const response = await fetch("/api/founder/activity?limit=120", { cache: "no-store" })
+      const data = await response.json().catch(() => ({})) as ActivityPayload
+      if (!response.ok || !data?.ok) throw new Error(data?.error || `Activity API ${response.status}`)
+      setActivity(data)
+    } catch (requestError) {
+      setActivityError(requestError instanceof Error ? requestError.message : "Не удалось загрузить запросы")
+    } finally {
+      setActivityLoading(false)
     }
   }, [founder])
 
@@ -215,7 +263,8 @@ export function FounderConsoleRuntime() {
   useEffect(() => {
     if (!open || !founder) return
     void refresh()
-  }, [open, founder, refresh])
+    void refreshActivity()
+  }, [open, founder, refresh, refreshActivity])
 
   useEffect(() => {
     if (!open) return
@@ -253,6 +302,16 @@ export function FounderConsoleRuntime() {
     if (!query) return users
     return users.filter((entry) => `${entry.name || ""} ${entry.email || ""}`.toLowerCase().includes(query))
   }, [payload?.recentUsers, userQuery])
+
+  /* Filtered in the browser rather than by re-requesting: the whole page is
+     already loaded, and typing in a search box should not walk object storage
+     for every keystroke. */
+  const visibleActivity = useMemo(() => {
+    const items = activity?.items || []
+    const query = activityQuery.trim().toLowerCase()
+    if (!query) return items
+    return items.filter((row) => `${row.userName} ${row.userEmail} ${row.userText}`.toLowerCase().includes(query))
+  }, [activity?.items, activityQuery])
 
   if (!founder || typeof document === "undefined") return null
 
@@ -400,6 +459,100 @@ export function FounderConsoleRuntime() {
           </section>
         </div>
 
+        <section className="malik-founder-panel malik-founder-requests">
+          <div className="malik-founder-panel__head">
+            <div>
+              <strong>Запросы пользователей</strong>
+              <span>
+                {activity
+                  ? `${number(activity.total)} записей · ${number(activity.today)} за сутки · ${activity.storage === "encrypted-object-storage" ? "шифрованное хранилище" : "память текущего сервера"}`
+                  : "Кто и что писал — новые сверху"}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="malik-founder-requests-refresh"
+              onClick={() => void refreshActivity()}
+              disabled={activityLoading}
+              title="Обновить запросы"
+              aria-label="Обновить запросы"
+            >
+              <RefreshCw className={activityLoading ? "is-spinning" : ""} />
+            </button>
+          </div>
+
+          <label className="malik-founder-user-search">
+            <Search aria-hidden="true" />
+            <input
+              value={activityQuery}
+              onChange={(event) => setActivityQuery(event.target.value)}
+              placeholder="Поиск по пользователю или тексту запроса"
+              aria-label="Поиск по запросам"
+            />
+            {activityQuery ? <button type="button" onClick={() => setActivityQuery("")} aria-label="Очистить поиск"><X /></button> : null}
+          </label>
+
+          {activityError ? (
+            <div className="malik-founder-empty">
+              {activityError} <button type="button" onClick={() => void refreshActivity()}>Повторить</button>
+            </div>
+          ) : null}
+
+          <div className="malik-founder-requests-list">
+            {visibleActivity.length ? visibleActivity.map((row) => {
+              const expanded = openRow === row.id
+              return (
+                <article key={`${row.id}:${row.createdAt}`} className={`malik-founder-request${expanded ? " is-open" : ""}`}>
+                  <button
+                    type="button"
+                    className="malik-founder-request__head"
+                    onClick={() => setOpenRow((current) => current === row.id ? null : row.id)}
+                    aria-expanded={expanded}
+                  >
+                    <span className="malik-founder-user-avatar">{(row.userName || row.userEmail || "U").charAt(0).toUpperCase()}</span>
+                    <span className="malik-founder-request__copy">
+                      <span className="malik-founder-request__who">
+                        <strong>{row.userName || "Пользователь"}</strong>
+                        <small>{row.userEmail}</small>
+                      </span>
+                      <span className="malik-founder-request__text">{row.userText || "— пустой запрос —"}</span>
+                    </span>
+                    <span className="malik-founder-request__meta">
+                      <span className={`malik-founder-tag is-${row.source}`}>{row.source === "voice" ? "голос" : "чат"}</span>
+                      <time>{when(row.createdAt)}</time>
+                    </span>
+                  </button>
+
+                  {expanded ? (
+                    <div className="malik-founder-request__body">
+                      <div className="malik-founder-request__block">
+                        <span>Запрос</span>
+                        <p>{row.userText || "—"}</p>
+                      </div>
+                      <div className="malik-founder-request__block">
+                        <span>Ответ{row.model ? ` · ${row.provider ? `${row.provider} / ` : ""}${row.model}` : ""}</span>
+                        <p>{row.assistantText || "—"}</p>
+                      </div>
+                    </div>
+                  ) : null}
+                </article>
+              )
+            }) : (
+              <div className="malik-founder-empty">
+                {activityLoading
+                  ? "Читаю логи…"
+                  : activityQuery
+                    ? "По этому запросу ничего не нашлось."
+                    : activity?.storage === "runtime-memory"
+                      ? "Пока пусто. Хранилище — память текущего сервера, поэтому история обнуляется при каждом деплое Render."
+                      : "Пока пусто — ни одного запроса от пользователей не записано."}
+              </div>
+            )}
+          </div>
+
+          {activity?.warning ? <div className="malik-founder-disabled"><strong>WorkOS:</strong><span>{activity.warning}</span></div> : null}
+        </section>
+
         <footer className="malik-founder-foot">
           <ShieldCheck />
           <span>
@@ -482,6 +635,36 @@ export function FounderConsoleRuntime() {
         .malik-founder-user-search button { position:absolute; top:50%; right:5px; width:26px; height:26px; display:grid; place-items:center; transform:translateY(-50%); border:0; border-radius:8px; background:transparent; color:#66666d; }
         .malik-founder-user-search button:hover { background:#1a1a1a; color:#aaa; }
         .malik-founder-user-search button svg { width:12px; height:12px; }
+        /* Requests panel. Neutral greys throughout: NoBlueUiGuard repaints any
+           colour it reads as brand blue, and a log that changes colour after
+           the guard walks the DOM looks like a rendering bug. */
+        .malik-founder-requests { margin-top:12px; }
+        .malik-founder-requests-refresh { width:34px; height:34px; display:grid; place-items:center; flex:0 0 auto; border:1px solid rgba(255,255,255,.09); border-radius:9px; background:#121212; color:#a9a9af; }
+        .malik-founder-requests-refresh:hover:not(:disabled) { background:#1a1a1a; color:#fff; }
+        .malik-founder-requests-refresh:disabled { opacity:.55; }
+        .malik-founder-requests-refresh svg { width:15px; height:15px; }
+        .malik-founder-requests-list { max-height:520px; overflow:auto; overscroll-behavior:contain; padding:2px 10px 10px; scrollbar-width:thin; scrollbar-color:#222 transparent; }
+        .malik-founder-request { border-bottom:1px solid rgba(255,255,255,.045); }
+        .malik-founder-request:last-child { border-bottom:0; }
+        .malik-founder-request__head { width:100%; display:grid; grid-template-columns:28px minmax(0,1fr) auto; gap:10px; align-items:center; padding:9px 0; background:none; border:0; text-align:left; color:inherit; cursor:pointer; }
+        .malik-founder-request__head:hover { background:rgba(255,255,255,.02); }
+        .malik-founder-request__copy { min-width:0; display:flex; flex-direction:column; gap:2px; }
+        .malik-founder-request__who { display:flex; align-items:baseline; gap:7px; min-width:0; }
+        .malik-founder-request__who strong { font-size:12px; font-weight:650; color:#ededf0; white-space:nowrap; }
+        .malik-founder-request__who small { font-size:10.5px; color:#6f6f77; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        /* One line collapsed: the list is for scanning, the detail opens below. */
+        .malik-founder-request__text { font-size:12.5px; color:#a7a7ae; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .malik-founder-request.is-open .malik-founder-request__text { color:#f0f0f3; }
+        .malik-founder-request__meta { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+        .malik-founder-request__meta time { font-size:10.5px; color:#65656d; white-space:nowrap; }
+        .malik-founder-tag { border-radius:999px; padding:2px 7px; background:#191919; color:#9a9aa2; font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+        .malik-founder-tag.is-voice { background:#20201c; color:#b4b09a; }
+        .malik-founder-request__body { display:grid; gap:9px; padding:2px 0 12px 38px; }
+        .malik-founder-request__block { display:grid; gap:4px; }
+        .malik-founder-request__block > span { font-size:9.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:#66666e; }
+        /* pre-wrap so a prompt written across several lines is read the way it
+           was typed, and break-word so one long URL cannot widen the panel. */
+        .malik-founder-request__block p { margin:0; padding:9px 11px; border:1px solid rgba(255,255,255,.055); border-radius:9px; background:#0d0d0d; color:#d5d5da; font-size:12.5px; line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere; max-height:280px; overflow:auto; }
         .malik-founder-users { max-height:430px; overflow:auto; overscroll-behavior:contain; padding:5px 10px 10px; scrollbar-width:thin; scrollbar-color:#222 transparent; }
         .malik-founder-user-row { display:grid; grid-template-columns:32px minmax(0,1fr) auto; gap:10px; align-items:center; min-height:51px; border-bottom:1px solid rgba(255,255,255,.045); }
         .malik-founder-user-row:last-child { border-bottom:0; }
@@ -505,7 +688,7 @@ export function FounderConsoleRuntime() {
         @keyframes malik-founder-spin { to { transform:rotate(360deg); } }
         @media (max-width:1280px) { .malik-founder-secondary-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
         @media (max-width:1100px) { .malik-founder-primary-grid,.malik-founder-secondary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .malik-founder-columns { grid-template-columns:1fr; } .malik-founder-safety-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-        @media (max-width:768px) { .malik-founder-layer { left:0 !important; z-index:90; } .malik-founder-header { min-height:74px; padding:12px 14px; } .malik-founder-header h1 { font-size:21px; } .malik-founder-header p { max-width:58vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .malik-founder-scroll { padding:14px 12px calc(28px + env(safe-area-inset-bottom)); } .malik-founder-primary-grid,.malik-founder-secondary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; } .malik-founder-card { min-height:103px; padding:13px; } .malik-founder-card > strong { font-size:23px; } .malik-founder-safety-grid { grid-template-columns:1fr 1fr; } .malik-founder-safety-item { padding:11px 10px; } .malik-founder-users { max-height:50dvh; } }
+        @media (max-width:768px) { .malik-founder-layer { left:0 !important; z-index:90; } .malik-founder-header { min-height:74px; padding:12px 14px; } .malik-founder-header h1 { font-size:21px; } .malik-founder-header p { max-width:58vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .malik-founder-scroll { padding:14px 12px calc(28px + env(safe-area-inset-bottom)); } .malik-founder-primary-grid,.malik-founder-secondary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; } .malik-founder-card { min-height:103px; padding:13px; } .malik-founder-card > strong { font-size:23px; } .malik-founder-safety-grid { grid-template-columns:1fr 1fr; } .malik-founder-safety-item { padding:11px 10px; } .malik-founder-users { max-height:50dvh; } .malik-founder-requests-list { max-height:60dvh; } .malik-founder-request__meta { flex-direction:column; align-items:flex-end; gap:3px; } .malik-founder-request__body { padding-left:0; } }
         @media (max-width:430px) { .malik-founder-primary-grid,.malik-founder-secondary-grid { grid-template-columns:1fr 1fr; } .malik-founder-card__head { font-size:10px; } .malik-founder-card > strong { font-size:21px; } .malik-founder-card > small { font-size:9px; } .malik-founder-safety-grid { grid-template-columns:1fr; } .malik-founder-section-title { align-items:center; } .malik-founder-section-title time { display:none; } .malik-founder-table__row { grid-template-columns:minmax(0,1fr) 58px 72px; gap:7px; font-size:9.5px; } .malik-founder-user-row time { display:none; } .malik-founder-error { align-items:flex-start; } }
       `}</style>
     </section>,
