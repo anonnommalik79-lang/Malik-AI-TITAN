@@ -33,13 +33,20 @@ const here = dirname(fileURLToPath(import.meta.url))
  * module loaded here is import-free at runtime by design - only type imports,
  * which the compiler drops - so the stub require is never called.
  */
-function loadLib(relativePath) {
+function loadLib(relativePath, deps = {}) {
   const source = readFileSync(resolve(here, relativePath), "utf8")
   const compiled = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const loaded = {}
-  new Function("exports", "require", compiled)(loaded, () => ({}))
+  // Most of these modules import nothing at runtime. The ones that compose
+  // others (feed-row) get their dependencies handed in already loaded, so the
+  // composition itself is what gets tested rather than a stub of it.
+  const require = (specifier) => {
+    if (specifier in deps) return deps[specifier]
+    throw new Error(`verify-shorts-rotation: неизвестный импорт ${specifier}`)
+  }
+  new Function("exports", "require", compiled)(loaded, require)
   return { exports: loaded, source }
 }
 
@@ -498,6 +505,193 @@ if (/dbItems\.some\(\(item\) => item\.source === "tiktok"\)/.test(codeOnly(feedR
   console.log("  FAIL лента снова решает по загруженной странице, а не по creator")
 } else {
   console.log("  ok   решение о синке не зависит от feed limit")
+}
+
+console.log("\nОдни счётчики в ленте, профиле и библиотеке")
+
+/*
+ * The feed computed display as external+local while /api/shorts/profile and
+ * /api/shorts/library kept their own inline mapping over the local columns
+ * alone - so one imported TikTok showed 40,007 likes in the feed and 7 in the
+ * library. rowMetrics is now the single reading; these cases assert the three
+ * routes cannot drift again.
+ */
+const feedRow = loadLib("../lib/shorts/feed-row.ts", {
+  "@/lib/shorts/metrics": metricsLib.exports,
+  "@/lib/shorts/tiktok-identity": identity.exports,
+})
+const { rowMetrics, rowPublicHandle } = feedRow.exports
+
+const tiktokRow = {
+  source: "tiktok",
+  source_url: "https://www.tiktok.com/@cristiano/video/7312345678901234567",
+  username: "tt.cristiano",
+  views: 0, likes: 7, comments: 0, reposts: 0, saves: 0, shares: 0,
+  external_views: 900000, external_likes: 40000, external_comments: 1200, external_shares: 300,
+}
+check("tiktok: external 40000 + local 7 = 40007", String(rowMetrics(tiktokRow).likes), "40007")
+check("tiktok: локальная половина сохранена", String(rowMetrics(tiktokRow).local.likes), "7")
+check("tiktok: внешняя половина сохранена", String(rowMetrics(tiktokRow).external.likes), "40000")
+
+const youtubeRow = {
+  source: "youtube",
+  views: 0, likes: 3, comments: 0, reposts: 0, saves: 0, shares: 0,
+  external_views: 20000, external_likes: 20000, external_comments: 0, external_shares: 0,
+}
+check("youtube: 20000 + 3 = 20003", String(rowMetrics(youtubeRow).likes), "20003")
+
+const malikRow = { source: "malik", views: 0, likes: 15, comments: 0, reposts: 0, saves: 0, shares: 0 }
+check("malik-native: 15 и никакого external", String(rowMetrics(malikRow).likes), "15")
+check("malik-native: external отсутствует", String(rowMetrics(malikRow).external === undefined), "true")
+
+check("публичный @ из source_url библиотеки", String(rowPublicHandle(tiktokRow)), "cristiano")
+check("у не-tiktok строки handle не выдумывается", String(rowPublicHandle(youtubeRow)), "null")
+
+// All three routes must call the same helper - no second copy of the formula.
+for (const [label, file] of [
+  ["лента", "../app/api/shorts/feed/route.ts"],
+  ["профиль", "../app/api/shorts/profile/route.ts"],
+  ["библиотека", "../app/api/shorts/library/route.ts"],
+]) {
+  const text = codeOnly(readFileSync(resolve(here, file), "utf8"))
+  checks += 1
+  const shared = /rowMetrics\(/.test(text) || /buildShortMetrics\(/.test(text)
+  const inline = /likes: Number\(\w+\.likes \|\| 0\)/.test(text)
+  if (shared && !inline) {
+    console.log(`  ok   ${label} использует общую формулу`)
+  } else {
+    failures += 1
+    console.log(`  FAIL ${label} считает счётчики по-своему`)
+  }
+}
+
+checks += 1
+if (/handle: rowPublicHandle\(row\)/.test(codeOnly(readFileSync(resolve(here, "../app/api/shorts/library/route.ts"), "utf8")))) {
+  console.log("  ok   библиотека отдаёт реальный handle, а не tt.*")
+} else {
+  failures += 1
+  console.log("  FAIL библиотека может показать tt.* как @")
+}
+
+console.log("\nTikTok реально проигрывается")
+
+/*
+ * A share_url is a web page, not a media file. The native <video> fallback
+ * rendered src={undefined} for every imported TikTok, so a post could arrive,
+ * rotate and count correctly and still play nothing.
+ */
+const player = clientSource
+
+checks += 1
+if (/item\.playback\.kind === "tiktok"/.test(player) && /player\/v1\//.test(player)) {
+  console.log("  ok   для tiktok есть отдельная ветка плеера")
+} else {
+  failures += 1
+  console.log("  FAIL отдельной ветки плеера для tiktok нет")
+}
+
+checks += 1
+if (/\$\{TIKTOK_PLAYER_ORIGIN\}\/player\/v1\/\$\{encodeURIComponent\(item\.playback\.videoId\)\}/.test(player)) {
+  console.log("  ok   iframe: tiktok.com/player/v1/{videoId}, id закодирован")
+} else {
+  failures += 1
+  console.log("  FAIL адрес плеера или кодирование videoId не те")
+}
+
+checks += 1
+// The native <video> must be unreachable for a tiktok item: the branch above
+// returns first, and the src expression still only fills for native.
+const nativeSrc = /src=\{item\.playback\.kind === "native" \? item\.playback\.url : undefined\}/.test(player)
+const tiktokReturnsFirst = player.indexOf('if (item.playback.kind === "tiktok")') < player.indexOf("<video")
+if (nativeSrc && tiktokReturnsFirst) {
+  console.log("  ok   tiktok не доходит до <video src={undefined}>")
+} else {
+  failures += 1
+  console.log("  FAIL tiktok всё ещё может попасть в native <video>")
+}
+
+for (const [label, needle] of [
+  ["play/pause", /postTikTok\(playing \? "pause" : "play"\)/],
+  ["seekTo", /postTikTok\("seekTo", target\)/],
+  ["mute/unMute", /postTikTok\(muted \? "mute" : "unMute"\)/],
+]) {
+  checks += 1
+  if (needle.test(player)) {
+    console.log(`  ok   ${label} идёт через messaging плеера`)
+  } else {
+    failures += 1
+    console.log(`  FAIL ${label} не подключён к плееру`)
+  }
+}
+
+checks += 1
+if (/"x-tiktok-player": true, type, value/.test(player)) {
+  console.log("  ok   команды в официальном конверте x-tiktok-player")
+} else {
+  failures += 1
+  console.log("  FAIL конверт команд не соответствует протоколу")
+}
+
+for (const [label, needle] of [
+  ["origin", /event\.origin !== TIKTOK_PLAYER_ORIGIN/],
+  ["contentWindow", /event\.source !== frame\.contentWindow/],
+  ["маркер", /data\["x-tiktok-player"\] !== true/],
+]) {
+  checks += 1
+  if (needle.test(player)) {
+    console.log(`  ok   listener проверяет ${label}`)
+  } else {
+    failures += 1
+    console.log(`  FAIL listener не проверяет ${label}`)
+  }
+}
+
+checks += 1
+if (/removeEventListener\("message", onMessage\)/.test(player)) {
+  console.log("  ok   listener снимается при размонтировании")
+} else {
+  failures += 1
+  console.log("  FAIL listener не снимается")
+}
+
+checks += 1
+if (/postMessage\(\s*\{ "x-tiktok-player": true[\s\S]{0,120}"\*"/.test(player)) {
+  failures += 1
+  console.log("  FAIL команды уходят с targetOrigin \"*\"")
+} else {
+  console.log("  ok   targetOrigin закреплён, не \"*\"")
+}
+
+checks += 1
+if (/onPlayerError/.test(player) && /setTiktokError\(true\)/.test(player)) {
+  console.log("  ok   ошибка плеера не роняет страницу")
+} else {
+  failures += 1
+  console.log("  FAIL ошибка плеера не обработана")
+}
+
+checks += 1
+if (/autoplay: active \? "1" : "0"/.test(player) && /if \(!active\) postTikTok\("pause"\)/.test(player)) {
+  console.log("  ok   неактивный Short не продолжает играть")
+} else {
+  failures += 1
+  console.log("  FAIL неактивный Short может продолжать играть")
+}
+
+checks += 1
+if (/controls: "0"/.test(player) && /progress_bar: "0"/.test(player) && /play_button: "0"/.test(player)) {
+  console.log("  ok   родные контролы TikTok скрыты — бар остаётся один")
+} else {
+  failures += 1
+  console.log("  FAIL поверх наших контролов будут вторые")
+}
+
+checks += 1
+if (/loop: "1"/.test(player)) {
+  console.log("  ok   loop включён")
+} else {
+  failures += 1
+  console.log("  FAIL loop не включён")
 }
 
 console.log("\nProvider endpoint не отдаёт секреты")

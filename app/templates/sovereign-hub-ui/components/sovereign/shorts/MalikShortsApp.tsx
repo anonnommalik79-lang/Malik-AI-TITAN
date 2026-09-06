@@ -119,6 +119,8 @@ type ShortCard = {
   caption?: string
   publishedAt?: string
   creator?: { userKey?: string; username?: string; handle?: string | null; displayName?: string; avatarUrl?: string | null; verified?: boolean }
+  /** /api/shorts/profile returns posts without a creator object; the real @ rides flat. */
+  creatorHandle?: string | null
   metrics: { views: number; likes: number; comments: number; reposts?: number; saves?: number; shares?: number }
 }
 
@@ -291,6 +293,14 @@ function formatTime(seconds: number) {
  * seekTo back. YouTube's own controls are turned off because this bar replaces
  * them rather than sitting under them.
  */
+/**
+ * TikTok's embed player origin, pinned.
+ *
+ * Used both as the postMessage target and as the only accepted event origin,
+ * so a wildcard can never creep into one side while the other stays strict.
+ */
+const TIKTOK_PLAYER_ORIGIN = "https://www.tiktok.com"
+
 function ShortPlayer({ item, active, muted, onToggleMuted }: {
   item: MalikShortItem
   active: boolean
@@ -302,13 +312,30 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
   const [playing, setPlaying] = useState(false)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(item.durationSeconds || 0)
+  const [tiktokError, setTiktokError] = useState(false)
 
   const isYouTube = item.playback.kind === "youtube"
+  const isTikTok = item.playback.kind === "tiktok"
 
   const post = useCallback((func: string, args: unknown[] = []) => {
     frameRef.current?.contentWindow?.postMessage(
       JSON.stringify({ event: "command", func, args }),
       "https://www.youtube.com",
+    )
+  }, [])
+
+  /**
+   * Host to TikTok's embed player.
+   *
+   * The documented envelope is `{ "x-tiktok-player": true, type, value }` and
+   * the player ignores anything else, so the marker is not decoration. The
+   * target origin is pinned rather than "*" - a wildcard would broadcast these
+   * commands to whatever document happens to be in the frame.
+   */
+  const postTikTok = useCallback((type: string, value?: unknown) => {
+    frameRef.current?.contentWindow?.postMessage(
+      { "x-tiktok-player": true, type, value },
+      TIKTOK_PLAYER_ORIGIN,
     )
   }, [])
 
@@ -373,35 +400,126 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
     post(muted ? "mute" : "unMute")
   }, [isYouTube, muted, post])
 
+  // ---- tiktok ------------------------------------------------------------
+  /**
+   * A TikTok share_url is a web page, not a media file, so the native <video>
+   * fallback rendered `src={undefined}` for every imported TikTok: the post
+   * arrived, rotated and counted correctly, and then played nothing. The
+   * official embed player is the only supported way to play one.
+   *
+   * The listener is deliberately strict. A window-level message handler hears
+   * every frame on the page, so three things must hold before a payload is
+   * believed: it came from TikTok's origin, its source is this component's own
+   * iframe, and it carries the player's marker. Anything else is ignored
+   * without a branch.
+   */
+  useEffect(() => {
+    if (!isTikTok || !active) return
+    const frame = frameRef.current
+    if (!frame) return
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== TIKTOK_PLAYER_ORIGIN) return
+      if (event.source !== frame.contentWindow) return
+      const data: any = event.data
+      if (!data || typeof data !== "object" || data["x-tiktok-player"] !== true) return
+
+      switch (data.type) {
+        case "onPlayerReady":
+          // State is applied on ready, not on mount: commands sent before the
+          // player exists are dropped, which is how autoplay and the mute
+          // toggle used to disagree with the button that set them.
+          postTikTok(muted ? "mute" : "unMute")
+          if (active) postTikTok("play")
+          break
+        case "onStateChange":
+          // 1 playing, 2 paused, 0 ended, 3 buffering, -1 initialising.
+          setPlaying(data.value === 1)
+          break
+        case "onCurrentTime": {
+          const value = data.value || {}
+          if (typeof value.currentTime === "number") setCurrent(value.currentTime)
+          if (typeof value.duration === "number" && value.duration > 0) setDuration(value.duration)
+          break
+        }
+        case "onMute":
+          if (typeof data.value === "boolean" && data.value !== muted) onToggleMuted()
+          break
+        case "onPlayerError":
+          // A dead or region-blocked video must not take the page with it: the
+          // frame is replaced by the poster and a link to the original.
+          console.warn("[Malik Shorts] tiktok player error", data.value)
+          setTiktokError(true)
+          setPlaying(false)
+          break
+        default:
+          break
+      }
+    }
+
+    window.addEventListener("message", onMessage)
+    return () => window.removeEventListener("message", onMessage)
+  }, [isTikTok, active, item.id, muted, onToggleMuted, postTikTok])
+
+  // Leaving the active slot must actually stop the sound, and the iframe can
+  // outlive the switch for a frame or two before it unmounts.
+  useEffect(() => {
+    if (!isTikTok) return
+    if (!active) postTikTok("pause")
+  }, [isTikTok, active, postTikTok])
+
+  useEffect(() => {
+    if (!isTikTok) return
+    postTikTok(muted ? "mute" : "unMute")
+  }, [isTikTok, muted, postTikTok])
+
   const toggle = useCallback(() => {
     if (isYouTube) { post(playing ? "pauseVideo" : "playVideo"); setPlaying(!playing); return }
+    if (isTikTok) {
+      // The player answers with onStateChange; this is the optimistic half so
+      // the icon flips on the tap rather than on the round trip.
+      postTikTok(playing ? "pause" : "play")
+      setPlaying(!playing)
+      return
+    }
     const video = videoRef.current
     if (!video) return
     if (video.paused) video.play().catch(() => {})
     else video.pause()
-  }, [isYouTube, playing, post])
+  }, [isYouTube, isTikTok, playing, post, postTikTok])
 
   const seek = useCallback((ratio: number) => {
     if (!duration) return
     const target = Math.max(0, Math.min(duration, ratio * duration))
     if (isYouTube) { post("seekTo", [target, true]); setCurrent(target); return }
+    if (isTikTok) { postTikTok("seekTo", target); setCurrent(target); return }
     const video = videoRef.current
     if (video) video.currentTime = target
-  }, [duration, isYouTube, post])
+  }, [duration, isYouTube, isTikTok, post, postTikTok])
 
   const fullscreen = useCallback(() => {
-    const node: HTMLElement | null = isYouTube ? frameRef.current : videoRef.current
+    const node: HTMLElement | null = isYouTube || isTikTok ? frameRef.current : videoRef.current
     node?.requestFullscreen?.().catch(() => {})
-  }, [isYouTube])
+  }, [isYouTube, isTikTok])
 
+  // TikTok has no derivable thumbnail URL the way YouTube does; the cover image
+  // is what the import stored in poster_url, so item.posterUrl already covers it.
   const poster = item.posterUrl || (item.playback.kind === "youtube"
     ? `https://i.ytimg.com/vi/${encodeURIComponent(item.playback.videoId)}/hqdefault.jpg`
     : item.playback.kind === "native" ? item.playback.poster : undefined)
 
+  /*
+   * Derived, not stored. An inactive Short is paused by command and its player
+   * is unmounted behind the poster, so the icon must read "paused" without an
+   * effect writing that into state - which is both a cascading render and a
+   * second source of truth for something the parent already knows.
+   */
+  const showPlaying = playing && active
+
   const bar = (
     <div className={styles.playerBar}>
-      <button type="button" className={styles.playerButton} aria-label={playing ? "Пауза" : "Воспроизвести"} onClick={toggle}>
-        {playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
+      <button type="button" className={styles.playerButton} aria-label={showPlaying ? "Пауза" : "Воспроизвести"} onClick={toggle}>
+        {showPlaying ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
       </button>
       <div
         className={styles.progressTrack}
@@ -456,6 +574,64 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
           src={`https://www.youtube.com/embed/${encodeURIComponent(item.playback.videoId)}?${params.toString()}`}
           title={item.caption || "Video"}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+        {bar}
+      </>
+    )
+  }
+
+  if (item.playback.kind === "tiktok") {
+    // A dead video keeps the page alive: poster plus a link to the original,
+    // never a frame stuck on an error screen under our own controls.
+    if (tiktokError) {
+      return (
+        <>
+          {poster ? <img className={styles.poster} src={poster} alt="" loading="lazy" referrerPolicy="no-referrer" /> : null}
+          {item.playback.canonicalUrl ? (
+            <a className={styles.sourceOpen} href={item.playback.canonicalUrl} target="_blank" rel="noopener noreferrer nofollow">
+              Открыть в TikTok
+            </a>
+          ) : null}
+          {bar}
+        </>
+      )
+    }
+    /*
+     * Every chrome parameter is off because the bar below already provides it.
+     * Two progress bars and two play buttons stacked on one video is how a
+     * player stops feeling like one product - the same reason the YouTube
+     * branch above passes controls=0.
+     *
+     * canonicalUrl stays an attribution link and is never the frame's src: a
+     * share_url is a web page, and pointing an embed at it is what produced a
+     * blank <video> before.
+     */
+    const params = new URLSearchParams({
+      controls: "0",
+      progress_bar: "0",
+      play_button: "0",
+      volume_control: "0",
+      fullscreen_button: "0",
+      timestamp: "0",
+      music_info: "0",
+      description: "0",
+      rel: "0",
+      native_context_menu: "0",
+      closed_caption: "0",
+      loop: "1",
+      autoplay: active ? "1" : "0",
+      muted: muted ? "1" : "0",
+    })
+    return (
+      <>
+        <iframe
+          ref={frameRef}
+          className={styles.videoFrame}
+          src={`${TIKTOK_PLAYER_ORIGIN}/player/v1/${encodeURIComponent(item.playback.videoId)}?${params.toString()}`}
+          title={item.caption || "TikTok"}
+          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
           allowFullScreen
           referrerPolicy="strict-origin-when-cross-origin"
         />
@@ -547,7 +723,7 @@ function ShortGrid({ items, empty, onOpen }: {
           <span className={styles.cardBody}>
             <span className={styles.cardCaption}>{item.caption || "Без описания"}</span>
             <span className={styles.cardMeta}>
-              {creatorTag(item.creator, "malik")} · <Heart size={10} /> {compact(item.metrics.likes)}
+              {creatorTag({ ...item.creator, handle: item.creator?.handle ?? item.creatorHandle }, "malik")} · <Heart size={10} /> {compact(item.metrics.likes)}
             </span>
           </span>
         </button>

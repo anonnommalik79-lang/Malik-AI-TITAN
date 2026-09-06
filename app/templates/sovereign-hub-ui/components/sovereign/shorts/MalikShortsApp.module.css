@@ -227,6 +227,17 @@
   background: #050505;
 }
 .poster { position: absolute; inset: 0; }
+/* Shown only when the embed player reports an error: the poster stays and this
+   is the way out to the original post. Neutral greys, so NoBlueUiGuard has
+   nothing to repaint after it walks the DOM. */
+.sourceOpen {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  z-index: 3; border-radius: 999px; padding: 9px 16px;
+  border: 1px solid rgba(255,255,255,.16); background: rgba(18,18,20,.86);
+  color: #f2f2f5; font-size: 12.5px; font-weight: 650; text-decoration: none;
+  backdrop-filter: blur(6px);
+}
+.sourceOpen:hover { background: rgba(30,30,33,.92); }
 .posterShade { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,.06), rgba(0,0,0,.04) 48%, rgba(0,0,0,.78) 100%); pointer-events: none; }
 .playHint {
   position: absolute; inset: 0;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 import { getShortsSupabaseConfig, safeText, shortsSupabaseRequest } from "@/lib/shorts/server"
+import { rowMetrics, rowPublicHandle } from "@/lib/shorts/feed-row"
 import { parseTikTokHandle, resolvePublicHandle } from "@/lib/shorts/tiktok-identity"
 
 export const dynamic = "force-dynamic"
@@ -84,10 +85,11 @@ export async function GET(request: NextRequest) {
       hashtags: post.hashtags || [],
       durationSeconds: post.duration_seconds,
       publishedAt: post.published_at,
-      metrics: {
-        views: Number(post.views || 0), likes: Number(post.likes || 0), comments: Number(post.comments || 0),
-        reposts: Number(post.reposts || 0), saves: Number(post.saves || 0), shares: Number(post.shares || 0),
-      },
+      // Same formula as the feed - external plus local. Reading only the local
+      // columns here made one imported TikTok show 40,007 likes in the feed and
+      // 7 on its author's profile.
+      metrics: rowMetrics(post),
+      creatorHandle: rowPublicHandle(post),
     })),
   }, { headers: { "Cache-Control": "private, no-store" } })
 }
