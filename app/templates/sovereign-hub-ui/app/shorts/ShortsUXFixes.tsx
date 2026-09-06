@@ -35,16 +35,23 @@ function activeArticle() {
   }, items[0])
 }
 
-function youtubeCommand(frame: HTMLIFrameElement, func: "unMute" | "playVideo") {
+function youtubeCommand(frame: HTMLIFrameElement, func: "unMute") {
   frame.contentWindow?.postMessage(
     JSON.stringify({ event: "command", func, args: [] }),
     "https://www.youtube.com",
   )
 }
 
-function forceSound(article: HTMLElement) {
-  // Flip MalikShortsApp's own global mute state first. This keeps the native
-  // players, the visible icon and every next short in the same sound-on state.
+/**
+ * Unlock sound after a neutral user gesture without changing playback state.
+ *
+ * This helper used to call play() / playVideo() every time the Shorts DOM
+ * changed, scrolled or received a pointerdown. That meant pressing Pause was
+ * immediately followed by another forced Play command, so the visible pause
+ * button looked broken. Playback belongs to ShortPlayer; this helper may only
+ * unlock audio and must never resume a video the viewer deliberately paused.
+ */
+function unlockSound(article: HTMLElement) {
   const muteButton = article.querySelector<HTMLButtonElement>('button[aria-label="Включить звук"]')
   muteButton?.click()
 
@@ -54,17 +61,15 @@ function forceSound(article: HTMLElement) {
     video.defaultMuted = false
     video.volume = 1
     video.removeAttribute("muted")
-    video.play().catch(() => {})
   }
 
   const frame = article.querySelector<HTMLIFrameElement>('iframe[src*="youtube.com/embed/"]')
   if (frame) {
     youtubeCommand(frame, "unMute")
-    youtubeCommand(frame, "playVideo")
-    // The iframe API can receive the first command before the player is ready.
-    // A couple of short retries make sound-on reliable when a new short mounts.
-    window.setTimeout(() => { youtubeCommand(frame, "unMute"); youtubeCommand(frame, "playVideo") }, 180)
-    window.setTimeout(() => { youtubeCommand(frame, "unMute"); youtubeCommand(frame, "playVideo") }, 650)
+    // The iframe may receive the first audio command before its JS API is ready.
+    // Retrying unMute is safe because it does not alter play/pause state.
+    window.setTimeout(() => youtubeCommand(frame, "unMute"), 180)
+    window.setTimeout(() => youtubeCommand(frame, "unMute"), 650)
   }
 }
 
@@ -132,7 +137,9 @@ export function ShortsUXFixes() {
       return
     }
 
-    forceSound(current)
+    // Do not call play(), playVideo(), pause(), or flip mute state here. `sync`
+    // runs on DOM mutations and scroll, so touching playback from this path would
+    // fight the actual player controls and make user choices non-persistent.
 
     if (window.innerWidth <= 860) {
       setNav((value) => value.visible ? { ...value, visible: false } : value)
@@ -156,7 +163,6 @@ export function ShortsUXFixes() {
     const target = items[nextIndex]
     if (!target || target === current) return
     target.scrollIntoView({ behavior: "smooth", block: "start" })
-    window.setTimeout(() => forceSound(target), 220)
     window.setTimeout(sync, 360)
   }, [sync])
 
@@ -180,12 +186,19 @@ export function ShortsUXFixes() {
     }
     window.addEventListener("keydown", onKeyDown)
 
-    // If the browser blocks audible autoplay on the first paint, the very first
-    // real gesture immediately unlocks sound without making the user hunt for a
-    // speaker button.
-    const unlock = () => {
+    // Audible autoplay may need one real user gesture. Unlock it only from a
+    // neutral tap on the video area, never from a control button: pressing
+    // Pause, Mute, Like, Save, etc. must perform exactly that action and nothing
+    // else. This listener removes itself after the first successful neutral tap.
+    let unlocked = false
+    const unlock = (event: PointerEvent | TouchEvent) => {
+      if (unlocked) return
+      const target = event.target as HTMLElement | null
+      if (!target || target.closest("button, a, input, textarea, [role='slider'], [contenteditable='true']")) return
       const current = activeArticle()
-      if (current) forceSound(current)
+      if (!current || !current.contains(target)) return
+      unlocked = true
+      unlockSound(current)
     }
     window.addEventListener("pointerdown", unlock, { capture: true, passive: true })
     window.addEventListener("touchstart", unlock, { capture: true, passive: true })
