@@ -1,4 +1,5 @@
 import "server-only"
+import { createHash } from "node:crypto"
 
 const trim = (value?: string) => String(value || "").trim()
 
@@ -71,5 +72,15 @@ export function safeText(value: unknown, max = 500) {
 }
 
 export function stableShortId(source: "malik" | "youtube" | "tiktok", id: string) {
-  return `${source}:${String(id).replace(/[^a-zA-Z0-9._:-]/g, "").slice(0, 160)}`
+  const clean = String(id).replace(/[^a-zA-Z0-9._:-]/g, "").slice(0, 160)
+  const hash = createHash("sha256").update(`${source}:${clean}`).digest("hex")
+  const variant = ((Number.parseInt(hash.slice(16, 18), 16) & 0x3f) | 0x80)
+    .toString(16)
+    .padStart(2, "0")
+
+  // UUID-shaped deterministic fallback. When the Shorts database is connected,
+  // feed materialisation still replaces this with the real post UUID. When it
+  // is not, imported YouTube/TikTok items can still go through the interaction
+  // pipeline instead of being rejected by the client before a click is handled.
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-${variant}${hash.slice(18, 20)}-${hash.slice(20, 32)}`
 }
