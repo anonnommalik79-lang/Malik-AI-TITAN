@@ -2,7 +2,7 @@
 
 ## Implemented
 
-- Direct workspace entry, no marketing landing screen.
+- Original photo-and-launch entry screen retained; improved workspace opens after launch.
 - Existing eight-role model pipeline and industry templates retained.
 - Editable company context; TXT/MD/CSV ingestion with size and character limits.
 - Russian, Kazakh and English output selection.

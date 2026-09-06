@@ -3,8 +3,9 @@
 /**
  * Бизнес под ключ — Autonomous Company.
  *
- * Two workspace states, with browser-local checkpoints:
+ * Intro followed by two workspace states, with browser-local checkpoints:
  *
+ *   intro      the original photograph and launch button
  *   workspace  the brief: composer, the eight agents, the templates
  *   running    the pipeline, live, with what each agent actually returned
  *
@@ -19,6 +20,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Image from "next/image"
 import {
+  ArrowRight,
+  FileText,
+  PenSquare,
+  Play,
+  Users,
   ArrowUp,
   Check,
   ChevronDown,
@@ -54,7 +60,7 @@ const ENDPOINT = "/api/business/run"
 /** The section's own default, named in the reference. */
 const DEFAULT_MODEL: MalikModelId = "malik-27b"
 
-type Stage = "workspace" | "running"
+type Stage = "intro" | "workspace" | "running"
 type StepState = "waiting" | "running" | "done" | "failed"
 
 type Step = {
@@ -67,6 +73,14 @@ type Step = {
   ms?: number
 }
 
+
+const CAPABILITIES: Array<{ icon: typeof Search; title: string; desc: string }> = [
+  { icon: Search, title: "Исследует рынок", desc: "Спрос, конкуренты и возможности." },
+  { icon: FileText, title: "Создаёт продукт и сайт", desc: "Бренд, структура и готовый запуск." },
+  { icon: PenSquare, title: "Генерирует контент", desc: "Креативы, тексты и продвижение." },
+  { icon: Users, title: "Находит клиентов", desc: "Привлекает нужную аудиторию." },
+  { icon: SlidersHorizontal, title: "Ведёт лиды и продажи", desc: "Заявки, CRM и рост выручки." },
+]
 
 const MARKETS = ["Общепит", "E-commerce", "B2B услуги", "SaaS", "Образование", "Недвижимость", "Логистика", "Фитнес и здоровье", "Туризм"]
 const COUNTRIES = ["Казахстан", "Узбекистан", "Кыргызстан", "Россия", "ОАЭ", "Глобально"]
@@ -90,7 +104,7 @@ export type AutonomousCompanyProps = {
 
 export function AutonomousCompany({ username }: AutonomousCompanyProps) {
   const accountId = useAccountScope()
-  const [stage, setStage] = useState<Stage>("workspace")
+  const [stage, setStage] = useState<Stage>("intro")
   const [prompt, setPrompt] = useState(() => takePrefillPrompt())
   const hasPrefill = useRef(Boolean(prompt))
   const [market, setMarket] = useState("")
@@ -172,7 +186,7 @@ export function AutonomousCompany({ username }: AutonomousCompanyProps) {
               const content = text(item?.content, 60000)
               return { agent, content, state: item?.state === "done" && content ? "done" : "waiting", provider: text(item?.provider, 200), model: text(item?.model, 200) }
             })
-            setSteps(restored); setStage("running")
+            setSteps(restored)
             setNotice("Сессия восстановлена. Можно продолжить незавершённые этапы. В закрытой вкладке выполнение не идёт.")
           }
         }
@@ -363,6 +377,61 @@ export function AutonomousCompany({ username }: AutonomousCompanyProps) {
 
 
   /* ------------------------------------------------- WORKSPACE / RUNNING */
+  const openWorkspace = () => {
+    setStage(steps.length ? "running" : "workspace")
+    window.setTimeout(() => textareaRef.current?.focus(), 60)
+  }
+
+  /* ------------------------------------------------------------ INTRO */
+
+  if (stage === "intro") {
+    return (
+      <main className={styles.root} data-view="business-autonomous" data-stage="intro">
+        <div className={styles.intro}>
+          <div className={styles.introArt}>
+            {/* Local, not a remote URL: an empty grey column on the first screen
+                of a product page is the worst possible first impression, and a
+                third-party host is one outage away from it. */}
+            <Image
+              src="/business/hero.webp"
+              alt="Предприниматель за работой в офисе Malik AI"
+              width={775}
+              height={874}
+              priority
+              sizes="(max-width: 900px) 100vw, 56vw"
+            />
+          </div>
+
+          <div className={styles.introPanel}>
+            <span className={styles.eyebrow}>Malik AI</span>
+            <h1 className={styles.introTitle}>Autonomous Company</h1>
+            <p className={styles.introLead}>Превращает одну идею в работающий бизнес.</p>
+
+            <div className={styles.cards}>
+              {CAPABILITIES.map(({ icon: Icon, title, desc }) => (
+                <button key={title} type="button" className={styles.card} onClick={openWorkspace}>
+                  <span className={styles.cardIcon}><Icon strokeWidth={1.7} /></span>
+                  <span>
+                    <span className={styles.cardTitle}>{title}</span>
+                    <span className={styles.cardDesc}>{desc}</span>
+                  </span>
+                  <span className={styles.cardArrow}><ArrowRight strokeWidth={1.8} /></span>
+                </button>
+              ))}
+            </div>
+
+            <div className={styles.introFooter}>
+              <button type="button" className={styles.launch} onClick={openWorkspace}>
+                <Play fill="currentColor" strokeWidth={0} />
+                Запустить Autonomous Company
+              </button>
+              <span className={styles.launchNote}>От идеи до выручки.<br />С ИИ.</span>
+            </div>
+          </div>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className={styles.root} data-view="business-autonomous" data-stage={stage}>
