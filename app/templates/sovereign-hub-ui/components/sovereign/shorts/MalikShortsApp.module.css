@@ -10,7 +10,7 @@
   inset: 0;
   z-index: 40;
   display: grid;
-  grid-template-columns: 248px minmax(400px, 1fr) 348px;
+  grid-template-columns: 400px minmax(0, 1fr) 548px;
   background: var(--ms-bg);
   color: var(--ms-white);
   overflow: hidden;
@@ -100,8 +100,8 @@
 }
 .navButton:hover, .profileButton:hover { background: rgba(255,255,255,.07); }
 .navButton:active, .profileButton:active { transform: scale(.985); }
-.navButtonActive { background: #fff; color: #000 !important; }
-.navButtonActive:hover { background: #fff; }
+.navButtonActive { background: #1e1e20; color: #fff !important; font-weight: 750; }
+.navButtonActive:hover { background: #242427; }
 .navIcon { width: 20px; height: 20px; flex: 0 0 20px; }
 .createButton { margin-top: 16px; background: #fff; color: #000 !important; justify-content: center; font-weight: 800; }
 .createButton:hover { background: #ececec; }
@@ -128,6 +128,10 @@
 
 .center { min-width: 0; min-height: 0; position: relative; background: #000; }
 .topbar {
+  display: none;
+}
+
+.topbarOld {
   position: absolute;
   z-index: 10;
   top: 0; left: 0; right: 0;
@@ -176,17 +180,15 @@
   scroll-snap-stop: always;
   display: grid;
   place-items: center;
-  padding: 72px 26px 24px;
+  padding: 16px 22px 34px;
 }
+/* One card, nothing beside it. The action rail lives inside the frame now, so
+   the shell no longer reserves a 62px column for it. */
 .shortShell {
   position: relative;
-  width: min(100%, 610px);
-  height: min(calc(100dvh - 104px), 860px);
-  min-height: 560px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 62px;
-  gap: 13px;
-  align-items: end;
+  width: min(100%, 665px);
+  height: min(calc(100dvh - 62px), 910px);
+  min-height: 540px;
 }
 .videoCard {
   position: relative;
@@ -243,18 +245,38 @@
 .videoMeta {
   position: absolute;
   z-index: 4;
-  left: 18px; right: 18px; bottom: 18px;
+  left: 20px; right: 92px; bottom: 62px;
   pointer-events: none;
   text-shadow: 0 2px 8px rgba(0,0,0,.65);
 }
-.creatorLine { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.creatorName { font-size: 15px; font-weight: 820; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.videoMeta button { pointer-events: auto; }
+.creatorLine { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.metaAvatar { width: 42px; height: 42px; border-radius: 50%; flex: 0 0 42px; display: grid; place-items: center; overflow: hidden; background: #181818; border: 1px solid rgba(255,255,255,.2); font-weight: 800; }
+.metaAvatar img { width: 100%; height: 100%; object-fit: cover; }
+.creatorBlock { min-width: 0; display: grid; gap: 2px; }
+.creatorTop { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.creatorName { font-size: 14.5px; font-weight: 820; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.creatorHandle { font-size: 11.5px; color: rgba(255,255,255,.72); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subscribeBtn { flex: none; height: 32px; padding: 0 15px; border: 0; border-radius: 9px; background: #fff; color: #000 !important; font-size: 12px; font-weight: 780; text-shadow: none; cursor: pointer; }
+.subscribeBtn:hover { background: #ececec; }
 .verified { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: #fff; color: #000; font-size: 10px; font-weight: 900; text-shadow: none; }
 .caption { margin-top: 8px; max-width: 92%; font-size: 13px; line-height: 1.42; font-weight: 520; color: rgba(255,255,255,.94); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.tags { margin-top: 7px; font-size: 12px; font-weight: 720; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Blue, as in the reference: hashtags are links in shape even when they are not
+   yet links in behaviour, and white made them read as part of the sentence. */
+.tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; font-size: 12.5px; font-weight: 700; color: #7cc0ff; }
+.soundRow { display: flex; align-items: center; gap: 7px; margin-top: 11px; font-size: 11.5px; color: rgba(255,255,255,.86); }
 .externalStats { margin-top: 8px; font-size: 10px; color: rgba(255,255,255,.6); }
 
-.actions { align-self: end; display: flex; flex-direction: column; align-items: center; gap: 12px; padding-bottom: 2px; }
+.actions {
+  position: absolute;
+  z-index: 5;
+  right: 16px;
+  bottom: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
 .actionGroup { display: grid; justify-items: center; gap: 4px; }
 .actionButton {
   width: 48px; height: 48px;
@@ -637,3 +659,43 @@ a.liveTile:hover { background: #131313; border-color: rgba(255,255,255,.24); }
 .liveTile > span:nth-child(2) { flex: 1; min-width: 0; }
 .liveTile strong { display: block; font-size: 13px; font-weight: 780; }
 .liveTile small { display: block; margin-top: 3px; font-size: 11px; color: var(--ms-muted); }
+
+/* ---------------------------------------------------- the control bar */
+
+.playerBar {
+  position: absolute;
+  z-index: 6;
+  left: 0; right: 0; bottom: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.82) 55%);
+}
+
+.playerButton { display: grid; width: 28px; height: 28px; flex: none; place-items: center; border: 0; border-radius: 8px; background: transparent; color: #fff; cursor: pointer; }
+.playerButton:hover { background: rgba(255,255,255,.14); }
+
+.progressTrack { position: relative; flex: 1; min-width: 0; height: 4px; border-radius: 999px; background: rgba(255,255,255,.26); cursor: pointer; }
+.progressTrack:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+.progressFill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: #fff; }
+.playerTime { flex: none; font-size: 11px; font-variant-numeric: tabular-nums; color: rgba(255,255,255,.86); }
+
+.runtimeNote { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; font-size: 11px; color: var(--ms-muted); }
+.runtimeDot { width: 7px; height: 7px; border-radius: 50%; background: #3ddc84; }
+
+/* ------------------------------------------- right rail, at reference width */
+
+/* Dividers between the three counts, and the bio in quotes, both from the
+   reference. At 548px the tools finally fit two across, which is why they were
+   a column before and are a grid now. */
+.statRow span + span { padding-left: 22px; border-left: 1px solid var(--ms-border); }
+.quotedBio { margin-top: 12px; font-size: 12.5px; line-height: 1.5; color: rgba(255,255,255,.86); }
+
+.toolGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.creatorSplit { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 18px; align-items: start; margin-top: 12px; }
+.creatorSplit .statRow { margin-top: 0; }
+.creatorAbout { font-size: 12px; line-height: 1.5; color: var(--ms-soft); }
+
+.versionNote { margin: 16px 2px 4px; text-align: right; font-size: 10px; color: rgba(255,255,255,.3); }

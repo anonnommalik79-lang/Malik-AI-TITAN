@@ -20,7 +20,9 @@ import {
   MapPin,
   MessageCircle,
   MoreHorizontal,
+  Maximize2,
   Music,
+  Pause,
   Play,
   Plus,
   Radio,
@@ -246,6 +248,23 @@ function Avatar({ src, name, className }: { src?: string | null; name: string; c
   )
 }
 
+function formatTime(seconds: number) {
+  const total = Math.max(0, Math.floor(seconds || 0))
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`
+}
+
+/**
+ * The player and its own control bar.
+ *
+ * The bar is real for both kinds of video, which is the only reason it exists:
+ * a progress line that does not follow the video is worse than no progress line.
+ * A Malik-hosted file is an ordinary <video>, so time comes from `timeupdate`.
+ * A YouTube embed is driven through its IFrame API over postMessage - the
+ * `listening` handshake makes the player send `infoDelivery` events carrying
+ * currentTime and duration, and the same channel takes playVideo/pauseVideo/
+ * seekTo back. YouTube's own controls are turned off because this bar replaces
+ * them rather than sitting under them.
+ */
 function ShortPlayer({ item, active, muted, onToggleMuted }: {
   item: MalikShortItem
   active: boolean
@@ -253,7 +272,21 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
   onToggleMuted: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const frameRef = useRef<HTMLIFrameElement | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const [current, setCurrent] = useState(0)
+  const [duration, setDuration] = useState(item.durationSeconds || 0)
 
+  const isYouTube = item.playback.kind === "youtube"
+
+  const post = useCallback((func: string, args: unknown[] = []) => {
+    frameRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: "command", func, args }),
+      "https://www.youtube.com",
+    )
+  }, [])
+
+  // ---- native ------------------------------------------------------------
   useEffect(() => {
     if (item.playback.kind !== "native") return
     const video = videoRef.current
@@ -263,12 +296,115 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
     else video.pause()
   }, [active, item.playback.kind, muted])
 
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const onTime = () => { setCurrent(video.currentTime); setDuration(video.duration || 0) }
+    const onPlay = () => setPlaying(true)
+    const onPause = () => setPlaying(false)
+    video.addEventListener("timeupdate", onTime)
+    video.addEventListener("durationchange", onTime)
+    video.addEventListener("play", onPlay)
+    video.addEventListener("pause", onPause)
+    return () => {
+      video.removeEventListener("timeupdate", onTime)
+      video.removeEventListener("durationchange", onTime)
+      video.removeEventListener("play", onPlay)
+      video.removeEventListener("pause", onPause)
+    }
+  }, [item.id, active])
+
+  // ---- youtube -----------------------------------------------------------
+  useEffect(() => {
+    if (!isYouTube || !active) return
+    const frame = frameRef.current
+    if (!frame) return
+
+    const handshake = () => frame.contentWindow?.postMessage(
+      JSON.stringify({ event: "listening", id: item.id, channel: "widget" }),
+      "https://www.youtube.com",
+    )
+    const timer = window.setInterval(handshake, 1000)
+    handshake()
+
+    const onMessage = (event: MessageEvent) => {
+      if (!event.origin.includes("youtube.com")) return
+      let payload: any
+      try { payload = typeof event.data === "string" ? JSON.parse(event.data) : event.data } catch { return }
+      const info = payload?.info
+      if (!info) return
+      if (typeof info.currentTime === "number") setCurrent(info.currentTime)
+      if (typeof info.duration === "number" && info.duration > 0) setDuration(info.duration)
+      // 1 is PLAYING in the IFrame API's state enum.
+      if (typeof info.playerState === "number") setPlaying(info.playerState === 1)
+    }
+    window.addEventListener("message", onMessage)
+    return () => { window.clearInterval(timer); window.removeEventListener("message", onMessage) }
+  }, [isYouTube, active, item.id])
+
+  useEffect(() => {
+    if (!isYouTube) return
+    post(muted ? "mute" : "unMute")
+  }, [isYouTube, muted, post])
+
+  const toggle = useCallback(() => {
+    if (isYouTube) { post(playing ? "pauseVideo" : "playVideo"); setPlaying(!playing); return }
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) video.play().catch(() => {})
+    else video.pause()
+  }, [isYouTube, playing, post])
+
+  const seek = useCallback((ratio: number) => {
+    if (!duration) return
+    const target = Math.max(0, Math.min(duration, ratio * duration))
+    if (isYouTube) { post("seekTo", [target, true]); setCurrent(target); return }
+    const video = videoRef.current
+    if (video) video.currentTime = target
+  }, [duration, isYouTube, post])
+
+  const fullscreen = useCallback(() => {
+    const node: HTMLElement | null = isYouTube ? frameRef.current : videoRef.current
+    node?.requestFullscreen?.().catch(() => {})
+  }, [isYouTube])
+
   const poster = item.posterUrl || (item.playback.kind === "youtube"
     ? `https://i.ytimg.com/vi/${encodeURIComponent(item.playback.videoId)}/hqdefault.jpg`
-    : undefined)
+    : item.playback.kind === "native" ? item.playback.poster : undefined)
+
+  const bar = (
+    <div className={styles.playerBar}>
+      <button type="button" className={styles.playerButton} aria-label={playing ? "Пауза" : "Воспроизвести"} onClick={toggle}>
+        {playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
+      </button>
+      <div
+        className={styles.progressTrack}
+        role="slider"
+        tabIndex={0}
+        aria-label="Позиция в видео"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(duration) || 0}
+        aria-valuenow={Math.round(current)}
+        onClick={(event) => {
+          const box = event.currentTarget.getBoundingClientRect()
+          seek((event.clientX - box.left) / Math.max(1, box.width))
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowRight") seek(Math.min(1, (current + 5) / Math.max(1, duration)))
+          if (event.key === "ArrowLeft") seek(Math.max(0, (current - 5) / Math.max(1, duration)))
+        }}
+      >
+        <span className={styles.progressFill} style={{ width: `${duration ? Math.min(100, (current / duration) * 100) : 0}%` }} />
+      </div>
+      <span className={styles.playerTime}>{formatTime(current)} / {formatTime(duration)}</span>
+      <button type="button" className={styles.playerButton} aria-label="Во весь экран" onClick={fullscreen}>
+        <Maximize2 size={14} />
+      </button>
+    </div>
+  )
 
   if (!active && poster) {
-    return <img className={styles.poster} src={poster} alt="" loading="lazy" referrerPolicy="no-referrer" />
+    return <><img className={styles.poster} src={poster} alt="" loading="lazy" referrerPolicy="no-referrer" />{bar}</>
   }
 
   if (item.playback.kind === "youtube") {
@@ -277,56 +413,47 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
       autoplay: active ? "1" : "0",
       mute: "1",
       playsinline: "1",
-      controls: "1",
+      // Off on purpose: the bar below replaces them, and two sets of controls
+      // stacked on one video is how a player stops feeling like one product.
+      controls: "0",
+      enablejsapi: "1",
       rel: "0",
       loop: "1",
       playlist: item.playback.videoId,
       origin,
     })
     return (
-      <iframe
-        className={styles.videoFrame}
-        src={`https://www.youtube.com/embed/${encodeURIComponent(item.playback.videoId)}?${params.toString()}`}
-        title={item.caption || "Video"}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-        referrerPolicy="strict-origin-when-cross-origin"
-      />
-    )
-  }
-
-  if (item.playback.kind === "tiktok") {
-    const params = new URLSearchParams({ autoplay: active ? "1" : "0", loop: "1" })
-    return (
-      <iframe
-        className={styles.videoFrame}
-        src={`https://www.tiktok.com/player/v1/${encodeURIComponent(item.playback.videoId)}?${params.toString()}`}
-        title={item.caption || "Video"}
-        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-        allowFullScreen
-        referrerPolicy="strict-origin-when-cross-origin"
-      />
+      <>
+        <iframe
+          ref={frameRef}
+          className={styles.videoFrame}
+          src={`https://www.youtube.com/embed/${encodeURIComponent(item.playback.videoId)}?${params.toString()}`}
+          title={item.caption || "Video"}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+        {bar}
+      </>
     )
   }
 
   return (
-    <video
-      ref={videoRef}
-      className={styles.nativeVideo}
-      src={item.playback.url}
-      poster={item.playback.poster || item.posterUrl}
-      muted={muted}
-      playsInline
-      loop
-      preload={active ? "auto" : "metadata"}
-      onClick={() => {
-        const video = videoRef.current
-        if (!video) return
-        if (video.paused) video.play().catch(() => {})
-        else video.pause()
-      }}
-      onDoubleClick={onToggleMuted}
-    />
+    <>
+      <video
+        ref={videoRef}
+        className={styles.nativeVideo}
+        src={item.playback.kind === "native" ? item.playback.url : undefined}
+        poster={poster}
+        muted={muted}
+        playsInline
+        loop
+        preload={active ? "auto" : "metadata"}
+        onClick={toggle}
+        onDoubleClick={onToggleMuted}
+      />
+      {bar}
+    </>
   )
 }
 
@@ -1093,6 +1220,9 @@ export function MalikShortsApp() {
               <article key={short.id} className={styles.shortWrap} data-short-id={short.id}>
                 <div className={styles.shortShell}>
                   <section className={styles.videoCard}>
+                    {/* The action rail sits inside the frame, over the video, the
+                        way the reference has it - beside the card it read as a
+                        toolbar for the page rather than for this video. */}
                     <ShortPlayer item={short} active={active} muted={muted} onToggleMuted={() => setMuted((value) => !value)} />
                     <div className={styles.posterShade} />
                     <div className={styles.videoTop}>
@@ -1113,15 +1243,32 @@ export function MalikShortsApp() {
                     </div>
                     <div className={styles.videoMeta}>
                       <div className={styles.creatorLine}>
-                        <strong className={styles.creatorName}>@{short.creator.username}</strong>
-                        {short.creator.verified ? <span className={styles.verified}><Check size={10} /></span> : null}
+                        <Avatar src={short.creator.avatarUrl} name={short.creator.displayName} className={styles.metaAvatar} />
+                        <span className={styles.creatorBlock}>
+                          <span className={styles.creatorTop}>
+                            <strong className={styles.creatorName}>{short.creator.displayName}</strong>
+                            {short.creator.verified ? <span className={styles.verified}><Check size={9} /></span> : null}
+                          </span>
+                          <span className={styles.creatorHandle}>@{short.creator.username}</span>
+                        </span>
+                        {short.creator.id !== profile?.userKey ? (
+                          <button type="button" className={styles.subscribeBtn} onClick={() => toggleFollow(short)}>
+                            {short.viewer.following ? "Вы подписаны" : "Подписаться"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={styles.caption}>{short.caption}</div>
-                      {short.hashtags.length ? <div className={styles.tags}>{short.hashtags.slice(0, 6).map((tag) => `#${tag}`).join(" ")}</div> : null}
+                      {short.hashtags.length ? (
+                        <div className={styles.tags}>
+                          {short.hashtags.slice(0, 6).map((tag) => <span key={tag}>#{tag}</span>)}
+                        </div>
+                      ) : null}
                       {stats ? <div className={styles.externalStats}>{stats}</div> : null}
+                      <div className={styles.soundRow}>
+                        <Music size={12} />
+                        <span>Оригинальный звук — {short.creator.displayName}</span>
+                      </div>
                     </div>
-                  </section>
-
                   <aside className={styles.actions} aria-label="Действия с роликом">
                     <div className={styles.actionGroup}>
                       <button type="button" className={styles.actionButton} aria-label={`Профиль ${short.creator.displayName}`} onClick={() => interaction(short, "profile_view")}>
@@ -1134,8 +1281,12 @@ export function MalikShortsApp() {
                     <Action icon={<Repeat2 size={22} />} active={short.viewer.reposted} count={short.metrics.reposts} label="Репост" onClick={() => toggleRepost(short)} />
                     <Action icon={<Bookmark size={22} fill={short.viewer.saved ? "currentColor" : "none"} />} active={short.viewer.saved} count={short.metrics.saves} label="Сохранить" onClick={() => toggleSave(short)} />
                     <Action icon={<Share2 size={22} />} label="Поделиться" onClick={() => shareShort(short)} />
-                    <Action icon={<Sparkles size={22} />} label="Спросить Malik" onClick={() => askMalik(short)} />
+                    <Action icon={<MoreHorizontal size={22} />} label="Ещё" onClick={() => askMalik(short)} />
                   </aside>
+                  </section>
+                </div>
+                <div className={styles.runtimeNote}>
+                  <span className={styles.runtimeDot} /> Malik Shorts · Desktop · Runtime
                 </div>
               </article>
             )
@@ -1421,7 +1572,7 @@ export function MalikShortsApp() {
             <span><b>{compact(profile?.followerCount)}</b>Подписчики</span>
             <span><b>{compact(profile?.followingCount)}</b>Подписки</span>
           </div>
-          {profile?.bio ? <div className={styles.sideCardText}>{profile.bio}</div> : null}
+          {profile?.bio ? <div className={styles.quotedBio}>&laquo;{profile.bio}&raquo;</div> : null}
           <div className={styles.metaRow}><MapPin size={12} /> Казахстан <Link2 size={12} /> <a href="/" className={styles.metaLink}>malik.ai</a></div>
         </section>
 
@@ -1447,11 +1598,13 @@ export function MalikShortsApp() {
 
               {creator ? (
                 <>
-                  <div className={styles.statRow}>
-                    <span><b>{compact(creator.profile.followerCount)}</b>Подписчики</span>
-                    <span><b>{compact(creator.profile.postCount)}</b>Видео</span>
+                  <div className={styles.creatorSplit}>
+                    <div className={styles.statRow}>
+                      <span><b>{compact(creator.profile.followerCount)}</b>Подписчики</span>
+                      <span><b>{compact(creator.profile.postCount)}</b>Видео</span>
+                    </div>
+                    {creator.profile.bio ? <div className={styles.creatorAbout}>{creator.profile.bio}</div> : null}
                   </div>
-                  {creator.profile.bio ? <div className={styles.sideCardText}>{creator.profile.bio}</div> : null}
                   {creator.posts.length ? (
                     <div className={styles.creatorStrip}>
                       {creator.posts.slice(0, 4).map((post) => (
@@ -1534,6 +1687,8 @@ export function MalikShortsApp() {
             {tiktok.connected ? <><RefreshCw size={13} style={{ display: "inline", marginRight: 6 }} />Синхронизировать TikTok</> : "Подключить TikTok"}
           </button>
         </section>
+
+        <div className={styles.versionNote}>v1.2.0</div>
       </aside>
 
       {drawer ? <>
