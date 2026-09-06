@@ -89,6 +89,7 @@ function syncBusinessModelUi() {
   const trigger = root.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')
   if (trigger) {
     const directSpans = Array.from(trigger.children).filter((child): child is HTMLElement => child instanceof HTMLElement && child.tagName === "SPAN")
+    const iconHost = directSpans[0]
     const copy = directSpans[1]
     const name = copy?.children[0] instanceof HTMLElement ? copy.children[0] as HTMLElement : null
     const provider = copy?.children[1] instanceof HTMLElement ? copy.children[1] as HTMLElement : null
@@ -96,6 +97,7 @@ function syncBusinessModelUi() {
 
     if (meta) {
       trigger.dataset.businessModelIcon = meta.icon
+      iconHost?.setAttribute("data-preserve-brand-color", "true")
       if (name && name.textContent !== meta.label) name.textContent = meta.label
     }
   }
