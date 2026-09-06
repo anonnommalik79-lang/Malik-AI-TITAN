@@ -331,7 +331,7 @@ export async function GET(request: NextRequest) {
   let dbItems: MalikShortItem[] = []
   if (getShortsSupabaseConfig()) {
     const rows = await shortsSupabaseRequest<DbFeedRow[]>(
-      `malik_shorts_feed_v1?select=*&source=in.(malik,tiktok)&order=published_at.desc.nullslast,created_at.desc&limit=${Math.min(limit * 2, 50)}`,
+      `malik_shorts_feed_v1?select=*&source=in.(malik,tiktok,youtube)&order=published_at.desc.nullslast,created_at.desc&limit=${Math.min(limit * 2, 50)}`,
     ).catch(() => [] as DbFeedRow[])
     dbItems = rows.map(mapDbRow)
   }
