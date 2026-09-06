@@ -8,7 +8,6 @@ export function ShortsAutoSync() {
   useEffect(() => {
     if (typeof window === "undefined") return
     if (window.sessionStorage.getItem(SESSION_KEY) === "1") return
-    window.sessionStorage.setItem(SESSION_KEY, "1")
 
     let cancelled = false
     ;(async () => {
@@ -18,8 +17,16 @@ export function ShortsAutoSync() {
         const status = await statusResponse.json().catch(() => null)
         if (!status?.connected || cancelled) return
 
+        // Mark the session only after TikTok is genuinely connected. The old
+        // version set this before checking status, so opening Shorts once while
+        // disconnected prevented a later same-session connection from syncing.
+        window.sessionStorage.setItem(SESSION_KEY, "1")
+
         const syncResponse = await fetch("/api/tiktok/sync", { method: "POST", cache: "no-store" })
-        if (!syncResponse.ok || cancelled) return
+        if (!syncResponse.ok || cancelled) {
+          window.sessionStorage.removeItem(SESSION_KEY)
+          return
+        }
         const payload = await syncResponse.json().catch(() => null)
         if (cancelled) return
 
@@ -28,6 +35,7 @@ export function ShortsAutoSync() {
         // immediately; the session flag prevents a reload loop.
         if (Number(payload?.imported || 0) > 0) window.location.reload()
       } catch {
+        window.sessionStorage.removeItem(SESSION_KEY)
         // TikTok is an optional source. YouTube/Malik feed must keep working if
         // the provider is unavailable or the account has not been connected.
       }
