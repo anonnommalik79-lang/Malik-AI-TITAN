@@ -1,6 +1,9 @@
 "use client"
 
-import { useLayoutEffect, type ReactNode } from "react"
+import { createContext, useContext, useLayoutEffect, type ReactNode } from "react"
+
+const AccountScopeContext = createContext("guest")
+export const useAccountScope = () => useContext(AccountScopeContext)
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const ACCOUNT_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
@@ -79,7 +82,7 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
     }
   }, [accountId])
 
-  return children
+  return <AccountScopeContext.Provider key={accountId} value={accountId}>{children}</AccountScopeContext.Provider>
 }
 
 export default AccountChatPersistence

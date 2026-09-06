@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
-const read = (p) => readFileSync(join(ROOT, p), "utf8")
+const read = (p) => readFileSync(join(ROOT, p), "utf8").replace(/\r\n/g, "\n")
 
 let failures = 0
 let checks = 0
@@ -144,7 +144,7 @@ check("the instruction reaches every agent, not only the first",
   autonomous.includes("instruction?: string | null")
   && autonomous.includes("ОТРАСЛЕВАЯ ИНСТРУКЦИЯ"))
 check("the run sends the instruction that is on screen",
-  component.includes("agentInput(agent, brief, done, instruction)"))
+  component.includes("agentInput(agent, brief, done, [instruction, knowledge"))
 check("choosing a template is visible on the card",
   component.includes("templateCardActive"))
 // The instruction must be shown in full and be editable. A summary of it -

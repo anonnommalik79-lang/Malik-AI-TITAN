@@ -216,6 +216,46 @@
 }
 
 .hero { text-align: center; margin-bottom: 14px; }
+.economics { margin: 16px 0; border: 1px solid #333; border-radius: 12px; padding: 18px; background: #121212; }
+.economics summary { cursor: pointer; font-size: 14px; }
+.economics summary span, .economics p { font-size: 12px; color: #aaa; line-height: 1.6; }
+.economicsFields, .economicsResults { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.economicsFields label { display: grid; gap: 8px; font-size: 12px; color: #bbb; }
+.economicsFields input { width: 100%; box-sizing: border-box; padding: 10px; color: white; background: #090909; border: 1px solid #444; border-radius: 8px; }
+.economicsResults dt { color: #aaa; font-size: 12px; }
+.economicsResults dd { margin: 8px 0; font-size: 17px; }
+
+.workbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0 12px; border-bottom: 1px solid #282828; }
+.workbar h1 { margin: 6px 0; font-size: clamp(24px, 2.4vw, 34px); letter-spacing: -.04em; line-height: 1.15; }
+.workbarActions, .resultTools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.workbarActions > span, .resultTools > span { color: #aaa; font-size: 12px; }
+.localNote { color: #90969c; font-size: 12px; line-height: 1.6; margin: 12px 0 20px; }
+.notice { display: flex; justify-content: space-between; gap: 12px; background: #1c1c1c; border: 1px solid #414141; border-radius: 10px; padding: 12px 16px; margin: 12px 0; font-size: 13px; }
+.notice button { border: 0; background: none; color: #fff; font-size: 20px; cursor: pointer; }
+.contextPanel { border-top: 1px solid #303034; padding: 14px 20px; }
+.contextPanel summary { cursor: pointer; font-size: 14px; }
+.contextPanel summary span { color: #969ca4; margin-left: 12px; font-size: 12px; }
+.contextFields { display: grid; gap: 16px; margin-top: 18px; }
+.contextFields label { display: grid; gap: 8px; color: #c1c6cd; font-size: 13px; }
+.contextFields textarea, .contextFields select { box-sizing: border-box; width: 100%; border: 1px solid #3b3d42; background: #101113; color: #eee; padding: 12px; border-radius: 9px; font: inherit; }
+.contextFields textarea { resize: vertical; min-height: 120px; }
+.contextFields select { max-width: 240px; }
+.uploadLabel input { max-width: 100%; }
+.savedGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.savedGrid article { border: 1px solid #333; padding: 18px; border-radius: 12px; background: #121315; }
+.savedGrid h3 { font-size: 16px; overflow-wrap: anywhere; }
+.savedGrid p { color: #aaa; font-size: 12px; }
+.savedGrid button { margin: 8px 8px 0 0; }
+.resultTools { margin: 12px 0; white-space: normal; }
+.root button:disabled { opacity: .45; cursor: not-allowed; }
+.root button:focus-visible, .root summary:focus-visible { outline: 2px solid #ddd; outline-offset: 3px; }
+@media (max-width: 640px) {
+  .workbar { align-items: flex-start; flex-direction: column; }
+  .workbarActions { width: 100%; justify-content: space-between; }
+  .contextPanel { padding: 14px; }
+  .contextPanel summary span { display: block; margin: 6px 0 0; }
+  .resultTools button { flex: 1 1 140px; min-height: 42px; }
+}
 
 .kicker {
   display: inline-flex;
