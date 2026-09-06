@@ -674,7 +674,7 @@ if (/onPlayerError/.test(player) && /setTiktokError\(true\)/.test(player)) {
 }
 
 checks += 1
-if (/postTikTok\(active \? "play" : "pause"\)/.test(player) && /autoplay: options\.autoplay \? "1" : "0"/.test(tiktokPlayerSource)) {
+if (/postTikTok\(active \? "play" : "pause"\)/.test(player) && /autoplay: "0"/.test(tiktokPlayerSource)) {
   console.log("  ok   неактивный Short не продолжает играть")
 } else {
   failures += 1
@@ -702,13 +702,17 @@ const { tiktokPlayerSrc, classifyTikTokPlayerError, tiktokPosterEndpoint, TIKTOK
  */
 check(
   "src одинаков независимо от mute-состояния",
-  String(tiktokPlayerSrc("7312345678901234567", { autoplay: true }) === tiktokPlayerSrc("7312345678901234567", { autoplay: true })),
+  String(tiktokPlayerSrc("7312345678901234567") === tiktokPlayerSrc("7312345678901234567")),
   "true",
 )
-check("src всегда стартует приглушённым", String(tiktokPlayerSrc("7312345678901234567").includes("muted=1")), "true")
+// muted=1 is documented as "prevent the user from changing the volume" - a
+// lock, not an initial state, so a later unMute would have nothing to act on.
+check("muted=1 не используется как замок", String(tiktokPlayerSrc("7312345678901234567").includes("muted=1")), "false")
+check("muted=0 в URL", String(tiktokPlayerSrc("7312345678901234567").includes("muted=0")), "true")
+check("autoplay=0 в URL", String(tiktokPlayerSrc("7312345678901234567").includes("autoplay=0")), "true")
+check("src не принимает состояние React", String(tiktokPlayerSrc.length), "1")
 check("videoId закодирован в пути", String(tiktokPlayerSrc("73123/../x").includes("73123%2F..%2Fx")), "true")
 check("loop включён", String(tiktokPlayerSrc("7312345678901234567").includes("loop=1")), "true")
-check("autoplay отражает момент монтирования", String(tiktokPlayerSrc("1234567", { autoplay: false }).includes("autoplay=0")), "true")
 
 checks += 1
 if (/muted \? "1" : "0"/.test(codeOnly(tiktokPlayer.source)) || /muted: muted/.test(codeOnly(player))) {
@@ -719,7 +723,7 @@ if (/muted \? "1" : "0"/.test(codeOnly(tiktokPlayer.source)) || /muted: muted/.t
 }
 
 checks += 1
-if (/src=\{tiktokPlayerSrc\(item\.playback\.videoId, \{ autoplay: autoplayOnMount \}\)\}/.test(player)) {
+if (/src=\{tiktokPlayerSrc\(item\.playback\.videoId\)\}/.test(player)) {
   console.log("  ok   iframe строит src один раз, autoplay заморожен на монтировании")
 } else {
   failures += 1
@@ -732,6 +736,38 @@ if (/postTikTok\(muted \? "mute" : "unMute"\)/.test(player)) {
 } else {
   failures += 1
   console.log("  FAIL mute не отправляется сообщением")
+}
+
+checks += 1
+if (/postTikTok\(muted \? "mute" : "unMute"\)\n\s+if \(active\) postTikTok\("play"\)/.test(clientSource)) {
+  console.log("  ok   onPlayerReady применяет mute и play из React-состояния")
+} else {
+  failures += 1
+  console.log("  FAIL onPlayerReady не применяет состояние")
+}
+
+/*
+ * onMute is an observation, not an instruction. It used to call onToggleMuted
+ * when the player disagreed, which let a freshly mounted iframe flip the whole
+ * app's sound preference just by starting in a different state: scroll onto a
+ * TikTok with the feed unmuted and everything went silent.
+ */
+checks += 1
+const muteCase = player.slice(player.indexOf('case "onMute"'), player.indexOf('case "onPlayerError"'))
+if (muteCase && !/onToggleMuted/.test(muteCase)) {
+  console.log("  ok   onMute не меняет пользовательскую настройку звука")
+} else {
+  failures += 1
+  console.log("  FAIL onMute всё ещё переключает глобальный muted")
+}
+
+checks += 1
+// React state is the only writer; the player is only ever told.
+if (!/onToggleMuted/.test(player.slice(player.indexOf("const onMessage ="), player.indexOf("window.addEventListener(\"message\", onMessage)")))) {
+  console.log("  ok   слушатель плеера не пишет в user preference")
+} else {
+  failures += 1
+  console.log("  FAIL слушатель плеера пишет в user preference")
 }
 
 console.log("\nОшибка autoplay (3002) — не смертельная")
@@ -813,6 +849,13 @@ check("oEmbed-адрес не содержит пользовательскую 
 
 check("миниатюра с CDN TikTok принимается", String(isAllowedTikTokThumbnail("https://p16-sign.tiktokcdn-us.com/obj/abc~tplv.jpeg")), "true")
 check("миниатюра с чужого хоста отвергается", String(isAllowedTikTokThumbnail("https://evil.tld/x.jpg")), "false")
+// TikTok's own oEmbed documentation answers with p16.muscdn.com; leaving it off
+// the list rejected the official response and showed the placeholder instead.
+check("p16.muscdn.com принимается", String(isAllowedTikTokThumbnail("https://p16.muscdn.com/img/abc~tplv.jpeg")), "true")
+check("muscdn.com без поддомена принимается", String(isAllowedTikTokThumbnail("https://muscdn.com/img/abc.jpeg")), "true")
+check("muscdn.com.evil.com отвергается", String(isAllowedTikTokThumbnail("https://muscdn.com.evil.com/x.jpg")), "false")
+check("evil-muscdn.com отвергается", String(isAllowedTikTokThumbnail("https://evil-muscdn.com/x.jpg")), "false")
+check("169.254.169.254 отвергается", String(isAllowedTikTokThumbnail("https://169.254.169.254/x.jpg")), "false")
 check("http-миниатюра отвергается", String(isAllowedTikTokThumbnail("http://p16.tiktokcdn.com/x.jpg")), "false")
 check("хост-подделка отвергается", String(isAllowedTikTokThumbnail("https://tiktokcdn.com.evil.tld/x.jpg")), "false")
 check("пустая миниатюра отвергается", String(isAllowedTikTokThumbnail(null)), "false")

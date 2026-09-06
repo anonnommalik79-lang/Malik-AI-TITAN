@@ -32,7 +32,20 @@ const THUMBNAIL_HOST_SUFFIXES = [
   ".ttwstatic.com",
   ".ibyteimg.com",
   ".byteoversea.com",
+  // TikTok's own oEmbed documentation returns thumbnails on p16.muscdn.com,
+  // so leaving it out rejected the official answer and turned every refreshed
+  // cover into the placeholder.
+  ".muscdn.com",
 ]
+
+/**
+ * Hosts allowed with no subdomain at all.
+ *
+ * Kept separate from the suffix list because a suffix entry cannot express
+ * "this exact host": `.muscdn.com` does not match `muscdn.com`, and dropping
+ * the leading dot to make it would also match `evil-muscdn.com`.
+ */
+const THUMBNAIL_HOSTS = ["muscdn.com"]
 
 export type TikTokPosterTarget = {
   /** Canonical URL rebuilt from recognised parts - never the caller's string. */
@@ -91,6 +104,10 @@ export function isAllowedTikTokThumbnail(value?: string | null): boolean {
   if (parsed.protocol !== "https:") return false
   if (parsed.username || parsed.password) return false
   const host = parsed.hostname.toLowerCase()
+  // Exact match or a real subdomain. Both checks anchor on a dot boundary, so
+  // muscdn.com.evil.tld and evil-muscdn.com fail the same way any other
+  // unrelated host does.
+  if (THUMBNAIL_HOSTS.includes(host)) return true
   return THUMBNAIL_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix))
 }
 

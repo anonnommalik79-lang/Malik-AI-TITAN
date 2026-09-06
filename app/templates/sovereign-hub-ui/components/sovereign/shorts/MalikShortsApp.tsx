@@ -361,10 +361,6 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
    * poster instead, so the value at mount is the right one; afterwards play and
    * pause are commands, not URL changes.
    */
-  // useState, not useRef: the value is read during render to build the src, and
-  // a ref read in render is exactly what react-hooks/refs warns about. The
-  // setter is never called, so the initial value is frozen either way.
-  const [autoplayOnMount] = useState(active)
 
   const isYouTube = item.playback.kind === "youtube"
   const isTikTok = item.playback.kind === "tiktok"
@@ -478,9 +474,10 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
 
       switch (data.type) {
         case "onPlayerReady":
-          // State is applied on ready, not on mount: commands sent before the
-          // player exists are dropped, which is how autoplay and the mute
-          // toggle used to disagree with the button that set them.
+          // Everything is applied here, because the URL now carries neither
+          // mute nor autoplay - commands sent before the player exists are
+          // dropped, so this is the first moment they can land. React's `muted`
+          // is the single source of truth for volume.
           postTikTok(muted ? "mute" : "unMute")
           if (active) postTikTok("play")
           break
@@ -495,7 +492,16 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
           break
         }
         case "onMute":
-          if (typeof data.value === "boolean" && data.value !== muted) onToggleMuted()
+          /*
+           * Observed, never obeyed.
+           *
+           * This used to call onToggleMuted when the player disagreed with us,
+           * which handed a freshly mounted iframe the power to flip the whole
+           * app's sound preference simply by starting in a different state -
+           * scroll to a TikTok with the feed unmuted and everything went
+           * silent. The direction is one-way: React state drives the player
+           * through mute/unMute, and the player's report changes nothing.
+           */
           break
         case "onPlayerError": {
           /*
@@ -520,7 +526,7 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
 
     window.addEventListener("message", onMessage)
     return () => window.removeEventListener("message", onMessage)
-  }, [isTikTok, active, item.id, muted, onToggleMuted, postTikTok])
+  }, [isTikTok, active, item.id, muted, postTikTok])
 
   /*
    * Play and pause follow `active` as commands rather than through the src.
@@ -697,7 +703,7 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
         <iframe
           ref={frameRef}
           className={styles.videoFrame}
-          src={tiktokPlayerSrc(item.playback.videoId, { autoplay: autoplayOnMount })}
+          src={tiktokPlayerSrc(item.playback.videoId)}
           title={item.caption || "TikTok"}
           allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
           allowFullScreen

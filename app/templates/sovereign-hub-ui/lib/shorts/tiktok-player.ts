@@ -14,20 +14,25 @@ export const TIKTOK_PLAYER_ORIGIN = "https://www.tiktok.com"
 export const TIKTOK_POST_ID = /^\d{6,32}$/
 
 /**
- * The player URL for a video.
+ * The player URL for a video. Fully static per video - it takes no arguments
+ * beyond the id, so nothing about React state can reach it.
  *
- * It deliberately takes no mute argument. Mute used to be a query parameter, so
- * tapping the speaker changed the src, React swapped the iframe, and the
- * browser reloaded the player - losing buffer, position and player state on
- * every toggle. The frame now always starts muted (which is also what browsers
- * require before they will autoplay anything) and the live mute state is
- * applied over postMessage once the player reports ready.
+ * Mute was a query parameter once: tapping the speaker changed the src, React
+ * swapped the iframe, and the browser reloaded the player, losing buffer and
+ * position on every toggle. The obvious repair - pinning `muted=1` and
+ * unmuting over postMessage - is worse, because TikTok documents that value as
+ * "set the default volume to 0 **and prevent the user from changing the
+ * volume**". It is a lock, not an initial state, so a later unMute has nothing
+ * to act on. Both flags are therefore off, and the live mute state and playback
+ * are applied as commands once the player reports ready. A browser that refuses
+ * to start audible playback answers with error 3002, which is recoverable: the
+ * frame stays and our play button starts it from a real user gesture.
  *
  * Every chrome parameter is off because the Malik bar provides all of it; two
  * progress bars and two play buttons on one video is how a player stops feeling
  * like one product.
  */
-export function tiktokPlayerSrc(videoId: string, options: { autoplay?: boolean } = {}) {
+export function tiktokPlayerSrc(videoId: string) {
   const params = new URLSearchParams({
     controls: "0",
     progress_bar: "0",
@@ -41,9 +46,9 @@ export function tiktokPlayerSrc(videoId: string, options: { autoplay?: boolean }
     native_context_menu: "0",
     closed_caption: "0",
     loop: "1",
-    autoplay: options.autoplay ? "1" : "0",
-    // Constant on purpose - see above. Unmuting happens over postMessage.
-    muted: "1",
+    // Both constant. Playback and volume are commands, never URL state.
+    autoplay: "0",
+    muted: "0",
   })
   return `${TIKTOK_PLAYER_ORIGIN}/player/v1/${encodeURIComponent(videoId)}?${params.toString()}`
 }
