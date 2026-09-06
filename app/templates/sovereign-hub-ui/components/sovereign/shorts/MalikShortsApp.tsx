@@ -46,6 +46,7 @@ import {
 import { prefillPrompt } from "@/lib/malik-context"
 import { applyLocalCounters, applyLocalDelta, bumpLocalCounter } from "@/lib/shorts/metrics"
 import { resolvePublicHandle } from "@/lib/shorts/tiktok-identity"
+import { classifyTikTokPlayerError, tiktokPlayerSrc, tiktokPosterEndpoint, TIKTOK_PLAYER_ORIGIN } from "@/lib/shorts/tiktok-player"
 import type { MalikShortComment, MalikShortFeedResponse, MalikShortInteractionAction, MalikShortItem, MalikShortSource } from "@/lib/shorts/types"
 import styles from "./MalikShortsApp.module.css"
 
@@ -109,11 +110,57 @@ function creatorTag(
   return String(creator?.displayName || "").trim() || fallback
 }
 
+/**
+ * A poster that survives its own URL expiring.
+ *
+ * TikTok's cover_image_url lives about six hours and is stored as if permanent,
+ * so a post imported yesterday renders a broken-image icon today unless its
+ * owner happened to open the feed and trigger a sync. The stored cover stays
+ * the fast path - no extra request while it works - and only a real load
+ * failure falls through to /api/shorts/tiktok/poster, which re-resolves the
+ * thumbnail from the post's own canonical URL.
+ *
+ * One component for every surface, so the feed, the grid cards, the library and
+ * the profile degrade identically instead of three of them showing a broken
+ * tile. Non-TikTok posters keep the previous behaviour exactly: no fallback
+ * exists for them, so a failure leaves the neutral tile the parent renders.
+ */
+function ShortPoster({ src, source, sourceUrl, videoId, className, fallback }: {
+  src?: string | null
+  source?: string | null
+  sourceUrl?: string | null
+  videoId?: string | null
+  className?: string
+  fallback?: React.ReactNode
+}) {
+  const refresh = source === "tiktok" ? tiktokPosterEndpoint(sourceUrl, videoId) : null
+  // "stored" first, then the refreshed URL once, then give up. The step is held
+  // in state rather than swapping src inside the error handler so a failing
+  // fallback cannot retry itself in a loop.
+  const [step, setStep] = useState<"stored" | "refresh" | "gone">(src ? "stored" : refresh ? "refresh" : "gone")
+
+  const current = step === "stored" ? src : step === "refresh" ? refresh : null
+  if (!current) return <>{fallback ?? null}</>
+
+  return (
+    <img
+      className={className}
+      src={current}
+      alt=""
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setStep((value) => (value === "stored" && refresh ? "refresh" : "gone"))}
+    />
+  )
+}
+
 /** The flattened row shape /api/shorts/library and /api/shorts/profile return. */
 type ShortCard = {
   id: string
   source: MalikShortSource
   sourceUrl?: string
+  /** The platform's own video id; both card routes already return it. */
+  sourceId?: string | null
   posterUrl?: string | null
   mediaUrl?: string | null
   caption?: string
@@ -293,14 +340,6 @@ function formatTime(seconds: number) {
  * seekTo back. YouTube's own controls are turned off because this bar replaces
  * them rather than sitting under them.
  */
-/**
- * TikTok's embed player origin, pinned.
- *
- * Used both as the postMessage target and as the only accepted event origin,
- * so a wildcard can never creep into one side while the other stays strict.
- */
-const TIKTOK_PLAYER_ORIGIN = "https://www.tiktok.com"
-
 function ShortPlayer({ item, active, muted, onToggleMuted }: {
   item: MalikShortItem
   active: boolean
@@ -313,6 +352,19 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(item.durationSeconds || 0)
   const [tiktokError, setTiktokError] = useState(false)
+  /*
+   * Captured on first render and never updated.
+   *
+   * `active` in the src would rebuild the iframe the moment a Short became the
+   * current one, throwing away a player that was already loading. The component
+   * lives inside <article key={short.id}> and its inactive state renders the
+   * poster instead, so the value at mount is the right one; afterwards play and
+   * pause are commands, not URL changes.
+   */
+  // useState, not useRef: the value is read during render to build the src, and
+  // a ref read in render is exactly what react-hooks/refs warns about. The
+  // setter is never called, so the initial value is frozen either way.
+  const [autoplayOnMount] = useState(active)
 
   const isYouTube = item.playback.kind === "youtube"
   const isTikTok = item.playback.kind === "tiktok"
@@ -445,13 +497,22 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
         case "onMute":
           if (typeof data.value === "boolean" && data.value !== muted) onToggleMuted()
           break
-        case "onPlayerError":
-          // A dead or region-blocked video must not take the page with it: the
-          // frame is replaced by the poster and a link to the original.
-          console.warn("[Malik Shorts] tiktok player error", data.value)
-          setTiktokError(true)
+        case "onPlayerError": {
+          /*
+           * 3002 is not a broken video - it is the browser declining to start
+           * playback without a user gesture. Tearing the iframe down for it
+           * replaced a perfectly good player with a poster and a dead end, when
+           * all that was needed was for someone to press play. So a recoverable
+           * error leaves the frame mounted and only reports that nothing is
+           * playing; our own play button then sends `play` from inside a real
+           * user gesture, which is exactly what the browser was waiting for.
+           */
+          const failure = classifyTikTokPlayerError(data.value)
+          console.warn(`[Malik Shorts] tiktok player error code=${failure.code} type=${failure.type} fatal=${failure.fatal}`)
           setPlaying(false)
+          if (failure.fatal) setTiktokError(true)
           break
+        }
         default:
           break
       }
@@ -461,11 +522,15 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
     return () => window.removeEventListener("message", onMessage)
   }, [isTikTok, active, item.id, muted, onToggleMuted, postTikTok])
 
-  // Leaving the active slot must actually stop the sound, and the iframe can
-  // outlive the switch for a frame or two before it unmounts.
+  /*
+   * Play and pause follow `active` as commands rather than through the src.
+   * Leaving the active slot must actually stop the sound - the iframe can
+   * outlive the switch by a frame or two - and arriving at it must start
+   * playback even though the URL's autoplay flag was frozen at mount.
+   */
   useEffect(() => {
     if (!isTikTok) return
-    if (!active) postTikTok("pause")
+    postTikTok(active ? "play" : "pause")
   }, [isTikTok, active, postTikTok])
 
   useEffect(() => {
@@ -548,7 +613,18 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
   )
 
   if (!active && poster) {
-    return <><img className={styles.poster} src={poster} alt="" loading="lazy" referrerPolicy="no-referrer" />{bar}</>
+    return (
+      <>
+        <ShortPoster
+          className={styles.poster}
+          src={poster}
+          source={item.source}
+          sourceUrl={item.sourceUrl}
+          videoId={item.playback.kind === "tiktok" ? item.playback.videoId : null}
+        />
+        {bar}
+      </>
+    )
   }
 
   if (item.playback.kind === "youtube") {
@@ -588,7 +664,13 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
     if (tiktokError) {
       return (
         <>
-          {poster ? <img className={styles.poster} src={poster} alt="" loading="lazy" referrerPolicy="no-referrer" /> : null}
+          <ShortPoster
+            className={styles.poster}
+            src={poster}
+            source={item.source}
+            sourceUrl={item.sourceUrl}
+            videoId={item.playback.videoId}
+          />
           {item.playback.canonicalUrl ? (
             <a className={styles.sourceOpen} href={item.playback.canonicalUrl} target="_blank" rel="noopener noreferrer nofollow">
               Открыть в TikTok
@@ -599,37 +681,23 @@ function ShortPlayer({ item, active, muted, onToggleMuted }: {
       )
     }
     /*
-     * Every chrome parameter is off because the bar below already provides it.
-     * Two progress bars and two play buttons stacked on one video is how a
-     * player stops feeling like one product - the same reason the YouTube
-     * branch above passes controls=0.
+     * The src is built once, from tiktokPlayerSrc, and carries no mute state.
+     * Mute used to be a query parameter: tapping the speaker changed the URL,
+     * React swapped the iframe, and the player reloaded - losing position and
+     * buffer on every toggle. The frame always starts muted, which is also what
+     * browsers require before they will autoplay, and the live mute state goes
+     * over postMessage once the player says it is ready.
      *
      * canonicalUrl stays an attribution link and is never the frame's src: a
      * share_url is a web page, and pointing an embed at it is what produced a
      * blank <video> before.
      */
-    const params = new URLSearchParams({
-      controls: "0",
-      progress_bar: "0",
-      play_button: "0",
-      volume_control: "0",
-      fullscreen_button: "0",
-      timestamp: "0",
-      music_info: "0",
-      description: "0",
-      rel: "0",
-      native_context_menu: "0",
-      closed_caption: "0",
-      loop: "1",
-      autoplay: active ? "1" : "0",
-      muted: muted ? "1" : "0",
-    })
     return (
       <>
         <iframe
           ref={frameRef}
           className={styles.videoFrame}
-          src={`${TIKTOK_PLAYER_ORIGIN}/player/v1/${encodeURIComponent(item.playback.videoId)}?${params.toString()}`}
+          src={tiktokPlayerSrc(item.playback.videoId, { autoplay: autoplayOnMount })}
           title={item.caption || "TikTok"}
           allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
           allowFullScreen
@@ -687,6 +755,7 @@ function toCard(item: MalikShortItem): ShortCard {
     id: item.id,
     source: item.source,
     sourceUrl: item.sourceUrl,
+    sourceId: item.sourceId ?? null,
     posterUrl: item.posterUrl || (item.playback.kind === "youtube"
       ? `https://i.ytimg.com/vi/${encodeURIComponent(item.playback.videoId)}/hqdefault.jpg`
       : item.playback.kind === "native" ? item.playback.poster : undefined),
@@ -715,9 +784,13 @@ function ShortGrid({ items, empty, onOpen }: {
       {items.map((item) => (
         <button key={item.id} type="button" className={styles.card} onClick={() => onOpen(item)}>
           <span className={styles.cardMedia}>
-            {item.posterUrl
-              ? <img src={item.posterUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />
-              : <span className={styles.cardBlank}><Video size={20} /></span>}
+            <ShortPoster
+              src={item.posterUrl}
+              source={item.source}
+              sourceUrl={item.sourceUrl}
+              videoId={item.sourceId}
+              fallback={<span className={styles.cardBlank}><Video size={20} /></span>}
+            />
             <span className={styles.cardViews}><Play size={10} fill="currentColor" />{compact(item.metrics.views)}</span>
           </span>
           <span className={styles.cardBody}>
@@ -1914,7 +1987,13 @@ export function MalikShortsApp() {
                     <div className={styles.creatorStrip}>
                       {creator.posts.slice(0, 4).map((post) => (
                         <button key={post.id} type="button" className={styles.creatorThumb} onClick={() => { goto("foryou"); setActiveId(post.id) }}>
-                          {post.posterUrl ? <img src={post.posterUrl} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className={styles.cardBlank}><Video size={16} /></span>}
+                          <ShortPoster
+                            src={post.posterUrl}
+                            source={post.source}
+                            sourceUrl={post.sourceUrl}
+                            videoId={post.sourceId}
+                            fallback={<span className={styles.cardBlank}><Video size={16} /></span>}
+                          />
                           <span className={styles.cardViews}><Play size={9} fill="currentColor" />{compact(post.metrics.views)}</span>
                         </button>
                       ))}

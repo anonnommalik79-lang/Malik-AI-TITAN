@@ -581,9 +581,12 @@ console.log("\nTikTok реально проигрывается")
  * rotate and count correctly and still play nothing.
  */
 const player = clientSource
+// The URL and its parameters live in lib/shorts/tiktok-player.ts; the checks
+// below read whichever file actually owns the rule.
+const tiktokPlayerSource = codeOnly(readFileSync(resolve(here, "../lib/shorts/tiktok-player.ts"), "utf8"))
 
 checks += 1
-if (/item\.playback\.kind === "tiktok"/.test(player) && /player\/v1\//.test(player)) {
+if (/item\.playback\.kind === "tiktok"/.test(player) && /tiktokPlayerSrc\(item\.playback\.videoId/.test(player)) {
   console.log("  ok   для tiktok есть отдельная ветка плеера")
 } else {
   failures += 1
@@ -591,7 +594,7 @@ if (/item\.playback\.kind === "tiktok"/.test(player) && /player\/v1\//.test(play
 }
 
 checks += 1
-if (/\$\{TIKTOK_PLAYER_ORIGIN\}\/player\/v1\/\$\{encodeURIComponent\(item\.playback\.videoId\)\}/.test(player)) {
+if (/\$\{TIKTOK_PLAYER_ORIGIN\}\/player\/v1\/\$\{encodeURIComponent\(videoId\)\}/.test(tiktokPlayerSource)) {
   console.log("  ok   iframe: tiktok.com/player/v1/{videoId}, id закодирован")
 } else {
   failures += 1
@@ -671,7 +674,7 @@ if (/onPlayerError/.test(player) && /setTiktokError\(true\)/.test(player)) {
 }
 
 checks += 1
-if (/autoplay: active \? "1" : "0"/.test(player) && /if \(!active\) postTikTok\("pause"\)/.test(player)) {
+if (/postTikTok\(active \? "play" : "pause"\)/.test(player) && /autoplay: options\.autoplay \? "1" : "0"/.test(tiktokPlayerSource)) {
   console.log("  ok   неактивный Short не продолжает играть")
 } else {
   failures += 1
@@ -679,19 +682,186 @@ if (/autoplay: active \? "1" : "0"/.test(player) && /if \(!active\) postTikTok\(
 }
 
 checks += 1
-if (/controls: "0"/.test(player) && /progress_bar: "0"/.test(player) && /play_button: "0"/.test(player)) {
+if (/controls: "0"/.test(tiktokPlayerSource) && /progress_bar: "0"/.test(tiktokPlayerSource) && /play_button: "0"/.test(tiktokPlayerSource)) {
   console.log("  ok   родные контролы TikTok скрыты — бар остаётся один")
 } else {
   failures += 1
   console.log("  FAIL поверх наших контролов будут вторые")
 }
 
+console.log("\nМьют не перезагружает плеер")
+
+const tiktokPlayer = loadLib("../lib/shorts/tiktok-player.ts")
+const { tiktokPlayerSrc, classifyTikTokPlayerError, tiktokPosterEndpoint, TIKTOK_AUTOPLAY_ERROR } = tiktokPlayer.exports
+
+/*
+ * Mute used to be a query parameter, so tapping the speaker changed the src,
+ * React swapped the iframe and the browser reloaded the player - losing
+ * position and buffer on every toggle. The URL now carries no mute state at
+ * all, which is what this asserts: the same video always yields one address.
+ */
+check(
+  "src одинаков независимо от mute-состояния",
+  String(tiktokPlayerSrc("7312345678901234567", { autoplay: true }) === tiktokPlayerSrc("7312345678901234567", { autoplay: true })),
+  "true",
+)
+check("src всегда стартует приглушённым", String(tiktokPlayerSrc("7312345678901234567").includes("muted=1")), "true")
+check("videoId закодирован в пути", String(tiktokPlayerSrc("73123/../x").includes("73123%2F..%2Fx")), "true")
+check("loop включён", String(tiktokPlayerSrc("7312345678901234567").includes("loop=1")), "true")
+check("autoplay отражает момент монтирования", String(tiktokPlayerSrc("1234567", { autoplay: false }).includes("autoplay=0")), "true")
+
 checks += 1
-if (/loop: "1"/.test(player)) {
-  console.log("  ok   loop включён")
+if (/muted \? "1" : "0"/.test(codeOnly(tiktokPlayer.source)) || /muted: muted/.test(codeOnly(player))) {
+  failures += 1
+  console.log("  FAIL mute-состояние снова попало в src плеера")
+} else {
+  console.log("  ok   mute-состояние не участвует в src")
+}
+
+checks += 1
+if (/src=\{tiktokPlayerSrc\(item\.playback\.videoId, \{ autoplay: autoplayOnMount \}\)\}/.test(player)) {
+  console.log("  ok   iframe строит src один раз, autoplay заморожен на монтировании")
 } else {
   failures += 1
-  console.log("  FAIL loop не включён")
+  console.log("  FAIL src iframe пересобирается из динамического состояния")
+}
+
+checks += 1
+if (/postTikTok\(muted \? "mute" : "unMute"\)/.test(player)) {
+  console.log("  ok   mute/unMute идут сообщением, а не через URL")
+} else {
+  failures += 1
+  console.log("  FAIL mute не отправляется сообщением")
+}
+
+console.log("\nОшибка autoplay (3002) — не смертельная")
+
+check("3002 распознаётся", String(TIKTOK_AUTOPLAY_ERROR), "3002")
+check(
+  "3002 → восстановимая",
+  String(classifyTikTokPlayerError({ errorCode: 3002, errorType: "AUTOPLAY_ERROR" }).fatal),
+  "false",
+)
+for (const [code, label] of [[1001, "INVALID_VIDEO"], [2001, "SERVER_ERROR"], [3001, "PLAYBACK_ERROR"]]) {
+  check(`${code} → фатальная`, String(classifyTikTokPlayerError({ errorCode: code, errorType: label }).fatal), "true")
+}
+check("код читается из value.errorCode", String(classifyTikTokPlayerError({ errorCode: 3002 }).code), "3002")
+check("тип читается из value.errorType", classifyTikTokPlayerError({ errorCode: 3002, errorType: "AUTOPLAY_ERROR" }).type, "AUTOPLAY_ERROR")
+// The payload is an object; comparing the whole value to a number would match
+// nothing and quietly make every error fatal.
+check("число вместо объекта не считается 3002", String(classifyTikTokPlayerError(3002).fatal), "true")
+check("пустой payload не роняет разбор", String(classifyTikTokPlayerError(null).fatal), "true")
+
+checks += 1
+if (/const failure = classifyTikTokPlayerError\(data\.value\)/.test(player) && /if \(failure\.fatal\) setTiktokError\(true\)/.test(player)) {
+  console.log("  ok   iframe уничтожается только на фатальной ошибке")
+} else {
+  failures += 1
+  console.log("  FAIL любая ошибка всё ещё убивает плеер")
+}
+
+checks += 1
+// After a recoverable error our own play button must be able to start it: the
+// tap is the user gesture the browser was waiting for.
+if (/postTikTok\(playing \? "pause" : "play"\)/.test(player)) {
+  console.log("  ok   после 3002 наша кнопка Play отправляет play")
+} else {
+  failures += 1
+  console.log("  FAIL кнопка Play не отправляет play")
+}
+
+console.log("\nОбложка TikTok переживает истечение cover_image_url")
+
+const poster = loadLib("../lib/shorts/tiktok-poster.ts")
+const { resolveTikTokPosterTarget, tiktokOembedUrl, isAllowedTikTokThumbnail, TIKTOK_OEMBED_ENDPOINT } = poster.exports
+
+check(
+  "endpoint строится из source_url",
+  String(tiktokPosterEndpoint("https://www.tiktok.com/@cristiano/video/7312345678901234567", null)),
+  "/api/shorts/tiktok/poster?url=https%3A%2F%2Fwww.tiktok.com%2F%40cristiano%2Fvideo%2F7312345678901234567",
+)
+check("endpoint из чистого id", String(tiktokPosterEndpoint(null, "7312345678901234567")), "/api/shorts/tiktok/poster?id=7312345678901234567")
+check("без данных endpoint не строится", String(tiktokPosterEndpoint(null, null)), "null")
+check("нечисловой id отвергается", String(tiktokPosterEndpoint(null, "../../etc/passwd")), "null")
+
+// SSRF surface. Only a real TikTok video URL or a numeric id gets through, and
+// the URL that is actually requested is rebuilt from the parts we recognised.
+const good = resolveTikTokPosterTarget({ url: "https://www.tiktok.com/@cristiano/video/7312345678901234567" })
+check("валидный TikTok URL принимается", String(good?.postId), "7312345678901234567")
+check("URL пересобирается канонически", String(good?.canonicalUrl), "https://www.tiktok.com/@cristiano/video/7312345678901234567")
+check(
+  "query и fragment отбрасываются",
+  String(resolveTikTokPosterTarget({ url: "https://www.tiktok.com/@c.ristiano/video/7312345678901234567?is_from=1#x" })?.canonicalUrl),
+  "https://www.tiktok.com/@c.ristiano/video/7312345678901234567",
+)
+for (const [label, url] of [
+  ["чужой хост", "https://evil.tld/@x/video/123456"],
+  ["хост-подделка", "https://www.tiktok.com.evil.tld/@x/video/1234567"],
+  ["внутренний адрес", "http://169.254.169.254/latest/meta-data"],
+  ["localhost", "http://127.0.0.1:8080/@x/video/1234567"],
+  ["file", "file:///etc/passwd"],
+  ["креденшелы в URL", "https://user:pass@www.tiktok.com/@x/video/1234567"],
+  ["нестандартный порт", "https://www.tiktok.com:2375/@x/video/1234567"],
+  ["не путь видео", "https://www.tiktok.com/@x/live"],
+  ["http вместо https", "http://www.tiktok.com/@x/video/1234567"],
+]) {
+  check(`SSRF: ${label} отвергнут`, String(resolveTikTokPosterTarget({ url })), "null")
+}
+
+check("запрос идёт только на захардкоженный oEmbed", String(tiktokOembedUrl(good).startsWith(TIKTOK_OEMBED_ENDPOINT + "?url=")), "true")
+check("oEmbed-адрес не содержит пользовательскую строку целиком", String(tiktokOembedUrl(good).includes("is_from")), "false")
+
+check("миниатюра с CDN TikTok принимается", String(isAllowedTikTokThumbnail("https://p16-sign.tiktokcdn-us.com/obj/abc~tplv.jpeg")), "true")
+check("миниатюра с чужого хоста отвергается", String(isAllowedTikTokThumbnail("https://evil.tld/x.jpg")), "false")
+check("http-миниатюра отвергается", String(isAllowedTikTokThumbnail("http://p16.tiktokcdn.com/x.jpg")), "false")
+check("хост-подделка отвергается", String(isAllowedTikTokThumbnail("https://tiktokcdn.com.evil.tld/x.jpg")), "false")
+check("пустая миниатюра отвергается", String(isAllowedTikTokThumbnail(null)), "false")
+
+const posterRoute = codeOnly(readFileSync(resolve(here, "../app/api/shorts/tiktok/poster/route.ts"), "utf8"))
+checks += 1
+if (/fetch\(tiktokOembedUrl\(target\)/.test(posterRoute) && !/fetch\((request|url|raw|input)/.test(posterRoute)) {
+  console.log("  ok   сервер не ходит по произвольному URL из запроса")
+} else {
+  failures += 1
+  console.log("  FAIL сервер может сходить по URL из запроса")
+}
+checks += 1
+if (/isAllowedTikTokThumbnail\(thumbnail\)/.test(posterRoute) && /placeholder\(/.test(posterRoute)) {
+  console.log("  ok   редирект только на разрешённый CDN, иначе заглушка")
+} else {
+  failures += 1
+  console.log("  FAIL редирект не ограничен списком хостов")
+}
+checks += 1
+if (/revalidate: CACHE_SECONDS/.test(posterRoute) && /max-age=\$\{CACHE_SECONDS\}/.test(posterRoute)) {
+  console.log("  ok   ответ кэшируется, oEmbed не дёргается на каждый рендер")
+} else {
+  failures += 1
+  console.log("  FAIL кэширования нет")
+}
+
+// One component for every surface: feed, grid cards, library, profile.
+checks += 1
+const posterUses = (player.match(/<ShortPoster/g) || []).length
+if (posterUses >= 4 && !/<img src=\{item\.posterUrl\}/.test(player) && !/<img src=\{post\.posterUrl\}/.test(player)) {
+  console.log(`  ok   лента, карточки, библиотека и профиль используют один ShortPoster (${posterUses})`)
+} else {
+  failures += 1
+  console.log("  FAIL часть поверхностей рисует постер напрямую")
+}
+checks += 1
+if (/setStep\(\(value\) => \(value === "stored" && refresh \? "refresh" : "gone"\)\)/.test(player)) {
+  console.log("  ok   упавшая обложка пробует свежую ровно один раз")
+} else {
+  failures += 1
+  console.log("  FAIL fallback обложки может зациклиться")
+}
+checks += 1
+if (/source === "tiktok" \? tiktokPosterEndpoint/.test(player)) {
+  console.log("  ok   fallback предлагается только для TikTok")
+} else {
+  failures += 1
+  console.log("  FAIL fallback предлагается не тем источникам")
 }
 
 console.log("\nProvider endpoint не отдаёт секреты")
