@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
+  ArrowLeft,
   Bell,
   Bookmark,
   Camera,
@@ -1144,6 +1145,15 @@ export function MalikShortsApp() {
   return (
     <div className={styles.root}>
       <aside className={styles.left} aria-label="Malik Shorts">
+        {/* Shorts takes the whole screen — it is fixed and covers the dashboard —
+            so without this there is no way back to the rest of Malik AI except
+            the browser's own back button. It sits above the brand and is styled
+            to be seen rather than found. */}
+        <a className={styles.backHome} href="/dashboard">
+          <ArrowLeft size={15} />
+          <span>Вернуться в Malik AI</span>
+        </a>
+
         <div className={styles.brandRow}>
           <a className={styles.brand} href="/shorts" aria-label="Malik Shorts">
             <span className={styles.mark} />
@@ -1536,6 +1546,10 @@ export function MalikShortsApp() {
               )}
           </section>
         ) : null}
+
+        <a className={styles.backHomeMobile} href="/dashboard" aria-label="Вернуться в Malik AI">
+          <ArrowLeft size={15} /> Malik AI
+        </a>
 
         <nav className={styles.mobileNav} aria-label="Навигация Malik Shorts">
           <button type="button" className={`${styles.mobileNavButton} ${view === "foryou" ? styles.mobileNavActive : ""}`} onClick={() => goto("foryou")}><Home /><span>Главная</span></button>

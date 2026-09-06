@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   BarChart3,
   Briefcase,
+  Clapperboard,
   CreditCard,
   Cpu,
   Crown,
@@ -141,6 +142,12 @@ type SidebarAction = {
   icon: typeof LayoutTemplate
   view?: string
   action?: "new" | "codex" | "voice" | "translate"
+  /** A section that lives on its own route rather than inside the dashboard. */
+  href?: string
+  /** Shown beside the label, e.g. BETA. */
+  badge?: string
+  /** Lifts the row out of the list. Used sparingly - one at a time. */
+  accent?: boolean
 }
 
 const PRIMARY_ACTIONS: SidebarAction[] = [
@@ -156,6 +163,10 @@ const PRIMARY_ACTIONS: SidebarAction[] = [
   // same endpoint as the business section — and nothing in the app opened it.
   // It linked out to other sections; nothing linked in.
   { id: "newsroom", label: "Newsroom", icon: Newspaper, view: "media-newsroom" },
+  // Malik Shorts is a whole product on its own route and nothing in the app
+  // linked to it — the same way Newsroom had no way in. It carries the accent
+  // because it is the newest surface here, not because everything should.
+  { id: "shorts", label: "Malik Shorts", icon: Clapperboard, href: "/shorts", badge: "BETA", accent: true },
   { id: "plugins", label: "Плагины", icon: Plug, view: "features" },
   { id: "websites", label: "Сайты", icon: LayoutTemplate, view: "website-generation" },
   { id: "video-generation", label: "Генерация видео", icon: Video, view: "video-generation" },
@@ -281,6 +292,10 @@ function SidebarInner({
     if (action.action === "new") return onNewChat?.()
     if (action.action === "codex") return onOpenCodex?.()
     if (action.action === "voice") return onOpenVoice?.()
+    if (action.href) {
+      window.location.assign(action.href)
+      return
+    }
     if (action.action === "translate") {
       // The app has a real translator — 600 lines against /api/translator — and
       // the top bar already opens it. This rail carried the same label and did
@@ -324,10 +339,11 @@ function SidebarInner({
     const Icon = action.icon
     const active = action.view === activeView
     return (
-      <button key={action.id} type="button" aria-label={action.label} aria-current={active ? "page" : undefined}
+      <button key={action.id} type="button" data-preserve-brand-color={action.accent ? "true" : undefined} aria-label={action.label} aria-current={active ? "page" : undefined}
         onClick={() => runAction(action)} onMouseEnter={showTooltip(action.label)} onMouseLeave={() => setTooltip(null)}
-        className={cn("malik-sidebar-rail-btn", active && "is-active")}>
+        className={cn("malik-sidebar-rail-btn", active && "is-active", action.accent && "is-accent")}>
         <Icon className="h-[18px] w-[18px]" />
+        {action.badge ? <i className="malik-sidebar-rail-dot" data-preserve-brand-color="true" /> : null}
       </button>
     )
   }
@@ -411,7 +427,7 @@ function SidebarInner({
         {PRIMARY_ACTIONS.map((action) => {
           const Icon = action.icon
           const active = action.view === activeView
-          return <button key={action.id} data-action-id={action.id} type="button" aria-current={active ? "page" : undefined} onClick={() => runAction(action)} className={cn("malik-sidebar-primary", active && "is-active")}><Icon className="h-[17px] w-[17px]" /><span>{action.label}</span></button>
+          return <button key={action.id} data-action-id={action.id} data-preserve-brand-color={action.accent ? "true" : undefined} type="button" aria-current={active ? "page" : undefined} onClick={() => runAction(action)} className={cn("malik-sidebar-primary", active && "is-active", action.accent && "is-accent")}><Icon className="h-[17px] w-[17px]" /><span>{action.label}</span>{action.badge ? <em className="malik-shorts-beta" data-preserve-brand-color="true">{action.badge}</em> : null}</button>
         })}
       </nav>
 
@@ -477,6 +493,26 @@ function SidebarStyles() {
       .malik-sidebar-primary:hover { background:rgba(255,255,255,.055); color:#fff; }
       .malik-sidebar-primary.is-active { background:#202023; color:#fff; font-weight:520; }
       .malik-sidebar-primary.is-active svg { color:#fff; }
+      /* Malik Shorts. The accent is deliberate and there is exactly one of it:
+         a list where several rows shout is a list where none of them do. The
+         badge is marked data-preserve-brand-color because NoBlueUiGuard repaints
+         anything in the blue-violet range at runtime, and this gradient is
+         squarely inside it. The row carries the same attribute, because the
+         guard rewrites the element whose background it dislikes - it wrote
+         background-image:none !important straight onto the button - and
+         closest() then covers the badge inside it as well.
+
+         The class is not called .malik-sidebar-badge: creator-clone-safe.css
+         already owns that name under a #malik-root .malik-dashboard-shell rule, with
+         !important on every property. Out-specifying it would be an arms race
+         over a name that is not mine, so this one has its own. */
+      .malik-sidebar-primary.is-accent { background:linear-gradient(90deg, rgba(93,79,255,.16), rgba(93,79,255,.04)); color:#fff; }
+      .malik-sidebar-primary.is-accent svg { color:#b9a8ff; }
+      .malik-sidebar-primary.is-accent:hover { background:linear-gradient(90deg, rgba(93,79,255,.26), rgba(93,79,255,.07)); }
+      .malik-shorts-beta { margin-left:auto; flex-shrink:0; border-radius:999px; padding:2.5px 7px; background:linear-gradient(135deg,#7c5cff,#3d8bff); color:#fff; font-size:9px; font-style:normal; font-weight:800; letter-spacing:.07em; box-shadow:0 0 14px rgba(124,92,255,.45); }
+      .malik-sidebar-rail-btn.is-accent svg { color:#b9a8ff; }
+      .malik-sidebar-rail-dot { position:absolute; top:6px; right:6px; width:6px; height:6px; border-radius:50%; background:#7c5cff; box-shadow:0 0 8px rgba(124,92,255,.8); }
+      .malik-sidebar-rail-btn { position:relative; }
       .malik-sidebar-history { border-top:1px solid rgba(255,255,255,.055); border-bottom:1px solid rgba(255,255,255,.055); }
       .malik-sidebar-chat-group + .malik-sidebar-chat-group { margin-top:14px; }
       .malik-sidebar-group-title { margin:0 0 5px; padding:0 7px; color:#72727c; font-size:10.5px; font-weight:520; }
