@@ -7,6 +7,7 @@ import {
   shortsSupabaseRequest,
   stableShortId,
 } from "@/lib/shorts/server"
+import { fetchTikTokVideos, getFreshTikTokAccessToken, materializeTikTokVideos } from "@/lib/shorts/tiktok"
 import type { MalikShortFeedResponse, MalikShortItem, MalikShortSource } from "@/lib/shorts/types"
 
 export const dynamic = "force-dynamic"
@@ -302,18 +303,36 @@ function uniqueBySource(items: MalikShortItem[]) {
   })
 }
 
+function shuffle<T>(items: T[]) {
+  const result = [...items]
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
+
 function mixSources(items: MalikShortItem[], limit: number) {
   const buckets: Record<MalikShortSource, MalikShortItem[]> = { malik: [], tiktok: [], youtube: [] }
   for (const item of items) buckets[item.source].push(item)
-  const pattern: MalikShortSource[] = ["malik", "youtube", "malik", "tiktok", "youtube"]
+  buckets.malik = shuffle(buckets.malik)
+  buckets.youtube = shuffle(buckets.youtube)
+  buckets.tiktok = shuffle(buckets.tiktok)
+
+  const patterns: MalikShortSource[][] = [
+    ["youtube", "tiktok", "malik", "youtube", "tiktok", "malik"],
+    ["tiktok", "youtube", "malik", "tiktok", "youtube", "malik"],
+    ["malik", "youtube", "tiktok", "youtube", "malik", "tiktok"],
+  ]
+  const pattern = patterns[Math.floor(Math.random() * patterns.length)]
   const output: MalikShortItem[] = []
   let guard = 0
-  while (output.length < limit && guard < limit * 10) {
+  while (output.length < limit && guard < limit * 12) {
     const source = pattern[guard % pattern.length]
     const item = buckets[source].shift()
     if (item) output.push(item)
     else {
-      const fallback = buckets.malik.shift() || buckets.tiktok.shift() || buckets.youtube.shift()
+      const fallback = buckets.tiktok.shift() || buckets.youtube.shift() || buckets.malik.shift()
       if (fallback) output.push(fallback)
       else break
     }
@@ -322,18 +341,42 @@ function mixSources(items: MalikShortItem[], limit: number) {
   return output
 }
 
+async function loadDbFeed(limit: number) {
+  if (!getShortsSupabaseConfig()) return [] as MalikShortItem[]
+  const rows = await shortsSupabaseRequest<DbFeedRow[]>(
+    `malik_shorts_feed_v1?select=*&source=in.(malik,tiktok,youtube)&order=published_at.desc.nullslast,created_at.desc&limit=${Math.min(limit * 4, 100)}`,
+  ).catch(() => [] as DbFeedRow[])
+  return rows.map(mapDbRow)
+}
+
+async function pullTikTokIfMissing(userKey: string) {
+  try {
+    const accessToken = await getFreshTikTokAccessToken(userKey)
+    const page = await fetchTikTokVideos(accessToken, 20)
+    if (!page.videos.length) return 0
+    const rows = await materializeTikTokVideos(userKey, page.videos)
+    return rows.length
+  } catch (error) {
+    console.warn("[Malik Shorts] TikTok feed refresh skipped", String(error instanceof Error ? error.message : error).slice(0, 160))
+    return 0
+  }
+}
+
 export async function GET(request: NextRequest) {
   const limit = clampInt(request.nextUrl.searchParams.get("limit"), 6, 30, 16)
   const language = request.nextUrl.searchParams.get("lang") || "ru"
   const region = request.nextUrl.searchParams.get("region") || "KZ"
   const { user } = await getOptionalWorkOSAuth()
 
-  let dbItems: MalikShortItem[] = []
-  if (getShortsSupabaseConfig()) {
-    const rows = await shortsSupabaseRequest<DbFeedRow[]>(
-      `malik_shorts_feed_v1?select=*&source=in.(malik,tiktok,youtube)&order=published_at.desc.nullslast,created_at.desc&limit=${Math.min(limit * 2, 50)}`,
-    ).catch(() => [] as DbFeedRow[])
-    dbItems = rows.map(mapDbRow)
+  let dbItems = await loadDbFeed(limit)
+
+  // TikTok has no public global For You discovery endpoint in this integration.
+  // If the signed-in Malik user has connected TikTok, make the connection useful
+  // without a manual button: when the shared DB has no TikTok rows yet, import
+  // the account's videos here and immediately rebuild the unified feed.
+  if (user?.id && getShortsSupabaseConfig() && !dbItems.some((item) => item.source === "tiktok")) {
+    const imported = await pullTikTokIfMissing(user.id)
+    if (imported > 0) dbItems = await loadDbFeed(limit)
   }
 
   const youtubeCandidates: YouTubeCandidate[] = await fetchYouTubeCandidates(limit, language, region).catch(() => [] as YouTubeCandidate[])
