@@ -529,6 +529,43 @@ function ShortGrid({ items, empty, onOpen }: {
   )
 }
 
+/**
+ * The platform marks, drawn.
+ *
+ * These were the letters "YT" and "TT" in a coloured square, which is a
+ * placeholder wearing a logo's clothes: at a glance it reads as a bug, not as
+ * YouTube. The real shapes are two paths and they are what people recognise.
+ */
+function MalikMark() {
+  return (
+    <svg viewBox="0 0 512 512" role="img" aria-label="Malik Shorts" focusable="false">
+      <rect width="512" height="512" rx="112" fill="#f7f7f7" />
+      <path d="M100 324 233 137v187H100Z" fill="#050505" />
+      <path d="M263 137h128L263 327V137Z" fill="#050505" />
+    </svg>
+  )
+}
+
+function YouTubeMark() {
+  return (
+    <svg viewBox="0 0 28 20" role="img" aria-label="YouTube" focusable="false">
+      <path
+        d="M27.4 3.1A3.5 3.5 0 0 0 24.9.6C22.7 0 14 0 14 0S5.3 0 3.1.6A3.5 3.5 0 0 0 .6 3.1C0 5.3 0 10 0 10s0 4.7.6 6.9a3.5 3.5 0 0 0 2.5 2.5C5.3 20 14 20 14 20s8.7 0 10.9-.6a3.5 3.5 0 0 0 2.5-2.5C28 14.7 28 10 28 10s0-4.7-.6-6.9Z"
+        fill="#fb0219"
+      />
+      <path d="M11.2 14.3 18.5 10l-7.3-4.3v8.6Z" fill="#fff" />
+    </svg>
+  )
+}
+
+function TikTokMark() {
+  return (
+    <svg viewBox="0 0 24 28" role="img" aria-label="TikTok" focusable="false">
+      <path d="M16.6 0h4.5a7.5 7.5 0 0 0 6.9 6.7v4.5a12 12 0 0 1-6.9-2.3v9.4A9.9 9.9 0 1 1 11.2 8.4v4.7a5.3 5.3 0 1 0 5.4 5.3V0Z" fill="currentColor" transform="translate(-2)" />
+    </svg>
+  )
+}
+
 export function MalikShortsApp() {
   const [feed, setFeed] = useState<MalikShortItem[]>([])
   const [profile, setProfile] = useState<ShortsProfile | null>(null)
@@ -1157,7 +1194,7 @@ export function MalikShortsApp() {
         </nav>
 
         <button type="button" className={styles.proCard} onClick={() => notify("Malik AI Pro открывает все модели и снимает дневные лимиты")}>
-          <span className={styles.proIcon} data-preserve-brand-color="true"><Crown size={16} className={styles.crown} /></span>
+          <span className={styles.proIcon} data-preserve-brand-color="true"><Crown size={16} className={styles.crown} fill="currentColor" strokeWidth={1.2} /></span>
           <span>
             <strong>Malik AI Pro</strong>
             <small>Больше возможностей для твоего контента</small>
@@ -1230,7 +1267,7 @@ export function MalikShortsApp() {
                     <div className={styles.videoTop}>
                       <span className={styles.malikBadge} data-source={short.source}>
                         <span className={styles.sourceDot} data-source={short.source} data-preserve-brand-color="true">
-                          {short.source === "youtube" ? "YT" : short.source === "tiktok" ? "TT" : "M"}
+                          {short.source === "youtube" ? <YouTubeMark /> : short.source === "tiktok" ? <TikTokMark /> : <MalikMark />}
                         </span>
                         {SOURCE_NOTE[short.source]}
                       </span>
@@ -1343,7 +1380,7 @@ export function MalikShortsApp() {
             {activeShort ? (
               <div className={styles.remixSource}>
                 <span className={styles.sourceMark} data-source={activeShort.source} data-preserve-brand-color="true">
-                  {activeShort.source === "youtube" ? "YT" : activeShort.source === "tiktok" ? "TT" : "M"}
+                  {activeShort.source === "youtube" ? <YouTubeMark /> : activeShort.source === "tiktok" ? <TikTokMark /> : <MalikMark />}
                 </span>
                 <span>
                   <b>{activeShort.caption || "Без описания"}</b>
@@ -1515,7 +1552,7 @@ export function MalikShortsApp() {
             the whole point of a rail beside a player rather than under it. */}
         <div className={styles.rightTop}>
           <button type="button" className={styles.proPill} data-preserve-brand-color="true" onClick={() => notify("Malik AI Pro открывает все модели и снимает дневные лимиты")}>
-            <Crown size={14} className={styles.crown} /> Malik AI Pro
+            <Crown size={14} className={styles.crown} fill="currentColor" strokeWidth={1.2} /> Malik AI Pro
           </button>
           <button type="button" className={styles.ghostPill} onClick={() => window.open("/", "_self")}>
             <Download size={14} /> Скачать App
@@ -1629,7 +1666,7 @@ export function MalikShortsApp() {
             <div className={styles.sideCardTitle}>Источник</div>
             <div className={styles.meRow}>
               <span className={styles.sourceMark} data-source={activeShort.source} data-preserve-brand-color="true">
-                {activeShort.source === "youtube" ? "YT" : activeShort.source === "tiktok" ? "TT" : "M"}
+                {activeShort.source === "youtube" ? <YouTubeMark /> : activeShort.source === "tiktok" ? <TikTokMark /> : <MalikMark />}
               </span>
               <div className={styles.meBody}>
                 <div className={styles.meName}>{SOURCE_LABEL[activeShort.source]}</div>

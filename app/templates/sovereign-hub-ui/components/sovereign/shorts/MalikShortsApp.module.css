@@ -14,7 +14,19 @@
   background: var(--ms-bg);
   color: var(--ms-white);
   overflow: hidden;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* The reference is set in Inter. Inter is not in this project — the app names
+     'Geist' in its Tailwind theme and loads no file for it either — so the стек
+     below picks the closest thing each platform actually has, in order:
+     Inter if the machine has it, then Windows' Segoe UI Variable, then macOS's
+     system face. Naming a font nobody loads is what made this screen render in
+     a different typeface on every machine. */
+  font-family: Inter, "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI",
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue",
+    ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.006em;
 }
 
 .root * { box-sizing: border-box; }
@@ -593,7 +605,9 @@
 .creatorThumb:hover { border-color: rgba(255,255,255,.3); }
 .creatorThumb .cardViews { left: 4px; bottom: 4px; padding: 2px 5px; font-size: 8.5px; }
 
-.sourceMark { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border-radius: 10px; font-size: 12px; font-weight: 850; color: #fff; background: #1a1a1a; border: 1px solid var(--ms-border); }
+.sourceMark { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border-radius: 10px; font-size: 12px; font-weight: 850; color: #fff; background: #1a1a1a; border: 1px solid var(--ms-border); overflow: hidden; }
+.sourceMark svg { width: 22px; height: 22px; }
+.sourceDot svg { width: 15px; height: 15px; }
 .sourceMark[data-source="youtube"] { background: #2a0e0e; border-color: rgba(255,80,80,.34); }
 .sourceMark[data-source="tiktok"] { background: #0e1a1a; border-color: rgba(120,255,235,.24); }
 
@@ -625,7 +639,7 @@
    viewer wants to know first - where this came from - was missing on exactly
    the videos that came from somewhere else. */
 .malikBadge[data-source] { display: inline-flex; align-items: center; gap: 8px; }
-.sourceDot { display: grid; width: 21px; height: 21px; flex: none; place-items: center; border-radius: 6px; font-size: 9px; font-weight: 850; background: #fff; color: #000; }
+.sourceDot { display: grid; width: 22px; height: 22px; flex: none; place-items: center; border-radius: 6px; font-size: 9px; font-weight: 850; background: #fff; color: #000; }
 .sourceDot[data-source="youtube"] { background: #ff0033; color: #fff; }
 .sourceDot[data-source="tiktok"] { background: #0b0b0b; color: #fff; border: 1px solid rgba(255,255,255,.3); }
 
@@ -756,10 +770,10 @@ a.liveTile:hover { background: #131313; border-color: rgba(255,255,255,.24); }
 
 .tags[data-preserve-brand-color] { color: #57a7ff; }
 
-.sourceMark[data-source="youtube"][data-preserve-brand-color] { background: #fb0219; border-color: #fb0219; color: #fff; }
-.sourceMark[data-source="tiktok"][data-preserve-brand-color] { background: #010101; border-color: rgba(37, 244, 238, .5); color: #25f4ee; }
-.sourceDot[data-source="youtube"][data-preserve-brand-color] { background: #fb0219; color: #fff; }
-.sourceDot[data-source="tiktok"][data-preserve-brand-color] { background: #010101; color: #25f4ee; border: 1px solid rgba(37, 244, 238, .5); }
+.sourceMark[data-source="youtube"][data-preserve-brand-color] { background: #140406; border-color: rgba(251, 2, 25, .34); }
+.sourceMark[data-source="tiktok"][data-preserve-brand-color] { background: #050505; border-color: rgba(37, 244, 238, .4); color: #25f4ee; }
+.sourceDot[data-source="youtube"][data-preserve-brand-color] { background: transparent; }
+.sourceDot[data-source="tiktok"][data-preserve-brand-color] { background: transparent; color: #25f4ee; }
 
 .dot[data-preserve-brand-color] { background: #fd223c; }
 
