@@ -142,7 +142,20 @@ export function ChatAutoScrollRuntime() {
     }
   }, [])
 
-  return null
+  return (
+    <style jsx global>{`
+      #malik-root [data-message-list] {
+        scroll-padding-bottom: 12rem !important;
+      }
+      @media (max-width: 767px) {
+        #malik-root [data-message-list] {
+          padding-bottom: calc(13.5rem + env(safe-area-inset-bottom)) !important;
+          scroll-padding-bottom: calc(13.5rem + env(safe-area-inset-bottom)) !important;
+          overscroll-behavior-y: contain;
+        }
+      }
+    `}</style>
+  )
 }
 
 export default ChatAutoScrollRuntime
