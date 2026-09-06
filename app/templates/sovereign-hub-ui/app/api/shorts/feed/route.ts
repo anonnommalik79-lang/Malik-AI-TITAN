@@ -17,6 +17,8 @@ type YouTubeCandidate = {
   videoId: string
   channelId: string
   channelTitle: string
+  channelHandle?: string
+  channelAvatar?: string
   title: string
   description: string
   publishedAt?: string
@@ -51,6 +53,16 @@ function extractHashtags(text: string) {
   return Array.from(new Set((String(text || "").match(/#[\p{L}\p{N}_]{2,50}/gu) || []).map((tag) => tag.slice(1).toLowerCase()))).slice(0, 12)
 }
 
+function youtubeUsername(channelId: string, channelHandle?: string) {
+  const handle = String(channelHandle || "")
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/[^\p{L}\p{N}._-]/gu, "")
+    .slice(0, 32)
+  if (handle) return handle
+  return `yt.${channelId.replace(/[^A-Za-z0-9._]/g, "").slice(-24)}`.slice(0, 32)
+}
+
 function mapDbRow(row: DbFeedRow): MalikShortItem {
   const source = (["malik", "youtube", "tiktok"].includes(row.source) ? row.source : "malik") as MalikShortSource
   const playback = row.playback_kind === "youtube"
@@ -58,6 +70,12 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
     : row.playback_kind === "tiktok"
       ? { kind: "tiktok" as const, videoId: String(row.source_id || ""), canonicalUrl: row.source_url || undefined }
       : { kind: "native" as const, url: String(row.media_url || ""), poster: row.poster_url || undefined }
+
+  const youtube = source === "youtube"
+  const externalViews = row.external_views == null ? undefined : count(row.external_views)
+  const externalLikes = row.external_likes == null ? undefined : count(row.external_likes)
+  const externalComments = row.external_comments == null ? undefined : count(row.external_comments)
+  const externalShares = row.external_shares == null ? undefined : count(row.external_shares)
 
   return {
     id: String(row.id),
@@ -84,17 +102,21 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
     publishedAt: row.published_at || undefined,
     createdAt: row.created_at || undefined,
     metrics: {
-      views: count(row.views),
-      likes: count(row.likes),
-      comments: count(row.comments),
+      // For imported YouTube videos these are the public counters from YouTube,
+      // not Malik-local interaction rows. The old mapping put the real numbers
+      // only in `external`, while the action rail renders these top-level fields,
+      // which is why every YouTube Short showed 0 beside the icons.
+      views: youtube ? count(externalViews) : count(row.views),
+      likes: youtube ? count(externalLikes) : count(row.likes),
+      comments: youtube ? count(externalComments) : count(row.comments),
       reposts: count(row.reposts),
       saves: count(row.saves),
       shares: count(row.shares),
       external: {
-        views: row.external_views == null ? undefined : count(row.external_views),
-        likes: row.external_likes == null ? undefined : count(row.external_likes),
-        comments: row.external_comments == null ? undefined : count(row.external_comments),
-        shares: row.external_shares == null ? undefined : count(row.external_shares),
+        views: externalViews,
+        likes: externalLikes,
+        comments: externalComments,
+        shares: externalShares,
       },
     },
     viewer: { liked: false, saved: false, reposted: false, following: false },
@@ -141,19 +163,53 @@ async function fetchYouTubeCandidates(limit: number, language: string, region: s
   const videoResponse = await fetch(videoUrl, { next: { revalidate: 180 } })
   if (!videoResponse.ok) return []
   const videoJson = await videoResponse.json()
-  const byId = new Map<string, any>((videoJson?.items || []).map((item: any) => [String(item.id), item]))
+  const videos = Array.isArray(videoJson?.items) ? videoJson.items : []
+  const byId = new Map<string, any>(videos.map((item: any) => [String(item.id), item]))
+
+  // The videos endpoint does not include the channel avatar. The original Malik
+  // Shorts prototype explicitly called channels.list for this; production had
+  // dropped that call, so the UI fell back to initials such as "AS". Restore
+  // the real YouTube channel identity in one batched request.
+  const channelIds = Array.from(new Set(videos.map((item: any) => String(item?.snippet?.channelId || "")).filter(Boolean)))
+  const channelById = new Map<string, any>()
+  if (channelIds.length) {
+    const channelUrl = new URL("https://www.googleapis.com/youtube/v3/channels")
+    channelUrl.searchParams.set("part", "snippet")
+    channelUrl.searchParams.set("id", channelIds.slice(0, 50).join(","))
+    channelUrl.searchParams.set("key", config.apiKey)
+    const channelResponse = await fetch(channelUrl, { next: { revalidate: 180 } }).catch(() => null)
+    if (channelResponse?.ok) {
+      const channelJson = await channelResponse.json().catch(() => null)
+      for (const channel of Array.isArray(channelJson?.items) ? channelJson.items : []) {
+        if (channel?.id) channelById.set(String(channel.id), channel)
+      }
+    }
+  }
 
   return ids.flatMap((videoId: string) => {
     const item = byId.get(videoId)
     if (!item || item?.status?.embeddable === false) return []
     const durationSeconds = isoDurationSeconds(item?.contentDetails?.duration)
     if (durationSeconds && durationSeconds > 240) return []
+
     const snippet = item?.snippet || {}
     const stats = item?.statistics || {}
+    const channelId = String(snippet.channelId || "unknown")
+    const channel = channelById.get(channelId)
+    const channelSnippet = channel?.snippet || {}
+    const channelAvatar = channelSnippet?.thumbnails?.high?.url
+      || channelSnippet?.thumbnails?.medium?.url
+      || channelSnippet?.thumbnails?.default?.url
+      || undefined
+    const channelTitle = decodeEntities(String(channelSnippet?.title || snippet.channelTitle || "Creator"))
+    const channelHandle = String(channelSnippet?.customUrl || "").replace(/^@/, "") || undefined
+
     return [{
       videoId,
-      channelId: String(snippet.channelId || "unknown"),
-      channelTitle: decodeEntities(String(snippet.channelTitle || "Creator")),
+      channelId,
+      channelTitle,
+      channelHandle,
+      channelAvatar,
       title: decodeEntities(String(snippet.title || "")),
       description: decodeEntities(String(snippet.description || "")),
       publishedAt: snippet.publishedAt,
@@ -171,8 +227,9 @@ async function materializeYouTube(candidates: YouTubeCandidate[]) {
 
   const profiles = Array.from(new Map(candidates.map((item) => [item.channelId, {
     user_key: `youtube:${item.channelId}`,
-    username: `yt.${item.channelId.replace(/[^A-Za-z0-9._]/g, "").slice(-24)}`.slice(0, 32),
+    username: youtubeUsername(item.channelId, item.channelHandle),
     display_name: item.channelTitle,
+    avatar_url: item.channelAvatar || null,
     bio: "",
     locale: "ru",
     region: "KZ",
@@ -239,8 +296,9 @@ function mapYouTubeCandidate(item: YouTubeCandidate, dbId?: string): MalikShortI
     posterUrl: item.thumbnail,
     creator: {
       id: `youtube:${item.channelId}`,
-      username: `yt.${item.channelId.replace(/[^A-Za-z0-9._]/g, "").slice(-24)}`.slice(0, 32),
+      username: youtubeUsername(item.channelId, item.channelHandle),
       displayName: item.channelTitle,
+      avatarUrl: item.channelAvatar,
       external: true,
       claimed: false,
     },
@@ -252,9 +310,9 @@ function mapYouTubeCandidate(item: YouTubeCandidate, dbId?: string): MalikShortI
     durationSeconds: item.durationSeconds,
     publishedAt: item.publishedAt,
     metrics: {
-      views: 0,
-      likes: 0,
-      comments: 0,
+      views: item.views,
+      likes: item.likes,
+      comments: item.comments,
       reposts: 0,
       saves: 0,
       shares: 0,
@@ -370,10 +428,6 @@ export async function GET(request: NextRequest) {
 
   let dbItems = await loadDbFeed(limit)
 
-  // TikTok has no public global For You discovery endpoint in this integration.
-  // If the signed-in Malik user has connected TikTok, make the connection useful
-  // without a manual button: when the shared DB has no TikTok rows yet, import
-  // the account's videos here and immediately rebuild the unified feed.
   if (user?.id && getShortsSupabaseConfig() && !dbItems.some((item) => item.source === "tiktok")) {
     const imported = await pullTikTokIfMissing(user.id)
     if (imported > 0) dbItems = await loadDbFeed(limit)
