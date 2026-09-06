@@ -1,0 +1,93 @@
+/* Final Malik Shorts runtime overrides.
+   Kept page-scoped by importing only from /shorts/page.tsx. */
+
+/* Use the real Malik AI app icon instead of the CSS-drawn placeholder mark. */
+aside[aria-label="Malik Shorts"] a[aria-label="Malik Shorts"] > span:first-child {
+  width: 34px !important;
+  height: 34px !important;
+  flex: 0 0 34px !important;
+  border-radius: 10px !important;
+  background: #fff url('/malik-ai-icon.png') center / cover no-repeat !important;
+  overflow: hidden !important;
+}
+
+aside[aria-label="Malik Shorts"] a[aria-label="Malik Shorts"] > span:first-child::before,
+aside[aria-label="Malik Shorts"] a[aria-label="Malik Shorts"] > span:first-child::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* Let the current video occupy the whole centre workspace instead of sitting
+   in a narrow portrait card surrounded by dead black space. */
+article[data-short-id] {
+  padding: 12px 14px !important;
+}
+
+article[data-short-id] > div:first-child {
+  width: 100% !important;
+  max-width: none !important;
+  height: calc(100dvh - 24px) !important;
+  min-height: 560px !important;
+}
+
+article[data-short-id] > div:first-child > section {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 18px !important;
+}
+
+/* The runtime/debug label and its green dot are not product UI. */
+article[data-short-id] > div:last-child:not(:first-child) {
+  display: none !important;
+}
+
+/* TikTok is a feed source, not a call-to-action in the language card.
+   Connected accounts are refreshed automatically by ShortsAutoSync. */
+aside[aria-label="Malik Shorts"] + main + aside > section:last-of-type > button {
+  display: none !important;
+}
+
+@media (max-width: 860px) {
+  article[data-short-id] {
+    padding: 0 !important;
+  }
+
+  article[data-short-id] > div:first-child {
+    width: 100vw !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+  }
+
+  article[data-short-id] > div:first-child > section {
+    border-radius: 0 !important;
+    border: 0 !important;
+  }
+
+  /* The desktop vertical action tower covers the video on a phone.
+     Mobile keeps its dedicated bottom navigation instead. */
+  aside[aria-label="Действия с роликом"] {
+    display: none !important;
+  }
+
+  /* Reclaim the top-left slot with the official Malik AI icon. The anchor
+     stays a real link back to the main Malik AI app. */
+  main > a[href="/dashboard"][aria-label="Вернуться в Malik AI"] {
+    display: block !important;
+    left: 12px !important;
+    top: calc(12px + env(safe-area-inset-top)) !important;
+    width: 40px !important;
+    height: 40px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 12px !important;
+    background: #fff url('/malik-ai-icon.png') center / cover no-repeat !important;
+    color: transparent !important;
+    font-size: 0 !important;
+    box-shadow: 0 6px 24px rgba(0,0,0,.28) !important;
+    backdrop-filter: none !important;
+  }
+
+  main > a[href="/dashboard"][aria-label="Вернуться в Malik AI"] svg {
+    display: none !important;
+  }
+}
