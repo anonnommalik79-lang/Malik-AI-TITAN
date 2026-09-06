@@ -7,7 +7,18 @@ export type MalikShortPlayback =
 
 export type MalikShortCreator = {
   id: string
+  /**
+   * The row key in malik_shorts_profiles. For an imported creator this is a
+   * Malik-internal, collision-safe name (`tt.cristiano`) - not something to
+   * render as an @.
+   */
   username: string
+  /**
+   * The platform's real public handle, parsed from a TikTok-issued URL, or null
+   * when unknown. lib/shorts/tiktok-identity.ts#resolvePublicHandle decides
+   * what to display; it is never guessed from the username or display name.
+   */
+  handle?: string | null
   displayName: string
   avatarUrl?: string
   bio?: string

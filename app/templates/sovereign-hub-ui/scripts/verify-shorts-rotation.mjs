@@ -50,8 +50,8 @@ const policy = loadLib("../lib/shorts/tiktok-sync-policy.ts")
 
 const source = rotation.source
 const { dedupeBySource, buildRotatedFeed } = rotation.exports
-const { buildShortMetrics, applyLocalCounters, bumpLocalCounter, usesExternalMetrics } = metricsLib.exports
-const { parseTikTokHandle, tiktokUsernameCandidates, tiktokCreatorKey, USERNAME_PATTERN } = identity.exports
+const { buildShortMetrics, applyLocalCounters, applyLocalDelta, bumpLocalCounter, usesExternalMetrics } = metricsLib.exports
+const { parseTikTokHandle, tiktokUsernameCandidates, tiktokCreatorKey, USERNAME_PATTERN, resolvePublicHandle, isImportedUsername } = identity.exports
 const { decideTikTokSync, freshnessLabel, FRESH_WINDOW_MS, ERROR_COOLDOWN_MS } = policy.exports
 
 let failures = 0
@@ -270,6 +270,63 @@ if (/\{ \.\.\.item\.metrics, \.\.\.json\.metrics \}/.test(codeOnly(readFileSync(
   console.log("  ok   клиент не затирает внешние счётчики ответом RPC")
 }
 
+console.log("\nОффлайн-ответ: дельты, а не абсолютные значения")
+
+/*
+ * The fallback path of /api/shorts/interactions answers when the database is
+ * unreachable. It used to send `{ likes: 1 }` under the field that means
+ * absolute local counters, so one failed RPC replaced 37 local likes with 1 and
+ * pulled a 40,037 display down to 40,001. These cases pin the corrected
+ * semantics: offline moves by a delta, online replaces with an absolute.
+ */
+const busy = buildShortMetrics(
+  { views: 0, likes: 37, comments: 0, reposts: 0, saves: 0, shares: 0 },
+  { views: 900000, likes: 40000, comments: 1200, shares: 300 },
+)
+check("исходное состояние 40000 + 37", String(busy.likes), "40037")
+
+// Case A: offline like.
+const offlineLike = applyLocalDelta(busy, "like")
+check("оффлайн-лайк → 40038", String(offlineLike.likes), "40038")
+check("локальный счётчик стал 38, а не 1", String(offlineLike.local.likes), "38")
+check("внешний не тронут", String(offlineLike.external.likes), "40000")
+
+// Case B: offline unlike returns exactly where it started.
+check("оффлайн-анлайк → 40037", String(applyLocalDelta(offlineLike, "unlike").likes), "40037")
+
+// Case C: the saved path still replaces with the absolute the RPC reports.
+const savedLike = applyLocalCounters(busy, { views: 0, likes: 38, comments: 0, reposts: 0, saves: 0, shares: 0 })
+check("сохранённый лайк (RPC local=38) → 40038", String(savedLike.likes), "40038")
+
+check("оффлайн-сохранение двигает saves", String(applyLocalDelta(busy, "save").saves), "1")
+check("оффлайн-репост двигает reposts", String(applyLocalDelta(busy, "repost").reposts), "1")
+check("оффлайн-шер двигает shares", String(applyLocalDelta(busy, "share").shares), "301")
+check("follow не двигает счётчики", String(applyLocalDelta(busy, "follow") === busy), "true")
+check("view не двойного счёта оффлайн", String(applyLocalDelta(busy, "view") === busy), "true")
+
+// The counter cannot go below zero even if the client is out of step.
+const zeroLocal = buildShortMetrics(null, { likes: 40000 })
+check("анлайк при local=0 не уходит в минус", String(applyLocalDelta(zeroLocal, "unlike").local.likes), "0")
+check("и показывает по-прежнему 40000", String(applyLocalDelta(zeroLocal, "unlike").likes), "40000")
+
+checks += 1
+const interactionsRoute = codeOnly(readFileSync(resolve(here, "../app/api/shorts/interactions/route.ts"), "utf8"))
+if (/metrics\.(likes|saves|reposts) = /.test(interactionsRoute)) {
+  failures += 1
+  console.log("  FAIL fallback снова отдаёт дельты под именем metrics")
+} else {
+  console.log("  ok   fallback отдаёт metricDeltas, не metrics")
+}
+
+checks += 1
+const clientSource = codeOnly(readFileSync(resolve(here, "../components/sovereign/shorts/MalikShortsApp.tsx"), "utf8"))
+if (/persistence === true/.test(clientSource) && /applyLocalDelta\(item\.metrics/.test(clientSource)) {
+  console.log("  ok   клиент различает сохранённый ответ и оффлайн")
+} else {
+  failures += 1
+  console.log("  FAIL клиент не различает absolute и delta")
+}
+
 console.log("\nTikTok: handle и username")
 
 // Case G: a Malik user already owns @malik; the TikTok creator @malik must not
@@ -311,6 +368,43 @@ if (/follower_count|total_likes/.test(codeOnly(readFileSync(resolve(here, "../li
   console.log("  FAIL TikTok-профиль всё ещё пишет follower_count/total_likes поверх Malik social graph")
 } else {
   console.log("  ok   TikTok-профиль не трогает Malik social graph")
+}
+
+console.log("\nПубличный @ не содержит внутренний namespace")
+
+// Case E: the DB key is tt.cristiano, the real TikTok handle is cristiano, and
+// the second is what a person must see.
+check("реальный handle побеждает внутреннее имя", resolvePublicHandle({ handle: "cristiano", username: "tt.cristiano" }), "cristiano")
+check("tt.-имя без handle не показывается", String(resolvePublicHandle({ handle: null, username: "tt.cristiano" })), "null")
+check("tt.-имя с хэшем тоже не показывается", String(resolvePublicHandle({ handle: null, username: "tt.cristiano.a91f2" })), "null")
+check("tt.-хэш не показывается", String(resolvePublicHandle({ handle: null, username: "tt.9f3a1c2b4d5e" })), "null")
+// Case F: nothing is invented from the display name.
+check("displayName не превращается в @", String(resolvePublicHandle({ handle: null, username: null })), "null")
+// A YouTube channel handle is stored un-prefixed and passes through unchanged.
+check("обычный username проходит как есть", resolvePublicHandle({ handle: null, username: "gorod24.almaty" }), "gorod24.almaty")
+check("собственный Malik-аккаунт проходит", resolvePublicHandle({ handle: null, username: "malik.abc123" }), "malik.abc123")
+check("isImportedUsername распознаёт tt.", String(isImportedUsername("tt.cristiano")), "true")
+check("isImportedUsername не трогает чужие", String(isImportedUsername("cristiano")), "false")
+
+// The handle comes out of a TikTok-issued URL - the same parser reads the
+// profile deep link and a post share_url.
+check("handle из share_url поста", String(parseTikTokHandle("https://www.tiktok.com/@cristiano/video/7312345678901234567")), "cristiano")
+check("handle из deep link профиля", String(parseTikTokHandle("https://www.tiktok.com/@cristiano")), "cristiano")
+
+checks += 1
+if (/@\{(short|activeShort|item)\.creator\??\.?username/.test(clientSource) || /@\{profileView\.username/.test(clientSource)) {
+  failures += 1
+  console.log("  FAIL интерфейс всё ещё печатает @ + внутренний username")
+} else {
+  console.log("  ok   интерфейс печатает @ только через creatorTag")
+}
+
+checks += 1
+if (/handle: source === "tiktok" \? parseTikTokHandle\(row\.source_url\)/.test(codeOnly(feedRoute))) {
+  console.log("  ok   лента отдаёт реальный handle из share_url")
+} else {
+  failures += 1
+  console.log("  FAIL лента не отдаёт реальный handle")
 }
 
 console.log("\nЧастота обращений к TikTok API")
@@ -370,6 +464,33 @@ check("метка свежести: никогда", freshnessLabel({ connected:
 check("метка свежести: свежо", freshnessLabel({ connected: true, creatorKey: "tiktok:x", hasPosts: true, lastSyncAt: iso(HOUR) }, now), "fresh")
 check("метка свежести: устарело", freshnessLabel({ connected: true, creatorKey: "tiktok:x", hasPosts: true, lastSyncAt: iso(FRESH_WINDOW_MS + HOUR) }, now), "stale")
 check("метка свежести: падает", freshnessLabel({ connected: true, creatorKey: "tiktok:x", hasPosts: true, lastSyncAt: iso(2 * HOUR), lastErrorAt: iso(HOUR) }, now), "failing")
+
+// Case D: a connection made before sync stamps existed. It has no lastSyncAt,
+// but its videos were imported an hour ago - reporting "never" there is a false
+// alarm, and it is the reason readCreatorPosts fetches created_at.
+check(
+  "legacy: постов свежие, метки нет → fresh",
+  freshnessLabel({ connected: true, creatorKey: "tiktok:x", hasPosts: true, lastSyncAt: null, newestPostAt: iso(HOUR) }, now),
+  "fresh",
+)
+check(
+  "legacy: посты старые, метки нет → stale",
+  freshnessLabel({ connected: true, creatorKey: "tiktok:x", hasPosts: true, lastSyncAt: null, newestPostAt: iso(FRESH_WINDOW_MS + HOUR) }, now),
+  "stale",
+)
+check(
+  "постов нет вовсе → never",
+  freshnessLabel({ connected: true, creatorKey: "tiktok:x", hasPosts: false, lastSyncAt: null, newestPostAt: null }, now),
+  "never",
+)
+
+checks += 1
+if (/select=id,created_at[^`]*order=created_at\.desc/.test(codeOnly(readFileSync(resolve(here, "../lib/shorts/provider-accounts.ts"), "utf8")))) {
+  console.log("  ok   provider-accounts читает дату новейшего поста")
+} else {
+  failures += 1
+  console.log("  FAIL provider-accounts не читает newestPostAt — legacy покажет ложное never")
+}
 
 checks += 1
 if (/dbItems\.some\(\(item\) => item\.source === "tiktok"\)/.test(codeOnly(feedRoute))) {

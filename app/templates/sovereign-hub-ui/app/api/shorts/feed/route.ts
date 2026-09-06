@@ -9,6 +9,7 @@ import {
 } from "@/lib/shorts/server"
 import { buildRotatedFeed } from "@/lib/shorts/feed-rotation"
 import { buildShortMetrics } from "@/lib/shorts/metrics"
+import { parseTikTokHandle } from "@/lib/shorts/tiktok-identity"
 import {
   fetchTikTokUser,
   fetchTikTokVideos,
@@ -89,6 +90,11 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
     creator: {
       id: String(row.creator_key),
       username: String(row.username || "creator"),
+      // The real @ comes out of the video's own share_url
+      // (tiktok.com/@handle/video/...), which TikTok issued - the stored
+      // username is `tt.<name>`, a Malik row key, and showing it as an @ would
+      // put a handle in front of people that does not exist on TikTok.
+      handle: source === "tiktok" ? parseTikTokHandle(row.source_url) : null,
       displayName: String(row.display_name || row.username || "Creator"),
       avatarUrl: row.avatar_url || undefined,
       bio: row.bio || undefined,

@@ -162,7 +162,47 @@ export function applyLocalCounters(
   }
 }
 
-/** Add one to a local counter without waiting for a round trip. */
+/**
+ * What each action does to a local counter when the database is unreachable.
+ *
+ * The interaction endpoint has an offline path that used to answer with a
+ * `metrics` object holding `likes: 1`, and `metrics` means *absolute local
+ * counters* everywhere else. Feeding that to applyLocalCounters replaced a
+ * local count of 37 with 1 and dragged the display from 40,037 down to 40,001 -
+ * the same class of bug as the original overwrite, one layer further in.
+ *
+ * So the offline answer carries deltas under a different name, and the two
+ * shapes never share a field. `view` is absent deliberately: a view recorded
+ * while the database is down is not counted twice when it comes back.
+ */
+export const LOCAL_ACTION_DELTAS: Record<string, { key: keyof LocalCounters; delta: number }> = {
+  like: { key: "likes", delta: 1 },
+  unlike: { key: "likes", delta: -1 },
+  save: { key: "saves", delta: 1 },
+  unsave: { key: "saves", delta: -1 },
+  repost: { key: "reposts", delta: 1 },
+  unrepost: { key: "reposts", delta: -1 },
+  share: { key: "shares", delta: 1 },
+}
+
+export type LocalCounterDelta = { key: keyof LocalCounters; delta: number }
+
+/** The delta an action implies, or null for actions that move no counter. */
+export function localDeltaForAction(action: string): LocalCounterDelta | null {
+  return LOCAL_ACTION_DELTAS[action] || null
+}
+
+/**
+ * Apply an offline action's delta. Never replaces a counter with an absolute
+ * value, so an existing local count survives a round trip that failed.
+ */
+export function applyLocalDelta(previous: ShortMetricsShape, action: string): ShortMetricsShape {
+  const move = localDeltaForAction(action)
+  if (!move) return previous
+  return bumpLocalCounter(previous, move.key, move.delta)
+}
+
+/** Add to a local counter without waiting for a round trip. Clamped at zero. */
 export function bumpLocalCounter(
   previous: ShortMetricsShape,
   key: keyof LocalCounters,

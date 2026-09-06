@@ -44,13 +44,17 @@ import {
   X,
 } from "lucide-react"
 import { prefillPrompt } from "@/lib/malik-context"
-import { applyLocalCounters, bumpLocalCounter } from "@/lib/shorts/metrics"
+import { applyLocalCounters, applyLocalDelta, bumpLocalCounter } from "@/lib/shorts/metrics"
+import { resolvePublicHandle } from "@/lib/shorts/tiktok-identity"
 import type { MalikShortComment, MalikShortFeedResponse, MalikShortInteractionAction, MalikShortItem, MalikShortSource } from "@/lib/shorts/types"
 import styles from "./MalikShortsApp.module.css"
 
 type ShortsProfile = {
   userKey: string
+  /** The row key. For an imported creator this is Malik-internal (`tt.…`). */
   username: string
+  /** The platform's real @, when /api/shorts/profile could resolve one. */
+  handle?: string | null
   displayName: string
   avatarUrl?: string | null
   bio?: string
@@ -85,6 +89,26 @@ type ShortsView = "foryou" | "explore" | "following" | "remix" | "live" | "libra
 
 type LibraryKind = "saved" | "liked" | "reposted" | "mine"
 
+/**
+ * The @ to render for a creator, or their display name when there is none.
+ *
+ * An imported creator's stored username is a Malik row key - `tt.cristiano` -
+ * because malik_shorts_profiles.username is unique across every profile and a
+ * real TikTok @ can collide with a Malik user who took the same name first.
+ * Rendering that key after an @ would show people a handle that does not exist
+ * on TikTok, so resolvePublicHandle returns the platform's own handle when a
+ * TikTok-issued URL gave us one and null otherwise - and null falls back to the
+ * display name rather than to an invented @.
+ */
+function creatorTag(
+  creator?: { handle?: string | null; username?: string | null; displayName?: string | null } | null,
+  fallback = "",
+) {
+  const handle = resolvePublicHandle({ handle: creator?.handle, username: creator?.username })
+  if (handle) return `@${handle}`
+  return String(creator?.displayName || "").trim() || fallback
+}
+
 /** The flattened row shape /api/shorts/library and /api/shorts/profile return. */
 type ShortCard = {
   id: string
@@ -94,7 +118,7 @@ type ShortCard = {
   mediaUrl?: string | null
   caption?: string
   publishedAt?: string
-  creator?: { userKey?: string; username?: string; displayName?: string; avatarUrl?: string | null; verified?: boolean }
+  creator?: { userKey?: string; username?: string; handle?: string | null; displayName?: string; avatarUrl?: string | null; verified?: boolean }
   metrics: { views: number; likes: number; comments: number; reposts?: number; saves?: number; shares?: number }
 }
 
@@ -495,6 +519,7 @@ function toCard(item: MalikShortItem): ShortCard {
     creator: {
       userKey: item.creator.id,
       username: item.creator.username,
+      handle: item.creator.handle ?? null,
       displayName: item.creator.displayName,
       avatarUrl: item.creator.avatarUrl,
       verified: item.creator.verified,
@@ -522,7 +547,7 @@ function ShortGrid({ items, empty, onOpen }: {
           <span className={styles.cardBody}>
             <span className={styles.cardCaption}>{item.caption || "Без описания"}</span>
             <span className={styles.cardMeta}>
-              @{item.creator?.username || "malik"} · <Heart size={10} /> {compact(item.metrics.likes)}
+              {creatorTag(item.creator, "malik")} · <Heart size={10} /> {compact(item.metrics.likes)}
             </span>
           </span>
         </button>
@@ -673,15 +698,26 @@ export function MalikShortsApp() {
       }
       const json = await response.json().catch(() => null)
       if (!response.ok) throw new Error(json?.error || "interaction")
-      // malik_shorts_interact answers with Malik's own counters and nothing
-      // else - it has no idea what the video did on TikTok. Spreading that
-      // answer over the item is what dropped a 40,000-like TikTok to 1: the
-      // response said `likes: 1` and it landed on the field the rail renders.
-      // applyLocalCounters replaces only the local half and recomputes the
-      // visible number from both, so external counters survive every tap.
+      /*
+       * Two answers, two meanings, and mixing them up is how this broke twice.
+       *
+       * A saved interaction (persistence: true) comes back from
+       * malik_shorts_interact with the ABSOLUTE Malik-local counters - and only
+       * those, since it has no idea what the video did on TikTok.
+       * applyLocalCounters replaces the local half and recomputes the visible
+       * number from both halves, so external counters survive every tap.
+       *
+       * An unsaved one (persistence: false) carries DELTAS under a different
+       * field. Folding those in as absolutes is what would turn 37 local likes
+       * into 1 and drag a 40,037 display down to 40,001 - so they go through
+       * applyLocalDelta, which adds and never replaces.
+       */
+      const saved = json?.persistence === true
       setFeed((items) => items.map((item) => item.id === short.id ? {
         ...item,
-        metrics: applyLocalCounters(item.metrics, json?.metrics),
+        metrics: saved
+          ? applyLocalCounters(item.metrics, json?.metrics)
+          : applyLocalDelta(item.metrics, String(json?.action || action)),
         viewer: json?.viewer ? { ...item.viewer, ...json.viewer } : item.viewer,
       } : item))
       return json
@@ -836,7 +872,7 @@ export function MalikShortsApp() {
   const matchesSearch = useCallback((item: MalikShortItem) => {
     const q = search.trim().toLocaleLowerCase()
     if (!q) return true
-    return `${item.caption} ${item.creator.displayName} ${item.creator.username} ${item.hashtags.join(" ")}`
+    return `${item.caption} ${item.creator.displayName} ${item.creator.username} ${item.creator.handle || ""} ${item.hashtags.join(" ")}`
       .toLocaleLowerCase().includes(q)
   }, [search])
 
@@ -877,7 +913,7 @@ export function MalikShortsApp() {
   const askMalik = useCallback((short: MalikShortItem) => {
     const context = [
       "Ты получил контекст из Malik Shorts.",
-      `Автор: @${short.creator.username} (${short.creator.displayName}).`,
+      `Автор: ${creatorTag(short.creator)} (${short.creator.displayName}).`,
       `Описание: ${short.caption || "без описания"}.`,
       short.sourceUrl ? `Ссылка на ролик: ${short.sourceUrl}.` : "",
       "Помоги мне разобраться с этим роликом: ",
@@ -1047,7 +1083,7 @@ export function MalikShortsApp() {
     setRemix({ busy: true, body: "", error: null })
     const prompt = [
       `Исходный ролик: «${short.caption || "без описания"}»`,
-      `Автор: ${short.creator.displayName} (@${short.creator.username})`,
+      `Автор: ${short.creator.displayName} (${creatorTag(short.creator)})`,
       short.hashtags.length ? `Хэштеги: ${short.hashtags.map((tag) => `#${tag}`).join(" ")}` : "",
       "",
       "Сделай план ремикса этого вертикального ролика для Malik Shorts:",
@@ -1117,7 +1153,7 @@ export function MalikShortsApp() {
 
     const title = id === "describe" ? "Описание для ролика" : "Идея похожего ролика"
     const context = [
-      `Автор: ${short.creator.displayName} (@${short.creator.username})`,
+      `Автор: ${short.creator.displayName} (${creatorTag(short.creator)})`,
       short.caption ? `Текущее описание: ${short.caption}` : "",
       short.hashtags.length ? `Хэштеги: ${short.hashtags.map((tag) => `#${tag}`).join(" ")}` : "",
       `Площадка: ${SOURCE_LABEL[short.source]}`,
@@ -1321,7 +1357,7 @@ export function MalikShortsApp() {
                             <strong className={styles.creatorName}>{short.creator.displayName}</strong>
                             {short.creator.verified ? <span className={styles.verified} data-preserve-brand-color="true"><Check size={9} /></span> : null}
                           </span>
-                          <span className={styles.creatorHandle}>@{short.creator.username}</span>
+                          <span className={styles.creatorHandle}>{creatorTag(short.creator)}</span>
                         </span>
                         {short.creator.id !== profile?.userKey ? (
                           <button type="button" className={styles.subscribeBtn} onClick={() => toggleFollow(short)}>
@@ -1414,7 +1450,7 @@ export function MalikShortsApp() {
               <div>
                 <h2>AI Remix</h2>
                 <p>{activeShort
-                  ? `Ремикс ролика @${activeShort.creator.username} — идея, крючок, раскадровка и озвучка.`
+                  ? `Ремикс ролика ${creatorTag(activeShort.creator)} — идея, крючок, раскадровка и озвучка.`
                   : "Открой ленту и выбери ролик — ремикс делается для конкретного видео."}</p>
               </div>
               {activeShort ? (
@@ -1431,7 +1467,7 @@ export function MalikShortsApp() {
                 </span>
                 <span>
                   <b>{activeShort.caption || "Без описания"}</b>
-                  <small>@{activeShort.creator.username} · {SOURCE_LABEL[activeShort.source]}</small>
+                  <small>{creatorTag(activeShort.creator)} · {SOURCE_LABEL[activeShort.source]}</small>
                 </span>
               </div>
             ) : null}
@@ -1565,7 +1601,7 @@ export function MalikShortsApp() {
                         <h2>{profileView.displayName}</h2>
                         {profileView.verified ? <span className={styles.verified} data-preserve-brand-color="true"><Check size={11} /></span> : null}
                       </div>
-                      <div className={styles.profileHandle}>@{profileView.username}</div>
+                      <div className={styles.profileHandle}>{creatorTag(profileView)}</div>
                       <div className={styles.statRow}>
                         <span><b>{compact(profileView.postCount)}</b>Видео</span>
                         <span><b>{compact(profileView.followerCount)}</b>Подписчики</span>
@@ -1680,7 +1716,7 @@ export function MalikShortsApp() {
                     {activeShort.creator.displayName}
                     {activeShort.creator.verified ? <span className={styles.verified} style={{ marginLeft: 6 }}><Check size={9} /></span> : null}
                   </div>
-                  <div className={styles.meHandle}>@{activeShort.creator.username}</div>
+                  <div className={styles.meHandle}>{creatorTag(activeShort.creator)}</div>
                 </div>
                 {activeShort.creator.id !== profile?.userKey ? (
                   <button type="button" className={activeShort.viewer.following ? styles.secondaryButton : styles.connectButton} style={{ width: "auto", marginTop: 0 }} onClick={() => toggleFollow(activeShort)}>

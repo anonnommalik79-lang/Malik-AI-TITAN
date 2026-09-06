@@ -103,10 +103,39 @@ export function tiktokUsernameCandidates(openId: string, handle?: string | null)
   return candidates.filter((name, index, list) => USERNAME_PATTERN.test(name) && list.indexOf(name) === index)
 }
 
-/** What to show a human: the real handle if TikTok gave one, else the display name. */
-export function tiktokPublicHandle(displayName?: string | null, profileDeepLink?: string | null): string | null {
-  const handle = parseTikTokHandle(profileDeepLink)
+/**
+ * The prefix that marks a username as ours rather than the platform's.
+ *
+ * `tt.cristiano` is a Malik row key: it exists because
+ * malik_shorts_profiles.username is unique across every profile and a real
+ * TikTok @ can collide with a Malik user who registered the same name. It is
+ * correct as a key and wrong as something to show a person.
+ */
+export const IMPORTED_USERNAME_PREFIX = "tt."
+
+/**
+ * The @ a person should see, or null when we do not know it.
+ *
+ * One source of truth: a TikTok-issued URL. profile_deep_link gives it at
+ * connection time and every post's share_url gives it afterwards
+ * (tiktok.com/@handle/video/...), and both go through the same parser. What is
+ * never done is inventing one - not from the display name, and not by stripping
+ * our own prefix off a username, because `tt.cristiano.a91f2` and `tt.9f3a...`
+ * would both decode into a handle that points at somebody else's real TikTok.
+ *
+ * A username without the prefix is a real platform handle (that is how YouTube
+ * channels are stored) and passes through. Otherwise the answer is null, and
+ * the caller shows the display name with no @ at all.
+ */
+export function resolvePublicHandle(input: { handle?: string | null; username?: string | null }): string | null {
+  const handle = String(input.handle || "").trim()
   if (handle) return handle
-  const name = String(displayName || "").trim()
-  return name || null
+  const username = String(input.username || "").trim()
+  if (!username || username.startsWith(IMPORTED_USERNAME_PREFIX)) return null
+  return username
+}
+
+/** True when this username is a Malik-internal key and must not be shown as an @. */
+export function isImportedUsername(username?: string | null) {
+  return String(username || "").startsWith(IMPORTED_USERNAME_PREFIX)
 }

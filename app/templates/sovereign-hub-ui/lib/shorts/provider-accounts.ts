@@ -80,12 +80,23 @@ function toProfile(row: any): ShortsProviderProfile {
   }
 }
 
-async function countCreatorPosts(creatorKey: string, provider: ShortsProviderId) {
+/**
+ * How many posts this creator has, and when the newest one arrived.
+ *
+ * The timestamp matters as much as the count. A connection made before sync
+ * stamps existed has no last_sync_at, so with the count alone freshnessLabel
+ * answered "never" for an account whose videos were imported an hour ago -
+ * a false alarm on every legacy connection. Ordering by created_at gets the
+ * newest row in the same request, and it stands in for the missing stamp.
+ */
+async function readCreatorPosts(creatorKey: string, provider: ShortsProviderId) {
   const rows = await shortsSupabaseRequest<any[]>(
-    `malik_shorts_posts?select=id&source=eq.${provider}&creator_key=eq.${encodeURIComponent(creatorKey)}&limit=${POST_COUNT_CAP}`,
+    `malik_shorts_posts?select=id,created_at&source=eq.${provider}&creator_key=eq.${
+      encodeURIComponent(creatorKey)
+    }&order=created_at.desc&limit=${POST_COUNT_CAP}`,
   ).catch(() => [] as any[])
   const count = rows?.length || 0
-  return { count, capped: count >= POST_COUNT_CAP }
+  return { count, capped: count >= POST_COUNT_CAP, newestPostAt: rows?.[0]?.created_at || null }
 }
 
 /**
@@ -127,14 +138,18 @@ export async function getShortsProviderAccounts(userKey: string | null | undefin
     const lastSyncAt = meta.last_sync_at || null
     const lastErrorAt = meta.last_sync_error_at || null
 
-    const posts = creatorKey ? await countCreatorPosts(creatorKey, provider) : { count: 0, capped: false }
+    const posts = creatorKey
+      ? await readCreatorPosts(creatorKey, provider)
+      : { count: 0, capped: false, newestPostAt: null }
     const state: TikTokSyncState = {
       connected: true,
       creatorKey,
       lastSyncAt,
       lastErrorAt,
       hasPosts: posts.count > 0,
-      newestPostAt: null,
+      // Passed through rather than dropped: without it a connection older than
+      // the sync stamps reports "never" while holding freshly imported videos.
+      newestPostAt: posts.newestPostAt,
     }
 
     providers[provider] = {
