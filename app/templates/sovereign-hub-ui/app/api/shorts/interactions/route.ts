@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 import { getShortsSupabaseConfig, safeText, shortsSupabaseRequest } from "@/lib/shorts/server"
 import type { MalikShortInteractionPayload } from "@/lib/shorts/types"
+import { isYouTubePost } from "@/lib/shorts/legacy-source"
 
 export const dynamic = "force-dynamic"
 
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
   const durationMs = intOrNull(input.durationMs)
 
   try {
+    if (await isYouTubePost(shortId)) return NextResponse.json({ error: "YOUTUBE_OAUTH_REQUIRED", message: "Use the connected YouTube client; local actions do not synchronize with YouTube." }, { status: 409 })
     const endpoint = action === "view" ? "rpc/malik_shorts_record_view" : "rpc/malik_shorts_interact"
     const body = action === "view"
       ? {
