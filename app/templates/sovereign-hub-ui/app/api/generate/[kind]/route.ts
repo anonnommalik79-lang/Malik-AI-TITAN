@@ -9,7 +9,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
-type RouteContext = { params: Promise<{ kind?: string }> | { kind?: string } }
+type RouteContext = { params: Promise<{ kind: string }> }
 
 const SUPPORTED_KINDS = new Set([
   "text",

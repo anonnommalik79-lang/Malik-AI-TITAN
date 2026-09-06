@@ -13,6 +13,11 @@ const nextConfig = {
     root: projectRoot,
   },
   outputFileTracingRoot: projectRoot,
+  // Optional local verification on disk-constrained worktrees; normal deploys keep caching.
+  webpack(config) {
+    if (process.env.MALIK_BUILD_NO_CACHE === "1") config.cache = false;
+    return config;
+  },
   async headers() {
     return [{
       source: "/images/malik-mobile-cinematic-v2.webp",
