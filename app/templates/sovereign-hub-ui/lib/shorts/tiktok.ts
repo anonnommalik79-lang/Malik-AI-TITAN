@@ -149,6 +149,95 @@ function hashtags(text: string) {
   return Array.from(new Set((String(text || "").match(/#[\p{L}\p{N}_]{2,50}/gu) || []).map((tag) => tag.slice(1).toLowerCase()))).slice(0, 12)
 }
 
+/** The key a TikTok creator owns in malik_shorts_profiles, mirroring `youtube:<channelId>`. */
+export function tiktokCreatorKey(openId: string) {
+  return `tiktok:${String(openId || "").trim()}`
+}
+
+/**
+ * A username the profiles table will actually accept.
+ *
+ * malik_shorts_profiles.username is UNIQUE with a check of ^[A-Za-z0-9._]{2,32}$,
+ * so a Cyrillic or emoji display name - which TikTok hands out freely - cannot
+ * be used as-is. The real handle is not in user/info at all, but it is inside
+ * profile_deep_link (https://www.tiktok.com/@handle), so that is read first and
+ * the open id is the fallback. Deriving from the open id rather than the
+ * display name also keeps the value unique: two creators may share a display
+ * name, never an open id.
+ */
+export function tiktokUsername(openId: string, profileDeepLink?: string) {
+  const handle = String(profileDeepLink || "").match(/tiktok\.com\/@([A-Za-z0-9._]{2,32})/)?.[1]
+  if (handle) return handle.slice(0, 32)
+  const id = String(openId || "").replace(/[^A-Za-z0-9._]/g, "")
+  return `tiktok.${id.slice(-24)}`.slice(0, 32)
+}
+
+/**
+ * Give the TikTok creator a profile row before their videos reference it.
+ *
+ * malik_shorts_posts.creator_key is a foreign key into malik_shorts_profiles,
+ * so importing videos without this insert fails the whole batch - and it failed
+ * quietly, because the import path only logged. The row also carries the part
+ * other viewers see: a TikTok in the shared feed shows the TikTok creator's
+ * name and avatar, not the Malik account that happened to connect it.
+ */
+export async function materializeTikTokProfile(user: TikTokUser) {
+  const key = tiktokCreatorKey(user.open_id)
+  await shortsSupabaseRequest("malik_shorts_profiles?on_conflict=user_key", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify([{
+      user_key: key,
+      username: tiktokUsername(user.open_id, user.profile_deep_link),
+      display_name: String(user.display_name || "TikTok").slice(0, 120),
+      avatar_url: user.avatar_large_url || user.avatar_url_100 || user.avatar_url || null,
+      bio: String(user.bio_description || "").slice(0, 500),
+      verified: Boolean(user.is_verified),
+      follower_count: Number(user.follower_count || 0),
+      following_count: Number(user.following_count || 0),
+      total_likes: Number(user.likes_count || 0),
+      updated_at: new Date().toISOString(),
+    }]),
+  })
+  return key
+}
+
+/**
+ * Rebuild the creator from what the connection row already stored.
+ *
+ * The import path is reached from the feed too, where re-calling user/info on
+ * every request would spend a TikTok rate-limit slot to learn something that is
+ * sitting in our own table.
+ */
+/**
+ * The profile key this Malik user's TikToks are filed under, or null when the
+ * account is not connected. One cheap read; no TikTok call.
+ */
+export async function getTikTokCreatorKey(userKey: string): Promise<string | null> {
+  const connection = await getStoredTikTokConnection(userKey).catch(() => null)
+  return connection?.provider_user_id ? tiktokCreatorKey(String(connection.provider_user_id)) : null
+}
+
+export async function tiktokCreatorFromConnection(userKey: string): Promise<TikTokUser | null> {
+  const connection = await getStoredTikTokConnection(userKey).catch(() => null)
+  if (!connection?.provider_user_id) return null
+  const meta = connection.metadata || {}
+  return {
+    open_id: String(connection.provider_user_id),
+    union_id: meta.union_id || undefined,
+    avatar_url: connection.avatar_url || undefined,
+    avatar_large_url: connection.avatar_url || undefined,
+    display_name: connection.display_name || connection.username || undefined,
+    profile_deep_link: meta.profile_deep_link || undefined,
+    bio_description: meta.bio_description || undefined,
+    is_verified: Boolean(meta.is_verified),
+    follower_count: Number(meta.follower_count || 0),
+    following_count: Number(meta.following_count || 0),
+    likes_count: Number(meta.likes_count || 0),
+    video_count: Number(meta.video_count || 0),
+  }
+}
+
 export async function storeTikTokConnection(args: {
   userKey: string
   token: TikTokTokenResponse
@@ -193,10 +282,30 @@ export async function storeTikTokConnection(args: {
   })
 }
 
-export async function materializeTikTokVideos(userKey: string, videos: TikTokVideo[]) {
+/**
+ * Import a creator's public TikToks into the shared Malik Shorts pool.
+ *
+ * `creator` is optional: pass it right after an OAuth exchange, when the fresh
+ * user/info response is already in hand, and leave it out anywhere else - the
+ * stored connection row has everything needed.
+ *
+ * The posts land in malik_shorts_posts as public, published rows exactly like
+ * imported YouTube videos, which is what puts them in every viewer's feed. Only
+ * the creator needs a TikTok connection; nobody needs one to watch. Rights stay
+ * closed - no remix, no download, attribution required - because these are
+ * somebody else's videos being shown under TikTok's terms, not ours to reuse.
+ */
+export async function materializeTikTokVideos(userKey: string, videos: TikTokVideo[], creator?: TikTokUser) {
   if (!videos.length) return [] as any[]
+
+  const owner = creator || await tiktokCreatorFromConnection(userKey)
+  if (!owner?.open_id) throw new Error("TIKTOK_CREATOR_UNKNOWN")
+
+  // The profile has to exist first: posts.creator_key is a foreign key into it.
+  const creatorKey = await materializeTikTokProfile(owner)
+
   const posts = videos.map((video) => ({
-    creator_key: userKey,
+    creator_key: creatorKey,
     source: "tiktok",
     source_id: video.id,
     source_url: video.share_url || null,

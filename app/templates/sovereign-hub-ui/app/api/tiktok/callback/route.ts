@@ -69,7 +69,10 @@ export async function GET(request: NextRequest) {
     ])
 
     await storeTikTokConnection({ userKey: user.id, token, user: tiktokUser })
-    await materializeTikTokVideos(user.id, videoPage.videos)
+    // The freshly fetched creator is handed straight through, so the first
+    // import already carries the real avatar and display name instead of
+    // re-reading the connection row we are in the middle of writing.
+    await materializeTikTokVideos(user.id, videoPage.videos, tiktokUser)
 
     const response = NextResponse.redirect(shortsRedirect({ connected: "tiktok", imported: String(videoPage.videos.length) }))
     response.cookies.delete(STATE_COOKIE)
