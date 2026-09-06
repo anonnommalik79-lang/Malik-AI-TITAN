@@ -1,0 +1,80 @@
+/* Malik Shorts profile desktop authority.
+   The feed needs a three-column layout, but the profile does not: keeping the
+   live-video context rail beside a personal profile duplicated the same account
+   twice and left the actual profile squeezed into a narrow empty column.
+   This file is page-scoped by /shorts/page.tsx and uses only the wrapper we own. */
+
+@media (min-width: 1121px) {
+  [data-malik-shorts-page="1"] > div:has(> aside:first-child nav button:nth-child(8)[aria-current="page"]) {
+    grid-template-columns: 400px minmax(0, 1fr) !important;
+  }
+}
+
+@media (min-width: 861px) and (max-width: 1120px) {
+  [data-malik-shorts-page="1"] > div:has(> aside:first-child nav button:nth-child(8)[aria-current="page"]) {
+    grid-template-columns: 76px minmax(0, 1fr) !important;
+  }
+}
+
+@media (min-width: 861px) {
+  /* Profile is its own destination. The right rail belongs to the active video
+     feed, so hiding it here removes the duplicated profile/current-author/tools
+     stack shown in the broken screenshot. */
+  [data-malik-shorts-page="1"] > div:has(> aside:first-child nav button:nth-child(8)[aria-current="page"]) > main + aside {
+    display: none !important;
+  }
+
+  [data-malik-shorts-page="1"] > div:has(> aside:first-child nav button:nth-child(8)[aria-current="page"]) > main {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-right: 0 !important;
+    background: #000 !important;
+  }
+
+  /* Keep the profile centered and readable on 1080p, 1440p and ultrawide
+     monitors instead of pinning a tiny header to the upper-left corner. */
+  [data-malik-shorts-page="1"] > div:has(> aside:first-child nav button:nth-child(8)[aria-current="page"]) > main > section {
+    inset: 0 auto 0 50% !important;
+    width: min(1120px, calc(100% - 64px)) !important;
+    transform: translateX(-50%) !important;
+    padding: 44px 0 92px !important;
+    scrollbar-gutter: stable;
+  }
+
+  [data-malik-shorts-page="1"] > div:has(> aside:first-child nav button:nth-child(8)[aria-current="page"]) > main > section > header:first-child {
+    display: flex !important;
+    align-items: center !important;
+    gap: 24px !important;
+    margin: 0 0 28px !important;
+    padding: 4px 4px 28px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, .09);
+  }
+
+  [data-malik-shorts-page="1"] > div:has(> aside:first-child nav button:nth-child(8)[aria-current="page"]) > main > section > header:first-child > div:first-child {
+    width: 112px !important;
+    height: 112px !important;
+    flex: 0 0 112px !important;
+  }
+
+  [data-malik-shorts-page="1"] > div:has(> aside:first-child nav button:nth-child(8)[aria-current="page"]) > main > section > header:first-child h2 {
+    margin: 0 !important;
+    font-size: clamp(25px, 2.2vw, 32px) !important;
+    line-height: 1.1 !important;
+    letter-spacing: -.025em !important;
+  }
+
+  /* When there are no published shorts, make the state intentional rather than
+     leaving ~80% of the screen as unexplained black space. */
+  [data-malik-shorts-page="1"] > div:has(> aside:first-child nav button:nth-child(8)[aria-current="page"]) > main > section > header:first-child + div:not(:has(button)) {
+    min-height: 300px;
+    max-width: none !important;
+    display: grid;
+    place-items: center;
+    padding: 42px !important;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 20px;
+    background: #030303;
+    color: rgba(255, 255, 255, .62) !important;
+  }
+}
