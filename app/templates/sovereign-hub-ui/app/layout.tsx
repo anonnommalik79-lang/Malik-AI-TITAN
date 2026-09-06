@@ -15,6 +15,7 @@ import { ImageJobRuntime } from "@/components/sovereign/ImageJobRuntime"
 import { ChatHistoryQuotaGuard } from "@/components/sovereign/ChatHistoryQuotaGuard"
 import { MalikCognitiveResponseRuntime } from "@/components/sovereign/MalikCognitiveResponseRuntime"
 import { ChatTurnScrollRuntime } from "@/components/sovereign/ChatTurnScrollRuntime"
+import { BusinessModelUiRuntime } from "@/components/sovereign/business/BusinessModelUiRuntime"
 import "./globals.css"
 import "./mobile-polish.css"
 import "./legendary-aurora.css"
@@ -223,6 +224,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <MalikSearchMotion />
         <MalikTurnRuntime />
         <ChatTurnScrollRuntime />
+        <BusinessModelUiRuntime />
         <MalikStopPolish />
         <FounderConsoleRuntime />
         <FounderMessageHistoryRuntime />
