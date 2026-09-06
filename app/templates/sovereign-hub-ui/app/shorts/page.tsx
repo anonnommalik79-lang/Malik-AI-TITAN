@@ -3,6 +3,7 @@ import { MalikShortsApp } from "@/components/sovereign/shorts/MalikShortsApp"
 import { ShortsAutoSync } from "./ShortsAutoSync"
 import { ShortsUXFixes } from "./ShortsUXFixes"
 import "./shorts-final.css"
+import "./shorts-profile-layout-fix.css"
 
 export const dynamic = "force-dynamic"
 
@@ -23,7 +24,9 @@ export default function MalikShortsPage() {
     <>
       <ShortsAutoSync />
       <ShortsUXFixes />
-      <MalikShortsApp />
+      <div data-malik-shorts-page="1">
+        <MalikShortsApp />
+      </div>
     </>
   )
 }
