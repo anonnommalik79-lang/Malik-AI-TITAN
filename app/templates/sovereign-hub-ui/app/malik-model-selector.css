@@ -7,33 +7,35 @@
 .malik-model-selector__trigger {
   display: inline-flex;
   min-height: 36px;
-  max-width: 188px;
+  max-width: 224px;
   align-items: center;
-  gap: 7px;
-  border: 0;
-  border-radius: 10px;
-  padding: 4px 8px 4px 5px;
-  background: transparent;
-  color: #d6d6d9;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 11px;
+  padding: 4px 9px 4px 6px;
+  background: #121214;
+  color: #eeeeef;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
-  transition: background-color 140ms ease, color 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 .malik-model-selector__trigger:hover,
 .malik-model-selector__trigger[aria-expanded="true"] {
-  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: #18181b;
   color: #ffffff;
 }
 
-.malik-model-selector__trigger > span:not(.malik-model-selector__mark) {
+.malik-model-selector__trigger > span:not(.malik-model-selector__mark):not(.malik-model-selector__brand) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* Legacy Malik mark is intentionally kept for the image-model selector. */
 .malik-model-selector__mark {
   display: inline-flex;
   width: 26px;
@@ -52,21 +54,56 @@
   border-radius: 7px;
 }
 
-.malik-model-selector__mark svg {
+.malik-model-selector__mark svg { width: 17px; height: 17px; }
+.malik-model-selector__mark.is-compact svg { width: 15px; height: 15px; }
+
+.malik-model-selector__brand {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  background: #f7f7f8;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.035);
+}
+
+.malik-model-selector__brand.is-compact {
+  width: 25px;
+  height: 25px;
+  border-radius: 7px;
+}
+
+.malik-model-selector__brand img {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.malik-model-selector__brand.is-compact img {
   width: 17px;
   height: 17px;
 }
 
-.malik-model-selector__mark.is-compact svg {
-  width: 15px;
-  height: 15px;
+.malik-model-selector__brand-fallback {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #101012;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .malik-model-selector__chevron {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
-  color: #71717a;
+  color: #8a8a91;
   transition: transform 150ms ease;
 }
 
@@ -77,20 +114,21 @@
 .malik-model-selector__popover {
   position: fixed;
   z-index: 460;
-  width: 344px;
-  max-height: min(67dvh, 566px);
+  width: 356px;
+  max-height: min(68dvh, 520px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  border: 1px solid rgba(255, 255, 255, 0.085);
-  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 14px;
   padding: 8px;
-  background: #181819;
-  color: #f4f4f5;
+  background: #111113;
+  color: #f5f5f6;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58), 0 2px 8px rgba(0, 0, 0, 0.25);
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
-  animation: malik-model-popover-in 150ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+  transform-origin: top left;
+  animation: malik-model-popover-down 145ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .malik-model-selector__popover.is-bottom {
@@ -98,138 +136,95 @@
   animation-name: malik-model-popover-down;
 }
 
-.malik-model-selector__title {
-  padding: 6px 9px 9px;
-  color: #f5f5f6;
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
+.malik-model-selector__title,
 .malik-model-selector__section-label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 9px 4px;
-  color: #71717a;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.malik-model-selector__section-label svg {
-  width: 11px;
-  height: 11px;
-}
-
-.malik-model-selector__section-label.is-pro {
-  color: #a9955c;
+  display: none;
 }
 
 .malik-model-selector__group {
   display: grid;
-  gap: 2px;
+  gap: 3px;
 }
 
 .malik-model-selector__divider {
   height: 1px;
-  margin: 7px 7px 5px;
-  background: rgba(255, 255, 255, 0.07);
+  margin: 7px 8px;
+  background: rgba(255, 255, 255, 0.075);
 }
 
 .malik-model-selector__row {
   display: grid;
   width: 100%;
-  min-height: 56px;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
+  min-height: 48px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   border: 0;
-  border-radius: 11px;
-  padding: 7px 9px;
+  border-radius: 10px;
+  padding: 7px 10px;
   background: transparent;
   color: inherit;
   text-align: left;
-  transition: background-color 130ms ease;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .malik-model-selector__row:hover,
 .malik-model-selector__row:focus-visible {
-  background: rgba(255, 255, 255, 0.055);
+  background: #202023;
 }
 
 .malik-model-selector__row.is-selected {
-  background: rgba(255, 255, 255, 0.038);
+  background: #29292d;
 }
 
 .malik-model-selector__copy {
   display: grid;
   min-width: 0;
-  gap: 4px;
+  gap: 0;
 }
 
 .malik-model-selector__name {
   overflow: hidden;
-  color: #ededee;
+  color: #f0f0f1;
   font-size: 13px;
-  font-weight: 540;
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.malik-model-selector__description {
-  overflow: hidden;
-  color: #7f7f87;
-  font-size: 11px;
-  font-weight: 400;
+  font-weight: 610;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.malik-model-selector__description {
+  display: none;
+}
+
 .malik-model-selector__state {
   display: inline-flex;
+  min-width: 18px;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
-  color: #9a9aa1;
+  gap: 5px;
+  color: #f5f5f6;
 }
 
 .malik-model-selector__state > svg {
-  width: 15px;
-  height: 15px;
+  width: 17px;
+  height: 17px;
 }
 
+/* Free/available pills were intentionally removed from the component. */
 .malik-model-selector__state .is-free,
 .malik-model-selector__state .is-pro {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  border-radius: 999px;
-  padding: 3px 6px;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.045em;
-  text-transform: uppercase;
+  display: none;
 }
 
-.malik-model-selector__state .is-free {
-  background: rgba(255, 255, 255, 0.055);
-  color: #9c9ca3;
+.malik-model-selector__pro-crown {
+  color: #d7b85a;
 }
 
-.malik-model-selector__state .is-pro {
-  background: rgba(217, 182, 85, 0.09);
-  color: #bfa965;
-}
-
-.malik-model-selector__state .is-pro svg,
 .malik-model-selector__lock {
-  width: 10px;
-  height: 10px;
+  width: 11px !important;
+  height: 11px !important;
+  color: #77777f;
 }
 
 .malik-model-upgrade {
@@ -310,20 +305,15 @@
 
 .malik-model-upgrade__button:hover { background: #ffffff; }
 
-@keyframes malik-model-popover-in {
-  from { opacity: 0; transform: translateY(5px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
 @keyframes malik-model-popover-down {
-  from { opacity: 0; transform: translateY(-5px) scale(0.985); }
+  from { opacity: 0; transform: translateY(-6px) scale(0.988); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @media (max-width: 680px) {
   .malik-model-selector__trigger {
-    max-width: 150px;
-    padding-right: 6px;
+    max-width: 168px;
+    padding-right: 7px;
   }
 
   .malik-model-selector__popover {
@@ -335,13 +325,13 @@
   }
 
   .malik-model-selector__row {
-    min-height: 58px;
+    min-height: 50px;
   }
 }
 
 @media (max-width: 410px) {
   .malik-model-selector__trigger {
-    max-width: 132px;
+    max-width: 148px;
     font-size: 12px;
   }
 }
