@@ -699,3 +699,78 @@ a.liveTile:hover { background: #131313; border-color: rgba(255,255,255,.24); }
 .creatorAbout { font-size: 12px; line-height: 1.5; color: var(--ms-soft); }
 
 .versionNote { margin: 16px 2px 4px; text-align: right; font-size: 10px; color: rgba(255,255,255,.3); }
+
+/* ==================================================================
+   Brand accents.
+
+   Everything above this block is a true neutral on purpose: NoBlueUiGuard
+   walks the live DOM and repaints any colour whose hue lands between 178
+   and 250 with saturation at or above 0.12. The first build of this
+   screen went grey all over because of it — which was an overcorrection,
+   since the guard has an explicit way out. Every rule below is applied to
+   an element carrying data-preserve-brand-color="true"; the guard checks
+   `closest()` against that attribute and skips the whole subtree.
+
+   These are the reference's own accents, and they are all identity
+   colours rather than decoration: a platform's red, a verified tick's
+   blue, a live indicator, a presence dot.
+   ================================================================== */
+
+.proPill[data-preserve-brand-color] {
+  border-color: rgba(60, 120, 255, .55);
+  background: rgba(38, 84, 214, .18);
+  color: #cddcff;
+}
+
+.proPill[data-preserve-brand-color]:hover { background: rgba(38, 84, 214, .3); }
+.crown { color: #f4c453; }
+
+.proIcon[data-preserve-brand-color] { background: #16171b; }
+
+.navBadge[data-preserve-brand-color] {
+  background: #2f6bfd;
+  color: #fff;
+}
+
+.navButtonActive .navBadge[data-preserve-brand-color] { background: #2f6bfd; color: #fff; }
+
+/* The tick is the platform mark, not a decoration: white-on-black read as
+   a UI glyph, and the blue disc is what people actually recognise. */
+.verified[data-preserve-brand-color] {
+  background: #2f8fff;
+  color: #fff;
+}
+
+/* The app forces `#malik-root a:any-link { color: inherit !important }`, an id
+   selector carrying !important, so a plain class cannot colour a link here no
+   matter how specific it looks. Matching that id and going one class further is
+   what it takes. */
+:global(#malik-root) .metaLink[data-preserve-brand-color] {
+  color: #6aa8ff !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tags[data-preserve-brand-color] { color: #6aa8ff; }
+
+.sourceMark[data-source="youtube"][data-preserve-brand-color] { background: #ff0033; border-color: #ff0033; color: #fff; }
+.sourceMark[data-source="tiktok"][data-preserve-brand-color] { background: #010101; border-color: rgba(37, 244, 238, .5); color: #25f4ee; }
+.sourceDot[data-source="youtube"][data-preserve-brand-color] { background: #ff0033; color: #fff; }
+.sourceDot[data-source="tiktok"][data-preserve-brand-color] { background: #010101; color: #25f4ee; border: 1px solid rgba(37, 244, 238, .5); }
+
+.dot[data-preserve-brand-color] { background: #ff3b30; }
+
+.onlineDot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #34d399;
+  border: 2px solid #020202;
+}
+
+.topAvatar { position: relative; }
+
+.liveDot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #ff3b30; }

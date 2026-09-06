@@ -734,7 +734,8 @@ export function MalikShortsApp() {
    * instead of letting someone press "go live" into nothing.
    */
   useEffect(() => {
-    if (view !== "live") return
+    // Also on mount, not only inside the Live view: the rail marks a followed
+    // author who is broadcasting, and it cannot do that without the list.
     let cancelled = false
     fetch("/api/shorts/live", { cache: "no-store" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(String(response.status))))
@@ -1121,7 +1122,7 @@ export function MalikShortsApp() {
             onClick={() => { setInboxOpen(true); markInboxRead() }}
           >
             <Bell size={15} />
-            {unread ? <span className={styles.dot} /> : null}
+            {unread ? <span className={styles.dot} data-preserve-brand-color="true" /> : null}
           </button>
         </div>
 
@@ -1149,14 +1150,14 @@ export function MalikShortsApp() {
                 aria-current={active ? "page" : undefined}
               >
                 <Icon className={styles.navIcon} /> <span>{item.label}</span>
-                {"badge" in item && item.badge ? <em className={styles.navBadge}>{item.badge}</em> : null}
+                {"badge" in item && item.badge ? <em className={styles.navBadge} data-preserve-brand-color="true">{item.badge}</em> : null}
               </button>
             )
           })}
         </nav>
 
         <button type="button" className={styles.proCard} onClick={() => notify("Malik AI Pro открывает все модели и снимает дневные лимиты")}>
-          <span className={styles.proIcon}><Crown size={16} /></span>
+          <span className={styles.proIcon} data-preserve-brand-color="true"><Crown size={16} className={styles.crown} /></span>
           <span>
             <strong>Malik AI Pro</strong>
             <small>Больше возможностей для твоего контента</small>
@@ -1179,7 +1180,8 @@ export function MalikShortsApp() {
             >
               <Avatar src={item.avatarUrl} name={item.displayName} className={styles.avatarSmall} />
               <span className={styles.subsName}>{item.displayName}</span>
-              {item.verified ? <span className={styles.verified}><Check size={9} /></span> : null}
+              {item.verified ? <span className={styles.verified} data-preserve-brand-color="true"><Check size={9} /></span> : null}
+              {liveRooms.some((room) => room.host === item.username) ? <span className={styles.liveDot} data-preserve-brand-color="true" title="В эфире" /> : null}
             </button>
           ))}
           {following.length > 6 ? (
@@ -1227,7 +1229,7 @@ export function MalikShortsApp() {
                     <div className={styles.posterShade} />
                     <div className={styles.videoTop}>
                       <span className={styles.malikBadge} data-source={short.source}>
-                        <span className={styles.sourceDot} data-source={short.source}>
+                        <span className={styles.sourceDot} data-source={short.source} data-preserve-brand-color="true">
                           {short.source === "youtube" ? "YT" : short.source === "tiktok" ? "TT" : "M"}
                         </span>
                         {SOURCE_NOTE[short.source]}
@@ -1247,7 +1249,7 @@ export function MalikShortsApp() {
                         <span className={styles.creatorBlock}>
                           <span className={styles.creatorTop}>
                             <strong className={styles.creatorName}>{short.creator.displayName}</strong>
-                            {short.creator.verified ? <span className={styles.verified}><Check size={9} /></span> : null}
+                            {short.creator.verified ? <span className={styles.verified} data-preserve-brand-color="true"><Check size={9} /></span> : null}
                           </span>
                           <span className={styles.creatorHandle}>@{short.creator.username}</span>
                         </span>
@@ -1259,7 +1261,7 @@ export function MalikShortsApp() {
                       </div>
                       <div className={styles.caption}>{short.caption}</div>
                       {short.hashtags.length ? (
-                        <div className={styles.tags}>
+                        <div className={styles.tags} data-preserve-brand-color="true">
                           {short.hashtags.slice(0, 6).map((tag) => <span key={tag}>#{tag}</span>)}
                         </div>
                       ) : null}
@@ -1340,7 +1342,7 @@ export function MalikShortsApp() {
 
             {activeShort ? (
               <div className={styles.remixSource}>
-                <span className={styles.sourceMark} data-source={activeShort.source}>
+                <span className={styles.sourceMark} data-source={activeShort.source} data-preserve-brand-color="true">
                   {activeShort.source === "youtube" ? "YT" : activeShort.source === "tiktok" ? "TT" : "M"}
                 </span>
                 <span>
@@ -1477,7 +1479,7 @@ export function MalikShortsApp() {
                     <div className={styles.profileHeadBody}>
                       <div className={styles.profileHeadName}>
                         <h2>{me.profile.displayName}</h2>
-                        {me.profile.verified ? <span className={styles.verified}><Check size={11} /></span> : null}
+                        {me.profile.verified ? <span className={styles.verified} data-preserve-brand-color="true"><Check size={11} /></span> : null}
                       </div>
                       <div className={styles.profileHandle}>@{me.profile.username}</div>
                       <div className={styles.statRow}>
@@ -1512,8 +1514,8 @@ export function MalikShortsApp() {
             author card, the source and the quick actions change with it - that is
             the whole point of a rail beside a player rather than under it. */}
         <div className={styles.rightTop}>
-          <button type="button" className={styles.proPill} onClick={() => notify("Malik AI Pro открывает все модели и снимает дневные лимиты")}>
-            <Crown size={14} /> Malik AI Pro
+          <button type="button" className={styles.proPill} data-preserve-brand-color="true" onClick={() => notify("Malik AI Pro открывает все модели и снимает дневные лимиты")}>
+            <Crown size={14} className={styles.crown} /> Malik AI Pro
           </button>
           <button type="button" className={styles.ghostPill} onClick={() => window.open("/", "_self")}>
             <Download size={14} /> Скачать App
@@ -1525,10 +1527,11 @@ export function MalikShortsApp() {
             onClick={() => { setInboxOpen((open) => !open); if (!inboxOpen) markInboxRead() }}
           >
             <Bell size={16} />
-            {unread ? <span className={styles.dot} /> : null}
+            {unread ? <span className={styles.dot} data-preserve-brand-color="true" /> : null}
           </button>
           <button type="button" className={styles.topAvatar} onClick={() => goto("profile")} aria-label="Мой профиль">
             <Avatar src={profile?.avatarUrl} name={profile?.displayName || "Malik"} className={styles.avatarSmall} />
+            <span className={styles.onlineDot} data-preserve-brand-color="true" />
           </button>
         </div>
 
@@ -1573,7 +1576,7 @@ export function MalikShortsApp() {
             <span><b>{compact(profile?.followingCount)}</b>Подписки</span>
           </div>
           {profile?.bio ? <div className={styles.quotedBio}>&laquo;{profile.bio}&raquo;</div> : null}
-          <div className={styles.metaRow}><MapPin size={12} /> Казахстан <Link2 size={12} /> <a href="/" className={styles.metaLink}>malik.ai</a></div>
+          <div className={styles.metaRow}><MapPin size={12} /> Казахстан <Link2 size={12} /> <a href="/" className={styles.metaLink} data-preserve-brand-color="true">malik.ai</a></div>
         </section>
 
         <section className={styles.sideCard}>
@@ -1625,7 +1628,7 @@ export function MalikShortsApp() {
           <section className={styles.sideCard}>
             <div className={styles.sideCardTitle}>Источник</div>
             <div className={styles.meRow}>
-              <span className={styles.sourceMark} data-source={activeShort.source}>
+              <span className={styles.sourceMark} data-source={activeShort.source} data-preserve-brand-color="true">
                 {activeShort.source === "youtube" ? "YT" : activeShort.source === "tiktok" ? "TT" : "M"}
               </span>
               <div className={styles.meBody}>
