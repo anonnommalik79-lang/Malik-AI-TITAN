@@ -506,11 +506,16 @@
 
 .strip::-webkit-scrollbar { display: none; }
 
-.stripLabel { display: flex; align-items: center; gap: 9px; flex: none; }
+/* background-image is declared on purpose, and so is the one on .flow below.
+   Something in the app's global CSS hands these a gradient containing a blue,
+   and NoBlueUiGuard reacts by stripping the image and painting the element
+   #1b1b1d — which showed up as a pale plate behind "8 агентов готовы" on the
+   phone. Saying "none" here leaves the guard nothing to object to. */
+.stripLabel { display: flex; align-items: center; gap: 9px; flex: none; background-image: none; }
 .stripLabel b { font-size: 13px; font-weight: 640; display: block; }
 .stripLabel small { font-size: 11.5px; color: #7f8a93; display: block; }
 
-.flow { display: flex; align-items: center; gap: 8px; flex: none; }
+.flow { display: flex; align-items: center; gap: 8px; flex: none; background-image: none; }
 .flow em { color: #49535a; font-style: normal; font-size: 13px; }
 
 .chip {
@@ -913,6 +918,12 @@
   .spin { animation: none; }
 }
 
+/* Hidden by default and shown inside the narrow media query below. This has
+   to sit above that query: both rules are a single class, so at equal
+   specificity the later one wins, and declaring it afterwards would hide the
+   label on exactly the widths that need it. */
+.sendLabel { display: none; }
+
 /* ============================================================ NARROW */
 
 @media (max-width: 1200px) {
@@ -939,9 +950,42 @@
 
   /* The label above the agents rather than beside them - side by side, the
      eight chips push it out of the strip's scrollable row. */
-  .strip { flex-direction: column; align-items: stretch; gap: 10px; overflow: visible; }
-  .flow { overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  /* The agents scroll edge to edge inside the card. With plain overflow the
+     last chip was cut off at the card's padding and there was no way to tell
+     more of them existed. */
+  .strip { flex-direction: column; align-items: stretch; gap: 10px; overflow: hidden; }
+  .flow {
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -14px;
+    padding: 0 14px 2px;
+    -webkit-overflow-scrolling: touch;
+  }
   .flow::-webkit-scrollbar { display: none; }
+  .chip { flex: none; }
+
+  /* On a phone the controls wrap onto three rows and the round send button
+     ended up marooned beside «Особые требования». Here it is the full-width
+     action it actually is. */
+  .send {
+    /* grid + place-items stacks the arrow above the label; on a phone this is
+       a row with an icon, not a two-line block. */
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 48px;
+    border-radius: 13px;
+    gap: 9px;
+    font-size: 14px;
+    font-weight: 720;
+  }
+  .sendLabel { display: inline; }
+  .spacer { display: none; }
+
+  .heroTitle { font-size: clamp(20px, 6.2vw, 26px); }
+  .heroLead { font-size: 13px; }
 
   .sectionHead { flex-direction: column; align-items: flex-start; gap: 4px; }
   .filters { flex-direction: column; align-items: stretch; gap: 10px; }

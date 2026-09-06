@@ -688,11 +688,21 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                   aria-label="Запустить Autonomous Company"
                 >
                   <ArrowUp strokeWidth={2} />
+                  {/* Shown only on a phone. A 42px arrow floating beside a
+                      wrapped chip is not a launch button; on the widths where
+                      the controls wrap, this is the one thing to press. */}
+                  <span className={styles.sendLabel}>Запустить</span>
                 </button>
               </div>
             </section>
 
-            <section className={styles.strip} aria-label="Autonomous agent pipeline">
+            {/* A div, not a section. The app carries a global rule —
+                #malik-root … section:nth-of-type(2) > div — that paints the
+                direct children of the second section with a dark blue gradient,
+                !important. NoBlueUiGuard then strips that gradient and repaints
+                the element #1b1b1d, which is the pale plate that appeared behind
+                the agent strip on a phone. Not being a section avoids both. */}
+            <div className={styles.strip} role="group" aria-label="Autonomous agent pipeline">
               <div className={styles.stripLabel}>
                 <span className={styles.dot} />
                 <span><b>8 агентов готовы</b><small>один бизнес-процесс</small></span>
@@ -705,7 +715,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                   </span>
                 ))}
               </div>
-            </section>
+            </div>
 
             <div className={styles.sectionHead}>
               <div>
@@ -791,7 +801,13 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                 : <button type="button" className={styles.ghost} onClick={restart}>Новый запуск</button>}
             </div>
 
-            <section className={styles.strip} aria-label="Autonomous agent pipeline">
+            {/* A div, not a section. The app carries a global rule —
+                #malik-root … section:nth-of-type(2) > div — that paints the
+                direct children of the second section with a dark blue gradient,
+                !important. NoBlueUiGuard then strips that gradient and repaints
+                the element #1b1b1d, which is the pale plate that appeared behind
+                the agent strip on a phone. Not being a section avoids both. */}
+            <div className={styles.strip} role="group" aria-label="Autonomous agent pipeline">
               <div className={styles.stripLabel}>
                 <span className={styles.dot} />
                 <span><b>{model?.label}</b><small>API orchestration</small></span>
@@ -810,7 +826,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                   </span>
                 ))}
               </div>
-            </section>
+            </div>
 
             {runError && (
               <div className={styles.runHead}>
