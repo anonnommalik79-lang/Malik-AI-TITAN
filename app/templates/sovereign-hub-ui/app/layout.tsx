@@ -87,6 +87,8 @@ import "./mobile-sites-library-oled-final.css"
 // Final home authority: approved cinematic Malik scene + reflective floor + compact controls.
 import "./mobile-unicorn-home-final.css"
 import "./mobile-viewport.css"
+// Final Autonomous Company model selector reference pass. Must stay last.
+import "./business-model-reference-final.css"
 
 // Let Next emit one viewport tag. Read the visible area separately on iOS,
 // where the keyboard does not resize dvh. Keep deliberate pinch zoom available.
