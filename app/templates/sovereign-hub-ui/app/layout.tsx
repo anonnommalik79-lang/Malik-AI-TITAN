@@ -14,6 +14,7 @@ import { ImageQualityRuntime } from "@/components/sovereign/ImageQualityRuntime"
 import { ImageJobRuntime } from "@/components/sovereign/ImageJobRuntime"
 import { ChatHistoryQuotaGuard } from "@/components/sovereign/ChatHistoryQuotaGuard"
 import { MalikCognitiveResponseRuntime } from "@/components/sovereign/MalikCognitiveResponseRuntime"
+import { ChatTurnScrollRuntime } from "@/components/sovereign/ChatTurnScrollRuntime"
 import "./globals.css"
 import "./mobile-polish.css"
 import "./legendary-aurora.css"
@@ -221,6 +222,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <NoBlueUiGuard />
         <MalikSearchMotion />
         <MalikTurnRuntime />
+        <ChatTurnScrollRuntime />
         <MalikStopPolish />
         <FounderConsoleRuntime />
         <FounderMessageHistoryRuntime />
