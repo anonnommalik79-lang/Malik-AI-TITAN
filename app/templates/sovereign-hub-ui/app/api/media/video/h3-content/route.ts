@@ -18,12 +18,19 @@ export async function GET(request: Request) {
     return Response.json({ ok: false, error: "invalid_h3_task_id" }, { status: 400 })
   }
 
-  const headers = malikH3AuthHeaders()
+  let remoteUrl = ""
+  try {
+    remoteUrl = malikH3RemoteContentUrl(taskId)
+  } catch (error) {
+    return Response.json({ ok: false, error: error instanceof Error ? error.message : "video_not_ready" }, { status: 409 })
+  }
+
+  const headers = malikH3AuthHeaders(taskId)
   headers.set("accept", "video/mp4,video/*,*/*")
   const range = request.headers.get("range")
   if (range) headers.set("range", range)
 
-  const upstream = await fetch(malikH3RemoteContentUrl(taskId), {
+  const upstream = await fetch(remoteUrl, {
     method: "GET",
     headers,
     cache: "no-store",
@@ -52,7 +59,7 @@ export async function GET(request: Request) {
 
   if (!out.get("content-type")) out.set("content-type", "video/mp4")
   out.set("cache-control", "private, max-age=300")
-  out.set("x-malik-video-provider", "h3-self-hosted")
+  out.set("x-malik-video-provider", "MalikVideo-1.0")
 
   return new Response(upstream.body, {
     status: upstream.status,
