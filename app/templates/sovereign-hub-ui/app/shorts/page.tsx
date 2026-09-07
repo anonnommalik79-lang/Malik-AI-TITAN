@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { MalikShortsApp } from "@/components/sovereign/shorts/MalikShortsApp"
+import { ShortsAuthorProfileOverlay } from "@/components/sovereign/shorts/ShortsAuthorProfileOverlay"
 import { ShortsAutoSync } from "./ShortsAutoSync"
 import { ShortsUXFixes } from "./ShortsUXFixes"
 import "./shorts-final.css"
@@ -27,6 +28,7 @@ export default function MalikShortsPage() {
       <div data-malik-shorts-page="1">
         <MalikShortsApp />
       </div>
+      <ShortsAuthorProfileOverlay />
     </>
   )
 }
