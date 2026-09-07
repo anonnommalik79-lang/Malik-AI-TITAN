@@ -4,12 +4,6 @@ import type { AIPlan } from "@/lib/ai/types"
 
 type MediaKind = "image" | "video"
 
-const OWNER_MEDIA_IDS = new Set([
-  "amangeldymalik38@gmail.com",
-  "anonnommalik79@gmail.com",
-  "admin@malik.ai",
-])
-
 const memoryImage = new Map<string, number>()
 const memoryVideo = new Map<string, number>()
 
@@ -25,15 +19,21 @@ function readLimit(name: string, fallback: number): number {
 export function getMediaDailyLimits() {
   return {
     guest: { images: readLimit("GUEST_DAILY_IMAGE_LIMIT", 10), videos: readLimit("GUEST_DAILY_VIDEO_LIMIT", 0) },
-    free: { images: readLimit("FREE_DAILY_IMAGE_LIMIT", 50), videos: 1 },
-    premium: { images: readLimit("PREMIUM_DAILY_IMAGE_LIMIT", 200), videos: 1 },
+    free: { images: readLimit("FREE_DAILY_IMAGE_LIMIT", 50), videos: readLimit("FREE_DAILY_VIDEO_LIMIT", 1) },
+    premium: { images: readLimit("PREMIUM_DAILY_IMAGE_LIMIT", 200), videos: readLimit("PREMIUM_DAILY_VIDEO_LIMIT", 1) },
   }
 }
 
 function limitFor(tier: UserTier, kind: MediaKind): number {
   const limits = getMediaDailyLimits()
-  if (tier === "owner") return 999_999
-  if (kind === "video") return tier === "guest" ? limits.guest.videos : 1
+  // Owner is intentionally unlimited at the Malik AI application layer.
+  // The upstream provider may still enforce its own independent quota.
+  if (tier === "owner") return Number.MAX_SAFE_INTEGER
+  if (kind === "video") {
+    if (tier === "premium") return limits.premium.videos
+    if (tier === "free") return limits.free.videos
+    return limits.guest.videos
+  }
   if (tier === "premium") return limits.premium.images
   if (tier === "free") return limits.free.images
   return limits.guest.images
@@ -57,9 +57,7 @@ export async function getMediaUsage(userId: string, kind: MediaKind): Promise<nu
 
 export async function checkMediaLimit(input: { userId?: string; plan?: AIPlan; kind: MediaKind }) {
   const userId = input.userId?.trim() || "guest"
-  const tier = OWNER_MEDIA_IDS.has(userId.toLowerCase())
-    ? "owner"
-    : resolveUserTier(userId === "guest" ? undefined : userId, input.plan || "free")
+  const tier = resolveUserTier(userId === "guest" ? undefined : userId, input.plan || "free")
   const max = limitFor(tier, input.kind)
   const used = await getMediaUsage(userId, input.kind)
   const remaining = Math.max(0, max - used)
