@@ -21,7 +21,7 @@ export function malikH3Mode(): H3Mode {
 }
 
 export function malikH3Model() {
-  return process.env.MALIKVIDEO_H3_MODEL?.trim() || "MalikVideo-1.0-H3"
+  return process.env.MALIKVIDEO_H3_MODEL?.trim() || "MalikVideo 1.0"
 }
 
 export function malikH3Configured() {
@@ -118,7 +118,7 @@ export async function createMalikH3Job(input: VideoGenerateInput) {
         ...baseBody,
         output_resolution: outputResolution,
         metadata: {
-          requested_resolution: input.resolution || "1080p",
+          requested_resolution: input.resolution || "720p",
           generate_audio: input.generateAudio !== false,
           product: "MalikVideo",
         },
