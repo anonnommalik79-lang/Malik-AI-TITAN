@@ -7,11 +7,14 @@ function normalizeMediaUserId(id: string) {
   return value
 }
 
-export async function resolveMediaUser(request: Request, body?: { userEmail?: string; email?: string; plan?: AIPlan }) {
-  const entitlement = await resolveRequestEntitlement(request)
-  const fromBody = body?.userEmail?.trim() || body?.email?.trim()
-  const userId = normalizeMediaUserId(fromBody || entitlement.userId || "guest")
-  const plan = body?.plan || entitlement.plan
-  const authenticated = entitlement.authenticated || Boolean(fromBody && fromBody !== "guest")
-  return { userId, plan, authenticated }
+export async function resolveMediaUser(_request: Request, _body?: { userEmail?: string; email?: string; plan?: AIPlan }) {
+  // Identity and plan are server-authoritative. Never trust body.userEmail/body.plan
+  // for owner bypasses or daily quota decisions.
+  const entitlement = await resolveRequestEntitlement(_request)
+  const userId = normalizeMediaUserId(entitlement.userId || "guest")
+  return {
+    userId,
+    plan: entitlement.plan,
+    authenticated: entitlement.authenticated,
+  }
 }
