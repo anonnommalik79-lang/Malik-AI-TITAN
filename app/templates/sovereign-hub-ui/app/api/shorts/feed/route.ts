@@ -9,6 +9,7 @@ import {
 } from "@/lib/shorts/server"
 import { buildRotatedFeed } from "@/lib/shorts/feed-rotation"
 import { buildShortMetrics } from "@/lib/shorts/metrics"
+import { loadViewerFeedHistory, withoutRecentlySeen, youtubeDiscoveryQuery } from "@/lib/shorts/feed-history"
 import { parseTikTokHandle } from "@/lib/shorts/tiktok-identity"
 import {
   fetchTikTokUser,
@@ -90,10 +91,6 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
     creator: {
       id: String(row.creator_key),
       username: String(row.username || "creator"),
-      // The real @ comes out of the video's own share_url
-      // (tiktok.com/@handle/video/...), which TikTok issued - the stored
-      // username is `tt.<name>`, a Malik row key, and showing it as an @ would
-      // put a handle in front of people that does not exist on TikTok.
       handle: source === "tiktok" ? parseTikTokHandle(row.source_url) : null,
       displayName: String(row.display_name || row.username || "Creator"),
       avatarUrl: row.avatar_url || undefined,
@@ -110,10 +107,6 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
     durationSeconds: row.duration_seconds == null ? undefined : Number(row.duration_seconds),
     publishedAt: row.published_at || undefined,
     createdAt: row.created_at || undefined,
-    // Display is external plus local, and both halves travel with the item so
-    // an interaction response can replace one without erasing the other.
-    // buildShortMetrics is the only place that arithmetic lives - see
-    // lib/shorts/metrics.ts for why it is not a per-source branch.
     metrics: buildShortMetrics(
       { views: row.views, likes: row.likes, comments: row.comments, reposts: row.reposts, saves: row.saves, shares: row.shares },
       { views: row.external_views, likes: row.external_likes, comments: row.external_comments, shares: row.external_shares },
@@ -128,14 +121,15 @@ function mapDbRow(row: DbFeedRow): MalikShortItem {
   }
 }
 
-async function fetchYouTubeCandidates(limit: number, language: string, region: string): Promise<YouTubeCandidate[]> {
+async function fetchYouTubeCandidates(limit: number, language: string, region: string, discoverySeed = 0): Promise<YouTubeCandidate[]> {
   const config = getYouTubeShortsConfig()
   if (!config) return []
 
+  const maxResults = Math.min(40, Math.max(16, limit * 2))
   const searchUrl = new URL("https://www.googleapis.com/youtube/v3/search")
   searchUrl.searchParams.set("part", "snippet")
   searchUrl.searchParams.set("type", "video")
-  searchUrl.searchParams.set("maxResults", String(Math.min(24, Math.max(8, limit))))
+  searchUrl.searchParams.set("maxResults", String(maxResults))
   searchUrl.searchParams.set("regionCode", region.slice(0, 2).toUpperCase() || "KZ")
   searchUrl.searchParams.set("relevanceLanguage", language === "kk" ? "kk" : language === "en" ? "en" : "ru")
   searchUrl.searchParams.set("safeSearch", "moderate")
@@ -143,7 +137,7 @@ async function fetchYouTubeCandidates(limit: number, language: string, region: s
   searchUrl.searchParams.set("videoSyndicated", "true")
   searchUrl.searchParams.set("videoDuration", "short")
   searchUrl.searchParams.set("order", "relevance")
-  searchUrl.searchParams.set("q", language === "kk" ? "Қазақстан Алматы Астана қазақ" : language === "en" ? "Kazakhstan Almaty Astana" : "Казахстан Алматы Астана")
+  searchUrl.searchParams.set("q", youtubeDiscoveryQuery(language, discoverySeed))
   searchUrl.searchParams.set("key", config.apiKey)
 
   const searchResponse = await fetch(searchUrl, { next: { revalidate: 180 } })
@@ -152,7 +146,7 @@ async function fetchYouTubeCandidates(limit: number, language: string, region: s
   const ids = (Array.isArray(searchJson?.items) ? searchJson.items : [])
     .map((item: any) => item?.id?.videoId)
     .filter(Boolean)
-    .slice(0, 24)
+    .slice(0, maxResults)
   if (!ids.length) return []
 
   const videoUrl = new URL("https://www.googleapis.com/youtube/v3/videos")
@@ -165,10 +159,6 @@ async function fetchYouTubeCandidates(limit: number, language: string, region: s
   const videos = Array.isArray(videoJson?.items) ? videoJson.items : []
   const byId = new Map<string, any>(videos.map((item: any) => [String(item.id), item]))
 
-  // The videos endpoint does not include the channel avatar. The original Malik
-  // Shorts prototype explicitly called channels.list for this; production had
-  // dropped that call, so the UI fell back to initials such as "AS". Restore
-  // the real YouTube channel identity in one batched request.
   const channelIds = Array.from(new Set(videos.map((item: any) => String(item?.snippet?.channelId || "")).filter(Boolean)))
   const channelById = new Map<string, any>()
   if (channelIds.length) {
@@ -308,10 +298,6 @@ function mapYouTubeCandidate(item: YouTubeCandidate, dbId?: string): MalikShortI
     region: "KZ",
     durationSeconds: item.durationSeconds,
     publishedAt: item.publishedAt,
-    // A candidate straight off the YouTube API has no Malik-local history yet -
-    // if it is already materialised the database copy wins deduplication and
-    // brings the local counters with it. Same builder either way, so the two
-    // paths cannot drift into showing different numbers for one video.
     metrics: buildShortMetrics(null, { views: item.views, likes: item.likes, comments: item.comments }),
     viewer: { liked: false, saved: false, reposted: false, following: false },
     rights: { canRemix: false, canDownload: false, canCrossPost: false, attributionRequired: true },
@@ -346,39 +332,14 @@ async function hydrateViewerState(items: MalikShortItem[], userKey?: string) {
   }))
 }
 
-/*
- * Dedupe and provider rotation live in lib/shorts/feed-rotation.ts.
- *
- * They used to be here, built on Math.random - one of three hard-coded patterns
- * picked per request, with each bucket shuffled first. That made the order
- * unexplainable to a viewer refreshing the page and untestable for us. The
- * helper is deterministic round-robin and has its own test script; this route
- * just calls it.
- */
-
 async function loadDbFeed(limit: number) {
   if (!getShortsSupabaseConfig()) return [] as MalikShortItem[]
   const rows = await shortsSupabaseRequest<DbFeedRow[]>(
-    `malik_shorts_feed_v1?select=*&source=in.(malik,tiktok,youtube)&order=published_at.desc.nullslast,created_at.desc&limit=${Math.min(limit * 4, 100)}`,
+    `malik_shorts_feed_v1?select=*&source=in.(malik,tiktok,youtube)&order=published_at.desc.nullslast,created_at.desc&limit=${Math.min(limit * 8, 200)}`,
   ).catch(() => [] as DbFeedRow[])
   return rows.map(mapDbRow)
 }
 
-/**
- * Opportunistic import of the viewer's own TikTok.
- *
- * Whether to run at all is decided by shouldSyncViewerTikTok, which asks about
- * this creator's materialised posts directly and honours a freshness window and
- * an error cooldown. Two earlier versions of that question were wrong: "does
- * the pool contain any TikTok" stopped importing everyone after the first
- * creator connected, and "is a TikTok in the loaded feed page" depended on
- * `limit` and re-hit the API on every page load.
- *
- * Failures are recorded, not just logged. The stamp is what stops a revoked app
- * or an expired refresh token from producing one doomed TikTok call per
- * request, and the viewer keeps getting YouTube and Malik posts throughout -
- * both are already loaded before this runs.
- */
 async function pullOwnTikTok(userKey: string, creatorKey: string) {
   try {
     const accessToken = await getFreshTikTokAccessToken(userKey)
@@ -387,8 +348,6 @@ async function pullOwnTikTok(userKey: string, creatorKey: string) {
       fetchTikTokVideos(accessToken, 20),
     ])
     if (!page.videos.length) {
-      // An empty account is a successful sync. Without the stamp it would look
-      // never-synced forever and call TikTok on every single request.
       await recordTikTokSyncResult(userKey, { ok: true, imported: 0 })
       return 0
     }
@@ -403,19 +362,22 @@ async function pullOwnTikTok(userKey: string, creatorKey: string) {
   }
 }
 
+async function youtubeItemsForDiscovery(limit: number, language: string, region: string, seed: number) {
+  const candidates = await fetchYouTubeCandidates(limit, language, region, seed).catch(() => [] as YouTubeCandidate[])
+  const idMap = await materializeYouTube(candidates).catch(() => new Map<string, string>())
+  return candidates.map((item) => mapYouTubeCandidate(item, idMap.get(item.videoId)))
+}
+
 export async function GET(request: NextRequest) {
   const limit = clampInt(request.nextUrl.searchParams.get("limit"), 6, 30, 16)
   const language = request.nextUrl.searchParams.get("lang") || "ru"
   const region = request.nextUrl.searchParams.get("region") || "KZ"
   const { user } = await getOptionalWorkOSAuth()
 
+  const history = await loadViewerFeedHistory(user?.id)
   let dbItems = await loadDbFeed(limit)
 
   if (user?.id && getShortsSupabaseConfig()) {
-    // Ask about this viewer's own connection and its freshness, never about
-    // what happens to be in the loaded page: another creator's TikToks being
-    // present says nothing about whether this viewer's are, and a page of 18
-    // rows says nothing about what is materialised.
     const { state, decision } = await shouldSyncViewerTikTok(user.id)
     if (decision.sync && state.creatorKey) {
       const imported = await pullOwnTikTok(user.id, state.creatorKey)
@@ -423,11 +385,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const youtubeCandidates: YouTubeCandidate[] = await fetchYouTubeCandidates(limit, language, region).catch(() => [] as YouTubeCandidate[])
-  const youtubeIdMap = await materializeYouTube(youtubeCandidates).catch(() => new Map<string, string>())
-  const youtubeItems: MalikShortItem[] = youtubeCandidates.map((item: YouTubeCandidate) => mapYouTubeCandidate(item, youtubeIdMap.get(item.videoId)))
+  const firstYouTube = await youtubeItemsForDiscovery(limit, language, region, history.discoverySeed)
+  let pool = withoutRecentlySeen([...dbItems, ...firstYouTube], history)
 
-  const mixed = buildRotatedFeed([...dbItems, ...youtubeItems], limit)
+  // A heavy viewer can consume the whole cached discovery slice. Only then pay
+  // for one additional YouTube discovery request, using the next deterministic
+  // topic, instead of immediately recycling videos they already watched.
+  if (pool.length < limit && getYouTubeShortsConfig()) {
+    const secondYouTube = await youtubeItemsForDiscovery(limit, language, region, history.discoverySeed + 1)
+    pool = withoutRecentlySeen([...pool, ...secondYouTube], history)
+  }
+
+  const mixed = buildRotatedFeed(pool, limit)
   const items = await hydrateViewerState(mixed, user?.id)
   const payload: MalikShortFeedResponse = {
     items,
