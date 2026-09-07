@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 import { clampInt, getShortsSupabaseConfig, safeText, shortsSupabaseRequest } from "@/lib/shorts/server"
 import { resolveUnifiedYouTubePost } from "@/lib/shorts/youtube-unified"
+import { listPublicYouTubeComments } from "@/lib/shorts/youtube-public-comments"
 import { youtube, type Resource } from "@/lib/youtube/client"
 import { failure } from "@/lib/youtube/http"
 import { connection } from "@/lib/youtube/store"
-import { listComments, mapComment } from "@/lib/youtube/resources"
+import { mapComment } from "@/lib/youtube/resources"
 import { videoIdValid } from "@/lib/youtube/contracts"
 import type { YouTubeComment } from "@/lib/youtube/contracts"
 
@@ -36,24 +37,13 @@ function unifiedYouTubeComment(shortId: string, row: YouTubeComment) {
   }
 }
 
-async function loadUnifiedYouTubeComments(userKey: string, shortId: string, videoId: string, limit: number) {
-  const items: YouTubeComment[] = []
-  let pageToken = ""
-
-  // The existing Malik drawer asks for up to 50. YouTube returns 20 per request
-  // in this integration, so fetch at most three bounded pages and keep the same
-  // drawer instead of opening/redirecting to youtube.com.
-  for (let page = 0; page < 3 && items.length < limit; page += 1) {
-    const result = await listComments(userKey, videoId, pageToken)
-    items.push(...result.items)
-    pageToken = result.nextPageToken || ""
-    if (!pageToken) break
-  }
-
+async function loadUnifiedYouTubeComments(shortId: string, videoId: string, limit: number) {
+  const result = await listPublicYouTubeComments(videoId, limit)
   return {
-    items: items.slice(0, limit).map((row) => unifiedYouTubeComment(shortId, row)),
+    items: result.items.map((row) => unifiedYouTubeComment(shortId, row)),
     provider: "youtube",
-    nextPageToken: pageToken || undefined,
+    nextPageToken: result.nextPageToken,
+    disabled: Boolean(result.disabled),
     persistence: true,
   }
 }
@@ -65,13 +55,11 @@ export async function GET(request: NextRequest) {
 
   const youtubePost = await resolveUnifiedYouTubePost(shortId)
   if (youtubePost && videoIdValid(youtubePost.sourceId)) {
-    const { user } = await getOptionalWorkOSAuth()
-    if (!user) return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 })
     try {
-      const result = await loadUnifiedYouTubeComments(user.id, shortId, youtubePost.sourceId, limit)
+      const result = await loadUnifiedYouTubeComments(shortId, youtubePost.sourceId, limit)
       return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } })
     } catch (error) {
-      console.error("[Malik Shorts] YouTube comments load failed", error)
+      console.error("[Malik Shorts] YouTube public comments load failed", error)
       return failure(error)
     }
   }
