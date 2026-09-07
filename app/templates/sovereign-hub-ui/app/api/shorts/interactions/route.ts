@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 import { getShortsSupabaseConfig, safeText, shortsSupabaseRequest } from "@/lib/shorts/server"
+import { mirrorYouTubeViewerState, resolveUnifiedYouTubePost, youtubeChannelIdFromCreatorKey } from "@/lib/shorts/youtube-unified"
 import type { MalikShortInteractionPayload } from "@/lib/shorts/types"
+import { youtube } from "@/lib/youtube/client"
+import { failure } from "@/lib/youtube/http"
+import { setSaved, setSubscription } from "@/lib/youtube/resources"
+import { videoIdValid, channelIdValid } from "@/lib/youtube/contracts"
 
 export const dynamic = "force-dynamic"
 
@@ -52,6 +57,51 @@ function optimisticResult(action: string) {
   }
 }
 
+async function handleConnectedYouTubeAction(userKey: string, shortId: string, action: string) {
+  if (!["like", "unlike", "save", "unsave", "follow", "unfollow"].includes(action)) return null
+
+  const post = await resolveUnifiedYouTubePost(shortId)
+  if (!post || !videoIdValid(post.sourceId)) return null
+
+  try {
+    if (action === "like" || action === "unlike") {
+      const liked = action === "like"
+      await youtube(userKey, "videos/rate", { id: post.sourceId, rating: liked ? "like" : "none" }, "POST")
+      await mirrorYouTubeViewerState(userKey, post, liked ? "like" : "unlike")
+      return NextResponse.json({
+        ...optimisticResult(action),
+        provider: "youtube",
+        viewer: { liked },
+      }, { headers: { "Cache-Control": "private, no-store" } })
+    }
+
+    if (action === "save" || action === "unsave") {
+      const result = await setSaved(userKey, post.sourceId, action === "save")
+      await mirrorYouTubeViewerState(userKey, post, result.saved ? "save" : "unsave")
+      return NextResponse.json({
+        ...optimisticResult(result.saved ? "save" : "unsave"),
+        provider: "youtube",
+        viewer: { saved: result.saved },
+      }, { headers: { "Cache-Control": "private, no-store" } })
+    }
+
+    const channelId = youtubeChannelIdFromCreatorKey(post.creatorKey)
+    if (!channelIdValid(channelId)) return NextResponse.json({ error: "YOUTUBE_CHANNEL_UNKNOWN" }, { status: 409 })
+    const result = await setSubscription(userKey, channelId, action === "follow")
+    await mirrorYouTubeViewerState(userKey, post, result.subscribed ? "follow" : "unfollow")
+    return NextResponse.json({
+      ...optimisticResult(result.subscribed ? "follow" : "unfollow"),
+      provider: "youtube",
+      viewer: { following: result.subscribed },
+    }, { headers: { "Cache-Control": "private, no-store" } })
+  } catch (error) {
+    // Do not lie with an optimistic Malik-only success when the user explicitly
+    // clicked a YouTube action. The connected YouTube API is authoritative.
+    console.error("[Malik Shorts] connected YouTube action failed", error)
+    return failure(error)
+  }
+}
+
 export async function POST(request: NextRequest) {
   const { user } = await getOptionalWorkOSAuth()
   if (!user) return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 })
@@ -75,9 +125,15 @@ export async function POST(request: NextRequest) {
   const durationMs = intOrNull(input.durationMs)
   const fallback = optimisticResult(action)
 
+  // The unified UI keeps its own buttons, but YouTube-owned mutations must go
+  // through the connected YouTube API instead of pretending to be Malik likes.
+  if (source === "youtube") {
+    const connected = await handleConnectedYouTubeAction(user.id, shortId, action)
+    if (connected) return connected
+  }
+
   // Imported Shorts are still interactive when the optional social database is
-  // not configured. The UI gets a real optimistic state instead of the old
-  // “социальные действия включатся после подключения базы” dead-end.
+  // not configured. TikTok/Malik-local actions keep the old optimistic path.
   if (!getShortsSupabaseConfig()) return NextResponse.json(fallback)
 
   try {
@@ -104,11 +160,10 @@ export async function POST(request: NextRequest) {
     const result = Array.isArray(rows) ? rows[0] : rows
     return NextResponse.json({ ok: true, persistence: true, ...(result || {}) })
   } catch (error) {
-    // External videos may be visible even while materialisation or a migration is
-    // temporarily unavailable. Their like/save/repost/follow controls should not
-    // turn into an error toast just because the optional persistence layer missed
-    // that item. Malik-native posts still report a backend failure normally.
-    if (source === "youtube" || source === "tiktok") {
+    // TikTok may be visible while its optional persistence layer is unavailable.
+    // YouTube mutations were already handled above and must never land here as a
+    // fake success after a real Google API failure.
+    if (source === "tiktok") {
       console.warn("[Malik Shorts] external interaction fell back to optimistic mode", error)
       return NextResponse.json(fallback)
     }
