@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
 import { clampInt, getShortsSupabaseConfig, safeText, shortsSupabaseRequest } from "@/lib/shorts/server"
+import { resolveUnifiedYouTubePost } from "@/lib/shorts/youtube-unified"
+import { youtube, type Resource } from "@/lib/youtube/client"
+import { failure } from "@/lib/youtube/http"
+import { connection } from "@/lib/youtube/store"
+import { listComments, mapComment } from "@/lib/youtube/resources"
+import { videoIdValid } from "@/lib/youtube/contracts"
+import type { YouTubeComment } from "@/lib/youtube/contracts"
 
 export const dynamic = "force-dynamic"
 
@@ -8,10 +15,67 @@ function validUuid(value: string) {
   return /^[0-9a-f-]{36}$/i.test(value)
 }
 
+function unifiedYouTubeComment(shortId: string, row: YouTubeComment) {
+  return {
+    id: row.id,
+    shortId,
+    parentId: row.parentId || undefined,
+    body: row.text,
+    likes: Number(row.likes || 0),
+    createdAt: row.publishedAt || new Date().toISOString(),
+    viewerLiked: row.viewerRating === "like",
+    user: {
+      id: row.channelId ? `youtube:${row.channelId}` : `youtube-comment:${row.id}`,
+      username: row.author || "youtube",
+      displayName: row.author || "YouTube",
+      avatarUrl: row.avatar || undefined,
+      verified: false,
+      external: true,
+      claimed: false,
+    },
+  }
+}
+
+async function loadUnifiedYouTubeComments(userKey: string, shortId: string, videoId: string, limit: number) {
+  const items: YouTubeComment[] = []
+  let pageToken = ""
+
+  // The existing Malik drawer asks for up to 50. YouTube returns 20 per request
+  // in this integration, so fetch at most three bounded pages and keep the same
+  // drawer instead of opening/redirecting to youtube.com.
+  for (let page = 0; page < 3 && items.length < limit; page += 1) {
+    const result = await listComments(userKey, videoId, pageToken)
+    items.push(...result.items)
+    pageToken = result.nextPageToken || ""
+    if (!pageToken) break
+  }
+
+  return {
+    items: items.slice(0, limit).map((row) => unifiedYouTubeComment(shortId, row)),
+    provider: "youtube",
+    nextPageToken: pageToken || undefined,
+    persistence: true,
+  }
+}
+
 export async function GET(request: NextRequest) {
   const shortId = safeText(request.nextUrl.searchParams.get("shortId"), 80)
   const limit = clampInt(request.nextUrl.searchParams.get("limit"), 1, 80, 40)
   if (!validUuid(shortId)) return NextResponse.json({ error: "INVALID_SHORT_ID" }, { status: 400 })
+
+  const youtubePost = await resolveUnifiedYouTubePost(shortId)
+  if (youtubePost && videoIdValid(youtubePost.sourceId)) {
+    const { user } = await getOptionalWorkOSAuth()
+    if (!user) return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 })
+    try {
+      const result = await loadUnifiedYouTubeComments(user.id, shortId, youtubePost.sourceId, limit)
+      return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } })
+    } catch (error) {
+      console.error("[Malik Shorts] YouTube comments load failed", error)
+      return failure(error)
+    }
+  }
+
   if (!getShortsSupabaseConfig()) return NextResponse.json({ items: [], persistence: false })
 
   const rows = await shortsSupabaseRequest<any[]>(
@@ -40,7 +104,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const { user } = await getOptionalWorkOSAuth()
   if (!user) return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 })
-  if (!getShortsSupabaseConfig()) return NextResponse.json({ error: "SHORTS_DB_NOT_CONFIGURED" }, { status: 503 })
 
   let input: { shortId?: string; body?: string; parentId?: string }
   try {
@@ -50,11 +113,52 @@ export async function POST(request: NextRequest) {
   }
 
   const shortId = safeText(input.shortId, 80)
-  const parentId = safeText(input.parentId, 80)
+  const parentId = safeText(input.parentId, 180)
   const body = safeText(input.body, 2200)
-  if (!validUuid(shortId) || !body || (parentId && !validUuid(parentId))) {
+  if (!validUuid(shortId) || !body) {
     return NextResponse.json({ error: "INVALID_COMMENT" }, { status: 400 })
   }
+
+  const youtubePost = await resolveUnifiedYouTubePost(shortId)
+  if (youtubePost && videoIdValid(youtubePost.sourceId)) {
+    try {
+      const own = await connection(user.id)
+      let created: YouTubeComment
+
+      if (parentId) {
+        const resource = await youtube<Resource>(
+          user.id,
+          "comments",
+          { part: "snippet" },
+          "POST",
+          { snippet: { parentId, textOriginal: body } },
+        )
+        created = mapComment(resource, own?.channel_id || "")
+      } else {
+        const resource = await youtube<Resource>(
+          user.id,
+          "commentThreads",
+          { part: "snippet" },
+          "POST",
+          { snippet: { videoId: youtubePost.sourceId, topLevelComment: { snippet: { textOriginal: body } } } },
+        )
+        created = mapComment(resource.snippet?.topLevelComment as Resource, own?.channel_id || "")
+      }
+
+      return NextResponse.json({
+        ok: true,
+        id: created.id,
+        item: unifiedYouTubeComment(shortId, created),
+        provider: "youtube",
+      }, { status: 201, headers: { "Cache-Control": "private, no-store" } })
+    } catch (error) {
+      console.error("[Malik Shorts] YouTube comment publish failed", error)
+      return failure(error)
+    }
+  }
+
+  if (parentId && !validUuid(parentId)) return NextResponse.json({ error: "INVALID_COMMENT" }, { status: 400 })
+  if (!getShortsSupabaseConfig()) return NextResponse.json({ error: "SHORTS_DB_NOT_CONFIGURED" }, { status: 503 })
 
   try {
     const response = await shortsSupabaseRequest<any>("rpc/malik_shorts_create_comment", {
