@@ -1284,6 +1284,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                 plan={effectivePlan}
                 onSelect={onModelChange || (() => {})}
                 onOpenBilling={onOpenBilling}
+                placement="top"
               />
               <span className="malik-inline-action-swap">
                 <button

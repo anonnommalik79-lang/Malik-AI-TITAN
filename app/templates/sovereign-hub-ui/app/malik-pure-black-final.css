@@ -259,11 +259,14 @@ body:has(.malik-auth-page),
     box-shadow: none !important;
   }
 
+  /* Dark, like every other viewport. The gold fill here was the mobile half of
+     a split the home screen already overrode on desktop, so the tab changed
+     colour between the welcome screen and the first answer. */
   .titan-tab.is-active {
-    border-color: rgba(239, 199, 82, 0.52) !important;
-    background: linear-gradient(180deg, #e9c34f 0%, #cfa12c 100%) !important;
-    color: #151006 !important;
-    box-shadow: 0 4px 14px rgba(201, 152, 47, 0.16) !important;
+    border-color: rgba(255, 255, 255, 0.62) !important;
+    background: #090909 !important;
+    color: #fff !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
   }
 
   .titan-tab span,

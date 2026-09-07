@@ -368,7 +368,7 @@ function HomeComposer({
             plan={userPlan}
             onSelect={onModelChange}
             onOpenBilling={onOpenBilling}
-            placement="bottom"
+            placement="top"
           />
 
           <span className="thome-action-swap">

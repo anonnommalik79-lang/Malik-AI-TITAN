@@ -369,13 +369,23 @@ function TitanTopBarInner({
         }
         .titan-tab:hover { background: rgba(255,255,255,.045); color: #fff; }
         .titan-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(232,197,106,.45); }
+        /*
+         * The active tab is dark, everywhere.
+         *
+         * It used to be a gold fill here and a dark pill on the home screen,
+         * because desktop-unicorn-home-final.css overrides this rule under
+         * body:has(.thome). So the same button changed colour the moment a
+         * question was asked - the home look was the one that had been designed
+         * and reviewed, and this one only ever showed up after the first turn.
+         * Same values as that override, stated once, so the two cannot drift.
+         */
         .titan-tab.is-active {
-          border-color: rgba(255,240,200,.3);
-          background: var(--malik-gradient-gold, linear-gradient(135deg,#f3de96,#d9ae45 45%,#a87c22));
-          color: #1b1405;
-          box-shadow: 0 6px 20px rgba(201,152,47,.22);
+          border-color: rgba(255,255,255,.62);
+          background: #090909;
+          color: #fff;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
         }
-        .titan-tab.is-active svg { color: #1b1405; }
+        .titan-tab.is-active svg { color: #fff; }
         .titan-topbar-right { display: flex; flex-shrink: 0; align-items: center; gap: 8px; }
         .titan-search {
           display: none;

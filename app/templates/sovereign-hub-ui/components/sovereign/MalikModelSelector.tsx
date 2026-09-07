@@ -124,7 +124,8 @@ export function MalikModelSelector({
   onSelect: (modelId: MalikModelId) => void
   onOpenBilling?: () => void
   className?: string
-  placement?: "auto" | "bottom"
+  /** "top" pins the list above the trigger; "auto" measures, "bottom" pins below. */
+  placement?: "auto" | "bottom" | "top"
 }) {
   const isMobile = useSyncExternalStore(subscribeMobileSelector, getMobileSnapshot, getServerMobileSnapshot)
   const [open, setOpen] = useState(false)
@@ -187,7 +188,16 @@ export function MalikModelSelector({
       const measuredHeight = Math.min(popoverRef.current?.scrollHeight || 520, 520)
       const spaceBelow = Math.max(0, viewportHeight - rect.bottom - gap - edge)
       const spaceAbove = Math.max(0, rect.top - gap - edge)
-      const openAbove = placement === "auto" && spaceAbove > spaceBelow
+      /*
+       * "top" is a pin, not a preference.
+       *
+       * The composer sits at the bottom of the screen, so a list opening
+       * downwards had a few dozen pixels to live in and clipped its own
+       * options. "auto" only chose upwards when the space above happened to
+       * measure larger, which it does not while the popover is still 0px tall
+       * on the first pass. Pinning removes the measurement from the decision.
+       */
+      const openAbove = placement === "top" || (placement === "auto" && spaceAbove > spaceBelow)
       const available = openAbove ? spaceAbove : spaceBelow
       const desiredHeight = Math.min(measuredHeight, Math.max(96, available))
 

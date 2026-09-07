@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { playImageGenerationCompleteSound, playImageGenerationStartSound } from "@/lib/media/image-generation-sound"
-import { resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
+import { cacheGeneratedImageByUrl, readCachedGeneratedImage, resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 
 type Status = "queued" | "thinking" | "generating" | "rendering" | "ready" | "failed"
 
@@ -126,6 +125,17 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     return () => { cancelled = true }
   }, [resultUrl, fallbackUrl])
 
+  /*
+   * Show the image, then keep a copy of it in this browser.
+   *
+   * The finished picture is served from /api/media/asset/<id>, which lives only
+   * as long as the server holds the bytes - Render drops them on every deploy
+   * and on idle, so an image generated an hour ago came back as "Сохранённое
+   * изображение недоступно". On success the bytes are copied into the viewer's
+   * own IndexedDB (from the browser's HTTP cache, so nothing is downloaded
+   * twice), and on failure that copy is what gets shown. The history belongs to
+   * the person who made it, not to the host or the repository.
+   */
   useEffect(() => {
     if (!resolvedResultUrl || imageLoaded || actuallyFailed) return
     let cancelled = false
@@ -134,15 +144,21 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
         if (cancelled) return
         setAssetError("")
         setImageLoaded(true)
+        void cacheGeneratedImageByUrl(resolvedResultUrl)
       })
-      .catch(() => {
-        if (!cancelled) setAssetError("Сохранённое изображение недоступно.")
+      .catch(async () => {
+        if (cancelled) return
+        const cached = await readCachedGeneratedImage(resolvedResultUrl)
+        if (cancelled) return
+        if (cached) {
+          setResolvedResultUrl(cached)
+          setAssetError("")
+          return
+        }
+        setAssetError("Сохранённое изображение недоступно.")
       })
     return () => { cancelled = true }
   }, [resolvedResultUrl, imageLoaded, actuallyFailed])
-
-  useEffect(() => { if (!actuallyFailed && !imageLoaded) playImageGenerationStartSound() }, [actuallyFailed, imageLoaded])
-  useEffect(() => { if (imageLoaded) playImageGenerationCompleteSound() }, [imageLoaded])
 
   const shownProgress = useMemo(() => {
     if (imageLoaded || actuallyFailed) return 100
