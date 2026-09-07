@@ -70,7 +70,7 @@ function stageFor(status?: Status) {
   return "Создаю изображение"
 }
 
-export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedAt, failed, error, progress }: ImageGenerationMotionProps) {
+export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedAt, understood, failed, error, progress }: ImageGenerationMotionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const phaseStartedAtRef = useRef(Date.now())
   const lastStatusRef = useRef<Status | undefined>(status)
@@ -328,6 +328,18 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
         </div>
         <div className="malik-hand-loader-v7__track" aria-hidden="true"><span style={{ width: `${shownProgress}%` }} /></div>
         <div className="malik-hand-loader-v7__status">{imageLoaded ? `Готово за ${seconds} с` : actuallyFailed ? failureText : `${shownStage} · ${seconds} с`}</div>
+        {/*
+          What Malik understood, back on screen.
+
+          The dashboard still asks /api/ai/image/understand before drawing and
+          still sends the answer along to the image route, but the line stopped
+          being rendered when this loader was rewritten - so the request was
+          being paid for and the person never saw the result. It matters most
+          for exactly the people this product is for: a typo or a heavy accent
+          becomes a sentence you can read and correct in two seconds, instead of
+          forty seconds spent drawing the wrong photograph.
+        */}
+        {understood && !actuallyFailed ? <div className="malik-photo-understood"><strong>Malik понял</strong>{understood}</div> : null}
       </div>
 
       <style jsx global>{`
@@ -339,6 +351,8 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
         #malik-root .malik-photo-motion.malik-hand-loader-v7 .malik-hand-loader-v7__progress{width:100%!important;display:grid!important;visibility:visible!important;opacity:1!important;gap:7px!important;padding:0 1px!important;margin:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
         .malik-hand-loader-v7__meta{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;font-size:12px!important;line-height:1.2!important;color:rgba(255,255,255,.92)!important}.malik-hand-loader-v7__meta strong{font-size:12px!important;font-weight:700!important;color:#fff!important;font-variant-numeric:tabular-nums!important}
         .malik-hand-loader-v7__track{width:100%!important;height:3px!important;overflow:hidden!important;border-radius:999px!important;background:rgba(255,255,255,.18)!important}.malik-hand-loader-v7__track>span{display:block!important;height:100%!important;border-radius:inherit!important;background:#fff!important;transition:width 240ms linear!important}
+        #malik-root .malik-photo-motion .malik-photo-understood{display:grid!important;gap:3px!important;margin:0!important;padding:9px 11px!important;border-radius:12px!important;border:1px solid rgba(255,255,255,.09)!important;background:#0a0a0a!important;color:rgba(255,255,255,.82)!important;font-size:12px!important;line-height:1.5!important}
+        #malik-root .malik-photo-motion .malik-photo-understood strong{font-size:10px!important;font-weight:700!important;letter-spacing:.06em!important;text-transform:uppercase!important;color:rgba(255,255,255,.45)!important}
         .malik-hand-loader-v7__status{display:block!important;min-height:16px!important;font-size:11px!important;line-height:1.35!important;color:rgba(255,255,255,.58)!important}.malik-hand-loader-v7__failure{position:absolute!important;inset:0!important;display:grid!important;place-content:center!important;gap:8px!important;padding:28px!important;text-align:center!important;background:#000!important;color:#fff!important}.malik-hand-loader-v7__failure span{max-width:440px!important;font-size:12px!important;line-height:1.55!important;color:rgba(255,255,255,.58)!important}
         @media(max-width:640px){.malik-photo-motion.malik-hand-loader-v7{width:100%!important;max-width:none!important;gap:10px!important}.malik-hand-loader-v7 .malik-photo-stage,.malik-hand-loader-v7 .malik-art-stage{border-radius:22px!important}.malik-hand-loader-v7__canvas,.malik-hand-loader-v7 .malik-art-result{border-radius:21px!important}}
         @media(prefers-reduced-motion:reduce){.malik-hand-loader-v7__track>span,.malik-hand-loader-v7 .malik-art-result{transition:none!important;animation:none!important}}
