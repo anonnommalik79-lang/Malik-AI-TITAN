@@ -1,7 +1,24 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Download, ExternalLink, Search, Sparkles, Star, Wand2, X } from "lucide-react"
+import {
+  Clock,
+  Download,
+  ExternalLink,
+  Folder,
+  FolderPlus,
+  Image as ImageIcon,
+  LayoutGrid,
+  List,
+  Search,
+  Share2,
+  Shuffle,
+  Sparkles,
+  Star,
+  Tag,
+  Wand2,
+  X,
+} from "lucide-react"
 import {
   LIBRARY_CATEGORIES,
   LIBRARY_TEMPLATES,
@@ -17,14 +34,16 @@ export type SiteLibraryPanelProps = {
 }
 
 type Sort = "popular" | "name" | "category"
+type ViewMode = "grid" | "list"
 
 const SORTS: Array<[Sort, string]> = [
-  ["popular", "По популярности"],
+  ["popular", "Сначала популярные"],
   ["name", "По названию"],
   ["category", "По категории"],
 ]
 
 const FAVOURITES_KEY = "malik-library-favourites-v1"
+const VIEW_KEY = "malik-library-view-v1"
 
 function readFavourites(): number[] {
   if (typeof window === "undefined") return []
@@ -36,28 +55,64 @@ function readFavourites(): number[] {
   }
 }
 
+/**
+ * Tags for a template, derived rather than invented.
+ *
+ * The reference shows a row of tag pills under the title. There is no tag field
+ * in the data, and making words up would put labels on a template that nothing
+ * in the product agrees with - so the pills carry what is actually known: the
+ * category, the direction, and the editorial flag when it is set.
+ */
+function tagsOf(template: LibraryTemplate) {
+  const parts = [template.category, ...template.subcategory.split("/").map((part) => part.trim())]
+  if (template.featured) parts.push("Выбор Malik")
+  return parts.filter(Boolean)
+}
+
 export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<string>("Все")
+  const [direction, setDirection] = useState<string>("Все")
   const [sort, setSort] = useState<Sort>("popular")
+  const [view, setView] = useState<ViewMode>("grid")
   const [onlyFavourites, setOnlyFavourites] = useState(false)
   const [favourites, setFavourites] = useState<number[]>([])
+  const [selected, setSelected] = useState<LibraryTemplate | null>(null)
   const [opened, setOpened] = useState<LibraryTemplate | null>(null)
-  const [openCard, setOpenCard] = useState<number | null>(null)
-  const [touchOnly, setTouchOnly] = useState(false)
+  const [shared, setShared] = useState(false)
   const [visible, setVisible] = useState(24)
+  const [sortOpen, setSortOpen] = useState(false)
+  const [directionOpen, setDirectionOpen] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => { setFavourites(readFavourites()) }, [])
+  const toolsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return
-    const media = window.matchMedia("(hover: none)")
-    const sync = () => setTouchOnly(media.matches)
-    sync()
-    media.addEventListener("change", sync)
-    return () => media.removeEventListener("change", sync)
+    setFavourites(readFavourites())
+    try {
+      const storedView = window.localStorage.getItem(VIEW_KEY)
+      if (storedView === "grid" || storedView === "list") setView(storedView)
+    } catch {}
   }, [])
+
+  // One handler for both dropdowns: two separate outside-click listeners on the
+  // same container fight each other and leave one menu stuck open.
+  useEffect(() => {
+    if (!sortOpen && !directionOpen) return
+    const onDown = (event: MouseEvent) => {
+      if (toolsRef.current?.contains(event.target as Node)) return
+      setSortOpen(false)
+      setDirectionOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setSortOpen(false); setDirectionOpen(false) }
+    }
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [sortOpen, directionOpen])
 
   const toggleFavourite = (id: number) => {
     setFavourites((current) => {
@@ -67,10 +122,24 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
     })
   }
 
+  const chooseView = (next: ViewMode) => {
+    setView(next)
+    try { window.localStorage.setItem(VIEW_KEY, next) } catch {}
+  }
+
+  /** Directions available inside the chosen category - the filter never offers an empty result. */
+  const directions = useMemo(() => {
+    const pool = category === "Все" ? LIBRARY_TEMPLATES : LIBRARY_TEMPLATES.filter((item) => item.category === category)
+    return ["Все", ...Array.from(new Set(pool.map((item) => item.subcategory))).sort((a, b) => a.localeCompare(b, "ru"))]
+  }, [category])
+
+  useEffect(() => { setDirection("Все") }, [category])
+
   const shown = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("ru")
     const filtered = LIBRARY_TEMPLATES.filter((template) => {
       if (category !== "Все" && template.category !== category) return false
+      if (direction !== "Все" && template.subcategory !== direction) return false
       if (onlyFavourites && !favourites.includes(template.id)) return false
       if (!needle) return true
       return `${template.name} ${template.category} ${template.subcategory}`.toLocaleLowerCase("ru").includes(needle)
@@ -80,11 +149,11 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
     if (sort === "name") sorted.sort((a, b) => a.name.localeCompare(b.name, "ru"))
     if (sort === "category") sorted.sort((a, b) => a.category.localeCompare(b.category, "ru") || b.popularity - a.popularity)
     return sorted
-  }, [query, category, sort, onlyFavourites, favourites])
+  }, [query, category, direction, sort, onlyFavourites, favourites])
 
   // A hundred cards is too many to mount at once on a phone. They arrive a
   // screenful at a time as the person reaches the end of the list.
-  useEffect(() => { setVisible(24) }, [query, category, sort, onlyFavourites])
+  useEffect(() => { setVisible(24) }, [query, category, direction, sort, onlyFavourites])
   useEffect(() => {
     const node = sentinelRef.current
     if (!node || typeof IntersectionObserver === "undefined") return
@@ -96,6 +165,14 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
     observer.observe(node)
     return () => observer.disconnect()
   }, [shown.length])
+
+  // A selected template that a filter has just hidden would keep its panel open
+  // over a grid that no longer contains it.
+  useEffect(() => {
+    if (selected && !shown.some((item) => item.id === selected.id)) setSelected(null)
+  }, [shown, selected])
+
+  useEffect(() => { setShared(false) }, [selected])
 
   useEffect(() => {
     if (!opened) return
@@ -119,121 +196,207 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
-  const download = () => {
-    if (!opened || !openedHtml) return
-    const url = URL.createObjectURL(new Blob([openedHtml], { type: "text/html" }))
+  const download = (template: LibraryTemplate) => {
+    const html = buildLibrarySite(template, origin)
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }))
     const link = document.createElement("a")
     link.href = url
-    link.download = `${opened.slug || "malik-site"}.html`
+    link.download = `${template.slug || "malik-site"}.html`
     document.body.appendChild(link)
     link.click()
     link.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
+  /** Copies the finished page, because there is no public URL to share. */
+  const share = async (template: LibraryTemplate) => {
+    const html = buildLibrarySite(template, origin)
+    try {
+      await navigator.clipboard.writeText(html)
+      setShared(true)
+      window.setTimeout(() => setShared(false), 2200)
+    } catch {
+      download(template)
+    }
+  }
+
+  const surprise = () => {
+    const pool = shown.length ? shown : LIBRARY_TEMPLATES
+    setSelected(pool[Math.floor(Math.random() * pool.length)])
+  }
+
+  const accentOf = (template: LibraryTemplate) => LIBRARY_STYLES[template.category].accent
+
   return (
     <main className="malikLibrary">
-      <div className="libWorkspace">
-        <header className="libHero">
-          <div>
-            <span>Malik AI · Site Library</span>
-            <h1>Библиотека</h1>
-            <p>Сто готовых сайтов. Каждый открывается целиком, работает на телефоне и может стать основой вашего — «Использовать стиль» передаёт направление прямо в генератор.</p>
-          </div>
-          <div className="libHeroMeta">
-            <b>{LIBRARY_TEMPLATES.length}</b>
-            <small>шаблонов · {LIBRARY_CATEGORIES.length} категорий</small>
-          </div>
-        </header>
+      <header className="libBar">
+        <div className="libBarTitle"><Folder aria-hidden="true" /> Библиотека</div>
+        <label className="libBarSearch">
+          <Search aria-hidden="true" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск…" aria-label="Поиск по библиотеке" />
+          <kbd>⌘K</kbd>
+        </label>
+      </header>
 
-        <section className="libTools">
-          <label className="libSearch">
-            <Search aria-hidden="true" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти сайт, категорию или направление…" />
-            {query && <button type="button" aria-label="Очистить" onClick={() => setQuery("")}><X /></button>}
-          </label>
-          <select className="libSort" value={sort} onChange={(event) => setSort(event.target.value as Sort)} aria-label="Сортировка">
-            {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-          <button
-            type="button"
-            className={`libFavFilter${onlyFavourites ? " is-on" : ""}`}
-            onClick={() => setOnlyFavourites((current) => !current)}
-            aria-pressed={onlyFavourites}
-          >
-            <Star aria-hidden="true" /> Избранное{favourites.length ? ` · ${favourites.length}` : ""}
-          </button>
-        </section>
+      <div className={`libBody${selected ? " has-detail" : ""}`}>
+        <div className="libMain">
+          <section className="libIntro">
+            <div>
+              <p className="libIntroLead">Готовые сайты, стили и направления — всегда под рукой.</p>
+              <p className="libIntroSub">Любой шаблон открывается целиком и может стать основой вашего.</p>
+            </div>
+            <button type="button" className="libPrimary" onClick={surprise}>
+              <Shuffle aria-hidden="true" /> Случайный стиль
+            </button>
+          </section>
 
-        <div className="libCategories">
-          {["Все", ...LIBRARY_CATEGORIES].map((item) => (
-            <button key={item} type="button" className={item === category ? "is-active" : ""} onClick={() => setCategory(item)}>{item}</button>
-          ))}
+          <nav className="libTabs" aria-label="Категории">
+            <button type="button" className={category === "Все" && !onlyFavourites ? "is-active" : ""} onClick={() => { setCategory("Все"); setOnlyFavourites(false) }}>
+              <Sparkles aria-hidden="true" /> Все
+            </button>
+            <button type="button" className={onlyFavourites ? "is-active" : ""} onClick={() => setOnlyFavourites((current) => !current)} aria-pressed={onlyFavourites}>
+              <Star aria-hidden="true" /> Избранное{favourites.length ? ` · ${favourites.length}` : ""}
+            </button>
+            {LIBRARY_CATEGORIES.map((item) => (
+              <button key={item} type="button" className={item === category && !onlyFavourites ? "is-active" : ""} onClick={() => { setCategory(item); setOnlyFavourites(false) }}>
+                <ImageIcon aria-hidden="true" /> {item}
+              </button>
+            ))}
+          </nav>
+
+          <div className="libTools" ref={toolsRef}>
+            <label className="libFilterSearch">
+              <Search aria-hidden="true" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по библиотеке…" />
+              {query && <button type="button" aria-label="Очистить поиск" onClick={() => setQuery("")}><X /></button>}
+            </label>
+
+            <div className="libSelect">
+              <button type="button" onClick={() => { setDirectionOpen((v) => !v); setSortOpen(false) }} aria-expanded={directionOpen}>
+                <Tag aria-hidden="true" /> Направление: {direction}
+              </button>
+              {directionOpen && (
+                <div className="libMenu" role="menu">
+                  {directions.map((item) => (
+                    <button key={item} type="button" role="menuitem" className={item === direction ? "is-on" : ""} onClick={() => { setDirection(item); setDirectionOpen(false) }}>{item}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="libSpacer" />
+
+            <div className="libSelect">
+              <button type="button" onClick={() => { setSortOpen((v) => !v); setDirectionOpen(false) }} aria-expanded={sortOpen}>
+                <Clock aria-hidden="true" /> {SORTS.find(([value]) => value === sort)?.[1]}
+              </button>
+              {sortOpen && (
+                <div className="libMenu is-right" role="menu">
+                  {SORTS.map(([value, label]) => (
+                    <button key={value} type="button" role="menuitem" className={value === sort ? "is-on" : ""} onClick={() => { setSort(value); setSortOpen(false) }}>{label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="libViewSwitch" role="group" aria-label="Вид">
+              <button type="button" className={view === "grid" ? "is-on" : ""} onClick={() => chooseView("grid")} aria-label="Сеткой" aria-pressed={view === "grid"}><LayoutGrid /></button>
+              <button type="button" className={view === "list" ? "is-on" : ""} onClick={() => chooseView("list")} aria-label="Списком" aria-pressed={view === "list"}><List /></button>
+            </div>
+          </div>
+
+          {shown.length === 0 ? (
+            <p className="libEmpty">Ничего не нашлось. Попробуйте другое слово или снимите фильтр.</p>
+          ) : (
+            <section className={view === "grid" ? "libGrid" : "libList"}>
+              {shown.slice(0, visible).map((template, position) => (
+                <article
+                  key={template.id}
+                  className={`libCard${selected?.id === template.id ? " is-selected" : ""}`}
+                  style={{ ["--accent" as string]: accentOf(template) }}
+                >
+                  <button className="libShot" onClick={() => setSelected(template)} aria-label={`Показать ${template.name}`}>
+                    <img
+                      src={template.preview}
+                      alt=""
+                      width={1280}
+                      height={720}
+                      loading={position < 6 ? "eager" : "lazy"}
+                      decoding="async"
+                      draggable={false}
+                    />
+                    {template.featured && <span className="libBadge"><Sparkles aria-hidden="true" /> Выбор Malik</span>}
+                  </button>
+
+                  <div className="libCardFoot">
+                    <span className="libKind" aria-hidden="true"><ImageIcon /></span>
+                    <span className="libCardText">
+                      <b>{template.name}</b>
+                      <small>Шаблон · {template.subcategory}</small>
+                    </span>
+                    <button
+                      type="button"
+                      className={`libFav${favourites.includes(template.id) ? " is-on" : ""}`}
+                      onClick={() => toggleFavourite(template.id)}
+                      aria-label={favourites.includes(template.id) ? `Убрать ${template.name} из избранного` : `В избранное: ${template.name}`}
+                      aria-pressed={favourites.includes(template.id)}
+                    >
+                      <Star aria-hidden="true" />
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </section>
+          )}
+
+          <div ref={sentinelRef} aria-hidden="true" />
+          {visible < shown.length && <p className="libMore">Показано {visible} из {shown.length} — прокрутите дальше</p>}
         </div>
 
-        <section className="libHeading">
-          <div><h2>{category === "Все" ? "Все направления" : category}</h2><p>{shown.length} из {LIBRARY_TEMPLATES.length} · клик по фото открывает настоящий сайт</p></div>
-        </section>
+        {selected && (
+          <aside className="libDetail" aria-label={`О шаблоне ${selected.name}`} style={{ ["--accent" as string]: accentOf(selected) }}>
+            <div className="libDetailShot">
+              <img src={selected.preview} alt="" width={1280} height={720} decoding="async" draggable={false} />
+              <button type="button" className="libDetailClose" onClick={() => setSelected(null)} aria-label="Закрыть панель"><X /></button>
+            </div>
 
-        {shown.length === 0 ? (
-          <p className="libEmpty">Ничего не нашлось. Попробуйте другое слово или снимите фильтр.</p>
-        ) : (
-          <section className="libGrid">
-            {shown.slice(0, visible).map((template, position) => (
-              <article className={`libCard${openCard === template.id ? " is-open" : ""}`} key={template.id}>
-                <button
-                  className="libShot"
-                  onClick={() => {
-                    if (!touchOnly || openCard === template.id) setOpened(template)
-                    else setOpenCard(template.id)
-                  }}
-                  aria-label={touchOnly && openCard !== template.id ? `Показать описание: ${template.name}` : `Открыть сайт ${template.name}`}
-                >
-                  <img
-                    src={template.preview}
-                    alt=""
-                    width={1280}
-                    height={720}
-                    loading={position < 6 ? "eager" : "lazy"}
-                    decoding="async"
-                    draggable={false}
-                  />
+            <div className="libDetailBody">
+              <h2>{selected.name}</h2>
+              <p className="libDetailMeta"><ImageIcon aria-hidden="true" /> Шаблон сайта · {selected.category}</p>
+
+              <div className="libTags">
+                {tagsOf(selected).map((tag) => <span key={tag}>{tag}</span>)}
+              </div>
+
+              <p className="libDetailText">
+                {LIBRARY_STYLES[selected.category].tagline}
+              </p>
+
+              <dl className="libSpecs">
+                <div><dt>Направление</dt><dd>{selected.subcategory}</dd></div>
+                <div><dt>Категория</dt><dd>{selected.category}</dd></div>
+                <div><dt>Заголовок</dt><dd>{LIBRARY_STYLES[selected.category].headline}</dd></div>
+                <div><dt>Популярность</dt><dd>{selected.popularity} из 100</dd></div>
+                <div><dt>Файл</dt><dd>{selected.slug}.html</dd></div>
+              </dl>
+
+              <button type="button" className="libPrimary is-wide" onClick={() => setOpened(selected)}>
+                <ExternalLink aria-hidden="true" /> Открыть
+              </button>
+              <div className="libDetailRow">
+                <button type="button" onClick={() => void share(selected)}>
+                  <Share2 aria-hidden="true" /> {shared ? "Скопировано" : "Поделиться"}
                 </button>
-
-                <button
-                  type="button"
-                  className={`libFav${favourites.includes(template.id) ? " is-on" : ""}`}
-                  onClick={() => toggleFavourite(template.id)}
-                  aria-label={favourites.includes(template.id) ? `Убрать ${template.name} из избранного` : `В избранное: ${template.name}`}
-                  aria-pressed={favourites.includes(template.id)}
-                >
-                  <Star aria-hidden="true" />
+                <button type="button" onClick={() => { const t = selected; setSelected(null); onUseStyle?.(libraryPrompt(t), t) }}>
+                  <Wand2 aria-hidden="true" /> Использовать стиль
                 </button>
-
-                {template.featured && <span className="libBadge"><Sparkles aria-hidden="true" /> Выбор Malik</span>}
-
-                <span className="libShade" aria-hidden="true" />
-                <span className="libMeta">
-                  <b>{template.name}</b>
-                  <small>{template.subcategory}</small>
-                  <em style={{ ["--accent" as string]: LIBRARY_STYLES[template.category].accent }}>{template.category}</em>
-                  {/* Only one action on the card, and it opens the site. The
-                      second button used to be "use this style", which navigated
-                      to the generator - so a click anywhere near the bottom of a
-                      card threw the person out of the Library they were
-                      browsing. Using a style is now a decision made inside the
-                      open template, where it is unambiguous. */}
-                  <span className="libActions">
-                    <button type="button" className="is-primary" onClick={() => setOpened(template)}>Открыть шаблон</button>
-                  </span>
-                </span>
-              </article>
-            ))}
-          </section>
+              </div>
+              <button type="button" className="libDetailWide" onClick={() => download(selected)}>
+                <FolderPlus aria-hidden="true" /> Скачать HTML
+              </button>
+            </div>
+          </aside>
         )}
-
-        <div ref={sentinelRef} aria-hidden="true" />
-        {visible < shown.length && <p className="libMore">Показано {visible} из {shown.length} — прокрутите дальше</p>}
       </div>
 
       {opened && (
@@ -247,7 +410,7 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
               <div className="libViewerActions">
                 <button type="button" className="is-primary" onClick={() => { const t = opened; setOpened(null); onUseStyle?.(libraryPrompt(t), t) }}><Wand2 aria-hidden="true" /> Использовать стиль</button>
                 <button type="button" onClick={openInTab}><ExternalLink aria-hidden="true" /> В новой вкладке</button>
-                <button type="button" onClick={download}><Download aria-hidden="true" /> Скачать HTML</button>
+                <button type="button" onClick={() => download(opened)}><Download aria-hidden="true" /> Скачать HTML</button>
                 <button type="button" onClick={() => setOpened(null)} aria-label="Закрыть"><X aria-hidden="true" /></button>
               </div>
             </div>
@@ -264,74 +427,157 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
 
 function LibraryCss() {
   return <style jsx global>{`
-    .malikLibrary{width:100%;height:100%;overflow:auto;background:#000;color:#f7f7f8;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
-    .malikLibrary *{box-sizing:border-box}.malikLibrary button,.malikLibrary input,.malikLibrary select{font:inherit}.malikLibrary button{cursor:pointer}
-    .libWorkspace{width:calc(100% - 30px);max-width:1760px;margin:0 auto;padding:20px 0 72px}
-    .libHero{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:4px 2px 18px;border-bottom:1px solid #17191d}
-    .libHero>div>span{display:block;margin-bottom:6px;color:#747a84;font-size:10px}
-    .libHero h1{margin:0;font-size:clamp(38px,4vw,54px);line-height:.95;letter-spacing:-.055em}
-    .libHero p{max-width:820px;margin:8px 0 0;color:#8d929b;font-size:12px;line-height:1.55}
-    .libHeroMeta{flex:0 0 auto;text-align:right}.libHeroMeta b{display:block;font-size:34px;line-height:1;letter-spacing:-.05em}.libHeroMeta small{display:block;margin-top:4px;color:#747a84;font-size:10px}
-    .libTools{display:flex;align-items:center;gap:9px;padding-top:14px}
-    .libSearch{height:40px;flex:1;display:flex;align-items:center;gap:9px;border:1px solid #2b2f36;background:#121417;border-radius:11px;padding:0 12px}
-    .libSearch svg{width:16px;height:16px;color:#777d87;flex:0 0 auto}
-    .libSearch input{width:100%;border:0;outline:0;background:transparent;color:#fff}
-    .libSearch button{border:0;background:transparent;color:#8b909a;display:grid;place-items:center;padding:0}
-    .libSort{height:40px;border:1px solid #2b2f36;background:#0c0e10;color:#c9cdd4;border-radius:11px;padding:0 10px;outline:0}
-    .libFavFilter{height:40px;display:inline-flex;align-items:center;gap:7px;border:1px solid #2b2f36;background:#0c0e10;color:#c9cdd4;border-radius:11px;padding:0 12px;font-size:11px;white-space:nowrap}
-    .libFavFilter svg{width:15px;height:15px}
-    .libFavFilter.is-on{background:#fff;border-color:#fff;color:#000;font-weight:800}
-    .libCategories{display:flex;gap:7px;overflow-x:auto;padding:10px 0 2px}
-    .libCategories button{height:31px;border:1px solid #292d33;background:#0c0e10;color:#aeb2ba;border-radius:999px;padding:0 12px;font-size:10px;white-space:nowrap}
-    .libCategories button.is-active{background:#fff;border-color:#fff;color:#000;font-weight:850}
-    .libHeading{margin:16px 0 10px}.libHeading h2{margin:0;font-size:24px;letter-spacing:-.03em}.libHeading p{margin:4px 0 0;color:#747a84;font-size:10px}
-    .libEmpty{color:#8b909a;font-size:12px;padding:28px 2px}
-    .libMore{margin:14px 0 0;text-align:center;color:#6f757f;font-size:10px}
+    .malikLibrary{--lib-bg:#08090a;--lib-panel:#101113;--lib-panel-2:#17181b;--lib-line:rgba(255,255,255,.085);--lib-line-2:rgba(255,255,255,.14);--lib-text:#f3f4f5;--lib-dim:rgba(255,255,255,.56);--lib-dim-2:rgba(255,255,255,.36);width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;background:var(--lib-bg);color:var(--lib-text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+    .malikLibrary *{box-sizing:border-box}
+    .malikLibrary button,.malikLibrary input{font:inherit}
+    .malikLibrary button{cursor:pointer;color:inherit}
+    .malikLibrary :focus-visible{outline:2px solid rgba(255,255,255,.5);outline-offset:2px}
 
-    .libGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;background:#000}
-    .libCard{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border:1px solid #16191d;border-radius:12px;background:#0a0b0d;isolation:isolate}
-    .libShot{position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;background:#0a0b0d;cursor:zoom-in;display:block}
-    .libShot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;max-width:none;transform:scale(1);transition:transform .5s cubic-bezier(.22,.61,.36,1)}
-    .libCard:hover .libShot img,.libCard:focus-within .libShot img{transform:scale(1.045)}
-    .libShot:focus-visible{outline:2px solid #fff;outline-offset:-2px}
-    .libFav{position:absolute;z-index:3;top:9px;right:9px;width:31px;height:31px;display:grid;place-items:center;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(8,9,11,.66);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#e7e9ed;padding:0}
-    .libFav svg{width:15px;height:15px}
-    .libFav.is-on{background:#fff;border-color:#fff;color:#111}.libFav.is-on svg{fill:currentColor}
-    .libBadge{position:absolute;z-index:3;top:9px;left:9px;display:inline-flex;align-items:center;gap:5px;border-radius:999px;border:1px solid rgba(255,255,255,.2);background:rgba(8,9,11,.68);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);padding:4px 8px;font-size:8px;letter-spacing:.02em}
-    .libBadge svg{width:11px;height:11px}
-    .libShade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,0) 34%,rgba(0,0,0,.34) 56%,rgba(0,0,0,.8) 78%,rgba(0,0,0,.96) 100%);opacity:0;transition:opacity .16s ease}
-    .libMeta{position:absolute;left:0;right:0;bottom:0;padding:48px 11px 10px;display:grid;grid-template-columns:1fr auto;gap:3px 8px;opacity:0;transform:translateY(8px);transition:opacity .16s ease,transform .16s ease;pointer-events:none}
-    .libMeta b{font-size:12.5px;text-shadow:0 1px 10px rgba(0,0,0,.85)}
-    .libMeta small{grid-column:1;color:#dfe2e6;font-size:9px;text-shadow:0 1px 8px rgba(0,0,0,.85)}
-    .libMeta em{grid-column:2;grid-row:1/3;align-self:start;border:1px solid var(--accent,rgba(255,255,255,.22));color:var(--accent,#fff);background:rgba(0,0,0,.55);border-radius:999px;padding:3px 7px;font-size:7.5px;font-style:normal;white-space:nowrap}
-    .libActions{grid-column:1/-1;display:flex;gap:6px;margin-top:6px;pointer-events:auto}
-    .libActions button{flex:1;height:30px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(10,12,15,.92);color:#fff;font-size:9.5px;font-weight:800}
-    .libActions button.is-primary{background:#fff;border-color:#fff;color:#000}
-    .libCard:hover .libShade,.libCard:hover .libMeta,.libCard:focus-within .libShade,.libCard:focus-within .libMeta,.libCard.is-open .libShade,.libCard.is-open .libMeta{opacity:1;transform:none}
+    /* top strip */
+    .libBar{flex:0 0 auto;display:flex;align-items:center;gap:16px;height:56px;padding:0 18px;border-bottom:1px solid var(--lib-line);background:var(--lib-panel)}
+    .libBarTitle{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:650}
+    .libBarTitle svg{width:16px;height:16px;color:var(--lib-dim)}
+    .libBarSearch{margin-left:auto;display:flex;align-items:center;gap:9px;width:min(320px,42vw);height:34px;padding:0 11px;border:1px solid var(--lib-line);border-radius:10px;background:#0a0b0c}
+    .libBarSearch svg{width:14px;height:14px;color:var(--lib-dim-2);flex:0 0 14px}
+    .libBarSearch input{flex:1;min-width:0;border:0;background:transparent;color:inherit;font-size:13px;outline:none}
+    .libBarSearch input::placeholder{color:var(--lib-dim-2)}
+    .libBarSearch kbd{font-family:inherit;font-size:10px;color:var(--lib-dim-2);border:1px solid var(--lib-line);border-radius:5px;padding:2px 5px}
 
-    .libViewer{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.94);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-    .libViewerBox{width:min(1400px,97vw);height:min(92vh,980px);display:flex;flex-direction:column;background:#08090a;border:1px solid #2b2f36;border-radius:16px;overflow:hidden}
-    .libViewerHead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border-bottom:1px solid #1e2229;flex-wrap:wrap}
-    .libViewerHead b{display:block;font-size:15px;letter-spacing:-.02em}
-    .libViewerHead small{display:block;margin-top:2px;color:#828892;font-size:10px}
-    .libViewerActions{display:flex;gap:7px;flex-wrap:wrap}
-    .libViewerActions button{height:34px;display:inline-flex;align-items:center;gap:6px;border-radius:9px;border:1px solid #2f333a;background:#111317;color:#fff;padding:0 11px;font-size:11px;font-weight:700}
-    .libViewerActions button.is-primary{background:#fff;border-color:#fff;color:#000;font-weight:850}
-    .libViewerActions svg{width:14px;height:14px}
-    .libViewerBox iframe{flex:1;width:100%;border:0;display:block;background:#000}
+    /* two columns: grid + detail */
+    .libBody{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);overflow:hidden}
+    .libBody.has-detail{grid-template-columns:minmax(0,1fr) 380px}
+    .libMain{min-width:0;overflow-y:auto;padding:22px 20px 64px;scrollbar-width:thin}
 
-    @media(max-width:1120px){.libGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-    @media(max-width:720px){
-      .libWorkspace{width:calc(100% - 16px);padding-top:12px}
-      .libHero{display:block;padding-bottom:14px}.libHero h1{font-size:34px}.libHeroMeta{text-align:left;margin-top:12px;display:flex;align-items:baseline;gap:8px}.libHeroMeta b{font-size:26px}
-      .libTools{display:grid;grid-template-columns:1fr auto;gap:8px}.libSearch{grid-column:1/-1}
-      .libGrid{grid-template-columns:1fr;gap:10px}
-      .libMeta{padding:64px 12px 12px}.libMeta b{font-size:15px}.libMeta small{font-size:10.5px}
-      .libActions button{height:38px;font-size:11.5px}
-      .libViewerBox{width:100%;height:94vh;border-radius:14px}
-      .libViewerActions{width:100%}.libViewerActions button{flex:1;justify-content:center}
+    .libIntro{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:20px}
+    .libIntroLead{margin:0;font-size:15px;font-weight:600}
+    .libIntroSub{margin:4px 0 0;font-size:13px;color:var(--lib-dim)}
+
+    /* .malikLibrary button sets color:inherit and is (0,1,1); a bare .libPrimary
+       is (0,1,0) and loses, which painted white text on the white button. The
+       class is scoped so it outranks the reset instead of fighting it. */
+    .malikLibrary .libPrimary{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:38px;padding:0 17px;border:0;border-radius:10px;background:#fff;color:#0a0a0b;font-size:13px;font-weight:650;flex:0 0 auto}
+    .malikLibrary .libPrimary:hover{background:#e9e9ea}
+    .malikLibrary .libPrimary svg{width:15px;height:15px}
+    .malikLibrary .libPrimary.is-wide{width:100%;height:42px}
+
+    /* filter tabs */
+    .libTabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;scrollbar-width:none}
+    .libTabs::-webkit-scrollbar{display:none}
+    .libTabs button{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px;flex:0 0 auto;border:1px solid var(--lib-line);border-radius:10px;background:var(--lib-panel);font-size:12.5px;font-weight:600;white-space:nowrap;transition:background .14s ease,border-color .14s ease}
+    .libTabs button svg{width:14px;height:14px;color:var(--lib-dim)}
+    .libTabs button:hover{background:var(--lib-panel-2)}
+    .libTabs button.is-active{border-color:var(--lib-line-2);background:#000;color:#fff}
+    .libTabs button.is-active svg{color:#fff}
+
+    /* filter row */
+    .libTools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+    .libSpacer{flex:1 1 auto;min-width:0}
+    .libFilterSearch{display:flex;align-items:center;gap:9px;width:min(300px,100%);height:36px;padding:0 12px;border:1px solid var(--lib-line);border-radius:10px;background:var(--lib-panel)}
+    .libFilterSearch svg{width:14px;height:14px;color:var(--lib-dim-2);flex:0 0 14px}
+    .libFilterSearch input{flex:1;min-width:0;border:0;background:transparent;color:inherit;font-size:13px;outline:none}
+    .libFilterSearch input::placeholder{color:var(--lib-dim-2)}
+    .libFilterSearch button{display:grid;place-items:center;border:0;background:transparent;padding:0}
+
+    .libSelect{position:relative;flex:0 0 auto}
+    .libSelect>button{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 13px;border:1px solid var(--lib-line);border-radius:10px;background:var(--lib-panel);font-size:12.5px;font-weight:550}
+    .libSelect>button:hover{background:var(--lib-panel-2)}
+    .libSelect>button svg{width:14px;height:14px;color:var(--lib-dim)}
+    .libMenu{position:absolute;z-index:20;top:calc(100% + 6px);left:0;min-width:220px;max-height:290px;overflow-y:auto;padding:6px;border:1px solid var(--lib-line-2);border-radius:12px;background:var(--lib-panel-2);box-shadow:0 18px 44px rgba(0,0,0,.55);display:grid;gap:2px}
+    .libMenu.is-right{left:auto;right:0}
+    .libMenu button{width:100%;text-align:left;border:0;border-radius:8px;background:transparent;padding:8px 10px;font-size:12.5px}
+    .libMenu button:hover{background:rgba(255,255,255,.07)}
+    .libMenu button.is-on{background:rgba(255,255,255,.12);font-weight:650}
+
+    .libViewSwitch{display:flex;gap:2px;padding:3px;border:1px solid var(--lib-line);border-radius:10px;background:var(--lib-panel);flex:0 0 auto}
+    .libViewSwitch button{display:grid;place-items:center;width:30px;height:28px;border:0;border-radius:7px;background:transparent}
+    .libViewSwitch button svg{width:15px;height:15px;color:var(--lib-dim)}
+    .libViewSwitch button.is-on{background:rgba(255,255,255,.12)}
+    .libViewSwitch button.is-on svg{color:#fff}
+
+    /* cards */
+    .libGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+    .libList{display:grid;gap:8px}
+    .libCard{position:relative;display:flex;flex-direction:column;border:1px solid var(--lib-line);border-radius:14px;background:var(--lib-panel);overflow:hidden;transition:border-color .16s ease,transform .16s ease}
+    .libCard:hover{border-color:var(--lib-line-2);transform:translateY(-2px)}
+    .libCard.is-selected{border-color:#fff}
+    .libShot{position:relative;display:block;width:100%;padding:0;border:0;background:#000;line-height:0}
+    .libShot img{width:100%;height:auto;aspect-ratio:16/10;object-fit:cover;display:block}
+    .libBadge{position:absolute;top:9px;left:9px;display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;background:rgba(0,0,0,.66);backdrop-filter:blur(6px);color:#fff;font-size:10px;font-weight:700;line-height:1}
+    .libBadge svg{width:11px;height:11px;color:var(--accent,#fff)}
+    .libCardFoot{display:flex;align-items:center;gap:10px;padding:10px 11px;min-width:0}
+    .libKind{display:grid;place-items:center;width:28px;height:28px;flex:0 0 28px;border-radius:8px;background:var(--lib-panel-2)}
+    .libKind svg{width:14px;height:14px;color:var(--lib-dim)}
+    .libCardText{min-width:0;display:grid;gap:1px}
+    .libCardText b{font-size:12.5px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .libCardText small{font-size:11px;color:var(--lib-dim-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .libFav{margin-left:auto;display:grid;place-items:center;width:28px;height:28px;flex:0 0 28px;border:0;border-radius:8px;background:transparent}
+    .libFav svg{width:15px;height:15px;color:var(--lib-dim-2)}
+    .libFav:hover{background:rgba(255,255,255,.07)}
+    .libFav.is-on svg{color:var(--accent,#fff);fill:var(--accent,#fff)}
+
+    /* list mode: same card, laid sideways */
+    .libList .libCard{flex-direction:row;align-items:center;border-radius:12px}
+    .libList .libShot{width:132px;flex:0 0 132px}
+    /* The top-left of a site screenshot is its masthead - the part that makes a
+       template recognisable. Centre-cropping a 132px strip shows the middle of
+       the page instead, which is the same grey block on every card. */
+    .libList .libShot img{aspect-ratio:16/9;object-position:left top}
+    .libList .libCardFoot{flex:1;min-width:0}
+    .libList .libBadge{display:none}
+
+    .libEmpty,.libMore{margin:26px 0 0;font-size:13px;color:var(--lib-dim)}
+
+    /* detail panel */
+    .libDetail{min-width:0;overflow-y:auto;border-left:1px solid var(--lib-line);background:var(--lib-panel);scrollbar-width:thin}
+    .libDetailShot{position:relative;line-height:0;background:#000}
+    .libDetailShot img{width:100%;height:auto;aspect-ratio:16/10;object-fit:cover;display:block}
+    .libDetailClose{position:absolute;top:10px;right:10px;display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:50%;background:rgba(0,0,0,.6);backdrop-filter:blur(6px)}
+    .libDetailClose svg{width:14px;height:14px}
+    .libDetailBody{padding:16px 16px 26px;display:grid;gap:12px}
+    .libDetailBody h2{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em}
+    .libDetailMeta{margin:0;display:flex;align-items:center;gap:7px;font-size:12px;color:var(--lib-dim)}
+    .libDetailMeta svg{width:13px;height:13px}
+    .libTags{display:flex;flex-wrap:wrap;gap:6px}
+    .libTags span{padding:4px 9px;border:1px solid var(--lib-line);border-radius:999px;background:var(--lib-panel-2);font-size:11px;color:var(--lib-dim)}
+    .libDetailText{margin:0;font-size:13px;line-height:1.6;color:var(--lib-dim)}
+    .libSpecs{margin:2px 0 0;display:grid;gap:0}
+    .libSpecs>div{display:flex;align-items:baseline;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px solid var(--lib-line)}
+    .libSpecs>div:last-child{border-bottom:0}
+    .libSpecs dt{margin:0;font-size:12px;color:var(--lib-dim-2)}
+    .libSpecs dd{margin:0;font-size:12px;font-weight:600;text-align:right;min-width:0;overflow-wrap:anywhere}
+    .libDetailRow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .libDetailRow button,.libDetailWide{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:38px;padding:0 12px;border:1px solid var(--lib-line);border-radius:10px;background:var(--lib-panel-2);font-size:12.5px;font-weight:600}
+    .libDetailWide{width:100%}
+    .libDetailRow button:hover,.libDetailWide:hover{border-color:var(--lib-line-2);background:#1d1e22}
+    .libDetailRow svg,.libDetailWide svg{width:14px;height:14px}
+
+    /* full viewer */
+    .libViewer{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:22px;background:rgba(0,0,0,.82);backdrop-filter:blur(6px)}
+    .libViewerBox{width:min(1180px,100%);height:min(88vh,900px);display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--lib-line-2);border-radius:16px;background:#0a0b0c}
+    .libViewerHead{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--lib-line)}
+    .libViewerHead b{display:block;font-size:14px;font-weight:700}
+    .libViewerHead small{display:block;font-size:11.5px;color:var(--lib-dim-2)}
+    .libViewerActions{display:flex;gap:8px;flex-wrap:wrap}
+    .libViewerActions button{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border:1px solid var(--lib-line);border-radius:9px;background:var(--lib-panel-2);font-size:12.5px;font-weight:600}
+    .libViewerActions button svg{width:14px;height:14px}
+    .malikLibrary .libViewerActions button.is-primary{border-color:transparent;background:#fff;color:#0a0a0b}
+    .libViewerBox iframe{flex:1;width:100%;border:0;background:#fff}
+
+    @media (max-width:1100px){
+      .libBody.has-detail{grid-template-columns:minmax(0,1fr)}
+      .libDetail{position:fixed;inset:auto 0 0;z-index:70;max-height:78dvh;border-left:0;border-top:1px solid var(--lib-line-2);border-radius:18px 18px 0 0;box-shadow:0 -18px 50px rgba(0,0,0,.6)}
+    }
+    @media (max-width:640px){
+      .libBar{padding:0 12px}
+      .libBarTitle span{display:none}
+      .libMain{padding:16px 12px 60px}
+      .libGrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+      .libFilterSearch{width:100%}
+      .libSpacer{display:none}
+    }
+    @media (prefers-reduced-motion:reduce){
+      .libCard{transition:none}
+      .libCard:hover{transform:none}
     }
   `}</style>
 }
-
-export default SiteLibraryPanel
