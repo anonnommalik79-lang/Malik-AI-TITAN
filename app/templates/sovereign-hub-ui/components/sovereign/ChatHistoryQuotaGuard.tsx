@@ -1,7 +1,6 @@
 "use client"
 
 import { useLayoutEffect } from "react"
-import { ChatAutoScrollRuntime } from "@/components/sovereign/ChatAutoScrollRuntime"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const DASHBOARD_ACCOUNT_STORAGE_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
@@ -66,7 +65,14 @@ export function ChatHistoryQuotaGuard() {
     }
   }, [])
 
-  return <ChatAutoScrollRuntime />
+  // IMPORTANT: do not mount ChatAutoScrollRuntime here.
+  // It used a MutationObserver + ResizeObserver to repeatedly assign
+  // `scroller.scrollTop = scroller.scrollHeight` while the assistant streamed.
+  // That fought the user's wheel/trackpad/touch movement and made the chat feel
+  // locked during text/code/image generation. ChatTurnScrollRuntime (mounted in
+  // app/layout.tsx) already keeps the chat element scrollable and suppresses
+  // legacy programmatic bottom jumps without touching manual scrolling.
+  return null
 }
 
 export default ChatHistoryQuotaGuard
