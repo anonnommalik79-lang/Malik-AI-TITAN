@@ -33,6 +33,8 @@ const handlers: Record<string, () => boolean> = {
 }
 
 const FREE_IMAGE_PROVIDERS = new Set(["cloudflare", "pollinations"])
+const TRANSIENT_IMAGE_PROVIDER_ERROR =
+  /\b(?:429|500|502|503|504|520|521|522|523|524)\b|fetch failed|network|socket|econnreset|eai_again|temporar(?:y|ily)|upstream/i
 
 function effectiveImageOrder(): string[] {
   const order = imageGodOrder()
@@ -43,6 +45,38 @@ function effectiveImageOrder(): string[] {
 
 function uniqueProviders(values: string[]) {
   return values.filter((provider, index, list) => Boolean(provider) && list.indexOf(provider) === index)
+}
+
+function shouldRetryImageProviderError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "")
+  if (!message || /timeout|timed out|abort|IMAGE_PROVIDER_ATTEMPT_TIMEOUT/i.test(message)) return false
+  return TRANSIENT_IMAGE_PROVIDER_ERROR.test(message)
+}
+
+/**
+ * Image providers occasionally return a transient 5xx after doing most of the
+ * work. Previously that single upstream hiccup immediately consumed the model
+ * and eventually surfaced to the user as "Media API returned 502" at 99%.
+ * Retry only transient network/upstream failures once; invalid requests,
+ * authentication failures and timeouts still fail over immediately.
+ */
+async function retryTransientImageProvider<T>(
+  run: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  let lastError: unknown
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await run()
+    } catch (error) {
+      lastError = error
+      if (attempt > 0 || signal?.aborted || !shouldRetryImageProviderError(error)) throw error
+      await new Promise((resolve) => setTimeout(resolve, 450))
+    }
+  }
+
+  throw lastError
 }
 
 function clampNumber(value: unknown, min: number, max: number) {
@@ -164,14 +198,17 @@ export async function routeImageGeneration(
         const result = await withAttemptSignal(
           options?.signal,
           cloudflareAttemptTimeoutMs(preferred),
-          (signal) => generatePreparedCloudflareImage({
-            strictPrompt: prompt,
-            negativePrompt,
-            aspectRatio: input.aspectRatio,
-            modelId: automaticModelId,
-            tuning,
+          (signal) => retryTransientImageProvider(
+            () => generatePreparedCloudflareImage({
+              strictPrompt: prompt,
+              negativePrompt,
+              aspectRatio: input.aspectRatio,
+              modelId: automaticModelId,
+              tuning,
+              signal,
+            }),
             signal,
-          }),
+          ),
         )
         return {
           ok: true,
@@ -206,12 +243,12 @@ export async function routeImageGeneration(
 
     try {
       if (provider === "stability") {
-        const result = await generateWithStability({
+        const result = await retryTransientImageProvider(() => generateWithStability({
           prompt,
           aspectRatio: input.aspectRatio,
           mode: input.mode,
           signal: options?.signal,
-        })
+        }), options?.signal)
         return {
           ok: true,
           provider: "stability",
@@ -230,11 +267,11 @@ export async function routeImageGeneration(
       }
 
       if (provider === "fal") {
-        const result = await generateFalImage({
+        const result = await retryTransientImageProvider(() => generateFalImage({
           prompt,
           aspectRatio: input.aspectRatio,
           signal: options?.signal,
-        })
+        }), options?.signal)
         return {
           ok: true,
           provider: "fal",
@@ -252,11 +289,11 @@ export async function routeImageGeneration(
       }
 
       if (provider === "aws-bedrock") {
-        const result = await generateAwsImage({
+        const result = await retryTransientImageProvider(() => generateAwsImage({
           prompt,
           mode: input.mode,
           signal: options?.signal,
-        })
+        }), options?.signal)
         return {
           ok: true,
           provider: "aws-bedrock",
@@ -275,12 +312,12 @@ export async function routeImageGeneration(
       }
 
       if (provider === "pollinations") {
-        const result = await generateWithPollinations({
+        const result = await retryTransientImageProvider(() => generateWithPollinations({
           prompt,
           negativePrompt,
           aspectRatio: input.aspectRatio,
           signal: options?.signal,
-        })
+        }), options?.signal)
         return {
           ok: true,
           provider: "pollinations",
