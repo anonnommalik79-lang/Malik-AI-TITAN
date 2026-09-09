@@ -7,6 +7,7 @@ import {
 } from "../lib/ai/malik-models.ts"
 
 const expected = {
+  "malik-coder-32b": ["malik-orchestrator", "MalikCoder-1.0"],
   "malik-qwen-397b": ["modelscope", "Qwen/Qwen3.5-397B-A17B"],
   "malik-reason-753b": ["modelscope", "ZhipuAI/GLM-5.2"],
   "malik-core-300b": ["modelscope", "PaddlePaddle/ERNIE-4.5-300B-A47B-PT"],
@@ -18,7 +19,6 @@ const expected = {
   "malik-27b": ["groq", "qwen/qwen3.8-27b"],
   "malik-30b": ["cloudflare", "@cf/qwen/qwen3-30b-a3b-fp8"],
   "malik-vision-26b": ["cloudflare", "@cf/google/gemma-4-26b-a4b-it"],
-  "malik-coder-32b": ["cloudflare", "@cf/qwen/qwen2.5-coder-32b-instruct"],
   "malik-70b": ["cloudflare", "@cf/meta/llama-3.3-70b-instruct-fp8-fast"],
   "malik-120b": ["groq", "openai/gpt-oss-120b"],
   "malik-agent-120b": ["cloudflare", "@cf/nvidia/nemotron-3-120b-a12b"],
@@ -27,7 +27,7 @@ const expected = {
 assert.equal(MALIK_MODELS.length, 15, "The selector must expose fifteen live Malik models")
 assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, 15, "Model IDs must be unique")
 assert.equal(new Set(MALIK_MODELS.map((model) => `${model.provider}:${model.providerModel}`)).size, 15, "Provider routes must be unique")
-assert.equal(DEFAULT_MALIK_MODEL_ID, "malik-qwen-397b", "Qwen 3.5 397B must be the default text model")
+assert.equal(DEFAULT_MALIK_MODEL_ID, "malik-coder-32b", "MalikCoder 1.0 must be the default text/code model")
 
 for (const [id, [provider, providerModel]] of Object.entries(expected)) {
   const model = getMalikModel(id)
@@ -42,6 +42,7 @@ for (const [id, [provider, providerModel]] of Object.entries(expected)) {
 assert.deepEqual(
   MALIK_MODELS.filter((model) => canUseMalikModel(model.id, "free")).map((model) => model.id),
   [
+    "malik-coder-32b",
     "malik-qwen-397b",
     "malik-reason-753b",
     "malik-core-300b",
@@ -51,9 +52,10 @@ assert.deepEqual(
     "malik-fast-120b",
     "malik-27b",
   ],
-  "Free must expose the eight live free models",
+  "Free must expose MalikCoder 1.0 plus the eight existing live free models",
 )
 
+assert.equal(getMalikModel("malik-coder-32b").label, "MalikCoder 1.0", "Public model name must be exact")
 assert.equal(MALIK_MODELS.some((model) => model.providerModel === "zai-glm-4.7"), false, "Deprecated GLM 4.7 must not be exposed")
 assert.equal(MALIK_MODELS.some((model) => model.providerModel.includes("gemini")), false, "Hidden Gemini must never appear in the selector")
-console.log("Verified 15 unique live Malik routes, branding, and Free/Pro gates.")
+console.log("Verified 15 unique Malik routes with MalikCoder 1.0 as the default free orchestrated model.")
