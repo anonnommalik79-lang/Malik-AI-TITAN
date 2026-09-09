@@ -1,6 +1,7 @@
 import type { AIPlan } from "./types"
 
 export type MalikModelId =
+  | "malik-coder-1"
   | "malik-qwen-397b"
   | "malik-reason-753b"
   | "malik-core-300b"
@@ -18,7 +19,7 @@ export type MalikModelId =
   | "malik-agent-120b"
 
 export type MalikModelTier = "free" | "pro"
-export type MalikModelProvider = "modelscope" | "aihubmix" | "groq" | "cloudflare" | "cerebras"
+export type MalikModelProvider = "malik-orchestrator" | "modelscope" | "aihubmix" | "groq" | "cloudflare" | "cerebras"
 
 export type MalikModelDefinition = {
   id: MalikModelId
@@ -30,11 +31,20 @@ export type MalikModelDefinition = {
   capabilities: readonly ("text" | "vision" | "code" | "tools" | "reasoning")[]
 }
 
-// v3 intentionally resets the old saved Qwen3.8/Groq default so existing users
-// land on the new ModelScope flagship after this rollout.
-const MALIK_MODEL_STORAGE_KEY = "malik_selected_model_v3"
+// v4 resets old saved defaults so existing users land on MalikCoder 1.0 after
+// the multi-provider orchestration rollout.
+const MALIK_MODEL_STORAGE_KEY = "malik_selected_model_v4"
 
 export const MALIK_MODELS = [
+  {
+    id: "malik-coder-1",
+    label: "MalikCoder 1.0",
+    description: "Multi-provider · Полные ответы и код до завершения",
+    tier: "free",
+    provider: "malik-orchestrator",
+    providerModel: "MalikCoder-1.0",
+    capabilities: ["text", "code", "tools", "reasoning"],
+  },
   {
     id: "malik-qwen-397b",
     label: "MalikLLM397B Qwen 3.5",
@@ -172,7 +182,7 @@ export const MALIK_MODELS = [
   },
 ] as const satisfies readonly MalikModelDefinition[]
 
-export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-qwen-397b"
+export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-coder-1"
 export const FREE_MALIK_MODELS = MALIK_MODELS.filter((model) => model.tier === "free")
 export const PRO_MALIK_MODELS = MALIK_MODELS.filter((model) => model.tier === "pro")
 
