@@ -1,11 +1,12 @@
 import { asPlainText, malikGodAnswer } from "@/lib/malik-god-router"
+import { checkUsageLimit, recordChatUsage } from "@/lib/limits/rate-limit"
 import {
   MalikModelRouteError,
   malikModelErrorPayload,
   resolveStrictMalikSelection,
 } from "@/lib/server/malik-model-router"
 import { runMalikCoderOrchestrator } from "@/lib/server/malik-coder-orchestrator"
-import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
 import { isFeatureDisabled, readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
 
@@ -154,6 +155,7 @@ async function runSelectedAnswer(
 function liveSseResponse(
   body: any,
   selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>,
+  entitlement: RequestEntitlement,
 ) {
   const encoder = new TextEncoder()
   const startedAt = Date.now()
@@ -178,7 +180,10 @@ function liveSseResponse(
         body,
         selection,
         (progress) => send("progress", { type: "progress", ...progress }),
-      ).then((answer) => {
+      ).then(async (answer) => {
+        await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0).catch((error) => {
+          console.warn("[MALIK_CHAT_USAGE]", error instanceof Error ? error.message : String(error))
+        })
         observeComputeResult(answer)
         send("content", {
           type: "content",
@@ -267,11 +272,32 @@ async function handlePOST(request: Request) {
       return textResponse(identity)
     }
 
+    const limit = await checkUsageLimit({
+      userId: entitlement.userId,
+      plan: entitlement.plan,
+      task: "chat",
+    })
+    if (!limit.ok) {
+      return Response.json({
+        ok: false,
+        error: limit.code || "DAILY_LIMIT_REACHED",
+        message: entitlement.plan === "free"
+          ? "Лимит 15 запросов на сегодня исчерпан. Доступ обновится после ежедневного сброса."
+          : limit.error || "Daily limit reached",
+        remaining: 0,
+        resetAt: limit.resetAt,
+      }, {
+        status: 429,
+        headers: { "cache-control": "private, no-store" },
+      })
+    }
+
     // Founder recognition is granted only from the verified WorkOS session.
     // User-controlled email/name fields in the request are intentionally ignored.
     const routedBody = ownerMode ? withVerifiedOwnerChatContext(body) : body
-    if (wantsSse(request, body)) return liveSseResponse(routedBody, selection)
+    if (wantsSse(request, body)) return liveSseResponse(routedBody, selection, entitlement)
     const answer = await runSelectedAnswer(routedBody, selection)
+    await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0)
     observeComputeResult(answer)
     const content = asPlainText(answer)
     return textResponse(content)
@@ -292,6 +318,7 @@ export async function GET() {
     status: isFeatureDisabled("chat") ? "paused" : "ready",
     defaultModel: "MalikCoder 1.0",
     limits: {
+      freeDailyChatRequests: 15,
       maxBodyMb: MAX_CHAT_BODY_BYTES / (1024 * 1024),
       maxTextContextChars: MAX_TEXT_CONTEXT_CHARS,
     },
