@@ -16,6 +16,7 @@ import { ChatHistoryQuotaGuard } from "@/components/sovereign/ChatHistoryQuotaGu
 import { MalikCognitiveResponseRuntime } from "@/components/sovereign/MalikCognitiveResponseRuntime"
 import { ChatTurnScrollRuntime } from "@/components/sovereign/ChatTurnScrollRuntime"
 import { SidebarSectionRuntime } from "@/components/sovereign/SidebarSectionRuntime"
+import { ReleaseFixRuntime } from "@/components/sovereign/ReleaseFixRuntime"
 import { BusinessModelUiRuntime } from "@/components/sovereign/business/BusinessModelUiRuntime"
 import "./globals.css"
 import "./mobile-polish.css"
@@ -226,6 +227,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <MalikTurnRuntime />
         <ChatTurnScrollRuntime />
         <SidebarSectionRuntime />
+        <ReleaseFixRuntime />
         <BusinessModelUiRuntime />
         <MalikStopPolish />
         <FounderConsoleRuntime />
