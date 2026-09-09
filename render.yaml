@@ -20,13 +20,13 @@ services:
       - key: AI_FREE_MODE
         value: "true"
       - key: IMAGE_PREFERRED_MODEL_TIMEOUT_MS
-        value: "35000"
+        value: "45000"
       - key: IMAGE_FALLBACK_MODEL_TIMEOUT_MS
-        value: "4000"
+        value: "6000"
       - key: IMAGE_PROMPT_COMPILER_TIMEOUT_MS
         value: "5000"
       - key: POLLINATIONS_TIMEOUT_MS
-        value: "15000"
+        value: "22000"
       - key: TEXT_PROVIDER_ORDER
         value: "modelscope,aihubmix,cerebras,groq,gemini,openrouter"
       - key: CODE_PROVIDER_ORDER
