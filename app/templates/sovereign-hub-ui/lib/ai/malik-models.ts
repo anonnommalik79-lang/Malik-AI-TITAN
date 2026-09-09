@@ -1,7 +1,6 @@
 import type { AIPlan } from "./types"
 
 export type MalikModelId =
-  | "malik-coder-1"
   | "malik-qwen-397b"
   | "malik-reason-753b"
   | "malik-core-300b"
@@ -37,7 +36,7 @@ const MALIK_MODEL_STORAGE_KEY = "malik_selected_model_v4"
 
 export const MALIK_MODELS = [
   {
-    id: "malik-coder-1",
+    id: "malik-coder-32b",
     label: "MalikCoder 1.0",
     description: "Multi-provider · Полные ответы и код до завершения",
     tier: "free",
@@ -145,15 +144,6 @@ export const MALIK_MODELS = [
     capabilities: ["text", "vision", "tools", "reasoning"],
   },
   {
-    id: "malik-coder-32b",
-    label: "MalikLLM Coder 32B",
-    description: "Продвинутый код",
-    tier: "pro",
-    provider: "cloudflare",
-    providerModel: "@cf/qwen/qwen2.5-coder-32b-instruct",
-    capabilities: ["text", "code"],
-  },
-  {
     id: "malik-70b",
     label: "MalikLLM 70B",
     description: "Продвинутый",
@@ -182,7 +172,7 @@ export const MALIK_MODELS = [
   },
 ] as const satisfies readonly MalikModelDefinition[]
 
-export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-coder-1"
+export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-coder-32b"
 export const FREE_MALIK_MODELS = MALIK_MODELS.filter((model) => model.tier === "free")
 export const PRO_MALIK_MODELS = MALIK_MODELS.filter((model) => model.tier === "pro")
 
