@@ -146,8 +146,8 @@ async function runProvider(
 
   try {
     if (provider === "groq") {
-      const key = env("GROQ_API_KEY")
-      if (!key) throw new Error("GROQ_API_KEY is not configured")
+      const key = env("MALIK_CODER_GROQ_API_KEY") || env("GROQ_API_KEY")
+      if (!key) throw new Error("MALIK_CODER_GROQ_API_KEY is not configured")
       return await callOpenAICompatible({
         provider,
         url: `${(env("GROQ_BASE_URL") || "https://api.groq.com/openai/v1").replace(/\/+$/, "")}/chat/completions`,
@@ -160,9 +160,9 @@ async function runProvider(
     }
 
     if (provider === "cloudflare") {
-      const key = env("CLOUDFLARE_API_TOKEN") || env("CF_API_TOKEN")
-      const accountId = env("CLOUDFLARE_ACCOUNT_ID") || env("CF_ACCOUNT_ID")
-      if (!key || !accountId) throw new Error("Cloudflare Workers AI credentials are not configured")
+      const key = env("MALIK_CODER_CLOUDFLARE_API_TOKEN") || env("CLOUDFLARE_API_TOKEN") || env("CF_API_TOKEN")
+      const accountId = env("MALIK_CODER_CLOUDFLARE_ACCOUNT_ID") || env("CLOUDFLARE_ACCOUNT_ID") || env("CF_ACCOUNT_ID")
+      if (!key || !accountId) throw new Error("MalikCoder Cloudflare credentials are not configured")
       return await callOpenAICompatible({
         provider,
         url: `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`,
@@ -175,8 +175,8 @@ async function runProvider(
     }
 
     if (provider === "sambanova") {
-      const key = env("SAMBANOVA_API_KEY")
-      if (!key) throw new Error("SAMBANOVA_API_KEY is not configured")
+      const key = env("MALIK_CODER_SAMBANOVA_API_KEY") || env("SAMBANOVA_API_KEY")
+      if (!key) throw new Error("MALIK_CODER_SAMBANOVA_API_KEY is not configured")
       return await callOpenAICompatible({
         provider,
         url: `${(env("SAMBANOVA_BASE_URL") || "https://api.sambanova.ai/v1").replace(/\/+$/, "")}/chat/completions`,
@@ -188,8 +188,8 @@ async function runProvider(
       })
     }
 
-    const key = env("OPENROUTER_API_KEY")
-    if (!key) throw new Error("OPENROUTER_API_KEY is not configured")
+    const key = env("MALIK_CODER_OPENROUTER_API_KEY") || env("OPENROUTER_API_KEY")
+    if (!key) throw new Error("MALIK_CODER_OPENROUTER_API_KEY is not configured")
     return await callOpenAICompatible({
       provider,
       url: `${(env("OPENROUTER_BASE_URL") || "https://openrouter.ai/api/v1").replace(/\/+$/, "")}/chat/completions`,
