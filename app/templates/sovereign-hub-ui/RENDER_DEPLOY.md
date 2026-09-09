@@ -17,7 +17,7 @@ Render sets `PORT` automatically. Do not hardcode port 3000 in production.
 
 ## MalikCoder 1.0 — required provider secrets
 
-MalikCoder 1.0 is the default free text/code model. It orchestrates Groq, Cloudflare Workers AI, OpenRouter Free, and SambaNova. SambaNova is best-effort: HTTP 429 puts it into a temporary cooldown while the other providers continue.
+MalikCoder 1.0 is the default free text/code model. It orchestrates Groq, Cloudflare Workers AI, OpenRouter, and SambaNova. SambaNova is best-effort: HTTP 429 puts it into a temporary cooldown while the other providers continue.
 
 Add these in **Render Dashboard → your Web Service → Environment → Add Environment Variable**:
 
@@ -40,9 +40,11 @@ Do not prefix any of these server secrets with `NEXT_PUBLIC_` and never commit r
 ```env
 MALIK_CODER_GROQ_MODEL=openai/gpt-oss-120b
 MALIK_CODER_CLOUDFLARE_MODEL=@cf/meta/llama-3.1-8b-instruct-fast
-MALIK_CODER_OPENROUTER_MODEL=openrouter/free
+MALIK_CODER_OPENROUTER_MODEL=poolside/laguna-s-2.1:free
 MALIK_CODER_SAMBANOVA_MODEL=gpt-oss-120b
 ```
+
+OpenRouter is pinned to a specific free non-NVIDIA model instead of `openrouter/free`, because the generic free router can select NVIDIA models. If the pinned model changes upstream, update `MALIK_CODER_OPENROUTER_MODEL` in Render without changing application code.
 
 ### Recommended output budgets
 
