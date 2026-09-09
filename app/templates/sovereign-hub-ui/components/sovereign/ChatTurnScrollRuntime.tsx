@@ -37,21 +37,18 @@ function requestedTop(args: unknown[]) {
 }
 
 /**
- * Keeps the viewport exactly where the person left it after Send.
+ * Free ChatGPT-style turn scrolling.
  *
- * ChatView still has legacy effects that call scrollTo(scrollHeight) whenever
- * messages change. The previous runtime tried to improve that by moving the new
- * user row near the top of the thread. On a tall desktop chat that looked like
- * the whole conversation had flown out through the top edge of the app.
+ * The app has legacy effects that try to jump to scrollHeight while text/image
+ * state changes. During streaming that fought the wheel/trackpad and made the
+ * thread feel locked. The runtime now does only three things:
+ *   1. preserve the viewport once when Send is pressed;
+ *   2. block only programmatic "jump to newest token" calls for that turn;
+ *   3. give the active turn a small fixed breathing room below the last row so
+ *      the person can move a little above/below the generation without hacks.
  *
- * The correct behaviour is simpler:
- *   - pressing Send preserves the current chat scrollTop;
- *   - the new turn and every streamed token are allowed to render below it;
- *   - legacy forced-bottom calls are ignored for that active turn;
- *   - wheel, touch, scrollbar and keyboard movement remain completely native;
- *   - the surrounding page/sidebar are never scrolled by this runtime;
- *   - opening another saved chat clears the guard so that chat may choose its
- *     own initial position once.
+ * It never handles wheel/touch itself and it no longer observes every streamed
+ * character, so text and photo generation do not create an animation-frame loop.
  */
 export function ChatTurnScrollRuntime() {
   useEffect(() => {
@@ -78,6 +75,8 @@ export function ChatTurnScrollRuntime() {
       thread.style.setProperty("overflow-x", "hidden", "important")
       thread.style.setProperty("touch-action", "pan-y", "important")
       thread.style.setProperty("overscroll-behavior-y", "contain", "important")
+      thread.style.setProperty("scroll-behavior", "auto", "important")
+      thread.style.setProperty("scroll-snap-type", "none", "important")
       thread.style.setProperty("-webkit-overflow-scrolling", "touch", "important")
     }
 
@@ -92,8 +91,6 @@ export function ChatTurnScrollRuntime() {
       makeThreadScrollable(thread)
       thread.setAttribute(FREE_SCROLL_ATTR, "1")
       thread.setAttribute(PRESERVED_TOP_ATTR, String(Math.max(0, top)))
-      // Browser scroll anchoring can otherwise move a bottom-aligned thread when
-      // a new message is inserted even if no JS scroll command runs.
       thread.style.setProperty("overflow-anchor", "none", "important")
     }
 
@@ -117,8 +114,8 @@ export function ChatTurnScrollRuntime() {
     const patchedScrollTo = function(this: Element, ...args: unknown[]) {
       if (isHtmlElement(this) && this.matches(CHAT_SCROLL) && freeScrolling(this)) {
         const top = requestedTop(args)
-        // Block only the app's "always jump to the newest token" command.
-        // All normal/manual scrolling remains native.
+        // Only suppress the legacy auto-follow shape. A person's wheel, touch,
+        // scrollbar drag and keyboard scrolling never enter this branch.
         if (top !== null && top >= this.scrollHeight - 2) return
       }
       return (nativeScrollTo as (...values: unknown[]) => void).apply(this, args)
@@ -132,10 +129,8 @@ export function ChatTurnScrollRuntime() {
         behavior: "auto",
       })
 
-      // Desktop browsers should never pan the document itself when a chat turn
-      // is submitted; that is what makes the fixed sidebar/header appear to jump.
-      // On phones the visual viewport legitimately moves for the software keyboard,
-      // so document restoration is intentionally desktop-only.
+      // Keep the document itself fixed on desktop. Only .malik-chat-scroll may
+      // move, so the sidebar/header never ride upward with a chat submission.
       if (window.innerWidth >= 768 && Math.abs(window.scrollY - pendingPageTop) > 1) {
         nativeWindowScrollTo(window.scrollX, pendingPageTop)
       }
@@ -164,29 +159,28 @@ export function ChatTurnScrollRuntime() {
         clearTurnState(currentThread)
         currentThread = thread
         currentList = list
-
         if (pending) restoreSubmittedViewport(thread)
         else clearTurnState(thread)
-
         previousUserCount = rows.length
         previousLastUser = lastUser
         return
       }
 
       const userChanged = lastUser !== previousLastUser || rows.length !== previousUserCount
-      if (userChanged) {
-        if (pending) {
-          restoreSubmittedViewport(thread)
-          pendingSendUntil = 0
-        } else {
-          // A reused DOM shell can represent another saved chat. Do not carry the
-          // previous chat's scroll guard across sessions.
-          const appendedOneTurn = rows.length === previousUserCount + 1
-          if (!appendedOneTurn) clearTurnState(thread)
-        }
-        previousUserCount = rows.length
-        previousLastUser = lastUser
+      if (!userChanged) return
+
+      if (pending) {
+        restoreSubmittedViewport(thread)
+        pendingSendUntil = 0
+      } else {
+        // If the same shell was reused for another saved session, drop the turn
+        // guard. A normal single appended user turn keeps free scrolling.
+        const appendedOneTurn = rows.length === previousUserCount + 1
+        if (!appendedOneTurn) clearTurnState(thread)
       }
+
+      previousUserCount = rows.length
+      previousLastUser = lastUser
     }
 
     const schedule = () => {
@@ -196,7 +190,6 @@ export function ChatTurnScrollRuntime() {
     const armSend = () => {
       const { thread } = chatParts()
       if (!thread) return
-
       pendingSendUntil = performance.now() + 3000
       pendingThreadTop = thread.scrollTop
       pendingPageTop = window.scrollY
@@ -207,7 +200,7 @@ export function ChatTurnScrollRuntime() {
     const cancelPendingPlacement = (event: Event) => {
       const target = event.target instanceof Element ? event.target : null
       if (!target?.closest(CHAT_SCROLL)) return
-      // If the person starts moving immediately after Send, their hand wins.
+      // The first manual movement immediately wins over the one-time restore.
       pendingSendUntil = 0
     }
 
@@ -237,9 +230,8 @@ export function ChatTurnScrollRuntime() {
     observer.observe(document.body, {
       subtree: true,
       childList: true,
-      characterData: true,
       attributes: true,
-      attributeFilter: ["class", "data-malik-message", "src"],
+      attributeFilter: ["data-malik-message"],
     })
 
     scan()
@@ -258,7 +250,24 @@ export function ChatTurnScrollRuntime() {
     }
   }, [])
 
-  return null
+  return (
+    <style jsx global>{`
+      .malik-chat-scroll[data-malik-free-scroll="1"] {
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        touch-action: pan-y !important;
+        overscroll-behavior-y: contain !important;
+        scroll-behavior: auto !important;
+        scroll-snap-type: none !important;
+      }
+
+      /* Stable, fixed breathing room: unlike the old runway this never grows or
+         shrinks while tokens arrive, so it cannot change scrollTop under a hand. */
+      .malik-chat-scroll[data-malik-free-scroll="1"] .malik-message-list {
+        padding-bottom: clamp(120px, 18vh, 190px) !important;
+      }
+    `}</style>
+  )
 }
 
 export default ChatTurnScrollRuntime
