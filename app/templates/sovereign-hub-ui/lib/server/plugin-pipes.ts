@@ -83,7 +83,12 @@ export async function createPipesAuthorization(userId: string, providerSlug: str
     }),
   })
 
-  const url = String(payload?.authorization_url || payload?.url || "")
+  // WorkOS Pipes officially returns `url`, which points at its own
+  // authorize-redirect endpoint and carries the state needed to finish OAuth
+  // and honor return_to. Some responses also expose a provider authorization
+  // URL for compatibility; prefer WorkOS' redirect so GitHub never loses that
+  // state and strands the browser on an internal /sessions/verified-device URL.
+  const url = String(payload?.url || payload?.authorization_url || "")
   if (!response.ok || !url) {
     const reason = String(payload?.message || payload?.error || `WorkOS Pipes returned ${response.status}`)
     throw new Error(reason)
