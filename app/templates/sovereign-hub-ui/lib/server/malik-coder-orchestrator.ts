@@ -194,7 +194,9 @@ async function runProvider(
       provider,
       url: `${(env("OPENROUTER_BASE_URL") || "https://openrouter.ai/api/v1").replace(/\/+$/, "")}/chat/completions`,
       key,
-      model: env("MALIK_CODER_OPENROUTER_MODEL") || "openrouter/free",
+      // Pin a free non-NVIDIA model. The generic openrouter/free router can
+      // randomly choose NVIDIA models, which MalikCoder intentionally excludes.
+      model: env("MALIK_CODER_OPENROUTER_MODEL") || "poolside/laguna-s-2.1:free",
       messages,
       maxTokens,
       temperature,
