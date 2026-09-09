@@ -30,7 +30,11 @@ type OrchestratorResult = {
   }
 }
 
-const cooldownUntil = new Map<ProviderName, number>()
+type ProviderOptions = {
+  model?: string
+}
+
+const cooldownUntil = new Map<string, number>()
 
 function env(name: string) {
   const value = process.env[name]
@@ -55,11 +59,20 @@ function isComplex(prompt: string) {
   return prompt.length > 420 || isCodeLike(prompt) || /(подроб|полностью|целиком|все файлы|всё до конца|глубок|анализ|план|архитект|проект|сравни|исслед)/i.test(prompt)
 }
 
+function clip(value: string, maxChars: number, fromEnd = false) {
+  const text = String(value || "").trim()
+  if (text.length <= maxChars) return text
+  return fromEnd ? text.slice(-maxChars) : text.slice(0, maxChars)
+}
+
 function historyMessages(history?: HistoryMessage[]) {
   return (history || [])
     .filter((message) => message && (message.role === "user" || message.role === "assistant") && typeof message.content === "string")
-    .slice(-10)
-    .map((message) => ({ role: message.role, content: message.content.trim() } as ChatMessage))
+    .slice(-6)
+    .map((message) => ({
+      role: message.role,
+      content: clip(message.content, 1800, true),
+    } as ChatMessage))
     .filter((message) => message.content)
 }
 
@@ -67,17 +80,48 @@ function errorText(value: unknown) {
   return value instanceof Error ? value.message : String(value)
 }
 
+function stageKey(provider: ProviderName, model?: string) {
+  return `${provider}:${model || "default"}`
+}
+
 function shouldCooldown(error: unknown) {
-  return /(429|too many requests|rate.?limit|quota)/i.test(errorText(error))
+  return /(429|too many requests|rate.?limit|quota|payment method is required|billing)/i.test(errorText(error))
 }
 
-function setCooldown(provider: ProviderName) {
-  const minutes = envInt("MALIK_CODER_PROVIDER_COOLDOWN_MINUTES", 15, 1, 120)
-  cooldownUntil.set(provider, Date.now() + minutes * 60_000)
+function setCooldown(provider: ProviderName, model: string | undefined, error: unknown) {
+  const billingBlocked = /(payment method is required|billing)/i.test(errorText(error))
+  const minutes = billingBlocked
+    ? envInt("MALIK_CODER_BILLING_COOLDOWN_MINUTES", 720, 30, 1440)
+    : envInt("MALIK_CODER_PROVIDER_COOLDOWN_MINUTES", 15, 1, 120)
+  cooldownUntil.set(stageKey(provider, model), Date.now() + minutes * 60_000)
 }
 
-function providerReady(provider: ProviderName) {
-  return (cooldownUntil.get(provider) || 0) <= Date.now()
+function providerReady(provider: ProviderName, model?: string) {
+  return (cooldownUntil.get(stageKey(provider, model)) || 0) <= Date.now()
+}
+
+function roughMessageTokens(messages: ChatMessage[]) {
+  // Deliberately conservative for Russian/Kazakh/code: roughly 3 chars/token.
+  return messages.reduce((total, message) => total + Math.ceil(message.content.length / 3) + 8, 24)
+}
+
+function groqOutputBudget(messages: ChatMessage[], requested: number) {
+  // The actual connected free Groq org currently reports an 8K TPM ceiling.
+  // Keep each request under that ceiling instead of asking for 10K-16K in one call.
+  const tpm = envInt("MALIK_CODER_GROQ_TPM_LIMIT", 8000, 2000, 250_000)
+  const safety = envInt("MALIK_CODER_GROQ_TPM_SAFETY", 700, 200, 2000)
+  const available = tpm - roughMessageTokens(messages) - safety
+  if (available < 384) throw new Error("Groq input is too large for the current free TPM window")
+  return Math.min(requested, Math.max(384, available))
+}
+
+function contentFrom(payload: any) {
+  const content = payload?.choices?.[0]?.message?.content
+  if (typeof content === "string") return content.trim()
+  if (Array.isArray(content)) {
+    return content.map((part: any) => typeof part === "string" ? part : String(part?.text || "")).join("").trim()
+  }
+  return ""
 }
 
 async function parseOpenAIResponse(response: Response, provider: ProviderName, model: string): Promise<StageResult> {
@@ -89,13 +133,7 @@ async function parseOpenAIResponse(response: Response, provider: ProviderName, m
     throw error
   }
 
-  const content = payload?.choices?.[0]?.message?.content
-  const text = typeof content === "string"
-    ? content.trim()
-    : Array.isArray(content)
-      ? content.map((part: any) => typeof part === "string" ? part : String(part?.text || "")).join("").trim()
-      : ""
-
+  const text = contentFrom(payload)
   if (!text) throw new Error(`${provider} returned an empty final answer`)
 
   return {
@@ -116,6 +154,7 @@ async function callOpenAICompatible(input: {
   maxTokens: number
   temperature: number
   extraHeaders?: Record<string, string>
+  extraBody?: Record<string, unknown>
 }) {
   const response = await providerFetch(input.url, {
     method: "POST",
@@ -130,6 +169,7 @@ async function callOpenAICompatible(input: {
       max_tokens: input.maxTokens,
       temperature: input.temperature,
       stream: false,
+      ...(input.extraBody || {}),
     }),
   }, providerTimeoutMs())
 
@@ -141,21 +181,29 @@ async function runProvider(
   messages: ChatMessage[],
   maxTokens: number,
   temperature: number,
+  options: ProviderOptions = {},
 ): Promise<StageResult> {
-  if (!providerReady(provider)) throw new Error(`${provider} is cooling down after a rate limit`)
+  const modelOverride = options.model
+  if (!providerReady(provider, modelOverride)) throw new Error(`${provider} model is cooling down after an upstream limit`)
 
   try {
     if (provider === "groq") {
       const key = env("MALIK_CODER_GROQ_API_KEY") || env("GROQ_API_KEY")
       if (!key) throw new Error("MALIK_CODER_GROQ_API_KEY is not configured")
+      const model = modelOverride || env("MALIK_CODER_GROQ_MODEL") || "openai/gpt-oss-120b"
+      const boundedMax = groqOutputBudget(messages, maxTokens)
+      const qwen = /^qwen\//i.test(model)
       return await callOpenAICompatible({
         provider,
         url: `${(env("GROQ_BASE_URL") || "https://api.groq.com/openai/v1").replace(/\/+$/, "")}/chat/completions`,
         key,
-        model: env("MALIK_CODER_GROQ_MODEL") || "openai/gpt-oss-120b",
+        model,
         messages,
-        maxTokens,
+        maxTokens: boundedMax,
         temperature,
+        extraBody: qwen
+          ? { reasoning_effort: "none", reasoning_format: "hidden" }
+          : { reasoning_effort: "low", reasoning_format: "hidden" },
       })
     }
 
@@ -163,11 +211,12 @@ async function runProvider(
       const key = env("MALIK_CODER_CLOUDFLARE_API_TOKEN") || env("CLOUDFLARE_API_TOKEN") || env("CF_API_TOKEN")
       const accountId = env("MALIK_CODER_CLOUDFLARE_ACCOUNT_ID") || env("CLOUDFLARE_ACCOUNT_ID") || env("CF_ACCOUNT_ID")
       if (!key || !accountId) throw new Error("MalikCoder Cloudflare credentials are not configured")
+      const model = modelOverride || env("MALIK_CODER_CLOUDFLARE_MODEL") || "@cf/meta/llama-3.1-8b-instruct-fast"
       return await callOpenAICompatible({
         provider,
         url: `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`,
         key,
-        model: env("MALIK_CODER_CLOUDFLARE_MODEL") || "@cf/meta/llama-3.1-8b-instruct-fast",
+        model,
         messages,
         maxTokens,
         temperature,
@@ -177,11 +226,12 @@ async function runProvider(
     if (provider === "sambanova") {
       const key = env("MALIK_CODER_SAMBANOVA_API_KEY") || env("SAMBANOVA_API_KEY")
       if (!key) throw new Error("MALIK_CODER_SAMBANOVA_API_KEY is not configured")
+      const model = modelOverride || env("MALIK_CODER_SAMBANOVA_MODEL") || env("SAMBANOVA_MODEL") || "gpt-oss-120b"
       return await callOpenAICompatible({
         provider,
         url: `${(env("SAMBANOVA_BASE_URL") || "https://api.sambanova.ai/v1").replace(/\/+$/, "")}/chat/completions`,
         key,
-        model: env("MALIK_CODER_SAMBANOVA_MODEL") || env("SAMBANOVA_MODEL") || "gpt-oss-120b",
+        model,
         messages,
         maxTokens,
         temperature,
@@ -190,13 +240,12 @@ async function runProvider(
 
     const key = env("MALIK_CODER_OPENROUTER_API_KEY") || env("OPENROUTER_API_KEY")
     if (!key) throw new Error("MALIK_CODER_OPENROUTER_API_KEY is not configured")
+    const model = modelOverride || env("MALIK_CODER_OPENROUTER_MODEL") || "dots-studio/dots-3-note-preview:free"
     return await callOpenAICompatible({
       provider,
       url: `${(env("OPENROUTER_BASE_URL") || "https://openrouter.ai/api/v1").replace(/\/+$/, "")}/chat/completions`,
       key,
-      // Pin a free non-NVIDIA model. The generic openrouter/free router can
-      // randomly choose NVIDIA models, which MalikCoder intentionally excludes.
-      model: env("MALIK_CODER_OPENROUTER_MODEL") || "poolside/laguna-s-2.1:free",
+      model,
       messages,
       maxTokens,
       temperature,
@@ -207,7 +256,7 @@ async function runProvider(
       },
     })
   } catch (error) {
-    if (shouldCooldown(error)) setCooldown(provider)
+    if (shouldCooldown(error)) setCooldown(provider, modelOverride, error)
     throw error
   }
 }
@@ -218,17 +267,19 @@ async function safeStage(
   maxTokens: number,
   temperature: number,
   stages: OrchestratorResult["usage"]["stages"],
+  options: ProviderOptions = {},
 ) {
   try {
-    const result = await runProvider(provider, messages, maxTokens, temperature)
+    const result = await runProvider(provider, messages, maxTokens, temperature, options)
     stages.push({ provider, model: result.model, ok: true })
     return result
   } catch (error) {
-    stages.push({ provider, model: "unavailable", ok: false })
+    stages.push({ provider, model: options.model || "unavailable", ok: false })
     console.warn("[MALIK_CODER_1]", JSON.stringify({
       provider,
+      model: options.model,
       stage: "skipped",
-      error: errorText(error).slice(0, 220),
+      error: errorText(error).slice(0, 320),
     }))
     return null
   }
@@ -258,97 +309,185 @@ function continuationNeeded(result: StageResult | null, codeLike: boolean) {
   if (/\b(TODO|rest omitted|continue similarly|continued in the next|продолжение в следующ|остальное аналогично)\b/i.test(result.content)) return true
   const fences = (result.content.match(/```/g) || []).length
   if (codeLike && fences % 2 === 1) return true
-  return codeLike && result.content.length < 900
+  return codeLike && result.content.length < 1800
+}
+
+function reviewSaysComplete(review: StageResult | null) {
+  return Boolean(review?.content && /^\s*COMPLETE[.!\s]*$/i.test(review.content))
+}
+
+function continuationMessages(system: string, prompt: string, combined: string, review?: StageResult | null): ChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: `${system}\nContinue the existing user-facing answer from the exact stopping point. Do not restart, summarize, repeat earlier code, or mention internal stages. Finish missing requirements and close any incomplete code fences/files.`,
+    },
+    {
+      role: "user",
+      content: [
+        `ORIGINAL REQUEST:\n${clip(prompt, 8000)}`,
+        review?.content && !reviewSaysComplete(review) ? `\nMISSING REQUIREMENTS TO FIX:\n${clip(review.content, 2600)}` : "",
+      ].filter(Boolean).join("\n"),
+    },
+    {
+      role: "assistant",
+      content: clip(combined, 9000, true),
+    },
+    {
+      role: "user",
+      content: "Continue exactly from where the answer stopped. Output only the missing continuation and finish the task.",
+    },
+  ]
 }
 
 export async function runMalikCoderOrchestrator(input: OrchestratorInput): Promise<OrchestratorResult> {
   const started = Date.now()
   const stages: OrchestratorResult["usage"]["stages"] = []
-  const codeLike = isCodeLike(input.prompt)
-  const complex = isComplex(input.prompt)
+  const prompt = String(input.prompt || "").trim()
+  if (!prompt) throw new Error("MalikCoder 1.0 received an empty prompt")
+
+  const codeLike = isCodeLike(prompt)
+  const complex = isComplex(prompt)
   const system = baseSystem(input.systemPrompt, codeLike)
   const history = historyMessages(input.history)
 
-  const plan = await safeStage("cloudflare", [
+  const plan = complex ? await safeStage("cloudflare", [
     { role: "system", content: `${system}\nYou are the planning stage. Return a compact requirements checklist and, for code, the exact files/components that must be produced. Do not give hidden reasoning.` },
     ...history,
-    { role: "user", content: input.prompt },
-  ], envInt("MALIK_CODER_PLAN_MAX_TOKENS", 1200, 256, 4000), 0.15, stages)
+    { role: "user", content: clip(prompt, 12_000) },
+  ], envInt("MALIK_CODER_PLAN_MAX_TOKENS", 700, 256, 1600), 0.15, stages) : null
 
-  const primaryMax = input.maxTokens || envInt(
+  const primaryMessages: ChatMessage[] = [
+    { role: "system", content: `${system}\nYou are the primary implementation stage. Produce a full answer, not an outline. Complete every checklist item you can before stopping.` },
+    ...history,
+    {
+      role: "user",
+      content: [
+        `USER REQUEST:\n${clip(prompt, 12_000)}`,
+        plan?.content ? `\nREQUIREMENTS CHECKLIST:\n${clip(plan.content, 3200)}` : "",
+      ].filter(Boolean).join("\n"),
+    },
+  ]
+
+  const requestedPrimary = input.maxTokens || envInt(
     codeLike ? "MALIK_CODER_PRIMARY_CODE_TOKENS" : "MALIK_CODER_PRIMARY_CHAT_TOKENS",
-    codeLike ? 10_000 : 5_000,
-    1000,
-    24_000,
+    codeLike ? 4200 : 2800,
+    900,
+    6000,
   )
 
-  const draft = await safeStage("groq", [
-    { role: "system", content: `${system}\nYou are the primary implementation stage. Produce a full answer, not an outline. Complete every item in the checklist before stopping.` },
-    ...history,
-    { role: "user", content: [
-      `USER REQUEST:\n${input.prompt}`,
-      plan?.content ? `\nREQUIREMENTS CHECKLIST:\n${plan.content}` : "",
-    ].filter(Boolean).join("\n") },
-  ], primaryMax, input.temperature ?? (codeLike ? 0.12 : 0.28), stages)
+  let draft = await safeStage(
+    "groq",
+    primaryMessages,
+    requestedPrimary,
+    input.temperature ?? (codeLike ? 0.12 : 0.28),
+    stages,
+  )
+
+  // If the 120B free TPM window is saturated, use a second Groq model with a
+  // separate model route before falling back to the smaller Cloudflare model.
+  if (!draft) {
+    draft = await safeStage(
+      "groq",
+      primaryMessages,
+      envInt("MALIK_CODER_GROQ_BACKUP_TOKENS", codeLike ? 3200 : 2400, 800, 5000),
+      input.temperature ?? (codeLike ? 0.12 : 0.25),
+      stages,
+      { model: env("MALIK_CODER_GROQ_BACKUP_MODEL") || "qwen/qwen3.8-27b" },
+    )
+  }
 
   if (!draft) {
-    const emergency = await safeStage("openrouter", [
-      { role: "system", content: `${system}\nProduce the complete final answer now.` },
-      ...history,
-      { role: "user", content: input.prompt },
-    ], envInt("MALIK_CODER_FINAL_MAX_TOKENS", codeLike ? 12_000 : 7_000, 1000, 24_000), 0.2, stages)
-
-    if (!emergency) throw new Error("MalikCoder 1.0 has no healthy provider available")
-    return { content: emergency.content, provider: "malik-orchestrator", model: "MalikCoder-1.0", latencyMs: Date.now() - started, usage: { stages } }
+    draft = await safeStage(
+      "cloudflare",
+      primaryMessages,
+      envInt("MALIK_CODER_CLOUDFLARE_FALLBACK_TOKENS", codeLike ? 3600 : 2600, 800, 6000),
+      input.temperature ?? (codeLike ? 0.12 : 0.25),
+      stages,
+    )
   }
+
+  if (!draft) {
+    draft = await safeStage(
+      "openrouter",
+      primaryMessages,
+      envInt("MALIK_CODER_OPENROUTER_FALLBACK_TOKENS", codeLike ? 4200 : 3000, 800, 7000),
+      input.temperature ?? (codeLike ? 0.12 : 0.25),
+      stages,
+    )
+  }
+
+  if (!draft) throw new Error("MalikCoder 1.0 has no healthy provider available")
 
   const review = complex ? await safeStage("openrouter", [
-    { role: "system", content: `${system}\nYou are the independent reviewer. Compare the draft against the exact user request. Return only concrete missing requirements, bugs, unsafe assumptions, broken imports, incomplete files, or factual gaps. If nothing important is missing, return COMPLETE.` },
-    { role: "user", content: `USER REQUEST:\n${input.prompt}\n\nDRAFT:\n${draft.content}` },
-  ], envInt("MALIK_CODER_REVIEW_MAX_TOKENS", 2200, 256, 5000), 0.1, stages) : null
+    { role: "system", content: `${system}\nYou are an independent verifier. Compare the answer against the exact request. Return COMPLETE if it is sufficient. Otherwise list only concrete missing requirements or broken code that must still be fixed.` },
+    {
+      role: "user",
+      content: `USER REQUEST:\n${clip(prompt, 8000)}\n\nANSWER TO VERIFY:\n${clip(draft.content, 14_000)}`,
+    },
+  ], envInt("MALIK_CODER_REVIEW_MAX_TOKENS", 1100, 256, 2200), 0.1, stages) : null
 
-  // SambaNova is intentionally a best-effort specialist. If its free quota is
-  // exhausted (429), it enters cooldown and the turn continues without failing.
-  const specialist = complex ? await safeStage("sambanova", [
-    { role: "system", content: `${system}\nYou are a specialist fixer. Based on the request, draft, and reviewer notes, provide concrete corrected sections or missing implementation. Do not discuss internal review stages.` },
-    { role: "user", content: [
-      `USER REQUEST:\n${input.prompt}`,
-      `\nDRAFT:\n${draft.content}`,
-      review?.content ? `\nREVIEW NOTES:\n${review.content}` : "",
-    ].filter(Boolean).join("\n") },
-  ], envInt("MALIK_CODER_SPECIALIST_MAX_TOKENS", codeLike ? 6000 : 3200, 512, 12_000), codeLike ? 0.12 : 0.22, stages) : null
+  // SambaNova is optional. Current free accounts may require billing details;
+  // that condition enters a long cooldown and never blocks a MalikCoder turn.
+  const specialist = complex && review && !reviewSaysComplete(review)
+    ? await safeStage("sambanova", [
+      { role: "system", content: `${system}\nProvide only concrete missing implementation or corrections needed to satisfy the request. Do not repeat correct sections.` },
+      {
+        role: "user",
+        content: [
+          `USER REQUEST:\n${clip(prompt, 8000)}`,
+          `\nCURRENT ANSWER TAIL:\n${clip(draft.content, 9000, true)}`,
+          `\nVERIFIER NOTES:\n${clip(review.content, 2600)}`,
+        ].join("\n"),
+      },
+    ], envInt("MALIK_CODER_SPECIALIST_MAX_TOKENS", codeLike ? 2200 : 1400, 512, 4000), codeLike ? 0.12 : 0.2, stages)
+    : null
 
-  const finalMax = envInt("MALIK_CODER_FINAL_MAX_TOKENS", codeLike ? 16_000 : 8_000, 1000, 24_000)
-  let final = await safeStage("groq", [
-    { role: "system", content: `${system}\nYou are the final MalikCoder 1.0 synthesis stage. Output ONLY the finished user-facing answer. Merge all useful corrections. Do not mention drafts, reviewers, stages, providers, or orchestration. If code is requested, include complete runnable code and all required files. Finish the task before ending.` },
-    ...history,
-    { role: "user", content: [
-      `USER REQUEST:\n${input.prompt}`,
-      plan?.content ? `\nCHECKLIST:\n${plan.content}` : "",
-      `\nPRIMARY DRAFT:\n${draft.content}`,
-      review?.content ? `\nREVIEW:\n${review.content}` : "",
-      specialist?.content ? `\nSPECIALIST FIXES:\n${specialist.content}` : "",
-    ].filter(Boolean).join("\n") },
-  ], finalMax, input.temperature ?? (codeLike ? 0.1 : 0.24), stages)
+  let combined = draft.content
+  let current: StageResult = draft
+  const reviewNeedsMore = Boolean(review && !reviewSaysComplete(review))
+  const specialistNeedsMore = Boolean(specialist?.content)
+  let needMore = continuationNeeded(current, codeLike) || reviewNeedsMore || specialistNeedsMore
+  const rounds = envInt("MALIK_CODER_CONTINUATION_ROUNDS", codeLike ? 3 : 1, 0, 4)
 
-  if (!final) final = specialist || draft
+  for (let round = 0; round < rounds && needMore; round += 1) {
+    const messages = continuationMessages(system, prompt, combined, review)
+    let continuation: StageResult | null = null
 
-  const rounds = envInt("MALIK_CODER_CONTINUATION_ROUNDS", 2, 0, 4)
-  let combined = final.content
-  let current = final
+    if (round === 0) {
+      continuation = await safeStage(
+        "groq",
+        messages,
+        envInt("MALIK_CODER_CONTINUATION_GROQ_TOKENS", codeLike ? 2800 : 1800, 600, 4000),
+        codeLike ? 0.1 : 0.2,
+        stages,
+        { model: env("MALIK_CODER_GROQ_CONTINUE_MODEL") || "qwen/qwen3.8-27b" },
+      )
+    } else if (round === 1) {
+      continuation = await safeStage(
+        "cloudflare",
+        messages,
+        envInt("MALIK_CODER_CONTINUATION_CLOUDFLARE_TOKENS", codeLike ? 3400 : 2000, 600, 5000),
+        codeLike ? 0.1 : 0.2,
+        stages,
+      )
+    } else {
+      continuation = await safeStage(
+        "openrouter",
+        messages,
+        envInt("MALIK_CODER_CONTINUATION_OPENROUTER_TOKENS", codeLike ? 3600 : 2200, 600, 6000),
+        codeLike ? 0.1 : 0.2,
+        stages,
+      )
+    }
 
-  for (let round = 0; round < rounds && continuationNeeded(current, codeLike); round += 1) {
-    const continuation = await safeStage(round % 2 === 0 ? "cloudflare" : "openrouter", [
-      { role: "system", content: `${system}\nContinue the existing final answer from the exact stopping point. Do not restart, summarize, repeat earlier code, or mention that this is a continuation. Finish the remaining user requirements.` },
-      { role: "user", content: `ORIGINAL REQUEST:\n${input.prompt}` },
-      { role: "assistant", content: combined },
-      { role: "user", content: "Continue exactly from where the answer stopped and finish everything remaining." },
-    ], envInt("MALIK_CODER_CONTINUATION_MAX_TOKENS", codeLike ? 8000 : 4000, 512, 12_000), codeLike ? 0.1 : 0.2, stages)
-
-    if (!continuation) break
+    if (!continuation) continue
     combined = `${combined}\n${continuation.content}`.trim()
     current = continuation
+    needMore = continuationNeeded(current, codeLike)
   }
+
+  if (!combined.trim()) throw new Error("MalikCoder 1.0 produced an empty answer")
 
   return {
     content: combined,
