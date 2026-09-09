@@ -43,7 +43,7 @@ const MODEL_BRANDS: Record<MalikModelId, BrandIcon> = {
   "malik-27b": { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
   "malik-30b": { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
   "malik-vision-26b": { label: "Google Gemma", urls: ["https://www.google.com/favicon.ico"], fallback: "G" },
-  "malik-coder-32b": { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
+  "malik-coder-32b": { label: "Malik AI", urls: ["/favicon.ico"], fallback: "M" },
   "malik-70b": { label: "Meta Llama", urls: ["https://www.meta.com/favicon.ico"], fallback: "M" },
   "malik-120b": { label: "OpenAI GPT-OSS", urls: ["https://openai.com/favicon.ico"], fallback: "O" },
   "malik-agent-120b": { label: "NVIDIA Nemotron", urls: ["https://www.nvidia.com/favicon.ico"], fallback: "N" },
