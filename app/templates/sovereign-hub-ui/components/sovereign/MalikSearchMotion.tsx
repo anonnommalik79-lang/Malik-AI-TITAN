@@ -86,7 +86,7 @@ function findActiveThinking(): MotionState {
     original.querySelector<HTMLElement>(".malik-activity-row.is-meta .malik-activity-text")?.textContent,
   )
   const observedElapsed = Number(metaText.match(/(\d+)\s*s\b/i)?.[1] || 0)
-  const thinkingLabel = actions.at(-1) || (sourceCount ? "Проверяю найденные источники" : "Ищу в Интернете")
+  const thinkingLabel = actions.at(-1) || (sourceCount ? "Проверяю найденные источники" : "Думаю")
 
   return {
     target,
@@ -100,7 +100,7 @@ function findActiveThinking(): MotionState {
 }
 
 function isSearchAction(text: string) {
-  return /(?:\bпоиск\b|\bищ(?:у|ет|ем|ем\s)|\bsearch(?:ing|ed)?\b|\bweb\s*search\b)/iu.test(text)
+  return /(?:поиск|ищ(?:у|ет|ем|ут|ет\s)|search(?:ing|ed)?|web\s*search)/iu.test(text)
 }
 
 function makeSearchLine(text: string) {
@@ -188,8 +188,10 @@ export function MalikSearchMotion() {
 
   const currentAction = useMemo(() => {
     const nonSearch = motion.actions.filter((item) => !isSearchAction(item))
-    return nonSearch.at(-1) || motion.thinkingLabel || (motion.web ? "Проверяю найденные данные" : "Думаю")
-  }, [motion.actions, motion.thinkingLabel, motion.web])
+    if (nonSearch.length) return nonSearch.at(-1) || "Думаю"
+    if (motion.web) return motion.sourceCount ? "Проверяю найденные источники" : "Думаю"
+    return motion.thinkingLabel || "Думаю"
+  }, [motion.actions, motion.sourceCount, motion.thinkingLabel, motion.web])
 
   const visibleSearches = searchActions.slice(-7)
 
@@ -414,7 +416,7 @@ export function MalikSearchMotion() {
             {motion.active ? "" : "◷"}
           </span>
           <span className="malik-search-motion__label">
-            {motion.active ? `Работаю · ${elapsed}s` : `Работало на протяжении ${elapsed}s`}
+            {motion.active ? `Работа для ${elapsed}s` : `Работало на протяжении ${elapsed}s`}
           </span>
         </div>
       </div>
@@ -431,7 +433,7 @@ export function MalikSearchMotion() {
             {motion.active ? "" : "◷"}
           </span>
           <span className="malik-search-motion__label">
-            {motion.active ? `Работаю · ${elapsed}s` : `Работало на протяжении ${elapsed}s`}
+            {motion.active ? `Работа для ${elapsed}s` : `Работало на протяжении ${elapsed}s`}
           </span>
         </div>
       </div>
