@@ -103,6 +103,23 @@ function markAccountQuotaExhausted(slot: CloudflareImageAccountSlot) {
   quotaCooldownUntil.set(slot, nextUtcQuotaResetMs())
 }
 
+function signalReasonMessage(signal?: AbortSignal) {
+  const reason = signal?.reason
+  if (reason instanceof Error) return reason.message
+  return String(reason || "")
+}
+
+function isInternalAttemptTimeoutSignal(signal?: AbortSignal) {
+  return Boolean(signal?.aborted && /IMAGE_PROVIDER_ATTEMPT_TIMEOUT/i.test(signalReasonMessage(signal)))
+}
+
+function cloudflareAccountTimeoutMs() {
+  const configured = Number(process.env.IMAGE_CLOUDFLARE_ACCOUNT_TIMEOUT_MS)
+  const fallback = Math.min(imageProviderTimeoutMs(), 60_000)
+  if (!Number.isFinite(configured)) return fallback
+  return Math.min(90_000, Math.max(10_000, configured))
+}
+
 function imageSize(aspectRatio: ImageAspectRatio = "1:1") {
   if (aspectRatio === "16:9") return { width: 1344, height: 768 }
   if (aspectRatio === "9:16") return { width: 768, height: 1344 }
@@ -143,15 +160,20 @@ async function callCloudflareAccount(
   signal?: AbortSignal,
 ) {
   const controller = new AbortController()
+  const followParentSignal = Boolean(signal && !isInternalAttemptTimeoutSignal(signal))
   const abort = () => controller.abort(signal?.reason)
-  if (signal) {
+
+  if (followParentSignal && signal) {
     if (signal.aborted) abort()
     else signal.addEventListener("abort", abort, { once: true })
   }
 
   const headers = new Headers(init.headers)
   headers.set("authorization", `Bearer ${account.token}`)
-  const timer = setTimeout(() => controller.abort(), imageProviderTimeoutMs())
+  const timer = setTimeout(
+    () => controller.abort(new Error("CLOUDFLARE_ACCOUNT_TIMEOUT")),
+    cloudflareAccountTimeoutMs(),
+  )
 
   try {
     return await fetch(`https://api.cloudflare.com/client/v4/accounts/${account.accountId}/ai/run/${model}`, {
@@ -162,7 +184,7 @@ async function callCloudflareAccount(
     })
   } finally {
     clearTimeout(timer)
-    signal?.removeEventListener("abort", abort)
+    if (followParentSignal && signal) signal.removeEventListener("abort", abort)
   }
 }
 
@@ -189,9 +211,10 @@ async function cloudflareFailure(response: Response): Promise<{ failed: boolean;
 
 /**
  * Try the dedicated image account first, then the generic Cloudflare account,
- * then the third reserve image account. Any account-level failure continues
- * the SAME model/request on the next account so the current generation can
- * finish instead of surfacing the first upstream error to the user.
+ * then the third reserve image account. Each account gets an independent
+ * request window: when the router's preferred-model timeout aborts account #1,
+ * that internal timeout is NOT inherited by account #2/#3. The same prompt and
+ * model therefore continue instead of all reserve accounts dying instantly.
  *
  * Daily neuron exhaustion is remembered per account until the next 00:00 UTC
  * reset. After reset that account automatically becomes eligible again.
@@ -206,23 +229,42 @@ async function callCloudflare(model: string, init: RequestInit, signal?: AbortSi
   let lastError: unknown
 
   for (const account of accounts) {
-    if (accountQuotaCoolingDown(account.slot)) continue
+    if (accountQuotaCoolingDown(account.slot)) {
+      console.info("[malik-image][cloudflare-account-skip]", { slot: account.slot, model, reason: "daily-quota-cooldown" })
+      continue
+    }
 
     try {
       const response = await callCloudflareAccount(account, model, init, signal)
       const failure = await cloudflareFailure(response)
-      if (!failure.failed) return response
+      if (!failure.failed) {
+        console.info("[malik-image][cloudflare-account-success]", { slot: account.slot, model, status: response.status })
+        return response
+      }
 
       lastResponse = response
-      if (ACCOUNT_WIDE_QUOTA_ERROR.test(failure.message)) {
-        markAccountQuotaExhausted(account.slot)
-      }
-      // Continue immediately on the next Cloudflare account with the exact same
-      // model, prompt and request body. The first/second account error stays hidden.
+      const quotaExhausted = ACCOUNT_WIDE_QUOTA_ERROR.test(failure.message)
+      if (quotaExhausted) markAccountQuotaExhausted(account.slot)
+
+      console.warn("[malik-image][cloudflare-account-failover]", {
+        slot: account.slot,
+        model,
+        status: response.status,
+        reason: quotaExhausted ? "daily-quota" : "upstream-response",
+      })
     } catch (error) {
       lastError = error
-      // Network/auth/account failure must not kill the user's generation while
-      // another configured Cloudflare account is still available.
+      if (signal?.aborted && !isInternalAttemptTimeoutSignal(signal)) throw error
+
+      const message = error instanceof Error ? error.message : String(error || "")
+      console.warn("[malik-image][cloudflare-account-failover]", {
+        slot: account.slot,
+        model,
+        status: 0,
+        reason: /abort|timeout/i.test(message) ? "timeout-or-abort" : "network-or-fetch",
+      })
+      // An internal preferred-model timeout is allowed to kill only the account
+      // that was active when it fired. Reserve accounts receive fresh signals.
     }
   }
 
