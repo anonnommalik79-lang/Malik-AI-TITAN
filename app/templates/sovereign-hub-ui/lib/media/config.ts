@@ -58,10 +58,12 @@ export function imagePromptCompilerTimeoutMs(): number {
 }
 
 export function pollinationsTimeoutMs(): number {
-  // Pollinations is the last-resort route. Keep it inside the same browser
-  // request window instead of letting the UI time out while the server carries on.
-  const n = Number(process.env.POLLINATIONS_TIMEOUT_MS || 18_000)
-  return Number.isFinite(n) && n > 0 ? n : 18_000
+  // Pollinations is the free last-resort route. Public image generation can
+  // legitimately take longer than 20s under load, so give it enough time to
+  // return one real image instead of surfacing AbortError after Cloudflare's
+  // daily allowance is exhausted.
+  const n = Number(process.env.POLLINATIONS_TIMEOUT_MS || 45_000)
+  return Number.isFinite(n) && n > 0 ? n : 45_000
 }
 
 export const POLLO_API_BASE = "https://pollo.ai/api/platform"
