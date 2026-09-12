@@ -9,6 +9,15 @@ export type VideoProviderId = "h3" | "dashscope" | "pollo" | "runway" | "fal" | 
 export type VideoAspectRatio = "16:9" | "9:16" | "1:1"
 export type VideoResolution = "480p" | "720p" | "1080p" | "2k"
 
+export type ImageFallbackWarning = {
+  code: "QUALITY_DEGRADED_FALLBACK"
+  title: string
+  message: string
+  ctaLabel: string
+  dismissLabel: string
+  severity: "warning"
+}
+
 export type ImageGenerateInput = {
   prompt: string
   /** Description already shown to the user by the understand step. */
@@ -53,6 +62,9 @@ export type ImageGenerateResult = {
   upscaleApplied?: boolean
   processor?: "sharp" | "passthrough"
   routeReason?: string
+  generationTier?: "quality" | "standard-fallback"
+  generationSource?: string
+  fallbackWarning?: ImageFallbackWarning
   error?: string
   resetAt?: string
   storageUrl?: string
