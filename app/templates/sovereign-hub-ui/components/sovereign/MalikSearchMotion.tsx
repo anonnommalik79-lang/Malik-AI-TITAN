@@ -172,7 +172,7 @@ export function MalikSearchMotion() {
     () => motion.actions.filter(isSearchAction).map(makeSearchLine),
     [motion.actions],
   )
-  const searchCount = motion.web ? Math.max(motion.sourceCount, searchActions.length) : 0
+  const searchCount = motion.web ? (searchActions.length || motion.sourceCount) : 0
 
   useEffect(() => {
     if (!motion.web || !searchCount || manualExpansion) return
