@@ -1,9 +1,11 @@
 import {
   MALIK_IMAGE_MODELS,
   canUseMalikImageModel,
+  getMalikImageModel,
   isMalikImageModelId,
   type MalikImageModelId,
 } from "./image-models"
+import { imageFreeMode } from "./config"
 import { getMalikImageModelCapability } from "./image-model-capabilities"
 import type { MalikImageQuality } from "./image-quality-presets"
 import type { ImageMode } from "./types"
@@ -21,13 +23,33 @@ function qualityWeights(quality: MalikImageQuality) {
   return { detail: 0.93, speed: 0.07 }
 }
 
+/**
+ * Cloudflare's free Workers AI allowance is account-wide: switching from one
+ * Cloudflare image model to another does not create a fresh quota. In free mode
+ * we therefore keep the expensive premium/FLUX Dev route out of the pool even
+ * for owner accounts. Otherwise one or two ultra renders can consume the whole
+ * daily neuron allowance and every later image fails at once.
+ *
+ * Set IMAGE_FREE_MODE=false on a deployment that intentionally wants to use
+ * premium/paid image capacity again.
+ */
+function allowedByRuntimeBudget(modelId: MalikImageModelId, freeMode: boolean) {
+  return !freeMode || getMalikImageModel(modelId).tier === "free"
+}
+
 export function chooseMalikImageModel(input: {
   requestedModelId?: unknown
   plan?: string | null
   quality: MalikImageQuality
   mode?: ImageMode
 }): MalikImageRouteDecision {
-  if (isMalikImageModelId(input.requestedModelId) && canUseMalikImageModel(input.requestedModelId, input.plan)) {
+  const freeMode = imageFreeMode()
+
+  if (
+    isMalikImageModelId(input.requestedModelId)
+    && canUseMalikImageModel(input.requestedModelId, input.plan)
+    && allowedByRuntimeBudget(input.requestedModelId, freeMode)
+  ) {
     return {
       modelId: input.requestedModelId,
       automatic: false,
@@ -37,7 +59,10 @@ export function chooseMalikImageModel(input: {
 
   const mode = input.mode || "cinematic"
   const weights = qualityWeights(input.quality)
-  const available = MALIK_IMAGE_MODELS.filter((model) => canUseMalikImageModel(model.id, input.plan))
+  const available = MALIK_IMAGE_MODELS.filter((model) => (
+    canUseMalikImageModel(model.id, input.plan)
+    && allowedByRuntimeBudget(model.id, freeMode)
+  ))
 
   const scored = available.map((model) => {
     const capability = getMalikImageModelCapability(model.id)
@@ -56,6 +81,6 @@ export function chooseMalikImageModel(input: {
   return {
     modelId: winner,
     automatic: true,
-    reason: `auto ${input.quality}/${mode}: quality-capability score`,
+    reason: `${freeMode ? "free-budget protected; " : ""}auto ${input.quality}/${mode}: quality-capability score`,
   }
 }
