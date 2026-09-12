@@ -19,6 +19,8 @@ services:
         value: https://malikaiworld.world
       - key: AI_FREE_MODE
         value: "true"
+      - key: IMAGE_FREE_MODE
+        value: "true"
       - key: IMAGE_PREFERRED_MODEL_TIMEOUT_MS
         value: "45000"
       - key: IMAGE_FALLBACK_MODEL_TIMEOUT_MS
@@ -26,7 +28,9 @@ services:
       - key: IMAGE_PROMPT_COMPILER_TIMEOUT_MS
         value: "5000"
       - key: POLLINATIONS_TIMEOUT_MS
-        value: "22000"
+        value: "45000"
+      - key: IMAGE_CANDIDATES
+        value: "1"
       - key: TEXT_PROVIDER_ORDER
         value: "modelscope,aihubmix,cerebras,groq,gemini,openrouter"
       - key: CODE_PROVIDER_ORDER
