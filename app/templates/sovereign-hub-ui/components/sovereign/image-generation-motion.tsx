@@ -21,13 +21,10 @@ type ImageGenerationMotionProps = {
 const GENERATION_WATCHDOG_MS = 3 * 60 * 1000
 const READY_RESULT_GRACE_MS = 8_000
 
-// Waiting animation uses only public NASA space imagery. No hands, characters,
-// fantasy art or app mockups are allowed back into this loader.
 const DEMOS = [
   "https://images-assets.nasa.gov/image/PIA15985/PIA15985~large.jpg",
   "https://images-assets.nasa.gov/image/PIA10957/PIA10957~large.jpg",
   "https://images-assets.nasa.gov/image/PIA04222/PIA04222~large.jpg",
-  "https://images-assets.nasa.gov/image/PIA07905/PIA07905~large.jpg",
   "https://images-assets.nasa.gov/image/PIA04628/PIA04628~large.jpg",
   "https://images-assets.nasa.gov/image/PIA04230/PIA04230~large.jpg",
   "https://images-assets.nasa.gov/image/PIA04921/PIA04921~large.jpg",
@@ -35,6 +32,10 @@ const DEMOS = [
 ] as const
 
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value))
+const smooth = (value: number) => {
+  const x = clamp(value, 0, 1)
+  return x * x * (3 - 2 * x)
+}
 
 function loadImage(src: string, timeout = 25_000) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -62,12 +63,12 @@ function progressFor(status: Status | undefined, phaseSeconds: number) {
 }
 
 function stageFor(status?: Status) {
-  if (status === "queued") return "Подготавливаю модель"
-  if (status === "thinking") return "Анализирую промпт"
-  if (status === "generating") return "Прорисовываю сцену"
-  if (status === "rendering" || status === "ready") return "Финальная детализация"
+  if (status === "queued") return "Генерирую варианты"
+  if (status === "thinking") return "Строю свет и форму"
+  if (status === "generating") return "Строю свет и форму"
+  if (status === "rendering" || status === "ready") return "Проявляю финальный кадр"
   if (status === "failed") return "Генерация остановлена"
-  return "Создаю изображение"
+  return "Генерирую варианты"
 }
 
 export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedAt, understood, failed, error, progress }: ImageGenerationMotionProps) {
@@ -116,6 +117,7 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     let cancelled = false
     const candidate = resultUrl || fallbackUrl || ""
     if (!candidate) { setResolvedResultUrl(""); setImageLoaded(false); return }
+
     resolveGeneratedImageUrl(candidate)
       .then((url) => { if (!cancelled) { setResolvedResultUrl(url); setAssetError("") } })
       .catch(() => {
@@ -125,17 +127,6 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     return () => { cancelled = true }
   }, [resultUrl, fallbackUrl])
 
-  /*
-   * Show the image, then keep a copy of it in this browser.
-   *
-   * The finished picture is served from /api/media/asset/<id>, which lives only
-   * as long as the server holds the bytes - Render drops them on every deploy
-   * and on idle, so an image generated an hour ago came back as "Сохранённое
-   * изображение недоступно". On success the bytes are copied into the viewer's
-   * own IndexedDB (from the browser's HTTP cache, so nothing is downloaded
-   * twice), and on failure that copy is what gets shown. The history belongs to
-   * the person who made it, not to the host or the repository.
-   */
   useEffect(() => {
     if (!resolvedResultUrl || imageLoaded || actuallyFailed) return
     let cancelled = false
@@ -166,6 +157,8 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     return progressFor(status, phaseSeconds)
   }, [imageLoaded, actuallyFailed, progress, status, phaseSeconds])
 
+  const activeStep = shownProgress < 34 ? 0 : shownProgress < 78 ? 1 : 2
+  const steps = ["Генерирую варианты", "Строю свет и форму", "Проявляю финальный кадр"]
   const shownStage = actuallyFailed ? "Генерация остановлена" : imageLoaded ? "Готово" : stageFor(status)
 
   useEffect(() => {
@@ -179,26 +172,28 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
     let height = 1
     let dpr = 1
     let demos: HTMLImageElement[] = []
-    let demoIndex = 0
-    let cycleStarted = performance.now()
+    let preparedIndex = -1
+    let animationStartedAt = performance.now()
     let lastFrameAt = 0
 
-    const source = document.createElement("canvas")
-    const sourceCtx = source.getContext("2d", { alpha: false })!
-    const mask = document.createElement("canvas")
-    const maskCtx = mask.getContext("2d", { alpha: true })!
+    const currentSurface = document.createElement("canvas")
+    const nextSurface = document.createElement("canvas")
+    const softSurface = document.createElement("canvas")
+    const maskSurface = document.createElement("canvas")
+    const transitionSurface = document.createElement("canvas")
 
-    const roundRect = (c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
-      c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath()
-    }
+    const currentCtx = currentSurface.getContext("2d", { alpha: false })!
+    const nextCtx = nextSurface.getContext("2d", { alpha: false })!
+    const softCtx = softSurface.getContext("2d", { alpha: false })!
+    const maskCtx = maskSurface.getContext("2d", { alpha: true })!
+    const transitionCtx = transitionSurface.getContext("2d", { alpha: true })!
 
-    const sizeTo = (element: HTMLCanvasElement) => {
-      element.width = Math.round(width * dpr)
-      element.height = Math.round(height * dpr)
-      const c = element.getContext("2d")!
-      c.setTransform(dpr, 0, 0, dpr, 0, 0)
-      c.imageSmoothingEnabled = true
-      c.imageSmoothingQuality = "high"
+    const setCanvasSize = (element: HTMLCanvasElement, context: CanvasRenderingContext2D) => {
+      element.width = Math.max(1, Math.round(width * dpr))
+      element.height = Math.max(1, Math.round(height * dpr))
+      context.setTransform(dpr, 0, 0, dpr, 0, 0)
+      context.imageSmoothingEnabled = true
+      context.imageSmoothingQuality = "high"
     }
 
     const resize = () => {
@@ -213,77 +208,141 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.imageSmoothingEnabled = true
       ctx.imageSmoothingQuality = "high"
-      sizeTo(source); sizeTo(mask)
+      setCanvasSize(currentSurface, currentCtx)
+      setCanvasSize(nextSurface, nextCtx)
+      setCanvasSize(softSurface, softCtx)
+      setCanvasSize(maskSurface, maskCtx)
+      setCanvasSize(transitionSurface, transitionCtx)
+      preparedIndex = -1
     }
 
     const drawCover = (c: CanvasRenderingContext2D, img: HTMLImageElement) => {
-      const k = Math.max(width / img.naturalWidth, height / img.naturalHeight)
-      const w = img.naturalWidth * k
-      const h = img.naturalHeight * k
-      c.drawImage(img, (width - w) / 2, (height - h) / 2, w, h)
+      const scale = Math.max(width / img.naturalWidth, height / img.naturalHeight)
+      const drawWidth = img.naturalWidth * scale
+      const drawHeight = img.naturalHeight * scale
+      c.drawImage(img, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
     }
 
-    const prepareSource = (img: HTMLImageElement) => {
-      sourceCtx.fillStyle = "#000"
-      sourceCtx.fillRect(0, 0, width, height)
-      sourceCtx.save()
-      sourceCtx.filter = "saturate(1.22) contrast(1.08) brightness(1.05)"
-      drawCover(sourceCtx, img)
-      sourceCtx.restore()
+    const prepareSurface = (c: CanvasRenderingContext2D, img: HTMLImageElement, filter = "none") => {
+      c.save()
+      c.setTransform(dpr, 0, 0, dpr, 0, 0)
+      c.clearRect(0, 0, width, height)
+      c.fillStyle = "#070708"
+      c.fillRect(0, 0, width, height)
+      c.filter = filter
+      drawCover(c, img)
+      c.restore()
+    }
+
+    const preparePair = (index: number) => {
+      if (!demos.length || preparedIndex === index) return
+      const current = demos[index % demos.length]
+      const next = demos[(index + 1) % demos.length]
+      prepareSurface(currentCtx, current, "saturate(1.05) contrast(1.05) brightness(.86)")
+      prepareSurface(nextCtx, next, "saturate(1.05) contrast(1.06) brightness(.9)")
+      prepareSurface(softCtx, next, "grayscale(1) contrast(.78) brightness(.62)")
+      preparedIndex = index
+    }
+
+    const renderMask = (progressValue: number) => {
+      maskCtx.save()
+      maskCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
       maskCtx.clearRect(0, 0, width, height)
-    }
-
-    const renderReveal = (img: HTMLImageElement, t: number) => {
-      prepareSource(img)
       const rows = 7
-      const active = clamp(t, 0, 1) * rows
-      for (let row = 0; row < rows; row++) {
-        const amount = clamp(active - row, 0, 1)
-        if (!amount) continue
-        const y = row * (height / rows)
-        const h = height / rows + 2
-        const leftToRight = row % 2 === 0
-        const w = width * amount
-        maskCtx.fillStyle = "#fff"
-        maskCtx.fillRect(leftToRight ? 0 : width - w, y, w, h)
-      }
+      const rowHeight = height / rows + 3
+      const edge = Math.max(20, Math.min(46, width * .1))
 
-      ctx.fillStyle = "#000"
-      ctx.fillRect(0, 0, width, height)
+      for (let row = 0; row < rows; row++) {
+        const delay = row * .045
+        const amount = smooth((progressValue - delay) / .48)
+        if (amount <= 0) continue
+        const y = row * (height / rows) - 2
+        const frontier = width * amount
+        const leftToRight = row % 2 === 0
+
+        if (leftToRight) {
+          const solidEnd = Math.max(0, frontier - edge)
+          maskCtx.fillStyle = "#fff"
+          maskCtx.fillRect(0, y, solidEnd, rowHeight)
+          const gradient = maskCtx.createLinearGradient(solidEnd, 0, Math.min(width, frontier + edge), 0)
+          gradient.addColorStop(0, "rgba(255,255,255,1)")
+          gradient.addColorStop(1, "rgba(255,255,255,0)")
+          maskCtx.fillStyle = gradient
+          maskCtx.fillRect(solidEnd, y, Math.max(0, frontier + edge - solidEnd), rowHeight)
+        } else {
+          const solidStart = Math.min(width, width - frontier + edge)
+          maskCtx.fillStyle = "#fff"
+          maskCtx.fillRect(solidStart, y, width - solidStart, rowHeight)
+          const gradientStart = Math.max(0, width - frontier - edge)
+          const gradient = maskCtx.createLinearGradient(gradientStart, 0, solidStart, 0)
+          gradient.addColorStop(0, "rgba(255,255,255,0)")
+          gradient.addColorStop(1, "rgba(255,255,255,1)")
+          maskCtx.fillStyle = gradient
+          maskCtx.fillRect(gradientStart, y, Math.max(0, solidStart - gradientStart), rowHeight)
+        }
+      }
+      maskCtx.restore()
+    }
+
+    const drawMasked = (surface: HTMLCanvasElement, alpha: number) => {
+      transitionCtx.save()
+      transitionCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      transitionCtx.clearRect(0, 0, width, height)
+      transitionCtx.globalAlpha = 1
+      transitionCtx.globalCompositeOperation = "source-over"
+      transitionCtx.drawImage(surface, 0, 0, width, height)
+      transitionCtx.globalCompositeOperation = "destination-in"
+      transitionCtx.drawImage(maskSurface, 0, 0, width, height)
+      transitionCtx.restore()
+
       ctx.save()
-      roundRect(ctx, 0, 0, width, height, 28)
-      ctx.clip()
-      ctx.drawImage(source, 0, 0, width, height)
-      ctx.globalCompositeOperation = "destination-in"
-      ctx.drawImage(mask, 0, 0, width, height)
-      ctx.globalCompositeOperation = "source-over"
-      ctx.restore()
-      ctx.save()
-      roundRect(ctx, .5, .5, width - 1, height - 1, 28)
-      ctx.strokeStyle = "rgba(218,174,76,.94)"
-      ctx.lineWidth = 1
-      ctx.stroke()
+      ctx.globalAlpha = alpha
+      ctx.drawImage(transitionSurface, 0, 0, width, height)
       ctx.restore()
     }
 
-    const loop = (now: number) => {
+    const render = (now: number) => {
       if (disposed) return
       if (now - lastFrameAt < 32) {
-        requestAnimationFrame(loop)
+        requestAnimationFrame(render)
         return
       }
       lastFrameAt = now
 
-      const duration = 4200
-      const t = clamp((now - cycleStarted) / duration, 0, 1)
-      const current = demos[demoIndex]
-      if (current) renderReveal(current, t)
-
-      if (t >= 1 && demos.length) {
-        demoIndex = (demoIndex + 1) % demos.length
-        cycleStarted = now + 140
+      if (!demos.length) {
+        requestAnimationFrame(render)
+        return
       }
-      requestAnimationFrame(loop)
+
+      const cycleMs = 720
+      const holdMs = 150
+      const elapsed = Math.max(0, now - animationStartedAt)
+      const cycleNumber = Math.floor(elapsed / cycleMs)
+      const index = cycleNumber % demos.length
+      const withinCycle = elapsed % cycleMs
+      preparePair(index)
+
+      ctx.save()
+      ctx.clearRect(0, 0, width, height)
+      ctx.fillStyle = "#070708"
+      ctx.fillRect(0, 0, width, height)
+      ctx.drawImage(currentSurface, 0, 0, width, height)
+
+      if (withinCycle > holdMs) {
+        const p = smooth((withinCycle - holdMs) / (cycleMs - holdMs))
+        renderMask(p)
+        drawMasked(softSurface, .54)
+        const photoAlpha = smooth((p - .13) / .66)
+        if (photoAlpha > 0) drawMasked(nextSurface, .94 * photoAlpha)
+        const settle = smooth((p - .76) / .24)
+        if (settle > 0) {
+          ctx.globalAlpha = settle
+          ctx.drawImage(nextSurface, 0, 0, width, height)
+          ctx.globalAlpha = 1
+        }
+      }
+      ctx.restore()
+      requestAnimationFrame(render)
     }
 
     const observer = new ResizeObserver(resize)
@@ -297,14 +356,19 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
           .filter((result): result is PromiseFulfilledResult<HTMLImageElement> => result.status === "fulfilled")
           .map((result) => result.value)
         if (!demos.length) {
-          setAssetError("Не удалось загрузить космическую анимацию изображения.")
+          setAssetError("Не удалось загрузить анимацию генерации изображения.")
           return
         }
         setAssetError("")
-        requestAnimationFrame(loop)
+        animationStartedAt = performance.now()
+        preparedIndex = -1
+        requestAnimationFrame(render)
       })
 
-    return () => { disposed = true; observer.disconnect() }
+    return () => {
+      disposed = true
+      observer.disconnect()
+    }
   }, [actuallyFailed, imageLoaded])
 
   const failureText = error || assetError || (timedOut
@@ -314,48 +378,60 @@ export function ImageGenerationMotion({ resultUrl, fallbackUrl, status, startedA
       : "Генерация изображения не завершилась.")
 
   return (
-    <section className="malik-photo-motion malik-hand-loader-v7" data-malik-image-motion="1" data-malik-image-ready={imageLoaded ? "1" : "0"} data-malik-loader-assets="nasa-space-sequence-v1">
-      <div className={`malik-photo-stage malik-art-stage ${imageLoaded ? "is-finished" : "is-generating"}`}>
-        {!actuallyFailed && !imageLoaded ? <canvas ref={canvasRef} className="malik-hand-loader-v7__canvas" /> : null}
-        {imageLoaded && resolvedResultUrl ? <img className="malik-art-result is-visible" src={resolvedResultUrl} alt="Сгенерированное изображение Malik AI" draggable={false} decoding="async" /> : null}
-        {actuallyFailed ? <div className="malik-hand-loader-v7__failure"><strong>Генерация остановлена</strong><span>{failureText}</span></div> : null}
+    <section className="malik-photo-v20" data-malik-image-motion="1" data-malik-image-ready={imageLoaded ? "1" : "0"} data-malik-loader-assets="nasa-paint-sequence-v20">
+      <div className={`malik-photo-v20__heading${imageLoaded ? " is-ready" : ""}`}>
+        <div className="malik-photo-v20__title-row">
+          <span className="malik-photo-v20__spark" aria-hidden="true"><i /><b /></span>
+          <span className="malik-photo-v20__title">{imageLoaded ? "Готово" : "Создаю изображение"}</span>
+        </div>
+
+        {!imageLoaded && !actuallyFailed ? (
+          <div className="malik-photo-v20__steps" aria-live="polite">
+            {steps.map((step, index) => (
+              <div className={`malik-photo-v20__step${index === activeStep ? " is-active" : ""}${index < activeStep ? " is-done" : ""}`} key={step}>
+                <span className="malik-photo-v20__step-mark" aria-hidden="true">{index === 0 ? "⌕" : index === 1 ? "✦" : "◷"}</span>
+                <span>{step}</span>
+              </div>
+            ))}
+            <div className="malik-photo-v20__timer"><span className="malik-photo-v20__pulse" aria-hidden="true" /><span>Генерация {seconds.toFixed(1)}s · {shownProgress}%</span></div>
+          </div>
+        ) : null}
       </div>
 
-      <div className="malik-hand-loader-v7__progress" aria-live="polite">
-        <div className="malik-hand-loader-v7__meta">
-          <span>{imageLoaded ? "Готово" : actuallyFailed ? "Генерация остановлена" : "Генерирую изображение"}</span>
-          <strong>{shownProgress}%</strong>
-        </div>
-        <div className="malik-hand-loader-v7__track" aria-hidden="true"><span style={{ width: `${shownProgress}%` }} /></div>
-        <div className="malik-hand-loader-v7__status">{imageLoaded ? `Готово за ${seconds} с` : actuallyFailed ? failureText : `${shownStage} · ${seconds} с`}</div>
-        {/*
-          What Malik understood, back on screen.
+      <div className={`malik-photo-v20__frame${imageLoaded ? " is-ready" : ""}`}>
+        {!actuallyFailed && !imageLoaded ? <canvas ref={canvasRef} className="malik-photo-v20__canvas" /> : null}
+        {imageLoaded && resolvedResultUrl ? <img className="malik-photo-v20__result" src={resolvedResultUrl} alt="Сгенерированное изображение Malik AI" draggable={false} decoding="async" /> : null}
+        {!actuallyFailed && !imageLoaded ? <span className="malik-photo-v20__sweep" aria-hidden="true" /> : null}
+        {actuallyFailed ? <div className="malik-photo-v20__failure"><strong>Генерация остановлена</strong><span>{failureText}</span></div> : null}
+      </div>
 
-          The dashboard still asks /api/ai/image/understand before drawing and
-          still sends the answer along to the image route, but the line stopped
-          being rendered when this loader was rewritten - so the request was
-          being paid for and the person never saw the result. It matters most
-          for exactly the people this product is for: a typo or a heavy accent
-          becomes a sentence you can read and correct in two seconds, instead of
-          forty seconds spent drawing the wrong photograph.
-        */}
-        {understood && !actuallyFailed ? <div className="malik-photo-understood"><strong>Malik понял</strong>{understood}</div> : null}
+      <div className="malik-photo-v20__progress" aria-live="polite">
+        <div className="malik-photo-v20__track" aria-hidden="true"><span style={{ width: `${shownProgress}%` }} /></div>
+        <div className="malik-photo-v20__status">{imageLoaded ? `Готово за ${seconds} с` : actuallyFailed ? failureText : shownStage}</div>
+        {understood && !actuallyFailed ? <div className="malik-photo-understood"><strong>Malik понял</strong><span>{understood}</span></div> : null}
       </div>
 
       <style jsx global>{`
-        .malik-photo-motion.malik-hand-loader-v7{width:min(100%,680px)!important;max-width:680px!important;margin:2px 0 0!important;padding:0!important;display:grid!important;gap:12px!important;background:#000!important;border:0!important;box-shadow:none!important;color:#fff!important}
-        .malik-hand-loader-v7 .malik-photo-stage,.malik-hand-loader-v7 .malik-art-stage{position:relative!important;width:100%!important;aspect-ratio:1/1!important;min-height:0!important;overflow:hidden!important;border-radius:28px!important;border:1px solid rgba(218,174,76,.94)!important;background:#000!important;box-shadow:0 0 0 1px rgba(255,227,163,.04) inset!important;isolation:isolate!important}
-        .malik-hand-loader-v7__canvas,.malik-hand-loader-v7 .malik-art-result{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;display:block!important;border:0!important;border-radius:27px!important;background:#000!important;object-fit:contain!important;object-position:50% 50%!important}
-        .malik-hand-loader-v7__canvas{will-change:transform;transform:translateZ(0)}
-        .malik-hand-loader-v7 .malik-art-result{opacity:1!important;filter:none!important;transform:none!important;animation:malik-v7-in 180ms ease-out both!important}@keyframes malik-v7-in{from{opacity:.82}to{opacity:1}}
-        #malik-root .malik-photo-motion.malik-hand-loader-v7 .malik-hand-loader-v7__progress{width:100%!important;display:grid!important;visibility:visible!important;opacity:1!important;gap:7px!important;padding:0 1px!important;margin:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
-        .malik-hand-loader-v7__meta{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;font-size:12px!important;line-height:1.2!important;color:rgba(255,255,255,.92)!important}.malik-hand-loader-v7__meta strong{font-size:12px!important;font-weight:700!important;color:#fff!important;font-variant-numeric:tabular-nums!important}
-        .malik-hand-loader-v7__track{width:100%!important;height:3px!important;overflow:hidden!important;border-radius:999px!important;background:rgba(255,255,255,.18)!important}.malik-hand-loader-v7__track>span{display:block!important;height:100%!important;border-radius:inherit!important;background:#fff!important;transition:width 240ms linear!important}
-        #malik-root .malik-photo-motion .malik-photo-understood{display:grid!important;gap:3px!important;margin:0!important;padding:9px 11px!important;border-radius:12px!important;border:1px solid rgba(255,255,255,.09)!important;background:#0a0a0a!important;color:rgba(255,255,255,.82)!important;font-size:12px!important;line-height:1.5!important}
-        #malik-root .malik-photo-motion .malik-photo-understood strong{font-size:10px!important;font-weight:700!important;letter-spacing:.06em!important;text-transform:uppercase!important;color:rgba(255,255,255,.45)!important}
-        .malik-hand-loader-v7__status{display:block!important;min-height:16px!important;font-size:11px!important;line-height:1.35!important;color:rgba(255,255,255,.58)!important}.malik-hand-loader-v7__failure{position:absolute!important;inset:0!important;display:grid!important;place-content:center!important;gap:8px!important;padding:28px!important;text-align:center!important;background:#000!important;color:#fff!important}.malik-hand-loader-v7__failure span{max-width:440px!important;font-size:12px!important;line-height:1.55!important;color:rgba(255,255,255,.58)!important}
-        @media(max-width:640px){.malik-photo-motion.malik-hand-loader-v7{width:100%!important;max-width:none!important;gap:10px!important}.malik-hand-loader-v7 .malik-photo-stage,.malik-hand-loader-v7 .malik-art-stage{border-radius:22px!important}.malik-hand-loader-v7__canvas,.malik-hand-loader-v7 .malik-art-result{border-radius:21px!important}}
-        @media(prefers-reduced-motion:reduce){.malik-hand-loader-v7__track>span,.malik-hand-loader-v7 .malik-art-result{transition:none!important;animation:none!important}}
+        .malik-photo-v20{width:min(100%,430px)!important;max-width:430px!important;margin:4px auto 0!important;padding:0!important;display:grid!important;gap:12px!important;background:transparent!important;border:0!important;box-shadow:none!important;color:#fff!important;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important}
+        .malik-photo-v20__heading{display:grid;justify-items:center;gap:9px;width:100%!important;text-align:center!important}
+        .malik-photo-v20__title-row{display:flex!important;align-items:center!important;justify-content:center!important;gap:10px!important;min-height:30px!important}
+        .malik-photo-v20__spark{position:relative!important;width:16px!important;height:16px!important;flex:0 0 16px!important;color:#f5f5f6!important;opacity:.64!important;animation:malik-photo-v20-spark 1.05s ease-in-out infinite!important}
+        .malik-photo-v20__spark:before,.malik-photo-v20__spark:after,.malik-photo-v20__spark i,.malik-photo-v20__spark b{content:""!important;position:absolute!important;left:50%!important;top:50%!important;border-radius:999px!important;background:currentColor!important;transform:translate(-50%,-50%)!important}.malik-photo-v20__spark:before{width:2px!important;height:16px!important}.malik-photo-v20__spark:after{width:16px!important;height:2px!important}.malik-photo-v20__spark i{width:2px!important;height:11px!important;transform:translate(-50%,-50%) rotate(45deg)!important}.malik-photo-v20__spark b{width:2px!important;height:11px!important;transform:translate(-50%,-50%) rotate(-45deg)!important}
+        .malik-photo-v20__title{font-size:24px!important;font-weight:590!important;line-height:1.15!important;letter-spacing:-.025em!important;color:transparent!important;background:linear-gradient(90deg,#626269 0%,#7d7e85 25%,#9a9aa2 39%,#fff 50%,#9a9aa2 61%,#7d7e85 75%,#626269 100%)!important;background-size:190% 100%!important;background-position:-190% 50%!important;-webkit-background-clip:text!important;background-clip:text!important;-webkit-text-fill-color:transparent!important;animation:malik-photo-v20-title .66s linear infinite!important}
+        .malik-photo-v20__heading.is-ready .malik-photo-v20__title{color:#d9d9dd!important;background:none!important;-webkit-text-fill-color:currentColor!important;animation:none!important}.malik-photo-v20__heading.is-ready .malik-photo-v20__spark{animation:none!important;opacity:.82!important}
+        .malik-photo-v20__steps{display:grid!important;gap:6px!important;width:max-content!important;max-width:100%!important;text-align:left!important}
+        .malik-photo-v20__step{display:flex!important;align-items:center!important;gap:8px!important;min-height:18px!important;color:#505158!important;font-size:12px!important;line-height:1.4!important;transition:color .18s ease,transform .18s ease!important}.malik-photo-v20__step.is-active{color:#c9c9ce!important;transform:translateX(1px)!important}.malik-photo-v20__step.is-done{color:#707078!important}
+        .malik-photo-v20__step-mark{display:grid!important;place-items:center!important;width:13px!important;height:13px!important;flex:0 0 13px!important;color:#66676e!important;font-size:11px!important}.malik-photo-v20__step.is-active .malik-photo-v20__step-mark{color:#f0f0f2!important}.malik-photo-v20__step.is-done .malik-photo-v20__step-mark{font-size:0!important}.malik-photo-v20__step.is-done .malik-photo-v20__step-mark:after{content:""!important;width:4px!important;height:4px!important;border-radius:50%!important;background:#66676e!important}
+        .malik-photo-v20__timer{display:flex!important;align-items:center!important;gap:8px!important;margin-top:2px!important;color:#505158!important;font-size:11px!important;font-variant-numeric:tabular-nums!important}.malik-photo-v20__pulse{width:5px!important;height:5px!important;border-radius:50%!important;background:#ededee!important;animation:malik-photo-v20-pulse 1.1s ease-out infinite!important}
+        .malik-photo-v20__frame{position:relative!important;width:100%!important;aspect-ratio:1/1!important;overflow:hidden!important;border-radius:28px!important;border:1px solid rgba(255,255,255,.09)!important;background:#070708!important;box-shadow:18px 18px 0 -12px #080809,20px 20px 0 -11px rgba(255,255,255,.025)!important;isolation:isolate!important}
+        .malik-photo-v20__canvas,.malik-photo-v20__result{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;display:block!important;border:0!important;border-radius:27px!important;background:#070708!important;object-position:50% 50%!important}.malik-photo-v20__canvas{will-change:transform;transform:translateZ(0)}.malik-photo-v20__result{object-fit:contain!important;opacity:1!important;filter:none!important;animation:malik-photo-v20-result 180ms ease-out both!important}
+        .malik-photo-v20__sweep{position:absolute!important;inset:-12% -24%!important;z-index:3!important;pointer-events:none!important;background:linear-gradient(112deg,transparent 44%,rgba(255,255,255,.008) 48%,rgba(255,255,255,.075) 50%,rgba(255,255,255,.008) 52%,transparent 56%)!important;transform:translateX(-120%)!important;mix-blend-mode:screen!important;animation:malik-photo-v20-sweep .58s linear infinite!important}
+        .malik-photo-v20__progress{display:grid!important;gap:7px!important;width:100%!important;padding:0!important;margin:0!important;background:transparent!important;border:0!important;box-shadow:none!important}.malik-photo-v20__track{width:100%!important;height:3px!important;overflow:hidden!important;border-radius:999px!important;background:rgba(255,255,255,.075)!important}.malik-photo-v20__track>span{display:block!important;height:100%!important;border-radius:inherit!important;background:#e7e7e9!important;transition:width 240ms linear!important}
+        .malik-photo-v20__status{min-height:15px!important;color:rgba(255,255,255,.5)!important;font-size:11px!important;line-height:1.35!important;text-align:center!important}.malik-photo-v20__failure{position:absolute!important;inset:0!important;display:grid!important;place-content:center!important;gap:8px!important;padding:28px!important;text-align:center!important;background:#070708!important;color:#fff!important}.malik-photo-v20__failure span{max-width:360px!important;font-size:12px!important;line-height:1.55!important;color:rgba(255,255,255,.58)!important}
+        #malik-root .malik-photo-v20 .malik-photo-understood{display:grid!important;gap:3px!important;margin:0!important;padding:0!important;background:transparent!important;border:0!important;color:rgba(255,255,255,.72)!important;font-size:12px!important;line-height:1.5!important;text-align:left!important}#malik-root .malik-photo-v20 .malik-photo-understood strong{font-size:10px!important;font-weight:700!important;letter-spacing:.06em!important;text-transform:uppercase!important;color:rgba(255,255,255,.4)!important}
+        @keyframes malik-photo-v20-title{0%{background-position:-190% 50%}100%{background-position:190% 50%}}@keyframes malik-photo-v20-spark{0%,100%{opacity:.42;transform:scale(.96)}50%{opacity:1;transform:scale(1.06)}}@keyframes malik-photo-v20-pulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.15)}70%{box-shadow:0 0 0 6px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}@keyframes malik-photo-v20-sweep{0%{transform:translateX(-120%)}100%{transform:translateX(120%)}}@keyframes malik-photo-v20-result{from{opacity:.78}to{opacity:1}}
+        @media(max-width:640px){.malik-photo-v20{width:min(100%,390px)!important;max-width:390px!important;gap:10px!important;margin-left:auto!important;margin-right:auto!important}.malik-photo-v20__title-row{transform:translateX(-10px)!important}.malik-photo-v20__title{font-size:21px!important}.malik-photo-v20__frame{border-radius:24px!important;box-shadow:12px 12px 0 -8px #080809,14px 14px 0 -7px rgba(255,255,255,.02)!important}.malik-photo-v20__canvas,.malik-photo-v20__result{border-radius:23px!important}.malik-photo-v20__steps{font-size:12px!important}}
+        @media(prefers-reduced-motion:reduce){.malik-photo-v20__title,.malik-photo-v20__spark,.malik-photo-v20__pulse,.malik-photo-v20__sweep,.malik-photo-v20__result{animation:none!important}.malik-photo-v20__track>span{transition:none!important}.malik-photo-v20__title{color:#d9d9dd!important;background:none!important;-webkit-text-fill-color:currentColor!important}}
       `}</style>
     </section>
   )
