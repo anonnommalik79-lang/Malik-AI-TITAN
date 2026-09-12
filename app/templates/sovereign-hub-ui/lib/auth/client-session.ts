@@ -12,9 +12,55 @@ export type MalikAuthSnapshot = {
 }
 
 const SNAPSHOT_KEY = "malik_workos_profile"
+let authStatusRefreshStarted = false
+
+async function refreshAuthSnapshotFromServer() {
+  if (typeof window === "undefined" || authStatusRefreshStarted) return
+  authStatusRefreshStarted = true
+
+  try {
+    const response = await fetch("/api/auth/status", {
+      cache: "no-store",
+      credentials: "same-origin",
+    })
+    const data = await response.json().catch(() => null) as {
+      authenticated?: boolean
+      user?: {
+        id?: string
+        email?: string
+        name?: string
+        avatar?: string
+        isAdmin?: boolean
+        role?: "creator" | "admin" | "user"
+      } | null
+    } | null
+
+    if (!response.ok || !data?.authenticated || !data.user?.email) return
+
+    storeWorkOSProfile({
+      id: data.user.id,
+      email: data.user.email.trim().toLowerCase(),
+      name: data.user.name || data.user.email.split("@")[0],
+      avatar: data.user.avatar || "",
+      isAdmin: data.user.isAdmin === true,
+      role: data.user.role || (data.user.isAdmin ? "creator" : "user"),
+      mode: "workos",
+      lastLoginAt: new Date().toISOString(),
+    })
+  } catch {
+    // Keep the last local snapshot when the auth status endpoint is temporarily unavailable.
+  }
+}
 
 export function getStoredAuthSnapshot(): MalikAuthSnapshot | null {
   if (typeof window === "undefined") return null
+
+  // Founder/admin UI used to depend only on this local snapshot. After the
+  // WorkOS auth flow moved server-side, the snapshot could be missing or stale
+  // even while the browser had a valid owner session. Hydrate it once from the
+  // authoritative server session and notify all existing listeners.
+  void refreshAuthSnapshotFromServer()
+
   try {
     const value = window.localStorage.getItem(SNAPSHOT_KEY)
     return value ? (JSON.parse(value) as MalikAuthSnapshot) : null
