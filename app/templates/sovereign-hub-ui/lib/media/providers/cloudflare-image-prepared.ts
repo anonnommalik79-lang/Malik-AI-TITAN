@@ -7,7 +7,7 @@ import { imageProviderTimeoutMs } from "../config"
 import type { ProviderQualityTuning } from "../image-quality-presets"
 import type { ImageAspectRatio } from "../types"
 
-type CloudflareImageAccountSlot = "primary" | "secondary"
+type CloudflareImageAccountSlot = "primary" | "secondary" | "tertiary"
 
 type CloudflareImageAccount = {
   slot: CloudflareImageAccountSlot
@@ -20,24 +20,16 @@ const ACCOUNT_WIDE_QUOTA_ERROR =
   /daily free allocation|used up your daily free allocation|10[,. ]?000\s+neurons|workers paid plan|quota[^\n]*(?:exhaust|limit|used up)/i
 
 function primaryCloudflareAccount(): CloudflareImageAccount | null {
-  const accountId = (
-    process.env.CLOUDFLARE_IMAGE_ACCOUNT_ID?.trim() ||
-    process.env.CLOUDFLARE_ACCOUNT_ID?.trim() ||
-    process.env.CF_ACCOUNT_ID?.trim() ||
-    ""
-  )
-  const token = (
-    process.env.CLOUDFLARE_IMAGE_API_TOKEN?.trim() ||
-    process.env.CLOUDFLARE_API_TOKEN?.trim() ||
-    process.env.CF_API_TOKEN?.trim() ||
-    ""
-  )
+  const accountId = process.env.CLOUDFLARE_IMAGE_ACCOUNT_ID?.trim() || ""
+  const token = process.env.CLOUDFLARE_IMAGE_API_TOKEN?.trim() || ""
 
   return accountId && token ? { slot: "primary", accountId, token } : null
 }
 
 function secondaryCloudflareAccount(): CloudflareImageAccount | null {
   const accountId = (
+    process.env.CLOUDFLARE_ACCOUNT_ID?.trim() ||
+    process.env.CF_ACCOUNT_ID?.trim() ||
     process.env.CLOUDFLARE_IMAGE_ACCOUNT_ID_2?.trim() ||
     process.env.CLOUDFLARE_IMAGE_SECONDARY_ACCOUNT_ID?.trim() ||
     process.env.CLOUDFLARE_ACCOUNT_ID_2?.trim() ||
@@ -45,6 +37,8 @@ function secondaryCloudflareAccount(): CloudflareImageAccount | null {
     ""
   )
   const token = (
+    process.env.CLOUDFLARE_API_TOKEN?.trim() ||
+    process.env.CF_API_TOKEN?.trim() ||
     process.env.CLOUDFLARE_IMAGE_API_TOKEN_2?.trim() ||
     process.env.CLOUDFLARE_IMAGE_SECONDARY_API_TOKEN?.trim() ||
     process.env.CLOUDFLARE_API_TOKEN_2?.trim() ||
@@ -55,9 +49,31 @@ function secondaryCloudflareAccount(): CloudflareImageAccount | null {
   return accountId && token ? { slot: "secondary", accountId, token } : null
 }
 
+function tertiaryCloudflareAccount(): CloudflareImageAccount | null {
+  const accountId = (
+    process.env.CLOUDFLARE_IMAGE_ACCOUNT_ID_3?.trim() ||
+    process.env.CLOUDFLARE_IMAGE_TERTIARY_ACCOUNT_ID?.trim() ||
+    process.env.CLOUDFLARE_ACCOUNT_ID_3?.trim() ||
+    process.env.CF_ACCOUNT_ID_3?.trim() ||
+    ""
+  )
+  const token = (
+    process.env.CLOUDFLARE_IMAGE_API_TOKEN_3?.trim() ||
+    process.env.CLOUDFLARE_IMAGE_TERTIARY_API_TOKEN?.trim() ||
+    process.env.CLOUDFLARE_API_TOKEN_3?.trim() ||
+    process.env.CF_API_TOKEN_3?.trim() ||
+    ""
+  )
+
+  return accountId && token ? { slot: "tertiary", accountId, token } : null
+}
+
 function cloudflareAccounts(): CloudflareImageAccount[] {
-  const accounts = [primaryCloudflareAccount(), secondaryCloudflareAccount()]
-    .filter((value): value is CloudflareImageAccount => Boolean(value))
+  const accounts = [
+    primaryCloudflareAccount(),
+    secondaryCloudflareAccount(),
+    tertiaryCloudflareAccount(),
+  ].filter((value): value is CloudflareImageAccount => Boolean(value))
 
   return accounts.filter((account, index, list) =>
     list.findIndex((candidate) => candidate.accountId === account.accountId && candidate.token === account.token) === index,
@@ -172,11 +188,13 @@ async function cloudflareFailure(response: Response): Promise<{ failed: boolean;
 }
 
 /**
- * Try the dedicated primary Workers AI account first. Any account-level failure
- * immediately continues the SAME model/request on the second account, so the
- * current user generation can finish instead of surfacing an error. Daily
- * neuron exhaustion is remembered until the next 00:00 UTC reset; after that
- * the primary account automatically becomes first again.
+ * Try the dedicated image account first, then the generic Cloudflare account,
+ * then the third reserve image account. Any account-level failure continues
+ * the SAME model/request on the next account so the current generation can
+ * finish instead of surfacing the first upstream error to the user.
+ *
+ * Daily neuron exhaustion is remembered per account until the next 00:00 UTC
+ * reset. After reset that account automatically becomes eligible again.
  */
 async function callCloudflare(model: string, init: RequestInit, signal?: AbortSignal) {
   const accounts = cloudflareAccounts()
@@ -199,12 +217,12 @@ async function callCloudflare(model: string, init: RequestInit, signal?: AbortSi
       if (ACCOUNT_WIDE_QUOTA_ERROR.test(failure.message)) {
         markAccountQuotaExhausted(account.slot)
       }
-      // Continue immediately on the second Cloudflare account with the same
-      // model and same prepared prompt. Do not return the first account error.
+      // Continue immediately on the next Cloudflare account with the exact same
+      // model, prompt and request body. The first/second account error stays hidden.
     } catch (error) {
       lastError = error
-      // Network/auth/account failure on account #1 must not kill the request.
-      // Account #2 gets the exact same generation attempt immediately.
+      // Network/auth/account failure must not kill the user's generation while
+      // another configured Cloudflare account is still available.
     }
   }
 
