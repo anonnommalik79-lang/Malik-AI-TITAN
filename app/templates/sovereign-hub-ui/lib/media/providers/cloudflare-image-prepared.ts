@@ -7,26 +7,84 @@ import { imageProviderTimeoutMs } from "../config"
 import type { ProviderQualityTuning } from "../image-quality-presets"
 import type { ImageAspectRatio } from "../types"
 
-function cloudflareAccountId(): string {
-  return (
+type CloudflareImageAccountSlot = "primary" | "secondary"
+
+type CloudflareImageAccount = {
+  slot: CloudflareImageAccountSlot
+  accountId: string
+  token: string
+}
+
+const quotaCooldownUntil = new Map<CloudflareImageAccountSlot, number>()
+const ACCOUNT_WIDE_QUOTA_ERROR =
+  /daily free allocation|used up your daily free allocation|10[,. ]?000\s+neurons|workers paid plan|quota[^\n]*(?:exhaust|limit|used up)/i
+
+function primaryCloudflareAccount(): CloudflareImageAccount | null {
+  const accountId = (
     process.env.CLOUDFLARE_IMAGE_ACCOUNT_ID?.trim() ||
     process.env.CLOUDFLARE_ACCOUNT_ID?.trim() ||
     process.env.CF_ACCOUNT_ID?.trim() ||
     ""
   )
-}
-
-function cloudflareApiToken(): string {
-  return (
+  const token = (
     process.env.CLOUDFLARE_IMAGE_API_TOKEN?.trim() ||
     process.env.CLOUDFLARE_API_TOKEN?.trim() ||
     process.env.CF_API_TOKEN?.trim() ||
     ""
   )
+
+  return accountId && token ? { slot: "primary", accountId, token } : null
+}
+
+function secondaryCloudflareAccount(): CloudflareImageAccount | null {
+  const accountId = (
+    process.env.CLOUDFLARE_IMAGE_ACCOUNT_ID_2?.trim() ||
+    process.env.CLOUDFLARE_IMAGE_SECONDARY_ACCOUNT_ID?.trim() ||
+    process.env.CLOUDFLARE_ACCOUNT_ID_2?.trim() ||
+    process.env.CF_ACCOUNT_ID_2?.trim() ||
+    ""
+  )
+  const token = (
+    process.env.CLOUDFLARE_IMAGE_API_TOKEN_2?.trim() ||
+    process.env.CLOUDFLARE_IMAGE_SECONDARY_API_TOKEN?.trim() ||
+    process.env.CLOUDFLARE_API_TOKEN_2?.trim() ||
+    process.env.CF_API_TOKEN_2?.trim() ||
+    ""
+  )
+
+  return accountId && token ? { slot: "secondary", accountId, token } : null
+}
+
+function cloudflareAccounts(): CloudflareImageAccount[] {
+  const accounts = [primaryCloudflareAccount(), secondaryCloudflareAccount()]
+    .filter((value): value is CloudflareImageAccount => Boolean(value))
+
+  return accounts.filter((account, index, list) =>
+    list.findIndex((candidate) => candidate.accountId === account.accountId && candidate.token === account.token) === index,
+  )
 }
 
 export function preparedCloudflareImageConfigured(): boolean {
-  return Boolean(cloudflareAccountId() && cloudflareApiToken())
+  return cloudflareAccounts().length > 0
+}
+
+function nextUtcQuotaResetMs() {
+  const now = new Date()
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 5)
+}
+
+function accountQuotaCoolingDown(slot: CloudflareImageAccountSlot) {
+  const until = quotaCooldownUntil.get(slot) || 0
+  if (!until) return false
+  if (Date.now() >= until) {
+    quotaCooldownUntil.delete(slot)
+    return false
+  }
+  return true
+}
+
+function markAccountQuotaExhausted(slot: CloudflareImageAccountSlot) {
+  quotaCooldownUntil.set(slot, nextUtcQuotaResetMs())
 }
 
 function imageSize(aspectRatio: ImageAspectRatio = "1:1") {
@@ -62,13 +120,12 @@ function extractImage(payload: any): string {
   return `data:image/jpeg;base64,${value}`
 }
 
-async function callCloudflare(model: string, init: RequestInit, signal?: AbortSignal) {
-  const accountId = cloudflareAccountId()
-  const token = cloudflareApiToken()
-  if (!accountId || !token) {
-    throw new Error("CLOUDFLARE_IMAGE_ACCOUNT_ID and CLOUDFLARE_IMAGE_API_TOKEN are not configured")
-  }
-
+async function callCloudflareAccount(
+  account: CloudflareImageAccount,
+  model: string,
+  init: RequestInit,
+  signal?: AbortSignal,
+) {
   const controller = new AbortController()
   const abort = () => controller.abort(signal?.reason)
   if (signal) {
@@ -77,11 +134,11 @@ async function callCloudflare(model: string, init: RequestInit, signal?: AbortSi
   }
 
   const headers = new Headers(init.headers)
-  headers.set("authorization", `Bearer ${token}`)
+  headers.set("authorization", `Bearer ${account.token}`)
   const timer = setTimeout(() => controller.abort(), imageProviderTimeoutMs())
 
   try {
-    return await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`, {
+    return await fetch(`https://api.cloudflare.com/client/v4/accounts/${account.accountId}/ai/run/${model}`, {
       ...init,
       headers,
       signal: controller.signal,
@@ -91,6 +148,69 @@ async function callCloudflare(model: string, init: RequestInit, signal?: AbortSi
     clearTimeout(timer)
     signal?.removeEventListener("abort", abort)
   }
+}
+
+async function cloudflareFailure(response: Response): Promise<{ failed: boolean; message: string }> {
+  const contentType = response.headers.get("content-type") || ""
+  if (contentType.startsWith("image/") && response.ok) return { failed: false, message: "" }
+
+  try {
+    const text = await response.clone().text()
+    let payload: any = null
+    try {
+      payload = text ? JSON.parse(text) : null
+    } catch {
+      payload = null
+    }
+
+    const message = payload?.errors?.[0]?.message || payload?.error?.message || payload?.message || text || ""
+    const failed = !response.ok || payload?.success === false
+    return { failed, message: String(message || "") }
+  } catch {
+    return { failed: !response.ok, message: "" }
+  }
+}
+
+/**
+ * Try the dedicated primary Workers AI account first. Any account-level failure
+ * immediately continues the SAME model/request on the second account, so the
+ * current user generation can finish instead of surfacing an error. Daily
+ * neuron exhaustion is remembered until the next 00:00 UTC reset; after that
+ * the primary account automatically becomes first again.
+ */
+async function callCloudflare(model: string, init: RequestInit, signal?: AbortSignal) {
+  const accounts = cloudflareAccounts()
+  if (!accounts.length) {
+    throw new Error("Cloudflare Workers AI image accounts are not configured")
+  }
+
+  let lastResponse: Response | undefined
+  let lastError: unknown
+
+  for (const account of accounts) {
+    if (accountQuotaCoolingDown(account.slot)) continue
+
+    try {
+      const response = await callCloudflareAccount(account, model, init, signal)
+      const failure = await cloudflareFailure(response)
+      if (!failure.failed) return response
+
+      lastResponse = response
+      if (ACCOUNT_WIDE_QUOTA_ERROR.test(failure.message)) {
+        markAccountQuotaExhausted(account.slot)
+      }
+      // Continue immediately on the second Cloudflare account with the same
+      // model and same prepared prompt. Do not return the first account error.
+    } catch (error) {
+      lastError = error
+      // Network/auth/account failure on account #1 must not kill the request.
+      // Account #2 gets the exact same generation attempt immediately.
+    }
+  }
+
+  if (lastResponse) return lastResponse
+  if (lastError) throw lastError
+  throw new Error("All configured Cloudflare Workers AI image accounts are temporarily unavailable")
 }
 
 function jsonRequestBody(
@@ -150,7 +270,7 @@ export async function generatePreparedCloudflareImage({
   guidance?: number
 }> {
   if (!preparedCloudflareImageConfigured()) {
-    throw new Error("Cloudflare Workers AI image account is not configured")
+    throw new Error("Cloudflare Workers AI image accounts are not configured")
   }
 
   const model = getMalikImageModel(modelId)
