@@ -229,6 +229,7 @@ export function MalikSearchMotion() {
   const style = <style>{`
     [data-malik-message='assistant'] .malik-thinking-line,
     [data-malik-message='assistant'] .malik-activity { display:none!important; }
+    [data-malik-message='assistant'] section[aria-label='План Malik Action OS'] { display:none!important; }
     .malik-search-motion{width:min(100%,720px);padding:4px 0 8px;color:#efeff1;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     .malik-search-motion__stack{display:grid;gap:7px}
     .malik-search-motion__row,.malik-search-motion__summary{display:flex;align-items:flex-start;gap:9px;min-width:0;min-height:22px;color:#8f8f95;font-size:13px;font-weight:520;line-height:1.5}
@@ -240,9 +241,11 @@ export function MalikSearchMotion() {
     .malik-search-motion__sources-title{color:#66666c;font-size:11px;font-weight:650}.malik-search-motion__sources{display:flex;flex-wrap:wrap;gap:6px}.malik-search-motion__source{display:inline-flex;align-items:center;gap:7px;min-height:28px;padding:0 9px;border:1px solid rgba(255,255,255,.09);border-radius:9px;background:#0b0b0c;color:#aaaab0;font-size:11px}.malik-search-motion__source-mark{display:grid;place-items:center;width:15px;height:15px;border-radius:4px;background:#1a1a1d;color:#d8d8dc;font-size:8px;font-weight:800;text-transform:uppercase}.malik-search-motion__source-kind{color:#5f5f65}
     .malik-search-motion__signal{display:flex;align-items:flex-start;gap:7px;color:#8d8d93;font-size:11.5px;line-height:1.45}.malik-search-motion__signal strong{color:#c7c7cb!important;font-size:inherit!important;font-weight:650!important}
     .malik-search-motion__stage{color:#c8c8cc}.malik-search-motion__stage.is-active{color:#f0f0f1}.malik-search-motion__meta{color:#626268;font-size:11.5px;font-variant-numeric:tabular-nums}
-    @keyframes malik-research-pulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.2)}70%{box-shadow:0 0 0 5px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}@keyframes malik-research-expand{from{opacity:0;max-height:0;transform:translateY(-3px)}to{opacity:1;max-height:440px;transform:none}}@keyframes malik-research-line-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    .malik-search-motion__stage.is-active .malik-search-motion__label{color:transparent;background:linear-gradient(90deg,#77777d 0%,#8b8b91 34%,#ffffff 50%,#8b8b91 66%,#77777d 100%);background-size:220% 100%;background-position:-200% 50%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:malik-thinking-text-sweep 1.35s linear infinite}
+    .malik-search-motion__stage.is-active .malik-search-motion__icon{color:#f4f4f5;animation:malik-thinking-icon-pulse 1.35s ease-in-out infinite}
+    @keyframes malik-research-pulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.2)}70%{box-shadow:0 0 0 5px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}@keyframes malik-research-expand{from{opacity:0;max-height:0;transform:translateY(-3px)}to{opacity:1;max-height:440px;transform:none}}@keyframes malik-research-line-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}@keyframes malik-thinking-text-sweep{0%{background-position:-200% 50%}100%{background-position:200% 50%}}@keyframes malik-thinking-icon-pulse{0%,100%{opacity:.55}50%{opacity:1}}
     @media(max-width:640px){.malik-search-motion{width:100%}.malik-search-motion__row,.malik-search-motion__summary{font-size:12.5px}.malik-search-motion__search{font-size:12px}}
-    @media(prefers-reduced-motion:reduce){.malik-search-motion__icon.is-live:after,.malik-search-motion__details,.malik-search-motion__search{animation:none!important}.malik-search-motion__chevron{transition:none}}
+    @media(prefers-reduced-motion:reduce){.malik-search-motion__icon.is-live:after,.malik-search-motion__details,.malik-search-motion__search,.malik-search-motion__stage.is-active .malik-search-motion__label,.malik-search-motion__stage.is-active .malik-search-motion__icon{animation:none!important}.malik-search-motion__stage.is-active .malik-search-motion__label{color:#f0f0f1!important;background:none!important;-webkit-text-fill-color:currentColor!important}.malik-search-motion__chevron{transition:none}}
   `}</style>
 
   if (!motion.target) return style
