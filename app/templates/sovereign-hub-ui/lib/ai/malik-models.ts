@@ -6,6 +6,7 @@ export type MalikModelId =
   | "malik-core-300b"
   | "malik-flash-53"
   | "malik-vision-k3"
+  | "nvidia-nemotron-ultra-550b"
   | "malik-8b"
   | "malik-20b"
   | "malik-fast-120b"
@@ -18,7 +19,7 @@ export type MalikModelId =
   | "malik-agent-120b"
 
 export type MalikModelTier = "free" | "pro"
-export type MalikModelProvider = "malik-orchestrator" | "modelscope" | "aihubmix" | "groq" | "cloudflare" | "cerebras"
+export type MalikModelProvider = "malik-orchestrator" | "modelscope" | "aihubmix" | "groq" | "cloudflare" | "cerebras" | "nemotron-openrouter"
 
 export type MalikModelDefinition = {
   id: MalikModelId
@@ -42,6 +43,15 @@ export const MALIK_MODELS = [
     tier: "free",
     provider: "malik-orchestrator",
     providerModel: "MalikCoder-1.0",
+    capabilities: ["text", "code", "tools", "reasoning"],
+  },
+  {
+    id: "nvidia-nemotron-ultra-550b",
+    label: "NVIDIA Nemotron 3 Ultra 550B",
+    description: "OpenRouter Free · 1M контекст · Сложный код, агенты и reasoning",
+    tier: "free",
+    provider: "nemotron-openrouter",
+    providerModel: "nvidia/nemotron-3-ultra-550b-a55b:free",
     capabilities: ["text", "code", "tools", "reasoning"],
   },
   {

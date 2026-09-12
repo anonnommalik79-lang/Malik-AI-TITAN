@@ -37,6 +37,7 @@ const MODEL_BRANDS: Record<MalikModelId, BrandIcon> = {
   "malik-core-300b": { label: "Baidu ERNIE", urls: ["https://ernie.baidu.com/favicon.ico", "https://www.baidu.com/favicon.ico"], fallback: "E" },
   "malik-flash-53": { label: "Z.ai GLM", urls: ["https://chat.z.ai/favicon.ico", "https://z.ai/favicon.ico"], fallback: "Z" },
   "malik-vision-k3": { label: "Kimi", urls: ["https://www.kimi.com/favicon.ico", "https://kimi.moonshot.cn/favicon.ico"], fallback: "K" },
+  "nvidia-nemotron-ultra-550b": { label: "NVIDIA Nemotron", urls: ["https://www.nvidia.com/favicon.ico"], fallback: "N" },
   "malik-8b": { label: "Meta Llama", urls: ["https://www.meta.com/favicon.ico"], fallback: "M" },
   "malik-20b": { label: "OpenAI", urls: ["https://openai.com/favicon.ico"], fallback: "O" },
   "malik-fast-120b": { label: "OpenAI GPT-OSS", urls: ["https://openai.com/favicon.ico"], fallback: "O" },

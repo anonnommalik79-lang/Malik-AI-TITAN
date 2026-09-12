@@ -8,6 +8,7 @@ import {
 
 const expected = {
   "malik-coder-32b": ["malik-orchestrator", "MalikCoder-1.0"],
+  "nvidia-nemotron-ultra-550b": ["nemotron-openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free"],
   "malik-qwen-397b": ["modelscope", "Qwen/Qwen3.5-397B-A17B"],
   "malik-reason-753b": ["modelscope", "ZhipuAI/GLM-5.2"],
   "malik-core-300b": ["modelscope", "PaddlePaddle/ERNIE-4.5-300B-A47B-PT"],
@@ -24,9 +25,9 @@ const expected = {
   "malik-agent-120b": ["cloudflare", "@cf/nvidia/nemotron-3-120b-a12b"],
 }
 
-assert.equal(MALIK_MODELS.length, 15, "The selector must expose fifteen live Malik models")
-assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, 15, "Model IDs must be unique")
-assert.equal(new Set(MALIK_MODELS.map((model) => `${model.provider}:${model.providerModel}`)).size, 15, "Provider routes must be unique")
+assert.equal(MALIK_MODELS.length, 16, "The selector must expose sixteen live models")
+assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, 16, "Model IDs must be unique")
+assert.equal(new Set(MALIK_MODELS.map((model) => `${model.provider}:${model.providerModel}`)).size, 16, "Provider routes must be unique")
 assert.equal(DEFAULT_MALIK_MODEL_ID, "malik-coder-32b", "MalikCoder 1.0 must be the default text/code model")
 
 for (const [id, [provider, providerModel]] of Object.entries(expected)) {
@@ -35,7 +36,12 @@ for (const [id, [provider, providerModel]] of Object.entries(expected)) {
   assert.equal(model.providerModel, providerModel, `${id} provider model`)
   assert.equal(canUseMalikModel(id, "pro"), true, `${id} must be available to Pro`)
   assert.equal(canUseMalikModel(id, "free"), model.tier === "free", `${id} Free gate`)
-  assert.match(model.label, /^Malik/, `${id} label must use Malik branding`)
+  if (id === "nvidia-nemotron-ultra-550b") {
+    assert.equal(model.label, "NVIDIA Nemotron 3 Ultra 550B", "Nemotron must keep its official public name")
+    assert.deepEqual(model.capabilities, ["text", "code", "tools", "reasoning"], "Nemotron coding capabilities")
+  } else {
+    assert.match(model.label, /^Malik/, `${id} label must use Malik branding`)
+  }
   console.log(`${id} -> ${model.provider} -> ${model.providerModel} [${model.tier}]`)
 }
 
@@ -43,6 +49,7 @@ assert.deepEqual(
   MALIK_MODELS.filter((model) => canUseMalikModel(model.id, "free")).map((model) => model.id),
   [
     "malik-coder-32b",
+    "nvidia-nemotron-ultra-550b",
     "malik-qwen-397b",
     "malik-reason-753b",
     "malik-core-300b",
@@ -52,10 +59,11 @@ assert.deepEqual(
     "malik-fast-120b",
     "malik-27b",
   ],
-  "Free must expose MalikCoder 1.0 plus the eight existing live free models",
+  "Free must expose Nemotron 550B plus the existing live free models",
 )
 
 assert.equal(getMalikModel("malik-coder-32b").label, "MalikCoder 1.0", "Public model name must be exact")
+assert.equal(getMalikModel("nvidia-nemotron-ultra-550b").tier, "free", "Nemotron OpenRouter endpoint must be selectable on Free")
 assert.equal(MALIK_MODELS.some((model) => model.providerModel === "zai-glm-4.7"), false, "Deprecated GLM 4.7 must not be exposed")
 assert.equal(MALIK_MODELS.some((model) => model.providerModel.includes("gemini")), false, "Hidden Gemini must never appear in the selector")
-console.log("Verified 15 unique Malik routes with MalikCoder 1.0 as the default free orchestrated model.")
+console.log("Verified 16 unique model routes including NVIDIA Nemotron 3 Ultra 550B.")
