@@ -138,15 +138,15 @@ function providerRuntime(model: MalikModelDefinition, requestedTokens?: number, 
   if (model.provider === "nemotron-openrouter") {
     const key = env("NEMOTRON_OPENROUTER_API_KEY")
     if (!key) return missing(`${model.label} временно недоступна: NEMOTRON_OPENROUTER_API_KEY не настроен.`) as never
-    const configured = clampTokens(Number(env("NEMOTRON_MAX_OUTPUT_TOKENS") || 16_000), 16_000)
+    const configured = clampTokens(Number(env("NEMOTRON_MAX_OUTPUT_TOKENS") || 16_000), 16_000, 16_000)
     return {
       url: `${(env("NEMOTRON_OPENROUTER_BASE_URL") || "https://openrouter.ai/api/v1").replace(/\/+$/, "")}/chat/completions`,
       key,
       model: env("NEMOTRON_OPENROUTER_MODEL") || model.providerModel,
-      stream: true,
-      maxTokens: Math.max(configured, commonTokens),
+      stream: false,
+      maxTokens: Math.max(configured, Math.min(commonTokens, 16_000)),
       temperature: typeof requestedTemperature === "number" ? requestedTemperature : Number(env("NEMOTRON_TEMPERATURE") || 0.2),
-      timeoutMs: Math.max(30_000, Number(env("NEMOTRON_TIMEOUT_MS") || 120_000)),
+      timeoutMs: Math.max(120_000, Number(env("NEMOTRON_TIMEOUT_MS") || 360_000)),
       headers: {
         "HTTP-Referer": env("NEXT_PUBLIC_APP_URL") || "https://malikaiworld.world",
         "X-Title": "MALIK AI",
@@ -262,6 +262,10 @@ async function runFallback(input: {
   return null
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export async function runStrictMalikModel(input: {
   modelId: MalikModelId
   prompt: string
@@ -286,40 +290,66 @@ export async function runStrictMalikModel(input: {
   try {
     const runtime = providerRuntime(model, input.maxTokens, input.temperature)
     const messages = buildMessages({ model, prompt: input.prompt, systemPrompt: input.systemPrompt, history: input.history, attachments: input.attachments })
-    console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({ selectedModelId: model.id, provider: model.provider, providerModel: runtime.model, stage: "request" }))
-    const response = await providerFetch(runtime.url, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${runtime.key}`,
-        "content-type": "application/json; charset=utf-8",
-        accept: runtime.stream ? "text/event-stream" : "application/json",
-        ...(runtime.headers || {}),
-      },
-      body: JSON.stringify({
-        model: runtime.model,
-        messages,
-        max_tokens: runtime.maxTokens,
-        temperature: runtime.temperature,
-        ...(model.provider === "groq" && /^qwen\/qwen3\./.test(runtime.model) ? { reasoning_effort: "none" } : {}),
-        stream: runtime.stream,
-      }),
-    }, runtime.timeoutMs)
+    const maxAttempts = model.provider === "nemotron-openrouter" ? 2 : 1
+    let lastStatus = 503
 
-    if (!response.ok) {
-      console.error("[MALIK_MODEL_ROUTE] upstream", response.status, await upstreamError(response))
-      throw new MalikModelRouteError("SELECTED_MODEL_UNAVAILABLE", `${model.label} временно недоступна.`, response.status, model.id)
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({ selectedModelId: model.id, provider: model.provider, providerModel: runtime.model, stage: "request", attempt }))
+      const response = await providerFetch(runtime.url, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${runtime.key}`,
+          "content-type": "application/json; charset=utf-8",
+          accept: runtime.stream ? "text/event-stream" : "application/json",
+          ...(runtime.headers || {}),
+        },
+        body: JSON.stringify({
+          model: runtime.model,
+          messages,
+          max_tokens: runtime.maxTokens,
+          temperature: runtime.temperature,
+          ...(model.provider === "groq" && /^qwen\/qwen3\./.test(runtime.model) ? { reasoning_effort: "none" } : {}),
+          ...(model.provider === "nemotron-openrouter" ? { reasoning: { effort: "low", exclude: true } } : {}),
+          stream: runtime.stream,
+        }),
+      }, runtime.timeoutMs)
+
+      lastStatus = response.status
+      if (!response.ok) {
+        const detail = await upstreamError(response)
+        console.error("[MALIK_MODEL_ROUTE] upstream", response.status, detail)
+        const retryable = model.provider === "nemotron-openrouter" && (response.status === 429 || response.status >= 500)
+        if (retryable && attempt < maxAttempts) {
+          await sleep(750)
+          continue
+        }
+        throw new MalikModelRouteError("SELECTED_MODEL_UNAVAILABLE", `${model.label} временно недоступна.`, response.status, model.id)
+      }
+
+      const parsed = runtime.stream || response.headers.get("content-type")?.includes("text/event-stream")
+        ? await readStream(response)
+        : await response.json().then((payload: any) => ({ content: contentFrom(payload), usage: payload?.usage })).catch(() => ({ content: "", usage: undefined }))
+
+      if (parsed.content) {
+        return { content: parsed.content, provider: model.provider, model: runtime.model, selectedModelId: model.id, latencyMs: Date.now() - started, usage: parsed.usage }
+      }
+
+      console.error("[MALIK_MODEL_ROUTE] empty-response", JSON.stringify({ selectedModelId: model.id, provider: model.provider, attempt }))
+      if (model.provider === "nemotron-openrouter" && attempt < maxAttempts) {
+        await sleep(750)
+        continue
+      }
+      throw new MalikModelRouteError("SELECTED_MODEL_UNAVAILABLE", `${model.label} временно недоступна.`, lastStatus || 503, model.id)
     }
-    const parsed = runtime.stream || response.headers.get("content-type")?.includes("text/event-stream")
-      ? await readStream(response)
-      : await response.json().then((payload: any) => ({ content: contentFrom(payload), usage: payload?.usage })).catch(() => ({ content: "", usage: undefined }))
-    if (!parsed.content) throw new MalikModelRouteError("SELECTED_MODEL_UNAVAILABLE", `${model.label} временно недоступна.`, 503, model.id)
-    return { content: parsed.content, provider: model.provider, model: runtime.model, selectedModelId: model.id, latencyMs: Date.now() - started, usage: parsed.usage }
+
+    throw new MalikModelRouteError("SELECTED_MODEL_UNAVAILABLE", `${model.label} временно недоступна.`, lastStatus || 503, model.id)
   } catch (error) {
     if (options.allowFallback !== false) {
       const fallback = await runFallback({ failedModelId: model.id, originalModelId: input.modelId, prompt: input.prompt, systemPrompt: input.systemPrompt, history: input.history, attachments: input.attachments, maxTokens: input.maxTokens, temperature: input.temperature }).catch(() => null)
       if (fallback) return fallback
     }
     if (error instanceof MalikModelRouteError) throw error
+    console.error("[MALIK_MODEL_ROUTE] exception", error instanceof Error ? error.message : String(error))
     throw new MalikModelRouteError("SELECTED_MODEL_UNAVAILABLE", `${model.label} временно недоступна. Попробуйте ещё раз или выберите другую модель.`, 503, model.id)
   }
 }
