@@ -36,24 +36,20 @@ function stableSeed(value: string) {
 /**
  * How many candidates to draw before keeping one.
  *
- * A diffusion model's output varies enormously with the seed; the same prompt
- * gives a masterpiece and a mess on consecutive numbers. Drawing a couple and
- * keeping the better one is the cheapest real quality gain available here,
- * because it costs nothing but time.
+ * Pollinations is the emergency free route used when Cloudflare's account-wide
+ * daily neuron allowance is gone. Reliability matters more than drawing two
+ * simultaneous candidates there, because two public requests double the load
+ * and are more likely to hit the provider timeout/rate limit. Production now
+ * defaults to one render; operators can opt back into 2-4 with IMAGE_CANDIDATES.
  */
 function candidateCount() {
-  const value = Number(process.env.IMAGE_CANDIDATES || 2)
-  return Number.isFinite(value) ? Math.max(1, Math.min(4, Math.round(value))) : 2
+  const value = Number(process.env.IMAGE_CANDIDATES || 1)
+  return Number.isFinite(value) ? Math.max(1, Math.min(4, Math.round(value))) : 1
 }
 
 /**
- * Picks the most detailed of several renders of the same prompt.
- *
- * At identical dimensions and quality settings, a JPEG's size tracks how much
- * high-frequency information survived: a crisp face with fabric texture does
- * not compress as small as a soft, smeared one. It is a proxy rather than a
- * judgement of composition, but it reliably rejects the blurred and washed-out
- * draws, which is what the seed lottery actually produces.
+ * Picks the most detailed of several renders of the same prompt when an
+ * operator explicitly enables more than one candidate.
  */
 function mostDetailed(candidates: Array<{ bytes: Buffer; contentType: string }>) {
   return candidates.reduce((best, candidate) => (candidate.bytes.byteLength > best.bytes.byteLength ? candidate : best))
@@ -109,7 +105,7 @@ export async function generateWithPollinations(input: {
   const base = stableSeed(prompt) + (Number(input.variant) || 0) * 7919
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), pollinationsTimeoutMs())
+  const timeout = setTimeout(() => controller.abort(new Error("POLLINATIONS_TIMEOUT")), pollinationsTimeoutMs())
   const abort = () => controller.abort(input.signal?.reason)
   if (input.signal) {
     if (input.signal.aborted) abort()
@@ -135,8 +131,8 @@ export async function generateWithPollinations(input: {
       result.status === "fulfilled" && result.value.bytes.byteLength > 1024 ? [result.value] : []
     ))
 
-    // One good draw is enough; the extra candidates are an improvement, never a
-    // requirement, so a partial failure must not fail the whole request.
+    // One good draw is enough; extra candidates are an optional improvement,
+    // never a requirement, so a partial failure must not fail the whole request.
     if (!ok.length) {
       const failure = draws.find((result) => result.status === "rejected") as PromiseRejectedResult | undefined
       throw failure?.reason instanceof Error ? failure.reason : new Error("Pollinations returned no image")
