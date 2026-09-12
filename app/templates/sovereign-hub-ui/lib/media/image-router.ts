@@ -4,7 +4,9 @@ import { generateWithStability, stabilityConfigured } from "./providers/stabilit
 import { awsImageConfigured, falImageConfigured, generateAwsImage, generateFalImage } from "./providers/titan-image"
 import {
   generatePreparedCloudflareImage,
+  generateRawTertiaryCloudflareImage,
   preparedCloudflareImageConfigured,
+  tertiaryCloudflareImageConfigured,
 } from "./providers/cloudflare-image-prepared"
 import { MALIK_IMAGE_MODELS, type MalikImageModelId } from "./image-models"
 import { getMalikImageModelCapability } from "./image-model-capabilities"
@@ -18,12 +20,6 @@ import { enhanceImagePrompt, enhanceNegativePrompt } from "./image-prompt-enhanc
 import { buildVisualPrompt } from "./visual-prompt"
 import type { ImageGenerateInput, ImageGenerateResult } from "./types"
 
-/**
- * One prompt is prepared once, then handed unchanged to whichever provider is
- * available. Malik's quality layer changes fidelity terms and provider knobs,
- * never the subject, count, colour, action or location the user asked for.
- */
-
 const handlers: Record<string, () => boolean> = {
   cloudflare: preparedCloudflareImageConfigured,
   stability: stabilityConfigured,
@@ -35,6 +31,15 @@ const handlers: Record<string, () => boolean> = {
 const FREE_IMAGE_PROVIDERS = new Set(["cloudflare", "pollinations"])
 const TRANSIENT_IMAGE_PROVIDER_ERROR =
   /\b(?:429|500|502|503|504|520|521|522|523|524)\b|fetch failed|network|socket|econnreset|eai_again|temporar(?:y|ily)|upstream/i
+
+const STANDARD_FALLBACK_WARNING = {
+  code: "QUALITY_DEGRADED_FALLBACK" as const,
+  title: "Включена резервная стандартная модель",
+  message: "Два мощных пула временно недоступны, поэтому качество может быть ниже обычного. Malik AI Pro предназначен для приоритетного доступа к мощному режиму.",
+  ctaLabel: "Перейти на Pro",
+  dismissLabel: "Продолжить",
+  severity: "warning" as const,
+}
 
 function effectiveImageOrder(): string[] {
   const order = imageGodOrder()
@@ -53,19 +58,8 @@ function shouldRetryImageProviderError(error: unknown) {
   return TRANSIENT_IMAGE_PROVIDER_ERROR.test(message)
 }
 
-/**
- * Image providers occasionally return a transient 5xx after doing most of the
- * work. Previously that single upstream hiccup immediately consumed the model
- * and eventually surfaced to the user as "Media API returned 502" at 99%.
- * Retry only transient network/upstream failures once; invalid requests,
- * authentication failures and timeouts still fail over immediately.
- */
-async function retryTransientImageProvider<T>(
-  run: () => Promise<T>,
-  signal?: AbortSignal,
-): Promise<T> {
+async function retryTransientImageProvider<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   let lastError: unknown
-
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       return await run()
@@ -75,7 +69,6 @@ async function retryTransientImageProvider<T>(
       await new Promise((resolve) => setTimeout(resolve, 450))
     }
   }
-
   throw lastError
 }
 
@@ -91,12 +84,6 @@ function timeoutFromEnv(name: string, fallback: number, min: number, max: number
   return Math.min(max, Math.max(min, value))
 }
 
-/**
- * The chosen model is the quality route and gets a generous window. Only models
- * reached after that route has failed use the short failover window. This keeps
- * normal output identical while preventing four dead Cloudflare endpoints from
- * consuming four full provider timeouts in sequence.
- */
 function cloudflareAttemptTimeoutMs(preferred: boolean) {
   return preferred
     ? timeoutFromEnv("IMAGE_PREFERRED_MODEL_TIMEOUT_MS", 50_000, 10_000, 90_000)
@@ -115,7 +102,6 @@ async function withAttemptSignal<T>(
     else parentSignal.addEventListener("abort", abortFromParent, { once: true })
   }
   const timer = setTimeout(() => controller.abort(new Error("IMAGE_PROVIDER_ATTEMPT_TIMEOUT")), timeoutMs)
-
   try {
     return await run(controller.signal)
   } finally {
@@ -124,10 +110,7 @@ async function withAttemptSignal<T>(
   }
 }
 
-function tunedForModel(
-  modelId: MalikImageModelId,
-  input: ImageGenerateInput,
-): ProviderQualityTuning {
+function tunedForModel(modelId: MalikImageModelId, input: ImageGenerateInput): ProviderQualityTuning {
   const quality = resolveMalikImageQuality(input.quality)
   const capability = getMalikImageModelCapability(modelId)
   const base = tuneImageModelForQuality(modelId, quality)
@@ -182,10 +165,10 @@ export async function routeImageGeneration(
   })
   const negativePrompt = enhanceNegativePrompt(visual.negativePrompt, quality)
 
+  // Accounts #1 and #2 are the quality pool. They keep Malik's full prompt
+  // compiler and automatic model routing. Account #3 is deliberately excluded
+  // here so it keeps its capacity for the standard reserve path below.
   if (preparedCloudflareImageConfigured()) {
-    // Start with the model chosen for this exact quality/mode, then fail over
-    // through every free Cloudflare model. This preserves availability without
-    // downgrading the entire product to one hard-coded engine.
     const automaticModels = [
       preferredModelId,
       ...MALIK_IMAGE_MODELS.filter((model) => model.tier === "free").map((model) => model.id),
@@ -222,15 +205,58 @@ export async function routeImageGeneration(
           quality,
           steps: result.steps ?? tuning.steps,
           guidance: result.guidance ?? tuning.guidance,
-          routeReason: preferred ? decision.reason : `${decision.reason}; cloudflare fallback`,
+          routeReason: preferred ? decision.reason : `${decision.reason}; cloudflare quality fallback`,
+          generationTier: "quality",
+          generationSource: `cloudflare-${result.accountSlot}`,
           remainingDailyImages: 0,
         }
       } catch (error) {
-        errors.push(`cloudflare/${automaticModelId}: ${error instanceof Error ? error.message : "failed"}`)
+        errors.push(`cloudflare-quality/${automaticModelId}: ${error instanceof Error ? error.message : "failed"}`)
       }
     }
   } else {
-    errors.push("cloudflare: not configured")
+    errors.push("cloudflare-quality: not configured")
+  }
+
+  // Account #3 is a cheap continuity pool. It receives the normalized user
+  // request directly, always renders with FLUX.2 Klein 4B, and then still goes
+  // through Malik's local delivery/upscale stage in generate-photo-route.
+  if (tertiaryCloudflareImageConfigured()) {
+    try {
+      const result = await withAttemptSignal(
+        options?.signal,
+        timeoutFromEnv("IMAGE_TERTIARY_MODEL_TIMEOUT_MS", 45_000, 10_000, 90_000),
+        (signal) => retryTransientImageProvider(
+          () => generateRawTertiaryCloudflareImage({
+            prompt: input.prompt,
+            aspectRatio: input.aspectRatio,
+            signal,
+          }),
+          signal,
+        ),
+      )
+      const warningText = `⚠ ${STANDARD_FALLBACK_WARNING.title}. ${STANDARD_FALLBACK_WARNING.message}`
+      return {
+        ok: true,
+        provider: "cloudflare",
+        imageUrl: result.imageUrl,
+        modelId: result.modelId,
+        providerModel: result.providerModel,
+        understood: visual.understood ? `${visual.understood} · ${warningText}` : warningText,
+        enhancedPrompt: input.prompt,
+        quality,
+        guidance: result.guidance,
+        routeReason: `${decision.reason}; tertiary raw Klein reserve`,
+        generationTier: "standard-fallback",
+        generationSource: "cloudflare-tertiary-raw-klein",
+        fallbackWarning: STANDARD_FALLBACK_WARNING,
+        remainingDailyImages: 0,
+      }
+    } catch (error) {
+      errors.push(`cloudflare-tertiary/flux-klein-4b: ${error instanceof Error ? error.message : "failed"}`)
+    }
+  } else {
+    errors.push("cloudflare-tertiary: not configured")
   }
 
   const order = uniqueProviders([...effectiveImageOrder(), "pollinations"]).filter((provider) => provider !== "cloudflare")
