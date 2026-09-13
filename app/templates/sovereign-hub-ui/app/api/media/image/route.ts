@@ -1,8 +1,11 @@
-import { handleMalikPhotoGenerationRequest } from "@/lib/media/generate-photo-route"
+import { photoMaintenanceResponse } from "@/lib/server/media-availability"
 import { withCompute } from "@/lib/malik-compute/runtime"
 
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
-// The dedicated Photo Generation page uses the exact same automatic model,
-// strict prompt and persistence contract as image generation inside chat.
-export const POST = withCompute(handleMalikPhotoGenerationRequest, "image")
+export const POST = withCompute(handlePOST, "image")
+
+async function handlePOST() {
+  return photoMaintenanceResponse("/api/media/image")
+}
