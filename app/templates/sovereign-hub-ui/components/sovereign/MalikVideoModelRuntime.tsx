@@ -341,11 +341,78 @@ export function MalikVideoModelRuntime() {
       })
 
       host.querySelectorAll<HTMLButtonElement>("[data-paid-model='1'], [data-daily-video-locked='1']").forEach((button) => {
+        if (button.dataset.malikGateBound === "1") return
+        button.dataset.malikGateBound = "1"
         button.addEventListener("click", (event) => {
+          if (button.dataset.paidModel !== "1" && button.dataset.dailyVideoLocked !== "1") return
           event.preventDefault()
           event.stopPropagation()
         })
       })
+    }
+
+    const syncCurrentStudio = () => {
+      const studio = document.querySelector<HTMLElement>('.mv2[data-view="video-generation-v2"]')
+      if (!studio) return
+      const malikButton = studio.querySelector<HTMLButtonElement>(".mv2__models .mv2__model")
+      if (malikButton) {
+        const copy = malikButton.querySelector<HTMLElement>(".mv2__model-copy small")
+        const tier = malikButton.querySelector<HTMLElement>(".mv2__tier")
+        if (gate.limited) {
+          malikButton.classList.remove("is-active")
+          malikButton.classList.add("is-pro")
+          malikButton.dataset.malikDailyLocked = "1"
+          malikButton.setAttribute("aria-disabled", "true")
+          malikButton.title = "Бесплатный дневной лимит исчерпан. MalikVideo временно Pro до сброса лимита."
+          if (copy) copy.textContent = "Лимит на сегодня исчерпан"
+          if (tier) {
+            tier.textContent = "Pro"
+            tier.classList.remove("is-free")
+            tier.classList.add("is-pro")
+          }
+        } else {
+          malikButton.classList.add("is-active")
+          malikButton.classList.remove("is-pro")
+          malikButton.dataset.malikDailyLocked = "0"
+          malikButton.removeAttribute("aria-disabled")
+          malikButton.title = "1 бесплатная генерация видео в день для всех пользователей"
+          if (copy) copy.textContent = "Бесплатно · 1 видео в день"
+          if (tier) {
+            tier.textContent = "Free"
+            tier.classList.add("is-free")
+            tier.classList.remove("is-pro")
+          }
+        }
+
+        if (malikButton.dataset.malikDailyClickGuard !== "1") {
+          malikButton.dataset.malikDailyClickGuard = "1"
+          malikButton.addEventListener("click", (event) => {
+            if (malikButton.dataset.malikDailyLocked !== "1") return
+            event.preventDefault()
+            event.stopImmediatePropagation()
+          }, true)
+        }
+      }
+
+      const generateButton = studio.querySelector<HTMLButtonElement>(".mv2__generate")
+      if (generateButton) {
+        generateButton.dataset.malikDailyLocked = gate.limited ? "1" : "0"
+        if (gate.limited) {
+          generateButton.setAttribute("aria-disabled", "true")
+          generateButton.title = "Дневной бесплатный лимит MalikVideo исчерпан. Доступ вернётся после обновления лимита."
+        } else {
+          generateButton.removeAttribute("aria-disabled")
+          generateButton.removeAttribute("title")
+        }
+        if (generateButton.dataset.malikDailyClickGuard !== "1") {
+          generateButton.dataset.malikDailyClickGuard = "1"
+          generateButton.addEventListener("click", (event) => {
+            if (generateButton.dataset.malikDailyLocked !== "1") return
+            event.preventDefault()
+            event.stopImmediatePropagation()
+          }, true)
+        }
+      }
     }
 
     const install = () => {
@@ -363,13 +430,15 @@ export function MalikVideoModelRuntime() {
         }
       }
 
+      syncCurrentStudio()
       installMobileCategoryPagers()
     }
 
     const refreshGate = async () => {
       if (disposed || refreshing) return
-      const studio = document.querySelector<HTMLElement>('.mv[data-view="video-generation"]')
-      if (!studio && document.visibilityState === "hidden") return
+      const legacyStudio = document.querySelector<HTMLElement>('.mv[data-view="video-generation"]')
+      const currentStudio = document.querySelector<HTMLElement>('.mv2[data-view="video-generation-v2"]')
+      if (!legacyStudio && !currentStudio && document.visibilityState === "hidden") return
       refreshing = true
       try {
         const response = await fetch("/api/generate/video", { cache: "no-store", credentials: "same-origin" })
@@ -384,10 +453,10 @@ export function MalikVideoModelRuntime() {
         const resetAt = String(data.resetAt || "")
         if (limited !== gate.limited || resetAt !== gate.resetAt) {
           gate = { limited, resetAt }
-          install()
         }
+        install()
       } catch {
-        // Keep the last known UI state if the lightweight availability request fails.
+        install()
       } finally {
         refreshing = false
       }
