@@ -257,7 +257,7 @@ export function photoMaintenanceResponse(route = "image") {
     kind: "photo",
     status: "paused",
     code: "IMAGE_GENERATION_TEMPORARILY_PAUSED",
-    error: "IMAGE_GENERATION_TEMPORARILY_PAUSED",
+    error: PHOTO_MAINTENANCE_MESSAGE,
     maintenance: true,
     temporary: true,
     retryable: false,
@@ -266,8 +266,11 @@ export function photoMaintenanceResponse(route = "image") {
     displayMessage: PHOTO_MAINTENANCE_MESSAGE,
     route,
   }, {
-    status: 200,
-    headers: { "Cache-Control": "no-store, max-age=0" },
+    status: 503,
+    headers: {
+      "Cache-Control": "no-store, max-age=0",
+      "Retry-After": "3600",
+    },
   })
 }
 
@@ -277,7 +280,7 @@ export function videoDailyLimitResponse(status: VideoDailyGateStatus, route = "v
     kind: "video",
     status: "limited",
     code: "VIDEO_GLOBAL_DAILY_LIMIT_REACHED",
-    error: "VIDEO_GLOBAL_DAILY_LIMIT_REACHED",
+    error: VIDEO_LIMIT_MESSAGE,
     locked: true,
     pro: true,
     tier: "Pro",
@@ -289,7 +292,7 @@ export function videoDailyLimitResponse(status: VideoDailyGateStatus, route = "v
     displayMessage: VIDEO_LIMIT_MESSAGE,
     route,
   }, {
-    status: 200,
+    status: 429,
     headers: {
       "Cache-Control": "no-store, max-age=0",
       "X-Malik-Video-Limit": "global-daily-1",
