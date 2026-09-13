@@ -6,19 +6,6 @@ import { founderMessageStorageMode, readFounderMessageLog, type FounderMessageEn
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-/**
- * Every recent request, across every user, newest first.
- *
- * /api/founder/messages already returns one user's history, but it needs to be
- * told whose - which is only useful once you already know who to look at. The
- * founder page's actual question is the opposite one: who is using this right
- * now and what are they asking. So this route walks the accounts and merges
- * their logs into a single timeline.
- *
- * It reads the same encrypted log the per-user route reads and adds no new
- * storage: whatever /api/ai/chat and /api/voice/turn wrote is all there is.
- */
-
 type WorkOSUser = {
   id?: string
   email?: string
@@ -29,53 +16,77 @@ type WorkOSUser = {
   created_at?: string | null
 }
 
+type WorkOSUsersPage = {
+  data?: WorkOSUser[]
+  list_metadata?: { after?: string | null }
+}
+
 type ActivityRow = FounderMessageEntry & {
   userId: string
   userEmail: string
   userName: string
 }
 
-/** How many accounts are walked. Sorted by last sign-in, so this is "who is around". */
-const MAX_ACCOUNTS = 60
-/** Logs are read in waves rather than all at once, so object storage is not hit with 60 parallel gets. */
 const WAVE = 8
+const WORKOS_PAGE_SIZE = 100
+const WORKOS_MAX_PAGES = 1_000
+const DAY_MS = 24 * 60 * 60 * 1000
+const ALMATY_OFFSET_MS = 6 * 60 * 60 * 1000
 
 function dateMs(value?: string | null) {
   const parsed = Date.parse(String(value || ""))
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-async function fetchRecentAccounts(): Promise<WorkOSUser[]> {
+function almatyDayNumber(value: number) {
+  return Math.floor((value + ALMATY_OFFSET_MS) / DAY_MS)
+}
+
+function isAlmatyDay(value: number, daysAgo: number, now = Date.now()) {
+  return value > 0 && almatyDayNumber(value) === almatyDayNumber(now) - daysAgo
+}
+
+async function fetchAllAccounts(): Promise<WorkOSUser[]> {
   const apiKey = String(process.env.WORKOS_API_KEY || "").trim()
   if (!apiKey) throw new Error("WORKOS_API_KEY is not configured")
 
-  const url = new URL("https://api.workos.com/user_management/users")
-  url.searchParams.set("limit", String(Math.min(100, MAX_ACCOUNTS)))
-  url.searchParams.set("order", "desc")
+  const accounts: WorkOSUser[] = []
+  const seenCursors = new Set<string>()
+  let after = ""
 
-  const response = await fetchWithTimeout(url, {
-    headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-    cache: "no-store",
-  }, 8_000)
+  for (let page = 0; page < WORKOS_MAX_PAGES; page += 1) {
+    const url = new URL("https://api.workos.com/user_management/users")
+    url.searchParams.set("limit", String(WORKOS_PAGE_SIZE))
+    url.searchParams.set("order", "desc")
+    if (after) url.searchParams.set("after", after)
 
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "")
-    throw new Error(`WorkOS users ${response.status}${detail ? `: ${detail.slice(0, 180)}` : ""}`)
+    const response = await fetchWithTimeout(url, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      cache: "no-store",
+    }, 8_000)
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "")
+      throw new Error(`WorkOS users ${response.status}${detail ? `: ${detail.slice(0, 180)}` : ""}`)
+    }
+
+    const payload = await response.json().catch(() => ({})) as WorkOSUsersPage
+    const pageUsers = Array.isArray(payload.data) ? payload.data : []
+    accounts.push(...pageUsers)
+
+    const next = String(payload.list_metadata?.after || "")
+    if (!next || pageUsers.length === 0 || next === after || seenCursors.has(next)) break
+    seenCursors.add(next)
+    after = next
   }
 
-  const payload = await response.json().catch(() => ({})) as { data?: WorkOSUser[] }
-  const users = Array.isArray(payload.data) ? payload.data : []
-  return users
-    .sort((left, right) => dateMs(right.last_sign_in_at || right.created_at) - dateMs(left.last_sign_in_at || left.created_at))
-    .slice(0, MAX_ACCOUNTS)
+  return accounts.sort((left, right) => dateMs(right.last_sign_in_at || right.created_at) - dateMs(left.last_sign_in_at || left.created_at))
 }
 
 /*
- * A log is stored under whatever string the request called the user, and that
- * string is not the same everywhere: the entitlement layer uses the email,
- * older writes used the WorkOS id. Both spellings are read and merged, exactly
- * as /api/founder/messages does, so history does not disappear because an
- * account was identified differently on a different day.
+ * A log can exist under the email, the prefixed WorkOS id, or the raw WorkOS id
+ * depending on which route originally wrote it. Merge every spelling so older
+ * requests never disappear merely because identification changed later.
  */
 async function readAllSpellings(user: WorkOSUser): Promise<FounderMessageEntry[]> {
   const keys = [...new Set([
@@ -101,13 +112,12 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url)
-  const limit = Math.min(300, Math.max(10, Number(url.searchParams.get("limit")) || 80))
   const search = String(url.searchParams.get("q") || "").trim().toLowerCase()
 
   let accounts: WorkOSUser[] = []
   let warning = ""
   try {
-    accounts = await fetchRecentAccounts()
+    accounts = await fetchAllAccounts()
   } catch (error) {
     warning = error instanceof Error ? error.message : "WorkOS users unavailable"
   }
@@ -132,18 +142,17 @@ export async function GET(request: Request) {
     ? rows.filter((row) => `${row.userName} ${row.userEmail} ${row.userText}`.toLowerCase().includes(search))
     : rows
 
-  const items = filtered
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-    .slice(0, limit)
-
-  const day = 24 * 60 * 60 * 1000
+  // Founder asked for the complete timeline. Do not cut the response to the
+  // old 120/300-row window; sorting is the only transformation here.
+  const items = filtered.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
   const now = Date.now()
 
   return Response.json({
     ok: true,
     items,
     total: rows.length,
-    today: rows.filter((row) => now - dateMs(row.createdAt) <= day).length,
+    today: rows.filter((row) => isAlmatyDay(dateMs(row.createdAt), 0, now)).length,
+    yesterday: rows.filter((row) => isAlmatyDay(dateMs(row.createdAt), 1, now)).length,
     accountsScanned: accounts.length,
     storage: founderMessageStorageMode(),
     warning: warning || null,
