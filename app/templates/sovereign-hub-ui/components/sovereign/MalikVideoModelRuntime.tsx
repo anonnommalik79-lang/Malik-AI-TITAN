@@ -6,7 +6,7 @@ const MODELS = [
   {
     id: "malikvideo-1",
     name: "MalikVideo 1.0",
-    subtitle: "Бесплатно",
+    subtitle: "Бесплатно · 1 видео в день",
     tier: "Free",
     icon: "/brands/malikvideo.svg",
     fallback: "M",
@@ -60,6 +60,12 @@ const MODELS = [
 ] as const
 
 const MOBILE_PAGE_SIZE = 5
+const VIDEO_GATE_POLL_MS = 5_000
+
+type VideoGateState = {
+  limited: boolean
+  resetAt: string
+}
 
 const MOBILE_SITES_LIBRARY_STYLE = `
 @media (max-width: 820px) {
@@ -209,11 +215,20 @@ const MOBILE_SITES_LIBRARY_STYLE = `
 }
 `
 
-function modelMarkup() {
+function modelMarkup(videoGate: VideoGateState) {
   const cards = MODELS.map((model) => {
-    const tierClass = model.tier === "Free" ? "mv-model-tier--free" : "mv-model-tier--pro"
-    const stateClass = model.active ? " is-active" : " is-pro"
-    const paidAttr = model.active ? "" : ' data-paid-model="1" aria-disabled="true" title="Pro-модель: подключение API отдельно"'
+    const isMalikVideo = model.id === "malikvideo-1"
+    const dailyLocked = isMalikVideo && videoGate.limited
+    const tier = dailyLocked ? "Pro" : model.tier
+    const subtitle = dailyLocked ? "Лимит на сегодня исчерпан" : model.subtitle
+    const active = model.active && !dailyLocked
+    const tierClass = tier === "Free" ? "mv-model-tier--free" : "mv-model-tier--pro"
+    const stateClass = active ? " is-active" : " is-pro"
+    const paidAttr = dailyLocked
+      ? ` data-daily-video-locked="1" aria-disabled="true" title="Дневной лимит исчерпан. Доступ вернётся после ${videoGate.resetAt || "обновления лимита"}"`
+      : model.active
+        ? ""
+        : ' data-paid-model="1" aria-disabled="true" title="Pro-модель: подключение API отдельно"'
 
     return `
       <button type="button" class="mv-model-card${stateClass}" data-model-id="${model.id}"${paidAttr}>
@@ -222,9 +237,9 @@ function modelMarkup() {
         </span>
         <span class="mv-model-copy">
           <strong>${model.name}</strong>
-          <small>${model.subtitle}</small>
+          <small>${subtitle}</small>
         </span>
-        <span class="mv-model-tier ${tierClass}">${model.tier}</span>
+        <span class="mv-model-tier ${tierClass}">${tier}</span>
       </button>
     `
   }).join("")
@@ -317,29 +332,65 @@ function installMobileCategoryPagers() {
 export function MalikVideoModelRuntime() {
   useEffect(() => {
     let disposed = false
+    let gate: VideoGateState = { limited: false, resetAt: "" }
+    let refreshing = false
+
+    const bindModelEvents = (host: HTMLElement) => {
+      host.querySelectorAll<HTMLImageElement>(".mv-model-icon img").forEach((image) => {
+        image.addEventListener("error", () => image.classList.add("is-broken"), { once: true })
+      })
+
+      host.querySelectorAll<HTMLButtonElement>("[data-paid-model='1'], [data-daily-video-locked='1']").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        })
+      })
+    }
 
     const install = () => {
       if (disposed) return
       const studio = document.querySelector<HTMLElement>('.mv[data-view="video-generation"]')
       const host = studio?.querySelector<HTMLElement>(".mv__model-row")
-      if (host && host.dataset.malikVideoModels !== "1") {
-        host.dataset.malikVideoModels = "1"
-        host.classList.add("mv__model-row--catalog")
-        host.innerHTML = modelMarkup()
-
-        host.querySelectorAll<HTMLImageElement>(".mv-model-icon img").forEach((image) => {
-          image.addEventListener("error", () => image.classList.add("is-broken"), { once: true })
-        })
-
-        host.querySelectorAll<HTMLButtonElement>("[data-paid-model='1']").forEach((button) => {
-          button.addEventListener("click", (event) => {
-            event.preventDefault()
-            event.stopPropagation()
-          })
-        })
+      if (host) {
+        const nextGateKey = gate.limited ? `pro:${gate.resetAt}` : "free"
+        if (host.dataset.malikVideoModels !== "1" || host.dataset.malikVideoGate !== nextGateKey) {
+          host.dataset.malikVideoModels = "1"
+          host.dataset.malikVideoGate = nextGateKey
+          host.classList.add("mv__model-row--catalog")
+          host.innerHTML = modelMarkup(gate)
+          bindModelEvents(host)
+        }
       }
 
       installMobileCategoryPagers()
+    }
+
+    const refreshGate = async () => {
+      if (disposed || refreshing) return
+      const studio = document.querySelector<HTMLElement>('.mv[data-view="video-generation"]')
+      if (!studio && document.visibilityState === "hidden") return
+      refreshing = true
+      try {
+        const response = await fetch("/api/generate/video", { cache: "no-store", credentials: "same-origin" })
+        const data = await response.json().catch(() => ({})) as {
+          status?: string
+          tier?: string
+          pro?: boolean
+          locked?: boolean
+          resetAt?: string
+        }
+        const limited = data.locked === true || data.pro === true || data.tier === "Pro" || data.status === "limited"
+        const resetAt = String(data.resetAt || "")
+        if (limited !== gate.limited || resetAt !== gate.resetAt) {
+          gate = { limited, resetAt }
+          install()
+        }
+      } catch {
+        // Keep the last known UI state if the lightweight availability request fails.
+      } finally {
+        refreshing = false
+      }
     }
 
     const styleId = "malik-mobile-sites-library-final"
@@ -351,14 +402,26 @@ export function MalikVideoModelRuntime() {
     }
 
     const onResize = () => installMobileCategoryPagers()
+    const onFocus = () => void refreshGate()
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void refreshGate()
+    }
+
     install()
+    void refreshGate()
+    const timer = window.setInterval(() => void refreshGate(), VIDEO_GATE_POLL_MS)
     window.addEventListener("resize", onResize, { passive: true })
+    window.addEventListener("focus", onFocus)
+    document.addEventListener("visibilitychange", onVisibility)
     const observer = new MutationObserver(install)
     observer.observe(document.documentElement, { childList: true, subtree: true })
 
     return () => {
       disposed = true
+      window.clearInterval(timer)
       window.removeEventListener("resize", onResize)
+      window.removeEventListener("focus", onFocus)
+      document.removeEventListener("visibilitychange", onVisibility)
       observer.disconnect()
     }
   }, [])
