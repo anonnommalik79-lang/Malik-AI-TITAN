@@ -3,6 +3,7 @@ import { checkMediaLimit, nextMediaResetAt, recordMediaUsage } from "@/lib/media
 import { resolveMediaUser } from "@/lib/media/request"
 import { routeVideoGeneration } from "@/lib/media/video-router"
 import type { VideoResolution } from "@/lib/media/types"
+import { acquireVideoDailySlot, videoDailyLimitResponse } from "@/lib/server/media-availability"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
@@ -43,6 +44,11 @@ async function handlePOST(request: Request) {
     }, { status: 429 })
   }
 
+  const globalSlot = await acquireVideoDailySlot(user.userId)
+  if (!globalSlot.available) {
+    return videoDailyLimitResponse(globalSlot, "/api/media/video")
+  }
+
   const result = await routeVideoGeneration({
     prompt: prompt || "Animate this image",
     imageUrl,
@@ -63,14 +69,14 @@ async function handlePOST(request: Request) {
       status: result.status,
       stage: result.stage,
       outputResolution: result.outputResolution,
-      remainingDailyVideos: limit.remaining,
-      resetAt: nextMediaResetAt(),
+      remainingDailyVideos: 0,
+      globalDailyLimit: 1,
+      resetAt: globalSlot.resetAt,
       plan: limit.plan,
     }, { status: result.status === "disabled" ? 503 : 502 })
   }
 
   await recordMediaUsage(user.userId, "video")
-  const remaining = Math.max(0, limit.remaining - 1)
 
   return Response.json({
     ok: true,
@@ -80,9 +86,10 @@ async function handlePOST(request: Request) {
     status: result.status,
     stage: result.stage,
     outputResolution: result.outputResolution || resolution,
-    remainingDailyVideos: remaining,
+    remainingDailyVideos: 0,
+    globalDailyLimit: 1,
     statusUrl: `/api/media/video/status?taskId=${encodeURIComponent(result.taskId)}`,
-    resetAt: nextMediaResetAt(),
+    resetAt: globalSlot.resetAt || nextMediaResetAt(),
     plan: limit.plan,
   })
 }
