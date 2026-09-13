@@ -28,7 +28,6 @@ type FounderMessageGlobal = typeof globalThis & {
   __malikFounderMessageQueues?: Map<string, Promise<void>>
 }
 
-const MAX_ENTRIES_PER_USER = 500
 const MAX_TEXT_CHARS = 16_000
 const AAD = Buffer.from("malik-founder-message-log-v1", "utf8")
 
@@ -118,7 +117,9 @@ function decrypt(raw: string, secret: string): FounderMessageEntry[] {
     const plain = Buffer.concat([decipher.update(Buffer.from(envelope.data, "base64")), decipher.final()]).toString("utf8")
     const parsed: unknown = JSON.parse(plain)
     if (!Array.isArray(parsed)) return []
-    return parsed.map(cleanEntry).filter((entry): entry is FounderMessageEntry => Boolean(entry)).slice(-MAX_ENTRIES_PER_USER)
+    // Do not prune old founder history on read. The encrypted object is the
+    // durable audit/history source and must keep yesterday and older entries.
+    return parsed.map(cleanEntry).filter((entry): entry is FounderMessageEntry => Boolean(entry))
   } catch {
     return []
   }
@@ -229,7 +230,9 @@ export async function appendFounderMessage(input: {
       item.assistantText === entry.assistantText &&
       Math.abs(Date.parse(item.createdAt) - Date.parse(entry.createdAt)) < 1500,
     )
-    const updated = duplicate ? current : [...current, entry].slice(-MAX_ENTRIES_PER_USER)
+    // No rolling slice: once a request is stored, later requests do not delete
+    // it. Deploys also keep history when encrypted object storage is configured.
+    const updated = duplicate ? current : [...current, entry]
     memory().set(userId, updated)
     try {
       stored = await writeCloud(userId, updated)
