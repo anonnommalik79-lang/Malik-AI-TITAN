@@ -12,11 +12,17 @@ export type MalikAuthSnapshot = {
 }
 
 const SNAPSHOT_KEY = "malik_workos_profile"
-let authStatusRefreshStarted = false
+let authStatusRefreshInFlight = false
+let lastAuthStatusRefreshAt = 0
+const AUTH_STATUS_REFRESH_TTL_MS = 15_000
 
-async function refreshAuthSnapshotFromServer() {
-  if (typeof window === "undefined" || authStatusRefreshStarted) return
-  authStatusRefreshStarted = true
+async function refreshAuthSnapshotFromServer(force = false) {
+  if (typeof window === "undefined" || authStatusRefreshInFlight) return
+  const now = Date.now()
+  if (!force && now - lastAuthStatusRefreshAt < AUTH_STATUS_REFRESH_TTL_MS) return
+
+  authStatusRefreshInFlight = true
+  lastAuthStatusRefreshAt = now
 
   try {
     const response = await fetch("/api/auth/status", {
@@ -49,16 +55,20 @@ async function refreshAuthSnapshotFromServer() {
     })
   } catch {
     // Keep the last local snapshot when the auth status endpoint is temporarily unavailable.
+  } finally {
+    // The old implementation stayed permanently locked after the first request.
+    // If that request ran before the WorkOS session cookie existed, founder UI
+    // could stay hidden until a full reload. Allow safe server-verified retries.
+    authStatusRefreshInFlight = false
   }
 }
 
 export function getStoredAuthSnapshot(): MalikAuthSnapshot | null {
   if (typeof window === "undefined") return null
 
-  // Founder/admin UI used to depend only on this local snapshot. After the
-  // WorkOS auth flow moved server-side, the snapshot could be missing or stale
-  // even while the browser had a valid owner session. Hydrate it once from the
-  // authoritative server session and notify all existing listeners.
+  // Keep the local snapshot fast, but regularly reconcile it with the
+  // authoritative server session. This restores founder/admin UI after login
+  // without trusting localStorage for privileges.
   void refreshAuthSnapshotFromServer()
 
   try {
@@ -67,6 +77,11 @@ export function getStoredAuthSnapshot(): MalikAuthSnapshot | null {
   } catch {
     return null
   }
+}
+
+export async function refreshStoredAuthSnapshot() {
+  await refreshAuthSnapshotFromServer(true)
+  return getStoredAuthSnapshot()
 }
 
 export function storeWorkOSProfile(snapshot: MalikAuthSnapshot) {
