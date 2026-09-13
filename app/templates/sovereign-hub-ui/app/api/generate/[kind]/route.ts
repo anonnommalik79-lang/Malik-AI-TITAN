@@ -2,6 +2,12 @@ import { handleGenerateRequest } from "@/lib/generation-route"
 import { handleMalikPhotoGenerationRequest } from "@/lib/media/generate-photo-route"
 import { handleSkillWebsiteGenerationRequest } from "@/lib/sites/generate-site-route"
 import { isFeatureDisabled } from "@/lib/server/request-safety"
+import {
+  acquireVideoDailySlot,
+  getVideoDailyGateStatus,
+  photoMaintenanceResponse,
+  videoDailyLimitResponse,
+} from "@/lib/server/media-availability"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 import { generationComputeOperation } from "@/lib/malik-compute/policies"
@@ -142,6 +148,15 @@ function disabledKind(kind: string, id: string) {
   }, id, kind)
 }
 
+async function bodyPrompt(request: Request) {
+  const body = await request.clone().json().catch(() => ({})) as { prompt?: unknown; message?: unknown; input?: unknown }
+  return String(body.prompt || body.message || body.input || "").trim()
+}
+
+function isExplicitVideoPrompt(prompt: string) {
+  return /^\s*\/(?:video|veo)(?![\p{L}\p{N}_])\s*:?/iu.test(prompt)
+}
+
 export const POST = withCompute(handlePOST, generationComputeOperation)
 
 async function handlePOST(request: Request, context: RouteContext) {
@@ -151,10 +166,22 @@ async function handlePOST(request: Request, context: RouteContext) {
   if (!SUPPORTED_KINDS.has(kind)) return invalidKind(kind, id)
   if (isFeatureDisabled("generation") || isFeatureDisabled(kind)) return disabledKind(kind, id)
 
+  if (kind === "photo") {
+    return withCors(photoMaintenanceResponse(`/api/generate/${kind}`), kind, id)
+  }
+
+  if (kind === "video") {
+    const prompt = await bodyPrompt(request)
+    // generation-route only spends provider quota on explicit /video or /veo requests.
+    // Keep invalid/text-routed requests from burning the single global slot.
+    if (prompt && isExplicitVideoPrompt(prompt)) {
+      const slot = await acquireVideoDailySlot("generate-kind")
+      if (!slot.available) return withCors(videoDailyLimitResponse(slot, `/api/generate/${kind}`), kind, id)
+    }
+  }
+
   try {
     const startedAt = Date.now()
-    // Photo and Sites have dedicated product pipelines. Everything else keeps
-    // using the shared generation core.
     const response = kind === "photo"
       ? await handleMalikPhotoGenerationRequest(request)
       : kind === "website"
@@ -180,6 +207,35 @@ export async function GET(request: Request, context: RouteContext) {
   const id = request.headers.get("X-Malik-Request-Id") || requestId()
   const kind = await readKind(context)
   if (!SUPPORTED_KINDS.has(kind)) return invalidKind(kind, id)
+
+  if (kind === "photo") {
+    const response = photoMaintenanceResponse(`/api/generate/${kind}`)
+    return withCors(response, kind, id)
+  }
+
+  if (kind === "video") {
+    const gate = await getVideoDailyGateStatus()
+    return json({
+      ok: gate.available,
+      product: "MALIK AI 6.5 TITAN",
+      route: `/api/generate/${kind}`,
+      method: "POST",
+      runtime,
+      kind,
+      status: gate.available ? "ready" : "limited",
+      tier: gate.available ? "Free" : "Pro",
+      pro: !gate.available,
+      locked: !gate.available,
+      globalDailyLimit: 1,
+      remainingDailyVideos: gate.available ? 1 : 0,
+      resetAt: gate.resetAt,
+      retryAt: gate.resetAt,
+      storage: gate.storage,
+      message: gate.available
+        ? "MalikVideo доступен: осталась 1 бесплатная генерация для всех на текущий день."
+        : "Бесплатный дневной лимит MalikVideo уже использован. Модель временно доступна как Pro до обновления лимита.",
+    }, { status: 200, headers: { "Cache-Control": "no-store" } }, id, kind)
+  }
 
   const paused = isFeatureDisabled("generation") || isFeatureDisabled(kind)
   return json({
@@ -212,7 +268,7 @@ export async function GET(request: Request, context: RouteContext) {
         modelId: "optional Malik image model id for photo generation",
       },
       delegatedTo: kind === "photo"
-        ? "handleMalikPhotoGenerationRequest(request)"
+        ? "photo-maintenance"
         : kind === "website"
           ? "handleSkillWebsiteGenerationRequest(request)"
           : "handleGenerateRequest(request, kind)",
@@ -224,6 +280,36 @@ export async function HEAD(request: Request, context: RouteContext) {
   const id = request.headers.get("X-Malik-Request-Id") || requestId()
   const kind = await readKind(context)
   const supported = SUPPORTED_KINDS.has(kind)
+
+  if (supported && kind === "photo") {
+    return new Response(null, {
+      status: 200,
+      headers: {
+        ...CORS_HEADERS,
+        "X-Malik-Request-Id": id,
+        "X-Malik-Route": `/api/generate/${kind}`,
+        "X-Malik-Kind": kind,
+        "X-Malik-Health": "paused",
+      },
+    })
+  }
+
+  if (supported && kind === "video") {
+    const gate = await getVideoDailyGateStatus()
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...CORS_HEADERS,
+        "X-Malik-Request-Id": id,
+        "X-Malik-Route": `/api/generate/${kind}`,
+        "X-Malik-Kind": kind,
+        "X-Malik-Health": gate.available ? "ok" : "limited",
+        "X-Malik-Video-Tier": gate.available ? "Free" : "Pro",
+        "X-Malik-Video-Reset-At": gate.resetAt,
+      },
+    })
+  }
+
   const paused = supported && (isFeatureDisabled("generation") || isFeatureDisabled(kind))
   return new Response(null, {
     status: !supported ? 400 : paused ? 503 : 204,
