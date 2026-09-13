@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { compileGodVideoPrompt } from "@/lib/ai/video/god-prompt-compiler"
 import { startAwsNovaReelVideo } from "@/lib/ai/video/aws-nova-reel"
+import {
+  acquireVideoDailySlot,
+  getVideoDailyGateStatus,
+  videoDailyLimitResponse,
+} from "@/lib/server/media-availability"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
@@ -8,7 +13,7 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 function json(data: unknown, status = 200) {
-  return NextResponse.json(data, { status })
+  return NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } })
 }
 
 function parseDuration(value: unknown) {
@@ -29,6 +34,11 @@ async function handlePOST(req: NextRequest) {
     return json({ ok: false, status: "failed", message: "Prompt is required." }, 400)
   }
 
+  const globalSlot = await acquireVideoDailySlot(String(body.userEmail || body.email || "generate-video"))
+  if (!globalSlot.available) {
+    return videoDailyLimitResponse(globalSlot, "/api/generate/video")
+  }
+
   const compiled = compileGodVideoPrompt({ prompt, durationSeconds, aspectRatio })
 
   try {
@@ -46,6 +56,9 @@ async function handlePOST(req: NextRequest) {
         prompt,
         enhancedPrompt: compiled.englishPrompt,
         negativePrompt: compiled.negativePrompt,
+        globalDailyLimit: 1,
+        remainingDailyVideos: 0,
+        resetAt: globalSlot.resetAt,
       })
     }
 
@@ -63,6 +76,9 @@ async function handlePOST(req: NextRequest) {
       message: result.publicError || result.message || "Real video provider did not return a video URL.",
       publicError: result.publicError || result.message,
       fallbackMode: "cinema-preview",
+      globalDailyLimit: 1,
+      remainingDailyVideos: 0,
+      resetAt: globalSlot.resetAt,
       text: [
         "Cinema Preview ready.",
         "Real video needs working AWS Bedrock Nova Reel credentials and S3 output.",
@@ -86,6 +102,9 @@ async function handlePOST(req: NextRequest) {
       message: error?.message || "AWS Nova Reel failed.",
       publicError: error?.message || "AWS Nova Reel failed.",
       fallbackMode: "cinema-preview",
+      globalDailyLimit: 1,
+      remainingDailyVideos: 0,
+      resetAt: globalSlot.resetAt,
       text: [
         "Cinema Preview ready.",
         "AWS Nova Reel failed before returning a video URL.",
@@ -94,4 +113,20 @@ async function handlePOST(req: NextRequest) {
       ].join("\n"),
     }, 200)
   }
+}
+
+export async function GET() {
+  const gate = await getVideoDailyGateStatus()
+  return json({
+    ok: gate.available,
+    kind: "video",
+    status: gate.available ? "ready" : "limited",
+    tier: gate.available ? "Free" : "Pro",
+    pro: !gate.available,
+    locked: !gate.available,
+    globalDailyLimit: 1,
+    remainingDailyVideos: gate.available ? 1 : 0,
+    resetAt: gate.resetAt,
+    retryAt: gate.resetAt,
+  })
 }
