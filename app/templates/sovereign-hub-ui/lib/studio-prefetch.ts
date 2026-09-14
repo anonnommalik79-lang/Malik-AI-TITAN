@@ -10,9 +10,14 @@ export function prefetchChatShell(): void {
   void import("@/components/sovereign/chat-view").catch(() => undefined)
 }
 
+/**
+ * Keep the very heavy video studio out of background prefetch. It owns large
+ * showcase media and should only be loaded when the user explicitly opens it.
+ * This prevents an idle dashboard from competing with chat and navigation for
+ * CPU, memory and network bandwidth.
+ */
 const STUDIO_IMPORTS = [
   () => import("@/components/sovereign/photo-generation/PhotoGenerationStudio"),
-  () => import("@/components/sovereign/video-generation/VideoGenerationStudio"),
   () => import("@/components/sovereign/website-generation/WebsiteGenerationStudio"),
   () => import("@/components/sovereign/command-center/CommandCenterStudio"),
   () => import("@/components/sovereign/business/BusinessCommandCenter"),
@@ -22,11 +27,6 @@ const STUDIO_IMPORTS = [
   () => import("@/components/sovereign/digital-bridge-sections"),
 ] as const
 
-/**
- * Phones pay for this twice: the download itself on a metered connection, and
- * the parse/compile of eleven studio chunks on a slower CPU. Touch devices get
- * the chat shell only; the studio chunk still loads on demand when opened.
- */
 function shouldPrefetchStudios(): boolean {
   try {
     const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
@@ -50,7 +50,7 @@ export function prefetchStudioChunks(): void {
     STUDIO_IMPORTS.forEach((load, index) => {
       window.setTimeout(() => {
         void load().catch(() => undefined)
-      }, index * 90)
+      }, index * 120)
     })
-  }, 500)
+  }, 900)
 }
