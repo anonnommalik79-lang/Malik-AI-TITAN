@@ -11,6 +11,7 @@ import {
   businessTaskForMode,
   isAutonomousBusinessMode,
 } from "@/lib/business/orchestration"
+import type { BusinessOutputQuality } from "@/lib/business/orchestration"
 import type { BusinessRunContext } from "@/lib/business/types"
 import { publicEngineForProvider, publicErrorMessage, sanitizePublicText } from "@/lib/brand-provider-map"
 import { checkPromptLength } from "@/lib/limits/rate-limit"
@@ -122,9 +123,9 @@ export async function runBusinessEngine(request: Request, body: BusinessRunBody)
 
   // A transport-level success is not enough for an autonomous agent. Generic
   // greetings such as "Как я могу помочь?" must never receive a green check.
-  let quality = result.success
+  let quality: BusinessOutputQuality = result.success
     ? businessOutputQuality(mode.id, result.output)
-    : { ok: false as const }
+    : { ok: false, reason: "empty" }
 
   if (result.success && !quality.ok && isAutonomousBusinessMode(mode.id)) {
     const retryBase = requestWithoutProvider(base, result.provider)
@@ -140,7 +141,7 @@ export async function runBusinessEngine(request: Request, body: BusinessRunBody)
     })
     quality = result.success
       ? businessOutputQuality(mode.id, result.output)
-      : { ok: false as const }
+      : { ok: false, reason: "empty" }
   }
 
   const accepted = result.success && quality.ok
