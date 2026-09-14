@@ -56,6 +56,7 @@ import {
   type TemplateCategory,
 } from "@/lib/business/autonomous"
 import { MALIK_MODELS, type MalikModelId } from "@/lib/ai/malik-models"
+import { CompanyLaunchPad } from "./CompanyLaunchPad"
 import styles from "./AutonomousCompany.module.css"
 
 const ENDPOINT = "/api/business/run"
@@ -137,8 +138,6 @@ function Rich({ text }: { text: string }) {
       const rows: string[][] = []
       while (i < lines.length && lines[i].trim().startsWith("|")) {
         const cells = lines[i].trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim())
-        // The |---|---| separator carries no data; it only tells markdown where
-        // the header ends, which we already know from being the first row.
         if (!cells.every((c) => /^:?-{2,}:?$/.test(c))) rows.push(cells)
         i += 1
       }
@@ -221,23 +220,11 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   const [steps, setSteps] = useState<Step[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [runError, setRunError] = useState<string | null>(null)
-  // Which template is steering the run, and the instruction it produced.
-  //
-  // The instruction is state, not something derived at send time, because it is
-  // editable: what stands in that box is what the eight agents get. Someone who
-  // knows his own market can strike out the line that is wrong for it, and the
-  // run will honour that rather than quietly re-adding it.
   const [activeTemplate, setActiveTemplate] = useState<BusinessTemplate | null>(null)
   const [instruction, setInstruction] = useState("")
   const [instructionOpen, setInstructionOpen] = useState(true)
   const [query, setQuery] = useState("")
-  // State, not a ref: the header button reads this during render, and a ref
-  // would leave "Остановить" on screen after the run had already finished.
   const [running, setRunning] = useState(false)
-
-  // The stress test: its own state, because it is its own call and its own
-  // failure. A run that produced eight documents is still a success when the
-  // ninth stage cannot be reached.
   const [stress, setStress] = useState("")
   const [stressBusy, setStressBusy] = useState(false)
   const [stressError, setStressError] = useState<string | null>(null)
@@ -252,8 +239,6 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   )
 
   const templates = useMemo(() => {
-    // "Мои шаблоны" has nothing saved yet; showing the whole catalogue there
-    // would be a lie about what it is.
     const byCategory = category === "Мои"
       ? []
       : category === "Все"
@@ -262,8 +247,6 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
 
     const needle = query.trim().toLowerCase()
     if (!needle) return byCategory
-    // Searches the playbook too: someone looking for "отток" or "фудкост" is
-    // looking for the business those words belong to.
     return byCategory.filter((item) => [
       item.title, item.description, item.category, item.market || "", ...item.playbook, ...item.metrics,
     ].join(" ").toLowerCase().includes(needle))
@@ -271,7 +254,6 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
 
   useEffect(() => () => { abortRef.current?.abort() }, [])
 
-  // A click anywhere closes the control menus, the way every menu in this app does.
   useEffect(() => {
     if (!openMenu) return
     const close = () => setOpenMenu(null)
@@ -309,12 +291,6 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
   }, [])
 
-  /**
-   * Runs the eight agents, in order, each one on the real endpoint.
-   *
-   * Sequential on purpose: every agent is given what the ones before it wrote,
-   * which is the difference between one company and eight unrelated documents.
-   */
   const run = useCallback(async () => {
     const brief = prompt.trim()
     if (!brief || runningRef.current) return
@@ -332,10 +308,6 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     setSteps(AUTONOMOUS_AGENTS.map((agent) => ({ agent, state: "waiting", content: "" })))
     setExpanded(AUTONOMOUS_AGENTS[0].id)
 
-    // These are the keys BusinessRunContext actually has. Country, budget and
-    // requirements have no field of their own, and inventing one would mean the
-    // person's answers never reached the prompt at all - they go into `extra`,
-    // which buildBusinessPrompt does render.
     const extra = [
       country ? `Страна / рынок: ${country}` : "",
       budget ? `Бюджет на запуск: ${budget}` : "",
@@ -397,9 +369,6 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
         setSteps((current) => current.map((step) => (step.agent.id === agent.id
           ? { ...step, state: "failed", error: message, ms: Date.now() - started }
           : step)))
-        // The next agent is written against this one's output. Continuing
-        // without it produces a company assembled from a hole, so the run
-        // stops and says where.
         setRunError(`${agent.name} остановился: ${message}`)
         break
       }
@@ -409,16 +378,6 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     setRunning(false)
   }, [budget, country, instruction, market, modelId, prompt, requirements])
 
-  /**
-   * Runs the stress test against what the eight agents actually wrote.
-   *
-   * The prompt cap is per plan - 3000 characters for a guest, 6000 free - and
-   * the client has no way to know which applies. So it asks with the generous
-   * budget and, if the server says the input is too long, reads the real cap out
-   * of the refusal and asks again at that size. The refusal happens in
-   * checkPromptLength, before any provider is called, so the retry costs a round
-   * trip and not a model call.
-   */
   const runStressTest = useCallback(async () => {
     const done = steps
       .filter((step) => step.state === "done" && step.content)
@@ -492,18 +451,12 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   }, [onNewChat])
 
   const completed = steps.filter((step) => step.state === "done").length
-  const activeAgentId = steps.find((step) => step.state === "running")?.agent.id
-
-  /* ------------------------------------------------------------ INTRO */
 
   if (stage === "intro") {
     return (
       <main className={styles.root} data-view="business-autonomous" data-stage="intro">
         <div className={styles.intro}>
           <div className={styles.introArt}>
-            {/* Local, not a remote URL: an empty grey column on the first screen
-                of a product page is the worst possible first impression, and a
-                third-party host is one outage away from it. */}
             <Image
               src="/business/hero.webp"
               alt="Предприниматель за работой в офисе Malik AI"
@@ -545,14 +498,9 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     )
   }
 
-  /* ------------------------------------------------- WORKSPACE / RUNNING */
-
   return (
     <main className={styles.root} data-view="business-autonomous" data-stage={stage}>
       <div className={styles.workspace}>
-        {/* Deliberately a div, not a header: the dashboard shell styles
-            `.malik-dashboard-shell header *` and hides `header > div:nth-of-type(2)`
-            for its own top bar, which swallowed this hero's icon and meta line. */}
         <div className={styles.hero}>
           <div className={styles.kicker}><span className={styles.dot} /> Autonomous Business OS</div>
           <div className={styles.briefcase}><Briefcase strokeWidth={1.7} /></div>
@@ -581,9 +529,6 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                 />
               </div>
 
-              {/* There is no attach button and no microphone here on purpose:
-                  /api/business/run takes text, and a control that looks like it
-                  works but does nothing is worse than one that is absent. */}
               {instruction && (
                 <div className={styles.instruction}>
                   <div className={styles.instructionHead}>
@@ -654,54 +599,19 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                   )}
                 </div>
 
-                <ControlMenu
-                  id="market" label="Рынок" value={market} icon={Globe}
-                  options={MARKETS} open={openMenu === "market"}
-                  onToggle={() => setOpenMenu(openMenu === "market" ? null : "market")}
-                  onPick={(value) => { setMarket(value); setOpenMenu(null) }}
-                />
-                <ControlMenu
-                  id="country" label="Страна" value={country} icon={MapPin}
-                  options={COUNTRIES} open={openMenu === "country"}
-                  onToggle={() => setOpenMenu(openMenu === "country" ? null : "country")}
-                  onPick={(value) => { setCountry(value); setOpenMenu(null) }}
-                />
-                <ControlMenu
-                  id="budget" label="Бюджет" value={budget} icon={DollarSign}
-                  options={BUDGETS} open={openMenu === "budget"}
-                  onToggle={() => setOpenMenu(openMenu === "budget" ? null : "budget")}
-                  onPick={(value) => { setBudget(value); setOpenMenu(null) }}
-                />
-                <ControlMenu
-                  id="req" label="Особые требования" value={requirements} icon={SlidersHorizontal}
-                  freeform open={openMenu === "req"}
-                  onToggle={() => setOpenMenu(openMenu === "req" ? null : "req")}
-                  onPick={(value) => { setRequirements(value); setOpenMenu(null) }}
-                />
+                <ControlMenu id="market" label="Рынок" value={market} icon={Globe} options={MARKETS} open={openMenu === "market"} onToggle={() => setOpenMenu(openMenu === "market" ? null : "market")} onPick={(value) => { setMarket(value); setOpenMenu(null) }} />
+                <ControlMenu id="country" label="Страна" value={country} icon={MapPin} options={COUNTRIES} open={openMenu === "country"} onToggle={() => setOpenMenu(openMenu === "country" ? null : "country")} onPick={(value) => { setCountry(value); setOpenMenu(null) }} />
+                <ControlMenu id="budget" label="Бюджет" value={budget} icon={DollarSign} options={BUDGETS} open={openMenu === "budget"} onToggle={() => setOpenMenu(openMenu === "budget" ? null : "budget")} onPick={(value) => { setBudget(value); setOpenMenu(null) }} />
+                <ControlMenu id="req" label="Особые требования" value={requirements} icon={SlidersHorizontal} freeform open={openMenu === "req"} onToggle={() => setOpenMenu(openMenu === "req" ? null : "req")} onPick={(value) => { setRequirements(value); setOpenMenu(null) }} />
 
                 <span className={styles.spacer} />
-                <button
-                  type="button"
-                  className={styles.send}
-                  onClick={() => void run()}
-                  disabled={!prompt.trim()}
-                  aria-label="Запустить Autonomous Company"
-                >
+                <button type="button" className={styles.send} onClick={() => void run()} disabled={!prompt.trim()} aria-label="Запустить Autonomous Company">
                   <ArrowUp strokeWidth={2} />
-                  {/* Shown only on a phone. A 42px arrow floating beside a
-                      wrapped chip is not a launch button; on the widths where
-                      the controls wrap, this is the one thing to press. */}
                   <span className={styles.sendLabel}>Запустить</span>
                 </button>
               </div>
             </section>
 
-            {/* A div, not a section. The app carries a global rule —
-                #malik-root … section:nth-of-type(2) > div — that paints the
-                direct children of the second section with a dark blue gradient,
-                !important. NoBlueUiGuard then strips that gradient and repaints
-                the element #1b1b1d, which is the pale plate that appeared behind
-                the agent strip on a phone. Not being a section avoids both. */}
             <div className={styles.strip} role="group" aria-label="Autonomous agent pipeline">
               <div className={styles.stripLabel}>
                 <span className={styles.dot} />
@@ -728,37 +638,20 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
             <div className={styles.filters}>
               <nav className={styles.categories} aria-label="Категории шаблонов">
                 {TEMPLATE_CATEGORIES.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`${styles.category} ${category === item.id ? styles.categoryActive : ""}`}
-                    onClick={() => setCategory(item.id)}
-                    aria-pressed={category === item.id}
-                  >
+                  <button key={item.id} type="button" className={`${styles.category} ${category === item.id ? styles.categoryActive : ""}`} onClick={() => setCategory(item.id)} aria-pressed={category === item.id}>
                     {item.label}
                   </button>
                 ))}
               </nav>
               <label className={styles.search}>
                 <Search strokeWidth={1.8} />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Найти шаблон"
-                  aria-label="Поиск по шаблонам"
-                />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти шаблон" aria-label="Поиск по шаблонам" />
               </label>
             </div>
 
             <section className={styles.grid}>
               {templates.map((template) => (
-                <button
-                  key={template.id}
-                  type="button"
-                  className={`${styles.templateCard} ${activeTemplate?.id === template.id ? styles.templateCardActive : ""}`}
-                  onClick={() => applyTemplate(template)}
-                  aria-pressed={activeTemplate?.id === template.id}
-                >
+                <button key={template.id} type="button" className={`${styles.templateCard} ${activeTemplate?.id === template.id ? styles.templateCardActive : ""}`} onClick={() => applyTemplate(template)} aria-pressed={activeTemplate?.id === template.id}>
                   <Image src={template.image} alt={template.title} width={320} height={200} sizes="(max-width: 900px) 50vw, 16vw" />
                   <span className={styles.templateBody}>
                     <span className={styles.templateTitle}>{template.title}</span>
@@ -767,14 +660,8 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                   </span>
                 </button>
               ))}
-              {category === "Мои" && !templates.length && (
-                <p className={styles.emptyNote}>
-                  Здесь появятся шаблоны, которые ты сохранишь сам. Пока их нет — начни со «Своего шаблона» справа.
-                </p>
-              )}
-              {category !== "Мои" && query.trim() && !templates.length && (
-                <p className={styles.emptyNote}>По запросу «{query.trim()}» ничего не нашлось.</p>
-              )}
+              {category === "Мои" && !templates.length && <p className={styles.emptyNote}>Здесь появятся шаблоны, которые ты сохранишь сам. Пока их нет — начни со «Своего шаблона» справа.</p>}
+              {category !== "Мои" && query.trim() && !templates.length && <p className={styles.emptyNote}>По запросу «{query.trim()}» ничего не нашлось.</p>}
               <button type="button" className={`${styles.templateCard} ${styles.customCard}`} onClick={startCustom}>
                 <span className={styles.customPlus}><Plus strokeWidth={1.8} /></span>
                 <span>
@@ -801,12 +688,6 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                 : <button type="button" className={styles.ghost} onClick={restart}>Новый запуск</button>}
             </div>
 
-            {/* A div, not a section. The app carries a global rule —
-                #malik-root … section:nth-of-type(2) > div — that paints the
-                direct children of the second section with a dark blue gradient,
-                !important. NoBlueUiGuard then strips that gradient and repaints
-                the element #1b1b1d, which is the pale plate that appeared behind
-                the agent strip on a phone. Not being a section avoids both. */}
             <div className={styles.strip} role="group" aria-label="Autonomous agent pipeline">
               <div className={styles.stripLabel}>
                 <span className={styles.dot} />
@@ -815,11 +696,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
               <div className={styles.flow}>
                 {steps.map((step, index) => (
                   <span key={step.agent.id} style={{ display: "contents" }}>
-                    <span className={`${styles.chip} ${
-                      step.state === "running" ? styles.chipActive
-                        : step.state === "done" ? styles.chipDone
-                          : step.state === "failed" ? styles.chipFailed : ""
-                    }`}>
+                    <span className={`${styles.chip} ${step.state === "running" ? styles.chipActive : step.state === "done" ? styles.chipDone : step.state === "failed" ? styles.chipFailed : ""}`}>
                       <b>{step.agent.name}</b><small>{step.agent.role}</small>
                     </span>
                     {index < steps.length - 1 && <em>→</em>}
@@ -843,21 +720,9 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                 const open = expanded === step.agent.id
                 return (
                   <article key={step.agent.id} className={styles.step}>
-                    <button
-                      type="button"
-                      className={styles.stepHead}
-                      onClick={() => setExpanded(open ? null : step.agent.id)}
-                      aria-expanded={open}
-                    >
-                      <span className={`${styles.stepBadge} ${
-                        step.state === "running" ? styles.stepBadgeActive
-                          : step.state === "done" ? styles.stepBadgeDone
-                            : step.state === "failed" ? styles.stepBadgeFailed : ""
-                      }`}>
-                        {step.state === "running" ? <Loader2 size={14} className={styles.spin} />
-                          : step.state === "done" ? <Check size={14} />
-                            : step.state === "failed" ? <TriangleAlert size={14} />
-                              : index + 1}
+                    <button type="button" className={styles.stepHead} onClick={() => setExpanded(open ? null : step.agent.id)} aria-expanded={open}>
+                      <span className={`${styles.stepBadge} ${step.state === "running" ? styles.stepBadgeActive : step.state === "done" ? styles.stepBadgeDone : step.state === "failed" ? styles.stepBadgeFailed : ""}`}>
+                        {step.state === "running" ? <Loader2 size={14} className={styles.spin} /> : step.state === "done" ? <Check size={14} /> : step.state === "failed" ? <TriangleAlert size={14} /> : index + 1}
                       </span>
                       <span>
                         <span className={styles.stepName}>{step.agent.name}</span>
@@ -874,11 +739,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                     {open && (step.content || step.error) && (
                       <div className={`${styles.stepBody} ${step.error ? styles.stepError : ""}`}>
                         {step.error ? step.error : <Rich text={step.content} />}
-                        {step.state === "done" && (step.provider || step.model) && (
-                          <div className={styles.stepMeta}>
-                            {[step.provider, step.model].filter(Boolean).join(" · ")}
-                          </div>
-                        )}
+                        {step.state === "done" && (step.provider || step.model) && <div className={styles.stepMeta}>{[step.provider, step.model].filter(Boolean).join(" · ")}</div>}
                       </div>
                     )}
                   </article>
@@ -886,8 +747,15 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
               })}
             </div>
 
-            {/* The stress test lives at the bottom of the run, because it has
-                nothing to read until the agents have written something. */}
+            <CompanyLaunchPad
+              steps={steps}
+              prompt={prompt}
+              market={market}
+              country={country}
+              budget={budget}
+              requirements={requirements}
+            />
+
             {completed > 0 && !running && (
               <section className={styles.stress}>
                 <div className={styles.stressHead}>
@@ -897,9 +765,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                     <small>{STRESS_TEST.subtitle}</small>
                   </div>
                   <button type="button" className={styles.stressRun} onClick={() => void runStressTest()} disabled={stressBusy}>
-                    {stressBusy
-                      ? <><Loader2 size={14} className={styles.spin} /> Разбираю план…</>
-                      : stress ? "Проверить заново" : "Проверить план"}
+                    {stressBusy ? <><Loader2 size={14} className={styles.spin} /> Разбираю план…</> : stress ? "Проверить заново" : "Проверить план"}
                   </button>
                 </div>
 
@@ -911,13 +777,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                   </p>
                 )}
 
-                {stressError && (
-                  <p className={`${styles.stressLead} ${styles.stressFailed}`}>
-                    <TriangleAlert size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
-                    {stressError}
-                  </p>
-                )}
-
+                {stressError && <p className={`${styles.stressLead} ${styles.stressFailed}`}><TriangleAlert size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />{stressError}</p>}
                 {stress && <div className={styles.stressBody}><Rich text={stress} /></div>}
               </section>
             )}
