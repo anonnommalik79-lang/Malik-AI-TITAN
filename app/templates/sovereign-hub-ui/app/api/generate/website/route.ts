@@ -18,6 +18,8 @@ Requirements:
 - Use semantic HTML, responsive layout, accessible contrast and controls.
 - Make the visual system feel premium and finished: typography, spacing, hierarchy, hover/focus states, mobile behavior.
 - Honor the user's requested brand direction without copying third-party logos, copyrighted copy, or proprietary page layouts.
+- Preserve concrete product, market, pricing and CTA decisions from the brief instead of inventing a different business.
+- Never fabricate customers, testimonials, revenue, investors, partnerships or traction.
 - Do not output explanations before or after the HTML.
 `.trim()
 
@@ -37,18 +39,25 @@ export async function POST(request: Request) {
     if (!prompt) {
       return NextResponse.json({ error: "`prompt` is required" }, { status: 400 })
     }
+    if (prompt.length > 28_000) {
+      return NextResponse.json({ error: "Website brief is too long" }, { status: 413 })
+    }
 
+    // MalikCoder is the resilient code-first orchestrator. The previous route
+    // pinned site generation to one provider-backed 120B model, so a provider
+    // billing/rate failure could kill the whole product build even though other
+    // coding lanes were healthy.
     const result = await runStrictMalikModel({
-      modelId: "malik-fast-120b",
+      modelId: "malik-coder-32b",
       prompt: `USER BRIEF:\n${prompt}`,
       systemPrompt: WEBSITE_INSTRUCTION,
-      maxTokens: 6000,
-      temperature: 0.35,
+      maxTokens: 7000,
+      temperature: 0.3,
     })
 
     const html = cleanHtml(result.content)
 
-    if (!html || !/<html[\s>]/i.test(html)) {
+    if (!html || !/<html[\s>]/i.test(html) || !/<body[\s>]/i.test(html)) {
       return NextResponse.json(
         { error: "Website generator returned invalid HTML" },
         { status: 502 },
