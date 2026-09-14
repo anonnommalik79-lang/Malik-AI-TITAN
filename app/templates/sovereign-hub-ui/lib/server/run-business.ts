@@ -9,6 +9,7 @@ import {
   businessOutputTokenBudget,
   businessRetryPrompt,
   businessTaskForMode,
+  ensureAutonomousCompanyState,
   isAutonomousBusinessMode,
 } from "@/lib/business/orchestration"
 import type { BusinessOutputQuality } from "@/lib/business/orchestration"
@@ -29,14 +30,41 @@ export type BusinessRunBody = {
   modelId?: string
 }
 
-function requestWithoutProvider(base: AIRequest, provider?: string): AIRequest {
-  if (!provider || !Array.isArray(base.metadata?.allowedProviders)) return base
-  const allowed = (base.metadata?.allowedProviders as string[]).filter((item) => item !== provider)
+const BUSINESS_RETRY_PROVIDERS = [
+  "aihubmix",
+  "gemini",
+  "mistral",
+  "nvidia-nim",
+  "groq",
+  "modelscope",
+  "openrouter",
+  "deepseek",
+  "openai",
+  "claude",
+  "cerebras",
+  "aws-bedrock",
+  "azure",
+]
+
+function requestWithoutProviders(base: AIRequest, rejected: Set<string>): AIRequest {
+  const configured = Array.isArray(base.metadata?.allowedProviders)
+    ? (base.metadata?.allowedProviders as string[])
+    : BUSINESS_RETRY_PROVIDERS
+  const allowed = configured.filter((item) => !rejected.has(item))
   if (!allowed.length) return base
   return {
     ...base,
+    provider: undefined,
+    model: undefined,
     metadata: { ...base.metadata, allowedProviders: allowed },
   }
+}
+
+function normalizeAutonomousResult(modeId: Parameters<typeof ensureAutonomousCompanyState>[0], result: Awaited<ReturnType<typeof routeAI>>) {
+  if (result.success && typeof result.output === "string") {
+    result.output = ensureAutonomousCompanyState(modeId, result.output)
+  }
+  return result
 }
 
 export async function runBusinessEngine(request: Request, body: BusinessRunBody) {
@@ -66,9 +94,6 @@ export async function runBusinessEngine(request: Request, body: BusinessRunBody)
     language: body?.language || body?.context?.language || "ru",
   }
 
-  // Autonomous Company is one continuous run, not eight unrelated chat calls.
-  // The protocol makes each stage preserve decisions and emit a compact company
-  // state handoff that survives the client's bounded context window.
   const orchestratedInput = augmentBusinessInput(mode.id, input)
   const fullPrompt = buildBusinessPrompt(mode, orchestratedInput, context)
   const task = businessTaskForMode(mode.id)
@@ -90,11 +115,6 @@ export async function runBusinessEngine(request: Request, body: BusinessRunBody)
     },
   })
 
-  /*
-   * A chosen model is a preference, not a promise. It is tried against its own
-   * provider first. If it is unavailable, rate-limited or returns a generic
-   * placeholder, the automatic route gets a chance to complete the stage.
-   */
   const requested = body?.modelId
   const pinned = isMalikModelId(requested) && canUseMalikModel(requested, entitlement.plan)
     ? getMalikModel(requested)
@@ -112,33 +132,49 @@ export async function runBusinessEngine(request: Request, body: BusinessRunBody)
     })
     : null
 
-  // A user's own daily limit is final. Provider-specific failures and rate
-  // limits are not: another provider may still be healthy, so keep routing.
   if (!result || (!result.success && result.error !== "DAILY_LIMIT_REACHED")) {
-    const fallbackBase = result && pinned
-      ? requestWithoutProvider(base, result.provider)
-      : base
-    result = await routeAI(fallbackBase)
+    const rejected = new Set<string>()
+    if (result?.provider) rejected.add(result.provider)
+    result = await routeAI(requestWithoutProviders(base, rejected))
   }
 
-  // A transport-level success is not enough for an autonomous agent. Generic
-  // greetings such as "Как я могу помочь?" must never receive a green check.
+  result = normalizeAutonomousResult(mode.id, result)
   let quality: BusinessOutputQuality = result.success
     ? businessOutputQuality(mode.id, result.output)
     : { ok: false, reason: "empty" }
 
-  if (result.success && !quality.ok && isAutonomousBusinessMode(mode.id)) {
-    const retryBase = requestWithoutProvider(base, result.provider)
+  const rejectedProviders = new Set<string>()
+  if (result.provider) rejectedProviders.add(result.provider)
+
+  // A provider may return HTTP 200 while still giving a greeting, tiny answer or
+  // malformed handoff. Retry across alternate providers instead of asking the
+  // same weak route twice. Two repair attempts keeps latency bounded while
+  // making a single flaky model unable to kill the entire 8-agent company.
+  for (let attempt = 1; result.success && !quality.ok && isAutonomousBusinessMode(mode.id) && attempt <= 2; attempt += 1) {
+    console.warn("[BUSINESS_AGENT_REJECTED]", {
+      mode: mode.id,
+      reason: quality.reason,
+      provider: result.provider,
+      model: result.model,
+      chars: typeof result.output === "string" ? result.output.length : 0,
+      attempt,
+    })
+
+    const retryBase = requestWithoutProviders(base, rejectedProviders)
     result = await routeAI({
       ...retryBase,
       prompt: businessRetryPrompt(fullPrompt, quality.reason),
       metadata: {
         ...retryBase.metadata,
         businessQualityRetry: true,
-        rejectedProvider: result.provider,
+        businessQualityAttempt: attempt,
+        rejectedProviders: Array.from(rejectedProviders),
         rejectedReason: quality.reason,
       },
     })
+
+    if (result.provider) rejectedProviders.add(result.provider)
+    result = normalizeAutonomousResult(mode.id, result)
     quality = result.success
       ? businessOutputQuality(mode.id, result.output)
       : { ok: false, reason: "empty" }
@@ -148,8 +184,18 @@ export async function runBusinessEngine(request: Request, body: BusinessRunBody)
   const engine = publicEngineForProvider(result.provider, task)
   const fallbackUsed = !accepted || Boolean(result.fallbackUsed) || Boolean(pinned && result.provider !== pinned.provider)
   const qualityError = result.success && !quality.ok
-    ? "Агент вернул слишком общий или неполный ответ. Malik AI остановил этап, чтобы не выдавать заглушку за готовую работу."
+    ? "Агент не смог сформировать полноценный результат даже после резервных маршрутов. Нажми «Повторить» — следующий запуск попробует доступные модели заново."
     : undefined
+
+  if (!accepted) {
+    console.warn("[BUSINESS_AGENT_FAILED]", {
+      mode: mode.id,
+      reason: quality.reason || result.error || "provider_error",
+      provider: result.provider,
+      model: result.model,
+      rejectedProviders: Array.from(rejectedProviders),
+    })
+  }
 
   return Response.json(
     {
