@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const snapshot = getUsage(userId, plan)
   const usage = { chat: snapshot.chatCount, image: snapshot.imageCount, video: snapshot.videoCount, project: snapshot.projectCount }
   const limits = PLAN_LIMITS[plan]
-  const textTokens = getDailyTextTokenQuota(userId, plan)
+  const textTokens = getDailyTextTokenQuota(userId, plan === "owner")
 
   return Response.json({
     ok: true,
