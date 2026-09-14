@@ -14,10 +14,13 @@ export type UserUsage = {
   updatedAt: string
 }
 
+// Chat count is retained for analytics, but daily text access is now governed
+// by the server-side 8K generated-token quota. These large values prevent the
+// old message-count gate from stopping a user before the token allowance does.
 export const PLAN_LIMITS: Record<AIPlan, Record<UsageKind, number>> = {
-  free: { chat: 15, image: 1, video: 0, project: 2 },
-  pro: { chat: 300, image: 25, video: 5, project: 30 },
-  ultra: { chat: 1000, image: 100, video: 20, project: 100 },
+  free: { chat: 100000, image: 1, video: 0, project: 2 },
+  pro: { chat: 100000, image: 25, video: 5, project: 30 },
+  ultra: { chat: 100000, image: 100, video: 20, project: 100 },
   owner: { chat: 999999, image: 999999, video: 999999, project: 999999 },
 }
 
@@ -164,4 +167,3 @@ export function resetDailyUsage(userId = "guest", plan: AIPlan = "free") {
   usageStore.delete(key(userId))
   return getUserUsage(userId, plan)
 }
-
