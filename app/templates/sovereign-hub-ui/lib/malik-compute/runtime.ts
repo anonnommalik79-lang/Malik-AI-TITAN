@@ -5,16 +5,46 @@ import { getComputeIdentity } from "./identity"
 import { classifyComputeFailure } from "./adapter"
 import { estimateCompute, MalikComputeError, MalikComputeService } from "./service"
 import type { ComputeOperation, ComputeReservation } from "./types"
+import {
+  DAILY_TEXT_TOKEN_LIMIT,
+  getDailyTextTokenQuota,
+  recordGeneratedTextTokens,
+} from "@/lib/server/daily-text-token-quota"
 
 type Metadata = Record<string, unknown>
-type Context = { metadata: Metadata }
+type TextQuotaContext = { userId: string; unlimited: boolean; recorded: boolean; output: string }
+type Context = { metadata: Metadata; textQuota?: TextQuotaContext }
 const active = new AsyncLocalStorage<Context>()
 export const computeService = new MalikComputeService(new FileComputeStore())
+
+function textQuotaOperation(operation: ComputeOperation) {
+  return operation === "chat" || operation === "research" || operation === "agent"
+}
+
+function outputText(data: Metadata) {
+  for (const key of ["content", "answer", "text", "output"]) {
+    const value = data[key]
+    if (typeof value === "string" && value.trim()) return value
+  }
+  return ""
+}
+
+function chargeTextQuota(context: Context, text?: string) {
+  const quota = context.textQuota
+  if (!quota || quota.recorded) return
+  const value = String(text || quota.output || "").trim()
+  if (!value) return
+  const snapshot = recordGeneratedTextTokens(quota.userId, quota.unlimited, value)
+  quota.recorded = true
+  context.metadata.dailyTextTokens = snapshot
+}
 
 // Metadata comes from the actual server result, never from a submitted price/user ID.
 export function observeComputeResult(result: object) {
   const context = active.getStore()
-  if (context) Object.assign(context.metadata, result)
+  if (!context) return
+  Object.assign(context.metadata, result)
+  chargeTextQuota(context, outputText(result as Metadata))
 }
 
 export async function retryCompute<T>(run: () => T): Promise<T> {
@@ -29,11 +59,14 @@ export async function retryCompute<T>(run: () => T): Promise<T> {
 
 export function computeErrorResponse(error: unknown) {
   const code = error instanceof MalikComputeError ? error.code : "MALIK_COMPUTE_STORAGE_UNAVAILABLE"
-  const limited = code === "MALIK_COMPUTE_LIMIT_REACHED"
+  const tokenLimited = code === "MALIK_TEXT_TOKEN_LIMIT_REACHED"
+  const limited = code === "MALIK_COMPUTE_LIMIT_REACHED" || tokenLimited
   const auth = code === "MALIK_COMPUTE_AUTH_REQUIRED"
-  const message = limited ? "Вы достигли дневного лимита Malik Compute. Баланс обновится в 00:00 UTC."
-    : auth ? "Войдите в аккаунт или выберите гостевой вход."
-    : "Не удалось обработать баланс Compute. Попробуйте ещё раз."
+  const message = tokenLimited
+    ? `Вы использовали ${DAILY_TEXT_TOKEN_LIMIT} текстовых токенов за сегодня. Лимит обновится в 00:00 UTC.`
+    : limited ? "Вы достигли дневного лимита Malik Compute. Баланс обновится в 00:00 UTC."
+      : auth ? "Войдите в аккаунт или выберите гостевой вход."
+        : "Не удалось обработать баланс Compute. Попробуйте ещё раз."
   return Response.json({ ok: false, code, error: message, message }, {
     status: limited ? 429 : auth ? 401 : 503,
     headers: { "Cache-Control": "private, no-store", ...(limited ? { "Retry-After": String(Math.max(1, Math.ceil((Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z") + 86400000 - Date.now()) / 1000))) } : {}) },
@@ -51,7 +84,7 @@ function unsuccessful(data: Metadata) {
 function freeResult(data: Metadata) {
   return data.cached === true || data.demo === true || data.mock === true ||
     /(?:-cache$|^local-smart$)/.test(String(data.provider || "")) ||
-    ["demo-ready", "preview-ready", "storyboard-ready"].includes(String(data.status || ""))
+    ["demo-ready", "preview-ready", "storyboard-ready"].includes(String(data.status || "").toLowerCase())
 }
 
 function jobDetails(data: Metadata, request: Request) {
@@ -102,6 +135,15 @@ export function withCompute<R extends Request, Args extends unknown[]>(
     try {
       const identity = await getComputeIdentity()
       const operation = typeof policy === "function" ? await policy(request) : policy
+
+      if (textQuotaOperation(operation)) {
+        context.textQuota = { userId: identity.userId, unlimited: identity.admin === true, recorded: false, output: "" }
+        const quota = getDailyTextTokenQuota(identity.userId, identity.admin === true)
+        if (!quota.unlimited && (quota.remaining ?? 0) <= 0) {
+          throw new MalikComputeError("MALIK_TEXT_TOKEN_LIMIT_REACHED", "Daily generated text token limit reached.")
+        }
+      }
+
       reservation = await retryCompute(() => computeService.reserveCompute(identity.userId, estimateCompute(operation), operation, randomUUID()))
       if (request.signal.aborted) { await finish(true); return new Response(null, { status: 499 }) }
       const response = await active.run(context, () => handler(request, ...args))
@@ -127,10 +169,19 @@ export function withCompute<R extends Request, Args extends unknown[]>(
               if (kind === "error" || data.type === "error" || data.ok === false) failed = true
               if (["content", "answer", "done"].includes(kind || "")) {
                 Object.assign(context.metadata, data)
-                if (kind !== "done") hasContent ||= Boolean(data.content || data.answer || data.text)
+                if (kind !== "done") {
+                  const generated = outputText(data)
+                  hasContent ||= Boolean(generated)
+                  if (generated && context.textQuota && context.textQuota.output.length < 2_000_000) {
+                    context.textQuota.output += generated
+                  }
+                }
               }
               // Research also emits progress "done" events before its answer.
-              if ((kind === "done" || data.type === "done") && hasContent) completed = true
+              if ((kind === "done" || data.type === "done") && hasContent) {
+                completed = true
+                if (!failed) chargeTextQuota(context)
+              }
             } catch { if (kind === "error") failed = true }
           }
         }
@@ -156,6 +207,7 @@ export function withCompute<R extends Request, Args extends unknown[]>(
               if (ended) return
               if (next.done) {
                 inspect(decoder.decode())
+                if (!failed && completed && hasContent) chargeTextQuota(context)
                 await finish(failed || !completed || !hasContent)
                 ended = true
                 request.signal.removeEventListener("abort", abort)
@@ -187,7 +239,13 @@ export function withCompute<R extends Request, Args extends unknown[]>(
       }
       if (response.headers.get("content-type")?.includes("application/json")) {
         const data: unknown = await response.clone().json()
-        if (data && typeof data === "object") Object.assign(context.metadata, data)
+        if (data && typeof data === "object") {
+          Object.assign(context.metadata, data)
+          chargeTextQuota(context, outputText(data as Metadata))
+        }
+      } else if (response.headers.get("content-type")?.includes("text/plain")) {
+        const text = await response.clone().text().catch(() => "")
+        chargeTextQuota(context, text)
       }
       if (operation === "video" && !unsuccessful(context.metadata) && !freeResult(context.metadata) &&
           (pending(context.metadata) || (jobDetails(context.metadata, request) && !videoReady(context.metadata)))) {
