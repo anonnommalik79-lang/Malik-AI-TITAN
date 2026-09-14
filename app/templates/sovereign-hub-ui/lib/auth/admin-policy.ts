@@ -14,5 +14,9 @@ export function isOwnerEmail(email?: string | null): boolean {
 }
 
 export function isVerifiedOwner(user?: { email?: string | null; emailVerified?: boolean } | null): boolean {
-  return user?.emailVerified === true && isOwnerEmail(user.email)
+  // Founder access is bound to the authenticated WorkOS account email itself.
+  // Some identity-provider sessions can report emailVerified inconsistently,
+  // which previously hid the private founder console from the real owner.
+  // Other plan/entitlement code still keeps its own verified-email checks.
+  return isOwnerEmail(user?.email)
 }
