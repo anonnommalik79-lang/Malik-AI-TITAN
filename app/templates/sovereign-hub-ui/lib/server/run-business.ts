@@ -3,6 +3,14 @@ import { canUseMalikModel, getMalikModel, isMalikModelId } from "@/lib/ai/malik-
 import { routeAI } from "@/lib/ai/router"
 import type { AIRequest } from "@/lib/ai/types"
 import { buildBusinessPrompt, getBusinessMode } from "@/lib/business/modes"
+import {
+  augmentBusinessInput,
+  businessOutputQuality,
+  businessOutputTokenBudget,
+  businessRetryPrompt,
+  businessTaskForMode,
+  isAutonomousBusinessMode,
+} from "@/lib/business/orchestration"
 import type { BusinessRunContext } from "@/lib/business/types"
 import { publicEngineForProvider, publicErrorMessage, sanitizePublicText } from "@/lib/brand-provider-map"
 import { checkPromptLength } from "@/lib/limits/rate-limit"
@@ -18,6 +26,16 @@ export type BusinessRunBody = {
   language?: "ru" | "kz" | "en"
   /** Malik model the caller asked for. Ignored when unknown, or not on the caller's plan. */
   modelId?: string
+}
+
+function requestWithoutProvider(base: AIRequest, provider?: string): AIRequest {
+  if (!provider || !Array.isArray(base.metadata?.allowedProviders)) return base
+  const allowed = (base.metadata?.allowedProviders as string[]).filter((item) => item !== provider)
+  if (!allowed.length) return base
+  return {
+    ...base,
+    metadata: { ...base.metadata, allowedProviders: allowed },
+  }
 }
 
 export async function runBusinessEngine(request: Request, body: BusinessRunBody) {
@@ -47,27 +65,34 @@ export async function runBusinessEngine(request: Request, body: BusinessRunBody)
     language: body?.language || body?.context?.language || "ru",
   }
 
-  const fullPrompt = buildBusinessPrompt(mode, input, context)
+  // Autonomous Company is one continuous run, not eight unrelated chat calls.
+  // The protocol makes each stage preserve decisions and emit a compact company
+  // state handoff that survives the client's bounded context window.
+  const orchestratedInput = augmentBusinessInput(mode.id, input)
+  const fullPrompt = buildBusinessPrompt(mode, orchestratedInput, context)
+  const task = businessTaskForMode(mode.id)
+  const maxTokens = businessOutputTokenBudget(mode.id, entitlement.plan === "owner")
+
   const base: AIRequest = applyFreeModeRequest({
     prompt: fullPrompt,
-    task: "research",
+    task,
+    maxTokens,
     userId: entitlement.userId,
     userEmail: entitlement.userId,
     plan: entitlement.plan,
     signal: request.signal,
-    metadata: { businessMode: mode.id, businessSection: mode.sectionId },
+    metadata: {
+      businessMode: mode.id,
+      businessSection: mode.sectionId,
+      autonomousCompany: isAutonomousBusinessMode(mode.id),
+      businessTask: task,
+    },
   })
 
   /*
-   * A chosen model is a preference, not a promise.
-   *
-   * routeAI applies `model` to whichever provider ends up running, so setting
-   * it globally would hand a Groq model id to Gemini the moment Groq fails and
-   * poison the fallback chain that has always made this endpoint reliable.
-   * So the pinned model is tried alone, against its own provider, and if that
-   * attempt fails the original automatic call runs exactly as before. The
-   * response reports the provider and model that actually answered, so the UI
-   * can show what ran rather than what was asked for.
+   * A chosen model is a preference, not a promise. It is tried against its own
+   * provider first. If it is unavailable, rate-limited or returns a generic
+   * placeholder, the automatic route gets a chance to complete the stage.
    */
   const requested = body?.modelId
   const pinned = isMalikModelId(requested) && canUseMalikModel(requested, entitlement.plan)
@@ -86,27 +111,61 @@ export async function runBusinessEngine(request: Request, body: BusinessRunBody)
     })
     : null
 
-  // A rate limit is the same answer from every provider; retrying only burns time.
-  if (!result || (!result.success && result.error !== "DAILY_LIMIT_REACHED" && result.error !== "RATE_LIMIT")) {
-    result = await routeAI(base)
+  // A user's own daily limit is final. Provider-specific failures and rate
+  // limits are not: another provider may still be healthy, so keep routing.
+  if (!result || (!result.success && result.error !== "DAILY_LIMIT_REACHED")) {
+    const fallbackBase = result && pinned
+      ? requestWithoutProvider(base, result.provider)
+      : base
+    result = await routeAI(fallbackBase)
   }
 
-  const engine = publicEngineForProvider(result.provider, "research")
-  const fallbackUsed = !result.success || Boolean(result.fallbackUsed)
+  // A transport-level success is not enough for an autonomous agent. Generic
+  // greetings such as "Как я могу помочь?" must never receive a green check.
+  let quality = result.success
+    ? businessOutputQuality(mode.id, result.output)
+    : { ok: false as const }
+
+  if (result.success && !quality.ok && isAutonomousBusinessMode(mode.id)) {
+    const retryBase = requestWithoutProvider(base, result.provider)
+    result = await routeAI({
+      ...retryBase,
+      prompt: businessRetryPrompt(fullPrompt, quality.reason),
+      metadata: {
+        ...retryBase.metadata,
+        businessQualityRetry: true,
+        rejectedProvider: result.provider,
+        rejectedReason: quality.reason,
+      },
+    })
+    quality = result.success
+      ? businessOutputQuality(mode.id, result.output)
+      : { ok: false as const }
+  }
+
+  const accepted = result.success && quality.ok
+  const engine = publicEngineForProvider(result.provider, task)
+  const fallbackUsed = !accepted || Boolean(result.fallbackUsed) || Boolean(pinned && result.provider !== pinned.provider)
+  const qualityError = result.success && !quality.ok
+    ? "Агент вернул слишком общий или неполный ответ. Malik AI остановил этап, чтобы не выдавать заглушку за готовую работу."
+    : undefined
 
   return Response.json(
     {
-      ok: result.success,
+      ok: accepted,
       mode: mode.id,
       modeTitle: mode.titleRu,
       sectionId: mode.sectionId,
       engine: engine.title,
       provider: result.provider,
       model: result.model,
-      status: fallbackUsed ? "fallback" : "ready",
+      status: accepted ? (fallbackUsed ? "fallback" : "ready") : "failed",
       fallbackUsed,
-      content: sanitizePublicText(result.output),
-      publicError: result.success ? undefined : publicErrorMessage(result.error),
+      content: accepted ? sanitizePublicText(result.output) : "",
+      publicError: accepted ? undefined : (qualityError || publicErrorMessage(result.error)),
+      error: accepted ? undefined : (qualityError ? "BUSINESS_OUTPUT_REJECTED" : result.error),
+      quality: accepted ? "accepted" : (quality.reason || "provider_error"),
+      task,
     },
     { status: result.error === "DAILY_LIMIT_REACHED" ? 429 : 200 },
   )
