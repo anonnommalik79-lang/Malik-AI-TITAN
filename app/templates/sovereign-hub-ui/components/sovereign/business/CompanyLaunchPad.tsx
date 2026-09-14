@@ -12,6 +12,9 @@ type LaunchStep = {
   content: string
 }
 
+type ProjectFile = { path: string; content: string }
+type ProjectQa = { passed?: boolean; checks?: string[]; issues?: string[]; reviewer?: string; rounds?: number }
+
 export type CompanyLaunchPadProps = {
   steps: LaunchStep[]
   prompt: string
@@ -60,16 +63,22 @@ function buildWebsiteBrief(props: CompanyLaunchPadProps) {
     .join("\n\n")
 
   return [
-    "Создай реальный работающий одностраничный MVP/лендинг этой компании по решениям восьми агентов Malik Autonomous Company.",
-    "Это не концепт и не объяснение. Нужен законченный продуктовый интерфейс, который можно открыть в браузере и показать инвестору.",
+    "Создай реальный работающий MVP этой компании по решениям восьми агентов Malik Autonomous Company.",
+    "Это не концепт и не объяснение. Нужен законченный продуктовый интерфейс, который можно открыть и показать инвестору.",
     "Сохрани название, ICP, оффер, рынок, цену, CTA и ключевые решения из плана. Не выдумывай другой бизнес.",
-    "Сделай премиальный полностью адаптивный интерфейс: hero, продукт, ценность, функции/услуги, pricing если он определён, FAQ и сильный CTA.",
+    "Сделай премиальный полностью адаптивный интерфейс: hero, продукт, ценность, функции/услуги, pricing если определён, FAQ и сильный CTA.",
     "Не вставляй фальшивые отзывы, клиентов, выручку или логотипы компаний. Если факта нет — не изображай его как факт.",
-    "Все CSS и JS должны находиться внутри одного index.html. Сайт должен работать без сборщика и внешнего backend.",
     `ИСХОДНАЯ ИДЕЯ:\n${props.prompt.trim()}`,
     constraints ? `ОГРАНИЧЕНИЯ:\n${constraints}` : "",
     `РЕШЕНИЯ АГЕНТОВ:\n${blueprint}`,
   ].filter(Boolean).join("\n\n")
+}
+
+function companyPlan(props: CompanyLaunchPadProps) {
+  return props.steps
+    .filter((step) => step.state === "done")
+    .map((step) => `# ${step.agent.name} · ${step.agent.role}\n\n${step.content}`)
+    .join("\n\n---\n\n")
 }
 
 function saveToSites(title: string, prompt: string, html: string) {
@@ -88,7 +97,10 @@ function saveToSites(title: string, prompt: string, html: string) {
 export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
   const ready = props.steps.length >= 8 && props.steps.every((step) => step.state === "done" && step.content.trim())
   const storageKey = useMemo(() => `malik-autonomous-product:${hashKey(props.prompt)}`, [props.prompt])
+  const projectStorageKey = useMemo(() => `${storageKey}:nextjs`, [storageKey])
   const title = useMemo(() => companyTitle(props.prompt), [props.prompt])
+  const brief = useMemo(() => buildWebsiteBrief(props), [props])
+
   const [html, setHtml] = useState("")
   const [meta, setMeta] = useState<BuildMeta>({})
   const [building, setBuilding] = useState(false)
@@ -96,6 +108,16 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
   const [deploying, setDeploying] = useState(false)
   const [deployUrl, setDeployUrl] = useState("")
   const [deployError, setDeployError] = useState("")
+
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([])
+  const [projectName, setProjectName] = useState("")
+  const [projectQa, setProjectQa] = useState<ProjectQa>({})
+  const [projectBuilding, setProjectBuilding] = useState(false)
+  const [projectError, setProjectError] = useState("")
+  const [projectDeploying, setProjectDeploying] = useState(false)
+  const [projectDeployUrl, setProjectDeployUrl] = useState("")
+  const [projectDeployState, setProjectDeployState] = useState("")
+  const [projectDeployError, setProjectDeployError] = useState("")
 
   useEffect(() => {
     if (!ready) return
@@ -106,14 +128,28 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
         setMeta(stored.meta || {})
         setDeployUrl(typeof stored.deployUrl === "string" ? stored.deployUrl : "")
       }
+      const project = JSON.parse(localStorage.getItem(projectStorageKey) || "null")
+      if (Array.isArray(project?.files)) {
+        setProjectFiles(project.files)
+        setProjectName(typeof project.projectName === "string" ? project.projectName : "")
+        setProjectQa(project.qa || {})
+        setProjectDeployUrl(typeof project.deployUrl === "string" ? project.deployUrl : "")
+        setProjectDeployState(typeof project.deployState === "string" ? project.deployState : "")
+      }
     } catch {}
-  }, [ready, storageKey])
+  }, [projectStorageKey, ready, storageKey])
 
   const persist = useCallback((nextHtml: string, nextMeta: BuildMeta, nextDeployUrl = deployUrl) => {
     try {
       localStorage.setItem(storageKey, JSON.stringify({ html: nextHtml, meta: nextMeta, deployUrl: nextDeployUrl, savedAt: Date.now() }))
     } catch {}
   }, [deployUrl, storageKey])
+
+  const persistProject = useCallback((files: ProjectFile[], name: string, qa: ProjectQa, url = projectDeployUrl, deployState = projectDeployState) => {
+    try {
+      localStorage.setItem(projectStorageKey, JSON.stringify({ files, projectName: name, qa, deployUrl: url, deployState, savedAt: Date.now() }))
+    } catch {}
+  }, [projectDeployState, projectDeployUrl, projectStorageKey])
 
   const build = useCallback(async () => {
     if (!ready || building) return
@@ -124,7 +160,7 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
     try {
       const response = await clientFetchWithTimeout(
         "/api/generate/website",
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: buildWebsiteBrief(props) }) },
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: brief }) },
         180_000,
       )
       const data = await response.json().catch(() => ({}))
@@ -145,7 +181,46 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
     } finally {
       setBuilding(false)
     }
-  }, [building, persist, props, ready, title])
+  }, [brief, building, persist, props.prompt, ready, title])
+
+  const buildNextProject = useCallback(async () => {
+    if (!ready || projectBuilding) return
+    setProjectBuilding(true)
+    setProjectError("")
+    setProjectDeployError("")
+    setProjectDeployUrl("")
+    setProjectDeployState("")
+    try {
+      const response = await clientFetchWithTimeout(
+        "/api/business/build-project",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: brief, html, name: slug(title) }),
+        },
+        300_000,
+      )
+      const data = await response.json().catch(() => ({}))
+      const files = Array.isArray(data?.files)
+        ? data.files.filter((file: any) => typeof file?.path === "string" && typeof file?.content === "string")
+        : []
+      if (!response.ok || data?.ok === false) {
+        const issues = Array.isArray(data?.qa?.issues) ? data.qa.issues.join(" · ") : ""
+        throw new Error(data?.error || issues || `HTTP ${response.status}`)
+      }
+      if (!files.length) throw new Error("Project Builder завершился без файлов")
+      const nextName = String(data?.projectName || slug(title))
+      const qa = data?.qa || {}
+      setProjectFiles(files)
+      setProjectName(nextName)
+      setProjectQa(qa)
+      persistProject(files, nextName, qa, "", "")
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "Не удалось собрать Next.js проект")
+    } finally {
+      setProjectBuilding(false)
+    }
+  }, [brief, html, persistProject, projectBuilding, ready, title])
 
   const openPreview = useCallback(() => {
     if (!html) return
@@ -156,16 +231,23 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
 
   const downloadZip = useCallback(() => {
     if (!html) return
-    const plan = props.steps.filter((step) => step.state === "done").map((step) => `# ${step.agent.name} · ${step.agent.role}\n\n${step.content}`).join("\n\n---\n\n")
     const manifest = JSON.stringify({ idea: props.prompt, market: props.market || null, country: props.country || null, budget: props.budget || null, requirements: props.requirements || null, generatedAt: new Date().toISOString() }, null, 2)
     const readme = `# ${title}\n\nGenerated by Malik Autonomous Company.\n\nOpen \`index.html\` in any modern browser. No build step is required.\n`
     downloadProjectZip(`${slug(title)}-malik`, [
       { name: "index.html", content: html },
-      { name: "company-plan.md", content: plan },
+      { name: "company-plan.md", content: companyPlan(props) },
       { name: "company.json", content: manifest },
       { name: "README.md", content: readme },
     ])
   }, [html, props, title])
+
+  const downloadNextZip = useCallback(() => {
+    if (!projectFiles.length) return
+    downloadProjectZip(`${projectName || slug(title)}-nextjs`, [
+      ...projectFiles.map((file) => ({ name: file.path, content: file.content })),
+      { name: "company-plan.md", content: companyPlan(props) },
+    ])
+  }, [projectFiles, projectName, props, title])
 
   const deploy = useCallback(async () => {
     if (!html || deploying) return
@@ -198,6 +280,43 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
     }
   }, [deploying, downloadZip, html, meta, persist, title])
 
+  const deployNextProject = useCallback(async () => {
+    if (!projectFiles.length || projectDeploying) return
+    setProjectDeploying(true)
+    setProjectDeployError("")
+    try {
+      const response = await clientFetchWithTimeout(
+        "/api/business/deploy-project",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: projectName || slug(title), files: projectFiles }),
+        },
+        150_000,
+      )
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || data?.ok === false) {
+        if (data?.code === "VERCEL_NOT_CONFIGURED") {
+          downloadNextZip()
+          window.open(String(data?.dropUrl || "https://vercel.com/drop"), "_blank", "noopener,noreferrer")
+          throw new Error("Vercel token не подключён. Исходники Next.js скачаны ZIP-архивом.")
+        }
+        throw new Error(data?.error || `HTTP ${response.status}`)
+      }
+      const url = String(data?.url || "")
+      const state = String(data?.readyState || "QUEUED")
+      if (!url) throw new Error("Vercel не вернул URL проекта")
+      setProjectDeployUrl(url)
+      setProjectDeployState(state)
+      persistProject(projectFiles, projectName || slug(title), projectQa, url, state)
+      window.open(url, "_blank", "noopener,noreferrer")
+    } catch (error) {
+      setProjectDeployError(error instanceof Error ? error.message : "Не удалось задеплоить Next.js проект")
+    } finally {
+      setProjectDeploying(false)
+    }
+  }, [downloadNextZip, persistProject, projectDeploying, projectFiles, projectName, projectQa, title])
+
   if (!ready) return null
 
   return (
@@ -207,7 +326,7 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
         <div className={styles.heading}>
           <span>COMPANY LAUNCHPAD</span>
           <h3>Из плана — в работающий продукт</h3>
-          <p>8 агентов согласовали компанию. Теперь Malik собирает сайт/MVP, live preview, ZIP и deployment.</p>
+          <p>8 агентов согласовали компанию. Malik собирает preview, production-код, QA и deployment.</p>
         </div>
         {!html ? (
           <button type="button" className={styles.primary} onClick={() => void build()} disabled={building}>
@@ -215,7 +334,7 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
           </button>
         ) : (
           <button type="button" className={styles.secondary} onClick={() => void build()} disabled={building}>
-            {building ? <Loader2 className={styles.spin} /> : <RefreshCw />} Пересобрать
+            {building ? <Loader2 className={styles.spin} /> : <RefreshCw />} Пересобрать preview
           </button>
         )}
       </div>
@@ -225,14 +344,14 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
       {!html && !building && !buildError && (
         <div className={styles.empty}>
           <PackageOpen />
-          <div><b>План готов к сборке</b><span>Нажми «Создать продукт» — Coder превратит решения агентов в standalone index.html.</span></div>
+          <div><b>План готов к сборке</b><span>Сначала Malik создаст мгновенный standalone preview, затем production Next.js проект.</span></div>
         </div>
       )}
 
       {html && (
         <>
           <div className={styles.statusRow}>
-            <span><CheckCircle2 /> MVP собран</span>
+            <span><CheckCircle2 /> MVP preview собран</span>
             <span><Globe2 /> Live preview</span>
             <span><PackageOpen /> ZIP ready</span>
             {meta.model && <span className={styles.meta}>{meta.model}{meta.latencyMs ? ` · ${(meta.latencyMs / 1000).toFixed(1)}с` : ""}</span>}
@@ -249,14 +368,86 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
 
           <div className={styles.actions}>
             <button type="button" className={styles.secondary} onClick={openPreview}><ExternalLink /> Открыть preview</button>
-            <button type="button" className={styles.secondary} onClick={downloadZip}><Download /> Скачать ZIP</button>
+            <button type="button" className={styles.secondary} onClick={downloadZip}><Download /> Скачать HTML ZIP</button>
             <button type="button" className={styles.primary} onClick={() => void deploy()} disabled={deploying}>
-              {deploying ? <><Loader2 className={styles.spin} /> Deploy…</> : <><Rocket /> Deploy Company</>}
+              {deploying ? <><Loader2 className={styles.spin} /> Deploy…</> : <><Rocket /> Deploy Preview</>}
             </button>
           </div>
 
-          {deployUrl && <div className={styles.deployed}><CheckCircle2 /><span><b>Deployment создан</b><a href={deployUrl} target="_blank" rel="noreferrer">{deployUrl}</a></span></div>}
+          {deployUrl && <div className={styles.deployed}><CheckCircle2 /><span><b>Preview deployment создан</b><a href={deployUrl} target="_blank" rel="noreferrer">{deployUrl}</a></span></div>}
           {deployError && <div className={styles.error}>{deployError}</div>}
+
+          <div className={styles.projectStage}>
+            <div className={styles.projectHead}>
+              <div>
+                <span>PRODUCTION BUILD</span>
+                <h4>Next.js Project · Build → QA → Fix → Deploy</h4>
+                <p>MalikCoder создаёт multi-file App Router проект, QA gate проверяет контракт и при ошибках автоматически запускает repair round.</p>
+              </div>
+              <button type="button" className={projectFiles.length ? styles.secondary : styles.primary} onClick={() => void buildNextProject()} disabled={projectBuilding}>
+                {projectBuilding
+                  ? <><Loader2 className={styles.spin} /> Build + QA…</>
+                  : projectFiles.length ? <><RefreshCw /> Пересобрать Next.js</> : <><Code2 /> Собрать Next.js проект</>}
+              </button>
+            </div>
+
+            {projectError && <div className={styles.error}>{projectError}</div>}
+
+            {projectBuilding && (
+              <div className={styles.pipeline}>
+                <span className={styles.pipelineActive}>1. Generate files</span><i>→</i>
+                <span>2. Static QA</span><i>→</i>
+                <span>3. AI review</span><i>→</i>
+                <span>4. Auto-fix</span>
+              </div>
+            )}
+
+            {!!projectFiles.length && (
+              <>
+                <div className={styles.statusRow}>
+                  <span><CheckCircle2 /> {projectFiles.length} файлов</span>
+                  <span><CheckCircle2 /> QA {projectQa.passed ? "passed" : "unknown"}</span>
+                  <span><RefreshCw /> {projectQa.rounds || 1} round</span>
+                  <span><PackageOpen /> Next.js ZIP ready</span>
+                  {projectDeployState && <span><Globe2 /> Vercel {projectDeployState}</span>}
+                </div>
+
+                <div className={styles.fileGrid}>
+                  {projectFiles.map((file) => (
+                    <div key={file.path} className={styles.fileCard}>
+                      <Code2 />
+                      <span><b>{file.path}</b><small>{Math.max(1, Math.round(file.content.length / 1024))} KB</small></span>
+                    </div>
+                  ))}
+                </div>
+
+                {!!projectQa.checks?.length && (
+                  <div className={styles.qaBox}>
+                    <b>QA gate</b>
+                    <span>{projectQa.checks.slice(0, 8).join(" · ")}</span>
+                  </div>
+                )}
+
+                <div className={styles.actions}>
+                  <button type="button" className={styles.secondary} onClick={downloadNextZip}><Download /> Скачать Next.js ZIP</button>
+                  <button type="button" className={styles.primary} onClick={() => void deployNextProject()} disabled={projectDeploying}>
+                    {projectDeploying ? <><Loader2 className={styles.spin} /> Vercel build…</> : <><Rocket /> Build & Deploy Next.js</>}
+                  </button>
+                </div>
+
+                {projectDeployUrl && (
+                  <div className={styles.deployed}>
+                    <CheckCircle2 />
+                    <span>
+                      <b>{projectDeployState === "READY" ? "Production build verified" : `Deployment ${projectDeployState || "created"}`}</b>
+                      <a href={projectDeployUrl} target="_blank" rel="noreferrer">{projectDeployUrl}</a>
+                    </span>
+                  </div>
+                )}
+                {projectDeployError && <div className={styles.error}>{projectDeployError}</div>}
+              </>
+            )}
+          </div>
         </>
       )}
     </section>
