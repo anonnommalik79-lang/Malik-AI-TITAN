@@ -358,29 +358,31 @@ export function MalikVideoModelRuntime() {
       if (malikButton) {
         const copy = malikButton.querySelector<HTMLElement>(".mv2__model-copy small")
         const tier = malikButton.querySelector<HTMLElement>(".mv2__tier")
+        const lockValue = gate.limited ? "1" : "0"
+        const copyText = gate.limited ? "Лимит на сегодня исчерпан" : "Бесплатно · 1 видео в день"
+        const tierText = gate.limited ? "Pro" : "Free"
+        const buttonTitle = gate.limited
+          ? "Бесплатный дневной лимит исчерпан. MalikVideo временно Pro до сброса лимита."
+          : "1 бесплатная генерация видео в день для всех пользователей"
+
+        malikButton.classList.toggle("is-active", !gate.limited)
+        malikButton.classList.toggle("is-pro", gate.limited)
+        if (malikButton.dataset.malikDailyLocked !== lockValue) malikButton.dataset.malikDailyLocked = lockValue
+        if (malikButton.title !== buttonTitle) malikButton.title = buttonTitle
+        if (copy && copy.textContent !== copyText) copy.textContent = copyText
+        if (tier && tier.textContent !== tierText) tier.textContent = tierText
+
         if (gate.limited) {
-          malikButton.classList.remove("is-active")
-          malikButton.classList.add("is-pro")
-          malikButton.dataset.malikDailyLocked = "1"
-          malikButton.setAttribute("aria-disabled", "true")
-          malikButton.title = "Бесплатный дневной лимит исчерпан. MalikVideo временно Pro до сброса лимита."
-          if (copy) copy.textContent = "Лимит на сегодня исчерпан"
+          if (malikButton.getAttribute("aria-disabled") !== "true") malikButton.setAttribute("aria-disabled", "true")
           if (tier) {
-            tier.textContent = "Pro"
-            tier.classList.remove("is-free")
-            tier.classList.add("is-pro")
+            tier.classList.toggle("is-free", false)
+            tier.classList.toggle("is-pro", true)
           }
         } else {
-          malikButton.classList.add("is-active")
-          malikButton.classList.remove("is-pro")
-          malikButton.dataset.malikDailyLocked = "0"
-          malikButton.removeAttribute("aria-disabled")
-          malikButton.title = "1 бесплатная генерация видео в день для всех пользователей"
-          if (copy) copy.textContent = "Бесплатно · 1 видео в день"
+          if (malikButton.hasAttribute("aria-disabled")) malikButton.removeAttribute("aria-disabled")
           if (tier) {
-            tier.textContent = "Free"
-            tier.classList.add("is-free")
-            tier.classList.remove("is-pro")
+            tier.classList.toggle("is-free", true)
+            tier.classList.toggle("is-pro", false)
           }
         }
 
@@ -396,13 +398,15 @@ export function MalikVideoModelRuntime() {
 
       const generateButton = studio.querySelector<HTMLButtonElement>(".mv2__generate")
       if (generateButton) {
-        generateButton.dataset.malikDailyLocked = gate.limited ? "1" : "0"
+        const lockValue = gate.limited ? "1" : "0"
+        if (generateButton.dataset.malikDailyLocked !== lockValue) generateButton.dataset.malikDailyLocked = lockValue
         if (gate.limited) {
-          generateButton.setAttribute("aria-disabled", "true")
-          generateButton.title = "Дневной бесплатный лимит MalikVideo исчерпан. Доступ вернётся после обновления лимита."
+          if (generateButton.getAttribute("aria-disabled") !== "true") generateButton.setAttribute("aria-disabled", "true")
+          const lockedTitle = "Дневной бесплатный лимит MalikVideo исчерпан. Доступ вернётся после обновления лимита."
+          if (generateButton.title !== lockedTitle) generateButton.title = lockedTitle
         } else {
-          generateButton.removeAttribute("aria-disabled")
-          generateButton.removeAttribute("title")
+          if (generateButton.hasAttribute("aria-disabled")) generateButton.removeAttribute("aria-disabled")
+          if (generateButton.hasAttribute("title")) generateButton.removeAttribute("title")
         }
         if (generateButton.dataset.malikDailyClickGuard !== "1") {
           generateButton.dataset.malikDailyClickGuard = "1"

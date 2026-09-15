@@ -44,25 +44,38 @@ function check(name, fn) {
 
 const studio = codeOf("components/sovereign/video-generation/VideoGenerationStudio.tsx")
 const dashboard = codeOf("components/sovereign/dashboard.tsx")
+const videoRuntime = codeOf("components/sovereign/MalikVideoModelRuntime.tsx")
 const provider = codeOf("lib/media/providers/titan-video.ts")
 
 console.log("\nwhat used to make a five second clip take ten minutes")
 
-check("the video studio opens without waiting for a fragile lazy chunk", () => {
+check("the video studio shows a loading shell while its lightweight chunk arrives", () => {
   assert.match(
     dashboard,
-    /import\s+\{\s*VideoGenerationStudio\s*\}\s+from\s+["']\.\/video-generation\/VideoGenerationStudio["']/,
-    "the dashboard must bundle the video studio so selecting it cannot leave a blank screen",
+    /const\s+VideoGenerationStudio\s*=\s*dynamic\s*\(/,
+    "the video studio should stay out of the initial dashboard bundle",
   )
-  assert.ok(
-    !/const\s+VideoGenerationStudio\s*=\s*dynamic\s*\(/.test(dashboard),
-    "the video studio must not depend on an on-demand chunk without a reliable fallback",
+  assert.match(
+    dashboard,
+    /data-video-studio-loading/,
+    "opening the video studio must never show an unexplained blank screen",
   )
   assert.match(
     dashboard,
     /activeView\s*===\s*["']video-generation["'][\s\S]{0,160}return\s+<VideoGenerationStudio/,
     "the selected sidebar view must render the video studio",
   )
+})
+
+check("the video limit observer cannot trigger an infinite mutation loop", () => {
+  assert.match(videoRuntime, /copy\s*&&\s*copy\.textContent\s*!==\s*copyText/,
+    "model copy may only be rewritten when its value actually changed")
+  assert.match(videoRuntime, /tier\s*&&\s*tier\.textContent\s*!==\s*tierText/,
+    "model tier may only be rewritten when its value actually changed")
+  assert.ok(!/if\s*\(copy\)\s*copy\.textContent\s*=/.test(videoRuntime),
+    "an unconditional text rewrite would wake the document MutationObserver forever")
+  assert.ok(!/if\s*\(tier\)\s*\{\s*tier\.textContent\s*=/.test(videoRuntime),
+    "an unconditional tier rewrite would wake the document MutationObserver forever")
 })
 
 check("the studio no longer hardcodes 1080p on every render", () => {

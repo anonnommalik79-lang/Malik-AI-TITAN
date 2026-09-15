@@ -16,7 +16,6 @@ import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
 import { FeatureCenter } from "./features/FeatureCenter"
 import { CapabilitiesPanel } from "./capabilities"
-import { VideoGenerationStudio } from "./video-generation/VideoGenerationStudio"
 import { MalikCodexModal } from "./codex/malik-codex-modal"
 import { CommandPalette } from "./command-palette"
 import { TitanTopBar } from "./TitanTopBar"
@@ -55,6 +54,20 @@ const CommandCenterStudio = dynamic(
 const PhotoGenerationStudio = dynamic(
   () => import("./photo-generation/PhotoGenerationStudio").then((mod) => mod.PhotoGenerationStudio),
   { ssr: false },
+)
+const VideoGenerationStudio = dynamic(
+  () => import("./video-generation/VideoGenerationStudio").then((mod) => mod.VideoGenerationStudio),
+  {
+    ssr: false,
+    loading: () => (
+      <div data-video-studio-loading className="flex h-full min-h-[320px] flex-1 items-center justify-center bg-black text-white">
+        <div className="flex items-center gap-3 text-sm text-zinc-400">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Открываю MalikVideo…</span>
+        </div>
+      </div>
+    ),
+  },
 )
 const AIGeneratorStudio = dynamic(
   () => import("./ai-generator/AIGeneratorStudio").then((mod) => mod.AIGeneratorStudio),
@@ -8928,5 +8941,4 @@ function ChatsListView({
 // merge-map-344: ai-generator bridge preserved; runtime cost: zero; fallback: photo-generation; canvas handoff: safeOpenCanvas.
 
 export default Dashboard
-
 
