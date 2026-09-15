@@ -35,31 +35,36 @@ type ProviderRuntime = {
 }
 
 const TEXT_FALLBACK_MODELS: Partial<Record<MalikModelId, readonly MalikModelId[]>> = {
-  "malik-coder-32b": ["malik-flash-53", "malik-fast-120b", "malik-qwen-397b", "malik-20b", "malik-27b"],
-  "nvidia-nemotron-ultra-550b": ["malik-qwen-397b", "malik-fast-120b", "malik-reason-753b", "malik-flash-53"],
-  "malik-qwen-397b": ["malik-flash-53", "malik-fast-120b", "malik-20b", "malik-27b"],
-  "malik-reason-753b": ["malik-qwen-397b", "malik-flash-53", "malik-fast-120b", "malik-20b"],
-  "malik-core-300b": ["malik-qwen-397b", "malik-flash-53", "malik-fast-120b", "malik-20b"],
-  "malik-flash-53": ["malik-qwen-397b", "malik-fast-120b", "malik-20b", "malik-27b"],
-  "malik-vision-k3": ["malik-qwen-397b", "malik-flash-53", "malik-fast-120b", "malik-20b"],
-  "malik-27b": ["malik-fast-120b", "malik-qwen-397b", "malik-20b", "malik-flash-53"],
-  "malik-fast-120b": ["malik-qwen-397b", "malik-20b", "malik-27b", "malik-flash-53"],
-  "malik-20b": ["malik-fast-120b", "malik-qwen-397b", "malik-27b", "malik-flash-53"],
-  "malik-8b": ["malik-fast-120b", "malik-flash-53", "malik-20b", "malik-qwen-397b"],
-  "malik-30b": ["malik-flash-53", "malik-fast-120b", "malik-qwen-397b", "malik-20b"],
-  "malik-vision-26b": ["malik-vision-k3", "malik-qwen-397b", "malik-flash-53", "malik-fast-120b"],
-  "malik-70b": ["malik-fast-120b", "malik-20b", "malik-qwen-397b", "malik-flash-53"],
-  "malik-120b": ["malik-fast-120b", "malik-qwen-397b", "malik-flash-53", "malik-20b"],
-  "malik-agent-120b": ["malik-fast-120b", "malik-qwen-397b", "malik-flash-53", "malik-20b"],
+  "malik-coder-32b": ["malik-20b", "malik-27b", "malik-flash-53", "malik-fast-120b", "malik-qwen-397b"],
+  "nvidia-nemotron-ultra-550b": ["malik-20b", "malik-27b", "malik-flash-53", "malik-fast-120b", "malik-qwen-397b"],
+  "malik-qwen-397b": ["malik-20b", "malik-27b", "malik-flash-53", "malik-fast-120b"],
+  "malik-reason-753b": ["malik-20b", "malik-27b", "malik-qwen-397b", "malik-flash-53", "malik-fast-120b"],
+  "malik-core-300b": ["malik-20b", "malik-27b", "malik-qwen-397b", "malik-flash-53", "malik-fast-120b"],
+  "malik-flash-53": ["malik-20b", "malik-27b", "malik-qwen-397b", "malik-fast-120b"],
+  "malik-vision-k3": ["malik-27b", "malik-20b", "malik-qwen-397b", "malik-flash-53", "malik-fast-120b"],
+  "malik-27b": ["malik-20b", "malik-flash-53", "malik-qwen-397b", "malik-fast-120b"],
+  "malik-fast-120b": ["malik-20b", "malik-27b", "malik-qwen-397b", "malik-flash-53"],
+  "malik-20b": ["malik-27b", "malik-flash-53", "malik-qwen-397b", "malik-fast-120b"],
+  "malik-8b": ["malik-20b", "malik-27b", "malik-flash-53", "malik-fast-120b"],
+  "malik-30b": ["malik-20b", "malik-27b", "malik-flash-53", "malik-fast-120b"],
+  "malik-vision-26b": ["malik-27b", "malik-20b", "malik-vision-k3", "malik-flash-53"],
+  "malik-70b": ["malik-20b", "malik-27b", "malik-fast-120b", "malik-flash-53"],
+  "malik-120b": ["malik-20b", "malik-27b", "malik-fast-120b", "malik-flash-53"],
+  "malik-agent-120b": ["malik-20b", "malik-27b", "malik-fast-120b", "malik-flash-53"],
 }
 
 const GLOBAL_TEXT_FALLBACKS: readonly MalikModelId[] = [
-  "malik-fast-120b",
-  "malik-flash-53",
-  "malik-qwen-397b",
   "malik-20b",
   "malik-27b",
+  "malik-flash-53",
+  "malik-fast-120b",
+  "malik-qwen-397b",
 ]
+
+const PROVIDER_COOLDOWN_UNTIL = new Map<string, number>()
+const HARD_PROVIDER_COOLDOWN_MS = 15 * 60 * 1000
+const EMPTY_PROVIDER_COOLDOWN_MS = 2 * 60 * 1000
+const NETWORK_PROVIDER_COOLDOWN_MS = 20 * 1000
 
 export class MalikModelRouteError extends Error {
   constructor(
@@ -157,7 +162,7 @@ function providerRuntime(model: MalikModelDefinition, requestedTokens?: number, 
   if (model.provider === "nemotron-openrouter") {
     const key = env("NEMOTRON_OPENROUTER_API_KEY")
     if (!key) return missing(`${model.label} временно недоступна: NEMOTRON_OPENROUTER_API_KEY не настроен.`) as never
-    const configured = clampTokens(Number(env("NEMOTRON_MAX_OUTPUT_TOKENS") || 16_000), 16_000, 16_000)
+    const configured = clampTokens(Number(env("NEMOTRON_MAX_OUTPUT_TOKENS") || 8_000), 8_000, 16_000)
     return {
       url: `${(env("NEMOTRON_OPENROUTER_BASE_URL") || "https://openrouter.ai/api/v1").replace(/\/+$/, "")}/chat/completions`,
       key,
@@ -165,7 +170,7 @@ function providerRuntime(model: MalikModelDefinition, requestedTokens?: number, 
       stream: false,
       maxTokens: Math.max(configured, Math.min(commonTokens, 16_000)),
       temperature: typeof requestedTemperature === "number" ? requestedTemperature : Number(env("NEMOTRON_TEMPERATURE") || 0.2),
-      timeoutMs: Math.max(120_000, Number(env("NEMOTRON_TIMEOUT_MS") || 360_000)),
+      timeoutMs: Math.max(30_000, Number(env("NEMOTRON_TIMEOUT_MS") || 45_000)),
       headers: {
         "HTTP-Referer": env("NEXT_PUBLIC_APP_URL") || "https://malikaiworld.world",
         "X-Title": "MALIK AI",
@@ -200,17 +205,33 @@ function providerRuntime(model: MalikModelDefinition, requestedTokens?: number, 
   return { url: `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`, key, model: model.providerModel, stream: false, maxTokens: commonTokens, temperature: commonTemperature, timeoutMs: commonTimeout }
 }
 
-function contentFrom(payload: any) {
-  const content = payload?.choices?.[0]?.message?.content
-  if (typeof content === "string") return content.trim()
-  if (Array.isArray(content)) return content.map((part) => typeof part === "string" ? part : part?.text || "").join("").trim()
-  return ""
-}
-
 function contentPart(value: unknown) {
   if (typeof value === "string") return value
   if (!Array.isArray(value)) return ""
   return value.map((part) => typeof part === "string" ? part : part && typeof part === "object" && "text" in part ? String((part as any).text || "") : "").join("")
+}
+
+function contentFrom(payload: any) {
+  const primary = contentPart(payload?.choices?.[0]?.message?.content)
+  if (primary.trim()) return primary.trim()
+
+  // Some OpenAI-compatible gateways wrap text in a provider envelope even
+  // when the HTTP endpoint itself is OpenAI-shaped. Accept only user-visible
+  // response fields here; reasoning/thinking fields are intentionally ignored.
+  for (const candidate of [payload?.result?.response, payload?.result?.text, payload?.response, payload?.output_text]) {
+    const value = contentPart(candidate).trim()
+    if (value) return value
+  }
+  return ""
+}
+
+function visibleFinalText(value: string) {
+  return String(value || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "\n")
+    .replace(/<think>[\s\S]*$/gi, "\n")
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, "\n")
+    .replace(/<reasoning>[\s\S]*$/gi, "\n")
+    .trim()
 }
 
 async function readStream(response: Response) {
@@ -252,6 +273,42 @@ async function upstreamError(response: Response) {
   }
 }
 
+function providerHealthKey(model: MalikModelDefinition) {
+  return `${model.provider}:${model.providerModel}`
+}
+
+function remainingCooldownMs(model: MalikModelDefinition) {
+  const key = providerHealthKey(model)
+  const until = PROVIDER_COOLDOWN_UNTIL.get(key) || 0
+  if (until <= Date.now()) {
+    if (until) PROVIDER_COOLDOWN_UNTIL.delete(key)
+    return 0
+  }
+  return until - Date.now()
+}
+
+function setCooldown(model: MalikModelDefinition, durationMs: number, reason: string) {
+  const safe = Math.max(1_000, Math.min(durationMs, HARD_PROVIDER_COOLDOWN_MS))
+  PROVIDER_COOLDOWN_UNTIL.set(providerHealthKey(model), Date.now() + safe)
+  console.warn("[MALIK_MODEL_ROUTE] cooldown", JSON.stringify({ modelId: model.id, provider: model.provider, providerModel: model.providerModel, durationMs: safe, reason }))
+}
+
+function retryAfterMs(response: Response, detail: string) {
+  const raw = response.headers.get("retry-after")?.trim() || ""
+  if (raw) {
+    const seconds = Number(raw)
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1000)
+    const date = Date.parse(raw)
+    if (Number.isFinite(date)) return Math.max(0, date - Date.now())
+  }
+
+  const secondsMatch = detail.match(/try again in\s+([\d.]+)s\b/i)
+  if (secondsMatch) return Math.ceil(Number(secondsMatch[1]) * 1000)
+  const millisMatch = detail.match(/try again in\s+([\d.]+)ms\b/i)
+  if (millisMatch) return Math.ceil(Number(millisMatch[1]))
+  return 15_000
+}
+
 function fallbackModels(modelId: MalikModelId) {
   const preferred = TEXT_FALLBACK_MODELS[modelId] || []
   return [...new Set([...preferred, ...GLOBAL_TEXT_FALLBACKS])]
@@ -270,6 +327,13 @@ async function runFallback(input: {
   temperature?: number
 }): Promise<StrictMalikResult | null> {
   for (const fallbackModelId of fallbackModels(input.failedModelId)) {
+    const fallbackModel = getMalikModel(fallbackModelId)
+    const cooldownMs = remainingCooldownMs(fallbackModel)
+    if (cooldownMs > 0) {
+      console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({ selectedModelId: input.originalModelId, fallbackModelId, stage: "fallback-skip-cooldown", cooldownMs }))
+      continue
+    }
+
     try {
       const result = await runStrictMalikModel({
         modelId: fallbackModelId,
@@ -280,6 +344,10 @@ async function runFallback(input: {
         maxTokens: input.maxTokens,
         temperature: input.temperature,
       }, { allowFallback: false })
+      if (!visibleFinalText(result.content)) {
+        setCooldown(fallbackModel, EMPTY_PROVIDER_COOLDOWN_MS, "hidden-or-empty-final")
+        continue
+      }
       console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({ selectedModelId: input.originalModelId, fallbackModelId, provider: result.provider, providerModel: result.model, stage: "fallback-success" }))
       return { ...result, selectedModelId: input.originalModelId }
     } catch (error) {
@@ -294,12 +362,27 @@ function sleep(ms: number) {
 }
 
 function isRetryableStatus(status: number) {
-  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500
+  return status === 408 || status === 409 || status === 425 || status >= 500
 }
 
 function providerAttempts(model: MalikModelDefinition) {
-  if (model.provider === "nemotron-openrouter") return 3
+  // OpenRouter free models can queue for a long time. One bounded attempt is
+  // enough; fail over rather than holding the entire chat open for minutes.
+  if (model.provider === "nemotron-openrouter") return 1
   return 2
+}
+
+function providerSpecificBody(model: MalikModelDefinition, runtime: ProviderRuntime) {
+  if (model.provider === "groq" && /^openai\/gpt-oss-(?:20b|120b)$/.test(runtime.model)) {
+    return { reasoning_effort: "low", include_reasoning: false }
+  }
+  if (model.provider === "groq" && /^qwen\/qwen3\./.test(runtime.model)) {
+    return { reasoning_effort: "none" }
+  }
+  if (model.provider === "nemotron-openrouter") {
+    return { reasoning: { effort: "low", exclude: true } }
+  }
+  return {}
 }
 
 export async function runStrictMalikModel(input: {
@@ -324,6 +407,11 @@ export async function runStrictMalikModel(input: {
   const model = getMalikModel(input.modelId)
   const started = Date.now()
   try {
+    const cooldownMs = remainingCooldownMs(model)
+    if (cooldownMs > 0) {
+      throw new MalikModelRouteError("PROVIDER_COOLDOWN", `${model.label} переключается на резервный маршрут.`, 503, model.id)
+    }
+
     const runtime = providerRuntime(model, input.maxTokens, input.temperature)
     const messages = buildMessages({ model, prompt: input.prompt, systemPrompt: input.systemPrompt, history: input.history, attachments: input.attachments })
     const maxAttempts = providerAttempts(model)
@@ -347,8 +435,7 @@ export async function runStrictMalikModel(input: {
             messages,
             max_tokens: runtime.maxTokens,
             temperature: runtime.temperature,
-            ...(model.provider === "groq" && /^qwen\/qwen3\./.test(runtime.model) ? { reasoning_effort: "none" } : {}),
-            ...(model.provider === "nemotron-openrouter" ? { reasoning: { effort: "low", exclude: true } } : {}),
+            ...providerSpecificBody(model, runtime),
             stream: runtime.stream,
           }),
         }, runtime.timeoutMs)
@@ -356,9 +443,10 @@ export async function runStrictMalikModel(input: {
         lastError = error
         console.warn("[MALIK_MODEL_ROUTE] request failed", model.id, attempt, error instanceof Error ? error.message : String(error))
         if (attempt < maxAttempts) {
-          await sleep(400 * attempt)
+          await sleep(350 * attempt)
           continue
         }
+        setCooldown(model, NETWORK_PROVIDER_COOLDOWN_MS, "network-or-timeout")
         throw error
       }
 
@@ -366,10 +454,24 @@ export async function runStrictMalikModel(input: {
       if (!response.ok) {
         const detail = await upstreamError(response)
         console.error("[MALIK_MODEL_ROUTE] upstream", response.status, detail)
+
+        if (response.status === 401 || response.status === 402 || response.status === 403) {
+          setCooldown(model, HARD_PROVIDER_COOLDOWN_MS, `http-${response.status}`)
+          throw new MalikModelRouteError("SELECTED_MODEL_UNAVAILABLE", `${model.label} временно недоступна.`, response.status, model.id)
+        }
+
+        if (response.status === 429) {
+          setCooldown(model, Math.max(3_000, retryAfterMs(response, detail)), "rate-limit")
+          // Do not immediately retry the same exhausted quota. The outer router
+          // can switch to another model/provider without wasting the request.
+          throw new MalikModelRouteError("SELECTED_MODEL_RATE_LIMITED", `${model.label} временно перегружена.`, 429, model.id)
+        }
+
         if (isRetryableStatus(response.status) && attempt < maxAttempts) {
-          await sleep(response.status === 429 ? 900 * attempt : 450 * attempt)
+          await sleep(450 * attempt)
           continue
         }
+        if (response.status >= 500) setCooldown(model, NETWORK_PROVIDER_COOLDOWN_MS, `http-${response.status}`)
         throw new MalikModelRouteError("SELECTED_MODEL_UNAVAILABLE", `${model.label} временно недоступна.`, response.status, model.id)
       }
 
@@ -382,21 +484,24 @@ export async function runStrictMalikModel(input: {
         lastError = error
         console.warn("[MALIK_MODEL_ROUTE] parse failed", model.id, attempt, error instanceof Error ? error.message : String(error))
         if (attempt < maxAttempts) {
-          await sleep(400 * attempt)
+          await sleep(350 * attempt)
           continue
         }
+        setCooldown(model, NETWORK_PROVIDER_COOLDOWN_MS, "parse-error")
         throw error
       }
 
-      if (parsed.content) {
+      if (parsed.content && visibleFinalText(parsed.content)) {
+        PROVIDER_COOLDOWN_UNTIL.delete(providerHealthKey(model))
         return { content: parsed.content, provider: model.provider, model: runtime.model, selectedModelId: model.id, latencyMs: Date.now() - started, usage: parsed.usage }
       }
 
-      console.error("[MALIK_MODEL_ROUTE] empty-response", JSON.stringify({ selectedModelId: model.id, provider: model.provider, attempt }))
+      console.error("[MALIK_MODEL_ROUTE] empty-response", JSON.stringify({ selectedModelId: model.id, provider: model.provider, attempt, hadRawContent: Boolean(parsed.content) }))
       if (attempt < maxAttempts) {
-        await sleep(400 * attempt)
+        await sleep(350 * attempt)
         continue
       }
+      setCooldown(model, EMPTY_PROVIDER_COOLDOWN_MS, parsed.content ? "hidden-only-final" : "empty-response")
       throw new MalikModelRouteError("SELECTED_MODEL_UNAVAILABLE", `${model.label} временно недоступна.`, lastStatus || 503, model.id)
     }
 
