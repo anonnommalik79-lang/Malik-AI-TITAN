@@ -16,6 +16,7 @@ import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
 import { FeatureCenter } from "./features/FeatureCenter"
 import { CapabilitiesPanel } from "./capabilities"
+import { VideoGenerationStudio } from "./video-generation/VideoGenerationStudio"
 import { MalikCodexModal } from "./codex/malik-codex-modal"
 import { CommandPalette } from "./command-palette"
 import { TitanTopBar } from "./TitanTopBar"
@@ -53,10 +54,6 @@ const CommandCenterStudio = dynamic(
 )
 const PhotoGenerationStudio = dynamic(
   () => import("./photo-generation/PhotoGenerationStudio").then((mod) => mod.PhotoGenerationStudio),
-  { ssr: false },
-)
-const VideoGenerationStudio = dynamic(
-  () => import("./video-generation/VideoGenerationStudio").then((mod) => mod.VideoGenerationStudio),
   { ssr: false },
 )
 const AIGeneratorStudio = dynamic(
@@ -8931,6 +8928,5 @@ function ChatsListView({
 // merge-map-344: ai-generator bridge preserved; runtime cost: zero; fallback: photo-generation; canvas handoff: safeOpenCanvas.
 
 export default Dashboard
-
 
 

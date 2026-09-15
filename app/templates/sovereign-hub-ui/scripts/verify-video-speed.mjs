@@ -43,9 +43,27 @@ function check(name, fn) {
 }
 
 const studio = codeOf("components/sovereign/video-generation/VideoGenerationStudio.tsx")
+const dashboard = codeOf("components/sovereign/dashboard.tsx")
 const provider = codeOf("lib/media/providers/titan-video.ts")
 
 console.log("\nwhat used to make a five second clip take ten minutes")
+
+check("the video studio opens without waiting for a fragile lazy chunk", () => {
+  assert.match(
+    dashboard,
+    /import\s+\{\s*VideoGenerationStudio\s*\}\s+from\s+["']\.\/video-generation\/VideoGenerationStudio["']/,
+    "the dashboard must bundle the video studio so selecting it cannot leave a blank screen",
+  )
+  assert.ok(
+    !/const\s+VideoGenerationStudio\s*=\s*dynamic\s*\(/.test(dashboard),
+    "the video studio must not depend on an on-demand chunk without a reliable fallback",
+  )
+  assert.match(
+    dashboard,
+    /activeView\s*===\s*["']video-generation["'][\s\S]{0,160}return\s+<VideoGenerationStudio/,
+    "the selected sidebar view must render the video studio",
+  )
+})
 
 check("the studio no longer hardcodes 1080p on every render", () => {
   assert.ok(!/resolution:\s*"1080p"/.test(studio), "1080p must not be pinned in the request")
