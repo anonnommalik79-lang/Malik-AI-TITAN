@@ -14,8 +14,8 @@ export async function register() {
         const started = Date.now()
         let primaryOk = false
         let userPathOk = false
-        let primaryProvider = model.provider
-        let primaryModel = model.providerModel
+        let primaryProvider: string = model.provider
+        let primaryModel: string = model.providerModel
         let primaryError = ""
         let userPathProvider = ""
         let userPathModel = ""
