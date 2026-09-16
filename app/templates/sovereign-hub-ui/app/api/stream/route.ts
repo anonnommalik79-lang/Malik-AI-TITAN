@@ -10,6 +10,7 @@ import { runMalikCoderOrchestrator } from "@/lib/server/malik-coder-orchestrator
 import { prepareMalikAgentRuntime } from "@/lib/server/malik-agent-runtime"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
+import { appendFounderMessage } from "@/lib/server/founder-message-log"
 import { putProjectArtifact } from "@/lib/server/project-artifact-store"
 import { isFeatureDisabled, readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
 
@@ -21,6 +22,7 @@ export const dynamic = "force-dynamic"
 const MAX_CHAT_BODY_BYTES = 16 * 1024 * 1024
 const MAX_TEXT_CONTEXT_CHARS = 260_000
 const MALIK_CODER_MODEL_ID = "malik-coder-32b" as const
+const MALIK_ADMIN_COMMAND = "/malik"
 
 function wantsSse(request: Request, body: any) {
   const accept = request.headers.get("accept") || ""
@@ -112,6 +114,157 @@ function coderHistory(body: any) {
     .filter((message: any) => (message?.role === "user" || message?.role === "assistant") && typeof message?.content === "string")
     .slice(-10)
     .map((message: any) => ({ role: message.role as "user" | "assistant", content: String(message.content) }))
+}
+
+function isMalikAdminCommand(body: any) {
+  return coderPrompt(body).trim().toLowerCase() === MALIK_ADMIN_COMMAND
+}
+
+function redactCredentialLikeText(value: unknown) {
+  return String(value ?? "")
+    .replace(/\bsk-(?:proj-)?[a-z0-9_-]{12,}\b/gi, "sk-[REDACTED]")
+    .replace(/\bgh[pousr]_[a-z0-9]{20,}\b/gi, "gh_[REDACTED]")
+    .replace(/\b(Bearer\s+)[a-z0-9._~+\/-]{20,}/gi, "$1[REDACTED]")
+    .replace(/((?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|token|secret|password|пароль|секрет|ключ)\s*[:=]\s*)[^\s,;]+/gi, "$1[REDACTED]")
+}
+
+function markdownQuote(value: unknown) {
+  const clean = redactCredentialLikeText(value).trim() || "(пустой запрос)"
+  return clean.split(/\r?\n/).map((line) => `> ${line}`).join("\n")
+}
+
+function formatAlmatyDate(value: unknown) {
+  const parsed = new Date(String(value || ""))
+  if (!Number.isFinite(parsed.getTime())) return "дата неизвестна"
+  return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Asia/Almaty",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(parsed)
+}
+
+async function founderApiJson(request: Request, path: string) {
+  const headers = new Headers({ Accept: "application/json" })
+  const cookie = request.headers.get("cookie")
+  const authorization = request.headers.get("authorization")
+  if (cookie) headers.set("cookie", cookie)
+  if (authorization) headers.set("authorization", authorization)
+
+  const response = await fetch(new URL(path, request.url), {
+    method: "GET",
+    headers,
+    cache: "no-store",
+  })
+  const payload = await response.json().catch(() => ({})) as any
+  if (!response.ok || payload?.ok === false) {
+    const detail = String(payload?.error || payload?.message || response.statusText || response.status)
+    throw new Error(`${path}: ${detail}`)
+  }
+  return payload
+}
+
+async function malikAdminCommandAnswer(request: Request, body: any, ownerMode: boolean) {
+  if (!isMalikAdminCommand(body)) return null
+  if (!ownerMode) return "Команда `/malik` доступна только владельцу MALIK AI."
+
+  const [overview, activity] = await Promise.all([
+    founderApiJson(request, "/api/founder/overview"),
+    founderApiJson(request, "/api/founder/activity"),
+  ])
+
+  const users = Array.isArray(overview?.recentUsers) ? overview.recentUsers : []
+  const items = Array.isArray(activity?.items) ? activity.items : []
+  const grouped = new Map<string, any[]>()
+
+  for (const item of items) {
+    const key = String(item?.userEmail || item?.userId || "unknown").trim().toLowerCase()
+    const list = grouped.get(key) || []
+    list.push(item)
+    grouped.set(key, list)
+  }
+
+  const lines: string[] = [
+    "# MALIK · Founder Database",
+    "",
+    `**Зарегистрировано:** ${users.length}`,
+    `**Сохранённых запросов:** ${Number(activity?.total || items.length)}`,
+    `**Запросов сегодня:** ${Number(activity?.today || 0)}`,
+    `**Хранилище истории:** ${String(activity?.storage || "unknown")}`,
+    "",
+    "## Пользователи",
+    "",
+  ]
+
+  if (!users.length) lines.push("Пользователи не найдены.")
+
+  users.forEach((user: any, index: number) => {
+    const email = String(user?.email || "").trim().toLowerCase()
+    const id = String(user?.id || "").trim()
+    const name = String(user?.name || email || "Пользователь").trim()
+    const logs = grouped.get(email) || grouped.get(id.toLowerCase()) || []
+    const flags = [
+      user?.emailVerified ? "verified" : "unverified",
+      user?.activeToday ? "active today" : "",
+      user?.registeredToday ? "registered today" : "",
+    ].filter(Boolean).join(" · ")
+
+    lines.push(`${index + 1}. **${name}** — \`${email || "email unavailable"}\``)
+    lines.push(`   ID: \`${id || "unknown"}\` · запросов в журнале: **${logs.length}**${flags ? ` · ${flags}` : ""}`)
+    if (user?.createdAt) lines.push(`   Регистрация: ${formatAlmatyDate(user.createdAt)}`)
+    if (user?.lastSignInAt) lines.push(`   Последний вход: ${formatAlmatyDate(user.lastSignInAt)}`)
+    lines.push("")
+  })
+
+  lines.push("## Все запросы пользователей", "")
+
+  if (!items.length) {
+    lines.push("В серверном журнале пока нет сохранённых запросов. Новые запросы основного чата теперь сохраняются автоматически.")
+  } else {
+    const usersWithLogs = [...grouped.entries()]
+    usersWithLogs.forEach(([key, logs], groupIndex) => {
+      const first = logs[0] || {}
+      const name = String(first?.userName || key || "Пользователь")
+      const email = String(first?.userEmail || key || "")
+      lines.push(`### ${groupIndex + 1}. ${name} — \`${email}\` · ${logs.length}`)
+      lines.push("")
+      logs.forEach((item: any, index: number) => {
+        lines.push(`**${index + 1}. ${formatAlmatyDate(item?.createdAt)} · ${String(item?.source || "chat")}**`)
+        lines.push(markdownQuote(item?.userText))
+        lines.push("")
+      })
+    })
+  }
+
+  const warnings = [overview?.warning, activity?.warning].map((value) => String(value || "").trim()).filter(Boolean)
+  if (warnings.length) {
+    lines.push("---", `⚠️ ${warnings.join(" · ")}`)
+  }
+
+  lines.push("", "Credentials и похожие на секреты значения автоматически маскируются в этой выдаче.")
+  return lines.join("\n")
+}
+
+async function persistFounderChatTurn(body: any, entitlement: RequestEntitlement, answer: any) {
+  if (!entitlement.authenticated || !entitlement.userId || entitlement.userId === "guest") return
+  const userText = coderPrompt(body)
+  if (!userText || userText.trim().toLowerCase() === MALIK_ADMIN_COMMAND) return
+
+  try {
+    await appendFounderMessage({
+      userId: entitlement.userId,
+      source: "chat",
+      userText,
+      assistantText: asPlainText(answer),
+      provider: String(answer?.provider || "") || undefined,
+      model: String(answer?.model || "") || undefined,
+    })
+  } catch (error) {
+    console.warn("[FOUNDER MESSAGE LOG] chat persistence failed", error instanceof Error ? error.message : String(error))
+  }
 }
 
 function shouldRunMalikCoder(selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>) {
@@ -294,10 +447,12 @@ function liveSseResponse(
           console.warn("[MALIK_CHAT_USAGE]", error instanceof Error ? error.message : String(error))
         })
         observeComputeResult(answer)
+        const content = asPlainText(answer)
         send("content", {
           type: "content",
-          content: protectChatCodeFences(asPlainText(answer)),
+          content: protectChatCodeFences(content),
         })
+        await persistFounderChatTurn(body, entitlement, answer)
         send("done", {
           type: "done",
           provider: answer.provider,
@@ -377,6 +532,12 @@ async function handlePOST(request: Request) {
     const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
     const ownerMode = entitlement.plan === "owner"
 
+    const adminCommand = await malikAdminCommandAnswer(request, body, ownerMode)
+    if (adminCommand !== null) {
+      if (wantsSse(request, body)) return identitySseResponse(adminCommand, "malik-founder-command")
+      return textResponse(adminCommand)
+    }
+
     const identity = malikIdentityAnswer(body, ownerMode)
     if (identity) {
       if (wantsSse(request, body)) return identitySseResponse(identity, selection?.modelId || MALIK_CODER_MODEL_ID)
@@ -412,6 +573,7 @@ async function handlePOST(request: Request) {
       : await runSelectedAnswer(routedBody, selection)
     await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0)
     observeComputeResult(answer)
+    await persistFounderChatTurn(routedBody, entitlement, answer)
     const content = asPlainText(answer)
     return textResponse(content)
   } catch (error) {
@@ -439,6 +601,13 @@ export async function GET() {
       enabled: true,
       maxParallelSubagents: 4,
       durableBackground: true,
+    },
+    founderCommand: {
+      command: MALIK_ADMIN_COMMAND,
+      ownerOnly: true,
+      listsRegisteredUsers: true,
+      listsPersistedPrompts: true,
+      credentialsRedacted: true,
     },
     limits: {
       freeDailyChatRequests: 15,
