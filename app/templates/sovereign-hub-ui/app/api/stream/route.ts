@@ -402,6 +402,7 @@ async function runProjectAnswer(
     model: project.model || "Malik Project Builder",
     usedWeb: false,
     sources: [] as any[],
+    attempts: [],
     selectedModelId,
     projectArtifact: {
       id: artifact.id,
