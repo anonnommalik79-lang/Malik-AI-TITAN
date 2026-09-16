@@ -1,31 +1,25 @@
 "use client"
 
 import { Fragment, useState, type ReactNode } from "react"
-import { Check, Copy } from "lucide-react"
+import { Archive, Check, Copy, Download } from "lucide-react"
 
 /**
  * Renders an assistant answer as structured text.
  *
- * The chat used to print the model's reply into a `whitespace-pre-wrap` div, so
- * everything arrived as one unbroken wall: headings, lists and code all landed
- * as the same run of prose, and any markdown the model produced showed up as
- * literal asterisks. Two answers of identical quality read completely
- * differently depending only on this.
- *
  * Deliberately dependency-free and deliberately not `dangerouslySetInnerHTML`:
- * the text comes from a model, which means it can contain anything, so it is
- * parsed into React elements and never into HTML. A construct this parser does
- * not know stays visible as the plain text it was, which is the right failure
- * for a chat - nothing is ever silently swallowed.
+ * model output is parsed into React elements and never injected as HTML.
  */
 
 type Props = { text: string; className?: string }
 
-/** `**bold**`, `*italic*`, `` `code` ``, and [links](url), in one pass. */
+function isProjectArtifactHref(href: string) {
+  return /^\/api\/ai\/project\/artifacts\/[^/]+\/download(?:\?|$)/.test(href)
+}
+
+/** `**bold**`, `*italic*`, `code`, and safe http(s)/same-origin API links. */
 function inline(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = []
-  // Ordered by precedence: code first, so **bold** inside `code` stays literal.
-  const pattern = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\((https?:\/\/[^\s)]+)\))/g
+  const pattern = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\(((?:https?:\/\/|\/api\/)[^\s)]+)\))/g
 
   let last = 0
   let match: RegExpExecArray | null
@@ -43,9 +37,27 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
     } else if (token.startsWith("[")) {
       const label = token.slice(1, token.indexOf("]"))
       const href = match[6] || "#"
-      nodes.push(
-        <a key={key} href={href} target="_blank" rel="noreferrer noopener" className="malik-md-link">{label}</a>,
-      )
+      if (isProjectArtifactHref(href)) {
+        nodes.push(
+          <a
+            key={key}
+            href={href}
+            download
+            className="my-1 inline-flex max-w-full items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.045] px-3.5 py-2.5 text-sm font-medium text-zinc-100 no-underline transition hover:border-white/20 hover:bg-white/[0.075]"
+            aria-label={`${label}. Скачать ZIP`}
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/10 bg-black/30 text-zinc-300">
+              <Archive className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span className="min-w-0 truncate">{label}</span>
+            <Download className="ml-1 h-4 w-4 shrink-0 text-zinc-400" aria-hidden="true" />
+          </a>,
+        )
+      } else {
+        nodes.push(
+          <a key={key} href={href} target="_blank" rel="noreferrer noopener" className="malik-md-link">{label}</a>,
+        )
+      }
     } else {
       nodes.push(<em key={key} className="malik-md-em">{token.slice(1, -1)}</em>)
     }
@@ -80,7 +92,6 @@ function isTableStart(lines: string[], index: number) {
   return Boolean(lines[index]?.includes("|") && lines[index + 1]?.includes("|") && isTableSeparator(lines[index + 1]))
 }
 
-/** Groups the answer into blocks. Line-based, because that is how models write. */
 function parseBlocks(source: string): Block[] {
   const lines = String(source || "").replace(/\r\n?/g, "\n").split("\n")
   const blocks: Block[] = []
@@ -88,9 +99,6 @@ function parseBlocks(source: string): Block[] {
 
   while (index < lines.length) {
     const line = lines[index]
-
-    // Fenced code. An unterminated fence runs to the end rather than eating the
-    // rest of the answer as prose - a truncated stream is a normal event here.
     const fence = line.match(/^\s*```(\w*)\s*$/)
     if (fence) {
       const body: string[] = []
