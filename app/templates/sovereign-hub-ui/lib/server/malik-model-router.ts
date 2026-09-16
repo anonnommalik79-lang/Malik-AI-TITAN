@@ -196,7 +196,6 @@ function providerRuntime(model: MalikModelDefinition, requestedTokens?: number, 
   if (model.provider === "malik-orchestrator") {
     return missing(`${model.label} использует оркестратор и переключается на доступные provider-модели автоматически.`) as never
   }
-
   if (model.provider === "nemotron-openrouter") {
     const key = env("NEMOTRON_OPENROUTER_API_KEY")
     if (!key) return missing(`${model.label} временно недоступна: NEMOTRON_OPENROUTER_API_KEY не настроен.`) as never
@@ -215,7 +214,6 @@ function providerRuntime(model: MalikModelDefinition, requestedTokens?: number, 
       },
     }
   }
-
   if (model.provider === "modelscope") {
     const key = env("MODELSCOPE_API_KEY")
     if (!key) return missing(`${model.label} временно недоступна: ModelScope API не настроен.`) as never
@@ -268,11 +266,18 @@ function visibleFinalText(value: string) {
     .trim()
 }
 
-function looksLikeIncompleteCode(value: string) {
+function codeAnswerNeedsMore(value: string, prompt: string) {
   const text = String(value || "").trim()
   if (!text) return true
   if ((text.match(/```/g) || []).length % 2 === 1) return true
-  if (/<!doctype html|<html/i.test(text) && !/<\/html>/i.test(text)) return true
+  const asksHtml = /(?:html|index\.html)/i.test(prompt)
+  const asksCompleteImplementation = /(?:complete|full|runnable|single[- ]file|write|create|build|implement|готов|полный|целиком|сделай|напиши|создай)/i.test(prompt)
+  if (asksHtml && asksCompleteImplementation) {
+    if (!/(?:<!doctype html|<html[\s>])/i.test(text)) return true
+    if (!/<\/html>/i.test(text)) return true
+  } else if (/(?:<!doctype html|<html[\s>])/i.test(text) && !/<\/html>/i.test(text)) {
+    return true
+  }
   return false
 }
 
@@ -353,11 +358,10 @@ function retryAfterMs(response: Response, detail: string) {
 
 function fallbackModels(modelId: MalikModelId, prompt: string) {
   const preferred = TEXT_FALLBACK_MODELS[modelId] || []
-  const codeMode = isCodeRequest(prompt)
-  const global = codeMode ? CODE_FALLBACKS : GLOBAL_TEXT_FALLBACKS
+  const global = isCodeRequest(prompt) ? CODE_FALLBACKS : GLOBAL_TEXT_FALLBACKS
   return [...new Set([...global, ...preferred])]
     .filter((candidate): candidate is MalikModelId => candidate !== modelId)
-    .slice(0, codeMode ? 7 : 5)
+    .slice(0, isCodeRequest(prompt) ? 7 : 5)
 }
 
 function fallbackTokenBudget(model: MalikModelDefinition, requested: number | undefined, prompt: string) {
@@ -397,8 +401,38 @@ async function runFallback(input: {
         setCooldown(fallbackModel, EMPTY_PROVIDER_COOLDOWN_MS, "hidden-or-empty-final")
         continue
       }
-      console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({ selectedModelId: input.originalModelId, fallbackModelId, provider: result.provider, providerModel: result.model, stage: "fallback-success", codeMode: isCodeRequest(input.prompt) }))
-      return { ...result, selectedModelId: input.originalModelId }
+
+      let completed = result
+      if (isCodeRequest(input.prompt) && codeAnswerNeedsMore(result.content, input.prompt)) {
+        console.warn("[MALIK_MODEL_ROUTE] fallback-code-continuation", JSON.stringify({ selectedModelId: input.originalModelId, fallbackModelId }))
+        try {
+          const continuation = await runStrictMalikModel({
+            modelId: fallbackModelId,
+            prompt: continuationPrompt(input.prompt, result.content),
+            systemPrompt: input.systemPrompt,
+            maxTokens: fallbackTokenBudget(fallbackModel, input.maxTokens, input.prompt),
+            temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.12, 0.12),
+          }, { allowFallback: false })
+          if (visibleFinalText(continuation.content)) {
+            completed = {
+              ...result,
+              content: `${result.content.trim()}\n${continuation.content.trim()}`.trim(),
+              latencyMs: result.latencyMs + continuation.latencyMs,
+              usage: { primary: result.usage, continuation: continuation.usage },
+            }
+          }
+        } catch (error) {
+          console.warn("[MALIK_MODEL_ROUTE] fallback-code-continuation failed", fallbackModelId, error instanceof Error ? error.message : String(error))
+        }
+      }
+
+      if (isCodeRequest(input.prompt) && codeAnswerNeedsMore(completed.content, input.prompt)) {
+        console.warn("[MALIK_MODEL_ROUTE] fallback incomplete", fallbackModelId)
+        continue
+      }
+
+      console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({ selectedModelId: input.originalModelId, fallbackModelId, provider: completed.provider, providerModel: completed.model, stage: "fallback-success", codeMode: isCodeRequest(input.prompt) }))
+      return { ...completed, selectedModelId: input.originalModelId }
     } catch (error) {
       console.warn("[MALIK_MODEL_ROUTE] fallback failed", fallbackModelId, error instanceof Error ? error.message : String(error))
     }
@@ -557,7 +591,7 @@ export async function runStrictMalikModel(input: {
         PROVIDER_COOLDOWN_UNTIL.delete(providerHealthKey(model))
         const base: StrictMalikResult = { content: parsed.content, provider: model.provider, model: runtime.model, selectedModelId: model.id, latencyMs: Date.now() - started, usage: parsed.usage }
         const depth = options.continuationDepth || 0
-        const truncated = codeMode && (parsed.finishReason === "length" || looksLikeIncompleteCode(parsed.content))
+        const truncated = codeMode && (parsed.finishReason === "length" || codeAnswerNeedsMore(parsed.content, input.prompt))
         if (truncated && options.allowFallback !== false && depth < 2) {
           console.warn("[MALIK_MODEL_ROUTE] code-continuation", JSON.stringify({ selectedModelId: model.id, finishReason: parsed.finishReason || "shape", depth }))
           try {
@@ -569,16 +603,22 @@ export async function runStrictMalikModel(input: {
               temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.15, 0.15),
             }, { allowFallback: true, continuationDepth: depth + 1 })
             if (visibleFinalText(continuation.content)) {
-              return {
-                ...base,
-                content: `${parsed.content.trim()}\n${continuation.content.trim()}`.trim(),
-                latencyMs: Date.now() - started,
-                usage: { primary: parsed.usage, continuation: continuation.usage },
+              const combined = `${parsed.content.trim()}\n${continuation.content.trim()}`.trim()
+              if (!codeAnswerNeedsMore(combined, input.prompt)) {
+                return {
+                  ...base,
+                  content: combined,
+                  latencyMs: Date.now() - started,
+                  usage: { primary: parsed.usage, continuation: continuation.usage },
+                }
               }
             }
           } catch (error) {
             console.warn("[MALIK_MODEL_ROUTE] code-continuation failed", error instanceof Error ? error.message : String(error))
           }
+        }
+        if (truncated && options.allowFallback !== false) {
+          throw new MalikModelRouteError("INCOMPLETE_CODE", `${model.label} не завершила код; переключаюсь на резервную модель.`, 503, model.id)
         }
         return base
       }
