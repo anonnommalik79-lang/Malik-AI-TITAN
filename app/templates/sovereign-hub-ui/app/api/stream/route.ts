@@ -1,4 +1,5 @@
 import { asPlainText, malikGodAnswer } from "@/lib/malik-god-router"
+import { generateProjectWithBrain } from "@/lib/ai/project-builder"
 import { checkUsageLimit, recordChatUsage } from "@/lib/limits/rate-limit"
 import {
   MalikModelRouteError,
@@ -9,6 +10,7 @@ import { runMalikCoderOrchestrator } from "@/lib/server/malik-coder-orchestrator
 import { prepareMalikAgentRuntime } from "@/lib/server/malik-agent-runtime"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
+import { putProjectArtifact } from "@/lib/server/project-artifact-store"
 import { isFeatureDisabled, readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
@@ -23,6 +25,10 @@ const MALIK_CODER_MODEL_ID = "malik-coder-32b" as const
 function wantsSse(request: Request, body: any) {
   const accept = request.headers.get("accept") || ""
   return accept.includes("text/event-stream") || body?.stream === true
+}
+
+function isProjectBuildRequest(body: any) {
+  return body?.isProjectRequest === true || (body?.forceCanvas === true && body?.responseMode === "canvas")
 }
 
 /**
@@ -177,6 +183,84 @@ async function runSelectedAnswer(
   }
 }
 
+async function runProjectAnswer(
+  body: any,
+  selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>,
+  onStatus?: (text: string) => void,
+) {
+  const prompt = coderPrompt(body)
+  const selectedModelId = selection?.modelId || MALIK_CODER_MODEL_ID
+  onStatus?.("Malik AI проектирует структуру и рабочую логику")
+
+  const project = await generateProjectWithBrain({
+    prompt,
+    framework: "next",
+    language: "typescript",
+    modelId: selectedModelId,
+  })
+
+  if (project.status !== "completed" || !project.qa?.passed || !project.files.length) {
+    const detail = project.error ? ` ${project.error}` : ""
+    throw new MalikModelRouteError(
+      "PROJECT_QA_FAILED",
+      `Проект не прошёл финальную проверку, поэтому Malik AI не выдаёт сырой ZIP.${detail}`.slice(0, 1200),
+      502,
+      selectedModelId,
+    )
+  }
+
+  onStatus?.("Код прошёл QA. Malik AI упаковывает проект в ZIP")
+  const artifact = putProjectArtifact(project)
+  const downloadUrl = `/api/ai/project/artifacts/${artifact.id}/download`
+  const isRussian = /[а-яёәіңғүұқөһ]/iu.test(prompt)
+  const featureFiles = project.files
+    .filter((file) => !["package.json", "tsconfig.json", "next-env.d.ts", "next.config.ts", ".gitignore"].includes(file.path))
+    .map((file) => `\`${file.path}\``)
+    .slice(0, 8)
+    .join(", ")
+
+  const content = isRussian
+    ? [
+        "## Проект готов",
+        "",
+        `Malik AI собрал **${project.files.length} файлов**, проверил структуру и логику и только после успешного QA упаковал результат.`,
+        "",
+        `[Скачать ${artifact.filename}](${downloadUrl})`,
+        "",
+        featureFiles ? `Основные файлы: ${featureFiles}.` : "",
+        `Проверка: **пройдена**, раундов QA: **${project.qa.rounds}**.`,
+        "Запуск: `npm install` → `npm run dev`. Финальная проверка: `npm run build`.",
+      ].filter(Boolean).join("\n")
+    : [
+        "## Project ready",
+        "",
+        `Malik AI generated **${project.files.length} files**, validated the structure and implementation, and packaged the result only after QA passed.`,
+        "",
+        `[Download ${artifact.filename}](${downloadUrl})`,
+        "",
+        featureFiles ? `Main files: ${featureFiles}.` : "",
+        `QA: **passed**, rounds: **${project.qa.rounds}**.`,
+        "Run: `npm install` → `npm run dev`. Final check: `npm run build`.",
+      ].filter(Boolean).join("\n")
+
+  return {
+    content,
+    provider: project.provider || "malik-project-builder",
+    model: project.model || "Malik Project Builder",
+    usedWeb: false,
+    sources: [] as any[],
+    selectedModelId,
+    projectArtifact: {
+      id: artifact.id,
+      filename: artifact.filename,
+      downloadUrl,
+      fileCount: project.files.length,
+      expiresAt: artifact.expiresAt,
+      qaRounds: project.qa.rounds,
+    },
+  }
+}
+
 function liveSseResponse(
   body: any,
   selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>,
@@ -199,13 +283,13 @@ function liveSseResponse(
         controller.close()
       }
 
-      send("status", { type: "status", text: "Malik AI принял запрос" })
+      send("status", { type: "status", text: isProjectBuildRequest(body) ? "Malik AI начинает сборку проекта" : "Malik AI принял запрос" })
 
-      void runSelectedAnswer(
-        body,
-        selection,
-        (progress) => send("progress", { type: "progress", ...progress }),
-      ).then(async (answer) => {
+      const answerPromise = isProjectBuildRequest(body)
+        ? runProjectAnswer(body, selection, (text) => send("status", { type: "status", text }))
+        : runSelectedAnswer(body, selection, (progress) => send("progress", { type: "progress", ...progress }))
+
+      void answerPromise.then(async (answer) => {
         await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0).catch((error) => {
           console.warn("[MALIK_CHAT_USAGE]", error instanceof Error ? error.message : String(error))
         })
@@ -224,6 +308,7 @@ function liveSseResponse(
           webSourceCount: answer.sources.length,
           tookMs: Date.now() - startedAt,
           agentRuntime: "agentRuntime" in answer ? answer.agentRuntime : undefined,
+          projectArtifact: "projectArtifact" in answer ? answer.projectArtifact : undefined,
         })
         close()
       }).catch((error) => {
@@ -322,7 +407,9 @@ async function handlePOST(request: Request) {
     // User-controlled email/name fields in the request are intentionally ignored.
     const routedBody = ownerMode ? withVerifiedOwnerChatContext(body) : body
     if (wantsSse(request, body)) return liveSseResponse(routedBody, selection, entitlement)
-    const answer = await runSelectedAnswer(routedBody, selection)
+    const answer = isProjectBuildRequest(routedBody)
+      ? await runProjectAnswer(routedBody, selection)
+      : await runSelectedAnswer(routedBody, selection)
     await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0)
     observeComputeResult(answer)
     const content = asPlainText(answer)
@@ -343,6 +430,11 @@ export async function GET() {
     route: "/api/stream",
     status: isFeatureDisabled("chat") ? "paused" : "ready",
     defaultModel: "MalikCoder 1.0",
+    projectArtifacts: {
+      enabled: true,
+      qaRequired: true,
+      format: "zip",
+    },
     agentRuntime: {
       enabled: true,
       maxParallelSubagents: 4,
