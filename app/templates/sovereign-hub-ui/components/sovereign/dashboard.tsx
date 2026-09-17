@@ -1581,6 +1581,7 @@ type DashboardRouteReason =
   | "history"
   | "canvas"
   | "capability"
+  | "plugin"
   | "template"
   | "fallback"
   | "system"
@@ -6854,7 +6855,9 @@ const shouldShowMobilePreviewButton =
       return <SovereignSupportPanel onClose={closeAccountPanel} onOpenSettings={() => safeOpenView("settings")} onOpenBilling={() => safeOpenView("billing")} />;
     }
     if (activeView === "features") {
-      return <FeatureCenter />;
+      // Плагины is a view, not a route: switch in place so the composer that
+      // receives the plugin command actually mounts.
+      return <FeatureCenter onUsePlugin={() => safeOpenView("home", "plugin")} />;
     }
     if (activeView === "capabilities") {
       return (

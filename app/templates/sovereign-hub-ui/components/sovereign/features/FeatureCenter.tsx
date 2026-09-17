@@ -152,7 +152,7 @@ function PluginDetail({ plugin, onClose, onRun }: {
   )
 }
 
-export function FeatureCenter() {
+export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, plugin: MalikPlugin) => void } = {}) {
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<"All" | PluginCategory>("All")
   const [freeOnly, setFreeOnly] = useState(false)
@@ -173,8 +173,27 @@ export function FeatureCenter() {
 
   const featured = useMemo(() => MALIK_PLUGINS.filter((plugin) => plugin.featured), [])
 
+  /**
+   * "Использовать в Malik AI" has to land in the composer.
+   *
+   * Плагины is a view inside /dashboard, not a route of its own, so the old
+   * `location.assign("/dashboard")` reloaded the page the person was already
+   * on. The dashboard then restored its last view - Плагины - and the composer
+   * that was supposed to receive the command never mounted. The button looked
+   * dead on all hundred cards.
+   *
+   * The host switches the view in place instead. prefillPrompt still carries
+   * the text, so the OAuth gate inside takePrefillPrompt keeps working for the
+   * account-backed plugins. The reload stays as the fallback for any host that
+   * renders this panel without a view switcher.
+   */
   const runPlugin = (plugin: MalikPlugin) => {
     prefillPrompt(plugin.prompt)
+    setSelectedId(null)
+    if (onUsePlugin) {
+      onUsePlugin(plugin.prompt, plugin)
+      return
+    }
     window.location.assign("/dashboard")
   }
 
