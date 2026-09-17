@@ -6723,12 +6723,56 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return () => window.removeEventListener("malik-open-command-palette", open)
   }, [])
 
-  const runCommandPaletteAction = useCallback((action: PowerAction) => {
+  /**
+   * Runs a command-palette action.
+   *
+   * Sixty-two of the hundred and ten entries used to fall off the end of this
+   * function and do nothing: every prompt-chat and prompt-canvas action, the
+   * status entries, both clipboard entries and the counter reset. The palette
+   * called itself a registry of 75+ functions while more than half of it was
+   * decoration.
+   *
+   * Returns a confirmation line for the actions that finish in place - copying
+   * to the clipboard, clearing counters. The palette shows it and stays open;
+   * everything else closes the palette and moves the person somewhere.
+   */
+  const runCommandPaletteAction = useCallback((action: PowerAction): string | void => {
     const type = action.actionType
+
+    if (type === "copy-build-command" || type === "copy-guide") {
+      const text = type === "copy-build-command" ? "npm run build" : (action.prompt || action.description)
+      try {
+        void navigator.clipboard?.writeText(text)
+        return "Скопировано в буфер обмена"
+      } catch {
+        return "Браузер не дал доступ к буферу обмена"
+      }
+    }
+
+    if (type === "reset-usage") {
+      // Local display counters only. Nothing on the server is touched, and the
+      // action says so rather than implying the quota was reset.
+      let cleared = 0
+      try {
+        for (const key of Object.keys(window.localStorage)) {
+          if (!/usage|quota|counter/i.test(key)) continue
+          if (!key.toLowerCase().startsWith("malik")) continue
+          window.localStorage.removeItem(key)
+          cleared += 1
+        }
+      } catch {
+        return "Браузер не дал очистить локальное хранилище"
+      }
+      return cleared
+        ? `Локальные счётчики очищены (${cleared}). На сервере лимиты не менялись.`
+        : "Локальных счётчиков не найдено. На сервере лимиты не менялись."
+    }
+
     setCommandPaletteOpen(false)
 
     if (type.startsWith("set-mode:")) {
       setActiveAiMode(type.replace("set-mode:", "") as AiModeId)
+      safeOpenView("home", "manual")
       return
     }
     if (type === "open-canvas") {
@@ -6737,6 +6781,24 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     }
     if (type === "open-codex") {
       setCodexOpen(true)
+      return
+    }
+    if (type === "open-api-status") {
+      window.location.assign("/status")
+      return
+    }
+    if (type === "owner-tools") {
+      if (!canAccessAdmin) return
+      window.location.assign("/founder")
+      return
+    }
+    if (type === "prompt-chat" || type === "prompt-canvas") {
+      // The text is a starting instruction the person finishes - most of these
+      // need their own subject - so it is prefilled, never sent behind their
+      // back. prompt-canvas also puts the answer where it belongs.
+      if (type === "prompt-canvas") setActiveAiMode("canvas")
+      safeOpenView("home", "manual")
+      if (action.prompt) prefillPrompt(action.prompt)
       return
     }
 
@@ -6756,7 +6818,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     }
     const view = viewByAction[type]
     if (view) safeOpenView(view, "manual")
-  }, [safeOpenCanvas, safeOpenView])
+  }, [canAccessAdmin, safeOpenCanvas, safeOpenView])
 
   const hasStartedChat = messages.length > 0
   const shouldRenderEmptyHome = activeView === "home" && !hasStartedChat
