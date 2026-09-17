@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import { ArrowLeft, Code2, ExternalLink, Globe2, Loader2, Plus, Search, Trash2, Upload } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { buildTemplateSite } from "@/lib/library/site-library"
+import { OverlayPortal } from "@/components/sovereign/OverlayPortal"
 
 export type WebsiteGenerationStudioProps = {
   username?: string
@@ -383,22 +384,27 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
           ))}
         </section>
 
+        {/* Portalled: the dashboard's <main> is its own stacking context, so an
+            overlay rendered in place opened with its left quarter - the site
+            title and the start of every headline - painted over by the sidebar. */}
         {zoomed && (
-          <div className="shotLightbox" role="dialog" aria-modal="true" aria-label={zoomed.title} onClick={() => setZoomed(null)}>
-            <div className="shotLightboxBox" onClick={(event) => event.stopPropagation()}>
-              <div className="shotLightboxHead">
-                <div><b>{zoomed.title}</b><small>{zoomed.subtitle} · {zoomed.category}</small></div>
-                <div className="shotLightboxActions">
-                  <button className="secondaryButton" onClick={openTemplateInTab}>В новой вкладке</button>
-                  <button className="secondaryButton" onClick={downloadTemplate}>Скачать HTML</button>
-                  <button className="primaryButton" onClick={() => { setZoomed(null); useTemplate(zoomed) }}>Использовать стиль</button>
-                  <button className="secondaryButton" onClick={() => setZoomed(null)} aria-label="Закрыть">Закрыть ✕</button>
+          <OverlayPortal>
+            <div className="shotLightbox" role="dialog" aria-modal="true" aria-label={zoomed.title} onClick={() => setZoomed(null)}>
+              <div className="shotLightboxBox" onClick={(event) => event.stopPropagation()}>
+                <div className="shotLightboxHead">
+                  <div><b>{zoomed.title}</b><small>{zoomed.subtitle} · {zoomed.category}</small></div>
+                  <div className="shotLightboxActions">
+                    <button className="secondaryButton" onClick={openTemplateInTab}>В новой вкладке</button>
+                    <button className="secondaryButton" onClick={downloadTemplate}>Скачать HTML</button>
+                    <button className="primaryButton" onClick={() => { setZoomed(null); useTemplate(zoomed) }}>Использовать стиль</button>
+                    <button className="secondaryButton" onClick={() => setZoomed(null)} aria-label="Закрыть">Закрыть ✕</button>
+                  </div>
                 </div>
+                {/* The template, running. It used to be a photograph of one. */}
+                <iframe title={`Шаблон ${zoomed.title}`} srcDoc={zoomedHtml} sandbox="allow-scripts allow-popups" />
               </div>
-              {/* The template, running. It used to be a photograph of one. */}
-              <iframe title={`Шаблон ${zoomed.title}`} srcDoc={zoomedHtml} sandbox="allow-scripts allow-popups" />
             </div>
-          </div>
+          </OverlayPortal>
         )}
 
         {sites.length > 0 && <section className="savedSites"><h2>Мои сайты</h2>{sites.map((site) => <div className="savedRow" key={site.id}><button onClick={() => { setPrompt(site.prompt); setHtml(site.html); setError(""); setBuilder(true) }}><b>{site.title}</b><small>{new Date(site.createdAt).toLocaleString("ru-RU")}</small></button><button className="deleteSite" aria-label="Удалить сайт" onClick={() => saveSites(sites.filter((item) => item.id !== site.id))}><Trash2 /></button></div>)}</section>}

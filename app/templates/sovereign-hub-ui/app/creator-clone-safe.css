@@ -7753,9 +7753,24 @@ body,
   pointer-events: none;
 }
 
+/* No transform and no paint containment on the shell or its regions.
+ *
+ * Both were here for the compositor - translateZ(0) to force a GPU layer,
+ * `paint` to stop repaints escaping the region. Both also make the element a
+ * containing block for every `position: fixed` descendant, and an identity
+ * transform counts. Every full-screen overlay opened inside the dashboard was
+ * therefore laid out against the scrolled <main> instead of the viewport: the
+ * Сайты template viewer opened at x=312,y=893 in a 1440x950 window with
+ * «Использовать стиль» and «Закрыть» past the right edge, so the person who
+ * opened a template could not close it.
+ *
+ * `contain: layout` does the same thing as `paint` here - the spec makes a
+ * layout-contained element a containing block for absolutely and fixed
+ * positioned descendants - so the whole declaration goes. Browsers promote a
+ * scrolling region to its own layer without being told. backface-visibility
+ * stays: it creates no containing block.
+ */
 #malik-root .malik-dashboard-shell {
-  contain: layout style paint;
-  transform: translateZ(0);
   overscroll-behavior: none;
 }
 
@@ -7764,7 +7779,6 @@ body,
 #malik-root .malik-dashboard-shell header,
 #malik-root .malik-dashboard-shell nav {
   backface-visibility: hidden;
-  transform: translateZ(0);
 }
 
 #malik-root .malik-dashboard-shell .creator-space-comet,
@@ -7795,9 +7809,12 @@ body,
   will-change: transform;
 }
 
+/* Same reason: these sections are exactly what the overlays render inside, and
+   a contained one becomes their containing block. Style containment alone is
+   what is left, and it changes nothing about position. */
 .malik-fast-runtime #malik-root .malik-dashboard-shell main > section,
 .malik-fast-runtime #malik-root .malik-dashboard-shell main > div {
-  contain: layout paint style;
+  contain: style;
 }
 
 .malik-fast-runtime #malik-root .malik-dashboard-shell [class*="backdrop-blur"] {

@@ -27,6 +27,7 @@ import {
   libraryPrompt,
   type LibraryTemplate,
 } from "@/lib/library/site-library"
+import { OverlayPortal } from "@/components/sovereign/OverlayPortal"
 
 export type SiteLibraryPanelProps = {
   /** Hands a style to the site generator, which is what stops this being a museum. */
@@ -399,7 +400,11 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
         )}
       </div>
 
+      {/* Portalled for the same reason as the Сайты viewer: the dashboard's
+          <main> is a stacking context, so an overlay rendered in place opens
+          underneath the sidebar. */}
       {opened && (
+        <OverlayPortal>
         <div className="libViewer" role="dialog" aria-modal="true" aria-label={opened.name} onClick={() => setOpened(null)}>
           <div className="libViewerBox" onClick={(event) => event.stopPropagation()}>
             <div className="libViewerHead">
@@ -418,6 +423,7 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
             <iframe title={`Сайт ${opened.name}`} srcDoc={openedHtml} sandbox="allow-scripts allow-popups" />
           </div>
         </div>
+        </OverlayPortal>
       )}
 
       <LibraryCss />
