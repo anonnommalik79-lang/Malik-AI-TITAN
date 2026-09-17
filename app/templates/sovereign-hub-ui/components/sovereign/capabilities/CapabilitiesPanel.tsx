@@ -178,7 +178,7 @@ export function CapabilitiesPanel({ variant = "page", onUseCapability }: Capabil
               </p>
             </div>
             {variant === "page" ? (
-              <Link href="/dashboard" className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-sm font-black text-black transition hover:bg-cyan-50">
+              <Link href="/dashboard" className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-sm font-black text-black transition hover:bg-zinc-200">
                 Open dashboard <ExternalLink className="h-4 w-4" />
               </Link>
             ) : null}
@@ -302,7 +302,7 @@ export function CapabilitiesPanel({ variant = "page", onUseCapability }: Capabil
                 type="button"
                 onClick={executeCapability}
                 disabled={isRunning}
-                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md bg-white px-3 py-3 text-sm font-black text-black transition hover:bg-cyan-50 disabled:opacity-60"
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md bg-white px-3 py-3 text-sm font-black text-black transition hover:bg-zinc-200 disabled:opacity-60"
               >
                 {onUseCapability ? <SendHorizontal className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                 {isRunning ? "Running..." : onUseCapability ? "Send to chat" : "Run capability"}

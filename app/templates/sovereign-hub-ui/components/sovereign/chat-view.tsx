@@ -776,7 +776,7 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
 
         {realVideo ? (
           <div className="mt-3 flex flex-wrap gap-2">
-            <a href={url} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-cyan-50">Открыть результат</a>
+            <a href={url} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-zinc-200">Открыть результат</a>
             <button type="button" onClick={() => navigator.clipboard?.writeText(url)} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-black text-zinc-300 transition hover:bg-white/10">Copy link</button>
           </div>
         ) : null}

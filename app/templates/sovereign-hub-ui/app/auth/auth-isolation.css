@@ -94,20 +94,29 @@ html.malik-auth-active #malik-investor-aurora,
     display: none;
   }
 
+  /* The card is as tall as the form, not 510px.
+   *
+   * The shell is a fixed box inside a stage that is 1717x916 and scaled to the
+   * window, so 510px was 510 stage pixels at every window size - and the sign-up
+   * form needs 543. «Войти как гость» was cut in half on the first screen of the
+   * product, at every resolution, with only a thin scrollbar to say so. The
+   * stage leaves 757px below the shell's top edge, which is room enough; the
+   * max-height keeps the card inside the stage if the form ever grows. */
   #malik-root .sva-desktop-only .sva-shell {
     inset: auto;
     left: 49px;
     top: 159px;
     width: 440px;
-    height: 510px;
+    height: auto;
+    max-height: 737px;
     padding: 0;
     align-items: stretch;
   }
 
   #malik-root .sva-desktop-only .sva-card {
     width: 100%;
-    height: 100%;
-    max-height: none;
+    height: auto;
+    max-height: 737px;
     padding: 22px 28px 24px;
     border-radius: 20px;
     background: linear-gradient(168deg, #080c1c 0%, #060816 38%, #0a0618 100%) !important;

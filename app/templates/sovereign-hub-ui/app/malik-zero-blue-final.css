@@ -149,6 +149,15 @@ body::after,
   background-image: none !important;
 }
 
+/* Repainting a background obliges us to repaint the text on it.
+ *
+ * These selectors match the class NAME, so a variant counts: a button written
+ * `bg-white … text-black hover:bg-cyan-50` matches [class*="bg-cyan-"] and had
+ * its resting background forced to #1b1b1d while its text stayed black. «Run
+ * capability» and «Open dashboard» on /capabilities measured a contrast ratio
+ * of 1.22 - black on near-black. Whatever pairing the author intended is
+ * already broken by the line above, so the foreground comes with it.
+ */
 #malik-root [class*="bg-blue-"],
 #malik-root [class*="bg-cyan-"],
 #malik-root [class*="bg-sky-"],
@@ -158,6 +167,7 @@ body::after,
   background-color: #1b1b1d !important;
   background-image: none !important;
   box-shadow: none !important;
+  color: #f5f5f5 !important;
 }
 
 #malik-root [class*="from-blue-"],
@@ -317,6 +327,23 @@ body::after,
   color: inherit !important;
   text-decoration-color: currentColor !important;
 }
+
+/* A link that names its own neutral colour keeps it.
+ *
+ * The reset above exists to kill the browser's default blue, but it took every
+ * deliberate colour with it - Tailwind's utilities sit in a cascade layer and
+ * lose to an unlayered rule whatever their specificity. Every white call to
+ * action in the product was painting white text on a white pill: «Выбрать
+ * пакет» and «Получить бесплатный AI-аудит» on /business measured a contrast
+ * ratio of 1.0, «Open 60-second demo flow» on /investors and «Open MALIK AI
+ * dashboard» on /demo 1.48. The buttons were there and nobody could read them.
+ *
+ * Only neutral colours are restored. text-cyan-* is deliberately left to the
+ * reset and to NoBlueUiGuard, because that is the blue this file is here for.
+ */
+#malik-root a:any-link.text-black { color: #000000 !important; }
+#malik-root a:any-link.text-white { color: #ffffff !important; }
+#malik-root a:any-link.text-zinc-300 { color: #d4d4d8 !important; }
 
 #malik-root * {
   -webkit-tap-highlight-color: transparent !important;
