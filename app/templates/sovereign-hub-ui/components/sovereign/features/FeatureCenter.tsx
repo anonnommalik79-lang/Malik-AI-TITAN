@@ -20,7 +20,6 @@ import {
 import {
   officialPluginIconUrl,
   pluginDisplayName,
-  PLUGIN_BRAND_COUNT,
 } from "./plugin-brand-icons"
 
 const CATEGORY_LABEL: Record<PluginCategory, string> = {
@@ -180,7 +179,7 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
    * `location.assign("/dashboard")` reloaded the page the person was already
    * on. The dashboard then restored its last view - Плагины - and the composer
    * that was supposed to receive the command never mounted. The button looked
-   * dead on all hundred cards.
+   * dead on every one of the 42 cards.
    *
    * The host switches the view in place instead. prefillPrompt still carries
    * the text, so the OAuth gate inside takePrefillPrompt keeps working for the
@@ -204,12 +203,15 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
           <div className="plugin-market-title-wrap">
             <p className="plugin-market-kicker">MALIK AI · PLUGINS</p>
             <h1>Плагины</h1>
+            {/* The count comes from the registry. The line used to promise 100
+                services beside a badge reading 42 and a grid of 42 cards - three
+                numbers on one screen and only the last one true. */}
             <p className="plugin-market-subtitle">
-              100 сильных сервисов и AI‑инструментов. Официальные иконки, единый интерфейс, запуск внутри Malik AI.
+              {MALIK_PLUGINS.length} сервисов и AI‑инструментов. Официальные иконки, единый интерфейс, запуск внутри Malik AI.
             </p>
           </div>
-          <div className="plugin-market-count" aria-label={`${PLUGIN_BRAND_COUNT} плагинов`}>
-            <strong>{PLUGIN_BRAND_COUNT}</strong>
+          <div className="plugin-market-count" aria-label={`${MALIK_PLUGINS.length} плагинов`}>
+            <strong>{MALIK_PLUGINS.length}</strong>
             <span>плагинов</span>
           </div>
         </header>

@@ -2,6 +2,7 @@ import { handleGenerateRequest, generationManifest } from "@/lib/generation-rout
 import {
   acquireVideoDailySlot,
   getVideoDailyGateStatus,
+  isPhotoGenerationPaused,
   photoMaintenanceResponse,
   videoDailyLimitResponse,
 } from "@/lib/server/media-availability"
@@ -36,7 +37,7 @@ async function handlePOST(request: Request) {
   const kind = normalizeKind(body.kind)
   const prompt = String(body.prompt || body.message || "").trim()
 
-  if (kind === "photo") {
+  if (kind === "photo" && isPhotoGenerationPaused()) {
     return photoMaintenanceResponse("/api/generate")
   }
 

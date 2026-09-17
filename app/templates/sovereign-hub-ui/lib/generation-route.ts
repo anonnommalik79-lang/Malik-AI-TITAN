@@ -638,46 +638,42 @@ function buildRouteMetadata(ctx: RequestContext, body: GenerationBody, extra: Re
 }
 
 async function handleImageGeneration(ctx: RequestContext, body: GenerationBody, prompt: string) {
-  const makeImageFallback = (
-    status: "demo-ready" | "preview-ready" = "preview-ready",
-    reason?: unknown,
-    rateLimited = false,
-  ) => {
-    const url = imageFallbackUrl(prompt, body.style || body.format || "premium")
-
-    return responseJson(ctx, {
-      ok: true,
+  /**
+   * A failed image comes back as a failure.
+   *
+   * This lane used to answer every failure - rate limit, empty provider
+   * response, thrown error - with `ok: true`, `message: "Image generated."` and
+   * an SVG data URL: a gradient card with the person's own prompt written
+   * across it under the words "Malik Vision Titan". They asked for a picture,
+   * were told one had been generated, and got a caption of their request. The
+   * catch branch also charged them for it.
+   *
+   * The status stays HTTP 200 on purpose - the UI must never surface a raw 429 -
+   * but the body says plainly that nothing was generated, and carries no url for
+   * a client to mistake for a result.
+   */
+  const imageFailure = (reason?: unknown, rateLimited = false) =>
+    responseJson(ctx, {
+      ok: false,
       kind: ctx.kind,
       requestedKind: ctx.requestedKind,
-      engine: publicEngineForProvider("demo-fallback", ctx.kind).title,
-      provider: "demo-fallback",
-      model: "image-preview",
-      fallbackUsed: true,
-      fallback: true,
-      status,
-      url,
-      imageUrl: url,
-      previewUrl: url,
-      posterUrl: url,
-      mediaUrl: url,
-      outputUrl: url,
-      assetUrl: url,
-      artifact: responseArtifact(ctx.kind, prompt, undefined, url, {
-        mediaType: "image",
-        safeFallback: true,
-        rateLimited,
-      }),
+      provider: ctx.requestedProvider || "image-router",
+      fallbackUsed: false,
+      fallback: false,
+      status: "failed",
+      error: rateLimited ? "IMAGE_RATE_LIMITED" : "IMAGE_GENERATION_FAILED",
       message: rateLimited
         ? "Image provider limit reached."
-        : "Image generated.",
-      displayMessage: "Demo image preview ready.",
+        : "Image generation failed.",
+      displayMessage: rateLimited
+        ? "Лимит генерации изображений исчерпан. Попробуйте позже."
+        : "Не удалось сгенерировать изображение. Попробуйте ещё раз или измените запрос.",
       publicError: reason ? publicErrorMessage(reason) : undefined,
       diagnostics: publicDiagnostics(ctx, {
         lane: "image",
-        providerStatus: rateLimited ? "rate-limit-fallback" : "fallback",
+        providerStatus: rateLimited ? "rate-limited" : "failed",
       }),
     })
-  }
 
   const bypassLocalImageRateLimit =
     ctx.requestedProvider === "cloudflare" &&
@@ -691,7 +687,7 @@ async function handleImageGeneration(ctx: RequestContext, body: GenerationBody, 
   // Media generation must never show HTTP 429 in the product UI.
   // If live generation is limited, return a stable HTTP 200 demo preview.
   if (!rate.ok) {
-    return makeImageFallback("preview-ready", rate.message || "limit_reached", true)
+    return imageFailure(rate.message || "limit_reached", true)
   }
 
   try {
@@ -708,9 +704,9 @@ async function handleImageGeneration(ctx: RequestContext, body: GenerationBody, 
 
     const url = outputUrl(result.output)
 
-    // If provider succeeds but no media URL exists, show demo preview instead of error.
+    // A provider that answers without a media URL has not produced an image.
     if (!url) {
-      return makeImageFallback("preview-ready", "Image provider returned no image URL.", false)
+      return imageFailure("Image provider returned no image URL.", false)
     }
 
     safeIncrementUsage(ctx.entitlement.userId, ctx.entitlement.plan, "image")
@@ -738,8 +734,8 @@ async function handleImageGeneration(ctx: RequestContext, body: GenerationBody, 
       diagnostics: publicDiagnostics(ctx, { lane: "image", providerStatus: "live" }),
     })
   } catch (error) {
-    safeIncrementUsage(ctx.entitlement.userId, ctx.entitlement.plan, "image")
-    return makeImageFallback("preview-ready", error, false)
+    // No usage is spent on a request that produced nothing.
+    return imageFailure(error, false)
   }
 }
 
@@ -1103,34 +1099,23 @@ export async function handleGenerateRequest(request: Request, routeKind?: string
     return await handleTextOrArtifactGeneration(ctx, body, routedPrompt)
   } catch (error) {
     if (ctx.kind === "photo") {
-      const url = imageFallbackUrl(prompt, body.style || body.format || "premium")
-
+      // The same rule as handleImageGeneration: an image that was not made is
+      // not reported as one. This branch used to answer an unexpected crash
+      // with `ok: true`, "Image generated." and a caption of the prompt drawn
+      // on a gradient.
       return responseJson(ctx, {
-        ok: true,
+        ok: false,
         kind: ctx.kind,
         requestedKind: ctx.requestedKind,
-        engine: publicEngineForProvider("demo-fallback", ctx.kind).title,
-        provider: "demo-fallback",
-        model: "image-preview",
-        status: "preview-ready",
-        url,
-        imageUrl: url,
-        previewUrl: url,
-        posterUrl: url,
-        mediaUrl: url,
-        outputUrl: url,
-        assetUrl: url,
-        fallback: true,
-        fallbackUsed: true,
-        artifact: responseArtifact(ctx.kind, prompt, undefined, url, {
-          mediaType: "image",
-          safeFallback: true,
-          emergency: true,
-        }),
-        message: "Image generated.",
-        displayMessage: "Demo image preview ready.",
+        provider: ctx.requestedProvider || "image-router",
+        fallback: false,
+        fallbackUsed: false,
+        status: "failed",
+        error: "IMAGE_GENERATION_FAILED",
+        message: "Image generation failed.",
+        displayMessage: "Не удалось сгенерировать изображение. Попробуйте ещё раз или измените запрос.",
         publicError: publicErrorMessage(error),
-        diagnostics: publicDiagnostics(ctx, { providerStatus: "emergency-image-fallback" }),
+        diagnostics: publicDiagnostics(ctx, { providerStatus: "failed" }),
       })
     }
 

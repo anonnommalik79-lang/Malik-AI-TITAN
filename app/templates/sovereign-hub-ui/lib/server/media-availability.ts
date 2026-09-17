@@ -251,6 +251,22 @@ export async function acquireVideoDailySlot(userId = "anonymous"): Promise<Video
   })
 }
 
+/**
+ * Whether image generation is paused.
+ *
+ * The pause was hard-coded into four routes, so the whole «Генерация
+ * изображений» section answered every request with a maintenance notice and the
+ * only way to bring it back was a code change and a redeploy. It stays paused by
+ * default - that decision was deliberate - but it is a setting now:
+ * MALIK_PHOTO_MAINTENANCE=off (or 0/false/no) turns image generation back on
+ * from the Render dashboard, with no code change.
+ */
+export function isPhotoGenerationPaused() {
+  const raw = String(process.env.MALIK_PHOTO_MAINTENANCE ?? "").trim()
+  if (!raw) return true
+  return !/^(0|off|false|no)$/i.test(raw)
+}
+
 export function photoMaintenanceResponse(route = "image") {
   return Response.json({
     ok: false,
