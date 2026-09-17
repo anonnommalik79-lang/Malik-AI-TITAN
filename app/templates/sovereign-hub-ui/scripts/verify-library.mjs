@@ -156,21 +156,33 @@ check("favourites survive a reload", () => {
 
 console.log("\nthe photograph is the point on a phone")
 
-for (const [label, file] of [
-  ["library", "components/sovereign/library/SiteLibraryPanel.tsx"],
-  ["sites", "components/sovereign/website-generation/WebsiteGenerationStudio.tsx"],
-]) {
-  check(`${label}: the caption is asked for, not painted over every picture`, () => {
-    const source = codeOf(file)
-    // A phone has no hover, so the caption used to be forced on permanently and
-    // covered the bottom third of every photograph.
-    assert.match(source, /matchMedia\("\(hover: none\)"\)/)
-    assert.match(source, /is-open/)
-    const mobile = /@media\(max-width:720px\)\{([\s\S]*?)\n  `/.exec(source)?.[1] || source
-    assert.doesNotMatch(mobile, /(templateShade|libShade),\s*\.(templateOverlay|libMeta)\{opacity:1/,
-      "the caption must not be forced visible on mobile")
-  })
-}
+check("sites: the caption is asked for, not painted over every picture", () => {
+  const source = codeOf("components/sovereign/website-generation/WebsiteGenerationStudio.tsx")
+  // A phone has no hover, so the caption used to be forced on permanently and
+  // covered the bottom third of every photograph.
+  assert.match(source, /matchMedia\("\(hover: none\)"\)/)
+  assert.match(source, /is-open/)
+  const mobile = /@media\(max-width:720px\)\{([\s\S]*?)\n  `/.exec(source)?.[1] || source
+  assert.doesNotMatch(mobile, /(templateShade|templateOverlay)\{opacity:1/,
+    "the caption must not be forced visible on mobile")
+})
+
+check("library: the caption lives under the picture, not on top of it", () => {
+  // The Library was rebuilt and no longer overlays anything: the name and the
+  // direction sit in .libCardFoot below the shot, readable without a hover and
+  // without covering the template. So the guard is the shape of that layout
+  // rather than the tap-to-reveal mechanism it replaced - a caption absolutely
+  // positioned inside the picture would fail this, which is the regression the
+  // original check existed to catch.
+  const source = panel
+  assert.match(source, /<div className="libCardFoot">/, "the card still needs a caption row")
+  const shot = /<button className="libShot"[\s\S]*?<\/button>/.exec(source)?.[0] || ""
+  assert.ok(shot, "the card still needs its picture")
+  assert.doesNotMatch(shot, /libCardText|libCardFoot/, "the caption must not be rendered inside the picture")
+  const footCss = /\.libCardFoot\{([^}]*)\}/.exec(source)?.[1] || ""
+  assert.ok(footCss, "libCardFoot must be styled")
+  assert.doesNotMatch(footCss, /position:\s*absolute/, "the caption row must not be lifted onto the picture")
+})
 
 console.log("\nthe template opens, and it is a template")
 
@@ -196,13 +208,18 @@ check("every category in the Сайты gallery can build a real site", () => {
 
 check("opening a template from the Library never navigates away", () => {
   // A card action that jumped to the site generator meant a click anywhere near
-  // the bottom of a card threw the person out of the Library.
-  const actions = /<span className="libActions">([\s\S]*?)<\/span>/.exec(panel)?.[1] || ""
-  assert.ok(actions, "the card actions must still exist")
-  assert.doesNotMatch(actions, /onUseStyle/, "a card must not navigate")
-  assert.match(actions, /setOpened\(template\)/)
-  // Using a style stays available - inside the opened template, deliberately.
+  // the bottom of a card threw the person out of the Library. The rebuilt card
+  // has no actions row of its own, so the guard reads the card itself: nothing
+  // inside it may call onUseStyle, and the only things it can do are select the
+  // template and favourite it.
+  const card = /<article\s+key=\{template\.id\}[\s\S]*?<\/article>/.exec(panel)?.[0] || ""
+  assert.ok(card, "the template card must still exist")
+  assert.doesNotMatch(card, /onUseStyle/, "a card must not navigate")
+  assert.match(card, /setSelected\(template\)/, "a card opens the template, it does not leave")
+  // Using a style stays available - in the detail panel and the opened viewer,
+  // deliberately, where the person has already chosen a template.
   assert.match(panel, /libViewerActions[\s\S]{0,600}onUseStyle/)
+  assert.match(panel, /libDetailRow[\s\S]{0,600}onUseStyle/)
 })
 
 check("no page title is inside a scrolling box", () => {

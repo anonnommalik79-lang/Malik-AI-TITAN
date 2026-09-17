@@ -101,8 +101,14 @@ check("a dropped connection does not cancel the render", () => {
 })
 
 check("the result is persisted, so it is there when the person comes back", () => {
+  // Persistence moved wholly to object storage: the route uploads through
+  // lib/storage/cloud-upload and no longer writes a local asset first, which is
+  // why saveMediaAsset is gone from it. What must still be true is that the copy
+  // is durable and that the response says so when it is not.
   assert.match(route, /uploadMediaAsset/)
-  assert.match(route, /saveMediaAsset/)
+  assert.match(route, /isCloudStorageConfigured/)
+  assert.match(route, /durable\s*=\s*Boolean\(storageUrl\)/)
+  assert.match(route, /persistenceError/)
 })
 
 check("a second request cannot pile up behind the first", () => {

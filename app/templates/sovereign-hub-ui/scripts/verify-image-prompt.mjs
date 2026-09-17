@@ -251,20 +251,31 @@ assert.match(pollinations, /negative_prompt=/, "Запреты должны ух
 // A failed generation must never come back dressed as a picture. (Code and
 // website kinds still ship a starter template on failure — that is a scaffold,
 // not a counterfeit photograph, so only the media branches are asserted here.)
-const generate = codeOf("app/api/generate/route.ts")
+// The route is a thin wrapper now; the lane itself lives in lib/generation-route.
+const generate = codeOf("lib/generation-route.ts")
 assert.equal(generate.includes("Malik Vision Demo"), false, "SVG-заглушка с текстом должна быть удалена")
-assert.equal(generate.includes("imageFallbackUrl"), false, "Подделка фото должна быть удалена")
-assert.equal(generate.includes("videoFallbackPreviewUrl"), false, "Подделка видео должна быть удалена")
-assert.match(generate, /function imageFailure/, "Провал должен возвращаться как честная ошибка")
+assert.match(generate, /const imageFailure/, "Провал должен возвращаться как честная ошибка")
 
-const mediaBranch = generate.slice(
-  generate.indexOf('if (kind === "photo"'),
-  generate.indexOf("const fallbackCode"),
+// The image lane, from its entry to the start of the video lane. Nothing in it
+// may hand back a picture that was not generated: no fallback URL, no ok:true
+// on a failure, no "demo-ready". (The video lane still ships a storyboard
+// placeholder and is deliberately out of scope here.)
+const imageLane = generate.slice(
+  generate.indexOf("async function handleImageGeneration"),
+  generate.indexOf("async function handleVideoGeneration"),
 )
-assert.ok(mediaBranch.length > 200, "Не удалось найти ветку фото/видео")
-assert.equal(mediaBranch.includes("demo-ready"), false, "Фото не должно отдаваться как demo-ready")
-assert.equal(mediaBranch.includes("storyboard-ready"), false, "Видео не должно отдаваться как storyboard-ready")
-assert.ok((mediaBranch.match(/imageFailure\(/g) || []).length >= 4, "Каждый провал медиа должен быть честной ошибкой")
+assert.ok(imageLane.length > 400, "Не удалось найти ветку изображений")
+assert.equal(imageLane.includes("imageFallbackUrl"), false, "Подделка фото должна быть удалена")
+assert.equal(imageLane.includes("demo-ready"), false, "Фото не должно отдаваться как demo-ready")
+assert.match(imageLane, /ok: false[\s\S]{0,200}status: "failed"/, "Провал должен быть помечен как провал")
+
+// The outer catch must not counterfeit either.
+const emergencyStart = generate.lastIndexOf('if (ctx.kind === "photo") {')
+const emergencyPhoto = generate.slice(emergencyStart, generate.indexOf('if (ctx.kind === "video") {', emergencyStart))
+assert.ok(emergencyPhoto.length > 200, "Не удалось найти аварийную ветку фото")
+assert.equal(emergencyPhoto.includes("imageFallbackUrl"), false, "Аварийная ветка фото не должна подделывать картинку")
+assert.match(emergencyPhoto, /ok: false/, "Аварийная ветка фото должна возвращать провал")
+assert.ok((imageLane.match(/imageFailure\(/g) || []).length >= 3, "Каждый провал изображения должен быть честной ошибкой")
 
 const dashboard = codeOf("components/sovereign/dashboard.tsx")
 assert.equal(

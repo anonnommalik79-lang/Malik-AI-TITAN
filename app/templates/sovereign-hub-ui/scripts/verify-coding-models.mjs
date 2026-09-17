@@ -67,13 +67,22 @@ check("Codestral is wired in as a real provider", () => {
 
 console.log("\nwho gets asked first")
 
-check("everything that builds leads with Gemini, then Codestral", () => {
+check("everything that builds puts Gemini and Codestral ahead of Cerebras", () => {
+  // This used to require Gemini to be first and Codestral second. Two providers
+  // were put in front of them since - aihubmix and modelscope - which is a
+  // routing decision, not a defect. The rule worth keeping is the one this check
+  // was written for: Cerebras was leading on coding tasks and returning code
+  // that did not build, so it must sit behind the two that do.
   const order = providers.match(/const ROUTING_ORDER[\s\S]*?\n\}/)?.[0] || ""
   for (const task of ["code", "debug", "project"]) {
     const line = order.match(new RegExp(`${task}: \\[([^\\]]*)\\]`))?.[1] || ""
     const ids = line.split(",").map((value) => value.trim().replace(/"/g, ""))
-    assert.equal(ids[0], "gemini", `${task} must lead with Gemini`)
-    assert.equal(ids[1], "mistral", `${task} must fall to Codestral second`)
+    assert.ok(ids.length, `${task} must have a routing chain`)
+    for (const id of ["gemini", "mistral", "cerebras"]) {
+      assert.ok(ids.includes(id), `${task} must keep ${id} in the chain`)
+    }
+    assert.ok(ids.indexOf("gemini") < ids.indexOf("cerebras"), `${task} must try Gemini before Cerebras`)
+    assert.ok(ids.indexOf("mistral") < ids.indexOf("cerebras"), `${task} must try Codestral before Cerebras`)
   }
 })
 

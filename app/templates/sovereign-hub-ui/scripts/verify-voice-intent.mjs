@@ -33,6 +33,14 @@ assert.equal(intent.answersKazakhGreeting("Жақсымын, рақмет! Өз�
 let lastCall, modelReply = "Клисн — ол әйелдің есімі.", calls = 0
 const turn = load("app/api/voice/turn/route.ts", {
   "@/lib/malik-compute/runtime": { withCompute: (handler) => handler },
+  // The route reads the session to attribute a turn. Nobody is signed in here
+  // and the suite is about what the voice turn says, not who said it, so the
+  // session module answers with no user rather than pulling WorkOS - which has
+  // no CJS entry point and cannot be required from a plain Node script at all.
+  "@/lib/auth/server": { getOptionalWorkOSAuth: async () => ({ user: null, sessionId: undefined }), isWorkOSConfigured: () => false },
+  // The route records the turn for the founder console. That write goes to
+  // storage and is not what these assertions are about.
+  "@/lib/server/founder-message-log": { appendFounderMessage: async () => {} },
   "@/lib/voice/voice-llm-router": { voiceLlmAnswer: async (input) => {
     lastCall = input; calls++
     return { content: modelReply, provider: "test", model: "test-model" }

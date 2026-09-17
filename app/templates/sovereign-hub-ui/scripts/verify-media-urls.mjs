@@ -80,8 +80,16 @@ assert.equal(
 // The image route must hand back one short durable URL whenever persistence works.
 // It must not duplicate the same 2K bytes into an inlineImageUrl response field.
 const photoRoute = fs.readFileSync("lib/media/generate-photo-route.ts", "utf8")
-assert.match(photoRoute, /saveMediaAsset/, "Generated photos must be stored durably server-side")
-assert.match(photoRoute, /storageUrl \|\| assetUrl \|\| finalInlineUrl/, "Durable URLs must win over the last-resort inline result")
+// The upload moved from saveMediaAsset to uploadMediaAsset in lib/storage/
+// cloud-upload, and the delivered URL is now `storageUrl || delivered.imageUrl`.
+// The rules are the same and they are what is asserted: a generated photo is
+// pushed to object storage, the durable URL wins over whatever the provider
+// handed back, and the browser is told plainly whether the copy is durable.
+assert.match(photoRoute, /uploadMediaAsset/, "Generated photos must be stored durably server-side")
+assert.match(photoRoute, /isCloudStorageConfigured/, "The route must know whether durable storage exists")
+assert.match(photoRoute, /storageUrl \|\| delivered\.imageUrl/, "Durable URLs must win over the provider's own result")
+assert.match(photoRoute, /durable\s*=\s*Boolean\(storageUrl\)/, "The response must say whether the copy is durable")
+assert.match(photoRoute, /persistenceError/, "A failed upload must be reported, not swallowed")
 assert.equal(/inlineImageUrl\s*:/.test(photoRoute), false, "A durable image must not carry a duplicate base64 fallback")
 
 const assetStore = fs.readFileSync("lib/media/asset-store.ts", "utf8")

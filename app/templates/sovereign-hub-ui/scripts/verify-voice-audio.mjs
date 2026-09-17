@@ -7,7 +7,16 @@ import ts from "typescript"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const nativeRequire = createRequire(import.meta.url)
-const stubs = { "@/lib/malik-compute/runtime": { withCompute: (handler) => handler } }
+const stubs = {
+  "@/lib/malik-compute/runtime": { withCompute: (handler) => handler },
+  // Two packages in this graph cannot be required from a plain Node script:
+  // `server-only` throws on purpose outside a server component, and
+  // @workos-inc/authkit-nextjs publishes no CJS entry point. Neither carries
+  // behaviour this suite exercises - the voice tests do not sign anyone in - so
+  // the harness answers for them the way the bundler does.
+  "server-only": {},
+  "@workos-inc/authkit-nextjs": { withAuth: async () => ({ user: null, sessionId: undefined }) },
+}
 const cache = new Map()
 function load(file) {
   const absolute = path.resolve(root, file)
