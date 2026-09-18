@@ -300,8 +300,14 @@ async function runSelectedAnswer(
   }
 
   if (!shouldRunMalikCoder(selection)) {
+    const requestedMaxTokens = Number(executionBody?.maxTokens)
     const selectedBody = maxOutputTokens
-      ? { ...executionBody, maxTokens: Math.min(Number(executionBody?.maxTokens || maxOutputTokens), maxOutputTokens) }
+      ? {
+          ...executionBody,
+          maxTokens: Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0
+            ? Math.min(Math.floor(requestedMaxTokens), maxOutputTokens)
+            : maxOutputTokens,
+        }
       : executionBody
     const answer = await malikGodAnswer(
       selectedBody,
