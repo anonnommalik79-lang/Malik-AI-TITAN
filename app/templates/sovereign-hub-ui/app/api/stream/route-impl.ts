@@ -423,6 +423,12 @@ function liveSseResponse(
   const encoder = new TextEncoder()
   const startedAt = Date.now()
   let cancelled = false
+  let heartbeat: ReturnType<typeof setInterval> | null = null
+
+  const stopHeartbeat = () => {
+    if (heartbeat) clearInterval(heartbeat)
+    heartbeat = null
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -438,6 +444,15 @@ function liveSseResponse(
       }
 
       send("status", { type: "status", text: isProjectBuildRequest(body) ? "Malik AI начинает сборку проекта" : "Malik AI принял запрос" })
+      heartbeat = setInterval(() => {
+        send("progress", {
+          type: "progress",
+          phase: "generating",
+          text: isProjectBuildRequest(body)
+            ? "Malik AI продолжает собирать и проверять проект…"
+            : "Malik AI продолжает писать полный ответ…",
+        })
+      }, 15_000)
 
       const answerPromise = isProjectBuildRequest(body)
         ? runProjectAnswer(body, selection, (text) => send("status", { type: "status", text }))
@@ -454,6 +469,7 @@ function liveSseResponse(
           content: protectChatCodeFences(content),
         })
         await persistFounderChatTurn(body, entitlement, answer)
+        stopHeartbeat()
         send("done", {
           type: "done",
           provider: answer.provider,
@@ -468,6 +484,7 @@ function liveSseResponse(
         })
         close()
       }).catch((error) => {
+        stopHeartbeat()
         const payload = malikModelErrorPayload(error)
         send("error", {
           type: "error",
@@ -476,7 +493,10 @@ function liveSseResponse(
         close()
       })
     },
-    cancel() { cancelled = true },
+    cancel() {
+      cancelled = true
+      stopHeartbeat()
+    },
   })
 
   return new Response(stream, {
@@ -555,7 +575,7 @@ async function handlePOST(request: Request) {
         ok: false,
         error: limit.code || "DAILY_LIMIT_REACHED",
         message: entitlement.plan === "free"
-          ? "Лимит 15 запросов на сегодня исчерпан. Доступ обновится после ежедневного сброса."
+          ? "Дневной лимит текста исчерпан. Доступ обновится после ежедневного сброса."
           : limit.error || "Daily limit reached",
         remaining: 0,
         resetAt: limit.resetAt,
@@ -611,7 +631,8 @@ export async function GET() {
       credentialsRedacted: true,
     },
     limits: {
-      freeDailyChatRequests: 15,
+      freeDailyChatRequests: null,
+      freeDailyGeneratedTextTokens: 10_000,
       maxBodyMb: MAX_CHAT_BODY_BYTES / (1024 * 1024),
       maxTextContextChars: MAX_TEXT_CONTEXT_CHARS,
     },
