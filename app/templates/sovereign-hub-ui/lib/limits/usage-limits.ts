@@ -2,7 +2,7 @@ import type { UserTier } from "./user-plan"
 
 export type LimitKind = "chat" | "upload" | "video"
 
-// Daily text usage is governed by the server-side generated-token quota.
+// Daily text usage is governed by the server-side 10K generated-token quota.
 // Keep this legacy request-count ceiling out of the way; per-minute abuse
 // protection in rate-limit.ts remains active.
 export const TIER_LIMITS: Record<UserTier, Record<LimitKind, number> & { maxPromptChars: number }> = {
