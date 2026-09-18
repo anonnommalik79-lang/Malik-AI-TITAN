@@ -105,7 +105,9 @@ export async function runMalikCoderOrchestrator(input: Input): Promise<Result> {
   const routes = candidates(code, totalBudget)
 
   let plan = ""
-  if (complex) {
+  // Small specialist/subagent budgets should go straight to the answer instead
+  // of spending most of their allowance on an internal planning call.
+  if (complex && totalBudget >= 2_000) {
     const p = await firstHealthy({ list: [{ id: "malik-fast-120b", tokens: 700 }, { id: "malik-flash-53", tokens: 700 }, { id: "malik-qwen-397b", tokens: 700 }], prompt: `Make a compact implementation checklist for this exact request. Do not answer it yet.\n\n${prompt}`, system, history, temperature: 0.05, stages })
     plan = p?.content || ""
   }
