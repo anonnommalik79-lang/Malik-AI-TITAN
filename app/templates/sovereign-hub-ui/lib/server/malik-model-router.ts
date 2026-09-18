@@ -242,7 +242,7 @@ function providerRuntime(model: MalikModelDefinition, requestedTokens?: number, 
     return { url: `${(env("GROQ_BASE_URL") || "https://api.groq.com/openai/v1").replace(/\/+$/, "")}/chat/completions`, key, model: model.providerModel, stream: false, maxTokens: commonTokens, temperature: commonTemperature, timeoutMs: commonTimeout }
   }
 
-  const key = env("CLOUDFLARE_API_TOKEN") || env("CF_API_TOKEN")
+  const key = env("CLOUDFLARE_AUTH_TOKEN") || env("CLOUDFLARE_API_TOKEN") || env("CF_API_TOKEN")
   const accountId = env("CLOUDFLARE_ACCOUNT_ID") || env("CF_ACCOUNT_ID")
   if (!key || !accountId) return missing(`${model.label} временно недоступна: серверный провайдер не настроен.`) as never
   return { url: `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`, key, model: model.providerModel, stream: false, maxTokens: commonTokens, temperature: commonTemperature, timeoutMs: commonTimeout }
