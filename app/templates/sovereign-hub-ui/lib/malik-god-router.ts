@@ -956,8 +956,13 @@ export async function malikGodAnswer(
   }
 
   const usedWeb = shouldUseWeb(prompt, body)
+  const requestedMaxTokens = Number(body?.maxTokens)
+  const maxTokens = Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0
+    ? Math.floor(requestedMaxTokens)
+    : undefined
   const cache = usedWeb ? getCache(prompt) : null
-  if (cache) {
+  const cacheFitsBudget = !cache || !maxTokens || Math.ceil(String(cache.content || "").length / 3) <= maxTokens
+  if (cache && cacheFitsBudget) {
     cache.sources.forEach((source) => emitResearch?.({
       kind: "source",
       text: `Источник из проверенного кэша · ${source.domain}`,
@@ -972,10 +977,6 @@ export async function malikGodAnswer(
   }
 
   const sources = usedWeb ? await gatherSources(prompt, emitResearch) : []
-  const requestedMaxTokens = Number(body?.maxTokens)
-  const maxTokens = Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0
-    ? Math.floor(requestedMaxTokens)
-    : undefined
   const result = await callProviderChain(prompt, usedWeb, sources, maxTokens)
 
   let answer: GodAnswer
