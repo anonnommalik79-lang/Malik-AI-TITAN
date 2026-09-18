@@ -12,6 +12,8 @@ const quota = read("lib/server/daily-text-token-quota.ts")
 const envExample = read(".env.example")
 const render = read("../../../render.yaml")
 const agent = read("lib/server/malik-agent-runtime.ts")
+const godRouter = read("lib/malik-god-router.ts")
+const jsonChatRoute = read("app/api/ai/chat/route.ts")
 
 console.log("\nlong-code runtime invariants")
 
@@ -36,6 +38,10 @@ assert.match(stream, /setInterval\(\(\) => \{/)
 assert.match(agent, /function preservePrompt/)
 assert.match(agent, /const prompt = preservePrompt\(body\?\.originalQuestion \|\| originalPrompt\(body\)\)/)
 assert.ok(!agent.includes("clean(body?.originalQuestion || originalPrompt(body), 18000)"), "agent runtime must preserve multiline code prompts")
+assert.match(godRouter, /callProviderChain\(prompt, usedWeb, sources, maxTokens\)/)
+assert.match(godRouter, /cacheFitsBudget/)
+assert.match(jsonChatRoute, /getDailyTextTokenQuota/)
+assert.match(jsonChatRoute, /quotaBoundBody/)
 
 for (const [name, value] of [
   ["FREE_DAILY_TEXT_TOKEN_LIMIT", "10000"],
