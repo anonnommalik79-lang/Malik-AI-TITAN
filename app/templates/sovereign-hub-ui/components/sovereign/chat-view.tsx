@@ -6,7 +6,6 @@ import { MalikMarkdown } from "./MalikMarkdown"
 import {
   BookOpen,
   Bot,
-  Camera,
   Check,
   ChevronRight,
   Code,
@@ -23,7 +22,6 @@ import {
   Mic,
   Paperclip,
   Plus,
-  Plug,
   RefreshCw,
   Search,
   SendHorizontal,
@@ -98,6 +96,7 @@ interface Message {
   generatedMedia?: InlineMediaGeneration
   imageConfirmation?: ImageGenerationConfirmation
   actionPlan?: MalikActionPlan
+  attachments?: ChatAttachment[]
 }
 
 type ImageGenerationConfirmation = {
@@ -157,7 +156,8 @@ interface ChatViewProps {
   projectDescription?: string
 }
 
-const MAX_FILE_SIZE = 12 * 1024 * 1024
+const MAX_BINARY_FILE_SIZE = 10 * 1024 * 1024
+const MAX_TEXT_FILE_SIZE = 12 * 1024 * 1024
 const MAX_INLINE_TEXT_CHARS = 600_000
 const TEXT_UPLOAD_EXTENSIONS = new Set([
   "txt", "md", "mdx", "csv", "tsv", "json", "jsonl", "yaml", "yml", "xml", "html", "htm", "css",
@@ -187,12 +187,14 @@ function inferUploadMime(file: File) {
 }
 
 async function fileToAttachment(file: File): Promise<ChatAttachment> {
-  if (file.size > MAX_FILE_SIZE) throw new Error(`Файл слишком большой: ${file.name}. Лимит 12MB для вложения в чат.`)
   const mime = inferUploadMime(file)
   const ext = uploadExtension(file.name)
   const textLike = mime.startsWith("text/") || mime === "application/json" || TEXT_UPLOAD_EXTENSIONS.has(ext)
 
   if (textLike) {
+    if (file.size > MAX_TEXT_FILE_SIZE) {
+      throw new Error(`Файл слишком большой: ${file.name}. Лимит 12MB для текстового файла.`)
+    }
     const text = (await file.text()).slice(0, MAX_INLINE_TEXT_CHARS)
     return {
       id: crypto.randomUUID(),
@@ -202,6 +204,10 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
       kind: CODE_UPLOAD_EXTENSIONS.has(ext) ? "code" : "file",
       text,
     }
+  }
+
+  if (file.size > MAX_BINARY_FILE_SIZE) {
+    throw new Error(`Файл слишком большой: ${file.name}. Лимит 10MB для бинарного вложения в чат.`)
   }
 
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -218,7 +224,15 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
       : mime.startsWith("audio/")
         ? "audio"
         : "file"
-  return { id: crypto.randomUUID(), name: file.name, mime, size: file.size, kind, base64 }
+  return {
+    id: crypto.randomUUID(),
+    name: file.name,
+    mime,
+    size: file.size,
+    kind,
+    base64,
+    url: kind === "image" || kind === "video" ? URL.createObjectURL(file) : undefined,
+  }
 }
 
 
@@ -248,6 +262,74 @@ function AttachmentPill({ item, onRemove }: { item: ChatAttachment; onRemove: ()
       <button type="button" onClick={onRemove} className="ml-1 rounded-md p-1 text-slate-500 hover:bg-white/10 hover:text-white">
         <X className="h-3.5 w-3.5" />
       </button>
+    </div>
+  )
+}
+
+function UserAttachmentPreview({ item }: { item: ChatAttachment }) {
+  const [previewFailed, setPreviewFailed] = useState(false)
+  const src = typeof item.url === "string" && /^(?:blob:|data:|https?:)/i.test(item.url) ? item.url : ""
+  const formatBytes = (bytes: number) => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return ""
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`
+  }
+
+  if (item.kind === "image" && src && !previewFailed) {
+    return (
+      <figure className="malik-user-attachment malik-user-attachment--image overflow-hidden rounded-[18px] border border-white/10 bg-black/30">
+        <img
+          src={src}
+          alt={item.name || "Прикреплённое изображение"}
+          className="block max-h-[360px] w-full object-cover"
+          loading="eager"
+          onError={() => setPreviewFailed(true)}
+        />
+        <figcaption className="truncate border-t border-white/[0.07] px-3 py-2 text-[11px] leading-4 text-zinc-400">
+          {item.name}
+        </figcaption>
+      </figure>
+    )
+  }
+
+  if (item.kind === "video" && src && !previewFailed) {
+    return (
+      <figure className="malik-user-attachment malik-user-attachment--video overflow-hidden rounded-[18px] border border-white/10 bg-black/40">
+        <video
+          src={src}
+          className="block max-h-[360px] w-full bg-black object-contain"
+          controls
+          preload="metadata"
+          onError={() => setPreviewFailed(true)}
+        />
+        <figcaption className="truncate border-t border-white/[0.07] px-3 py-2 text-[11px] leading-4 text-zinc-400">
+          {item.name}
+        </figcaption>
+      </figure>
+    )
+  }
+
+  const Icon = item.kind === "audio" ? Volume2 : item.kind === "code" ? Code : FileText
+  return (
+    <div className="malik-user-attachment flex min-w-0 items-center gap-3 rounded-[16px] border border-white/10 bg-black/20 px-3 py-3">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/[0.08] text-zinc-300">
+        <Icon className="h-4.5 w-4.5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <strong className="block truncate text-xs font-medium text-zinc-100">{item.name || "Файл"}</strong>
+        <small className="mt-0.5 block text-[10px] uppercase tracking-[0.08em] text-zinc-500">
+          {(item.mime || item.kind).split("/").pop()} {formatBytes(item.size)}
+        </small>
+      </span>
+    </div>
+  )
+}
+
+function UserAttachmentGallery({ items }: { items: ChatAttachment[] }) {
+  if (!items.length) return null
+  return (
+    <div className={cn("mb-2.5 grid gap-2", items.length > 1 && "sm:grid-cols-2")} aria-label="Прикреплённые файлы">
+      {items.map((item) => <UserAttachmentPreview key={item.id} item={item} />)}
     </div>
   )
 }
@@ -887,7 +969,7 @@ function MessageBubble({
           <svg viewBox="0 0 44 44" className="h-full w-full" aria-hidden="true"><rect width="44" height="44" rx="12" fill="white" /><path d="M9 29 L22 15 L22 29 Z" fill="#03040a" /><path d="M24 15 H38 L24 29 Z" fill="#03040a" /></svg>
         </div>
       )}
-      <div className={cn("malik-message-stack min-w-0 overflow-hidden", isUser ? "order-first max-w-[80%]" : "w-full")}>
+      <div className={cn("malik-message-stack min-w-0 overflow-hidden", isUser ? "order-first max-w-[92%] sm:max-w-[80%]" : "w-full")}>
         <div className={cn(
           "malik-message-card break-words text-[15px] leading-7 sm:text-[15.5px]",
           message.generatedMedia || message.imageConfirmation || isThinking
@@ -908,6 +990,7 @@ function MessageBubble({
             </div>
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
+          {isUser && message.attachments?.length ? <UserAttachmentGallery items={message.attachments} /> : null}
           {message.generatedMedia ? (
             <GeminiMediaGenerationCard media={message.generatedMedia} />
           ) : message.imageConfirmation ? (
@@ -996,10 +1079,8 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const [isRecording, setIsRecording] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const cameraInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
-  const audioInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
   const attachButtonRef = useRef<HTMLButtonElement>(null)
   const attachMenuRef = useRef<HTMLDivElement>(null)
@@ -1068,12 +1149,20 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     if (!files?.length) return
     setLocalError(null)
     try {
-      const parsed = await Promise.all(Array.from(files).slice(0, 6).map(fileToAttachment))
+      const parsed = await Promise.all(Array.from(files).slice(0, 8).map(fileToAttachment))
       setAttachments((previous) => [...previous, ...parsed].slice(0, 8))
       setShowAttachMenu(false)
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "Ошибка файла")
     }
+  }
+
+  const removeComposerAttachment = (id: string) => {
+    setAttachments((previous) => {
+      const target = previous.find((item) => item.id === id)
+      if (target?.url?.startsWith("blob:")) URL.revokeObjectURL(target.url)
+      return previous.filter((item) => item.id !== id)
+    })
   }
 
   const addCodeAttachment = () => {
@@ -1196,31 +1285,21 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
 
   const attachItems = useMemo(() => [
     {
-      label: "Камера",
-      icon: Camera,
-      action: () => { setShowAttachMenu(false); cameraInputRef.current?.click() },
-    },
-    {
-      label: "Фото",
+      label: "Загрузить изображения",
       icon: ImageIcon,
       action: () => { setShowAttachMenu(false); imageInputRef.current?.click() },
     },
     {
-      label: "Видео",
+      label: "Загрузить видео",
       icon: Video,
       action: () => { setShowAttachMenu(false); videoInputRef.current?.click() },
     },
     {
-      label: "Файлы",
+      label: "Загрузить файлы",
       icon: Paperclip,
       action: () => { setShowAttachMenu(false); fileInputRef.current?.click() },
     },
-    {
-      label: "Плагины",
-      icon: Plug,
-      action: () => { setShowAttachMenu(false); onOpenPlugins?.() },
-    },
-  ], [onOpenPlugins])
+  ], [])
 
   return (
     <div data-malik-chat-fullwidth="1" className="malik-chat-fullwidth relative z-[2] flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-transparent text-white">
@@ -1302,7 +1381,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       <div data-composer className="malik-composer-dock relative z-20 w-full shrink-0 bg-transparent px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 md:px-8 md:pb-6 lg:px-10">
         <div className="malik-composer-panel chat-composer relative mx-auto w-full max-w-[768px] rounded-[1.55rem] border border-white/10 bg-[#111112] p-3 sm:p-4">
           {localError && <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">{localError}</div>}
-          {attachments.length > 0 && <div className="mb-3 flex flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => setAttachments((previous) => previous.filter((item) => item.id !== attachment.id))} />)}</div>}
+          {attachments.length > 0 && <div className="mb-3 flex flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => removeComposerAttachment(attachment.id)} />)}</div>}
           <div className="malik-inline-composer">
             <button ref={attachButtonRef} type="button" onClick={() => setShowAttachMenu((value) => !value)} className={cn("malik-inline-action", showAttachMenu && "is-active")} aria-label="Добавить" aria-haspopup="menu" aria-expanded={showAttachMenu} aria-controls="malik-attachment-menu">
               <Plus className="h-5 w-5" />
@@ -1390,11 +1469,16 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
         <p className="mt-2 hidden text-center text-xs text-slate-600 sm:block">Malik AI может ошибаться. Проверяйте важную информацию.</p>
       </div>
 
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => handleFiles(event.target.files)} />
-      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(event) => handleFiles(event.target.files)} />
       <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => handleFiles(event.target.files)} />
-      <input ref={audioInputRef} type="file" accept="audio/*" multiple className="hidden" onChange={(event) => handleFiles(event.target.files)} />
       <input ref={videoInputRef} type="file" accept="video/*" multiple className="hidden" onChange={(event) => handleFiles(event.target.files)} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.mdx,.csv,.tsv,.json,.jsonl,.yaml,.yml,.xml,.html,.htm,.css,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.kt,.go,.rs,.rb,.php,.swift,.c,.h,.cpp,.hpp,.cs,.sql,.sh,.bash,.zsh,.ps1,.toml,.ini,.log"
+        className="hidden"
+        onChange={(event) => handleFiles(event.target.files)}
+      />
 
       {codeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
