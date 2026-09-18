@@ -116,7 +116,7 @@ export function ImageGenerationMotion({
     }
     tick()
     if (imageLoaded || actuallyFailed) return
-    const timer = window.setInterval(tick, 100)
+    const timer = window.setInterval(tick, 1000)
     return () => window.clearInterval(timer)
   }, [startedAt, imageLoaded, actuallyFailed])
 
@@ -414,7 +414,7 @@ export function ImageGenerationMotion({
         .malik-message-row:has(.malik-photo-final[data-malik-image-state="generating"]) .malik-message-actions,.malik-message-row:has(.malik-photo-final[data-malik-image-state="failed"]) .malik-message-actions{display:none!important}
         .malik-message-row:has(.malik-photo-final[data-malik-image-state="ready"]) .malik-message-actions{display:flex!important;align-items:center!important;gap:8px!important;min-height:30px!important}
         .malik-message-row:has(.malik-photo-final[data-malik-image-state="ready"]) .malik-message-actions>button{width:28px!important;height:28px!important;min-width:28px!important;min-height:28px!important;padding:0!important;display:grid!important;place-items:center!important;border-radius:8px!important;line-height:1!important}
-        @keyframes malik-photo-final-title{0%{background-position:-220% 50%}100%{background-position:220% 50%}}@keyframes malik-photo-final-spark{0%,100%{opacity:.42;transform:scale(.96)}50%{opacity:1;transform:scale(1.06)}}@keyframes malik-photo-final-pulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.16)}70%{box-shadow:0 0 0 6px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}@keyframes malik-photo-final-sweep{0%{transform:translateX(-120%)}100%{transform:translateX(120%)}}@keyframes malik-photo-final-result{from{opacity:0;transform:scale(1.012);filter:blur(3px)}to{opacity:1;transform:scale(1);filter:blur(0)}}
+        @keyframes malik-photo-final-title{0%{background-position:-220% 50%}100%{background-position:220% 50%}}@keyframes malik-photo-final-spark{0%,100%{opacity:.42;transform:scale(.96)}50%{opacity:1;transform:scale(1.06)}}@keyframes malik-photo-final-pulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.16)}70%{box-shadow:0 0 0 6px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}@keyframes malik-photo-final-sweep{0%{transform:translateX(-120%)}100%{transform:translateX(120%)}}@keyframes malik-photo-final-result{from{opacity:0;transform:scale(1.012)}to{opacity:1;transform:scale(1)}}
         @media(max-width:640px){.malik-photo-final{width:min(92vw,390px)!important;max-width:390px!important;gap:11px!important;margin-left:auto!important;margin-right:auto!important}.malik-photo-final__title-row{gap:8px!important;transform:translateX(-10px)!important}.malik-photo-final__title{font-size:22px!important}.malik-photo-final__steps{width:min(100%,286px)!important}.malik-photo-final__frame{border-radius:24px!important;box-shadow:12px 12px 0 -8px #080809,14px 14px 0 -7px rgba(255,255,255,.025)!important}.malik-photo-final__backdrop,.malik-photo-final__canvas,.malik-photo-final__result{border-radius:23px!important}}
       `}</style>
     </section>
