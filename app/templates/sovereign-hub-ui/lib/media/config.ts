@@ -74,7 +74,7 @@ export function imageGodOrder(): string[] {
 }
 
 export function videoGodOrder(): string[] {
-  const raw = process.env.VIDEO_GOD_PROVIDER_ORDER || process.env.VIDEO_PROVIDER_ORDER || "h3,dashscope,pollo,runway,fal,luma,veo"
+  const raw = process.env.VIDEO_GOD_PROVIDER_ORDER || process.env.VIDEO_PROVIDER_ORDER || "novai,magichour,pixazo,cliptaps,h3,dashscope,pollo,runway,fal,luma,veo"
   const order = raw.split(",").map((s) => s.trim()).filter(Boolean)
 
   // Preserve the old production behavior for deployments that have not opted
