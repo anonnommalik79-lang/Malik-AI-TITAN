@@ -61,6 +61,8 @@ services:
         sync: false
       - key: GROQ_BASE_URL
         value: https://api.groq.com/openai/v1
+      - key: GROQ_TPM_BUDGET
+        value: "8000"
       - key: CLOUDFLARE_API_TOKEN
         sync: false
       - key: CLOUDFLARE_ACCOUNT_ID
@@ -81,10 +83,18 @@ services:
         value: "github,openrouter,deepseek"
       - key: MALIK_GOD_SHOW_PROVIDER
         value: "false"
+      - key: FREE_DAILY_TEXT_TOKEN_LIMIT
+        value: "10000"
+      - key: MAX_OUTPUT_TOKENS
+        value: "4000"
+      - key: MAX_CODE_OUTPUT_TOKENS
+        value: "10000"
+      - key: MALIK_MODEL_PROVIDER_TIMEOUT_MS
+        value: "360000"
       - key: MALIK_GOD_MAX_OUTPUT_TOKENS
-        value: "2200"
+        value: "4000"
       - key: MALIK_GOD_PROVIDER_TIMEOUT_MS
-        value: "18000"
+        value: "30000"
       - key: WORKOS_CLIENT_ID
         sync: false
       - key: WORKOS_API_KEY
