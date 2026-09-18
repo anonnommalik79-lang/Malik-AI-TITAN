@@ -31,6 +31,7 @@ assert.match(router, /runHiddenGeminiMultimodal/, "router hardening must preserv
 assert.ok(!router.includes("Math.min(requested, 650)"), "Qwen must not be hard-capped to 650 output tokens")
 assert.ok(!router.includes("Math.min(requested, 1_600)"), "AIHubMix must not be hard-capped to 1600 output tokens")
 assert.ok(!router.includes("Math.min(requested, 2_000)"), "large-code routes must not be hard-capped to 2000 output tokens")
+assert.match(router, /Math\.min\(configured, commonTokens\)/, "Nemotron must respect caller quota rather than force its configured maximum")
 
 assert.match(stream, /getDailyTextTokenQuota/)
 assert.match(stream, /multimodal-router/, "long-code fixes must preserve unified attachment routing")
