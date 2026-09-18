@@ -10,7 +10,7 @@ const router = read("lib/server/malik-model-router.ts")
 const stream = read("app/api/stream/route-impl.ts")
 const quota = read("lib/server/daily-text-token-quota.ts")
 const envExample = read(".env.example")
-const render = read("../../../../render.yaml")
+const render = read("../../../render.yaml")\nconst agent = read("lib/server/malik-agent-runtime.ts")
 
 console.log("\nlong-code runtime invariants")
 
