@@ -5,7 +5,6 @@ import {
   ArrowUp,
   BookOpen,
   Brain,
-  Code2,
   Film,
   Github,
   Globe,
@@ -30,10 +29,27 @@ import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
-const MAX_HOME_ATTACHMENTS = 4
+const MAX_HOME_ATTACHMENTS = 8
 const MAX_HOME_VIDEO_SECONDS = 30
-const MAX_HOME_IMAGE_BYTES = 10 * 1024 * 1024
-const MAX_HOME_VIDEO_BYTES = 50 * 1024 * 1024
+const MAX_HOME_BINARY_BYTES = 10 * 1024 * 1024
+const MAX_HOME_TEXT_BYTES = 12 * 1024 * 1024
+const MAX_HOME_TEXT_CHARS = 600_000
+
+const HOME_TEXT_EXTENSIONS = new Set([
+  "txt", "md", "mdx", "csv", "tsv", "json", "jsonl", "yaml", "yml", "xml", "html", "htm", "css",
+  "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "java", "kt", "go", "rs", "rb", "php", "swift",
+  "c", "h", "cpp", "hpp", "cs", "sql", "sh", "bash", "zsh", "ps1", "toml", "ini", "env", "log",
+])
+const HOME_CODE_EXTENSIONS = new Set([
+  "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "java", "kt", "go", "rs", "rb", "php", "swift",
+  "c", "h", "cpp", "hpp", "cs", "sql", "sh", "bash", "zsh", "ps1", "html", "css",
+])
+const HOME_FILE_ACCEPT = [
+  ".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".md", ".mdx", ".csv", ".tsv", ".json", ".jsonl",
+  ".yaml", ".yml", ".xml", ".html", ".htm", ".css", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
+  ".py", ".java", ".kt", ".go", ".rs", ".rb", ".php", ".swift", ".c", ".h", ".cpp", ".hpp", ".cs",
+  ".sql", ".sh", ".bash", ".zsh", ".ps1", ".toml", ".ini", ".log",
+].join(",")
 
 const SOURCE_PLUGINS: Array<{
   id: string
@@ -133,18 +149,46 @@ function videoDurationSeconds(file: File) {
   })
 }
 
-async function mediaFileToAttachment(file: File): Promise<ChatAttachment> {
-  const mime = file.type || "application/octet-stream"
+function homeUploadExtension(name: string) {
+  return name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || ""
+}
+
+function homeUploadMime(file: File) {
+  if (file.type) return file.type
+  const ext = homeUploadExtension(file.name)
+  if (ext === "pdf") return "application/pdf"
+  if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  if (ext === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  if (ext === "pptx") return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  if (ext === "json") return "application/json"
+  if (ext === "csv") return "text/csv"
+  if (HOME_TEXT_EXTENSIONS.has(ext)) return "text/plain"
+  return "application/octet-stream"
+}
+
+async function homeFileToAttachment(file: File): Promise<ChatAttachment> {
+  const mime = homeUploadMime(file)
+  const ext = homeUploadExtension(file.name)
   const isImage = mime.startsWith("image/")
   const isVideo = mime.startsWith("video/")
+  const isText = mime.startsWith("text/") || mime === "application/json" || HOME_TEXT_EXTENSIONS.has(ext)
 
-  if (!isImage && !isVideo) {
-    throw new Error(`${file.name}: выбери фото или видео.`)
+  if (isText) {
+    if (file.size > MAX_HOME_TEXT_BYTES) {
+      throw new Error(`${file.name}: слишком большой текстовый файл. Максимум 12 MB.`)
+    }
+    return {
+      id: attachmentId(),
+      name: file.name || "document.txt",
+      mime,
+      size: file.size,
+      kind: HOME_CODE_EXTENSIONS.has(ext) ? "code" : "file",
+      text: (await file.text()).slice(0, MAX_HOME_TEXT_CHARS),
+    }
   }
 
-  const sizeLimit = isVideo ? MAX_HOME_VIDEO_BYTES : MAX_HOME_IMAGE_BYTES
-  if (file.size > sizeLimit) {
-    throw new Error(`${file.name}: слишком большой файл. ${isVideo ? "Видео до 50 MB." : "Фото до 10 MB."}`)
+  if (file.size > MAX_HOME_BINARY_BYTES) {
+    throw new Error(`${file.name}: слишком большой файл для чата. Максимум 10 MB.`)
   }
 
   if (isVideo) {
@@ -154,14 +198,25 @@ async function mediaFileToAttachment(file: File): Promise<ChatAttachment> {
     }
   }
 
+  const supportedBinary =
+    isImage ||
+    isVideo ||
+    mime.startsWith("audio/") ||
+    mime === "application/pdf" ||
+    mime.includes("officedocument")
+  if (!supportedBinary) {
+    throw new Error(`${file.name}: этот формат пока не поддерживается для анализа.`)
+  }
+
   const base64 = await readAsBase64(file)
   return {
     id: attachmentId(),
-    name: file.name || (isVideo ? "camera-video.mp4" : "image.jpg"),
+    name: file.name || (isVideo ? "video.mp4" : isImage ? "image.jpg" : "document"),
     mime,
     size: file.size,
-    kind: isVideo ? "video" : "image",
+    kind: isImage ? "image" : isVideo ? "video" : mime.startsWith("audio/") ? "audio" : "file",
     base64,
+    url: isImage || isVideo ? URL.createObjectURL(file) : undefined,
   }
 }
 
@@ -201,8 +256,6 @@ function HomeComposer({
   onToggleMemory,
   onSelectMediaFiles,
   onRemoveAttachment,
-  onOpenCode,
-  onOpenCanvas,
   selectedModelId,
   userPlan,
   onModelChange,
@@ -221,8 +274,6 @@ function HomeComposer({
   onToggleMemory: () => void
   onSelectMediaFiles: (files: File[]) => void
   onRemoveAttachment: (id: string) => void
-  onOpenCode?: () => void
-  onOpenCanvas?: () => void
   selectedModelId: MalikModelId
   userPlan: AIPlan
   onModelChange: (modelId: MalikModelId) => void
@@ -232,8 +283,9 @@ function HomeComposer({
   const [toolsOpen, setToolsOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const toolsRef = useRef<HTMLDivElement>(null)
-  const galleryInputRef = useRef<HTMLInputElement>(null)
-  const cameraVideoInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const field = textareaRef.current
@@ -262,15 +314,11 @@ function HomeComposer({
     id: string
     label: string
     icon: LucideIcon
-    active?: boolean
-    action?: () => void
+    action: () => void
   }> = [
-    { id: "web", label: "Веб-поиск", icon: Globe, active: webOn, action: onToggleWeb },
-    { id: "image", label: "Изображение", icon: ImageIcon, action: () => galleryInputRef.current?.click() },
-    { id: "video", label: "Видео", icon: Film, action: () => cameraVideoInputRef.current?.click() },
-    { id: "code", label: "Код", icon: Code2, action: onOpenCode },
-    { id: "files", label: "Файлы", icon: Paperclip, action: onOpenCanvas },
-    { id: "memory", label: "Память", icon: Brain, active: memoryOn, action: onToggleMemory },
+    { id: "upload-image", label: "Загрузить изображения", icon: ImageIcon, action: () => imageInputRef.current?.click() },
+    { id: "upload-video", label: "Загрузить видео", icon: Film, action: () => videoInputRef.current?.click() },
+    { id: "upload-files", label: "Загрузить файлы", icon: Paperclip, action: () => fileInputRef.current?.click() },
   ]
 
   const hasSendableContent = Boolean(prompt.trim() || attachments.length)
@@ -287,7 +335,7 @@ function HomeComposer({
             type="button"
             onClick={() => setToolsOpen((open) => !open)}
             className={cn("thome-icon-button thome-plus-button", toolsOpen && "is-open")}
-            aria-label="Добавить файл или инструмент"
+            aria-label="Загрузить в Malik AI"
             aria-expanded={toolsOpen}
             aria-haspopup="menu"
           >
@@ -295,7 +343,7 @@ function HomeComposer({
           </button>
 
           {toolsOpen ? (
-            <div className="thome-tools-menu" role="menu" aria-label="Инструменты Malik AI">
+            <div className="thome-tools-menu" role="menu" aria-label="Загрузить в Malik AI">
               {tools.map((tool) => {
                 const Icon = tool.icon
                 return (
@@ -303,12 +351,11 @@ function HomeComposer({
                     key={tool.id}
                     type="button"
                     role="menuitem"
-                    className={cn("thome-tools-item", tool.active && "is-active")}
+                    className="thome-tools-item"
                     onClick={() => openAndClose(tool.action)}
                   >
                     <Icon aria-hidden="true" />
                     <span>{tool.label}</span>
-                    {tool.active ? <span className="thome-tools-state">Вкл.</span> : null}
                   </button>
                 )
               })}
@@ -316,9 +363,9 @@ function HomeComposer({
           ) : null}
 
           <input
-            ref={galleryInputRef}
+            ref={imageInputRef}
             type="file"
-            accept="image/*,video/*"
+            accept="image/*"
             multiple
             className="hidden"
             aria-hidden="true"
@@ -329,10 +376,23 @@ function HomeComposer({
             }}
           />
           <input
-            ref={cameraVideoInputRef}
+            ref={videoInputRef}
             type="file"
             accept="video/*"
-            capture="environment"
+            multiple
+            className="hidden"
+            aria-hidden="true"
+            tabIndex={-1}
+            onChange={(event) => {
+              onSelectMediaFiles(Array.from(event.currentTarget.files || []))
+              event.currentTarget.value = ""
+            }}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={HOME_FILE_ACCEPT}
+            multiple
             className="hidden"
             aria-hidden="true"
             tabIndex={-1}
@@ -401,7 +461,7 @@ function HomeComposer({
       {attachments.length || attachmentError ? (
         <div className="thome-attachments" aria-live="polite">
           {attachments.map((item) => {
-            const Icon = item.kind === "video" ? Film : ImageIcon
+            const Icon = item.kind === "video" ? Film : item.kind === "image" ? ImageIcon : Paperclip
             return (
               <span key={item.id} className="thome-attachment-pill">
                 <Icon aria-hidden="true" />
@@ -458,13 +518,13 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     return () => window.removeEventListener(PREFILL_EVENT, fill)
   }, [])
 
-  const addMediaFiles = async (files: File[]) => {
+  const addFiles = async (files: File[]) => {
     if (!files.length) return
     setAttachmentError("")
 
     const room = Math.max(0, MAX_HOME_ATTACHMENTS - attachments.length)
     if (!room) {
-      setAttachmentError(`Можно прикрепить максимум ${MAX_HOME_ATTACHMENTS} фото/видео.`)
+      setAttachmentError(`Можно прикрепить максимум ${MAX_HOME_ATTACHMENTS} файлов.`)
       return
     }
 
@@ -472,26 +532,37 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     const errors: string[] = []
     for (const file of files.slice(0, room)) {
       try {
-        accepted.push(await mediaFileToAttachment(file))
+        accepted.push(await homeFileToAttachment(file))
       } catch (error) {
         errors.push(error instanceof Error ? error.message : `Не удалось добавить ${file.name}.`)
       }
     }
 
-    if (files.length > room) errors.push(`Можно прикрепить максимум ${MAX_HOME_ATTACHMENTS} фото/видео.`)
+    if (files.length > room) errors.push(`Можно прикрепить максимум ${MAX_HOME_ATTACHMENTS} файлов.`)
     if (accepted.length) setAttachments((previous) => [...previous, ...accepted].slice(0, MAX_HOME_ATTACHMENTS))
     if (errors.length) setAttachmentError(errors[0])
+  }
+
+  const removeAttachment = (id: string) => {
+    setAttachments((previous) => {
+      const target = previous.find((item) => item.id === id)
+      if (target?.url?.startsWith("blob:")) URL.revokeObjectURL(target.url)
+      return previous.filter((item) => item.id !== id)
+    })
+    setAttachmentError("")
   }
 
   const submit = () => {
     const text = prompt.trim()
     if ((!text && !attachments.length) || props.isLoading) return
 
-    const mediaPrompt = attachments.some((item) => item.kind === "video")
+    const attachmentPrompt = attachments.some((item) => item.kind === "video")
       ? "Проанализируй прикреплённое видео и подробно ответь по его содержанию."
-      : "Проанализируй прикреплённое изображение и подробно ответь по его содержанию."
+      : attachments.some((item) => item.kind === "image")
+        ? "Проанализируй прикреплённое изображение и подробно ответь по его содержанию."
+        : "Прочитай прикреплённые файлы и подробно ответь по их содержанию."
 
-    props.onSubmit(text || mediaPrompt, attachments, { research: webOn })
+    props.onSubmit(text || attachmentPrompt, attachments, { research: webOn })
     setPrompt("")
     setAttachments([])
     setAttachmentError("")
@@ -548,13 +619,8 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               onSubmit={submit}
               onToggleWeb={() => setWebOn(!webOn)}
               onToggleMemory={() => setMemoryOn(!memoryOn)}
-              onSelectMediaFiles={(files) => { void addMediaFiles(files) }}
-              onRemoveAttachment={(id) => {
-                setAttachments((previous) => previous.filter((item) => item.id !== id))
-                setAttachmentError("")
-              }}
-              onOpenCode={props.onOpenCode}
-              onOpenCanvas={props.onOpenCanvas}
+              onSelectMediaFiles={(files) => { void addFiles(files) }}
+              onRemoveAttachment={removeAttachment}
               selectedModelId={props.selectedModelId || DEFAULT_MALIK_MODEL_ID}
               userPlan={props.userPlan || "free"}
               onModelChange={props.onModelChange || (() => {})}
@@ -623,13 +689,8 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                   onSubmit={submit}
                   onToggleWeb={() => setWebOn(!webOn)}
                   onToggleMemory={() => setMemoryOn(!memoryOn)}
-                  onSelectMediaFiles={(files) => { void addMediaFiles(files) }}
-                  onRemoveAttachment={(id) => {
-                    setAttachments((previous) => previous.filter((item) => item.id !== id))
-                    setAttachmentError("")
-                  }}
-                  onOpenCode={props.onOpenCode}
-                  onOpenCanvas={props.onOpenCanvas}
+                  onSelectMediaFiles={(files) => { void addFiles(files) }}
+                  onRemoveAttachment={removeAttachment}
                   selectedModelId={props.selectedModelId || DEFAULT_MALIK_MODEL_ID}
                   userPlan={props.userPlan || "free"}
                   onModelChange={props.onModelChange || (() => {})}
