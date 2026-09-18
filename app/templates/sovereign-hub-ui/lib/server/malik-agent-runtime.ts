@@ -25,9 +25,13 @@ function clean(value: unknown, max = 12000) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, max)
 }
 
+function preservePrompt(value: unknown, max = 120_000) {
+  return String(value || "").trim().slice(0, max)
+}
+
 function originalPrompt(body: any) {
   for (const key of ["originalQuestion", "prompt", "message", "question", "input", "text", "content"]) {
-    const value = clean(body?.[key], 18000)
+    const value = preservePrompt(body?.[key])
     if (value) return value
   }
   return ""
@@ -137,7 +141,7 @@ export function isMalikAgentRuntimeRequest(body: any) {
 export async function prepareMalikAgentRuntime(body: any): Promise<MalikAgentRuntimeResult | null> {
   const contract = executionContract(body)
   if (!contract) return null
-  const prompt = clean(body?.originalQuestion || originalPrompt(body), 18000)
+  const prompt = preservePrompt(body?.originalQuestion || originalPrompt(body))
   if (!prompt) return null
 
   const maxSubagents = envInt("MALIK_AGENT_MAX_SUBAGENTS", 3, 2, 4)
