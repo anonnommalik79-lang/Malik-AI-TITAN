@@ -10,7 +10,8 @@ const router = read("lib/server/malik-model-router.ts")
 const stream = read("app/api/stream/route-impl.ts")
 const quota = read("lib/server/daily-text-token-quota.ts")
 const envExample = read(".env.example")
-const render = read("../../../render.yaml")\nconst agent = read("lib/server/malik-agent-runtime.ts")
+const render = read("../../../render.yaml")
+const agent = read("lib/server/malik-agent-runtime.ts")
 
 console.log("\nlong-code runtime invariants")
 
@@ -19,6 +20,7 @@ assert.match(orchestrator, /normalizedBudget\(input\.maxTokens, code \? 10_000 :
 assert.match(orchestrator, /USER REQUEST:\\n\$\{prompt\}/)
 assert.ok(!orchestrator.includes("clip(prompt, 9000)"), "accepted coding prompts must not be silently cut to 9K chars")
 assert.match(orchestrator, /remainingBudget = Math\.max\(0, totalBudget - estimateVisibleTokens\(result\)\)/)
+assert.match(orchestrator, /complex && totalBudget >= 2_000/, "small subagent budgets must not be wasted on a planner")
 
 assert.match(router, /const CODE_PROVIDER_TIMEOUT_MS = 360_000/)
 assert.match(router, /GROQ_TPM_BUDGET/)
@@ -31,6 +33,9 @@ assert.match(stream, /getDailyTextTokenQuota/)
 assert.match(stream, /maxTokens: maxOutputTokens/)
 assert.match(stream, /runSelectedAnswer\(routedBody, selection, undefined, maxOutputTokens\)/)
 assert.match(stream, /setInterval\(\(\) => \{/)
+assert.match(agent, /function preservePrompt/)
+assert.match(agent, /const prompt = preservePrompt\(body\?\.originalQuestion \|\| originalPrompt\(body\)\)/)
+assert.ok(!agent.includes("clean(body?.originalQuestion || originalPrompt(body), 18000)"), "agent runtime must preserve multiline code prompts")
 
 for (const [name, value] of [
   ["FREE_DAILY_TEXT_TOKEN_LIMIT", "10000"],
