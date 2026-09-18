@@ -21,7 +21,7 @@ function extractBlock(source, startText, endText) {
   return source.slice(start, end)
 }
 
-const chatMenu = extractBlock(chat, "const attachItems = useMemo", "const handleRegenerate")
+const chatMenu = extractBlock(chat, "const attachItems = useMemo", "  return (\n    <div data-malik-chat-fullwidth")
 const homeMenu = extractBlock(home, "const tools: Array<", "const hasSendableContent")
 
 for (const menu of [chatMenu, homeMenu]) {
