@@ -211,6 +211,7 @@ interface Message {
   modelId?: MalikModelId
   research?: MalikMessageResearch
   actionPlan?: MalikActionPlan
+  attachments?: ChatAttachment[]
 }
 
 type ImageGenerationConfirmation = {
@@ -5534,6 +5535,16 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     role: "user",
     content: parsedMediaCommand ? inlineMediaPrompt : cleanContent,
     timestamp: new Date(),
+    // Keep only lightweight display metadata in chat/history. The full base64/text
+    // payload is sent to /api/stream below but must not be duplicated into localStorage.
+    attachments: attachments.map((item) => ({
+      id: item.id,
+      name: item.name,
+      mime: item.mime,
+      size: item.size,
+      kind: item.kind,
+      url: item.url,
+    })),
   }
 
   const assistantMessage: Message = {
