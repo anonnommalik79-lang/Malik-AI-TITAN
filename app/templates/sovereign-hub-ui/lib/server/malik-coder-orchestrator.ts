@@ -92,11 +92,11 @@ export async function runMalikCoderOrchestrator(input: Input): Promise<Result> {
 
   let plan = ""
   if (complex) {
-    const p = await firstHealthy({ list: [{ id: "malik-fast-120b", tokens: 700 }, { id: "malik-flash-53", tokens: 700 }, { id: "malik-qwen-397b", tokens: 700 }], prompt: `Make a compact implementation checklist for this exact request. Do not answer it yet.\n\n${clip(prompt, 60_000)}`, system, history, temperature: 0.05, stages })
+    const p = await firstHealthy({ list: [{ id: "malik-fast-120b", tokens: 700 }, { id: "malik-flash-53", tokens: 700 }, { id: "malik-qwen-397b", tokens: 700 }], prompt: `Make a compact implementation checklist for this exact request. Do not answer it yet.\n\n${prompt}`, system, history, temperature: 0.05, stages })
     plan = p?.content || ""
   }
 
-  const request = [`USER REQUEST:\n${clip(prompt, 120_000)}`, plan ? `\nCHECKLIST:\n${clip(plan, 2500)}` : "", "\nImplement the request completely now. Return the final user-facing answer, not an outline. Do not shorten code to save tokens."].filter(Boolean).join("\n")
+  const request = [`USER REQUEST:\n${prompt}`, plan ? `\nCHECKLIST:\n${clip(plan, 2500)}` : "", "\nImplement the request completely now. Return the final user-facing answer, not an outline. Do not shorten code to save tokens."].filter(Boolean).join("\n")
   const draft = await firstHealthy({ list: routes, prompt: request, system, history, temperature: input.temperature ?? (code ? 0.07 : 0.2), stages })
   if (!draft?.content) throw new Error("MalikCoder 1.0 has no healthy route available")
 
@@ -108,7 +108,7 @@ export async function runMalikCoderOrchestrator(input: Input): Promise<Result> {
       .map((x) => ({ ...x, tokens: Math.min(x.tokens, code ? 6_000 : 2_500) }))
     const next = await firstHealthy({
       list: shifted,
-      prompt: `ORIGINAL REQUEST:\n${clip(prompt, 60_000)}\n\nCURRENT ANSWER TAIL:\n${clip(result, 18_000, true)}\n\nContinue exactly where the answer stopped. Output only missing continuation. Do not repeat previous code. Finish every original requirement and close incomplete code or files.`,
+      prompt: `ORIGINAL REQUEST:\n${prompt}\n\nCURRENT ANSWER TAIL:\n${clip(result, 18_000, true)}\n\nContinue exactly where the answer stopped. Output only missing continuation. Do not repeat previous code. Finish every original requirement and close incomplete code or files.`,
       system,
       temperature: code ? 0.04 : 0.14,
       stages,
