@@ -84,7 +84,7 @@ export const MALIK_MODELS = [
   {
     id: "malik-flash-53",
     label: "MalikFlash GLM 5.3",
-    description: "AIHubMix · Free · Код и reasoning",
+    description: "AIHubMix · 1M токенов/день shared · Код и reasoning",
     tier: "free",
     provider: "aihubmix",
     providerModel: "coding-glm-5.3-free",
@@ -93,7 +93,7 @@ export const MALIK_MODELS = [
   {
     id: "malik-vision-k3",
     label: "MalikVision Kimi K3",
-    description: "AIHubMix · Free · Фото, файлы и multimodal",
+    description: "AIHubMix · 1M токенов/день shared · Фото, файлы и multimodal",
     tier: "free",
     provider: "aihubmix",
     providerModel: "coding-kimi-k3-free",
@@ -102,7 +102,7 @@ export const MALIK_MODELS = [
   {
     id: "malik-20b",
     label: "MalikLLM 20B",
-    description: "Быстрый · Для повседневных задач",
+    description: "Groq · 200K токенов/день · Быстрые задачи",
     tier: "free",
     provider: "groq",
     providerModel: "openai/gpt-oss-20b",
@@ -120,7 +120,7 @@ export const MALIK_MODELS = [
   {
     id: "malik-27b",
     label: "MalikLLM Qwen3.8 27B",
-    description: "2M токенов/день · Быстрый reasoning",
+    description: "Groq · 200K токенов/день · Быстрый reasoning",
     tier: "free",
     provider: "groq",
     providerModel: "qwen/qwen3.8-27b",
@@ -165,7 +165,7 @@ export const MALIK_MODELS = [
   {
     id: "malik-120b",
     label: "MalikLLM Pro 120B",
-    description: "Максимальное рассуждение",
+    description: "Groq · 200K токенов/день · Максимальное рассуждение",
     tier: "pro",
     provider: "groq",
     providerModel: "openai/gpt-oss-120b",
