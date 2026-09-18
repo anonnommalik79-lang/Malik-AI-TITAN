@@ -230,7 +230,9 @@ function providerRuntime(
       key,
       model: env("NEMOTRON_OPENROUTER_MODEL") || model.providerModel,
       stream: false,
-      maxTokens: codeMode ? Math.min(configured, 6_000) : Math.max(configured, Math.min(commonTokens, 16_000)),
+      maxTokens: codeMode
+        ? Math.min(configured, commonTokens, 6_000)
+        : Math.min(configured, commonTokens),
       temperature: typeof requestedTemperature === "number" ? requestedTemperature : Number(env("NEMOTRON_TEMPERATURE") || 0.2),
       timeoutMs: Math.max(codeMode ? 120_000 : 30_000, Number(env("NEMOTRON_TIMEOUT_MS") || 45_000)),
       headers: {
