@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/malik-model-router"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
+import { getDailyTextTokenQuota } from "@/lib/server/daily-text-token-quota"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
@@ -38,6 +39,14 @@ async function handlePOST(request: Request) {
     const selection = await resolveStrictMalikSelection(request, body)
     const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
     const ownerMode = entitlement.plan === "owner"
+    const textQuota = getDailyTextTokenQuota(entitlement.userId, ownerMode)
+    const requestedMaxTokens = Number(body?.maxTokens)
+    const maxOutputTokens = textQuota.unlimited
+      ? (Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0 ? Math.floor(requestedMaxTokens) : undefined)
+      : Math.min(
+          Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0 ? Math.floor(requestedMaxTokens) : Number.MAX_SAFE_INTEGER,
+          Math.max(1, Math.floor(textQuota.remaining ?? 0)),
+        )
 
     // Founder/company identity is deterministic. Providers never get a chance
     // to invent a developer team or another company for MALIK AI.
@@ -62,7 +71,8 @@ async function handlePOST(request: Request) {
 
     // Only a server-verified owner session receives this context. Client body
     // fields such as email/username can never grant founder mode.
-    const routedBody = ownerMode ? withVerifiedOwnerChatContext(body) : body
+    const quotaBoundBody = maxOutputTokens ? { ...body, maxTokens: maxOutputTokens } : body
+    const routedBody = ownerMode ? withVerifiedOwnerChatContext(quotaBoundBody) : quotaBoundBody
     const answer = await malikGodAnswer(routedBody, selection ? { modelId: selection.modelId } : undefined)
     const payload = asJson(answer)
 

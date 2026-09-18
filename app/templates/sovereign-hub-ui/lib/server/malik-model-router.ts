@@ -168,7 +168,19 @@ function buildMessages(input: {
 
 function clampTokens(value: number, fallback: number, max = 65_536) {
   const safe = Number.isFinite(value) && value > 0 ? value : fallback
-  return Math.min(max, Math.max(512, Math.floor(safe)))
+  return Math.min(max, Math.max(1, Math.floor(safe)))
+}
+
+function estimateProviderInputTokens(messages: ProviderMessage[]) {
+  // Conservative estimate for code + multilingual prompts. We use it only to
+  // avoid sending requests that cannot fit a provider's per-minute budget.
+  const chars = JSON.stringify(messages).length
+  return Math.max(1, Math.ceil(chars / 3))
+}
+
+function estimateVisibleTokens(value: string) {
+  const text = String(value || "")
+  return text ? Math.max(1, Math.ceil(text.length / 3)) : 0
 }
 
 function safeProviderTokens(model: MalikModelDefinition, requested: number, codeMode: boolean) {
@@ -189,7 +201,13 @@ function safeProviderTokens(model: MalikModelDefinition, requested: number, code
   return Math.min(requested, 10_000)
 }
 
-function providerRuntime(model: MalikModelDefinition, requestedTokens?: number, requestedTemperature?: number, codeMode = false): ProviderRuntime {
+function providerRuntime(
+  model: MalikModelDefinition,
+  requestedTokens?: number,
+  requestedTemperature?: number,
+  codeMode = false,
+  estimatedInputTokens = 0,
+): ProviderRuntime {
   const defaultTokens = codeMode
     ? Number(process.env.MAX_CODE_OUTPUT_TOKENS || process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || 10_000)
     : Number(process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || process.env.MAX_OUTPUT_TOKENS || 4_000)
@@ -212,7 +230,9 @@ function providerRuntime(model: MalikModelDefinition, requestedTokens?: number, 
       key,
       model: env("NEMOTRON_OPENROUTER_MODEL") || model.providerModel,
       stream: false,
-      maxTokens: codeMode ? Math.min(configured, 6_000) : Math.max(configured, Math.min(commonTokens, 16_000)),
+      maxTokens: codeMode
+        ? Math.min(configured, commonTokens, 6_000)
+        : Math.min(configured, commonTokens),
       temperature: typeof requestedTemperature === "number" ? requestedTemperature : Number(env("NEMOTRON_TEMPERATURE") || 0.2),
       timeoutMs: Math.max(codeMode ? 120_000 : 30_000, Number(env("NEMOTRON_TIMEOUT_MS") || 45_000)),
       headers: {
@@ -239,7 +259,29 @@ function providerRuntime(model: MalikModelDefinition, requestedTokens?: number, 
   if (model.provider === "groq") {
     const key = env("GROQ_API_KEY")
     if (!key) return missing(`${model.label} временно недоступна: серверный провайдер не настроен.`) as never
-    return { url: `${(env("GROQ_BASE_URL") || "https://api.groq.com/openai/v1").replace(/\/+$/, "")}/chat/completions`, key, model: model.providerModel, stream: false, maxTokens: commonTokens, temperature: commonTemperature, timeoutMs: commonTimeout }
+
+    const configuredTpm = Number(env("GROQ_TPM_BUDGET") || 8_000)
+    const tpmBudget = Number.isFinite(configuredTpm) && configuredTpm > 0 ? Math.floor(configuredTpm) : 8_000
+    const reserve = Math.max(128, Math.min(1_000, Math.floor(tpmBudget * 0.08)))
+    const availableOutput = tpmBudget - estimatedInputTokens - reserve
+    if (availableOutput <= 0) {
+      throw new MalikModelRouteError(
+        "PROVIDER_REQUEST_TOO_LARGE",
+        `${model.label} пропускается для этого большого контекста; переключаюсь на маршрут с большим лимитом.`,
+        503,
+        model.id,
+      )
+    }
+
+    return {
+      url: `${(env("GROQ_BASE_URL") || "https://api.groq.com/openai/v1").replace(/\/+$/, "")}/chat/completions`,
+      key,
+      model: model.providerModel,
+      stream: false,
+      maxTokens: Math.max(1, Math.min(commonTokens, availableOutput)),
+      temperature: commonTemperature,
+      timeoutMs: commonTimeout,
+    }
   }
 
   const key = env("CLOUDFLARE_AUTH_TOKEN") || env("CLOUDFLARE_API_TOKEN") || env("CF_API_TOKEN")
@@ -514,14 +556,15 @@ export async function runStrictMalikModel(input: {
       throw new MalikModelRouteError("PROVIDER_COOLDOWN", `${model.label} переключается на резервный маршрут.`, 503, model.id)
     }
 
-    const runtime = providerRuntime(model, input.maxTokens, input.temperature, codeMode)
     const messages = buildMessages({ model, prompt: input.prompt, systemPrompt: input.systemPrompt, history: input.history, attachments: input.attachments })
+    const estimatedInputTokens = estimateProviderInputTokens(messages)
+    const runtime = providerRuntime(model, input.maxTokens, input.temperature, codeMode, estimatedInputTokens)
     const maxAttempts = providerAttempts(model)
     let lastStatus = 503
     let lastError: unknown = null
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({ selectedModelId: model.id, provider: model.provider, providerModel: runtime.model, stage: "request", attempt, codeMode, maxTokens: runtime.maxTokens, timeoutMs: runtime.timeoutMs }))
+      console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({ selectedModelId: model.id, provider: model.provider, providerModel: runtime.model, stage: "request", attempt, codeMode, maxTokens: runtime.maxTokens, estimatedInputTokens, timeoutMs: runtime.timeoutMs }))
       let response: Response
       try {
         response = await providerFetch(runtime.url, {
@@ -600,28 +643,38 @@ export async function runStrictMalikModel(input: {
         const depth = options.continuationDepth || 0
         const truncated = codeMode && (parsed.finishReason === "length" || codeAnswerNeedsMore(parsed.content, input.prompt))
         if (truncated && options.allowFallback !== false && depth < 2) {
-          console.warn("[MALIK_MODEL_ROUTE] code-continuation", JSON.stringify({ selectedModelId: model.id, finishReason: parsed.finishReason || "shape", depth }))
-          try {
-            const continuation = await runStrictMalikModel({
-              modelId: input.modelId,
-              prompt: continuationPrompt(input.prompt, parsed.content),
-              systemPrompt: input.systemPrompt,
-              maxTokens: Math.min(Number(input.maxTokens || 10_000), 6_000),
-              temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.15, 0.15),
-            }, { allowFallback: true, continuationDepth: depth + 1 })
-            if (visibleFinalText(continuation.content)) {
-              const combined = `${parsed.content.trim()}\n${continuation.content.trim()}`.trim()
-              if (!codeAnswerNeedsMore(combined, input.prompt)) {
-                return {
-                  ...base,
-                  content: combined,
-                  latencyMs: Date.now() - started,
-                  usage: { primary: parsed.usage, continuation: continuation.usage },
+          const totalBudget = Math.max(1, Number(input.maxTokens || runtime.maxTokens))
+          const remainingBudget = Math.max(0, totalBudget - estimateVisibleTokens(parsed.content))
+          console.warn("[MALIK_MODEL_ROUTE] code-continuation", JSON.stringify({
+            selectedModelId: model.id,
+            finishReason: parsed.finishReason || "shape",
+            depth,
+            remainingBudget,
+          }))
+
+          if (remainingBudget > 0) {
+            try {
+              const continuation = await runStrictMalikModel({
+                modelId: input.modelId,
+                prompt: continuationPrompt(input.prompt, parsed.content),
+                systemPrompt: input.systemPrompt,
+                maxTokens: Math.min(remainingBudget, 6_000),
+                temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.15, 0.15),
+              }, { allowFallback: true, continuationDepth: depth + 1 })
+              if (visibleFinalText(continuation.content)) {
+                const combined = `${parsed.content.trim()}\n${continuation.content.trim()}`.trim()
+                if (!codeAnswerNeedsMore(combined, input.prompt)) {
+                  return {
+                    ...base,
+                    content: combined,
+                    latencyMs: Date.now() - started,
+                    usage: { primary: parsed.usage, continuation: continuation.usage },
+                  }
                 }
               }
+            } catch (error) {
+              console.warn("[MALIK_MODEL_ROUTE] code-continuation failed", error instanceof Error ? error.message : String(error))
             }
-          } catch (error) {
-            console.warn("[MALIK_MODEL_ROUTE] code-continuation failed", error instanceof Error ? error.message : String(error))
           }
         }
         if (truncated && options.allowFallback !== false) {
