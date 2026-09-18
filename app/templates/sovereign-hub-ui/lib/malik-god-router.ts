@@ -728,7 +728,13 @@ type ProviderConfig = {
   headers?: Record<string, string>
 }
 
-async function callOpenAICompatible(config: ProviderConfig, prompt: string, usedWeb: boolean, sources: SourceItem[]): Promise<{ content: string; attempt: ProviderAttempt }> {
+async function callOpenAICompatible(
+  config: ProviderConfig,
+  prompt: string,
+  usedWeb: boolean,
+  sources: SourceItem[],
+  maxTokens?: number,
+): Promise<{ content: string; attempt: ProviderAttempt }> {
   const started = Date.now()
   const attemptBase = { provider: config.provider, model: config.model, ok: false, latencyMs: 0 }
 
@@ -755,7 +761,10 @@ async function callOpenAICompatible(config: ProviderConfig, prompt: string, used
             { role: "system", content: systemPrompt(usedWeb, prompt) },
             { role: "user", content: userContent },
           ],
-          max_tokens: Number(process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || 2200),
+          max_tokens: Math.max(1, Math.min(
+            Number(maxTokens || process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || 4_000),
+            Number(process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || 4_000),
+          )),
           temperature: Number(process.env.MALIK_GOD_TEMPERATURE || 0.4),
           stream: false,
         }),
@@ -808,7 +817,7 @@ function providerConfigs() {
   } satisfies Record<string, ProviderConfig>
 }
 
-async function callOpenRouterModels(prompt: string, usedWeb: boolean, sources: SourceItem[]) {
+async function callOpenRouterModels(prompt: string, usedWeb: boolean, sources: SourceItem[], maxTokens?: number) {
   const key = env("OPENROUTER_API_KEY")
   const models = (env("OPENROUTER_MODEL_ORDER") || "moonshotai/kimi-k2,qwen/qwen-max,z-ai/glm-4.5,deepseek/deepseek-chat")
     .split(",")
@@ -831,7 +840,8 @@ async function callOpenRouterModels(prompt: string, usedWeb: boolean, sources: S
       },
       prompt,
       usedWeb,
-      sources
+      sources,
+      maxTokens,
     )
 
     attempts.push(result.attempt)
@@ -841,7 +851,7 @@ async function callOpenRouterModels(prompt: string, usedWeb: boolean, sources: S
   return { content: "", provider: "openrouter", model: "none", attempts }
 }
 
-async function callProviderChain(prompt: string, usedWeb: boolean, sources: SourceItem[]) {
+async function callProviderChain(prompt: string, usedWeb: boolean, sources: SourceItem[], maxTokens?: number) {
   const attempts: ProviderAttempt[] = []
   const configs = providerConfigs()
 
@@ -852,7 +862,7 @@ async function callProviderChain(prompt: string, usedWeb: boolean, sources: Sour
 
   for (const name of chain) {
     if (name === "openrouter") {
-      const result = await callOpenRouterModels(prompt, usedWeb, sources)
+      const result = await callOpenRouterModels(prompt, usedWeb, sources, maxTokens)
       attempts.push(...result.attempts)
       if (result.content) return { content: result.content, provider: result.provider, model: result.model, attempts }
       continue
@@ -861,7 +871,7 @@ async function callProviderChain(prompt: string, usedWeb: boolean, sources: Sour
     const config = configs[name as keyof typeof configs]
     if (!config) continue
 
-    const result = await callOpenAICompatible(config, prompt, usedWeb, sources)
+    const result = await callOpenAICompatible(config, prompt, usedWeb, sources, maxTokens)
     attempts.push(result.attempt)
     if (result.content) return { content: result.content, provider: config.provider, model: config.model, attempts }
   }
@@ -962,7 +972,11 @@ export async function malikGodAnswer(
   }
 
   const sources = usedWeb ? await gatherSources(prompt, emitResearch) : []
-  const result = await callProviderChain(prompt, usedWeb, sources)
+  const requestedMaxTokens = Number(body?.maxTokens)
+  const maxTokens = Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0
+    ? Math.floor(requestedMaxTokens)
+    : undefined
+  const result = await callProviderChain(prompt, usedWeb, sources, maxTokens)
 
   let answer: GodAnswer
   if (result.content) {
