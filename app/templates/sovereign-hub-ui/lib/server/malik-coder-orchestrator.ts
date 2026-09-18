@@ -39,8 +39,20 @@ function contract(base: string, code: boolean) {
   ].join("\n")
 }
 
-function candidates(code: boolean): Candidate[] {
-  return code ? [
+function normalizedBudget(value: number | undefined, fallback: number) {
+  const raw = Number(value || fallback)
+  if (!Number.isFinite(raw) || raw <= 0) return fallback
+  return Math.max(1, Math.min(10_000, Math.floor(raw)))
+}
+
+function estimateVisibleTokens(value: string) {
+  const text = String(value || "")
+  return text ? Math.max(1, Math.ceil(text.length / 3)) : 0
+}
+
+function candidates(code: boolean, maxTokens?: number): Candidate[] {
+  const budget = normalizedBudget(maxTokens, code ? 10_000 : 4_000)
+  const list: Candidate[] = code ? [
     // Long code must start on providers with enough daily allowance and output headroom.
     { id: "malik-fast-120b", tokens: 10_000 },
     { id: "malik-flash-53", tokens: 10_000 },
@@ -54,6 +66,7 @@ function candidates(code: boolean): Candidate[] {
     { id: "malik-vision-k3", tokens: 4_000 },
     { id: "malik-20b", tokens: 3_000 },
   ]
+  return list.map((candidate) => ({ ...candidate, tokens: Math.min(candidate.tokens, budget) }))
 }
 
 async function firstHealthy(args: { list: Candidate[]; prompt: string; system: string; history?: HistoryMessage[]; temperature: number; stages: Stage[] }) {
@@ -88,10 +101,13 @@ export async function runMalikCoderOrchestrator(input: Input): Promise<Result> {
   const stages: Stage[] = []
   const system = contract(input.systemPrompt, code)
   const history = historyForModel(input.history)
-  const routes = candidates(code)
+  const totalBudget = normalizedBudget(input.maxTokens, code ? 10_000 : 4_000)
+  const routes = candidates(code, totalBudget)
 
   let plan = ""
-  if (complex) {
+  // Small specialist/subagent budgets should go straight to the answer instead
+  // of spending most of their allowance on an internal planning call.
+  if (complex && totalBudget >= 2_000) {
     const p = await firstHealthy({ list: [{ id: "malik-fast-120b", tokens: 700 }, { id: "malik-flash-53", tokens: 700 }, { id: "malik-qwen-397b", tokens: 700 }], prompt: `Make a compact implementation checklist for this exact request. Do not answer it yet.\n\n${prompt}`, system, history, temperature: 0.05, stages })
     plan = p?.content || ""
   }
@@ -104,8 +120,14 @@ export async function runMalikCoderOrchestrator(input: Input): Promise<Result> {
   let more = incomplete(result, prompt, code)
   const rounds = code ? 4 : 1
   for (let round = 0; round < rounds && more; round += 1) {
+    const remainingBudget = Math.max(0, totalBudget - estimateVisibleTokens(result))
+    if (remainingBudget <= 0) break
+
     const shifted = [...routes.slice((round + 1) % routes.length), ...routes.slice(0, (round + 1) % routes.length)]
-      .map((x) => ({ ...x, tokens: Math.min(x.tokens, code ? 6_000 : 2_500) }))
+      .map((x) => ({ ...x, tokens: Math.min(x.tokens, code ? 6_000 : 2_500, remainingBudget) }))
+      .filter((x) => x.tokens > 0)
+    if (!shifted.length) break
+
     const next = await firstHealthy({
       list: shifted,
       prompt: `ORIGINAL REQUEST:\n${prompt}\n\nCURRENT ANSWER TAIL:\n${clip(result, 18_000, true)}\n\nContinue exactly where the answer stopped. Output only missing continuation. Do not repeat previous code. Finish every original requirement and close incomplete code or files.`,
@@ -117,7 +139,7 @@ export async function runMalikCoderOrchestrator(input: Input): Promise<Result> {
     const addition = next.content.trim()
     if (!addition || result.endsWith(addition)) break
     result = `${result}\n${addition}`.trim()
-    more = incomplete(addition, prompt, code)
+    more = incomplete(result, prompt, code)
   }
 
   return { content: result, provider: "malik-orchestrator", model: "MalikCoder-1.0", latencyMs: Date.now() - started, usage: { stages } }
