@@ -130,12 +130,50 @@ const SHOWCASE_TEMPLATES: ShowcaseVideoTemplate[] = [
 ]
 
 const MODELS = [
-  { id: "malik", name: "MalikVideo 1.0", subtitle: "Бесплатно", tier: "Free", icon: "/brands/malikvideo.svg", active: true },
-  { id: "kling21", name: "Kling 2.1", subtitle: "Лучшее качество", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://klingai.com", active: false },
-  { id: "kling16", name: "Kling 1.6", subtitle: "Стабильная", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://klingai.com", active: false },
-  { id: "runway", name: "Runway Gen-3", subtitle: "Реалистичные", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://runwayml.com", active: false },
-  { id: "luma", name: "Luma Dream Machine", subtitle: "Креативные", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://lumalabs.ai", active: false },
-  { id: "pika", name: "Pika 2.0", subtitle: "Быстрые", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://pika.art", active: false },
+  {
+    id: "novai",
+    provider: "novai",
+    name: "NovAI · CogVideoX Flash",
+    subtitle: "720p · основной бесплатный",
+    tier: "Free",
+    icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://aiapi-pro.com",
+    featured: true,
+    audio: false,
+    note: "CogVideoX Flash — основной бесплатный маршрут MalikVideo.",
+  },
+  {
+    id: "magichour",
+    provider: "magichour",
+    name: "Magic Hour · LTX",
+    subtitle: "480p · free credits",
+    tier: "Free",
+    icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://magichour.ai",
+    featured: false,
+    audio: true,
+    note: "Magic Hour использует бесплатные кредиты аккаунта; доступ зависит от оставшихся daily claims.",
+  },
+  {
+    id: "pixazo",
+    provider: "pixazo",
+    name: "Pixazo · LTX Free",
+    subtitle: "Free preview · без native audio",
+    tier: "Free",
+    icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://pixazo.ai",
+    featured: false,
+    audio: false,
+    note: "Pixazo LTX Free работает в preview/fair-use режиме.",
+  },
+  {
+    id: "cliptaps",
+    provider: "cliptaps",
+    name: "ClipTaps",
+    subtitle: "1 проект/день · до 3 сцен",
+    tier: "Free",
+    icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://cliptaps.com",
+    featured: false,
+    audio: true,
+    note: "ClipTaps — резервный daily-провайдер; результат может содержать watermark и автоматически созданный голос.",
+  },
 ] as const
 
 const CATEGORIES = ["Популярное", "Кинематографичные", "Анимация", "Реалистичные", "Природа", "Технологии", "Люди", "Продукты"] as const
@@ -190,7 +228,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("Популярное")
   const [thumbPage, setThumbPage] = useState(0)
   const [modelNotice, setModelNotice] = useState("")
+  const [selectedModelId, setSelectedModelId] = useState<(typeof MODELS)[number]["id"]>("novai")
   const busy = phase === "queued" || phase === "rendering"
+  const selectedModel = MODELS.find((model) => model.id === selectedModelId) || MODELS[0]
   const selectedItem = SHOWCASE_TEMPLATES[selected] || SHOWCASE_TEMPLATES[0]
   const cards = useMemo(() => SHOWCASE_TEMPLATES.slice(1), [])
   const thumbSize = 6
@@ -232,7 +272,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             length: duration,
             resolution: QUALITY_RESOLUTION[quality],
             ratio: ratio === "4:3" ? "16:9" : ratio,
-            generateAudio: true,
+            generateAudio: selectedModel.audio,
+            provider: selectedModel.provider,
             userEmail: operator,
           }),
         },
@@ -308,7 +349,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             <div className="mv2__rendering">
               <div className="mv2__render-box"><Sparkles size={34} /></div>
               <strong>{statusLabel(phase, attempt)}</strong>
-              <small>{QUALITY_RESOLUTION[quality]} · {ratio} · {duration}s · Audio synced</small>
+              <small>{selectedModel.name} · {ratio} · {duration}s · {selectedModel.audio ? "Audio" : "Video"}</small>
             </div>
           ) : null}
         </div>
@@ -333,7 +374,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           <div className="mv2__preview-copy">
             <h3>{videoUrl ? "Готовое видео" : selectedItem.title}</h3>
             <p>{videoUrl ? "Результат MalikVideo без дополнительного перекодирования интерфейсом." : selectedItem.prompt}</p>
-            <div className="mv2__chips"><span>{duration} секунд</span><span>{QUALITY_RESOLUTION[quality]}</span><span>{ratio}</span><span>MalikVideo 1.0</span><span>Audio synced</span></div>
+            <div className="mv2__chips"><span>{duration} секунд</span><span>{QUALITY_RESOLUTION[quality]}</span><span>{ratio}</span><span>{selectedModel.name}</span><span>{selectedModel.audio ? "Audio" : "Video"}</span></div>
           </div>
           <div className="mv2__preview-actions">
             <button type="button" onClick={downloadCurrent}><Download /><span>Скачать</span></button>
@@ -363,13 +404,25 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
         <div className="mv2__section-title">Модель <Info /></div>
         <div className="mv2__models">
-          {MODELS.map((model) => (
-            <button key={model.id} type="button" className={`mv2__model${model.active ? " is-active" : " is-pro"}`} onClick={() => model.active ? setModelNotice("") : setModelNotice(`${model.name} — Pro модель. MalikVideo 1.0 остаётся бесплатной активной моделью.`)}>
-              <span className="mv2__model-icon"><img src={model.icon} alt="" draggable={false} /></span>
-              <span className="mv2__model-copy"><strong>{model.name}</strong><small>{model.subtitle}</small></span>
-              <span className={`mv2__tier ${model.active ? "is-free" : "is-pro"}`}>{model.tier}</span>
-            </button>
-          ))}
+          {MODELS.map((model) => {
+            const active = model.id === selectedModelId
+            return (
+              <button
+                key={model.id}
+                type="button"
+                className={`mv2__model${active ? " is-active" : ""}${model.featured ? " is-featured" : ""}`}
+                onClick={() => {
+                  setSelectedModelId(model.id)
+                  setModelNotice(model.note)
+                }}
+                aria-pressed={active}
+              >
+                <span className="mv2__model-icon"><img src={model.icon} alt="" draggable={false} /></span>
+                <span className="mv2__model-copy"><strong>{model.name}</strong><small>{model.subtitle}</small></span>
+                <span className="mv2__tier is-free">{model.tier}</span>
+              </button>
+            )
+          })}
         </div>
         {modelNotice ? <div className="mv2__model-notice">{modelNotice}</div> : null}
 
@@ -404,7 +457,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv2__preview-info{margin-top:12px;padding:15px;display:grid;grid-template-columns:1fr 132px;gap:15px}.mv2__preview-copy h3{margin:0 0 8px;font-size:17px}.mv2__preview-copy p{margin:0;color:#9ca4b2;font-size:12px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.mv2__chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.mv2__chips span{height:28px;padding:0 9px;border:1px solid #292d34;border-radius:999px;background:#12161d;color:#adb5c2;display:inline-flex;align-items:center;font-size:10px}.mv2__preview-actions{display:flex;flex-direction:column;gap:7px}.mv2__preview-actions button{height:35px;border:1px solid #2c3038;border-radius:9px;background:#12161d;color:#edf1f7;display:flex;align-items:center;justify-content:center;gap:7px;font-size:11px}.mv2__preview-actions svg{width:14px;height:14px}
         .mv2__controls-column{position:relative;padding:5px 0 24px}.mv2__mode-tabs{position:absolute;right:0;top:0;display:flex;border:1px solid #1d2027;background:#0b0d11;border-radius:12px;padding:3px;overflow:hidden}.mv2__mode-tabs button{height:34px;border:0;border-radius:9px;background:transparent;color:#8e96a4;padding:0 13px;font-size:10px;white-space:nowrap}.mv2__mode-tabs button.is-active{background:#191d25;color:#fff}.mv2__eyebrow{margin-top:13px;color:#707887;letter-spacing:.28em;font-size:10px}.mv2 h1{margin:14px 0 6px;font-size:clamp(34px,3.2vw,52px);line-height:1;letter-spacing:-.05em}.mv2__lead{margin:0 0 15px;color:#929aa8;font-size:13px}
         .mv2__prompt-card{padding:12px}.mv2__prompt-card textarea{width:100%;height:106px;border:0;outline:0;resize:none;background:transparent;color:#fff;font-size:14px;line-height:1.5;padding:3px}.mv2__prompt-card textarea::placeholder{color:#6f7887}.mv2__prompt-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.mv2__helper-row{display:flex;gap:6px;flex-wrap:wrap}.mv2__helper-row button{height:30px;border:1px solid #2a2e36;border-radius:8px;background:#151922;color:#cbd2dd;display:flex;align-items:center;gap:5px;padding:0 9px;font-size:9px}.mv2__helper-row svg{width:12px;height:12px}.mv2__count{font-size:9px;color:#777f8d;white-space:nowrap}
-        .mv2__section-title{display:flex;align-items:center;gap:5px;margin:15px 0 8px;font-size:12px;font-weight:750}.mv2__section-title svg{width:13px;height:13px}.mv2__models{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.mv2__model{position:relative;min-width:0;height:66px;padding:8px;border:1px solid #272b33;border-radius:11px;background:#0f131a;color:#fff;display:flex;align-items:center;gap:7px;text-align:left;overflow:hidden}.mv2__model.is-active{border-color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}.mv2__model-icon{width:34px;height:34px;flex:0 0 34px;border-radius:8px;background:#fff;display:grid;place-items:center;overflow:hidden}.mv2__model-icon img{width:22px;height:22px;object-fit:contain}.mv2__model-copy{min-width:0;display:flex;flex-direction:column;gap:3px}.mv2__model-copy strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}.mv2__model-copy small{color:#858d9b;font-size:8px}.mv2__tier{position:absolute;right:6px;top:5px;padding:2px 5px;border-radius:999px;font-size:7px}.mv2__tier.is-free{background:#fff;color:#000}.mv2__tier.is-pro{background:#252935;color:#c9d0db}.mv2__model-notice{margin-top:8px;color:#aeb6c4;font-size:10px}
+        .mv2__section-title{display:flex;align-items:center;gap:5px;margin:15px 0 8px;font-size:12px;font-weight:750}.mv2__section-title svg{width:13px;height:13px}.mv2__models{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.mv2__model{position:relative;min-width:0;height:66px;padding:8px;border:1px solid #272b33;border-radius:11px;background:#0f131a;color:#fff;display:flex;align-items:center;gap:7px;text-align:left;overflow:hidden}.mv2__model.is-active{border-color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}.mv2__model.is-featured{grid-column:1/-1;height:72px;background:#121720}.mv2__model-icon{width:34px;height:34px;flex:0 0 34px;border-radius:8px;background:#fff;display:grid;place-items:center;overflow:hidden}.mv2__model-icon img{width:22px;height:22px;object-fit:contain}.mv2__model-copy{min-width:0;display:flex;flex-direction:column;gap:3px}.mv2__model-copy strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}.mv2__model-copy small{color:#858d9b;font-size:8px}.mv2__tier{position:absolute;right:6px;top:5px;padding:2px 5px;border-radius:999px;font-size:7px}.mv2__tier.is-free{background:#fff;color:#000}.mv2__tier.is-pro{background:#252935;color:#c9d0db}.mv2__model-notice{margin-top:8px;color:#aeb6c4;font-size:10px}
         .mv2__settings-grid{display:grid;grid-template-columns:1.1fr 1fr 1.3fr;gap:10px}.mv2__segments{display:flex;flex-wrap:wrap;gap:6px}.mv2__segments button{height:31px;padding:0 10px;border:1px solid #2a2e36;border-radius:8px;background:#11151c;color:#aeb6c4;font-size:9px}.mv2__segments button.is-active{background:#f4f4f5;color:#050505;border-color:#fff}.mv2__segments button.is-disabled{opacity:.45;cursor:default}.mv2__generate-row{display:grid;grid-template-columns:1fr auto 38px;gap:8px;align-items:center;margin-top:18px}.mv2__generate{height:46px;border:0;border-radius:12px;background:#fff;color:#050505;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}.mv2__generate:disabled{opacity:.5;cursor:not-allowed}.mv2__generate svg{width:17px}.mv2__credits{font-size:9px;color:#8f97a5}.mv2__tune{height:38px;border:1px solid #292d35;border-radius:10px;background:#11151b;color:#ddd;display:grid;place-items:center}.mv2__tune svg{width:16px}.mv2__status{display:flex;align-items:center;gap:7px;min-height:32px;color:#8992a0;font-size:9px}.mv2__status b{color:#f4a6a6;font-weight:600}.mv2__status-dot{width:6px;height:6px;border-radius:50%;background:#666}.mv2__status-dot.is-ready{background:#39d98a}.mv2__status-dot.is-rendering,.mv2__status-dot.is-queued{background:#f5c451}.mv2__status-dot.is-failed{background:#ff6b6b}
         .mv2__gallery-tabs{display:flex;gap:5px;overflow-x:auto;padding:4px 0 8px;scrollbar-width:none}.mv2__gallery-tabs::-webkit-scrollbar{display:none}.mv2__gallery-tabs button{height:29px;padding:0 10px;border:1px solid #22262d;border-radius:999px;background:#0d1016;color:#89919f;font-size:8px;white-space:nowrap}.mv2__gallery-tabs button.is-active{background:#fff;color:#000}.mv2__gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.mv2__gallery-card{position:relative;aspect-ratio:16/10;border:1px solid #20242b;border-radius:10px;overflow:hidden;padding:0;background:#080a0d}.mv2__gallery-card.is-active{border-color:#fff}.mv2__gallery-poster{width:100%;height:100%;object-fit:cover;display:block}.mv2__gallery-shade{position:absolute;inset:0;background:linear-gradient(180deg,transparent 50%,rgba(0,0,0,.84))}.mv2__gallery-copy{position:absolute;z-index:2;left:8px;right:8px;bottom:7px;display:flex;flex-direction:column;text-align:left}.mv2__gallery-copy strong{font-size:9px;color:#fff}.mv2__gallery-copy small{font-size:7px;color:#aab2bf;margin-top:2px}
         @media (max-width:1180px){.mv2{grid-template-columns:1fr;padding:14px}.mv2__preview-column{order:2}.mv2__controls-column{order:1}.mv2__models{grid-template-columns:repeat(3,minmax(0,1fr))}.mv2__gallery{grid-template-columns:repeat(4,minmax(0,1fr))}}

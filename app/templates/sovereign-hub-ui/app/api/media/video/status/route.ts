@@ -1,4 +1,5 @@
 import { refreshVideoJobStatus } from "@/lib/media/video-router"
+import type { VideoProviderId } from "@/lib/media/types"
 
 import { withComputeVideoStatus } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
@@ -6,12 +7,14 @@ export const runtime = "nodejs"
 export const GET = withComputeVideoStatus(handleGET)
 
 async function handleGET(request: Request) {
-  const taskId = new URL(request.url).searchParams.get("taskId")?.trim() || ""
+  const url = new URL(request.url)
+  const taskId = url.searchParams.get("taskId")?.trim() || ""
+  const provider = url.searchParams.get("provider")?.trim() as VideoProviderId | undefined
   if (!taskId) {
     return Response.json({ ok: false, error: "taskId is required" }, { status: 400 })
   }
 
-  const result = await refreshVideoJobStatus(taskId)
+  const result = await refreshVideoJobStatus(taskId, provider)
 
   const publicStatus =
     result.status === "completed"

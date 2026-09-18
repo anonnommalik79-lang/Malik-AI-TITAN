@@ -5,7 +5,7 @@ export type ImageAspectRatio = "1:1" | "16:9" | "9:16" | "4:5" | "4:3"
 export type ImageMode = "cinematic" | "realistic" | "product" | "design"
 
 export type ImageProviderId = "cloudflare" | "stability" | "pollinations" | "fal" | "aws-bedrock"
-export type VideoProviderId = "h3" | "dashscope" | "pollo" | "runway" | "fal" | "luma" | "veo"
+export type VideoProviderId = "novai" | "magichour" | "pixazo" | "cliptaps" | "h3" | "dashscope" | "pollo" | "runway" | "fal" | "luma" | "veo"
 export type VideoAspectRatio = "16:9" | "9:16" | "1:1"
 export type VideoResolution = "480p" | "720p" | "1080p" | "2k"
 
@@ -79,6 +79,7 @@ export type VideoGenerateInput = {
   resolution?: VideoResolution
   ratio?: VideoAspectRatio
   generateAudio?: boolean
+  providerId?: VideoProviderId
   userId?: string
   plan?: string
 }
