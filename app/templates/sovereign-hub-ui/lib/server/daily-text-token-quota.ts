@@ -3,7 +3,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import path from "node:path"
 import { computeDirectory } from "@/lib/malik-compute/file-store"
 
-export const DAILY_TEXT_TOKEN_LIMIT = 8_000
+const configuredDailyTextTokenLimit = Number(process.env.FREE_DAILY_TEXT_TOKEN_LIMIT || 10_000)
+export const DAILY_TEXT_TOKEN_LIMIT = Number.isFinite(configuredDailyTextTokenLimit) && configuredDailyTextTokenLimit > 0
+  ? Math.floor(configuredDailyTextTokenLimit)
+  : 10_000
 
 type StoredQuota = {
   day: string
