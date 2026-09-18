@@ -1,6 +1,14 @@
 import { polloVideoEnabled, polloVideoModel, videoGodOrder } from "./config"
 import { getVideoJob, patchVideoJob, saveVideoJob } from "./jobs"
 import {
+  createFreeVideoJob,
+  fetchFreeVideoStatus,
+  freeVideoModel,
+  freeVideoProviderConfigured,
+  isFreeVideoProvider,
+  type FreeVideoProviderId,
+} from "./providers/free-video"
+import {
   createMalikH3Job,
   fetchMalikH3Status,
   isMalikH3TaskId,
@@ -28,7 +36,7 @@ function mapRemoteStatus(status: string): VideoJobStatus {
 
 export async function routeVideoGeneration(input: VideoGenerateInput): Promise<VideoGenerateResult> {
   const errors: string[] = []
-  const order = videoGodOrder() as VideoProviderId[]
+  const order = input.providerId ? [input.providerId] : (videoGodOrder() as VideoProviderId[])
   const compiledPrompt = await compileMalikVideoPrompt(input.prompt, input.generateAudio !== false)
   const providerInput = { ...input, prompt: compiledPrompt || ensure8KQualityPrompt(input.prompt) }
 
@@ -64,6 +72,35 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
           status: "queued",
           stage: "queued",
           outputResolution: input.resolution || "1080p",
+          remainingDailyVideos: 0,
+        }
+      }
+
+      if (isFreeVideoProvider(provider)) {
+        if (!freeVideoProviderConfigured(provider)) {
+          errors.push(`${provider}: API key not configured`)
+          continue
+        }
+
+        const created = await createFreeVideoJob(provider, providerInput)
+        saveVideoJob({
+          taskId: created.taskId,
+          provider,
+          userId,
+          prompt: input.prompt,
+          status: "queued",
+          model: created.model,
+          statusUrl: created.statusUrl,
+          createdAt: now,
+          updatedAt: now,
+        })
+        return {
+          ok: true,
+          provider,
+          model: created.model,
+          taskId: created.taskId,
+          status: "queued",
+          outputResolution: provider === "magichour" ? "480p" : input.resolution || "720p",
           remainingDailyVideos: 0,
         }
       }
@@ -150,8 +187,35 @@ async function refreshH3(taskId: string, model = malikH3Model()): Promise<VideoG
   }
 }
 
-export async function refreshVideoJobStatus(taskId: string): Promise<VideoGenerateResult & { videoUrl?: string }> {
+export async function refreshVideoJobStatus(taskId: string, providerHint?: VideoProviderId): Promise<VideoGenerateResult & { videoUrl?: string }> {
   const stored = getVideoJob(taskId)
+
+  if (!stored && providerHint && isFreeVideoProvider(providerHint) && freeVideoProviderConfigured(providerHint)) {
+    try {
+      const remote = await fetchFreeVideoStatus(providerHint, taskId)
+      const status = mapRemoteStatus(remote.status)
+      return {
+        ok: status !== "failed",
+        provider: providerHint,
+        model: freeVideoModel(providerHint),
+        taskId,
+        status,
+        remainingDailyVideos: 0,
+        videoUrl: remote.videoUrl,
+        error: remote.error,
+      }
+    } catch (error) {
+      return {
+        ok: false,
+        provider: providerHint,
+        model: freeVideoModel(providerHint),
+        taskId,
+        status: "failed",
+        remainingDailyVideos: 0,
+        error: error instanceof Error ? error.message : "Free video status check failed",
+      }
+    }
+  }
 
   if (!stored && isMalikH3TaskId(taskId) && malikH3Configured()) {
     return refreshH3(taskId)
@@ -192,6 +256,34 @@ export async function refreshVideoJobStatus(taskId: string): Promise<VideoGenera
     const result = await refreshH3(taskId, stored.model)
     patchVideoJob(taskId, { status: result.status, videoUrl: result.videoUrl, error: result.error })
     return result
+  }
+
+  if (isFreeVideoProvider(stored.provider)) {
+    try {
+      const remote = await fetchFreeVideoStatus(stored.provider as FreeVideoProviderId, taskId, { statusUrl: stored.statusUrl })
+      const status = mapRemoteStatus(remote.status)
+      patchVideoJob(taskId, { status, videoUrl: remote.videoUrl, error: remote.error })
+      return {
+        ok: status !== "failed",
+        provider: stored.provider,
+        model: stored.model,
+        taskId,
+        status,
+        remainingDailyVideos: 0,
+        videoUrl: remote.videoUrl,
+        error: remote.error,
+      }
+    } catch (error) {
+      return {
+        ok: false,
+        provider: stored.provider,
+        model: stored.model,
+        taskId,
+        status: "failed",
+        remainingDailyVideos: 0,
+        error: error instanceof Error ? error.message : "Free video status check failed",
+      }
+    }
   }
 
   try {
