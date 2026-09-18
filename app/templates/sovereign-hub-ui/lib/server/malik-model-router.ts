@@ -68,13 +68,13 @@ const GLOBAL_TEXT_FALLBACKS: readonly MalikModelId[] = [
 ]
 
 const CODE_FALLBACKS: readonly MalikModelId[] = [
-  "malik-30b",
-  "malik-agent-120b",
-  "malik-vision-26b",
-  "malik-70b",
-  "malik-120b",
-  "malik-20b",
+  "malik-fast-120b",
+  "malik-flash-53",
+  "malik-qwen-397b",
+  "malik-vision-k3",
   "malik-27b",
+  "malik-20b",
+  "malik-120b",
 ]
 
 const PROVIDER_COOLDOWN_UNTIL = new Map<string, number>()
