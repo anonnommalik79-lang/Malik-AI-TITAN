@@ -2,7 +2,8 @@ import { maxVideoPromptLength } from "@/lib/media/config"
 import { checkMediaLimit, nextMediaResetAt, recordMediaUsage } from "@/lib/media/limits"
 import { resolveMediaUser } from "@/lib/media/request"
 import { routeVideoGeneration } from "@/lib/media/video-router"
-import type { VideoResolution } from "@/lib/media/types"
+import { isFreeVideoProvider } from "@/lib/media/providers/free-video"
+import type { VideoProviderId, VideoResolution } from "@/lib/media/types"
 import { acquireVideoDailySlot, videoDailyLimitResponse } from "@/lib/server/media-availability"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
@@ -18,6 +19,13 @@ async function handlePOST(request: Request) {
   const resolution = (["480p", "720p", "1080p", "2k"].includes(body?.resolution) ? body.resolution : "720p") as VideoResolution
   const ratio = ["16:9", "9:16", "1:1"].includes(body?.ratio) ? body.ratio : "16:9"
   const generateAudio = body?.generateAudio !== false
+  const providerRaw = typeof body?.provider === "string" ? body.provider.trim() : ""
+  const validProviders = new Set<VideoProviderId>(["novai", "magichour", "pixazo", "cliptaps", "h3", "dashscope", "pollo", "runway", "fal", "luma", "veo"])
+  const providerId = providerRaw && validProviders.has(providerRaw as VideoProviderId) ? providerRaw as VideoProviderId : undefined
+
+  if (providerRaw && !providerId) {
+    return Response.json({ ok: false, error: "Unknown video provider", code: "INVALID_VIDEO_PROVIDER" }, { status: 400 })
+  }
 
   if (!prompt && !imageUrl) {
     return Response.json({ ok: false, error: "Prompt or imageUrl is required" }, { status: 400 })
@@ -44,9 +52,14 @@ async function handlePOST(request: Request) {
     }, { status: 429 })
   }
 
-  const globalSlot = await acquireVideoDailySlot(user.userId)
-  if (!globalSlot.available) {
-    return videoDailyLimitResponse(globalSlot, "/api/media/video")
+  let globalResetAt = nextMediaResetAt()
+  const usesProviderManagedQuota = !providerId || isFreeVideoProvider(providerId)
+  if (!usesProviderManagedQuota) {
+    const globalSlot = await acquireVideoDailySlot(user.userId)
+    if (!globalSlot.available) {
+      return videoDailyLimitResponse(globalSlot, "/api/media/video")
+    }
+    globalResetAt = globalSlot.resetAt
   }
 
   const result = await routeVideoGeneration({
@@ -56,6 +69,7 @@ async function handlePOST(request: Request) {
     resolution,
     ratio,
     generateAudio,
+    providerId,
     userId: user.userId,
     plan: user.plan,
   })
@@ -70,8 +84,8 @@ async function handlePOST(request: Request) {
       stage: result.stage,
       outputResolution: result.outputResolution,
       remainingDailyVideos: 0,
-      globalDailyLimit: 1,
-      resetAt: globalSlot.resetAt,
+      globalDailyLimit: usesProviderManagedQuota ? null : 1,
+      resetAt: globalResetAt,
       plan: limit.plan,
     }, { status: result.status === "disabled" ? 503 : 502 })
   }
@@ -87,9 +101,9 @@ async function handlePOST(request: Request) {
     stage: result.stage,
     outputResolution: result.outputResolution || resolution,
     remainingDailyVideos: 0,
-    globalDailyLimit: 1,
-    statusUrl: `/api/media/video/status?taskId=${encodeURIComponent(result.taskId)}`,
-    resetAt: globalSlot.resetAt || nextMediaResetAt(),
+    globalDailyLimit: usesProviderManagedQuota ? null : 1,
+    statusUrl: `/api/media/video/status?taskId=${encodeURIComponent(result.taskId)}&provider=${encodeURIComponent(result.provider)}`,
+    resetAt: globalResetAt,
     plan: limit.plan,
   })
 }
