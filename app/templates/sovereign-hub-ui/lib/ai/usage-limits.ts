@@ -15,7 +15,7 @@ export type UserUsage = {
 }
 
 // Chat count is retained for analytics, but daily text access is now governed
-// by the server-side 8K generated-token quota. These large values prevent the
+// by the server-side 10K generated-token quota. These large values prevent the
 // old message-count gate from stopping a user before the token allowance does.
 export const PLAN_LIMITS: Record<AIPlan, Record<UsageKind, number>> = {
   free: { chat: 100000, image: 1, video: 0, project: 2 },

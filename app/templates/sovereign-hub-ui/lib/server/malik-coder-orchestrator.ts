@@ -24,7 +24,7 @@ function complexTask(prompt: string, code: boolean) {
 
 function historyForModel(history?: HistoryMessage[]) {
   return (history || []).filter((m) => (m?.role === "user" || m?.role === "assistant") && typeof m.content === "string")
-    .slice(-5).map((m) => ({ role: m.role, content: clip(m.content, 1300, true) }))
+    .slice(-8).map((m) => ({ role: m.role, content: clip(m.content, 4000, true) }))
 }
 
 function contract(base: string, code: boolean) {
@@ -41,17 +41,18 @@ function contract(base: string, code: boolean) {
 
 function candidates(code: boolean): Candidate[] {
   return code ? [
-    { id: "malik-30b", tokens: 3600 },
-    { id: "malik-flash-53", tokens: 4000 },
-    { id: "malik-8b", tokens: 2600 },
-    { id: "malik-20b", tokens: 700 },
-    { id: "malik-27b", tokens: 650 },
+    // Long code must start on providers with enough daily allowance and output headroom.
+    { id: "malik-fast-120b", tokens: 10_000 },
+    { id: "malik-flash-53", tokens: 10_000 },
+    { id: "malik-qwen-397b", tokens: 10_000 },
+    { id: "malik-27b", tokens: 8_000 },
+    { id: "malik-20b", tokens: 8_000 },
   ] : [
-    { id: "malik-30b", tokens: 2600 },
-    { id: "malik-vision-k3", tokens: 2800 },
-    { id: "malik-flash-53", tokens: 2800 },
-    { id: "malik-8b", tokens: 2000 },
-    { id: "malik-20b", tokens: 700 },
+    { id: "malik-fast-120b", tokens: 4_000 },
+    { id: "malik-flash-53", tokens: 4_000 },
+    { id: "malik-qwen-397b", tokens: 4_000 },
+    { id: "malik-vision-k3", tokens: 4_000 },
+    { id: "malik-20b", tokens: 3_000 },
   ]
 }
 
@@ -75,7 +76,7 @@ function incomplete(text: string, prompt: string, code: boolean) {
   if (/\b(TODO|placeholder|rest omitted|continue similarly|остальное аналогично|продолжение в следующ)\b/i.test(text)) return true
   if ((text.match(/```/g) || []).length % 2 === 1) return true
   if (/html|index\.html/i.test(prompt) && /<!doctype html|<html/i.test(text) && !/<\/html>/i.test(text)) return true
-  return text.length < 1000
+  return false
 }
 
 export async function runMalikCoderOrchestrator(input: Input): Promise<Result> {
@@ -91,11 +92,11 @@ export async function runMalikCoderOrchestrator(input: Input): Promise<Result> {
 
   let plan = ""
   if (complex) {
-    const p = await firstHealthy({ list: [{ id: "malik-30b", tokens: 450 }, { id: "malik-flash-53", tokens: 450 }, { id: "malik-8b", tokens: 400 }], prompt: `Make a compact implementation checklist for this exact request. Do not answer it yet.\n\n${clip(prompt, 8000)}`, system, history, temperature: 0.05, stages })
+    const p = await firstHealthy({ list: [{ id: "malik-fast-120b", tokens: 700 }, { id: "malik-flash-53", tokens: 700 }, { id: "malik-qwen-397b", tokens: 700 }], prompt: `Make a compact implementation checklist for this exact request. Do not answer it yet.\n\n${prompt}`, system, history, temperature: 0.05, stages })
     plan = p?.content || ""
   }
 
-  const request = [`USER REQUEST:\n${clip(prompt, 9000)}`, plan ? `\nCHECKLIST:\n${clip(plan, 1500)}` : "", "\nImplement the request completely now. Return the final user-facing answer, not an outline."].filter(Boolean).join("\n")
+  const request = [`USER REQUEST:\n${prompt}`, plan ? `\nCHECKLIST:\n${clip(plan, 2500)}` : "", "\nImplement the request completely now. Return the final user-facing answer, not an outline. Do not shorten code to save tokens."].filter(Boolean).join("\n")
   const draft = await firstHealthy({ list: routes, prompt: request, system, history, temperature: input.temperature ?? (code ? 0.07 : 0.2), stages })
   if (!draft?.content) throw new Error("MalikCoder 1.0 has no healthy route available")
 
@@ -104,10 +105,10 @@ export async function runMalikCoderOrchestrator(input: Input): Promise<Result> {
   const rounds = code ? 4 : 1
   for (let round = 0; round < rounds && more; round += 1) {
     const shifted = [...routes.slice((round + 1) % routes.length), ...routes.slice(0, (round + 1) % routes.length)]
-      .map((x) => ({ ...x, tokens: Math.min(x.tokens, code ? 2800 : 1600) }))
+      .map((x) => ({ ...x, tokens: Math.min(x.tokens, code ? 6_000 : 2_500) }))
     const next = await firstHealthy({
       list: shifted,
-      prompt: `ORIGINAL REQUEST:\n${clip(prompt, 6500)}\n\nCURRENT ANSWER TAIL:\n${clip(result, 7500, true)}\n\nContinue exactly where the answer stopped. Output only missing continuation. Do not repeat previous code. Finish every original requirement and close incomplete code or files.`,
+      prompt: `ORIGINAL REQUEST:\n${prompt}\n\nCURRENT ANSWER TAIL:\n${clip(result, 18_000, true)}\n\nContinue exactly where the answer stopped. Output only missing continuation. Do not repeat previous code. Finish every original requirement and close incomplete code or files.`,
       system,
       temperature: code ? 0.04 : 0.14,
       stages,

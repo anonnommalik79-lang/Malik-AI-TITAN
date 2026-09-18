@@ -46,22 +46,17 @@ MALIK_CODER_SAMBANOVA_MODEL=gpt-oss-120b
 
 OpenRouter is pinned to a specific free non-NVIDIA model instead of `openrouter/free`, because the generic free router can select NVIDIA models. If the pinned model changes upstream, update `MALIK_CODER_OPENROUTER_MODEL` in Render without changing application code.
 
-### Recommended output budgets
+### Recommended text/code budgets
 
 ```env
-MALIK_CODER_PLAN_MAX_TOKENS=1200
-MALIK_CODER_PRIMARY_CHAT_TOKENS=5000
-MALIK_CODER_PRIMARY_CODE_TOKENS=10000
-MALIK_CODER_REVIEW_MAX_TOKENS=2200
-MALIK_CODER_SPECIALIST_MAX_TOKENS=6000
-MALIK_CODER_FINAL_MAX_TOKENS=16000
-MALIK_CODER_CONTINUATION_MAX_TOKENS=8000
-MALIK_CODER_CONTINUATION_ROUNDS=2
-MALIK_CODER_PROVIDER_TIMEOUT_MS=45000
-MALIK_CODER_PROVIDER_COOLDOWN_MINUTES=15
+FREE_DAILY_TEXT_TOKEN_LIMIT=10000
+MAX_OUTPUT_TOKENS=4000
+MAX_CODE_OUTPUT_TOKENS=10000
+MALIK_GOD_MAX_OUTPUT_TOKENS=4000
+MALIK_MODEL_PROVIDER_TIMEOUT_MS=360000
 ```
 
-These values are maximum stage budgets, not a promise that every provider will emit that many tokens. Each provider can apply a smaller upstream context/output limit.
+The 10K setting is the Malik user-facing generated-text allowance per UTC day. Provider input tokens, retries and provider-specific rate limits are separate. Long code requests are allowed up to the provider's real capability instead of being artificially clipped to a tiny completion.
 
 ## General app environment
 
@@ -73,7 +68,7 @@ IMAGE_FREE_MODE=true
 IMAGE_PROVIDER_PRIMARY=pollinations
 ```
 
-The Free text/chat allowance is **15 completed provider-backed requests per UTC day**. Internal MalikCoder planner/reviewer/fixer calls belong to the same user turn and are not counted as extra user requests.
+The Free text/chat allowance is **10,000 generated text tokens per UTC day**. The legacy message-count ceiling is intentionally kept out of the way; per-minute abuse protection remains active. Internal MalikCoder planner/reviewer/fixer calls belong to the same user turn.
 
 ## Recommended (auth + history)
 
@@ -100,7 +95,7 @@ GET https://YOUR_APP.onrender.com/api/health
 GET https://YOUR_APP.onrender.com/api/health/providers
 ```
 
-`GET /api/stream` should report `defaultModel: "MalikCoder 1.0"` and `freeDailyChatRequests: 15`.
+`GET /api/stream` should report `defaultModel: "MalikCoder 1.0"`, `freeDailyChatRequests: null`, and `freeDailyGeneratedTextTokens: 10000`.
 
 Then send one short chat request and one code request. In Render logs, MalikCoder stages may mention provider names for server diagnostics; provider names and credentials are never intentionally sent to the user-facing answer.
 
