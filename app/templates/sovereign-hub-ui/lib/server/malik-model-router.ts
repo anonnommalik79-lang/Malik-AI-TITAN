@@ -81,7 +81,7 @@ const PROVIDER_COOLDOWN_UNTIL = new Map<string, number>()
 const HARD_PROVIDER_COOLDOWN_MS = 15 * 60 * 1000
 const EMPTY_PROVIDER_COOLDOWN_MS = 2 * 60 * 1000
 const NETWORK_PROVIDER_COOLDOWN_MS = 20 * 1000
-const CODE_PROVIDER_TIMEOUT_MS = 90_000
+const CODE_PROVIDER_TIMEOUT_MS = 360_000
 
 export class MalikModelRouteError extends Error {
   constructor(
@@ -173,20 +173,27 @@ function clampTokens(value: number, fallback: number, max = 65_536) {
 
 function safeProviderTokens(model: MalikModelDefinition, requested: number, codeMode: boolean) {
   if (!codeMode) return requested
+
+  // The old router intentionally squeezed code to 650-2400 tokens, which made
+  // otherwise healthy providers look "broken" on real files and large coding
+  // tasks. Keep only provider-capability ceilings here; the user's 10K/day
+  // quota is enforced separately by Malik Compute.
   if (model.provider === "groq") {
-    if (/qwen\/qwen3\.8-27b/i.test(model.providerModel)) return Math.min(requested, 650)
-    if (/openai\/gpt-oss-20b/i.test(model.providerModel)) return Math.min(requested, 1_200)
-    if (/openai\/gpt-oss-120b/i.test(model.providerModel)) return Math.min(requested, 2_000)
+    if (/qwen\/qwen3\.8-27b/i.test(model.providerModel)) return Math.min(requested, 10_000)
+    if (/openai\/gpt-oss-(?:20b|120b)/i.test(model.providerModel)) return Math.min(requested, 10_000)
   }
-  if (model.provider === "cloudflare") return Math.min(requested, 2_400)
-  if (model.provider === "aihubmix") return Math.min(requested, 1_600)
-  if (model.provider === "modelscope") return Math.min(requested, 2_000)
-  if (model.provider === "cerebras") return Math.min(requested, 2_000)
-  return requested
+  if (model.provider === "cloudflare") return Math.min(requested, 8_000)
+  if (model.provider === "aihubmix") return Math.min(requested, 10_000)
+  if (model.provider === "modelscope") return Math.min(requested, 10_000)
+  if (model.provider === "cerebras") return Math.min(requested, 10_000)
+  return Math.min(requested, 10_000)
 }
 
 function providerRuntime(model: MalikModelDefinition, requestedTokens?: number, requestedTemperature?: number, codeMode = false): ProviderRuntime {
-  const requested = clampTokens(Number(requestedTokens || process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || 2200), 2200)
+  const defaultTokens = codeMode
+    ? Number(process.env.MAX_CODE_OUTPUT_TOKENS || process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || 10_000)
+    : Number(process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || process.env.MAX_OUTPUT_TOKENS || 4_000)
+  const requested = clampTokens(Number(requestedTokens || defaultTokens), codeMode ? 10_000 : 4_000)
   const commonTokens = safeProviderTokens(model, requested, codeMode)
   const commonTemperature = typeof requestedTemperature === "number" ? requestedTemperature : Number(process.env.MALIK_GOD_TEMPERATURE || 0.4)
   const configuredTimeout = Number(process.env.MALIK_MODEL_PROVIDER_TIMEOUT_MS || 30_000)
@@ -366,7 +373,7 @@ function fallbackModels(modelId: MalikModelId, prompt: string) {
 
 function fallbackTokenBudget(model: MalikModelDefinition, requested: number | undefined, prompt: string) {
   if (!isCodeRequest(prompt)) return requested
-  const desired = clampTokens(Number(requested || 2200), 2200)
+  const desired = clampTokens(Number(requested || 10_000), 10_000)
   return safeProviderTokens(model, desired, true)
 }
 
@@ -599,7 +606,7 @@ export async function runStrictMalikModel(input: {
               modelId: input.modelId,
               prompt: continuationPrompt(input.prompt, parsed.content),
               systemPrompt: input.systemPrompt,
-              maxTokens: Math.min(Number(input.maxTokens || 2200), 2200),
+              maxTokens: Math.min(Number(input.maxTokens || 10_000), 6_000),
               temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.15, 0.15),
             }, { allowFallback: true, continuationDepth: depth + 1 })
             if (visibleFinalText(continuation.content)) {
