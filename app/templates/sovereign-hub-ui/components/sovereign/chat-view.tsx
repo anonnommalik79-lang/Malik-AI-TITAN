@@ -158,9 +158,52 @@ interface ChatViewProps {
 }
 
 const MAX_FILE_SIZE = 12 * 1024 * 1024
+const MAX_INLINE_TEXT_CHARS = 600_000
+const TEXT_UPLOAD_EXTENSIONS = new Set([
+  "txt", "md", "mdx", "csv", "tsv", "json", "jsonl", "yaml", "yml", "xml", "html", "htm", "css",
+  "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "java", "kt", "go", "rs", "rb", "php", "swift",
+  "c", "h", "cpp", "hpp", "cs", "sql", "sh", "bash", "zsh", "ps1", "toml", "ini", "env", "log",
+])
+const CODE_UPLOAD_EXTENSIONS = new Set([
+  "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "java", "kt", "go", "rs", "rb", "php", "swift",
+  "c", "h", "cpp", "hpp", "cs", "sql", "sh", "bash", "zsh", "ps1", "html", "css",
+])
+
+function uploadExtension(name: string) {
+  return name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || ""
+}
+
+function inferUploadMime(file: File) {
+  if (file.type) return file.type
+  const ext = uploadExtension(file.name)
+  if (ext === "pdf") return "application/pdf"
+  if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  if (ext === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  if (ext === "pptx") return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  if (ext === "json") return "application/json"
+  if (ext === "csv") return "text/csv"
+  if (TEXT_UPLOAD_EXTENSIONS.has(ext)) return "text/plain"
+  return "application/octet-stream"
+}
 
 async function fileToAttachment(file: File): Promise<ChatAttachment> {
-  if (file.size > MAX_FILE_SIZE) throw new Error(`Файл слишком большой: ${file.name}. Лимит 12MB.`)
+  if (file.size > MAX_FILE_SIZE) throw new Error(`Файл слишком большой: ${file.name}. Лимит 12MB для вложения в чат.`)
+  const mime = inferUploadMime(file)
+  const ext = uploadExtension(file.name)
+  const textLike = mime.startsWith("text/") || mime === "application/json" || TEXT_UPLOAD_EXTENSIONS.has(ext)
+
+  if (textLike) {
+    const text = (await file.text()).slice(0, MAX_INLINE_TEXT_CHARS)
+    return {
+      id: crypto.randomUUID(),
+      name: file.name,
+      mime,
+      size: file.size,
+      kind: CODE_UPLOAD_EXTENSIONS.has(ext) ? "code" : "file",
+      text,
+    }
+  }
+
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ""))
@@ -168,7 +211,6 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
     reader.readAsDataURL(file)
   })
   const base64 = dataUrl.includes(",") ? dataUrl.split(",").pop() || "" : dataUrl
-  const mime = file.type || "application/octet-stream"
   const kind: ChatAttachment["kind"] = mime.startsWith("image/")
     ? "image"
     : mime.startsWith("video/")

@@ -1,25 +1,44 @@
 import type { UploadValidationResult, UploadedFile, UploadedFileKind } from "./types"
 
-const DEFAULT_MAX_IMAGE_BYTES = Number(process.env.MAX_UPLOAD_IMAGE_MB || 10) * 1024 * 1024
+const DEFAULT_MAX_IMAGE_BYTES = Number(process.env.MALIK_MAX_IMAGE_MB || process.env.MAX_UPLOAD_IMAGE_MB || 10) * 1024 * 1024
 const DEFAULT_MAX_VIDEO_BYTES = Number(process.env.MAX_UPLOAD_VIDEO_MB || 50) * 1024 * 1024
-const DEFAULT_MAX_DOC_BYTES = Number(process.env.MAX_UPLOAD_DOC_MB || 12) * 1024 * 1024
+const DEFAULT_MAX_DOC_BYTES = Number(process.env.MALIK_MAX_DOCUMENT_MB || process.env.MAX_UPLOAD_DOC_MB || 12) * 1024 * 1024
 
 const ALLOWED_MIME = new Set([
   "image/png",
   "image/jpeg",
   "image/webp",
+  "image/gif",
   "video/mp4",
   "video/webm",
+  "video/quicktime",
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg",
+  "audio/aac",
   "text/plain",
+  "text/csv",
+  "text/markdown",
+  "text/html",
+  "text/css",
+  "application/json",
+  "application/xml",
   "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ])
 
 function detectKind(mime: string): UploadedFileKind {
   if (mime.startsWith("image/")) return "image"
   if (mime.startsWith("video/")) return "video"
   if (mime.startsWith("audio/")) return "audio"
-  if (mime === "text/plain") return "text"
-  if (mime === "application/pdf") return "document"
+  if (mime.startsWith("text/") || mime === "application/json" || mime === "application/xml") return "text"
+  if (mime === "application/pdf" || mime.includes("officedocument")) return "document"
   return "unknown"
 }
 
