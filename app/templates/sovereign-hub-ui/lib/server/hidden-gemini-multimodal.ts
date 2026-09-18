@@ -8,30 +8,36 @@ export type HiddenMultimodalAttachment = {
   name?: string
 }
 
-const DEFAULT_MODEL = "gemini-3.7-flash"
+type SupportedPart = "image" | "video" | "audio" | "document"
+
+const DEFAULT_MODEL = "gemini-3.5-flash-lite"
+const DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash"
 
 function env(name: string) {
   const value = process.env[name]
   return typeof value === "string" ? value.trim() : ""
 }
 
-function mediaKind(attachment: HiddenMultimodalAttachment): "image" | "video" | "audio" | null {
+function attachmentKind(attachment: HiddenMultimodalAttachment): SupportedPart | null {
   const kind = String(attachment.kind || "").toLowerCase()
   const mime = String(attachment.mime || "").toLowerCase()
+  const name = String(attachment.name || "").toLowerCase()
   if (kind === "image" || mime.startsWith("image/")) return "image"
   if (kind === "video" || mime.startsWith("video/")) return "video"
   if (kind === "audio" || mime.startsWith("audio/")) return "audio"
+  if (kind === "document" || mime === "application/pdf" || name.endsWith(".pdf")) return "document"
   return null
 }
 
 export function hasHiddenGeminiMedia(attachments?: HiddenMultimodalAttachment[]) {
-  return Array.isArray(attachments) && attachments.some((attachment) => Boolean(mediaKind(attachment)))
+  return Array.isArray(attachments) && attachments.some((attachment) => Boolean(attachmentKind(attachment)))
 }
 
-function defaultMime(kind: "image" | "video" | "audio") {
+function defaultMime(kind: SupportedPart) {
   if (kind === "image") return "image/jpeg"
   if (kind === "video") return "video/mp4"
-  return "audio/mpeg"
+  if (kind === "audio") return "audio/mpeg"
+  return "application/pdf"
 }
 
 function dataUrlPayload(url: string) {
@@ -52,6 +58,13 @@ function outputText(payload: any) {
       .trim()
     if (text) return text
   }
+
+  const candidates = Array.isArray(payload?.candidates) ? payload.candidates : []
+  for (const candidate of candidates) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : []
+    const text = parts.map((part: any) => typeof part?.text === "string" ? part.text : "").join("").trim()
+    if (text) return text
+  }
   return ""
 }
 
@@ -65,6 +78,50 @@ function compactHistory(history?: Array<{ role: "user" | "assistant"; content: s
     .join("\n")
 }
 
+function modelChain() {
+  return [...new Set([
+    env("GEMINI_MULTIMODAL_MODEL") || env("GEMINI_VISION_MODEL") || DEFAULT_MODEL,
+    env("GEMINI_FALLBACK_MODEL") || DEFAULT_FALLBACK_MODEL,
+  ].filter(Boolean))]
+}
+
+async function callGemini(input: {
+  key: string
+  model: string
+  systemPrompt: string
+  requestInput: any[]
+  signal?: AbortSignal
+}) {
+  const response = await providerFetch(
+    "https://generativelanguage.googleapis.com/v1beta/interactions",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "x-goog-api-key": input.key,
+      },
+      body: JSON.stringify({
+        model: input.model,
+        system_instruction: input.systemPrompt,
+        input: input.requestInput,
+      }),
+      signal: input.signal,
+    },
+    Number(process.env.GEMINI_MULTIMODAL_TIMEOUT_MS || 90_000),
+  )
+
+  const payload = await response.json().catch(() => ({}))
+  const text = outputText(payload)
+  if (!response.ok || !text) {
+    const providerMessage = payload?.error?.message || payload?.message || `Gemini multimodal returned ${response.status}`
+    const error = new Error(providerMessage) as Error & { status?: number }
+    error.status = response.status
+    throw error
+  }
+
+  return { text, usage: payload?.usage || payload?.usageMetadata }
+}
+
 export async function runHiddenGeminiMultimodal(input: {
   prompt: string
   systemPrompt: string
@@ -75,8 +132,7 @@ export async function runHiddenGeminiMultimodal(input: {
   const key = env("GEMINI_API_KEY") || env("GOOGLE_GENERATIVE_AI_API_KEY") || env("GOOGLE_AI_API_KEY")
   if (!key) throw new Error("HIDDEN_MULTIMODAL_NOT_CONFIGURED")
 
-  const model = env("GEMINI_MULTIMODAL_MODEL") || DEFAULT_MODEL
-  const media = (input.attachments || []).filter((attachment) => Boolean(mediaKind(attachment)))
+  const media = (input.attachments || []).filter((attachment) => Boolean(attachmentKind(attachment)))
   const requestInput: any[] = []
   const historyText = compactHistory(input.history)
   requestInput.push({
@@ -87,7 +143,7 @@ export async function runHiddenGeminiMultimodal(input: {
   })
 
   for (const attachment of media) {
-    const kind = mediaKind(attachment)
+    const kind = attachmentKind(attachment)
     if (!kind) continue
     let mime = attachment.mime || defaultMime(kind)
     let data = attachment.base64 || ""
@@ -104,35 +160,28 @@ export async function runHiddenGeminiMultimodal(input: {
 
   if (requestInput.length <= 1) throw new Error("HIDDEN_MULTIMODAL_MEDIA_MISSING")
 
-  const response = await providerFetch(
-    "https://generativelanguage.googleapis.com/v1beta/interactions",
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "x-goog-api-key": key,
-      },
-      body: JSON.stringify({
+  let lastError: unknown = null
+  for (const model of modelChain()) {
+    try {
+      const result = await callGemini({
+        key,
         model,
-        system_instruction: input.systemPrompt,
-        input: requestInput,
-      }),
-      signal: input.signal,
-    },
-    Number(process.env.GEMINI_MULTIMODAL_TIMEOUT_MS || 60_000),
-  )
-
-  const payload = await response.json().catch(() => ({}))
-  const text = outputText(payload)
-  if (!response.ok || !text) {
-    const providerMessage = payload?.error?.message || payload?.message || `Gemini multimodal returned ${response.status}`
-    throw new Error(providerMessage)
+        systemPrompt: input.systemPrompt,
+        requestInput,
+        signal: input.signal,
+      })
+      return {
+        content: result.text,
+        provider: "malik-multimodal",
+        model: "malik-vision-hidden",
+        providerModel: model,
+        usage: result.usage,
+      }
+    } catch (error) {
+      lastError = error
+      console.warn("[MALIK_MULTIMODAL] Gemini model failed", model, error instanceof Error ? error.message : String(error))
+    }
   }
 
-  return {
-    content: text,
-    provider: "malik-multimodal",
-    model: "malik-vision-hidden",
-    usage: payload?.usage,
-  }
+  throw lastError instanceof Error ? lastError : new Error("HIDDEN_MULTIMODAL_FAILED")
 }
