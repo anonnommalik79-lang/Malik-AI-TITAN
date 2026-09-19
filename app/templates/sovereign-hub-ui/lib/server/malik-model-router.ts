@@ -706,6 +706,20 @@ export async function runStrictMalikModel(input: {
 }
 
 export function malikModelErrorPayload(error: unknown) {
+  if (!(error instanceof MalikModelRouteError) && error instanceof Error) {
+    const raw = error.message || ""
+    if (/не удалось прочитать вложение|hidden_multimodal|multimodal|vision_fallback/i.test(raw)) {
+      const video = /\bvideo\b|видео/i.test(raw)
+      return {
+        ok: false,
+        error: "MULTIMODAL_ENGINE_UNAVAILABLE",
+        message: video
+          ? "Не удалось завершить анализ видео. Malik Vision не получил устойчивый мультимодальный ответ — повторите запрос через несколько секунд."
+          : "Не удалось завершить анализ медиа. Malik Vision временно не получил устойчивый мультимодальный ответ.",
+      }
+    }
+  }
+
   const routeError = error instanceof MalikModelRouteError
     ? error
     : new MalikModelRouteError("MALIK_MODEL_ERROR", "Выбранная модель временно недоступна.", 503)
