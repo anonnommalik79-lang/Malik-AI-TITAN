@@ -152,7 +152,7 @@ import {
   type MalikModelId,
 } from "@/lib/ai/malik-models"
 import type { AIPlan } from "@/lib/ai/types"
-import { isStoredGeneratedImageUrl, persistGeneratedImageReference, persistGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
+import { isStoredGeneratedImageUrl, persistGeneratedImageReference, persistGeneratedImageUrl, resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import {
   responseDepthInstruction,
@@ -256,6 +256,90 @@ type InlineMediaGeneration = {
 
 function isInlineMediaProcessing(status: InlineMediaGenerationStatus) {
   return status === "queued" || status === "thinking" || status === "generating" || status === "rendering"
+}
+
+
+function promptRefersToRecentImage(value: string) {
+  const text = String(value || "").trim().toLowerCase()
+  return /(?:на|в|про)\s+(?:этом\s+|этой\s+)?(?:фото|фотке|фотографии|картинке|изображении)|(?:кто|что)\s+(?:это|там|тут|здесь)|кто\s+на\s+(?:фото|фотке|картинке)|что\s+(?:изображено|нарисовано|видно)|опиши\s+(?:это|фото|картинку|изображение)|посмотри\s+(?:на\s+)?(?:фото|картинку|изображение)/i.test(text)
+}
+
+async function blobToBase64(blob: Blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  let binary = ""
+  const chunk = 0x8000
+  for (let offset = 0; offset < bytes.length; offset += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(bytes.length, offset + chunk)))
+  }
+  return btoa(binary)
+}
+
+async function makeVisionSizedBlob(source: Blob): Promise<Blob> {
+  if (typeof createImageBitmap !== "function" || typeof document === "undefined") return source
+  try {
+    const bitmap = await createImageBitmap(source)
+    const longest = Math.max(bitmap.width, bitmap.height)
+    if (longest <= 1400 && source.size <= 2_500_000) {
+      bitmap.close()
+      return source
+    }
+
+    const scale = Math.min(1, 1400 / Math.max(1, longest))
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+    const canvas = document.createElement("canvas")
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext("2d", { alpha: false })
+    if (!context) {
+      bitmap.close()
+      return source
+    }
+    context.drawImage(bitmap, 0, 0, width, height)
+    bitmap.close()
+
+    const compressed = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.86)
+    )
+    canvas.width = 1
+    canvas.height = 1
+    return compressed?.size ? compressed : source
+  } catch {
+    return source
+  }
+}
+
+async function latestGeneratedImageAttachment(messages: Message[], prompt: string): Promise<ChatAttachment | null> {
+  if (!promptRefersToRecentImage(prompt) || typeof window === "undefined") return null
+
+  const latest = [...messages].reverse().find((message) => {
+    const media = message.generatedMedia
+    return media?.kind === "image" && media.status === "ready" && Boolean(media.url || media.fallbackUrl || media.thumbnailUrl)
+  })
+  const media = latest?.generatedMedia
+  const reference = media?.url || media?.fallbackUrl || media?.thumbnailUrl || ""
+  if (!media || !reference) return null
+
+  try {
+    const resolved = await resolveGeneratedImageUrl(reference)
+    const response = await fetch(resolved, { cache: "force-cache" })
+    if (!response.ok && !resolved.startsWith("blob:") && !resolved.startsWith("data:")) return null
+    const source = await response.blob()
+    if (!source.type.startsWith("image/") || !source.size) return null
+
+    const blob = await makeVisionSizedBlob(source)
+    const mime = blob.type.startsWith("image/") ? blob.type : "image/jpeg"
+    return {
+      id: `generated-visual-context-${media.id}`,
+      name: `malik-generated-context-${media.id}.jpg`,
+      mime,
+      size: blob.size,
+      kind: "image",
+      base64: await blobToBase64(blob),
+    }
+  } catch {
+    return null
+  }
 }
 
 // Mirrors the watchdog inside the chat card. Photo generation is synchronous and
@@ -5469,6 +5553,16 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const cleanContent = (content || "").trim()
   if (!cleanContent || isLoading) return
 
+  // Follow-up questions such as "кто на фото?" automatically receive the last
+  // ready generated image from this chat as a hidden multimodal attachment.
+  // The user does not need to upload the generated picture again.
+  const implicitGeneratedImage = attachments.some((item) => item.kind === "image")
+    ? null
+    : await latestGeneratedImageAttachment(messagesRef.current, cleanContent)
+  const requestAttachments = implicitGeneratedImage
+    ? [...attachments, implicitGeneratedImage]
+    : attachments
+
   const memoryIntent = detectMalikMemoryIntent(cleanContent)
   const actionPlan = memoryIntent ? null : createMalikActionPlan({
     prompt: cleanContent,
@@ -5480,7 +5574,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const responseDepth = resolveResponseDepth(options?.responseDepth ?? loadResponseDepth(userPlan), userPlan)
   const depthLimits = responseDepthLimits(responseDepth)
 
-  const routeDecision = detectIntentAndRoute(cleanContent, attachments, activeAiMode)
+  const routeDecision = detectIntentAndRoute(cleanContent, requestAttachments, activeAiMode)
   dashboardEventBus.emit({
     type: "intent:routed",
     source: "handleSendMessage",
@@ -5494,7 +5588,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setCodexOpen(true)
   }
 
-  const runtimePlan = buildSovereignRuntimePlan(cleanContent, attachments, activeAiMode)
+  const runtimePlan = buildSovereignRuntimePlan(cleanContent, requestAttachments, activeAiMode)
   const mode = runtimePlan.responseMode
   const isProjReq = runtimePlan.isProjectRequest
   const isCodeReq = mode === "code"
@@ -6099,9 +6193,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         isAdmin,
         isCreator: canAccessAdmin,
         creatorName: canAccessAdmin ? "Абдумалик" : undefined,
-        attachments,
-        media_b64: attachments.find(a => a.base64)?.base64,
-        media_type: attachments.find(a => a.base64)?.mime,
+        attachments: requestAttachments,
+        media_b64: requestAttachments.find(a => a.base64)?.base64,
+        media_type: requestAttachments.find(a => a.base64)?.mime,
         mode: isProjReq ? "pro" : isCodeReq ? "code" : "fast",
         responseMode: mode,
         model: selectedModelId,
@@ -6133,7 +6227,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           chat: true,
           code: true,
           canvas: isProjReq,
-          multimodalRequested: /фото|изображ|картин|video|видео|file|файл/i.test(cleanContent),
+          multimodalRequested: requestAttachments.some((item) => item.kind === "image" || item.kind === "video" || item.kind === "file") || /фото|изображ|картин|video|видео|file|файл/i.test(cleanContent),
         },
       }),
     })
