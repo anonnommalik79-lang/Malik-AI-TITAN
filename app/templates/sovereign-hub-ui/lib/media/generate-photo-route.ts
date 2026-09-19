@@ -304,6 +304,17 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     const imageUrl = storageUrl || delivered.imageUrl
     const previewUrl = previewStorageUrl
     const displayUrl = displayImageReference(previewUrl, imageUrl)
+
+    // No cloud bucket? Send only the lightweight display derivative as a
+    // one-response browser cache seed. The client immediately moves it into
+    // account-scoped IndexedDB and drops this base64 string from React/history.
+    // Nothing is persisted on Render's filesystem.
+    const browserCacheImageUrl =
+      !storageUrl &&
+      displayPreview?.buffer?.length &&
+      displayPreview.buffer.length <= 8 * 1024 * 1024
+        ? `data:${displayPreview.mime};base64,${displayPreview.buffer.toString("base64")}`
+        : undefined
     const resolvedModelId = result.modelId || requestedModelId
     const resolvedImageModel = resolvedModelId ? getMalikImageModel(resolvedModelId) : undefined
     const durable = Boolean(storageUrl)
@@ -323,6 +334,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       mediaUrl: displayUrl,
       previewUrl,
       thumbnailUrl: previewUrl,
+      browserCacheImageUrl,
       previewWidth: displayPreview?.width,
       previewHeight: displayPreview?.height,
       understood: result.understood,
