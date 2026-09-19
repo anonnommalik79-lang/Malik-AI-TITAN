@@ -410,6 +410,20 @@ export async function routeMalikAttachments(input: {
 
   for (const [index, attachment] of attachments.entries()) {
     const kind = binaryKind(attachment)
+
+    // A browser-sampled video reaches the server as lightweight video metadata
+    // plus chronological JPEG frames. Keep the metadata in the prompt context
+    // instead of trying to send an empty video blob to the vision provider.
+    if (
+      kind === "video"
+      && !attachment.base64
+      && typeof attachment.text === "string"
+      && attachment.text.includes("[MALIK_VIDEO_TIMELINE_METADATA]")
+    ) {
+      textSections.push(`[${attachmentLabel(attachment, index)}]\n${attachment.text}`)
+      continue
+    }
+
     if (kind) {
       binary.push({ ...attachment, mime: attachmentMime(attachment), kind })
       continue
