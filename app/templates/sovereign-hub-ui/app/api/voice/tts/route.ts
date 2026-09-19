@@ -220,7 +220,7 @@ const GEMINI_LANGUAGE: Record<VoiceLanguage, { name: string; code: string }> = {
 
 async function geminiTts(text: string, voice: string, language: VoiceLanguage, speed: number, expressivity: number) {
   if (ttsSkipped("gemini")) return null
-  const keys = unique([env("GEMINI_VOICE_API_KEY"), env("GEMINI_API_KEY"), env("GOOGLE_GENERATIVE_AI_API_KEY"), env("GOOGLE_AI_API_KEY")])
+  const keys = unique([env("MALIK_VOICE_GEMINI_KEY"), env("GEMINI_VOICE_API_KEY"), env("GEMINI_API_KEY"), env("GOOGLE_GENERATIVE_AI_API_KEY"), env("GOOGLE_AI_API_KEY")])
   if (!keys.length) return null
 
   const voiceName = geminiVoiceFor(voice, language === "kk" ? "ru" : language)
