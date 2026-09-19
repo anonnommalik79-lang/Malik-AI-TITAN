@@ -260,7 +260,7 @@ function expandVideoAnalysisAttachments(items: ChatAttachment[]): ChatAttachment
 
     const { analysisFrames, base64: _base64, url: _url, ...metadata } = item
     const timeline = analysisFrames
-      .map((frame, index) => \`frame \${index + 1}: \${frame.timestampSeconds.toFixed(2)}s\`)
+      .map((frame, index) => `frame ${index + 1}: ${frame.timestampSeconds.toFixed(2)}s`)
       .join(", ")
 
     const videoMeta: ChatAttachment = {
@@ -268,23 +268,23 @@ function expandVideoAnalysisAttachments(items: ChatAttachment[]): ChatAttachment
       size: 0,
       text: [
         "[MALIK_VIDEO_TIMELINE_METADATA]",
-        \`Original video: \${item.name}\`,
-        \`Duration: \${Number(item.durationSeconds || 0).toFixed(2)} seconds\`,
+        `Original video: ${item.name}`,
+        `Duration: ${Number(item.durationSeconds || 0).toFixed(2)} seconds`,
         "The following JPEG attachments are chronological frames sampled locally from this video.",
-        \`Timeline: \${timeline}\`,
+        `Timeline: ${timeline}`,
         "Analyze these frames as one continuous video timeline. Do not treat them as unrelated photos.",
         "[/MALIK_VIDEO_TIMELINE_METADATA]",
       ].join("\\n"),
     }
 
     const frameAttachments: ChatAttachment[] = analysisFrames.map((frame, index) => ({
-      id: \`\${item.id}-frame-\${index + 1}\`,
+      id: `${item.id}-frame-${index + 1}`,
       name: frame.name,
       mime: frame.mime,
       size: Math.ceil(frame.base64.length * 0.75),
       kind: "image",
       base64: frame.base64,
-      text: \`Video frame \${index + 1} at \${frame.timestampSeconds.toFixed(2)} seconds.\`,
+      text: `Video frame ${index + 1} at ${frame.timestampSeconds.toFixed(2)} seconds.`,
     }))
 
     return [videoMeta, ...frameAttachments]
