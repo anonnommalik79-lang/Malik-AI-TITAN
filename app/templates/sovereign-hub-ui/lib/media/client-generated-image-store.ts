@@ -229,11 +229,8 @@ export async function persistGeneratedImageReference(id: string, url: string): P
   if (!value || isStoredGeneratedImageUrl(value)) return value
   if (value.startsWith("data:image/")) return persistGeneratedImageUrl(id, value)
 
-  const ownAsset = value.startsWith("/") || (() => {
-    if (typeof window === "undefined") return false
-    try { return new URL(value, window.location.href).origin === window.location.origin } catch { return false }
-  })()
-  if (!ownAsset) return value
+  const fetchableImage = value.startsWith("/") || /^https:\/\//i.test(value)
+  if (!fetchableImage) return value
 
   try {
     const key = scopedKey(`id:${id}`)
@@ -250,6 +247,9 @@ export async function resolveGeneratedImageUrl(url: string): Promise<string> {
   if (!isStoredGeneratedImageUrl(url)) return url
 
   const id = decodeURIComponent(url.slice(URL_PREFIX.length))
+  if (id.startsWith("acct:") && !id.startsWith(`acct:${currentAccountScope}:`)) {
+    throw new Error("Это изображение принадлежит другому локальному аккаунту.")
+  }
   const value = await readEntry(id)
   if (!value) throw new Error("Сохранённое изображение не найдено. Повторите генерацию.")
   const resolved = entryToDisplayUrl(value)
@@ -274,9 +274,7 @@ function legacyCacheKeyFor(url: string) {
 function isOwnAssetUrl(url: string) {
   const value = String(url || "")
   if (value.startsWith("data:") || value.startsWith("blob:") || value.startsWith(URL_PREFIX)) return false
-  if (value.startsWith("/")) return true
-  if (typeof window === "undefined") return false
-  try { return new URL(value, window.location.href).origin === window.location.origin } catch { return false }
+  return value.startsWith("/") || /^https:\/\//i.test(value)
 }
 
 /** The local copy of an image that was shown from url, or "" when there is none. */
