@@ -325,7 +325,23 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
   const mime = inferUploadMime(file)
   const ext = uploadExtension(file.name)
   const textLike = mime.startsWith("text/") || mime === "application/json" || TEXT_UPLOAD_EXTENSIONS.has(ext)
-  const isVideo = mime.startsWith("video/")
+
+  if (mime.startsWith("video/")) {
+    if (file.size > MAX_VIDEO_FILE_SIZE) {
+      throw new Error(`Видео слишком большое: ${file.name}. Для анализа до 10 секунд лимит файла 150MB.`)
+    }
+    const analyzed = await captureVideoAnalysisFrames(file)
+    return {
+      id: crypto.randomUUID(),
+      name: file.name,
+      mime,
+      size: file.size,
+      kind: "video",
+      url: URL.createObjectURL(file),
+      durationSeconds: analyzed.durationSeconds,
+      analysisFrames: analyzed.frames,
+    }
+  }
 
   if (textLike) {
     if (file.size > MAX_TEXT_FILE_SIZE) {
@@ -342,53 +358,17 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
     }
   }
 
-  if (isVideo) {
-    if (file.size > MAX_VIDEO_FILE_SIZE) {
-      throw new Error(`Видео слишком большое: ${file.name}. Максимум 150MB для анализа до 10 секунд.`)
-    }
-    const durationSeconds = await readVideoDuration(file)
-    if (durationSeconds > MAX_VIDEO_SECONDS + 0.05) {
-      throw new Error(`${file.name}: видео ${durationSeconds.toFixed(1)} сек. Malik AI читает видео до 10 сек.`)
-    }
-
-    try {
-      const analysisFrames = await sampleVideoFrames(file, durationSeconds)
-      return {
-        id: crypto.randomUUID(),
-        name: file.name,
-        mime,
-        size: file.size,
-        kind: "video",
-        durationSeconds,
-        analysisFrames,
-        // Keep the original only as a local preview. The raw phone video is not
-        // serialized into /api/stream; compact timeline frames are sent instead.
-        url: URL.createObjectURL(file),
-      }
-    } catch (error) {
-      // Small videos can still use the provider's native video path if local
-      // timeline extraction is unavailable on an older browser/codec.
-      if (file.size <= 8 * 1024 * 1024) {
-        return {
-          id: crypto.randomUUID(),
-          name: file.name,
-          mime,
-          size: file.size,
-          kind: "video",
-          durationSeconds,
-          base64: await readBlobAsBase64(file),
-          url: URL.createObjectURL(file),
-        }
-      }
-      throw error
-    }
-  }
-
   if (file.size > MAX_BINARY_FILE_SIZE) {
     throw new Error(`Файл слишком большой: ${file.name}. Лимит 10MB для бинарного вложения в чат.`)
   }
 
-  const base64 = await readBlobAsBase64(file)
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ""))
+    reader.onerror = () => reject(new Error("Не удалось прочитать файл"))
+    reader.readAsDataURL(file)
+  })
+  const base64 = dataUrl.includes(",") ? dataUrl.split(",").pop() || "" : dataUrl
   const kind: ChatAttachment["kind"] = mime.startsWith("image/")
     ? "image"
     : mime.startsWith("audio/")
