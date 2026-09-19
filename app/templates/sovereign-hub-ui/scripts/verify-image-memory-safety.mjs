@@ -33,9 +33,16 @@ assert.match(route, /previewUrl,/, "API must expose the display derivative")
 assert.match(route, /#malik-master=/, "display URL must carry a master download reference")
 assert.match(resultExperience, /function masterImageUrl/, "result tools must resolve the master URL")
 assert.match(resultExperience, /fullQualitySrc\s*=\s*masterImageUrl\(src\)/, "downloads must use full quality")
-assert.match(studio, /const displayUrl = data\.url \|\| data\.previewUrl \|\| data\.imageUrl/, "photo studio must paint the display derivative")
-assert.match(studio, /const masterUrl = data\.masterUrl \|\| data\.imageUrl \|\| displayUrl/, "photo studio must preserve the full-resolution master")
-assert.match(studio, /results\[0\]\?\.masterUrl \?\? results\[0\]\?\.url/, "explicit Canvas export should use the master")
+// The Photo Generation studio was replaced by the Voltframe teaser - the panel
+// deliberately renders one picture and calls no API at all, so there is nothing
+// left in it to paint a derivative. The contract it used to consume is still
+// guarded above, on the route that produces it.
+assert.match(studio, /data-view="photo-generation"/, "the photo-generation panel must still be the one the dashboard mounts")
+assert.equal(/fetch\(|previewUrl/.test(studio), false, "the teaser must not call the generation API")
+// Both of these described code inside the studio that no longer exists. The
+// master/derivative contract itself is still guarded, on the route that hands
+// the two URLs out and on the result tools that resolve the master for a
+// download - see the assertions above.
 
 // Full-quality post-processing is gated by host capacity instead of lowering resolution.
 assert.match(route, /withMalikImageProcessingSlot/, "8K delivery must use the capacity gate")
@@ -77,11 +84,23 @@ assert.match(resultCss, /\.malik-photo-motion \.malik-art-result[\s\S]*filter:\s
 
 // The in-chat waiting UI stays bounded and becomes completely idle when finished.
 assert.equal(/CYCLE_MS|MAX_CYCLES|setCycle\(/.test(motion), false, "photo waiting UI must not run remount cycles")
-assert.equal(/<svg|malik-coded-hand|malik-spray-rig|blur\(/i.test(motion), false, "photo waiting UI must not render the old heavy SVG/fog stack")
+// The heavy stack was an animated inline SVG scene plus a full-screen fog blur.
+// A bare /<svg/ also matched the 44px Malik mark beside the card's title, and a
+// bare /blur\(/ matched a 3px transition, neither of which costs anything. The
+// scene itself stays banned: no named rig, no SVG filter, no SVG animation, no
+// large blur, and no room for a scene to grow back unnoticed.
+assert.equal(/malik-coded-hand|malik-spray-rig|feGaussianBlur|<animate/i.test(motion), false, "photo waiting UI must not render the old heavy SVG/fog stack")
+for (const [, radius] of motion.matchAll(/blur\((\d+(?:\.\d+)?)px\)/gi)) {
+  assert.ok(Number(radius) < 8, `photo waiting UI must not run a heavy blur: blur(${radius}px)`)
+}
+assert.ok((motion.match(/<svg/gi) || []).length <= 2, "photo waiting UI must stay free of an inline SVG scene")
 assert.match(motion, /if\s*\(imageLoaded\s*\|\|\s*actuallyFailed\)\s*return[\s\S]*setInterval\(tick,\s*1000\)/, "finished cards must stop timers and active cards must update at 1 Hz")
-assert.match(motion, /malik-image-loading-mobile-final\\.gif/, "mobile waiting scene must use the approved Malik GIF")
-assert.match(motion, /malik-image-loading-pc-final\\.gif/, "desktop waiting scene must use the approved Malik GIF")
-assert.match(motion, /<source media="\\(max-width: 640px\\)"/, "waiting scene must switch between mobile and desktop GIFs")
+// `\\.` inside a regex literal is a literal backslash, not an escaped dot, so
+// both of these could never match the paths they were written for and failed
+// against the very GIFs they were added to protect.
+assert.match(motion, /malik-image-loading-mobile-final\.gif/, "mobile waiting scene must use the approved Malik GIF")
+assert.match(motion, /malik-image-loading-pc-final\.gif/, "desktop waiting scene must use the approved Malik GIF")
+assert.match(motion, /<source media="\(max-width: 640px\)"/, "waiting scene must switch between mobile and desktop GIFs")
 assert.equal(/<canvas|requestAnimationFrame|ResizeObserver/.test(motion), false, "GIF waiting scene must stay browser-native and avoid canvas animation work")
 assert.match(motion, /loadImage\(resolvedResultUrl\)[\s\S]*setImageLoaded\(true\)/, "final display image should decode once and hand off immediately")
 assert.equal(/finalImage|lastFinalUrl|finalUrlRef/.test(motion), false, "finished image must not be redrawn through the canvas reveal")

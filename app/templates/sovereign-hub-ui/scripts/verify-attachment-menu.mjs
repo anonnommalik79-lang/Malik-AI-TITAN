@@ -73,7 +73,10 @@ assert.match(shareTarget, /form\.getAll\("files"\)/, "PWA share target must acce
 const userMessageBlock = extractBlock(dashboard, "const userMessage: Message = {", "  const assistantMessage: Message = {")
 assert.match(userMessageBlock, /attachments:\s*attachments\.map\(\(item\) => \(\{[\s\S]*url:\s*item\.url/, "User messages must keep lightweight attachment metadata")
 assert.equal(userMessageBlock.includes("base64: item.base64"), false, "Chat history must not duplicate base64 uploads")
-assert.match(dashboard, /attachments,\s*media_b64:/, "The full attachment payload must still be sent to /api/stream")
+// `attachments,` became `attachments: apiRequestAttachments,` - the shorthand
+// went, the payload did not. The rule is that both keys are still in the body
+// sent to /api/stream, in that order.
+assert.match(dashboard, /attachments:?\s*[A-Za-z]*,\s*media_b64:/, "The full attachment payload must still be sent to /api/stream")
 assert.match(stream, /routeMalikAttachments/, "The main stream route must send attachments through the multimodal router")
 assert.match(multimodal, /runHiddenGeminiMultimodal/, "Binary attachments must reach the hidden Gemini multimodal path")
 

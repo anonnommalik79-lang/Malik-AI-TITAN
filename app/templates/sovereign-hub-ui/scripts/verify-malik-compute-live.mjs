@@ -53,7 +53,10 @@ const stubs = {
   },
   "@/lib/media/config": { maxVideoPromptLength: () => 6000 },
   "@/lib/media/limits": { checkMediaLimit: async () => ({ ok: true, remaining: 10, plan: "plus" }), nextMediaResetAt: () => "", recordMediaUsage: async () => {} },
-  "@/lib/media/request": { resolveMediaUser: async () => ({ userId: actor.id, plan: "plus" }) },
+  // The media routes refuse guests outright now, so the stub has to answer the
+  // question they actually ask. Without `authenticated` the video route returns
+  // 401 and the metering assertions below measure the refusal, not the meter.
+  "@/lib/media/request": { resolveMediaUser: async () => ({ userId: actor.id, plan: "plus", authenticated: true }) },
   "@/lib/media/video-router": { routeVideoGeneration: async () => videoResult, refreshVideoJobStatus: async () => videoStatus },
 }
 const cache = new Map()
