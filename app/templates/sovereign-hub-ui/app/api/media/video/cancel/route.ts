@@ -12,8 +12,13 @@ function dashscopeApiBase() {
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const user = await resolveMediaUser(request, body)
+  if (!user.authenticated || user.userId === "guest") {
+    return Response.json({ ok: false, code: "AUTH_REQUIRED", error: "Войдите в аккаунт, чтобы отменить видео." }, { status: 401 })
+  }
   const requestedTaskId = String(body?.taskId || "").trim()
-  const job = requestedTaskId ? getVideoJob(requestedTaskId) : getLatestVideoJobForUser(user.userId)
+  const job = requestedTaskId
+    ? await getVideoJob(requestedTaskId, user.userId)
+    : await getLatestVideoJobForUser(user.userId)
 
   if (!job) {
     return Response.json(
@@ -69,7 +74,7 @@ export async function POST(request: Request) {
     )
   }
 
-  patchVideoJob(job.taskId, { status: "failed", error: "Canceled by user" })
+  await patchVideoJob(job.taskId, { status: "failed", error: "Canceled by user" }, user.userId)
   await recordMediaUsage(user.userId, "video", -1)
   const limit = await checkMediaLimit({ userId: user.userId, plan: user.plan, kind: "video" })
 

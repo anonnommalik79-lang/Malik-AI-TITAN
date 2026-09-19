@@ -448,6 +448,7 @@ async function runSelectedAnswer(
 async function runProjectAnswer(
   body: any,
   selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>,
+  ownerId: string,
   onStatus?: (text: string) => void,
 ) {
   let prompt = coderPrompt(body)
@@ -500,7 +501,7 @@ async function runProjectAnswer(
   }
 
   onStatus?.("Код прошёл QA. Malik AI упаковывает проект в ZIP")
-  const artifact = putProjectArtifact(project)
+  const artifact = await putProjectArtifact(project, ownerId)
   const downloadUrl = `/api/ai/project/artifacts/${artifact.id}/download`
   const isRussian = /[а-яёәіңғүұқөһ]/iu.test(prompt)
   const featureFiles = project.files
@@ -594,7 +595,7 @@ function liveSseResponse(
       }, 15_000)
 
       const answerPromise = isProjectBuildRequest(body)
-        ? runProjectAnswer(body, selection, (text) => send("status", { type: "status", text }))
+        ? runProjectAnswer(body, selection, entitlement.userId, (text) => send("status", { type: "status", text }))
         : runSelectedAnswer(body, selection, (progress) => send("progress", { type: "progress", ...progress }), maxOutputTokens)
 
       void answerPromise.then(async (answer) => {
@@ -779,7 +780,7 @@ async function handlePOST(request: Request) {
     const routedBody = ownerMode ? withVerifiedOwnerChatContext(body) : body
     if (wantsSse(request, body)) return liveSseResponse(routedBody, selection, entitlement, maxOutputTokens)
     const answer = isProjectBuildRequest(routedBody)
-      ? await runProjectAnswer(routedBody, selection)
+      ? await runProjectAnswer(routedBody, selection, entitlement.userId)
       : await runSelectedAnswer(routedBody, selection, undefined, maxOutputTokens)
     const multimodalCost = estimateMultimodalTokens(hasMalikAttachments(routedBody?.attachments) ? routedBody.attachments : [])
     if (multimodalCost > 0) {

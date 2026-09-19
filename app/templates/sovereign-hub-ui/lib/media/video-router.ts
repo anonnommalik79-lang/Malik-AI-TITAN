@@ -60,7 +60,7 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
         }
 
         const created = await createMalikH3Job(providerInput)
-        saveVideoJob({
+        await saveVideoJob({
           taskId: created.taskId,
           provider: "h3",
           userId,
@@ -91,7 +91,7 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
         }
 
         const created = await createFreeVideoJob(provider, providerInput)
-        saveVideoJob({
+        await saveVideoJob({
           taskId: created.taskId,
           provider,
           userId,
@@ -123,7 +123,7 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
         if (!polloVideoEnabled()) throw new Error("POLLO_VIDEO_ENABLED=false")
         if (!polloConfigured()) throw new Error("POLLO_API_KEY missing")
         const created = await createPolloVideoTask(providerInput)
-        saveVideoJob({
+        await saveVideoJob({
           taskId: created.taskId,
           provider: "pollo",
           userId,
@@ -137,7 +137,7 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
       }
 
       const created = await createTitanVideoJob(titanProvider, providerInput)
-      saveVideoJob({
+      await saveVideoJob({
         taskId: created.taskId,
         provider,
         userId,
@@ -195,10 +195,10 @@ async function refreshH3(taskId: string, model = malikH3Model()): Promise<VideoG
   }
 }
 
-export async function refreshVideoJobStatus(taskId: string, providerHint?: VideoProviderId): Promise<VideoGenerateResult & { videoUrl?: string }> {
-  const stored = getVideoJob(taskId)
+export async function refreshVideoJobStatus(taskId: string, providerHint?: VideoProviderId, userId?: string): Promise<VideoGenerateResult & { videoUrl?: string }> {
+  const stored = await getVideoJob(taskId, userId)
 
-  if (!stored && providerHint && isFreeVideoProvider(providerHint) && freeVideoProviderConfigured(providerHint)) {
+  if (!stored && !userId && providerHint && isFreeVideoProvider(providerHint) && freeVideoProviderConfigured(providerHint)) {
     try {
       const remote = await fetchFreeVideoStatus(providerHint, taskId)
       const status = mapRemoteStatus(remote.status)
@@ -225,11 +225,11 @@ export async function refreshVideoJobStatus(taskId: string, providerHint?: Video
     }
   }
 
-  if (!stored && isMalikH3TaskId(taskId) && malikH3Configured()) {
+  if (!stored && !userId && isMalikH3TaskId(taskId) && malikH3Configured()) {
     return refreshH3(taskId)
   }
 
-  if (!stored && videoProviderConfigured("dashscope")) {
+  if (!stored && !userId && videoProviderConfigured("dashscope")) {
     try {
       const remote = await fetchTitanVideoStatus("dashscope", taskId)
       const status = mapRemoteStatus(remote.status)
@@ -262,7 +262,7 @@ export async function refreshVideoJobStatus(taskId: string, providerHint?: Video
 
   if (stored.provider === "h3") {
     const result = await refreshH3(taskId, stored.model)
-    patchVideoJob(taskId, { status: result.status, videoUrl: result.videoUrl, error: result.error })
+    await patchVideoJob(taskId, { status: result.status, videoUrl: result.videoUrl, error: result.error }, stored.userId)
     return result
   }
 
@@ -270,7 +270,7 @@ export async function refreshVideoJobStatus(taskId: string, providerHint?: Video
     try {
       const remote = await fetchFreeVideoStatus(stored.provider as FreeVideoProviderId, taskId, { statusUrl: stored.statusUrl })
       const status = mapRemoteStatus(remote.status)
-      patchVideoJob(taskId, { status, videoUrl: remote.videoUrl, error: remote.error })
+      await patchVideoJob(taskId, { status, videoUrl: remote.videoUrl, error: remote.error }, stored.userId)
       return {
         ok: status !== "failed",
         provider: stored.provider,
@@ -301,7 +301,7 @@ export async function refreshVideoJobStatus(taskId: string, providerHint?: Video
         : await fetchTitanVideoStatus(stored.provider as TitanVideoProviderId, taskId, { statusUrl: stored.statusUrl, responseUrl: stored.responseUrl })
 
     const status = mapRemoteStatus(remote.status)
-    patchVideoJob(taskId, { status, videoUrl: remote.videoUrl, error: remote.error })
+    await patchVideoJob(taskId, { status, videoUrl: remote.videoUrl, error: remote.error }, stored.userId)
 
     return {
       ok: status !== "failed",
