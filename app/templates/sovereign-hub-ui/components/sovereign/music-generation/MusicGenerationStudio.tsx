@@ -521,6 +521,20 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           <button type="button" onClick={improvePrompt} aria-label="Улучшить запрос"><Sparkles /></button>
           <button type="button" onClick={() => setNotice("Настройки трека применяются ниже.")} aria-label="Настройки"><SlidersHorizontal /></button>
         </div>
+        {!instrumental && lyricsEnabled ? (
+          <div className="mm-prompt-language" aria-label="Язык текста песни">
+            {(Object.keys(LANGUAGE_LABELS) as LyricsLanguage[]).map((language) => (
+              <button
+                key={language}
+                type="button"
+                className={lyricsLanguage === language ? "is-active" : ""}
+                onClick={() => setLyricsLanguage(language)}
+              >
+                {LANGUAGE_LABELS[language]}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="mm-count">
           <span>{prompt.length}/2000</span>
           <button type="button" onClick={() => setPrompt("")} aria-label="Очистить"><X /></button>
@@ -528,34 +542,6 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       </div>
     </div>
   )
-
-  const lyricsCard = !instrumental && lyricsEnabled ? (
-    <div className="mm-lyrics">
-      <div className="mm-lyrics-top">
-        <span><FileText />Текст песни · Malik AI</span>
-        <div className="mm-language">
-          {(Object.keys(LANGUAGE_LABELS) as LyricsLanguage[]).map((language) => (
-            <button
-              key={language}
-              type="button"
-              className={lyricsLanguage === language ? "is-active" : ""}
-              onClick={() => setLyricsLanguage(language)}
-            >
-              {LANGUAGE_LABELS[language]}
-            </button>
-          ))}
-        </div>
-      </div>
-      <textarea
-        value={lyrics}
-        maxLength={12000}
-        onChange={(event) => setLyrics(event.target.value)}
-        placeholder={"Оставьте пустым — Malik AI сам напишет слова по вашему запросу.\n\nИли вставьте свои слова здесь..."}
-        disabled={generating}
-      />
-      <small>{lyrics.length}/12000 · пусто = Malik AI напишет автоматически · KZ / RU / EN</small>
-    </div>
-  ) : null
 
   const durationControls = (
     <div className="mm-setting">
@@ -740,25 +726,23 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
       <div className="mm-desktop">
         <div className="mm-desktop-grid">
+          <aside className="mm-promo mm-promo-left" aria-label="Malik Music visual" />
           <div className="mm-desktop-main">
-            <div className="mm-hero">
-              <div className="mm-hero-copy">
-                <span>MALIK MUSIC STUDIO · {quotaLabel}</span>
-                <h1>Создавай<br />музыку с <b>AI</b></h1>
-                <p>Настоящая генерация через deAPI AceStep 1.5 XL Turbo. Prompt → request_id → polling → MP3.</p>
-                <small>FROM IDEAS TO HITS</small>
-              </div>
-              <div className="mm-hero-mark"><Crown /><span>MUSIC<br />HAS<br />NO LIMITS</span></div>
-            </div>
+            <div className="mm-hero" role="img" aria-label={"Malik Music · " + quotaLabel} />
 
             {genreCards}
             {promptCard}
-            {lyricsCard}
-            <div className="mm-settings-grid">{durationControls}{outputControls}</div>
+            <div className="mm-settings-grid">
+              {durationControls}
+              <div className="mm-setting mm-model-setting">
+                <div className="mm-label"><Box />Модель</div>
+                {modelButton}
+              </div>
+              {outputControls}
+            </div>
             {moodControls}
             <div className="mm-desktop-bottom">
               {switchControls}
-              {modelButton}
             </div>
             {generateButton}
             {player}
@@ -766,14 +750,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
             {historyPanel}
           </div>
 
-          <aside className="mm-promo">
-            <div className="mm-promo-brand"><Crown /><span>PHONK<br />MODE</span></div>
-            <div className="mm-promo-bottom">
-              <span>БОЛЬШЕ<br />ЧЕМ МУЗЫКА</span>
-              <i />
-              <strong>ТВОИ ИДЕИ<br />РЕАЛЬНЫ</strong>
-            </div>
-          </aside>
+          <aside className="mm-promo mm-promo-right" aria-label="Malik Music night visual" />
         </div>
       </div>
 
@@ -795,7 +772,6 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
         {genreCards}
         {promptCard}
-        {lyricsCard}
         <div className="mm-mobile-settings">{durationControls}{outputControls}</div>
         {moodControls}
         <div className="mm-mobile-switches">{switchControls}</div>
