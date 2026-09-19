@@ -158,10 +158,15 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const geminiLiveReadyRef = useRef(false)
   const liveInputRef = useRef("")
   const liveOutputRef = useRef("")
+  const voiceRef = useRef(voice)
 
   useEffect(() => {
     languageRef.current = language
   }, [language])
+
+  useEffect(() => {
+    voiceRef.current = voice
+  }, [voice])
 
   useEffect(() => {
     speedRef.current = speed
@@ -198,7 +203,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       liveInputRef.current = ""
       liveOutputRef.current = ""
       geminiLiveRef.current = new GeminiLiveSession({
-        voice,
+        voice: voiceRef.current,
         callbacks: {
           onReady: (model) => {
             geminiLiveReadyRef.current = true
@@ -253,7 +258,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     const ready = await geminiLiveRef.current.connect()
     geminiLiveReadyRef.current = ready
     return ready
-  }, [voice])
+  }, [])
 
   const stopReplyAudio = useCallback((interrupted = true) => {
     geminiLiveRef.current?.stopOutput()
