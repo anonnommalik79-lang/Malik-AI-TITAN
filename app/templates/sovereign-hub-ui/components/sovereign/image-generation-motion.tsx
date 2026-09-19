@@ -142,6 +142,14 @@ export function ImageGenerationMotion({
   }, [resultUrl, fallbackUrl])
 
   useEffect(() => {
+    return () => {
+      if (resolvedResultUrl.startsWith("blob:")) {
+        try { URL.revokeObjectURL(resolvedResultUrl) } catch {}
+      }
+    }
+  }, [resolvedResultUrl])
+
+  useEffect(() => {
     if (!resolvedResultUrl || imageLoaded || actuallyFailed) return
     let cancelled = false
 
