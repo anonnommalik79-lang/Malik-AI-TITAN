@@ -281,6 +281,7 @@ function HomeComposer({
   onOpenVoice?: () => void
 }) {
   const [toolsOpen, setToolsOpen] = useState(false)
+  const [dragActive, setDragActive] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const toolsRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -321,13 +322,82 @@ function HomeComposer({
     { id: "upload-files", label: "Загрузить файлы", icon: Paperclip, action: () => fileInputRef.current?.click() },
   ]
 
+  const importRemoteAsFile = async (rawUrl: string) => {
+    const url = rawUrl.trim()
+    if (!/^https?:\/\//i.test(url)) return false
+    try {
+      const response = await fetch("/api/attachments/import-url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ url }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok || !payload?.file?.base64) return false
+      const binary = atob(String(payload.file.base64))
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+      const file = new File([bytes], String(payload.file.name || "shared-media"), {
+        type: String(payload.file.mime || "application/octet-stream"),
+      })
+      onSelectMediaFiles([file])
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const transferUrl = (transfer: DataTransfer | null) => {
+    if (!transfer) return ""
+    const uri = transfer.getData("text/uri-list").split(/\r?\n/).find((line) => line && !line.startsWith("#")) || ""
+    if (/^https?:\/\//i.test(uri.trim())) return uri.trim()
+    const html = transfer.getData("text/html")
+    const src = html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || ""
+    if (/^https?:\/\//i.test(src)) return src
+    const text = transfer.getData("text/plain").trim()
+    return /^https?:\/\/\S+$/i.test(text) ? text : ""
+  }
+
+  const handlePaste = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files || [])
+    if (files.length) {
+      event.preventDefault()
+      onSelectMediaFiles(files)
+      return
+    }
+    const url = transferUrl(event.clipboardData)
+    if (url) {
+      event.preventDefault()
+      await importRemoteAsFile(url)
+    }
+  }
+
+  const handleDrop = async (event: React.DragEvent<HTMLElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setDragActive(false)
+    const files = Array.from(event.dataTransfer.files || [])
+    if (files.length) {
+      onSelectMediaFiles(files)
+      return
+    }
+    const url = transferUrl(event.dataTransfer)
+    if (url) await importRemoteAsFile(url)
+  }
+
   const hasSendableContent = Boolean(prompt.trim() || attachments.length)
 
   return (
     <section
-      className="thome-composer"
+      className={cn("thome-composer", dragActive && "is-dragging")}
       aria-label="Новый запрос"
       data-has-content={hasSendableContent ? "true" : "false"}
+      onDragEnter={(event) => { event.preventDefault(); setDragActive(true) }}
+      onDragOver={(event) => { event.preventDefault(); setDragActive(true) }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false)
+      }}
+      onDrop={handleDrop}
     >
       <div className="thome-composer-row">
         <div className="thome-tools" ref={toolsRef}>
@@ -411,6 +481,7 @@ function HomeComposer({
             if (event.target.value.trim()) prefetchChatShell()
             onPromptChange(event.target.value)
           }}
+          onPaste={handlePaste}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault()
@@ -461,6 +532,19 @@ function HomeComposer({
       {attachments.length || attachmentError ? (
         <div className="thome-attachments" aria-live="polite">
           {attachments.map((item) => {
+            const preview = typeof item.url === "string" && /^(?:blob:|data:|https?:)/i.test(item.url) ? item.url : ""
+            if ((item.kind === "image" || item.kind === "video") && preview) {
+              return (
+                <span key={item.id} className="thome-attachment-preview" title={item.name}>
+                  {item.kind === "image"
+                    ? <img src={preview} alt={item.name || "Изображение"} />
+                    : <video src={preview} muted playsInline preload="metadata" />}
+                  <button type="button" onClick={() => onRemoveAttachment(item.id)} aria-label={`Убрать ${item.name}`}>
+                    <X aria-hidden="true" />
+                  </button>
+                </span>
+              )
+            }
             const Icon = item.kind === "video" ? Film : item.kind === "image" ? ImageIcon : Paperclip
             return (
               <span key={item.id} className="thome-attachment-pill">
