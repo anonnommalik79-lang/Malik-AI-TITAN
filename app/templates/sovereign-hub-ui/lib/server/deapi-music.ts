@@ -98,6 +98,13 @@ export async function submitDeapiMusic(input: {
     ? `${input.prompt}. Instrumental only, no vocals.`
     : input.prompt
 
+  // deAPI's ACE-Step endpoint currently validates the lyrics field even for
+  // instrumental requests. Their ACE-Step guide recommends "[Instrumental]"
+  // for this case, so always send the field instead of omitting it.
+  const lyrics = input.instrumental
+    ? "[Instrumental]"
+    : (input.lyrics?.trim() || "")
+
   const body: Record<string, unknown> = {
     model: musicModel(),
     caption,
@@ -107,8 +114,8 @@ export async function submitDeapiMusic(input: {
     seed: -1,
     format: "mp3",
     vocal_language: "unknown",
+    lyrics,
   }
-  if (!input.instrumental && input.lyrics?.trim()) body.lyrics = input.lyrics.trim()
 
   let lastError = "deAPI request failed"
   let lastStatus = 502
