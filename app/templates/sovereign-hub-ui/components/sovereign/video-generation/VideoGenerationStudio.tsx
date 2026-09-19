@@ -19,6 +19,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Upload,
+  Video,
   X,
 } from "lucide-react"
 import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
@@ -229,6 +230,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [sourcePreview, setSourcePreview] = useState("")
   const sourceInputRef = useRef<HTMLInputElement | null>(null)
+  const mobileSourceInputRef = useRef<HTMLInputElement | null>(null)
+  const [sourceDurationSeconds, setSourceDurationSeconds] = useState(0)
   const [ratio, setRatio] = useState<Ratio>("16:9")
   const [duration, setDuration] = useState<Duration>(5)
   const [quality, setQuality] = useState<Quality>("max")
@@ -241,7 +244,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [thumbPage, setThumbPage] = useState(0)
   const [modelNotice, setModelNotice] = useState("")
   const [selectedModelId, setSelectedModelId] = useState<(typeof MODELS)[number]["id"]>("novai")
-  const [mobilePanel, setMobilePanel] = useState<"text" | "image" | "style">("text")
+  const [mobilePanel, setMobilePanel] = useState<"text" | "image" | "video" | "style">("text")
   const busy = phase === "queued" || phase === "rendering"
   const selectedModel = MODELS.find((model) => model.id === selectedModelId) || MODELS[0]
   const selectedItem = SHOWCASE_TEMPLATES[selected] || SHOWCASE_TEMPLATES[0]
@@ -263,6 +266,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     if (busy || nextMode === mode) return
     setMode(nextMode)
     setSourceFile(null)
+    setSourceDurationSeconds(0)
     setSourcePreview("")
     setVideoUrl("")
     setError("")
@@ -271,14 +275,45 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       setSelectedModelId("magichour")
       setDuration(5)
       setModelNotice(nextMode === "image"
-        ? "Image → Video работает через Magic Hour LTX 2.5: исходное фото остаётся первым кадром."
-        : "Video → Video работает через Magic Hour AI Video Editor: исходное видео сохраняется как основа.")
+        ? "Image → Video работает через Magic Hour: исходное фото остаётся первым кадром."
+        : "Видео → Видео: Google Omni редактирует исходный клип по тексту — можно добавить, убрать, заменить или изменить детали.")
     } else {
       setModelNotice("")
     }
   }
 
-  const handleSourceChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const readVideoDuration = (file: File) => new Promise<number>((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const video = document.createElement("video")
+    const cleanup = () => {
+      video.removeAttribute("src")
+      video.load()
+      URL.revokeObjectURL(url)
+    }
+    const timer = window.setTimeout(() => {
+      cleanup()
+      reject(new Error("Не удалось прочитать длительность видео."))
+    }, 12_000)
+
+    video.preload = "metadata"
+    video.muted = true
+    video.playsInline = true
+    video.onloadedmetadata = () => {
+      window.clearTimeout(timer)
+      const value = Number(video.duration)
+      cleanup()
+      if (!Number.isFinite(value) || value <= 0) reject(new Error("Не удалось определить длительность видео."))
+      else resolve(value)
+    }
+    video.onerror = () => {
+      window.clearTimeout(timer)
+      cleanup()
+      reject(new Error("Не удалось открыть видео. Используйте MP4, MOV, WebM или M4V."))
+    }
+    video.src = url
+  })
+
+  const handleSourceChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null
     event.target.value = ""
     if (!file) return
@@ -288,15 +323,40 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       setError(imageMode ? "Выберите изображение." : "Выберите видео.")
       return
     }
-    setSourceFile(file)
-    setSourcePreview(URL.createObjectURL(file))
-    setVideoUrl("")
-    setError("")
-    setPhase("idle")
+
+    try {
+      let sourceDuration = 0
+      if (!imageMode) {
+        sourceDuration = await readVideoDuration(file)
+        if (sourceDuration > 5.05) {
+          setError(`Для Видео → Видео загрузите клип до 5 секунд. Сейчас: ${sourceDuration.toFixed(1)} сек.`)
+          return
+        }
+        if (sourceDuration < 3) {
+          setError(`Magic Hour Google Omni сейчас принимает клипы от 3 до 10 секунд. Загрузите фрагмент 3–5 секунд.`)
+          return
+        }
+      }
+
+      if (sourcePreview) URL.revokeObjectURL(sourcePreview)
+      setSourceFile(file)
+      setSourceDurationSeconds(sourceDuration)
+      setSourcePreview(URL.createObjectURL(file))
+      setVideoUrl("")
+      setError("")
+      setPhase("idle")
+      if (!imageMode) {
+        setDuration(5)
+        setModelNotice(`Видео ${sourceDuration.toFixed(1)} сек · Google Omni. Опишите, что добавить, убрать, заменить или изменить.`)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось прочитать файл.")
+    }
   }
 
   const clearSource = () => {
     setSourceFile(null)
+    setSourceDurationSeconds(0)
     setSourcePreview("")
     setVideoUrl("")
     setError("")
@@ -305,12 +365,16 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   const chooseDuration = (value: Duration) => {
     if (busy) return
+    if (mode === "video") {
+      setDuration(5)
+      setSelectedModelId("magichour")
+      setModelNotice("Видео → Видео обрабатывает загруженный фрагмент до 5 секунд через Magic Hour Google Omni.")
+      return
+    }
     setDuration(value)
-    // 10 seconds is guaranteed by the current Magic Hour LTX route. Other
-    // free providers may choose their own duration, so pin 10s to LTX.
     if (value === 10 && selectedModelId !== "magichour") {
       setSelectedModelId("magichour")
-      setModelNotice("10 секунд → Magic Hour LTX 2.5, чтобы длительность реально соблюдалась.")
+      setModelNotice("10 секунд → Magic Hour LTX, чтобы длительность реально соблюдалась.")
     }
   }
 
@@ -368,7 +432,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             mode,
             imageUrl: mode === "image" ? sourcePath : undefined,
             sourceVideoUrl: mode === "video" ? sourcePath : undefined,
-            length: duration,
+            sourceDurationSeconds: mode === "video" ? sourceDurationSeconds : undefined,
+            length: mode === "video" ? 5 : duration,
             resolution: QUALITY_RESOLUTION[quality],
             ratio: ratio === "4:3" ? "16:9" : ratio,
             generateAudio: selectedModel.audio,
@@ -442,7 +507,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     if (busy) return
     if (mode !== "text") {
       setSelectedModelId("magichour")
-      setModelNotice("Image → Video на мобильном работает через Magic Hour LTX.")
+      setModelNotice(mode === "video"
+        ? "Видео → Видео работает через Magic Hour Google Omni."
+        : "Image → Video на мобильном работает через Magic Hour.")
       return
     }
     const available = MODELS.filter((model) => duration !== 10 || model.id === "magichour")
@@ -456,7 +523,14 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     if (busy) return
     if (mode !== "image") changeMode("image")
     setMobilePanel("image")
-    requestAnimationFrame(() => sourceInputRef.current?.click())
+    window.setTimeout(() => mobileSourceInputRef.current?.click(), 0)
+  }
+
+  const openMobileVideoPicker = () => {
+    if (busy) return
+    if (mode !== "video") changeMode("video")
+    setMobilePanel("video")
+    window.setTimeout(() => mobileSourceInputRef.current?.click(), 0)
   }
 
   const downloadCurrent = () => {
