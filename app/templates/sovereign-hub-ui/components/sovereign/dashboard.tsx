@@ -5599,9 +5599,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setMobilePreviewOpen(false)
     setGeneratedCode("")
   }
-  const requestedInlineMediaKind = detectInlineMediaGenerationRequest(cleanContent, attachments, activeAiMode)
+  const requestedInlineMediaKind = detectInlineMediaGenerationRequest(cleanContent, requestAttachments, activeAiMode)
   const parsedMediaCommand = parseMediaCommand(cleanContent)
-  const editingImage = requestedInlineMediaKind === "image" && isExplicitImageEditRequest(cleanContent, attachments.some((item) => item.kind === "image"))
+  const editingImage = requestedInlineMediaKind === "image" && isExplicitImageEditRequest(cleanContent, requestAttachments.some((item) => item.kind === "image"))
   const needsImageConfirmation = requestedInlineMediaKind === "image" && !parsedMediaCommand && !editingImage
   const inlineMediaKind = needsImageConfirmation ? null : requestedInlineMediaKind
   // Shown in the chat card: without the slash command.
@@ -5611,7 +5611,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const inlineMediaApiPrompt = parsedMediaCommand
     ? cleanContent
     : `${inlineMediaKind === "video" ? "/video" : "/image"} ${cleanContent}`
-  setActiveGenerationKind(needsImageConfirmation ? "text" : inlineMediaKind || detectDashboardGenerationKind(cleanContent, attachments, activeAiMode))
+  setActiveGenerationKind(needsImageConfirmation ? "text" : inlineMediaKind || detectDashboardGenerationKind(cleanContent, requestAttachments, activeAiMode))
   const chatId = activeChatId || crypto.randomUUID()
   const title = cleanContent.slice(0, 34) + (cleanContent.length > 34 ? "..." : "")
 
@@ -5954,7 +5954,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           duration: inlineMediaKind === "video" ? 5 : undefined,
           userEmail: normalizedEmail,
           mediaProAccessCode: "Malik ai",
-          attachments: attachments.map((item) => ({
+          attachments: requestAttachments.map((item) => ({
             id: item.id,
             name: item.name,
             mime: item.mime,
