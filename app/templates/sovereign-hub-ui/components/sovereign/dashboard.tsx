@@ -1215,13 +1215,47 @@ function reviveMessage(message: any): Message {
   }
 }
 
+function messageAttachmentFingerprint(message: Message) {
+  return (message.attachments || [])
+    .map((item) => `${item.id}:${item.kind}:${item.name}:${item.size}`)
+    .join("|")
+}
+
+function collapseAccidentalDuplicateTurns(items: Message[]) {
+  const result: Message[] = []
+
+  for (const message of items) {
+    if (message.role === "user" && result.length >= 2) {
+      const previousAssistant = result[result.length - 1]
+      const previousUser = result[result.length - 2]
+      const deltaMs = message.timestamp.getTime() - previousUser.timestamp.getTime()
+      const samePrompt =
+        previousUser.role === "user"
+        && previousAssistant.role === "assistant"
+        && previousUser.content.trim().replace(/\s+/g, " ") === message.content.trim().replace(/\s+/g, " ")
+      const sameAttachments = messageAttachmentFingerprint(previousUser) === messageAttachmentFingerprint(message)
+
+      // A duplicated UI event used to create two identical turns before React
+      // could commit isLoading=true. Keep the newer turn and discard only the
+      // immediately preceding copy from that tiny race window.
+      if (samePrompt && sameAttachments && Number.isFinite(deltaMs) && deltaMs >= 0 && deltaMs <= 2500) {
+        result.splice(result.length - 2, 2)
+      }
+    }
+
+    result.push(message)
+  }
+
+  return result
+}
+
 function reviveChat(chat: StoredChat): Chat {
   return {
     id: String(chat?.id || crypto.randomUUID()),
     title: String(chat?.title || "Новый проект"),
     timestamp: chat?.timestamp ? new Date(chat.timestamp) : new Date(),
     isPinned: Boolean(chat?.isPinned),
-    messages: Array.isArray(chat?.messages) ? chat.messages.map(reviveMessage) : [],
+    messages: Array.isArray(chat?.messages) ? collapseAccidentalDuplicateTurns(chat.messages.map(reviveMessage)) : [],
     status: chat?.status === "deployed" || chat?.status === "building" ? chat.status : "draft",
     techStack: Array.isArray(chat?.techStack) ? chat.techStack : ["React", "Tailwind"],
     selectedModelId: isMalikModelId(chat?.selectedModelId) ? chat.selectedModelId : undefined,
@@ -4725,6 +4759,7 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
   const [messages, setMessages] = useState<Message[]>([])
   const messagesRef = useRef<Message[]>([])
   const chatsRef = useRef<Chat[]>([])
+  const sendGateRef = useRef<{ signature: string; at: number }>({ signature: "", at: 0 })
   const [isLoading, setIsLoading] = useState(false)
   const [isGeneratingTerminal, setIsGeneratingTerminal] = useState(false) // Новое состояние для терминала
   const [generatedCode, setGeneratedCode] = useState<string>("")
@@ -4866,7 +4901,7 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
           setActiveView("home")
         } else {
           if (parsed?.activeChatId) setActiveChatId(String(parsed.activeChatId))
-          if (Array.isArray(parsed?.messages)) setMessages(parsed.messages.map(reviveMessage))
+          if (Array.isArray(parsed?.messages)) setMessages(collapseAccidentalDuplicateTurns(parsed.messages.map(reviveMessage)))
           if (typeof parsed?.generatedCode === "string") setGeneratedCode(parsed.generatedCode)
         }
         if (isMalikModelId(parsed?.selectedModelId)) setSelectedModelId(parsed.selectedModelId)
@@ -5609,7 +5644,20 @@ async function revealAssistantTextQuickly(text: string, onFrame: (visible: strin
 
 const handleSendMessage = useCallback(async (content: string, attachments: ChatAttachment[] = [], options?: ChatSendOptions) => {
   const cleanContent = (content || "").trim()
-  if (!cleanContent || isLoading) return
+  if (!cleanContent) return
+
+  // React state is asynchronous: Enter/click could reach this callback twice
+  // before isLoading=true was committed, producing two user rows, two assistant
+  // turns and a stop button that stayed alive beside an already-finished reply.
+  // This synchronous gate closes that race at the single dashboard entry point.
+  const submissionNow = Date.now()
+  const submissionSignature = `${cleanContent}\u0000${attachments.map((item) => `${item.id}:${item.kind}:${item.size}`).join("|")}`
+  const previousSubmission = sendGateRef.current
+  const duplicateBurst = previousSubmission.signature === submissionSignature
+    && submissionNow - previousSubmission.at < 2500
+  const sameTickBurst = submissionNow - previousSubmission.at < 350
+  if (isLoading || duplicateBurst || sameTickBurst) return
+  sendGateRef.current = { signature: submissionSignature, at: submissionNow }
 
   // Follow-up questions such as "кто на фото?" automatically receive the last
   // ready generated image from this chat as a hidden multimodal attachment.
