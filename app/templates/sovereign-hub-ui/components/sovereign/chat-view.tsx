@@ -279,8 +279,9 @@ async function captureVideoAnalysisFrames(file: File) {
 
     const frameCount = duration < 0.8 ? 4 : VIDEO_ANALYSIS_FRAME_COUNT
     const safeEnd = Math.max(0, duration - 0.03)
-    const timestamps = Array.from({ length: frameCount }, (_, index) =>
-      frameCount === 1 ? 0 : safeEnd * (index / (frameCount - 1)),
+    const timestamps = Array.from(
+      { length: frameCount },
+      (_, index) => safeEnd * (index / (frameCount - 1)),
     )
 
     const frames: NonNullable<ChatAttachment["analysisFrames"]> = []
