@@ -1824,6 +1824,17 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
     keywords: ["video", "видео", "ролик", "motion", "runway"],
     opensPreview: true,
   },
+  "music-generation": {
+    id: "music-generation",
+    title: "Malik Music",
+    description: "Responsive music and phonk track studio with working local audio preview.",
+    bucket: "generator",
+    icon: "music",
+    status: "beta",
+    mobileMode: "full",
+    fallbackView: "home",
+    keywords: ["music", "track", "phonk", "музыка", "трек", "фонк", "бит"],
+  },
   "code-generation": {
     id: "code-generation",
     title: "Code Generation",
