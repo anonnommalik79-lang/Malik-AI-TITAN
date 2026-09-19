@@ -383,6 +383,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     const form = new FormData()
     form.append("file", sourceFile, sourceFile.name)
     form.append("mode", mode)
+    if (mode === "video") form.append("durationSeconds", String(sourceDurationSeconds))
     const response = await clientFetchWithTimeout("/api/media/video/source", { method: "POST", body: form }, 90_000)
     const data = await response.json().catch(() => ({}))
     if (!response.ok || !data?.filePath) {
