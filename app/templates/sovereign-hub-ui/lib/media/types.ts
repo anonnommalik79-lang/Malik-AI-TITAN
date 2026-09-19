@@ -80,6 +80,8 @@ export type VideoGenerateInput = {
   imageUrl?: string
   /** Optional source video for prompt-driven video editing. Use a provider asset path or a public HTTPS URL. */
   sourceVideoUrl?: string
+  /** Duration of an uploaded source clip, validated client/server for video editing. */
+  sourceDurationSeconds?: number
   mode?: "text" | "image" | "video"
   length?: 5 | 10
   resolution?: VideoResolution
