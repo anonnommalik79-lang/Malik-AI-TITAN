@@ -334,6 +334,7 @@ function makeCandidate(
 }
 
 function addDualAnswer(assistantRow: HTMLElement) {
+  if (assistantRow.getAttribute("data-malik-dual-resolved")) return
   if (assistantRow.querySelector(":scope .malik-dual-answer")) return
   if (!isCompletedAssistant(assistantRow)) return
 
@@ -389,6 +390,26 @@ function addDualAnswer(assistantRow: HTMLElement) {
     })
   }
 
+  const resolveSelection = (selected: "1" | "2") => {
+    const selectedBody = (selected === "1" ? full : focused).cloneNode(true) as HTMLElement
+    scrubClone(selectedBody)
+
+    markdown.replaceChildren(...Array.from(selectedBody.childNodes))
+    markdown.classList.remove("malik-dual-source-hidden")
+    assistantRow.setAttribute("data-malik-dual-resolved", selected)
+    shell.remove()
+  }
+
+  const selectAnswer = (selected: "1" | "2") => {
+    try { window.localStorage.setItem(storageKey, selected) } catch { /* best effort */ }
+    applySelection(selected)
+    shell.setAttribute("data-resolving", selected)
+
+    // Keep a tiny visual confirmation, then collapse the comparison into the
+    // chosen answer so the conversation continues as a normal Malik response.
+    window.setTimeout(() => resolveSelection(selected), 140)
+  }
+
   let saved: "1" | "2" | null = null
   try {
     const value = window.localStorage.getItem(storageKey)
@@ -396,16 +417,15 @@ function addDualAnswer(assistantRow: HTMLElement) {
   } catch {
     saved = null
   }
-  applySelection(saved)
 
-  one.choose.addEventListener("click", () => {
-    try { window.localStorage.setItem(storageKey, "1") } catch { /* best effort */ }
-    applySelection("1")
-  })
-  two.choose.addEventListener("click", () => {
-    try { window.localStorage.setItem(storageKey, "2") } catch { /* best effort */ }
-    applySelection("2")
-  })
+  if (saved) {
+    resolveSelection(saved)
+    return
+  }
+
+  applySelection(null)
+  one.choose.addEventListener("click", () => selectAnswer("1"))
+  two.choose.addEventListener("click", () => selectAnswer("2"))
 
   markdown.classList.add("malik-dual-source-hidden")
   card.insertBefore(shell, markdown)
