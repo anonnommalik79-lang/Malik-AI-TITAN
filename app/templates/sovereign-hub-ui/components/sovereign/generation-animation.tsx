@@ -16,7 +16,7 @@ interface GenerationAnimationProps {
 const generationStepMap = {
   text: ["Reading request", "Finding intent", "Structuring answer", "Checking clarity", "Writing response", "Final polish"],
   image: ["Reading image", "Scanning details", "Extracting visual cues", "Matching prompt", "Preparing insight", "Returning analysis"],
-  video: ["Loading frames", "Reading timeline", "Detecting motion", "Mapping scenes", "Summarizing video", "Returning analysis"],
+  video: ["Определяю сцены", "Сопоставляю кадры", "Проверяю движение", "Ищу детали и артефакты", "Сверяю вывод", "Формирую ответ"],
   file: ["Opening file", "Parsing structure", "Extracting facts", "Finding tasks", "Building summary", "Returning result"],
   code: ["Understanding bug", "Planning fix", "Generating code", "Connecting actions", "Checking edge cases", "Returning patch"],
   website: ["Understanding prompt", "Planning layout", "Generating components", "Connecting actions", "Building preview", "Sending to canvas"],
