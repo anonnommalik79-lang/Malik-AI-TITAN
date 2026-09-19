@@ -584,8 +584,11 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           type="button"
           className={"mm-switch" + (instrumental ? " is-on" : "")}
           onClick={() => {
-            setInstrumental((value) => !value)
-            if (!instrumental) setLyricsEnabled(false)
+            const next = !instrumental
+            setInstrumental(next)
+            // Keep the modes mutually exclusive so the backend never receives
+            // "vocals requested, but no lyrics mode selected".
+            setLyricsEnabled(!next)
           }}
           aria-pressed={instrumental}
         >
