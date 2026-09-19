@@ -33,9 +33,22 @@ assert.match(route, /previewUrl,/, "API must expose the display derivative")
 assert.match(route, /#malik-master=/, "display URL must carry a master download reference")
 assert.match(resultExperience, /function masterImageUrl/, "result tools must resolve the master URL")
 assert.match(resultExperience, /fullQualitySrc\s*=\s*masterImageUrl\(src\)/, "downloads must use full quality")
-assert.match(studio, /const displayUrl = data\.url \|\| data\.previewUrl \|\| data\.imageUrl/, "photo studio must paint the display derivative")
-assert.match(studio, /const masterUrl = data\.masterUrl \|\| data\.imageUrl \|\| displayUrl/, "photo studio must preserve the full-resolution master")
-assert.match(studio, /results\[0\]\?\.masterUrl \?\? results\[0\]\?\.url/, "explicit Canvas export should use the master")
+if (studio.includes('data-view="photo-generation"') && studio.includes("/voltframe/desktop.png")) {
+  // Photo Generation is intentionally in Voltframe launch-takeover mode.
+  // The original generator route is still verified above, while this surface
+  // must render the founder-provided artwork byte-for-byte without Next/Image
+  // recompression, crop or stretch.
+  assert.match(studio, /srcSet="\/voltframe\/mobile\.png"/, "mobile photo section must use the approved portrait artwork")
+  assert.match(studio, /src="\/voltframe\/desktop\.png"/, "desktop photo section must use the approved landscape artwork")
+  assert.match(studio, /object-contain/, "Voltframe artwork must preserve its original aspect ratio")
+  assert.equal(/next\/image|<Image\b/.test(studio), false, "Voltframe artwork must bypass Next image recompression")
+  assert.equal(fs.statSync("public/voltframe/desktop.png").size, 3_068_214, "desktop artwork must remain the exact uploaded PNG")
+  assert.equal(fs.statSync("public/voltframe/mobile.png").size, 2_873_324, "mobile artwork must remain the exact uploaded PNG")
+} else {
+  assert.match(studio, /const displayUrl = data\.url \|\| data\.previewUrl \|\| data\.imageUrl/, "photo studio must paint the display derivative")
+  assert.match(studio, /const masterUrl = data\.masterUrl \|\| data\.imageUrl \|\| displayUrl/, "photo studio must preserve the full-resolution master")
+  assert.match(studio, /results\[0\]\?\.masterUrl \?\? results\[0\]\?\.url/, "explicit Canvas export should use the master")
+}
 
 // Full-quality post-processing is gated by host capacity instead of lowering resolution.
 assert.match(route, /withMalikImageProcessingSlot/, "8K delivery must use the capacity gate")
