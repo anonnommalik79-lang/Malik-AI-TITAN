@@ -591,17 +591,15 @@ def gemini_live_token():
 
     model = _env("MALIK_VOICE_MODEL") or "gemini-3.8-live"
     now = datetime.now(timezone.utc)
+    # Keep the token short-lived, but do not constrain setup fields here.
+    # The browser sends the complete Live setup (voice, transcription, system
+    # instruction). A constrained token can reject a perfectly valid setup when
+    # one locked field is omitted or represented differently by the raw WS API.
+    # Google's official minimal REST example uses exactly these three fields.
     body = {
         "uses": 1,
         "expireTime": (now + timedelta(minutes=30)).isoformat().replace("+00:00", "Z"),
         "newSessionExpireTime": (now + timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
-        "liveConnectConstraints": {
-            "model": f"models/{model}",
-            "config": {
-                "sessionResumption": {},
-                "responseModalities": ["AUDIO"],
-            },
-        },
     }
 
     try:
