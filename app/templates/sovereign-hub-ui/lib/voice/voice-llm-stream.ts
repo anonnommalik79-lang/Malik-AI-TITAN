@@ -55,7 +55,7 @@ function gemini(): Endpoint {
     provider: "gemini",
     // Gemini's OpenAI-compatible surface, so one client covers both providers.
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    keys: unique([env("GEMINI_VOICE_API_KEY"), env("GEMINI_API_KEY"), env("GOOGLE_GENERATIVE_AI_API_KEY"), env("GOOGLE_AI_API_KEY")]),
+    keys: unique([env("MALIK_VOICE_GEMINI_KEY"), env("GEMINI_VOICE_API_KEY"), env("GEMINI_API_KEY"), env("GOOGLE_GENERATIVE_AI_API_KEY"), env("GOOGLE_AI_API_KEY")]),
     models: unique([env("VOICE_LLM_KAZAKH_MODEL"), "gemini-2.5-flash", "gemini-flash-latest"]),
   }
 }
