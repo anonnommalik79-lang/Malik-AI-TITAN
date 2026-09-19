@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import {
   ArrowUp,
+  Box,
+  Clock3,
+  Crown,
+  Monitor,
+  Play,
+  RectangleHorizontal,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -235,6 +241,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [thumbPage, setThumbPage] = useState(0)
   const [modelNotice, setModelNotice] = useState("")
   const [selectedModelId, setSelectedModelId] = useState<(typeof MODELS)[number]["id"]>("novai")
+  const [mobilePanel, setMobilePanel] = useState<"text" | "image" | "style">("text")
   const busy = phase === "queued" || phase === "rendering"
   const selectedModel = MODELS.find((model) => model.id === selectedModelId) || MODELS[0]
   const selectedItem = SHOWCASE_TEMPLATES[selected] || SHOWCASE_TEMPLATES[0]
@@ -403,6 +410,55 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     }
   }
 
+  const improvePrompt = () => {
+    setPrompt((value) => value.trim()
+      ? `${value.trim()} Кинематографичный свет, реалистичная физика движения, плавная работа камеры, высокая детализация и естественная динамика.`
+      : DEFAULT_PROMPT)
+  }
+
+  const applyMobileStyle = (style: string) => {
+    setPrompt((value) => {
+      const base = value.trim() || DEFAULT_PROMPT
+      return base.includes(style) ? base : `${base} ${style}`
+    })
+    setMobilePanel("text")
+  }
+
+  const cycleMobileDuration = () => chooseDuration(duration === 5 ? 10 : 5)
+
+  const cycleMobileQuality = () => {
+    if (busy) return
+    setQuality((value) => value === "max" ? "fast" : "max")
+  }
+
+  const cycleMobileRatio = () => {
+    if (busy) return
+    const values: Ratio[] = ["16:9", "9:16", "1:1", "4:3"]
+    const index = values.indexOf(ratio)
+    setRatio(values[(index + 1) % values.length])
+  }
+
+  const cycleMobileModel = () => {
+    if (busy) return
+    if (mode !== "text") {
+      setSelectedModelId("magichour")
+      setModelNotice("Image → Video на мобильном работает через Magic Hour LTX.")
+      return
+    }
+    const available = MODELS.filter((model) => duration !== 10 || model.id === "magichour")
+    const index = available.findIndex((model) => model.id === selectedModelId)
+    const next = available[(index + 1 + available.length) % available.length] || available[0]
+    setSelectedModelId(next.id)
+    setModelNotice(next.note)
+  }
+
+  const openMobileImagePicker = () => {
+    if (busy) return
+    if (mode !== "image") changeMode("image")
+    setMobilePanel("image")
+    requestAnimationFrame(() => sourceInputRef.current?.click())
+  }
+
   const downloadCurrent = () => {
     const src = videoUrl || selectedItem.src
     const anchor = document.createElement("a")
@@ -425,6 +481,113 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   return (
     <main className="mv2" data-view="video-generation-v2" data-phase={phase}>
+      <section className="mv2__mobile-only" aria-label="Мобильная генерация видео">
+        <div className="mv2m__tabs">
+          <button
+            type="button"
+            className={mobilePanel === "text" ? "is-active" : ""}
+            onClick={() => {
+              if (mode !== "text") changeMode("text")
+              setMobilePanel("text")
+            }}
+            disabled={busy}
+          >
+            <span className="mv2m__tab-icon">T</span>
+            Текст в видео
+          </button>
+          <button
+            type="button"
+            className={mobilePanel === "image" ? "is-active" : ""}
+            onClick={() => {
+              if (mode !== "image") changeMode("image")
+              setMobilePanel("image")
+            }}
+            disabled={busy}
+          >
+            <ImagePlus />
+            Изображение в видео
+          </button>
+          <button
+            type="button"
+            className={mobilePanel === "style" ? "is-active" : ""}
+            onClick={() => setMobilePanel("style")}
+            disabled={busy}
+          >
+            <SlidersHorizontal />
+            Стиль / эффекты
+          </button>
+        </div>
+
+        {mobilePanel === "style" ? (
+          <div className="mv2m__styles">
+            <button type="button" onClick={() => applyMobileStyle("Кинематографичный стиль, драматичный свет.")}>Cinematic</button>
+            <button type="button" onClick={() => applyMobileStyle("Фотореализм, естественный свет и физика.")}>Realistic</button>
+            <button type="button" onClick={() => applyMobileStyle("Динамичная камера, быстрый motion и энергичный монтаж.")}>Dynamic</button>
+            <button type="button" onClick={() => applyMobileStyle("Мягкая атмосферная цветокоррекция и плавное движение.")}>Soft</button>
+          </div>
+        ) : null}
+
+        {mobilePanel === "image" ? (
+          <div className="mv2m__source">
+            <button type="button" className="mv2m__source-preview" onClick={openMobileImagePicker} disabled={busy}>
+              {sourcePreview && mode === "image"
+                ? <img src={sourcePreview} alt="Загруженное изображение" draggable={false} />
+                : <ImagePlus />}
+            </button>
+            <button type="button" className="mv2m__source-copy" onClick={openMobileImagePicker} disabled={busy}>
+              <strong>{sourceFile?.name || "Добавить изображение"}</strong>
+              <small>{sourceFile ? "Нажмите, чтобы заменить" : "JPG, PNG, WebP или AVIF"}</small>
+            </button>
+            {sourceFile ? <button type="button" className="mv2m__source-remove" onClick={clearSource} aria-label="Убрать изображение" disabled={busy}><X /></button> : null}
+          </div>
+        ) : null}
+
+        <div className="mv2m__prompt">
+          <textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value.slice(0, 2000))}
+            placeholder="Опишите, какое видео вы хотите создать..."
+            disabled={busy}
+          />
+          <div className="mv2m__prompt-foot">
+            <div className="mv2m__prompt-tools">
+              <button type="button" onClick={openMobileImagePicker} aria-label="Загрузить изображение" disabled={busy}><ImagePlus /></button>
+              <button type="button" onClick={improvePrompt} aria-label="Улучшить промпт" disabled={busy}><Sparkles /></button>
+              <button type="button" onClick={() => setMobilePanel((value) => value === "style" ? "text" : "style")} aria-label="Стиль и эффекты" disabled={busy}><SlidersHorizontal /></button>
+            </div>
+            <div className="mv2m__counter">
+              <span>{prompt.length}/2000</span>
+              <button type="button" onClick={() => setPrompt("")} aria-label="Очистить запрос" disabled={busy || !prompt}><X /></button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mv2m__controls">
+          <button type="button" onClick={cycleMobileDuration} disabled={busy}><Clock3 /><span>{duration} секунд</span></button>
+          <button type="button" onClick={cycleMobileQuality} disabled={busy}><Monitor /><span>{QUALITY_RESOLUTION[quality]}</span></button>
+          <button type="button" onClick={cycleMobileRatio} disabled={busy}><RectangleHorizontal /><span>{ratio}</span></button>
+          <button type="button" onClick={cycleMobileModel} disabled={busy}><Box /><span>{selectedModel.name.split(" · ")[0]}</span><small>⌄</small></button>
+        </div>
+
+        <button
+          type="button"
+          className="mv2m__generate"
+          onClick={generate}
+          disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile)}
+        >
+          <Play />
+          <span>{busy ? statusLabel(phase, attempt) : "Генерировать"}</span>
+        </button>
+
+        <div className="mv2m__brand"><Crown />Превращай идеи в реальность с Malik AI</div>
+        {(error || phase === "ready") ? (
+          <div className={`mv2m__status${error ? " is-error" : ""}`}>
+            {error || "Видео готово"}
+            {videoUrl ? <button type="button" onClick={() => window.open(videoUrl, "_blank", "noopener,noreferrer")}>Открыть</button> : null}
+          </div>
+        ) : null}
+      </section>
+
       <section className="mv2__preview-column">
         <div className="mv2__stage">
           <div className="mv2__stage-brand mv2__stage-brand--left"><span>IDEAS TO REALITY</span><small>WITH AI</small></div>
@@ -605,6 +768,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       <style jsx>{`
         .mv2{width:100%;min-height:100%;display:grid;grid-template-columns:minmax(460px,.94fr) minmax(560px,1.06fr);gap:18px;padding:14px 18px 30px;background:#000;color:#f7f7f8;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;overflow:auto;color-scheme:dark}
         .mv2 *{box-sizing:border-box}.mv2 button,.mv2 textarea{font:inherit}.mv2 button{cursor:pointer}.mv2 button:focus-visible,.mv2 textarea:focus-visible{outline:1px solid rgba(255,255,255,.58);outline-offset:2px}
+        .mv2__mobile-only{display:none}
+        .mv2m__tabs,.mv2m__styles,.mv2m__source,.mv2m__prompt,.mv2m__controls,.mv2m__generate,.mv2m__brand,.mv2m__status{box-sizing:border-box}
         .mv2__preview-column,.mv2__controls-column{min-width:0}.mv2__stage,.mv2__prompt-card,.mv2__preview-info{border:1px solid #272a31;background:#0c0f14;border-radius:16px}
         .mv2__stage{position:relative;aspect-ratio:16/10.4;overflow:hidden;background:#06080c}.mv2__media{position:absolute;inset:0;display:grid;place-items:center;background:#050608}.mv2__hero-video,.mv2__result,.mv2__source-image,.mv2__source-video{width:100%;height:100%;display:block;background:#050608;object-fit:contain}.mv2__stage:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.18),transparent 22%,transparent 70%,rgba(0,0,0,.36))}
         .mv2__stage-brand{position:absolute;z-index:2;top:24px;color:#d9e0eb;letter-spacing:.36em;font-size:11px}.mv2__stage-brand--left{left:28px;display:flex;flex-direction:column;gap:10px}.mv2__stage-brand--left small{font-size:9px}.mv2__stage-brand--right{right:26px}.mv2__rendering{position:absolute;z-index:4;inset:0;background:rgba(0,0,0,.68);backdrop-filter:blur(12px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}.mv2__render-box{width:96px;height:96px;border-radius:24px;border:1px solid rgba(255,255,255,.17);display:grid;place-items:center;background:#0c0e12;animation:mv2pulse 1.7s ease-in-out infinite}.mv2__rendering strong{font-size:14px}.mv2__rendering small{color:#939aa7;font-size:11px}@keyframes mv2pulse{50%{transform:scale(1.035);box-shadow:0 24px 70px rgba(0,0,0,.6)}}
@@ -616,7 +781,31 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv2__settings-grid{display:grid;grid-template-columns:1.1fr 1fr 1.3fr;gap:10px}.mv2__segments{display:flex;flex-wrap:wrap;gap:6px}.mv2__segments button{height:31px;padding:0 10px;border:1px solid #2a2e36;border-radius:8px;background:#11151c;color:#aeb6c4;font-size:9px}.mv2__segments button.is-active{background:#f4f4f5 !important;color:#050505 !important;border-color:#fff !important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.45)}.mv2__segments button.is-disabled{opacity:.45;cursor:default}.mv2__generate-row{display:grid;grid-template-columns:1fr auto 38px;gap:8px;align-items:center;margin-top:18px}.mv2__generate{height:46px;border:0;border-radius:12px;background:#fff;color:#050505;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}.mv2__generate:disabled{opacity:.5;cursor:not-allowed}.mv2__generate svg{width:17px}.mv2__credits{font-size:9px;color:#8f97a5}.mv2__tune{height:38px;border:1px solid #292d35;border-radius:10px;background:#11151b;color:#ddd;display:grid;place-items:center}.mv2__tune svg{width:16px}.mv2__status{display:flex;align-items:center;gap:7px;min-height:32px;color:#8992a0;font-size:9px}.mv2__status b{color:#f4a6a6;font-weight:600}.mv2__status-dot{width:6px;height:6px;border-radius:50%;background:#666}.mv2__status-dot.is-ready{background:#39d98a}.mv2__status-dot.is-rendering,.mv2__status-dot.is-queued{background:#f5c451}.mv2__status-dot.is-failed{background:#ff6b6b}
         .mv2__gallery-tabs{display:flex;gap:5px;overflow-x:auto;padding:4px 0 8px;scrollbar-width:none}.mv2__gallery-tabs::-webkit-scrollbar{display:none}.mv2__gallery-tabs button{height:29px;padding:0 10px;border:1px solid #22262d;border-radius:999px;background:#0d1016;color:#89919f;font-size:8px;white-space:nowrap}.mv2__gallery-tabs button.is-active{background:#fff;color:#000}.mv2__gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.mv2__gallery-card{position:relative;aspect-ratio:16/10;border:1px solid #20242b;border-radius:10px;overflow:hidden;padding:0;background:#080a0d}.mv2__gallery-card.is-active{border-color:#fff}.mv2__gallery-poster{width:100%;height:100%;object-fit:cover;display:block}.mv2__gallery-shade{position:absolute;inset:0;background:linear-gradient(180deg,transparent 50%,rgba(0,0,0,.84))}.mv2__gallery-copy{position:absolute;z-index:2;left:8px;right:8px;bottom:7px;display:flex;flex-direction:column;text-align:left}.mv2__gallery-copy strong{font-size:9px;color:#fff}.mv2__gallery-copy small{font-size:7px;color:#aab2bf;margin-top:2px}
         @media (max-width:1180px){.mv2{grid-template-columns:1fr;padding:14px}.mv2__preview-column{order:2}.mv2__controls-column{order:1}.mv2__models{grid-template-columns:repeat(3,minmax(0,1fr))}.mv2__gallery{grid-template-columns:repeat(4,minmax(0,1fr))}}
-        @media (max-width:820px){.mv2{display:block;padding:12px 10px 26px;overflow:visible}.mv2__preview-column{margin-top:16px}.mv2__mode-tabs{position:static;margin-bottom:14px;overflow-x:auto}.mv2__eyebrow{margin-top:0}.mv2 h1{font-size:34px}.mv2__models{grid-template-columns:repeat(2,minmax(0,1fr))}.mv2__settings-grid{grid-template-columns:1fr}.mv2__thumbs{grid-template-columns:repeat(3,minmax(0,1fr))}.mv2__thumb:nth-child(n+4){display:none}.mv2__preview-info{grid-template-columns:1fr}.mv2__preview-actions{display:grid;grid-template-columns:repeat(3,1fr)}.mv2__gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.mv2__generate-row{grid-template-columns:1fr 38px}.mv2__credits{display:none}.mv2__source-card{grid-template-columns:44px minmax(0,1fr) auto}.mv2__source-preview{width:44px;height:44px}.mv2__source-clear{grid-column:3}.mv2__source-upload{grid-column:3}.mv2__source-copy small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
+        @media (max-width:820px){
+          .mv2{display:block;min-height:100%;padding:0;background:#000;overflow:visible}
+          .mv2__preview-column,.mv2__controls-column{display:none !important}
+          .mv2__mobile-only{display:block;width:100%;max-width:560px;margin:0 auto;padding:8px 10px 22px;background:#000;color:#f7f7f8}
+          .mv2m__tabs{height:44px;display:grid;grid-template-columns:.95fr 1.35fr 1fr;gap:0;border-bottom:1px solid #24272d}
+          .mv2m__tabs button{position:relative;min-width:0;border:0;background:transparent;color:#8b919b;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 4px;font-size:10px;white-space:nowrap}
+          .mv2m__tabs button svg{width:12px;height:12px;flex:0 0 12px}.mv2m__tab-icon{font-family:Georgia,serif;font-style:italic;font-weight:700;font-size:14px}
+          .mv2m__tabs button.is-active{color:#38ff58}.mv2m__tabs button.is-active:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:#38ff58;box-shadow:0 0 12px rgba(56,255,88,.55)}
+          .mv2m__styles{display:flex;gap:6px;overflow-x:auto;padding:9px 0 0;scrollbar-width:none}.mv2m__styles::-webkit-scrollbar{display:none}
+          .mv2m__styles button{height:29px;flex:0 0 auto;padding:0 10px;border:1px solid #2a2e35;border-radius:9px;background:#111318;color:#b8bec8;font-size:9px}
+          .mv2m__source{margin-top:9px;min-height:58px;padding:7px;border:1px solid #2b2e35;border-radius:12px;background:#0e1014;display:grid;grid-template-columns:44px minmax(0,1fr) 30px;gap:8px;align-items:center}
+          .mv2m__source-preview{width:44px;height:44px;padding:0;border:1px solid #30343b;border-radius:9px;background:#14171c;color:#bfc5cd;display:grid;place-items:center;overflow:hidden}.mv2m__source-preview svg{width:18px;height:18px}.mv2m__source-preview img{width:100%;height:100%;object-fit:cover;display:block}
+          .mv2m__source-copy{min-width:0;padding:0;border:0;background:transparent;color:#fff;text-align:left;display:flex;flex-direction:column;gap:3px}.mv2m__source-copy strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mv2m__source-copy small{font-size:8px;color:#818894}
+          .mv2m__source-remove{width:30px;height:30px;border:0;border-radius:50%;background:#2d3036;color:#aeb4bd;display:grid;place-items:center}.mv2m__source-remove svg{width:13px;height:13px}
+          .mv2m__prompt{margin-top:8px;padding:11px 10px 9px;border:1px solid #2b2e35;border-radius:14px;background:linear-gradient(180deg,#101216,#0d0f12);box-shadow:inset 0 1px 0 rgba(255,255,255,.018)}
+          .mv2m__prompt textarea{width:100%;height:75px;resize:none;border:0;outline:0;background:transparent;color:#f7f7f8;font-size:11px;line-height:1.45;padding:0}.mv2m__prompt textarea::placeholder{color:#717783}
+          .mv2m__prompt-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.mv2m__prompt-tools{display:flex;gap:7px}.mv2m__prompt-tools button{width:29px;height:29px;padding:0;border:1px solid #2c3037;border-radius:8px;background:#14171c;color:#c1c6ce;display:grid;place-items:center}.mv2m__prompt-tools button svg{width:14px;height:14px}
+          .mv2m__counter{display:flex;align-items:center;gap:7px;color:#777e89;font-size:8px}.mv2m__counter button{width:20px;height:20px;padding:0;border:0;border-radius:50%;background:#343840;color:#aeb4bd;display:grid;place-items:center}.mv2m__counter button svg{width:11px;height:11px}
+          .mv2m__controls{display:grid;grid-template-columns:1fr 1fr .9fr 1.2fr;gap:6px;margin-top:8px}
+          .mv2m__controls button{min-width:0;height:38px;padding:0 7px;border:1px solid #2b2e35;border-radius:10px;background:#111318;color:#bcc2cb;display:flex;align-items:center;justify-content:center;gap:5px;font-size:9px;white-space:nowrap}.mv2m__controls button svg{width:13px;height:13px;flex:0 0 13px}.mv2m__controls button span{overflow:hidden;text-overflow:ellipsis}.mv2m__controls button small{font-size:8px;color:#858c96}
+          .mv2m__generate{width:100%;height:48px;margin-top:8px;border:0;border-radius:12px;background:#39f75a;color:#041107;font-weight:850;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 0 22px rgba(57,247,90,.16)}.mv2m__generate svg{width:15px;height:15px;fill:currentColor}.mv2m__generate:disabled{opacity:.48;cursor:not-allowed}
+          .mv2m__brand{margin-top:13px;color:#9fa6b0;font-size:8px;display:flex;align-items:center;justify-content:center;gap:6px}.mv2m__brand svg{width:13px;height:13px;color:#39f75a}
+          .mv2m__status{margin-top:8px;min-height:28px;padding:7px 9px;border:1px solid #26302a;border-radius:9px;background:#0c130e;color:#8ee89d;font-size:9px;display:flex;align-items:center;justify-content:space-between;gap:8px}.mv2m__status.is-error{border-color:#3c2828;background:#160d0d;color:#f0a0a0}.mv2m__status button{border:0;background:transparent;color:inherit;text-decoration:underline;font-size:9px}
+        }
+        @media (max-width:380px){.mv2m__controls{grid-template-columns:1fr 1fr}.mv2m__tabs button{font-size:8.5px}.mv2__mobile-only{padding-left:8px;padding-right:8px}}
       `}</style>
     </main>
   )
