@@ -5,6 +5,7 @@ export type ResponseDepth = "fast" | "deep" | "ultra"
 export type ChatSendOptions = {
   responseDepth?: ResponseDepth
   research?: boolean
+  imageSize?: "1K" | "2K" | "4K"
 }
 
 const STORAGE_KEY = "malik_response_depth"

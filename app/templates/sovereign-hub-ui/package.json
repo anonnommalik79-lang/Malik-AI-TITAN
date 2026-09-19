@@ -45,7 +45,8 @@
     "test:voice-live-path": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-path.mjs",
     "test:voice-answer": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-answer.mjs",
     "test:multimodal": "node scripts/verify-multimodal-router.mjs && node scripts/verify-attachment-menu.mjs",
-    "test:long-code": "node scripts/verify-long-code-runtime.mjs"
+    "test:long-code": "node scripts/verify-long-code-runtime.mjs",
+    "test:image-credits": "node scripts/verify-image-credits.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",

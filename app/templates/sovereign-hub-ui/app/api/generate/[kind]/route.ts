@@ -5,7 +5,6 @@ import { isFeatureDisabled } from "@/lib/server/request-safety"
 import {
   acquireVideoDailySlot,
   getVideoDailyGateStatus,
-  photoMaintenanceResponse,
   videoDailyLimitResponse,
 } from "@/lib/server/media-availability"
 
@@ -166,10 +165,6 @@ async function handlePOST(request: Request, context: RouteContext) {
   if (!SUPPORTED_KINDS.has(kind)) return invalidKind(kind, id)
   if (isFeatureDisabled("generation") || isFeatureDisabled(kind)) return disabledKind(kind, id)
 
-  if (kind === "photo") {
-    return withCors(photoMaintenanceResponse(`/api/generate/${kind}`), kind, id)
-  }
-
   if (kind === "video") {
     const prompt = await bodyPrompt(request)
     // generation-route only spends provider quota on explicit /video or /veo requests.
@@ -207,11 +202,6 @@ export async function GET(request: Request, context: RouteContext) {
   const id = request.headers.get("X-Malik-Request-Id") || requestId()
   const kind = await readKind(context)
   if (!SUPPORTED_KINDS.has(kind)) return invalidKind(kind, id)
-
-  if (kind === "photo") {
-    const response = photoMaintenanceResponse(`/api/generate/${kind}`)
-    return withCors(response, kind, id)
-  }
 
   if (kind === "video") {
     const gate = await getVideoDailyGateStatus()
@@ -268,7 +258,7 @@ export async function GET(request: Request, context: RouteContext) {
         modelId: "optional Malik image model id for photo generation",
       },
       delegatedTo: kind === "photo"
-        ? "photo-maintenance"
+        ? "handleMalikPhotoGenerationRequest(request)"
         : kind === "website"
           ? "handleSkillWebsiteGenerationRequest(request)"
           : "handleGenerateRequest(request, kind)",
@@ -280,19 +270,6 @@ export async function HEAD(request: Request, context: RouteContext) {
   const id = request.headers.get("X-Malik-Request-Id") || requestId()
   const kind = await readKind(context)
   const supported = SUPPORTED_KINDS.has(kind)
-
-  if (supported && kind === "photo") {
-    return new Response(null, {
-      status: 200,
-      headers: {
-        ...CORS_HEADERS,
-        "X-Malik-Request-Id": id,
-        "X-Malik-Route": `/api/generate/${kind}`,
-        "X-Malik-Kind": kind,
-        "X-Malik-Health": "paused",
-      },
-    })
-  }
 
   if (supported && kind === "video") {
     const gate = await getVideoDailyGateStatus()

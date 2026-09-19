@@ -1,4 +1,4 @@
-export type UsageEventType = "chat" | "upload" | "video" | "image"
+export type UsageEventType = "chat" | "upload" | "video" | "image" | "image4k"
 
 type MalikPersistedUsageGlobal = typeof globalThis & {
   __malikPersistedUsageMemory?: Map<string, number>
@@ -10,12 +10,29 @@ function usageCache() {
   return scope.__malikPersistedUsageMemory
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10)
+function dateKey(date: Date, timeZone: string) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date)
+    const value = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+    return `${value.year}-${value.month}-${value.day}`
+  } catch {
+    return date.toISOString().slice(0, 10)
+  }
+}
+
+function today(eventType?: UsageEventType) {
+  const imageEvent = eventType === "image" || eventType === "image4k"
+  const zone = imageEvent ? (process.env.IMAGE_RESET_TIMEZONE?.trim() || "UTC") : "UTC"
+  return dateKey(new Date(), zone)
 }
 
 function cacheKey(userId: string, eventType: UsageEventType) {
-  return `${today()}:${userId}:${eventType}`
+  return `${today(eventType)}:${userId}:${eventType}`
 }
 
 export async function resolveAuthUserUuid(userId: string): Promise<string | null> {
@@ -36,7 +53,7 @@ export async function incrementPersistedUsage(userId: string, eventType: UsageEv
 export function getPersistedUsageOverview() {
   const date = today()
   const prefix = `${date}:`
-  const totals: Record<UsageEventType, number> = { chat: 0, upload: 0, video: 0, image: 0 }
+  const totals: Record<UsageEventType, number> = { chat: 0, upload: 0, video: 0, image: 0, image4k: 0 }
   const users = new Set<string>()
 
   for (const [key, value] of usageCache().entries()) {

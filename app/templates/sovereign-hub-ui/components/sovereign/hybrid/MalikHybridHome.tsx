@@ -261,6 +261,7 @@ function HomeComposer({
   onModelChange,
   onOpenBilling,
   onOpenVoice,
+  imageCredits,
 }: {
   prompt: string
   isLoading?: boolean
@@ -279,6 +280,7 @@ function HomeComposer({
   onModelChange: (modelId: MalikModelId) => void
   onOpenBilling?: () => void
   onOpenVoice?: () => void
+  imageCredits?: { remaining: number; daily: number } | null
 }) {
   const [toolsOpen, setToolsOpen] = useState(false)
   const [dragActive, setDragActive] = useState(false)
@@ -569,6 +571,10 @@ function HomeComposer({
           <Brain aria-hidden="true" />
           Память {memoryOn ? "включена" : "выключена"}
         </button>
+        <span className="thome-meta-chip" title="Ежедневные кредиты генерации изображений">
+          <ImageIcon aria-hidden="true" />
+          Фото {imageCredits ? (imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining) : "…"} кр.
+        </span>
         <span className="thome-meta-note">Покажу прочитанные источники</span>
       </div>
     </section>
@@ -579,8 +585,34 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [prompt, setPrompt] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [attachmentError, setAttachmentError] = useState("")
+  const [imageCredits, setImageCredits] = useState<{ remaining: number; daily: number } | null>(null)
   const [webOn, setWebOn] = useWebSearchEnabled()
   const [memoryOn, setMemoryOn] = useContextEnabled()
+
+  useEffect(() => {
+    let cancelled = false
+    const refreshCredits = async () => {
+      try {
+        const response = await fetch("/api/ai/image/credits", { cache: "no-store", credentials: "same-origin" })
+        const payload = await response.json().catch(() => null)
+        if (!cancelled && response.ok && payload?.ok) {
+          setImageCredits({
+            remaining: Number(payload.remaining || 0),
+            daily: Number(payload.daily || 0),
+          })
+        }
+      } catch {
+        // The home remains usable while the server balance refreshes.
+      }
+    }
+    const refresh = () => { void refreshCredits() }
+    refresh()
+    window.addEventListener("malik-image-credits-changed", refresh)
+    return () => {
+      cancelled = true
+      window.removeEventListener("malik-image-credits-changed", refresh)
+    }
+  }, [])
 
   useEffect(() => {
     const fill = (event: Event) => {
@@ -750,6 +782,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               onModelChange={props.onModelChange || (() => {})}
               onOpenBilling={props.onOpenBilling}
               onOpenVoice={props.onOpenVoice}
+              imageCredits={imageCredits}
             />
 
             <div

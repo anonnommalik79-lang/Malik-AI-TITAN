@@ -44,6 +44,9 @@ jobs:
       - name: Verify image memory safety
         run: npm run test:image-memory
 
+      - name: Verify image credits and Agnes routing
+        run: npm run test:image-credits
+
       - name: Verify attachment UX
         run: npm run test:attachment-menu
 

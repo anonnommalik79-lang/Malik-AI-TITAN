@@ -99,9 +99,23 @@ interface Message {
   attachments?: ChatAttachment[]
 }
 
+type ImageResolution = "1K" | "2K" | "4K"
+
 type ImageGenerationConfirmation = {
   prompt: string
-  status: "pending" | "confirmed" | "cancelled"
+  status: "pending" | "confirmed" | "generating" | "cancelled"
+  imageSize?: ImageResolution
+}
+
+type ImageCreditSnapshot = {
+  remaining: number
+  daily: number
+  used: number
+  costs: Record<ImageResolution, number>
+  max4kPerDay: number
+  used4k: number
+  remaining4k: number
+  resetAt?: string
 }
 
 export interface ChatAttachment {
@@ -139,7 +153,7 @@ export type InlineMediaGeneration = {
 interface ChatViewProps {
   messages: Message[]
   onSendMessage: (message: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => void
-  onImageConfirmation?: (messageId: string, prompt: string, action: "confirm" | "cancel") => void
+  onImageConfirmation?: (messageId: string, prompt: string, action: "confirm" | "cancel" | "generate", imageSize?: ImageResolution) => void
   isLoading?: boolean
   streamingText?: string
   currentUser?: string
@@ -988,6 +1002,7 @@ function MessageBubble({
   onFeedback,
   feedback,
   onImageConfirmation,
+  imageCredits,
   onOpenActionTarget,
 }: {
   message: Message
@@ -1000,7 +1015,8 @@ function MessageBubble({
   onShare?: (text: string) => void
   onFeedback?: (id: string, value: "up" | "down") => void
   feedback?: "up" | "down" | null
-  onImageConfirmation?: (messageId: string, prompt: string, action: "confirm" | "cancel") => void
+  onImageConfirmation?: (messageId: string, prompt: string, action: "confirm" | "cancel" | "generate", imageSize?: ImageResolution) => void
+  imageCredits?: ImageCreditSnapshot | null
   onOpenActionTarget?: (target: MalikActionTarget) => void
 }) {
   const isUser = message.role === "user"
@@ -1058,7 +1074,7 @@ function MessageBubble({
                     onClick={() => onImageConfirmation?.(message.id, message.imageConfirmation!.prompt, "confirm")}
                     className="min-h-11 rounded-xl bg-white px-4 text-sm font-semibold text-black transition hover:bg-zinc-200"
                   >
-                    Сгенерировать вам изображение
+                    Да, создать изображение
                   </button>
                   <button
                     type="button"
@@ -1068,10 +1084,52 @@ function MessageBubble({
                     Отмена
                   </button>
                 </div>
-              ) : (
+              ) : message.imageConfirmation.status === "confirmed" ? (
+                <div className="mt-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">Качество</span>
+                    <span className="text-xs font-medium text-zinc-400">
+                      Фото-кредиты: {imageCredits ? (imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining) : "…"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["1K", "2K", "4K"] as const).map((size) => {
+                      const cost = imageCredits?.costs?.[size] ?? (size === "1K" ? 1 : size === "2K" ? 2 : 5)
+                      const blockedByCredits = imageCredits ? imageCredits.remaining < cost : false
+                      const blocked4k = size === "4K" && imageCredits ? imageCredits.remaining4k <= 0 : false
+                      const disabled = blockedByCredits || blocked4k
+                      return (
+                        <button
+                          key={size}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => onImageConfirmation?.(message.id, message.imageConfirmation!.prompt, "generate", size)}
+                          className={cn(
+                            "min-h-12 rounded-xl border px-3 text-sm font-semibold transition",
+                            disabled
+                              ? "cursor-not-allowed border-white/[0.05] bg-white/[0.02] text-zinc-700"
+                              : "border-white/10 bg-white/[0.045] text-white hover:border-white/20 hover:bg-white/[0.08]",
+                          )}
+                          title={blocked4k ? "Лимит 4K на сегодня исчерпан" : blockedByCredits ? "Недостаточно фото-кредитов" : undefined}
+                        >
+                          <span className="block">{size}</span>
+                          <span className="mt-0.5 block text-[10px] font-medium text-zinc-500">{cost} кр.</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {imageCredits ? (
+                    <p className="mt-2 text-[11px] text-zinc-600">
+                      Доступно {imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining} из {imageCredits.daily > 1_000_000 ? "∞" : imageCredits.daily} · 4K: {imageCredits.remaining4k > 1_000_000 ? "∞" : imageCredits.remaining4k} осталось
+                    </p>
+                  ) : null}
+                </div>
+              ) : message.imageConfirmation.status === "generating" ? (
                 <p className="mt-4 text-sm font-medium text-zinc-400">
-                  {message.imageConfirmation.status === "confirmed" ? "Генерация подтверждена." : "Генерация отменена."}
+                  Запускаю {message.imageConfirmation.imageSize || "выбранное"} качество…
                 </p>
+              ) : (
+                <p className="mt-4 text-sm font-medium text-zinc-400">Генерация отменена.</p>
               )}
             </section>
           ) : displayContent
@@ -1118,7 +1176,50 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const [responseDepth, setResponseDepth] = useState<ResponseDepth>(() => loadResponseDepth(userPlan))
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [feedbackMap, setFeedbackMap] = useState<Record<string, "up" | "down">>({})
+  const [imageCredits, setImageCredits] = useState<ImageCreditSnapshot | null>(null)
   const [showAttachMenu, setShowAttachMenu] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+
+    const refreshImageCredits = async () => {
+      try {
+        const response = await fetch("/api/ai/image/credits", { cache: "no-store", credentials: "same-origin" })
+        const payload = await response.json().catch(() => null)
+        if (!cancelled && response.ok && payload?.ok) {
+          setImageCredits({
+            remaining: Number(payload.remaining || 0),
+            daily: Number(payload.daily || 0),
+            used: Number(payload.used || 0),
+            costs: {
+              "1K": Number(payload?.costs?.["1K"] ?? 1),
+              "2K": Number(payload?.costs?.["2K"] ?? 2),
+              "4K": Number(payload?.costs?.["4K"] ?? 5),
+            },
+            max4kPerDay: Number(payload.max4kPerDay || 0),
+            used4k: Number(payload.used4k || 0),
+            remaining4k: Number(payload.remaining4k || 0),
+            resetAt: typeof payload.resetAt === "string" ? payload.resetAt : undefined,
+          })
+        }
+      } catch {
+        // Credits stay server-authoritative; a temporary badge refresh failure
+        // must never break the chat itself.
+      }
+    }
+
+    const refresh = () => { void refreshImageCredits() }
+    const onVisibility = () => { if (document.visibilityState === "visible") refresh() }
+
+    refresh()
+    window.addEventListener("malik-image-credits-changed", refresh)
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      cancelled = true
+      window.removeEventListener("malik-image-credits-changed", refresh)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [])
+
   const [attachMenuPosition, setAttachMenuPosition] = useState<{ left: number; top: number; width: number } | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
@@ -1549,6 +1650,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                   onFeedback={handleFeedback}
                   feedback={feedbackMap[message.id] ?? null}
                   onImageConfirmation={onImageConfirmation}
+                  imageCredits={imageCredits}
                   onOpenActionTarget={onOpenActionTarget}
                 />
               ))}
@@ -1627,7 +1729,9 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
             <button type="button" onClick={() => handleQuickAction("Найди в открытом вебе свежую информацию и покажи источники")}>
               <Globe className="h-3.5 w-3.5" /> Веб и источники
             </button>
-            <span>Enter — отправить · Shift + Enter — новая строка</span>
+            <span>
+              Фото · {imageCredits ? (imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining) : "…"} кр. · Enter — отправить · Shift + Enter — новая строка
+            </span>
           </div>
           {showAttachMenu && attachMenuPosition && typeof document !== "undefined" ? createPortal(
             <div

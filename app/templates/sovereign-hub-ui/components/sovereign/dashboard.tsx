@@ -214,9 +214,12 @@ interface Message {
   attachments?: ChatAttachment[]
 }
 
+type ImageResolution = "1K" | "2K" | "4K"
+
 type ImageGenerationConfirmation = {
   prompt: string
-  status: "pending" | "confirmed" | "cancelled"
+  status: "pending" | "confirmed" | "generating" | "cancelled"
+  imageSize?: ImageResolution
 }
 
 interface ChatAttachment {
@@ -5839,6 +5842,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           stream: false,
           kind: inlineMediaKind === "video" ? "video" : "photo",
           provider: "auto",
+          imageSize: inlineMediaKind === "image" ? options?.imageSize : undefined,
           // Chat sends no style on purpose. "cinematic Gemini-style transparent
           // chat generation" used to travel into the image prompt and repaint
           // every request in a look nobody asked for.
@@ -5998,6 +6002,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           (isFallback ? "Google Veo" : assistantMessage.generatedMedia.provider),
       }
 
+      if (inlineMediaKind === "image" && readyMedia.status === "ready" && typeof window !== "undefined") {
+        window.dispatchEvent(new Event("malik-image-credits-changed"))
+      }
       finalizeInlineMedia(readyMedia)
     } catch (error) {
       const failedMedia: InlineMediaGeneration = {
@@ -6290,16 +6297,33 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }
 }, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email])
 
-  const handleImageConfirmation = useCallback((messageId: string, prompt: string, action: "confirm" | "cancel") => {
-    const status: ImageGenerationConfirmation["status"] = action === "confirm" ? "confirmed" : "cancelled"
+  const handleImageConfirmation = useCallback((
+    messageId: string,
+    prompt: string,
+    action: "confirm" | "cancel" | "generate",
+    requestedSize?: ImageResolution,
+  ) => {
+    const imageSize: ImageResolution = requestedSize === "2K" || requestedSize === "4K" ? requestedSize : "1K"
+    const status: ImageGenerationConfirmation["status"] =
+      action === "confirm" ? "confirmed" : action === "generate" ? "generating" : "cancelled"
+
     const patch = (items: Message[]) => items.map((message) => message.id === messageId && message.imageConfirmation
-      ? { ...message, imageConfirmation: { ...message.imageConfirmation, status } }
+      ? {
+          ...message,
+          imageConfirmation: {
+            ...message.imageConfirmation,
+            status,
+            imageSize: action === "generate" ? imageSize : message.imageConfirmation.imageSize,
+          },
+        }
       : message)
 
     setMessages((previous) => patch(previous))
     setChats((previous) => previous.map((chat) => ({ ...chat, messages: patch(chat.messages) })))
 
-    if (action === "confirm") void handleSendMessage(`/image ${prompt}`)
+    if (action === "generate") {
+      void handleSendMessage(`/image ${prompt}`, [], { imageSize })
+    }
   }, [handleSendMessage])
 
   const handleUseTemplate = useCallback((prompt: string) => {
