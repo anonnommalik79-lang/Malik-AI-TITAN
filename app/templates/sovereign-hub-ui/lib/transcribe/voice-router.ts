@@ -28,7 +28,7 @@ function env(...names: string[]) {
 }
 
 export function isVoiceTranscribeConfigured() {
-  const gemini = env("GEMINI_VOICE_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY")
+  const gemini = env("MALIK_VOICE_GEMINI_KEY", "GEMINI_VOICE_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY")
   const groq = env("GROQ_VOICE_API_KEY", "GROQ_API_KEY")
   const cfToken = env("CLOUDFLARE_VOICE_API_TOKEN", "CLOUDFLARE_API_TOKEN")
   const cfAccount = env("CLOUDFLARE_VOICE_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID")
@@ -61,7 +61,7 @@ function interactionText(payload: any) {
 }
 
 async function geminiAttempt(data: ArrayBuffer, filename: string, mime: string, model: string, prompt?: string) {
-  const key = env("GEMINI_VOICE_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY")
+  const key = env("MALIK_VOICE_GEMINI_KEY", "GEMINI_VOICE_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY")
   if (!key) return { ok: false as const, skipped: true as const, error: "missing key" }
   const started = Date.now()
   let fileName = ""
