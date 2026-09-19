@@ -5973,7 +5973,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       // before the chat snapshot is saved. The message stores only a tiny
       // malik-image:// handle, so logout/login and Render redeploys on this
       // browser do not erase the result and localStorage never receives MBs.
-      let inlineFallbackUrl = typeof finalPayload?.inlineImageUrl === "string" ? finalPayload.inlineImageUrl : ""
+      let inlineFallbackUrl =
+        typeof finalPayload?.browserCacheImageUrl === "string" ? finalPayload.browserCacheImageUrl :
+        typeof finalPayload?.inlineImageUrl === "string" ? finalPayload.inlineImageUrl :
+        ""
       if (inlineMediaKind === "image" && mediaUrl) {
         let durableMediaUrl = await persistGeneratedImageReference(assistantMessage.generatedMedia.id, mediaUrl)
 
