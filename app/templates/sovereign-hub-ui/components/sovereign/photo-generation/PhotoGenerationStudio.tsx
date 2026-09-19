@@ -11,12 +11,13 @@ export type PhotoGenerationStudioProps = {
 /**
  * Voltframe launch takeover.
  *
- * This view intentionally contains no old Photo Generation studio UI. The
- * artwork supplied by the founder is the whole product surface: landscape on
- * desktop/tablet and the dedicated portrait composition on mobile.
+ * The old Photo Generation studio is intentionally removed. The founder's
+ * supplied artwork is rendered as-is: landscape on desktop/tablet and the
+ * dedicated portrait artwork on phones.
  *
- * Native <img> is deliberate. Next/Image would be allowed to transcode or
- * resize the artwork; this route serves the lossless source bytes unchanged.
+ * Native <img> is deliberate so Next.js never recompresses or resizes the
+ * source files. object-contain preserves every pixel and the original aspect
+ * ratio without crop or stretch.
  */
 export function PhotoGenerationStudio(_props: PhotoGenerationStudioProps) {
   return (
@@ -26,13 +27,9 @@ export function PhotoGenerationStudio(_props: PhotoGenerationStudioProps) {
       aria-label="Voltframe AI скоро в Malik AI"
     >
       <picture className="block h-full w-full">
-        <source
-          media="(max-width: 767px)"
-          srcSet="/api/voltframe-teaser/mobile"
-          type="image/webp"
-        />
+        <source media="(max-width: 767px)" srcSet="/voltframe/mobile.png" type="image/png" />
         <img
-          src="/api/voltframe-teaser/desktop"
+          src="/voltframe/desktop.png"
           alt="Voltframe AI скоро в Malik AI"
           width={1672}
           height={941}
