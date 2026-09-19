@@ -627,6 +627,46 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     if (errors.length) setAttachmentError(errors[0])
   }
 
+
+  useEffect(() => {
+    const current = new URL(window.location.href)
+    const token = current.searchParams.get("shareTarget")
+    if (!token) return
+    let cancelled = false
+
+    fetch(`/api/attachments/share-target?token=${encodeURIComponent(token)}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    })
+      .then(async (response) => ({ response, payload: await response.json().catch(() => ({})) }))
+      .then(async ({ response, payload }) => {
+        if (cancelled || !response.ok || !payload?.ok) return
+        const sharedFiles: File[] = []
+        for (const item of Array.isArray(payload.files) ? payload.files : []) {
+          try {
+            const base64 = String(item?.base64 || "")
+            if (!base64) continue
+            const binary = atob(base64)
+            const bytes = new Uint8Array(binary.length)
+            for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+            sharedFiles.push(new File([bytes], String(item?.name || "shared-media"), {
+              type: String(item?.mime || "application/octet-stream"),
+            }))
+          } catch {}
+        }
+        if (sharedFiles.length) await addFiles(sharedFiles)
+        const sharedText = [payload.text, payload.url].map((value) => String(value || "").trim()).filter(Boolean).join("\n")
+        if (sharedText) setPrompt((previous) => previous.trim() ? previous : sharedText)
+      })
+      .finally(() => {
+        if (cancelled) return
+        current.searchParams.delete("shareTarget")
+        window.history.replaceState(window.history.state, "", current.pathname + current.search + current.hash)
+      })
+
+    return () => { cancelled = true }
+  }, [])
+
   const removeAttachment = (id: string) => {
     setAttachments((previous) => {
       const target = previous.find((item) => item.id === id)
