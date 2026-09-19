@@ -234,7 +234,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           return
         }
 
-        if (data?.status === "ready" && data?.resultUrl) {
+        if ((data?.status === "ready" || data?.status === "done") && data?.resultUrl) {
           setHistory((rows) => rows.map((item) =>
             item.requestId === activeRequestId
               ? {
@@ -451,7 +451,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       return
     }
     const anchor = document.createElement("a")
-    anchor.href = source.downloadUrl || ("/api/media/music/file?requestId=" + encodeURIComponent(source.requestId))
+    anchor.href = source.downloadUrl || ("/api/media/music/download?requestId=" + encodeURIComponent(source.requestId))
     anchor.rel = "noopener"
     document.body.appendChild(anchor)
     anchor.click()
