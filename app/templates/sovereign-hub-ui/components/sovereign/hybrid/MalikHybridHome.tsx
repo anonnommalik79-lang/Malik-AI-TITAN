@@ -26,6 +26,7 @@ import { MalikModelSelector } from "../MalikModelSelector"
 import type { ChatAttachment } from "../chat-view"
 import type { AiModeId } from "../power-registry"
 import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
+import { normalizeClientImage } from "@/lib/media/client-image-normalize"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
@@ -261,6 +262,19 @@ async function homeFileToAttachment(file: File): Promise<ChatAttachment> {
   const isImage = mime.startsWith("image/")
   const isVideo = mime.startsWith("video/")
   const isText = mime.startsWith("text/") || mime === "application/json" || HOME_TEXT_EXTENSIONS.has(ext)
+
+  if (isImage) {
+    const normalized = await normalizeClientImage(file)
+    return {
+      id: attachmentId(),
+      name: normalized.name,
+      mime: normalized.mime,
+      size: normalized.size,
+      kind: "image",
+      base64: normalized.base64,
+      url: normalized.previewUrl,
+    }
+  }
 
   if (isText) {
     if (file.size > MAX_HOME_TEXT_BYTES) {
