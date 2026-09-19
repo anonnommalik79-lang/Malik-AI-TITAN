@@ -417,9 +417,6 @@ function installBackgroundRuntime(
  * recovery, and the next visit patches the finished answer into the exact chat.
  */
 export function AccountChatPersistence({ accountId, children }: { accountId: string; children: ReactNode }) {
-  // Set the browser-local media namespace before child effects try to restore images.
-  setGeneratedImageAccountScope(accountId)
-
   useLayoutEffect(() => {
     if (typeof window === "undefined" || typeof Storage === "undefined") return
 
