@@ -149,6 +149,7 @@ export class GeminiLiveSession {
           socket.send(JSON.stringify({
             setup: {
               model: `models/${this.model}`,
+              sessionResumption: {},
               generationConfig: {
                 responseModalities: ["AUDIO"],
                 speechConfig: {
@@ -166,9 +167,17 @@ export class GeminiLiveSession {
           }))
         }
 
-        socket.onmessage = (event) => {
+        socket.onmessage = async (event) => {
+          let raw = ""
+          try {
+            raw = typeof event.data === "string"
+              ? event.data
+              : event.data instanceof Blob
+                ? await event.data.text()
+                : ""
+          } catch {}
           let message: any
-          try { message = JSON.parse(typeof event.data === "string" ? event.data : "") }
+          try { message = JSON.parse(raw) }
           catch { return }
 
           if (message.setupComplete) {
@@ -207,12 +216,14 @@ export class GeminiLiveSession {
 
         socket.onerror = () => {
           this.ready = false
+          console.error("[VOICE_GEMINI_LIVE_WS_ERROR]")
           this.callbacks.onError?.()
           finish(false)
         }
 
-        socket.onclose = () => {
+        socket.onclose = (event) => {
           const wasReady = this.ready
+          if (event.code !== 1000) console.error("[VOICE_GEMINI_LIVE_WS_CLOSE]", event.code, event.reason || "no reason")
           this.ready = false
           this.detachMicrophone()
           this.stopOutput()
