@@ -236,6 +236,31 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
 }
 
 
+function attachmentFromSharedFile(file: any): ChatAttachment | null {
+  const base64 = String(file?.base64 || "")
+  const mime = String(file?.mime || "application/octet-stream")
+  if (!base64 || (!mime.startsWith("image/") && !mime.startsWith("video/") && mime !== "application/pdf")) return null
+  try {
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+    const blob = new Blob([bytes], { type: mime })
+    const kind: ChatAttachment["kind"] = mime.startsWith("image/") ? "image" : mime.startsWith("video/") ? "video" : "file"
+    return {
+      id: crypto.randomUUID(),
+      name: String(file?.name || "shared-media"),
+      mime,
+      size: Number(file?.size || blob.size),
+      kind,
+      base64,
+      url: kind === "image" || kind === "video" ? URL.createObjectURL(blob) : undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
+
 function detectGenerationStatusType(text: string): GenerationStatusType {
   const value = text.toLowerCase().trim()
 
@@ -1139,6 +1164,35 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     const loaded = loadResponseDepth(effectivePlan)
     setResponseDepth(loaded === "ultra" && !canUseUltra(effectivePlan) ? "deep" : loaded)
   }, [effectivePlan])
+
+  useEffect(() => {
+    const current = new URL(window.location.href)
+    const token = current.searchParams.get("shareTarget")
+    if (!token) return
+    let cancelled = false
+
+    fetch(`/api/attachments/share-target?token=${encodeURIComponent(token)}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    })
+      .then(async (response) => ({ response, payload: await response.json().catch(() => ({})) }))
+      .then(({ response, payload }) => {
+        if (cancelled || !response.ok || !payload?.ok) return
+        const imported = (Array.isArray(payload.files) ? payload.files : [])
+          .map(attachmentFromSharedFile)
+          .filter((item: ChatAttachment | null): item is ChatAttachment => Boolean(item))
+        if (imported.length) setAttachments((previous) => [...previous, ...imported].slice(0, 8))
+        const sharedText = [payload.text, payload.url].map((value) => String(value || "").trim()).filter(Boolean).join("\n")
+        if (sharedText) setPrompt((previous) => previous.trim() ? previous : sharedText)
+      })
+      .finally(() => {
+        if (cancelled) return
+        current.searchParams.delete("shareTarget")
+        window.history.replaceState(window.history.state, "", current.pathname + current.search + current.hash)
+      })
+
+    return () => { cancelled = true }
+  }, [])
   useEffect(() => {
     if (!textareaRef.current) return
     const priority = window.matchMedia("(max-width: 767px)").matches ? "important" : ""
