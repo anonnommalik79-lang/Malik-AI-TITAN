@@ -450,7 +450,12 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       setNotice("Сначала дождитесь готового MP3.")
       return
     }
-    window.location.assign(source.downloadUrl || ("/api/media/music/file?requestId=" + encodeURIComponent(source.requestId)))
+    const anchor = document.createElement("a")
+    anchor.href = source.downloadUrl || ("/api/media/music/file?requestId=" + encodeURIComponent(source.requestId))
+    anchor.rel = "noopener"
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
   }
 
   const shareTrack = async () => {
