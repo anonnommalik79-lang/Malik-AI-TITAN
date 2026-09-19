@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import {
   ArrowUp,
   ChevronLeft,
@@ -12,8 +12,10 @@ import {
   Share2,
   SlidersHorizontal,
   Sparkles,
+  Upload,
+  X,
 } from "lucide-react"
-import { canUseGeneration, incrementUsage, isOwnerUser } from "@/lib/usage-limits"
+import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { takePrefillPrompt } from "@/lib/malik-context"
 
@@ -28,6 +30,7 @@ export type VideoGenerationStudioProps = {
 type Ratio = "16:9" | "9:16" | "1:1" | "4:3"
 type Duration = 5 | 10
 type Quality = "fast" | "max"
+type VideoMode = "text" | "image" | "video"
 type GenerationPhase = "idle" | "queued" | "rendering" | "ready" | "failed"
 type ShowcaseVideoTemplate = {
   id: string
@@ -215,8 +218,11 @@ function HeroVideo({ item }: { item: ShowcaseVideoTemplate }) {
 
 export function VideoGenerationStudio({ username, onViewChange }: VideoGenerationStudioProps) {
   const operator = username?.trim() || "guest@malik.ai"
-  const owner = isOwnerUser(operator)
   const [prompt, setPrompt] = useState(() => takePrefillPrompt() || DEFAULT_PROMPT)
+  const [mode, setMode] = useState<VideoMode>("text")
+  const [sourceFile, setSourceFile] = useState<File | null>(null)
+  const [sourcePreview, setSourcePreview] = useState("")
+  const sourceInputRef = useRef<HTMLInputElement | null>(null)
   const [ratio, setRatio] = useState<Ratio>("16:9")
   const [duration, setDuration] = useState<Duration>(5)
   const [quality, setQuality] = useState<Quality>("max")
@@ -237,6 +243,83 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const thumbPages = Math.max(1, Math.ceil(SHOWCASE_TEMPLATES.length / thumbSize))
   const thumbs = SHOWCASE_TEMPLATES.slice(thumbPage * thumbSize, thumbPage * thumbSize + thumbSize)
 
+  useEffect(() => {
+    return () => {
+      if (sourcePreview) URL.revokeObjectURL(sourcePreview)
+    }
+  }, [sourcePreview])
+
+  const supportsMode = (modelId: (typeof MODELS)[number]["id"], targetMode: VideoMode) =>
+    targetMode === "text" ? true : modelId === "magichour"
+
+  const changeMode = (nextMode: VideoMode) => {
+    if (busy || nextMode === mode) return
+    setMode(nextMode)
+    setSourceFile(null)
+    setSourcePreview("")
+    setVideoUrl("")
+    setError("")
+    setPhase("idle")
+    if (nextMode !== "text") {
+      setSelectedModelId("magichour")
+      setDuration(5)
+      setModelNotice(nextMode === "image"
+        ? "Image → Video работает через Magic Hour LTX 2.5: исходное фото остаётся первым кадром."
+        : "Video → Video работает через Magic Hour AI Video Editor: исходное видео сохраняется как основа.")
+    } else {
+      setModelNotice("")
+    }
+  }
+
+  const handleSourceChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null
+    event.target.value = ""
+    if (!file) return
+    const imageMode = mode === "image"
+    const valid = imageMode ? file.type.startsWith("image/") : file.type.startsWith("video/")
+    if (!valid) {
+      setError(imageMode ? "Выберите изображение." : "Выберите видео.")
+      return
+    }
+    setSourceFile(file)
+    setSourcePreview(URL.createObjectURL(file))
+    setVideoUrl("")
+    setError("")
+    setPhase("idle")
+  }
+
+  const clearSource = () => {
+    setSourceFile(null)
+    setSourcePreview("")
+    setVideoUrl("")
+    setError("")
+    setPhase("idle")
+  }
+
+  const chooseDuration = (value: Duration) => {
+    if (busy) return
+    setDuration(value)
+    // 10 seconds is guaranteed by the current Magic Hour LTX route. Other
+    // free providers may choose their own duration, so pin 10s to LTX.
+    if (value === 10 && selectedModelId !== "magichour") {
+      setSelectedModelId("magichour")
+      setModelNotice("10 секунд → Magic Hour LTX 2.5, чтобы длительность реально соблюдалась.")
+    }
+  }
+
+  const uploadSource = async () => {
+    if (!sourceFile || mode === "text") return ""
+    const form = new FormData()
+    form.append("file", sourceFile, sourceFile.name)
+    form.append("mode", mode)
+    const response = await clientFetchWithTimeout("/api/media/video/source", { method: "POST", body: form }, 90_000)
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok || !data?.filePath) {
+      throw new Error(data?.error || "Не удалось загрузить исходный файл.")
+    }
+    return String(data.filePath)
+  }
+
   const chooseTemplate = (index: number) => {
     const item = SHOWCASE_TEMPLATES[index]
     if (!item) return
@@ -250,18 +333,24 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const generate = async () => {
     const cleanPrompt = prompt.trim()
     if (!cleanPrompt || busy) return
+    if (mode !== "text" && !sourceFile) {
+      setPhase("failed")
+      setError(mode === "image" ? "Сначала загрузите фото." : "Сначала загрузите видео.")
+      return
+    }
     setError("")
     setVideoUrl("")
     setAttempt(0)
 
     if (!canUseGeneration("video", operator)) {
       setPhase("failed")
-      setError("Сегодняшняя бесплатная генерация уже использована. Лимит обновится завтра.")
+      setError("Сегодняшняя генерация видео на этом аккаунте уже использована. Лимит обновится завтра.")
       return
     }
 
     setPhase("queued")
     try {
+      const sourcePath = mode === "text" ? "" : await uploadSource()
       const response = await clientFetchWithTimeout(
         ENDPOINT,
         {
@@ -269,12 +358,14 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt: cleanPrompt,
+            mode,
+            imageUrl: mode === "image" ? sourcePath : undefined,
+            sourceVideoUrl: mode === "video" ? sourcePath : undefined,
             length: duration,
             resolution: QUALITY_RESOLUTION[quality],
             ratio: ratio === "4:3" ? "16:9" : ratio,
             generateAudio: selectedModel.audio,
-            provider: selectedModel.provider,
-            userEmail: operator,
+            provider: mode === "text" ? selectedModel.provider : "magichour",
           }),
         },
         60_000,
@@ -287,7 +378,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
       const taskId = String(data?.taskId || "")
       if (!taskId) throw new Error("Видеомодель не вернула taskId")
-      if (!owner) incrementUsage("video")
+      incrementUsage("video")
       setPhase("rendering")
 
       const statusUrl = String(data?.statusUrl || `/api/media/video/status?taskId=${encodeURIComponent(taskId)}`)
@@ -341,6 +432,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           <div className="mv2__media">
             {videoUrl ? (
               <video src={videoUrl} controls autoPlay playsInline preload="metadata" className="mv2__result" />
+            ) : sourcePreview && mode === "image" ? (
+              <img src={sourcePreview} alt="Загруженное фото" className="mv2__source-image" draggable={false} />
+            ) : sourcePreview && mode === "video" ? (
+              <video src={sourcePreview} controls muted playsInline preload="metadata" className="mv2__source-video" />
             ) : (
               <HeroVideo item={selectedItem} />
             )}
@@ -385,10 +480,31 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       </section>
 
       <section className="mv2__controls-column">
-        <div className="mv2__mode-tabs"><button className="is-active" type="button">Текст → Видео</button><button type="button" title="Скоро">Изображение → Видео</button><button type="button" title="Скоро">Видео → Видео</button></div>
+        <div className="mv2__mode-tabs">
+          {([
+            ["text", "Текст → Видео"],
+            ["image", "Изображение → Видео"],
+            ["video", "Видео → Видео"],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              className={mode === value ? "is-active" : ""}
+              type="button"
+              aria-pressed={mode === value}
+              onClick={() => changeMode(value)}
+              disabled={busy}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="mv2__eyebrow">MALIK VIDEO</div>
         <h1>Создавайте невероятные видео</h1>
-        <p className="mv2__lead">Опишите идею — Malik AI подготовит сцену, движение камеры и звук.</p>
+        <p className="mv2__lead">{mode === "text"
+          ? "Опишите идею — Malik AI подготовит сцену, движение камеры и звук."
+          : mode === "image"
+            ? "Загрузите исходное фото и опишите движение. Malik AI сохранит его как первый кадр и оживит по запросу."
+            : "Загрузите исходное видео и опишите изменение. Malik AI сохранит основу и реалистично добавит нужные детали."}</p>
 
         <div className="mv2__prompt-card">
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value.slice(0, 2000))} placeholder="Опишите, какое видео вы хотите создать..." disabled={busy} />
@@ -401,6 +517,43 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             <span className="mv2__count">{prompt.length}/2000</span>
           </div>
         </div>
+
+        {mode !== "text" ? (
+          <div className="mv2__source-card">
+            <input
+              ref={sourceInputRef}
+              type="file"
+              accept={mode === "image" ? "image/png,image/jpeg,image/webp,image/avif" : "video/mp4,video/webm,video/quicktime,video/x-m4v"}
+              onChange={handleSourceChange}
+              hidden
+            />
+            <div className="mv2__source-preview">
+              {sourcePreview ? (
+                mode === "image"
+                  ? <img src={sourcePreview} alt="" draggable={false} />
+                  : <video src={sourcePreview} muted playsInline preload="metadata" />
+              ) : (
+                <Upload />
+              )}
+            </div>
+            <div className="mv2__source-copy">
+              <strong>{sourceFile?.name || (mode === "image" ? "Исходное фото" : "Исходное видео")}</strong>
+              <small>{sourceFile
+                ? mode === "image"
+                  ? "Фото будет сохранено как исходный первый кадр."
+                  : "Оригинальное видео будет основой для AI-редактирования."
+                : mode === "image"
+                  ? "PNG, JPG, WebP или AVIF"
+                  : "MP4, WebM, MOV или M4V"}</small>
+            </div>
+            <button className="mv2__source-upload" type="button" onClick={() => sourceInputRef.current?.click()} disabled={busy}>
+              <Upload />{sourceFile ? "Заменить" : "Загрузить"}
+            </button>
+            {sourceFile ? <button className="mv2__source-clear" type="button" onClick={clearSource} aria-label="Убрать файл" disabled={busy}><X /></button> : null}
+          </div>
+        ) : null}
+
+        <div className="mv2__daily-note">1 генерация видео в день на один аккаунт</div>
 
         <div className="mv2__section-title">Модель <Info /></div>
         <div className="mv2__models">
@@ -416,6 +569,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                   setModelNotice(model.note)
                 }}
                 aria-pressed={active}
+                disabled={!supportsMode(model.id, mode) || (duration === 10 && model.id !== "magichour")}
+                title={!supportsMode(model.id, mode) ? "Этот режим сейчас работает через Magic Hour LTX" : duration === 10 && model.id !== "magichour" ? "10 секунд сейчас гарантируются через Magic Hour LTX" : model.note}
               >
                 <span className="mv2__model-icon"><img src={model.icon} alt="" draggable={false} /></span>
                 <span className="mv2__model-copy"><strong>{model.name}</strong><small>{model.subtitle}</small></span>
@@ -427,12 +582,12 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         {modelNotice ? <div className="mv2__model-notice">{modelNotice}</div> : null}
 
         <div className="mv2__settings-grid">
-          <div><div className="mv2__section-title">Качество <Info /></div><div className="mv2__segments"><button type="button" className={quality === "fast" ? "is-active" : ""} onClick={() => setQuality("fast")}>720p · Быстро</button><button type="button" className={quality === "max" ? "is-active" : ""} onClick={() => setQuality("max")}>1080p · Max</button><button type="button" className="is-disabled" disabled>2K · Pro</button></div></div>
-          <div><div className="mv2__section-title">Длительность</div><div className="mv2__segments">{([5, 10] as Duration[]).map((value) => <button key={value} type="button" className={duration === value ? "is-active" : ""} onClick={() => setDuration(value)}>{value} сек</button>)}<button type="button" className="is-disabled" disabled>16 сек · Pro</button></div></div>
-          <div><div className="mv2__section-title">Соотношение сторон</div><div className="mv2__segments">{(["16:9", "9:16", "1:1", "4:3"] as Ratio[]).map((value) => <button key={value} type="button" className={ratio === value ? "is-active" : ""} onClick={() => setRatio(value)}>{value}</button>)}</div></div>
+          <div><div className="mv2__section-title">Качество <Info /></div><div className="mv2__segments"><button type="button" aria-pressed={quality === "fast"} className={quality === "fast" ? "is-active" : ""} onClick={() => setQuality("fast")} disabled={busy}>720p · Быстро</button><button type="button" aria-pressed={quality === "max"} className={quality === "max" ? "is-active" : ""} onClick={() => setQuality("max")} disabled={busy}>1080p · Max</button><button type="button" className="is-disabled" disabled>2K · Pro</button></div></div>
+          <div><div className="mv2__section-title">Длительность</div><div className="mv2__segments">{([5, 10] as Duration[]).map((value) => <button key={value} type="button" aria-pressed={duration === value} className={duration === value ? "is-active" : ""} onClick={() => chooseDuration(value)} disabled={busy}>{value} сек</button>)}<button type="button" className="is-disabled" disabled>16 сек · Pro</button></div></div>
+          <div><div className="mv2__section-title">Соотношение сторон</div><div className="mv2__segments">{(["16:9", "9:16", "1:1", "4:3"] as Ratio[]).map((value) => <button key={value} type="button" aria-pressed={ratio === value} className={ratio === value ? "is-active" : ""} onClick={() => setRatio(value)} disabled={busy}>{value}</button>)}</div></div>
         </div>
 
-        <div className="mv2__generate-row"><button type="button" className="mv2__generate" onClick={generate} disabled={busy || !prompt.trim()}><span>{busy ? statusLabel(phase, attempt) : "Сгенерировать видео"}</span><ArrowUp /></button><div className="mv2__credits">◉ ≈ 10 кредитов</div><button type="button" className="mv2__tune"><SlidersHorizontal /></button></div>
+        <div className="mv2__generate-row"><button type="button" className="mv2__generate" onClick={generate} disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile)}><span>{busy ? statusLabel(phase, attempt) : mode === "image" ? `Оживить фото · ${duration} сек` : mode === "video" ? `Изменить видео · ${duration} сек` : "Сгенерировать видео"}</span><ArrowUp /></button><div className="mv2__credits">◉ 1 видео / день</div><button type="button" className="mv2__tune"><SlidersHorizontal /></button></div>
         <div className="mv2__status"><span className={`mv2__status-dot is-${phase}`} />{statusLabel(phase, attempt)}{error ? <b>{error}</b> : null}</div>
 
         <div className="mv2__gallery-tabs">{CATEGORIES.map((item) => <button key={item} type="button" className={activeCategory === item ? "is-active" : ""} onClick={() => setActiveCategory(item)}>{item}</button>)}</div>
@@ -451,17 +606,17 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv2{width:100%;min-height:100%;display:grid;grid-template-columns:minmax(460px,.94fr) minmax(560px,1.06fr);gap:18px;padding:14px 18px 30px;background:#000;color:#f7f7f8;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;overflow:auto;color-scheme:dark}
         .mv2 *{box-sizing:border-box}.mv2 button,.mv2 textarea{font:inherit}.mv2 button{cursor:pointer}.mv2 button:focus-visible,.mv2 textarea:focus-visible{outline:1px solid rgba(255,255,255,.58);outline-offset:2px}
         .mv2__preview-column,.mv2__controls-column{min-width:0}.mv2__stage,.mv2__prompt-card,.mv2__preview-info{border:1px solid #272a31;background:#0c0f14;border-radius:16px}
-        .mv2__stage{position:relative;aspect-ratio:16/10.4;overflow:hidden;background:#06080c}.mv2__media{position:absolute;inset:0;display:grid;place-items:center;background:#050608}.mv2__hero-video,.mv2__result{width:100%;height:100%;display:block;background:#050608;object-fit:contain}.mv2__stage:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.18),transparent 22%,transparent 70%,rgba(0,0,0,.36))}
+        .mv2__stage{position:relative;aspect-ratio:16/10.4;overflow:hidden;background:#06080c}.mv2__media{position:absolute;inset:0;display:grid;place-items:center;background:#050608}.mv2__hero-video,.mv2__result,.mv2__source-image,.mv2__source-video{width:100%;height:100%;display:block;background:#050608;object-fit:contain}.mv2__stage:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.18),transparent 22%,transparent 70%,rgba(0,0,0,.36))}
         .mv2__stage-brand{position:absolute;z-index:2;top:24px;color:#d9e0eb;letter-spacing:.36em;font-size:11px}.mv2__stage-brand--left{left:28px;display:flex;flex-direction:column;gap:10px}.mv2__stage-brand--left small{font-size:9px}.mv2__stage-brand--right{right:26px}.mv2__rendering{position:absolute;z-index:4;inset:0;background:rgba(0,0,0,.68);backdrop-filter:blur(12px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}.mv2__render-box{width:96px;height:96px;border-radius:24px;border:1px solid rgba(255,255,255,.17);display:grid;place-items:center;background:#0c0e12;animation:mv2pulse 1.7s ease-in-out infinite}.mv2__rendering strong{font-size:14px}.mv2__rendering small{color:#939aa7;font-size:11px}@keyframes mv2pulse{50%{transform:scale(1.035);box-shadow:0 24px 70px rgba(0,0,0,.6)}}
         .mv2__thumb-strip{display:grid;grid-template-columns:28px 1fr 28px;gap:7px;align-items:center;margin-top:12px}.mv2__thumbs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}.mv2__arrow{width:28px;height:76px;border:0;background:transparent;color:#b9c2d1;display:grid;place-items:center}.mv2__arrow svg{width:18px;height:18px}.mv2__thumb{position:relative;height:76px;border:1px solid #262a31;border-radius:10px;overflow:hidden;background:#0b0e13;padding:0}.mv2__thumb.is-active{border-color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}.mv2__thumb-poster{width:100%;height:100%;object-fit:cover;display:block}.mv2__thumb:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(0,0,0,.72))}.mv2__thumb span{position:absolute;z-index:2;left:7px;bottom:5px;font-size:9px;color:#dce2ec}
         .mv2__preview-info{margin-top:12px;padding:15px;display:grid;grid-template-columns:1fr 132px;gap:15px}.mv2__preview-copy h3{margin:0 0 8px;font-size:17px}.mv2__preview-copy p{margin:0;color:#9ca4b2;font-size:12px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.mv2__chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.mv2__chips span{height:28px;padding:0 9px;border:1px solid #292d34;border-radius:999px;background:#12161d;color:#adb5c2;display:inline-flex;align-items:center;font-size:10px}.mv2__preview-actions{display:flex;flex-direction:column;gap:7px}.mv2__preview-actions button{height:35px;border:1px solid #2c3038;border-radius:9px;background:#12161d;color:#edf1f7;display:flex;align-items:center;justify-content:center;gap:7px;font-size:11px}.mv2__preview-actions svg{width:14px;height:14px}
-        .mv2__controls-column{position:relative;padding:5px 0 24px}.mv2__mode-tabs{position:absolute;right:0;top:0;display:flex;border:1px solid #1d2027;background:#0b0d11;border-radius:12px;padding:3px;overflow:hidden}.mv2__mode-tabs button{height:34px;border:0;border-radius:9px;background:transparent;color:#8e96a4;padding:0 13px;font-size:10px;white-space:nowrap}.mv2__mode-tabs button.is-active{background:#191d25;color:#fff}.mv2__eyebrow{margin-top:13px;color:#707887;letter-spacing:.28em;font-size:10px}.mv2 h1{margin:14px 0 6px;font-size:clamp(34px,3.2vw,52px);line-height:1;letter-spacing:-.05em}.mv2__lead{margin:0 0 15px;color:#929aa8;font-size:13px}
-        .mv2__prompt-card{padding:12px}.mv2__prompt-card textarea{width:100%;height:106px;border:0;outline:0;resize:none;background:transparent;color:#fff;font-size:14px;line-height:1.5;padding:3px}.mv2__prompt-card textarea::placeholder{color:#6f7887}.mv2__prompt-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.mv2__helper-row{display:flex;gap:6px;flex-wrap:wrap}.mv2__helper-row button{height:30px;border:1px solid #2a2e36;border-radius:8px;background:#151922;color:#cbd2dd;display:flex;align-items:center;gap:5px;padding:0 9px;font-size:9px}.mv2__helper-row svg{width:12px;height:12px}.mv2__count{font-size:9px;color:#777f8d;white-space:nowrap}
-        .mv2__section-title{display:flex;align-items:center;gap:5px;margin:15px 0 8px;font-size:12px;font-weight:750}.mv2__section-title svg{width:13px;height:13px}.mv2__models{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.mv2__model{position:relative;min-width:0;height:66px;padding:8px;border:1px solid #272b33;border-radius:11px;background:#0f131a;color:#fff;display:flex;align-items:center;gap:7px;text-align:left;overflow:hidden}.mv2__model.is-active{border-color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}.mv2__model.is-featured{grid-column:1/-1;height:72px;background:#121720}.mv2__model-icon{width:34px;height:34px;flex:0 0 34px;border-radius:8px;background:#fff;display:grid;place-items:center;overflow:hidden}.mv2__model-icon img{width:22px;height:22px;object-fit:contain}.mv2__model-copy{min-width:0;display:flex;flex-direction:column;gap:3px}.mv2__model-copy strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}.mv2__model-copy small{color:#858d9b;font-size:8px}.mv2__tier{position:absolute;right:6px;top:5px;padding:2px 5px;border-radius:999px;font-size:7px}.mv2__tier.is-free{background:#fff;color:#000}.mv2__tier.is-pro{background:#252935;color:#c9d0db}.mv2__model-notice{margin-top:8px;color:#aeb6c4;font-size:10px}
-        .mv2__settings-grid{display:grid;grid-template-columns:1.1fr 1fr 1.3fr;gap:10px}.mv2__segments{display:flex;flex-wrap:wrap;gap:6px}.mv2__segments button{height:31px;padding:0 10px;border:1px solid #2a2e36;border-radius:8px;background:#11151c;color:#aeb6c4;font-size:9px}.mv2__segments button.is-active{background:#f4f4f5;color:#050505;border-color:#fff}.mv2__segments button.is-disabled{opacity:.45;cursor:default}.mv2__generate-row{display:grid;grid-template-columns:1fr auto 38px;gap:8px;align-items:center;margin-top:18px}.mv2__generate{height:46px;border:0;border-radius:12px;background:#fff;color:#050505;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}.mv2__generate:disabled{opacity:.5;cursor:not-allowed}.mv2__generate svg{width:17px}.mv2__credits{font-size:9px;color:#8f97a5}.mv2__tune{height:38px;border:1px solid #292d35;border-radius:10px;background:#11151b;color:#ddd;display:grid;place-items:center}.mv2__tune svg{width:16px}.mv2__status{display:flex;align-items:center;gap:7px;min-height:32px;color:#8992a0;font-size:9px}.mv2__status b{color:#f4a6a6;font-weight:600}.mv2__status-dot{width:6px;height:6px;border-radius:50%;background:#666}.mv2__status-dot.is-ready{background:#39d98a}.mv2__status-dot.is-rendering,.mv2__status-dot.is-queued{background:#f5c451}.mv2__status-dot.is-failed{background:#ff6b6b}
+        .mv2__controls-column{position:relative;padding:5px 0 24px}.mv2__mode-tabs{position:absolute;right:0;top:0;display:flex;border:1px solid #1d2027;background:#0b0d11;border-radius:12px;padding:3px;overflow:hidden}.mv2__mode-tabs button{height:34px;border:0;border-radius:9px;background:transparent;color:#8e96a4;padding:0 13px;font-size:10px;white-space:nowrap}.mv2__mode-tabs button.is-active{background:#f4f4f5 !important;color:#050505 !important;box-shadow:inset 0 0 0 1px #fff}.mv2__mode-tabs button:disabled{cursor:not-allowed;opacity:.6}.mv2__eyebrow{margin-top:13px;color:#707887;letter-spacing:.28em;font-size:10px}.mv2 h1{margin:14px 0 6px;font-size:clamp(34px,3.2vw,52px);line-height:1;letter-spacing:-.05em}.mv2__lead{margin:0 0 15px;color:#929aa8;font-size:13px}
+        .mv2__prompt-card{padding:12px}.mv2__prompt-card textarea{width:100%;height:106px;border:0;outline:0;resize:none;background:transparent;color:#fff;font-size:14px;line-height:1.5;padding:3px}.mv2__prompt-card textarea::placeholder{color:#6f7887}.mv2__source-card{margin-top:9px;min-height:64px;padding:8px;border:1px solid #272a31;border-radius:12px;background:#0c0f14;display:grid;grid-template-columns:48px minmax(0,1fr) auto auto;align-items:center;gap:9px}.mv2__source-preview{width:48px;height:48px;border-radius:9px;overflow:hidden;border:1px solid #2d323b;background:#12161d;display:grid;place-items:center;color:#aeb6c4}.mv2__source-preview img,.mv2__source-preview video{width:100%;height:100%;object-fit:cover;display:block}.mv2__source-preview svg{width:19px}.mv2__source-copy{min-width:0;display:flex;flex-direction:column;gap:4px}.mv2__source-copy strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mv2__source-copy small{font-size:8px;color:#858d9b;line-height:1.35}.mv2__source-upload,.mv2__source-clear{height:34px;border:1px solid #303540;border-radius:9px;background:#151922;color:#eef2f8;display:flex;align-items:center;justify-content:center;gap:6px}.mv2__source-upload{padding:0 10px;font-size:9px}.mv2__source-upload svg,.mv2__source-clear svg{width:13px;height:13px}.mv2__source-clear{width:34px;padding:0}.mv2__daily-note{margin-top:8px;color:#7e8795;font-size:9px}.mv2__prompt-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.mv2__helper-row{display:flex;gap:6px;flex-wrap:wrap}.mv2__helper-row button{height:30px;border:1px solid #2a2e36;border-radius:8px;background:#151922;color:#cbd2dd;display:flex;align-items:center;gap:5px;padding:0 9px;font-size:9px}.mv2__helper-row svg{width:12px;height:12px}.mv2__count{font-size:9px;color:#777f8d;white-space:nowrap}
+        .mv2__section-title{display:flex;align-items:center;gap:5px;margin:15px 0 8px;font-size:12px;font-weight:750}.mv2__section-title svg{width:13px;height:13px}.mv2__models{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.mv2__model{position:relative;min-width:0;height:66px;padding:8px;border:1px solid #272b33;border-radius:11px;background:#0f131a;color:#fff;display:flex;align-items:center;gap:7px;text-align:left;overflow:hidden}.mv2__model.is-active{border-color:#fff !important;background:#171c24 !important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.32) !important}.mv2__model:disabled{opacity:.38;cursor:not-allowed}.mv2__model.is-featured{grid-column:1/-1;height:72px;background:#121720}.mv2__model-icon{width:34px;height:34px;flex:0 0 34px;border-radius:8px;background:#fff;display:grid;place-items:center;overflow:hidden}.mv2__model-icon img{width:22px;height:22px;object-fit:contain}.mv2__model-copy{min-width:0;display:flex;flex-direction:column;gap:3px}.mv2__model-copy strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}.mv2__model-copy small{color:#858d9b;font-size:8px}.mv2__tier{position:absolute;right:6px;top:5px;padding:2px 5px;border-radius:999px;font-size:7px}.mv2__tier.is-free{background:#fff;color:#000}.mv2__tier.is-pro{background:#252935;color:#c9d0db}.mv2__model-notice{margin-top:8px;color:#aeb6c4;font-size:10px}
+        .mv2__settings-grid{display:grid;grid-template-columns:1.1fr 1fr 1.3fr;gap:10px}.mv2__segments{display:flex;flex-wrap:wrap;gap:6px}.mv2__segments button{height:31px;padding:0 10px;border:1px solid #2a2e36;border-radius:8px;background:#11151c;color:#aeb6c4;font-size:9px}.mv2__segments button.is-active{background:#f4f4f5 !important;color:#050505 !important;border-color:#fff !important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.45)}.mv2__segments button.is-disabled{opacity:.45;cursor:default}.mv2__generate-row{display:grid;grid-template-columns:1fr auto 38px;gap:8px;align-items:center;margin-top:18px}.mv2__generate{height:46px;border:0;border-radius:12px;background:#fff;color:#050505;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}.mv2__generate:disabled{opacity:.5;cursor:not-allowed}.mv2__generate svg{width:17px}.mv2__credits{font-size:9px;color:#8f97a5}.mv2__tune{height:38px;border:1px solid #292d35;border-radius:10px;background:#11151b;color:#ddd;display:grid;place-items:center}.mv2__tune svg{width:16px}.mv2__status{display:flex;align-items:center;gap:7px;min-height:32px;color:#8992a0;font-size:9px}.mv2__status b{color:#f4a6a6;font-weight:600}.mv2__status-dot{width:6px;height:6px;border-radius:50%;background:#666}.mv2__status-dot.is-ready{background:#39d98a}.mv2__status-dot.is-rendering,.mv2__status-dot.is-queued{background:#f5c451}.mv2__status-dot.is-failed{background:#ff6b6b}
         .mv2__gallery-tabs{display:flex;gap:5px;overflow-x:auto;padding:4px 0 8px;scrollbar-width:none}.mv2__gallery-tabs::-webkit-scrollbar{display:none}.mv2__gallery-tabs button{height:29px;padding:0 10px;border:1px solid #22262d;border-radius:999px;background:#0d1016;color:#89919f;font-size:8px;white-space:nowrap}.mv2__gallery-tabs button.is-active{background:#fff;color:#000}.mv2__gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.mv2__gallery-card{position:relative;aspect-ratio:16/10;border:1px solid #20242b;border-radius:10px;overflow:hidden;padding:0;background:#080a0d}.mv2__gallery-card.is-active{border-color:#fff}.mv2__gallery-poster{width:100%;height:100%;object-fit:cover;display:block}.mv2__gallery-shade{position:absolute;inset:0;background:linear-gradient(180deg,transparent 50%,rgba(0,0,0,.84))}.mv2__gallery-copy{position:absolute;z-index:2;left:8px;right:8px;bottom:7px;display:flex;flex-direction:column;text-align:left}.mv2__gallery-copy strong{font-size:9px;color:#fff}.mv2__gallery-copy small{font-size:7px;color:#aab2bf;margin-top:2px}
         @media (max-width:1180px){.mv2{grid-template-columns:1fr;padding:14px}.mv2__preview-column{order:2}.mv2__controls-column{order:1}.mv2__models{grid-template-columns:repeat(3,minmax(0,1fr))}.mv2__gallery{grid-template-columns:repeat(4,minmax(0,1fr))}}
-        @media (max-width:820px){.mv2{display:block;padding:12px 10px 26px;overflow:visible}.mv2__preview-column{margin-top:16px}.mv2__mode-tabs{position:static;margin-bottom:14px;overflow-x:auto}.mv2__eyebrow{margin-top:0}.mv2 h1{font-size:34px}.mv2__models{grid-template-columns:repeat(2,minmax(0,1fr))}.mv2__settings-grid{grid-template-columns:1fr}.mv2__thumbs{grid-template-columns:repeat(3,minmax(0,1fr))}.mv2__thumb:nth-child(n+4){display:none}.mv2__preview-info{grid-template-columns:1fr}.mv2__preview-actions{display:grid;grid-template-columns:repeat(3,1fr)}.mv2__gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.mv2__generate-row{grid-template-columns:1fr 38px}.mv2__credits{display:none}}
+        @media (max-width:820px){.mv2{display:block;padding:12px 10px 26px;overflow:visible}.mv2__preview-column{margin-top:16px}.mv2__mode-tabs{position:static;margin-bottom:14px;overflow-x:auto}.mv2__eyebrow{margin-top:0}.mv2 h1{font-size:34px}.mv2__models{grid-template-columns:repeat(2,minmax(0,1fr))}.mv2__settings-grid{grid-template-columns:1fr}.mv2__thumbs{grid-template-columns:repeat(3,minmax(0,1fr))}.mv2__thumb:nth-child(n+4){display:none}.mv2__preview-info{grid-template-columns:1fr}.mv2__preview-actions{display:grid;grid-template-columns:repeat(3,1fr)}.mv2__gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.mv2__generate-row{grid-template-columns:1fr 38px}.mv2__credits{display:none}.mv2__source-card{grid-template-columns:44px minmax(0,1fr) auto}.mv2__source-preview{width:44px;height:44px}.mv2__source-clear{grid-column:3}.mv2__source-upload{grid-column:3}.mv2__source-copy small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}}
       `}</style>
     </main>
   )
