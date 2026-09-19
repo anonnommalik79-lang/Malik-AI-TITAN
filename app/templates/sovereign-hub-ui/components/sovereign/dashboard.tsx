@@ -69,6 +69,20 @@ const VideoGenerationStudio = dynamic(
     ),
   },
 )
+const MusicGenerationStudio = dynamic(
+  () => import("./music-generation/MusicGenerationStudio").then((mod) => mod.MusicGenerationStudio),
+  {
+    ssr: false,
+    loading: () => (
+      <div data-music-studio-loading className="flex h-full min-h-[320px] flex-1 items-center justify-center bg-black text-white">
+        <div className="flex items-center gap-3 text-sm text-zinc-400">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Открываю Malik Music…</span>
+        </div>
+      </div>
+    ),
+  },
+)
 const AIGeneratorStudio = dynamic(
   () => import("./ai-generator/AIGeneratorStudio").then((mod) => mod.AIGeneratorStudio),
   { ssr: false },
@@ -6795,6 +6809,9 @@ const shouldShowMobilePreviewButton =
     }
     if (activeView === "video-generation") {
       return <VideoGenerationStudio {...studioBridgeProps} />
+    }
+    if (activeView === "music-generation") {
+      return <MusicGenerationStudio username={username} />
     }
     if (
       activeView === "code-generation" ||
