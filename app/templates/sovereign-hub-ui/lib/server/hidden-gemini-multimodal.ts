@@ -82,7 +82,12 @@ function modelChain() {
   return [...new Set([
     env("GEMINI_MULTIMODAL_MODEL") || env("GEMINI_VISION_MODEL") || DEFAULT_MODEL,
     env("GEMINI_FALLBACK_MODEL") || DEFAULT_FALLBACK_MODEL,
-    "gemini-3.5-flash",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
   ].filter(Boolean))]
 }
 
@@ -117,7 +122,7 @@ async function callGemini(input: {
       }),
       signal: input.signal,
     },
-    Number(process.env.GEMINI_MULTIMODAL_TIMEOUT_MS || 90_000),
+    Number(process.env.GEMINI_MULTIMODAL_TIMEOUT_MS || 120_000),
   )
 
   const payload = await response.json().catch(() => ({}))
@@ -187,7 +192,13 @@ export async function runHiddenGeminiMultimodal(input: {
   attachments?: HiddenMultimodalAttachment[]
   signal?: AbortSignal
 }) {
-  const key = env("GEMINI_API_KEY") || env("GOOGLE_GENERATIVE_AI_API_KEY") || env("GOOGLE_AI_API_KEY")
+  const key =
+    env("GEMINI_API_KEY")
+    || env("GOOGLE_GENERATIVE_AI_API_KEY")
+    || env("GOOGLE_AI_API_KEY")
+    || env("GOOGLE_API_KEY")
+    || env("GOOGLE_VEO_API_KEY")
+    || env("VEO_API_KEY")
   if (!key) throw new Error("HIDDEN_MULTIMODAL_NOT_CONFIGURED")
 
   const media = (input.attachments || []).filter((attachment) => Boolean(attachmentKind(attachment)))
