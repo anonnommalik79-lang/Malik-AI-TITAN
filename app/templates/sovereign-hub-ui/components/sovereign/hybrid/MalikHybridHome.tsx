@@ -30,7 +30,10 @@ import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
 const MAX_HOME_ATTACHMENTS = 8
-const MAX_HOME_VIDEO_SECONDS = 30
+const MAX_HOME_VIDEO_SECONDS = 10
+const MAX_HOME_VIDEO_BYTES = 150 * 1024 * 1024
+const HOME_VIDEO_FRAME_COUNT = 6
+const HOME_VIDEO_LONG_EDGE = 960
 const MAX_HOME_BINARY_BYTES = 10 * 1024 * 1024
 const MAX_HOME_TEXT_BYTES = 12 * 1024 * 1024
 const MAX_HOME_TEXT_CHARS = 600_000
@@ -149,6 +152,92 @@ function videoDurationSeconds(file: File) {
   })
 }
 
+function blobAsBase64(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "")
+      resolve(dataUrl.includes(",") ? dataUrl.split(",").pop() || "" : dataUrl)
+    }
+    reader.onerror = () => reject(new Error("Не удалось подготовить кадр видео."))
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function sampleHomeVideoFrames(file: File, durationSeconds: number) {
+  const video = document.createElement("video")
+  const objectUrl = URL.createObjectURL(file)
+  video.preload = "auto"
+  video.muted = true
+  video.playsInline = true
+
+  const waitFor = (eventName: "loadeddata" | "seeked", timeoutMs: number) =>
+    new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        video.removeEventListener(eventName, done)
+        video.removeEventListener("error", fail)
+        window.clearTimeout(timer)
+      }
+      const done = () => { cleanup(); resolve() }
+      const fail = () => { cleanup(); reject(new Error(`Не удалось декодировать ${file.name}.`)) }
+      const timer = window.setTimeout(() => {
+        cleanup()
+        reject(new Error(`Не удалось подготовить кадры ${file.name}.`))
+      }, timeoutMs)
+      video.addEventListener(eventName, done, { once: true })
+      video.addEventListener("error", fail, { once: true })
+    })
+
+  try {
+    video.src = objectUrl
+    video.load()
+    if (video.readyState < 2) await waitFor("loadeddata", 15_000)
+
+    const sourceWidth = Math.max(1, video.videoWidth || 1)
+    const sourceHeight = Math.max(1, video.videoHeight || 1)
+    const scale = Math.min(1, HOME_VIDEO_LONG_EDGE / Math.max(sourceWidth, sourceHeight))
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale))
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale))
+    const context = canvas.getContext("2d", { alpha: false })
+    if (!context) throw new Error("Canvas unavailable")
+
+    const safeDuration = Math.max(0.05, durationSeconds)
+    const frameCount = Math.min(HOME_VIDEO_FRAME_COUNT, Math.max(3, Math.ceil(safeDuration * 0.75)))
+    const frames: NonNullable<ChatAttachment["analysisFrames"]> = []
+
+    for (let index = 0; index < frameCount; index += 1) {
+      const ratio = frameCount === 1 ? 0 : index / (frameCount - 1)
+      const timestampSeconds = Math.min(
+        Math.max(0, safeDuration - 0.05),
+        Math.max(0, ratio * Math.max(0, safeDuration - 0.05)),
+      )
+      if (Math.abs(video.currentTime - timestampSeconds) > 0.02) {
+        video.currentTime = timestampSeconds
+        await waitFor("seeked", 10_000)
+      }
+      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      const frameBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.76))
+      if (!frameBlob?.size) continue
+      frames.push({
+        name: `${file.name.replace(/\.[^.]+$/, "") || "video"}-frame-${index + 1}.jpg`,
+        mime: "image/jpeg",
+        base64: await blobAsBase64(frameBlob),
+        timestampSeconds,
+      })
+    }
+
+    canvas.width = 1
+    canvas.height = 1
+    if (frames.length < 2) throw new Error(`Не удалось извлечь достаточно кадров из ${file.name}.`)
+    return frames
+  } finally {
+    video.removeAttribute("src")
+    video.load()
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
 function homeUploadExtension(name: string) {
   return name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || ""
 }
@@ -187,20 +276,49 @@ async function homeFileToAttachment(file: File): Promise<ChatAttachment> {
     }
   }
 
+  if (isVideo) {
+    if (file.size > MAX_HOME_VIDEO_BYTES) {
+      throw new Error(`${file.name}: видео слишком большое. Максимум 150 MB для анализа до 10 сек.`)
+    }
+    const durationSeconds = await videoDurationSeconds(file)
+    if (durationSeconds > MAX_HOME_VIDEO_SECONDS + 0.05) {
+      throw new Error(`${file.name}: видео ${durationSeconds.toFixed(1)} сек. Malik AI читает видео до 10 сек.`)
+    }
+
+    try {
+      return {
+        id: attachmentId(),
+        name: file.name || "video.mp4",
+        mime,
+        size: file.size,
+        kind: "video",
+        durationSeconds,
+        analysisFrames: await sampleHomeVideoFrames(file, durationSeconds),
+        url: URL.createObjectURL(file),
+      }
+    } catch (error) {
+      if (file.size <= 8 * 1024 * 1024) {
+        return {
+          id: attachmentId(),
+          name: file.name || "video.mp4",
+          mime,
+          size: file.size,
+          kind: "video",
+          durationSeconds,
+          base64: await readAsBase64(file),
+          url: URL.createObjectURL(file),
+        }
+      }
+      throw error
+    }
+  }
+
   if (file.size > MAX_HOME_BINARY_BYTES) {
     throw new Error(`${file.name}: слишком большой файл для чата. Максимум 10 MB.`)
   }
 
-  if (isVideo) {
-    const duration = await videoDurationSeconds(file)
-    if (duration > MAX_HOME_VIDEO_SECONDS + 0.05) {
-      throw new Error(`${file.name}: видео ${Math.ceil(duration)} сек. Максимум 30 сек.`)
-    }
-  }
-
   const supportedBinary =
     isImage ||
-    isVideo ||
     mime.startsWith("audio/") ||
     mime === "application/pdf" ||
     mime.includes("officedocument")
@@ -211,12 +329,12 @@ async function homeFileToAttachment(file: File): Promise<ChatAttachment> {
   const base64 = await readAsBase64(file)
   return {
     id: attachmentId(),
-    name: file.name || (isVideo ? "video.mp4" : isImage ? "image.jpg" : "document"),
+    name: file.name || (isImage ? "image.jpg" : "document"),
     mime,
     size: file.size,
-    kind: isImage ? "image" : isVideo ? "video" : mime.startsWith("audio/") ? "audio" : "file",
+    kind: isImage ? "image" : mime.startsWith("audio/") ? "audio" : "file",
     base64,
-    url: isImage || isVideo ? URL.createObjectURL(file) : undefined,
+    url: isImage ? URL.createObjectURL(file) : undefined,
   }
 }
 
