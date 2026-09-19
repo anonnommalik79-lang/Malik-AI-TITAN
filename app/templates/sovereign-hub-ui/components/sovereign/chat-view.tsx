@@ -46,6 +46,7 @@ import { canUseUltra, loadResponseDepth, type ChatSendOptions, type ResponseDept
 import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 import { isExplicitImageEditRequest, isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
 import { isDataSvgUrl, isImageLikeUrl, isRealVideoUrl } from "@/lib/media/media-url"
+import { normalizeClientImage } from "@/lib/media/client-image-normalize"
 import { ImageGenerationMotion } from "./image-generation-motion"
 import type { MalikActionPlan, MalikActionTarget } from "@/lib/ai/action-os"
 
@@ -341,6 +342,19 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
       url: URL.createObjectURL(file),
       durationSeconds: analyzed.durationSeconds,
       analysisFrames: analyzed.frames,
+    }
+  }
+
+  if (mime.startsWith("image/")) {
+    const normalized = await normalizeClientImage(file)
+    return {
+      id: crypto.randomUUID(),
+      name: normalized.name,
+      mime: normalized.mime,
+      size: normalized.size,
+      kind: "image",
+      base64: normalized.base64,
+      url: normalized.previewUrl,
     }
   }
 
