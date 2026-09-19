@@ -17,9 +17,14 @@ import {
 import { postProcessGeneratedImage } from "./image-postprocess"
 import { resolveRequestedQuality } from "./image-resolution-intent"
 import { routeImageGeneration } from "./image-router"
-import { checkMediaLimit, nextMediaResetAt, recordMediaUsage } from "./limits"
+import {
+  checkImageCreditLimit,
+  normalizeImageCreditSize,
+  recordImageCreditUsage,
+} from "./limits"
+import { agnesImageConfigured, generateWithAgnesImage } from "./providers/agnes-image"
 import { resolveMediaUser } from "./request"
-import type { ImageAspectRatio, ImageMode } from "./types"
+import type { ImageAspectRatio, ImageGenerateResult, ImageMode } from "./types"
 
 const ASPECTS = new Set<ImageAspectRatio>(["1:1", "16:9", "9:16", "4:5", "4:3"])
 const MODES = new Set<ImageMode>(["cinematic", "realistic", "product", "design"])
@@ -96,10 +101,14 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   const aspectRatio = ASPECTS.has(body?.aspectRatio) ? body.aspectRatio : "1:1"
   const requestedMode = String(body?.mode || body?.style || "").toLowerCase()
   const mode: ImageMode = MODES.has(requestedMode as ImageMode) ? requestedMode as ImageMode : "cinematic"
+  const rawImageSize = String(body?.imageSize || body?.resolution || body?.size || "").trim().toUpperCase()
+  const hasExplicitImageSize = rawImageSize === "1K" || rawImageSize === "2K" || rawImageSize === "4K"
+  const imageSize = normalizeImageCreditSize(rawImageSize)
+  const sizeQuality = imageSize === "4K" ? "ultra4k" : imageSize === "2K" ? "quality" : "balanced"
 
   const requested = resolveRequestedQuality(
     rawPrompt,
-    resolveMalikImageQuality(body?.quality || readImageQualityCookie(request)),
+    resolveMalikImageQuality(body?.quality || (hasExplicitImageSize ? sizeQuality : readImageQualityCookie(request))),
   )
   const prompt = requested.prompt
   const quality = requested.quality
@@ -124,15 +133,24 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     }, { status: 403 })
   }
 
-  const limit = await checkMediaLimit({ userId: user.userId, plan: user.plan, kind: "image" })
-  if (!limit.ok) {
+  const credit = await checkImageCreditLimit({
+    userId: user.userId,
+    plan: user.plan,
+    size: imageSize,
+  })
+  if (!credit.ok) {
     return Response.json({
       ok: false,
       status: "failed",
-      error: limit.code || "IMAGE_LIMIT_REACHED",
-      publicError: limit.error,
-      resetAt: limit.resetAt,
-      remainingDailyImages: 0,
+      error: credit.code,
+      publicError: credit.error,
+      resetAt: credit.resetAt,
+      remainingDailyImages: credit.remaining,
+      remainingImageCredits: credit.remaining,
+      dailyImageCredits: credit.daily,
+      imageCreditCost: credit.cost,
+      imageSize,
+      remaining4k: credit.remaining4k,
       modelId: requestedModelId,
       modelLabel: requestedModelId ? getMalikImageModel(requestedModelId).label : "MalikImage Auto",
       quality,
@@ -152,22 +170,51 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   }
 
   try {
-    const result = await routeImageGeneration({
-      prompt,
-      understood: typeof body?.understood === "string" ? body.understood : undefined,
-      aspectRatio,
-      mode,
-      modelId: requestedModelId,
-      quality,
-      steps: optionalNumber(body?.steps),
-      guidance: optionalNumber(body?.guidance ?? body?.cfg),
-      seed: optionalNumber(body?.seed),
-      detailBoost: typeof body?.detailBoost === "boolean" ? body.detailBoost : undefined,
-      artifactCleanup: typeof body?.artifactCleanup === "boolean" ? body.artifactCleanup : undefined,
-      preserveFaces: typeof body?.preserveFaces === "boolean" ? body.preserveFaces : undefined,
-      userId: user.userId,
-      plan: user.plan,
-    })
+    let result: ImageGenerateResult | undefined
+
+    if (agnesImageConfigured()) {
+      try {
+        const agnes = await generateWithAgnesImage({
+          prompt,
+          size: imageSize,
+          aspectRatio,
+        })
+        result = {
+          ok: true,
+          provider: "agnes",
+          imageUrl: agnes.imageUrl,
+          providerModel: agnes.providerModel,
+          remainingDailyImages: credit.remaining,
+          quality,
+          enhancedPrompt: prompt,
+          routeReason: "agnes-primary",
+          generationSource: "agnes-image-2.1-flash",
+          generationTier: "quality",
+        }
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error || "AGNES_UNAVAILABLE")
+        console.warn("[image] Agnes primary unavailable; continuing with Malik fallback.", reason.slice(0, 220))
+      }
+    }
+
+    if (!result) {
+      result = await routeImageGeneration({
+        prompt,
+        understood: typeof body?.understood === "string" ? body.understood : undefined,
+        aspectRatio,
+        mode,
+        modelId: requestedModelId,
+        quality,
+        steps: optionalNumber(body?.steps),
+        guidance: optionalNumber(body?.guidance ?? body?.cfg),
+        seed: optionalNumber(body?.seed),
+        detailBoost: typeof body?.detailBoost === "boolean" ? body.detailBoost : undefined,
+        artifactCleanup: typeof body?.artifactCleanup === "boolean" ? body.artifactCleanup : undefined,
+        preserveFaces: typeof body?.preserveFaces === "boolean" ? body.preserveFaces : undefined,
+        userId: user.userId,
+        plan: user.plan,
+      })
+    }
 
     if (!result.ok) {
       return Response.json({
@@ -181,8 +228,8 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
         providerModel: result.providerModel,
         quality,
         routeReason: result.routeReason,
-        remainingDailyImages: limit.remaining,
-        resetAt: nextMediaResetAt(),
+        remainingDailyImages: credit.remaining,
+        resetAt: credit.resetAt,
       }, { status: 502 })
     }
 
@@ -202,8 +249,15 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       )
     }
 
-    await recordMediaUsage(user.userId, "image")
-    const remaining = Math.max(0, limit.remaining - 1)
+    await recordImageCreditUsage(user.userId, imageSize)
+    const remaining = credit.plan === "owner"
+      ? credit.remaining
+      : Math.max(0, credit.remaining - credit.cost)
+    const remaining4k = credit.plan === "owner"
+      ? credit.remaining4k
+      : imageSize === "4K"
+        ? Math.max(0, credit.remaining4k - 1)
+        : credit.remaining4k
 
     let storageUrl: string | undefined
     let previewStorageUrl: string | undefined
@@ -295,8 +349,13 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       cloudStorageConfigured,
       persistenceError,
       remainingDailyImages: remaining,
-      resetAt: nextMediaResetAt(),
-      plan: limit.plan,
+      remainingImageCredits: remaining,
+      dailyImageCredits: credit.daily,
+      imageCreditCost: credit.cost,
+      imageSize,
+      remaining4k,
+      resetAt: credit.resetAt,
+      plan: credit.plan,
     })
   } finally {
     releaseImageGenerationLock(user.userId, generationLock)
