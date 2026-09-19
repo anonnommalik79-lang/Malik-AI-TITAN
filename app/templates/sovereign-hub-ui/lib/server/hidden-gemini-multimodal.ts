@@ -10,8 +10,8 @@ export type HiddenMultimodalAttachment = {
 
 type SupportedPart = "image" | "video" | "audio" | "document"
 
-const DEFAULT_MODEL = "gemini-3.5-flash-lite"
-const DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash"
+const DEFAULT_MODEL = "gemini-3.8-flash"
+const DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash-lite"
 
 function env(name: string) {
   const value = process.env[name]
@@ -82,7 +82,16 @@ function modelChain() {
   return [...new Set([
     env("GEMINI_MULTIMODAL_MODEL") || env("GEMINI_VISION_MODEL") || DEFAULT_MODEL,
     env("GEMINI_FALLBACK_MODEL") || DEFAULT_FALLBACK_MODEL,
+    "gemini-3.5-flash",
   ].filter(Boolean))]
+}
+
+function modelInput(model: string, requestInput: any[]) {
+  const supportsAgenticVideo = /gemini-(?:3\.8|3\.7|3\.6)-flash|gemini-3\.5-flash-lite/i.test(model)
+  return requestInput.map((part) => {
+    if (part?.type !== "video" || !supportsAgenticVideo) return part
+    return { ...part, processing: "agentic" }
+  })
 }
 
 async function callGemini(input: {
@@ -103,7 +112,8 @@ async function callGemini(input: {
       body: JSON.stringify({
         model: input.model,
         system_instruction: input.systemPrompt,
-        input: input.requestInput,
+        input: modelInput(input.model, input.requestInput),
+        store: false,
       }),
       signal: input.signal,
     },
@@ -120,6 +130,54 @@ async function callGemini(input: {
   }
 
   return { text, usage: payload?.usage || payload?.usageMetadata }
+}
+
+async function callGeminiGenerateContent(input: {
+  key: string
+  model: string
+  systemPrompt: string
+  requestInput: any[]
+  signal?: AbortSignal
+}) {
+  const parts = modelInput(input.model, input.requestInput).map((part) => {
+    if (part?.type === "text") return { text: String(part.text || "") }
+    if (["image", "video", "audio", "document"].includes(String(part?.type || "")) && part?.data) {
+      return {
+        inline_data: {
+          mime_type: String(part.mime_type || "application/octet-stream"),
+          data: String(part.data),
+        },
+      }
+    }
+    return null
+  }).filter(Boolean)
+
+  const response = await providerFetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "x-goog-api-key": input.key,
+      },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: input.systemPrompt }] },
+        contents: [{ role: "user", parts }],
+      }),
+      signal: input.signal,
+    },
+    Number(process.env.GEMINI_MULTIMODAL_TIMEOUT_MS || 120_000),
+  )
+
+  const payload = await response.json().catch(() => ({}))
+  const text = outputText(payload)
+  if (!response.ok || !text) {
+    const providerMessage = payload?.error?.message || payload?.message || `Gemini generateContent returned ${response.status}`
+    const error = new Error(providerMessage) as Error & { status?: number }
+    error.status = response.status
+    throw error
+  }
+  return { text, usage: payload?.usageMetadata || payload?.usage }
 }
 
 export async function runHiddenGeminiMultimodal(input: {
@@ -177,9 +235,28 @@ export async function runHiddenGeminiMultimodal(input: {
         providerModel: model,
         usage: result.usage,
       }
-    } catch (error) {
-      lastError = error
-      console.warn("[MALIK_MULTIMODAL] Gemini model failed", model, error instanceof Error ? error.message : String(error))
+    } catch (interactionError) {
+      lastError = interactionError
+      console.warn("[MALIK_MULTIMODAL] Gemini Interactions failed", model, interactionError instanceof Error ? interactionError.message : String(interactionError))
+      try {
+        const result = await callGeminiGenerateContent({
+          key,
+          model,
+          systemPrompt: input.systemPrompt,
+          requestInput,
+          signal: input.signal,
+        })
+        return {
+          content: result.text,
+          provider: "malik-multimodal",
+          model: "malik-vision-hidden",
+          providerModel: model,
+          usage: result.usage,
+        }
+      } catch (generateContentError) {
+        lastError = generateContentError
+        console.warn("[MALIK_MULTIMODAL] Gemini generateContent fallback failed", model, generateContentError instanceof Error ? generateContentError.message : String(generateContentError))
+      }
     }
   }
 
