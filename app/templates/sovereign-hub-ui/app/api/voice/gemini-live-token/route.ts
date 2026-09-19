@@ -35,13 +35,6 @@ export async function GET() {
         uses: 1,
         expireTime,
         newSessionExpireTime,
-        liveConnectConstraints: {
-          model: `models/${model}`,
-          config: {
-            sessionResumption: {},
-            responseModalities: ["AUDIO"],
-          },
-        },
       }),
     })
     const payload = await response.json().catch(() => ({})) as { name?: string; error?: { message?: string } }
