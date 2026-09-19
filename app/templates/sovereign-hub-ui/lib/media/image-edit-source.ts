@@ -2,7 +2,6 @@ import sharp from "sharp"
 import { RequestSafetyError } from "../server/request-safety"
 import type { ImageGenerateInput } from "./types"
 
-const MAX_BYTES = 12 * 1024 * 1024
 const MAX_PIXELS = 40_000_000
 
 export function imageAttachments(body: { attachments?: unknown }) {
@@ -24,14 +23,12 @@ export async function prepareImageEditSource(body: { attachments?: unknown }): P
   let encoded = typeof file.base64 === "string" ? file.base64 : ""
   if (!encoded && typeof file.url === "string" && file.url.startsWith("data:")) encoded = file.url
   if (!encoded) throw new RequestSafetyError("Загрузите оригинал фото файлом ещё раз.", 400, "IMAGE_EDIT_UPLOAD_REQUIRED")
-  if (encoded.length > Math.ceil(MAX_BYTES * 4 / 3) + 128) throw new RequestSafetyError("Фото должно быть не больше 12 МБ.", 413, "IMAGE_EDIT_TOO_LARGE")
   const dataUrl = /^data:(image\/(?:png|jpeg|webp));base64,/i.exec(encoded)
   const mime = dataUrl?.[1]?.toLowerCase() || String(file.mime || "").toLowerCase()
   if (!/^image\/(png|jpeg|webp)$/.test(mime)) throw new RequestSafetyError("Используйте фото PNG, JPEG или WebP.", 415, "IMAGE_EDIT_FORMAT")
   if (dataUrl) encoded = encoded.slice(dataUrl[0].length)
   if (!encoded || encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) throw new RequestSafetyError("Не удалось прочитать фото. Загрузите его ещё раз.", 400, "IMAGE_EDIT_INVALID")
   const bytes = Buffer.from(encoded, "base64")
-  if (bytes.length > MAX_BYTES) throw new RequestSafetyError("Фото должно быть не больше 12 МБ.", 413, "IMAGE_EDIT_TOO_LARGE")
   try {
     const decoder = sharp(bytes, { limitInputPixels: MAX_PIXELS, failOn: "error" })
     const meta = await decoder.metadata()
