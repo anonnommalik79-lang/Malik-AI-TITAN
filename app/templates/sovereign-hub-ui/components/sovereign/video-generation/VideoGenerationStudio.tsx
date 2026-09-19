@@ -845,7 +845,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                   : "Оригинальное видео будет основой для AI-редактирования."
                 : mode === "image"
                   ? "PNG, JPG, WebP или AVIF"
-                  : "MP4, WebM, MOV или M4V"}</small>
+                  : "MP4, WebM, MOV или M4V · 3–5 секунд"}</small>
             </div>
             <button className="mv2__source-upload" type="button" onClick={() => sourceInputRef.current?.click()} disabled={busy}>
               <Upload />{sourceFile ? "Заменить" : "Загрузить"}
@@ -923,14 +923,14 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           .mv2{display:block;min-height:100%;padding:0;background:#000;overflow:visible}
           .mv2__preview-column,.mv2__controls-column{display:none !important}
           .mv2__mobile-only{display:block;width:100%;max-width:560px;margin:0 auto;padding:8px 10px 22px;background:#000;color:#f7f7f8}
-          .mv2m__tabs{height:44px;display:grid;grid-template-columns:.95fr 1.35fr 1fr;gap:0;border-bottom:1px solid #24272d}
-          .mv2m__tabs button{position:relative;min-width:0;border:0;background:transparent;color:#8b919b;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 4px;font-size:10px;white-space:nowrap}
+          .mv2m__tabs{height:44px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border-bottom:1px solid #24272d}
+          .mv2m__tabs button{position:relative;min-width:0;border:0;background:transparent;color:#8b919b;display:flex;align-items:center;justify-content:center;gap:5px;padding:0 3px;font-size:9px;white-space:nowrap}
           .mv2m__tabs button svg{width:12px;height:12px;flex:0 0 12px}.mv2m__tab-icon{font-family:Georgia,serif;font-style:italic;font-weight:700;font-size:14px}
           .mv2m__tabs button.is-active{color:#38ff58}.mv2m__tabs button.is-active:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:#38ff58;box-shadow:0 0 12px rgba(56,255,88,.55)}
           .mv2m__styles{display:flex;gap:6px;overflow-x:auto;padding:9px 0 0;scrollbar-width:none}.mv2m__styles::-webkit-scrollbar{display:none}
           .mv2m__styles button{height:29px;flex:0 0 auto;padding:0 10px;border:1px solid #2a2e35;border-radius:9px;background:#111318;color:#b8bec8;font-size:9px}
           .mv2m__source{margin-top:9px;min-height:58px;padding:7px;border:1px solid #2b2e35;border-radius:12px;background:#0e1014;display:grid;grid-template-columns:44px minmax(0,1fr) 30px;gap:8px;align-items:center}
-          .mv2m__source-preview{width:44px;height:44px;padding:0;border:1px solid #30343b;border-radius:9px;background:#14171c;color:#bfc5cd;display:grid;place-items:center;overflow:hidden}.mv2m__source-preview svg{width:18px;height:18px}.mv2m__source-preview img{width:100%;height:100%;object-fit:cover;display:block}
+          .mv2m__source-preview{width:44px;height:44px;padding:0;border:1px solid #30343b;border-radius:9px;background:#14171c;color:#bfc5cd;display:grid;place-items:center;overflow:hidden}.mv2m__source-preview svg{width:18px;height:18px}.mv2m__source-preview img,.mv2m__source-preview video{width:100%;height:100%;object-fit:cover;display:block}
           .mv2m__source-copy{min-width:0;padding:0;border:0;background:transparent;color:#fff;text-align:left;display:flex;flex-direction:column;gap:3px}.mv2m__source-copy strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mv2m__source-copy small{font-size:8px;color:#818894}
           .mv2m__source-remove{width:30px;height:30px;border:0;border-radius:50%;background:#2d3036;color:#aeb4bd;display:grid;place-items:center}.mv2m__source-remove svg{width:13px;height:13px}
           .mv2m__prompt{margin-top:8px;padding:11px 10px 9px;border:1px solid #2b2e35;border-radius:14px;background:linear-gradient(180deg,#101216,#0d0f12);box-shadow:inset 0 1px 0 rgba(255,255,255,.018)}
@@ -942,8 +942,14 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           .mv2m__generate{width:100%;height:48px;margin-top:8px;border:0;border-radius:12px;background:#39f75a;color:#041107;font-weight:850;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 0 22px rgba(57,247,90,.16)}.mv2m__generate svg{width:15px;height:15px;fill:currentColor}.mv2m__generate:disabled{opacity:.48;cursor:not-allowed}
           .mv2m__brand{margin-top:13px;color:#9fa6b0;font-size:8px;display:flex;align-items:center;justify-content:center;gap:6px}.mv2m__brand svg{width:13px;height:13px;color:#39f75a}
           .mv2m__status{margin-top:8px;min-height:28px;padding:7px 9px;border:1px solid #26302a;border-radius:9px;background:#0c130e;color:#8ee89d;font-size:9px;display:flex;align-items:center;justify-content:space-between;gap:8px}.mv2m__status.is-error{border-color:#3c2828;background:#160d0d;color:#f0a0a0}.mv2m__status button{border:0;background:transparent;color:inherit;text-decoration:underline;font-size:9px}
+          .mv2m__examples-head{margin-top:16px;display:flex;align-items:center;justify-content:space-between;color:#d8dde4;font-size:10px;font-weight:750}.mv2m__examples-head small{color:#737b86;font-size:8px}
+          .mv2m__examples{display:flex;gap:7px;margin-top:8px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none}.mv2m__examples::-webkit-scrollbar{display:none}
+          .mv2m__examples>button{position:relative;flex:0 0 112px;height:76px;padding:0;border:1px solid #242830;border-radius:10px;overflow:hidden;background:#090b0e;color:#fff}.mv2m__examples>button.is-active{border-color:#39f75a;box-shadow:0 0 0 1px rgba(57,247,90,.12)}
+          .mv2m__example-poster{width:100%;height:100%;display:block;object-fit:cover}.mv2m__examples>button:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 35%,rgba(0,0,0,.78))}
+          .mv2m__example-play{position:absolute;z-index:2;left:8px;top:8px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.62);display:grid;place-items:center}.mv2m__example-play svg{width:10px;height:10px;fill:#fff}
+          .mv2m__examples strong{position:absolute;z-index:2;left:7px;right:6px;bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;font-size:8px}
         }
-        @media (max-width:380px){.mv2m__controls{grid-template-columns:1fr 1fr}.mv2m__tabs button{font-size:8.5px}.mv2__mobile-only{padding-left:8px;padding-right:8px}}
+        @media (max-width:380px){.mv2m__controls{grid-template-columns:1fr 1fr}.mv2m__tabs button{font-size:7.5px;gap:3px}.mv2m__tabs button svg{width:11px;height:11px}.mv2__mobile-only{padding-left:8px;padding-right:8px}}
       `}</style>
     </main>
   )
