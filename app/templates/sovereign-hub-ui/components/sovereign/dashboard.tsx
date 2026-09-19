@@ -258,6 +258,55 @@ function isInlineMediaProcessing(status: InlineMediaGenerationStatus) {
   return status === "queued" || status === "thinking" || status === "generating" || status === "rendering"
 }
 
+function describeReadyMediaAction(media?: InlineMediaGeneration) {
+  if (!media || media.status !== "ready") return ""
+  const understood = String(media.understood || "").trim()
+  const prompt = String(media.prompt || "").trim()
+  const editPrefix = /^(?:редактирую\s+(?:загруженное\s+)?фото|редактирую\s+изображение|editing\s+(?:the\s+)?(?:uploaded\s+)?image)\s*:\s*/iu
+  if (editPrefix.test(understood)) {
+    const action = understood.replace(editPrefix, "").trim() || prompt
+    return action ? `Отредактировал изображение: ${action}` : "Отредактировал изображение."
+  }
+  if (media.kind === "video") {
+    return prompt ? `Создал видео по запросу: ${prompt}` : "Создал видео."
+  }
+  return prompt ? `Создал изображение по запросу: ${prompt}` : "Создал изображение."
+}
+
+function recentReadyMediaActions(messages: Message[], limit = 6) {
+  return messages
+    .map((message) => describeReadyMediaAction(message.generatedMedia))
+    .filter(Boolean)
+    .slice(-limit)
+}
+
+function asksAboutMalikMediaActions(value: string) {
+  const text = String(value || "").trim().toLowerCase()
+  return /(?:что\s+ты\s+(?:делал|сделал|изменил|добавил|генерировал|редактировал)|что\s+(?:было\s+)?сделано|какие\s+(?:правки|изменения)\s+ты\s+(?:сделал|вн[её]с)|что\s+ты\s+поменял|что\s+изменилось|what\s+did\s+you\s+(?:do|change|edit|add)|what\s+changes\s+did\s+you\s+make)/iu.test(text)
+}
+
+function buildMalikMediaActionAnswer(messages: Message[]) {
+  const actions = recentReadyMediaActions(messages)
+  if (!actions.length) return ""
+  return [
+    "Да. В этом чате Malik AI реально выполнил эти действия с медиа:",
+    "",
+    ...actions.map((action, index) => `${index + 1}. ${action}`),
+  ].join("\n")
+}
+
+function buildMalikMediaHistoryContext(messages: Message[]) {
+  const actions = recentReadyMediaActions(messages)
+  if (!actions.length) return ""
+  return [
+    "[MALIK_MEDIA_ACTION_HISTORY]",
+    "These are factual actions already completed by MALIK AI's integrated media pipeline in this chat.",
+    "Never deny that these actions happened. Do not say MALIK AI cannot generate or edit images merely because the currently selected text model itself does not manipulate pixels.",
+    "When asked what you did, describe these completed actions accurately and concisely.",
+    ...actions.map((action, index) => `${index + 1}. ${action}`),
+  ].join("\n")
+}
+
 
 function promptRefersToRecentImage(value: string) {
   const text = String(value || "").trim().toLowerCase()
@@ -5721,11 +5770,17 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // The "Контекст" switch in the right rail decides whether prior turns travel
   // with the request. Off means the model sees this message and nothing else.
   const carryContext = readContextEnabled()
-  const history = (carryContext ? [...messages, userMessage].slice(-12) : [userMessage]).map(m => ({
-    role: m.role,
-    content: m.content,
-  }))
+  const history = (carryContext ? [...messages, userMessage].slice(-12) : [userMessage]).map(m => {
+    const mediaFact = describeReadyMediaAction(m.generatedMedia)
+    return {
+      role: m.role,
+      content: mediaFact
+        ? `${m.content}\n\n[MALIK_MEDIA_ACTION_FACT]\n${mediaFact}`
+        : m.content,
+    }
+  })
   const memoryContext = buildMalikMemoryContext()
+  const mediaHistoryContext = buildMalikMediaHistoryContext(messages)
 
   const attachmentSummary = attachments.length
     ? "\n\n[Вложения]: " + attachments.map(a => `${a.kind}:${a.name || a.url || "untitled"} (${a.mime || "text"})`).join(", ")
@@ -5750,7 +5805,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       ].join("\n")
     : ""
   const actionInstruction = buildMalikActionInstruction(actionPlan)
-  const instruction = `${buildSovereignInstruction(mode, cleanContent + attachmentSummary)}\n\n${runtimePlan.instruction}\n\n${responseDepthInstruction(responseDepth)}${memoryContext ? `\n\n[MALIK_USER_CONTROLLED_MEMORY]\n${memoryContext}` : ""}${actionInstruction ? `\n\n${actionInstruction}` : ""}${projectContext ? `\n\n${projectContext}` : ""}${ownerInstruction ? `\n\n${ownerInstruction}` : ""}`
+  const instruction = `${buildSovereignInstruction(mode, cleanContent + attachmentSummary)}\n\n${runtimePlan.instruction}\n\n${responseDepthInstruction(responseDepth)}${memoryContext ? `\n\n[MALIK_USER_CONTROLLED_MEMORY]\n${memoryContext}` : ""}${mediaHistoryContext ? `\n\n${mediaHistoryContext}` : ""}${actionInstruction ? `\n\n${actionInstruction}` : ""}${projectContext ? `\n\n${projectContext}` : ""}${ownerInstruction ? `\n\n${ownerInstruction}` : ""}`
   const question = `${cleanContent}\n\n${instruction}`
 
   const finalizeAssistant = (finalText: string, finalCode?: string, finalResearch?: MalikMessageResearch, failed = false) => {
@@ -5919,6 +5974,17 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setIsLoading(false)
     setStreamingText("")
     return
+  }
+
+  if (asksAboutMalikMediaActions(cleanContent)) {
+    const factualMediaAnswer = buildMalikMediaActionAnswer(messages)
+    if (factualMediaAnswer) {
+      finalizeAssistant(factualMediaAnswer)
+      setIsGeneratingTerminal(false)
+      setIsLoading(false)
+      setStreamingText("")
+      return
+    }
   }
 
   if (inlineMediaKind && assistantMessage.generatedMedia) {
