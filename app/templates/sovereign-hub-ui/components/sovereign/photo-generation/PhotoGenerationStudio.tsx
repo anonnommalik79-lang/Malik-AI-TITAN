@@ -15,7 +15,6 @@ import {
   Cpu,
   ChevronRight,
 } from "lucide-react"
-import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { PHOTO_GALLERY_EXAMPLES, PHOTO_STYLE_PRESETS } from "@/lib/media-library"
 import { takePrefillPrompt } from "@/lib/malik-context"
@@ -76,6 +75,15 @@ const PROMPT_CHIPS = [
 const GALLERY_EXAMPLES = PHOTO_GALLERY_EXAMPLES
 
 const RATIOS = ["1:1", "16:9", "9:16", "4:3"] as const
+const IMAGE_SIZES = ["1K", "2K", "4K"] as const
+type ImageSize = (typeof IMAGE_SIZES)[number]
+
+type ImageCreditSnapshot = {
+  remaining: number
+  daily: number
+  costs: Record<ImageSize, number>
+  remaining4k: number
+}
 
 function localSvgDataUrl(prompt: string, style: string) {
   const safe = (prompt || "Malik Vision").slice(0, 100)
@@ -102,6 +110,8 @@ export function PhotoGenerationStudio({
   const [prompt, setPrompt] = useState(() => takePrefillPrompt() || DEFAULT_PROMPT)
   const [activeStyle, setActiveStyle] = useState(STYLE_PRESETS[0].id)
   const [ratio, setRatio] = useState<(typeof RATIOS)[number]>("16:9")
+  const [imageSize, setImageSize] = useState<ImageSize>("2K")
+  const [imageCredits, setImageCredits] = useState<ImageCreditSnapshot | null>(null)
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState("Студия готова к рендеру")
   const [error, setError] = useState<string | null>(null)
@@ -109,7 +119,6 @@ export function PhotoGenerationStudio({
   const [providerUsed, setProviderUsed] = useState("")
   const [storageRestored, setStorageRestored] = useState(false)
 
-  const [remainingDaily, setRemainingDaily] = useState<number | null>(null)
 
   const styleMeta = useMemo(
     () => STYLE_PRESETS.find((s) => s.id === activeStyle) ?? STYLE_PRESETS[0],
@@ -117,6 +126,39 @@ export function PhotoGenerationStudio({
   )
 
   const heroPhoto = results[0]?.url ?? styleMeta.photo
+
+  useEffect(() => {
+    let cancelled = false
+
+    const refreshCredits = async () => {
+      try {
+        const response = await fetch("/api/ai/image/credits", { cache: "no-store", credentials: "same-origin" })
+        const payload = await response.json().catch(() => null)
+        if (!cancelled && response.ok && payload?.ok) {
+          setImageCredits({
+            remaining: Number(payload.remaining || 0),
+            daily: Number(payload.daily || 0),
+            costs: {
+              "1K": Number(payload?.costs?.["1K"] ?? 1),
+              "2K": Number(payload?.costs?.["2K"] ?? 2),
+              "4K": Number(payload?.costs?.["4K"] ?? 5),
+            },
+            remaining4k: Number(payload.remaining4k || 0),
+          })
+        }
+      } catch {
+        // Keep the studio usable if the balance badge is temporarily unavailable.
+      }
+    }
+
+    const refresh = () => { void refreshCredits() }
+    refresh()
+    window.addEventListener("malik-image-credits-changed", refresh)
+    return () => {
+      cancelled = true
+      window.removeEventListener("malik-image-credits-changed", refresh)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -158,12 +200,6 @@ export function PhotoGenerationStudio({
       setError("Введите описание изображения")
       return
     }
-    if (!canUseGeneration("image", operator)) {
-      setError("Достигнут лимит бесплатной генерации изображений")
-      setStatus("Лимит исчерпан")
-      return
-    }
-    incrementUsage("image")
     setLoading(true)
     setError(null)
     setStatus("Рендерю кадр…")
@@ -176,6 +212,7 @@ export function PhotoGenerationStudio({
           body: JSON.stringify({
             prompt,
             aspectRatio: ratio,
+            imageSize,
             mode: styleToMode(activeStyle),
             userEmail: operator,
           }),
@@ -183,7 +220,7 @@ export function PhotoGenerationStudio({
         95_000,
       )
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || data.message || `Ошибка ${res.status}`)
+      if (!res.ok) throw new Error(data.publicError || data.error || data.message || `Ошибка ${res.status}`)
 
       // Paint only the lightweight derivative. The 8K master is kept separately
       // and is never decoded by the studio until the user explicitly exports it.
@@ -202,7 +239,14 @@ export function PhotoGenerationStudio({
         fallback: data.provider === "pollinations",
       }
       setProviderUsed(String(data.provider || ""))
-      setRemainingDaily(typeof data.remainingDailyImages === "number" ? data.remainingDailyImages : null)
+      if (typeof data.remainingImageCredits === "number") {
+        setImageCredits((previous) => previous ? {
+          ...previous,
+          remaining: data.remainingImageCredits,
+          remaining4k: typeof data.remaining4k === "number" ? data.remaining4k : previous.remaining4k,
+        } : previous)
+        window.dispatchEvent(new Event("malik-image-credits-changed"))
+      }
       setResults((prev) => [next, ...prev].slice(0, 8))
       setStatus(data.provider === "pollinations" ? "Резервный провайдер: Pollinations" : `Готово · ${data.provider || "stability"}`)
     } catch (err) {
@@ -243,7 +287,7 @@ export function PhotoGenerationStudio({
             Статус рендера
             <strong>{loading ? "в работе" : "готов"}</strong>
             {providerUsed && <strong> · {providerUsed}</strong>}
-            {remainingDaily !== null && <strong> · осталось {remainingDaily}</strong>}
+            {imageCredits && <strong> · фото-кредиты {imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining}/{imageCredits.daily > 1_000_000 ? "∞" : imageCredits.daily}</strong>}
           </span>
         </div>
 
@@ -296,12 +340,35 @@ export function PhotoGenerationStudio({
               <span className="pgs__shelf-label"><Wand2 size={13} /> Промпт-лаборатория</span>
               <h2 className="pgs__shelf-title">Опишите изображение</h2>
             </div>
-            <div className="pgs__ratio-pills" role="group" aria-label="Соотношение сторон">
-              {RATIOS.map((r) => (
-                <button key={r} type="button" data-active={ratio === r ? "1" : "0"} onClick={() => setRatio(r)}>
-                  {r}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="pgs__ratio-pills" role="group" aria-label="Соотношение сторон">
+                {RATIOS.map((r) => (
+                  <button key={r} type="button" data-active={ratio === r ? "1" : "0"} onClick={() => setRatio(r)}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <div className="pgs__ratio-pills" role="group" aria-label="Качество изображения">
+                {IMAGE_SIZES.map((size) => {
+                  const cost = imageCredits?.costs?.[size] ?? (size === "1K" ? 1 : size === "2K" ? 2 : 5)
+                  const disabled = Boolean(
+                    imageCredits &&
+                    (imageCredits.remaining < cost || (size === "4K" && imageCredits.remaining4k <= 0)),
+                  )
+                  return (
+                    <button
+                      key={size}
+                      type="button"
+                      data-active={imageSize === size ? "1" : "0"}
+                      disabled={disabled}
+                      onClick={() => setImageSize(size)}
+                      title={disabled ? "Недостаточно фото-кредитов или исчерпан лимит 4K" : `${size} · ${cost} кр.`}
+                    >
+                      {size} · {cost} кр.
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
           <textarea
