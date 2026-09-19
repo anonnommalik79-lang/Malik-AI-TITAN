@@ -1,6 +1,7 @@
 "use client"
 
 import { useLayoutEffect, type ReactNode } from "react"
+import { requestPersistentGeneratedImageStorage, setGeneratedImageAccountScope } from "@/lib/media/client-generated-image-store"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const ACCOUNT_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
@@ -416,6 +417,9 @@ function installBackgroundRuntime(
  * recovery, and the next visit patches the finished answer into the exact chat.
  */
 export function AccountChatPersistence({ accountId, children }: { accountId: string; children: ReactNode }) {
+  // Set the browser-local media namespace before child effects try to restore images.
+  setGeneratedImageAccountScope(accountId)
+
   useLayoutEffect(() => {
     if (typeof window === "undefined" || typeof Storage === "undefined") return
 
@@ -426,6 +430,8 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
     const previousRemoveItem = proto.removeItem
     const scopedAccountKey = cleanAccountId(accountId)
     const scopedKey = scopedDashboardKey(scopedAccountKey)
+    setGeneratedImageAccountScope(accountId)
+    void requestPersistentGeneratedImageStorage()
     const backgroundRuntime = installBackgroundRuntime(scopedAccountKey, previousGetItem, previousSetItem, previousRemoveItem)
     backgroundRuntime.currentAccountKey = scopedAccountKey
 
