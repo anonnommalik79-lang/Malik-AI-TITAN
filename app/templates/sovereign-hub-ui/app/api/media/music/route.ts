@@ -15,6 +15,7 @@ export async function GET(request: Request) {
   return Response.json({
     ok: true,
     authenticated: user.authenticated,
+    configured: musicProviderConfigured(),
     providerConfigured: musicProviderConfigured(),
     provider: "deAPI",
     model: musicModel(),
@@ -24,6 +25,13 @@ export async function GET(request: Request) {
     remaining: quota.remaining,
     maxDurationSeconds: quota.maxDurationSeconds,
     resetAt: quota.resetAt,
+    limits: {
+      daily: quota.dailyLimit,
+      maxDurationSeconds: quota.maxDurationSeconds,
+      used: quota.used,
+      remaining: quota.remaining,
+      resetAt: quota.resetAt,
+    },
   }, { headers: { "Cache-Control": "no-store" } })
 }
 
@@ -32,6 +40,8 @@ export async function POST(request: Request) {
   const prompt = String(body?.prompt || body?.caption || "").trim()
   const lyrics = String(body?.lyrics || "").trim()
   const instrumental = body?.instrumental !== false
+  const genre = String(body?.genre || "").trim()
+  const mood = String(body?.mood || "").trim()
   const requestedDuration = Number(body?.duration || 30)
 
   if (!prompt) {
@@ -91,8 +101,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    const styledPrompt = [prompt, genre ? `Genre: ${genre}` : "", mood ? `Mood: ${mood}` : ""].filter(Boolean).join(". ")
     const result = await submitDeapiMusic({
-      prompt,
+      prompt: styledPrompt,
       lyrics: instrumental ? undefined : lyrics,
       instrumental,
       duration: Math.floor(requestedDuration),
@@ -121,6 +132,7 @@ export async function POST(request: Request) {
       statusUrl: `/api/media/music/status?requestId=${encodeURIComponent(requestId)}`,
       downloadUrl: `/api/media/music/download?requestId=${encodeURIComponent(requestId)}`,
       dailyLimit: updatedQuota.dailyLimit,
+      used: updatedQuota.used,
       remaining: updatedQuota.remaining,
       maxDurationSeconds: updatedQuota.maxDurationSeconds,
       resetAt: updatedQuota.resetAt,
