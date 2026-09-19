@@ -114,3 +114,48 @@
     height: 21px !important;
   }
 }
+
+
+/* Image generation owns its own inline Malik mark.
+   Never show the generic streaming avatar at the far left of an image card. */
+#malik-root .malik-message-row-assistant:has(.malik-photo-final) > .malik-ai-avatar.is-working {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  flex: 0 0 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Keep the only visible image-generation mark crisp white/black and close to
+   the title instead of letting theme opacity make it look grey. */
+#malik-root .malik-photo-final__title-row {
+  gap: 6px !important;
+}
+
+#malik-root .malik-photo-final__brand-mark {
+  width: 28px !important;
+  height: 28px !important;
+  flex: 0 0 28px !important;
+  opacity: 1 !important;
+  filter: none !important;
+  border: 0 !important;
+  background: #ffffff !important;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.34) !important;
+  mix-blend-mode: normal !important;
+}
+
+#malik-root .malik-photo-final__brand-mark svg,
+#malik-root .malik-photo-final__brand-mark svg rect {
+  opacity: 1 !important;
+  filter: none !important;
+  fill: #ffffff !important;
+}
+
+#malik-root .malik-photo-final__brand-mark svg path {
+  opacity: 1 !important;
+  fill: #050505 !important;
+}
