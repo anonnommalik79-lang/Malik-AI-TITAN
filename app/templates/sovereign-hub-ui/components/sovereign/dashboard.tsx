@@ -152,7 +152,7 @@ import {
   type MalikModelId,
 } from "@/lib/ai/malik-models"
 import type { AIPlan } from "@/lib/ai/types"
-import { persistGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
+import { isStoredGeneratedImageUrl, persistGeneratedImageReference, persistGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import {
   responseDepthInstruction,
@@ -4808,10 +4808,13 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
 
           const mediaUrl = extractInlineMediaUrl(payload, media.kind)
           if (mediaUrl) {
+            const durableMediaUrl = media.kind === "image"
+              ? await persistGeneratedImageReference(media.id, mediaUrl)
+              : mediaUrl
             applyPersistentMediaPatch(media.id, {
               status: "ready",
               progress: 100,
-              url: mediaUrl,
+              url: durableMediaUrl,
               provider: payload?.provider || payload?.job?.provider || media.provider,
               jobId: payload?.jobId || payload?.id || media.jobId,
               statusUrl,
@@ -5966,19 +5969,22 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         throw new Error("Fallback generation failed to produce preview.")
       }
 
-      // The image route now returns a durable /api/media/asset/<id> URL, which
-      // reloads and other devices can fetch. Raw bytes only come back when that
-      // store was unavailable — then IndexedDB is the fallback, as before.
+      // Finished photo bytes are copied into the signed-in account's IndexedDB
+      // before the chat snapshot is saved. The message stores only a tiny
+      // malik-image:// handle, so logout/login and Render redeploys on this
+      // browser do not erase the result and localStorage never receives MBs.
       let inlineFallbackUrl = typeof finalPayload?.inlineImageUrl === "string" ? finalPayload.inlineImageUrl : ""
       if (inlineMediaKind === "image" && mediaUrl) {
-        if (mediaUrl.startsWith("data:")) {
-          inlineFallbackUrl = mediaUrl
-          mediaUrl = await persistGeneratedImageUrl(assistantMessage.generatedMedia.id, mediaUrl)
-        } else if (inlineFallbackUrl.startsWith("data:")) {
-          // Durable URL in hand; keep a local copy so the card still paints if
-          // the asset route is unreachable from this network.
-          void persistGeneratedImageUrl(assistantMessage.generatedMedia.id, inlineFallbackUrl).catch(() => {})
+        let durableMediaUrl = await persistGeneratedImageReference(assistantMessage.generatedMedia.id, mediaUrl)
+
+        // If the server URL could not be copied but the provider included inline
+        // bytes, persist those instead. This is still browser disk, not Render RAM.
+        if (!isStoredGeneratedImageUrl(durableMediaUrl) && inlineFallbackUrl.startsWith("data:image/")) {
+          durableMediaUrl = await persistGeneratedImageUrl(assistantMessage.generatedMedia.id, inlineFallbackUrl)
         }
+
+        mediaUrl = durableMediaUrl
+        if (isStoredGeneratedImageUrl(mediaUrl)) inlineFallbackUrl = ""
       }
 
       const readyMedia: InlineMediaGeneration = {
