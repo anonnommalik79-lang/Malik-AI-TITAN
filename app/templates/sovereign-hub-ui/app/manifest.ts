@@ -1,6 +1,15 @@
 import type { MetadataRoute } from "next"
 
-export default function manifest(): MetadataRoute.Manifest {
+type MalikManifest = MetadataRoute.Manifest & {
+  share_target?: {
+    action: string
+    method: "POST"
+    enctype: "multipart/form-data"
+    params: { title: string; text: string; url: string; files: Array<{ name: string; accept: string[] }> }
+  }
+}
+
+export default function manifest(): MalikManifest {
   return {
     name: "Malik AI",
     short_name: "Malik AI",
@@ -11,6 +20,19 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     background_color: "#000000",
     theme_color: "#000000",
+    share_target: {
+      action: "/share-target",
+      method: "POST",
+      enctype: "multipart/form-data",
+      params: {
+        title: "title",
+        text: "text",
+        url: "url",
+        files: [
+          { name: "files", accept: ["image/*", "video/*", "application/pdf"] },
+        ],
+      },
+    },
     icons: [
       {
         src: "/icon",
