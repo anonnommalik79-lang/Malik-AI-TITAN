@@ -274,7 +274,7 @@ function expandVideoAnalysisAttachments(items: ChatAttachment[]): ChatAttachment
         `Timeline: ${timeline}`,
         "Analyze these frames as one continuous video timeline. Do not treat them as unrelated photos.",
         "[/MALIK_VIDEO_TIMELINE_METADATA]",
-      ].join("\\n"),
+      ].join("\n"),
     }
 
     const frameAttachments: ChatAttachment[] = analysisFrames.map((frame, index) => ({
@@ -6407,8 +6407,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         isCreator: canAccessAdmin,
         creatorName: canAccessAdmin ? "Абдумалик" : undefined,
         attachments: apiRequestAttachments,
-        media_b64: apiRequestAttachments.find(a => a.base64)?.base64,
-        media_type: apiRequestAttachments.find(a => a.base64)?.mime,
+        media_b64: requestAttachments.some((item) => item.kind === "video")
+          ? undefined
+          : apiRequestAttachments.find((item) => item.base64)?.base64,
+        media_type: requestAttachments.some((item) => item.kind === "video")
+          ? undefined
+          : apiRequestAttachments.find((item) => item.base64)?.mime,
         mode: isProjReq ? "pro" : isCodeReq ? "code" : "fast",
         responseMode: mode,
         model: selectedModelId,
