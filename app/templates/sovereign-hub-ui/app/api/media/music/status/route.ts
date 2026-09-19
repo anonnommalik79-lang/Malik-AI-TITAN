@@ -22,6 +22,12 @@ export async function GET(request: Request) {
   const job = await getDeapiMusicJob(requestId)
   const rawStatus = String(job.status || "").toLowerCase()
 
+  console.info("[MUSIC] deAPI status", {
+    requestId: requestId.slice(0, 12),
+    status: rawStatus || "unknown",
+    hasResultUrl: Boolean(job.resultUrl),
+  })
+
   if (!job.ok || rawStatus === "error" || rawStatus === "failed") {
     return Response.json({
       ok: false,
