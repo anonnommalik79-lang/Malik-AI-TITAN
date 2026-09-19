@@ -139,11 +139,11 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const [genreId, setGenreId] = useState<GenreId>("phonk")
   const [prompt, setPrompt] = useState("")
   const [lyrics, setLyrics] = useState("")
-  const [lyricsEnabled, setLyricsEnabled] = useState(false)
+  const [lyricsEnabled, setLyricsEnabled] = useState(true)
   const [lyricsLanguage, setLyricsLanguage] = useState<LyricsLanguage>("ru")
   const [duration, setDuration] = useState<number>(30)
   const [mood, setMood] = useState<Mood>("Агрессивный")
-  const [instrumental, setInstrumental] = useState(true)
+  const [instrumental, setInstrumental] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [activeRequestId, setActiveRequestId] = useState("")
   const [trackUrl, setTrackUrl] = useState("")
@@ -342,13 +342,12 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       setNotice("Максимальная длительность вашего тарифа: " + config.limits.maxDurationSeconds + " сек.")
       return
     }
-    if (!nextInstrumental && nextLyricsEnabled && !nextLyrics.trim()) {
-      setNotice("Добавьте свои слова песни.")
-      return
-    }
-
     setGenerating(true)
-    setNotice("Отправляю запрос в deAPI / AceStep 1.5 XL Turbo…")
+    setNotice(
+      !nextInstrumental && !nextLyrics.trim()
+        ? "Malik AI пишет слова песни по вашему запросу…"
+        : "Отправляю запрос в deAPI / AceStep 1.5 XL Turbo…",
+    )
     audioRef.current?.pause()
     setPlaying(false)
 
@@ -376,13 +375,24 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         return
       }
 
+      const resolvedLyrics = String(data?.lyrics || nextLyrics)
+      const resolvedLanguage = (["kk", "ru", "en"].includes(String(data?.lyricsLanguage))
+        ? String(data.lyricsLanguage)
+        : nextLanguage) as LyricsLanguage
+
+      if (!nextInstrumental && resolvedLyrics) {
+        setLyrics(resolvedLyrics)
+        setLyricsLanguage(resolvedLanguage)
+        setLyricsEnabled(true)
+      }
+
       const item: MusicHistoryItem = {
         requestId: String(data.requestId),
         title: historyTitle(nextPrompt, nextGenre),
         prompt: nextPrompt,
-        lyrics: nextLyrics,
-        lyricsEnabled: nextLyricsEnabled,
-        lyricsLanguage: nextLanguage,
+        lyrics: resolvedLyrics,
+        lyricsEnabled: !nextInstrumental,
+        lyricsLanguage: resolvedLanguage,
         instrumental: nextInstrumental,
         duration: nextDuration,
         genreId: nextGenreId,
@@ -404,7 +414,11 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           remaining: Number(data.remaining ?? Math.max(0, current.limits.remaining - 1)),
         },
       } : current)
-      setNotice("request_id получен. Ожидаю очередь deAPI…")
+      setNotice(
+        data?.lyricsGenerated
+          ? "Malik AI написал слова. request_id получен — AceStep создаёт музыку и вокал…"
+          : "request_id получен. Ожидаю очередь deAPI…",
+      )
     } catch (error) {
       setGenerating(false)
       setNotice(error instanceof Error ? error.message : "Не удалось отправить запрос.")
@@ -518,7 +532,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const lyricsCard = !instrumental && lyricsEnabled ? (
     <div className="mm-lyrics">
       <div className="mm-lyrics-top">
-        <span><FileText />Свои слова песни</span>
+        <span><FileText />Текст песни · Malik AI</span>
         <div className="mm-language">
           {(Object.keys(LANGUAGE_LABELS) as LyricsLanguage[]).map((language) => (
             <button
@@ -536,10 +550,10 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         value={lyrics}
         maxLength={12000}
         onChange={(event) => setLyrics(event.target.value)}
-        placeholder={"[verse]\nНапишите свои слова...\n\n[chorus]\nПрипев..."}
+        placeholder={"Оставьте пустым — Malik AI сам напишет слова по вашему запросу.\n\nИли вставьте свои слова здесь..."}
         disabled={generating}
       />
-      <small>{lyrics.length}/12000 · Unicode: KZ / RU / EN</small>
+      <small>{lyrics.length}/12000 · пусто = Malik AI напишет автоматически · KZ / RU / EN</small>
     </div>
   ) : null
 
@@ -586,8 +600,6 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           onClick={() => {
             const next = !instrumental
             setInstrumental(next)
-            // Keep the modes mutually exclusive so the backend never receives
-            // "vocals requested, but no lyrics mode selected".
             setLyricsEnabled(!next)
           }}
           aria-pressed={instrumental}
@@ -597,14 +609,14 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       </div>
 
       <div className="mm-switch-row">
-        <span><FileText />Текст песни</span>
+        <span><FileText />Текст песни (AI)</span>
         <button
           type="button"
           className={"mm-switch" + (lyricsEnabled ? " is-on" : "")}
           onClick={() => {
             const next = !lyricsEnabled
             setLyricsEnabled(next)
-            if (next) setInstrumental(false)
+            setInstrumental(!next)
           }}
           aria-pressed={lyricsEnabled}
         >
