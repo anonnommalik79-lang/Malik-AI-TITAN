@@ -374,6 +374,55 @@ function providerHealthKey(model: MalikModelDefinition) {
   return `${model.provider}:${model.providerModel}`
 }
 
+type ProviderRuntimeHealth = {
+  successes: number
+  failures: number
+  ewmaLatencyMs: number
+  lastFailureAt: number
+}
+
+const PROVIDER_RUNTIME_HEALTH = new Map<string, ProviderRuntimeHealth>()
+
+function runtimeHealth(model: MalikModelDefinition) {
+  const key = providerHealthKey(model)
+  let state = PROVIDER_RUNTIME_HEALTH.get(key)
+  if (!state) {
+    state = { successes: 0, failures: 0, ewmaLatencyMs: 0, lastFailureAt: 0 }
+    PROVIDER_RUNTIME_HEALTH.set(key, state)
+  }
+  return state
+}
+
+function recordProviderSuccess(model: MalikModelDefinition, latencyMs: number) {
+  const state = runtimeHealth(model)
+  state.successes = Math.min(50, state.successes + 1)
+  state.failures = Math.max(0, state.failures - 1)
+  const safeLatency = Math.max(1, Math.min(120_000, Math.floor(latencyMs || 0)))
+  state.ewmaLatencyMs = state.ewmaLatencyMs
+    ? Math.round(state.ewmaLatencyMs * 0.72 + safeLatency * 0.28)
+    : safeLatency
+}
+
+function recordProviderFailure(model: MalikModelDefinition) {
+  const state = runtimeHealth(model)
+  state.failures = Math.min(50, state.failures + 1)
+  state.successes = Math.max(0, state.successes - 1)
+  state.lastFailureAt = Date.now()
+}
+
+function providerFallbackScore(model: MalikModelDefinition, priority: number) {
+  const cooldown = remainingCooldownMs(model)
+  if (cooldown > 0) return 1_000_000_000 + cooldown + priority
+  const state = runtimeHealth(model)
+  const total = state.successes + state.failures
+  const failureRate = total ? state.failures / total : 0
+  const latency = state.ewmaLatencyMs || 1_500
+  const recentFailurePenalty = state.lastFailureAt && Date.now() - state.lastFailureAt < 60_000 ? 2_500 : 0
+  // Keep product-defined preference meaningful while routing around providers
+  // that are currently slow or failing.
+  return priority * 250 + failureRate * 5_000 + Math.min(latency, 10_000) + recentFailurePenalty
+}
+
 function remainingCooldownMs(model: MalikModelDefinition) {
   const key = providerHealthKey(model)
   const until = PROVIDER_COOLDOWN_UNTIL.get(key) || 0
@@ -408,8 +457,16 @@ function retryAfterMs(response: Response, detail: string) {
 function fallbackModels(modelId: MalikModelId, prompt: string) {
   const preferred = TEXT_FALLBACK_MODELS[modelId] || []
   const global = isCodeRequest(prompt) ? CODE_FALLBACKS : GLOBAL_TEXT_FALLBACKS
-  return [...new Set([...global, ...preferred])]
+  const candidates = [...new Set([...preferred, ...global])]
     .filter((candidate): candidate is MalikModelId => candidate !== modelId)
+
+  return candidates
+    .map((candidate, priority) => ({
+      candidate,
+      score: providerFallbackScore(getMalikModel(candidate), priority),
+    }))
+    .sort((left, right) => left.score - right.score)
+    .map((item) => item.candidate)
     .slice(0, isCodeRequest(prompt) ? 7 : 5)
 }
 
@@ -586,6 +643,7 @@ export async function runStrictMalikModel(input: {
         }, runtime.timeoutMs)
       } catch (error) {
         lastError = error
+        recordProviderFailure(model)
         console.warn("[MALIK_MODEL_ROUTE] request failed", model.id, attempt, error instanceof Error ? error.message : String(error))
         if (attempt < maxAttempts) {
           await sleep(codeMode ? 700 * attempt : 350 * attempt)
@@ -597,6 +655,7 @@ export async function runStrictMalikModel(input: {
 
       lastStatus = response.status
       if (!response.ok) {
+        recordProviderFailure(model)
         const detail = await upstreamError(response)
         console.error("[MALIK_MODEL_ROUTE] upstream", response.status, detail)
         if (response.status === 401 || response.status === 402 || response.status === 403) {
@@ -639,6 +698,7 @@ export async function runStrictMalikModel(input: {
 
       if (parsed.content && visibleFinalText(parsed.content)) {
         PROVIDER_COOLDOWN_UNTIL.delete(providerHealthKey(model))
+        recordProviderSuccess(model, Date.now() - started)
         const base: StrictMalikResult = { content: parsed.content, provider: model.provider, model: runtime.model, selectedModelId: model.id, latencyMs: Date.now() - started, usage: parsed.usage }
         const depth = options.continuationDepth || 0
         const truncated = codeMode && (parsed.finishReason === "length" || codeAnswerNeedsMore(parsed.content, input.prompt))
@@ -683,6 +743,7 @@ export async function runStrictMalikModel(input: {
         return base
       }
 
+      recordProviderFailure(model)
       console.error("[MALIK_MODEL_ROUTE] empty-response", JSON.stringify({ selectedModelId: model.id, provider: model.provider, attempt, hadRawContent: Boolean(parsed.content) }))
       if (attempt < maxAttempts) {
         await sleep(codeMode ? 700 * attempt : 350 * attempt)

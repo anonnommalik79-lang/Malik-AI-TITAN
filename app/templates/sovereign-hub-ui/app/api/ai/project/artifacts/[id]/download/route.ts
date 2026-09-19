@@ -1,18 +1,20 @@
 import { buildProjectZip } from "@/lib/business/project-zip"
 import { getProjectArtifact } from "@/lib/server/project-artifact-store"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const { id } = await context.params
-  const artifact = getProjectArtifact(id)
+  const entitlement = await resolveRequestEntitlement(request)
+  const artifact = await getProjectArtifact(id, entitlement.userId)
 
   if (!artifact) {
     return Response.json(
-      { ok: false, error: "PROJECT_ARTIFACT_NOT_FOUND", message: "Этот ZIP больше недоступен. Соберите проект ещё раз." },
+      { ok: false, error: "PROJECT_ARTIFACT_NOT_FOUND", message: "Этот ZIP больше недоступен или принадлежит другому аккаунту. Соберите проект ещё раз." },
       { status: 404, headers: { "cache-control": "no-store" } },
     )
   }

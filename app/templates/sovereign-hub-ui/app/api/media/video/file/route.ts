@@ -1,5 +1,6 @@
 import "server-only"
 
+import { resolveMediaUser } from "@/lib/media/request"
 import { refreshVideoJobStatus } from "@/lib/media/video-router"
 
 export const runtime = "nodejs"
@@ -16,13 +17,18 @@ function isAllowedMagicHourUrl(value: string) {
 }
 
 async function proxyMagicHourVideo(request: Request) {
+  const user = await resolveMediaUser(request)
+  if (!user.authenticated || user.userId === "guest") {
+    return Response.json({ ok: false, code: "AUTH_REQUIRED", error: "Войдите в аккаунт, чтобы открыть видео." }, { status: 401 })
+  }
+
   const current = new URL(request.url)
   const taskId = current.searchParams.get("taskId")?.trim() || ""
   if (!taskId) {
     return Response.json({ ok: false, error: "taskId is required" }, { status: 400 })
   }
 
-  const result = await refreshVideoJobStatus(taskId, "magichour")
+  const result = await refreshVideoJobStatus(taskId, "magichour", user.userId)
   if (!result.ok || result.status !== "completed" || !result.videoUrl) {
     return Response.json(
       {

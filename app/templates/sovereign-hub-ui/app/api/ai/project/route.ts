@@ -6,6 +6,7 @@ import {
   resolveStrictMalikSelection,
 } from "@/lib/server/malik-model-router"
 import { putProjectArtifact } from "@/lib/server/project-artifact-store"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,10 +20,12 @@ export async function POST(request: Request) {
 
   try {
     const selection = await resolveStrictMalikSelection(request, body)
+    const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
     const project = await generateProjectWithBrain({
       prompt: promptCheck.value,
-      userId: typeof body?.userId === "string" ? body.userId : undefined,
-      userEmail: typeof body?.userEmail === "string" ? body.userEmail : undefined,
+      // Identity is server-authoritative. Never let a submitted email/userId
+      // decide artifact ownership, billing tier or later download access.
+      userId: entitlement.userId,
       framework: body?.framework,
       language: body?.language,
       style: body?.style,
@@ -39,7 +42,7 @@ export async function POST(request: Request) {
       }, { status: 502, headers: { "cache-control": "no-store" } })
     }
 
-    const artifact = putProjectArtifact(project)
+    const artifact = await putProjectArtifact(project, entitlement.userId)
     return Response.json({
       ok: true,
       project,

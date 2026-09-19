@@ -1,3 +1,4 @@
+import { resolveMediaUser } from "@/lib/media/request"
 import { refreshVideoJobStatus } from "@/lib/media/video-router"
 import type { VideoProviderId } from "@/lib/media/types"
 
@@ -7,6 +8,11 @@ export const runtime = "nodejs"
 export const GET = withComputeVideoStatus(handleGET)
 
 async function handleGET(request: Request) {
+  const user = await resolveMediaUser(request)
+  if (!user.authenticated || user.userId === "guest") {
+    return Response.json({ ok: false, code: "AUTH_REQUIRED", error: "Войдите в аккаунт, чтобы проверить видео." }, { status: 401 })
+  }
+
   const url = new URL(request.url)
   const taskId = url.searchParams.get("taskId")?.trim() || ""
   const provider = url.searchParams.get("provider")?.trim() as VideoProviderId | undefined
@@ -14,7 +20,7 @@ async function handleGET(request: Request) {
     return Response.json({ ok: false, error: "taskId is required" }, { status: 400 })
   }
 
-  const result = await refreshVideoJobStatus(taskId, provider)
+  const result = await refreshVideoJobStatus(taskId, provider, user.userId)
 
   const publicStatus =
     result.status === "completed"
@@ -43,5 +49,5 @@ async function handleGET(request: Request) {
     videoUrl: publicVideoUrl,
     url: publicVideoUrl,
     error: result.error,
-  })
+  }, { headers: { "cache-control": "private, no-store" } })
 }

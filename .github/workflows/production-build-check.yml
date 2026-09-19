@@ -50,6 +50,9 @@ jobs:
       - name: Verify attachment UX
         run: npm run test:attachment-menu
 
+      - name: Core release regression suite
+        run: npm run test:release-core
+
       - name: Typecheck
         run: npm run typecheck
 
