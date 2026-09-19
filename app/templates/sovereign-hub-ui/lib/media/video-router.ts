@@ -37,8 +37,16 @@ function mapRemoteStatus(status: string): VideoJobStatus {
 export async function routeVideoGeneration(input: VideoGenerateInput): Promise<VideoGenerateResult> {
   const errors: string[] = []
   const order = input.providerId ? [input.providerId] : (videoGodOrder() as VideoProviderId[])
-  const compiledPrompt = await compileMalikVideoPrompt(input.prompt, input.generateAudio !== false)
-  const providerInput = { ...input, prompt: compiledPrompt || ensure8KQualityPrompt(input.prompt) }
+  // Source-driven edits should preserve the user's literal edit/motion request.
+  // The cinematic text-to-video compiler is useful for blank-canvas generation,
+  // but can accidentally invent scene changes for image/video source modes.
+  const compiledPrompt = input.mode === "text"
+    ? await compileMalikVideoPrompt(input.prompt, input.generateAudio !== false)
+    : input.prompt
+  const providerInput = {
+    ...input,
+    prompt: input.mode === "text" ? (compiledPrompt || ensure8KQualityPrompt(input.prompt)) : input.prompt,
+  }
 
   for (const provider of order) {
     try {

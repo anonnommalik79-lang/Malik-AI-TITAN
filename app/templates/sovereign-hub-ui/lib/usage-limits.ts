@@ -68,7 +68,9 @@ export function getUsageState(): UsageState {
 }
 
 export function canUseGeneration(type: GenerationLimitType, userEmail?: string | null) {
-  if (isOwnerUser(userEmail)) return true
+  // MalikVideo is intentionally one generation per account per day for
+  // everyone, including owner accounts. Other legacy owner bypasses stay as-is.
+  if (type !== "video" && isOwnerUser(userEmail)) return true
   const state = getUsageState()
   if (type === "image") return state.imageCount < 1
   if (type === "video") return state.videoCount < 1

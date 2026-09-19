@@ -195,28 +195,71 @@ export async function createFreeVideoJob(provider: FreeVideoProviderId, input: V
 
   if (provider === "magichour") {
     const root = baseUrl(provider)
+    const duration = input.length === 10 ? 10 : 5
+    const headers = jsonHeaders({ Authorization: `Bearer ${key}` })
+
+    const endpoint = input.sourceVideoUrl
+      ? `${root}/v1/ai-video-editor`
+      : input.imageUrl
+        ? `${root}/v1/image-to-video`
+        : `${root}/v1/text-to-video`
+
+    const body = input.sourceVideoUrl
+      ? {
+          name: "Malik AI Video Edit",
+          start_seconds: 0,
+          end_seconds: duration,
+          model: "ltx-2.3",
+          resolution: "480p",
+          assets: { video_file_path: input.sourceVideoUrl },
+          style: {
+            prompt: [
+              "Preserve the original video's subjects, identity, composition, motion continuity and photorealistic detail.",
+              "Apply only the requested changes and keep everything else visually consistent.",
+              input.prompt,
+            ].join(" "),
+          },
+        }
+      : input.imageUrl
+        ? {
+            name: "Malik AI Image to Video",
+            end_seconds: duration,
+            model: "ltx-2.5",
+            resolution: "480p",
+            audio: input.generateAudio !== false,
+            assets: { image_file_path: input.imageUrl },
+            style: {
+              prompt: [
+                "Use the uploaded image as the exact first frame and preserve its subject identity, proportions, colors and composition.",
+                "Add physically realistic motion, depth and details only as requested.",
+                input.prompt,
+              ].join(" "),
+            },
+          }
+        : {
+            name: "Malik AI Video",
+            end_seconds: duration,
+            model: "ltx-2.5",
+            resolution: "480p",
+            aspect_ratio: input.ratio || "16:9",
+            audio: input.generateAudio !== false,
+            style: { prompt: input.prompt },
+          }
+
     const payload = await requestJson(
-      `${root}/v1/text-to-video`,
+      endpoint,
       {
         method: "POST",
-        headers: jsonHeaders({ Authorization: `Bearer ${key}` }),
-        body: JSON.stringify({
-          name: "Malik AI Video",
-          end_seconds: 5,
-          model: "ltx-2.5",
-          resolution: "480p",
-          aspect_ratio: input.ratio || "16:9",
-          audio: input.generateAudio !== false,
-          style: { prompt: input.prompt },
-        }),
+        headers,
+        body: JSON.stringify(body),
       },
-      "Magic Hour submit",
+      input.sourceVideoUrl ? "Magic Hour video edit submit" : input.imageUrl ? "Magic Hour image-to-video submit" : "Magic Hour submit",
     )
     const taskId = firstString(payload?.id, payload?.project_id, payload?.task_id)
     if (!taskId) throw new Error("Magic Hour submit: missing project id")
     return {
       taskId,
-      model: "ltx-2.5",
+      model: input.sourceVideoUrl ? "ltx-2.3-video-editor" : "ltx-2.5",
       statusUrl: `${root}/v1/video-projects/${encodeURIComponent(taskId)}`,
     }
   }
