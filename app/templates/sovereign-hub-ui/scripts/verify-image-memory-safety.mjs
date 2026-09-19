@@ -33,9 +33,22 @@ assert.match(route, /previewUrl,/, "API must expose the display derivative")
 assert.match(route, /#malik-master=/, "display URL must carry a master download reference")
 assert.match(resultExperience, /function masterImageUrl/, "result tools must resolve the master URL")
 assert.match(resultExperience, /fullQualitySrc\s*=\s*masterImageUrl\(src\)/, "downloads must use full quality")
-assert.match(studio, /const displayUrl = data\.url \|\| data\.previewUrl \|\| data\.imageUrl/, "photo studio must paint the display derivative")
-assert.match(studio, /const masterUrl = data\.masterUrl \|\| data\.imageUrl \|\| displayUrl/, "photo studio must preserve the full-resolution master")
-assert.match(studio, /results\[0\]\?\.masterUrl \?\? results\[0\]\?\.url/, "explicit Canvas export should use the master")
+if (studio.includes('data-view="photo-generation"') && studio.includes("/voltframe/desktop.png")) {
+  // Photo Generation is intentionally in Voltframe launch-takeover mode.
+  // The original generator route is still verified above, while this surface
+  // must render the founder-provided artwork byte-for-byte without Next/Image
+  // recompression, crop or stretch.
+  assert.match(studio, /srcSet="\/voltframe\/mobile\.png"/, "mobile photo section must use the approved portrait artwork")
+  assert.match(studio, /src="\/voltframe\/desktop\.png"/, "desktop photo section must use the approved landscape artwork")
+  assert.match(studio, /object-contain/, "Voltframe artwork must preserve its original aspect ratio")
+  assert.equal(/next\/image|<Image\b/.test(studio), false, "Voltframe artwork must bypass Next image recompression")
+  assert.equal(fs.statSync("public/voltframe/desktop.png").size, 3_068_214, "desktop artwork must remain the exact uploaded PNG")
+  assert.equal(fs.statSync("public/voltframe/mobile.png").size, 2_873_324, "mobile artwork must remain the exact uploaded PNG")
+} else {
+  assert.match(studio, /const displayUrl = data\.url \|\| data\.previewUrl \|\| data\.imageUrl/, "photo studio must paint the display derivative")
+  assert.match(studio, /const masterUrl = data\.masterUrl \|\| data\.imageUrl \|\| displayUrl/, "photo studio must preserve the full-resolution master")
+  assert.match(studio, /results\[0\]\?\.masterUrl \?\? results\[0\]\?\.url/, "explicit Canvas export should use the master")
+}
 
 // Full-quality post-processing is gated by host capacity instead of lowering resolution.
 assert.match(route, /withMalikImageProcessingSlot/, "8K delivery must use the capacity gate")
@@ -79,9 +92,9 @@ assert.match(resultCss, /\.malik-photo-motion \.malik-art-result[\s\S]*filter:\s
 assert.equal(/CYCLE_MS|MAX_CYCLES|setCycle\(/.test(motion), false, "photo waiting UI must not run remount cycles")
 assert.equal(/<svg|malik-coded-hand|malik-spray-rig|blur\(/i.test(motion), false, "photo waiting UI must not render the old heavy SVG/fog stack")
 assert.match(motion, /if\s*\(imageLoaded\s*\|\|\s*actuallyFailed\)\s*return[\s\S]*setInterval\(tick,\s*1000\)/, "finished cards must stop timers and active cards must update at 1 Hz")
-assert.match(motion, /malik-image-loading-mobile-final\\.gif/, "mobile waiting scene must use the approved Malik GIF")
-assert.match(motion, /malik-image-loading-pc-final\\.gif/, "desktop waiting scene must use the approved Malik GIF")
-assert.match(motion, /<source media="\\(max-width: 640px\\)"/, "waiting scene must switch between mobile and desktop GIFs")
+assert.match(motion, /malik-image-loading-mobile-final\.gif/, "mobile waiting scene must use the approved Malik GIF")
+assert.match(motion, /malik-image-loading-pc-final\.gif/, "desktop waiting scene must use the approved Malik GIF")
+assert.match(motion, /<source media="\(max-width: 640px\)"/, "waiting scene must switch between mobile and desktop GIFs")
 assert.equal(/<canvas|requestAnimationFrame|ResizeObserver/.test(motion), false, "GIF waiting scene must stay browser-native and avoid canvas animation work")
 assert.match(motion, /loadImage\(resolvedResultUrl\)[\s\S]*setImageLoaded\(true\)/, "final display image should decode once and hand off immediately")
 assert.equal(/finalImage|lastFinalUrl|finalUrlRef/.test(motion), false, "finished image must not be redrawn through the canvas reveal")
