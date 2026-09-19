@@ -16,6 +16,7 @@ import { askAgainPhrase, chooseTranscript, conversationHint, shouldAskAgain } fr
 import { fuseTranscripts } from "@/lib/voice/rover"
 import { takeSentence } from "@/lib/voice/voice-llm-stream"
 import { PauseTracker } from "@/lib/voice/dsp"
+import { GeminiLiveSession } from "@/lib/voice/gemini-live-client"
 import { detectSpokenLanguageDetailed } from "@/lib/voice/voice-language"
 import { VOICE_HISTORY_TURNS, type VoiceMessage } from "@/lib/voice/conversation"
 
@@ -152,6 +153,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const autoSubmitRef = useRef<(() => void) | null>(null)
   const speechDetectedRef = useRef(false)
   const lastSpeechAtRef = useRef(0)
+  /** Native Gemini 3.8 Live is the first Voice engine. Existing STT/LLM/TTS stays as fallback. */
+  const geminiLiveRef = useRef<GeminiLiveSession | null>(null)
+  const geminiLiveReadyRef = useRef(false)
+  const liveInputRef = useRef("")
+  const liveOutputRef = useRef("")
 
   useEffect(() => {
     languageRef.current = language
@@ -186,7 +192,71 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     noticeTimerRef.current = window.setTimeout(() => setNotice(null), 2200)
   }, [])
 
+  const ensureGeminiLive = useCallback(async () => {
+    if (geminiLiveRef.current?.isReady()) return true
+    if (!geminiLiveRef.current) {
+      liveInputRef.current = ""
+      liveOutputRef.current = ""
+      geminiLiveRef.current = new GeminiLiveSession({
+        voice,
+        callbacks: {
+          onReady: (model) => {
+            geminiLiveReadyRef.current = true
+            if (!mountedRef.current || closingRef.current) return
+            setTitle("Слушаю")
+            setSubtitle(`${model} · живой audio-to-audio`)
+          },
+          onInputText: (text) => {
+            if (!mountedRef.current || closingRef.current) return
+            if (liveOutputRef.current) {
+              liveInputRef.current = ""
+              liveOutputRef.current = ""
+            }
+            liveInputRef.current += text
+            const repaired = repairTranscript(liveInputRef.current) || liveInputRef.current
+            setFinalTranscript(repaired.trim())
+            setInterimTranscript("")
+            setTitle("Слушаю")
+          },
+          onOutputText: (text) => {
+            if (!mountedRef.current || closingRef.current) return
+            if (!liveOutputRef.current) {
+              liveInputRef.current = ""
+              setFinalTranscript("")
+            }
+            liveOutputRef.current += text
+            setFinalTranscript(liveOutputRef.current.trim())
+            setInterimTranscript("")
+          },
+          onSpeaking: () => {
+            if (!mountedRef.current || closingRef.current) return
+            setTitle("Отвечаю")
+            setSubtitle("Gemini 3.8 Live · можно перебить голосом")
+          },
+          onTurnComplete: () => {
+            if (!mountedRef.current || closingRef.current) return
+            liveInputRef.current = ""
+            liveOutputRef.current = ""
+            setTitle("Слушаю")
+            setSubtitle("Gemini 3.8 Live · продолжай разговор")
+          },
+          onInterrupted: () => {
+            if (!mountedRef.current || closingRef.current) return
+            setTitle("Слушаю")
+            setSubtitle("Перебивание принято · говори")
+          },
+          onClosed: () => { geminiLiveReadyRef.current = false },
+          onError: () => { geminiLiveReadyRef.current = false },
+        },
+      })
+    }
+    const ready = await geminiLiveRef.current.connect()
+    geminiLiveReadyRef.current = ready
+    return ready
+  }, [voice])
+
   const stopReplyAudio = useCallback((interrupted = true) => {
+    geminiLiveRef.current?.stopOutput()
     replyVersionRef.current += 1
     replyAbortRef.current?.abort()
     replyAbortRef.current = null
@@ -537,6 +607,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const stopMicrophone = useCallback(async () => {
     micRequestRef.current += 1
     stopSpeech()
+    geminiLiveRef.current?.detachMicrophone()
     streamingRef.current = false
     listenerRef.current?.stop()
     listenerRef.current = null
@@ -566,6 +637,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     // clean rather than continuing yesterday's topic.
     historyRef.current = []
     stopReplyAudio(false)
+    geminiLiveRef.current?.close()
+    geminiLiveRef.current = null
+    geminiLiveReadyRef.current = false
+    liveInputRef.current = ""
+    liveOutputRef.current = ""
     fluxSessionRef.current?.close()
     fluxSessionRef.current = null
     void stopMicrophone()
@@ -789,6 +865,21 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       lastSpeechAtRef.current = 0
       streamTextRef.current = ""
       streamConfidenceRef.current = 1
+
+      // Voice Mode always tries the dedicated Gemini 3.8 Live model first.
+      // If its one-use token or websocket is unavailable, the proven
+      // Deepgram/Whisper + LLM + TTS pipeline below continues unchanged.
+      const liveReady = await ensureGeminiLive()
+      if (liveReady && geminiLiveRef.current?.attachMicrophone(stream, context)) {
+        streamingRef.current = true
+        startAudioLoop(analyser)
+        setTitle("Слушаю")
+        setSubtitle("Gemini 3.8 Live · говори естественно")
+        return
+      }
+
+      geminiLiveReadyRef.current = false
+      streamingRef.current = false
       startRecorder(stream)
       startAudioLoop(analyser)
       startSpeech()
@@ -801,7 +892,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       setTitle("Разреши доступ к микрофону")
       setSubtitle("Или включи демо — живой туман продолжит двигаться")
     }
-  }, [startAudioLoop, startRecorder, startSpeech, startStreaming, stopMicrophone])
+  }, [ensureGeminiLive, startAudioLoop, startRecorder, startSpeech, startStreaming, stopMicrophone])
 
   /**
    * Reads the streamed answer and speaks it as it is written.
@@ -1100,6 +1191,22 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   const toggleMicrophone = useCallback(async () => {
     unlockVoiceAudio()
+
+    // In native Live mode the websocket owns turn-taking. The mic button is
+    // only mute/unmute; it must never send the same sentence through the old
+    // transcription pipeline a second time.
+    if (geminiLiveReadyRef.current) {
+      if (micActiveRef.current) {
+        geminiLiveRef.current?.stopOutput()
+        await stopMicrophone()
+        setTitle("Микрофон выключен")
+        setSubtitle("Нажми микрофон, чтобы продолжить")
+      } else {
+        void startMicrophone()
+      }
+      return
+    }
+
     if (replyPlayingRef.current || fluxSessionRef.current?.isSpeaking()) {
       stopReplyAudio(true)
       setBusy(false)
@@ -1263,6 +1370,9 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = "hidden"
     const frame = requestAnimationFrame(() => setPhase("open"))
+    // Start negotiating the secure Gemini Live session as soon as Voice opens,
+    // before the microphone timer fires. The permanent API key remains on Render.
+    void ensureGeminiLive()
     const micTimer = window.setTimeout(() => { void startMicrophone() }, 240)
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") closeMode() }
     window.addEventListener("keydown", onKeyDown)
@@ -1275,7 +1385,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       cleanupAll()
       document.body.style.overflow = previousOverflow
     }
-  }, [cleanupAll, closeMode, startMicrophone])
+  }, [cleanupAll, closeMode, ensureGeminiLive, startMicrophone])
 
   return (
     <section className={`${styles.stage} ${styles[phase]}`} onPointerDownCapture={unlockVoiceAudio} data-voice-mode role="dialog" aria-modal="true" aria-label="Malik AI Voice Mode">
