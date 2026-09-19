@@ -145,6 +145,8 @@ async function synthesizeTrack(input: {
   quality: Quality
   mood: Mood
   instrumental: boolean
+  aiLyrics: boolean
+  model: string
 }) {
   await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
 
@@ -155,7 +157,9 @@ async function synthesizeTrack(input: {
     input.prompt,
     input.genre.id,
     input.mood,
-    input.instrumental ? "instrumental" : "lyrics",
+    input.instrumental ? "instrumental" : "vocal-mode",
+    input.aiLyrics ? "ai-lyrics" : "no-lyrics",
+    input.model,
   ].join("|"))
   const random = mulberry32(seed)
   const beat = 60 / input.genre.bpm
@@ -258,9 +262,14 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   useEffect(() => {
     return () => {
       if (trackUrl) URL.revokeObjectURL(trackUrl)
+    }
+  }, [trackUrl])
+
+  useEffect(() => {
+    return () => {
       if (coverPreview) URL.revokeObjectURL(coverPreview)
     }
-  }, [trackUrl, coverPreview])
+  }, [coverPreview])
 
   const chooseGenre = (next: Genre) => {
     setGenreId(next.id)
@@ -299,6 +308,8 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         quality,
         mood,
         instrumental,
+        aiLyrics,
+        model: MODELS[modelIndex],
       })
 
       if (trackUrl) URL.revokeObjectURL(trackUrl)
