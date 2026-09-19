@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { cacheGeneratedImageByUrl, readCachedGeneratedImage, resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 
 type Status = "queued" | "thinking" | "generating" | "rendering" | "ready" | "failed"
@@ -21,20 +21,8 @@ type ImageGenerationMotionProps = {
 const GENERATION_WATCHDOG_MS = 3 * 60 * 1000
 const READY_RESULT_GRACE_MS = 8_000
 
-const PREVIEW_FRAMES = [
-  "/images/titan-hero.jpg",
-  "/images/earth-candidate-1.jpg",
-  "/images/earth-candidate-3.jpg",
-  "/images/welcome-earth-orbit.jpg",
-  "/images/auth-mobile-dragon-bg.jpg",
-  "/images/malik-chat-legend-space.png",
-] as const
 
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value))
-const smooth = (value: number) => {
-  const x = clamp(value, 0, 1)
-  return x * x * (3 - 2 * x)
-}
 
 function loadImage(src: string, timeout = 25_000) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -84,7 +72,6 @@ export function ImageGenerationMotion({
   error,
   progress,
 }: ImageGenerationMotionProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const phaseStartedAtRef = useRef(Date.now())
   const lastStatusRef = useRef<Status | undefined>(status)
 
@@ -192,130 +179,6 @@ export function ImageGenerationMotion({
   const steps = ["Генерирую варианты", "Строю свет и форму", "Проявляю финальный кадр"]
   const shownStage = imageLoaded ? "Готово" : stageFor(status)
 
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || actuallyFailed || imageLoaded) return
-    const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true })
-    if (!ctx) return
-
-    let disposed = false
-    let frames: HTMLImageElement[] = []
-    let width = 1
-    let height = 1
-    let dpr = 1
-    let lastFrameAt = 0
-    let animationStartedAt = performance.now()
-
-    const resize = () => {
-      const rect = canvas.parentElement?.getBoundingClientRect()
-      if (!rect) return
-      width = Math.max(1, Math.round(rect.width))
-      height = Math.max(1, Math.round(rect.height))
-      dpr = Math.min(window.devicePixelRatio || 1, window.innerWidth <= 640 ? 1.25 : 1.5)
-      canvas.width = Math.round(width * dpr)
-      canvas.height = Math.round(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.imageSmoothingEnabled = true
-      ctx.imageSmoothingQuality = "high"
-    }
-
-    const drawCover = (image: HTMLImageElement, filter: string, alpha = 1) => {
-      const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight)
-      const drawWidth = image.naturalWidth * scale
-      const drawHeight = image.naturalHeight * scale
-      ctx.save()
-      ctx.globalAlpha = alpha
-      ctx.filter = filter
-      ctx.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
-      ctx.restore()
-    }
-
-    const render = (now: number) => {
-      if (disposed) return
-      if (now - lastFrameAt < 32) {
-        requestAnimationFrame(render)
-        return
-      }
-      lastFrameAt = now
-
-      ctx.save()
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.clearRect(0, 0, width, height)
-
-      if (!frames.length) {
-        ctx.restore()
-        requestAnimationFrame(render)
-        return
-      }
-
-      const elapsed = Math.max(0, now - animationStartedAt)
-      const cycleMs = 560
-      const holdMs = 90
-      const cycleNumber = Math.floor(elapsed / cycleMs)
-      const currentIndex = cycleNumber % frames.length
-      const nextIndex = (currentIndex + 1) % frames.length
-      const withinCycle = elapsed % cycleMs
-
-      const current = frames[currentIndex]
-      const next = frames[nextIndex]
-      drawCover(current, "grayscale(1) contrast(1.22) brightness(.72)")
-
-      if (withinCycle > holdMs) {
-        const p = smooth((withinCycle - holdMs) / (cycleMs - holdMs))
-        const rows = 7
-        const rowHeight = height / rows + 12
-
-        for (let row = 0; row < rows; row += 1) {
-          const delay = row * .05
-          const amount = smooth((p - delay) / .46)
-          if (amount <= 0) continue
-
-          const y = row * (height / rows) - 6
-          const span = width * (.26 + amount * .98)
-          const x = row % 2 === 0 ? -width * .18 : width - span + width * .18
-
-          ctx.save()
-          ctx.beginPath()
-          ctx.roundRect(x, y, span, rowHeight, Math.min(34, rowHeight * .42))
-          ctx.clip()
-          drawCover(next, "grayscale(1) contrast(1.25) brightness(.78)", .98)
-          ctx.restore()
-        }
-      }
-
-      const sweepX = ((elapsed / 1000 * 1.9) % 1.45) * width * 1.45 - width * .24
-      const shimmer = ctx.createLinearGradient(sweepX - 34, 0, sweepX + 34, 0)
-      shimmer.addColorStop(0, "rgba(255,255,255,0)")
-      shimmer.addColorStop(.5, "rgba(255,255,255,.07)")
-      shimmer.addColorStop(1, "rgba(255,255,255,0)")
-      ctx.fillStyle = shimmer
-      ctx.fillRect(sweepX - 34, 0, 68, height)
-
-      ctx.restore()
-      requestAnimationFrame(render)
-    }
-
-    const observer = new ResizeObserver(resize)
-    observer.observe(canvas.parentElement || canvas)
-    resize()
-
-    Promise.allSettled(PREVIEW_FRAMES.map((src) => loadImage(src))).then((results) => {
-      if (disposed) return
-      frames = results
-        .filter((result): result is PromiseFulfilledResult<HTMLImageElement> => result.status === "fulfilled")
-        .map((result) => result.value)
-      animationStartedAt = performance.now()
-    })
-
-    requestAnimationFrame(render)
-
-    return () => {
-      disposed = true
-      observer.disconnect()
-    }
-  }, [actuallyFailed, imageLoaded])
 
   const failureText = error || assetError || (timedOut
     ? "Генерация заняла больше трёх минут и была остановлена. Повторите запрос."
@@ -365,11 +228,16 @@ export function ImageGenerationMotion({
       ) : (
         <div className="malik-photo-final__frame">
           {!imageLoaded ? (
-            <>
-              <img className="malik-photo-final__backdrop" src={PREVIEW_FRAMES[0]} alt="" aria-hidden="true" />
-              <canvas ref={canvasRef} className="malik-photo-final__canvas" />
-              <span className="malik-photo-final__sweep" />
-            </>
+            <picture className="malik-photo-final__gif-picture" aria-hidden="true">
+              <source media="(max-width: 640px)" srcSet="/animations/malik-image-loading-mobile-final.gif" />
+              <img
+                className="malik-photo-final__gif"
+                src="/animations/malik-image-loading-pc-final.gif"
+                alt=""
+                draggable={false}
+                decoding="async"
+              />
+            </picture>
           ) : null}
 
           {imageLoaded && resolvedResultUrl ? (
@@ -406,6 +274,8 @@ export function ImageGenerationMotion({
         .malik-photo-final__mark{display:grid!important;place-items:center!important;width:13px!important;height:13px!important;flex:0 0 13px!important;color:#66676e!important;font-size:11px!important}.malik-photo-final__step.is-active .malik-photo-final__mark{color:#f4f4f5!important}
         .malik-photo-final__timer{display:flex!important;align-items:center!important;gap:8px!important;margin-top:2px!important;color:#505158!important;font-size:11px!important;font-variant-numeric:tabular-nums!important}.malik-photo-final__pulse{width:5px!important;height:5px!important;border-radius:50%!important;background:#ededee!important;animation:malik-photo-final-pulse 1.1s ease-out infinite!important}
         .malik-photo-final__frame{position:relative!important;width:100%!important;aspect-ratio:1/1!important;overflow:hidden!important;border-radius:28px!important;border:1px solid rgba(255,255,255,.09)!important;background:#050506!important;box-shadow:18px 18px 0 -12px #080809,20px 20px 0 -11px rgba(255,255,255,.025)!important;isolation:isolate!important}
+        .malik-photo-final__gif-picture{position:absolute!important;inset:0!important;z-index:1!important;display:block!important;overflow:hidden!important;border-radius:27px!important;background:#050506!important}
+        .malik-photo-final__gif{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;display:block!important;object-fit:cover!important;object-position:center!important;user-select:none!important;pointer-events:none!important;image-rendering:auto!important}
         .malik-photo-final__backdrop,.malik-photo-final__canvas,.malik-photo-final__result{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;display:block!important;border:0!important;border-radius:27px!important;object-position:50% 50%!important}
         .malik-photo-final__backdrop{z-index:0!important;object-fit:cover!important;filter:grayscale(1) contrast(1.22) brightness(.72)!important}.malik-photo-final__canvas{z-index:1!important;background:transparent!important;transform:translateZ(0)!important;will-change:transform!important}.malik-photo-final__result{z-index:2!important;object-fit:contain!important;background:#050506!important;animation:malik-photo-final-result 180ms ease-out both!important}
         .malik-photo-final__sweep{position:absolute!important;inset:-12% -24%!important;z-index:3!important;pointer-events:none!important;background:linear-gradient(112deg,transparent 45%,rgba(255,255,255,.008) 48%,rgba(255,255,255,.075) 50%,rgba(255,255,255,.008) 52%,transparent 55%)!important;transform:translateX(-120%)!important;mix-blend-mode:screen!important;animation:malik-photo-final-sweep .58s linear infinite!important}
@@ -416,7 +286,7 @@ export function ImageGenerationMotion({
         .malik-message-row:has(.malik-photo-final[data-malik-image-state="ready"]) .malik-message-actions{display:flex!important;align-items:center!important;gap:8px!important;min-height:30px!important}
         .malik-message-row:has(.malik-photo-final[data-malik-image-state="ready"]) .malik-message-actions>button{width:28px!important;height:28px!important;min-width:28px!important;min-height:28px!important;padding:0!important;display:grid!important;place-items:center!important;border-radius:8px!important;line-height:1!important}
         @keyframes malik-photo-final-title{0%{background-position:-220% 50%}100%{background-position:220% 50%}}@keyframes malik-photo-final-spark{0%,100%{opacity:.42;transform:scale(.96)}50%{opacity:1;transform:scale(1.06)}}@keyframes malik-photo-final-pulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.16)}70%{box-shadow:0 0 0 6px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}@keyframes malik-photo-final-sweep{0%{transform:translateX(-120%)}100%{transform:translateX(120%)}}@keyframes malik-photo-final-result{from{opacity:0;transform:scale(1.012)}to{opacity:1;transform:scale(1)}}
-        @media(max-width:640px){.malik-photo-final{width:min(92vw,390px)!important;max-width:390px!important;gap:11px!important;margin-left:auto!important;margin-right:auto!important}.malik-photo-final__title-row{gap:8px!important;transform:translateX(-10px)!important}.malik-photo-final__title{font-size:22px!important}.malik-photo-final__steps{width:min(100%,286px)!important}.malik-photo-final__frame{border-radius:24px!important;box-shadow:12px 12px 0 -8px #080809,14px 14px 0 -7px rgba(255,255,255,.025)!important}.malik-photo-final__backdrop,.malik-photo-final__canvas,.malik-photo-final__result{border-radius:23px!important}}
+        @media(max-width:640px){.malik-photo-final{width:min(92vw,390px)!important;max-width:390px!important;gap:11px!important;margin-left:auto!important;margin-right:auto!important}.malik-photo-final__title-row{gap:8px!important;transform:translateX(-10px)!important}.malik-photo-final__title{font-size:22px!important}.malik-photo-final__steps{width:min(100%,286px)!important}.malik-photo-final__frame{border-radius:24px!important;box-shadow:12px 12px 0 -8px #080809,14px 14px 0 -7px rgba(255,255,255,.025)!important}.malik-photo-final__backdrop,.malik-photo-final__canvas,.malik-photo-final__result{border-radius:23px!important}.malik-photo-final__gif-picture,.malik-photo-final__gif{border-radius:23px!important}}
       `}</style>
     </section>
   )
