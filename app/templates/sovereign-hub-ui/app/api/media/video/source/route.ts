@@ -58,6 +58,7 @@ export async function POST(request: Request) {
   const form = await request.formData().catch(() => null)
   const file = form?.get("file")
   const requestedMode = String(form?.get("mode") || "").trim()
+  const durationSeconds = Number(form?.get("durationSeconds") || 0)
   if (!(file instanceof File) || file.size <= 0) {
     return Response.json({ ok: false, code: "FILE_REQUIRED", error: "Выберите файл." }, { status: 400 })
   }
@@ -69,6 +70,13 @@ export async function POST(request: Request) {
     return Response.json(
       { ok: false, code: "UNSUPPORTED_MEDIA", error: "Поддерживаются PNG/JPG/WebP/AVIF и MP4/WebM/MOV/M4V." },
       { status: 415 },
+    )
+  }
+
+  if (mode === "video" && (!Number.isFinite(durationSeconds) || durationSeconds < 3 || durationSeconds > 5.05)) {
+    return Response.json(
+      { ok: false, code: "VIDEO_SOURCE_DURATION_UNSUPPORTED", error: "Для AI-редактирования загрузите видео длительностью от 3 до 5 секунд." },
+      { status: 400 },
     )
   }
 
@@ -127,5 +135,6 @@ export async function POST(request: Request) {
     name: file.name,
     mime,
     size: file.size,
+    durationSeconds: mode === "video" ? durationSeconds : undefined,
   })
 }
