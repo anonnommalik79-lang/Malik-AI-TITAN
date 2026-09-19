@@ -18,6 +18,7 @@ import {
   MessageSquare,
   MessageSquarePlus,
   Mic,
+  Music2,
   MoreHorizontal,
   PanelLeft,
   PanelLeftClose,
@@ -99,6 +100,7 @@ const CREATE_ACTIONS: SidebarAction[] = [
   { id: "shorts", label: "Malik Shorts", icon: Clapperboard, href: "/shorts", badge: "BETA" },
   { id: "websites", label: "Сайты", icon: LayoutTemplate, view: "website-generation" },
   { id: "video-generation", label: "Генерация видео", icon: Video, view: "video-generation" },
+  { id: "music-generation", label: "Создать трек", icon: Music2, view: "music-generation" },
   { id: "photo-generation", label: "Генерация изображений", icon: ImageIcon, view: "photo-generation" },
 ]
 
