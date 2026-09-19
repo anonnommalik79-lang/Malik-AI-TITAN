@@ -728,14 +728,105 @@ function ActivityIcon({ step }: { step: MalikResearchStep }) {
   return <Lightbulb className="h-[13px] w-[13px]" />
 }
 
+function VideoAnalysisPulse({ compact = false }: { compact?: boolean }) {
+  const stages = [
+    "Разбираю сцены",
+    "Сопоставляю движение",
+    "Проверяю камеру и свет",
+    "Ищу детали и артефакты",
+    "Сверяю вывод",
+  ] as const
+  const [stage, setStage] = useState(0)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setStage((value) => (value + 1) % stages.length), 1350)
+    return () => window.clearInterval(timer)
+  }, [stages.length])
+
+  if (compact) {
+    return (
+      <div className="malik-video-analysis-pulse mt-4 flex items-center gap-3 rounded-[16px] border border-white/[0.09] bg-[#080808] px-3.5 py-3" aria-live="polite">
+        <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.04]">
+          <Video className="h-4 w-4 text-white" />
+          <span className="absolute inset-[-3px] rounded-full border border-white/10 animate-ping" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <strong className="block text-[12px] font-semibold text-white">Malik Vision</strong>
+          <span className="block truncate text-[11px] text-zinc-500">{stages[stage]}…</span>
+        </span>
+        <span className="flex shrink-0 gap-1" aria-hidden="true">
+          {stages.map((_, index) => (
+            <i
+              key={index}
+              className={cn(
+                "h-1.5 w-4 rounded-full transition-all duration-500",
+                index < stage ? "bg-white/45" : index === stage ? "bg-white" : "bg-white/10",
+              )}
+            />
+          ))}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <section className="malik-video-analysis-pulse w-full max-w-[620px] overflow-hidden rounded-[20px] border border-white/[0.09] bg-[#080808] p-4" aria-live="polite" aria-label="Глубокий анализ видео">
+      <div className="flex items-center gap-3">
+        <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.04]">
+          <Video className="h-5 w-5 text-white" />
+          <span className="absolute inset-[-4px] rounded-full border border-white/10 animate-ping" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <strong className="block text-[13px] font-semibold text-white">Malik Vision · глубокий анализ</strong>
+          <span className="mt-0.5 block text-[11px] text-zinc-500">{stages[stage]}…</span>
+        </span>
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-zinc-400" />
+      </div>
+
+      <div className="mt-4 grid grid-cols-5 gap-1.5" aria-hidden="true">
+        {stages.map((label, index) => (
+          <div key={label} className="min-w-0">
+            <div className={cn(
+              "h-1.5 overflow-hidden rounded-full bg-white/[0.07] transition-all duration-500",
+              index === stage && "bg-white/[0.16]",
+            )}>
+              <span className={cn(
+                "block h-full origin-left rounded-full bg-white transition-transform duration-700",
+                index < stage ? "scale-x-100 opacity-45" : index === stage ? "scale-x-100 opacity-100 animate-pulse" : "scale-x-0 opacity-0",
+              )} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 flex h-12 items-end gap-1 overflow-hidden rounded-[12px] border border-white/[0.06] bg-black px-2.5 py-2" aria-hidden="true">
+        {Array.from({ length: 22 }).map((_, index) => {
+          const active = index % stages.length === stage
+          return (
+            <span
+              key={index}
+              className={cn(
+                "w-full rounded-full bg-white/[0.12] transition-all duration-500",
+                active ? "h-8 bg-white/65 animate-pulse" : index % 3 === 0 ? "h-5" : index % 2 === 0 ? "h-3" : "h-4",
+              )}
+            />
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 function ThinkingBubble({
   generationType,
   query = "",
   research,
+  videoAnalysis = false,
 }: {
   generationType: GenerationStatusType
   query?: string
   research?: MalikMessageResearch
+  videoAnalysis?: boolean
 }) {
   const [elapsed, setElapsed] = useState(0)
   const isResearch = Boolean(research?.usedWeb || research?.steps.length || isWorldResearchPrompt(query))
@@ -761,6 +852,7 @@ function ThinkingBubble({
   }
 
   if (!isResearch) {
+    if (videoAnalysis) return <VideoAnalysisPulse />
     return (
       <p className="malik-thinking-line" aria-live="polite">
         {labelMap[generationType] || labelMap.text}
@@ -1004,6 +1096,7 @@ function MessageBubble({
   onImageConfirmation,
   imageCredits,
   onOpenActionTarget,
+  videoAnalysis = false,
 }: {
   message: Message
   onCopy: (id: string, text: string) => void
@@ -1018,6 +1111,7 @@ function MessageBubble({
   onImageConfirmation?: (messageId: string, prompt: string, action: "confirm" | "cancel" | "generate", imageSize?: ImageResolution) => void
   imageCredits?: ImageCreditSnapshot | null
   onOpenActionTarget?: (target: MalikActionTarget) => void
+  videoAnalysis?: boolean
 }) {
   const isUser = message.role === "user"
   const isThinking = Boolean(message.isStreaming && !message.content && !message.generatedMedia)
@@ -1133,8 +1227,17 @@ function MessageBubble({
               )}
             </section>
           ) : displayContent
-            ? (isUser ? displayContent : <MalikMarkdown text={displayContent} />)
-            : (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} /> : "")}
+            ? (
+              isUser
+                ? displayContent
+                : (
+                  <>
+                    <MalikMarkdown text={displayContent} />
+                    {message.isStreaming && videoAnalysis ? <VideoAnalysisPulse compact /> : null}
+                  </>
+                )
+            )
+            : (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} /> : "")}
           {!isUser && !message.isStreaming && message.research?.sources.length ? (
             <SourceDeck research={message.research} />
           ) : null}
@@ -1347,8 +1450,17 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
 
   const activeGenerationType = useMemo(() => {
     const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")
+    const lastAttachments = lastUserMessage?.attachments || []
+    if (lastAttachments.some((item) => item.kind === "video" || item.mime?.startsWith("video/"))) return "video"
+    if (lastAttachments.some((item) => item.kind === "image" || item.mime?.startsWith("image/"))) return "image"
+    if (lastAttachments.some((item) => ["file", "code"].includes(item.kind))) return "file"
     return detectGenerationStatusType(lastUserMessage?.content || prompt)
   }, [messages, prompt])
+
+  const activeVideoAnalysis = useMemo(() => {
+    const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")
+    return Boolean(lastUserMessage?.attachments?.some((item) => item.kind === "video" || item.mime?.startsWith("video/")))
+  }, [messages])
 
   const handleFiles = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return
@@ -1660,6 +1772,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                   onImageConfirmation={onImageConfirmation}
                   imageCredits={imageCredits}
                   onOpenActionTarget={onOpenActionTarget}
+                  videoAnalysis={activeVideoAnalysis}
                 />
               ))}
             </>
