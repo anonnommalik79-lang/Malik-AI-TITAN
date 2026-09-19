@@ -2,6 +2,7 @@ import "server-only"
 
 import { createHash } from "node:crypto"
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import type { AIPlan } from "@/lib/ai/types"
 
 type MusicQuotaState = {
   day: string
@@ -18,8 +19,14 @@ function first(...values: Array<string | undefined>) {
   return values.map((value) => String(value || "").trim()).find(Boolean) || ""
 }
 
+function readPositiveInt(name: string, fallback: number) {
+  const value = Number(process.env[name])
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback
+}
+
 function storageConfig() {
   const bucket = first(
+    process.env.MUSIC_DAILY_GATE_BUCKET,
     process.env.MEDIA_STORAGE_BUCKET,
     process.env.R2_BUCKET,
     process.env.CLOUDFLARE_R2_BUCKET,
@@ -27,22 +34,23 @@ function storageConfig() {
     process.env.STORAGE_BUCKET,
   )
   const accessKeyId = first(
+    process.env.MUSIC_DAILY_GATE_ACCESS_KEY_ID,
     process.env.MEDIA_STORAGE_ACCESS_KEY_ID,
     process.env.AWS_ACCESS_KEY_ID,
   )
   const secretAccessKey = first(
+    process.env.MUSIC_DAILY_GATE_SECRET_ACCESS_KEY,
     process.env.MEDIA_STORAGE_SECRET_ACCESS_KEY,
     process.env.AWS_SECRET_ACCESS_KEY,
   )
   if (!bucket || !accessKeyId || !secretAccessKey) return null
-
   return {
     bucket,
     accessKeyId,
     secretAccessKey,
-    sessionToken: first(process.env.MEDIA_STORAGE_SESSION_TOKEN, process.env.AWS_SESSION_TOKEN) || undefined,
-    region: first(process.env.MEDIA_STORAGE_REGION, process.env.AWS_REGION) || "auto",
-    endpoint: first(process.env.MEDIA_STORAGE_ENDPOINT) || undefined,
+    sessionToken: first(process.env.MUSIC_DAILY_GATE_SESSION_TOKEN, process.env.MEDIA_STORAGE_SESSION_TOKEN, process.env.AWS_SESSION_TOKEN) || undefined,
+    region: first(process.env.MUSIC_DAILY_GATE_REGION, process.env.MEDIA_STORAGE_REGION, process.env.AWS_REGION) || "auto",
+    endpoint: first(process.env.MUSIC_DAILY_GATE_ENDPOINT, process.env.MEDIA_STORAGE_ENDPOINT) || undefined,
   }
 }
 
@@ -103,49 +111,67 @@ async function bodyToString(body: any) {
   return Buffer.concat(chunks).toString("utf8")
 }
 
-async function cloudState(userId: string): Promise<MusicQuotaState | null> {
-  const s = storage()
-  if (!s) return null
+async function readCloudState(userId: string): Promise<MusicQuotaState | null> {
+  const target = storage()
+  if (!target) return null
   try {
-    const result = await s.client.send(new GetObjectCommand({ Bucket: s.cfg.bucket, Key: objectKey(userId) }))
+    const result = await target.client.send(new GetObjectCommand({ Bucket: target.cfg.bucket, Key: objectKey(userId) }))
     const parsed = JSON.parse(await bodyToString(result.Body) || "{}") as Partial<MusicQuotaState>
     if (parsed.day !== utcDay()) return null
-    const count = Number(parsed.count || 0)
     return {
       day: parsed.day,
-      count: Number.isFinite(count) && count >= 0 ? count : 0,
-      updatedAt: String(parsed.updatedAt || new Date().toISOString()),
+      count: Math.max(0, Number(parsed.count || 0)),
+      updatedAt: String(parsed.updatedAt || ""),
     }
   } catch {
     return null
   }
 }
 
-export type MusicQuotaStatus = {
-  limit: number
-  used: number
-  remaining: number
-  resetAt: string
-  storage: "object-storage" | "runtime-memory"
+async function persistState(userId: string, state: MusicQuotaState) {
+  memory().set(memoryKey(userId), state)
+  const target = storage()
+  if (!target) return "runtime-memory" as const
+  try {
+    await target.client.send(new PutObjectCommand({
+      Bucket: target.cfg.bucket,
+      Key: objectKey(userId),
+      Body: Buffer.from(JSON.stringify(state), "utf8"),
+      ContentType: "application/json; charset=utf-8",
+      CacheControl: "private, no-store",
+      Metadata: { kind: "malik-music-daily" },
+    }))
+    return "object-storage" as const
+  } catch {
+    return "runtime-memory" as const
+  }
 }
 
-export async function getMusicQuota(userId: string, limit: number): Promise<MusicQuotaStatus> {
-  const safeLimit = Math.max(0, Math.floor(limit))
+export function getMusicPlanLimits(plan: AIPlan) {
+  const isPro = plan === "pro" || plan === "ultra" || plan === "owner"
+  const dailyLimit = isPro
+    ? readPositiveInt("MUSIC_PRO_DAILY_LIMIT", 30)
+    : readPositiveInt("MUSIC_FREE_DAILY_LIMIT", 3)
+  const maxDurationSeconds = isPro
+    ? readPositiveInt("MUSIC_PRO_MAX_DURATION_SECONDS", 180)
+    : readPositiveInt("MUSIC_FREE_DURATION_SECONDS", 30)
+  return { dailyLimit, maxDurationSeconds, tier: isPro ? "pro" as const : "free" as const }
+}
+
+export async function getMusicQuota(userId: string, plan: AIPlan) {
+  const limits = getMusicPlanLimits(plan)
   const key = memoryKey(userId)
   let state = memory().get(key)
-
-  if (!state) {
-    state = await cloudState(userId) || undefined
-    if (state) memory().set(key, state)
+  if (!state || state.day !== utcDay()) {
+    state = await readCloudState(userId) || { day: utcDay(), count: 0, updatedAt: new Date().toISOString() }
+    memory().set(key, state)
   }
-
-  const used = Math.max(0, Number(state?.count || 0))
   return {
-    limit: safeLimit,
-    used,
-    remaining: Math.max(0, safeLimit - used),
+    ...limits,
+    used: state.count,
+    remaining: Math.max(0, limits.dailyLimit - state.count),
     resetAt: nextUtcResetAt(),
-    storage: storageConfig() ? "object-storage" : "runtime-memory",
+    storage: storageConfig() ? "object-storage" as const : "runtime-memory" as const,
   }
 }
 
@@ -161,30 +187,18 @@ export function releaseMusicInFlight(userId: string) {
   inFlight().delete(memoryKey(userId))
 }
 
-export async function incrementMusicQuota(userId: string, limit: number): Promise<MusicQuotaStatus> {
-  const current = await getMusicQuota(userId, limit)
-  const state: MusicQuotaState = {
+export async function recordMusicUsage(userId: string, plan: AIPlan) {
+  const quota = await getMusicQuota(userId, plan)
+  const next: MusicQuotaState = {
     day: utcDay(),
-    count: current.used + 1,
+    count: quota.used + 1,
     updatedAt: new Date().toISOString(),
   }
-  memory().set(memoryKey(userId), state)
-
-  const s = storage()
-  if (s) {
-    try {
-      await s.client.send(new PutObjectCommand({
-        Bucket: s.cfg.bucket,
-        Key: objectKey(userId),
-        Body: Buffer.from(JSON.stringify(state), "utf8"),
-        ContentType: "application/json; charset=utf-8",
-        CacheControl: "private, no-store",
-        Metadata: { kind: "malik-music-daily" },
-      }))
-    } catch {
-      // Runtime memory remains the fallback for this process.
-    }
+  const storageKind = await persistState(userId, next)
+  return {
+    ...quota,
+    used: next.count,
+    remaining: Math.max(0, quota.dailyLimit - next.count),
+    storage: storageKind,
   }
-
-  return getMusicQuota(userId, limit)
 }
