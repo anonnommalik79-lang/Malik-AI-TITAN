@@ -3,35 +3,69 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import {
   Box,
+  CheckCircle2,
   Clock3,
   Crown,
   Download,
   FileText,
   Heart,
   ImagePlus,
+  Loader2,
   Music2,
   Pause,
   Play,
+  RefreshCw,
   Share2,
   SlidersHorizontal,
   Sparkles,
   Volume2,
-  WandSparkles,
   X,
 } from "lucide-react"
 import "./music-generation.css"
 
 type GenreId = "phonk" | "trap" | "hiphop" | "lofi" | "edm" | "other"
-type Quality = "128 kbps" | "320 kbps" | "WAV"
 type Mood = "Агрессивный" | "Спокойный" | "Атмосферный" | "Энергичный" | "Грустный" | "Другое"
+type LyricsLanguage = "kk" | "ru" | "en"
+type JobStatus = "queued" | "processing" | "ready" | "failed"
 
 type Genre = {
   id: GenreId
   label: string
   image: string
-  bpm: number
-  baseFrequency: number
   seed: string
+}
+
+type MusicConfig = {
+  configured: boolean
+  authenticated: boolean
+  plan: string
+  model: string
+  limits: {
+    daily: number
+    maxDurationSeconds: number
+    used: number
+    remaining: number
+    resetAt?: string
+  }
+}
+
+type MusicHistoryItem = {
+  requestId: string
+  title: string
+  prompt: string
+  lyrics: string
+  lyricsEnabled: boolean
+  lyricsLanguage: LyricsLanguage
+  instrumental: boolean
+  duration: number
+  genreId: GenreId
+  mood: Mood
+  status: JobStatus
+  progress?: number
+  resultUrl?: string
+  downloadUrl?: string
+  createdAt: string
+  error?: string
 }
 
 const GENRES: Genre[] = [
@@ -39,188 +73,44 @@ const GENRES: Genre[] = [
     id: "phonk",
     label: "Phonk",
     image: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=700&q=86",
-    bpm: 150,
-    baseFrequency: 392,
     seed: "Ночной агрессивный фонк, плотный 808, cowbell, тёмная атмосфера",
   },
   {
     id: "trap",
     label: "Trap",
     image: "https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=700&q=86",
-    bpm: 142,
-    baseFrequency: 330,
     seed: "Современный trap, тяжёлый 808, быстрые hi-hat, атмосферный synth",
   },
   {
     id: "hiphop",
     label: "Hip-Hop",
     image: "https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=700&q=86",
-    bpm: 96,
-    baseFrequency: 294,
     seed: "Современный hip-hop бит, плотный groove, чистый бас и уверенный ритм",
   },
   {
     id: "lofi",
     label: "Lo-Fi",
     image: "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?auto=format&fit=crop&w=700&q=86",
-    bpm: 78,
-    baseFrequency: 262,
     seed: "Спокойный lo-fi, тёплый винил, мягкие барабаны, ночная атмосфера",
   },
   {
     id: "edm",
     label: "EDM",
     image: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=700&q=86",
-    bpm: 128,
-    baseFrequency: 440,
     seed: "Энергичный EDM, мощный drop, яркие synth и клубная энергия",
   },
   {
     id: "other",
     label: "Другое",
     image: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=700&q=86",
-    bpm: 118,
-    baseFrequency: 349,
     seed: "Экспериментальный современный трек с необычной фактурой",
   },
 ]
 
-const DURATIONS = [15, 30, 60, 120] as const
-const QUALITIES: Quality[] = ["128 kbps", "320 kbps", "WAV"]
+const DURATION_OPTIONS = [15, 30, 60, 120, 180] as const
 const MOODS: Mood[] = ["Агрессивный", "Спокойный", "Атмосферный", "Энергичный", "Грустный", "Другое"]
-const MODELS = ["Malik Music v1", "Malik Music Flow", "Malik Music Ultra"]
-
-function hashString(value: string) {
-  let hash = 2166136261
-  for (let i = 0; i < value.length; i += 1) {
-    hash ^= value.charCodeAt(i)
-    hash = Math.imul(hash, 16777619)
-  }
-  return hash >>> 0
-}
-
-function mulberry32(seed: number) {
-  return () => {
-    let t = seed += 0x6d2b79f5
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-function writeAscii(view: DataView, offset: number, value: string) {
-  for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i))
-}
-
-function encodeWav(samples: Float32Array, sampleRate: number) {
-  const buffer = new ArrayBuffer(44 + samples.length * 2)
-  const view = new DataView(buffer)
-  writeAscii(view, 0, "RIFF")
-  view.setUint32(4, 36 + samples.length * 2, true)
-  writeAscii(view, 8, "WAVE")
-  writeAscii(view, 12, "fmt ")
-  view.setUint32(16, 16, true)
-  view.setUint16(20, 1, true)
-  view.setUint16(22, 1, true)
-  view.setUint32(24, sampleRate, true)
-  view.setUint32(28, sampleRate * 2, true)
-  view.setUint16(32, 2, true)
-  view.setUint16(34, 16, true)
-  writeAscii(view, 36, "data")
-  view.setUint32(40, samples.length * 2, true)
-
-  let offset = 44
-  for (let i = 0; i < samples.length; i += 1) {
-    const sample = Math.max(-1, Math.min(1, samples[i]))
-    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true)
-    offset += 2
-  }
-  return new Blob([buffer], { type: "audio/wav" })
-}
-
-async function synthesizeTrack(input: {
-  prompt: string
-  genre: Genre
-  duration: number
-  quality: Quality
-  mood: Mood
-  instrumental: boolean
-  aiLyrics: boolean
-  model: string
-}) {
-  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
-
-  const sampleRate = input.quality === "WAV" ? 22050 : input.quality === "320 kbps" ? 18000 : 14000
-  const length = Math.max(1, Math.floor(input.duration * sampleRate))
-  const samples = new Float32Array(length)
-  const seed = hashString([
-    input.prompt,
-    input.genre.id,
-    input.mood,
-    input.instrumental ? "instrumental" : "vocal-mode",
-    input.aiLyrics ? "ai-lyrics" : "no-lyrics",
-    input.model,
-  ].join("|"))
-  const random = mulberry32(seed)
-  const beat = 60 / input.genre.bpm
-  const sixteenth = beat / 4
-
-  const moodGain =
-    input.mood === "Агрессивный" ? 1.08 :
-    input.mood === "Энергичный" ? 1.0 :
-    input.mood === "Спокойный" ? 0.72 :
-    input.mood === "Грустный" ? 0.78 :
-    input.mood === "Атмосферный" ? 0.82 : 0.9
-
-  const notes =
-    input.genre.id === "phonk" ? [0, 3, 7, 10, 7, 3, 12, 10] :
-    input.genre.id === "trap" ? [0, 7, 5, 3, 0, 10, 7, 5] :
-    input.genre.id === "lofi" ? [0, 4, 7, 11, 7, 4, 2, 7] :
-    [0, 5, 7, 12, 7, 5, 10, 7]
-
-  for (let i = 0; i < length; i += 1) {
-    const t = i / sampleRate
-    const beatPos = t % beat
-    const beatIndex = Math.floor(t / beat)
-    const barBeat = beatIndex % 4
-
-    const kickEnv = Math.exp(-beatPos * 18)
-    const kickFreq = 48 + 55 * Math.exp(-beatPos * 26)
-    const kick = Math.sin(2 * Math.PI * kickFreq * t) * kickEnv * (barBeat === 0 || barBeat === 2 ? 0.82 : 0.45)
-
-    const snareHit = barBeat === 1 || barBeat === 3
-    const snareEnv = snareHit ? Math.exp(-beatPos * 24) : 0
-    const snare = (random() * 2 - 1) * snareEnv * 0.27
-
-    const hatPos = t % sixteenth
-    const hatEnv = Math.exp(-hatPos * 70)
-    const hat = (random() * 2 - 1) * hatEnv * 0.055
-
-    const step = Math.floor(t / (beat / 2))
-    const note = notes[step % notes.length]
-    const noteFrequency = input.genre.baseFrequency * Math.pow(2, note / 12)
-    const melodyPhase = t % (beat / 2)
-    const melodyEnv = Math.exp(-melodyPhase * (input.genre.id === "lofi" ? 5 : 9))
-    const melody =
-      (Math.sin(2 * Math.PI * noteFrequency * t) +
-      0.45 * Math.sin(2 * Math.PI * noteFrequency * 1.48 * t)) *
-      melodyEnv *
-      (input.genre.id === "phonk" ? 0.18 : 0.1)
-
-    const bassNote = input.genre.baseFrequency / 4 * Math.pow(2, notes[Math.floor(beatIndex / 2) % notes.length] / 12)
-    const bass = Math.tanh(Math.sin(2 * Math.PI * bassNote * t) * 2.4) * 0.16
-
-    const pad =
-      input.mood === "Атмосферный" || input.mood === "Спокойный"
-        ? Math.sin(2 * Math.PI * (input.genre.baseFrequency / 2) * t) * 0.035 +
-          Math.sin(2 * Math.PI * (input.genre.baseFrequency / 3) * t) * 0.025
-        : 0
-
-    samples[i] = Math.tanh((kick + snare + hat + melody + bass + pad) * moodGain) * 0.82
-  }
-
-  return encodeWav(samples, sampleRate)
-}
+const LANGUAGE_LABELS: Record<LyricsLanguage, string> = { kk: "Қазақша", ru: "Русский", en: "English" }
+const HISTORY_KEY = "malik-music-history-v2"
 
 function durationLabel(value: number) {
   if (value < 60) return value + " сек"
@@ -232,17 +122,30 @@ function formatTime(seconds: number) {
   return Math.floor(whole / 60) + ":" + String(whole % 60).padStart(2, "0")
 }
 
+function historyTitle(prompt: string, genre: Genre) {
+  const clean = prompt.split(/[,.!?]/)[0]?.trim()
+  if (clean && clean.length <= 42) return clean
+  return genre.id === "phonk" ? "Night Drive" : genre.label + " Session"
+}
+
+function safeHistory(value: unknown): MusicHistoryItem[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item) => item && typeof item === "object" && typeof item.requestId === "string")
+    .slice(0, 30) as MusicHistoryItem[]
+}
+
 export function MusicGenerationStudio({ username }: { username?: string }) {
   const [genreId, setGenreId] = useState<GenreId>("phonk")
   const [prompt, setPrompt] = useState("")
+  const [lyrics, setLyrics] = useState("")
+  const [lyricsEnabled, setLyricsEnabled] = useState(false)
+  const [lyricsLanguage, setLyricsLanguage] = useState<LyricsLanguage>("ru")
   const [duration, setDuration] = useState<number>(30)
-  const [quality, setQuality] = useState<Quality>("320 kbps")
   const [mood, setMood] = useState<Mood>("Агрессивный")
   const [instrumental, setInstrumental] = useState(true)
-  const [aiLyrics, setAiLyrics] = useState(false)
-  const [modelIndex, setModelIndex] = useState(0)
-  const [phonkMode, setPhonkMode] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [activeRequestId, setActiveRequestId] = useState("")
   const [trackUrl, setTrackUrl] = useState("")
   const [trackTitle, setTrackTitle] = useState("Night Drive")
   const [liked, setLiked] = useState(false)
@@ -250,20 +153,60 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const [currentTime, setCurrentTime] = useState(0)
   const [coverPreview, setCoverPreview] = useState("")
   const [notice, setNotice] = useState("")
+  const [config, setConfig] = useState<MusicConfig | null>(null)
+  const [history, setHistory] = useState<MusicHistoryItem[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const coverInputRef = useRef<HTMLInputElement | null>(null)
 
   const genre = GENRES.find((item) => item.id === genreId) || GENRES[0]
-  const wave = useMemo(() => {
-    const random = mulberry32(hashString(prompt + genreId + mood))
-    return Array.from({ length: 72 }, () => 7 + Math.round(random() * 30))
-  }, [prompt, genreId, mood])
+  const availableDurations = useMemo(
+    () => DURATION_OPTIONS.filter((value) => value <= (config?.limits.maxDurationSeconds || 30)),
+    [config?.limits.maxDurationSeconds],
+  )
+  const activeHistoryItem = history.find((item) => item.requestId === activeRequestId)
+  const wave = useMemo(
+    () => Array.from({ length: 72 }, (_, index) => 8 + ((index * 13 + genreId.length * 7) % 29)),
+    [genreId],
+  )
+
+  const refreshConfig = async () => {
+    try {
+      const response = await fetch("/api/media/music", { method: "GET", cache: "no-store" })
+      const data = await response.json().catch(() => null)
+      if (response.ok && data?.ok) {
+        setConfig(data as MusicConfig)
+        setDuration((value) => Math.min(value, Number(data?.limits?.maxDurationSeconds || 30)))
+      }
+    } catch {
+      // The Generate action will surface a useful server error if needed.
+    }
+  }
 
   useEffect(() => {
-    return () => {
-      if (trackUrl) URL.revokeObjectURL(trackUrl)
+    refreshConfig()
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(HISTORY_KEY) || "[]")
+      const rows = safeHistory(stored)
+      setHistory(rows)
+      const pending = rows.find((item) => item.status === "queued" || item.status === "processing")
+      if (pending) setActiveRequestId(pending.requestId)
+      const ready = rows.find((item) => item.status === "ready" && item.resultUrl)
+      if (ready?.resultUrl) {
+        setTrackUrl(ready.resultUrl)
+        setTrackTitle(ready.title)
+      }
+    } catch {
+      setHistory([])
     }
-  }, [trackUrl])
+  }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 30)))
+    } catch {
+      // History is a convenience layer; generation itself remains server-side.
+    }
+  }, [history])
 
   useEffect(() => {
     return () => {
@@ -271,9 +214,86 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     }
   }, [coverPreview])
 
+  useEffect(() => {
+    if (!activeRequestId) return
+    let cancelled = false
+    let timer: number | undefined
+
+    const poll = async () => {
+      try {
+        const response = await fetch(
+          "/api/media/music/status?requestId=" + encodeURIComponent(activeRequestId),
+          { method: "GET", cache: "no-store" },
+        )
+        const data = await response.json().catch(() => null)
+        if (cancelled) return
+
+        if (!response.ok) {
+          setNotice(data?.error || "Не удалось проверить статус трека.")
+          timer = window.setTimeout(poll, 4500)
+          return
+        }
+
+        if (data?.status === "ready" && data?.resultUrl) {
+          setHistory((rows) => rows.map((item) =>
+            item.requestId === activeRequestId
+              ? {
+                  ...item,
+                  status: "ready",
+                  progress: 100,
+                  resultUrl: String(data.resultUrl),
+                  downloadUrl: String(data.downloadUrl || ""),
+                  error: undefined,
+                }
+              : item,
+          ))
+          const item = history.find((row) => row.requestId === activeRequestId)
+          setTrackTitle(item?.title || trackTitle)
+          setTrackUrl(String(data.resultUrl))
+          setCurrentTime(0)
+          setGenerating(false)
+          setNotice("Трек готов.")
+          setActiveRequestId("")
+          refreshConfig()
+          return
+        }
+
+        if (data?.status === "failed") {
+          setHistory((rows) => rows.map((item) =>
+            item.requestId === activeRequestId
+              ? { ...item, status: "failed", error: String(data?.error || "Генерация не завершилась.") }
+              : item,
+          ))
+          setGenerating(false)
+          setNotice(data?.error || "Генерация не завершилась.")
+          setActiveRequestId("")
+          refreshConfig()
+          return
+        }
+
+        const nextStatus: JobStatus = data?.status === "queued" ? "queued" : "processing"
+        setHistory((rows) => rows.map((item) =>
+          item.requestId === activeRequestId
+            ? { ...item, status: nextStatus, progress: Number(data?.progress || item.progress || 0) }
+            : item,
+        ))
+        setGenerating(true)
+        setNotice(nextStatus === "queued" ? "Задание в очереди deAPI…" : "deAPI генерирует настоящий MP3…")
+        timer = window.setTimeout(poll, 3000)
+      } catch {
+        if (!cancelled) timer = window.setTimeout(poll, 5000)
+      }
+    }
+
+    poll()
+    return () => {
+      cancelled = true
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [activeRequestId])
+
   const chooseGenre = (next: Genre) => {
     setGenreId(next.id)
-    setPhonkMode(next.id === "phonk")
     if (!prompt.trim()) setPrompt(next.seed)
   }
 
@@ -293,46 +313,125 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     setCoverPreview(URL.createObjectURL(file))
   }
 
-  const generate = async () => {
+  const submitGeneration = async (override?: Partial<MusicHistoryItem>) => {
     if (generating) return
+
+    const nextGenreId = override?.genreId || genreId
+    const nextGenre = GENRES.find((item) => item.id === nextGenreId) || genre
+    const nextPrompt = String(override?.prompt ?? prompt).trim() || nextGenre.seed
+    const nextLyrics = String(override?.lyrics ?? lyrics)
+    const nextLyricsEnabled = override?.lyricsEnabled ?? lyricsEnabled
+    const nextInstrumental = override?.instrumental ?? instrumental
+    const nextDuration = Number(override?.duration ?? duration)
+    const nextMood = (override?.mood ?? mood) as Mood
+    const nextLanguage = (override?.lyricsLanguage ?? lyricsLanguage) as LyricsLanguage
+
+    if (!config?.authenticated) {
+      setNotice("Войдите в аккаунт, чтобы создавать музыку.")
+      return
+    }
+    if (!config?.configured) {
+      setNotice("deAPI не настроен на сервере.")
+      return
+    }
+    if (config.limits.remaining <= 0) {
+      setNotice("Дневной лимит генерации музыки исчерпан.")
+      return
+    }
+    if (nextDuration > config.limits.maxDurationSeconds) {
+      setNotice("Максимальная длительность вашего тарифа: " + config.limits.maxDurationSeconds + " сек.")
+      return
+    }
+    if (!nextInstrumental && nextLyricsEnabled && !nextLyrics.trim()) {
+      setNotice("Добавьте свои слова песни.")
+      return
+    }
+
     setGenerating(true)
-    setNotice("Собираю ритм, бас и музыкальную структуру…")
-    setPlaying(false)
+    setNotice("Отправляю запрос в deAPI / AceStep 1.5 XL Turbo…")
     audioRef.current?.pause()
+    setPlaying(false)
 
     try {
-      const blob = await synthesizeTrack({
-        prompt: prompt.trim() || genre.seed,
-        genre,
-        duration,
-        quality,
-        mood,
-        instrumental,
-        aiLyrics,
-        model: MODELS[modelIndex],
+      const response = await fetch("/api/media/music", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: nextPrompt,
+          lyrics: nextInstrumental || !nextLyricsEnabled ? "" : nextLyrics,
+          lyricsEnabled: !nextInstrumental && nextLyricsEnabled,
+          lyricsLanguage: nextLanguage,
+          instrumental: nextInstrumental,
+          duration: nextDuration,
+          genre: nextGenreId,
+          mood: nextMood,
+        }),
       })
+      const data = await response.json().catch(() => null)
 
-      if (trackUrl) URL.revokeObjectURL(trackUrl)
-      const url = URL.createObjectURL(blob)
-      setTrackUrl(url)
+      if (!response.ok || !data?.ok || !data?.requestId) {
+        setGenerating(false)
+        setNotice(data?.error || "deAPI не принял запрос.")
+        await refreshConfig()
+        return
+      }
 
-      const clean = (prompt.trim() || genre.seed).split(/[,.!?]/)[0]?.trim()
-      if (clean && clean.length <= 34) setTrackTitle(clean)
-      else setTrackTitle(genre.id === "phonk" ? "Night Drive" : genre.label + " Session")
+      const item: MusicHistoryItem = {
+        requestId: String(data.requestId),
+        title: historyTitle(nextPrompt, nextGenre),
+        prompt: nextPrompt,
+        lyrics: nextLyrics,
+        lyricsEnabled: nextLyricsEnabled,
+        lyricsLanguage: nextLanguage,
+        instrumental: nextInstrumental,
+        duration: nextDuration,
+        genreId: nextGenreId,
+        mood: nextMood,
+        status: "queued",
+        progress: 0,
+        downloadUrl: String(data.downloadUrl || ""),
+        createdAt: new Date().toISOString(),
+      }
 
-      setCurrentTime(0)
-      setNotice("Трек готов. Сейчас работает локальный preview-engine; внешний AI music API можно подключить без переделки интерфейса.")
+      setHistory((rows) => [item, ...rows.filter((row) => row.requestId !== item.requestId)].slice(0, 30))
+      setTrackTitle(item.title)
+      setActiveRequestId(item.requestId)
+      setConfig((current) => current ? {
+        ...current,
+        limits: {
+          ...current.limits,
+          used: Number(data.used ?? current.limits.used),
+          remaining: Number(data.remaining ?? Math.max(0, current.limits.remaining - 1)),
+        },
+      } : current)
+      setNotice("request_id получен. Ожидаю очередь deAPI…")
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Не удалось собрать preview-трек")
-    } finally {
       setGenerating(false)
+      setNotice(error instanceof Error ? error.message : "Не удалось отправить запрос.")
     }
+  }
+
+  const regenerate = (item?: MusicHistoryItem) => {
+    const source = item || history.find((row) => row.status === "ready" && row.resultUrl)
+    if (!source) {
+      submitGeneration()
+      return
+    }
+    setGenreId(source.genreId)
+    setPrompt(source.prompt)
+    setLyrics(source.lyrics)
+    setLyricsEnabled(source.lyricsEnabled)
+    setLyricsLanguage(source.lyricsLanguage)
+    setInstrumental(source.instrumental)
+    setDuration(source.duration)
+    setMood(source.mood)
+    submitGeneration(source)
   }
 
   const togglePlay = async () => {
     const audio = audioRef.current
     if (!audio || !trackUrl) {
-      setNotice("Сначала сгенерируйте трек.")
+      setNotice("Сначала дождитесь настоящего MP3 от deAPI.")
       return
     }
     if (audio.paused) {
@@ -344,33 +443,27 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     }
   }
 
-  const downloadTrack = () => {
-    if (!trackUrl) {
-      setNotice("Сначала сгенерируйте трек.")
+  const currentReady = history.find((item) => item.resultUrl === trackUrl && item.status === "ready")
+  const downloadTrack = (item?: MusicHistoryItem) => {
+    const source = item || currentReady
+    if (!source?.requestId) {
+      setNotice("Сначала дождитесь готового MP3.")
       return
     }
-    const anchor = document.createElement("a")
-    anchor.href = trackUrl
-    anchor.download = "malik-music-" + genre.id + ".wav"
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
+    window.location.assign(source.downloadUrl || ("/api/media/music/file?requestId=" + encodeURIComponent(source.requestId)))
   }
 
   const shareTrack = async () => {
     if (!trackUrl) {
-      setNotice("Сначала сгенерируйте трек.")
+      setNotice("Сначала дождитесь готового MP3.")
       return
     }
     try {
-      const response = await fetch(trackUrl)
-      const blob = await response.blob()
-      const file = new File([blob], "malik-music.wav", { type: "audio/wav" })
-      if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-        await navigator.share({ title: "Malik Music", text: trackTitle, files: [file] })
+      if (navigator.share) {
+        await navigator.share({ title: "Malik Music", text: trackTitle, url: trackUrl })
       } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(trackTitle + " — Malik Music")
-        setNotice("Название трека скопировано.")
+        await navigator.clipboard.writeText(trackUrl)
+        setNotice("Ссылка на MP3 скопирована.")
       }
     } catch {
       setNotice("Не удалось открыть системное меню «Поделиться».")
@@ -417,11 +510,39 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     </div>
   )
 
+  const lyricsCard = !instrumental && lyricsEnabled ? (
+    <div className="mm-lyrics">
+      <div className="mm-lyrics-top">
+        <span><FileText />Свои слова песни</span>
+        <div className="mm-language">
+          {(Object.keys(LANGUAGE_LABELS) as LyricsLanguage[]).map((language) => (
+            <button
+              key={language}
+              type="button"
+              className={lyricsLanguage === language ? "is-active" : ""}
+              onClick={() => setLyricsLanguage(language)}
+            >
+              {LANGUAGE_LABELS[language]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <textarea
+        value={lyrics}
+        maxLength={12000}
+        onChange={(event) => setLyrics(event.target.value)}
+        placeholder={"[verse]\nНапишите свои слова...\n\n[chorus]\nПрипев..."}
+        disabled={generating}
+      />
+      <small>{lyrics.length}/12000 · Unicode: KZ / RU / EN</small>
+    </div>
+  ) : null
+
   const durationControls = (
     <div className="mm-setting">
       <div className="mm-label"><Clock3 />Длительность</div>
       <div className="mm-options">
-        {DURATIONS.map((value) => (
+        {availableDurations.map((value) => (
           <button key={value} type="button" className={duration === value ? "is-active" : ""} onClick={() => setDuration(value)}>
             {durationLabel(value)}
           </button>
@@ -430,16 +551,10 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     </div>
   )
 
-  const qualityControls = (
+  const outputControls = (
     <div className="mm-setting">
-      <div className="mm-label"><Volume2 />Качество</div>
-      <div className="mm-options">
-        {QUALITIES.map((value) => (
-          <button key={value} type="button" className={quality === value ? "is-active" : ""} onClick={() => setQuality(value)}>
-            {value}
-          </button>
-        ))}
-      </div>
+      <div className="mm-label"><Volume2 />Результат</div>
+      <div className="mm-options"><button type="button" className="is-active">MP3</button></div>
     </div>
   )
 
@@ -460,25 +575,52 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     <div className="mm-switch-grid">
       <div className="mm-switch-row">
         <span><Music2 />Инструментал</span>
-        <button type="button" className={"mm-switch" + (instrumental ? " is-on" : "")} onClick={() => setInstrumental((value) => !value)} aria-pressed={instrumental}><i /></button>
+        <button
+          type="button"
+          className={"mm-switch" + (instrumental ? " is-on" : "")}
+          onClick={() => {
+            setInstrumental((value) => !value)
+            if (!instrumental) setLyricsEnabled(false)
+          }}
+          aria-pressed={instrumental}
+        >
+          <i />
+        </button>
       </div>
+
       <div className="mm-switch-row">
-        <span><FileText />Текст (AI)</span>
-        <button type="button" className={"mm-switch" + (aiLyrics ? " is-on" : "")} onClick={() => setAiLyrics((value) => !value)} aria-pressed={aiLyrics}><i /></button>
+        <span><FileText />Текст песни</span>
+        <button
+          type="button"
+          className={"mm-switch" + (lyricsEnabled ? " is-on" : "")}
+          onClick={() => {
+            const next = !lyricsEnabled
+            setLyricsEnabled(next)
+            if (next) setInstrumental(false)
+          }}
+          aria-pressed={lyricsEnabled}
+        >
+          <i />
+        </button>
       </div>
     </div>
   )
 
   const modelButton = (
-    <button className="mm-model" type="button" onClick={() => setModelIndex((value) => (value + 1) % MODELS.length)}>
-      <Box /><span>{MODELS[modelIndex]}</span><small>⌄</small>
+    <button className="mm-model" type="button" disabled>
+      <Box /><span>{config?.model || "AceStep 1.5 XL Turbo"}</span><small>deAPI</small>
     </button>
   )
 
+  const statusText =
+    activeHistoryItem?.status === "queued" ? "В очереди deAPI" :
+    activeHistoryItem?.status === "processing" ? "Генерация MP3" :
+    "Сгенерировать трек"
+
   const generateButton = (
-    <button className="mm-generate" type="button" onClick={generate} disabled={generating}>
-      {generating ? <WandSparkles className="mm-spin" /> : <Play />}
-      <span>{generating ? "Генерирую трек…" : "Сгенерировать трек"}</span>
+    <button className="mm-generate" type="button" onClick={() => submitGeneration()} disabled={generating || config?.limits.remaining === 0}>
+      {generating ? <Loader2 className="mm-spin" /> : <Play />}
+      <span>{generating ? statusText : "Сгенерировать трек"}</span>
     </button>
   )
 
@@ -488,7 +630,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       <div className="mm-player-main">
         <div className="mm-track-head">
           <strong>{trackTitle}</strong>
-          <span>{genre.label.toUpperCase()}</span>
+          <span>{trackUrl ? "MP3 READY" : activeHistoryItem ? activeHistoryItem.status.toUpperCase() : genre.label.toUpperCase()}</span>
         </div>
         <div className="mm-time">
           {formatTime(currentTime)} / {formatTime(trackUrl && audioRef.current?.duration ? audioRef.current.duration : duration)}
@@ -496,9 +638,10 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         <div className={"mm-wave" + (playing ? " is-playing" : "")}>
           {wave.map((height, index) => <i key={index} style={{ height }} />)}
         </div>
+        {activeRequestId ? <div className="mm-request">request_id: {activeRequestId}</div> : null}
       </div>
 
-      <button className="mm-round-play" type="button" onClick={togglePlay} aria-label={playing ? "Пауза" : "Воспроизвести"}>
+      <button className="mm-round-play" type="button" onClick={togglePlay} aria-label={playing ? "Пауза" : "Воспроизвести"} disabled={!trackUrl}>
         {playing ? <Pause /> : <Play />}
       </button>
 
@@ -506,17 +649,69 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         <button type="button" onClick={() => setLiked((value) => !value)} aria-label="В избранное">
           <Heart className={liked ? "is-filled" : ""} />
         </button>
-        <button type="button" onClick={downloadTrack} aria-label="Скачать"><Download /></button>
-        <button type="button" onClick={shareTrack} aria-label="Поделиться"><Share2 /></button>
+        <button type="button" onClick={() => downloadTrack()} aria-label="Скачать" disabled={!trackUrl}><Download /></button>
+        <button type="button" onClick={shareTrack} aria-label="Поделиться" disabled={!trackUrl}><Share2 /></button>
+        <button type="button" onClick={() => regenerate()} aria-label="Перегенерировать" disabled={generating}><RefreshCw /></button>
       </div>
     </div>
   )
+
+  const historyPanel = history.length ? (
+    <section className="mm-history">
+      <div className="mm-history-head">
+        <div><Music2 /><span>История генераций</span></div>
+        <small>{history.length}</small>
+      </div>
+      <div className="mm-history-list">
+        {history.map((item) => {
+          const itemGenre = GENRES.find((entry) => entry.id === item.genreId) || GENRES[0]
+          return (
+            <article key={item.requestId} className="mm-history-item">
+              <button
+                type="button"
+                className="mm-history-cover"
+                style={{ backgroundImage: "url(" + itemGenre.image + ")" }}
+                onClick={() => {
+                  if (!item.resultUrl) return
+                  setTrackUrl(item.resultUrl)
+                  setTrackTitle(item.title)
+                  setCurrentTime(0)
+                }}
+                aria-label={"Открыть " + item.title}
+              />
+              <div className="mm-history-copy">
+                <strong>{item.title}</strong>
+                <span>{itemGenre.label} · {durationLabel(item.duration)} · {item.instrumental ? "instrumental" : LANGUAGE_LABELS[item.lyricsLanguage]}</span>
+                <small>{item.requestId}</small>
+              </div>
+              <div className={"mm-history-status is-" + item.status}>
+                {item.status === "ready" ? <CheckCircle2 /> : item.status === "failed" ? <X /> : <Loader2 className="mm-spin" />}
+                <span>{item.status === "ready" ? "Готов" : item.status === "failed" ? "Ошибка" : item.status === "queued" ? "Очередь" : "Генерация"}</span>
+              </div>
+              <div className="mm-history-actions">
+                {item.status === "ready" && item.resultUrl ? (
+                  <button type="button" onClick={() => { setTrackUrl(item.resultUrl || ""); setTrackTitle(item.title); window.setTimeout(() => audioRef.current?.play().catch(() => undefined), 0) }} aria-label="Воспроизвести"><Play /></button>
+                ) : null}
+                {item.status === "ready" ? <button type="button" onClick={() => downloadTrack(item)} aria-label="Скачать"><Download /></button> : null}
+                <button type="button" onClick={() => regenerate(item)} aria-label="Перегенерировать" disabled={generating}><RefreshCw /></button>
+              </div>
+            </article>
+          )
+        })}
+      </div>
+    </section>
+  ) : null
+
+  const quotaLabel = config
+    ? config.limits.remaining + " / " + config.limits.daily + " сегодня"
+    : "Проверяю лимит…"
 
   return (
     <section className="malik-music" data-malik-music-studio data-user={username || "guest"}>
       <audio
         ref={audioRef}
         src={trackUrl || undefined}
+        preload="metadata"
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
@@ -528,9 +723,9 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           <div className="mm-desktop-main">
             <div className="mm-hero">
               <div className="mm-hero-copy">
-                <span>MALIK MUSIC STUDIO</span>
+                <span>MALIK MUSIC STUDIO · {quotaLabel}</span>
                 <h1>Создавай<br />музыку с <b>AI</b></h1>
-                <p>Фонк, рэп, трэп, lo-fi и любой стиль. Твоя идея — наш звук.</p>
+                <p>Настоящая генерация через deAPI AceStep 1.5 XL Turbo. Prompt → request_id → polling → MP3.</p>
                 <small>FROM IDEAS TO HITS</small>
               </div>
               <div className="mm-hero-mark"><Crown /><span>MUSIC<br />HAS<br />NO LIMITS</span></div>
@@ -538,7 +733,8 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
             {genreCards}
             {promptCard}
-            <div className="mm-settings-grid">{durationControls}{qualityControls}</div>
+            {lyricsCard}
+            <div className="mm-settings-grid">{durationControls}{outputControls}</div>
             {moodControls}
             <div className="mm-desktop-bottom">
               {switchControls}
@@ -547,6 +743,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
             {generateButton}
             {player}
             {notice ? <div className="mm-notice">{notice}</div> : null}
+            {historyPanel}
           </div>
 
           <aside className="mm-promo">
@@ -562,30 +759,32 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
       <div className="mm-mobile">
         <header className="mm-mobile-head">
-          <div><strong>MALIK AI</strong><small>MUSIC STUDIO</small></div>
-          <button type="button" className={phonkMode ? "is-active" : ""} onClick={() => setPhonkMode((value) => !value)}>
-            <Crown />{phonkMode ? "PHONK MODE" : "MUSIC MODE"}
+          <div><strong>MALIK AI</strong><small>MUSIC STUDIO · {quotaLabel}</small></div>
+          <button type="button" className={genreId === "phonk" ? "is-active" : ""} onClick={() => chooseGenre(GENRES[0])}>
+            <Crown />{genreId === "phonk" ? "PHONK MODE" : "PHONK"}
           </button>
         </header>
 
         <div className="mm-mobile-hero">
           <div>
             <h2>Создавай<br />музыку с <b>AI</b></h2>
-            <p>Фонк, рэп, трэп, lo-fi — твоя идея, наш звук.</p>
+            <p>Prompt → deAPI → AceStep → настоящий MP3.</p>
           </div>
           <Crown />
         </div>
 
         {genreCards}
         {promptCard}
-        <div className="mm-mobile-settings">{durationControls}{qualityControls}</div>
+        {lyricsCard}
+        <div className="mm-mobile-settings">{durationControls}{outputControls}</div>
         {moodControls}
         <div className="mm-mobile-switches">{switchControls}</div>
         {modelButton}
         {generateButton}
         {player}
-        <div className="mm-mobile-brand"><Crown />Превращай идеи в звук с Malik AI</div>
         {notice ? <div className="mm-notice">{notice}</div> : null}
+        {historyPanel}
+        <div className="mm-mobile-brand"><Crown />Превращай идеи в звук с Malik AI</div>
       </div>
     </section>
   )
