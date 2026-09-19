@@ -141,11 +141,15 @@ export async function routeImageGeneration(
     const editModelId: MalikImageModelId = input.modelId === "malik-image-1-premium"
       && ["owner", "pro", "ultra"].includes(input.plan || "") ? "malik-image-1-premium" : "flux-klein-4b"
     const instruction = [
-      "Edit the supplied image (input_image_0). Use it as the original canvas.",
-      "Apply only the user's requested changes. Preserve all unmentioned people, identities, objects, composition, framing, lighting and style.",
-      "For removals, reconstruct the affected background naturally. For lettering, reproduce the requested text exactly in its original language, without translating or adding text.",
-      "Return the edited image, not an explanation or a new unrelated scene.",
-      `User instruction: ${input.prompt}`,
+      "IMAGE EDIT MODE. The supplied input_image_0 is the authoritative original canvas.",
+      "Do not create a new scene and do not redesign the whole image.",
+      "Keep every unmentioned region visually consistent with the original: same people and identities, architecture, objects, camera position, crop, perspective, lighting, colors, weather, background and style.",
+      "Make only the user's requested change, placing new objects naturally with correct scale, perspective, contact shadows, reflections, occlusion and lighting.",
+      "If the user asks to add an object, preserve the original pixels/context around it as much as the model permits and integrate the object into the requested location.",
+      "If the user asks to remove something, reconstruct only the affected area naturally.",
+      "For lettering, reproduce the requested text exactly in its original language; do not translate or invent extra text.",
+      "Return only the edited image result, never an explanation and never an unrelated regeneration.",
+      `User edit instruction: ${input.prompt}`,
     ].join("\n")
     if (!preparedCloudflareImageConfigured()) return { ok: false, provider: "cloudflare", imageUrl: "", remainingDailyImages: 0, error: "Редактирование фото пока не подключено. Настройте Cloudflare Workers AI." }
     try {
