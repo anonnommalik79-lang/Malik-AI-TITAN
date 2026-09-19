@@ -556,6 +556,14 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   return (
     <main className="mv2" data-view="video-generation-v2" data-phase={phase}>
       <section className="mv2__mobile-only" aria-label="Мобильная генерация видео">
+        <input
+          ref={mobileSourceInputRef}
+          type="file"
+          accept={mode === "video" ? "video/mp4,video/webm,video/quicktime,video/x-m4v" : "image/png,image/jpeg,image/webp,image/avif"}
+          onChange={handleSourceChange}
+          hidden
+        />
+
         <div className="mv2m__tabs">
           <button
             type="button"
@@ -567,7 +575,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             disabled={busy}
           >
             <span className="mv2m__tab-icon">T</span>
-            Текст в видео
+            Текст
           </button>
           <button
             type="button"
@@ -579,7 +587,19 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             disabled={busy}
           >
             <ImagePlus />
-            Изображение в видео
+            Фото
+          </button>
+          <button
+            type="button"
+            className={mobilePanel === "video" ? "is-active" : ""}
+            onClick={() => {
+              if (mode !== "video") changeMode("video")
+              setMobilePanel("video")
+            }}
+            disabled={busy}
+          >
+            <Video />
+            Видео
           </button>
           <button
             type="button"
@@ -588,7 +608,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             disabled={busy}
           >
             <SlidersHorizontal />
-            Стиль / эффекты
+            Эффекты
           </button>
         </div>
 
@@ -616,6 +636,25 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           </div>
         ) : null}
 
+        {mobilePanel === "video" ? (
+          <div className="mv2m__source mv2m__source--video">
+            <button type="button" className="mv2m__source-preview" onClick={openMobileVideoPicker} disabled={busy}>
+              {sourcePreview && mode === "video"
+                ? <video src={sourcePreview} muted playsInline preload="metadata" />
+                : <Video />}
+            </button>
+            <button type="button" className="mv2m__source-copy" onClick={openMobileVideoPicker} disabled={busy}>
+              <strong>{sourceFile?.name || "Добавить видео"}</strong>
+              <small>
+                {sourceFile && mode === "video"
+                  ? `${sourceDurationSeconds.toFixed(1)} сек · AI-редактирование`
+                  : "MP4, MOV, WebM · фрагмент 3–5 сек"}
+              </small>
+            </button>
+            {sourceFile ? <button type="button" className="mv2m__source-remove" onClick={clearSource} aria-label="Убрать видео" disabled={busy}><X /></button> : null}
+          </div>
+        ) : null}
+
         <div className="mv2m__prompt">
           <textarea
             value={prompt}
@@ -626,6 +665,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           <div className="mv2m__prompt-foot">
             <div className="mv2m__prompt-tools">
               <button type="button" onClick={openMobileImagePicker} aria-label="Загрузить изображение" disabled={busy}><ImagePlus /></button>
+              <button type="button" onClick={openMobileVideoPicker} aria-label="Загрузить видео до 5 секунд" disabled={busy}><Video /></button>
               <button type="button" onClick={improvePrompt} aria-label="Улучшить промпт" disabled={busy}><Sparkles /></button>
               <button type="button" onClick={() => setMobilePanel((value) => value === "style" ? "text" : "style")} aria-label="Стиль и эффекты" disabled={busy}><SlidersHorizontal /></button>
             </div>
@@ -637,10 +677,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         </div>
 
         <div className="mv2m__controls">
-          <button type="button" onClick={cycleMobileDuration} disabled={busy}><Clock3 /><span>{duration} секунд</span></button>
+          <button type="button" onClick={cycleMobileDuration} disabled={busy || mode === "video"}><Clock3 /><span>{mode === "video" ? "до 5 сек" : `${duration} секунд`}</span></button>
           <button type="button" onClick={cycleMobileQuality} disabled={busy}><Monitor /><span>{QUALITY_RESOLUTION[quality]}</span></button>
           <button type="button" onClick={cycleMobileRatio} disabled={busy}><RectangleHorizontal /><span>{ratio}</span></button>
-          <button type="button" onClick={cycleMobileModel} disabled={busy}><Box /><span>{selectedModel.name.split(" · ")[0]}</span><small>⌄</small></button>
+          <button type="button" onClick={cycleMobileModel} disabled={busy}><Box /><span>{mode === "video" ? "Google Omni" : selectedModel.name.split(" · ")[0]}</span><small>⌄</small></button>
         </div>
 
         <button
@@ -650,7 +690,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile)}
         >
           <Play />
-          <span>{busy ? statusLabel(phase, attempt) : "Генерировать"}</span>
+          <span>{busy ? statusLabel(phase, attempt) : mode === "video" ? "Изменить видео" : "Генерировать"}</span>
         </button>
 
         <div className="mv2m__brand"><Crown />Превращай идеи в реальность с Malik AI</div>
@@ -660,6 +700,30 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             {videoUrl ? <button type="button" onClick={() => window.open(videoUrl, "_blank", "noopener,noreferrer")}>Открыть</button> : null}
           </div>
         ) : null}
+
+        <div className="mv2m__examples-head">
+          <span>Примеры видео</span>
+          <small>{SHOWCASE_TEMPLATES.length}</small>
+        </div>
+        <div className="mv2m__examples">
+          {SHOWCASE_TEMPLATES.map((item, index) => (
+            <button
+              key={item.id}
+              type="button"
+              className={selected === index ? "is-active" : ""}
+              onClick={() => {
+                chooseTemplate(index)
+                if (mode !== "text") changeMode("text")
+                setMobilePanel("text")
+              }}
+              disabled={busy}
+            >
+              <PosterAsset item={item} className="mv2m__example-poster" />
+              <span className="mv2m__example-play"><Play /></span>
+              <strong>{item.title}</strong>
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="mv2__preview-column">
