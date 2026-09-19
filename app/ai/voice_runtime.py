@@ -19,7 +19,7 @@ import re
 import threading
 import time
 import wave
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -282,7 +282,7 @@ def _gemini_audio_data(payload: Any) -> str:
 
 def _gemini_tts(text: str, voice: str, speed: float, expressivity: int, language: str = "ru"):
     keys = _unique([
-        _env("GEMINI_VOICE_API_KEY"), _env("GEMINI_API_KEY"),
+        _env("MALIK_VOICE_GEMINI_KEY"), _env("GEMINI_VOICE_API_KEY"), _env("GEMINI_API_KEY"),
         _env("GOOGLE_GENERATIVE_AI_API_KEY"), _env("GOOGLE_AI_API_KEY"),
     ])
     if not keys:
@@ -566,6 +566,67 @@ def deepgram_token():
         except Exception as exc:
             print("[VOICE_DEEPGRAM_TOKEN_ERROR]", exc)
     return jsonify({"ok": False, "error": "Deepgram Voice token unavailable"}), 503
+
+
+@voice_runtime_bp.route("/api/voice/gemini-live-token", methods=["GET", "OPTIONS"])
+def gemini_live_token():
+    """Mint a one-use browser token for the native Gemini Live websocket.
+
+    The permanent Render secret never leaves the backend. The browser receives
+    only a short-lived constrained token and connects directly to Google, which
+    keeps the audio path low-latency without exposing MALIK_VOICE_GEMINI_KEY.
+    """
+    if request.method == "OPTIONS":
+        return "", 204
+
+    key = _env(
+        "MALIK_VOICE_GEMINI_KEY",
+        "GEMINI_VOICE_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_GENERATIVE_AI_API_KEY",
+        "GOOGLE_AI_API_KEY",
+    )
+    if not key:
+        return jsonify({"ok": False, "error": "voice_live_not_configured"}), 503
+
+    model = _env("MALIK_VOICE_MODEL") or "gemini-3.8-live"
+    now = datetime.now(timezone.utc)
+    body = {
+        "uses": 1,
+        "expireTime": (now + timedelta(minutes=30)).isoformat().replace("+00:00", "Z"),
+        "newSessionExpireTime": (now + timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+        "liveConnectConstraints": {
+            "model": f"models/{model}",
+            "config": {
+                "sessionResumption": {},
+                "responseModalities": ["AUDIO"],
+            },
+        },
+    }
+
+    try:
+        response = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/auth_tokens",
+            headers={"x-goog-api-key": key, "content-type": "application/json"},
+            json=body,
+            timeout=max(_PROVIDER_TIMEOUT, 15),
+        )
+        payload = response.json() if response.content else {}
+        token = str(payload.get("name") or "").strip()
+        if response.ok and token:
+            result = jsonify({
+                "ok": True,
+                "accessToken": token,
+                "model": model,
+                "websocketUrl": "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained",
+            })
+            result.headers["Cache-Control"] = "no-store, private"
+            return result
+        print("[VOICE_GEMINI_LIVE_TOKEN_ERROR]", response.status_code, str((payload.get("error") or {}).get("message", ""))[:220])
+    except Exception as exc:
+        print("[VOICE_GEMINI_LIVE_TOKEN_ERROR]", exc)
+
+    return jsonify({"ok": False, "error": "voice_live_token_unavailable"}), 503
 
 
 @voice_runtime_bp.route("/api/voice/tts", methods=["POST", "OPTIONS"])
