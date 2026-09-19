@@ -883,8 +883,13 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         return
       }
 
+      // Never leave Voice in a fake "listening" state. If Live could not start,
+      // immediately arm the proven recorded/STT path and tell the UI which path
+      // is active. The user can still speak without reopening Voice.
       geminiLiveReadyRef.current = false
       streamingRef.current = false
+      setTitle("Слушаю")
+      setSubtitle("Резервный Voice · Gemini Live переподключится при следующем входе")
       startRecorder(stream)
       startAudioLoop(analyser)
       startSpeech()
