@@ -147,3 +147,61 @@
     font-size: 10.5px !important;
   }
 }
+
+
+/* Attachment UX V2 — previews stay visible before send and drag/drop is obvious. */
+#malik-root .malik-dashboard-shell .thome-composer.is-dragging {
+  border-color: rgba(255,255,255,.42) !important;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.14), 0 24px 75px rgba(0,0,0,.42) !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachment-preview {
+  position: relative !important;
+  display: block !important;
+  width: 76px !important;
+  height: 76px !important;
+  min-width: 76px !important;
+  flex: 0 0 76px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255,255,255,.11) !important;
+  border-radius: 16px !important;
+  background: #090909 !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachment-preview > img,
+#malik-root .malik-dashboard-shell .thome-attachment-preview > video {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachment-preview > button {
+  position: absolute !important;
+  top: 5px !important;
+  right: 5px !important;
+  display: grid !important;
+  width: 24px !important;
+  height: 24px !important;
+  place-items: center !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  border-radius: 999px !important;
+  background: rgba(0,0,0,.78) !important;
+  color: #fff !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-attachment-preview > button svg {
+  width: 13px !important;
+  height: 13px !important;
+}
+
+@media (max-width: 767px) {
+  #malik-root .malik-dashboard-shell .thome-attachment-preview {
+    width: 68px !important;
+    height: 68px !important;
+    min-width: 68px !important;
+    flex-basis: 68px !important;
+    border-radius: 14px !important;
+  }
+}
