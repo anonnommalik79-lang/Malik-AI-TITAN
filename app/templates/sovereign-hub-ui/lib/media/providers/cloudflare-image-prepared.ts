@@ -5,7 +5,7 @@ import {
 } from "../image-models"
 import { imageProviderTimeoutMs } from "../config"
 import type { ProviderQualityTuning } from "../image-quality-presets"
-import type { ImageAspectRatio } from "../types"
+import type { ImageAspectRatio, ImageGenerateInput } from "../types"
 
 type Slot = "primary" | "secondary" | "tertiary"
 type Account = { slot: Slot; accountId: string; token: string }
@@ -182,22 +182,25 @@ function jsonBody(modelId: MalikImageModelId, prompt: string, negativePrompt: st
   }
 }
 
-export async function generatePreparedCloudflareImage({ strictPrompt, negativePrompt, aspectRatio = "1:1", modelId = DEFAULT_MALIK_IMAGE_MODEL_ID, tuning, signal }: {
+export async function generatePreparedCloudflareImage({ strictPrompt, negativePrompt, aspectRatio = "1:1", modelId = DEFAULT_MALIK_IMAGE_MODEL_ID, tuning, signal, editSource }: {
   strictPrompt: string
   negativePrompt: string
   aspectRatio?: ImageAspectRatio
   modelId?: MalikImageModelId
   tuning?: ProviderQualityTuning
   signal?: AbortSignal
+  editSource?: ImageGenerateInput["editSource"]
 }) {
   const model = getMalikImageModel(modelId)
-  const { width, height } = size(aspectRatio)
+  const { width, height } = editSource || size(aspectRatio)
+  if (editSource && !["flux-klein-4b", "malik-image-1-premium"].includes(modelId)) throw new Error("IMAGE_EDIT_MODEL_UNSUPPORTED")
   let call: { response: Response; slot: Slot }
   if (model.requestKind === "multipart") {
     const form = new FormData()
     form.append("prompt", strictPrompt)
     form.append("width", String(width))
     form.append("height", String(height))
+    if (editSource) form.append("input_image_0", new Blob([new Uint8Array(editSource.bytes)], { type: editSource.mime }), "original.png")
     if (modelId === "flux-klein-4b") form.append("guidance", String(tuning?.guidance ?? envNumber("MALIK_IMAGE_KLEIN_GUIDANCE", 7.5, 0, 10)))
     if (modelId === "malik-image-1-premium") {
       form.append("steps", String(tuning?.steps ?? envNumber("MALIK_IMAGE_DEV_STEPS", 16, 1, 50)))

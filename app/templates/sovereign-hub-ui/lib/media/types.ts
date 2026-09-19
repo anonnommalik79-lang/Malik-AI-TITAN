@@ -20,6 +20,8 @@ export type ImageFallbackWarning = {
 
 export type ImageGenerateInput = {
   prompt: string
+  /** Validated, decoded upload. Only edit-capable providers may receive it. */
+  editSource?: { bytes: Uint8Array; mime: string; width: number; height: number }
   /** Description already shown to the user by the understand step. */
   understood?: string
   aspectRatio?: ImageAspectRatio

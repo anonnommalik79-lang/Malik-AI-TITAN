@@ -141,7 +141,7 @@ import {
   ShieldCheck
 } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
-import { isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
+import { isExplicitImageGenerationRequest, isExplicitImageEditRequest } from "@/lib/ai/image-intent"
 import {
   DEFAULT_MALIK_MODEL_ID,
   canUseMalikModel,
@@ -414,11 +414,12 @@ export function parseMediaCommand(prompt: string): { kind: "image" | "video"; pr
 
 function detectInlineMediaGenerationRequest(
   prompt: string,
-  _attachments: ChatAttachment[] = [],
+  attachments: ChatAttachment[] = [],
   mode: AiModeId = "auto",
 ): "image" | "video" | null {
   const command = parseMediaCommand(prompt)
   if (command) return command.kind
+  if (isExplicitImageEditRequest(prompt, attachments.some((item) => item.kind === "image"))) return "image"
 
   // Natural-language photo requests are accepted only when the request is an
   // explicit CREATE-image intent. Mentioning or discussing photos stays chat.
@@ -5600,7 +5601,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }
   const requestedInlineMediaKind = detectInlineMediaGenerationRequest(cleanContent, attachments, activeAiMode)
   const parsedMediaCommand = parseMediaCommand(cleanContent)
-  const needsImageConfirmation = requestedInlineMediaKind === "image" && !parsedMediaCommand
+  const editingImage = requestedInlineMediaKind === "image" && isExplicitImageEditRequest(cleanContent, attachments.some((item) => item.kind === "image"))
+  const needsImageConfirmation = requestedInlineMediaKind === "image" && !parsedMediaCommand && !editingImage
   const inlineMediaKind = needsImageConfirmation ? null : requestedInlineMediaKind
   // Shown in the chat card: without the slash command.
   const inlineMediaPrompt = parsedMediaCommand ? parsedMediaCommand.prompt || cleanContent : cleanContent
@@ -5909,7 +5911,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       // forty seconds drawing it. A heavy accent or a typo becomes a line the
       // user can read and correct immediately, instead of a wrong photograph.
       let understood = ""
-      if (inlineMediaKind === "image") {
+      if (inlineMediaKind === "image" && editingImage) {
+        understood = `Редактирую загруженное фото: ${inlineMediaPrompt}`
+        patchInlineMedia({ understood, status: "generating", progress: 30 })
+      } else if (inlineMediaKind === "image") {
         try {
           const understandResponse = await clientFetchWithTimeout("/api/ai/image/understand", {
             method: "POST",
@@ -5934,6 +5939,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: inlineMediaApiPrompt,
+          operation: editingImage ? "edit" : "generate",
           // The picture must match the line the user was just shown.
           understood: understood || undefined,
           stream: false,

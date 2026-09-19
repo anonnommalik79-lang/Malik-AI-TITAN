@@ -20,6 +20,20 @@ function firstMatch(value: string, pattern: RegExp) {
   return match ? { index: match.index, text: match[0] } : null
 }
 
+/** Uploaded pixels are required for edits; image analysis remains a chat turn. */
+export function isExplicitImageEditRequest(input: string, hasImage = false): boolean {
+  const text = String(input || "").replace(IMAGE_COMMAND_PATTERN, "").trim()
+  if (!text || VIDEO_COMMAND_PATTERN.test(text) || EXPLANATION_START_PATTERN.test(text)) return false
+  if (!hasImage && !IMAGE_NOUN_PATTERN.test(text)) return false
+  if (/^\s*(?:напиши|write|добавь|измени|исправь)\s+(?:мне\s+)?(?:код|промпт|prompt|code|функцию|скрипт)(?![\p{L}\p{N}_])/iu.test(text)) return false
+  const edit = /(?:измени|изменить|поменяй|меняй|замени|заменить|убери|убрать|удали|удалить|добавь|добавить|отредактируй|редактируй|перекрась|ретушируй|улучши|осветли|затемни|обрежь|вырежи|edit|replace|remove|erase|add|retouch|recolor|crop|өзгерт|ауыстыр|алып\s+таста|қос)(?![\p{L}\p{N}_])/iu
+  const lettering = /(?:напиши|нанеси|подпиши|надпись|write|put\s+text|жаз)(?![\p{L}\p{N}_])/iu
+  const onImage = /(?:фото|фотк|изображени|картинк|сурет|image|photo|здесь|сверху|снизу|на\s+(?:нём|нем|ней))/iu
+  const transform = /(?:сделай|сделать|make)\s+.{0,45}(?:фон|цвет|волос|одежд|background|color|brighter|darker)/iu
+  return edit.test(text) || transform.test(text) || (lettering.test(text) && onImage.test(text))
+    || (hasImage && isExplicitImageGenerationRequest(input))
+}
+
 /**
  * Returns true only when the user is explicitly asking Malik AI to CREATE an
  * image. Mentioning photos, asking how image generation works, requesting code

@@ -1,4 +1,7 @@
 import { mediaAssetExtension } from "./asset-store"
+import { isExplicitImageEditRequest } from "../ai/image-intent"
+import { readJsonBodyLimited, RequestSafetyError } from "../server/request-safety"
+import { imageAttachments, prepareImageEditSource } from "./image-edit-source"
 import { maxImagePromptLength } from "./config"
 import { createMalikImageDisplayPreview } from "./image-display-preview"
 import { withMalikImageProcessingSlot } from "./image-processing-capacity"
@@ -96,8 +99,16 @@ function displayImageReference(previewUrl: string | undefined, masterUrl: string
 }
 
 export async function handleMalikPhotoGenerationRequest(request: Request) {
-  const body = await request.json().catch(() => ({}))
+  let body: any
+  try {
+    body = await readJsonBodyLimited(request, 17 * 1024 * 1024)
+    if (!body || typeof body !== "object" || Array.isArray(body)) throw new RequestSafetyError("Некорректный запрос.")
+  } catch (error) {
+    return Response.json({ ok: false, status: "failed", error: error instanceof RequestSafetyError ? error.code : "INVALID_JSON",
+      publicError: "Не удалось прочитать запрос. Прикрепите одно фото до 12 МБ." }, { status: error instanceof RequestSafetyError ? error.status : 400 })
+  }
   const rawPrompt = normalizeImagePrompt(body?.prompt || body?.message)
+  const editing = body.operation === "edit" || imageAttachments(body).length > 0 || isExplicitImageEditRequest(rawPrompt)
   const aspectRatio = ASPECTS.has(body?.aspectRatio) ? body.aspectRatio : "1:1"
   const requestedMode = String(body?.mode || body?.style || "").toLowerCase()
   const mode: ImageMode = MODES.has(requestedMode as ImageMode) ? requestedMode as ImageMode : "cinematic"
@@ -106,7 +117,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   const imageSize = normalizeImageCreditSize(rawImageSize)
   const sizeQuality = imageSize === "4K" ? "ultra4k" : imageSize === "2K" ? "quality" : "balanced"
 
-  const requested = resolveRequestedQuality(
+  const requested = editing ? { prompt: rawPrompt, quality: resolveMalikImageQuality(body?.quality || readImageQualityCookie(request)), fromPrompt: false } : resolveRequestedQuality(
     rawPrompt,
     resolveMalikImageQuality(body?.quality || (hasExplicitImageSize ? sizeQuality : readImageQualityCookie(request))),
   )
@@ -119,6 +130,16 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   }
 
   const user = await resolveMediaUser(request, body)
+  let editSource
+  if (editing) {
+    try {
+      editSource = await withMalikImageProcessingSlot(() => prepareImageEditSource(body))
+    } catch (error) {
+      return Response.json({ ok: false, status: "failed", error: error instanceof RequestSafetyError ? error.code : "IMAGE_EDIT_INVALID",
+        publicError: error instanceof RequestSafetyError ? error.message : "Не удалось прочитать исходное фото." },
+      { status: error instanceof RequestSafetyError ? error.status : 400 })
+    }
+  }
   const requestedModelId = requestedImageModel(request, body)
   if (requestedModelId && !canUseMalikImageModel(requestedModelId, user.plan)) {
     const lockedModel = getMalikImageModel(requestedModelId)
@@ -172,7 +193,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   try {
     let result: ImageGenerateResult | undefined
 
-    if (agnesImageConfigured()) {
+    if (!editing && agnesImageConfigured()) {
       try {
         const agnes = await generateWithAgnesImage({
           prompt,
@@ -200,6 +221,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     if (!result) {
       result = await routeImageGeneration({
         prompt,
+        editSource,
         understood: typeof body?.understood === "string" ? body.understood : undefined,
         aspectRatio,
         mode,
@@ -323,6 +345,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       ok: true,
       status: "ready",
       kind: "photo",
+      operation: editing ? "edit" : "generate",
       provider: result.provider,
       engine: resolvedImageModel?.label || "MalikImage Auto",
       modelId: resolvedModelId,

@@ -137,6 +137,31 @@ export async function routeImageGeneration(
 ): Promise<ImageGenerateResult> {
   const errors: string[] = []
   const quality = resolveMalikImageQuality(input.quality)
+  if (input.editSource) {
+    const editModelId: MalikImageModelId = input.modelId === "malik-image-1-premium"
+      && ["owner", "pro", "ultra"].includes(input.plan || "") ? "malik-image-1-premium" : "flux-klein-4b"
+    const instruction = [
+      "Edit the supplied image (input_image_0). Use it as the original canvas.",
+      "Apply only the user's requested changes. Preserve all unmentioned people, identities, objects, composition, framing, lighting and style.",
+      "For removals, reconstruct the affected background naturally. For lettering, reproduce the requested text exactly in its original language, without translating or adding text.",
+      "Return the edited image, not an explanation or a new unrelated scene.",
+      `User instruction: ${input.prompt}`,
+    ].join("\n")
+    if (!preparedCloudflareImageConfigured()) return { ok: false, provider: "cloudflare", imageUrl: "", remainingDailyImages: 0, error: "Редактирование фото пока не подключено. Настройте Cloudflare Workers AI." }
+    try {
+      const result = await withAttemptSignal(options?.signal, 90_000, (signal) => generatePreparedCloudflareImage({
+        strictPrompt: instruction, negativePrompt: "", modelId: editModelId,
+        editSource: input.editSource, signal,
+      }))
+      return { ...result, ok: true, provider: "cloudflare", remainingDailyImages: 0, quality,
+        understood: `Редактирую загруженное фото: ${input.prompt}`, enhancedPrompt: instruction,
+        width: input.editSource.width, height: input.editSource.height, routeReason: "uploaded-image-edit" }
+    } catch {
+      // Never drop the original and fail over to a text-only image model.
+      return { ok: false, provider: "cloudflare", imageUrl: "", remainingDailyImages: 0,
+        error: "Не удалось отредактировать исходное фото. Попробуйте ещё раз; оригинал не изменён." }
+    }
+  }
   const decision = chooseMalikImageModel({
     requestedModelId: input.modelId,
     plan: input.plan,

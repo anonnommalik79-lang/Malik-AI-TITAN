@@ -28,6 +28,7 @@
     "test:media": "node scripts/verify-media-urls.mjs",
     "test:taxi": "node scripts/verify-taxi.mjs",
     "test:image-prompt": "node scripts/verify-image-prompt.mjs",
+    "test:image-edit": "node scripts/verify-image-edit.mjs",
     "test:image-memory": "node scripts/verify-image-memory-safety.mjs",
     "test:sites": "node scripts/verify-sites.mjs",
     "test:voice:understanding": "node scripts/verify-voice-understanding.mjs",
