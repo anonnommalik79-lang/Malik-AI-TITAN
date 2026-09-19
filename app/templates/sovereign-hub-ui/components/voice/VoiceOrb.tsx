@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, type MutableRefObject } from "react"
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react"
 import styles from "./VoiceMode.module.css"
 
 type GLProgram = {
@@ -13,6 +13,20 @@ type GLProgram = {
   time: WebGLUniformLocation | null
   energy: WebGLUniformLocation | null
 }
+
+/**
+ * `precision highp float` is not something a fragment shader may simply ask
+ * for. High precision is optional in WebGL 1 fragment shaders, and on the
+ * phone GPUs that do not have it the shader fails to compile - which is how
+ * the orb disappeared and «Анимация недоступна» took its place. The guard asks
+ * for high precision where it exists and settles for medium where it does not.
+ */
+const PRECISION = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif`
 
 const NOISE = `
 float h(vec2 p){
@@ -36,8 +50,7 @@ float fbm(vec2 p){
   return v;
 }`
 
-const BACKGROUND_FRAGMENT = `
-precision highp float;
+const BACKGROUND_FRAGMENT = `${PRECISION}
 uniform vec2 R;
 uniform float T;
 uniform float E;
@@ -88,8 +101,7 @@ void main(){
   gl_FragColor=vec4(col*glow,alpha);
 }`
 
-const ORB_FRAGMENT = `
-precision highp float;
+const ORB_FRAGMENT = `${PRECISION}
 uniform vec2 R;
 uniform float T;
 uniform float E;
@@ -160,8 +172,19 @@ function compileShader(gl: WebGLRenderingContext, type: number, source: string) 
   return shader
 }
 
+function glContext(canvas: HTMLCanvasElement) {
+  const options: WebGLContextAttributes = { alpha: true, antialias: false, premultipliedAlpha: false }
+  for (const name of ["webgl", "experimental-webgl"]) {
+    try {
+      const context = canvas.getContext(name, options) as WebGLRenderingContext | null
+      if (context) return context
+    } catch {}
+  }
+  return null
+}
+
 function createProgram(canvas: HTMLCanvasElement, fragmentSource: string): GLProgram | null {
-  const gl = canvas.getContext("webgl", { alpha: true, antialias: false, premultipliedAlpha: false })
+  const gl = glContext(canvas)
   if (!gl) return null
   const vertexShader = compileShader(gl, gl.VERTEX_SHADER, "attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}")
   const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource)
@@ -215,81 +238,258 @@ function destroy(program: GLProgram | null) {
   gl.getExtension("WEBGL_lose_context")?.loseContext()
 }
 
+function fit(canvas: HTMLCanvasElement, maxDpr: number) {
+  const rect = canvas.getBoundingClientRect()
+  const dpr = Math.min(maxDpr, window.devicePixelRatio || 1)
+  const width = Math.max(1, Math.floor(rect.width * dpr))
+  const height = Math.max(1, Math.floor(rect.height * dpr))
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width
+    canvas.height = height
+  }
+  return { width, height }
+}
+
+/** Drifting light, one soft blob. */
+function blob(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  color: string,
+  alpha: number,
+) {
+  if (radius <= 0 || alpha <= 0) return
+  const gradient = context.createRadialGradient(x, y, 0, x, y, radius)
+  gradient.addColorStop(0, `rgba(${color},${alpha.toFixed(3)})`)
+  gradient.addColorStop(.55, `rgba(${color},${(alpha * .42).toFixed(3)})`)
+  gradient.addColorStop(1, `rgba(${color},0)`)
+  context.fillStyle = gradient
+  context.beginPath()
+  context.arc(x, y, radius, 0, Math.PI * 2)
+  context.fill()
+}
+
+/**
+ * The same picture, drawn without a GPU.
+ *
+ * It is not the shader - noise fields per pixel are not something a 2D canvas
+ * can afford sixty times a second - but it is the same thing: a lit sphere of
+ * slow white mist over coloured fog, breathing with the voice. What matters is
+ * that there is never a frame where Voice has no orb and an apology instead.
+ */
+function paintFog(canvas: HTMLCanvasElement, seconds: number, energy: number) {
+  const context = canvas.getContext("2d")
+  if (!context) return false
+  const { width, height } = fit(canvas, 1.25)
+  context.setTransform(1, 0, 0, 1, 0, 0)
+  context.clearRect(0, 0, width, height)
+  context.globalCompositeOperation = "lighter"
+
+  const t = seconds * .09
+  const lift = .22 + energy * .30
+  const layers: Array<[string, number, number, number, number]> = [
+    // colour, x phase, y phase, radius scale, alpha scale
+    ["28,76,235", 0, 0, 1.05, .52],
+    ["107,36,212", 2.1, 1.3, .92, .44],
+    ["168,33,148", 4.3, 2.6, .78, .38],
+    ["12,140,166", 5.7, .8, .70, .30],
+  ]
+  for (const [color, px, py, rs, as] of layers) {
+    const x = width * (.5 + .34 * Math.sin(t * .62 + px) + .08 * Math.sin(t * 1.4 + px))
+    const y = height * (.92 - .16 * Math.abs(Math.sin(t * .45 + py)) - lift * .12)
+    blob(context, x, y, Math.max(width, height) * .52 * rs, color, (.30 + energy * .34) * as)
+  }
+
+  // The fog belongs at the bottom of the frame; this wipes it off the top.
+  context.globalCompositeOperation = "destination-out"
+  const fade = context.createLinearGradient(0, 0, 0, height)
+  fade.addColorStop(0, "rgba(0,0,0,1)")
+  fade.addColorStop(.46, "rgba(0,0,0,.72)")
+  fade.addColorStop(.78, "rgba(0,0,0,0)")
+  context.fillStyle = fade
+  context.fillRect(0, 0, width, height)
+  context.globalCompositeOperation = "source-over"
+  return true
+}
+
+function paintOrb(canvas: HTMLCanvasElement, seconds: number, energy: number) {
+  const context = canvas.getContext("2d")
+  if (!context) return false
+  const { width, height } = fit(canvas, 1.5)
+  context.setTransform(1, 0, 0, 1, 0, 0)
+  context.clearRect(0, 0, width, height)
+
+  const cx = width / 2
+  const cy = height / 2
+  const radius = Math.min(width, height) / 2
+
+  context.save()
+  context.beginPath()
+  context.arc(cx, cy, radius, 0, Math.PI * 2)
+  context.clip()
+
+  const base = context.createLinearGradient(0, cy - radius, 0, cy + radius)
+  base.addColorStop(0, "#d6e1ff")
+  base.addColorStop(.46, "#8fa8ff")
+  base.addColorStop(1, "#4f6bff")
+  context.fillStyle = base
+  context.fillRect(cx - radius, cy - radius, radius * 2, radius * 2)
+
+  // Mist rolling across the face of the sphere.
+  const t = seconds * (.16 + energy * .12)
+  context.globalCompositeOperation = "lighter"
+  const mist: Array<[string, number, number, number, number]> = [
+    ["255,255,255", .00, .90, .62, .30],
+    ["226,240,255", 1.70, .66, .52, .26],
+    ["201,214,255", 3.30, 1.10, .46, .22],
+    ["255,255,255", 4.90, .78, .38, .24],
+    ["208,226,255", 6.10, 1.32, .34, .20],
+  ]
+  for (const [color, phase, speed, size, alpha] of mist) {
+    const wrap = ((t * speed + phase) % 3) - 1
+    const x = cx + wrap * radius * 1.25
+    const y = cy + Math.sin(t * .8 + phase) * radius * .22 + radius * .08
+    blob(context, x, y, radius * size, color, alpha + energy * .10)
+  }
+
+  // Shading: dark at the rim, a highlight up and to the left, the way the
+  // shader lights it.
+  context.globalCompositeOperation = "source-over"
+  const rim = context.createRadialGradient(cx, cy, radius * .58, cx, cy, radius)
+  rim.addColorStop(0, "rgba(96,110,255,0)")
+  rim.addColorStop(1, "rgba(58,72,190,.34)")
+  context.fillStyle = rim
+  context.fillRect(cx - radius, cy - radius, radius * 2, radius * 2)
+
+  context.globalCompositeOperation = "lighter"
+  blob(context, cx - radius * .32, cy - radius * .36, radius * .52, "255,255,255", .22 + energy * .10)
+  context.globalCompositeOperation = "source-over"
+  context.restore()
+  return true
+}
+
 export function VoiceOrb({
   energyRef,
   speedRef,
   demoRef,
-  onWebGLUnavailable,
 }: {
   energyRef: MutableRefObject<number>
   speedRef: MutableRefObject<number>
   demoRef: MutableRefObject<boolean>
-  onWebGLUnavailable: () => void
 }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const backgroundRef = useRef<HTMLCanvasElement>(null)
   const orbRef = useRef<HTMLCanvasElement>(null)
-  const unavailableRef = useRef(onWebGLUnavailable)
+  const [mode, setMode] = useState<"gl" | "canvas">("gl")
+
+  /**
+   * Energy is shared by both renderers: it is what makes the orb answer the
+   * voice, and it drives the CSS glow around it either way.
+   */
+  const smoothedRef = useRef(.07)
+  const tick = useCallback((milliseconds: number) => {
+    if (demoRef.current) {
+      const seconds = milliseconds / 1000
+      energyRef.current = .18 + .12 * (.5 + .5 * Math.sin(seconds * 1.65)) + .055 * (.5 + .5 * Math.sin(seconds * 4.1 + 1.4))
+    }
+    smoothedRef.current += (Math.max(.04, Math.min(1, energyRef.current)) - smoothedRef.current) * .12
+    rootRef.current?.style.setProperty("--voice-energy", smoothedRef.current.toFixed(3))
+    return smoothedRef.current
+  }, [demoRef, energyRef])
 
   useEffect(() => {
-    unavailableRef.current = onWebGLUnavailable
-  }, [onWebGLUnavailable])
-
-  useEffect(() => {
+    if (mode !== "gl") return
     const backgroundCanvas = backgroundRef.current
     const orbCanvas = orbRef.current
     if (!backgroundCanvas || !orbCanvas) return
+
     const background = createProgram(backgroundCanvas, BACKGROUND_FRAGMENT)
     const orb = createProgram(orbCanvas, ORB_FRAGMENT)
-    if (!background || !orb) unavailableRef.current()
+    if (!background || !orb) {
+      destroy(background)
+      destroy(orb)
+      console.warn("[Voice WebGL] unavailable - painting the orb on canvas instead")
+      setMode("canvas")
+      return
+    }
+
+    // A lost context is a blank canvas that never comes back on its own, and a
+    // canvas that has held a WebGL context can never be asked for a 2D one.
+    // Switching modes remounts a fresh pair of canvases, so the picture
+    // survives the driver giving up.
+    let lost = false
+    const onLost = (event: Event) => {
+      event.preventDefault()
+      if (lost) return
+      lost = true
+      console.warn("[Voice WebGL] context lost - painting the orb on canvas instead")
+      setMode("canvas")
+    }
+    backgroundCanvas.addEventListener("webglcontextlost", onLost)
+    orbCanvas.addEventListener("webglcontextlost", onLost)
 
     let frame = 0
-    let smoothedEnergy = .07
     const render = (milliseconds: number) => {
-      if (demoRef.current) {
-        const seconds = milliseconds / 1000
-        energyRef.current = .18 + .12 * (.5 + .5 * Math.sin(seconds * 1.65)) + .055 * (.5 + .5 * Math.sin(seconds * 4.1 + 1.4))
-      }
-      smoothedEnergy += (Math.max(.04, Math.min(1, energyRef.current)) - smoothedEnergy) * .12
-      rootRef.current?.style.setProperty("--voice-energy", smoothedEnergy.toFixed(3))
+      const energy = tick(milliseconds)
       const speed = Math.max(.7, Math.min(1.5, speedRef.current))
 
-      if (background) {
-        resize(background, backgroundCanvas, 1.6)
-        const gl = background.gl
-        gl.useProgram(background.program)
-        gl.uniform2f(background.resolution, backgroundCanvas.width, backgroundCanvas.height)
-        gl.uniform1f(background.time, milliseconds / 1000 * (.62 + speed * .38))
-        gl.uniform1f(background.energy, smoothedEnergy)
-        gl.drawArrays(gl.TRIANGLES, 0, 6)
-      }
-      if (orb) {
-        resize(orb, orbCanvas, 2)
-        const gl = orb.gl
-        gl.useProgram(orb.program)
-        gl.uniform2f(orb.resolution, orbCanvas.width, orbCanvas.height)
-        gl.uniform1f(orb.time, milliseconds / 1000 * speed)
-        gl.uniform1f(orb.energy, smoothedEnergy)
-        gl.drawArrays(gl.TRIANGLES, 0, 6)
-      }
+      resize(background, backgroundCanvas, 1.6)
+      let gl = background.gl
+      gl.useProgram(background.program)
+      gl.uniform2f(background.resolution, backgroundCanvas.width, backgroundCanvas.height)
+      gl.uniform1f(background.time, milliseconds / 1000 * (.62 + speed * .38))
+      gl.uniform1f(background.energy, energy)
+      gl.drawArrays(gl.TRIANGLES, 0, 6)
+
+      resize(orb, orbCanvas, 2)
+      gl = orb.gl
+      gl.useProgram(orb.program)
+      gl.uniform2f(orb.resolution, orbCanvas.width, orbCanvas.height)
+      gl.uniform1f(orb.time, milliseconds / 1000 * speed)
+      gl.uniform1f(orb.energy, energy)
+      gl.drawArrays(gl.TRIANGLES, 0, 6)
+
       frame = requestAnimationFrame(render)
     }
     frame = requestAnimationFrame(render)
+
     return () => {
       cancelAnimationFrame(frame)
+      backgroundCanvas.removeEventListener("webglcontextlost", onLost)
+      orbCanvas.removeEventListener("webglcontextlost", onLost)
       destroy(background)
       destroy(orb)
     }
-  }, [demoRef, energyRef, speedRef])
+  }, [mode, speedRef, tick])
+
+  useEffect(() => {
+    if (mode !== "canvas") return
+    const backgroundCanvas = backgroundRef.current
+    const orbCanvas = orbRef.current
+    if (!backgroundCanvas || !orbCanvas) return
+
+    let frame = 0
+    const render = (milliseconds: number) => {
+      const energy = tick(milliseconds)
+      const speed = Math.max(.7, Math.min(1.5, speedRef.current))
+      const seconds = milliseconds / 1000 * speed
+      paintFog(backgroundCanvas, seconds, energy)
+      paintOrb(orbCanvas, seconds, energy)
+      frame = requestAnimationFrame(render)
+    }
+    frame = requestAnimationFrame(render)
+    return () => cancelAnimationFrame(frame)
+  }, [mode, speedRef, tick])
 
   return (
-    <div ref={rootRef} className={styles.visuals}>
-      <canvas ref={backgroundRef} className={styles.backgroundFog} aria-hidden="true" />
+    <div ref={rootRef} className={styles.visuals} data-orb-mode={mode}>
+      <canvas key={`${mode}-background`} ref={backgroundRef} className={styles.backgroundFog} aria-hidden="true" />
       <div className={styles.vignette} aria-hidden="true" />
       <div className={styles.grain} aria-hidden="true" />
       <div className={styles.orbWrap}>
         <div className={styles.orbShell}>
-          <canvas ref={orbRef} className={styles.orbCanvas} aria-label="Живой голосовой шар Malik AI" />
+          <canvas key={`${mode}-orb`} ref={orbRef} className={styles.orbCanvas} aria-label="Живой голосовой шар Malik AI" />
           <div className={styles.orbGlass} aria-hidden="true" />
         </div>
         <div className={styles.orbShadow} aria-hidden="true" />

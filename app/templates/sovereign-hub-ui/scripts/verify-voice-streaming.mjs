@@ -60,8 +60,15 @@ check("the recognizer decides the end of the turn, not a level meter", () => {
   assert.match(listenSource, /endpointing: "400"/)
   assert.match(listenSource, /utterance_end_ms/)
   assert.match(listenSource, /speech_final/)
-  assert.match(voiceMode, /if \(!streamingRef\.current\) \{[\s\S]{0,120}autoSubmitRef\.current\?\.\(\)/,
-    "the silence timer must not end a turn while the stream is up")
+  // The guard grew a second half. In Live mode autoSubmit does not mean "send
+  // what you heard" - it means "switch the microphone off" - so a level meter
+  // must not reach it there either, stream or no stream.
+  assert.match(voiceMode, /if \(!streamingRef\.current && LEGACY_VOICE_PIPELINE\) \{[\s\S]{0,180}autoSubmitRef\.current\?\.\(\)/,
+    "the silence timer must not end a turn while the stream is up, nor in Live mode")
+  // The dock keeps a second silence clock of its own, and that one was the
+  // microphone switching itself off a second after the first pause.
+  assert.match(voiceMode, /liveTurnTaking=\{!LEGACY_VOICE_PIPELINE\}/,
+    "the dock's auto-finish must be told that Live owns turn-taking")
 })
 
 check("Kazakh gets a Kazakh stream, everything else code-switches", () => {

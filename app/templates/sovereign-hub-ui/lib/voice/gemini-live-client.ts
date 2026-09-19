@@ -2,6 +2,8 @@
 
 import { getVoiceAudioContext, readyVoiceAudio } from "./audio-playback"
 
+export type LiveLanguage = "kk" | "ru" | "en"
+
 type LiveCallbacks = {
   onReady?: (model: string) => void
   onInputText?: (text: string) => void
@@ -9,6 +11,11 @@ type LiveCallbacks = {
   onSpeaking?: () => void
   onTurnComplete?: () => void
   onInterrupted?: () => void
+  /** The link dropped and the session is being restored. The microphone stays open. */
+  onReconnecting?: (attempt: number) => void
+  /** The link is back and the microphone is streaming again. */
+  onReconnected?: () => void
+  /** The session is gone for good - every retry failed. */
   onClosed?: () => void
   onError?: () => void
 }
@@ -20,9 +27,57 @@ type TokenPayload = {
   websocketUrl?: string
 }
 
+type VoiceWindow = typeof globalThis & { webkitAudioContext?: typeof AudioContext }
+
 const DEFAULT_WS = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained"
 const INPUT_RATE = 16000
 const DEFAULT_OUTPUT_RATE = 24000
+
+/** Back-off between reconnect attempts. The last value repeats until the cap. */
+const RETRY_DELAYS = [350, 900, 1800, 3200, 5000]
+const MAX_RETRIES = 12
+
+/**
+ * Anti-alias corner for the 48 kHz -> 16 kHz step.
+ *
+ * Everything above 8 kHz folds back into the speech band when the signal is
+ * decimated, which is heard by the model as a hiss laid over the voice. 7 kHz
+ * leaves the whole speech range intact and puts the filter's skirt where the
+ * fold would start.
+ */
+const ANTI_ALIAS_HZ = 7000
+
+/**
+ * The system prompt is written in the language of the answer.
+ *
+ * A model asked in English to "answer in the user's language" falls back to
+ * English whenever the audio is unclear - which is exactly when the fallback
+ * matters. Stating the rule in the target language, and repeating that noisy
+ * audio does not change it, is what keeps the reply in one language.
+ */
+const INSTRUCTIONS: Record<LiveLanguage, string> = {
+  kk: [
+    "Сен — Malik AI Voice, дауыспен сөйлесетін көмекші.",
+    "1-ЕРЕЖЕ: Жауапты ӘРҚАШАН тек қазақ тілінде бер. Дыбыс анық естілмесе де, бір сөз басқа тілде айтылса да — жауап бәрібір қазақша. Ағылшынша ЕШҚАШАН жауап берме.",
+    "2-ЕРЕЖЕ: Түсінбесең, қазақша қысқа қайта сұра.",
+    "3-ЕРЕЖЕ: Тірі адамша, қысқа әрі нақты сөйле. Әңгіме желісін ұстап отыр.",
+    "4-ЕРЕЖЕ: Ішкі провайдерлерді, модель аттарын немесе API кілттерін ешқашан атама.",
+  ].join(" "),
+  ru: [
+    "Ты — Malik AI Voice, голосовой собеседник.",
+    "ПРАВИЛО 1: Отвечай ВСЕГДА только на русском языке. Даже если звук неразборчив или одно слово прозвучало на другом языке — ответ всё равно только на русском. НИКОГДА не отвечай по-английски.",
+    "ПРАВИЛО 2: Если не расслышал — коротко переспроси по-русски.",
+    "ПРАВИЛО 3: Говори живо, коротко и по делу. Держи нить разговора.",
+    "ПРАВИЛО 4: Никогда не упоминай внутренних провайдеров, названия моделей или ключи API.",
+  ].join(" "),
+  en: [
+    "You are Malik AI Voice, a spoken conversation partner.",
+    "RULE 1: Always answer in English only. Even when the audio is unclear or a word arrives in another language, the answer stays English.",
+    "RULE 2: When you did not catch something, ask again briefly in English.",
+    "RULE 3: Speak naturally, short and to the point. Keep the thread of the conversation.",
+    "RULE 4: Never mention internal providers, model names or API keys.",
+  ].join(" "),
+}
 
 function toBase64(bytes: Uint8Array) {
   let binary = ""
@@ -40,17 +95,29 @@ function fromBase64(value: string) {
   return out
 }
 
-function resample(input: Float32Array, inputRate: number, outputRate = INPUT_RATE) {
+/**
+ * Rate conversion by averaging, not by picking.
+ *
+ * Taking every third sample throws away two out of three and folds their
+ * energy back over the voice. Averaging the window the sample stands for is a
+ * box filter: cheap, and together with the biquad in front of it enough to
+ * keep the 16 kHz stream clean.
+ */
+function downsample(input: Float32Array, inputRate: number, outputRate = INPUT_RATE) {
   if (inputRate === outputRate) return input
   const ratio = inputRate / outputRate
   const length = Math.max(1, Math.floor(input.length / ratio))
   const output = new Float32Array(length)
   for (let index = 0; index < length; index += 1) {
-    const position = index * ratio
-    const left = Math.floor(position)
-    const right = Math.min(input.length - 1, left + 1)
-    const mix = position - left
-    output[index] = input[left] * (1 - mix) + input[right] * mix
+    const start = index * ratio
+    const end = Math.min(input.length, start + ratio)
+    let sum = 0
+    let count = 0
+    for (let position = Math.floor(start); position < end; position += 1) {
+      sum += input[position]
+      count += 1
+    }
+    output[index] = count ? sum / count : input[Math.min(input.length - 1, Math.floor(start))]
   }
   return output
 }
@@ -81,28 +148,62 @@ function safeLiveVoice(value: string) {
   return known.has(head) ? head : "Charon"
 }
 
+function safeLanguage(value: unknown): LiveLanguage {
+  return value === "ru" || value === "en" || value === "kk" ? value : "kk"
+}
+
 /**
  * Native Gemini Live audio-to-audio session.
  *
  * The permanent Render key never reaches the browser. The browser receives a
- * one-use ephemeral token from /api/voice/gemini-live-token and talks directly
- * to Google's constrained Live websocket for the lowest possible latency.
+ * short-lived ephemeral token from /api/voice/gemini-live-token and talks
+ * directly to Google's constrained Live websocket for the lowest possible
+ * latency.
+ *
+ * Everything past the first connection exists because a websocket that lives
+ * for a whole conversation will be closed at some point by something: a phone
+ * changing cell, a laptop lid, Google rotating the serving host, the session
+ * reaching its audio limit. The old client treated every one of those as the
+ * end of Voice and released the microphone. Here the microphone is kept, the
+ * session is restored from its resumption handle, and the person keeps talking.
  */
 export class GeminiLiveSession {
   private socket: WebSocket | null = null
   private ready = false
   private connecting: Promise<boolean> | null = null
+  private generation = 0
+  private disposed = false
+
   private inputSource: MediaStreamAudioSourceNode | null = null
   private inputProcessor: ScriptProcessorNode | null = null
+  private inputFilters: BiquadFilterNode[] = []
   private silentGain: GainNode | null = null
+  private captureContext: AudioContext | null = null
+  private captureOwned = false
+  private lastFrameAt = 0
+  private watchdog = 0
+
+  private micStream: MediaStream | null = null
+  private hostContext: AudioContext | null = null
+  private wantsMic = false
+
+  private resumeHandle: string | null = null
+  private retries = 0
+  private retryTimer = 0
+  /** 0 = every documented option, 1 = core options, 2 = the bare minimum. */
+  private setupTier = 0
+  private sawSetupComplete = false
+
   private outputHead = 0
   private outputSources = new Set<AudioBufferSourceNode>()
   private callbacks: LiveCallbacks
   private voice: string
+  private language: LiveLanguage
   private model = "gemini-3.8-live"
 
-  constructor(input: { voice?: string; callbacks?: LiveCallbacks }) {
+  constructor(input: { voice?: string; language?: LiveLanguage; callbacks?: LiveCallbacks }) {
     this.voice = safeLiveVoice(input.voice || "Charon")
+    this.language = safeLanguage(input.language)
     this.callbacks = input.callbacks || {}
   }
 
@@ -110,15 +211,89 @@ export class GeminiLiveSession {
     return this.ready && this.socket?.readyState === WebSocket.OPEN
   }
 
-  async connect() {
-    if (this.isReady()) return true
-    if (this.connecting) return this.connecting
-    this.connecting = this.open()
-    try { return await this.connecting }
-    finally { this.connecting = null }
+  getLanguage() {
+    return this.language
   }
 
-  private async open() {
+  /**
+   * Switching the answer language rewrites the system prompt, and a system
+   * prompt only takes effect at setup. The session is therefore restarted -
+   * without the resumption handle, because resuming would restore the old one.
+   */
+  async setLanguage(language: LiveLanguage) {
+    const next = safeLanguage(language)
+    if (next === this.language) return
+    this.language = next
+    this.resumeHandle = null
+    if (!this.socket && !this.wantsMic) return
+    await this.restart()
+  }
+
+  /** Same story as the language: the voice is fixed when the session is set up. */
+  async setVoice(voice: string) {
+    const next = safeLiveVoice(voice)
+    if (next === this.voice) return
+    this.voice = next
+    this.resumeHandle = null
+    if (!this.socket && !this.wantsMic) return
+    await this.restart()
+  }
+
+  async connect() {
+    if (this.disposed) return false
+    if (this.isReady()) return true
+    if (this.connecting) return this.connecting
+    const attempt = this.open()
+    this.connecting = attempt
+    try { return await attempt }
+    finally { if (this.connecting === attempt) this.connecting = null }
+  }
+
+  private buildSetup() {
+    const setup: Record<string, unknown> = {
+      model: `models/${this.model}`,
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: this.voice } },
+        },
+      },
+      inputAudioTranscription: {},
+      outputAudioTranscription: {},
+      systemInstruction: { parts: [{ text: INSTRUCTIONS[this.language] }] },
+    }
+
+    if (this.setupTier <= 1) {
+      // Resuming is what makes a dropped link invisible: the restored session
+      // still knows what was said before it dropped.
+      setup.sessionResumption = this.resumeHandle ? { handle: this.resumeHandle } : {}
+    }
+
+    if (this.setupTier === 0) {
+      // Without compression an audio session is cut off at its context limit -
+      // a quarter of an hour of talking, then silence. Compression is what
+      // Google documents as the way to keep a session open indefinitely.
+      setup.contextWindowCompression = { slidingWindow: {} }
+      setup.realtimeInputConfig = {
+        automaticActivityDetection: {
+          disabled: false,
+          // A little padding in front keeps the first syllable; a short
+          // silence window is what makes the answer start almost at once
+          // instead of after a beat of waiting.
+          prefixPaddingMs: 120,
+          silenceDurationMs: 480,
+        },
+      }
+    }
+
+    return { setup }
+  }
+
+  private async open(): Promise<boolean> {
+    if (this.disposed) return false
+    const generation = ++this.generation
+
+    let token: TokenPayload
     try {
       const response = await fetch("/api/voice/gemini-live-token", {
         method: "GET",
@@ -126,170 +301,409 @@ export class GeminiLiveSession {
         cache: "no-store",
         headers: { accept: "application/json" },
       })
-      const token = await response.json().catch(() => ({})) as TokenPayload
-      if (!response.ok || !token.ok || !token.accessToken) return false
+      token = await response.json().catch(() => ({})) as TokenPayload
+      if (!response.ok || !token.ok || !token.accessToken) {
+        console.error("[VOICE_GEMINI_LIVE_TOKEN_UNAVAILABLE]", response.status)
+        return false
+      }
+    } catch (error) {
+      console.error("[VOICE_GEMINI_LIVE_TOKEN_FETCH]", error instanceof Error ? error.message : String(error))
+      return false
+    }
 
-      this.model = token.model || "gemini-3.8-live"
-      const base = token.websocketUrl || DEFAULT_WS
-      const url = `${base}?access_token=${encodeURIComponent(token.accessToken)}`
-      const socket = new WebSocket(url)
-      this.socket = socket
+    if (this.disposed || generation !== this.generation) return false
 
-      const opened = await new Promise<boolean>((resolve) => {
-        let settled = false
-        const finish = (value: boolean) => {
-          if (settled) return
-          settled = true
-          window.clearTimeout(timer)
-          resolve(value)
+    this.model = token.model || this.model
+    const base = token.websocketUrl || DEFAULT_WS
+
+    let socket: WebSocket
+    try {
+      socket = new WebSocket(`${base}?access_token=${encodeURIComponent(token.accessToken)}`)
+    } catch (error) {
+      console.error("[VOICE_GEMINI_LIVE_WS_OPEN]", error instanceof Error ? error.message : String(error))
+      return false
+    }
+    this.socket = socket
+    this.sawSetupComplete = false
+
+    const opened = await new Promise<boolean>((resolve) => {
+      let settled = false
+      const finish = (value: boolean) => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(timer)
+        resolve(value)
+      }
+      const timer = window.setTimeout(() => {
+        if (socket.readyState !== WebSocket.OPEN || !this.sawSetupComplete) {
+          try { socket.close(4000, "setup timeout") } catch {}
         }
-        const timer = window.setTimeout(() => finish(false), 9000)
+        finish(false)
+      }, 9000)
 
-        socket.onopen = () => {
-          socket.send(JSON.stringify({
-            setup: {
-              model: `models/${this.model}`,
-              sessionResumption: {},
-              generationConfig: {
-                responseModalities: ["AUDIO"],
-                speechConfig: {
-                  voiceConfig: { prebuiltVoiceConfig: { voiceName: this.voice } },
-                },
-              },
-              inputAudioTranscription: {},
-              outputAudioTranscription: {},
-              systemInstruction: {
-                parts: [{
-                  text: "You are Malik AI Voice. Listen carefully and answer naturally in the language the user speaks. Support Kazakh, Russian and English. Be concise by default, keep context across turns, and never mention internal providers or API keys.",
-                }],
-              },
-            },
-          }))
-        }
+      const mine = () => !this.disposed && generation === this.generation
 
-        socket.onmessage = async (event) => {
-          let raw = ""
-          try {
-            raw = typeof event.data === "string"
-              ? event.data
-              : event.data instanceof Blob
-                ? await event.data.text()
-                : ""
-          } catch {}
-          let message: any
-          try { message = JSON.parse(raw) }
-          catch { return }
+      socket.onopen = () => {
+        try { socket.send(JSON.stringify(this.buildSetup())) }
+        catch { finish(false) }
+      }
 
-          if (message.setupComplete) {
-            this.ready = true
-            this.callbacks.onReady?.(this.model)
-            finish(true)
-            return
-          }
+      socket.onmessage = async (event) => {
+        let raw = ""
+        try {
+          raw = typeof event.data === "string"
+            ? event.data
+            : event.data instanceof Blob
+              ? await event.data.text()
+              : ""
+        } catch {}
+        let message: any
+        try { message = JSON.parse(raw) }
+        catch { return }
+        if (!mine()) return
 
-          const server = message.serverContent
-          if (!server) return
-
-          if (server.interrupted) {
-            this.stopOutput()
-            this.callbacks.onInterrupted?.()
-          }
-
-          const inputText = String(server.inputTranscription?.text || "")
-          if (inputText) this.callbacks.onInputText?.(inputText)
-
-          const outputText = String(server.outputTranscription?.text || "")
-          if (outputText) this.callbacks.onOutputText?.(outputText)
-
-          for (const part of server.modelTurn?.parts || []) {
-            const inline = part?.inlineData || part?.inline_data
-            const data = inline?.data
-            const mime = String(inline?.mimeType || inline?.mime_type || "")
-            if (typeof data === "string" && data && /^audio\/pcm/i.test(mime)) {
-              this.callbacks.onSpeaking?.()
-              void this.playPcm(data, sampleRate(mime))
-            }
-          }
-
-          if (server.turnComplete) this.callbacks.onTurnComplete?.()
+        if (message.setupComplete) {
+          this.ready = true
+          this.sawSetupComplete = true
+          this.retries = 0
+          this.callbacks.onReady?.(this.model)
+          finish(true)
+          return
         }
 
-        socket.onerror = () => {
-          this.ready = false
-          console.error("[VOICE_GEMINI_LIVE_WS_ERROR]")
-          this.callbacks.onError?.()
-          finish(false)
+        // Google hands out a fresh handle as the conversation moves. The last
+        // one received is what a reconnect resumes from.
+        const handle = message.sessionResumptionUpdate?.newHandle
+        if (typeof handle === "string" && handle) this.resumeHandle = handle
+
+        // A warning that this connection is about to be taken away. Moving
+        // first means the gap is a few hundred milliseconds instead of a dead
+        // microphone.
+        if (message.goAway) {
+          console.warn("[VOICE_GEMINI_LIVE_GOAWAY]", message.goAway?.timeLeft || "")
+          this.restartSoon(0)
+          return
         }
 
-        socket.onclose = (event) => {
-          const wasReady = this.ready
-          if (event.code !== 1000) console.error("[VOICE_GEMINI_LIVE_WS_CLOSE]", event.code, event.reason || "no reason")
-          this.ready = false
-          this.detachMicrophone()
+        const server = message.serverContent
+        if (!server) return
+
+        if (server.interrupted) {
           this.stopOutput()
-          if (wasReady) this.callbacks.onClosed?.()
-          finish(false)
+          this.callbacks.onInterrupted?.()
         }
-      })
 
-      if (!opened) {
+        const inputText = String(server.inputTranscription?.text || "")
+        if (inputText) this.callbacks.onInputText?.(inputText)
+
+        const outputText = String(server.outputTranscription?.text || "")
+        if (outputText) this.callbacks.onOutputText?.(outputText)
+
+        for (const part of server.modelTurn?.parts || []) {
+          const inline = part?.inlineData || part?.inline_data
+          const data = inline?.data
+          const mime = String(inline?.mimeType || inline?.mime_type || "")
+          if (typeof data === "string" && data && /^audio\/pcm/i.test(mime)) {
+            this.callbacks.onSpeaking?.()
+            void this.playPcm(data, sampleRate(mime))
+          }
+        }
+
+        if (server.turnComplete) this.callbacks.onTurnComplete?.()
+      }
+
+      socket.onerror = () => {
+        if (!mine()) return
+        console.error("[VOICE_GEMINI_LIVE_WS_ERROR]")
+        finish(false)
+      }
+
+      socket.onclose = (event) => {
+        if (!mine()) {
+          finish(false)
+          return
+        }
+        const wasReady = this.ready
+        this.ready = false
+        if (event.code !== 1000) {
+          console.error("[VOICE_GEMINI_LIVE_WS_CLOSE]", event.code, event.reason || "no reason")
+        }
+        this.stopCapture()
+        this.stopOutput()
+
+        // Closed before setup ever succeeded, with a code that means the
+        // server refused what was sent. Rather than leave Voice dead because
+        // one option is not supported on this account, the same session is
+        // retried with a smaller setup.
+        if (!this.sawSetupComplete && this.setupTier < 2 && (event.code === 1007 || event.code === 1008 || event.code === 1003 || event.code === 1002)) {
+          this.setupTier += 1
+          console.warn("[VOICE_GEMINI_LIVE_SETUP_DOWNGRADE]", this.setupTier)
+        }
+
+        finish(false)
+        // Deliberate hang-ups (close(), restart()) bump the generation first,
+        // so anything arriving here is a drop the person did not ask for.
+        if (this.wantsMic || wasReady) this.restartSoon()
+      }
+    })
+
+    if (!opened) {
+      if (this.socket === socket) {
         try { socket.close() } catch {}
         if (this.socket === socket) this.socket = null
       }
-      return opened
-    } catch {
-      this.ready = false
-      this.callbacks.onError?.()
-      return false
     }
+    return opened
   }
 
-  attachMicrophone(stream: MediaStream, context: AudioContext) {
+  /** Tears the current link down without letting its handlers trigger a retry. */
+  private dropSocket() {
+    this.generation += 1
+    this.ready = false
+    this.connecting = null
+    const socket = this.socket
+    this.socket = null
+    try { socket?.close(1000, "restarting") } catch {}
+  }
+
+  private async restart() {
+    this.dropSocket()
+    this.stopCapture()
+    const ok = await this.connect()
+    if (ok && this.wantsMic) await this.startCapture()
+    return ok
+  }
+
+  /**
+   * Bring the session back, keeping the microphone open the whole time.
+   *
+   * The person sees the subtitle change and keeps talking; nothing is
+   * released, so there is nothing for them to switch back on afterwards.
+   */
+  private restartSoon(delay?: number) {
+    if (this.disposed || this.retryTimer) return
+    if (!this.wantsMic && !this.resumeHandle) return
+    if (this.retries >= MAX_RETRIES) {
+      this.callbacks.onClosed?.()
+      return
+    }
+    const wait = typeof delay === "number"
+      ? delay
+      : RETRY_DELAYS[Math.min(this.retries, RETRY_DELAYS.length - 1)]
+    this.retries += 1
+    this.callbacks.onReconnecting?.(this.retries)
+
+    this.retryTimer = window.setTimeout(async () => {
+      this.retryTimer = 0
+      if (this.disposed) return
+      this.dropSocket()
+      const ok = await this.connect()
+      if (this.disposed) return
+      if (!ok) {
+        this.restartSoon()
+        return
+      }
+      if (this.wantsMic) {
+        const attached = await this.startCapture()
+        if (!attached) {
+          this.restartSoon()
+          return
+        }
+      }
+      this.retries = 0
+      this.callbacks.onReconnected?.()
+    }, wait)
+  }
+
+  /**
+   * Hands the microphone to the session.
+   *
+   * The stream and the page's audio context are remembered, so every later
+   * reconnect re-arms capture on its own without asking the page for the
+   * microphone a second time.
+   */
+  async attachMicrophone(stream: MediaStream, context: AudioContext) {
     if (!this.isReady()) return false
-    this.detachMicrophone()
+    this.micStream = stream
+    this.hostContext = context
+    this.wantsMic = true
+    const started = await this.startCapture()
+    if (!started) this.wantsMic = false
+    return started
+  }
+
+  private async startCapture(): Promise<boolean> {
+    const stream = this.micStream
+    if (!stream || !this.isReady()) return false
+    this.stopCapture()
 
     try {
+      let context = this.hostContext
+      let owned = false
+
+      // Capturing straight into a 16 kHz context lets the browser's own
+      // resampler do the conversion on the raw signal. That is both better
+      // than anything done by hand here and cheaper.
+      if (!context || context.state === "closed" || context.sampleRate !== INPUT_RATE) {
+        const Ctor = (window as VoiceWindow).AudioContext || (window as VoiceWindow).webkitAudioContext
+        if (Ctor) {
+          try {
+            const native = new Ctor({ sampleRate: INPUT_RATE })
+            if (native.sampleRate === INPUT_RATE) {
+              context = native
+              owned = true
+            } else {
+              try { await native.close() } catch {}
+            }
+          } catch {}
+        }
+      }
+      if (!context || context.state === "closed") return false
+      if (context.state === "suspended") {
+        try { await context.resume() } catch {}
+      }
+
       const source = context.createMediaStreamSource(stream)
-      const processor = context.createScriptProcessor(2048, 1, 1)
+      const native = context.sampleRate === INPUT_RATE
+      const processor = context.createScriptProcessor(native ? 1024 : 2048, 1, 1)
       const gain = context.createGain()
       gain.gain.value = 0
 
-      processor.onaudioprocess = (event) => {
-        if (!this.isReady()) return
-        const mono = event.inputBuffer.getChannelData(0)
-        const samples = resample(mono, context.sampleRate, INPUT_RATE)
-        const bytes = pcm16(samples)
-        this.socket?.send(JSON.stringify({
-          realtimeInput: {
-            audio: {
-              data: toBase64(bytes),
-              mimeType: `audio/pcm;rate=${INPUT_RATE}`,
-            },
-          },
-        }))
+      const filters: BiquadFilterNode[] = []
+      if (!native) {
+        for (let index = 0; index < 2; index += 1) {
+          const filter = context.createBiquadFilter()
+          filter.type = "lowpass"
+          filter.frequency.value = ANTI_ALIAS_HZ
+          filter.Q.value = Math.SQRT1_2
+          filters.push(filter)
+        }
       }
 
-      source.connect(processor)
+      const rate = context.sampleRate
+      processor.onaudioprocess = (event) => {
+        if (!this.isReady()) return
+        this.lastFrameAt = Date.now()
+        const mono = event.inputBuffer.getChannelData(0)
+        const samples = downsample(mono, rate, INPUT_RATE)
+        const bytes = pcm16(samples)
+        try {
+          this.socket?.send(JSON.stringify({
+            realtimeInput: {
+              audio: {
+                data: toBase64(bytes),
+                mimeType: `audio/pcm;rate=${INPUT_RATE}`,
+              },
+            },
+          }))
+        } catch {}
+      }
+
+      let tail: AudioNode = source
+      for (const filter of filters) {
+        tail.connect(filter)
+        tail = filter
+      }
+      tail.connect(processor)
       processor.connect(gain)
       gain.connect(context.destination)
+
       this.inputSource = source
       this.inputProcessor = processor
+      this.inputFilters = filters
       this.silentGain = gain
+      this.captureContext = context
+      this.captureOwned = owned
+      this.lastFrameAt = Date.now()
+      this.startWatchdog()
+      console.info("[VOICE_GEMINI_LIVE_CAPTURE_READY]", `${rate}Hz`, native ? "native" : "resampled")
       return true
-    } catch {
-      this.detachMicrophone()
+    } catch (error) {
+      console.error("[VOICE_GEMINI_LIVE_CAPTURE]", error instanceof Error ? error.message : String(error))
+      this.stopCapture()
       return false
     }
   }
 
-  detachMicrophone() {
+  /**
+   * A ScriptProcessor stops firing without warning when the tab is backgrounded
+   * on a phone or the audio context is suspended by the system. Nothing throws;
+   * the microphone simply goes quiet, which is exactly how "the mic turns
+   * itself off" looks from the outside. This notices the silence and rebuilds
+   * the capture chain.
+   */
+  private startWatchdog() {
+    if (this.watchdog) return
+    this.watchdog = window.setInterval(() => {
+      if (this.disposed || !this.wantsMic) return
+      const context = this.captureContext
+      if (context && context.state === "suspended") {
+        void context.resume().catch(() => {})
+      }
+      if (!this.isReady()) return
+      if (this.lastFrameAt && Date.now() - this.lastFrameAt > 3500) {
+        console.warn("[VOICE_GEMINI_LIVE_CAPTURE_STALLED]")
+        this.lastFrameAt = Date.now()
+        void this.startCapture()
+      }
+    }, 1500)
+  }
+
+  private stopWatchdog() {
+    if (!this.watchdog) return
+    window.clearInterval(this.watchdog)
+    this.watchdog = 0
+  }
+
+  private stopCapture() {
     if (this.inputProcessor) this.inputProcessor.onaudioprocess = null
     try { this.inputSource?.disconnect() } catch {}
+    for (const filter of this.inputFilters) { try { filter.disconnect() } catch {} }
     try { this.inputProcessor?.disconnect() } catch {}
     try { this.silentGain?.disconnect() } catch {}
     this.inputSource = null
     this.inputProcessor = null
+    this.inputFilters = []
     this.silentGain = null
+    if (this.captureOwned && this.captureContext && this.captureContext.state !== "closed") {
+      const owned = this.captureContext
+      void owned.close().catch(() => {})
+    }
+    this.captureContext = null
+    this.captureOwned = false
+  }
+
+  /**
+   * A typed question, answered by the same session that answers the spoken
+   * ones - so the conversation stays one conversation rather than splitting
+   * between two models the moment somebody uses the keyboard.
+   */
+  sendText(text: string) {
+    const value = String(text || "").trim()
+    if (!value || !this.isReady()) return false
+    try {
+      this.socket?.send(JSON.stringify({
+        clientContent: {
+          turns: [{ role: "user", parts: [{ text: value }] }],
+          turnComplete: true,
+        },
+      }))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** The person switched the microphone off. This one is deliberate. */
+  detachMicrophone() {
+    this.wantsMic = false
+    this.stopWatchdog()
+    if (this.isReady()) {
+      try { this.socket?.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })) } catch {}
+    }
+    this.stopCapture()
+    this.micStream = null
+    this.hostContext = null
   }
 
   private async playPcm(encoded: string, rate: number) {
@@ -329,11 +743,15 @@ export class GeminiLiveSession {
   }
 
   close() {
-    this.ready = false
-    this.detachMicrophone()
+    this.disposed = true
+    this.wantsMic = false
+    this.resumeHandle = null
+    if (this.retryTimer) { window.clearTimeout(this.retryTimer); this.retryTimer = 0 }
+    this.stopWatchdog()
+    this.stopCapture()
     this.stopOutput()
-    const socket = this.socket
-    this.socket = null
-    try { socket?.close(1000, "Voice closed") } catch {}
+    this.micStream = null
+    this.hostContext = null
+    this.dropSocket()
   }
 }

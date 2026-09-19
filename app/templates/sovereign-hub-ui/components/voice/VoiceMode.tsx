@@ -4,7 +4,7 @@ import { X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { VoiceDock, type PickedVoiceFile } from "./VoiceDock"
 import { VoiceOrb } from "./VoiceOrb"
-import { VoiceSettings, defaultVoiceForLanguage, getVoiceProfile, voiceBelongsToLanguage, type VoiceLanguage } from "./VoiceSettings"
+import { VoiceSettings, defaultVoiceForLanguage, getVoiceProfile, liveVoiceFor, voiceBelongsToLanguage, type VoiceLanguage } from "./VoiceSettings"
 import styles from "./VoiceMode.module.css"
 import { isVoiceSoundEnabled, playVoiceTransitionSound, saveVoiceSoundEnabled } from "@/lib/voice-transition-sound"
 import { FluxTtsSession } from "@/lib/voice/flux-tts-client"
@@ -63,6 +63,20 @@ const STORAGE_KEY = "malik.voice.preferences.v4"
  * this product exists for. Waiting a little longer costs a moment before the
  * answer; cutting early costs half the question.
  */
+/**
+ * Gemini 3.8 Live is the voice engine. It is the only one.
+ *
+ * The Deepgram/Whisper + LLM + TTS pipeline below is kept whole and is not
+ * dead code by accident: it is the way back if Live is ever withdrawn. But it
+ * must not stand in for Live silently. Two engines with different voices and
+ * different languages answering the same person, with nothing on screen
+ * saying which one spoke, is worse than one engine that admits it is down -
+ * which is exactly how Voice came to answer in English.
+ *
+ * Set this to true to arm the reserve pipeline again.
+ */
+const LEGACY_VOICE_PIPELINE: boolean = false
+
 const SILENCE_MS = 1700
 /** Loud enough to be speech rather than the room. */
 const SPEECH_START_RMS = 0.020
@@ -73,7 +87,8 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const [phase, setPhase] = useState<"enter" | "open" | "leave">("enter")
   const [micActive, setMicActive] = useState(false)
   const [micError, setMicError] = useState<string | null>(null)
-  const [webGLError, setWebGLError] = useState(false)
+  /** Set when Gemini Live could not be reached, so Voice says so instead of pretending. */
+  const [liveError, setLiveError] = useState<string | null>(null)
   const [soundEnabled, setSoundEnabled] = useState(isVoiceSoundEnabled)
   const [screenActive, setScreenActive] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -203,11 +218,13 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       liveInputRef.current = ""
       liveOutputRef.current = ""
       geminiLiveRef.current = new GeminiLiveSession({
-        voice: voiceRef.current,
+        voice: liveVoiceFor(voiceRef.current),
+        language: languageRef.current,
         callbacks: {
           onReady: (model) => {
             geminiLiveReadyRef.current = true
             if (!mountedRef.current || closingRef.current) return
+            setLiveError(null)
             setTitle("Слушаю")
             setSubtitle(`${model} · живой audio-to-audio`)
           },
@@ -250,13 +267,43 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
             setTitle("Слушаю")
             setSubtitle("Перебивание принято · говори")
           },
-          onClosed: () => { geminiLiveReadyRef.current = false },
+          // A dropped websocket used to be the end of the conversation: the
+          // microphone was released and nothing said why. Now the session
+          // restores itself from its resumption handle while the microphone
+          // stays open, and the only thing that changes is this line.
+          onReconnecting: (attempt) => {
+            geminiLiveReadyRef.current = false
+            if (!mountedRef.current || closingRef.current) return
+            setSubtitle(attempt > 1 ? `Восстанавливаю связь · попытка ${attempt}` : "Восстанавливаю связь · микрофон открыт")
+          },
+          onReconnected: () => {
+            geminiLiveReadyRef.current = true
+            if (!mountedRef.current || closingRef.current) return
+            setLiveError(null)
+            setTitle("Слушаю")
+            setSubtitle("Gemini 3.8 Live · связь восстановлена")
+          },
+          onClosed: () => {
+            geminiLiveReadyRef.current = false
+            if (!mountedRef.current || closingRef.current) return
+            setTitle("Связь с Gemini Live потеряна")
+            setSubtitle("Нажми «Переподключить», чтобы продолжить")
+            setLiveError("Gemini Live не отвечает.")
+          },
           onError: () => { geminiLiveReadyRef.current = false },
         },
       })
     }
+    // The system prompt carries the answer language, and a system prompt is
+    // only read at setup, so a language picked after the session opened has to
+    // restart it.
+    await geminiLiveRef.current.setLanguage(languageRef.current)
+    await geminiLiveRef.current.setVoice(liveVoiceFor(voiceRef.current))
     const ready = await geminiLiveRef.current.connect()
     geminiLiveReadyRef.current = ready
+    if (!ready && mountedRef.current && !closingRef.current) {
+      setLiveError("Gemini Live сейчас недоступен.")
+    }
     return ready
   }, [])
 
@@ -736,7 +783,9 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         // turn from the words it heard, which is both earlier and right; this
         // timer decides it from a volume, which is why it used to cut people
         // off mid-thought.
-        if (!streamingRef.current) {
+        // And never in Live mode, where the same call means "switch the
+        // microphone off" rather than "send what you heard".
+        if (!streamingRef.current && LEGACY_VOICE_PIPELINE) {
           autoSubmitRef.current?.()
           return
         }
@@ -871,23 +920,35 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       streamTextRef.current = ""
       streamConfidenceRef.current = 1
 
-      // Voice Mode always tries the dedicated Gemini 3.8 Live model first.
-      // If its one-use token or websocket is unavailable, the proven
-      // Deepgram/Whisper + LLM + TTS pipeline below continues unchanged.
+      // Gemini 3.8 Live is the engine. The microphone is handed straight to
+      // the websocket: no recorder, no transcription round trip, no second
+      // model - the same path the model takes in Google's own studio.
       const liveReady = await ensureGeminiLive()
-      if (liveReady && geminiLiveRef.current?.attachMicrophone(stream, context)) {
+      if (!mountedRef.current || closingRef.current || micRequestRef.current !== requestId) return
+      if (liveReady && await geminiLiveRef.current?.attachMicrophone(stream, context)) {
         streamingRef.current = true
         startAudioLoop(analyser)
+        setLiveError(null)
         setTitle("Слушаю")
         setSubtitle("Gemini 3.8 Live · говори естественно")
         return
       }
 
-      // Never leave Voice in a fake "listening" state. If Live could not start,
-      // immediately arm the proven recorded/STT path and tell the UI which path
-      // is active. The user can still speak without reopening Voice.
       geminiLiveReadyRef.current = false
       streamingRef.current = false
+
+      if (!LEGACY_VOICE_PIPELINE) {
+        // Live did not come up. The microphone stays open so reconnecting
+        // costs one tap and no second permission prompt, and the screen says
+        // plainly that nobody is listening yet - rather than letting another
+        // model answer in another voice and another language.
+        startAudioLoop(analyser)
+        setTitle("Gemini Live не подключился")
+        setSubtitle("Микрофон открыт · нажми «Переподключить»")
+        setLiveError((current) => current || "Gemini Live сейчас недоступен.")
+        return
+      }
+
       setTitle("Слушаю")
       setSubtitle("Резервный Voice · Gemini Live переподключится при следующем входе")
       startRecorder(stream)
@@ -903,6 +964,23 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       setSubtitle("Или включи демо — живой туман продолжит двигаться")
     }
   }, [ensureGeminiLive, startAudioLoop, startRecorder, startSpeech, startStreaming, stopMicrophone])
+
+  /**
+   * Start over with a brand new Live session.
+   *
+   * The old one is thrown away rather than reconnected: whatever stopped it -
+   * an expired token, a rejected setup, a session Google has already finished
+   * with - is carried by that object, and a clean one costs a single request.
+   */
+  const reconnectLive = useCallback(async () => {
+    setLiveError(null)
+    setTitle("Подключаюсь к Gemini Live")
+    setSubtitle("Секунду…")
+    geminiLiveRef.current?.close()
+    geminiLiveRef.current = null
+    geminiLiveReadyRef.current = false
+    await startMicrophone()
+  }, [startMicrophone])
 
   /**
    * Reads the streamed answer and speaks it as it is written.
@@ -1103,7 +1181,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     setBusy(true)
     setTitle("Распознаю")
     setSubtitle(languageRef.current === "kk" ? "Қазақша · қатаң режим" : languageRef.current === "ru" ? "Русский · строгий режим" : "English · strict mode")
-    let prompt = ""
+    let prompt: string
     let whisperText = ""
     let whisperConfidence = 0
     try {
@@ -1204,8 +1282,9 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
     // In native Live mode the websocket owns turn-taking. The mic button is
     // only mute/unmute; it must never send the same sentence through the old
-    // transcription pipeline a second time.
-    if (geminiLiveReadyRef.current) {
+    // transcription pipeline a second time. With the reserve pipeline disarmed
+    // that is true even while Live is down - there is nothing else to send to.
+    if (geminiLiveReadyRef.current || !LEGACY_VOICE_PIPELINE) {
       if (micActiveRef.current) {
         geminiLiveRef.current?.stopOutput()
         await stopMicrophone()
@@ -1325,7 +1404,24 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     })
   }, [stopReplyAudio])
 
-  const submitText = useCallback((prompt: string) => { unlockVoiceAudio(); void runVoiceTurn(prompt) }, [runVoiceTurn])
+  const submitText = useCallback((prompt: string) => {
+    unlockVoiceAudio()
+    const value = String(prompt || "").trim()
+    if (!value) return
+    // Typed or spoken, it is the same conversation and the same session.
+    if (geminiLiveReadyRef.current && geminiLiveRef.current?.sendText(value)) {
+      setFinalTranscript(value)
+      setInterimTranscript("")
+      setTitle("Отвечаю")
+      setSubtitle("Gemini 3.8 Live · текстовый запрос")
+      return
+    }
+    if (!LEGACY_VOICE_PIPELINE) {
+      showNotice("Gemini Live не подключён — нажми «Переподключить»")
+      return
+    }
+    void runVoiceTurn(value)
+  }, [runVoiceTurn, showNotice])
 
   const retryReply = useCallback(async () => {
     unlockVoiceAudio()
@@ -1372,6 +1468,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       void stopMicrophone().then(() => window.setTimeout(() => {
         if (mountedRef.current && !closingRef.current) void startMicrophone()
       }, 90))
+    } else {
+      // No microphone to restart, but the open session is still holding the
+      // previous language in its system prompt.
+      void geminiLiveRef.current?.setLanguage(nextLanguage)
     }
   }, [startMicrophone, stopMicrophone, stopReplyAudio])
 
@@ -1399,7 +1499,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   return (
     <section className={`${styles.stage} ${styles[phase]}`} onPointerDownCapture={unlockVoiceAudio} data-voice-mode role="dialog" aria-modal="true" aria-label="Malik AI Voice Mode">
-      <VoiceOrb energyRef={energyRef} speedRef={speedRef} demoRef={demoRef} onWebGLUnavailable={() => setWebGLError(true)} />
+      <VoiceOrb energyRef={energyRef} speedRef={speedRef} demoRef={demoRef} />
 
       <header className={styles.topbar}>
         <span className={styles.quality}>Высокий <small>⌄</small></span>
@@ -1413,7 +1513,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         <div className={styles.transcript} aria-live="polite">
           <span>{finalTranscript}</span>{interimTranscript ? <span className={styles.interim}> {interimTranscript}</span> : null}
         </div>
-        {webGLError ? <div className={styles.inlineError}>Анимация недоступна. Можно продолжить разговор.</div> : null}
+        {liveError ? (
+          <div className={styles.retry} role="status">
+            <span>{liveError}</span>
+            <button type="button" onClick={() => void reconnectLive()}>Переподключить</button>
+          </div>
+        ) : null}
         {audioError ? <div className={styles.retry} role="status"><span>{audioError}</span><button type="button" disabled={busy} onClick={() => void retryReply()}>Озвучить ответ</button></div> : null}
         {micError ? (
           <div className={styles.retry}>
@@ -1447,6 +1552,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         personality={personality}
         pickedFile={pickedFile}
         energyRef={energyRef}
+        liveTurnTaking={!LEGACY_VOICE_PIPELINE}
         onMicToggle={() => { void toggleMicrophone() }}
         onSoundToggle={toggleSound}
         onScreenToggle={() => void toggleScreen()}

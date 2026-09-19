@@ -94,6 +94,36 @@ export function getVoiceProfile(name: string): VoiceProfile {
   return VOICES.find((item) => item.name === name) || VOICES[0]
 }
 
+/**
+ * The catalogue above was written for the recorded pipeline, where the voice
+ * is whatever Kokoro or Flux was asked to synthesize. Gemini Live speaks with
+ * its own built-in voices and nothing else, so a name from that list has to be
+ * translated into one of them - otherwise the picker moves and the voice never
+ * changes.
+ *
+ * Only voices whose character is documented are used, and only masculine names
+ * are offered for a masculine profile: a picker that answers in the wrong
+ * voice is worse than a short list.
+ */
+const LIVE_MASCULINE = ["Charon", "Fenrir", "Orus", "Puck"] as const
+const LIVE_FEMININE = ["Kore", "Aoede", "Leda", "Zephyr"] as const
+const LIVE_BY_NAME: Readonly<Record<string, string>> = {
+  "Kokoro M1": "Charon",
+  "Kokoro M1 Calm": "Orus",
+  "Kokoro M1 Strong": "Fenrir",
+}
+
+export function liveVoiceFor(name: string) {
+  const direct = LIVE_BY_NAME[name]
+  if (direct) return direct
+  const profile = getVoiceProfile(name)
+  const pool = profile.hints === femaleHints ? LIVE_FEMININE : LIVE_MASCULINE
+  if ((pool as readonly string[]).includes(profile.name)) return profile.name
+  const siblings = VOICES.filter((item) => item.language === profile.language && item.hints === profile.hints)
+  const position = Math.max(0, siblings.findIndex((item) => item.name === profile.name))
+  return pool[position % pool.length]
+}
+
 const LANGUAGE_BUTTONS: readonly { id: VoiceLanguage; label: string }[] = [
   { id: "kk", label: "Қазақша" },
   { id: "ru", label: "Русский" },

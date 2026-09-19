@@ -20,6 +20,7 @@ export function VoiceDock({
   personality,
   pickedFile,
   energyRef,
+  liveTurnTaking = false,
   onMicToggle,
   onSoundToggle,
   onScreenToggle,
@@ -36,6 +37,17 @@ export function VoiceDock({
   personality: string
   pickedFile: PickedVoiceFile | null
   energyRef: MutableRefObject<number>
+  /**
+   * True when the Live websocket decides where a turn ends.
+   *
+   * The clock below was written for the recorded path, where somebody has to
+   * say "this sentence is finished" and hand the recording over. In Live mode
+   * that is the model's own voice activity detection, and this timer does
+   * something quite different from finishing a turn: onMicToggle turns the
+   * microphone OFF. Which is what it did, a second after the first pause in a
+   * conversation - the microphone switching itself off mid-sentence.
+   */
+  liveTurnTaking?: boolean
   onMicToggle: () => void
   onSoundToggle: () => void
   onScreenToggle: () => void
@@ -93,7 +105,7 @@ export function VoiceDock({
         dot.style.opacity = micActive ? `${.60 + amplitude * .24}` : ".36"
       })
 
-      if (micActive && !autoFinishTriggeredRef.current) {
+      if (micActive && !liveTurnTaking && !autoFinishTriggeredRef.current) {
         const pastGrace = !micStartedAtRef.current || time - micStartedAtRef.current >= MIC_START_GRACE_MS
         const transcript = pastGrace
           ? (document.querySelector('[data-voice-mode] [aria-live="polite"]')?.textContent || "").trim()
@@ -128,7 +140,7 @@ export function VoiceDock({
     }
     frame = requestAnimationFrame(update)
     return () => cancelAnimationFrame(frame)
-  }, [energyRef, micActive, onMicToggle])
+  }, [energyRef, liveTurnTaking, micActive, onMicToggle])
 
   const choose = (file: File | undefined) => {
     if (!file) return

@@ -16,7 +16,7 @@
     "lint": "eslint .",
     "test:models": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-malik-models.mjs",
     "test:models:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-malik-models-live.mjs",
-    "test:voice": "node scripts/verify-voice-mode.mjs && node scripts/verify-voice-audio.mjs && node scripts/verify-voice-intent.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-streaming.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-accuracy.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-path.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-answer.mjs",
+    "test:voice": "node scripts/verify-voice-mode.mjs && node scripts/verify-voice-audio.mjs && node scripts/verify-voice-intent.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-streaming.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-accuracy.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-path.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-session.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-answer.mjs",
     "test:auth-audio": "node scripts/verify-auth-audio.mjs",
     "test:voice:live": "node scripts/verify-voice-live.mjs",
     "test:account": "node scripts/verify-account-and-search.mjs",
@@ -49,7 +49,8 @@
     "test:long-code": "node scripts/verify-long-code-runtime.mjs",
     "test:image-credits": "node scripts/verify-image-credits.mjs",
     "test:core-hardening": "node scripts/verify-core-hardening.mjs",
-    "test:release-core": "npm run test:models && npm run test:long-code && npm run test:multimodal && npm run test:media && npm run test:image-edit && npm run test:image-memory && npm run test:image-credits && npm run test:video-speed && npm run test:responses && npm run test:action-os && npm run test:generation-survives && npm run test:library && npm run test:core-hardening"
+    "test:release-core": "npm run test:models && npm run test:long-code && npm run test:multimodal && npm run test:media && npm run test:image-edit && npm run test:image-memory && npm run test:image-credits && npm run test:video-speed && npm run test:responses && npm run test:action-os && npm run test:generation-survives && npm run test:library && npm run test:core-hardening",
+    "test:voice-live-session": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-session.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",

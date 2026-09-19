@@ -1,0 +1,419 @@
+import assert from "node:assert/strict"
+
+/**
+ * Gemini Live, executed.
+ *
+ * Voice Mode had three faults that no amount of reading the file would have
+ * caught, because each of them is a thing that happens over time: the reply
+ * arrived in English, the microphone switched itself off in the middle of a
+ * conversation, and a dropped websocket ended the session for good.
+ *
+ * So this builds the browser - a fake WebSocket, a fake AudioContext whose
+ * ScriptProcessor can be made to fire, a fake token endpoint - and drives the
+ * real GeminiLiveSession through a real conversation, including the parts
+ * where the wire misbehaves.
+ *
+ * What it cannot prove is that Google agrees with the setup it is sent.
+ * Nothing short of a key can. What it does prove is that everything on this
+ * side of the wire behaves the way the conversation needs it to.
+ */
+
+let failures = 0
+async function check(name, fn) {
+  try {
+    const note = await fn()
+    console.log(`  ok  ${name}${note ? `  — ${note}` : ""}`)
+  } catch (error) {
+    failures += 1
+    console.error(`  FAIL ${name}\n       ${String(error.message).split("\n")[0]}`)
+  }
+}
+
+const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Everything the module reaches for that only exists in a browser. */
+function install({ token = "tok_live", sampleRate = 48000, nativeRate = true } = {}) {
+  const sockets = []
+  const timers = new Set()
+  let tokenRequests = 0
+
+  class FakeSocket {
+    constructor(url) {
+      this.url = url
+      this.readyState = 0
+      this.sent = []
+      sockets.push(this)
+      queueMicrotask(() => {
+        if (this.readyState === 3) return
+        this.readyState = 1
+        this.onopen?.()
+      })
+    }
+    send(data) { this.sent.push(data) }
+    close(code = 1000, reason = "") {
+      if (this.readyState === 3) return
+      this.readyState = 3
+      this.onclose?.({ code, reason })
+    }
+    /** What the server sends back. */
+    deliver(message) { this.onmessage?.({ data: JSON.stringify(message) }) }
+    /** The wire dropping underneath a live conversation. */
+    drop(code = 1011) {
+      this.readyState = 3
+      this.onclose?.({ code, reason: "server fault" })
+    }
+    setup() { return JSON.parse(this.sent[0] || "{}").setup || {} }
+    audio() {
+      return this.sent
+        .map((raw) => JSON.parse(raw))
+        .filter((message) => message.realtimeInput?.audio)
+        .map((message) => message.realtimeInput.audio)
+    }
+    /** Answers the setup the way Google does, handing out a resumption handle. */
+    async accept(handle = "handle-1") {
+      await tick()
+      this.deliver({ setupComplete: {} })
+      this.deliver({ sessionResumptionUpdate: { newHandle: handle, resumable: true } })
+      await tick()
+    }
+  }
+  FakeSocket.OPEN = 1
+
+  const processors = []
+  const filters = []
+  class FakeContext {
+    constructor(options) {
+      this.sampleRate = options?.sampleRate && nativeRate ? options.sampleRate : sampleRate
+      this.state = "running"
+      this.currentTime = 0
+      this.destination = {}
+    }
+    createMediaStreamSource() { return { connect() {} } }
+    createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} } }
+    createBiquadFilter() {
+      const filter = { type: "", frequency: { value: 0 }, Q: { value: 0 }, connect() {}, disconnect() {} }
+      filters.push(filter)
+      return filter
+    }
+    createScriptProcessor(size) {
+      const processor = { size, onaudioprocess: null, connect() {}, disconnect() {} }
+      processors.push(processor)
+      return processor
+    }
+    async resume() { this.state = "running" }
+    async close() { this.state = "closed" }
+  }
+
+  globalThis.WebSocket = FakeSocket
+  globalThis.btoa = (binary) => Buffer.from(binary, "binary").toString("base64")
+  globalThis.atob = (value) => Buffer.from(value, "base64").toString("binary")
+  globalThis.window = {
+    AudioContext: FakeContext,
+    setTimeout: (fn, ms) => { const id = setTimeout(fn, ms); timers.add(id); return id },
+    clearTimeout: (id) => { clearTimeout(id); timers.delete(id) },
+    setInterval: (fn, ms) => { const id = setInterval(fn, ms); timers.add(id); return id },
+    clearInterval: (id) => { clearInterval(id); timers.delete(id) },
+  }
+  globalThis.fetch = async () => {
+    tokenRequests += 1
+    return {
+      ok: Boolean(token),
+      json: async () => (token
+        ? { ok: true, accessToken: `${token}-${tokenRequests}`, model: "gemini-3.8-live" }
+        : { ok: false, error: "voice_live_not_configured" }),
+    }
+  }
+
+  const context = new FakeContext()
+  return {
+    sockets,
+    context,
+    get tokenRequests() { return tokenRequests },
+    /** Pushes one block of microphone audio through the real handler. */
+    feed(blocks = 1) {
+      const last = processors[processors.length - 1]
+      if (!last?.onaudioprocess) return 0
+      const samples = last.size
+      const data = new Float32Array(samples)
+      for (let index = 0; index < samples; index += 1) {
+        data[index] = Math.sin((2 * Math.PI * 440 * index) / 48000) * .4
+      }
+      for (let block = 0; block < blocks; block += 1) {
+        last.onaudioprocess({ inputBuffer: { getChannelData: () => data } })
+      }
+      return blocks
+    },
+    get processorCount() { return processors.length },
+    get filters() { return filters },
+    cleanup() { for (const id of timers) { clearTimeout(id); clearInterval(id) } },
+  }
+}
+
+const { GeminiLiveSession } = await import(`${process.cwd()}/lib/voice/gemini-live-client.ts`)
+
+async function connected(options = {}) {
+  const browser = install(options.install)
+  const events = []
+  const session = new GeminiLiveSession({
+    voice: options.voice || "Charon",
+    language: options.language || "kk",
+    callbacks: {
+      onReady: () => events.push("ready"),
+      onReconnecting: () => events.push("reconnecting"),
+      onReconnected: () => events.push("reconnected"),
+      onClosed: () => events.push("closed"),
+      onOutputText: (text) => events.push(`say:${text}`),
+      onInterrupted: () => events.push("interrupted"),
+      onTurnComplete: () => events.push("turn"),
+    },
+  })
+  const opening = session.connect()
+  await tick()
+  await browser.sockets[0].accept()
+  const ready = await opening
+  return { browser, session, events, ready }
+}
+
+console.log("\nthe language of the answer")
+
+await check("the system prompt is written in the language it asks for", async () => {
+  const notes = []
+  for (const [language, marker] of [["kk", "қазақ"], ["ru", "русском"], ["en", "English"]]) {
+    const { browser, session } = await connected({ language })
+    const instruction = browser.sockets[0].setup().systemInstruction?.parts?.[0]?.text || ""
+    assert.ok(instruction.includes(marker), `${language} prompt does not mention ${marker}`)
+    notes.push(`${language}→${marker}`)
+    session.close()
+    browser.cleanup()
+  }
+  return notes.join(", ")
+})
+
+await check("unclear audio is not an excuse to switch to English", async () => {
+  const { browser, session } = await connected({ language: "ru" })
+  const instruction = browser.sockets[0].setup().systemInstruction?.parts?.[0]?.text || ""
+  // This is the whole bug: a model told "answer in the user's language" falls
+  // back to English the moment it is unsure what it heard.
+  assert.match(instruction, /НИКОГДА не отвечай по-английски/)
+  assert.match(instruction, /неразборчив/)
+  session.close()
+  browser.cleanup()
+})
+
+await check("changing the language restarts the session with the new prompt", async () => {
+  const { browser, session } = await connected({ language: "kk" })
+  const change = session.setLanguage("ru")
+  await tick()
+  await browser.sockets[1].accept("handle-2")
+  await change
+  assert.equal(browser.sockets.length, 2, "the session was not reopened")
+  const instruction = browser.sockets[1].setup().systemInstruction?.parts?.[0]?.text || ""
+  assert.ok(instruction.includes("русском"), "the new session kept the old language")
+  session.close()
+  browser.cleanup()
+  return "kk → ru"
+})
+
+console.log("\nwhat reaches the model")
+
+await check("the microphone streams 16 kHz little-endian PCM", async () => {
+  const { browser, session } = await connected()
+  assert.equal(await session.attachMicrophone({}, browser.context), true)
+  browser.feed(4)
+  const audio = browser.sockets[0].audio()
+  assert.equal(audio.length, 4, "frames did not reach the socket")
+  assert.equal(audio[0].mimeType, "audio/pcm;rate=16000")
+  const bytes = Buffer.from(audio[0].data, "base64")
+  assert.ok(bytes.length > 0 && bytes.length % 2 === 0, "not whole 16-bit samples")
+  assert.notEqual(bytes.readInt16LE(200), 0, "the audio arrived silent")
+  session.close()
+  browser.cleanup()
+  return `${audio.length} frames, ${bytes.length} bytes each`
+})
+
+await check("capture runs at 16 kHz natively when the browser allows it", async () => {
+  const { browser, session } = await connected()
+  await session.attachMicrophone({}, browser.context)
+  // A 16 kHz context means the browser's own resampler did the conversion on
+  // the raw signal, which is better than anything done by hand afterwards.
+  browser.feed(1)
+  const bytes = Buffer.from(browser.sockets[0].audio()[0].data, "base64").length
+  assert.equal(bytes, 1024 * 2, "a 16 kHz capture block should arrive whole")
+  session.close()
+  browser.cleanup()
+  return "1024-sample blocks, 64ms"
+})
+
+await check("a 48 kHz context is filtered before it is decimated", async () => {
+  // Older Safari refuses a 16 kHz context. Decimating 48 kHz by picking every
+  // third sample folds everything above 8 kHz back over the voice, so the
+  // filtered path has to exist and has to be used.
+  const { browser, session } = await connected({ install: { nativeRate: false } })
+  await session.attachMicrophone({}, browser.context)
+  browser.feed(1)
+  const audio = browser.sockets[0].audio()
+  assert.equal(audio.length, 1)
+  assert.equal(audio[0].mimeType, "audio/pcm;rate=16000")
+  const frames = Buffer.from(audio[0].data, "base64").length / 2
+  assert.equal(frames, Math.floor(2048 / 3), "2048 samples at 48 kHz must become 682 at 16 kHz")
+  // The averaging alone is a weak filter; the biquads in front of it are what
+  // keep the fold-back out of the speech band.
+  assert.equal(browser.filters.length, 2, "the anti-alias filters were not built")
+  for (const filter of browser.filters) {
+    assert.equal(filter.type, "lowpass")
+    assert.equal(filter.frequency.value, 7000)
+  }
+  session.close()
+  browser.cleanup()
+  return `2048 @48k → ${frames} @16k, 2 lowpass at 7kHz`
+})
+
+await check("a typed question goes to the same session", async () => {
+  const { browser, session } = await connected()
+  assert.equal(session.sendText("сәлем"), true)
+  const sent = browser.sockets[0].sent.map((raw) => JSON.parse(raw)).find((message) => message.clientContent)
+  assert.equal(sent.clientContent.turns[0].parts[0].text, "сәлем")
+  assert.equal(sent.clientContent.turnComplete, true)
+  session.close()
+  browser.cleanup()
+})
+
+console.log("\nwhen the wire drops")
+
+await check("a dropped socket reconnects and keeps the microphone", async () => {
+  const { browser, session, events } = await connected()
+  await session.attachMicrophone({}, browser.context)
+  browser.feed(2)
+  assert.equal(browser.sockets[0].audio().length, 2)
+
+  browser.sockets[0].drop()
+  assert.ok(events.includes("reconnecting"), "nothing told the screen the link had dropped")
+
+  await tick(500)
+  assert.equal(browser.sockets.length, 2, "the session did not reopen")
+  await browser.sockets[1].accept("handle-2")
+  await tick(20)
+
+  assert.ok(events.includes("reconnected"), "the screen was never told the link came back")
+  // The point of all of it: the person keeps talking and never touches the
+  // microphone button.
+  browser.feed(3)
+  assert.equal(browser.sockets[1].audio().length, 3, "the microphone did not come back")
+  session.close()
+  browser.cleanup()
+  return `${browser.sockets[1].audio().length} frames after the drop`
+})
+
+await check("the restored session resumes instead of starting over", async () => {
+  const { browser, session } = await connected()
+  await session.attachMicrophone({}, browser.context)
+  assert.deepEqual(browser.sockets[0].setup().sessionResumption, {}, "the first setup should ask for a handle")
+
+  browser.sockets[0].drop()
+  await tick(500)
+  await browser.sockets[1].accept("handle-2")
+  // Without the handle the model would have forgotten the conversation and
+  // answered the next sentence as if it were the first.
+  assert.equal(browser.sockets[1].setup().sessionResumption?.handle, "handle-1")
+  session.close()
+  browser.cleanup()
+  return "handle-1 replayed"
+})
+
+await check("a goAway warning is acted on before the server hangs up", async () => {
+  const { browser, session } = await connected()
+  await session.attachMicrophone({}, browser.context)
+  browser.sockets[0].deliver({ goAway: { timeLeft: "2s" } })
+  await tick(300)
+  assert.equal(browser.sockets.length, 2, "the warning was ignored")
+  session.close()
+  browser.cleanup()
+})
+
+await check("each reconnect asks for its own token", async () => {
+  const { browser, session } = await connected()
+  await session.attachMicrophone({}, browser.context)
+  const before = browser.tokenRequests
+  browser.sockets[0].drop()
+  await tick(500)
+  assert.ok(browser.tokenRequests > before, "an ephemeral token was reused")
+  assert.notEqual(new URL(browser.sockets[1].url).searchParams.get("access_token"), new URL(browser.sockets[0].url).searchParams.get("access_token"))
+  session.close()
+  browser.cleanup()
+})
+
+await check("a setup the server refuses is retried smaller, not abandoned", async () => {
+  const browser = install()
+  const session = new GeminiLiveSession({ language: "ru", callbacks: {} })
+  const opening = session.connect()
+  await tick()
+  // 1007 is what Google sends when one field of the setup is not accepted.
+  // Losing Voice entirely because a single option is unsupported would be the
+  // worst possible trade.
+  browser.sockets[0].drop(1007)
+  const first = await opening
+  assert.equal(first, false)
+  const full = browser.sockets[0].setup()
+  assert.ok(full.contextWindowCompression, "the first attempt should send everything")
+
+  const retry = session.connect()
+  await tick()
+  await browser.sockets[1].accept()
+  assert.equal(await retry, true, "the smaller setup did not connect")
+  const reduced = browser.sockets[1].setup()
+  assert.equal(reduced.contextWindowCompression, undefined, "the refused option was sent again")
+  assert.ok(reduced.systemInstruction, "the language rule must survive the downgrade")
+  session.close()
+  browser.cleanup()
+  return `${Object.keys(full).length} fields → ${Object.keys(reduced).length}`
+})
+
+await check("switching the microphone off is deliberate and stays off", async () => {
+  const { browser, session, events } = await connected()
+  await session.attachMicrophone({}, browser.context)
+  session.detachMicrophone()
+  const ended = browser.sockets[0].sent.map((raw) => JSON.parse(raw)).some((message) => message.realtimeInput?.audioStreamEnd)
+  assert.equal(ended, true, "the model was not told the stream ended")
+
+  browser.sockets[0].drop()
+  await tick(500)
+  // Nothing is streaming and nothing was resumed, so there is nothing to
+  // reconnect for: a muted microphone must not quietly reopen the socket.
+  assert.ok(!events.includes("reconnected"))
+  session.close()
+  browser.cleanup()
+})
+
+await check("no token means Live says so rather than half-starting", async () => {
+  const browser = install({ token: null })
+  const session = new GeminiLiveSession({ callbacks: {} })
+  assert.equal(await session.connect(), false)
+  assert.equal(session.isReady(), false)
+  assert.equal(browser.sockets.length, 0, "a socket was opened without a token")
+  session.close()
+  browser.cleanup()
+})
+
+console.log("\nthe session is not cut short")
+
+await check("compression is requested so an audio session has no time limit", async () => {
+  const { browser, session } = await connected()
+  const setup = browser.sockets[0].setup()
+  assert.ok(setup.contextWindowCompression?.slidingWindow, "without this the session ends at its context limit")
+  assert.deepEqual(setup.generationConfig.responseModalities, ["AUDIO"])
+  assert.equal(setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, "Charon")
+  assert.ok(setup.inputAudioTranscription && setup.outputAudioTranscription, "subtitles need both transcriptions")
+  session.close()
+  browser.cleanup()
+})
+
+await check("an unknown voice name never reaches the wire", async () => {
+  const { browser, session } = await connected({ voice: "Kokoro M1" })
+  const name = browser.sockets[0].setup().generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName
+  assert.equal(name, "Charon", "a name Gemini does not know would fail the whole setup")
+  session.close()
+  browser.cleanup()
+})
+
+console.log(failures ? `\n${failures} failing\n` : "\nall Gemini Live session checks passed\n")
+process.exit(failures ? 1 : 0)

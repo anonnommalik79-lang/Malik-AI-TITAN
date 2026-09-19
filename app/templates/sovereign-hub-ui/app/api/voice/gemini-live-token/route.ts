@@ -17,11 +17,24 @@ function voiceKey() {
 
 export async function GET() {
   const key = voiceKey()
-  if (!key) return NextResponse.json({ ok: false, error: "voice_live_not_configured" }, { status: 503 })
+  if (!key) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "voice_live_not_configured",
+        reason: "no_key",
+        displayMessage: "Голосовой ключ Gemini не настроен на сервере.",
+      },
+      { status: 503 },
+    )
+  }
 
   const model = process.env.MALIK_VOICE_MODEL?.trim() || "gemini-3.8-live"
   const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString()
-  const newSessionExpireTime = new Date(Date.now() + 60 * 1000).toISOString()
+  // A minute was not enough on a phone that has just woken up or switched
+  // network: the token expired between being minted and the websocket opening,
+  // and Voice looked broken for no reason the person could see.
+  const newSessionExpireTime = new Date(Date.now() + 2 * 60 * 1000).toISOString()
 
   try {
     const response = await fetch(TOKEN_URL, {
@@ -40,7 +53,17 @@ export async function GET() {
     const payload = await response.json().catch(() => ({})) as { name?: string; error?: { message?: string } }
     if (!response.ok || !payload.name) {
       console.error("[VOICE_GEMINI_LIVE_TOKEN_ERROR]", response.status, payload.error?.message || "token unavailable")
-      return NextResponse.json({ ok: false, error: "voice_live_token_unavailable" }, { status: 503 })
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "voice_live_token_unavailable",
+          reason: response.status === 429 ? "rate_limited" : response.status === 403 ? "forbidden" : "upstream",
+          displayMessage: response.status === 429
+            ? "Gemini Live сейчас перегружен. Попробуй через минуту."
+            : "Google не выдал ключ для голосовой сессии.",
+        },
+        { status: 503 },
+      )
     }
 
     return NextResponse.json(
@@ -49,6 +72,14 @@ export async function GET() {
     )
   } catch (error) {
     console.error("[VOICE_GEMINI_LIVE_TOKEN_ERROR]", error instanceof Error ? error.message : String(error))
-    return NextResponse.json({ ok: false, error: "voice_live_token_unavailable" }, { status: 503 })
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "voice_live_token_unavailable",
+        reason: "network",
+        displayMessage: "Не получилось связаться с Google для голосовой сессии.",
+      },
+      { status: 503 },
+    )
   }
 }
