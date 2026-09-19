@@ -3,6 +3,7 @@ import { RequestSafetyError } from "../server/request-safety"
 import type { ImageGenerateInput } from "./types"
 
 const MAX_PIXELS = 40_000_000
+const MAX_EDIT_SOURCE_BYTES = 12 * 1024 * 1024
 
 export function imageAttachments(body: { attachments?: unknown }) {
   return Array.isArray(body.attachments)
@@ -28,6 +29,13 @@ export async function prepareImageEditSource(body: { attachments?: unknown }): P
   if (!/^image\/(png|jpeg|webp)$/.test(mime)) throw new RequestSafetyError("Используйте фото PNG, JPEG или WebP.", 415, "IMAGE_EDIT_FORMAT")
   if (dataUrl) encoded = encoded.slice(dataUrl[0].length)
   if (!encoded || encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) throw new RequestSafetyError("Не удалось прочитать фото. Загрузите его ещё раз.", 400, "IMAGE_EDIT_INVALID")
+  // Reject oversized inline sources before decode/sharp. This protects the
+  // server from base64 amplification and keeps image editing inside the chat
+  // request's safe memory envelope.
+  const estimatedBytes = Math.floor(encoded.length * 3 / 4)
+  if (estimatedBytes > MAX_EDIT_SOURCE_BYTES) {
+    throw new RequestSafetyError("Исходное фото слишком большое. Максимум 12 МБ.", 413, "IMAGE_EDIT_TOO_LARGE")
+  }
   const bytes = Buffer.from(encoded, "base64")
   try {
     const decoder = sharp(bytes, { limitInputPixels: MAX_PIXELS, failOn: "error" })
