@@ -92,8 +92,11 @@ import "./mobile-sites-library-oled-final.css"
 // Final home authority: approved cinematic Malik scene + reflective floor + compact controls.
 import "./mobile-unicorn-home-final.css"
 import "./mobile-viewport.css"
-// Final Autonomous Company model selector reference pass. Must stay last.
+// Final Autonomous Company model selector reference pass.
 import "./business-model-reference-final.css"
+// Absolute last: the phone drawer. Every section pinned to the top, the chat
+// history elastic at the bottom, and nothing grey left on the panel.
+import "./mobile-drawer-final.css"
 
 // Let Next emit one viewport tag. Read the visible area separately on iOS,
 // where the keyboard does not resize dvh. Keep deliberate pinch zoom available.

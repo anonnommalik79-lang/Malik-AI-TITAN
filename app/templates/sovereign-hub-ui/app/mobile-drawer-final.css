@@ -1,0 +1,282 @@
+/*
+ * The phone drawer: every section on top, chat history at the bottom, black and white.
+ *
+ * The drawer laid its two lists out as `nav { flex: 0 1 auto }` above
+ * `history { flex: 1 }`. On an empty account that looks fine. With a real chat
+ * history the history block takes every spare pixel, the nav is allowed to
+ * shrink, and it shrinks to nothing: on a 390x844 phone with sixteen chats the
+ * drawer opened showing «Поиск» and «История чатов» and not one of the thirteen
+ * sections - Новый чат, Библиотека, Проекты, Бизнес под ключ, Shorts, Сайты,
+ * Плагины, Compute, Переводчик and the rest were all still in the DOM, just
+ * squeezed to zero height. The account footer was pushed off the bottom with
+ * them.
+ *
+ * Here the nav is the fixed part and the history is the elastic one, which is
+ * the way round it should always have been. The rows are 36px so all thirteen
+ * fit above the fold on a normal phone; on a short one the nav scrolls inside
+ * its own box and still keeps its place at the top.
+ *
+ * The palette is black and white on purpose. Every grey wash and grey label in
+ * the drawer is either black or white now, the current item inverts to white on
+ * black rather than sitting in a grey pill, and the scrollbars are hidden.
+ *
+ * Loaded last so it wins over the earlier mobile passes without !important
+ * duels beyond the ones the older files force.
+ */
+
+@media (max-width: 768px) {
+  /* ---------------------------------------------------------- surfaces */
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer,
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar,
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar[data-collapsed="false"],
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-footer {
+    background: #000 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  /* Hide every scrollbar in the drawer: the grey track down the right edge was
+     the most visible grey left on the panel. */
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer *::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer * {
+    scrollbar-width: none !important;
+  }
+
+  /* ------------------------------------------------------------- header */
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-brand-name {
+    color: #fff !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-brand-version {
+    color: rgba(255, 255, 255, .5) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-search {
+    height: 40px !important;
+    min-height: 40px !important;
+    border: 1px solid rgba(255, 255, 255, .16) !important;
+    border-radius: 11px !important;
+    background: #000 !important;
+    color: rgba(255, 255, 255, .62) !important;
+    font-size: 13.5px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-search svg {
+    color: rgba(255, 255, 255, .62) !important;
+  }
+
+  /* ------------------------------------------- sections: the fixed part */
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-nav {
+    flex: 0 0 auto !important;
+    /* The reserve is the rest of the column: header 50, search 50, the
+       history's own minimum 96 and the account footer 86, plus room for the
+       safe-area inset. All thirteen sections fit above it on a normal phone; on
+       a short one the nav scrolls inside itself and still keeps the top. */
+    max-height: calc(100dvh - 292px) !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+    padding: 2px 10px 4px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-section-label {
+    margin: 7px 6px 2px !important;
+    color: rgba(255, 255, 255, .62) !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    line-height: 1.15 !important;
+    letter-spacing: .08em !important;
+    text-transform: uppercase !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-primary {
+    height: 34px !important;
+    min-height: 34px !important;
+    border-radius: 9px !important;
+    padding: 0 10px !important;
+    color: #fff !important;
+    font-size: 13.5px !important;
+    font-weight: 500 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-primary svg {
+    width: 17px !important;
+    height: 17px !important;
+    color: #fff !important;
+  }
+
+  /* The current section inverts instead of sitting in a grey pill. */
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-primary.is-active,
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-primary:hover {
+    background: #fff !important;
+    color: #000 !important;
+    font-weight: 650 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-primary.is-active svg,
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-primary:hover svg {
+    color: #000 !important;
+  }
+
+  /* The BETA flag was a purple gradient - the one colour left in a black and
+     white panel. */
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-shorts-beta {
+    border: 1px solid rgba(255, 255, 255, .45) !important;
+    background: #000 !important;
+    color: #fff !important;
+    box-shadow: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-primary.is-active .malik-shorts-beta,
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-primary:hover .malik-shorts-beta {
+    border-color: rgba(0, 0, 0, .45) !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* --------------------------------------- history: the elastic bottom */
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-history {
+    flex: 1 1 auto !important;
+    min-height: 96px !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+    border-top: 1px solid rgba(255, 255, 255, .12) !important;
+    background: #000 !important;
+    padding: 6px 10px 8px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-history-title,
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-group-title {
+    color: rgba(255, 255, 255, .62) !important;
+    font-size: 10.5px !important;
+    font-weight: 600 !important;
+    letter-spacing: .06em !important;
+    text-transform: uppercase !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-chat-row {
+    height: 38px !important;
+    border-radius: 9px !important;
+    background: #000 !important;
+    color: #fff !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-chat-row.is-active {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-chat-row.is-active .malik-sidebar-chat-icon,
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-chat-row.is-active .malik-sidebar-chat-title,
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-chat-row.is-active .malik-sidebar-chat-more {
+    color: #000 !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-chat-icon {
+    color: rgba(255, 255, 255, .7) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-chat-title {
+    color: inherit !important;
+    font-size: 13.5px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-empty-history span {
+    color: rgba(255, 255, 255, .62) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-empty-history small {
+    color: rgba(255, 255, 255, .38) !important;
+  }
+
+  /* -------------------------------------------------- account, at rest */
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-footer {
+    flex: 0 0 auto !important;
+    border-top: 1px solid rgba(255, 255, 255, .12) !important;
+    padding: 5px 10px calc(5px + env(safe-area-inset-bottom)) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-user-name {
+    color: #fff !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-user-role {
+    color: rgba(255, 255, 255, .5) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-user-avatar {
+    border-color: rgba(255, 255, 255, .22) !important;
+    background: #000 !important;
+    color: #fff !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-quickrow {
+    border-top: 1px solid rgba(255, 255, 255, .12) !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-icon-btn {
+    color: #fff !important;
+  }
+}
+
+/*
+ * Short phones: all thirteen sections still fit.
+ *
+ * On a 375x667 or 360x740 screen the column simply runs out of room - at 34px a
+ * row, thirteen rows plus three group labels plus the history and the account
+ * footer come to more than the screen. Rather than let four sections fall below
+ * a scroll, the rows tighten to 30px and the «ОСНОВНОЕ / СОЗДАНИЕ /
+ * ИНСТРУМЕНТЫ» labels step aside: the sections themselves are what the person
+ * came to the drawer for.
+ */
+@media (max-width: 768px) and (max-height: 780px) {
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-section-label {
+    display: none !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-primary {
+    height: 30px !important;
+    min-height: 30px !important;
+    font-size: 13px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-nav {
+    max-height: calc(100dvh - 262px) !important;
+    padding-top: 4px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-history,
+  html body #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-history {
+    min-height: 80px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-user {
+    height: 36px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-quickrow {
+    height: 30px !important;
+    margin-top: 3px !important;
+    padding-top: 3px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-icon-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+  }
+}

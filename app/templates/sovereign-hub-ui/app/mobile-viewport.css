@@ -398,22 +398,34 @@
     max-height: 100% !important;
   }
 
+  /* The drawer is a column, not one long scroll.
+     It used to scroll as a whole, which let the chat history push the sections
+     and the account footer off the bottom of the phone. Now the panel itself
+     holds still and only the history scrolls - see the rule below and
+     mobile-drawer-final.css, which pins the sections at the top. */
   html body #malik-root .malik-dashboard-shell .malik-mobile-drawer.fixed.z-50 .malik-sidebar[data-collapsed="false"] {
     position: relative !important;
     inset: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
     height: 100% !important;
     min-height: 0 !important;
     max-height: 100% !important;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
+    overflow: hidden !important;
     overscroll-behavior: contain !important;
     padding-bottom: max(8px, var(--malik-composer-bottom)) !important;
   }
 
+  /* `flex: 1 0 auto` with `overflow: visible` meant the history grew to the full
+     height of the chat list and never gave a pixel back - sixteen chats put the
+     account footer 500px below the bottom of the screen and squeezed every
+     section out of the panel. It is the elastic part of the column now, and it
+     scrolls inside itself. */
   html body #malik-root .malik-dashboard-shell .malik-mobile-drawer .malik-sidebar-history {
-    flex: 1 0 auto !important;
-    min-height: 100px !important;
-    overflow: visible !important;
+    flex: 1 1 auto !important;
+    min-height: 96px !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
   }
 
   /* Keyboard open: preserve the same cinematic artwork instead of replacing it
