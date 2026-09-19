@@ -232,13 +232,56 @@ function addCognitiveStrip(assistantRow: HTMLElement) {
   card.parentElement?.insertBefore(shell, card)
 }
 
-function importantForDual(plan: CognitivePlan, request: string, responseText: string, markdown: HTMLElement) {
-  if (responseText.length < 280 || markdown.children.length < 4) return false
+function imageAttachmentCount(userRow: HTMLElement | null) {
+  if (!userRow) return 0
+  return userRow.querySelectorAll(".malik-user-attachment--image").length
+}
+
+function complexImageTurn(userRow: HTMLElement | null, request: string, responseText: string, markdown: HTMLElement) {
+  const images = imageAttachmentCount(userRow)
+  if (!images) return false
+
+  const text = request.toLowerCase()
+  const explicitDeepVisualTask =
+    /(подроб|детал|проанализ|разбер|найди|посчитай|сравн|прочитай|распознай|текст|документ|таблиц|график|диаграм|схем|чертеж|код|ошибк|скриншот|интерфейс|архитект|формул|задач|реши|объясни|analy[sz]e|detail|inspect|count|compare|read|extract|ocr|document|table|chart|diagram|scheme|code|error|screenshot|interface|architecture|formula|solve|талда|мәтін|кесте|сызба|салыстыр|есеп)/iu.test(text)
+
+  const visuallyDenseAnswer =
+    responseText.length >= 720
+    && markdown.children.length >= 6
+
+  const multiImageComparison = images >= 2
+  return explicitDeepVisualTask || visuallyDenseAnswer || multiImageComparison
+}
+
+function importantForDual(
+  plan: CognitivePlan,
+  request: string,
+  responseText: string,
+  markdown: HTMLElement,
+  userRow: HTMLElement | null,
+) {
+  const images = imageAttachmentCount(userRow)
+  const complexImage = complexImageTurn(userRow, request, responseText, markdown)
+
+  // Images get stricter treatment: a normal photo/question stays one answer.
+  // Dual mode only appears when the visual task itself is genuinely dense.
+  if (images > 0) {
+    if (!complexImage) return false
+    if (responseText.length < 360 || markdown.children.length < 4) return false
+    if (/\b(кратко|коротко|brief|short|concise|қысқа)\b/iu.test(request)) return false
+    return true
+  }
+
+  // Text-only turns stay conservative too: most everyday questions are one answer.
+  if (responseText.length < 320 || markdown.children.length < 4) return false
   if (markdown.querySelector(".malik-md-codeblock")) return false
   if (/\b(кратко|коротко|brief|short|concise|қысқа)\b/iu.test(request)) return false
 
-  if (["compare", "decision", "business", "research", "numeric"].includes(plan.mode)) return true
-  return plan.mode === "explain" && request.length >= 170 && responseText.length >= 520
+  if (["compare", "decision"].includes(plan.mode)) return responseText.length >= 360
+  if (["business", "research", "numeric"].includes(plan.mode)) {
+    return request.length >= 55 || responseText.length >= 520
+  }
+  return plan.mode === "explain" && request.length >= 170 && responseText.length >= 560
 }
 
 function scrubClone(root: HTMLElement) {
@@ -344,11 +387,12 @@ function addDualAnswer(assistantRow: HTMLElement) {
 
   const userRow = previousUserRow(assistantRow)
   const request = userRow?.textContent?.replace("⚡", "").trim() || ""
-  if (!request) return
+  const hasImage = imageAttachmentCount(userRow) > 0
+  if (!request && !hasImage) return
 
   const plan = planFor(request)
   const responseText = markdown.textContent?.trim() || ""
-  if (!importantForDual(plan, request, responseText, markdown)) return
+  if (!importantForDual(plan, request, responseText, markdown, userRow)) return
 
   const locale = localeFor(request)
   const copy = DUAL_COPY[locale]
