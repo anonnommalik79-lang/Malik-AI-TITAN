@@ -20,6 +20,7 @@ async function handlePOST(request: Request) {
   const prompt = String(body?.prompt || "").trim()
   const imageUrl = typeof body?.imageUrl === "string" ? body.imageUrl.trim() : undefined
   const sourceVideoUrl = typeof body?.sourceVideoUrl === "string" ? body.sourceVideoUrl.trim() : undefined
+  const sourceDurationSeconds = Number(body?.sourceDurationSeconds || 0)
   const requestedMode = String(body?.mode || "").trim()
   const mode = requestedMode === "image" || requestedMode === "video" || requestedMode === "text"
     ? requestedMode
@@ -49,6 +50,13 @@ async function handlePOST(request: Request) {
   }
   if (mode === "video" && !sourceVideoUrl) {
     return Response.json({ ok: false, error: "Загрузите видео для режима Видео → Видео.", code: "VIDEO_SOURCE_REQUIRED" }, { status: 400 })
+  }
+  if (mode === "video" && (!Number.isFinite(sourceDurationSeconds) || sourceDurationSeconds < 3 || sourceDurationSeconds > 5.05)) {
+    return Response.json({
+      ok: false,
+      error: "Для AI-редактирования загрузите видео длительностью от 3 до 5 секунд.",
+      code: "VIDEO_SOURCE_DURATION_UNSUPPORTED",
+    }, { status: 400 })
   }
   if (mode === "text" && (imageUrl || sourceVideoUrl)) {
     return Response.json({ ok: false, error: "Source media is not accepted in text-to-video mode", code: "UNEXPECTED_VIDEO_SOURCE" }, { status: 400 })
@@ -116,6 +124,7 @@ async function handlePOST(request: Request) {
       prompt,
       imageUrl: mode === "image" ? imageUrl : undefined,
       sourceVideoUrl: mode === "video" ? sourceVideoUrl : undefined,
+      sourceDurationSeconds: mode === "video" ? sourceDurationSeconds : undefined,
       mode,
       length,
       resolution,
