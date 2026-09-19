@@ -245,6 +245,50 @@ interface ChatAttachment {
   base64?: string
   text?: string
   url?: string
+  durationSeconds?: number
+  analysisFrames?: Array<{
+    name: string
+    mime: "image/jpeg"
+    base64: string
+    timestampSeconds: number
+  }>
+}
+
+function expandVideoAnalysisAttachments(items: ChatAttachment[]): ChatAttachment[] {
+  return items.flatMap((item) => {
+    if (item.kind !== "video" || !item.analysisFrames?.length) return [item]
+
+    const { analysisFrames, base64: _base64, url: _url, ...metadata } = item
+    const timeline = analysisFrames
+      .map((frame, index) => \`frame \${index + 1}: \${frame.timestampSeconds.toFixed(2)}s\`)
+      .join(", ")
+
+    const videoMeta: ChatAttachment = {
+      ...metadata,
+      size: 0,
+      text: [
+        "[MALIK_VIDEO_TIMELINE_METADATA]",
+        \`Original video: \${item.name}\`,
+        \`Duration: \${Number(item.durationSeconds || 0).toFixed(2)} seconds\`,
+        "The following JPEG attachments are chronological frames sampled locally from this video.",
+        \`Timeline: \${timeline}\`,
+        "Analyze these frames as one continuous video timeline. Do not treat them as unrelated photos.",
+        "[/MALIK_VIDEO_TIMELINE_METADATA]",
+      ].join("\\n"),
+    }
+
+    const frameAttachments: ChatAttachment[] = analysisFrames.map((frame, index) => ({
+      id: \`\${item.id}-frame-\${index + 1}\`,
+      name: frame.name,
+      mime: frame.mime,
+      size: Math.ceil(frame.base64.length * 0.75),
+      kind: "image",
+      base64: frame.base64,
+      text: \`Video frame \${index + 1} at \${frame.timestampSeconds.toFixed(2)} seconds.\`,
+    }))
+
+    return [videoMeta, ...frameAttachments]
+  })
 }
 
 type InlineMediaGenerationStatus = "queued" | "thinking" | "generating" | "rendering" | "ready" | "failed"
@@ -5693,6 +5737,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const requestAttachments = implicitGeneratedImage
     ? [...attachments, implicitGeneratedImage]
     : attachments
+  // Raw phone video can easily exceed the /api/stream JSON body limit even at
+  // only a couple of seconds. ChatView samples up to six JPEG timeline frames
+  // locally; only those compact frames plus lightweight video metadata travel
+  // to the server.
+  const apiRequestAttachments = expandVideoAnalysisAttachments(requestAttachments)
 
   const memoryIntent = detectMalikMemoryIntent(cleanContent)
   const actionPlan = memoryIntent ? null : createMalikActionPlan({
@@ -6357,9 +6406,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         isAdmin,
         isCreator: canAccessAdmin,
         creatorName: canAccessAdmin ? "Абдумалик" : undefined,
-        attachments: requestAttachments,
-        media_b64: requestAttachments.find(a => a.base64)?.base64,
-        media_type: requestAttachments.find(a => a.base64)?.mime,
+        attachments: apiRequestAttachments,
+        media_b64: apiRequestAttachments.find(a => a.base64)?.base64,
+        media_type: apiRequestAttachments.find(a => a.base64)?.mime,
         mode: isProjReq ? "pro" : isCodeReq ? "code" : "fast",
         responseMode: mode,
         model: selectedModelId,
