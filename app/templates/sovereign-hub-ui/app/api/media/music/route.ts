@@ -1,5 +1,6 @@
 import { resolveMediaUser } from "@/lib/media/request"
 import { musicModel, musicProviderConfigured, submitDeapiMusic } from "@/lib/server/deapi-music"
+import { generateMusicLyrics, resolveMusicLyricsLanguage } from "@/lib/server/music-lyrics"
 import {
   acquireMusicInFlight,
   getMusicQuota,
@@ -42,6 +43,7 @@ export async function POST(request: Request) {
   const instrumental = body?.instrumental !== false
   const genre = String(body?.genre || "").trim()
   const mood = String(body?.mood || "").trim()
+  const requestedLyricsLanguage = body?.lyricsLanguage
   const requestedDuration = Number(body?.duration || 30)
 
   if (!prompt) {
@@ -101,10 +103,41 @@ export async function POST(request: Request) {
   }
 
   try {
-    const styledPrompt = [prompt, genre ? `Genre: ${genre}` : "", mood ? `Mood: ${mood}` : ""].filter(Boolean).join(". ")
+    let resolvedLyrics = lyrics
+    let lyricsGenerated = false
+    let resolvedLyricsLanguage = resolveMusicLyricsLanguage(prompt, requestedLyricsLanguage)
+
+    if (!instrumental && !resolvedLyrics) {
+      try {
+        const generated = await generateMusicLyrics({
+          prompt,
+          genre,
+          mood,
+          duration: Math.floor(requestedDuration),
+          language: requestedLyricsLanguage,
+        })
+        resolvedLyrics = generated.lyrics
+        resolvedLyricsLanguage = generated.language
+        lyricsGenerated = true
+      } catch (error) {
+        return Response.json({
+          ok: false,
+          code: "MALIK_LYRICS_GENERATION_FAILED",
+          error: error instanceof Error ? error.message : "Malik AI не смог написать слова песни.",
+        }, { status: 503 })
+      }
+    }
+
+    const styledPrompt = [
+      prompt,
+      genre ? `Genre: ${genre}` : "",
+      mood ? `Mood: ${mood}` : "",
+      !instrumental ? `Vocal song. Lyrics language: ${resolvedLyricsLanguage}` : "Instrumental track. No vocals.",
+    ].filter(Boolean).join(". ")
+
     const result = await submitDeapiMusic({
       prompt: styledPrompt,
-      lyrics: instrumental ? undefined : lyrics,
+      lyrics: instrumental ? undefined : resolvedLyrics,
       instrumental,
       duration: Math.floor(requestedDuration),
     })
@@ -136,6 +169,10 @@ export async function POST(request: Request) {
       remaining: updatedQuota.remaining,
       maxDurationSeconds: updatedQuota.maxDurationSeconds,
       resetAt: updatedQuota.resetAt,
+      lyrics: instrumental ? "" : resolvedLyrics,
+      lyricsGenerated,
+      lyricsLanguage: instrumental ? null : resolvedLyricsLanguage,
+      lyricsEngine: lyricsGenerated ? "Malik AI" : "user",
     }, { headers: { "Cache-Control": "no-store" } })
   } finally {
     releaseMusicInFlight(user.userId)
