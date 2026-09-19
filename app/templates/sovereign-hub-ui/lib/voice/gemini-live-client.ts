@@ -1,8 +1,17 @@
 "use client"
 
 import { getVoiceAudioContext, readyVoiceAudio } from "./audio-playback"
+import {
+  DEFAULT_LIVE_MODEL,
+  LIVE_INPUT_RATE,
+  LIVE_WS_URL,
+  buildLiveSetup,
+  safeLiveLanguage,
+  safeLiveVoice,
+  type LiveLanguage,
+} from "./gemini-live-setup"
 
-export type LiveLanguage = "kk" | "ru" | "en"
+export type { LiveLanguage }
 
 type LiveCallbacks = {
   onReady?: (model: string) => void
@@ -29,8 +38,8 @@ type TokenPayload = {
 
 type VoiceWindow = typeof globalThis & { webkitAudioContext?: typeof AudioContext }
 
-const DEFAULT_WS = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained"
-const INPUT_RATE = 16000
+const DEFAULT_WS = LIVE_WS_URL
+const INPUT_RATE = LIVE_INPUT_RATE
 const DEFAULT_OUTPUT_RATE = 24000
 
 /** Back-off between reconnect attempts. The last value repeats until the cap. */
@@ -46,38 +55,6 @@ const MAX_RETRIES = 12
  * fold would start.
  */
 const ANTI_ALIAS_HZ = 7000
-
-/**
- * The system prompt is written in the language of the answer.
- *
- * A model asked in English to "answer in the user's language" falls back to
- * English whenever the audio is unclear - which is exactly when the fallback
- * matters. Stating the rule in the target language, and repeating that noisy
- * audio does not change it, is what keeps the reply in one language.
- */
-const INSTRUCTIONS: Record<LiveLanguage, string> = {
-  kk: [
-    "Сен — Malik AI Voice, дауыспен сөйлесетін көмекші.",
-    "1-ЕРЕЖЕ: Жауапты ӘРҚАШАН тек қазақ тілінде бер. Дыбыс анық естілмесе де, бір сөз басқа тілде айтылса да — жауап бәрібір қазақша. Ағылшынша ЕШҚАШАН жауап берме.",
-    "2-ЕРЕЖЕ: Түсінбесең, қазақша қысқа қайта сұра.",
-    "3-ЕРЕЖЕ: Тірі адамша, қысқа әрі нақты сөйле. Әңгіме желісін ұстап отыр.",
-    "4-ЕРЕЖЕ: Ішкі провайдерлерді, модель аттарын немесе API кілттерін ешқашан атама.",
-  ].join(" "),
-  ru: [
-    "Ты — Malik AI Voice, голосовой собеседник.",
-    "ПРАВИЛО 1: Отвечай ВСЕГДА только на русском языке. Даже если звук неразборчив или одно слово прозвучало на другом языке — ответ всё равно только на русском. НИКОГДА не отвечай по-английски.",
-    "ПРАВИЛО 2: Если не расслышал — коротко переспроси по-русски.",
-    "ПРАВИЛО 3: Говори живо, коротко и по делу. Держи нить разговора.",
-    "ПРАВИЛО 4: Никогда не упоминай внутренних провайдеров, названия моделей или ключи API.",
-  ].join(" "),
-  en: [
-    "You are Malik AI Voice, a spoken conversation partner.",
-    "RULE 1: Always answer in English only. Even when the audio is unclear or a word arrives in another language, the answer stays English.",
-    "RULE 2: When you did not catch something, ask again briefly in English.",
-    "RULE 3: Speak naturally, short and to the point. Keep the thread of the conversation.",
-    "RULE 4: Never mention internal providers, model names or API keys.",
-  ].join(" "),
-}
 
 function toBase64(bytes: Uint8Array) {
   let binary = ""
@@ -136,22 +113,6 @@ function sampleRate(mime: string) {
   return parsed ? Math.max(8000, Number(parsed[1]) || DEFAULT_OUTPUT_RATE) : DEFAULT_OUTPUT_RATE
 }
 
-function safeLiveVoice(value: string) {
-  const known = new Set([
-    "Puck", "Charon", "Kore", "Aoede", "Fenrir", "Leda", "Achird", "Sulafat",
-    "Iapetus", "Rasalgethi", "Schedar", "Gacrux", "Orus", "Algenib", "Sadaltager",
-    "Alnilam", "Zubenelgenubi", "Laomedeia", "Algieba", "Enceladus", "Autonoe",
-    "Vindemiatrix", "Sadachbia", "Achernar", "Zephyr", "Callirrhoe", "Erinome",
-    "Despina", "Pulcherrima", "Umbriel",
-  ])
-  const head = String(value || "").trim().split(/\s+/)[0]
-  return known.has(head) ? head : "Charon"
-}
-
-function safeLanguage(value: unknown): LiveLanguage {
-  return value === "ru" || value === "en" || value === "kk" ? value : "kk"
-}
-
 /**
  * Native Gemini Live audio-to-audio session.
  *
@@ -191,7 +152,7 @@ export class GeminiLiveSession {
   private retries = 0
   private retryTimer = 0
   /** 0 = every documented option, 1 = core options, 2 = the bare minimum. */
-  private setupTier = 0
+  private setupTier: 0 | 1 | 2 = 0
   private sawSetupComplete = false
 
   private outputHead = 0
@@ -199,11 +160,11 @@ export class GeminiLiveSession {
   private callbacks: LiveCallbacks
   private voice: string
   private language: LiveLanguage
-  private model = "gemini-3.8-live"
+  private model = DEFAULT_LIVE_MODEL
 
   constructor(input: { voice?: string; language?: LiveLanguage; callbacks?: LiveCallbacks }) {
     this.voice = safeLiveVoice(input.voice || "Charon")
-    this.language = safeLanguage(input.language)
+    this.language = safeLiveLanguage(input.language)
     this.callbacks = input.callbacks || {}
   }
 
@@ -221,7 +182,7 @@ export class GeminiLiveSession {
    * without the resumption handle, because resuming would restore the old one.
    */
   async setLanguage(language: LiveLanguage) {
-    const next = safeLanguage(language)
+    const next = safeLiveLanguage(language)
     if (next === this.language) return
     this.language = next
     this.resumeHandle = null
@@ -250,43 +211,13 @@ export class GeminiLiveSession {
   }
 
   private buildSetup() {
-    const setup: Record<string, unknown> = {
-      model: `models/${this.model}`,
-      generationConfig: {
-        responseModalities: ["AUDIO"],
-        speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: this.voice } },
-        },
-      },
-      inputAudioTranscription: {},
-      outputAudioTranscription: {},
-      systemInstruction: { parts: [{ text: INSTRUCTIONS[this.language] }] },
-    }
-
-    if (this.setupTier <= 1) {
-      // Resuming is what makes a dropped link invisible: the restored session
-      // still knows what was said before it dropped.
-      setup.sessionResumption = this.resumeHandle ? { handle: this.resumeHandle } : {}
-    }
-
-    if (this.setupTier === 0) {
-      // Without compression an audio session is cut off at its context limit -
-      // a quarter of an hour of talking, then silence. Compression is what
-      // Google documents as the way to keep a session open indefinitely.
-      setup.contextWindowCompression = { slidingWindow: {} }
-      setup.realtimeInputConfig = {
-        automaticActivityDetection: {
-          disabled: false,
-          // A little padding in front keeps the first syllable; a short
-          // silence window is what makes the answer start almost at once
-          // instead of after a beat of waiting.
-          prefixPaddingMs: 120,
-          silenceDurationMs: 480,
-        },
-      }
-    }
-
-    return { setup }
+    return buildLiveSetup({
+      model: this.model,
+      voice: this.voice,
+      language: this.language,
+      tier: this.setupTier,
+      resumeHandle: this.resumeHandle,
+    })
   }
 
   private async open(): Promise<boolean> {
@@ -436,7 +367,7 @@ export class GeminiLiveSession {
         // one option is not supported on this account, the same session is
         // retried with a smaller setup.
         if (!this.sawSetupComplete && this.setupTier < 2 && (event.code === 1007 || event.code === 1008 || event.code === 1003 || event.code === 1002)) {
-          this.setupTier += 1
+          this.setupTier = (this.setupTier + 1) as 1 | 2
           console.warn("[VOICE_GEMINI_LIVE_SETUP_DOWNGRADE]", this.setupTier)
         }
 

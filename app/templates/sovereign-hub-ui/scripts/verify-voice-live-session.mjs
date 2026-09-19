@@ -415,5 +415,45 @@ await check("an unknown voice name never reaches the wire", async () => {
   browser.cleanup()
 })
 
+console.log("\nthe setup the server checks with is the setup the browser sends")
+
+const { buildLiveSetup, LIVE_WS_URL, LIVE_TOKEN_URL, DEFAULT_LIVE_MODEL } =
+  await import(`${process.cwd()}/lib/voice/gemini-live-setup.ts`)
+
+await check("both sides build it from the same module", async () => {
+  const { browser, session } = await connected({ language: "ru", voice: "Kore" })
+  const overTheWire = browser.sockets[0].setup()
+  // /api/voice/gemini-live-check calls buildLiveSetup and sends the result to
+  // Google. If that ever drifted from what the browser sends, a green check
+  // would mean nothing.
+  const fromTheServer = buildLiveSetup({ model: overTheWire.model.replace("models/", ""), language: "ru", voice: "Kore" }).setup
+  assert.deepEqual(fromTheServer, overTheWire)
+  session.close()
+  browser.cleanup()
+})
+
+await check("the endpoints are Google's, not a test stand", async () => {
+  // This file points them elsewhere while it runs against the fake server, and
+  // a forgotten override would ship a product that talks to nobody.
+  assert.match(LIVE_WS_URL, /^wss:\/\/generativelanguage\.googleapis\.com\//)
+  assert.match(LIVE_TOKEN_URL, /^https:\/\/generativelanguage\.googleapis\.com\//)
+  assert.match(LIVE_WS_URL, /BidiGenerateContentConstrained$/)
+  assert.equal(DEFAULT_LIVE_MODEL, "gemini-3.8-live")
+  return DEFAULT_LIVE_MODEL
+})
+
+await check("each smaller tier drops options and keeps the language rule", async () => {
+  const sizes = [0, 1, 2].map((tier) => Object.keys(buildLiveSetup({ tier, language: "kk" }).setup))
+  assert.ok(sizes[0].includes("contextWindowCompression") && sizes[0].includes("realtimeInputConfig"))
+  assert.ok(!sizes[1].includes("contextWindowCompression") && sizes[1].includes("sessionResumption"))
+  assert.ok(!sizes[2].includes("sessionResumption"))
+  for (const tier of [0, 1, 2]) {
+    const setup = buildLiveSetup({ tier, language: "kk" }).setup
+    assert.ok(setup.systemInstruction.parts[0].text.includes("қазақ"), `tier ${tier} lost the language rule`)
+    assert.deepEqual(setup.generationConfig.responseModalities, ["AUDIO"], `tier ${tier} lost audio output`)
+  }
+  return sizes.map((keys) => keys.length).join(" → ")
+})
+
 console.log(failures ? `\n${failures} failing\n` : "\nall Gemini Live session checks passed\n")
 process.exit(failures ? 1 : 0)

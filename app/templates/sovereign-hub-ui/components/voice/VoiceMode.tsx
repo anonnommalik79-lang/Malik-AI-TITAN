@@ -89,6 +89,9 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const [micError, setMicError] = useState<string | null>(null)
   /** Set when Gemini Live could not be reached, so Voice says so instead of pretending. */
   const [liveError, setLiveError] = useState<string | null>(null)
+  /** What the server-side self-check found, in one sentence. */
+  const [liveDiagnosis, setLiveDiagnosis] = useState<string | null>(null)
+  const [checkingLive, setCheckingLive] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(isVoiceSoundEnabled)
   const [screenActive, setScreenActive] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -974,6 +977,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
    */
   const reconnectLive = useCallback(async () => {
     setLiveError(null)
+    setLiveDiagnosis(null)
     setTitle("Подключаюсь к Gemini Live")
     setSubtitle("Секунду…")
     geminiLiveRef.current?.close()
@@ -981,6 +985,40 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     geminiLiveReadyRef.current = false
     await startMicrophone()
   }, [startMicrophone])
+
+  /**
+   * Asks the server to try the whole thing for real.
+   *
+   * The browser cannot tell a missing key from a rejected model name from a
+   * network that ate the websocket - it sees the same silence for all three.
+   * The server has the key, so it can open a real session to Google and say
+   * which of them it was, in a sentence, without anyone opening a console.
+   */
+  const checkLive = useCallback(async () => {
+    setCheckingLive(true)
+    setLiveDiagnosis("Проверяю связь с Gemini…")
+    try {
+      const response = await fetch(`/api/voice/gemini-live-check?language=${languageRef.current}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { accept: "application/json" },
+      })
+      const report = await response.json().catch(() => null) as
+        | { summary?: string; steps?: Array<{ title?: string; status?: string; detail?: string }> }
+        | null
+      if (!report?.summary) {
+        setLiveDiagnosis("Проверка не ответила. Похоже, сервер недоступен.")
+        return
+      }
+      const problem = report.steps?.find((step) => step.status === "fail")
+        || report.steps?.find((step) => step.status === "warn")
+      setLiveDiagnosis(problem ? `${report.summary} ${problem.title}: ${problem.detail}` : report.summary)
+    } catch {
+      setLiveDiagnosis("Проверка не дошла до сервера.")
+    } finally {
+      setCheckingLive(false)
+    }
+  }, [])
 
   /**
    * Reads the streamed answer and speaks it as it is written.
@@ -1517,8 +1555,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
           <div className={styles.retry} role="status">
             <span>{liveError}</span>
             <button type="button" onClick={() => void reconnectLive()}>Переподключить</button>
+            <button type="button" disabled={checkingLive} onClick={() => void checkLive()}>
+              {checkingLive ? "Проверяю…" : "Проверить связь"}
+            </button>
           </div>
         ) : null}
+        {liveDiagnosis ? <div className={styles.inlineError}>{liveDiagnosis}</div> : null}
         {audioError ? <div className={styles.retry} role="status"><span>{audioError}</span><button type="button" disabled={busy} onClick={() => void retryReply()}>Озвучить ответ</button></div> : null}
         {micError ? (
           <div className={styles.retry}>
