@@ -27,6 +27,11 @@ async function handleGET(request: Request) {
             ? "queued"
             : result.status
 
+  const publicVideoUrl =
+    result.provider === "magichour" && publicStatus === "ready" && result.videoUrl
+      ? `/api/media/video/file?taskId=${encodeURIComponent(result.taskId)}`
+      : result.videoUrl
+
   return Response.json({
     ok: result.ok,
     provider: result.provider,
@@ -35,8 +40,8 @@ async function handleGET(request: Request) {
     status: publicStatus,
     stage: result.stage,
     outputResolution: result.outputResolution,
-    videoUrl: result.videoUrl,
-    url: result.videoUrl,
+    videoUrl: publicVideoUrl,
+    url: publicVideoUrl,
     error: result.error,
   })
 }
