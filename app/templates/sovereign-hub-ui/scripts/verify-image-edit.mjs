@@ -23,11 +23,19 @@ function load(file, stubs = {}) {
 }
 
 const { isExplicitImageEditRequest: edit, isExplicitImageGenerationRequest: create } = load('lib/ai/image-intent.ts')
-for (const prompt of ['убери человека справа', 'добавь кота', 'замени фон', 'сделай фон белым', 'напиши на фото «С днём рождения!»', 'сгенерируй фото меня на пляже', 'remove the car', 'суретке гүл қос']) assert.equal(edit(prompt, true), true, prompt)
+for (const prompt of ['убери человека справа', 'добавь кота', 'добавь чёрный спорткар на зелёную траву', 'поставь машину слева', 'вставь человека в кадр', 'размести самолёт рядом с домом', 'перемести авто вправо', 'дорисуй дерево', 'замени фон', 'сделай фон белым', 'напиши на фото «С днём рождения!»', 'сгенерируй фото меня на пляже', 'remove the car', 'insert a black sports car on the lawn', 'change the sky', 'суретке гүл қос']) assert.equal(edit(prompt, true), true, prompt)
 for (const prompt of ['что на фото?', 'опиши изображение', 'как убрать человека с фото?', 'напиши код для фото', 'напиши промпт для картинки', 'переведи текст на фото', '/video добавь движение']) assert.equal(edit(prompt, true), false, prompt)
 assert.equal(edit('добавь пункт в список'), false)
 assert.equal(edit('убери человека на фото'), true)
 assert.equal(create('сгенерируй фото кота'), true)
+
+const dashboardSource = fs.readFileSync('components/sovereign/dashboard.tsx', 'utf8')
+assert.match(dashboardSource, /const forcedImageEdit = hasRequestImageAttachment && isExplicitImageEditRequest\(cleanContent, true\)/)
+assert.match(dashboardSource, /const requestedInlineMediaKind = forcedImageEdit[\s\S]*?\? "image"/)
+assert.match(dashboardSource, /promptLikelyEditsRecentImage/)
+const streamSource = fs.readFileSync('app/api/stream/route-impl.ts', 'utf8')
+assert.match(streamSource, /IMAGE_EDIT_ROUTE_REQUIRED/)
+assert.match(streamSource, /requiresImageEditPipeline\(body\)/)
 
 const source = load('lib/media/image-edit-source.ts')
 const original = await sharp({ create: { width: 800, height: 400, channels: 3, background: '#ee5533' } }).png().toBuffer()

@@ -20,6 +20,7 @@ import {
   recordDailyMultimodalTokens,
 } from "@/lib/server/daily-multimodal-quota"
 import { getDailyTextTokenQuota } from "@/lib/server/daily-text-token-quota"
+import { isExplicitImageEditRequest } from "@/lib/ai/image-intent"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
@@ -38,6 +39,26 @@ function wantsSse(request: Request, body: any) {
 
 function isProjectBuildRequest(body: any) {
   return body?.isProjectRequest === true || (body?.forceCanvas === true && body?.responseMode === "canvas")
+}
+
+function requiresImageEditPipeline(body: any) {
+  const attachments = Array.isArray(body?.attachments) ? body.attachments : []
+  const hasImage = attachments.some((item: any) =>
+    item && typeof item === "object" && (
+      item.kind === "image"
+      || (typeof item.mime === "string" && item.mime.toLowerCase().startsWith("image/"))
+    ),
+  )
+  if (!hasImage) return false
+  const prompt = String(
+    body?.originalQuestion
+    || body?.question
+    || body?.prompt
+    || body?.message
+    || body?.input
+    || "",
+  ).trim()
+  return isExplicitImageEditRequest(prompt, true)
 }
 
 /**
@@ -647,6 +668,24 @@ async function handlePOST(request: Request) {
     }, {
       status: 413,
       headers: { "cache-control": "no-store" },
+    })
+  }
+
+  // Fail closed: an image-edit command with an image attachment must never be
+  // answered by a text/vision chat model. The dashboard normally routes these
+  // straight to /api/ai/image; this guard protects every alternate/stale client.
+  if (requiresImageEditPipeline(body)) {
+    return Response.json({
+      ok: false,
+      error: "IMAGE_EDIT_ROUTE_REQUIRED",
+      reroute: "image-edit",
+      message: "Этот запрос должен выполняться редактором изображения.",
+    }, {
+      status: 409,
+      headers: {
+        "cache-control": "no-store",
+        "x-malik-route": "image-edit",
+      },
     })
   }
 

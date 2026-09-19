@@ -309,8 +309,16 @@ async function makeVisionSizedBlob(source: Blob): Promise<Blob> {
   }
 }
 
+function promptLikelyEditsRecentImage(value: string) {
+  const text = String(value || "").trim().toLowerCase()
+  if (!text) return false
+  const editVerb = /(?:добавь|добавить|поставь|вставь|размести|перемести|убери|удали|замени|измени|дорисуй|перекрась|ретушируй|сделай|edit|add|insert|place|move|remove|replace|change|modify)/iu
+  const visualTarget = /(?:сюда|здесь|тут|там|кадр|фото|фотк|картин|изображ|фон|небо|трав|газон|машин|авто|спорткар|человек|лицо|волос|одежд|цвет|свет|тень|дом|здани|дорог|дерев|image|photo|picture|background|sky|grass|lawn|car|person|face|hair|clothes|shadow)/iu
+  return editVerb.test(text) && visualTarget.test(text)
+}
+
 async function latestGeneratedImageAttachment(messages: Message[], prompt: string): Promise<ChatAttachment | null> {
-  if (!promptRefersToRecentImage(prompt) || typeof window === "undefined") return null
+  if (!(promptRefersToRecentImage(prompt) || promptLikelyEditsRecentImage(prompt)) || typeof window === "undefined") return null
 
   const latest = [...messages].reverse().find((message) => {
     const media = message.generatedMedia
@@ -5599,9 +5607,20 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setMobilePreviewOpen(false)
     setGeneratedCode("")
   }
-  const requestedInlineMediaKind = detectInlineMediaGenerationRequest(cleanContent, requestAttachments, activeAiMode)
+  const hasRequestImageAttachment = requestAttachments.some(
+    (item) => item.kind === "image" || String(item.mime || "").startsWith("image/"),
+  )
+  // Routing invariant: when real image bytes/context are present and the user
+  // asks to change the picture, text chat is not an eligible destination.
+  const forcedImageEdit = hasRequestImageAttachment && isExplicitImageEditRequest(cleanContent, true)
+  const requestedInlineMediaKind = forcedImageEdit
+    ? "image"
+    : detectInlineMediaGenerationRequest(cleanContent, requestAttachments, activeAiMode)
   const parsedMediaCommand = parseMediaCommand(cleanContent)
-  const editingImage = requestedInlineMediaKind === "image" && isExplicitImageEditRequest(cleanContent, requestAttachments.some((item) => item.kind === "image"))
+  const editingImage = forcedImageEdit || (
+    requestedInlineMediaKind === "image"
+    && isExplicitImageEditRequest(cleanContent, hasRequestImageAttachment)
+  )
   const needsImageConfirmation = requestedInlineMediaKind === "image" && !parsedMediaCommand && !editingImage
   const inlineMediaKind = needsImageConfirmation ? null : requestedInlineMediaKind
   // Shown in the chat card: without the slash command.
