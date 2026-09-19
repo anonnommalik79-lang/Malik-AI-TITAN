@@ -44,7 +44,7 @@ import { clientFetchWithTimeout } from "@/lib/api-client"
 import { MalikModelSelector } from "./MalikModelSelector"
 import { canUseUltra, loadResponseDepth, type ChatSendOptions, type ResponseDepth } from "@/lib/ai/response-depth"
 import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
-import { isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
+import { isExplicitImageEditRequest, isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
 import { isDataSvgUrl, isImageLikeUrl, isRealVideoUrl } from "@/lib/media/media-url"
 import { ImageGenerationMotion } from "./image-generation-motion"
 import type { MalikActionPlan, MalikActionTarget } from "@/lib/ai/action-os"
@@ -1479,11 +1479,19 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     // into chat titles and history, and the words "image/photo/video" inside
     // that instruction were themselves matching the old media detector.
     const outgoing = rawText || "Проанализируй вложения"
+    const hasImageAttachment = attachments.some((item) => item.kind === "image")
+    const imageEditRequest = hasImageAttachment && isExplicitImageEditRequest(outgoing, true)
+    // Hard routing guard: an uploaded-image edit must never fall through to the
+    // text model. The slash command is internal; dashboard strips it from the
+    // visible user message and uses the uploaded pixels as the edit reference.
+    const routedOutgoing = imageEditRequest && !/^\s*\/(?:image|img|photo|foto|фото|картинка)\b/iu.test(outgoing)
+      ? `/image ${outgoing}`
+      : outgoing
 
     setLocalError(null)
     try { window.localStorage.setItem("malik_last_user_prompt", outgoing) } catch {}
     setLastSubmittedPrompt(outgoing)
-    onSendMessage(outgoing, attachments, { responseDepth })
+    onSendMessage(routedOutgoing, attachments, { responseDepth })
     setPrompt("")
     setAttachments([])
     setShowAttachMenu(false)
