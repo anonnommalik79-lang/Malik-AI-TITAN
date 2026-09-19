@@ -260,7 +260,7 @@ async function captureVideoAnalysisFrames(file: File) {
     }
     if (duration > MAX_VIDEO_DURATION_SECONDS + 0.15) {
       throw new Error(
-        \`Видео должно быть не длиннее \${MAX_VIDEO_DURATION_SECONDS} секунд. Сейчас: \${duration.toFixed(1)} сек.\`,
+        `Видео должно быть не длиннее ${MAX_VIDEO_DURATION_SECONDS} секунд. Сейчас: ${duration.toFixed(1)} сек.`,
       )
     }
 
@@ -298,7 +298,7 @@ async function captureVideoAnalysisFrames(file: File) {
       if (!base64) continue
 
       frames.push({
-        name: \`\${file.name || "video"}-frame-\${String(index + 1).padStart(2, "0")}.jpg\`,
+        name: `${file.name || "video"}-frame-${String(index + 1).padStart(2, "0")}.jpg`,
         mime: "image/jpeg",
         base64,
         timestampSeconds: Number(timestamp.toFixed(2)),
