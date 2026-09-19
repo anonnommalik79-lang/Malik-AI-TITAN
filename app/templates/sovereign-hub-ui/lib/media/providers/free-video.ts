@@ -208,14 +208,14 @@ export async function createFreeVideoJob(provider: FreeVideoProviderId, input: V
       ? {
           name: "Malik AI Video Edit",
           start_seconds: 0,
-          end_seconds: duration,
-          model: "ltx-2.3",
-          resolution: "480p",
+          end_seconds: Math.min(5, Math.max(3, Number(input.sourceDurationSeconds || 5))),
           assets: { video_file_path: input.sourceVideoUrl },
           style: {
             prompt: [
-              "Preserve the original video's subjects, identity, composition, motion continuity and photorealistic detail.",
-              "Apply only the requested changes and keep everything else visually consistent.",
+              "Edit the uploaded video according to the user's instruction.",
+              "You may remove, replace, add, recolor, restyle or enhance objects, people, backgrounds and scene details when explicitly requested.",
+              "Preserve the original subject identity, timing, camera motion, composition and all unmentioned details as closely as possible.",
+              "Keep edits temporally consistent across frames and physically realistic unless the user asks for a stylized result.",
               input.prompt,
             ].join(" "),
           },
@@ -259,7 +259,7 @@ export async function createFreeVideoJob(provider: FreeVideoProviderId, input: V
     if (!taskId) throw new Error("Magic Hour submit: missing project id")
     return {
       taskId,
-      model: input.sourceVideoUrl ? "ltx-2.3-video-editor" : "ltx-2.5",
+      model: input.sourceVideoUrl ? "google-omni-video-editor" : "ltx-2.5",
       statusUrl: `${root}/v1/video-projects/${encodeURIComponent(taskId)}`,
     }
   }
