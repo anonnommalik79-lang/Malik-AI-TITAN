@@ -101,11 +101,11 @@ function displayImageReference(previewUrl: string | undefined, masterUrl: string
 export async function handleMalikPhotoGenerationRequest(request: Request) {
   let body: any
   try {
-    body = await readJsonBodyLimited(request, 17 * 1024 * 1024)
+    body = await readJsonBodyLimited(request, 32 * 1024 * 1024)
     if (!body || typeof body !== "object" || Array.isArray(body)) throw new RequestSafetyError("Некорректный запрос.")
   } catch (error) {
     return Response.json({ ok: false, status: "failed", error: error instanceof RequestSafetyError ? error.code : "INVALID_JSON",
-      publicError: "Не удалось прочитать запрос. Прикрепите одно фото до 12 МБ." }, { status: error instanceof RequestSafetyError ? error.status : 400 })
+      publicError: "Не удалось прочитать запрос. Попробуйте прикрепить фото ещё раз — Malik AI автоматически оптимизирует большие изображения." }, { status: error instanceof RequestSafetyError ? error.status : 400 })
   }
   const rawPrompt = normalizeImagePrompt(body?.prompt || body?.message)
   const editing = body.operation === "edit" || imageAttachments(body).length > 0 || isExplicitImageEditRequest(rawPrompt)
