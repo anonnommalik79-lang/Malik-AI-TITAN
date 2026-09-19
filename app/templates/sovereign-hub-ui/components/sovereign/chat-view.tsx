@@ -236,6 +236,31 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
 }
 
 
+function attachmentFromSharedFile(file: any): ChatAttachment | null {
+  const base64 = String(file?.base64 || "")
+  const mime = String(file?.mime || "application/octet-stream")
+  if (!base64 || (!mime.startsWith("image/") && !mime.startsWith("video/") && mime !== "application/pdf")) return null
+  try {
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+    const blob = new Blob([bytes], { type: mime })
+    const kind: ChatAttachment["kind"] = mime.startsWith("image/") ? "image" : mime.startsWith("video/") ? "video" : "file"
+    return {
+      id: crypto.randomUUID(),
+      name: String(file?.name || "shared-media"),
+      mime,
+      size: Number(file?.size || blob.size),
+      kind,
+      base64,
+      url: kind === "image" || kind === "video" ? URL.createObjectURL(blob) : undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
+
 function detectGenerationStatusType(text: string): GenerationStatusType {
   const value = text.toLowerCase().trim()
 
@@ -253,11 +278,40 @@ function detectGenerationStatusType(text: string): GenerationStatusType {
   return "text"
 }
 
+function attachmentPreviewSrc(item: ChatAttachment) {
+  if (typeof item.url === "string" && /^(?:blob:|data:|https?:)/i.test(item.url)) return item.url
+  if (item.base64 && (item.kind === "image" || item.kind === "video")) {
+    return `data:${item.mime || (item.kind === "image" ? "image/jpeg" : "video/mp4")};base64,${item.base64}`
+  }
+  return ""
+}
+
 function AttachmentPill({ item, onRemove }: { item: ChatAttachment; onRemove: () => void }) {
-  const Icon = item.kind === "image" ? ImageIcon : item.kind === "video" ? Video : item.kind === "audio" ? Volume2 : item.kind === "code" ? Code : item.kind === "url" ? LinkIcon : FileText
+  const preview = attachmentPreviewSrc(item)
+  if ((item.kind === "image" || item.kind === "video") && preview) {
+    return (
+      <div className="malik-composer-attachment-preview group relative h-[76px] w-[76px] shrink-0 overflow-hidden rounded-[16px] border border-white/10 bg-black">
+        {item.kind === "image" ? (
+          <img src={preview} alt={item.name || "Изображение"} className="h-full w-full object-cover" />
+        ) : (
+          <video src={preview} className="h-full w-full object-cover" muted playsInline preload="metadata" />
+        )}
+        <button
+          type="button"
+          onClick={onRemove}
+          className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full border border-white/15 bg-black/75 text-white shadow-lg backdrop-blur"
+          aria-label="Убрать вложение"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    )
+  }
+
+  const Icon = item.kind === "audio" ? Volume2 : item.kind === "code" ? Code : item.kind === "url" ? LinkIcon : FileText
   return (
-    <div className="group flex max-w-full items-center gap-2 rounded-xl border border-cyan-300/12 bg-white/[0.045] px-3 py-2 text-xs text-slate-300">
-      <Icon className="h-4 w-4 shrink-0 text-violet-300" />
+    <div className="group flex max-w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-xs text-slate-300">
+      <Icon className="h-4 w-4 shrink-0 text-zinc-300" />
       <span className="truncate">{item.name || item.url}</span>
       <button type="button" onClick={onRemove} className="ml-1 rounded-md p-1 text-slate-500 hover:bg-white/10 hover:text-white">
         <X className="h-3.5 w-3.5" />
@@ -268,7 +322,7 @@ function AttachmentPill({ item, onRemove }: { item: ChatAttachment; onRemove: ()
 
 function UserAttachmentPreview({ item }: { item: ChatAttachment }) {
   const [previewFailed, setPreviewFailed] = useState(false)
-  const src = typeof item.url === "string" && /^(?:blob:|data:|https?:)/i.test(item.url) ? item.url : ""
+  const src = attachmentPreviewSrc(item)
   const formatBytes = (bytes: number) => {
     if (!Number.isFinite(bytes) || bytes <= 0) return ""
     if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -277,34 +331,29 @@ function UserAttachmentPreview({ item }: { item: ChatAttachment }) {
 
   if (item.kind === "image" && src && !previewFailed) {
     return (
-      <figure className="malik-user-attachment malik-user-attachment--image overflow-hidden rounded-[18px] border border-white/10 bg-black/30">
+      <figure title={item.name} className="malik-user-attachment malik-user-attachment--image h-[152px] w-[152px] shrink-0 overflow-hidden rounded-[18px] border border-white/10 bg-black/30 sm:h-[168px] sm:w-[168px]">
         <img
           src={src}
           alt={item.name || "Прикреплённое изображение"}
-          className="block max-h-[360px] w-full object-cover"
+          className="block h-full w-full object-cover"
           loading="eager"
           onError={() => setPreviewFailed(true)}
         />
-        <figcaption className="truncate border-t border-white/[0.07] px-3 py-2 text-[11px] leading-4 text-zinc-400">
-          {item.name}
-        </figcaption>
       </figure>
     )
   }
 
   if (item.kind === "video" && src && !previewFailed) {
     return (
-      <figure className="malik-user-attachment malik-user-attachment--video overflow-hidden rounded-[18px] border border-white/10 bg-black/40">
+      <figure title={item.name} className="malik-user-attachment malik-user-attachment--video h-[152px] w-[152px] shrink-0 overflow-hidden rounded-[18px] border border-white/10 bg-black/40 sm:h-[168px] sm:w-[168px]">
         <video
           src={src}
-          className="block max-h-[360px] w-full bg-black object-contain"
+          className="block h-full w-full bg-black object-cover"
           controls
+          playsInline
           preload="metadata"
           onError={() => setPreviewFailed(true)}
         />
-        <figcaption className="truncate border-t border-white/[0.07] px-3 py-2 text-[11px] leading-4 text-zinc-400">
-          {item.name}
-        </figcaption>
       </figure>
     )
   }
@@ -328,7 +377,7 @@ function UserAttachmentPreview({ item }: { item: ChatAttachment }) {
 function UserAttachmentGallery({ items }: { items: ChatAttachment[] }) {
   if (!items.length) return null
   return (
-    <div className={cn("mb-2.5 grid gap-2", items.length > 1 && "sm:grid-cols-2")} aria-label="Прикреплённые файлы">
+    <div className="mb-2.5 flex max-w-full flex-wrap gap-2" aria-label="Прикреплённые файлы">
       {items.map((item) => <UserAttachmentPreview key={item.id} item={item} />)}
     </div>
   )
@@ -1070,6 +1119,8 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [feedbackMap, setFeedbackMap] = useState<Record<string, "up" | "down">>({})
   const [showAttachMenu, setShowAttachMenu] = useState(false)
+  const [attachMenuPosition, setAttachMenuPosition] = useState<{ left: number; top: number; width: number } | null>(null)
+  const [dragActive, setDragActive] = useState(false)
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [codeModalOpen, setCodeModalOpen] = useState(false)
   const [codeText, setCodeText] = useState("")
@@ -1113,6 +1164,35 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     const loaded = loadResponseDepth(effectivePlan)
     setResponseDepth(loaded === "ultra" && !canUseUltra(effectivePlan) ? "deep" : loaded)
   }, [effectivePlan])
+
+  useEffect(() => {
+    const current = new URL(window.location.href)
+    const token = current.searchParams.get("shareTarget")
+    if (!token) return
+    let cancelled = false
+
+    fetch(`/api/attachments/share-target?token=${encodeURIComponent(token)}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    })
+      .then(async (response) => ({ response, payload: await response.json().catch(() => ({})) }))
+      .then(({ response, payload }) => {
+        if (cancelled || !response.ok || !payload?.ok) return
+        const imported = (Array.isArray(payload.files) ? payload.files : [])
+          .map(attachmentFromSharedFile)
+          .filter((item: ChatAttachment | null): item is ChatAttachment => Boolean(item))
+        if (imported.length) setAttachments((previous) => [...previous, ...imported].slice(0, 8))
+        const sharedText = [payload.text, payload.url].map((value) => String(value || "").trim()).filter(Boolean).join("\n")
+        if (sharedText) setPrompt((previous) => previous.trim() ? previous : sharedText)
+      })
+      .finally(() => {
+        if (cancelled) return
+        current.searchParams.delete("shareTarget")
+        window.history.replaceState(window.history.state, "", current.pathname + current.search + current.hash)
+      })
+
+    return () => { cancelled = true }
+  }, [])
   useEffect(() => {
     if (!textareaRef.current) return
     const priority = window.matchMedia("(max-width: 767px)").matches ? "important" : ""
@@ -1137,6 +1217,30 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     }
   }, [showAttachMenu])
 
+  useEffect(() => {
+    if (!showAttachMenu) {
+      setAttachMenuPosition(null)
+      return
+    }
+
+    const updatePosition = () => {
+      const button = attachButtonRef.current
+      if (!button) return
+      const rect = button.getBoundingClientRect()
+      const width = Math.min(340, Math.max(248, window.innerWidth - 24))
+      const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - width - 12))
+      setAttachMenuPosition({ left, top: Math.max(12, rect.top - 12), width })
+    }
+
+    updatePosition()
+    window.addEventListener("resize", updatePosition)
+    window.addEventListener("scroll", updatePosition, true)
+    return () => {
+      window.removeEventListener("resize", updatePosition)
+      window.removeEventListener("scroll", updatePosition, true)
+    }
+  }, [showAttachMenu])
+
 
   const lastUserPrompt = useMemo(() => lastSubmittedPrompt || [...messages].reverse().find((message) => message.role === "user")?.content || prompt, [lastSubmittedPrompt, messages, prompt])
 
@@ -1145,8 +1249,8 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     return detectGenerationStatusType(lastUserMessage?.content || prompt)
   }, [messages, prompt])
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files?.length) return
+  const handleFiles = async (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return
     setLocalError(null)
     try {
       const parsed = await Promise.all(Array.from(files).slice(0, 8).map(fileToAttachment))
@@ -1155,6 +1259,82 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "Ошибка файла")
     }
+  }
+
+  const importRemoteMedia = async (rawUrl: string) => {
+    const url = rawUrl.trim()
+    if (!/^https?:\/\//i.test(url)) return false
+    try {
+      const response = await fetch("/api/attachments/import-url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ url }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok || !payload?.file?.base64) {
+        throw new Error(payload?.error || "Не удалось загрузить медиа по ссылке")
+      }
+
+      const binary = atob(String(payload.file.base64))
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+      const mime = String(payload.file.mime || "application/octet-stream")
+      const blob = new Blob([bytes], { type: mime })
+      const attachment: ChatAttachment = {
+        id: crypto.randomUUID(),
+        name: String(payload.file.name || "shared-media"),
+        mime,
+        size: Number(payload.file.size || blob.size),
+        kind: mime.startsWith("image/") ? "image" : mime.startsWith("video/") ? "video" : "file",
+        base64: String(payload.file.base64),
+        url: URL.createObjectURL(blob),
+      }
+      setAttachments((previous) => [...previous, attachment].slice(0, 8))
+      setLocalError(null)
+      return true
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "Не удалось импортировать медиа")
+      return false
+    }
+  }
+
+  const externalUrlFromTransfer = (transfer: DataTransfer | null) => {
+    if (!transfer) return ""
+    const uri = transfer.getData("text/uri-list").split(/\r?\n/).find((line) => line && !line.startsWith("#")) || ""
+    if (/^https?:\/\//i.test(uri.trim())) return uri.trim()
+    const html = transfer.getData("text/html")
+    const srcMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i)
+    if (srcMatch?.[1] && /^https?:\/\//i.test(srcMatch[1])) return srcMatch[1]
+    const text = transfer.getData("text/plain").trim()
+    return /^https?:\/\/\S+$/i.test(text) ? text : ""
+  }
+
+  const handleComposerPaste = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files || [])
+    if (files.length) {
+      event.preventDefault()
+      await handleFiles(files)
+      return
+    }
+    const url = externalUrlFromTransfer(event.clipboardData)
+    if (url) {
+      event.preventDefault()
+      await importRemoteMedia(url)
+    }
+  }
+
+  const handleComposerDrop = async (event: React.DragEvent<HTMLElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setDragActive(false)
+    const files = Array.from(event.dataTransfer.files || [])
+    if (files.length) {
+      await handleFiles(files)
+      return
+    }
+    const url = externalUrlFromTransfer(event.dataTransfer)
+    if (url) await importRemoteMedia(url)
   }
 
   const removeComposerAttachment = (id: string) => {
@@ -1379,9 +1559,18 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       </div>
 
       <div data-composer className="malik-composer-dock relative z-20 w-full shrink-0 bg-transparent px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 md:px-8 md:pb-6 lg:px-10">
-        <div className="malik-composer-panel chat-composer relative mx-auto w-full max-w-[768px] rounded-[1.55rem] border border-white/10 bg-[#111112] p-3 sm:p-4">
+        <div
+          className={cn("malik-composer-panel chat-composer relative mx-auto w-full max-w-[768px] rounded-[1.55rem] border border-white/10 bg-[#111112] p-3 transition sm:p-4", dragActive && "ring-2 ring-white/35")}
+          onDragEnter={(event) => { event.preventDefault(); setDragActive(true) }}
+          onDragOver={(event) => { event.preventDefault(); setDragActive(true) }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false)
+          }}
+          onDrop={handleComposerDrop}
+        >
           {localError && <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">{localError}</div>}
-          {attachments.length > 0 && <div className="mb-3 flex flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => removeComposerAttachment(attachment.id)} />)}</div>}
+          {attachments.length > 0 && <div className="malik-composer-attachments mb-3 flex max-w-full flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => removeComposerAttachment(attachment.id)} />)}</div>}
+          {dragActive ? <div className="pointer-events-none absolute inset-2 z-40 grid place-items-center rounded-[20px] border border-dashed border-white/30 bg-black/70 text-sm font-medium text-white">Отпустите фото, видео или файл</div> : null}
           <div className="malik-inline-composer">
             <button ref={attachButtonRef} type="button" onClick={() => setShowAttachMenu((value) => !value)} className={cn("malik-inline-action", showAttachMenu && "is-active")} aria-label="Добавить" aria-haspopup="menu" aria-expanded={showAttachMenu} aria-controls="malik-attachment-menu">
               <Plus className="h-5 w-5" />
@@ -1390,6 +1579,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
               ref={textareaRef}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
+              onPaste={handleComposerPaste}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault()
@@ -1439,13 +1629,19 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
             </button>
             <span>Enter — отправить · Shift + Enter — новая строка</span>
           </div>
-          {showAttachMenu && (
+          {showAttachMenu && attachMenuPosition && typeof document !== "undefined" ? createPortal(
             <div
               id="malik-attachment-menu"
               ref={attachMenuRef}
               role="menu"
               aria-label="Добавить в чат"
-              className="absolute bottom-[calc(100%+12px)] left-0 z-50 w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-[28px] border border-white/[0.10] bg-[#222222]/95 p-2.5 shadow-[0_24px_80px_rgba(0,0,0,.72)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#222222]/88"
+              className="fixed z-[10000] overflow-hidden rounded-[22px] border border-white/[0.10] bg-[#1b1b1c]/98 p-2 shadow-[0_24px_80px_rgba(0,0,0,.78)] backdrop-blur-xl"
+              style={{
+                left: attachMenuPosition.left,
+                top: attachMenuPosition.top,
+                width: attachMenuPosition.width,
+                transform: "translateY(-100%)",
+              }}
             >
               <div className="flex flex-col gap-1">
                 {attachItems.map((item) => (
@@ -1454,30 +1650,31 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                     type="button"
                     role="menuitem"
                     onClick={item.action}
-                    className="group flex w-full items-center gap-4 rounded-[20px] px-2.5 py-2.5 text-left text-[17px] font-semibold text-white transition-colors hover:bg-white/[0.07] active:bg-white/[0.11]"
+                    className="group flex min-h-12 w-full items-center gap-3 rounded-[15px] px-3 py-2.5 text-left text-[14px] font-semibold text-white transition-colors hover:bg-white/[0.07] active:bg-white/[0.11]"
                   >
-                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white/[0.12] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08)] transition group-hover:bg-white/[0.16]">
-                      <item.icon className="h-[23px] w-[23px] stroke-[1.8]" />
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/[0.10] text-white">
+                      <item.icon className="h-5 w-5 stroke-[1.8]" />
                     </span>
                     <span className="truncate">{item.label}</span>
                   </button>
                 ))}
               </div>
-            </div>
-          )}
+            </div>,
+            document.body,
+          ) : null}
         </div>
         <p className="mt-2 hidden text-center text-xs text-slate-600 sm:block">Malik AI может ошибаться. Проверяйте важную информацию.</p>
       </div>
 
-      <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => handleFiles(event.target.files)} />
-      <input ref={videoInputRef} type="file" accept="video/*" multiple className="hidden" onChange={(event) => handleFiles(event.target.files)} />
+      <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }} />
+      <input ref={videoInputRef} type="file" accept="video/*" multiple className="hidden" onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }} />
       <input
         ref={fileInputRef}
         type="file"
         multiple
         accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.mdx,.csv,.tsv,.json,.jsonl,.yaml,.yml,.xml,.html,.htm,.css,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.kt,.go,.rs,.rb,.php,.swift,.c,.h,.cpp,.hpp,.cs,.sql,.sh,.bash,.zsh,.ps1,.toml,.ini,.log"
         className="hidden"
-        onChange={(event) => handleFiles(event.target.files)}
+        onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }}
       />
 
       {codeModalOpen && (
