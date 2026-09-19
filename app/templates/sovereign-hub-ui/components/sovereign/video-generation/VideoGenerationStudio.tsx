@@ -698,7 +698,18 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         {(error || phase === "ready") ? (
           <div className={`mv2m__status${error ? " is-error" : ""}`}>
             {error || "Видео готово"}
-            {videoUrl ? <button type="button" onClick={() => window.open(videoUrl, "_blank", "noopener,noreferrer")}>Открыть</button> : null}
+          </div>
+        ) : null}
+        {videoUrl ? (
+          <div className="mv2m__result-video">
+            <video
+              key={videoUrl}
+              src={videoUrl}
+              controls
+              playsInline
+              preload="metadata"
+            />
+            <button type="button" onClick={downloadCurrent}>Скачать видео</button>
           </div>
         ) : null}
 
@@ -934,6 +945,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           .mv2m__source-preview{width:44px;height:44px;padding:0;border:1px solid #30343b;border-radius:9px;background:#14171c;color:#bfc5cd;display:grid;place-items:center;overflow:hidden}.mv2m__source-preview svg{width:18px;height:18px}.mv2m__source-preview img,.mv2m__source-preview video{width:100%;height:100%;object-fit:cover;display:block}
           .mv2m__source-copy{min-width:0;padding:0;border:0;background:transparent;color:#fff;text-align:left;display:flex;flex-direction:column;gap:3px}.mv2m__source-copy strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mv2m__source-copy small{font-size:8px;color:#818894}
           .mv2m__source-remove{width:30px;height:30px;border:0;border-radius:50%;background:#2d3036;color:#aeb4bd;display:grid;place-items:center}.mv2m__source-remove svg{width:13px;height:13px}
+          .mv2m__result-video{margin-top:10px;border:1px solid #292d35;border-radius:14px;overflow:hidden;background:#090b0e}.mv2m__result-video video{display:block;width:100%;max-height:52vh;background:#000;object-fit:contain}.mv2m__result-video button{width:100%;height:40px;border:0;border-top:1px solid #292d35;background:#14171c;color:#fff;font-size:10px;font-weight:700}
           .mv2m__prompt{margin-top:8px;padding:11px 10px 9px;border:1px solid #2b2e35;border-radius:14px;background:linear-gradient(180deg,#101216,#0d0f12);box-shadow:inset 0 1px 0 rgba(255,255,255,.018)}
           .mv2m__prompt textarea{width:100%;height:75px;resize:none;border:0;outline:0;background:transparent;color:#f7f7f8;font-size:11px;line-height:1.45;padding:0}.mv2m__prompt textarea::placeholder{color:#717783}
           .mv2m__prompt-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.mv2m__prompt-tools{display:flex;gap:7px}.mv2m__prompt-tools button{width:29px;height:29px;padding:0;border:1px solid #2c3037;border-radius:8px;background:#14171c;color:#c1c6ce;display:grid;place-items:center}.mv2m__prompt-tools button svg{width:14px;height:14px}
