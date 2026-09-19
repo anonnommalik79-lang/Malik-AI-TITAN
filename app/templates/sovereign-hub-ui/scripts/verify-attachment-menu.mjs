@@ -57,7 +57,7 @@ assert.match(chat, /malik-user-attachment--image/, "Sent photos must render as a
 assert.match(chat, /malik-user-attachment--video/, "Sent videos must render as actual video previews")
 assert.match(chat, /URL\.createObjectURL\(file\)/, "Chat media must receive a lightweight visual preview URL")
 assert.match(chat, /createPortal\([\s\S]*malik-attachment-menu/, "Chat plus menu must render through a body portal so the composer cannot clip it")
-assert.match(chat, /position: "fixed"/, "Chat plus menu must use viewport positioning")
+assert.match(chat, /className="fixed z-\[10000\]/, "Chat plus menu must use viewport positioning")
 assert.match(chat, /onPaste={handleComposerPaste}/, "Chat composer must accept pasted media")
 assert.match(chat, /onDrop={handleComposerDrop}/, "Chat composer must accept dragged media")
 assert.match(chat, /malik-composer-attachment-preview/, "Pending media must render as a square preview before send")
