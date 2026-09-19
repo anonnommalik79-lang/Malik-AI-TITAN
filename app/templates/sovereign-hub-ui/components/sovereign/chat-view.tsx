@@ -127,6 +127,13 @@ export interface ChatAttachment {
   base64?: string
   text?: string
   url?: string
+  durationSeconds?: number
+  analysisFrames?: Array<{
+    name: string
+    mime: "image/jpeg"
+    base64: string
+    timestampSeconds: number
+  }>
 }
 
 type InlineMediaGenerationStatus = "queued" | "thinking" | "generating" | "rendering" | "ready" | "failed"
@@ -171,6 +178,10 @@ interface ChatViewProps {
 }
 
 const MAX_BINARY_FILE_SIZE = 10 * 1024 * 1024
+const MAX_VIDEO_FILE_SIZE = 150 * 1024 * 1024
+const MAX_VIDEO_DURATION_SECONDS = 10
+const VIDEO_ANALYSIS_FRAME_COUNT = 6
+const VIDEO_ANALYSIS_LONG_EDGE = 640
 const MAX_TEXT_FILE_SIZE = 12 * 1024 * 1024
 const MAX_INLINE_TEXT_CHARS = 600_000
 const TEXT_UPLOAD_EXTENSIONS = new Set([
@@ -196,14 +207,141 @@ function inferUploadMime(file: File) {
   if (ext === "pptx") return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
   if (ext === "json") return "application/json"
   if (ext === "csv") return "text/csv"
+  if (ext === "mp4" || ext === "m4v") return "video/mp4"
+  if (ext === "mov") return "video/quicktime"
+  if (ext === "webm") return "video/webm"
   if (TEXT_UPLOAD_EXTENSIONS.has(ext)) return "text/plain"
   return "application/octet-stream"
+}
+
+function waitForVideoEvent(
+  video: HTMLVideoElement,
+  eventName: "loadedmetadata" | "loadeddata" | "seeked",
+  timeoutMs = 12_000,
+) {
+  return new Promise<void>((resolve, reject) => {
+    let timer = 0
+    const cleanup = () => {
+      video.removeEventListener(eventName, onReady)
+      video.removeEventListener("error", onError)
+      if (timer) window.clearTimeout(timer)
+    }
+    const onReady = () => {
+      cleanup()
+      resolve()
+    }
+    const onError = () => {
+      cleanup()
+      reject(new Error("Не удалось прочитать видео. Попробуйте MP4/MOV до 10 секунд."))
+    }
+    video.addEventListener(eventName, onReady, { once: true })
+    video.addEventListener("error", onError, { once: true })
+    timer = window.setTimeout(() => {
+      cleanup()
+      reject(new Error("Видео читается слишком долго. Попробуйте более короткий ролик."))
+    }, timeoutMs)
+  })
+}
+
+async function captureVideoAnalysisFrames(file: File) {
+  const objectUrl = URL.createObjectURL(file)
+  const video = document.createElement("video")
+  video.preload = "auto"
+  video.muted = true
+  video.playsInline = true
+  video.src = objectUrl
+
+  try {
+    await waitForVideoEvent(video, "loadedmetadata")
+
+    const duration = Number(video.duration)
+    if (!Number.isFinite(duration) || duration <= 0) {
+      throw new Error("Не удалось определить длительность видео.")
+    }
+    if (duration > MAX_VIDEO_DURATION_SECONDS + 0.15) {
+      throw new Error(
+        \`Видео должно быть не длиннее \${MAX_VIDEO_DURATION_SECONDS} секунд. Сейчас: \${duration.toFixed(1)} сек.\`,
+      )
+    }
+
+    if (video.readyState < 2) {
+      await waitForVideoEvent(video, "loadeddata")
+    }
+
+    const sourceWidth = Math.max(1, video.videoWidth || 1)
+    const sourceHeight = Math.max(1, video.videoHeight || 1)
+    const scale = Math.min(1, VIDEO_ANALYSIS_LONG_EDGE / Math.max(sourceWidth, sourceHeight))
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.max(2, Math.round(sourceWidth * scale))
+    canvas.height = Math.max(2, Math.round(sourceHeight * scale))
+    const context = canvas.getContext("2d", { alpha: false })
+    if (!context) throw new Error("Браузер не смог подготовить кадры видео.")
+
+    const frameCount = duration < 0.8 ? 4 : VIDEO_ANALYSIS_FRAME_COUNT
+    const safeEnd = Math.max(0, duration - 0.03)
+    const timestamps = Array.from({ length: frameCount }, (_, index) =>
+      frameCount === 1 ? 0 : safeEnd * (index / (frameCount - 1)),
+    )
+
+    const frames: NonNullable<ChatAttachment["analysisFrames"]> = []
+    for (let index = 0; index < timestamps.length; index += 1) {
+      const timestamp = timestamps[index]
+      if (timestamp > 0.015 || Math.abs(video.currentTime - timestamp) > 0.04) {
+        const seeked = waitForVideoEvent(video, "seeked", 10_000)
+        video.currentTime = Math.min(safeEnd, Math.max(0, timestamp))
+        await seeked
+      }
+
+      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.72)
+      const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] || "" : ""
+      if (!base64) continue
+
+      frames.push({
+        name: \`\${file.name || "video"}-frame-\${String(index + 1).padStart(2, "0")}.jpg\`,
+        mime: "image/jpeg",
+        base64,
+        timestampSeconds: Number(timestamp.toFixed(2)),
+      })
+    }
+
+    if (frames.length < 2) {
+      throw new Error("Не удалось извлечь достаточно кадров из видео.")
+    }
+
+    return {
+      durationSeconds: Number(duration.toFixed(2)),
+      frames,
+    }
+  } finally {
+    video.pause()
+    video.removeAttribute("src")
+    video.load()
+    URL.revokeObjectURL(objectUrl)
+  }
 }
 
 async function fileToAttachment(file: File): Promise<ChatAttachment> {
   const mime = inferUploadMime(file)
   const ext = uploadExtension(file.name)
   const textLike = mime.startsWith("text/") || mime === "application/json" || TEXT_UPLOAD_EXTENSIONS.has(ext)
+
+  if (mime.startsWith("video/")) {
+    if (file.size > MAX_VIDEO_FILE_SIZE) {
+      throw new Error(`Видео слишком большое: ${file.name}. Для анализа до 10 секунд лимит файла 150MB.`)
+    }
+    const analyzed = await captureVideoAnalysisFrames(file)
+    return {
+      id: crypto.randomUUID(),
+      name: file.name,
+      mime,
+      size: file.size,
+      kind: "video",
+      url: URL.createObjectURL(file),
+      durationSeconds: analyzed.durationSeconds,
+      analysisFrames: analyzed.frames,
+    }
+  }
 
   if (textLike) {
     if (file.size > MAX_TEXT_FILE_SIZE) {
