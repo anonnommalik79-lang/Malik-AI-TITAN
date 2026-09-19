@@ -168,6 +168,13 @@ export async function POST(request: Request) {
     const nextQuota = await incrementMusicQuota(user.userId, limits.dailyLimit)
     const requestId = submitted.requestId
 
+    console.info("[MUSIC] deAPI queued", {
+      requestId: requestId.slice(0, 12),
+      model: submitted.model,
+      duration,
+      plan: user.plan,
+    })
+
     return Response.json({
       ok: true,
       provider: submitted.provider,
