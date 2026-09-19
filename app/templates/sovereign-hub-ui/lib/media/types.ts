@@ -76,7 +76,11 @@ export type VideoJobStatus = "disabled" | "queued" | "generating" | "completed" 
 
 export type VideoGenerateInput = {
   prompt: string
+  /** Optional source image for image-to-video. Use a provider asset path or a public HTTPS URL. */
   imageUrl?: string
+  /** Optional source video for prompt-driven video editing. Use a provider asset path or a public HTTPS URL. */
+  sourceVideoUrl?: string
+  mode?: "text" | "image" | "video"
   length?: 5 | 10
   resolution?: VideoResolution
   ratio?: VideoAspectRatio
