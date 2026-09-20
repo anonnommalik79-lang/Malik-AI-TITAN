@@ -1,5 +1,5 @@
 import { resolveMediaUser } from "@/lib/media/request"
-import { getDeapiMusicJob, musicModel } from "@/lib/server/deapi-music"
+import { getDeapiMusicJob, musicModel, musicProviderName } from "@/lib/server/deapi-music"
 
 export const runtime = "nodejs"
 
@@ -19,8 +19,8 @@ export async function GET(request: Request) {
   if (result.status === "failed") {
     return Response.json({
       ok: false,
-      provider: "deAPI",
-      model: musicModel(),
+      provider: musicProviderName(requestId),
+      model: musicModel(requestId),
       requestId,
       request_id: requestId,
       status: "failed",
@@ -31,8 +31,8 @@ export async function GET(request: Request) {
   if (result.status === "done") {
     return Response.json({
       ok: true,
-      provider: "deAPI",
-      model: musicModel(),
+      provider: musicProviderName(requestId),
+      model: musicModel(requestId),
       requestId,
       request_id: requestId,
       status: "ready",
@@ -47,8 +47,8 @@ export async function GET(request: Request) {
 
   return Response.json({
     ok: true,
-    provider: "deAPI",
-    model: musicModel(),
+    provider: musicProviderName(requestId),
+    model: musicModel(requestId),
     requestId,
     request_id: requestId,
     status: result.status,
