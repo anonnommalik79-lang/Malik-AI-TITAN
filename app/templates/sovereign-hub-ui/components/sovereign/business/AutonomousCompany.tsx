@@ -55,14 +55,14 @@ import {
   type BusinessTemplate,
   type TemplateCategory,
 } from "@/lib/business/autonomous"
-import { MALIK_MODELS, type MalikModelId } from "@/lib/ai/malik-models"
+import { DEFAULT_MALIK_MODEL_ID, PUBLIC_MALIK_MODELS, type MalikModelId } from "@/lib/ai/malik-models"
 import { CompanyLaunchPad } from "./CompanyLaunchPad"
 import styles from "./AutonomousCompany.module.css"
 
 const ENDPOINT = "/api/business/run"
 
 /** The section's own default, named in the reference. */
-const DEFAULT_MODEL: MalikModelId = "malik-27b"
+const DEFAULT_MODEL: MalikModelId = DEFAULT_MALIK_MODEL_ID
 
 type Stage = "intro" | "workspace" | "running"
 type StepState = "waiting" | "running" | "done" | "failed"
@@ -234,7 +234,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const model = useMemo(
-    () => MALIK_MODELS.find((item) => item.id === modelId) || MALIK_MODELS.find((item) => item.id === DEFAULT_MODEL),
+    () => PUBLIC_MALIK_MODELS.find((item) => item.id === modelId) || PUBLIC_MALIK_MODELS.find((item) => item.id === DEFAULT_MODEL),
     [modelId],
   )
 
@@ -584,7 +584,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                   </button>
                   {openMenu === "model" && (
                     <div className={styles.menu} role="listbox">
-                      {MALIK_MODELS.filter((item) => item.tier === "free").map((item) => (
+                      {PUBLIC_MALIK_MODELS.filter((item) => item.tier === "free").map((item) => (
                         <button
                           key={item.id}
                           type="button"
