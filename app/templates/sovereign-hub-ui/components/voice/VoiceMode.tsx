@@ -173,6 +173,8 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const lastSpeechAtRef = useRef(0)
   /** Native Gemini 3.8 Live is the first Voice engine. Existing STT/LLM/TTS stays as fallback. */
   const geminiLiveRef = useRef<GeminiLiveSession | null>(null)
+  /** Lets the session's callbacks re-open the microphone without a cycle. */
+  const startMicrophoneRef = useRef<(() => Promise<void>) | null>(null)
   const geminiLiveReadyRef = useRef(false)
   const liveInputRef = useRef("")
   const liveOutputRef = useRef("")
@@ -286,11 +288,27 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
             setTitle("Слушаю")
             setSubtitle("Gemini 3.8 Live · связь восстановлена")
           },
+          // Retrying never stops on its own, but after a few failures in a row
+          // the person deserves to know why nothing is happening - without the
+          // microphone being taken away from them.
+          onStruggling: () => {
+            if (!mountedRef.current || closingRef.current) return
+            setLiveError("Связь с Gemini не восстанавливается. Продолжаю пробовать.")
+          },
+          // The microphone itself was taken - a call came in, the headset was
+          // unplugged, the browser revoked it. Only this component can ask for
+          // one again.
+          onMicrophoneLost: () => {
+            if (!mountedRef.current || closingRef.current) return
+            setTitle("Возвращаю микрофон")
+            setSubtitle("Секунду…")
+            window.setTimeout(() => {
+              if (mountedRef.current && !closingRef.current) void startMicrophoneRef.current?.()
+            }, 400)
+          },
           onClosed: () => {
             geminiLiveReadyRef.current = false
             if (!mountedRef.current || closingRef.current) return
-            setTitle("Связь с Gemini Live потеряна")
-            setSubtitle("Нажми «Переподключить», чтобы продолжить")
             setLiveError("Gemini Live не отвечает.")
           },
           onError: () => { geminiLiveReadyRef.current = false },
@@ -1380,6 +1398,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     else if (streamed || fallback) await answerTranscript(streamed || fallback)
     else showNotice("Скажи что-нибудь и нажми микрофон ещё раз")
   }, [answerTranscript, busy, collectRecorder, finalTranscript, interimTranscript, showNotice, startMicrophone, stopMicrophone, stopReplyAudio, transcribeAndRespond])
+
+  useEffect(() => {
+    startMicrophoneRef.current = startMicrophone
+    return () => { startMicrophoneRef.current = null }
+  }, [startMicrophone])
 
   useEffect(() => {
     autoSubmitRef.current = () => { void toggleMicrophone() }

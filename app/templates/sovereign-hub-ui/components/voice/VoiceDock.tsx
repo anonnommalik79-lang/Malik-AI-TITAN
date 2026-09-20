@@ -188,7 +188,7 @@ export function VoiceDock({
         </button>
         <div className={styles.controlDivider} />
 
-        <button type="button" className={`${styles.micPill} ${micActive ? styles.live : styles.muted}`} onClick={onMicToggle} title={micActive ? "Закончить фразу" : "Включить микрофон"} aria-label={micActive ? "Закончить фразу" : "Включить микрофон"} aria-pressed={micActive}>
+        <button type="button" className={`${styles.micPill} ${micActive ? styles.live : styles.muted}`} onClick={onMicToggle} title={micActive ? (liveTurnTaking ? "Выключить микрофон" : "Закончить фразу") : "Включить микрофон"} aria-label={micActive ? (liveTurnTaking ? "Выключить микрофон" : "Закончить фразу") : "Включить микрофон"} aria-pressed={micActive}>
           <span className={styles.micDots} aria-hidden="true">
             {Array.from({ length: 6 }, (_, index) => <span key={index} ref={(node) => { dotsRef.current[index] = node }} />)}
           </span>

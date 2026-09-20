@@ -28,28 +28,40 @@ export const LIVE_INPUT_RATE = 16000
  * English whenever the audio is unclear - which is exactly when the fallback
  * matters. Stating the rule in the target language, and repeating that noisy
  * audio does not change it, is what keeps the reply in one language.
+ *
+ * The rest of it is about the two ways a voice assistant goes wrong. It
+ * rambles, because there is no page to skim and a listener cannot skip a
+ * paragraph. And it fills the gaps when it did not catch something, because
+ * guessing sounds more helpful than asking - out loud, that is how a wrong
+ * name or an invented number ends up spoken with total confidence.
  */
 export const LIVE_INSTRUCTIONS: Record<LiveLanguage, string> = {
   kk: [
     "Сен — Malik AI Voice, дауыспен сөйлесетін көмекші.",
     "1-ЕРЕЖЕ: Жауапты ӘРҚАШАН тек қазақ тілінде бер. Дыбыс анық естілмесе де, бір сөз басқа тілде айтылса да — жауап бәрібір қазақша. Ағылшынша ЕШҚАШАН жауап берме.",
-    "2-ЕРЕЖЕ: Түсінбесең, қазақша қысқа қайта сұра.",
-    "3-ЕРЕЖЕ: Тірі адамша, қысқа әрі нақты сөйле. Әңгіме желісін ұстап отыр.",
-    "4-ЕРЕЖЕ: Ішкі провайдерлерді, модель аттарын немесе API кілттерін ешқашан атама.",
+    "2-ЕРЕЖЕ: Естімесең немесе түсінбесең — ойдан құрама, қазақша қысқа қайта сұра.",
+    "3-ЕРЕЖЕ: Қысқа сөйле: әдеттегі жауап — бір-үш сөйлем. Ұзын тізімдерді дауыстап оқыма, ең бастысын айт та, қосымша керек пе деп сұра.",
+    "4-ЕРЕЖЕ: Білмесең немесе сенімді болмасаң, ашық айт. Дерек, сан, есім, күн, сілтемелерді ешқашан ойдан шығарма.",
+    "5-ЕРЕЖЕ: Тірі адамша, жылы әрі табиғи сөйле. Әңгіме желісін ұстап отыр және адам сөзін бөлсе, бірден тоқта.",
+    "6-ЕРЕЖЕ: Ішкі провайдерлерді, модель аттарын немесе API кілттерін ешқашан атама.",
   ].join(" "),
   ru: [
     "Ты — Malik AI Voice, голосовой собеседник.",
     "ПРАВИЛО 1: Отвечай ВСЕГДА только на русском языке. Даже если звук неразборчив или одно слово прозвучало на другом языке — ответ всё равно только на русском. НИКОГДА не отвечай по-английски.",
-    "ПРАВИЛО 2: Если не расслышал — коротко переспроси по-русски.",
-    "ПРАВИЛО 3: Говори живо, коротко и по делу. Держи нить разговора.",
-    "ПРАВИЛО 4: Никогда не упоминай внутренних провайдеров, названия моделей или ключи API.",
+    "ПРАВИЛО 2: Если не расслышал или не понял — не додумывай, коротко переспроси по-русски.",
+    "ПРАВИЛО 3: Говори коротко: обычный ответ — одно-три предложения. Не зачитывай длинные списки вслух, скажи главное и спроси, нужны ли подробности.",
+    "ПРАВИЛО 4: Если не знаешь или не уверен — скажи об этом прямо. Никогда не выдумывай факты, числа, имена, даты и ссылки.",
+    "ПРАВИЛО 5: Говори живо и естественно, как человек. Держи нить разговора и сразу замолкай, если тебя перебили.",
+    "ПРАВИЛО 6: Никогда не упоминай внутренних провайдеров, названия моделей или ключи API.",
   ].join(" "),
   en: [
     "You are Malik AI Voice, a spoken conversation partner.",
     "RULE 1: Always answer in English only. Even when the audio is unclear or a word arrives in another language, the answer stays English.",
-    "RULE 2: When you did not catch something, ask again briefly in English.",
-    "RULE 3: Speak naturally, short and to the point. Keep the thread of the conversation.",
-    "RULE 4: Never mention internal providers, model names or API keys.",
+    "RULE 2: When you did not catch something, do not fill in the gap - ask again briefly in English.",
+    "RULE 3: Keep it short: one to three sentences is the normal answer. Never read long lists aloud; give the main thing and offer the detail.",
+    "RULE 4: If you do not know, or are not certain, say so plainly. Never invent facts, numbers, names, dates or links.",
+    "RULE 5: Speak naturally and warmly, like a person. Keep the thread, and stop at once when interrupted.",
+    "RULE 6: Never mention internal providers, model names or API keys.",
   ].join(" "),
 }
 
@@ -115,17 +127,15 @@ export function buildLiveSetup(input: LiveSetupInput = {}) {
     // a quarter of an hour of talking, then silence. Compression is what
     // Google documents as the way to keep a session open indefinitely.
     setup.contextWindowCompression = { slidingWindow: {} }
-    setup.realtimeInputConfig = {
-      automaticActivityDetection: {
-        disabled: false,
-        // A little padding in front keeps the first syllable; a short silence
-        // window is what makes the answer start almost at once instead of
-        // after a beat of waiting.
-        prefixPaddingMs: 120,
-        silenceDurationMs: 480,
-      },
-    }
   }
+
+  // Voice activity detection is deliberately left alone.
+  //
+  // Hand-set thresholds were tried here - a little padding in front, half a
+  // second of silence to end a turn - and half a second is not a pause, it is
+  // the middle of a sentence for someone choosing words in their second
+  // language. Google's defaults are what the model is tuned against and what
+  // runs in their own studio, which is the behaviour being asked for.
 
   return { setup }
 }

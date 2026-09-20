@@ -31,6 +31,19 @@ async function check(name, fn) {
 
 const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms))
 
+/** A microphone stream that can be ended the way an operating system ends one. */
+function fakeStream() {
+  const track = { kind: "audio", readyState: "live", muted: false, onended: null, onmute: null, stop() { this.readyState = "ended" } }
+  return {
+    track,
+    getAudioTracks: () => [track],
+    getTracks: () => [track],
+    /** The call that comes in, the headset that is unplugged. */
+    end() { track.readyState = "ended"; track.onended?.() },
+    mute() { track.muted = true; track.onmute?.() },
+  }
+}
+
 /** Everything the module reaches for that only exists in a browser. */
 function install({ token = "tok_live", sampleRate = 48000, nativeRate = true } = {}) {
   const sockets = []
@@ -114,12 +127,14 @@ function install({ token = "tok_live", sampleRate = 48000, nativeRate = true } =
     setInterval: (fn, ms) => { const id = setInterval(fn, ms); timers.add(id); return id },
     clearInterval: (id) => { clearInterval(id); timers.delete(id) },
   }
+  let liveToken = token
   globalThis.fetch = async () => {
     tokenRequests += 1
+    const value = liveToken
     return {
-      ok: Boolean(token),
-      json: async () => (token
-        ? { ok: true, accessToken: `${token}-${tokenRequests}`, model: "gemini-3.8-live" }
+      ok: Boolean(value),
+      json: async () => (value
+        ? { ok: true, accessToken: `${value}-${tokenRequests}`, model: "gemini-3.8-live" }
         : { ok: false, error: "voice_live_not_configured" }),
     }
   }
@@ -129,6 +144,8 @@ function install({ token = "tok_live", sampleRate = 48000, nativeRate = true } =
     sockets,
     context,
     get tokenRequests() { return tokenRequests },
+    /** The network goes away in the middle of a conversation. */
+    breakToken() { liveToken = null },
     /** Pushes one block of microphone audio through the real handler. */
     feed(blocks = 1) {
       const last = processors[processors.length - 1]
@@ -162,6 +179,8 @@ async function connected(options = {}) {
       onReconnecting: () => events.push("reconnecting"),
       onReconnected: () => events.push("reconnected"),
       onClosed: () => events.push("closed"),
+      onStruggling: () => events.push("struggling"),
+      onMicrophoneLost: () => events.push("mic-lost"),
       onOutputText: (text) => events.push(`say:${text}`),
       onInterrupted: () => events.push("interrupted"),
       onTurnComplete: () => events.push("turn"),
@@ -218,7 +237,7 @@ console.log("\nwhat reaches the model")
 
 await check("the microphone streams 16 kHz little-endian PCM", async () => {
   const { browser, session } = await connected()
-  assert.equal(await session.attachMicrophone({}, browser.context), true)
+  assert.equal(await session.attachMicrophone(fakeStream(), browser.context), true)
   browser.feed(4)
   const audio = browser.sockets[0].audio()
   assert.equal(audio.length, 4, "frames did not reach the socket")
@@ -233,7 +252,7 @@ await check("the microphone streams 16 kHz little-endian PCM", async () => {
 
 await check("capture runs at 16 kHz natively when the browser allows it", async () => {
   const { browser, session } = await connected()
-  await session.attachMicrophone({}, browser.context)
+  await session.attachMicrophone(fakeStream(), browser.context)
   // A 16 kHz context means the browser's own resampler did the conversion on
   // the raw signal, which is better than anything done by hand afterwards.
   browser.feed(1)
@@ -249,7 +268,7 @@ await check("a 48 kHz context is filtered before it is decimated", async () => {
   // third sample folds everything above 8 kHz back over the voice, so the
   // filtered path has to exist and has to be used.
   const { browser, session } = await connected({ install: { nativeRate: false } })
-  await session.attachMicrophone({}, browser.context)
+  await session.attachMicrophone(fakeStream(), browser.context)
   browser.feed(1)
   const audio = browser.sockets[0].audio()
   assert.equal(audio.length, 1)
@@ -282,7 +301,7 @@ console.log("\nwhen the wire drops")
 
 await check("a dropped socket reconnects and keeps the microphone", async () => {
   const { browser, session, events } = await connected()
-  await session.attachMicrophone({}, browser.context)
+  await session.attachMicrophone(fakeStream(), browser.context)
   browser.feed(2)
   assert.equal(browser.sockets[0].audio().length, 2)
 
@@ -306,7 +325,7 @@ await check("a dropped socket reconnects and keeps the microphone", async () => 
 
 await check("the restored session resumes instead of starting over", async () => {
   const { browser, session } = await connected()
-  await session.attachMicrophone({}, browser.context)
+  await session.attachMicrophone(fakeStream(), browser.context)
   assert.deepEqual(browser.sockets[0].setup().sessionResumption, {}, "the first setup should ask for a handle")
 
   browser.sockets[0].drop()
@@ -322,7 +341,7 @@ await check("the restored session resumes instead of starting over", async () =>
 
 await check("a goAway warning is acted on before the server hangs up", async () => {
   const { browser, session } = await connected()
-  await session.attachMicrophone({}, browser.context)
+  await session.attachMicrophone(fakeStream(), browser.context)
   browser.sockets[0].deliver({ goAway: { timeLeft: "2s" } })
   await tick(300)
   assert.equal(browser.sockets.length, 2, "the warning was ignored")
@@ -332,7 +351,7 @@ await check("a goAway warning is acted on before the server hangs up", async () 
 
 await check("each reconnect asks for its own token", async () => {
   const { browser, session } = await connected()
-  await session.attachMicrophone({}, browser.context)
+  await session.attachMicrophone(fakeStream(), browser.context)
   const before = browser.tokenRequests
   browser.sockets[0].drop()
   await tick(500)
@@ -370,7 +389,7 @@ await check("a setup the server refuses is retried smaller, not abandoned", asyn
 
 await check("switching the microphone off is deliberate and stays off", async () => {
   const { browser, session, events } = await connected()
-  await session.attachMicrophone({}, browser.context)
+  await session.attachMicrophone(fakeStream(), browser.context)
   session.detachMicrophone()
   const ended = browser.sockets[0].sent.map((raw) => JSON.parse(raw)).some((message) => message.realtimeInput?.audioStreamEnd)
   assert.equal(ended, true, "the model was not told the stream ended")
@@ -444,7 +463,10 @@ await check("the endpoints are Google's, not a test stand", async () => {
 
 await check("each smaller tier drops options and keeps the language rule", async () => {
   const sizes = [0, 1, 2].map((tier) => Object.keys(buildLiveSetup({ tier, language: "kk" }).setup))
-  assert.ok(sizes[0].includes("contextWindowCompression") && sizes[0].includes("realtimeInputConfig"))
+  assert.ok(sizes[0].includes("contextWindowCompression"))
+  // Voice activity detection is deliberately absent: Google's defaults are
+  // what the model is tuned against, and hand-set thresholds cut people off.
+  for (const keys of sizes) assert.ok(!keys.includes("realtimeInputConfig"), "VAD must be left to Google")
   assert.ok(!sizes[1].includes("contextWindowCompression") && sizes[1].includes("sessionResumption"))
   assert.ok(!sizes[2].includes("sessionResumption"))
   for (const tier of [0, 1, 2]) {
@@ -453,6 +475,82 @@ await check("each smaller tier drops options and keeps the language rule", async
     assert.deepEqual(setup.generationConfig.responseModalities, ["AUDIO"], `tier ${tier} lost audio output`)
   }
   return sizes.map((keys) => keys.length).join(" → ")
+})
+
+console.log("\nthe microphone does not go away")
+
+await check("a microphone taken by the system is reported, not guessed at", async () => {
+  const { browser, session, events } = await connected()
+  const stream = fakeStream()
+  await session.attachMicrophone(stream, browser.context)
+  browser.feed(2)
+  assert.equal(browser.sockets[0].audio().length, 2)
+
+  // A phone call takes the microphone. Nothing throws; audio just stops.
+  stream.end()
+  await tick(50)
+  assert.ok(events.includes("mic-lost"), "the page was never told the microphone had gone")
+  assert.equal(events.filter((event) => event === "mic-lost").length, 1, "one loss must not become a loop")
+  session.close()
+  browser.cleanup()
+})
+
+await check("a microphone muted for good is treated the same", async () => {
+  const { browser, session, events } = await connected()
+  const stream = fakeStream()
+  await session.attachMicrophone(stream, browser.context)
+  stream.mute()
+  await tick(200)
+  assert.ok(!events.includes("mic-lost"), "a momentary mute must not reopen the microphone")
+  await tick(1300)
+  assert.ok(events.includes("mic-lost"), "a mute that lasts is a lost microphone")
+  session.close()
+  browser.cleanup()
+  return "ignored for 1.2s, then reported"
+})
+
+await check("a dead stream is never streamed into silence", async () => {
+  const { browser, session } = await connected()
+  const stream = fakeStream()
+  stream.track.readyState = "ended"
+  assert.equal(await session.attachMicrophone(stream, browser.context), false)
+  assert.equal(browser.sockets[0].audio().length, 0)
+  session.close()
+  browser.cleanup()
+})
+
+await check("retrying never gives up on its own", async () => {
+  const { browser, session, events } = await connected()
+  await session.attachMicrophone(fakeStream(), browser.context)
+  // The network goes; every reconnect from here fails at the token.
+  browser.breakToken()
+  browser.sockets[0].drop()
+  await tick(4000)
+  const attempts = events.filter((event) => event === "reconnecting").length
+  assert.ok(attempts >= 3, `only ${attempts} attempts in four seconds`)
+  assert.ok(!events.includes("closed"), "the session gave up and released the conversation")
+  session.close()
+  browser.cleanup()
+  return `${attempts} attempts, still going`
+})
+
+console.log("\nwhat the model is told")
+
+await check("it is told not to fill in what it did not hear", async () => {
+  for (const [language, phrases] of [
+    ["ru", ["не додумывай", "не выдумывай факты", "одно-три предложения"]],
+    ["kk", ["ойдан құрама", "ойдан шығарма"]],
+    ["en", ["do not fill in the gap", "Never invent facts"]],
+  ]) {
+    const { browser, session } = await connected({ language })
+    const instruction = browser.sockets[0].setup().systemInstruction?.parts?.[0]?.text || ""
+    for (const phrase of phrases) {
+      assert.ok(instruction.includes(phrase), `${language} prompt is missing: ${phrase}`)
+    }
+    session.close()
+    browser.cleanup()
+  }
+  return "no guessing, no inventing, short answers"
 })
 
 console.log(failures ? `\n${failures} failing\n` : "\nall Gemini Live session checks passed\n")

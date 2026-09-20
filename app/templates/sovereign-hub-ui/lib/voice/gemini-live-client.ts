@@ -24,7 +24,14 @@ type LiveCallbacks = {
   onReconnecting?: (attempt: number) => void
   /** The link is back and the microphone is streaming again. */
   onReconnected?: () => void
-  /** The session is gone for good - every retry failed. */
+  /**
+   * The microphone itself went away - the operating system took it for a
+   * call, the browser revoked it, the track ended. Only the page can ask for
+   * it again, so it is told rather than guessed at.
+   */
+  onMicrophoneLost?: () => void
+  /** Retrying has been going on long enough that the person should be told. */
+  onStruggling?: (attempt: number) => void
   onClosed?: () => void
   onError?: () => void
 }
@@ -42,9 +49,17 @@ const DEFAULT_WS = LIVE_WS_URL
 const INPUT_RATE = LIVE_INPUT_RATE
 const DEFAULT_OUTPUT_RATE = 24000
 
-/** Back-off between reconnect attempts. The last value repeats until the cap. */
+/**
+ * Back-off between reconnect attempts. The last value repeats forever.
+ *
+ * There is no attempt limit on purpose. A limit means that a tunnel, a lift or
+ * a minute of bad wifi ends the conversation and the person has to notice, work
+ * out what happened and press something. Retrying costs one small request every
+ * five seconds; giving up costs the conversation.
+ */
 const RETRY_DELAYS = [350, 900, 1800, 3200, 5000]
-const MAX_RETRIES = 12
+/** After this many failures in a row the person is told, and retrying continues. */
+const STRUGGLING_AFTER = 6
 
 /**
  * Anti-alias corner for the 48 kHz -> 16 kHz step.
@@ -142,6 +157,7 @@ export class GeminiLiveSession {
   private captureContext: AudioContext | null = null
   private captureOwned = false
   private lastFrameAt = 0
+  private lastMicLossAt = 0
   private watchdog = 0
 
   private micStream: MediaStream | null = null
@@ -414,15 +430,12 @@ export class GeminiLiveSession {
   private restartSoon(delay?: number) {
     if (this.disposed || this.retryTimer) return
     if (!this.wantsMic && !this.resumeHandle) return
-    if (this.retries >= MAX_RETRIES) {
-      this.callbacks.onClosed?.()
-      return
-    }
     const wait = typeof delay === "number"
       ? delay
       : RETRY_DELAYS[Math.min(this.retries, RETRY_DELAYS.length - 1)]
     this.retries += 1
     this.callbacks.onReconnecting?.(this.retries)
+    if (this.retries === STRUGGLING_AFTER) this.callbacks.onStruggling?.(this.retries)
 
     this.retryTimer = window.setTimeout(async () => {
       this.retryTimer = 0
@@ -463,10 +476,50 @@ export class GeminiLiveSession {
     return started
   }
 
+  /**
+   * Notices when the microphone is taken away rather than merely quiet.
+   *
+   * A track ends when the operating system hands the microphone to a phone
+   * call, when the browser revokes it, when a headset is unplugged. Nothing
+   * throws and no audio arrives - the conversation simply stops working. Only
+   * the page can ask for a microphone, so it is told, once, and it re-opens
+   * one.
+   */
+  private watchTrack(stream: MediaStream) {
+    for (const track of stream.getAudioTracks()) {
+      track.onended = () => this.reportMicrophoneLost("ended")
+      track.onmute = () => {
+        // A mute can be momentary - a notification sound on iOS mutes the
+        // input for an instant. Only a mute that lasts is a real loss.
+        window.setTimeout(() => {
+          if (this.wantsMic && track.muted && track.readyState === "live") this.reportMicrophoneLost("muted")
+        }, 1200)
+      }
+    }
+  }
+
+  private reportMicrophoneLost(why: string) {
+    if (this.disposed || !this.wantsMic) return
+    const now = Date.now()
+    // One recovery attempt at a time: re-opening in a loop would spend the
+    // person's battery arguing with an operating system that has said no.
+    if (now - this.lastMicLossAt < 3000) return
+    this.lastMicLossAt = now
+    console.warn("[VOICE_GEMINI_LIVE_MIC_LOST]", why)
+    this.stopCapture()
+    this.callbacks.onMicrophoneLost?.()
+  }
+
   private async startCapture(): Promise<boolean> {
     const stream = this.micStream
     if (!stream || !this.isReady()) return false
     this.stopCapture()
+
+    // A stream whose track has already ended can never produce audio again.
+    if (!stream.getAudioTracks().some((track) => track.readyState === "live")) {
+      this.reportMicrophoneLost("dead-track")
+      return false
+    }
 
     try {
       let context = this.hostContext
@@ -546,6 +599,7 @@ export class GeminiLiveSession {
       this.captureContext = context
       this.captureOwned = owned
       this.lastFrameAt = Date.now()
+      this.watchTrack(stream)
       this.startWatchdog()
       console.info("[VOICE_GEMINI_LIVE_CAPTURE_READY]", `${rate}Hz`, native ? "native" : "resampled")
       return true
@@ -575,7 +629,9 @@ export class GeminiLiveSession {
       if (this.lastFrameAt && Date.now() - this.lastFrameAt > 3500) {
         console.warn("[VOICE_GEMINI_LIVE_CAPTURE_STALLED]")
         this.lastFrameAt = Date.now()
-        void this.startCapture()
+        const alive = this.micStream?.getAudioTracks().some((track) => track.readyState === "live")
+        if (alive) void this.startCapture()
+        else this.reportMicrophoneLost("stalled-dead-track")
       }
     }, 1500)
   }
@@ -628,6 +684,10 @@ export class GeminiLiveSession {
   /** The person switched the microphone off. This one is deliberate. */
   detachMicrophone() {
     this.wantsMic = false
+    for (const track of this.micStream?.getAudioTracks() || []) {
+      track.onended = null
+      track.onmute = null
+    }
     this.stopWatchdog()
     if (this.isReady()) {
       try { this.socket?.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })) } catch {}
