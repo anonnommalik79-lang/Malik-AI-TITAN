@@ -135,6 +135,26 @@ function historyTitle(prompt: string, genre: Genre) {
   return genre.id === "phonk" ? "Night Drive" : genre.label + " Session"
 }
 
+/**
+ * The music provider answers in English, to whoever is integrating it. Its
+ * two most common refusals are not about the request at all - they are about
+ * the account the server pays with - and "Client account is suspended" on a
+ * Russian screen tells the person nothing they can act on.
+ */
+function providerMessage(raw: unknown) {
+  const text = String(raw || "").trim()
+  if (/suspend/i.test(text)) {
+    return "Аккаунт музыкального провайдера приостановлен — генерация не пройдёт, пока он не восстановлен. Ответ сервиса: " + text
+  }
+  if (/insufficient|balance|credit|quota|payment/i.test(text)) {
+    return "У музыкального провайдера закончился баланс или лимит. Ответ сервиса: " + text
+  }
+  if (/unauthor|forbidden|api key|token/i.test(text)) {
+    return "Музыкальный провайдер не принял ключ сервера. Ответ сервиса: " + text
+  }
+  return text || "Сервис генерации не принял запрос."
+}
+
 function safeHistory(value: unknown): MusicHistoryItem[] {
   if (!Array.isArray(value)) return []
   return value
@@ -352,7 +372,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
               : item,
           ))
           setGenerating(false)
-          setNotice(data?.error || "Генерация не завершилась.")
+          setNotice(providerMessage(data?.error) || "Генерация не завершилась.")
           setActiveRequestId("")
           // A failed variant does not cancel the ones still owed.
           queueNextVariant()
@@ -465,7 +485,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
       if (!response.ok || !data?.ok || !data?.requestId) {
         setGenerating(false)
-        setNotice(data?.error || "deAPI не принял запрос.")
+        setNotice(providerMessage(data?.error))
         await refreshConfig()
         return
       }
@@ -856,8 +876,13 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
             <div className="mm-hero" role="img" aria-label="Malik Music Studio" />
 
             <div className="mm-main">
-              <div className="mm-genres">{genreTiles(false)}</div>
-
+              {/*
+                No genre strip on the desktop layout. Six dark crops in a row
+                read as clutter at this size and they were eating the height
+                the banner needs to be seen whole. The genre still travels
+                with the request - it is chosen on the phone, and it is what
+                seeds an empty prompt.
+              */}
               <div className="mm-card">
                 <textarea
                   className="mm-prompt-input"

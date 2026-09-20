@@ -50,11 +50,25 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
-.malik-music button:focus-visible,
-.malik-music textarea:focus-visible,
-.malik-music input:focus-visible {
-  outline: 1px solid rgba(57, 255, 90, .78);
-  outline-offset: 2px;
+/**
+ * Focus is green here, and nothing else is.
+ *
+ * A tapped card was picking up an amber ring from somewhere in the shell,
+ * which read as a second, competing "selected" state next to the real green
+ * one. Every focus ring in this screen is stated, and the plain :focus that
+ * a mouse click leaves behind draws nothing at all.
+ */
+#malik-root .malik-music button:focus,
+#malik-root .malik-music textarea:focus,
+#malik-root .malik-music input:focus {
+  outline: none !important;
+  box-shadow: none;
+}
+#malik-root .malik-music button:focus-visible,
+#malik-root .malik-music textarea:focus-visible,
+#malik-root .malik-music input:focus-visible {
+  outline: 2px solid rgba(57, 255, 90, .85) !important;
+  outline-offset: 2px !important;
 }
 
 /**
@@ -216,9 +230,17 @@
   color: #a9b2bb;
   font-weight: 800;
 }
+/**
+ * The banner, shown whole.
+ *
+ * It was 150px of a picture three times as wide as it is tall, so most of it
+ * was cropped away. With the genre strip gone from this layout there is room
+ * for its own proportions; the cap keeps it from eating a short screen.
+ */
 .mm-hero {
-  height: 150px;
   flex: 0 0 auto;
+  aspect-ratio: 2172 / 724;
+  max-height: 280px;
   border: 1px solid #26303a;
   border-radius: 18px;
   overflow: hidden;
