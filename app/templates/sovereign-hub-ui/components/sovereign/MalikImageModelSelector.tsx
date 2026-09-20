@@ -37,8 +37,12 @@ function OfficialBrandIcon({ model, compact = false }: { model: MalikImageModelD
     )
   }
 
-  const src = model.brand === "bfl" ? "https://bfl.ai/favicon.ico" : "https://leonardo.ai/favicon.ico"
-  const alt = model.brand === "bfl" ? "Black Forest Labs" : "Leonardo.Ai"
+  const brand = model.brand === "bfl"
+    ? { src: "https://bfl.ai/favicon.ico", alt: "Black Forest Labs" }
+    : model.brand === "sensenova"
+      ? { src: "https://www.sensetime.com/favicon.ico", alt: "SenseNova" }
+      : { src: "https://leonardo.ai/favicon.ico", alt: "Leonardo.Ai" }
+  const { src, alt } = brand
 
   return (
     <span
