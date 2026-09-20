@@ -17,9 +17,14 @@ export type MalikModelId =
   | "malik-70b"
   | "malik-120b"
   | "malik-agent-120b"
+  | "malik-deepseek-v41"
+  | "malik-bonsai-27b"
+  | "malik-glm-47-flash"
+  | "malik-gemma-4-26b"
+  | "malik-nemotron-3-120b"
 
 export type MalikModelTier = "free" | "pro"
-export type MalikModelProvider = "malik-orchestrator" | "modelscope" | "aihubmix" | "groq" | "cloudflare" | "cerebras" | "nemotron-openrouter"
+export type MalikModelProvider = "malik-orchestrator" | "modelscope" | "aihubmix" | "groq" | "cloudflare" | "cerebras" | "nemotron-openrouter" | "together" | "deepseek"
 
 export type MalikModelDefinition = {
   id: MalikModelId
@@ -44,6 +49,51 @@ export const MALIK_MODELS = [
     provider: "malik-orchestrator",
     providerModel: "MalikCoder-1.0",
     capabilities: ["text", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-bonsai-27b",
+    label: "MalikBonsai 27B",
+    description: "Together Serverless · Бесплатный production fallback · 262K",
+    tier: "free",
+    provider: "together",
+    providerModel: "Prism-ML/Ternary-Bonsai-27B",
+    capabilities: ["text", "vision", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-glm-47-flash",
+    label: "MalikGLM 4.7 Flash",
+    description: "Cloudflare Workers AI · Быстрый multilingual reasoning",
+    tier: "free",
+    provider: "cloudflare",
+    providerModel: "@cf/zai-org/glm-4.7-flash",
+    capabilities: ["text", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-gemma-4-26b",
+    label: "MalikGemma 4 26B",
+    description: "Cloudflare Workers AI · 256K · Vision + reasoning",
+    tier: "free",
+    provider: "cloudflare",
+    providerModel: "@cf/google/gemma-4-26b-a4b-it",
+    capabilities: ["text", "vision", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-nemotron-3-120b",
+    label: "MalikNemotron 3 120B",
+    description: "Cloudflare Workers AI · Сильный agentic fallback",
+    tier: "free",
+    provider: "cloudflare",
+    providerModel: "@cf/nvidia/nemotron-3-120b-a12b",
+    capabilities: ["text", "code", "tools", "reasoning"],
+  },
+  {
+    id: "malik-deepseek-v41",
+    label: "Malik DeepSeek V4.1 Flash",
+    description: "DeepSeek API · 1M контекст · Production emergency overflow",
+    tier: "free",
+    provider: "deepseek",
+    providerModel: "deepseek-flash",
+    capabilities: ["text", "vision", "code", "tools", "reasoning"],
   },
   {
     id: "nvidia-nemotron-ultra-550b",

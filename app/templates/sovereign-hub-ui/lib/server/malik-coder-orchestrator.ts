@@ -53,13 +53,24 @@ function estimateVisibleTokens(value: string) {
 function candidates(code: boolean, maxTokens?: number): Candidate[] {
   const budget = normalizedBudget(maxTokens, code ? 10_000 : 4_000)
   const list: Candidate[] = code ? [
-    // Long code must start on providers with enough daily allowance and output headroom.
+    // Launch pool: no single vendor can take down text generation.
+    // DeepSeek V4.1 Flash is deliberately last because it is the paid emergency overflow.
+    { id: "malik-bonsai-27b", tokens: 10_000 },
+    { id: "malik-glm-47-flash", tokens: 10_000 },
+    { id: "malik-gemma-4-26b", tokens: 10_000 },
+    { id: "malik-nemotron-3-120b", tokens: 10_000 },
+    { id: "malik-deepseek-v41", tokens: 10_000 },
     { id: "malik-fast-120b", tokens: 10_000 },
     { id: "malik-flash-53", tokens: 10_000 },
     { id: "malik-qwen-397b", tokens: 10_000 },
     { id: "malik-27b", tokens: 8_000 },
     { id: "malik-20b", tokens: 8_000 },
   ] : [
+    { id: "malik-bonsai-27b", tokens: 4_000 },
+    { id: "malik-glm-47-flash", tokens: 4_000 },
+    { id: "malik-gemma-4-26b", tokens: 4_000 },
+    { id: "malik-nemotron-3-120b", tokens: 4_000 },
+    { id: "malik-deepseek-v41", tokens: 4_000 },
     { id: "malik-fast-120b", tokens: 4_000 },
     { id: "malik-flash-53", tokens: 4_000 },
     { id: "malik-qwen-397b", tokens: 4_000 },
@@ -108,7 +119,7 @@ export async function runMalikCoderOrchestrator(input: Input): Promise<Result> {
   // Small specialist/subagent budgets should go straight to the answer instead
   // of spending most of their allowance on an internal planning call.
   if (complex && totalBudget >= 2_000) {
-    const p = await firstHealthy({ list: [{ id: "malik-fast-120b", tokens: 700 }, { id: "malik-flash-53", tokens: 700 }, { id: "malik-qwen-397b", tokens: 700 }], prompt: `Make a compact implementation checklist for this exact request. Do not answer it yet.\n\n${prompt}`, system, history, temperature: 0.05, stages })
+    const p = await firstHealthy({ list: [{ id: "malik-bonsai-27b", tokens: 700 }, { id: "malik-glm-47-flash", tokens: 700 }, { id: "malik-gemma-4-26b", tokens: 700 }], prompt: `Make a compact implementation checklist for this exact request. Do not answer it yet.\n\n${prompt}`, system, history, temperature: 0.05, stages })
     plan = p?.content || ""
   }
 

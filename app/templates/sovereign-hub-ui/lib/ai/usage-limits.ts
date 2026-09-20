@@ -14,11 +14,14 @@ export type UserUsage = {
   updatedAt: string
 }
 
-// Chat count is retained for analytics, but daily text access is now governed
-// by the server-side 10K generated-token quota. These large values prevent the
-// old message-count gate from stopping a user before the token allowance does.
+const configuredFreeDailyChatRequests = Number(process.env.FREE_DAILY_CHAT_REQUEST_LIMIT || 15)
+const freeDailyChatRequests = Number.isFinite(configuredFreeDailyChatRequests)
+  ? Math.max(1, Math.floor(configuredFreeDailyChatRequests))
+  : 15
+
+// Keep the legacy/UI usage path aligned with the live server gate.
 export const PLAN_LIMITS: Record<AIPlan, Record<UsageKind, number>> = {
-  free: { chat: 100000, image: 1, video: 0, project: 2 },
+  free: { chat: freeDailyChatRequests, image: 1, video: 0, project: 2 },
   pro: { chat: 100000, image: 25, video: 5, project: 30 },
   ultra: { chat: 100000, image: 100, video: 20, project: 100 },
   owner: { chat: 999999, image: 999999, video: 999999, project: 999999 },

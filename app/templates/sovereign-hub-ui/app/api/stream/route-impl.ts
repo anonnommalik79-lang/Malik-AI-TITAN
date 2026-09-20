@@ -829,7 +829,7 @@ export async function GET() {
       credentialsRedacted: true,
     },
     limits: {
-      freeDailyChatRequests: null,
+      freeDailyChatRequests: Number(process.env.FREE_DAILY_CHAT_REQUEST_LIMIT || 15),
       freeDailyGeneratedTextTokens: Number(process.env.FREE_DAILY_TEXT_TOKEN_LIMIT || 10_000),
       freeDailyMultimodalTokens: DAILY_MULTIMODAL_TOKEN_LIMIT,
       maxBodyMb: MAX_CHAT_BODY_BYTES / (1024 * 1024),

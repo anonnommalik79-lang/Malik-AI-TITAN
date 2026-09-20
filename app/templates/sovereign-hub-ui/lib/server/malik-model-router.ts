@@ -41,7 +41,7 @@ type ParsedProviderResponse = {
 }
 
 const TEXT_FALLBACK_MODELS: Partial<Record<MalikModelId, readonly MalikModelId[]>> = {
-  "malik-coder-32b": ["malik-20b", "malik-27b", "malik-flash-53", "malik-fast-120b", "malik-qwen-397b"],
+  "malik-coder-32b": ["malik-bonsai-27b", "malik-glm-47-flash", "malik-gemma-4-26b", "malik-nemotron-3-120b", "malik-deepseek-v41", "malik-20b", "malik-27b", "malik-flash-53", "malik-fast-120b", "malik-qwen-397b"],
   "nvidia-nemotron-ultra-550b": ["malik-20b", "malik-27b", "malik-flash-53", "malik-fast-120b", "malik-qwen-397b"],
   "malik-qwen-397b": ["malik-20b", "malik-27b", "malik-flash-53", "malik-fast-120b"],
   "malik-reason-753b": ["malik-20b", "malik-27b", "malik-qwen-397b", "malik-flash-53", "malik-fast-120b"],
@@ -60,6 +60,11 @@ const TEXT_FALLBACK_MODELS: Partial<Record<MalikModelId, readonly MalikModelId[]
 }
 
 const GLOBAL_TEXT_FALLBACKS: readonly MalikModelId[] = [
+  "malik-bonsai-27b",
+  "malik-glm-47-flash",
+  "malik-gemma-4-26b",
+  "malik-nemotron-3-120b",
+  "malik-deepseek-v41",
   "malik-20b",
   "malik-27b",
   "malik-flash-53",
@@ -68,6 +73,11 @@ const GLOBAL_TEXT_FALLBACKS: readonly MalikModelId[] = [
 ]
 
 const CODE_FALLBACKS: readonly MalikModelId[] = [
+  "malik-bonsai-27b",
+  "malik-glm-47-flash",
+  "malik-nemotron-3-120b",
+  "malik-gemma-4-26b",
+  "malik-deepseek-v41",
   "malik-fast-120b",
   "malik-flash-53",
   "malik-qwen-397b",
@@ -198,6 +208,8 @@ function safeProviderTokens(model: MalikModelDefinition, requested: number, code
   if (model.provider === "aihubmix") return Math.min(requested, 10_000)
   if (model.provider === "modelscope") return Math.min(requested, 10_000)
   if (model.provider === "cerebras") return Math.min(requested, 10_000)
+  if (model.provider === "together") return Math.min(requested, 10_000)
+  if (model.provider === "deepseek") return Math.min(requested, 10_000)
   return Math.min(requested, 10_000)
 }
 
@@ -256,6 +268,32 @@ function providerRuntime(
     if (!key) return missing(`${model.label} временно недоступна: Cerebras API не настроен.`) as never
     return { url: `${(env("CEREBRAS_BASE_URL") || "https://api.cerebras.ai/v1").replace(/\/+$/, "")}/chat/completions`, key, model: model.providerModel, stream: false, maxTokens: commonTokens, temperature: commonTemperature, timeoutMs: commonTimeout }
   }
+  if (model.provider === "together") {
+    const key = env("TOGETHER_API_KEY")
+    if (!key) return missing(`${model.label} временно недоступна: TOGETHER_API_KEY не настроен.`) as never
+    return {
+      url: `${(env("TOGETHER_BASE_URL") || "https://api.together.xyz/v1").replace(/\/+$/, "")}/chat/completions`,
+      key,
+      model: env("TOGETHER_FREE_MODEL") || model.providerModel,
+      stream: false,
+      maxTokens: commonTokens,
+      temperature: commonTemperature,
+      timeoutMs: commonTimeout,
+    }
+  }
+  if (model.provider === "deepseek") {
+    const key = env("DEEPSEEK_API_KEY")
+    if (!key) return missing(`${model.label} временно недоступна: DEEPSEEK_API_KEY не настроен.`) as never
+    return {
+      url: `${(env("DEEPSEEK_BASE_URL") || "https://api.deepseek.com").replace(/\/+$/, "")}/chat/completions`,
+      key,
+      model: env("DEEPSEEK_FLASH_MODEL") || model.providerModel,
+      stream: false,
+      maxTokens: commonTokens,
+      temperature: commonTemperature,
+      timeoutMs: Math.max(commonTimeout, 45_000),
+    }
+  }
   if (model.provider === "groq") {
     const key = env("GROQ_API_KEY")
     if (!key) return missing(`${model.label} временно недоступна: серверный провайдер не настроен.`) as never
@@ -284,8 +322,8 @@ function providerRuntime(
     }
   }
 
-  const key = env("CLOUDFLARE_AUTH_TOKEN") || env("CLOUDFLARE_API_TOKEN") || env("CF_API_TOKEN")
-  const accountId = env("CLOUDFLARE_ACCOUNT_ID") || env("CF_ACCOUNT_ID")
+  const key = env("CLOUDFLARE_AUTH_TOKEN") || env("CLOUDFLARE_API_TOKEN") || env("CF_API_TOKEN") || env("CLOUDFLARE_IMAGE_API_TOKEN")
+  const accountId = env("CLOUDFLARE_ACCOUNT_ID") || env("CF_ACCOUNT_ID") || env("CLOUDFLARE_IMAGE_ACCOUNT_ID")
   if (!key || !accountId) return missing(`${model.label} временно недоступна: серверный провайдер не настроен.`) as never
   return { url: `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`, key, model: model.providerModel, stream: false, maxTokens: commonTokens, temperature: commonTemperature, timeoutMs: commonTimeout }
 }
