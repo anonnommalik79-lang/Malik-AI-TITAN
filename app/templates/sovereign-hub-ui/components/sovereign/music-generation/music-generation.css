@@ -1,882 +1,1047 @@
+/**
+ * Malik Music Studio.
+ *
+ * Ported value for value from the two reference pages the founder supplied -
+ * the desktop studio and the phone layout. Every class is namespaced and every
+ * rule is scoped under .malik-music for one reason: the reference files use
+ * names like .card, .player, .hero and .side, and this application has global
+ * rules that would repaint and resize all of them. Same pixels, different
+ * names.
+ *
+ * Two layouts, not one responsive one. The reference designs differ in
+ * structure, not only in size - the phone has a header and a stacked player,
+ * the desktop has side photography and a three-column control row - so each is
+ * written out and the other is hidden.
+ */
 
 .malik-music {
-  --mm-green: #35ff55;
-  --mm-green-2: #20ed43;
+  --mm-green: #39ff5a;
+  --mm-green-2: #22d943;
+  --mm-line: #232830;
+  --mm-text: #f4f7f8;
+  --mm-muted: #8a949e;
+  position: relative;
   width: 100%;
   height: 100%;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   background: #000;
-  color: #f6f7f8;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--mm-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   color-scheme: dark;
 }
 .malik-music * { box-sizing: border-box; }
 .malik-music button,
-.malik-music textarea { font: inherit; }
+.malik-music input,
+.malik-music textarea { font-family: inherit; }
 .malik-music button { cursor: pointer; }
+.malik-music img { display: block; max-width: 100%; }
+.malik-music audio { display: none; }
+/** Read by a screen reader, drawn by nobody: the artwork carries the name. */
+.malik-music .mm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .malik-music button:focus-visible,
-.malik-music textarea:focus-visible {
-  outline: 1px solid rgba(53,255,85,.78);
+.malik-music textarea:focus-visible,
+.malik-music input:focus-visible {
+  outline: 1px solid rgba(57, 255, 90, .78);
   outline-offset: 2px;
 }
-.malik-music audio { display: none; }
 
-.mm-desktop { display: block; min-height: 100%; padding: 16px 18px 24px; }
+/**
+ * The shell paints every aria-pressed="true" control the same grey, marked
+ * important. That is a reasonable default for tabs and it erased two things
+ * here: the green on a switch that is on, and the ring around the chosen
+ * genre. The states are part of this design, so they are stated again at the
+ * same weight - and only inside this screen.
+ */
+#malik-root .malik-music .mm-desktop .mm-switch { background: #353c45 !important; }
+#malik-root .malik-music .mm-desktop .mm-switch.is-on { background: rgba(57, 255, 90, .32) !important; }
+#malik-root .malik-music .mm-mobile .mm-switch { background: #15181c !important; }
+#malik-root .malik-music .mm-mobile .mm-switch.is-on { background: #28ed49 !important; }
+/* Background colour only: these carry the artwork. */
+#malik-root .malik-music .mm-desktop .mm-genre[aria-pressed="true"] { background-color: #101316 !important; }
+#malik-root .malik-music .mm-mobile .mm-genre {
+  background-image: var(--mm-genre-image) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+#malik-root .malik-music .mm-mobile .mm-genre[aria-pressed="true"] {
+  background-color: #101215 !important;
+  border-color: var(--mm-green) !important;
+  box-shadow: 0 0 0 1px rgba(53, 255, 85, .15), 0 0 18px rgba(53, 255, 85, .10) !important;
+}
+
+/**
+ * The navy blue that is not in this design.
+ *
+ * Two shell rules paint every input and textarea `rgba(2,6,23,.78)` with a
+ * navy border and a 10px radius, and a third - a positional one, every direct
+ * div child of a second section - lays a navy gradient card down. They dress
+ * the chat composer, and in this studio they turned the prompt field and the
+ * «Качество» row blue. The palette here is black, white and green.
+ */
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile textarea,
+#malik-root .malik-dashboard-shell .malik-music .mm-desktop textarea,
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile input,
+#malik-root .malik-dashboard-shell .malik-music .mm-desktop input {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: inherit !important;
+}
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-label,
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-opts,
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-m-prompt-foot,
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-m-tools,
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-m-counter,
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-m-player,
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-m-timeline,
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-m-track-main,
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-m-track-top,
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-m-toggle-row,
+#malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-m-toggle-copy {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+/**
+ * The dashboard shell sizes every textarea for the chat composer: 92px tall
+ * with 13px of padding, marked important. Inside the studio the two fields
+ * have their own geometry from the design, so they say so at the same weight.
+ * Scoped to this screen, so the composer keeps its own size.
+ */
+#malik-root .malik-dashboard-shell .malik-music textarea {
+  min-height: 0 !important;
+  padding: 0 !important;
+}
+#malik-root .malik-dashboard-shell .malik-music .mm-prompt-input {
+  height: 48px !important;
+  min-height: 48px !important;
+  max-height: 48px !important;
+  font-size: 12px;
+}
+#malik-root .malik-dashboard-shell .malik-music .mm-lyrics-input {
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+  font-size: 12px;
+}
+#malik-root .malik-dashboard-shell .malik-music .mm-m-prompt textarea {
+  height: 83px !important;
+  min-height: 83px !important;
+  max-height: 83px !important;
+}
+
+/**
+ * A positional global rule - `#malik-root ... section:nth-of-type(3) button` -
+ * gives every button inside a third section an 88px minimum height and 0.85rem
+ * of padding on a phone. It is meant for the chat composer, and it landed on
+ * this studio's chips: the mood row came out 88px tall instead of 38. The
+ * studio states its own geometry back, at the same weight and only here.
+ */
+@media (max-width: 640px) {
+  /* The rule being answered carries an id, two classes (:not(:has()) and
+     :nth-of-type) and two types. Three classes beats it outright, so the
+     order in which the two stylesheets happen to load cannot decide. */
+  #malik-root .malik-dashboard-shell .malik-music .mm-mobile button,
+  #malik-root .malik-dashboard-shell .malik-music .mm-desktop button {
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+  #malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-opt { padding: 0 13px !important; }
+  #malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-m-grid2 .mm-opt { padding: 0 5px !important; }
+  #malik-root .malik-dashboard-shell .malik-music .mm-m-mode { padding: 0 12px !important; }
+  #malik-root .malik-dashboard-shell .malik-music .mm-mobile .mm-switch { padding: 3px !important; }
+  #malik-root .malik-dashboard-shell .malik-music .mm-m-prompt textarea { padding: 0 !important; }
+}
+
+/* ============================================================== DESKTOP === */
+
+.mm-desktop { height: 100%; min-height: 0; padding: 8px; background: #000; }
 .mm-mobile { display: none; }
-.mm-desktop-grid {
-  display: grid;
-  grid-template-columns: minmax(0,1fr) 330px;
-  gap: 16px;
-  max-width: 1440px;
-  margin: 0 auto;
-}
-.mm-desktop-main { min-width: 0; }
 
-.mm-hero {
-  position: relative;
-  height: 198px;
-  overflow: hidden;
-  border: 1px solid #292d32;
-  border-radius: 16px;
-  background:
-    linear-gradient(90deg,rgba(0,0,0,.98) 0 32%,rgba(0,0,0,.55) 58%,rgba(0,0,0,.25)),
-    url("https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=1800&q=90") 62% 48%/cover no-repeat;
-  box-shadow: 0 18px 50px rgba(0,0,0,.42);
+.mm-workspace {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: clamp(185px, 15vw, 250px) minmax(610px, 1fr) clamp(185px, 15vw, 250px);
+  gap: 8px;
 }
-.mm-hero::after {
+
+.mm-side {
+  border: 1px solid var(--mm-line);
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0a0c10;
+  position: relative;
+  min-height: 0;
+}
+.mm-side img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  color: transparent;
+  font-size: 0;
+}
+.mm-side::after {
   content: "";
   position: absolute;
   inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 74% 38%,rgba(53,255,85,.14),transparent 22%),
-    linear-gradient(180deg,rgba(255,255,255,.025),transparent 28%,rgba(0,0,0,.24));
+  background: linear-gradient(180deg, rgba(0,0,0,.04), rgba(0,0,0,.12) 55%, rgba(0,0,0,.34) 100%);
 }
-.mm-hero-copy { position: relative; z-index: 2; max-width: 510px; padding: 22px 28px; }
-.mm-hero-copy > span { color: #6b727c; font-size: 9px; letter-spacing: .28em; }
-.mm-hero-copy h1 { margin: 9px 0 8px; font-size: 39px; line-height: .98; letter-spacing: -.045em; }
-.mm-hero-copy h1 b { color: var(--mm-green); }
-.mm-hero-copy p { max-width: 400px; margin: 0; color: #c3c8cf; font-size: 13px; line-height: 1.45; }
-.mm-hero-copy small { display: block; margin-top: 11px; color: #64ff78; letter-spacing: .28em; font-size: 8px; }
-.mm-hero-mark {
-  position: absolute;
-  z-index: 3;
-  right: 26px;
-  bottom: 21px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #d3d7db;
-  font-size: 10px;
-  line-height: 1.35;
-  letter-spacing: .18em;
-}
-.mm-hero-mark svg { width: 39px; height: 39px; color: var(--mm-green); }
 
+.mm-center { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.mm-section-title {
+  padding: 0 4px;
+  font-size: 11px;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  color: #a9b2bb;
+  font-weight: 800;
+}
+.mm-hero {
+  height: 150px;
+  flex: 0 0 auto;
+  border: 1px solid #26303a;
+  border-radius: 18px;
+  overflow: hidden;
+  background: url("/music-studio/hero.jpg") center / cover no-repeat, #0b0d10;
+}
+
+.mm-main {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--mm-line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #08090b, #050607);
+  padding: 10px 10px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+}
+
+/**
+ * Six square genre cards that touch, with no gaps between them.
+ *
+ * The height comes from the strip, not from the cards. Every child of a card
+ * is absolutely positioned, so a card contributes nothing to an automatic grid
+ * row and the whole strip collapsed to its own two border pixels. Giving the
+ * strip the six-to-one ratio makes the row definite and the cards square.
+ */
 .mm-genres {
   display: grid;
-  grid-template-columns: repeat(6,minmax(0,1fr));
-  gap: 9px;
-  margin-top: 12px;
-}
-.mm-genre {
-  position: relative;
-  height: 112px;
-  overflow: hidden;
-  border: 1px solid #272b31;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+  border: 1px solid #29313a;
   border-radius: 12px;
-  padding: 0;
-  background-color: #0c0e10;
-  background-size: cover;
-  background-position: center;
-  color: #fff;
+  overflow: hidden;
+  background: #0b0e12;
 }
-.mm-genre::after {
+.mm-desktop .mm-genres { flex: 0 0 auto; aspect-ratio: 6 / 1; }
+.mm-desktop .mm-genre {
+  position: relative;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  border: 0;
+  border-right: 1px solid #29313a;
+  border-radius: 0;
+  overflow: hidden;
+  background: #101316;
+  padding: 0;
+}
+.mm-desktop .mm-genre:last-child { border-right: 0; }
+.mm-desktop .mm-genre img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.mm-desktop .mm-genre::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg,rgba(0,0,0,.04) 24%,rgba(0,0,0,.8) 100%);
+  background: linear-gradient(180deg, transparent 28%, rgba(0,0,0,.86));
 }
-.mm-genre span {
+.mm-desktop .mm-genre span {
   position: absolute;
-  z-index: 2;
-  left: 6px;
-  right: 6px;
+  z-index: 1;
+  left: 10px;
   bottom: 9px;
-  text-align: center;
-  font-size: 12px;
-  font-weight: 780;
-  text-shadow: 0 2px 8px #000;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 8px #000;
 }
-.mm-genre.is-active {
+/**
+ * The ring goes on the overlay, not on the card.
+ *
+ * An inset shadow paints above the background but below the children, and the
+ * artwork here is an absolutely positioned image - so the ring was drawn and
+ * then covered by the picture. The gradient overlay already sits on top of
+ * the image; putting the ring there is the same two green pixels, visible.
+ */
+.mm-desktop .mm-genre.is-active::after { box-shadow: inset 0 0 0 2px rgba(57,255,90,.90); }
+
+.mm-card { border: 1px solid #232830; border-radius: 14px; background: #0b0c0f; padding: 8px 10px; }
+.mm-card textarea {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f3f7f9;
+  resize: none;
+}
+.mm-card textarea::placeholder { color: #7f8993; }
+.mm-prompt-input { height: 48px; min-height: 48px; max-height: 48px; font-size: 12px; line-height: 1.35; }
+.mm-lyrics-input { height: 42px; font-size: 12px; line-height: 1.42; }
+
+.mm-card-tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+.mm-tool-group { display: flex; align-items: center; gap: 6px; }
+.mm-tool {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid #303640;
+  background: #15181d;
+  color: #ccd3d9;
+  display: grid;
+  place-items: center;
+}
+.mm-tool svg { width: 13px; height: 13px; }
+.mm-tool:disabled { opacity: .45; cursor: not-allowed; }
+.mm-counter { font-size: 10px; color: #7e8892; }
+
+.mm-subtitle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: #eff3f6;
+  font-weight: 700;
+}
+.mm-langs { display: flex; gap: 5px; }
+.mm-langs button {
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid #2d3239;
+  background: #121419;
+  color: #c0c8cf;
+  font-size: 9px;
+}
+.mm-langs button.is-active { border-color: rgba(57,255,90,.6); color: #fff; }
+
+/**
+ * The reference sets minimum widths for a centre column 809px wide. Inside
+ * this application the sidebar takes its share and the centre is narrower, and
+ * those minimums then added up to more than the row had - which pushed "WAV"
+ * off the edge. The proportions are the design's; the minimums are zero so the
+ * row always fits whatever width it is given.
+ */
+.mm-grid2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, .8fr) minmax(0, 1.08fr);
+  gap: 8px;
+  align-items: start;
+  margin-top: -4px;
+}
+.mm-control { min-width: 0; display: flex; flex-direction: column; justify-content: flex-start; align-self: start; }
+.mm-desktop .mm-label { margin-bottom: 4px; font-size: 11px; color: #f0f3f5; font-weight: 700; }
+.mm-desktop .mm-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.mm-desktop .mm-opt {
+  min-width: 44px;
+  height: 27px;
+  padding: 0 12px;
+  white-space: nowrap;
+  border-radius: 8px;
+  border: 1px solid #30353d;
+  background: #14171c;
+  color: #d4dbe1;
+  font-size: 10px;
+}
+.mm-desktop .mm-opt.is-active {
   border-color: var(--mm-green);
-  box-shadow: 0 0 0 1px rgba(53,255,85,.14), 0 0 22px rgba(53,255,85,.09);
+  box-shadow: 0 0 0 1px rgba(57,255,90,.18) inset;
+  color: #fff;
+}
+.mm-desktop .mm-opt:disabled { opacity: .42; cursor: not-allowed; }
+.mm-grid2 .mm-control:first-child .mm-opts { flex-wrap: nowrap; }
+.mm-grid2 .mm-control:first-child .mm-opt { flex: 1 1 0; min-width: 0; padding: 0 5px; }
+
+.mm-model-select { position: relative; }
+.mm-model-trigger {
+  width: 100%;
+  height: 32px;
+  border-radius: 9px;
+  border: 1px solid #30353d;
+  background: #111419;
+  color: #eef2f5;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.mm-model-trigger span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mm-model-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 38px;
+  z-index: 20;
+  padding: 6px;
+  border: 1px solid #30353d;
+  border-radius: 10px;
+  background: #0d1014;
+  box-shadow: 0 14px 34px rgba(0,0,0,.45);
+}
+.mm-model-option {
+  width: 100%;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #dfe5ea;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 9px;
+  font-size: 10px;
+  text-align: left;
+}
+.mm-model-option:hover { background: #171b21; }
+.mm-model-option.is-active { background: #111c14; color: #fff; }
+.mm-model-option.is-active::after { content: "✓"; color: var(--mm-green); font-weight: 900; }
+
+.mm-result-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; }
+.mm-result-sub { min-width: 0; }
+.mm-result-sub .mm-opts { flex-wrap: nowrap; gap: 4px; }
+.mm-result-sub .mm-opt { flex: 1; min-width: 0; padding: 0 8px; }
+
+.mm-moods { margin-top: -5px; }
+.mm-moods .mm-label { margin-bottom: 4px; }
+.mm-moods .mm-opts { gap: 5px; }
+.mm-moods .mm-opt { flex: 1 1 96px; height: 27px; }
+
+.mm-switchgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+  margin-top: -5px;
+}
+.mm-desktop .mm-toggle {
+  height: 32px;
+  border: 1px solid #30353d;
+  border-radius: 10px;
+  background: #101317;
+  padding: 0 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #eef2f5;
+}
+.mm-desktop .mm-toggle > span { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mm-desktop .mm-toggle svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.mm-desktop .mm-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: #353c45;
+}
+.mm-desktop .mm-switch i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #c8ced4;
+  transition: .2s;
+}
+.mm-desktop .mm-switch.is-on { background: rgba(57,255,90,.32); }
+.mm-desktop .mm-switch.is-on i { left: 25px; background: #fff; }
+
+.mm-desktop .mm-generate {
+  height: 42px;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #24da43, #4cff63);
+  color: #031005;
+  font-size: 18px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 0;
+}
+.mm-desktop .mm-generate svg { width: 18px; height: 18px; }
+.mm-generate:disabled { opacity: .55; cursor: not-allowed; }
+.mm-generate:active { transform: translateY(1px); }
+
+.mm-player {
+  border: 1px solid #232830;
+  border-radius: 14px;
+  background: #090b0d;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.mm-cover {
+  width: 64px;
+  height: 48px;
+  border-radius: 8px;
+  border: 1px solid #29313a;
+  background-size: cover;
+  background-position: center;
+}
+.mm-track-title { font-size: 12px; font-weight: 900; }
+.mm-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(57,255,90,.58);
+  color: var(--mm-green);
+  font-size: 8px;
+  font-weight: 800;
+}
+.mm-track-time { font-size: 9px; color: #cbd2d8; margin-top: 2px; }
+.mm-request { margin-top: 3px; font-size: 8px; color: #6d7780; word-break: break-all; }
+.mm-wave { margin-top: 7px; height: 24px; display: flex; gap: 2px; align-items: flex-end; overflow: hidden; }
+.mm-wave i { width: 3px; border-radius: 999px; background: linear-gradient(180deg, #73ff8c, #27d942); }
+.mm-wave.is-playing i { animation: mm-wave .8s ease-in-out infinite alternate; }
+.mm-wave i:nth-child(3n) { animation-delay: .12s; }
+.mm-wave i:nth-child(4n) { animation-delay: .22s; }
+.mm-wave i:nth-child(5n) { animation-delay: .32s; }
+@keyframes mm-wave { from { transform: scaleY(.55); } to { transform: scaleY(1.12); } }
+@media (prefers-reduced-motion: reduce) {
+  .mm-wave.is-playing i { animation: none; }
 }
 
-.mm-prompt {
-  margin-top: 13px;
-  padding: 12px;
-  border: 1px solid #2b2f35;
-  border-radius: 14px;
-  background: linear-gradient(180deg,#101216,#0b0d10);
+.mm-pactions { display: flex; gap: 10px; align-items: center; }
+.mm-mini {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #30353d;
+  border-radius: 8px;
+  background: #14181d;
+  color: #d1d8de;
+  display: grid;
+  place-items: center;
 }
-.mm-prompt textarea {
+.mm-mini.mm-play { width: 30px; height: 30px; border-radius: 50%; }
+.mm-mini svg { width: 16px; height: 16px; }
+.mm-mini.is-active {
+  border-color: rgba(57,255,90,.7);
+  box-shadow: 0 0 0 1px rgba(57,255,90,.18) inset;
+  background: #111b14;
+  color: #fff;
+}
+.mm-mini:disabled { opacity: .4; cursor: not-allowed; }
+
+.mm-history {
+  border: 1px solid #232830;
+  border-radius: 14px;
+  background: #090b0d;
+  padding: 10px;
+  min-height: 190px;
+}
+.mm-history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mm-history-head strong { font-size: 12px; }
+.mm-history-head span { font-size: 10px; color: #7d8892; }
+.mm-tracklist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.mm-htrack {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #282d35;
+  border-radius: 11px;
+  background: #0f1115;
+  padding: 8px;
+  min-width: 0;
+}
+.mm-htrack:hover { border-color: #39414b; background: #11151a; }
+.mm-htrack.is-active { border-color: rgba(57,255,90,.6); box-shadow: 0 0 0 1px rgba(57,255,90,.14) inset; }
+.mm-hcover {
+  width: 54px;
+  height: 54px;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid #2b323a;
+  padding: 0;
+}
+.mm-hmeta { min-width: 0; text-align: left; background: transparent; border: 0; padding: 0; color: inherit; }
+.mm-hmeta strong { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mm-hmeta small { display: block; margin-top: 4px; font-size: 8px; color: #87929c; }
+.mm-hwave { display: flex; gap: 1px; align-items: flex-end; height: 16px; margin-top: 5px; }
+.mm-hwave i { width: 2px; border-radius: 999px; background: var(--mm-green); }
+.mm-hactions { display: flex; gap: 4px; }
+.mm-hactions button {
+  width: 25px;
+  height: 25px;
+  border: 1px solid #31363d;
+  border-radius: 8px;
+  background: #14181d;
+  color: #d3d9df;
+  display: grid;
+  place-items: center;
+}
+.mm-hactions button svg { width: 13px; height: 13px; }
+.mm-hactions button:disabled { opacity: .4; cursor: not-allowed; }
+.mm-empty {
+  grid-column: 1 / -1;
+  min-height: 88px;
+  border: 1px dashed #31363d;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: #74808a;
+  font-size: 10px;
+  padding: 12px;
+}
+
+.mm-notice {
+  border: 1px solid #2b3139;
+  border-radius: 11px;
+  background: #0d1014;
+  color: #cfd6dc;
+  padding: 8px 10px;
+  font-size: 10px;
+}
+
+.mm-main,
+.mm-tracklist { scrollbar-width: thin; scrollbar-color: #2a3038 transparent; }
+.mm-main::-webkit-scrollbar,
+.mm-tracklist::-webkit-scrollbar { width: 6px; height: 6px; }
+.mm-main::-webkit-scrollbar-track,
+.mm-tracklist::-webkit-scrollbar-track { background: transparent; }
+.mm-main::-webkit-scrollbar-thumb,
+.mm-tracklist::-webkit-scrollbar-thumb { background: #2a3038; border-radius: 999px; }
+.mm-main::-webkit-scrollbar-thumb:hover,
+.mm-tracklist::-webkit-scrollbar-thumb:hover { background: #39414c; }
+
+.mm-mini,
+.mm-hactions button,
+.mm-tool,
+.mm-desktop .mm-genre,
+.mm-desktop .mm-opt,
+.mm-model-trigger,
+.mm-model-option,
+.mm-generate,
+.mm-switch { transition: all .16s ease; }
+.mm-mini:hover,
+.mm-hactions button:hover,
+.mm-tool:hover,
+.mm-desktop .mm-genre:hover,
+.mm-desktop .mm-opt:hover,
+.mm-model-trigger:hover,
+.mm-model-option:hover { transform: translateY(-1px); filter: brightness(1.05); }
+
+/* The reference keeps both photographs on a normal laptop and drops them on
+   narrower screens rather than squeezing the studio. */
+@media (max-width: 1390px) {
+  .mm-workspace { grid-template-columns: 185px minmax(600px, 1fr) 185px; gap: 6px; }
+  .mm-grid2 { grid-template-columns: minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1.12fr); }
+}
+@media (max-width: 1180px) {
+  .mm-workspace { grid-template-columns: minmax(0, 1fr); }
+  .mm-side { display: none; }
+  .mm-tracklist { grid-template-columns: 1fr; }
+  .mm-grid2 { grid-template-columns: 1fr 1fr; }
+  .mm-grid2 .mm-control:last-child { grid-column: 1 / -1; }
+}
+
+/* =============================================================== MOBILE === */
+
+@media (max-width: 900px) {
+  .mm-desktop { display: none; }
+  .mm-mobile { display: block; }
+}
+
+.malik-music .mm-mobile {
+  --mm-green: #35ff55;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 12px 28px;
+  background: radial-gradient(80% 28% at 50% 0%, rgba(255,255,255,.045), transparent 76%), #020302;
+}
+.mm-mobile svg { stroke-linecap: round; stroke-linejoin: round; }
+
+.mm-m-head {
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.mm-m-back { width: 38px; height: 38px; border: 0; background: transparent; color: #fff; display: grid; place-items: center; }
+.mm-m-back svg { width: 25px; height: 25px; }
+.mm-m-brand { text-align: center; line-height: 1; }
+.mm-m-brand strong { display: block; font-size: 20px; letter-spacing: .22em; font-weight: 500; }
+.mm-m-brand small { display: block; margin-top: 8px; color: #777e87; font-size: 9px; letter-spacing: .31em; }
+.mm-m-mode {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #1e5d2a;
+  background: #08110a;
+  color: #f2fff4;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 800;
+  box-shadow: inset 0 0 18px rgba(53,255,85,.03);
+}
+.mm-m-mode svg { color: var(--mm-green); width: 17px; height: 17px; }
+
+.mm-m-hero {
   width: 100%;
-  height: 78px;
+  aspect-ratio: 862 / 253;
+  height: auto;
+  border: 1px solid #2b2f35;
+  border-radius: 17px;
+  overflow: hidden;
+  position: relative;
+  background: #070909 url("/music-studio/m-hero.jpg") center / 100% 100% no-repeat;
+  box-shadow: 0 18px 55px rgba(0,0,0,.45);
+}
+.mm-m-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(0,0,0,.10), rgba(0,0,0,0) 55%, rgba(0,0,0,.09));
+  pointer-events: none;
+}
+
+.mm-mobile .mm-genres {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin: 12px 0;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
+}
+.mm-mobile .mm-genre {
+  height: 64px;
+  border: 1px solid #25292f;
+  border-radius: 13px;
+  background: #101215 center / cover no-repeat;
+  background-image: var(--mm-genre-image);
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+.mm-mobile .mm-genre::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 35%, rgba(0,0,0,.7) 100%);
+}
+.mm-mobile .mm-genre span {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 750;
+  text-shadow: 0 1px 8px #000;
+}
+.mm-mobile .mm-genre.is-active {
+  border-color: var(--mm-green);
+  box-shadow: 0 0 0 1px rgba(53,255,85,.15), 0 0 18px rgba(53,255,85,.10);
+}
+
+.mm-m-prompt {
+  border: 1px solid #292d33;
+  border-radius: 15px;
+  background: linear-gradient(180deg, #101216, #0b0d10);
+  padding: 12px 12px 9px;
+}
+/**
+ * The text stays at the size the application sets for every field on a phone,
+ * not the 12px in the reference. That rule is deliberate: below 16px, iOS
+ * Safari zooms the whole page the moment a field is focused, and a studio that
+ * jumps every time you tap the prompt is worse than four pixels of type. The
+ * box keeps the reference geometry.
+ */
+#malik-root .malik-music .mm-m-prompt textarea,
+.mm-m-prompt textarea {
+  width: 100%;
+  height: 83px !important;
+  min-height: 83px !important;
+  max-height: 83px !important;
   resize: none;
   border: 0;
   outline: 0;
   background: transparent;
   color: #fff;
-  font-size: 12px;
-  line-height: 1.5;
-}
-.mm-prompt textarea::placeholder { color: #747b85; }
-.mm-prompt-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.mm-prompt-tools { display: flex; gap: 7px; }
-.mm-prompt-tools button {
-  width: 32px;
-  height: 32px;
+  line-height: 1.45;
   padding: 0;
-  border: 1px solid #2c3037;
+}
+.mm-m-prompt textarea::placeholder { color: #747a83; }
+.mm-m-prompt-foot { display: flex; justify-content: space-between; align-items: center; }
+.mm-m-tools { display: flex; gap: 8px; }
+.mm-m-smallbtn {
+  width: 33px;
+  height: 33px;
+  border: 1px solid #2b2f35;
   border-radius: 9px;
-  background: #14171c;
-  color: #c5cad1;
+  background: #13161a;
+  color: #c8cdd4;
   display: grid;
   place-items: center;
 }
-.mm-prompt-tools svg { width: 15px; height: 15px; }
-.mm-count { display: flex; align-items: center; gap: 7px; color: #777e88; font-size: 9px; }
-.mm-count button {
-  width: 22px;
-  height: 22px;
+.mm-m-smallbtn:active { transform: scale(.97); }
+.mm-m-smallbtn svg { width: 15px; height: 15px; }
+.mm-m-counter { display: flex; align-items: center; gap: 7px; color: #777e87; font-size: 9px; }
+.mm-m-clear {
+  width: 24px;
+  height: 24px;
   border: 0;
   border-radius: 50%;
-  background: #373b42;
-  color: #b8bec6;
+  background: #383c43;
+  color: #b7bdc5;
   display: grid;
   place-items: center;
 }
-.mm-count svg { width: 11px; height: 11px; }
+.mm-m-clear svg { width: 11px; height: 11px; }
 
-.mm-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
-.mm-setting { min-width: 0; }
-.mm-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 7px;
-  color: #b8bdc4;
-  font-size: 11px;
-}
-.mm-label svg { width: 15px; height: 15px; }
-.mm-options { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; }
-.mm-options::-webkit-scrollbar { display: none; }
-.mm-options button {
+.mm-m-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.mm-mobile .mm-m-grid2 .mm-opts { display: grid; overflow: visible; gap: 6px; }
+.mm-mobile .mm-m-grid2 .mm-opts[data-group="duration"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mm-mobile .mm-m-grid2 .mm-opts[data-group="quality"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mm-mobile .mm-m-grid2 .mm-opt { min-width: 0; width: 100%; padding: 0 5px; font-size: 9px; white-space: nowrap; }
+
+.mm-m-section { margin-top: 13px; }
+.mm-m-grid2 .mm-m-section { margin-top: 0; }
+.mm-mobile .mm-label { display: flex; align-items: center; gap: 7px; color: #b8bdc4; font-size: 11px; margin-bottom: 7px; }
+.mm-mobile .mm-label svg { width: 15px; height: 15px; }
+.mm-mobile .mm-opts { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; }
+.mm-mobile .mm-opts::-webkit-scrollbar { display: none; }
+.mm-mobile .mm-opt {
+  height: 38px;
   min-width: max-content;
-  height: 37px;
   padding: 0 13px;
   border: 1px solid #292d33;
-  border-radius: 9px;
+  border-radius: 10px;
   background: #111318;
   color: #b9bec7;
   font-size: 10px;
 }
-.mm-options button.is-active {
+.mm-mobile .mm-opt.is-active {
   border-color: var(--mm-green);
   background: #0d160f;
   color: #fff;
   box-shadow: 0 0 0 1px rgba(53,255,85,.1);
 }
-.mm-mood { margin-top: 12px; }
-.mm-mood .mm-options {
-  display: grid;
-  grid-template-columns: repeat(6,minmax(0,1fr));
-  overflow: visible;
-}
-.mm-mood .mm-options button { min-width: 0; padding: 0 6px; }
+.mm-mobile .mm-opt:disabled { opacity: .42; cursor: not-allowed; }
 
-.mm-desktop-bottom {
-  display: grid;
-  grid-template-columns: 1fr 220px;
-  gap: 14px;
-  align-items: center;
-  margin-top: 13px;
-}
-.mm-switch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.mm-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.mm-switch-row > span { display: flex; align-items: center; gap: 7px; color: #c2c7ce; font-size: 11px; }
-.mm-switch-row svg { width: 16px; height: 16px; }
-.mm-switch {
-  width: 52px;
-  height: 28px;
-  border: 1px solid #2e3238;
+.mm-m-switches { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 13px; }
+.mm-m-toggle-row { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mm-m-toggle-copy { display: flex; align-items: center; gap: 7px; color: #c1c6cd; font-size: 11px; }
+.mm-m-toggle-copy svg { width: 17px; height: 17px; }
+.mm-mobile .mm-switch {
+  flex: 0 0 auto;
+  width: 53px;
+  height: 29px;
+  border: 1px solid #2d3137;
   border-radius: 999px;
   background: #15181c;
   padding: 3px;
 }
-.mm-switch i {
+.mm-mobile .mm-switch i {
   display: block;
-  width: 20px;
-  height: 20px;
+  width: 21px;
+  height: 21px;
   border-radius: 50%;
-  background: #616771;
+  background: #60666f;
   transition: .18s;
 }
-.mm-switch.is-on { background: #28ed49; border-color: #37ff56; }
-.mm-switch.is-on i { transform: translateX(23px); background: #fff; }
+.mm-mobile .mm-switch.is-on { background: #28ed49; border-color: #37ff56; }
+.mm-mobile .mm-switch.is-on i { transform: translateX(23px); background: #fff; }
 
-.mm-model {
-  height: 42px;
+.mm-m-model {
+  height: 44px;
+  margin-top: 12px;
   border: 1px solid #2b2f35;
-  border-radius: 10px;
+  border-radius: 11px;
   background: #111318;
-  color: #f4f5f7;
+  color: #f3f5f7;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   font-size: 11px;
 }
-.mm-model svg { width: 16px; height: 16px; }
-.mm-model small { color: #858c96; }
+.mm-m-model { max-width: 100%; }
+.mm-m-model span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-m-model small { color: #888f98; }
+.mm-m-model svg { width: 17px; height: 17px; }
 
-.mm-generate {
+.mm-mobile .mm-generate {
   width: 100%;
-  height: 50px;
-  margin-top: 10px;
+  height: 54px;
+  margin-top: 13px;
   border: 0;
-  border-radius: 11px;
-  background: linear-gradient(#4cff67,#27eb46);
+  border-radius: 13px;
+  background: linear-gradient(#4cff66, #27eb46);
   color: #041107;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 900;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 9px;
-  box-shadow: 0 0 28px rgba(53,255,85,.17);
+  box-shadow: 0 0 28px rgba(53,255,85,.18);
 }
-.mm-generate:disabled { opacity: .5; cursor: not-allowed; }
-.mm-generate svg { width: 17px; height: 17px; fill: currentColor; }
-.mm-spin { animation: mmspin 1s linear infinite; }
-@keyframes mmspin { to { transform: rotate(360deg); } }
+.mm-mobile .mm-generate svg { width: 17px; height: 17px; }
 
-.mm-player {
-  position: relative;
+.mm-m-track {
   margin-top: 13px;
-  padding: 10px;
   border: 1px solid #272b31;
-  border-radius: 14px;
-  background: linear-gradient(180deg,#0d0f12,#080a0b);
+  border-radius: 15px;
+  background: linear-gradient(180deg, #0d0f12, #080a0b);
+  padding: 11px;
   display: grid;
-  grid-template-columns: 76px minmax(0,1fr) 44px auto;
-  gap: 11px;
-  align-items: center;
+  grid-template-columns: 80px 1fr;
+  gap: 10px;
 }
-.mm-cover {
-  width: 76px;
-  height: 76px;
-  border: 1px solid #26302a;
+.mm-m-cover {
+  width: 80px;
+  height: 80px;
   border-radius: 10px;
-  background-size: cover;
-  background-position: center;
+  border: 1px solid #26302a;
+  background: #111 center / cover no-repeat;
+  overflow: hidden;
 }
-.mm-player-main { min-width: 0; }
-.mm-track-head { display: flex; align-items: center; gap: 8px; }
-.mm-track-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.mm-track-head span {
-  padding: 3px 6px;
+.mm-m-track-main { min-width: 0; }
+.mm-m-track-top { display: flex; align-items: center; gap: 8px; }
+.mm-m-track-title { font-size: 14px; font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-m-tag {
+  font-size: 8px;
+  color: var(--mm-green);
   border: 1px solid #1f5b2a;
   border-radius: 6px;
+  padding: 4px 6px;
   background: #071009;
-  color: var(--mm-green);
-  font-size: 7px;
+  flex: 0 0 auto;
 }
-.mm-time { margin: 5px 0 3px; color: #c5cad0; font-size: 9px; }
-.mm-wave { height: 31px; display: flex; align-items: center; gap: 2px; overflow: hidden; }
-.mm-wave i {
-  display: block;
-  width: 2px;
-  flex: 0 0 2px;
-  border-radius: 4px;
-  background: var(--mm-green);
-  opacity: .9;
-  transform-origin: center;
-}
-.mm-wave.is-playing i { animation: mmwave .75s ease-in-out infinite alternate; }
-.mm-wave i:nth-child(3n) { animation-delay: .11s; }
-.mm-wave i:nth-child(4n) { animation-delay: .2s; }
-@keyframes mmwave { from { transform: scaleY(.48); } to { transform: scaleY(1.14); } }
-.mm-round-play {
-  width: 44px;
-  height: 44px;
-  border: 1px solid #1f6c2c;
+.mm-m-track-actions { margin-left: auto; display: flex; gap: 4px; }
+.mm-m-iconbtn { width: 28px; height: 28px; border: 0; background: transparent; color: #eef1f3; display: grid; place-items: center; }
+.mm-m-iconbtn svg { width: 17px; height: 17px; }
+.mm-m-iconbtn:disabled { opacity: .4; cursor: not-allowed; }
+.mm-m-player { display: grid; grid-template-columns: 42px 1fr; gap: 9px; align-items: center; margin-top: 9px; }
+.mm-m-play {
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
+  border: 1px solid #1f6c2c;
   background: #08110a;
   color: #fff;
   display: grid;
   place-items: center;
 }
-.mm-round-play svg { width: 17px; height: 17px; fill: #fff; }
-.mm-player-actions { display: flex; gap: 4px; }
-.mm-player-actions button {
-  width: 32px;
-  height: 32px;
-  border: 0;
-  background: transparent;
-  color: #eef1f4;
-  display: grid;
-  place-items: center;
-}
-.mm-player-actions svg { width: 17px; height: 17px; }
-.mm-player-actions .is-filled { fill: var(--mm-green); color: var(--mm-green); }
-.mm-notice {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border: 1px solid #25342a;
-  border-radius: 9px;
-  background: #09110b;
-  color: #9cdba6;
-  font-size: 9px;
-  line-height: 1.4;
+.mm-m-play svg { width: 17px; height: 17px; }
+.mm-m-play:disabled { opacity: .45; cursor: not-allowed; }
+.mm-m-timeline { min-width: 0; }
+.mm-m-time { font-size: 10px; color: #c7ccd1; margin-bottom: 5px; }
+.mm-mobile .mm-wave { height: 34px; align-items: center; margin-top: 0; }
+.mm-mobile .mm-wave i { background: var(--mm-green); opacity: .9; transform-origin: center; }
+
+.mm-mobile .mm-history { margin-top: 13px; border-radius: 15px; }
+.mm-mobile .mm-tracklist { grid-template-columns: 1fr; max-height: none; }
+.mm-mobile .mm-notice { margin-top: 12px; }
+
+/* The reference tightens on a real phone: taller genre cards, less side
+   padding, and the two paired rows stacked instead of squeezed. */
+@media (max-width: 430px) {
+  .malik-music .mm-mobile { padding-left: 9px; padding-right: 9px; }
+  .mm-mobile .mm-genres { gap: 5px; }
+  .mm-mobile .mm-genre { height: 78px; }
+  .mm-m-grid2 { grid-template-columns: 1fr; }
+  .mm-m-switches { grid-template-columns: 1fr; }
 }
 
-.mm-promo {
-  position: relative;
-  min-height: 700px;
-  overflow: hidden;
-  border: 1px solid #272b31;
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg,rgba(0,0,0,.08),rgba(0,0,0,.4)),
-    url("https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1000&q=90") center/cover no-repeat;
-}
-.mm-promo::after {
-  content: "";
+/* The reference page ends with its own five-tab bar and a home indicator.
+   Both are deliberately absent: this screen lives inside Malik AI, which has
+   its own navigation, and a second row of tabs under the first is not a
+   design, it is two apps stacked. */
+
+.mm-toast {
   position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg,rgba(0,0,0,.08) 0,rgba(0,0,0,.14) 45%,rgba(0,0,0,.78) 100%);
-}
-.mm-promo-brand {
-  position: absolute;
-  z-index: 2;
-  top: 26px;
-  left: 24px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #ecf1ee;
+  left: 50%;
+  bottom: 18px;
+  transform: translate(-50%, 12px);
+  opacity: 0;
+  pointer-events: none;
+  padding: 10px 14px;
+  border: 1px solid #2c3035;
+  background: rgba(19,21,25,.96);
+  color: #fff;
+  border-radius: 12px;
   font-size: 11px;
-  font-weight: 750;
-  letter-spacing: .16em;
+  transition: .2s;
+  z-index: 50;
+  max-width: min(340px, calc(100% - 32px));
+  text-align: center;
 }
-.mm-promo-brand svg { width: 38px; height: 38px; color: var(--mm-green); }
-.mm-promo-bottom {
-  position: absolute;
-  z-index: 2;
-  left: 24px;
-  bottom: 25px;
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  color: #bdc4ca;
-  font-size: 11px;
-  letter-spacing: .16em;
-  line-height: 1.45;
-}
-.mm-promo-bottom i { display: block; width: 29px; height: 2px; background: var(--mm-green); }
-.mm-promo-bottom strong { color: #fff; font-size: 13px; }
+.mm-toast.is-show { opacity: 1; transform: translate(-50%, 0); }
 
-.mm-mobile { padding: 10px 11px 24px; }
-.mm-mobile-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
-.mm-mobile-head > div { display: flex; flex-direction: column; gap: 5px; }
-.mm-mobile-head strong { font-size: 17px; letter-spacing: .18em; font-weight: 560; }
-.mm-mobile-head small { color: #737a84; font-size: 8px; letter-spacing: .24em; }
-.mm-mobile-head button {
-  height: 36px;
-  padding: 0 11px;
-  border: 1px solid #2b3135;
-  border-radius: 999px;
-  background: #0b0e0c;
-  color: #d7ddd9;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 9px;
-  font-weight: 760;
-}
-.mm-mobile-head button.is-active { border-color: #1d632b; color: #fff; }
-.mm-mobile-head button svg { width: 15px; height: 15px; color: var(--mm-green); }
-.mm-mobile-hero {
-  position: relative;
-  height: 164px;
-  overflow: hidden;
-  border: 1px solid #2a2e33;
-  border-radius: 15px;
-  padding: 20px;
-  background:
-    linear-gradient(90deg,rgba(0,0,0,.97) 0 52%,rgba(0,0,0,.35)),
-    url("https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=1000&q=88") 68% 45%/cover no-repeat;
-}
-.mm-mobile-hero > div { position: relative; z-index: 2; max-width: 230px; }
-.mm-mobile-hero h2 { margin: 0 0 9px; font-size: 27px; line-height: 1; letter-spacing: -.04em; }
-.mm-mobile-hero h2 b { color: var(--mm-green); }
-.mm-mobile-hero p { margin: 0; color: #c3c9ce; font-size: 10px; line-height: 1.45; }
-.mm-mobile-hero > svg { position: absolute; right: 18px; top: 20px; width: 37px; height: 37px; color: var(--mm-green); opacity: .82; }
-.mm-mobile-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 11px; }
-.mm-mobile-switches { margin-top: 12px; }
-.mm-mobile-brand { margin-top: 12px; color: #8f969f; font-size: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
-.mm-mobile-brand svg { width: 13px; height: 13px; color: var(--mm-green); }
-
-@media (max-width: 1180px) {
-  .mm-desktop-grid { grid-template-columns: 1fr; }
-  .mm-promo { display: none; }
-  .mm-genre { height: 96px; }
-}
-
-@media (max-width: 820px) {
-  .mm-desktop { display: none; }
-  .mm-mobile { display: block; }
-  .mm-genres { gap: 5px; margin-top: 10px; }
-  .mm-genre { height: 62px; border-radius: 9px; }
-  .mm-genre span { bottom: 5px; font-size: 8px; }
-
-  .mm-prompt { margin-top: 8px; padding: 10px; }
-  .mm-prompt textarea { height: 71px; font-size: 11px; }
-
-  .mm-mobile-settings .mm-options { display: grid; overflow: visible; gap: 5px; }
-  .mm-mobile-settings .mm-setting:first-child .mm-options { grid-template-columns: repeat(4,minmax(0,1fr)); }
-  .mm-mobile-settings .mm-setting:last-child .mm-options { grid-template-columns: repeat(3,minmax(0,1fr)); }
-  .mm-mobile-settings .mm-options button {
-    min-width: 0;
-    width: 100%;
-    height: 35px;
-    padding: 0 4px;
-    font-size: 8px;
-    white-space: nowrap;
-  }
-  .mm-mood { margin-top: 11px; }
-  .mm-mood .mm-options { display: flex; overflow-x: auto; }
-  .mm-mood .mm-options button { min-width: max-content; padding: 0 11px; }
-
-  .mm-mobile-switches .mm-switch-grid { grid-template-columns: 1fr 1fr; gap: 13px; }
-  .mm-model { width: 100%; margin-top: 11px; }
-  .mm-generate { height: 49px; margin-top: 8px; }
-
-  .mm-player { grid-template-columns: 66px minmax(0,1fr); gap: 9px; padding: 9px; }
-  .mm-cover { width: 66px; height: 66px; }
-  .mm-round-play { position: absolute; z-index: 2; width: 39px; height: 39px; left: 78px; bottom: 12px; }
-  .mm-player-actions { grid-column: 2; justify-content: flex-end; margin-top: -4px; }
-  .mm-wave { height: 27px; }
-  .mm-notice { font-size: 8px; }
-}
-
-@media (max-width: 380px) {
-  .mm-mobile { padding-left: 8px; padding-right: 8px; }
-  .mm-genre { height: 56px; }
-  .mm-genre span { font-size: 7px; }
-  .mm-mobile-settings { grid-template-columns: 1fr; }
-  .mm-mobile-switches .mm-switch-grid { grid-template-columns: 1fr; }
-  .mm-round-play { left: 70px; }
-}
-
-
-.mm-lyrics {
-  margin-top: 10px;
-  padding: 11px 12px;
-  border: 1px solid #29302c;
-  border-radius: 13px;
-  background: linear-gradient(180deg,#0d1110,#090c0a);
-}
-.mm-lyrics-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-.mm-lyrics-top > span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #d6dbd7;
-  font-size: 10px;
-  font-weight: 650;
-}
-.mm-lyrics-top svg { width: 14px; height: 14px; color: var(--mm-green); }
-.mm-language { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; }
-.mm-language::-webkit-scrollbar { display: none; }
-.mm-language button {
-  min-width: max-content;
-  height: 28px;
-  padding: 0 9px;
-  border: 1px solid #2b3033;
-  border-radius: 8px;
-  background: #111417;
-  color: #939aa2;
-  font-size: 8px;
-}
-.mm-language button.is-active {
-  border-color: #2c9140;
-  background: #0a150c;
-  color: #ecfff0;
-}
-.mm-lyrics textarea {
-  width: 100%;
-  min-height: 112px;
-  resize: vertical;
-  border: 0;
-  outline: 0;
-  border-radius: 9px;
-  background: #090b0c;
-  padding: 10px;
-  color: #f6f7f8;
-  font-size: 10px;
-  line-height: 1.55;
-}
-.mm-lyrics textarea::placeholder { color: #697078; }
-.mm-lyrics > small {
-  display: block;
-  margin-top: 6px;
-  color: #646b73;
-  font-size: 8px;
-  text-align: right;
-}
-
-.mm-request {
-  margin-top: 4px;
-  overflow: hidden;
-  color: #6f7871;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 7px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mm-history {
-  margin-top: 14px;
-  padding: 11px;
-  border: 1px solid #24292d;
-  border-radius: 14px;
-  background: linear-gradient(180deg,#0c0e10,#08090a);
-}
-.mm-history-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 9px;
-}
-.mm-history-head > div {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #eef1f3;
-  font-size: 11px;
-  font-weight: 700;
-}
-.mm-history-head svg { width: 15px; height: 15px; color: var(--mm-green); }
-.mm-history-head small { color: #697078; font-size: 9px; }
-.mm-history-list { display: flex; flex-direction: column; gap: 7px; }
-.mm-history-item {
-  display: grid;
-  grid-template-columns: 48px minmax(0,1fr) auto auto;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  padding: 7px;
-  border: 1px solid #202428;
-  border-radius: 10px;
-  background: #0b0d0f;
-}
-.mm-history-cover {
-  width: 48px;
-  height: 48px;
-  border: 0;
-  border-radius: 8px;
-  background-size: cover;
-  background-position: center;
-}
-.mm-history-copy { min-width: 0; }
-.mm-history-copy strong {
-  display: block;
-  overflow: hidden;
-  color: #f0f2f3;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mm-history-copy span {
-  display: block;
-  margin-top: 3px;
-  overflow: hidden;
-  color: #858c94;
-  font-size: 8px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mm-history-copy small {
-  display: block;
-  margin-top: 3px;
-  overflow: hidden;
-  color: #565d64;
-  font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  font-size: 7px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mm-history-status {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #9aa1a8;
-  font-size: 8px;
-}
-.mm-history-status svg { width: 13px; height: 13px; }
-.mm-history-status.is-ready { color: #62ff77; }
-.mm-history-status.is-failed { color: #ff7d7d; }
-.mm-history-actions { display: flex; gap: 2px; }
-.mm-history-actions button {
-  width: 29px;
-  height: 29px;
-  border: 0;
-  border-radius: 7px;
-  background: #13171a;
-  color: #d9dddf;
-  display: grid;
-  place-items: center;
-}
-.mm-history-actions button:hover { background: #18201a; color: #fff; }
-.mm-history-actions button:disabled { opacity: .35; cursor: not-allowed; }
-.mm-history-actions svg { width: 14px; height: 14px; }
-
-.mm-model:disabled { opacity: 1; cursor: default; }
-.mm-player-actions button:disabled,
-.mm-round-play:disabled {
-  opacity: .3;
-  cursor: not-allowed;
-}
-
-@media (max-width: 820px) {
-  .mm-lyrics { margin-top: 8px; padding: 9px; }
-  .mm-lyrics-top { align-items: flex-start; flex-direction: column; }
-  .mm-language { width: 100%; }
-  .mm-lyrics textarea { min-height: 96px; }
-
-  .mm-history { padding: 8px; }
-  .mm-history-item {
-    grid-template-columns: 42px minmax(0,1fr) auto;
-    gap: 7px;
-  }
-  .mm-history-cover { width: 42px; height: 42px; }
-  .mm-history-status { grid-column: 2; }
-  .mm-history-actions { grid-column: 3; grid-row: 1 / span 2; flex-direction: column; }
-  .mm-history-copy small { max-width: 210px; }
-}
-
-
-/* === Malik Music desktop final pass: single prompt, clean photos, aligned controls === */
-@media (min-width: 821px) {
-  .mm-desktop { padding: 10px 12px 18px; }
-  .mm-desktop-grid {
-    grid-template-columns: 280px minmax(640px, 1fr) 280px;
-    gap: 0;
-    max-width: 1720px;
-    align-items: stretch;
-  }
-
-  .mm-desktop-main {
-    padding: 0 10px;
-    min-width: 0;
-  }
-
-  .mm-hero {
-    height: 178px;
-    border-radius: 14px;
-    background:
-      linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,.10)),
-      url("https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=1800&q=92") center 46%/cover no-repeat;
-  }
-  .mm-hero::after { background: linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,.14)); }
-
-  .mm-genres {
-    gap: 0;
-    margin-top: 10px;
-    overflow: hidden;
-    border: 1px solid #272d34;
-    border-radius: 12px;
-    background: #0b0d10;
-  }
-  .mm-genre {
-    height: 86px;
-    border: 0;
-    border-right: 1px solid #272d34;
-    border-radius: 0;
-    box-shadow: none;
-  }
-  .mm-genre:last-child { border-right: 0; }
-  .mm-genre.is-active {
-    box-shadow: inset 0 0 0 1px var(--mm-green), inset 0 -3px 0 rgba(53,255,85,.65);
-  }
-  .mm-genre span {
-    left: 10px;
-    right: auto;
-    bottom: 9px;
-    text-align: left;
-    font-size: 11px;
-  }
-
-  .mm-prompt {
-    margin-top: 10px;
-    padding: 10px 11px 8px;
-    background: #090b0e;
-  }
-  .mm-prompt textarea {
-    height: 44px;
-    min-height: 44px;
-    line-height: 1.35;
-  }
-  .mm-prompt-foot {
-    margin-top: 2px;
-    min-height: 32px;
-  }
-
-  .mm-prompt-language {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .mm-prompt-language button {
-    height: 24px;
-    padding: 0 8px;
-    border: 1px solid #2b3036;
-    border-radius: 999px;
-    background: #101317;
-    color: #8f98a2;
-    font-size: 8px;
-  }
-  .mm-prompt-language button.is-active {
-    border-color: #2d9142;
-    background: #09150c;
-    color: #fff;
-  }
-
-  .mm-settings-grid {
-    grid-template-columns: 1fr 1.05fr 1.25fr;
-    gap: 12px;
-    margin-top: 9px;
-    align-items: start;
-  }
-  .mm-model-setting .mm-model {
-    width: 100%;
-    height: 37px;
-  }
-  .mm-settings-grid .mm-options { gap: 5px; }
-  .mm-settings-grid .mm-options button {
-    height: 37px;
-    padding: 0 11px;
-  }
-
-  .mm-mood { margin-top: 9px; }
-  .mm-mood .mm-label { margin-bottom: 5px; }
-  .mm-mood .mm-options { gap: 6px; }
-  .mm-mood .mm-options button { height: 35px; }
-
-  .mm-desktop-bottom {
-    display: block;
-    margin-top: 8px;
-  }
-  .mm-switch-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-  .mm-switch-row {
-    height: 38px;
-    padding: 0 10px;
-    border: 1px solid #292f36;
-    border-radius: 10px;
-    background: #101318;
-  }
-
-  .mm-generate { margin-top: 8px; height: 46px; }
-  .mm-player { margin-top: 9px; }
-
-  .mm-player-actions { gap: 6px; }
-  .mm-player-actions button {
-    width: 34px;
-    height: 34px;
-    border: 1px solid #2a3037;
-    border-radius: 10px;
-    background: #101317;
-  }
-  .mm-player-actions button:hover,
-  .mm-prompt-tools button:hover,
-  .mm-options button:hover {
-    border-color: #3a424c;
-    background: #15191e;
-    transform: translateY(-1px);
-  }
-
-  .mm-promo {
-    min-height: 760px;
-    border-radius: 14px;
-    border-color: #242b33;
-    background-size: cover;
-    background-position: center;
-  }
-  .mm-promo::after {
-    background: linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,.18));
-  }
-  .mm-promo-left {
-    background:
-      linear-gradient(180deg,rgba(0,0,0,.02),rgba(0,0,0,.14)),
-      url("https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=1000&q=92") center/cover no-repeat;
-  }
-  .mm-promo-right {
-    background:
-      linear-gradient(180deg,rgba(0,0,0,.02),rgba(0,0,0,.14)),
-      url("https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=1000&q=92") center/cover no-repeat;
-  }
-}
-
-@media (max-width: 1500px) and (min-width: 821px) {
-  .mm-desktop-grid { grid-template-columns: 220px minmax(600px,1fr) 220px; }
-}
-
-@media (max-width: 1240px) and (min-width: 821px) {
-  .mm-desktop-grid { grid-template-columns: 1fr; }
-  .mm-promo { display: none; }
-}
-
-/* No second lyrics editor. Language stays inside the prompt card. */
-.mm-lyrics { display: none !important; }
-
-@media (max-width: 820px) {
-  .mm-prompt-language {
-    display: flex;
-    gap: 4px;
-    margin-left: auto;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .mm-prompt-language::-webkit-scrollbar { display: none; }
-  .mm-prompt-language button {
-    min-width: max-content;
-    height: 24px;
-    padding: 0 7px;
-    border: 1px solid #2b3036;
-    border-radius: 999px;
-    background: #101317;
-    color: #8f98a2;
-    font-size: 8px;
-  }
-  .mm-prompt-language button.is-active {
-    border-color: #2d9142;
-    background: #09150c;
-    color: #fff;
-  }
-}
-/* deploy-sync: Malik Music single-prompt final */
+.mm-spin { animation: mm-spin 1s linear infinite; }
+@keyframes mm-spin { to { transform: rotate(360deg); } }
