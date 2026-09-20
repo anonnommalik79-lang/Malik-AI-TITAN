@@ -23,6 +23,7 @@ type MusicConfig = {
   authenticated: boolean
   plan: string
   model: string
+  provider?: string
   limits: {
     daily: number
     maxDurationSeconds: number
