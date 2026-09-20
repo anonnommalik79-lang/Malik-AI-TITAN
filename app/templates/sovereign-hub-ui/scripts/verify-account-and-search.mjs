@@ -74,7 +74,7 @@ try {
     assert.equal(shouldUseWeb("привет", { forceResearch: true }), true)
   })
 
-  const { MALIK_MODELS, FREE_MALIK_MODELS, canUseMalikModel } = basic("lib/ai/malik-models.ts")
+  const { MALIK_MODELS, PUBLIC_MALIK_MODELS, FREE_MALIK_MODELS, canUseMalikModel } = basic("lib/ai/malik-models.ts")
   const { PUBLIC_PLANS } = basic("lib/billing/plans.ts")
   // The catalogue grows; the rules do not. This used to pin the exact three free
   // labels and a count of ten, so every model added to the product turned the
@@ -83,12 +83,12 @@ try {
   await check("two plans; the free tier is real and the gate follows it", () => {
     assert.deepEqual(PUBLIC_PLANS.map(p => p.id), ["free", "pro"])
     assert.ok(MALIK_MODELS.length >= 3, `expected a catalogue, found ${MALIK_MODELS.length}`)
-    const freeByTier = MALIK_MODELS.filter((model) => model.tier === "free").map((model) => model.id).sort()
-    assert.ok(freeByTier.length >= 1, "a free plan with no free model is not a free plan")
-    assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id).sort(), freeByTier,
-      "FREE_MALIK_MODELS must be exactly the models marked tier:free")
-    for (const model of MALIK_MODELS) {
-      assert.equal(canUseMalikModel(model.id, "free"), model.tier === "free")
+    const publicFree = PUBLIC_MALIK_MODELS.filter((model) => model.tier === "free").map((model) => model.id).sort()
+    assert.ok(publicFree.length >= 1, "a free plan with no public free model is not a free plan")
+    assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id).sort(), publicFree,
+      "FREE_MALIK_MODELS must be exactly the public unlocked models")
+    for (const model of PUBLIC_MALIK_MODELS) {
+      assert.equal(canUseMalikModel(model.id, "free"), true)
       assert.equal(canUseMalikModel(model.id, "pro"), true)
       assert.equal(canUseMalikModel(model.id, "ultra"), true)
     }
