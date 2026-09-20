@@ -367,12 +367,12 @@ export async function routeImageGeneration(
       }
 
       if (provider === "pollinations") {
-        const result = await retryTransientImageProvider(() => generateWithPollinations({
+        const result = await generateWithPollinations({
           prompt,
           negativePrompt,
           aspectRatio: input.aspectRatio,
           signal: options?.signal,
-        }), options?.signal)
+        })
         return {
           ok: true,
           provider: "pollinations",

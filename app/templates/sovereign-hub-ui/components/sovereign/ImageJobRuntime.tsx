@@ -69,6 +69,19 @@ function isFailed(payload: any) {
   return /failed|error|cancelled|canceled/.test(statusFrom(payload)) || payload?.ok === false
 }
 
+function shouldRetryStartFailure(response: Response, payload: any) {
+  if (![429, 502, 503, 504].includes(response.status)) return false
+  const code = String(payload?.code || payload?.error || "").toUpperCase()
+  if (/CREDIT|DAILY_LIMIT|REQUIRES_PLUS|COMPUTE_LIMIT|ALREADY_RUNNING|RATE_LIMIT_REACHED/.test(code)) return false
+  if (payload?.retryable === false) return false
+  return response.status !== 429 || payload?.retryable === true || code === "IMAGE_PROVIDERS_BUSY"
+}
+
+function retryDelay(payload: any) {
+  const value = Number(payload?.retryAfterMs || 1800)
+  return Number.isFinite(value) ? Math.max(500, Math.min(5_000, value)) : 1800
+}
+
 function mergedReadyPayload(initial: any, latest: any, imageUrl: string) {
   return {
     ...initial,
@@ -153,8 +166,16 @@ export function ImageJobRuntime() {
       }
 
       try {
-        const startedResponse = await previousFetch(input, generationInit)
-        const initial = await startedResponse.clone().json().catch(() => null)
+        const replayInput = () => typeof Request !== "undefined" && input instanceof Request ? input.clone() : input
+        let startedResponse = await previousFetch(replayInput(), generationInit)
+        let initial = await startedResponse.clone().json().catch(() => null)
+
+        if (initial && shouldRetryStartFailure(startedResponse, initial)) {
+          await sleep(retryDelay(initial), generationController.signal)
+          startedResponse = await previousFetch(replayInput(), generationInit)
+          initial = await startedResponse.clone().json().catch(() => null)
+        }
+
         if (!initial || !startedResponse.ok) return startedResponse
 
         const immediateUrl = imageUrlFrom(initial)

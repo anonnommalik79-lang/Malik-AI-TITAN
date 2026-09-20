@@ -12,6 +12,8 @@ type Account = { slot: Slot; accountId: string; token: string }
 
 const cooldownUntil = new Map<Slot, number>()
 const QUOTA_ERROR = /daily free allocation|used up your daily free allocation|10[,. ]?000\s+neurons|workers paid plan|quota[^\n]*(?:exhaust|limit|used up)/i
+const RATE_LIMIT_COOLDOWN_MS = 45_000
+const SERVER_ERROR_COOLDOWN_MS = 15_000
 
 function account(slot: Slot): Account | null {
   if (slot === "primary") {
@@ -54,6 +56,29 @@ function cooling(slot: Slot) {
     return false
   }
   return true
+}
+
+function retryAfterMs(response: Response) {
+  const raw = String(response.headers.get("retry-after") || "").trim()
+  if (!raw) return 0
+  const seconds = Number(raw)
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(60_000, Math.round(seconds * 1000))
+  const date = Date.parse(raw)
+  return Number.isFinite(date) ? Math.min(60_000, Math.max(0, date - Date.now())) : 0
+}
+
+function coolFailedAccount(current: Account, response: Response, message: string) {
+  if (QUOTA_ERROR.test(message)) {
+    cooldownUntil.set(current.slot, nextReset())
+    return
+  }
+  if (response.status === 429) {
+    cooldownUntil.set(current.slot, Date.now() + Math.max(RATE_LIMIT_COOLDOWN_MS, retryAfterMs(response)))
+    return
+  }
+  if (response.status >= 500) {
+    cooldownUntil.set(current.slot, Date.now() + SERVER_ERROR_COOLDOWN_MS)
+  }
 }
 
 function size(aspect: ImageAspectRatio = "1:1") {
@@ -118,7 +143,7 @@ async function runQuality(model: string, init: RequestInit, signal?: AbortSignal
       const state = await failure(response)
       if (!state.failed) return { response, slot: current.slot }
       lastResponse = response
-      if (QUOTA_ERROR.test(state.message)) cooldownUntil.set(current.slot, nextReset())
+      coolFailedAccount(current, response, state.message)
       console.warn("[malik-image][quality-failover]", { slot: current.slot, model, status: response.status })
     } catch (error) {
       lastError = error
@@ -137,7 +162,7 @@ async function runTertiary(model: string, init: RequestInit, signal?: AbortSigna
   if (cooling("tertiary")) throw new Error("Third Cloudflare image account daily quota is exhausted")
   const response = await runAccount(current, model, init, signal)
   const state = await failure(response)
-  if (state.failed && QUOTA_ERROR.test(state.message)) cooldownUntil.set("tertiary", nextReset())
+  if (state.failed) coolFailedAccount(current, response, state.message)
   return response
 }
 

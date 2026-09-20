@@ -55,6 +55,40 @@ function mostDetailed(candidates: Array<{ bytes: Buffer; contentType: string }>)
   return candidates.reduce((best, candidate) => (candidate.bytes.byteLength > best.bytes.byteLength ? candidate : best))
 }
 
+function isTransientStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500
+}
+
+function retryAfterMs(response: Response, attempt: number) {
+  const raw = String(response.headers.get("retry-after") || "").trim()
+  const seconds = Number(raw)
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(5_000, Math.round(seconds * 1000))
+  const date = raw ? Date.parse(raw) : NaN
+  if (Number.isFinite(date)) return Math.min(5_000, Math.max(0, date - Date.now()))
+  return Math.min(4_000, 900 * (2 ** attempt))
+}
+
+async function wait(ms: number, signal: AbortSignal) {
+  if (ms <= 0) return
+  await new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason || new DOMException("Aborted", "AbortError"))
+      return
+    }
+    let timer: ReturnType<typeof setTimeout>
+    const onAbort = () => {
+      clearTimeout(timer)
+      signal.removeEventListener("abort", onAbort)
+      reject(signal.reason || new DOMException("Aborted", "AbortError"))
+    }
+    timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort)
+      resolve()
+    }, ms)
+    signal.addEventListener("abort", onAbort, { once: true })
+  })
+}
+
 export async function pingPollinations(): Promise<"available" | "unavailable"> {
   try {
     const controller = new AbortController()
@@ -113,15 +147,25 @@ export async function generateWithPollinations(input: {
   }
 
   const draw = async (seed: number) => {
-    const url = pollinationsUrl({ ...input, prompt, seed })
-    const response = await fetch(url, { method: "GET", signal: controller.signal, redirect: "follow", cache: "no-store" })
-    if (!response.ok) throw new Error(`Pollinations returned ${response.status}`)
-    // Freeze the exact bytes returned by the server. The browser must not issue
-    // a second prompt URL request that could yield a different random image.
-    return {
-      contentType: response.headers.get("content-type") || "image/jpeg",
-      bytes: Buffer.from(await response.arrayBuffer()),
+    let lastError: Error | undefined
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const attemptSeed = seed + attempt * 271
+      const url = pollinationsUrl({ ...input, prompt, seed: attemptSeed })
+      const response = await fetch(url, { method: "GET", signal: controller.signal, redirect: "follow", cache: "no-store" })
+      if (response.ok) {
+        // Freeze the exact bytes returned by the server. The browser must not issue
+        // a second prompt URL request that could yield a different random image.
+        return {
+          contentType: response.headers.get("content-type") || "image/jpeg",
+          bytes: Buffer.from(await response.arrayBuffer()),
+        }
+      }
+
+      lastError = new Error(`Pollinations returned ${response.status}`)
+      if (!isTransientStatus(response.status) || attempt >= 2) throw lastError
+      await wait(retryAfterMs(response, attempt), controller.signal)
     }
+    throw lastError || new Error("Pollinations returned no image")
   }
 
   try {

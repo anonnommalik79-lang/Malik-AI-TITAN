@@ -98,6 +98,11 @@ function displayImageReference(previewUrl: string | undefined, masterUrl: string
   return `${previewUrl}${MASTER_FRAGMENT}${encodeURIComponent(masterUrl)}`
 }
 
+function transientImageFailure(value: unknown) {
+  const message = String(value || "")
+  return /\b(?:408|425|429|500|502|503|504|520|521|522|523|524)\b|rate limit|quota|busy|overload|temporar|timeout|fetch failed|network|socket|econnreset|eai_again|upstream/i.test(message)
+}
+
 export async function handleMalikPhotoGenerationRequest(request: Request) {
   let body: any
   try {
@@ -239,20 +244,31 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     }
 
     if (!result.ok) {
+      const transient = transientImageFailure(result.error)
+      console.warn("[image] all generation pools failed", {
+        transient,
+        provider: result.provider,
+        modelId: result.modelId || requestedModelId,
+        detail: String(result.error || "IMAGE_GENERATION_FAILED").slice(0, 700),
+      })
       return Response.json({
         ok: false,
         status: "failed",
-        error: result.error || "IMAGE_GENERATION_FAILED",
-        publicError: result.error || "Не удалось сгенерировать изображение.",
-        provider: result.provider,
+        error: transient ? "IMAGE_PROVIDERS_BUSY" : "IMAGE_GENERATION_FAILED",
+        publicError: transient
+          ? "Сервисы генерации временно перегружены. Malik AI уже переключился по резервным пулам; запрос будет повторён автоматически."
+          : "Не удалось сгенерировать изображение. Попробуйте ещё раз.",
+        retryable: transient,
+        retryAfterMs: transient ? 1800 : undefined,
         modelId: result.modelId || requestedModelId,
         modelLabel: result.modelId ? getMalikImageModel(result.modelId).label : "MalikImage Auto",
-        providerModel: result.providerModel,
         quality,
-        routeReason: result.routeReason,
         remainingDailyImages: credit.remaining,
         resetAt: credit.resetAt,
-      }, { status: 502 })
+      }, {
+        status: transient ? 503 : 502,
+        headers: transient ? { "Retry-After": "2", "Cache-Control": "no-store" } : { "Cache-Control": "no-store" },
+      })
     }
 
     const nativePreviewPromise = createMalikImageDisplayPreview({ sourceUrl: result.imageUrl })
