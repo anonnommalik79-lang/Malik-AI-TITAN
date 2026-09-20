@@ -18,6 +18,7 @@ import {
 } from "./image-quality-presets"
 import { enhanceImagePrompt, enhanceNegativePrompt } from "./image-prompt-enhancer"
 import { buildVisualPrompt } from "./visual-prompt"
+import { generateWithXkiroImage, xkiroImageConfigured } from "./providers/xkiro-image"
 import type { ImageGenerateInput, ImageGenerateResult } from "./types"
 
 const handlers: Record<string, () => boolean> = {
@@ -26,9 +27,10 @@ const handlers: Record<string, () => boolean> = {
   fal: falImageConfigured,
   "aws-bedrock": awsImageConfigured,
   pollinations: () => true,
+  xkiro: xkiroImageConfigured,
 }
 
-const FREE_IMAGE_PROVIDERS = new Set(["cloudflare", "pollinations"])
+const FREE_IMAGE_PROVIDERS = new Set(["cloudflare", "pollinations", "xkiro"])
 const TRANSIENT_IMAGE_PROVIDER_ERROR =
   /\b(?:429|500|502|503|504|520|521|522|523|524)\b|fetch failed|network|socket|econnreset|eai_again|temporar(?:y|ily)|upstream/i
 
@@ -194,13 +196,44 @@ export async function routeImageGeneration(
   })
   const negativePrompt = enhanceNegativePrompt(visual.negativePrompt, quality)
 
+  if (preferredModelId === "xkiro-sensenova-u15-lite") {
+    if (xkiroImageConfigured()) {
+      try {
+        const result = await withAttemptSignal(
+          options?.signal,
+          timeoutFromEnv("XKIRO_IMAGE_TIMEOUT_MS", 210_000, 30_000, 300_000),
+          (signal) => generateWithXkiroImage({ prompt, signal }),
+        )
+        return {
+          ok: true,
+          provider: "xkiro",
+          imageUrl: result.imageUrl,
+          modelId: preferredModelId,
+          providerModel: result.providerModel,
+          understood: visual.understood,
+          enhancedPrompt: prompt,
+          negativePrompt,
+          quality,
+          routeReason: `${decision.reason}; xKiro SenseNova U1.5 Lite`,
+          generationTier: "quality",
+          generationSource: "xkiro-sensenova-u1.5-lite",
+          remainingDailyImages: 0,
+        }
+      } catch (error) {
+        errors.push(`xkiro/${preferredModelId}: ${error instanceof Error ? error.message : "failed"}`)
+      }
+    } else {
+      errors.push("xkiro: not configured")
+    }
+  }
+
   // Accounts #1 and #2 are the quality pool. They keep Malik's full prompt
   // compiler and automatic model routing. Account #3 is deliberately excluded
   // here so it keeps its capacity for the standard reserve path below.
   if (preparedCloudflareImageConfigured()) {
     const automaticModels = [
       preferredModelId,
-      ...MALIK_IMAGE_MODELS.filter((model) => model.tier === "free").map((model) => model.id),
+      ...MALIK_IMAGE_MODELS.filter((model) => model.tier === "free" && model.provider === "cloudflare").map((model) => model.id),
     ].filter((modelId, index, list): modelId is MalikImageModelId => list.indexOf(modelId) === index)
 
     for (const automaticModelId of automaticModels) {
