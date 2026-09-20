@@ -6,10 +6,12 @@ export type MalikImageModelId =
   | "leonardo-phoenix"
   | "leonardo-lucid"
   | "malik-image-1-premium"
+  | "xkiro-sensenova-u15-lite"
 
-export type MalikImageBrand = "bfl" | "leonardo" | "malik"
+export type MalikImageBrand = "bfl" | "leonardo" | "malik" | "sensenova"
 export type MalikImageTier = "free" | "premium"
 export type MalikImageRequestKind = "json" | "multipart"
+export type MalikImageProvider = "cloudflare" | "xkiro"
 
 export type MalikImageModelDefinition = {
   id: MalikImageModelId
@@ -20,6 +22,7 @@ export type MalikImageModelDefinition = {
   tier: MalikImageTier
   providerModel: string
   requestKind: MalikImageRequestKind
+  provider: MalikImageProvider
 }
 
 export const MALIK_IMAGE_MODEL_STORAGE_KEY = "malik_image_model_v1"
@@ -36,6 +39,7 @@ export const MALIK_IMAGE_MODELS = [
     tier: "free",
     providerModel: "@cf/black-forest-labs/flux-2-klein-4b",
     requestKind: "multipart",
+    provider: "cloudflare",
   },
   {
     id: "flux-schnell",
@@ -46,6 +50,7 @@ export const MALIK_IMAGE_MODELS = [
     tier: "free",
     providerModel: "@cf/black-forest-labs/flux-1-schnell",
     requestKind: "json",
+    provider: "cloudflare",
   },
   {
     id: "leonardo-phoenix",
@@ -56,6 +61,7 @@ export const MALIK_IMAGE_MODELS = [
     tier: "free",
     providerModel: "@cf/leonardo/phoenix-1.0",
     requestKind: "json",
+    provider: "cloudflare",
   },
   {
     id: "leonardo-lucid",
@@ -66,6 +72,18 @@ export const MALIK_IMAGE_MODELS = [
     tier: "free",
     providerModel: "@cf/leonardo/lucid-origin",
     requestKind: "json",
+    provider: "cloudflare",
+  },
+  {
+    id: "xkiro-sensenova-u15-lite",
+    label: "SenseNova U1.5 Lite",
+    shortLabel: "SenseNova U1.5",
+    description: "xKiro · Free text-to-image",
+    brand: "sensenova",
+    tier: "free",
+    providerModel: "sensenova/sensenova-u1.5-lite",
+    requestKind: "json",
+    provider: "xkiro",
   },
   {
     id: "malik-image-1-premium",
@@ -76,6 +94,7 @@ export const MALIK_IMAGE_MODELS = [
     tier: "premium",
     providerModel: "@cf/black-forest-labs/flux-2-dev",
     requestKind: "multipart",
+    provider: "cloudflare",
   },
 ] as const satisfies readonly MalikImageModelDefinition[]
 
