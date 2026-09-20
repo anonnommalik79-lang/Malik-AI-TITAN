@@ -27,10 +27,8 @@ function subscribeMobileSelector(onChange: () => void) {
   return () => query.removeEventListener("change", onChange)
 }
 
-// Every model uses the first-party brand mark of the model family itself.
-// A second first-party URL is kept where the vendor exposes more than one
-// canonical host so a temporary favicon/CDN failure does not turn the selector
-// into generic letter tiles.
+// Third-party models use the official vendor/model-family mark.
+// Only MalikLLM 8B, MalikLLM 70B and MalikCoder 1.0 use the Malik model mark.
 const MODEL_BRANDS: Record<MalikModelId, BrandIcon> = {
   "malik-deepseek-v41": { label: "DeepSeek", urls: ["https://www.deepseek.com/favicon.ico", "https://deepseek.com/favicon.ico"], fallback: "D" },
   "malik-bonsai-27b": { label: "Together AI", urls: ["https://www.together.ai/favicon.ico", "https://together.ai/favicon.ico"], fallback: "T" },
@@ -43,14 +41,14 @@ const MODEL_BRANDS: Record<MalikModelId, BrandIcon> = {
   "malik-flash-53": { label: "Z.ai GLM", urls: ["https://chat.z.ai/favicon.ico", "https://z.ai/favicon.ico"], fallback: "Z" },
   "malik-vision-k3": { label: "Kimi", urls: ["https://www.kimi.com/favicon.ico", "https://kimi.moonshot.cn/favicon.ico"], fallback: "K" },
   "nvidia-nemotron-ultra-550b": { label: "NVIDIA Nemotron", urls: ["https://www.nvidia.com/favicon.ico"], fallback: "N" },
-  "malik-8b": { label: "Meta Llama", urls: ["https://www.meta.com/favicon.ico"], fallback: "M" },
+  "malik-8b": { label: "Malik AI", urls: ["/brands/malik-model-mark.png"], fallback: "" },
   "malik-20b": { label: "OpenAI", urls: ["https://openai.com/favicon.ico"], fallback: "O" },
   "malik-fast-120b": { label: "OpenAI GPT-OSS", urls: ["https://openai.com/favicon.ico"], fallback: "O" },
   "malik-27b": { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
   "malik-30b": { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
   "malik-vision-26b": { label: "Google Gemma", urls: ["https://www.google.com/favicon.ico"], fallback: "G" },
-  "malik-coder-32b": { label: "Malik AI", urls: ["/favicon.ico"], fallback: "M" },
-  "malik-70b": { label: "Meta Llama", urls: ["https://www.meta.com/favicon.ico"], fallback: "M" },
+  "malik-coder-32b": { label: "Malik AI", urls: ["/brands/malik-model-mark.png"], fallback: "" },
+  "malik-70b": { label: "Malik AI", urls: ["/brands/malik-model-mark.png"], fallback: "" },
   "malik-120b": { label: "OpenAI GPT-OSS", urls: ["https://openai.com/favicon.ico"], fallback: "O" },
   "malik-agent-120b": { label: "NVIDIA Nemotron", urls: ["https://www.nvidia.com/favicon.ico"], fallback: "N" },
 }

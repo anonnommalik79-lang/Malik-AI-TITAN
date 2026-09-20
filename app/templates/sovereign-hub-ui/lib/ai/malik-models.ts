@@ -52,7 +52,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-bonsai-27b",
-    label: "MalikBonsai 27B",
+    label: "Ternary-Bonsai-27B",
     description: "Together Serverless · Бесплатный production fallback · 262K",
     tier: "free",
     provider: "together",
@@ -61,7 +61,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-glm-47-flash",
-    label: "MalikGLM 4.7 Flash",
+    label: "GLM-4.7-Flash",
     description: "Cloudflare Workers AI · Быстрый multilingual reasoning",
     tier: "free",
     provider: "cloudflare",
@@ -70,7 +70,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-gemma-4-26b",
-    label: "MalikGemma 4 26B",
+    label: "Gemma 4 26B A4B IT",
     description: "Cloudflare Workers AI · 256K · Vision + reasoning",
     tier: "free",
     provider: "cloudflare",
@@ -79,7 +79,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-nemotron-3-120b",
-    label: "MalikNemotron 3 120B",
+    label: "NVIDIA Nemotron 3 Super 120B-A12B",
     description: "Cloudflare Workers AI · Сильный agentic fallback",
     tier: "free",
     provider: "cloudflare",
@@ -88,7 +88,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-deepseek-v41",
-    label: "Malik DeepSeek V4.1 Flash",
+    label: "DeepSeek V4.1 Flash",
     description: "DeepSeek API · 1M контекст · Production emergency overflow",
     tier: "free",
     provider: "deepseek",
@@ -106,7 +106,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-qwen-397b",
-    label: "MalikLLM397B Qwen 3.5",
+    label: "Qwen3.5-397B-A17B",
     description: "ModelScope · 397B · Основная мощная модель",
     tier: "free",
     provider: "modelscope",
@@ -115,7 +115,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-reason-753b",
-    label: "MalikReason753B GLM 5.2",
+    label: "GLM-5.2",
     description: "ModelScope · Тяжёлый reasoning и код",
     tier: "free",
     provider: "modelscope",
@@ -124,7 +124,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-core-300b",
-    label: "MalikCore300B ERNIE 4.5",
+    label: "ERNIE 4.5 300B-A47B-PT",
     description: "ModelScope · 300B · Резервный большой brain",
     tier: "free",
     provider: "modelscope",
@@ -133,7 +133,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-flash-53",
-    label: "MalikFlash GLM 5.3",
+    label: "GLM-5.3",
     description: "AIHubMix · 1M токенов/день shared · Код и reasoning",
     tier: "free",
     provider: "aihubmix",
@@ -142,7 +142,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-vision-k3",
-    label: "MalikVision Kimi K3",
+    label: "Kimi K3",
     description: "AIHubMix · 1M токенов/день shared · Фото, файлы и multimodal",
     tier: "free",
     provider: "aihubmix",
@@ -151,7 +151,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-20b",
-    label: "MalikLLM 20B",
+    label: "GPT-OSS 20B",
     description: "Groq · 200K токенов/день · Быстрые задачи",
     tier: "free",
     provider: "groq",
@@ -160,7 +160,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-fast-120b",
-    label: "MalikLLM Fast 120B",
+    label: "GPT-OSS 120B",
     description: "Cerebras · Production · 1M токенов/день",
     tier: "free",
     provider: "cerebras",
@@ -169,7 +169,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-27b",
-    label: "MalikLLM Qwen3.8 27B",
+    label: "Qwen3.8-27B",
     description: "Groq · 200K токенов/день · Быстрый reasoning",
     tier: "free",
     provider: "groq",
@@ -187,7 +187,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-30b",
-    label: "MalikLLM Reason 30B",
+    label: "Qwen3-30B-A3B",
     description: "Быстрое рассуждение",
     tier: "pro",
     provider: "cloudflare",
@@ -196,7 +196,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-vision-26b",
-    label: "MalikLLM Vision 26B",
+    label: "Gemma 4 26B A4B IT",
     description: "Изображения · Vision",
     tier: "pro",
     provider: "cloudflare",
@@ -214,7 +214,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-120b",
-    label: "MalikLLM Pro 120B",
+    label: "GPT-OSS 120B",
     description: "Groq · 200K токенов/день · Максимальное рассуждение",
     tier: "pro",
     provider: "groq",
@@ -223,7 +223,7 @@ export const MALIK_MODELS = [
   },
   {
     id: "malik-agent-120b",
-    label: "MalikLLM Agent 120B",
+    label: "NVIDIA Nemotron 3 Super 120B-A12B",
     description: "Агенты · Инструменты",
     tier: "pro",
     provider: "cloudflare",

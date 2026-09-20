@@ -23,9 +23,9 @@ export const PUBLIC_PLANS = [
     features: [
       `Все ${MALIK_MODELS.length} моделей Malik AI`,
       "Всё, что включено в бесплатный тариф",
-      "MalikCoder32B для продвинутого кода",
+      "MalikCoder 1.0 для продвинутого кода",
       "Vision-модели для анализа изображений",
-      "MalikLLM120B и MalikAgent120B",
+      "GPT-OSS 120B и NVIDIA Nemotron 3 Super 120B-A12B",
       "Максимальная глубина ответа",
       "Расширенные лимиты генерации медиа",
     ],

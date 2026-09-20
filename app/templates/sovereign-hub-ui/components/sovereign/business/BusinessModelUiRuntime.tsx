@@ -4,34 +4,34 @@ import { useEffect } from "react"
 
 type BusinessModelMeta = {
   label: string
-  icon: "qwen" | "glm52" | "ernie" | "glm53" | "kimi" | "oss20" | "oss120" | "malik"
+  icon: "qwen" | "glm" | "ernie" | "kimi" | "openai"
   legacy: readonly string[]
   providerHints: readonly string[]
 }
 
 const BUSINESS_MODELS: readonly BusinessModelMeta[] = [
   {
-    label: "Qwen 3.5 397B",
+    label: "Qwen3.5-397B-A17B",
     icon: "qwen",
-    legacy: ["MalikLLM397B Qwen 3.5", "Qwen 3.5 397B"],
+    legacy: ["MalikLLM397B Qwen 3.5", "Qwen 3.5 397B", "Qwen3.5-397B-A17B"],
     providerHints: ["Qwen/Qwen3.5-397B-A17B", "Qwen3.5-397B"],
   },
   {
-    label: "GLM 5.2",
-    icon: "glm52",
-    legacy: ["MalikReason753B GLM 5.2", "GLM 5.2"],
+    label: "GLM-5.2",
+    icon: "glm",
+    legacy: ["MalikReason753B GLM 5.2", "GLM 5.2", "GLM-5.2"],
     providerHints: ["ZhipuAI/GLM-5.2", "GLM-5.2"],
   },
   {
-    label: "ERNIE 4.5 300B",
+    label: "ERNIE 4.5 300B-A47B-PT",
     icon: "ernie",
-    legacy: ["MalikCore300B ERNIE 4.5", "ERNIE 4.5 300B"],
+    legacy: ["MalikCore300B ERNIE 4.5", "ERNIE 4.5 300B", "ERNIE 4.5 300B-A47B-PT"],
     providerHints: ["PaddlePaddle/ERNIE-4.5-300B-A47B-PT", "ERNIE-4.5-300B"],
   },
   {
-    label: "GLM 5.3",
-    icon: "glm53",
-    legacy: ["MalikFlash GLM 5.3", "GLM 5.3"],
+    label: "GLM-5.3",
+    icon: "glm",
+    legacy: ["MalikFlash GLM 5.3", "GLM 5.3", "GLM-5.3"],
     providerHints: ["coding-glm-5.3-free", "GLM-5.3"],
   },
   {
@@ -42,20 +42,20 @@ const BUSINESS_MODELS: readonly BusinessModelMeta[] = [
   },
   {
     label: "GPT-OSS 20B",
-    icon: "oss20",
+    icon: "openai",
     legacy: ["MalikLLM 20B", "GPT-OSS 20B"],
     providerHints: ["openai/gpt-oss-20b", "gpt-oss-20b"],
   },
   {
     label: "GPT-OSS 120B",
-    icon: "oss120",
+    icon: "openai",
     legacy: ["MalikLLM Fast 120B", "GPT-OSS 120B"],
     providerHints: ["gpt-oss-120b"],
   },
   {
-    label: "MalikLLM27B",
-    icon: "malik",
-    legacy: ["MalikLLM Qwen3.8 27B", "MalikLLM27B"],
+    label: "Qwen3.8-27B",
+    icon: "qwen",
+    legacy: ["MalikLLM Qwen3.8 27B", "MalikLLM27B", "Qwen3.8-27B"],
     providerHints: ["qwen/qwen3.8-27b", "qwen3.8-27b"],
   },
 ]
@@ -153,69 +153,33 @@ export function BusinessModelUiRuntime() {
       }
 
       #malik-root main[data-view="business-autonomous"] button[data-business-model-icon="qwen"] > span:first-child::before {
-        content: "Q";
-        background: linear-gradient(135deg,#5f6cff 0%,#8a4dff 52%,#38a6ff 100%);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        font-size: 31px;
-        font-weight: 900;
+        content: "";
+        border: 1px solid rgba(255,255,255,.12);
+        background: #f7f7f8 url('https://qwen.ai/favicon.svg') center/25px 25px no-repeat;
       }
 
-      #malik-root main[data-view="business-autonomous"] button[data-business-model-icon="glm52"] > span:first-child::before {
-        content: "∞";
-        color: #1685ff;
-        background: transparent;
-        font-size: 42px;
-        font-weight: 500;
-        letter-spacing: -.14em;
-        transform: translateX(-2px);
+      #malik-root main[data-view="business-autonomous"] button[data-business-model-icon="glm"] > span:first-child::before {
+        content: "";
+        border: 1px solid rgba(255,255,255,.12);
+        background: #f7f7f8 url('https://chat.z.ai/favicon.ico') center/25px 25px no-repeat;
       }
 
       #malik-root main[data-view="business-autonomous"] button[data-business-model-icon="ernie"] > span:first-child::before {
-        content: "✳";
-        color: #f37a3f;
-        background: transparent;
-        font-size: 36px;
-        transform: rotate(10deg);
-      }
-
-      #malik-root main[data-view="business-autonomous"] button[data-business-model-icon="glm53"] > span:first-child::before {
-        content: "G";
-        background: linear-gradient(135deg,#4285f4 12%,#34a853 40%,#fbbc05 66%,#ea4335 86%);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        font-size: 31px;
+        content: "";
+        border: 1px solid rgba(255,255,255,.12);
+        background: #f7f7f8 url('https://ernie.baidu.com/favicon.ico') center/25px 25px no-repeat;
       }
 
       #malik-root main[data-view="business-autonomous"] button[data-business-model-icon="kimi"] > span:first-child::before {
-        content: "✥";
-        color: #6848ff;
-        background: transparent;
-        font-size: 34px;
-        transform: rotate(45deg);
-      }
-
-      #malik-root main[data-view="business-autonomous"] button[data-business-model-icon="oss20"] > span:first-child::before {
-        content: "🤗";
-        background: transparent;
-        font-size: 31px;
-      }
-
-      #malik-root main[data-view="business-autonomous"] button[data-business-model-icon="oss120"] > span:first-child::before {
-        content: "✕";
-        color: #f5f5f5;
-        background: transparent;
-        font-size: 34px;
-        font-weight: 900;
-        transform: rotate(-10deg);
-      }
-
-      #malik-root main[data-view="business-autonomous"] button[data-business-model-icon="malik"] > span:first-child::before {
         content: "";
         border: 1px solid rgba(255,255,255,.12);
-        background: #f2f2f2 url('/icon.svg') center/cover no-repeat;
+        background: #f7f7f8 url('https://www.kimi.com/favicon.ico') center/25px 25px no-repeat;
+      }
+
+      #malik-root main[data-view="business-autonomous"] button[data-business-model-icon="openai"] > span:first-child::before {
+        content: "";
+        border: 1px solid rgba(255,255,255,.12);
+        background: #f7f7f8 url('https://openai.com/favicon.ico') center/25px 25px no-repeat;
       }
 
       /* The business selector must expose every free model; the older final CSS
