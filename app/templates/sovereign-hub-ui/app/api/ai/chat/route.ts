@@ -1,4 +1,5 @@
 import { asJson, extractPrompt, malikGodAnswer } from "@/lib/malik-god-router"
+import { DEFAULT_MALIK_MODEL_ID } from "@/lib/ai/malik-models"
 import { appendFounderMessage } from "@/lib/server/founder-message-log"
 import { parsePluginCommandFromBody, runMalikPlugin } from "@/lib/server/plugin-runtime"
 import {
@@ -57,7 +58,7 @@ async function handlePOST(request: Request) {
         content: identity,
         provider: "malik-identity-core",
         model: "verified-brand-profile",
-        selectedModelId: selection?.modelId,
+        selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
         usedWeb: false,
         sources: [],
         attempts: [],
@@ -73,7 +74,7 @@ async function handlePOST(request: Request) {
     // fields such as email/username can never grant founder mode.
     const quotaBoundBody = maxOutputTokens ? { ...body, maxTokens: maxOutputTokens } : body
     const routedBody = ownerMode ? withVerifiedOwnerChatContext(quotaBoundBody) : quotaBoundBody
-    const answer = await malikGodAnswer(routedBody, selection ? { modelId: selection.modelId } : undefined)
+    const answer = await malikGodAnswer(routedBody, { modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID })
     const payload = asJson(answer)
 
     /*
@@ -108,7 +109,7 @@ async function handlePOST(request: Request) {
     return Response.json(payload, {
       headers: {
         "cache-control": "no-store",
-        "x-malik-router": selection ? "strict-model-selection" : "github-openrouter-deepseek-v13",
+        "x-malik-router": selection ? "strict-model-selection" : "malik-max-router",
       },
     })
   } catch (error) {
@@ -119,5 +120,5 @@ async function handlePOST(request: Request) {
 }
 
 export async function GET() {
-  return Response.json({ ok: true, route: "/api/ai/chat", router: "MALIK GITHUB + OPENROUTER + DEEPSEEK V13 + PLUGINS" })
+  return Response.json({ ok: true, route: "/api/ai/chat", router: "MalikLLM MAX + strict model selection + plugins", defaultModel: DEFAULT_MALIK_MODEL_ID })
 }
