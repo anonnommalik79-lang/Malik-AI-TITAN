@@ -25,6 +25,7 @@ import {
 import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { takePrefillPrompt } from "@/lib/malik-context"
+import { ROUTER_VIDEO_CATALOG, type RouterCatalogEntry } from "@/lib/ai/router-catalog"
 
 export type VideoGenerationStudioProps = {
   username?: string
@@ -185,6 +186,17 @@ const MODELS = [
     note: "ClipTaps — резервный daily-провайдер; результат может содержать watermark и автоматически созданный голос.",
   },
 ] as const
+
+
+function catalogVideoIcon(entry: RouterCatalogEntry) {
+  const domains: Record<string, string> = {
+    kling: "klingai.com",
+    bytedance: "bytedance.com",
+    nara: "router.bynara.id",
+  }
+  const domain = domains[entry.brand] || (entry.provider === "nara" ? "router.bynara.id" : "llm7.io")
+  return `https://www.google.com/s2/favicons?sz=128&domain_url=https://${domain}`
+}
 
 const CATEGORIES = ["Популярное", "Кинематографичные", "Анимация", "Реалистичные", "Природа", "Технологии", "Люди", "Продукты"] as const
 
@@ -891,6 +903,20 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
               </button>
             )
           })}
+          {ROUTER_VIDEO_CATALOG.map((entry) => (
+            <button
+              key={`catalog:${entry.provider}:${entry.providerModel}`}
+              type="button"
+              className="mv2__model"
+              disabled
+              aria-disabled="true"
+              title="Каталог провайдера · PAYG выключен"
+            >
+              <span className="mv2__model-icon"><img src={catalogVideoIcon(entry)} alt="" draggable={false} /></span>
+              <span className="mv2__model-copy"><strong>{entry.label}</strong><small>{entry.provider.toUpperCase()} · каталог</small></span>
+              <span className="mv2__tier is-free">Catalog</span>
+            </button>
+          ))}
         </div>
         {modelNotice ? <div className="mv2__model-notice">{modelNotice}</div> : null}
 
