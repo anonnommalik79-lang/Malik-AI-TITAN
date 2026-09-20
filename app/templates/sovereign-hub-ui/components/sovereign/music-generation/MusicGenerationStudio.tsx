@@ -238,7 +238,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const [mastering, setMastering] = useState(true)
   const [phonkMode, setPhonkMode] = useState(true)
   const [toast, setToast] = useState("")
-  /** The real length of the loaded MP3, once the browser has read its header. */
+  /** The real length of the loaded audio file, once the browser has read its header. */
   const [audioDuration, setAudioDuration] = useState(0)
   const [notice, setNotice] = useState("")
   const [config, setConfig] = useState<MusicConfig | null>(null)
@@ -387,7 +387,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
             : item,
         ))
         setGenerating(true)
-        setNotice(nextStatus === "queued" ? "Задание в очереди deAPI…" : "deAPI генерирует настоящий MP3…")
+        setNotice(nextStatus === "queued" ? "Задание в очереди музыкального провайдера…" : "Музыкальный провайдер генерирует трек…")
         timer = window.setTimeout(poll, 3000)
       } catch {
         if (!cancelled) timer = window.setTimeout(poll, 5000)
@@ -440,7 +440,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       return
     }
     if (!config?.configured) {
-      setNotice("deAPI не настроен на сервере.")
+      setNotice("Музыкальный провайдер не настроен на сервере.")
       return
     }
     if (config.limits.remaining <= 0) {
@@ -455,7 +455,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     setNotice(
       !nextInstrumental && !nextLyrics.trim()
         ? "Malik AI пишет слова песни по вашему запросу…"
-        : "Отправляю запрос в deAPI / AceStep 1.5 XL Turbo…",
+        : `Отправляю запрос в ${config?.provider || "музыкальный провайдер"} / ${config?.model || "ACE-Step"}…`,
     )
     audioRef.current?.pause()
     setPlaying(false)
@@ -532,7 +532,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       setNotice(
         data?.lyricsGenerated
           ? "Malik AI написал слова. request_id получен — AceStep создаёт музыку и вокал…"
-          : "request_id получен. Ожидаю очередь deAPI…",
+          : "request_id получен. Ожидаю очередь музыкального провайдера…",
       )
     } catch (error) {
       setGenerating(false)
@@ -560,7 +560,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const togglePlay = async () => {
     const audio = audioRef.current
     if (!audio || !trackUrl) {
-      setNotice("Сначала дождитесь настоящего MP3 от deAPI.")
+      setNotice("Сначала дождитесь готового аудиотрека.")
       return
     }
     if (audio.paused) {
@@ -576,7 +576,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const downloadTrack = (item?: MusicHistoryItem) => {
     const source = item || currentReady
     if (!source?.requestId) {
-      setNotice("Сначала дождитесь готового MP3.")
+      setNotice("Сначала дождитесь готового аудиотрека.")
       return
     }
     const anchor = document.createElement("a")
@@ -589,7 +589,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
   const shareTrack = async () => {
     if (!trackUrl) {
-      setNotice("Сначала дождитесь готового MP3.")
+      setNotice("Сначала дождитесь готового аудиотрека.")
       return
     }
     try {
@@ -597,7 +597,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         await navigator.share({ title: "Malik Music", text: trackTitle, url: trackUrl })
       } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(trackUrl)
-        setNotice("Ссылка на MP3 скопирована.")
+        setNotice("Ссылка на трек скопирована.")
       }
     } catch {
       setNotice("Не удалось открыть системное меню «Поделиться».")
@@ -714,7 +714,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const statusLabel =
     activeHistoryItem?.status === "queued" ? "В очереди" :
     activeHistoryItem?.status === "processing" ? "Генерация" :
-    trackUrl ? "MP3 READY" : genre.label.toUpperCase()
+    trackUrl ? "AUDIO READY" : genre.label.toUpperCase()
 
   // The chosen length until the file itself says otherwise, then the truth.
   const totalSeconds = trackUrl && audioDuration > 0 ? Math.round(audioDuration) : duration
@@ -831,7 +831,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   )
 
   const generateLabel = generating
-    ? (activeHistoryItem?.status === "processing" ? "Генерация MP3…" : "Отправляю запрос…")
+    ? (activeHistoryItem?.status === "processing" ? "Генерация трека…" : "Отправляю запрос…")
     : "Сгенерировать трек"
 
   return (
@@ -965,7 +965,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
                   <div className="mm-label">Результат</div>
                   <div className="mm-result-grid">
                     <div className="mm-result-sub">
-                      <div className="mm-opts"><button type="button" className="mm-opt is-active">MP3</button></div>
+                      <div className="mm-opts"><button type="button" className="mm-opt is-active">AUTO</button></div>
                     </div>
                     <div className="mm-result-sub">
                       <div className="mm-opts">{qualityOptions(false)}</div>
