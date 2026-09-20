@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   try {
     const upstream = await fetch(job.resultUrl, { signal: controller.signal, cache: "no-store" })
     if (!upstream.ok || !upstream.body) {
-      return Response.json({ ok: false, code: "MUSIC_DOWNLOAD_FAILED", error: "Не удалось скачать готовый MP3." }, { status: 502 })
+      return Response.json({ ok: false, code: "MUSIC_DOWNLOAD_FAILED", error: "Не удалось скачать готовый аудиофайл." }, { status: 502 })
     }
 
     const headers = new Headers()
