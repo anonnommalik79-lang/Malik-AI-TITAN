@@ -9,13 +9,7 @@ import { DEFAULT_LIVE_MODEL, LIVE_TOKEN_URL } from "@/lib/voice/gemini-live-setu
  * answer - "поставь MALIK_VOICE_GEMINI_KEY" - instead of a 503 nobody can
  * explain. The key itself never leaves this module.
  */
-const KEY_NAMES = [
-  "MALIK_VOICE_GEMINI_KEY",
-  "GEMINI_VOICE_API_KEY",
-  "GEMINI_API_KEY",
-  "GOOGLE_GENERATIVE_AI_API_KEY",
-  "GOOGLE_AI_API_KEY",
-] as const
+const KEY_NAMES = ["MALIK_VOICE_GEMINI_KEY"] as const
 
 export function voiceKeySource() {
   for (const name of KEY_NAMES) {
