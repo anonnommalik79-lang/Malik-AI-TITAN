@@ -1,5 +1,5 @@
 import { resolveMediaUser } from "@/lib/media/request"
-import { musicModel, musicProviderConfigured, submitDeapiMusic } from "@/lib/server/deapi-music"
+import { musicModel, musicProviderConfigured, musicProviderName, submitDeapiMusic } from "@/lib/server/deapi-music"
 import { generateMusicLyrics, resolveMusicLyricsLanguage } from "@/lib/server/music-lyrics"
 import {
   acquireMusicInFlight,
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     authenticated: user.authenticated,
     configured: musicProviderConfigured(),
     providerConfigured: musicProviderConfigured(),
-    provider: "deAPI",
+    provider: musicProviderName(),
     model: musicModel(),
     plan: user.plan,
     dailyLimit: quota.dailyLimit,
@@ -145,9 +145,9 @@ export async function POST(request: Request) {
     if (!result.ok) {
       return Response.json({
         ok: false,
-        code: "DEAPI_MUSIC_SUBMIT_FAILED",
+        code: "MUSIC_SUBMIT_FAILED",
         error: result.error,
-        provider: "deAPI",
+        provider: musicProviderName(),
         model: musicModel(),
       }, { status: result.status >= 400 && result.status < 600 ? result.status : 502 })
     }
@@ -157,7 +157,7 @@ export async function POST(request: Request) {
 
     return Response.json({
       ok: true,
-      provider: "deAPI",
+      provider: result.provider,
       model: result.model,
       requestId,
       request_id: requestId,
