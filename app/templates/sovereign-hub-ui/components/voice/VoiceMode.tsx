@@ -226,12 +226,12 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         voice: liveVoiceFor(voiceRef.current),
         language: languageRef.current,
         callbacks: {
-          onReady: (model) => {
+          onReady: (_model) => {
             geminiLiveReadyRef.current = true
             if (!mountedRef.current || closingRef.current) return
             setLiveError(null)
             setTitle("Слушаю")
-            setSubtitle(`${model} · живой audio-to-audio`)
+            setSubtitle("Говори естественно · можно перебить голосом")
           },
           onInputText: (text) => {
             if (!mountedRef.current || closingRef.current) return
@@ -258,14 +258,14 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
           onSpeaking: () => {
             if (!mountedRef.current || closingRef.current) return
             setTitle("Отвечаю")
-            setSubtitle("Gemini 3.8 Live · можно перебить голосом")
+            setSubtitle("Можно перебить голосом")
           },
           onTurnComplete: () => {
             if (!mountedRef.current || closingRef.current) return
             liveInputRef.current = ""
             liveOutputRef.current = ""
             setTitle("Слушаю")
-            setSubtitle("Gemini 3.8 Live · продолжай разговор")
+            setSubtitle("Продолжай разговор")
           },
           onInterrupted: () => {
             if (!mountedRef.current || closingRef.current) return
@@ -286,14 +286,14 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
             if (!mountedRef.current || closingRef.current) return
             setLiveError(null)
             setTitle("Слушаю")
-            setSubtitle("Gemini 3.8 Live · связь восстановлена")
+            setSubtitle("Связь восстановлена · продолжай разговор")
           },
           // Retrying never stops on its own, but after a few failures in a row
           // the person deserves to know why nothing is happening - without the
           // microphone being taken away from them.
           onStruggling: () => {
             if (!mountedRef.current || closingRef.current) return
-            setLiveError("Связь с Gemini не восстанавливается. Продолжаю пробовать.")
+            setLiveError("Связь не восстанавливается. Продолжаю пробовать.")
           },
           // The microphone itself was taken - a call came in, the headset was
           // unplugged, the browser revoked it. Only this component can ask for
@@ -309,7 +309,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
           onClosed: () => {
             geminiLiveReadyRef.current = false
             if (!mountedRef.current || closingRef.current) return
-            setLiveError("Gemini Live не отвечает.")
+            setLiveError("Голосовой режим временно недоступен.")
           },
           onError: () => { geminiLiveReadyRef.current = false },
         },
@@ -323,7 +323,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     const ready = await geminiLiveRef.current.connect()
     geminiLiveReadyRef.current = ready
     if (!ready && mountedRef.current && !closingRef.current) {
-      setLiveError("Gemini Live сейчас недоступен.")
+      setLiveError("Голосовой режим сейчас недоступен.")
     }
     return ready
   }, [])
@@ -915,7 +915,6 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
           noiseSuppression: true,
           autoGainControl: true,
           channelCount: 1,
-          sampleRate: 16000,
         },
       })
       if (!mountedRef.current || closingRef.current || micRequestRef.current !== requestId) {
@@ -951,7 +950,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         startAudioLoop(analyser)
         setLiveError(null)
         setTitle("Слушаю")
-        setSubtitle("Gemini 3.8 Live · говори естественно")
+        setSubtitle("Говори естественно · можно перебить голосом")
         return
       }
 
@@ -964,14 +963,14 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         // plainly that nobody is listening yet - rather than letting another
         // model answer in another voice and another language.
         startAudioLoop(analyser)
-        setTitle("Gemini Live не подключился")
+        setTitle("Голосовой режим не подключился")
         setSubtitle("Микрофон открыт · нажми «Переподключить»")
-        setLiveError((current) => current || "Gemini Live сейчас недоступен.")
+        setLiveError((current) => current || "Голосовой режим сейчас недоступен.")
         return
       }
 
       setTitle("Слушаю")
-      setSubtitle("Резервный Voice · Gemini Live переподключится при следующем входе")
+      setSubtitle("Резервный Voice · основной голос переподключится при следующем входе")
       startRecorder(stream)
       startAudioLoop(analyser)
       startSpeech()
@@ -996,7 +995,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const reconnectLive = useCallback(async () => {
     setLiveError(null)
     setLiveDiagnosis(null)
-    setTitle("Подключаюсь к Gemini Live")
+    setTitle("Подключаю голосовой режим")
     setSubtitle("Секунду…")
     geminiLiveRef.current?.close()
     geminiLiveRef.current = null
@@ -1014,7 +1013,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
    */
   const checkLive = useCallback(async () => {
     setCheckingLive(true)
-    setLiveDiagnosis("Проверяю связь с Gemini…")
+    setLiveDiagnosis("Проверяю голосовую связь…")
     try {
       const response = await fetch(`/api/voice/gemini-live-check?language=${languageRef.current}`, {
         credentials: "same-origin",
@@ -1474,11 +1473,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       setFinalTranscript(value)
       setInterimTranscript("")
       setTitle("Отвечаю")
-      setSubtitle("Gemini 3.8 Live · текстовый запрос")
+      setSubtitle("Текстовый запрос · продолжаю разговор")
       return
     }
     if (!LEGACY_VOICE_PIPELINE) {
-      showNotice("Gemini Live не подключён — нажми «Переподключить»")
+      showNotice("Голосовой режим не подключён — нажми «Переподключить»")
       return
     }
     void runVoiceTurn(value)
