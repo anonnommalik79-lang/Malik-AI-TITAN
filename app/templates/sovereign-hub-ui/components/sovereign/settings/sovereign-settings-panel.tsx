@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Brain, Download, LogOut, Settings, User } from "lucide-react"
-import { MALIK_MODELS, canUseMalikModel, type MalikModelId } from "@/lib/ai/malik-models"
+import { PUBLIC_MALIK_MODELS, type MalikModelId } from "@/lib/ai/malik-models"
 import { loadResponseDepth, saveResponseDepth, canUseUltra, type ResponseDepth } from "@/lib/ai/response-depth"
 import { useWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import type { AIPlan } from "@/lib/ai/types"
@@ -49,7 +49,7 @@ export function SovereignSettingsPanel({ username, email, plan, selectedModelId,
             <div className={styles.row}>
               <div className={styles.rowCopy}><label htmlFor="settings-model">Модель</label><p>Применяется к текущему диалогу.</p></div>
               <select id="settings-model" className={styles.select} value={selectedModelId} onChange={(event) => onModelChange(event.target.value as MalikModelId)}>
-                {MALIK_MODELS.map((model) => <option key={model.id} value={model.id} disabled={!canUseMalikModel(model.id, plan)}>{model.label}{model.tier === "pro" && !plus ? " · Plus" : ""}</option>)}
+                {PUBLIC_MALIK_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
               </select>
             </div>
             <div className={styles.row}>
