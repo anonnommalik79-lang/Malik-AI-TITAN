@@ -1,69 +1,54 @@
 import assert from "node:assert/strict"
 import {
   DEFAULT_MALIK_MODEL_ID,
+  FREE_MALIK_MODELS,
   MALIK_MODELS,
+  MAX_ROUTER_MODEL_IDS,
+  PRO_MALIK_MODELS,
+  PUBLIC_MALIK_MODELS,
   canUseMalikModel,
   getMalikModel,
 } from "../lib/ai/malik-models.ts"
+import {
+  ROUTER_CATALOG,
+  ROUTER_CATALOG_COUNTS,
+  ROUTER_AUTO_TEXT_CATALOG,
+} from "../lib/ai/router-catalog.ts"
 
-const expected = {
-  "malik-coder-32b": ["malik-orchestrator", "MalikCoder-1.0"],
-  "nvidia-nemotron-ultra-550b": ["nemotron-openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free"],
-  "malik-qwen-397b": ["modelscope", "Qwen/Qwen3.5-397B-A17B"],
-  "malik-reason-753b": ["modelscope", "ZhipuAI/GLM-5.2"],
-  "malik-core-300b": ["modelscope", "PaddlePaddle/ERNIE-4.5-300B-A47B-PT"],
-  "malik-flash-53": ["aihubmix", "coding-glm-5.3-free"],
-  "malik-vision-k3": ["aihubmix", "coding-kimi-k3-free"],
-  "malik-8b": ["cloudflare", "@cf/meta/llama-3.1-8b-instruct-fast"],
-  "malik-20b": ["groq", "openai/gpt-oss-20b"],
-  "malik-fast-120b": ["cerebras", "gpt-oss-120b"],
-  "malik-27b": ["groq", "qwen/qwen3.8-27b"],
-  "malik-30b": ["cloudflare", "@cf/qwen/qwen3-30b-a3b-fp8"],
-  "malik-vision-26b": ["cloudflare", "@cf/google/gemma-4-26b-a4b-it"],
-  "malik-70b": ["cloudflare", "@cf/meta/llama-3.3-70b-instruct-fp8-fast"],
-  "malik-120b": ["groq", "openai/gpt-oss-120b"],
-  "malik-agent-120b": ["cloudflare", "@cf/nvidia/nemotron-3-120b-a12b"],
+assert.deepEqual(ROUTER_CATALOG_COUNTS, { total: 138, text: 123, image: 9, video: 6 }, "Three-router catalogue must stay 138 = 123 text + 9 image + 6 video")
+assert.equal(ROUTER_CATALOG.length, 138)
+assert.equal(DEFAULT_MALIK_MODEL_ID, "malik-max", "MalikLLM MAX must be the default")
+assert.equal(PUBLIC_MALIK_MODELS[0]?.id, "malik-max", "MalikLLM MAX must be first in the selector")
+assert.equal(getMalikModel("malik-max").label, "MalikLLM MAX")
+assert.equal(getMalikModel("malik-max").provider, "malik-orchestrator")
+
+assert.equal(PUBLIC_MALIK_MODELS.length, 125, "Selector must expose MAX + 123 router text entries + LLM7 Default")
+assert.equal(FREE_MALIK_MODELS.length, PUBLIC_MALIK_MODELS.length, "Every public text model is unlocked in the app")
+assert.equal(PRO_MALIK_MODELS.length, 0, "No text models are Pro-gated")
+assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, MALIK_MODELS.length, "Model IDs must be unique")
+
+for (const model of PUBLIC_MALIK_MODELS) {
+  assert.equal(model.hidden, undefined)
+  assert.equal(model.tier, "free")
+  assert.equal(canUseMalikModel(model.id, "free"), true, `${model.id} must be selectable on Free`)
 }
 
-assert.equal(MALIK_MODELS.length, 16, "The selector must expose sixteen live models")
-assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, 16, "Model IDs must be unique")
-assert.equal(new Set(MALIK_MODELS.map((model) => `${model.provider}:${model.providerModel}`)).size, 16, "Provider routes must be unique")
-assert.equal(DEFAULT_MALIK_MODEL_ID, "malik-coder-32b", "MalikCoder 1.0 must be the default text/code model")
+assert.equal(ROUTER_AUTO_TEXT_CATALOG.length, 47, "xKiro + Nara verified auto-free routes changed unexpectedly")
+assert.ok(MAX_ROUTER_MODEL_IDS.includes("router:llm7:default"), "LLM7 free default router must be inside MAX")
+assert.ok(MAX_ROUTER_MODEL_IDS.some((id) => id.startsWith("router:xkiro:")), "xKiro pool missing from MAX")
+assert.ok(MAX_ROUTER_MODEL_IDS.some((id) => id.startsWith("router:nara:")), "Nara pool missing from MAX")
+assert.ok(MAX_ROUTER_MODEL_IDS.includes("malik-20b"), "Existing Malik provider pool must remain a MAX fallback")
 
-for (const [id, [provider, providerModel]] of Object.entries(expected)) {
-  const model = getMalikModel(id)
-  assert.equal(model.provider, provider, `${id} provider`)
-  assert.equal(model.providerModel, providerModel, `${id} provider model`)
-  assert.equal(canUseMalikModel(id, "pro"), true, `${id} must be available to Pro`)
-  assert.equal(canUseMalikModel(id, "free"), model.tier === "free", `${id} Free gate`)
-  if (id === "nvidia-nemotron-ultra-550b") {
-    assert.equal(model.label, "NVIDIA Nemotron 3 Ultra 550B", "Nemotron must keep its official public name")
-    assert.deepEqual(model.capabilities, ["text", "code", "tools", "reasoning"], "Nemotron coding capabilities")
-  } else {
-    assert.match(model.label, /^Malik/, `${id} label must use Malik branding`)
-  }
-  console.log(`${id} -> ${model.provider} -> ${model.providerModel} [${model.tier}]`)
-}
+const xkiroMistral = getMalikModel("router:xkiro:mistralai/mistral-small-2603")
+assert.equal(xkiroMistral.label, "Mistral Small 4")
+assert.equal(xkiroMistral.access, "free")
 
-assert.deepEqual(
-  MALIK_MODELS.filter((model) => canUseMalikModel(model.id, "free")).map((model) => model.id),
-  [
-    "malik-coder-32b",
-    "nvidia-nemotron-ultra-550b",
-    "malik-qwen-397b",
-    "malik-reason-753b",
-    "malik-core-300b",
-    "malik-flash-53",
-    "malik-vision-k3",
-    "malik-20b",
-    "malik-fast-120b",
-    "malik-27b",
-  ],
-  "Free must expose Nemotron 550B plus the existing live free models",
-)
+const llm7Sol = getMalikModel("router:llm7:gpt-5.6-sol")
+assert.equal(llm7Sol.label, "gpt-5.6-sol")
+assert.equal(llm7Sol.access, "catalog", "Catalog presence must not be mislabeled as free")
 
-assert.equal(getMalikModel("malik-coder-32b").label, "MalikCoder 1.0", "Public model name must be exact")
-assert.equal(getMalikModel("nvidia-nemotron-ultra-550b").tier, "free", "Nemotron OpenRouter endpoint must be selectable on Free")
-assert.equal(MALIK_MODELS.some((model) => model.providerModel === "zai-glm-4.7"), false, "Deprecated GLM 4.7 must not be exposed")
-assert.equal(MALIK_MODELS.some((model) => model.providerModel.includes("gemini")), false, "Hidden Gemini must never appear in the selector")
-console.log("Verified 16 unique model routes including NVIDIA Nemotron 3 Ultra 550B.")
+const naraNemotron = getMalikModel("router:nara:nemotron-3-ultra-free")
+assert.equal(naraNemotron.label, "Nemotron 3 Ultra Free")
+assert.equal(naraNemotron.access, "free")
+
+console.log(`Verified ${PUBLIC_MALIK_MODELS.length} public text choices, ${MAX_ROUTER_MODEL_IDS.length} MAX failover lanes and 138 router catalogue entries.`)
