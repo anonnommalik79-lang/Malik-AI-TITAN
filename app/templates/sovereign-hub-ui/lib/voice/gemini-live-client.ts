@@ -15,6 +15,7 @@ export type { LiveLanguage }
 
 type LiveCallbacks = {
   onReady?: (model: string) => void
+  onInputInterim?: (text: string) => void
   onInputText?: (text: string) => void
   onOutputText?: (text: string) => void
   onSpeaking?: () => void
@@ -48,6 +49,10 @@ type VoiceWindow = typeof globalThis & { webkitAudioContext?: typeof AudioContex
 const DEFAULT_WS = LIVE_WS_URL
 const INPUT_RATE = LIVE_INPUT_RATE
 const DEFAULT_OUTPUT_RATE = 24000
+// Google recommends ~100 ms PCM chunks. Smaller ScriptProcessor callbacks are
+// accumulated to this exact size before they hit the websocket.
+const INPUT_PACKET_SAMPLES = Math.round(INPUT_RATE / 10)
+const MAX_SOCKET_BUFFER_BYTES = 1024 * 1024
 
 /**
  * Back-off between reconnect attempts. The last value repeats forever.
@@ -114,14 +119,6 @@ function downsample(input: Float32Array, inputRate: number, outputRate = INPUT_R
   return output
 }
 
-function pcm16(input: Float32Array) {
-  const output = new Int16Array(input.length)
-  for (let index = 0; index < input.length; index += 1) {
-    const value = Math.max(-1, Math.min(1, input[index]))
-    output[index] = value < 0 ? Math.round(value * 0x8000) : Math.round(value * 0x7fff)
-  }
-  return new Uint8Array(output.buffer)
-}
 
 function sampleRate(mime: string) {
   const parsed = /rate=(\d+)/i.exec(mime || "")
@@ -159,6 +156,7 @@ export class GeminiLiveSession {
   private lastFrameAt = 0
   private lastMicLossAt = 0
   private watchdog = 0
+  private inputSampleQueue: number[] = []
 
   private micStream: MediaStream | null = null
   private hostContext: AudioContext | null = null
@@ -340,6 +338,9 @@ export class GeminiLiveSession {
           this.callbacks.onInterrupted?.()
         }
 
+        const interimInputText = String(server.interimInputTranscription?.text || "")
+        if (interimInputText) this.callbacks.onInputInterim?.(interimInputText)
+
         const inputText = String(server.inputTranscription?.text || "")
         if (inputText) this.callbacks.onInputText?.(inputText)
 
@@ -510,10 +511,66 @@ export class GeminiLiveSession {
     this.callbacks.onMicrophoneLost?.()
   }
 
+  private sendInputPacket(samples: number[]) {
+    if (!samples.length || !this.isReady()) return
+    const socket = this.socket
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+
+    // If a mobile network stalls, do not build seconds of stale audio behind
+    // the user's live speech. The reconnect/resumption path will recover.
+    if (typeof socket.bufferedAmount === "number" && socket.bufferedAmount > MAX_SOCKET_BUFFER_BYTES) return
+
+    const pcm = new Int16Array(samples.length)
+    for (let index = 0; index < samples.length; index += 1) pcm[index] = samples[index]
+    try {
+      socket.send(JSON.stringify({
+        realtimeInput: {
+          audio: {
+            data: toBase64(new Uint8Array(pcm.buffer)),
+            mimeType: `audio/pcm;rate=${INPUT_RATE}`,
+          },
+        },
+      }))
+    } catch {}
+  }
+
+  private queueInputSamples(samples: Float32Array) {
+    for (let index = 0; index < samples.length; index += 1) {
+      const value = Math.max(-1, Math.min(1, samples[index]))
+      this.inputSampleQueue.push(value < 0 ? Math.round(value * 0x8000) : Math.round(value * 0x7fff))
+    }
+    while (this.inputSampleQueue.length >= INPUT_PACKET_SAMPLES) {
+      this.sendInputPacket(this.inputSampleQueue.splice(0, INPUT_PACKET_SAMPLES))
+    }
+  }
+
+  private flushInputSamples() {
+    if (!this.inputSampleQueue.length) return
+    this.sendInputPacket(this.inputSampleQueue.splice(0, this.inputSampleQueue.length))
+  }
+
+  /**
+   * Finalises only the current utterance while keeping the microphone attached.
+   * This is the hybrid-VAD path recommended by Gemini: server VAD still catches
+   * speech starts, while the client's longer silence detector can end a turn
+   * without waiting for another timeout.
+   */
+  endUtterance() {
+    if (!this.isReady() || !this.wantsMic) return false
+    this.flushInputSamples()
+    try {
+      this.socket?.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }))
+      return true
+    } catch {
+      return false
+    }
+  }
+
   private async startCapture(): Promise<boolean> {
     const stream = this.micStream
     if (!stream || !this.isReady()) return false
     this.stopCapture()
+    this.inputSampleQueue = []
 
     // A stream whose track has already ended can never produce audio again.
     if (!stream.getAudioTracks().some((track) => track.readyState === "live")) {
@@ -570,17 +627,7 @@ export class GeminiLiveSession {
         this.lastFrameAt = Date.now()
         const mono = event.inputBuffer.getChannelData(0)
         const samples = downsample(mono, rate, INPUT_RATE)
-        const bytes = pcm16(samples)
-        try {
-          this.socket?.send(JSON.stringify({
-            realtimeInput: {
-              audio: {
-                data: toBase64(bytes),
-                mimeType: `audio/pcm;rate=${INPUT_RATE}`,
-              },
-            },
-          }))
-        } catch {}
+        this.queueInputSamples(samples)
       }
 
       let tail: AudioNode = source
@@ -658,6 +705,7 @@ export class GeminiLiveSession {
     }
     this.captureContext = null
     this.captureOwned = false
+    this.inputSampleQueue = []
   }
 
   /**
@@ -689,9 +737,7 @@ export class GeminiLiveSession {
       track.onmute = null
     }
     this.stopWatchdog()
-    if (this.isReady()) {
-      try { this.socket?.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })) } catch {}
-    }
+    if (this.isReady()) this.endUtterance()
     this.stopCapture()
     this.micStream = null
     this.hostContext = null

@@ -176,6 +176,8 @@ async function connected(options = {}) {
     language: options.language || "kk",
     callbacks: {
       onReady: () => events.push("ready"),
+      onInputInterim: (text) => events.push(`hear~:${text}`),
+      onInputText: (text) => events.push(`hear:${text}`),
       onReconnecting: () => events.push("reconnecting"),
       onReconnected: () => events.push("reconnected"),
       onClosed: () => events.push("closed"),
@@ -213,8 +215,20 @@ await check("unclear audio is not an excuse to switch to English", async () => {
   const instruction = browser.sockets[0].setup().systemInstruction?.parts?.[0]?.text || ""
   // This is the whole bug: a model told "answer in the user's language" falls
   // back to English the moment it is unsure what it heard.
-  assert.match(instruction, /НИКОГДА не отвечай по-английски/)
+  assert.match(instruction, /ЯЗЫКОВОЙ ЗАМОК/)
   assert.match(instruction, /неразборчив/)
+  assert.match(instruction, /транскрипция выглядит китайской/)
+  session.close()
+  browser.cleanup()
+})
+
+await check("interim and final input transcripts stay separate", async () => {
+  const { browser, session, events } = await connected({ language: "kk" })
+  browser.sockets[0].deliver({ serverContent: { interimInputTranscription: { text: "сәл" } } })
+  browser.sockets[0].deliver({ serverContent: { inputTranscription: { text: "сәлем" } } })
+  await tick()
+  assert.ok(events.includes("hear~:сәл"))
+  assert.ok(events.includes("hear:сәлем"))
   session.close()
   browser.cleanup()
 })
@@ -240,27 +254,28 @@ await check("the microphone streams 16 kHz little-endian PCM", async () => {
   assert.equal(await session.attachMicrophone(fakeStream(), browser.context), true)
   browser.feed(4)
   const audio = browser.sockets[0].audio()
-  assert.equal(audio.length, 4, "frames did not reach the socket")
+  assert.equal(audio.length, 2, "100ms packets did not reach the socket")
   assert.equal(audio[0].mimeType, "audio/pcm;rate=16000")
   const bytes = Buffer.from(audio[0].data, "base64")
-  assert.ok(bytes.length > 0 && bytes.length % 2 === 0, "not whole 16-bit samples")
+  assert.equal(bytes.length, 1600 * 2, "a live packet must be 100ms of 16-bit PCM")
   assert.notEqual(bytes.readInt16LE(200), 0, "the audio arrived silent")
   session.close()
   browser.cleanup()
-  return `${audio.length} frames, ${bytes.length} bytes each`
+  return `${audio.length} packets, ${bytes.length} bytes each`
 })
 
 await check("capture runs at 16 kHz natively when the browser allows it", async () => {
   const { browser, session } = await connected()
   await session.attachMicrophone(fakeStream(), browser.context)
   // A 16 kHz context means the browser's own resampler did the conversion on
-  // the raw signal, which is better than anything done by hand afterwards.
-  browser.feed(1)
+  // the raw signal. Two 1024-sample callbacks are packetized into one exact
+  // 1600-sample (100ms) websocket frame, leaving the tail queued.
+  browser.feed(2)
   const bytes = Buffer.from(browser.sockets[0].audio()[0].data, "base64").length
-  assert.equal(bytes, 1024 * 2, "a 16 kHz capture block should arrive whole")
+  assert.equal(bytes, 1600 * 2, "native capture should be packetized to 100ms")
   session.close()
   browser.cleanup()
-  return "1024-sample blocks, 64ms"
+  return "1600-sample packets, 100ms"
 })
 
 await check("a 48 kHz context is filtered before it is decimated", async () => {
@@ -269,12 +284,12 @@ await check("a 48 kHz context is filtered before it is decimated", async () => {
   // filtered path has to exist and has to be used.
   const { browser, session } = await connected({ install: { nativeRate: false } })
   await session.attachMicrophone(fakeStream(), browser.context)
-  browser.feed(1)
+  browser.feed(3)
   const audio = browser.sockets[0].audio()
   assert.equal(audio.length, 1)
   assert.equal(audio[0].mimeType, "audio/pcm;rate=16000")
   const frames = Buffer.from(audio[0].data, "base64").length / 2
-  assert.equal(frames, Math.floor(2048 / 3), "2048 samples at 48 kHz must become 682 at 16 kHz")
+  assert.equal(frames, 1600, "48 kHz input must still reach Gemini as 100ms 16 kHz packets")
   // The averaging alone is a weak filter; the biquads in front of it are what
   // keep the fold-back out of the speech band.
   assert.equal(browser.filters.length, 2, "the anti-alias filters were not built")
@@ -284,7 +299,21 @@ await check("a 48 kHz context is filtered before it is decimated", async () => {
   }
   session.close()
   browser.cleanup()
-  return `2048 @48k → ${frames} @16k, 2 lowpass at 7kHz`
+  return `48k → ${frames}-sample @16k packets, 2 lowpass at 7kHz`
+})
+
+await check("ending one utterance flushes the short tail without muting the microphone", async () => {
+  const { browser, session } = await connected()
+  await session.attachMicrophone(fakeStream(), browser.context)
+  browser.feed(1)
+  assert.equal(browser.sockets[0].audio().length, 0, "a sub-100ms tail should still be queued")
+  assert.equal(session.endUtterance(), true)
+  assert.equal(browser.sockets[0].audio().length, 1, "the tail was not flushed")
+  const ended = browser.sockets[0].sent.map((raw) => JSON.parse(raw)).some((message) => message.realtimeInput?.audioStreamEnd)
+  assert.equal(ended, true, "hybrid VAD did not signal turn end")
+  assert.equal(session.isReady(), true, "ending an utterance must not close the session")
+  session.close()
+  browser.cleanup()
 })
 
 await check("a typed question goes to the same session", async () => {
@@ -302,7 +331,7 @@ console.log("\nwhen the wire drops")
 await check("a dropped socket reconnects and keeps the microphone", async () => {
   const { browser, session, events } = await connected()
   await session.attachMicrophone(fakeStream(), browser.context)
-  browser.feed(2)
+  browser.feed(4)
   assert.equal(browser.sockets[0].audio().length, 2)
 
   browser.sockets[0].drop()
@@ -316,8 +345,8 @@ await check("a dropped socket reconnects and keeps the microphone", async () => 
   assert.ok(events.includes("reconnected"), "the screen was never told the link came back")
   // The point of all of it: the person keeps talking and never touches the
   // microphone button.
-  browser.feed(3)
-  assert.equal(browser.sockets[1].audio().length, 3, "the microphone did not come back")
+  browser.feed(4)
+  assert.equal(browser.sockets[1].audio().length, 2, "the microphone did not come back")
   session.close()
   browser.cleanup()
   return `${browser.sockets[1].audio().length} frames after the drop`
@@ -464,9 +493,8 @@ await check("the endpoints are Google's, not a test stand", async () => {
 await check("each smaller tier drops options and keeps the language rule", async () => {
   const sizes = [0, 1, 2].map((tier) => Object.keys(buildLiveSetup({ tier, language: "kk" }).setup))
   assert.ok(sizes[0].includes("contextWindowCompression"))
-  // Voice activity detection is deliberately absent: Google's defaults are
-  // what the model is tuned against, and hand-set thresholds cut people off.
-  for (const keys of sizes) assert.ok(!keys.includes("realtimeInputConfig"), "VAD must be left to Google")
+  assert.ok(sizes[0].includes("realtimeInputConfig"), "full setup should tune VAD for natural pauses")
+  assert.ok(!sizes[1].includes("realtimeInputConfig") && !sizes[2].includes("realtimeInputConfig"), "fallback tiers must use provider-default VAD")
   assert.ok(!sizes[1].includes("contextWindowCompression") && sizes[1].includes("sessionResumption"))
   assert.ok(!sizes[2].includes("sessionResumption"))
   for (const tier of [0, 1, 2]) {
@@ -474,6 +502,11 @@ await check("each smaller tier drops options and keeps the language rule", async
     assert.ok(setup.systemInstruction.parts[0].text.includes("қазақ"), `tier ${tier} lost the language rule`)
     assert.deepEqual(setup.generationConfig.responseModalities, ["AUDIO"], `tier ${tier} lost audio output`)
   }
+  const fullSetup = buildLiveSetup({ tier: 0, language: "kk" }).setup
+  assert.deepEqual(fullSetup.inputAudioTranscription.languageCodes, ["kk-KZ"])
+  assert.equal(fullSetup.inputAudioTranscription.mode, "SMART")
+  assert.ok(fullSetup.inputAudioTranscription.customVocabulary.includes("Malik AI"))
+  assert.equal(fullSetup.realtimeInputConfig.automaticActivityDetection.endOfSpeechSensitivity, "END_SENSITIVITY_LOW")
   return sizes.map((keys) => keys.length).join(" → ")
 })
 
@@ -483,7 +516,7 @@ await check("a microphone taken by the system is reported, not guessed at", asyn
   const { browser, session, events } = await connected()
   const stream = fakeStream()
   await session.attachMicrophone(stream, browser.context)
-  browser.feed(2)
+  browser.feed(4)
   assert.equal(browser.sockets[0].audio().length, 2)
 
   // A phone call takes the microphone. Nothing throws; audio just stops.
@@ -538,9 +571,9 @@ console.log("\nwhat the model is told")
 
 await check("it is told not to fill in what it did not hear", async () => {
   for (const [language, phrases] of [
-    ["ru", ["не додумывай", "не выдумывай факты", "одно-три предложения"]],
-    ["kk", ["ойдан құрама", "ойдан шығарма"]],
-    ["en", ["do not fill in the gap", "Never invent facts"]],
+    ["ru", ["ЯЗЫКОВОЙ ЗАМОК", "неразборчива", "выбранный язык Voice"]],
+    ["kk", ["ТІЛ ҚҰЛПЫ", "қазақша нақтылап", "таңдалған Voice тілі"]],
+    ["en", ["LANGUAGE LOCK", "clarifying question in English", "selected Voice language"]],
   ]) {
     const { browser, session } = await connected({ language })
     const instruction = browser.sockets[0].setup().systemInstruction?.parts?.[0]?.text || ""
@@ -550,7 +583,7 @@ await check("it is told not to fill in what it did not hear", async () => {
     session.close()
     browser.cleanup()
   }
-  return "no guessing, no inventing, short answers"
+  return "strict language lock + same-language clarification"
 })
 
 console.log(failures ? `\n${failures} failing\n` : "\nall Gemini Live session checks passed\n")

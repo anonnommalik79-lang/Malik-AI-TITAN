@@ -233,6 +233,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
             setTitle("Слушаю")
             setSubtitle("Говори естественно · можно перебить голосом")
           },
+          onInputInterim: (text) => {
+            if (!mountedRef.current || closingRef.current || liveOutputRef.current) return
+            setInterimTranscript(text.trim())
+            setTitle("Слушаю")
+          },
           onInputText: (text) => {
             if (!mountedRef.current || closingRef.current) return
             if (liveOutputRef.current) {
@@ -800,13 +805,13 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         lastSpeechAtRef.current = now
       } else if (started && now - lastSpeechAtRef.current >= SILENCE_MS && Date.now() - recordingStartedAtRef.current >= 700) {
         speechDetectedRef.current = false
-        // Only when there is no streaming recognizer. It decides the end of a
-        // turn from the words it heard, which is both earlier and right; this
-        // timer decides it from a volume, which is why it used to cut people
-        // off mid-thought.
-        // And never in Live mode, where the same call means "switch the
-        // microphone off" rather than "send what you heard".
-        if (!streamingRef.current && LEGACY_VOICE_PIPELINE) {
+        // Native Live keeps server VAD enabled, but after a deliberately long
+        // local silence we also send audioStreamEnd. This is hybrid VAD: it
+        // finalises the utterance without muting the microphone, while the
+        // server still protects us if the local level detector misses it.
+        if (geminiLiveReadyRef.current && !LEGACY_VOICE_PIPELINE) {
+          geminiLiveRef.current?.endUtterance()
+        } else if (!streamingRef.current && LEGACY_VOICE_PIPELINE) {
           autoSubmitRef.current?.()
           return
         }
@@ -937,6 +942,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       setSubtitle(languageRef.current === "kk" ? "Қазақша сөйле — жауап тек қазақша болады" : languageRef.current === "ru" ? "Говори по-русски — ответ будет только по-русски" : "Speak English — the reply stays English")
       speechDetectedRef.current = false
       lastSpeechAtRef.current = 0
+      recordingStartedAtRef.current = Date.now()
       streamTextRef.current = ""
       streamConfidenceRef.current = 1
 
