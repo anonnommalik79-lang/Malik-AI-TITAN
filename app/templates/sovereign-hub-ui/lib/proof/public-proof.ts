@@ -42,7 +42,7 @@ export const LIVE_DEMO_ACTIONS = [
   { id: "deep", label: "Deep Mode", api: "/api/ai/chat", body: { mode: "deep", prompt: "Analyze a Kazakhstan student startup idea in 5 bullets." } },
   { id: "pro", label: "Pro Mode", api: "/api/ai/chat", body: { mode: "pro", prompt: "Draft a short investor strategy outline for an AI command center." } },
   { id: "code", label: "Code Mode", api: "/api/ai/code", body: { prompt: "Outline a TypeScript Next.js stats card component." } },
-  { id: "photo", label: "Photo Mode", api: "/api/ai/image", body: { prompt: "Futuristic Kazakhstan AI command center, cinematic, no text" } },
+  { id: "photo", label: "Photo Mode", api: "/api/media/image", body: { prompt: "Futuristic Kazakhstan AI command center, cinematic, no text" } },
   { id: "video", label: "Video Mode", api: "/api/ai/video", body: { prompt: "Short AI product launch motion graphic, no logos" } },
 ] as const
 

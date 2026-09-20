@@ -6146,7 +6146,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
       patchInlineMedia({ status: "generating", progress: 36 })
 
-      const mediaEndpoint = inlineMediaKind === "video" ? "/api/generate/video" : "/api/ai/image"
+      const mediaEndpoint = inlineMediaKind === "video" ? "/api/generate/video" : "/api/media/image"
       const response = await clientFetchWithTimeout(mediaEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -6188,7 +6188,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         payload?.status === "storyboard-ready"
 
       if (!response.ok && !payload?.ok) {
-        throw new Error(payload?.publicError || payload?.error || payload?.message || `Media API returned ${response.status}`)
+        throw new Error(payload?.publicError || payload?.error || payload?.message || (inlineMediaKind === "image" ? `Генератор изображений временно недоступен (HTTP ${response.status}). Попробуйте ещё раз.` : `Media API returned ${response.status}`))
       }
 
       const isProcessingStatus = (value: any) => /queued|queue|processing|rendering|running|submitted|starting/i.test(String(value || ""))

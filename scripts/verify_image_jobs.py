@@ -73,7 +73,7 @@ def main() -> None:
         Path(__file__).resolve().parents[1]
         / "app/templates/sovereign-hub-ui/components/sovereign/dashboard.tsx"
     ).read_text(encoding="utf-8")
-    assert '"/api/ai/image"' in dashboard
+    assert '"/api/media/image"' in dashboard
     assert "applyPersistentMediaPatch" in dashboard
     assert "statusUrl" in dashboard and "/api/ai/job/" in dashboard
     assert "different history or reloading the dashboard" in dashboard

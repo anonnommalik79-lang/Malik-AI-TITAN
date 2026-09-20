@@ -2,7 +2,7 @@
 
 import { useEffect } from "react"
 
-const IMAGE_START_PATH = "/api/ai/image"
+const IMAGE_START_PATH = "/api/media/image"
 const IMAGE_JOB_PREFIX = "/api/ai/job/"
 const IMAGE_WAIT_MS = 112_000
 const IMAGE_REQUEST_HARD_LIMIT_MS = 240_000
