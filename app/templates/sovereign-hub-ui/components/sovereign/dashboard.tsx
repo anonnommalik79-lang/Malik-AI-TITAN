@@ -4841,7 +4841,7 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
   const [username, setUsername] = useState<string>(safeGetStorage("malik_user", ""))
   const [isAdmin, setIsAdmin] = useState(false)
   const canAccessAdmin = !guestMode && !workOSLoading && isVerifiedOwner(workOSUser)
-  const [selectedModelId, setSelectedModelId] = useState<MalikModelId>(() => loadMalikModelSelection())
+  const [selectedModelId, setSelectedModelId] = useState<MalikModelId>(DEFAULT_MALIK_MODEL_ID)
   const [currentPlan, setCurrentPlan] = useState<AIPlan>("free")
   const [planResolved, setPlanResolved] = useState(false)
   const [authReady, setAuthReady] = useState(false)
@@ -4974,7 +4974,12 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
           if (Array.isArray(parsed?.messages)) setMessages(collapseAccidentalDuplicateTurns(parsed.messages.map(reviveMessage)))
           if (typeof parsed?.generatedCode === "string") setGeneratedCode(parsed.generatedCode)
         }
-        if (isMalikModelId(parsed?.selectedModelId)) setSelectedModelId(parsed.selectedModelId)
+        // MalikLLM MAX is the global entry model for every session. Do not
+        // revive an old last-used model from a previous dashboard snapshot.
+        // Historical chats/projects still restore their own selected model when
+        // the user explicitly opens them.
+        setSelectedModelId(DEFAULT_MALIK_MODEL_ID)
+        saveMalikModelSelection(DEFAULT_MALIK_MODEL_ID)
       }
     } catch (err) {
       console.warn("[DASHBOARD RESTORE ERROR]", err)
