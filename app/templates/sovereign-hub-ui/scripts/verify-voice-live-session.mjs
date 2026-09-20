@@ -199,7 +199,7 @@ console.log("\nthe language of the answer")
 
 await check("the system prompt is written in the language it asks for", async () => {
   const notes = []
-  for (const [language, marker] of [["kk", "қазақ"], ["ru", "русском"], ["en", "English"]]) {
+  for (const [language, marker] of [["kk", "қазақ"], ["ru", "по-русски"], ["en", "English"]]) {
     const { browser, session } = await connected({ language })
     const instruction = browser.sockets[0].setup().systemInstruction?.parts?.[0]?.text || ""
     assert.ok(instruction.includes(marker), `${language} prompt does not mention ${marker}`)
@@ -241,7 +241,7 @@ await check("changing the language restarts the session with the new prompt", as
   await change
   assert.equal(browser.sockets.length, 2, "the session was not reopened")
   const instruction = browser.sockets[1].setup().systemInstruction?.parts?.[0]?.text || ""
-  assert.ok(instruction.includes("русском"), "the new session kept the old language")
+  assert.ok(instruction.includes("по-русски"), "the new session kept the old language")
   session.close()
   browser.cleanup()
   return "kk → ru"
