@@ -83,24 +83,24 @@ async function runCheck(language: LiveLanguage): Promise<CheckResult> {
   // 1. The key -------------------------------------------------------------
   const source = voiceKeySource()
   if (!source.key) {
-    push("key", "Ключ Gemini", "fail", "Ни одна из переменных MALIK_VOICE_GEMINI_KEY / GEMINI_VOICE_API_KEY / GEMINI_API_KEY не задана на сервере.")
-    return finish("Голос не заработает: на Render нет ключа Gemini.")
+    push("key", "Ключ Voice", "fail", "Переменная MALIK_VOICE_GEMINI_KEY не задана на сервере.")
+    return finish("Голос не заработает: на Render нет ключа Voice.")
   }
-  push("key", "Ключ Gemini", "ok", `Взят из ${source.name}.`)
+  push("key", "Ключ Voice", "ok", `Взят из ${source.name}.`)
 
   // 2. The ephemeral token -------------------------------------------------
   const tokenStartedAt = Date.now()
   const minted = await mintLiveToken(2)
   if (!minted.ok) {
     push("token", "Одноразовый токен", "fail", minted.message)
-    return finish("Google не выдал токен для голосовой сессии.")
+    return finish("Не удалось получить токен для голосовой сессии.")
   }
   push("token", "Одноразовый токен", "ok", `Выдан за ${Date.now() - tokenStartedAt} мс.`)
 
   // 3–5. The session itself ------------------------------------------------
   const Socket = (globalThis as typeof globalThis & { WebSocket?: typeof WebSocket }).WebSocket
   if (!Socket) {
-    push("socket", "Соединение с Google", "fail", `В этой среде Node нет WebSocket (${process.version}). Нужен Node 22 или новее.`)
+    push("socket", "Голосовое соединение", "fail", `В этой среде Node нет WebSocket (${process.version}). Нужен Node 22 или новее.`)
     return finish("Проверку нельзя выполнить: среда без WebSocket.")
   }
 
@@ -184,24 +184,24 @@ async function runCheck(language: LiveLanguage): Promise<CheckResult> {
 
   if (!setupAt) {
     const why = closeCode === 1007 || closeCode === 1008
-      ? "Google отклонил параметры сессии — скорее всего дело в имени модели или в одном из полей setup."
+      ? "Сервис отклонил параметры сессии — скорее всего дело в имени модели или в одном из полей setup."
       : closeCode === 1011
-        ? "Google закрыл соединение со своей стороны."
+        ? "Сервис закрыл соединение со своей стороны."
         : done === "timeout"
-          ? "Google не ответил за 26 секунд."
+          ? "Сервис не ответил за 26 секунд."
           : `Соединение закрылось, код ${closeCode || "неизвестен"}.`
-    push("socket", "Соединение с Google", "fail", `${why}${closeReason ? ` (${closeReason})` : ""}`)
+    push("socket", "Голосовое соединение", "fail", `${why}${closeReason ? ` (${closeReason})` : ""}`)
     return finish(`Сессия не открылась. Модель в настройках: ${model}.`)
   }
 
-  push("socket", "Соединение с Google", "ok", `Websocket открыт и setup принят за ${setupAt - openedAt} мс. Модель ${model}.`)
+  push("socket", "Голосовое соединение", "ok", `Websocket открыт и setup принят за ${setupAt - openedAt} мс. Модель ${model}.`)
   push(
     "resume",
     "Восстановление после обрыва",
     resumeHandle ? "ok" : "warn",
     resumeHandle
-      ? "Google выдал handle — после обрыва разговор продолжится с того же места."
-      : "Google не прислал handle. Связь работает, но после обрыва разговор начнётся заново.",
+      ? "Сервис выдал handle — после обрыва разговор продолжится с того же места."
+      : "Сервис не прислал handle. Связь работает, но после обрыва разговор начнётся заново.",
   )
 
   if (!audioBytes) {
