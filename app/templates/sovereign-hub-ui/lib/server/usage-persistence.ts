@@ -37,7 +37,7 @@ function cacheKey(userId: string, eventType: UsageEventType) {
 
 export async function resolveAuthUserUuid(userId: string): Promise<string | null> {
   const value = userId.trim()
-  return value && value !== "guest" ? value : null
+  return value && value !== "guest" && !value.startsWith("guest:") ? value : null
 }
 
 export async function getPersistedUsage(userId: string, eventType: UsageEventType): Promise<number> {
@@ -65,7 +65,7 @@ export function getPersistedUsageOverview() {
     const eventType = rest.slice(separator + 1) as UsageEventType
     if (!(eventType in totals)) continue
     totals[eventType] += Number(value) || 0
-    if (userId && userId !== "guest") users.add(userId)
+    if (userId && userId !== "guest" && !userId.startsWith("guest:")) users.add(userId)
   }
 
   return {
