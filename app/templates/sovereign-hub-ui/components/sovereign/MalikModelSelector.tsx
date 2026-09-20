@@ -32,6 +32,11 @@ function subscribeMobileSelector(onChange: () => void) {
 // canonical host so a temporary favicon/CDN failure does not turn the selector
 // into generic letter tiles.
 const MODEL_BRANDS: Record<MalikModelId, BrandIcon> = {
+  "malik-deepseek-v41": { label: "DeepSeek", urls: ["https://www.deepseek.com/favicon.ico", "https://deepseek.com/favicon.ico"], fallback: "D" },
+  "malik-bonsai-27b": { label: "Together AI", urls: ["https://www.together.ai/favicon.ico", "https://together.ai/favicon.ico"], fallback: "T" },
+  "malik-glm-47-flash": { label: "Z.ai GLM", urls: ["https://chat.z.ai/favicon.ico", "https://z.ai/favicon.ico"], fallback: "Z" },
+  "malik-gemma-4-26b": { label: "Google Gemma", urls: ["https://www.google.com/favicon.ico"], fallback: "G" },
+  "malik-nemotron-3-120b": { label: "NVIDIA Nemotron", urls: ["https://www.nvidia.com/favicon.ico"], fallback: "N" },
   "malik-qwen-397b": { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
   "malik-reason-753b": { label: "Z.ai GLM", urls: ["https://chat.z.ai/favicon.ico", "https://z.ai/favicon.ico"], fallback: "Z" },
   "malik-core-300b": { label: "Baidu ERNIE", urls: ["https://ernie.baidu.com/favicon.ico", "https://www.baidu.com/favicon.ico"], fallback: "E" },
