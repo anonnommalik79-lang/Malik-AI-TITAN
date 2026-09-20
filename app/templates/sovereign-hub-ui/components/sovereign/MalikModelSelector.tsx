@@ -71,14 +71,15 @@ function ModelBrandIcon({ model, compact = false }: { model: MalikModelDefinitio
 }
 
 function ModelRow({ model, selected, onChoose }: { model: MalikModelDefinition; selected: boolean; onChoose: () => void }) {
+  const catalogOnly = model.access === "catalog"
   return (
-    <button type="button" role="menuitemradio" aria-checked={selected} className={cn("malik-model-selector__row", selected && "is-selected")} onClick={onChoose}>
+    <button type="button" role="menuitemradio" aria-checked={selected} aria-disabled={catalogOnly || undefined} disabled={catalogOnly} className={cn("malik-model-selector__row", selected && "is-selected")} onClick={catalogOnly ? undefined : onChoose} title={catalogOnly ? "Каталог провайдера · PAYG выключен" : undefined}>
       <ModelBrandIcon model={model} />
       <span className="malik-model-selector__copy">
         <span className="malik-model-selector__name">{model.label}</span>
         <span className="malik-model-selector__description">{model.description}</span>
       </span>
-      <span className="malik-model-selector__state">{selected ? <Check aria-label="Выбрано" /> : null}</span>
+      <span className="malik-model-selector__state">{selected ? <Check aria-label="Выбрано" /> : catalogOnly ? <span className="is-free">Каталог</span> : null}</span>
     </button>
   )
 }
