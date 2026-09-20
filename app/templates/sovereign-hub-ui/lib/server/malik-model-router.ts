@@ -177,38 +177,6 @@ function safeProviderTokens(model: MalikModelDefinition, requested: number, code
   // otherwise healthy providers look "broken" on real files and large coding
   // tasks. Keep only provider-capability ceilings here; the user's 10K/day
   // quota is enforced separately by Malik Compute.
-  if (model.access === "catalog" && env("ALLOW_ROUTER_PAYG_MODELS").toLowerCase() !== "true") {
-    return missing(`${model.label} есть в каталоге провайдера, но PAYG-вызов отключён для защиты баланса.`) as never
-  }
-  if (model.provider === "xkiro") {
-    const key = env("XKIRO_API_KEY") || env("XKIRO_API_KEY_1")
-    if (!key) return missing(`${model.label} временно недоступна: XKIRO_API_KEY_1 не настроен.`) as never
-    return {
-      url: `${(env("XKIRO_BASE_URL") || "https://api.xkiro.com/v1").replace(/\/+$/, "")}/chat/completions`,
-      key, model: model.providerModel, stream: false, maxTokens: commonTokens,
-      temperature: commonTemperature, timeoutMs: Math.max(commonTimeout, 45_000),
-      headers: { "x-api-key": key },
-    }
-  }
-  if (model.provider === "llm7") {
-    const key = env("LLM7_API_KEY") || env("LLM7_API_KEY_1")
-    if (!key) return missing(`${model.label} временно недоступна: LLM7_API_KEY_1 не настроен.`) as never
-    return {
-      url: `${(env("LLM7_BASE_URL") || "https://api.llm7.io/v1").replace(/\/+$/, "")}/chat/completions`,
-      key, model: model.providerModel, stream: false, maxTokens: commonTokens,
-      temperature: commonTemperature, timeoutMs: Math.max(commonTimeout, 45_000),
-    }
-  }
-  if (model.provider === "nara") {
-    const key = env("NARA_API_KEY") || env("NARA_API_KEY_1")
-    if (!key) return missing(`${model.label} временно недоступна: NARA_API_KEY не настроен.`) as never
-    return {
-      url: `${(env("NARA_BASE_URL") || "https://router.bynara.id/v1").replace(/\/+$/, "")}/chat/completions`,
-      key, model: model.providerModel, stream: false, maxTokens: commonTokens,
-      temperature: commonTemperature, timeoutMs: Math.max(commonTimeout, 45_000),
-    }
-  }
-
   if (model.provider === "groq") {
     if (/qwen\/qwen3\.8-27b/i.test(model.providerModel)) return Math.min(requested, 10_000)
     if (/openai\/gpt-oss-(?:20b|120b)/i.test(model.providerModel)) return Math.min(requested, 10_000)
@@ -304,6 +272,50 @@ function providerRuntime(
       timeoutMs: Math.max(commonTimeout, 45_000),
     }
   }
+  if (model.access === "catalog" && env("ALLOW_ROUTER_PAYG_MODELS").toLowerCase() !== "true") {
+    return missing(`${model.label} есть в каталоге провайдера, но PAYG-вызов отключён для защиты баланса.`) as never
+  }
+  if (model.provider === "xkiro") {
+    const key = env("XKIRO_API_KEY") || env("XKIRO_API_KEY_1")
+    if (!key) return missing(`${model.label} временно недоступна: XKIRO_API_KEY_1 не настроен.`) as never
+    return {
+      url: `${(env("XKIRO_BASE_URL") || "https://api.xkiro.com/v1").replace(/\/+$/, "")}/chat/completions`,
+      key,
+      model: model.providerModel,
+      stream: false,
+      maxTokens: commonTokens,
+      temperature: commonTemperature,
+      timeoutMs: Math.max(commonTimeout, 45_000),
+      headers: { "x-api-key": key },
+    }
+  }
+  if (model.provider === "llm7") {
+    const key = env("LLM7_API_KEY") || env("LLM7_API_KEY_1")
+    if (!key) return missing(`${model.label} временно недоступна: LLM7_API_KEY_1 не настроен.`) as never
+    return {
+      url: `${(env("LLM7_BASE_URL") || "https://api.llm7.io/v1").replace(/\/+$/, "")}/chat/completions`,
+      key,
+      model: model.providerModel,
+      stream: false,
+      maxTokens: commonTokens,
+      temperature: commonTemperature,
+      timeoutMs: Math.max(commonTimeout, 45_000),
+    }
+  }
+  if (model.provider === "nara") {
+    const key = env("NARA_API_KEY") || env("NARA_API_KEY_1")
+    if (!key) return missing(`${model.label} временно недоступна: NARA_API_KEY не настроен.`) as never
+    return {
+      url: `${(env("NARA_BASE_URL") || "https://router.bynara.id/v1").replace(/\/+$/, "")}/chat/completions`,
+      key,
+      model: model.providerModel,
+      stream: false,
+      maxTokens: commonTokens,
+      temperature: commonTemperature,
+      timeoutMs: Math.max(commonTimeout, 45_000),
+    }
+  }
+
   if (model.provider === "groq") {
     const key = env("GROQ_API_KEY")
     if (!key) return missing(`${model.label} временно недоступна: серверный провайдер не настроен.`) as never
