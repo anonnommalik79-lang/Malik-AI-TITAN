@@ -144,14 +144,27 @@ function historyTitle(prompt: string, genre: Genre) {
  */
 function providerMessage(raw: unknown) {
   const text = String(raw || "").trim()
+
+  // Free.ai can reject a valid free request when its public queue is saturated.
+  // This is not an account suspension and must win over any later deAPI
+  // fallback error that happens to contain the word "suspended".
+  if (/queue_at_capacity|free music queue is full|~?\s*\d+\s*hours? of jobs ahead|queue is full/i.test(text)) {
+    return "Бесплатная очередь Free.ai сейчас переполнена. Ключ работает, но свободных слотов нет — попробуйте позже."
+  }
+  if (/free\.ai/i.test(text) && /rate.?limit|too many requests|429/i.test(text)) {
+    return "Free.ai временно достиг лимита запросов. Попробуйте ещё раз позже."
+  }
+  if (/free\.ai/i.test(text) && /unauthor|forbidden|api key|token|401|403/i.test(text)) {
+    return "Free.ai не принял серверный API-ключ. Проверьте FREE_AI_API_KEY в Render."
+  }
   if (/suspend/i.test(text)) {
-    return "Аккаунт музыкального провайдера приостановлен — генерация не пройдёт, пока он не восстановлен. Ответ сервиса: " + text
+    return "Резервный музыкальный провайдер deAPI приостановлен. Основной Free.ai тоже не смог принять этот запрос."
   }
   if (/insufficient|balance|credit|quota|payment/i.test(text)) {
-    return "У музыкального провайдера закончился баланс или лимит. Ответ сервиса: " + text
+    return "У музыкального провайдера закончился баланс или лимит."
   }
   if (/unauthor|forbidden|api key|token/i.test(text)) {
-    return "Музыкальный провайдер не принял ключ сервера. Ответ сервиса: " + text
+    return "Музыкальный провайдер не принял ключ сервера."
   }
   return text || "Сервис генерации не принял запрос."
 }
@@ -242,6 +255,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   /** The real length of the loaded audio file, once the browser has read its header. */
   const [audioDuration, setAudioDuration] = useState(0)
   const [notice, setNotice] = useState("")
+  const [lastSubmitFailed, setLastSubmitFailed] = useState(false)
   const [config, setConfig] = useState<MusicConfig | null>(null)
   const [history, setHistory] = useState<MusicHistoryItem[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -453,6 +467,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       return
     }
     setGenerating(true)
+    setLastSubmitFailed(false)
     setNotice(
       !nextInstrumental && !nextLyrics.trim()
         ? "Malik AI пишет слова песни по вашему запросу…"
@@ -486,6 +501,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
       if (!response.ok || !data?.ok || !data?.requestId) {
         setGenerating(false)
+        setLastSubmitFailed(true)
         setNotice(providerMessage(data?.error))
         await refreshConfig()
         return
@@ -501,6 +517,8 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         setLyricsLanguage(resolvedLanguage)
         setLyricsEnabled(true)
       }
+
+      setLastSubmitFailed(false)
 
       const item: MusicHistoryItem = {
         requestId: String(data.requestId),
@@ -537,6 +555,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       )
     } catch (error) {
       setGenerating(false)
+      setLastSubmitFailed(true)
       setNotice(error instanceof Error ? error.message : "Не удалось отправить запрос.")
     }
   }
@@ -715,6 +734,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const statusLabel =
     activeHistoryItem?.status === "queued" ? "В очереди" :
     activeHistoryItem?.status === "processing" ? "Генерация" :
+    lastSubmitFailed ? "ОШИБКА" :
     trackUrl ? "AUDIO READY" : genre.label.toUpperCase()
 
   // The chosen length until the file itself says otherwise, then the truth.
