@@ -579,13 +579,7 @@ def gemini_live_token():
     if request.method == "OPTIONS":
         return "", 204
 
-    key = _env(
-        "MALIK_VOICE_GEMINI_KEY",
-        "GEMINI_VOICE_API_KEY",
-        "GEMINI_API_KEY",
-        "GOOGLE_GENERATIVE_AI_API_KEY",
-        "GOOGLE_AI_API_KEY",
-    )
+    key = _env("MALIK_VOICE_GEMINI_KEY")
     if not key:
         return jsonify({"ok": False, "error": "voice_live_not_configured"}), 503
 
@@ -835,7 +829,7 @@ def voice_health():
         "runtime": "flask-render",
         "kokoroKazakh": {"enabled": _KK_ENABLED, "repo": _KK_REPO, "loaded": _KK_MODEL is not None, "voice": "km_m1"},
         "deepgram": bool(_env("DEEPGRAM_VOICE_API_KEY", "DEEPGRAM_API_KEY")),
-        "gemini": bool(_env("GEMINI_VOICE_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY")),
+        "gemini": bool(_env("MALIK_VOICE_GEMINI_KEY")),
         "groqStt": bool(_env("GROQ_VOICE_API_KEY", "GROQ_API_KEY")),
         "cloudflareStt": bool(_env("CLOUDFLARE_VOICE_API_TOKEN", "CLOUDFLARE_API_TOKEN") and _env("CLOUDFLARE_VOICE_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID")),
     })
