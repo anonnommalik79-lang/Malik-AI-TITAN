@@ -11,6 +11,7 @@ import {
   type MalikImageModelId,
 } from "@/lib/media/image-models"
 import type { AIPlan } from "@/lib/ai/types"
+import { ROUTER_IMAGE_CATALOG, type RouterCatalogEntry } from "@/lib/ai/router-catalog"
 
 const cn = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ")
 
@@ -57,6 +58,35 @@ function OfficialBrandIcon({ model, compact = false }: { model: MalikImageModelD
         style={{ width: "100%", height: "100%", display: "block", objectFit: "contain", borderRadius: 7 }}
       />
     </span>
+  )
+}
+
+
+function catalogBrandUrl(entry: RouterCatalogEntry) {
+  const domains: Record<string, string> = {
+    openai: "openai.com",
+    xai: "x.ai",
+    google: "google.com",
+    sensenova: "sensetime.com",
+    nara: "router.bynara.id",
+    router: entry.provider === "llm7" ? "llm7.io" : entry.provider === "nara" ? "router.bynara.id" : "xkiro.com",
+  }
+  const domain = domains[entry.brand] || (entry.provider === "llm7" ? "llm7.io" : entry.provider === "nara" ? "router.bynara.id" : "xkiro.com")
+  return `https://www.google.com/s2/favicons?sz=128&domain_url=https://${domain}`
+}
+
+function CatalogImageRow({ entry }: { entry: RouterCatalogEntry }) {
+  return (
+    <button type="button" className="malik-model-selector__row" disabled aria-disabled="true" title="Каталог провайдера · PAYG отключён">
+      <span className="malik-model-selector__mark" aria-hidden="true" style={{ overflow: "hidden", background: "#fff" }}>
+        <img src={catalogBrandUrl(entry)} alt="" style={{ width: "100%", height: "100%", display: "block", objectFit: "contain", borderRadius: 7 }} />
+      </span>
+      <span className="malik-model-selector__copy">
+        <span className="malik-model-selector__name">{entry.label}</span>
+        <span className="malik-model-selector__description">{entry.provider.toUpperCase()} · каталог · PAYG выключен</span>
+      </span>
+      <span className="malik-model-selector__state"><span className="is-free">Каталог</span></span>
+    </button>
   )
 }
 
@@ -235,6 +265,9 @@ export function MalikImageModelSelector({
             allowed={canUseMalikImageModel(model.id, plan)}
             onChoose={() => choose(model)}
           />
+        ))}
+        {ROUTER_IMAGE_CATALOG.filter((entry) => !(entry.provider === "xkiro" && entry.providerModel === "sensenova/sensenova-u1.5-lite")).map((entry) => (
+          <CatalogImageRow key={`${entry.provider}:${entry.providerModel}`} entry={entry} />
         ))}
       </div>
       <div className="malik-model-selector__divider" />
