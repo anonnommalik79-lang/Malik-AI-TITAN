@@ -1,5 +1,6 @@
 import { asPlainText, malikGodAnswer } from "@/lib/malik-god-router"
 import { generateProjectWithBrain } from "@/lib/ai/project-builder"
+import { DEFAULT_MALIK_MODEL_ID } from "@/lib/ai/malik-models"
 import { checkUsageLimit, recordChatUsage } from "@/lib/limits/rate-limit"
 import {
   MalikModelRouteError,
@@ -78,7 +79,7 @@ function textResponse(content: string) {
     headers: {
       "content-type": "text/plain; charset=utf-8",
       "cache-control": "no-store",
-      "x-malik-router": "malik-coder-1-orchestrator",
+      "x-malik-router": "malik-max-router",
     },
   })
 }
@@ -296,7 +297,7 @@ async function persistFounderChatTurn(body: any, entitlement: RequestEntitlement
 }
 
 function shouldRunMalikCoder(selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>) {
-  return !selection || selection.modelId === MALIK_CODER_MODEL_ID
+  return selection?.modelId === MALIK_CODER_MODEL_ID
 }
 
 async function runSelectedAnswer(
@@ -354,7 +355,7 @@ async function runSelectedAnswer(
         usedWeb: false,
         sources: [],
         attempts: [],
-        selectedModelId: selection?.modelId || MALIK_CODER_MODEL_ID,
+        selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
         multimodal: {
           files: attachmentRoute.files,
           estimatedTokens: attachmentRoute.estimatedTokens,
@@ -404,9 +405,10 @@ async function runSelectedAnswer(
             : maxOutputTokens,
         }
       : executionBody
+    const selectedModelId = selection?.modelId || DEFAULT_MALIK_MODEL_ID
     const answer = await malikGodAnswer(
       selectedBody,
-      selection ? { modelId: selection.modelId } : undefined,
+      { modelId: selectedModelId },
       onProgress,
     )
     return agentRuntime ? { ...answer, agentRuntime } : answer
@@ -452,7 +454,7 @@ async function runProjectAnswer(
   onStatus?: (text: string) => void,
 ) {
   let prompt = coderPrompt(body)
-  const selectedModelId = selection?.modelId || MALIK_CODER_MODEL_ID
+  const selectedModelId = selection?.modelId || DEFAULT_MALIK_MODEL_ID
   const requestAttachments = hasMalikAttachments(body?.attachments) ? body.attachments : []
 
   if (requestAttachments.length) {
@@ -731,7 +733,7 @@ async function handlePOST(request: Request) {
 
     const identity = malikIdentityAnswer(body, ownerMode)
     if (identity) {
-      if (wantsSse(request, body)) return identitySseResponse(identity, selection?.modelId || MALIK_CODER_MODEL_ID)
+      if (wantsSse(request, body)) return identitySseResponse(identity, selection?.modelId || DEFAULT_MALIK_MODEL_ID)
       return textResponse(identity)
     }
 
