@@ -609,14 +609,18 @@ function liveSseResponse(
             console.warn("[MALIK_MULTIMODAL_QUOTA] record failed", error instanceof Error ? error.message : String(error))
           }
         }
-        await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0).catch((error) => {
-          console.warn("[MALIK_CHAT_USAGE]", error instanceof Error ? error.message : String(error))
-        })
         observeComputeResult(answer)
         const content = asPlainText(answer)
+        // Flush the answer to the UI before waiting on persisted usage storage.
+        // Quota admission already happened before generation, so this keeps
+        // accounting intact without making an instant answer look like it is
+        // still "thinking" while a database write finishes.
         send("content", {
           type: "content",
           content: protectChatCodeFences(content),
+        })
+        await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0).catch((error) => {
+          console.warn("[MALIK_CHAT_USAGE]", error instanceof Error ? error.message : String(error))
         })
         await persistFounderChatTurn(body, entitlement, answer)
         stopHeartbeat()
