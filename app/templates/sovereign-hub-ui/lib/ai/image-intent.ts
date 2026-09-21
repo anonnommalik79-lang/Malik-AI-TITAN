@@ -26,11 +26,13 @@ export function isExplicitImageEditRequest(input: string, hasImage = false): boo
   if (!text || VIDEO_COMMAND_PATTERN.test(text) || EXPLANATION_START_PATTERN.test(text)) return false
   if (!hasImage && !IMAGE_NOUN_PATTERN.test(text)) return false
   if (/^\s*(?:напиши|write|добавь|измени|исправь)\s+(?:мне\s+)?(?:код|промпт|prompt|code|функцию|скрипт)(?![\p{L}\p{N}_])/iu.test(text)) return false
-  const edit = /(?:измени|изменить|поменяй|меняй|замени|заменить|убери|убрать|удали|удалить|добавь|добавить|поставь|поставить|вставь|вставить|размести|разместить|перемести|переместить|дорисуй|дорисовать|отредактируй|редактируй|перекрась|ретушируй|улучши|осветли|затемни|обрежь|вырежи|edit|change|modify|replace|remove|erase|add|insert|place|move|retouch|recolor|crop|өзгерт|ауыстыр|алып\s+таста|қос|енгіз|өшір)(?![\p{L}\p{N}_])/iu
+  const edit = /(?:измени|изменить|поменяй|меняй|смени|сменить|замени|заменить|убери|убрать|удали|удалить|добавь|добавить|поставь|поставить|вставь|вставить|размести|разместить|перемести|переместить|дорисуй|дорисовать|отредактируй|редактируй|перекрась|ретушируй|улучши|осветли|затемни|обрежь|вырежи|edit|change|modify|replace|remove|erase|add|insert|place|move|retouch|recolor|crop|өзгерт|ауыстыр|алып\s+таста|қос|енгіз|өшір)(?![\p{L}\p{N}_])/iu
   const lettering = /(?:напиши|нанеси|подпиши|надпись|write|put\s+text|жаз)(?![\p{L}\p{N}_])/iu
-  const onImage = /(?:фото|фотк|изображени|картинк|сурет|image|photo|здесь|сверху|снизу|на\s+(?:нём|нем|ней))/iu
-  const transform = /(?:сделай|сделать|make)\s+.{0,45}(?:фон|цвет|волос|одежд|background|color|brighter|darker)/iu
-  return edit.test(text) || transform.test(text) || (lettering.test(text) && onImage.test(text))
+  const onImage = /(?:фото|фотк|изображени|картинк|сурет|image|photo|здесь|тут|сюда|сверху|снизу|на\s+(?:нём|нем|ней))/iu
+  const visualObject = /(?:фон|цвет|волос|одежд|логотип|лого(?![\p{L}\p{N}_])|эмблем|герб|значок|бренд|background|color|logo|badge|crest|brand|brighter|darker)/iu
+  const transform = /(?:сделай|сделать|пусть|make)\s+.{0,80}(?:фон|цвет|волос|одежд|логотип|лого(?![\p{L}\p{N}_])|эмблем|герб|значок|бренд|background|color|logo|badge|crest|brand|brighter|darker)/iu
+  const contextualTransform = hasImage && /(?:сделай|сделать|пусть|хочу|make)(?![\p{L}\p{N}_])/iu.test(text) && visualObject.test(text)
+  return edit.test(text) || transform.test(text) || contextualTransform || (lettering.test(text) && onImage.test(text))
     || (hasImage && isExplicitImageGenerationRequest(input))
 }
 

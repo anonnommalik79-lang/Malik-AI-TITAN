@@ -23,7 +23,7 @@ function load(file, stubs = {}) {
 }
 
 const { isExplicitImageEditRequest: edit, isExplicitImageGenerationRequest: create } = load('lib/ai/image-intent.ts')
-for (const prompt of ['убери человека справа', 'добавь кота', 'добавь чёрный спорткар на зелёную траву', 'поставь машину слева', 'вставь человека в кадр', 'размести самолёт рядом с домом', 'перемести авто вправо', 'дорисуй дерево', 'замени фон', 'сделай фон белым', 'напиши на фото «С днём рождения!»', 'сгенерируй фото меня на пляже', 'remove the car', 'insert a black sports car on the lawn', 'change the sky', 'суретке гүл қос']) assert.equal(edit(prompt, true), true, prompt)
+for (const prompt of ['убери человека справа', 'добавь кота', 'добавь чёрный спорткар на зелёную траву', 'поставь машину слева', 'вставь человека в кадр', 'размести самолёт рядом с домом', 'перемести авто вправо', 'дорисуй дерево', 'замени фон', 'сделай фон белым', 'смени тут логотип на реал мадрид', 'сделай чтобы тут было логотип барселоны', 'замени эмблему на Real Madrid', 'напиши на фото «С днём рождения!»', 'сгенерируй фото меня на пляже', 'remove the car', 'replace the logo with Barcelona badge', 'insert a black sports car on the lawn', 'change the sky', 'суретке гүл қос']) assert.equal(edit(prompt, true), true, prompt)
 for (const prompt of ['что на фото?', 'опиши изображение', 'как убрать человека с фото?', 'напиши код для фото', 'напиши промпт для картинки', 'переведи текст на фото', '/video добавь движение']) assert.equal(edit(prompt, true), false, prompt)
 assert.equal(edit('добавь пункт в список'), false)
 assert.equal(edit('убери человека на фото'), true)
@@ -33,6 +33,10 @@ const dashboardSource = fs.readFileSync('components/sovereign/dashboard.tsx', 'u
 assert.match(dashboardSource, /const forcedImageEdit = hasRequestImageAttachment && isExplicitImageEditRequest\(cleanContent, true\)/)
 assert.match(dashboardSource, /const requestedInlineMediaKind = forcedImageEdit[\s\S]*?\? "image"/)
 assert.match(dashboardSource, /promptLikelyEditsRecentImage/)
+assert.match(dashboardSource, /previousUpload/)
+assert.match(dashboardSource, /persistChatAttachmentsForHistory/)
+assert.match(dashboardSource, /\/api\/chat\/attachment/)
+assert.match(dashboardSource, /MALIK_SESSION_MEMORY/)
 assert.match(dashboardSource, /MALIK_MEDIA_ACTION_HISTORY/)
 assert.match(dashboardSource, /asksAboutMalikMediaActions/)
 assert.match(dashboardSource, /buildMalikMediaActionAnswer/)

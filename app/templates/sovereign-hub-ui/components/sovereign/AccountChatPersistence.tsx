@@ -9,6 +9,9 @@ const MIGRATION_MARKER = `${DASHBOARD_STORAGE_KEY}:account-migrated-v1`
 const BACKGROUND_TURN_PREFIX = "malik_background_chat_turns_v1:"
 const BACKGROUND_STREAM_PATH = "/api/stream/background"
 const CHAT_STREAM_PATH = "/api/stream"
+const ACCOUNT_CHAT_STATE_PATH = "/api/chat/state"
+const ACCOUNT_CHAT_STATE_EVENT = "malik-dashboard-full-state-v1"
+const ACCOUNT_REMOTE_SAVED_AT_PREFIX = "malik_dashboard_remote_saved_at_v1:"
 const MAX_PENDING_TURNS = 40
 const RECOVERY_POLL_MS = 1600
 const MAX_RECOVERY_AGE_MS = 7 * 24 * 60 * 60 * 1000
@@ -480,6 +483,119 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
       if (proto.getItem === routedGetItem) proto.getItem = previousGetItem
       if (proto.setItem === routedSetItem) proto.setItem = previousSetItem
       if (proto.removeItem === routedRemoveItem) proto.removeItem = previousRemoveItem
+    }
+  }, [accountId])
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return
+
+    const accountKey = cleanAccountId(accountId)
+    const savedAtKey = `${ACCOUNT_REMOTE_SAVED_AT_PREFIX}${accountKey}`
+    let disposed = false
+    let remoteReady = false
+    let remoteConfigured = true
+    let pendingRaw = ""
+    let timer = 0
+    let inFlight = Promise.resolve()
+
+    const parseTime = (value: unknown) => {
+      const parsed = Date.parse(String(value || ""))
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+
+    const pushSnapshot = (raw: string) => {
+      if (!raw || !remoteReady || !remoteConfigured || disposed) return
+      pendingRaw = raw
+      if (timer) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timer = 0
+        const nextRaw = pendingRaw
+        pendingRaw = ""
+        if (!nextRaw || disposed) return
+
+        inFlight = inFlight.catch(() => {}).then(async () => {
+          let state: unknown
+          try { state = JSON.parse(nextRaw) } catch { return }
+          const response = await fetch(ACCOUNT_CHAT_STATE_PATH, {
+            method: "PUT",
+            credentials: "same-origin",
+            cache: "no-store",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ state }),
+          }).catch(() => null)
+          if (!response?.ok) {
+            pendingRaw = nextRaw
+            return
+          }
+          const payload = await response.json().catch(() => ({}))
+          if (payload?.configured === false) {
+            remoteConfigured = false
+            return
+          }
+          if (typeof payload?.savedAt === "string") {
+            try { window.localStorage.setItem(savedAtKey, payload.savedAt) } catch {}
+          }
+        })
+      }, 850)
+    }
+
+    const onFullSnapshot = (event: Event) => {
+      const raw = (event as CustomEvent<string>).detail
+      if (typeof raw !== "string" || !raw) return
+      pendingRaw = raw
+      if (!remoteReady) return
+      try { window.localStorage.setItem(savedAtKey, new Date().toISOString()) } catch {}
+      pushSnapshot(raw)
+    }
+
+    window.addEventListener(ACCOUNT_CHAT_STATE_EVENT, onFullSnapshot)
+
+    void (async () => {
+      try {
+        const response = await fetch(ACCOUNT_CHAT_STATE_PATH, {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        })
+        if (!response.ok) {
+          remoteReady = true
+          if (pendingRaw) pushSnapshot(pendingRaw)
+          return
+        }
+
+        const payload = await response.json().catch(() => ({}))
+        remoteConfigured = payload?.configured !== false
+        const remoteState = payload?.state && typeof payload.state === "object" ? payload.state : null
+        const remoteSavedAt = parseTime(payload?.savedAt)
+        const localSavedAt = parseTime(window.localStorage.getItem(savedAtKey))
+        const localRaw = window.localStorage.getItem(DASHBOARD_STORAGE_KEY) || ""
+        const remoteRaw = remoteState ? JSON.stringify(remoteState) : ""
+
+        if (remoteRaw && remoteSavedAt > localSavedAt) {
+          try { window.localStorage.setItem(savedAtKey, String(payload.savedAt || new Date().toISOString())) } catch {}
+          pendingRaw = ""
+          remoteReady = true
+          if (remoteRaw !== localRaw) {
+            window.localStorage.setItem(DASHBOARD_STORAGE_KEY, remoteRaw)
+            window.location.reload()
+            return
+          }
+        } else {
+          remoteReady = true
+          const candidate = pendingRaw || localRaw
+          if (candidate && (!remoteRaw || localSavedAt > remoteSavedAt)) pushSnapshot(candidate)
+        }
+      } catch {
+        remoteReady = true
+        if (pendingRaw) pushSnapshot(pendingRaw)
+      }
+    })()
+
+    return () => {
+      disposed = true
+      if (timer) window.clearTimeout(timer)
+      window.removeEventListener(ACCOUNT_CHAT_STATE_EVENT, onFullSnapshot)
     }
   }, [accountId])
 

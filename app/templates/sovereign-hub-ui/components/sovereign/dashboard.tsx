@@ -366,6 +366,32 @@ function buildMalikMediaHistoryContext(messages: Message[]) {
   ].join("\n")
 }
 
+function buildPersistentSessionMemoryContext(messages: Message[], recentWindow = 32) {
+  const older = messages.slice(0, Math.max(0, messages.length - recentWindow))
+  if (!older.length) return ""
+
+  const lines = older.map((message, index) => {
+    const role = message.role === "assistant" ? "Assistant" : "User"
+    const content = String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 900)
+    const media = describeReadyMediaAction(message.generatedMedia)
+    const attachments = (message.attachments || [])
+      .map((item) => `${item.kind}:${item.name}`)
+      .slice(0, 6)
+      .join(", ")
+    const detail = [content, media, attachments ? `attachments: ${attachments}` : ""].filter(Boolean).join(" | ")
+    return detail ? `${index + 1}. ${role}: ${detail}` : ""
+  }).filter(Boolean)
+
+  if (!lines.length) return ""
+  let body = lines.join("\n")
+  if (body.length > 30_000) body = `${body.slice(0, 9_000)}\n…\n${body.slice(-20_000)}`
+  return [
+    "[MALIK_SESSION_MEMORY]",
+    "Persistent earlier context from this exact chat. Treat it as factual conversation history and keep continuity with it.",
+    body,
+  ].join("\n")
+}
+
 
 function promptRefersToRecentImage(value: string) {
   const text = String(value || "").trim().toLowerCase()
@@ -420,22 +446,17 @@ async function makeVisionSizedBlob(source: Blob): Promise<Blob> {
 function promptLikelyEditsRecentImage(value: string) {
   const text = String(value || "").trim().toLowerCase()
   if (!text) return false
-  const editVerb = /(?:добавь|добавить|поставь|вставь|размести|перемести|убери|удали|замени|измени|дорисуй|перекрась|ретушируй|сделай|edit|add|insert|place|move|remove|replace|change|modify)/iu
-  const visualTarget = /(?:сюда|здесь|тут|там|кадр|фото|фотк|картин|изображ|фон|небо|трав|газон|машин|авто|спорткар|человек|лицо|волос|одежд|цвет|свет|тень|дом|здани|дорог|дерев|image|photo|picture|background|sky|grass|lawn|car|person|face|hair|clothes|shadow)/iu
+  const editVerb = /(?:добавь|добавить|поставь|вставь|размести|перемести|убери|удали|замени|измени|смени|сменить|дорисуй|перекрась|ретушируй|сделай|edit|add|insert|place|move|remove|replace|change|modify)/iu
+  const visualTarget = /(?:сюда|здесь|тут|там|кадр|фото|фотк|картин|изображ|фон|логотип|лого|эмблем|герб|значок|бренд|небо|трав|газон|машин|авто|спорткар|человек|лицо|волос|одежд|цвет|свет|тень|дом|здани|дорог|дерев|image|photo|picture|background|logo|badge|crest|brand|sky|grass|lawn|car|person|face|hair|clothes|shadow)/iu
   return editVerb.test(text) && visualTarget.test(text)
 }
 
-async function latestGeneratedImageAttachment(messages: Message[], prompt: string): Promise<ChatAttachment | null> {
-  if (!(promptRefersToRecentImage(prompt) || promptLikelyEditsRecentImage(prompt)) || typeof window === "undefined") return null
-
-  const latest = [...messages].reverse().find((message) => {
-    const media = message.generatedMedia
-    return media?.kind === "image" && media.status === "ready" && Boolean(media.url || media.fallbackUrl || media.thumbnailUrl)
-  })
-  const media = latest?.generatedMedia
-  const reference = media?.url || media?.fallbackUrl || media?.thumbnailUrl || ""
-  if (!media || !reference) return null
-
+async function attachmentFromImageReference(
+  reference: string,
+  id: string,
+  name: string,
+): Promise<ChatAttachment | null> {
+  if (!reference || typeof window === "undefined") return null
   try {
     const resolved = await resolveGeneratedImageUrl(reference)
     const response = await fetch(resolved, { cache: "force-cache" })
@@ -446,8 +467,8 @@ async function latestGeneratedImageAttachment(messages: Message[], prompt: strin
     const blob = await makeVisionSizedBlob(source)
     const mime = blob.type.startsWith("image/") ? blob.type : "image/jpeg"
     return {
-      id: `generated-visual-context-${media.id}`,
-      name: `malik-generated-context-${media.id}.jpg`,
+      id,
+      name,
       mime,
       size: blob.size,
       kind: "image",
@@ -456,6 +477,69 @@ async function latestGeneratedImageAttachment(messages: Message[], prompt: strin
   } catch {
     return null
   }
+}
+
+async function latestGeneratedImageAttachment(messages: Message[], prompt: string): Promise<ChatAttachment | null> {
+  if (!(promptRefersToRecentImage(prompt) || promptLikelyEditsRecentImage(prompt)) || typeof window === "undefined") return null
+
+  for (const message of [...messages].reverse()) {
+    const media = message.generatedMedia
+    if (media?.kind === "image" && media.status === "ready") {
+      const reference = media.url || media.fallbackUrl || media.thumbnailUrl || ""
+      const generated = await attachmentFromImageReference(
+        reference,
+        `generated-visual-context-${media.id}`,
+        `malik-generated-context-${media.id}.jpg`,
+      )
+      if (generated) return generated
+    }
+
+    const previousUpload = [...(message.attachments || [])].reverse().find((item) =>
+      item.kind === "image" && Boolean(item.url),
+    )
+    if (previousUpload?.url) {
+      const uploaded = await attachmentFromImageReference(
+        previousUpload.url,
+        `uploaded-visual-context-${previousUpload.id}`,
+        previousUpload.name || "malik-uploaded-context.jpg",
+      )
+      if (uploaded) return uploaded
+    }
+  }
+
+  return null
+}
+
+function lightweightHistoryAttachment(item: ChatAttachment): ChatAttachment {
+  return toStorableAttachment(item)
+}
+
+async function persistChatAttachmentsForHistory(items: ChatAttachment[]) {
+  return Promise.all(items.map(async (item) => {
+    const lightweight = lightweightHistoryAttachment(item)
+    if (item.kind !== "image" || !item.base64) return lightweight
+    if (typeof item.url === "string" && (/^https:\/\//i.test(item.url) || item.url.startsWith("/"))) return lightweight
+
+    try {
+      const response = await clientFetchWithTimeout("/api/chat/attachment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file: {
+            name: item.name,
+            mime: item.mime,
+            size: item.size,
+            base64: item.base64,
+          },
+        }),
+      }, 25_000)
+      const payload = await response.json().catch(() => ({}))
+      const durableUrl = typeof payload?.url === "string" ? payload.url : ""
+      return durableUrl ? { ...lightweight, url: durableUrl } : lightweight
+    } catch {
+      return lightweight
+    }
+  }))
 }
 
 // Mirrors the watchdog inside the chat card. Photo generation is synchronous and
@@ -1039,6 +1123,7 @@ type StoredChat = Omit<Chat, "timestamp" | "messages"> & {
 }
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
+const ACCOUNT_CHAT_STATE_EVENT = "malik-dashboard-full-state-v1"
 const AUTH_ADMINS = [MALIK_OWNER_EMAIL]
 
 const isBrowser = () => typeof window !== "undefined"
@@ -1191,11 +1276,31 @@ function stripInlineMediaBytes(media: InlineMediaGeneration): InlineMediaGenerat
   }
 }
 
+function toStorableAttachment(item: ChatAttachment): ChatAttachment {
+  const durableUrl = typeof item.url === "string" && !item.url.startsWith("blob:") ? item.url : undefined
+  const keepText = item.kind === "code" || item.kind === "file" || item.kind === "url"
+  return {
+    id: item.id,
+    name: item.name,
+    mime: item.mime,
+    size: item.size,
+    kind: item.kind,
+    url: durableUrl,
+    text: keepText && typeof item.text === "string" ? item.text.slice(0, 180_000) : undefined,
+    durationSeconds: item.durationSeconds,
+  }
+}
+
 function toStorableMessage(message: Message): Message {
-  if (!message.generatedMedia) return message
+  const attachments = message.attachments?.map(toStorableAttachment)
+  if (!message.generatedMedia) return attachments ? { ...message, attachments } : message
   const generatedMedia = stripInlineMediaBytes(message.generatedMedia)
-  if (generatedMedia === message.generatedMedia) return message
-  return { ...message, generatedMedia, content: buildInlineMediaAssistantText(generatedMedia) }
+  return {
+    ...message,
+    attachments,
+    generatedMedia,
+    content: buildInlineMediaAssistantText(generatedMedia),
+  }
 }
 
 /**
@@ -1214,6 +1319,18 @@ function persistDashboardState(key: string, state: {
   const messages = state.messages.map(toStorableMessage)
   let chats = state.chats.map((chat) => ({ ...chat, messages: chat.messages.map(toStorableMessage) }))
 
+  // Account persistence receives the complete lightweight snapshot before the
+  // browser's ~5MB localStorage fallback starts shedding old chats.
+  try {
+    if (isBrowser()) {
+      window.dispatchEvent(new CustomEvent(ACCOUNT_CHAT_STATE_EVENT, {
+        detail: JSON.stringify({ ...state, chats, messages }),
+      }))
+    }
+  } catch {
+    // Remote account sync is best-effort; local history still remains available.
+  }
+
   for (let attempt = 0; attempt < 12; attempt += 1) {
     try {
       if (trySetStorage(key, JSON.stringify({ ...state, chats, messages }))) return true
@@ -1231,6 +1348,26 @@ function persistDashboardState(key: string, state: {
 }
 
 function reviveMessage(message: any): Message {
+  const attachments = Array.isArray(message?.attachments)
+    ? message.attachments.map((item: any): ChatAttachment | null => {
+        if (!item || typeof item !== "object") return null
+        const kind = ["image", "video", "audio", "file", "code", "url"].includes(String(item.kind))
+          ? item.kind as ChatAttachment["kind"]
+          : "file"
+        const rawUrl = typeof item.url === "string" ? item.url.trim() : ""
+        return {
+          id: String(item.id || crypto.randomUUID()),
+          name: String(item.name || "attachment").slice(0, 240),
+          mime: String(item.mime || "application/octet-stream").slice(0, 160),
+          size: Math.max(0, Number(item.size) || 0),
+          kind,
+          url: rawUrl && !rawUrl.startsWith("blob:") ? rawUrl : undefined,
+          text: typeof item.text === "string" ? item.text.slice(0, 180_000) : undefined,
+          durationSeconds: Number.isFinite(Number(item.durationSeconds)) ? Number(item.durationSeconds) : undefined,
+        }
+      }).filter((item: ChatAttachment | null): item is ChatAttachment => Boolean(item))
+    : undefined
+
   const generatedMedia = message?.generatedMedia && typeof message.generatedMedia === "object"
     ? settleStaleInlineMedia({
           id: String(message.generatedMedia.id || crypto.randomUUID()),
@@ -1271,6 +1408,7 @@ function reviveMessage(message: any): Message {
     modelId: isMalikModelId(message?.modelId) ? message.modelId : undefined,
     research: reviveResearch(message?.research),
     actionPlan: reviveMalikActionPlan(message?.actionPlan),
+    attachments,
   }
 }
 
@@ -5829,21 +5967,15 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setChats(prev => prev.map(c => c.id === chatId ? { ...c, selectedModelId, status: runtimePlan.status, techStack: runtimePlan.techStack } : c))
   }
 
+  const historyAttachments = await persistChatAttachmentsForHistory(attachments)
   const userMessage: Message = {
     id: crypto.randomUUID(),
     role: "user",
     content: parsedMediaCommand ? inlineMediaPrompt : cleanContent,
     timestamp: new Date(),
-    // Keep only lightweight display metadata in chat/history. The full base64/text
-    // payload is sent to /api/stream below but must not be duplicated into localStorage.
-    attachments: attachments.map((item) => ({
-      id: item.id,
-      name: item.name,
-      mime: item.mime,
-      size: item.size,
-      kind: item.kind,
-      url: item.url,
-    })),
+    // Base64 bytes never enter chat history. Images are copied to durable
+    // account storage when available; code/text keeps bounded text context.
+    attachments: historyAttachments,
   }
 
   const assistantMessage: Message = {
@@ -5899,7 +6031,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // The "Контекст" switch in the right rail decides whether prior turns travel
   // with the request. Off means the model sees this message and nothing else.
   const carryContext = readContextEnabled()
-  const history = (carryContext ? [...messages, userMessage].slice(-12) : [userMessage]).map(m => {
+  const historyWindow = 32
+  const history = (carryContext ? [...messages, userMessage].slice(-historyWindow) : [userMessage]).map(m => {
     const mediaFact = describeReadyMediaAction(m.generatedMedia)
     return {
       role: m.role,
@@ -5909,6 +6042,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     }
   })
   const memoryContext = buildMalikMemoryContext()
+  const sessionMemoryContext = carryContext ? buildPersistentSessionMemoryContext(messages, historyWindow - 1) : ""
   const mediaHistoryContext = buildMalikMediaHistoryContext(messages)
 
   const attachmentSummary = attachments.length
@@ -5934,7 +6068,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       ].join("\n")
     : ""
   const actionInstruction = buildMalikActionInstruction(actionPlan)
-  const instruction = `${buildSovereignInstruction(mode, cleanContent + attachmentSummary)}\n\n${runtimePlan.instruction}\n\n${responseDepthInstruction(responseDepth)}${memoryContext ? `\n\n[MALIK_USER_CONTROLLED_MEMORY]\n${memoryContext}` : ""}${mediaHistoryContext ? `\n\n${mediaHistoryContext}` : ""}${actionInstruction ? `\n\n${actionInstruction}` : ""}${projectContext ? `\n\n${projectContext}` : ""}${ownerInstruction ? `\n\n${ownerInstruction}` : ""}`
+  const instruction = `${buildSovereignInstruction(mode, cleanContent + attachmentSummary)}\n\n${runtimePlan.instruction}\n\n${responseDepthInstruction(responseDepth)}${memoryContext ? `\n\n[MALIK_USER_CONTROLLED_MEMORY]\n${memoryContext}` : ""}${sessionMemoryContext ? `\n\n${sessionMemoryContext}` : ""}${mediaHistoryContext ? `\n\n${mediaHistoryContext}` : ""}${actionInstruction ? `\n\n${actionInstruction}` : ""}${projectContext ? `\n\n${projectContext}` : ""}${ownerInstruction ? `\n\n${ownerInstruction}` : ""}`
   const question = `${cleanContent}\n\n${instruction}`
 
   const finalizeAssistant = (finalText: string, finalCode?: string, finalResearch?: MalikMessageResearch, failed = false) => {
@@ -6292,16 +6426,27 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         typeof finalPayload?.inlineImageUrl === "string" ? finalPayload.inlineImageUrl :
         ""
       if (inlineMediaKind === "image" && mediaUrl) {
-        let durableMediaUrl = await persistGeneratedImageReference(assistantMessage.generatedMedia.id, mediaUrl)
+        const serverDurableUrl = finalPayload?.durable === true
+          ? String(finalPayload?.masterUrl || finalPayload?.storageUrl || mediaUrl || "")
+          : ""
 
-        // If the server URL could not be copied but the provider included inline
-        // bytes, persist those instead. This is still browser disk, not Render RAM.
-        if (!isStoredGeneratedImageUrl(durableMediaUrl) && inlineFallbackUrl.startsWith("data:image/")) {
-          durableMediaUrl = await persistGeneratedImageUrl(assistantMessage.generatedMedia.id, inlineFallbackUrl)
+        if (serverDurableUrl && (/^https:\/\//i.test(serverDurableUrl) || serverDurableUrl.startsWith("/"))) {
+          // Keep the cloud/object-storage URL in chat history so the same image
+          // can be recalled and edited after reload or from another device.
+          mediaUrl = serverDurableUrl
+          inlineFallbackUrl = ""
+        } else {
+          let durableMediaUrl = await persistGeneratedImageReference(assistantMessage.generatedMedia.id, mediaUrl)
+
+          // If the server URL could not be copied but the provider included inline
+          // bytes, persist those instead. This is still browser disk, not Render RAM.
+          if (!isStoredGeneratedImageUrl(durableMediaUrl) && inlineFallbackUrl.startsWith("data:image/")) {
+            durableMediaUrl = await persistGeneratedImageUrl(assistantMessage.generatedMedia.id, inlineFallbackUrl)
+          }
+
+          mediaUrl = durableMediaUrl
+          if (isStoredGeneratedImageUrl(mediaUrl)) inlineFallbackUrl = ""
         }
-
-        mediaUrl = durableMediaUrl
-        if (isStoredGeneratedImageUrl(mediaUrl)) inlineFallbackUrl = ""
       }
 
       const readyMedia: InlineMediaGeneration = {

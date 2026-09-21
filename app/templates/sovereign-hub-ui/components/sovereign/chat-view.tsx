@@ -105,6 +105,19 @@ interface Message {
 
 type ImageResolution = "1K" | "2K" | "4K"
 
+function formatImageCreditCount(value: number) {
+  const count = Math.max(0, Math.trunc(Number(value) || 0))
+  const mod10 = count % 10
+  const mod100 = count % 100
+  if (mod10 === 1 && mod100 !== 11) return `${count} кредит`
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} кредита`
+  return `${count} кредитов`
+}
+
+function formatImageCreditBalance(value: number) {
+  return value > 1_000_000 ? "∞ кредитов" : formatImageCreditCount(value)
+}
+
 type ImageGenerationConfirmation = {
   prompt: string
   status: "pending" | "confirmed" | "generating" | "cancelled"
@@ -1597,12 +1610,12 @@ function MessageBubble({
           {message.generatedMedia ? (
             <GeminiMediaGenerationCard media={message.generatedMedia} />
           ) : message.imageConfirmation ? (
-            <section className="w-full max-w-[560px] rounded-[1.4rem] border border-white/10 bg-[#111112] p-4 shadow-[0_18px_60px_rgba(0,0,0,.32)] sm:p-5" aria-label="Подтверждение генерации изображения">
+            <section className="malik-image-credit-confirmation w-full max-w-[560px] rounded-[1.4rem] border border-white/20 bg-black p-4 shadow-[0_18px_60px_rgba(0,0,0,.72)] sm:p-5" aria-label="Подтверждение генерации изображения">
               <div className="flex items-start gap-3">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-black"><ImageIcon className="h-5 w-5" /></span>
                 <div className="min-w-0">
                   <h3 className="font-semibold text-white">Создать изображение?</h3>
-                  <p className="mt-1 line-clamp-3 text-sm leading-5 text-zinc-400">{message.imageConfirmation.prompt}</p>
+                  <p className="mt-1 line-clamp-3 text-sm leading-5 text-white/70">{message.imageConfirmation.prompt}</p>
                 </div>
               </div>
               {message.imageConfirmation.status === "pending" ? (
@@ -1625,9 +1638,9 @@ function MessageBubble({
               ) : message.imageConfirmation.status === "confirmed" ? (
                 <div className="mt-4">
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">Качество</span>
-                    <span className="text-xs font-medium text-zinc-400">
-                      Фото-кредиты: {imageCredits ? (imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining) : "…"}
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/65">Качество</span>
+                    <span className="text-xs font-semibold text-white">
+                      Фото-кредиты: {imageCredits ? formatImageCreditBalance(imageCredits.remaining) : "…"}
                     </span>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
@@ -1645,20 +1658,20 @@ function MessageBubble({
                           className={cn(
                             "min-h-12 rounded-xl border px-3 text-sm font-semibold transition",
                             disabled
-                              ? "cursor-not-allowed border-white/[0.05] bg-white/[0.02] text-zinc-700"
-                              : "border-white/10 bg-white/[0.045] text-white hover:border-white/20 hover:bg-white/[0.08]",
+                              ? "cursor-not-allowed border-white/10 bg-black text-white/30"
+                              : "border-white/20 bg-[#090909] text-white hover:border-white/40 hover:bg-[#111111]",
                           )}
                           title={blocked4k ? "Лимит 4K на сегодня исчерпан" : blockedByCredits ? "Недостаточно фото-кредитов" : undefined}
                         >
                           <span className="block">{size}</span>
-                          <span className="mt-0.5 block text-[10px] font-medium text-zinc-500">{cost} кр.</span>
+                          <span className="mt-0.5 block text-[10px] font-semibold text-white/65">{formatImageCreditCount(cost)}</span>
                         </button>
                       )
                     })}
                   </div>
                   {imageCredits ? (
-                    <p className="mt-2 text-[11px] text-zinc-600">
-                      Доступно {imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining} из {imageCredits.daily > 1_000_000 ? "∞" : imageCredits.daily} · 4K: {imageCredits.remaining4k > 1_000_000 ? "∞" : imageCredits.remaining4k} осталось
+                    <p className="mt-2 text-[11px] font-medium text-white/55">
+                      Доступно {formatImageCreditBalance(imageCredits.remaining)} из {formatImageCreditBalance(imageCredits.daily)} · 4K: {imageCredits.remaining4k > 1_000_000 ? "∞" : imageCredits.remaining4k} осталось
                     </p>
                   ) : null}
                 </div>

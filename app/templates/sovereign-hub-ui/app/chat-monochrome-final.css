@@ -132,3 +132,33 @@
 
    The generated image itself is never touched: it lives in
    .malik-generated / the media cards, none of which appear above. */
+
+
+/* --- image credit confirmation: absolute monochrome --------------------- */
+#malik-root .malik-image-credit-confirmation {
+  background: #000 !important;
+  color: #fff !important;
+  border-color: rgba(255,255,255,.20) !important;
+  box-shadow: 0 18px 60px rgba(0,0,0,.72) !important;
+  filter: grayscale(1) !important;
+  -webkit-filter: grayscale(1) !important;
+}
+
+#malik-root .malik-image-credit-confirmation button {
+  border-color: rgba(255,255,255,.18) !important;
+}
+
+#malik-root .malik-image-credit-confirmation button:not(:disabled) {
+  background: #090909 !important;
+  color: #fff !important;
+}
+
+#malik-root .malik-image-credit-confirmation button:not(:disabled):hover {
+  background: #121212 !important;
+  border-color: rgba(255,255,255,.42) !important;
+}
+
+#malik-root .malik-image-credit-confirmation button:disabled {
+  background: #000 !important;
+  color: rgba(255,255,255,.30) !important;
+}
