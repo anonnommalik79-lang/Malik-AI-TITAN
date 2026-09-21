@@ -36,10 +36,10 @@ function check(name, fn) {
 
 console.log("\nMALIK Answer DNA")
 
-check("contains exactly 70 independently named response modules", () => {
-  assert.equal(MALIK_RESPONSE_FEATURES.length, 70)
-  assert.equal(new Set(MALIK_RESPONSE_FEATURES.map((feature) => feature.id)).size, 70)
-  assert.equal(new Set(MALIK_RESPONSE_FEATURES.map((feature) => feature.name)).size, 70)
+check("contains exactly 80 independently named response modules", () => {
+  assert.equal(MALIK_RESPONSE_FEATURES.length, 80)
+  assert.equal(new Set(MALIK_RESPONSE_FEATURES.map((feature) => feature.id)).size, 80)
+  assert.equal(new Set(MALIK_RESPONSE_FEATURES.map((feature) => feature.name)).size, 80)
   for (const feature of MALIK_RESPONSE_FEATURES) {
     assert.ok(feature.instruction.length > 40, `${feature.id} is a name without a behaviour`)
     assert.ok(feature.signals.length > 0, `${feature.id} can never fire`)
@@ -135,6 +135,43 @@ check("an ordinary turn still gets the always-on conversation rules", () => {
 check("a calm turn is not told how to handle an angry one", () => {
   const prompt = buildMalikResponseSystemPrompt({ prompt: "Что такое рендер?" })
   for (const absent of ["Fix First", "Single Path", "Correction Grace", "Peer Register", "Local Reality"]) {
+    assert.doesNotMatch(prompt, new RegExp(absent), `${absent} must not fire on a neutral question`)
+  }
+})
+
+check("ten of them are about doing, not saying", () => {
+  const agency = [
+    "act-dont-instruct", "confirm-irreversible", "no-phantom-actions", "receipt-not-promise",
+    "partial-delivery", "produce-the-artifact", "resume-dont-restart", "voice-of-the-user",
+    "platform-fit", "state-the-cost",
+  ]
+  assert.equal(agency.length, 10)
+  const ids = new Set(MALIK_RESPONSE_FEATURES.map((feature) => feature.id))
+  for (const id of agency) assert.ok(ids.has(id), `missing agency module: ${id}`)
+})
+
+check("never claims an action it did not perform — on every single turn", () => {
+  // The one rule of the ten that earns a slot in every request.
+  for (const prompt of ["Что такое рендер?", "привет", "напиши функцию", "опубликуй пост"]) {
+    assert.match(buildMalikResponseSystemPrompt({ prompt }), /No Phantom Actions/, prompt)
+  }
+})
+
+check("asks before anything public, paid or permanent", () => {
+  const prompt = buildMalikResponseSystemPrompt({ prompt: "опубликуй это в инстаграм и спиши кредиты" })
+  assert.match(prompt, /Confirm Before Irreversible/)
+  assert.match(prompt, /State The Cost/)
+})
+
+check("writes a caption for the place it is going, in the person's own voice", () => {
+  const prompt = buildMalikResponseSystemPrompt({ prompt: "придумай подпись для поста в инстаграм для моего бизнеса" })
+  assert.match(prompt, /Platform Fit/)
+  assert.match(prompt, /Their Voice, Not Yours/)
+})
+
+check("the agency modules stay out of an ordinary question", () => {
+  const prompt = buildMalikResponseSystemPrompt({ prompt: "Что такое рендер?" })
+  for (const absent of ["Confirm Before Irreversible", "State The Cost", "Platform Fit", "Receipt, Not Promise"]) {
     assert.doesNotMatch(prompt, new RegExp(absent), `${absent} must not fire on a neutral question`)
   }
 })
