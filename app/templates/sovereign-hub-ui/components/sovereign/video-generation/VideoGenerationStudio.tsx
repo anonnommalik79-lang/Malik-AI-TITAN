@@ -288,7 +288,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       setDuration(5)
       setModelNotice(nextMode === "image"
         ? "Image → Video работает через Magic Hour: исходное фото остаётся первым кадром."
-        : "Видео → Видео: Google Omni редактирует исходный клип по тексту — можно добавить, убрать, заменить или изменить детали.")
+        : "Видео → Видео: Magic Hour AI Video Editor редактирует исходный клип по тексту — можно добавить, убрать, заменить или изменить детали.")
     } else {
       setModelNotice("")
     }
@@ -340,12 +340,12 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       let sourceDuration = 0
       if (!imageMode) {
         sourceDuration = await readVideoDuration(file)
-        if (sourceDuration > 5.05) {
-          setError(`Для Видео → Видео загрузите клип до 5 секунд. Сейчас: ${sourceDuration.toFixed(1)} сек.`)
+        if (sourceDuration > 10.05) {
+          setError(`Для Видео → Видео загрузите клип до 10 секунд. Сейчас: ${sourceDuration.toFixed(1)} сек.`)
           return
         }
         if (sourceDuration < 3) {
-          setError(`Magic Hour Google Omni сейчас принимает клипы от 3 до 10 секунд. Загрузите фрагмент 3–5 секунд.`)
+          setError(`Magic Hour AI Video Editor принимает клипы от 3 до 10 секунд.`)
           return
         }
       }
@@ -359,7 +359,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       setPhase("idle")
       if (!imageMode) {
         setDuration(5)
-        setModelNotice(`Видео ${sourceDuration.toFixed(1)} сек · Google Omni. Опишите, что добавить, убрать, заменить или изменить.`)
+        setModelNotice(`Видео ${sourceDuration.toFixed(1)} сек · Magic Hour AI Video Editor. Опишите, что добавить, убрать, заменить или изменить.`)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось прочитать файл.")
@@ -380,7 +380,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     if (mode === "video") {
       setDuration(5)
       setSelectedModelId("magichour")
-      setModelNotice("Видео → Видео обрабатывает загруженный фрагмент до 5 секунд через Magic Hour Google Omni.")
+      setModelNotice("Видео → Видео обрабатывает загруженный фрагмент 3–10 секунд через Magic Hour AI Video Editor.")
       return
     }
     setDuration(value)
