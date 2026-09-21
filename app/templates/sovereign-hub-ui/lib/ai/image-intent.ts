@@ -24,6 +24,14 @@ function firstMatch(value: string, pattern: RegExp) {
 export function isExplicitImageEditRequest(input: string, hasImage = false): boolean {
   const text = String(input || "").replace(IMAGE_COMMAND_PATTERN, "").trim()
   if (!text || VIDEO_COMMAND_PATTERN.test(text) || EXPLANATION_START_PATTERN.test(text)) return false
+
+  // A text-to-image request may legitimately contain edit-like words such as
+  // "надпись", "снизу", "добавь" or "сделай фон". Without uploaded pixels it
+  // must stay CREATE, otherwise prompts like "сгенерируй фото ... внизу
+  // надпись" are misrouted into the edit pipeline and fail with
+  // IMAGE_EDIT_SOURCE_REQUIRED.
+  if (!hasImage && isExplicitImageGenerationRequest(input)) return false
+
   if (!hasImage && !IMAGE_NOUN_PATTERN.test(text)) return false
   if (/^\s*(?:напиши|write|добавь|измени|исправь)\s+(?:мне\s+)?(?:код|промпт|prompt|code|функцию|скрипт)(?![\p{L}\p{N}_])/iu.test(text)) return false
   const edit = /(?:измени|изменить|поменяй|меняй|смени|сменить|замени|заменить|убери|убрать|удали|удалить|добавь|добавить|поставь|поставить|вставь|вставить|размести|разместить|перемести|переместить|дорисуй|дорисовать|отредактируй|редактируй|перекрась|ретушируй|улучши|осветли|затемни|обрежь|вырежи|edit|change|modify|replace|remove|erase|add|insert|place|move|retouch|recolor|crop|өзгерт|ауыстыр|алып\s+таста|қос|енгіз|өшір)(?![\p{L}\p{N}_])/iu
