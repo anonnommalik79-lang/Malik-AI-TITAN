@@ -16,7 +16,23 @@ const css = fs.readFileSync("app/chat-monochrome-final.css", "utf8")
 const layout = fs.readFileSync("app/layout.tsx", "utf8")
 const view = fs.readFileSync("components/sovereign/chat-view.tsx", "utf8")
 
-console.log("\nMALIK Chat in black and white")
+console.log("\nMALIK — black and white, one layer")
+
+check("the fact panel is the same black as the page behind it", () => {
+  // A dark-grey card on a black screen is a second surface, not a panel.
+  assert.match(view, /malik-fact-audit[^"]*\bbg-black\b/)
+  assert.doesNotMatch(view, /malik-fact-audit[^"]*bg-\[#[0-9a-f]{6}\]/i)
+})
+
+check("the mobile sign-in screen is one flat black surface", () => {
+  // The hairline across the sheet drew an outline under the buttons, which
+  // reads as a second layer laid over the page.
+  for (const file of ["app/malik-pure-black-final.css", "components/sovereign/sovereign-mobile-auth-black.css"]) {
+    const css = fs.readFileSync(file, "utf8")
+    const block = css.slice(css.indexOf(".sma-auth-panel {"))
+    assert.doesNotMatch(block.slice(0, 260), /border(?:-top)?:\s*1px/, `${file} draws a sheet edge again`)
+  }
+})
 
 check("the monochrome pass is the last stylesheet in the chain", () => {
   const imports = [...layout.matchAll(/^import "\.\/([^"]+\.css)"/gm)].map((match) => match[1])

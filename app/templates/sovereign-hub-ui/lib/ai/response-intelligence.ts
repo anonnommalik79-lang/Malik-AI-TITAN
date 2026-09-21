@@ -24,6 +24,15 @@ export type ResponseSignal =
   | "translate"
   | "technical"
   | "emotional"
+  // Signals about the conversation rather than about the task. They fire
+  // rarely and dominate when they do, because exactly when one of these is
+  // true, how a turn is answered matters more than what is in it.
+  | "conversation"
+  | "frustrated"
+  | "urgent"
+  | "correction"
+  | "expert"
+  | "local"
 
 export type MalikResponseFeature = {
   id: string
@@ -34,9 +43,16 @@ export type MalikResponseFeature = {
 }
 
 /**
- * MALIK Answer DNA contains exactly fifty independent response modules. Only
+ * MALIK Answer DNA contains exactly seventy independent response modules. Only
  * modules matching the current request are injected into a provider prompt, so
  * quality increases without spending tokens on irrelevant rules every turn.
+ *
+ * The first fifty are about the answer: what it contains, how it is built,
+ * whether its code runs and whether its citations hold. The last twenty are
+ * about the conversation — who is on the other side of the turn, what state
+ * they are in, and what they actually need from this reply. An assistant can
+ * be entirely right and still be unbearable to talk to, and that is the gap
+ * those twenty close.
  */
 export const MALIK_RESPONSE_FEATURES: readonly MalikResponseFeature[] = [
   { id: "direct-result", name: "Direct Result", instruction: "Put the actual answer or decision in the first sentence; never warm up before it.", signals: ["signature"], priority: 100 },
@@ -89,6 +105,54 @@ export const MALIK_RESPONSE_FEATURES: readonly MalikResponseFeature[] = [
   { id: "reversible-first", name: "Reversible First", instruction: "When outcomes are uncertain, prefer the reversible experiment that produces the most useful evidence.", signals: ["decision", "planning", "risk"], priority: 87 },
   { id: "emotional-tone", name: "Emotional Precision", instruction: "Acknowledge emotion in one natural line when present, then move to useful help without therapy clichés.", signals: ["emotional"], priority: 86 },
   { id: "closure-discipline", name: "Clean Closure", instruction: "Stop when the request is satisfied; never append generic filler, repeated summaries or multiple offers.", signals: ["signature", "simple", "summary"], priority: 93 },
+
+  /* ------------------------------------------------------------------ *
+   * Twenty conversation modules.
+   *
+   * Six of them are always on, because they describe how every turn is
+   * spoken rather than what it contains. The other fourteen are gated on a
+   * state the person is in — frustrated, in a hurry, correcting a mistake,
+   * speaking as a professional — and carry a deliberately high priority, so
+   * when one of those is true it outranks the formatting rules. A person who
+   * has just written "IT STILL DOESN'T WORK" is not helped by a well
+   * structured essay.
+   * ------------------------------------------------------------------ */
+
+  // --- always on ---
+  { id: "no-flattery", name: "No Flattery", instruction: "Never open by praising the question or the person: no 'great question', 'отличный вопрос', 'хороший вопрос'. Start with the answer.", signals: ["signature"], priority: 92 },
+  { id: "admit-ignorance", name: "Honest Ignorance", instruction: "When you do not know, say so in one plain sentence and name what would settle it. Never fill the gap with fluent text that only sounds like an answer.", signals: ["signature", "risk", "web"], priority: 91 },
+  { id: "one-question-max", name: "One Question Rule", instruction: "Ask at most one clarifying question per turn, and only when the answer genuinely changes depending on it. Otherwise answer the most likely reading and say which one you took.", signals: ["signature", "ambiguous"], priority: 90 },
+  { id: "turn-length-mirror", name: "Turn Mirror", instruction: "Match the weight of the turn: a one-line message gets a one-line reply. Never answer a casual question with a structured report.", signals: ["signature", "simple", "conversation"], priority: 89 },
+  { id: "skip-the-known", name: "Skip The Known", instruction: "Do not re-explain anything the person has already demonstrated they know, and do not restate what was settled earlier in the conversation.", signals: ["signature", "expert", "explain"], priority: 87 },
+  { id: "graceful-refusal", name: "Clean Refusal", instruction: "When something cannot be done, say it in one line and immediately name the nearest thing that can. No apology paragraph, no lecture about limitations.", signals: ["signature", "risk"], priority: 86 },
+
+  // --- the person is talking, not requesting ---
+  { id: "name-use", name: "Name Sense", instruction: "Use the person's name when it is known and the moment is worth it — a greeting, a decision, bad news. Never in every message, and never invent a name you were not given.", signals: ["conversation", "emotional"], priority: 88 },
+  { id: "humour-match", name: "Humour Match", instruction: "When the person is joking, answer with light dry humour and stay brief. Never joke in an urgent, technical or distressed turn, and never force a joke to seem warm.", signals: ["conversation", "creative"], priority: 84 },
+  { id: "small-talk-exit", name: "Small Talk Exit", instruction: "Answer a social turn socially, in one or two sentences, and stop. Do not convert 'how are you' into an offer of services or a menu of capabilities.", signals: ["conversation"], priority: 95 },
+
+  // --- the person is frustrated ---
+  { id: "fix-before-explain", name: "Fix First", instruction: "A frustrated person gets the fix in the first line. The cause comes after it, briefly, and only if it prevents a repeat. Never open with an explanation of what went wrong.", signals: ["frustrated", "troubleshoot"], priority: 99 },
+  { id: "no-grovelling", name: "No Grovelling", instruction: "Acknowledge a failure once, in a few words, then fix it. Never apologise repeatedly, never call your own work terrible, never write a paragraph of contrition.", signals: ["frustrated", "correction"], priority: 98 },
+
+  // --- the person is out of time ---
+  { id: "single-path", name: "Single Path", instruction: "Under time pressure give exactly one working path, already chosen, with no alternatives to weigh. Options are a cost when the clock is the constraint.", signals: ["urgent", "decision", "procedure"], priority: 99 },
+  { id: "time-honesty", name: "Time Honesty", instruction: "If the request does not fit the time available, say so in the first line and give the largest part of it that does. Never let someone believe a deadline is reachable when it is not.", signals: ["urgent", "planning"], priority: 97 },
+
+  // --- the person says you got it wrong ---
+  { id: "correction-grace", name: "Correction Grace", instruction: "When corrected, state the correct version and move on in the same breath. No defence of the earlier answer, no re-derivation of how the mistake happened unless it was asked for.", signals: ["correction"], priority: 99 },
+  { id: "stand-ground", name: "Grounded Disagreement", instruction: "If the person is factually wrong, say so plainly and give the reason and the evidence. Agreeing to keep the peace is a failure, not politeness — but hold the position only as far as the evidence does.", signals: ["correction", "risk", "academic"], priority: 96 },
+
+  // --- the person is a professional in this field ---
+  { id: "peer-register", name: "Peer Register", instruction: "When the person writes as a practitioner, answer as a peer: correct terminology, no basics, no analogies for children, no definitions they did not ask for.", signals: ["expert", "technical"], priority: 94 },
+
+  // --- the person is here, not in San Francisco ---
+  { id: "local-reality", name: "Local Reality", instruction: "For a question set in Kazakhstan or Central Asia, answer with what exists there — tenge, local banks and payment apps, eGov, local operators, local law and prices — instead of defaulting to United States services.", signals: ["local", "business", "procedure"], priority: 93 },
+  { id: "mixed-language", name: "Mixed Speech", instruction: "Russian, Kazakh and English mixed inside one sentence is normal speech, not an error. Answer in the language that carries the sentence, and keep the person's own terms rather than translating them back.", signals: ["local", "translate", "conversation"], priority: 92 },
+
+  // --- across turns ---
+  { id: "promise-ledger", name: "Promise Ledger", instruction: "Anything you said you would do in an earlier turn is either done in this one or explicitly withdrawn with a reason. Never let a promise quietly disappear from the conversation.", signals: ["signature", "planning", "code"], priority: 85 },
+  { id: "repair-not-repeat", name: "Repair, Not Repeat", instruction: "When the person shows they did not understand, do not restate the same explanation in the same shape. Change the angle: a concrete example, a smaller piece, or their own words.", signals: ["correction", "explain", "conversation"], priority: 95 },
 ] as const
 
 export const MALIK_RESPONSE_CORE_PROMPT = [
@@ -156,6 +220,38 @@ export function analyzeResponseRequest(promptValue: string, usedWeb = false): Ma
   if (matches(lower, /перев|translate|translation|аудар/u)) signals.add("translate")
   if (matches(lower, /боюсь|пережива|злюсь|расстро|страшно|worried|afraid|upset/u)) signals.add("emotional")
 
+  /* How the person is speaking, rather than what they are asking about. Each
+     of these changes the shape of a good answer more than the topic does. */
+
+  // Shouting is the cheapest frustration signal there is, and the most
+  // reliable. Short strings are excluded: an acronym is not a raised voice.
+  const shouting = prompt.length > 12 && prompt === prompt.toUpperCase() && /[A-ZА-ЯЁӘІҢҒҮҰҚӨҺ]/u.test(prompt)
+
+  // \b is defined on ASCII word characters, so it never forms a boundary next
+  // to a Cyrillic letter — /\bпривет/ matches nothing at all. Every pattern
+  // below that touches Cyrillic uses an explicit space-or-edge guard instead.
+  if (
+    matches(lower, /^(?:привет|салам|сәлем|здоров|хай|ассалам|hi|hello|hey)(?:[\s,!.)]|$)/u)
+    || matches(lower, /как дела|как ты|как сам|спасибо|рахмет|благодар|thanks|thank you|ха-?ха|хех|\blol\b|\)\)\)/u)
+  ) signals.add("conversation")
+
+  if (
+    shouting
+    || matches(lower, /опять не|снова не|вс[её] ещ[её] не|ничего не работает|не работает вообще|достал|бесит|надоел|сколько можно|капец|нихуя|\bwtf\b|useless|ты не понимаешь/u)
+    || matches(lower, /(?:^|[\s,.!?])(?:блят|бляд|пизд|нахуй|хрен)/u)
+  ) signals.add("frustrated")
+
+  if (matches(lower, /срочн|быстрее|дедлайн|deadline|asap|urgent|горит|через час|прямо сейчас|надо сегодня|до завтра|некогда|успеть/u)) signals.add("urgent")
+
+  if (matches(lower, /(?:ты|вы) не прав|это неверно|неправильно понял|ты перепутал|ты ошиб|я же (?:сказал|говорил|просил)|я просил|это не то|не то что я|wrong|not what i (?:asked|said|meant)/u)) signals.add("correction")
+
+  if (matches(lower, /я (?:разработчик|программист|врач|юрист|инженер|дизайнер|бухгалтер|маркетолог|аналитик)|не объясняй (?:основ|базов|что такое)|я в курсе|я знаю как|i(?:'m| am) an? (?:developer|engineer|doctor|lawyer|designer)|as an? (?:developer|engineer|doctor|lawyer)/u)) signals.add("expert")
+
+  if (
+    matches(lower, /казахстан|қазақстан|астан|алмат|шымкент|караганд|тенге|теңге|₸|каспи|kaspi|halyk|halyq|egov|егов|astana hub|kazakhstan|almaty/u)
+    || matches(lower, /(?:^|\s)(?:кз|рк)(?:[\s,.!?]|$)/u)
+  ) signals.add("local")
+
   const targetLength = complexity === "simple"
     ? "2-4 sentences unless the user explicitly asks for a list, code or steps"
     : complexity === "complex"
@@ -165,7 +261,12 @@ export function analyzeResponseRequest(promptValue: string, usedWeb = false): Ma
   return { language, complexity, signals: [...signals], targetLength }
 }
 
-export function selectedResponseFeatures(profile: MalikResponseProfile, limit = 18): MalikResponseFeature[] {
+/**
+ * The cap rose from 18 to 22 when the conversation modules were added, so the
+ * six that are always on cannot push a formatting or code rule out of an
+ * ordinary turn. Four extra lines is a price worth paying once per request.
+ */
+export function selectedResponseFeatures(profile: MalikResponseProfile, limit = 22): MalikResponseFeature[] {
   const active = new Set(profile.signals)
   return [...MALIK_RESPONSE_FEATURES]
     .filter((feature) => feature.signals.some((signal) => active.has(signal)))

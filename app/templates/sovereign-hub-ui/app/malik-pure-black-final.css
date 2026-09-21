@@ -148,10 +148,13 @@ body:has(.malik-auth-page),
   background-image: none !important;
 }
 
-/* Keep a very small separator on the mobile auth sheet so the buttons remain
-   readable while the sheet itself stays fully black. */
+/* No separator on the mobile auth sheet.
+   The hairline was there to keep the buttons readable, but a rounded line
+   drawn across the full width reads as a second surface sitting underneath
+   them — a sheet laid on the page instead of one black screen. The buttons
+   are grey and white on black and separate themselves perfectly well. */
 .sma-auth-panel {
-  border-top: 1px solid rgba(255, 255, 255, 0.055) !important;
+  border: 0 !important;
   box-shadow: none !important;
 }
 

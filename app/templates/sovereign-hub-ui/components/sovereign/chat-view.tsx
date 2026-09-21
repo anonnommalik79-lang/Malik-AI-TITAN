@@ -1375,7 +1375,9 @@ function FactAuditPanel({
       data-malik-fact-audit={shown.status}
       data-preserve-brand-color="true"
       className={cn(
-        "malik-fact-audit mt-3 w-full max-w-[680px] overflow-hidden rounded-2xl border bg-[#0b0b0c] text-left",
+        // Pure black, like the page behind it. #0b0b0c was a grey card laid on
+        // a black screen; the border alone says where the panel starts.
+        "malik-fact-audit mt-3 w-full max-w-[680px] overflow-hidden rounded-2xl border bg-black text-left",
         flagged ? "border-white/25" : "border-white/10",
       )}
       aria-label="Проверка фактов по источникам"

@@ -40,8 +40,9 @@ main.sma-root[data-auth-surface="black"] .sma-typewriter::after {
     background-image: none !important;
   }
 
+  /* One layer only: no hairline drawing a sheet under the buttons. */
   .sma-auth-panel {
-    border-top: 1px solid rgba(255, 255, 255, 0.055) !important;
+    border: 0 !important;
     box-shadow: none !important;
   }
 }
