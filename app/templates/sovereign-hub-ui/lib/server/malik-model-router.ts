@@ -100,7 +100,7 @@ function env(name: string) {
 
 function isCodeRequest(prompt: string) {
   const value = String(prompt || "")
-  return /(код|code|html|css|javascript|typescript|python|react|next\.?js|node\.?js|sql|api|index\.html|component|компонент|функц|скрипт|сайт|приложен|бот|debug|баг|ошибк|fix|build|repository|репозитор|class\s|function\s|const\s|let\s|import\s|```)/i.test(value)
+  return /(код|code|html|css|javascript|typescript|python|react|next\.?js|node\.?js|sql|api|index\.html|component|компонент|функц|скрипт|сайт|приложен|программ|алгоритм|бот|презентац|слайд|presentation|slides?|csv|openapi|mermaid|debug|баг|ошибк|fix|build|repository|репозитор|class\s|function\s|const\s|let\s|import\s|```)/i.test(value)
 }
 
 
@@ -133,6 +133,7 @@ function systemPrompt(model: MalikModelDefinition, basePrompt: string, publicMod
     "For coding requests, act as a senior production coding agent and implement the requested behavior instead of merely describing it.",
     "Never answer a coding request with only a template, pseudocode, TODO list, placeholder, stub, or shortened demo unless explicitly requested.",
     "Put complete runnable code before explanation. Include required imports, types, error handling, edge cases, integration details, and every necessary file path.",
+    "Put source files in fenced Markdown blocks with an explicit language. When a downloadable file is produced, add filename=relative/path.ext after the language in the opening fence so the chat can expose its download control.",
     "Do not stop after planning when implementation was requested.",
   ].join("\n")
 }

@@ -12,6 +12,9 @@ const BRAND_SAFE_SELECTOR = [
   "[data-brand-icon]",
   ".plugin-logo",
   ".sma-auth-icon",
+  // Syntax colours convey code structure; the global blue-removal pass must
+  // not turn highlighted tags and attributes back into monochrome text.
+  ".malik-md-codeblock",
   "svg[aria-label='Uber']",
 ].join(",")
 

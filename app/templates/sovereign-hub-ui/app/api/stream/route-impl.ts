@@ -22,6 +22,7 @@ import {
 } from "@/lib/server/daily-multimodal-quota"
 import { getDailyTextTokenQuota } from "@/lib/server/daily-text-token-quota"
 import { isExplicitImageEditRequest } from "@/lib/ai/image-intent"
+import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
@@ -343,6 +344,7 @@ async function runSelectedAnswer(
         "MALIK AI as a product has integrated image generation and image editing. Never claim the product cannot generate or edit images just because the currently selected text/vision model itself cannot manipulate pixels.",
         "If conversation history says MALIK AI generated or edited media, treat that as a factual completed product action.",
         "Answer in the user's language unless explicitly asked otherwise.",
+        buildChatArtifactSkillPrompt(coderPrompt(body)),
       ].filter(Boolean).join("\n"),
     })
 
@@ -418,6 +420,7 @@ async function runSelectedAnswer(
   }
 
   onProgress?.({ phase: "model", text: agentRuntime ? "Malik Agent Runtime собирает итог" : "MalikCoder 1.0 анализирует задачу" })
+  const artifactSkillPrompt = buildChatArtifactSkillPrompt(coderPrompt(executionBody))
   const result = await runMalikCoderOrchestrator({
     prompt: coderPrompt(executionBody),
     history: coderHistory(executionBody),
@@ -429,7 +432,8 @@ async function runSelectedAnswer(
       "MALIK AI as a product has integrated image generation and image editing. Never deny those product capabilities merely because this text model does not manipulate pixels directly.",
       "Treat MALIK_MEDIA_ACTION_FACT / MALIK_MEDIA_ACTION_HISTORY entries in history as factual completed actions and describe them accurately when asked.",
       "Answer in the user's language unless explicitly asked otherwise.",
-    ].join("\n"),
+      artifactSkillPrompt,
+    ].filter(Boolean).join("\n"),
     maxTokens: maxOutputTokens,
   })
   onProgress?.({ phase: "finalizing", text: "Malik AI проверяет и завершает результат" })

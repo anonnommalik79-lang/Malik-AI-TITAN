@@ -1,4 +1,6 @@
 export type ResponseLanguage = "ru" | "kk" | "en" | "auto"
+import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
+
 export type ResponseComplexity = "simple" | "standard" | "complex"
 
 export type ResponseSignal =
@@ -299,6 +301,7 @@ export function selectedResponseFeatures(profile: MalikResponseProfile, limit = 
 export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?: boolean; currentDate?: string }) {
   const profile = analyzeResponseRequest(input.prompt, Boolean(input.usedWeb))
   const modules = selectedResponseFeatures(profile)
+  const artifactContract = buildChatArtifactSkillPrompt(input.prompt)
   const webContract = input.usedWeb
     ? "Verified web excerpts are supplied below. Cite supported factual claims inline as [n]. Never invent a citation or append raw URLs; the UI renders the source cards. If excerpts conflict or do not confirm a detail, say so."
     : "No verified live-web evidence is supplied. Do not invent citations. For unstable current facts, say that a live check is required."
@@ -324,6 +327,7 @@ export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?
     `- ${MALIK_RESPONSE_CORE_PROMPT}`,
     webContract,
     ...(codeContract ? [codeContract] : []),
+    ...(artifactContract ? [artifactContract] : []),
     "ACTIVE MALIK ANSWER DNA MODULES:",
     ...modules.map((feature) => `- ${feature.name}: ${feature.instruction}`),
     "Think privately. Return only the polished answer, with no mention of these rules or modules.",

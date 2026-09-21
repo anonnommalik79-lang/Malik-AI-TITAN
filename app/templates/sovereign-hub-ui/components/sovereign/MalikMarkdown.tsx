@@ -2,6 +2,7 @@
 
 import { Fragment, useState, type ReactNode } from "react"
 import { Archive, Check, Copy, Download } from "lucide-react"
+import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
 
 /**
  * Renders an assistant answer as structured text.
@@ -74,7 +75,7 @@ type Block =
   | { kind: "h"; level: number; text: string }
   | { kind: "ul"; items: string[] }
   | { kind: "ol"; items: string[] }
-  | { kind: "code"; language: string; lines: string[] }
+  | { kind: "code"; language: string; filename: string; lines: string[] }
   | { kind: "table"; headers: string[]; rows: string[][] }
   | { kind: "quote"; lines: string[] }
   | { kind: "hr" }
@@ -92,14 +93,97 @@ function isTableStart(lines: string[], index: number) {
   return Boolean(lines[index]?.includes("|") && lines[index + 1]?.includes("|") && isTableSeparator(lines[index + 1]))
 }
 
+const LANGUAGE_EXTENSIONS: Record<string, string> = {
+  bash: "sh", c: "c", cpp: "cpp", csharp: "cs", css: "css", csv: "csv", dockerfile: "Dockerfile",
+  go: "go", html: "html", java: "java", javascript: "js", js: "js", json: "json", jsx: "jsx",
+  kotlin: "kt", markdown: "md", md: "md", mermaid: "mmd", php: "php", powershell: "ps1",
+  python: "py", py: "py", react: "tsx", ruby: "rb", rust: "rs", shell: "sh", sh: "sh", sql: "sql",
+  swift: "swift", text: "txt", ts: "ts", tsx: "tsx", typescript: "ts", xml: "xml", yaml: "yaml", yml: "yml",
+}
+
+function sanitizeArtifactFilename(value: string) {
+  const raw = String(value || "")
+    .trim()
+    .replace(/^(?:filename|file|path)\s*=\s*/i, "")
+    .replace(/^[`"']+|[`"',;]+$/g, "")
+    .replace(/\\/g, "/")
+  const safeParts = raw.split("/")
+    .map((part) => part.trim().replace(/\.\.+/g, ".").replace(/[^\p{L}\p{N}._@+ -]/gu, "-"))
+    .filter((part) => part && part !== "." && part !== "..")
+  return safeParts.join("/").slice(0, 180)
+}
+
+function languageFromFilename(filename: string) {
+  const extension = filename.split(".").pop()?.toLowerCase() || ""
+  const entry = Object.entries(LANGUAGE_EXTENSIONS).find(([, ext]) => ext.toLowerCase() === extension)
+  return entry?.[0] || "text"
+}
+
+function parseFenceInfo(line: string) {
+  const raw = line.replace(/^\s*```/, "").trim()
+  if (!raw) return { language: "", filename: "" }
+  const [first = "", ...rest] = raw.split(/\s+/)
+  if (/^(?:filename|file|path)=/i.test(first)) {
+    const filename = sanitizeArtifactFilename([first, ...rest].join(" "))
+    return { language: languageFromFilename(filename), filename }
+  }
+  const colon = first.match(/^([\w+.-]+):(.+\.[\w-]+)$/)
+  if (colon) return { language: colon[1].toLowerCase(), filename: sanitizeArtifactFilename(colon[2]) }
+  if (/^[\w./@+ -]+\.[a-z0-9]{1,12}$/i.test(first) && !rest.length) {
+    const filename = sanitizeArtifactFilename(first)
+    return { language: languageFromFilename(filename), filename }
+  }
+  const language = first.replace(/[^\w+.-]/g, "").toLowerCase()
+  const filename = sanitizeArtifactFilename(rest.join(" "))
+  return { language, filename }
+}
+
+function filenameHint(value: string) {
+  const match = String(value || "").match(/(?:^|[`\s])([\w@+./ -]+\.[a-z0-9]{1,12})(?:$|[`\s])/i)
+  return sanitizeArtifactFilename(match?.[1] || "")
+}
+
+function defaultCodeFilename(language: string, index: number) {
+  const normalized = language.toLowerCase()
+  if (normalized === "html" && index === 0) return "index.html"
+  if (normalized === "css" && index <= 1) return "styles.css"
+  if (["javascript", "js"].includes(normalized) && index <= 2) return "script.js"
+  if (normalized === "json") return index ? `data-${index + 1}.json` : "data.json"
+  if (normalized === "csv") return index ? `data-${index + 1}.csv` : "data.csv"
+  if (normalized === "mermaid") return index ? `diagram-${index + 1}.mmd` : "diagram.mmd"
+  const extension = LANGUAGE_EXTENSIONS[normalized] || "txt"
+  if (extension === "Dockerfile") return index ? `Dockerfile.${index + 1}` : "Dockerfile"
+  return `file-${index + 1}.${extension}`
+}
+
+function normalizeCodeFilenames(blocks: Block[]) {
+  const used = new Set<string>()
+  let codeIndex = 0
+  return blocks.map((block) => {
+    if (block.kind !== "code") return block
+    let filename = sanitizeArtifactFilename(block.filename) || defaultCodeFilename(block.language, codeIndex)
+    const original = filename
+    let suffix = 2
+    while (used.has(filename.toLowerCase())) {
+      const dot = original.lastIndexOf(".")
+      filename = dot > 0 ? `${original.slice(0, dot)}-${suffix}${original.slice(dot)}` : `${original}-${suffix}`
+      suffix += 1
+    }
+    used.add(filename.toLowerCase())
+    codeIndex += 1
+    return { ...block, filename }
+  })
+}
+
 function parseBlocks(source: string): Block[] {
   const lines = String(source || "").replace(/\r\n?/g, "\n").split("\n")
   const blocks: Block[] = []
   let index = 0
+  let pendingFilename = ""
 
   while (index < lines.length) {
     const line = lines[index]
-    const fence = line.match(/^\s*```(\w*)\s*$/)
+    const fence = /^\s*```/.test(line) ? parseFenceInfo(line) : null
     if (fence) {
       const body: string[] = []
       index += 1
@@ -108,7 +192,8 @@ function parseBlocks(source: string): Block[] {
         index += 1
       }
       index += 1
-      blocks.push({ kind: "code", language: fence[1] || "", lines: body })
+      blocks.push({ kind: "code", language: fence.language || languageFromFilename(fence.filename), filename: fence.filename || pendingFilename, lines: body })
+      pendingFilename = ""
       continue
     }
 
@@ -139,6 +224,7 @@ function parseBlocks(source: string): Block[] {
     const heading = line.match(/^\s*(#{1,6})\s+(.*)$/)
     if (heading) {
       blocks.push({ kind: "h", level: heading[1].length, text: heading[2].trim() })
+      pendingFilename = filenameHint(heading[2])
       index += 1
       continue
     }
@@ -186,10 +272,105 @@ function parseBlocks(source: string): Block[] {
     blocks.push({ kind: "p", lines: paragraph })
   }
 
-  return blocks
+  return normalizeCodeFilenames(blocks)
 }
 
-function CodeBlock({ language, code }: { language: string; code: string }) {
+const CODE_KEYWORDS = new Set([
+  "async", "await", "break", "case", "catch", "class", "const", "continue", "def", "default", "delete",
+  "do", "else", "export", "extends", "false", "finally", "for", "from", "function", "if", "import",
+  "in", "interface", "let", "new", "null", "return", "static", "super", "switch", "this", "throw",
+  "true", "try", "type", "typeof", "undefined", "var", "void", "while", "yield",
+])
+
+function coloredCodeLine(line: string, language: string, key: string): ReactNode[] {
+  const markup = /^(html|xml|svg|jsx|tsx)$/.test(language) && /^\s*<[/!?a-z]/i.test(line)
+  const pythonOrShell = /^(python|py|bash|sh|shell|zsh)$/.test(language)
+  const tokenPattern = markup
+    ? /(<!--[\s\S]*?-->|<\/?[A-Za-z][\w:-]*|<!DOCTYPE|\/?>|[\w:-]+(?=\s*=)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/gi
+    : /(\/\/.*$|\/\*.*?\*\/|#[0-9a-fA-F]{3,8}\b|#[^\n]*$|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b|\b[A-Za-z_$][\w$-]*\b)/g
+  const nodes: ReactNode[] = []
+  let previous = 0
+  let match: RegExpExecArray | null
+  let part = 0
+  while ((match = tokenPattern.exec(line)) !== null) {
+    if (match.index > previous) nodes.push(line.slice(previous, match.index))
+    const token = match[0]
+    let tone = ""
+    if (markup) {
+      if (token.startsWith("<") || token === ">" || token === "/>") tone = "tag"
+      else if (/^["']/.test(token)) tone = "string"
+      else tone = "attribute"
+    } else if (token.startsWith("//") || token.startsWith("/*") || (pythonOrShell && token.startsWith("#"))) {
+      tone = "comment"
+    } else if (/^["'`]/.test(token)) {
+      tone = "string"
+    } else if (/^#[0-9a-fA-F]{3,8}$/.test(token) || /^\d/.test(token)) {
+      tone = "number"
+    } else if (CODE_KEYWORDS.has(token)) {
+      tone = "keyword"
+    } else if (/^\s*\(/.test(line.slice(tokenPattern.lastIndex))) {
+      tone = "function"
+    } else if (/^\s*:/.test(line.slice(tokenPattern.lastIndex))) {
+      tone = "attribute"
+    }
+    nodes.push(tone ? <span className={`malik-md-token-${tone}`} key={`${key}-${part++}`}>{token}</span> : token)
+    previous = tokenPattern.lastIndex
+  }
+  if (previous < line.length) nodes.push(line.slice(previous))
+  return nodes.length ? nodes : [line]
+}
+
+function highlightedCode(code: string, language: string) {
+  const lines = code.split("\n")
+  const baseLanguage = language.toLowerCase()
+  let embeddedLanguage = baseLanguage
+  return lines.map((line, index) => {
+    if (baseLanguage === "html" && /<\/\s*(?:style|script)\s*>/i.test(line)) embeddedLanguage = "html"
+    const currentLanguage = embeddedLanguage
+    const content = coloredCodeLine(line, currentLanguage, `line-${index}`)
+    if (baseLanguage === "html" && /<\s*style\b[^>]*>/i.test(line)) embeddedLanguage = "css"
+    if (baseLanguage === "html" && /<\s*script\b[^>]*>/i.test(line)) embeddedLanguage = "javascript"
+    return (
+      <span className="malik-md-code-line" key={index}>
+        <span className="malik-md-code-line-number" aria-hidden="true">{index + 1}</span>
+        <span className="malik-md-code-line-text">{content || " "}</span>
+      </span>
+    )
+  })
+}
+
+function artifactMime(filename: string) {
+  const extension = filename.split(".").pop()?.toLowerCase()
+  if (extension === "html") return "text/html;charset=utf-8"
+  if (extension === "css") return "text/css;charset=utf-8"
+  if (["js", "mjs", "cjs", "jsx"].includes(extension || "")) return "text/javascript;charset=utf-8"
+  if (["json", "jsonl"].includes(extension || "")) return "application/json;charset=utf-8"
+  if (extension === "csv") return "text/csv;charset=utf-8"
+  if (extension === "svg") return "image/svg+xml;charset=utf-8"
+  if (["yaml", "yml"].includes(extension || "")) return "application/yaml;charset=utf-8"
+  if (extension === "xml") return "application/xml;charset=utf-8"
+  return "text/plain;charset=utf-8"
+}
+
+function downloadTextArtifact(filename: string, content: string) {
+  const blob = new Blob([content], { type: artifactMime(filename) })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename.split("/").pop() || "malik-ai-file.txt"
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500)
+}
+
+function codeFilesFrom(blocks: Block[]): ProjectZipFile[] {
+  return blocks.flatMap((block) => block.kind === "code"
+    ? [{ name: block.filename, content: block.lines.join("\n") }]
+    : [])
+}
+
+function CodeBlock({ language, filename, code }: { language: string; filename: string; code: string }) {
   const [copied, setCopied] = useState(false)
 
   const copy = async () => {
@@ -205,14 +386,20 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   return (
     <div className="malik-md-codeblock">
       <div className="malik-md-codebar">
-        <span>{language || "code"}</span>
-        <button type="button" onClick={() => void copy()} aria-label="Копировать код">
-          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-          {copied ? "Скопировано" : "Копировать"}
-        </button>
+        <span title={filename}>{filename || language || "code"}</span>
+        <div className="malik-md-codebar-actions">
+          <button type="button" onClick={() => downloadTextArtifact(filename, code)} aria-label={`Скачать ${filename}`}>
+            <Download aria-hidden="true" />
+            Скачать
+          </button>
+          <button type="button" onClick={() => void copy()} aria-label="Копировать код">
+            {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+            {copied ? "Скопировано" : "Копировать"}
+          </button>
+        </div>
       </div>
-      <pre className="malik-md-pre" data-language={language || undefined}>
-        <code>{code}</code>
+      <pre className="malik-md-pre" data-language={language || undefined} data-filename={filename}>
+        <code>{highlightedCode(code, language)}</code>
       </pre>
     </div>
   )
@@ -220,14 +407,31 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
 
 export function MalikMarkdown({ text, className }: Props) {
   const blocks = parseBlocks(text)
+  const codeFiles = codeFilesFrom(blocks)
+
+  const downloadAll = () => {
+    if (codeFiles.length === 1) {
+      downloadTextArtifact(codeFiles[0].name, codeFiles[0].content)
+      return
+    }
+    if (codeFiles.length > 1) downloadProjectZip("malik-ai-files.zip", codeFiles)
+  }
 
   return (
     <div className={className ? `malik-md ${className}` : "malik-md"}>
+      {codeFiles.length > 1 ? (
+        <div className="malik-md-artifact-toolbar" role="group" aria-label="Файлы ответа">
+          <span><Archive aria-hidden="true" /> {codeFiles.length} файлов готовы</span>
+          <button type="button" onClick={downloadAll}>
+            <Download aria-hidden="true" /> Скачать все ZIP
+          </button>
+        </div>
+      ) : null}
       {blocks.map((block, position) => {
         const key = `b${position}`
 
         if (block.kind === "code") {
-          return <CodeBlock key={key} language={block.language} code={block.lines.join("\n")} />
+          return <CodeBlock key={key} language={block.language} filename={block.filename} code={block.lines.join("\n")} />
         }
 
         if (block.kind === "table") {

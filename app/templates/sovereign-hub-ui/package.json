@@ -35,6 +35,7 @@
     "test:video-speed": "node scripts/verify-video-speed.mjs",
     "test:coding-models": "node scripts/verify-coding-models.mjs",
     "test:answer-format": "node scripts/verify-answer-format.mjs",
+    "test:chat-artifacts": "node --experimental-strip-types --no-warnings scripts/verify-chat-code-routing.mjs && node --experimental-strip-types --no-warnings scripts/verify-chat-artifacts.mjs",
     "test:responses": "node scripts/verify-response-quality.mjs",
     "test:action-os": "node scripts/verify-action-os.mjs",
     "test:image-quality": "node scripts/verify-image-quality.mjs",

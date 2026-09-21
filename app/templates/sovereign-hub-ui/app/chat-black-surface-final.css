@@ -121,18 +121,62 @@
 }
 
 /* Copy-ready code and real comparison tables in assistant answers. */
+#malik-root .malik-md-artifact-toolbar {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 0.8em;
+  padding: 7px 8px 7px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 13px;
+  background: #0a0a0a;
+  color: #d6d6da;
+  font: 600 12px/1.2 system-ui, sans-serif;
+}
+
+#malik-root .malik-md-artifact-toolbar span,
+#malik-root .malik-md-artifact-toolbar button,
+#malik-root .malik-md-codebar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#malik-root .malik-md-artifact-toolbar button {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9px;
+  background: #f5f5f5;
+  color: #050505;
+  font-weight: 720;
+  transition: background-color 140ms ease, transform 140ms ease;
+}
+
+#malik-root .malik-md-artifact-toolbar button:hover {
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+#malik-root .malik-md-artifact-toolbar svg {
+  width: 15px;
+  height: 15px;
+}
+
 #malik-root .malik-md-codeblock {
   max-width: 100%;
   margin: 0 0 0.95em;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 13px;
-  background: #090909;
+  background: #050505;
 }
 
 #malik-root .malik-md-codebar {
   display: flex;
-  min-height: 38px;
+  min-height: 42px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -169,11 +213,61 @@
 
 #malik-root .malik-md-codeblock .malik-md-pre {
   margin: 0;
-  padding: 0.9rem 1rem 1rem;
+  padding: 0.65rem 0 0.8rem;
   border: 0;
   border-radius: 0;
-  background: #090909;
+  background: #050505;
 }
+
+#malik-root .malik-md-codebar > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+}
+
+#malik-root .malik-md-codebar-actions {
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+#malik-root .malik-md-codeblock .malik-md-pre code {
+  display: block;
+  min-width: max-content;
+  color: #f3f4f6;
+  font-size: 0.95em;
+}
+
+#malik-root .malik-md-code-line {
+  display: flex;
+  min-height: 1.6em;
+}
+
+#malik-root .malik-md-code-line-number {
+  position: sticky;
+  left: 0;
+  flex: 0 0 3.6em;
+  padding-right: 0.8em;
+  border-right: 1px solid rgba(255, 255, 255, 0.11);
+  color: #81818b;
+  background: #050505;
+  text-align: right;
+  user-select: none;
+}
+
+#malik-root .malik-md-code-line-text {
+  padding: 0 1.1em;
+  white-space: pre;
+}
+
+#malik-root .malik-md-token-tag { color: #64b5ff; }
+#malik-root .malik-md-token-attribute { color: #62d7f4; }
+#malik-root .malik-md-token-string { color: #f6a277; }
+#malik-root .malik-md-token-keyword { color: #c998f7; }
+#malik-root .malik-md-token-function { color: #f5e88c; }
+#malik-root .malik-md-token-number { color: #f2ae77; }
+#malik-root .malik-md-token-comment { color: #87909b; }
 
 #malik-root .malik-md-table-wrap {
   max-width: 100%;
@@ -218,8 +312,22 @@
 }
 
 @media (max-width: 680px) {
+  #malik-root .malik-md-artifact-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  #malik-root .malik-md-artifact-toolbar button {
+    justify-content: center;
+  }
+
   #malik-root .malik-md-codebar {
     min-height: 36px;
+  }
+
+  #malik-root .malik-md-codebar-actions button {
+    padding: 0 6px;
+    font-size: 10px;
   }
 
   #malik-root .malik-md-table {

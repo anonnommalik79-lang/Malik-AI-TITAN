@@ -13,6 +13,8 @@ import { PreviewPanel } from "./preview-panel"
 import { clearStoredAuthSnapshot, storeWorkOSProfile } from "@/lib/auth/client-session"
 import { MALIK_OWNER_EMAIL, isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
+import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
+import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
 import { FeatureCenter } from "./features/FeatureCenter"
 import { CapabilitiesPanel } from "./capabilities"
@@ -189,8 +191,11 @@ const MALIK_DASHBOARD_SAFE_TEXT = ""
 
 function isDashboardBadText(value: string) {
   const text = String(value || "")
-  const commaCount = (text.match(/,/g) || []).length
-  const perSpamCount = (text.match(/\bper[-\w]*/gi) || []).length
+  // Code, JSON and CSV naturally contain many commas. Quality heuristics must
+  // inspect prose only or a valid downloadable answer can disappear entirely.
+  const prose = text.replace(/```[\s\S]*?(?:```|$)/g, "")
+  const commaCount = (prose.match(/,/g) || []).length
+  const perSpamCount = (prose.match(/\bper[-\w]*/gi) || []).length
   const badMarks = [
     "\u00D0", "\u00D1", "\u00E2",
     "\u0420\u045F", "\u0420\u0491", "\u0420\u0451", "\u0420\u00B0", "\u0420\u00B5", "\u0421\u0453", "\u0421\u201A", "\u0421\u0152",
@@ -5498,6 +5503,9 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     text: string,
     mode: ResponseMode
   ): { text: string; code: string; lang: string } => {
+    // A chat answer may contain an explanation followed by code. Never strip
+    // those fenced blocks just because there is prose before them.
+    if (mode !== "canvas") return { text: text || "", code: "", lang: "" }
     const ticks = String.fromCharCode(96).repeat(3)
     const codeBlockRegex = new RegExp(
       ticks + '(?:([a-zA-Z0-9_+\\-]*)\\s*)?\\n([\\s\\S]*?)' + ticks,
@@ -5565,11 +5573,11 @@ const detectResponseMode = (text: string): ResponseMode => {
   ]
 
   const codeWords = [
-    "python", "javascript", "typescript", "sql", "функц", "скрипт", "пример кода",
-    "ошибка", "debug", "refactor", "js", "ts"
+    "python", "javascript", "typescript", "sql", "код", "программ", "алгоритм", "бот",
+    "функц", "скрипт", "пример кода", "ошибка", "debug", "refactor", "js", "ts"
   ]
 
-  const createWords = ["создай", "сделай", "сгенерируй", "построй", "собери", "build", "generate", "create", "make"]
+  const createWords = ["создай", "сделай", "напиши", "разработай", "реализуй", "сгенерируй", "построй", "собери", "build", "write", "implement", "generate", "create", "make"]
   const canvasWords = [
     "сайт", "лендинг", "страница", "интерфейс", "шаблон", "дашборд", "компонент", "код",
     "website", "site", "landing", "dashboard", "ui", "react", "tsx", "html", "component",
@@ -5601,25 +5609,28 @@ const buildSovereignRuntimePlan = (
   const lower = (prompt || "").toLowerCase()
   const attachmentKinds = new Set(attachments.map((item) => item.kind))
 
-  const canvasModes: AiModeId[] = ["website", "canvas", "presentation", "pdf", "word", "creator"]
-  const codeModes: AiModeId[] = ["code", "architect", "debug", "data", "security", "research", "deep"]
-  const directCanvasSignal =
-    detectedMode === "canvas" ||
-    canvasModes.includes(activeMode) ||
-    /website|landing|dashboard|template|canvas|preview|html|tsx|react|component|ui|saas/.test(lower)
+  const canvasModes: AiModeId[] = ["website", "canvas"]
+  const codeModes: AiModeId[] = ["code", "architect", "debug"]
+  const implementationRequest = /сделай|создай|напиши|сверстай|реализуй|построй|сгенерируй|разработай|исправь|почини|build|create|write|generate|implement|fix/i.test(lower)
+  // A request to write a site is still a coding answer in chat. Only an
+  // explicit packaged-project request enters the ZIP/QA pipeline.
+  const explicitProjectBuild = explicitlyRequestsPackagedProject(prompt)
+  const directCanvasSignal = explicitProjectBuild
 
   const directCodeSignal =
-    detectedMode === "code" ||
+    detectedMode === "code" || (detectedMode === "canvas" && implementationRequest) ||
+    isChatArtifactCreationRequest(prompt) ||
     codeModes.includes(activeMode) ||
-    /debug|error|exception|typescript|javascript|python|sql|refactor|architecture|file tree|api route/.test(lower)
+    (canvasModes.includes(activeMode) && implementationRequest) ||
+    /debug|error|exception|refactor/.test(lower)
 
   const responseMode: ResponseMode = directCanvasSignal ? "canvas" : directCodeSignal ? "code" : "chat"
   const hasMedia = attachmentKinds.has("image") || attachmentKinds.has("video") || attachmentKinds.has("audio")
   const hasFiles = attachmentKinds.has("file") || attachmentKinds.has("code") || attachmentKinds.has("url")
-  const isProjectRequest = responseMode === "canvas"
+  const isProjectRequest = explicitProjectBuild
 
   const techStack = isProjectRequest
-    ? ["Next.js", "React", "Tailwind", "Canvas", "Safe fallback"]
+    ? ["Project", "Files", "QA"]
     : responseMode === "code"
       ? ["Code", "Debug", "Architecture", "Safe patch"]
       : hasMedia
@@ -5663,13 +5674,12 @@ const buildSovereignRuntimePlan = (
     isProjectRequest,
     status: isProjectRequest ? "building" : "draft",
     techStack,
-    canvasReason: isProjectRequest ? "Creative/build request detected, open right canvas on desktop." : "Normal chat/code flow.",
+    canvasReason: isProjectRequest ? "Packaged project explicitly requested." : "Normal chat/code flow.",
     instruction: [
       "[MALIK_SOVEREIGN_DASHBOARD_KERNEL_V2]",
       modeRules[activeMode],
       `Detected response mode: ${responseMode}.`,
-      `Canvas policy: ${isProjectRequest ? "open right preview with generated artifact" : "keep response in chat unless code artifact is explicitly requested"}.`,
-      "If backend answer is weak, empty, or only says done, use the local Google Veo and still give a useful result.",
+      `Canvas policy: ${isProjectRequest ? "build a downloadable project" : "return the answer and any requested code in chat"}.`,
       "Never break /api/stream. Never require secrets on the frontend. Never pretend a deploy happened.",
       ...attachmentRules,
     ].join("\n"),
@@ -5727,8 +5737,8 @@ const buildSovereignInstruction = (mode: ResponseMode, prompt: string): string =
 Ты — Malik AI Sovereign: быстрый, точный, профессиональный AI-оркестратор.
 Всегда отвечай по сути, без пустого "Готово".
 Если вопрос обычный — дай нормальный человеческий ответ.
-Если вопрос про код — дай рабочее решение, шаги проверки и код-блоки.
-Если вопрос просит сайт/UI/лендинг/dashboard/компонент — верни один большой production-ready код-блок.
+Если пользователь просит код, напиши именно запрошенный код. Язык, стек, количество файлов и формат выбирай по запросу пользователя, не подменяй готовым шаблоном.
+Не добавляй длинное вступление или план вместо результата. Не утверждай, что запускал код, если не запускал.
 Никогда не возвращай только "Готово".
 Не называй себя ChatGPT, Gemini, Grok или чужим брендом. Ты Malik AI.
 Сохраняй стиль: уверенный, полезный, понятный, без мусора.
@@ -5739,32 +5749,16 @@ const buildSovereignInstruction = (mode: ResponseMode, prompt: string): string =
 [UI_GENERATION_MODE]
 User request: ${prompt}
 
-Сгенерируй УНРКАЛЬНЫЙ проект строго под тему запроса.
-Запрещено использовать один и тот же дефолтный Sovereign-шаблон.
-
-Жёсткие требования к UI:
-- Один цельный код-блок: HTML/CSS/JS или React/Tailwind, без разбросанных кусочков.
-- Production-ready, responsive, mobile-first.
-- Реальные тематические секции под запрос пользователя, не заглушки.
-- Дорогая визуальная система: glassmorphism, gradients, depth, shadows, cards, micro-interactions.
-- Если ресторан: hero/menu/booking/reviews/location/contact.
-- Если фитнес: hero/programs/coaches/schedule/pricing/CTA.
-- Если SaaS: hero/features/dashboard-preview/pricing/testimonials/FAQ/CTA.
-- Если dashboard: sidebar/topbar/cards/charts/table/filters/activity.
-- Если portfolio: hero/projects/skills/about/contact.
-- Если продажи/e-commerce: hero, benefits, product cards, pricing, testimonials, FAQ, CTA, footer.
-- Если игра: интерактивная логика, state, score, controls, restart, анимации и понятные правила.
-- Код должен быть самодостаточный и красивый сразу после вставки.
-- Не пиши "Готово" вместо кода.
-- Если модель не уверена — всё равно возвращай полноценный рабочий демо-проект по теме.
+Соблюдай спецификацию пользователя. Не навязывай React, Tailwind, готовые секции, цвета или дизайн, которых он не просил.
+Выдай необходимые файлы и код полностью, без заглушек и выдуманного результата проверки.
 `
   }
 
   if (mode === "code") {
     return `${base}
 [CODE_ASSISTANT_MODE]
-Дай понятное решение с рабочим кодом.
-Если исправляешь баг — объясни причину, дай точную замену и проверку.
+Дай код по запросу пользователя, по возможности сразу с именем языка в блоке. Объяснение — только если оно нужно или запрошено.
+Если исправляешь баг — кратко объясни причину и покажи точную замену.
 Не открывай canvas без необходимости.
 `
   }
@@ -5917,6 +5911,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const mode = runtimePlan.responseMode
   const isProjReq = runtimePlan.isProjectRequest
   const isCodeReq = mode === "code"
+  const isArtifactRequest = isChatArtifactCreationRequest(cleanContent)
   // MALIK_CHAT_PREVIEW_CLOSE_V3
   if (!isProjReq) {
     setIsGeneratingTerminal(false)
@@ -6585,10 +6580,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         responseDepth,
         research: options?.research ?? readWebSearchEnabled(),
         stream: true,
-        maxTokens: depthLimits.maxTokens,
+        // Full source bundles and slide decks must not inherit Fast mode's
+        // short-answer budget. The server still applies account/provider caps.
+        maxTokens: isArtifactRequest ? Math.max(depthLimits.maxTokens, 8_000) : depthLimits.maxTokens,
         temperature: depthLimits.temperature,
         quality: {
-          minimumAnswerChars: isProjReq ? 1200 : Math.max(depthLimits.minAnswerChars, 80),
+          minimumAnswerChars: isProjReq || isArtifactRequest ? 1200 : Math.max(depthLimits.minAnswerChars, 80),
           retryIfShort: responseDepth === "deep" || responseDepth === "ultra",
           neverReturnOnly: ["Готово", "Ок", "Done", "Yes"],
         },

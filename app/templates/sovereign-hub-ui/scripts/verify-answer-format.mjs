@@ -7,7 +7,7 @@ const require_ = createRequire(import.meta.url)
 const React = require_("react")
 const { renderToStaticMarkup } = require_("react-dom/server")
 const icon = (name) => function TestIcon() { return React.createElement("svg", { "data-icon": name }) }
-const lucide = { Check: icon("check"), Copy: icon("copy") }
+const lucide = { Archive: icon("archive"), Check: icon("check"), Copy: icon("copy"), Download: icon("download") }
 
 /**
  * The chat printed the model's reply into a `whitespace-pre-wrap` div, so every
@@ -36,6 +36,7 @@ const box = { exports: {} }
 new Function("require", "module", "exports", "React", js.replace(/require\("react"\)/g, "React"))(
   (name) => {
     if (name === "lucide-react") return lucide
+    if (name === "@/lib/business/project-zip") return { downloadProjectZip() {} }
     throw new Error(`unexpected require(${name})`)
   }, box, box.exports, React,
 )
@@ -49,7 +50,7 @@ function check(name, fn) {
     console.log(`  ok  ${name}`)
   } catch (error) {
     failures += 1
-    console.error(`  FAIL ${name}\n       ${error.message.split("\n")[0]}`)
+    console.error(`  FAIL ${name}\n       ${error.message}`)
   }
 }
 
@@ -112,7 +113,9 @@ check("model text is never injected as HTML", () => {
 check("an unterminated code fence does not swallow the rest of the answer", () => {
   // Streaming answers get cut off mid-block all the time.
   const html = render("Вот код:\n\n```js\nconst a = 1")
-  assert.match(html, /const a = 1/)
+  assert.match(html, /token-keyword">const/)
+  assert.match(html, / a = /)
+  assert.match(html, /token-number">1/)
 })
 
 check("a plain one-line answer stays one plain paragraph", () => {

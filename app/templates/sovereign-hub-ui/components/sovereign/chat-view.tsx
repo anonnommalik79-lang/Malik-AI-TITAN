@@ -61,8 +61,9 @@ const MALIK_CHATVIEW_SAFE_TEXT = ""
 
 function isChatViewBadText(value: string) {
   const text = String(value || "")
-  const commaCount = (text.match(/,/g) || []).length
-  const perSpamCount = (text.match(/\bper[-\w]*/gi) || []).length
+  const prose = text.replace(/```[\s\S]*?(?:```|$)/g, "")
+  const commaCount = (prose.match(/,/g) || []).length
+  const perSpamCount = (prose.match(/\bper[-\w]*/gi) || []).length
   const badMarks = [
     "\u00D0", "\u00D1", "\u00E2",
     "\u0420\u045F", "\u0420\u0491", "\u0420\u0451", "\u0420\u00B0", "\u0420\u00B5", "\u0421\u0453", "\u0421\u201A", "\u0421\u0152",

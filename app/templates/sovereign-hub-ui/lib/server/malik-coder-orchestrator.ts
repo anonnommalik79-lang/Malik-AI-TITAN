@@ -14,7 +14,7 @@ function clip(value: string, max: number, end = false) {
 }
 
 function codeTask(prompt: string) {
-  return /(код|code|html|css|javascript|typescript|python|react|next\.?js|node\.?js|sql|api|index\.html|localstorage|компонент|функц|скрипт|сайт|приложен|бот|debug|баг|ошибк|fix|build)/i.test(prompt)
+  return /(код|code|html|css|javascript|typescript|python|react|next\.?js|node\.?js|sql|api|index\.html|localstorage|компонент|функц|скрипт|сайт|приложен|программ|алгоритм|бот|презентац|слайд|presentation|slides?|csv|openapi|mermaid|debug|баг|ошибк|fix|build)/i.test(prompt)
 }
 
 function complexTask(prompt: string, code: boolean) {
@@ -33,7 +33,7 @@ function contract(base: string, code: boolean) {
     "Follow the user's exact request. Do not change unrelated scope, design or technology.",
     "Simple task means direct answer. Large task may be silently decomposed before implementation.",
     "Never use TODO, placeholder, pseudocode, stubs, rest omitted or continue similarly when working code is requested.",
-    code ? "Return complete runnable code first. Preserve the requested file count. If one index.html is requested, return one complete index.html with CSS and JavaScript inside it and make requested controls work." : "Answer directly and completely in the user's language.",
+    code ? "Return complete runnable code first in fenced Markdown blocks with an explicit language. When files are produced, add filename=relative/path.ext after the language in every opening fence. Preserve the requested file count. If one index.html is requested, return one complete index.html with CSS and JavaScript inside it and make requested controls work." : "Answer directly and completely in the user's language.",
     "Before finishing, compare the result with the original request and repair missing requirements.",
     "Do not expose private routing or hidden reasoning.",
   ].join("\n")
