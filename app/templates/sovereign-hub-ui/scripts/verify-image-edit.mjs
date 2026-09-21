@@ -29,6 +29,16 @@ assert.equal(edit('добавь пункт в список'), false)
 assert.equal(edit('убери человека на фото'), true)
 assert.equal(create('сгенерируй фото кота'), true)
 
+// Creation prompts with layout/lettering words must never demand an upload.
+for (const prompt of [
+  'сгенерируй фото что там иконка темная и внизу надпись красавчик',
+  'сделай фото с логотипом сверху и надписью снизу',
+  'создай картинку и добавь текст внизу',
+]) {
+  assert.equal(create(prompt), true, prompt)
+  assert.equal(edit(prompt, false), false, prompt)
+}
+
 const dashboardSource = fs.readFileSync('components/sovereign/dashboard.tsx', 'utf8')
 assert.match(dashboardSource, /const forcedImageEdit = hasRequestImageAttachment && isExplicitImageEditRequest\(cleanContent, true\)/)
 assert.match(dashboardSource, /const requestedInlineMediaKind = forcedImageEdit[\s\S]*?\? "image"/)
