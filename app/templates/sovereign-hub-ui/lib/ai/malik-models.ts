@@ -37,8 +37,8 @@ function inferCapabilities(providerModel: string): MalikModelDefinition["capabil
 const ROUTER_TEXT_MODELS: MalikModelDefinition[] = ROUTER_TEXT_CATALOG.map((entry) => ({
   id: `router:${entry.provider}:${entry.providerModel}`,
   label: entry.label,
-  description: `${entry.provider === "xkiro" ? "xKiro" : entry.provider === "llm7" ? "LLM7" : "NaraRouter"} · ${entry.access === "free" ? "Free route" : "catalog route"}`,
-  tier: "free",
+  description: `${entry.provider === "xkiro" ? "xKiro" : entry.provider === "llm7" ? "LLM7" : "NaraRouter"} · ${entry.access === "free" ? "Free route" : "Pro route"}`,
+  tier: entry.access === "catalog" ? "pro" : "free",
   provider: entry.provider,
   providerModel: entry.providerModel,
   capabilities: inferCapabilities(entry.providerModel),
@@ -118,8 +118,8 @@ export const MALIK_MODELS: readonly MalikModelDefinition[] = [
 
 export const PUBLIC_MALIK_MODELS = MALIK_MODELS.filter((model) => !model.hidden)
 export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-max"
-export const FREE_MALIK_MODELS = PUBLIC_MALIK_MODELS.filter((model) => model.access !== "catalog")
-export const PRO_MALIK_MODELS: readonly MalikModelDefinition[] = []
+export const FREE_MALIK_MODELS = PUBLIC_MALIK_MODELS.filter((model) => model.tier === "free")
+export const PRO_MALIK_MODELS = PUBLIC_MALIK_MODELS.filter((model) => model.tier === "pro")
 
 const ROUTER_AUTO_IDS = ROUTER_AUTO_TEXT_CATALOG.map((entry) => `router:${entry.provider}:${entry.providerModel}`)
 const LEGACY_AUTO_IDS = LEGACY_INTERNAL_MODELS
@@ -145,10 +145,10 @@ export function hasMalikProAccess(plan: AIPlan | string | null | undefined): boo
   return plan === "pro" || plan === "ultra" || plan === "owner"
 }
 
-export function canUseMalikModel(modelId: MalikModelId, _plan: AIPlan | string | null | undefined): boolean {
+export function canUseMalikModel(modelId: MalikModelId, plan: AIPlan | string | null | undefined): boolean {
   if (!isMalikModelId(modelId)) return false
   const model = getMalikModel(modelId)
-  return model.hidden === true || model.access !== "catalog"
+  return model.hidden === true || model.tier === "free" || hasMalikProAccess(plan)
 }
 
 export function loadMalikModelSelection(): MalikModelId {

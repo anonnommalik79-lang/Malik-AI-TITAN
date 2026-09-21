@@ -1,4 +1,4 @@
-import { PUBLIC_MALIK_MODELS } from "../ai/malik-models"
+import { FREE_MALIK_MODELS, PRO_MALIK_MODELS } from "../ai/malik-models"
 
 // Keep "pro" as the stored entitlement ID so existing subscriptions keep working.
 export const PUBLIC_PLANS = [
@@ -8,7 +8,7 @@ export const PUBLIC_PLANS = [
     price: "0",
     description: "Для знакомства и повседневных задач.",
     features: [
-      `Все ${PUBLIC_MALIK_MODELS.length} модели/маршрута в селекторе`,
+      `${FREE_MALIK_MODELS.length} бесплатных моделей/маршрутов в селекторе`,
       "Веб-поиск по запросу с источниками",
       "История чатов и контекст диалога",
       "Проекты и готовые шаблоны",
@@ -22,6 +22,7 @@ export const PUBLIC_PLANS = [
     description: "Больше моделей для сложных идей и проектов.",
     features: [
       "Расширенные лимиты Malik AI",
+      `${PRO_MALIK_MODELS.length} Pro-моделей: Claude, GPT, DeepSeek, Gemini и другие`,
       "Всё, что включено в бесплатный тариф",
       "MalikCoder 1.0 для продвинутого кода",
       "Vision-модели для анализа изображений",

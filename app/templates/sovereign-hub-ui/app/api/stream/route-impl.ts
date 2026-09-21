@@ -1,6 +1,6 @@
 import { asPlainText, malikGodAnswer } from "@/lib/malik-god-router"
 import { generateProjectWithBrain } from "@/lib/ai/project-builder"
-import { DEFAULT_MALIK_MODEL_ID } from "@/lib/ai/malik-models"
+import { DEFAULT_MALIK_MODEL_ID, hasMalikProAccess } from "@/lib/ai/malik-models"
 import { checkUsageLimit, recordChatUsage } from "@/lib/limits/rate-limit"
 import {
   MalikModelRouteError,
@@ -408,7 +408,10 @@ async function runSelectedAnswer(
     const selectedModelId = selection?.modelId || DEFAULT_MALIK_MODEL_ID
     const answer = await malikGodAnswer(
       selectedBody,
-      { modelId: selectedModelId },
+      {
+        modelId: selectedModelId,
+        allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
+      },
       onProgress,
     )
     return agentRuntime ? { ...answer, agentRuntime } : answer

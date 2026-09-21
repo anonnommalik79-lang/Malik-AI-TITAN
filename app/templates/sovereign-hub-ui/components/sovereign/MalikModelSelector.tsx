@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
-import { Check, ChevronDown, Search } from "lucide-react"
-import { PUBLIC_MALIK_MODELS, getMalikModel, type MalikModelDefinition, type MalikModelId } from "@/lib/ai/malik-models"
+import { Check, ChevronDown, Crown, Lock, Search } from "lucide-react"
+import { PUBLIC_MALIK_MODELS, getMalikModel, hasMalikProAccess, type MalikModelDefinition, type MalikModelId } from "@/lib/ai/malik-models"
 import type { AIPlan } from "@/lib/ai/types"
 
 const cn = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ")
@@ -70,23 +70,52 @@ function ModelBrandIcon({ model, compact = false }: { model: MalikModelDefinitio
   )
 }
 
-function ModelRow({ model, selected, onChoose }: { model: MalikModelDefinition; selected: boolean; onChoose: () => void }) {
-  const catalogOnly = model.access === "catalog"
+function ModelRow({
+  model,
+  selected,
+  locked,
+  onChoose,
+  onUpgrade,
+}: {
+  model: MalikModelDefinition
+  selected: boolean
+  locked: boolean
+  onChoose: () => void
+  onUpgrade: () => void
+}) {
+  const pro = model.tier === "pro"
   return (
-    <button type="button" role="menuitemradio" aria-checked={selected} aria-disabled={catalogOnly || undefined} disabled={catalogOnly} className={cn("malik-model-selector__row", selected && "is-selected")} onClick={catalogOnly ? undefined : onChoose} title={catalogOnly ? "Каталог провайдера · PAYG выключен" : undefined}>
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={selected}
+      className={cn("malik-model-selector__row", selected && "is-selected", pro && "is-pro", locked && "is-locked")}
+      onClick={locked ? onUpgrade : onChoose}
+      title={locked ? "MalikAI Plus · нажмите, чтобы открыть подписку" : pro ? "MalikAI Plus model" : undefined}
+    >
       <ModelBrandIcon model={model} />
       <span className="malik-model-selector__copy">
         <span className="malik-model-selector__name">{model.label}</span>
         <span className="malik-model-selector__description">{model.description}</span>
       </span>
-      <span className="malik-model-selector__state">{selected ? <Check aria-label="Выбрано" /> : catalogOnly ? <span className="is-free">Каталог</span> : null}</span>
+      <span className="malik-model-selector__state">
+        {selected ? <Check aria-label="Выбрано" /> : pro ? (
+          <span className="malik-model-selector__pro-badge" aria-label={locked ? "Требуется MalikAI Plus" : "MalikAI Plus"}>
+            <Crown aria-hidden="true" />
+            <span>PRO</span>
+            {locked ? <Lock className="malik-model-selector__lock" aria-hidden="true" /> : null}
+          </span>
+        ) : null}
+      </span>
     </button>
   )
 }
 
 export function MalikModelSelector({
   selectedModelId,
+  plan,
   onSelect,
+  onOpenBilling,
   className,
   placement = "auto",
 }: {
@@ -113,6 +142,16 @@ export function MalikModelSelector({
       `${model.label} ${model.provider} ${model.providerModel}`.toLowerCase().includes(value),
     )
   }, [query])
+  const hasProAccess = hasMalikProAccess(plan)
+  const freeModels = visibleModels.filter((model) => model.tier === "free")
+  const proModels = visibleModels
+    .filter((model) => model.tier === "pro")
+    .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: "base" }))
+  const requestUpgrade = () => {
+    setOpen(false)
+    setQuery("")
+    onOpenBilling?.()
+  }
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -186,11 +225,28 @@ export function MalikModelSelector({
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск модели..." autoFocus style={{ width: "100%", border: 0, outline: 0, background: "transparent", color: "inherit", font: "inherit" }} />
         </label>
       </div>
-      <div className="malik-model-selector__group">
-        {visibleModels.map((model) => (
-          <ModelRow key={model.id} model={model} selected={model.id === selectedModelId} onChoose={() => { onSelect(model.id); setOpen(false); setQuery("") }} />
-        ))}
-      </div>
+      {freeModels.length ? (
+        <>
+          <div className="malik-model-selector__group-label">Бесплатные модели</div>
+          <div className="malik-model-selector__group">
+            {freeModels.map((model) => (
+              <ModelRow key={model.id} model={model} selected={model.id === selectedModelId} locked={false}
+                onChoose={() => { onSelect(model.id); setOpen(false); setQuery("") }} onUpgrade={requestUpgrade} />
+            ))}
+          </div>
+        </>
+      ) : null}
+      {proModels.length ? (
+        <section className="malik-model-selector__pro-section" aria-label="MalikAI Plus models">
+          <div className="malik-model-selector__group-label is-pro"><Crown aria-hidden="true" /> PRO · MalikAI Plus · {proModels.length}</div>
+          <div className="malik-model-selector__group">
+            {proModels.map((model) => (
+              <ModelRow key={model.id} model={model} selected={model.id === selectedModelId} locked={!hasProAccess}
+                onChoose={() => { onSelect(model.id); setOpen(false); setQuery("") }} onUpgrade={requestUpgrade} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   ) : null
 

@@ -146,6 +146,26 @@
   gap: 3px;
 }
 
+.malik-model-selector__group-label {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 5px;
+  color: #74747b;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.malik-model-selector__group-label.is-pro { color: #d7b85a; }
+.malik-model-selector__group-label svg { width: 13px; height: 13px; }
+.malik-model-selector__pro-section {
+  margin-top: 8px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  padding-top: 4px;
+}
+
 .malik-model-selector__divider {
   height: 1px;
   margin: 7px 8px;
@@ -176,6 +196,15 @@
 .malik-model-selector__row.is-selected {
   background: #29292d;
 }
+
+.malik-model-selector__row.is-pro { border: 1px solid transparent; }
+.malik-model-selector__row.is-pro:hover,
+.malik-model-selector__row.is-pro:focus-visible {
+  border-color: rgba(215,184,90,.24);
+  background: rgba(215,184,90,.055);
+}
+.malik-model-selector__row.is-locked { cursor: pointer; }
+.malik-model-selector__row.is-locked .malik-model-selector__name { color: #c4c4c8; }
 
 .malik-model-selector__copy {
   display: grid;
@@ -210,6 +239,24 @@
   width: 17px;
   height: 17px;
 }
+
+.malik-model-selector__pro-badge {
+  display: inline-flex;
+  min-width: 48px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid rgba(215,184,90,.22);
+  border-radius: 999px;
+  padding: 0 7px;
+  background: rgba(215,184,90,.08);
+  color: #d7b85a;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.malik-model-selector__pro-badge > svg { width: 11px; height: 11px; }
 
 /* Free/available pills were intentionally removed from the component. */
 .malik-model-selector__state .is-free,

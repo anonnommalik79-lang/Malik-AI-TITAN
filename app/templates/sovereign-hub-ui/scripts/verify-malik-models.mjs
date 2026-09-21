@@ -23,14 +23,22 @@ assert.equal(getMalikModel("malik-max").label, "MalikLLM MAX")
 assert.equal(getMalikModel("malik-max").provider, "malik-orchestrator")
 
 assert.equal(PUBLIC_MALIK_MODELS.length, 125, "Selector must expose MAX + 123 router text entries + LLM7 Default")
-assert.equal(FREE_MALIK_MODELS.length, PUBLIC_MALIK_MODELS.length, "Every public text model is unlocked in the app")
-assert.equal(PRO_MALIK_MODELS.length, 0, "No text models are Pro-gated")
+assert.equal(FREE_MALIK_MODELS.length, 49, "Free selector must expose MAX + 47 verified free routes + LLM7 Default")
+assert.equal(PRO_MALIK_MODELS.length, 76, "Provider catalog routes must be grouped as MalikAI Plus models")
 assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, MALIK_MODELS.length, "Model IDs must be unique")
 
-for (const model of PUBLIC_MALIK_MODELS) {
+for (const model of FREE_MALIK_MODELS) {
   assert.equal(model.hidden, undefined)
   assert.equal(model.tier, "free")
   assert.equal(canUseMalikModel(model.id, "free"), true, `${model.id} must be selectable on Free`)
+}
+for (const model of PRO_MALIK_MODELS) {
+  assert.equal(model.hidden, undefined)
+  assert.equal(model.tier, "pro")
+  assert.equal(model.access, "catalog")
+  assert.equal(canUseMalikModel(model.id, "free"), false, `${model.id} must be locked on Free`)
+  assert.equal(canUseMalikModel(model.id, "pro"), true, `${model.id} must unlock on MalikAI Plus`)
+  assert.equal(canUseMalikModel(model.id, "owner"), true, `${model.id} must unlock for owner`)
 }
 
 assert.equal(ROUTER_AUTO_TEXT_CATALOG.length, 47, "xKiro + Nara verified auto-free routes changed unexpectedly")
@@ -46,6 +54,9 @@ assert.equal(xkiroMistral.access, "free")
 const llm7Sol = getMalikModel("router:llm7:gpt-5.6-sol")
 assert.equal(llm7Sol.label, "gpt-5.6-sol")
 assert.equal(llm7Sol.access, "catalog", "Catalog presence must not be mislabeled as free")
+assert.equal(llm7Sol.tier, "pro")
+assert.equal(canUseMalikModel(llm7Sol.id, "free"), false)
+assert.equal(canUseMalikModel(llm7Sol.id, "pro"), true)
 
 const naraNemotron = getMalikModel("router:nara:nemotron-3-ultra-free")
 assert.equal(naraNemotron.label, "Nemotron 3 Ultra Free")

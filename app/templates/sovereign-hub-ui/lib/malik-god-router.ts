@@ -912,7 +912,7 @@ function sourceFallback(sources: SourceItem[], attempts: ProviderAttempt[]) {
 
 export async function malikGodAnswer(
   body: any,
-  selection?: { modelId: MalikModelId },
+  selection?: { modelId: MalikModelId; allowCatalog?: boolean },
   emitResearch?: ResearchEmitter,
 ): Promise<GodAnswer> {
   const prompt = extractPrompt(body)
@@ -949,6 +949,7 @@ export async function malikGodAnswer(
       attachments: Array.isArray(body?.attachments) ? body.attachments : [],
       maxTokens: Number(body?.maxTokens) || undefined,
       temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+      allowCatalog: selection.allowCatalog === true,
     })
     return {
       content: cleanText(result.content),

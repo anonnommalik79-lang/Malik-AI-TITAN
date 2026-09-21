@@ -221,6 +221,7 @@ function providerRuntime(
   requestedTemperature?: number,
   codeMode = false,
   estimatedInputTokens = 0,
+  allowCatalog = false,
 ): ProviderRuntime {
   const defaultTokens = codeMode
     ? Number(process.env.MAX_CODE_OUTPUT_TOKENS || process.env.MALIK_GOD_MAX_OUTPUT_TOKENS || 10_000)
@@ -296,7 +297,7 @@ function providerRuntime(
       timeoutMs: Math.max(commonTimeout, 45_000),
     }
   }
-  if (model.access === "catalog" && env("ALLOW_ROUTER_PAYG_MODELS").toLowerCase() !== "true") {
+  if (model.access === "catalog" && !allowCatalog && env("ALLOW_ROUTER_PAYG_MODELS").toLowerCase() !== "true") {
     return missing(`${model.label} есть в каталоге провайдера, но PAYG-вызов отключён для защиты баланса.`) as never
   }
   if (model.provider === "xkiro") {
@@ -700,6 +701,7 @@ export async function runStrictMalikModel(input: {
   maxTokens?: number
   temperature?: number
   publicModelLabel?: string
+  allowCatalog?: boolean
 }, options: { allowFallback?: boolean; continuationDepth?: number } = {}): Promise<StrictMalikResult> {
   if (hasHiddenGeminiMedia(input.attachments)) {
     try {
@@ -723,7 +725,7 @@ export async function runStrictMalikModel(input: {
 
     const messages = buildMessages({ model, prompt: input.prompt, systemPrompt: input.systemPrompt, history: input.history, attachments: input.attachments, publicModelLabel: input.publicModelLabel, fastMode })
     const estimatedInputTokens = estimateProviderInputTokens(messages)
-    const runtime = providerRuntime(model, input.maxTokens, input.temperature, codeMode, estimatedInputTokens)
+    const runtime = providerRuntime(model, input.maxTokens, input.temperature, codeMode, estimatedInputTokens, input.allowCatalog === true)
     if (fastMode) {
       const fastBudget = clampTokens(Number(env("MALIK_FAST_MAX_OUTPUT_TOKENS") || 900), 900, 1_200)
       runtime.maxTokens = Math.min(runtime.maxTokens, fastBudget)
@@ -839,6 +841,7 @@ export async function runStrictMalikModel(input: {
                 systemPrompt: input.systemPrompt,
                 maxTokens: Math.min(remainingBudget, 6_000),
                 temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.15, 0.15),
+                allowCatalog: input.allowCatalog,
               }, { allowFallback: true, continuationDepth: depth + 1 })
               if (visibleFinalText(continuation.content)) {
                 const combined = `${parsed.content.trim()}\n${continuation.content.trim()}`.trim()

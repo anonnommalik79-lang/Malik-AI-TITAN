@@ -74,7 +74,7 @@ try {
     assert.equal(shouldUseWeb("привет", { forceResearch: true }), true)
   })
 
-  const { MALIK_MODELS, PUBLIC_MALIK_MODELS, FREE_MALIK_MODELS, canUseMalikModel } = basic("lib/ai/malik-models.ts")
+  const { MALIK_MODELS, PUBLIC_MALIK_MODELS, FREE_MALIK_MODELS, PRO_MALIK_MODELS, canUseMalikModel } = basic("lib/ai/malik-models.ts")
   const { PUBLIC_PLANS } = basic("lib/billing/plans.ts")
   // The catalogue grows; the rules do not. This used to pin the exact three free
   // labels and a count of ten, so every model added to the product turned the
@@ -87,10 +87,16 @@ try {
     assert.ok(publicFree.length >= 1, "a free plan with no public free model is not a free plan")
     assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id).sort(), publicFree,
       "FREE_MALIK_MODELS must be exactly the public unlocked models")
-    for (const model of PUBLIC_MALIK_MODELS) {
+    for (const model of FREE_MALIK_MODELS) {
       assert.equal(canUseMalikModel(model.id, "free"), true)
       assert.equal(canUseMalikModel(model.id, "pro"), true)
       assert.equal(canUseMalikModel(model.id, "ultra"), true)
+    }
+    for (const model of PRO_MALIK_MODELS) {
+      assert.equal(canUseMalikModel(model.id, "free"), false)
+      assert.equal(canUseMalikModel(model.id, "pro"), true)
+      assert.equal(canUseMalikModel(model.id, "ultra"), true)
+      assert.equal(canUseMalikModel(model.id, "owner"), true)
     }
   })
 

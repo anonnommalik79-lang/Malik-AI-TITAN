@@ -1,5 +1,5 @@
 import { asJson, extractPrompt, malikGodAnswer } from "@/lib/malik-god-router"
-import { DEFAULT_MALIK_MODEL_ID } from "@/lib/ai/malik-models"
+import { DEFAULT_MALIK_MODEL_ID, hasMalikProAccess } from "@/lib/ai/malik-models"
 import { appendFounderMessage } from "@/lib/server/founder-message-log"
 import { parsePluginCommandFromBody, runMalikPlugin } from "@/lib/server/plugin-runtime"
 import {
@@ -74,7 +74,10 @@ async function handlePOST(request: Request) {
     // fields such as email/username can never grant founder mode.
     const quotaBoundBody = maxOutputTokens ? { ...body, maxTokens: maxOutputTokens } : body
     const routedBody = ownerMode ? withVerifiedOwnerChatContext(quotaBoundBody) : quotaBoundBody
-    const answer = await malikGodAnswer(routedBody, { modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID })
+    const answer = await malikGodAnswer(routedBody, {
+      modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
+      allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
+    })
     const payload = asJson(answer)
 
     /*
