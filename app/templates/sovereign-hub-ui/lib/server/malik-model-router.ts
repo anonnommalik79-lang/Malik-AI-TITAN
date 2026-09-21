@@ -103,6 +103,18 @@ function isCodeRequest(prompt: string) {
   return /(код|code|html|css|javascript|typescript|python|react|next\.?js|node\.?js|sql|api|index\.html|component|компонент|функц|скрипт|сайт|приложен|бот|debug|баг|ошибк|fix|build|repository|репозитор|class\s|function\s|const\s|let\s|import\s|```)/i.test(value)
 }
 
+
+function isFastChatRequest(prompt: string, attachments?: MalikAttachment[]) {
+  const value = String(prompt || "").trim()
+  if (!value || attachments?.length || isCodeRequest(value)) return false
+  if (value.length > 320 || value.split(/\r?\n/).length > 4) return false
+
+  // Short everyday questions should not pay the latency/cost of deep reasoning.
+  // Explicit analysis/research/planning/math-heavy instructions keep the full path.
+  if (/(подробн|глубок|проанализ|анализир|исслед|сравн|стратег|архитект|пошаг|по шагам|докаж|рассчитай|вычисли|формул|research|deep dive|analy[sz]e|compare|step by step|architecture|debug|benchmark)/i.test(value)) return false
+  return true
+}
+
 function imageUrl(attachment: MalikAttachment) {
   if (attachment.url?.startsWith("http") || attachment.url?.startsWith("data:image/")) return attachment.url
   if (!attachment.base64) return ""
@@ -132,6 +144,7 @@ function buildMessages(input: {
   history?: HistoryMessage[]
   attachments?: MalikAttachment[]
   publicModelLabel?: string
+  fastMode?: boolean
 }): ProviderMessage[] {
   const history = (input.history || [])
     .filter((message) => (message?.role === "user" || message?.role === "assistant") && typeof message.content === "string")
@@ -147,10 +160,21 @@ function buildMessages(input: {
     throw new MalikModelRouteError("MODEL_CAPABILITY_MISMATCH", `${input.model.label} не принимает изображения.`, 422, input.model.id)
   }
   const prior = history.at(-1)?.role === "user" ? history.slice(0, -1) : history
+  const qwenNoThink = input.fastMode && input.model.provider === "cloudflare" && /qwen3/i.test(input.model.providerModel)
+  const userPrompt = qwenNoThink ? `${input.prompt}\n/no_think` : input.prompt
   const content: ProviderMessage["content"] = images.length
-    ? [{ type: "text", text: input.prompt }, ...images.map((url) => ({ type: "image_url" as const, image_url: { url } }))]
-    : input.prompt
-  return [{ role: "system", content: systemPrompt(input.model, input.systemPrompt, input.publicModelLabel) }, ...prior, { role: "user", content }]
+    ? [{ type: "text", text: userPrompt }, ...images.map((url) => ({ type: "image_url" as const, image_url: { url } }))]
+    : userPrompt
+  const fastInstruction = input.fastMode
+    ? [
+        "FAST CHAT MODE:",
+        "This is a short everyday request. Answer immediately and directly.",
+        "Do not spend response budget on planning, hidden analysis, or long preambles.",
+        "Keep the final answer concise unless the user explicitly asks for detail.",
+      ].join("\n")
+    : ""
+  const basePrompt = [input.systemPrompt, fastInstruction].filter(Boolean).join("\n\n")
+  return [{ role: "system", content: systemPrompt(input.model, basePrompt, input.publicModelLabel) }, ...prior, { role: "user", content }]
 }
 
 function clampTokens(value: number, fallback: number, max = 65_536) {
@@ -635,12 +659,18 @@ function providerAttempts(model: MalikModelDefinition) {
   return 2
 }
 
-function providerSpecificBody(model: MalikModelDefinition, runtime: ProviderRuntime) {
+function providerSpecificBody(model: MalikModelDefinition, runtime: ProviderRuntime, fastMode = false) {
+  if (fastMode && model.provider === "modelscope" && /qwen\/qwen3(?:\.|-)/i.test(runtime.model)) {
+    return { enable_thinking: false }
+  }
   if (model.provider === "groq" && /^openai\/gpt-oss-(?:20b|120b)$/.test(runtime.model)) {
     return { reasoning_effort: "low", include_reasoning: false }
   }
   if (model.provider === "groq" && /^qwen\/qwen3\./.test(runtime.model)) {
     return { reasoning_effort: "none" }
+  }
+  if (fastMode && model.provider === "cerebras" && /^gpt-oss-120b$/i.test(runtime.model)) {
+    return { reasoning_effort: "low" }
   }
   if (model.provider === "nemotron-openrouter") {
     return { reasoning: { effort: "low", exclude: true } }
@@ -684,21 +714,26 @@ export async function runStrictMalikModel(input: {
   const model = getMalikModel(input.modelId)
   const started = Date.now()
   const codeMode = isCodeRequest(input.prompt)
+  const fastMode = !codeMode && isFastChatRequest(input.prompt, input.attachments)
   try {
     const cooldownMs = remainingCooldownMs(model)
     if (cooldownMs > 0) {
       throw new MalikModelRouteError("PROVIDER_COOLDOWN", `${model.label} переключается на резервный маршрут.`, 503, model.id)
     }
 
-    const messages = buildMessages({ model, prompt: input.prompt, systemPrompt: input.systemPrompt, history: input.history, attachments: input.attachments, publicModelLabel: input.publicModelLabel })
+    const messages = buildMessages({ model, prompt: input.prompt, systemPrompt: input.systemPrompt, history: input.history, attachments: input.attachments, publicModelLabel: input.publicModelLabel, fastMode })
     const estimatedInputTokens = estimateProviderInputTokens(messages)
     const runtime = providerRuntime(model, input.maxTokens, input.temperature, codeMode, estimatedInputTokens)
+    if (fastMode) {
+      const fastBudget = clampTokens(Number(env("MALIK_FAST_MAX_OUTPUT_TOKENS") || 900), 900, 1_200)
+      runtime.maxTokens = Math.min(runtime.maxTokens, fastBudget)
+    }
     const maxAttempts = providerAttempts(model)
     let lastStatus = 503
     let lastError: unknown = null
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({ selectedModelId: model.id, provider: model.provider, providerModel: runtime.model, stage: "request", attempt, codeMode, maxTokens: runtime.maxTokens, estimatedInputTokens, timeoutMs: runtime.timeoutMs }))
+      console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({ selectedModelId: model.id, provider: model.provider, providerModel: runtime.model, stage: "request", attempt, codeMode, fastMode, maxTokens: runtime.maxTokens, estimatedInputTokens, timeoutMs: runtime.timeoutMs }))
       let response: Response
       try {
         response = await providerFetch(runtime.url, {
@@ -714,7 +749,7 @@ export async function runStrictMalikModel(input: {
             messages,
             max_tokens: runtime.maxTokens,
             temperature: runtime.temperature,
-            ...providerSpecificBody(model, runtime),
+            ...providerSpecificBody(model, runtime, fastMode),
             stream: runtime.stream,
           }),
         }, runtime.timeoutMs)
