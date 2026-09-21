@@ -55,6 +55,19 @@ function detailFrom(payload: any, fallback: string) {
   )
 }
 
+function friendlyRequestError(label: string, detail: string) {
+  if (/magic hour/i.test(label)) {
+    const creditMatch = detail.match(/Rendering will cost\s+([\d.]+)\s+credits?.*?You have\s+([\d.]+)\s+credits?/i)
+    if (creditMatch) {
+      return `Недостаточно кредитов Magic Hour: нужно ${creditMatch[1]}, доступно ${creditMatch[2]}.`
+    }
+    if (/insufficient|not enough|credits?|upgrade your plan/i.test(detail) && /credit|plan/i.test(detail)) {
+      return "Недостаточно кредитов Magic Hour для этой генерации."
+    }
+  }
+  return `${label}: ${detail}`
+}
+
 async function requestJson(url: string, init: RequestInit, label: string) {
   const response = await fetch(url, { ...init, cache: "no-store" })
   const raw = await response.text()
@@ -67,7 +80,8 @@ async function requestJson(url: string, init: RequestInit, label: string) {
     }
   }
   if (!response.ok) {
-    throw new Error(`${label}: ${detailFrom(payload, `HTTP ${response.status}`)}`)
+    const detail = detailFrom(payload, `HTTP ${response.status}`)
+    throw new Error(friendlyRequestError(label, detail))
   }
   return payload
 }
@@ -200,7 +214,11 @@ export async function createFreeVideoJob(provider: FreeVideoProviderId, input: V
     const configuredEditorModel = env("MAGIC_HOUR_VIDEO_EDITOR_MODEL").toLowerCase()
     const editorModel = configuredEditorModel === "gemini-omni-1.1" ? "gemini-omni-1.1" : "ltx-2.3"
     const editorResolution = editorModel === "gemini-omni-1.1" ? "720p" : "480p"
-    const sourceEndSeconds = Math.min(10, Math.max(3, Number(input.sourceDurationSeconds || 5)))
+    const sourceDurationSeconds = Number(input.sourceDurationSeconds || duration)
+    const sourceEndSeconds = Math.min(
+      10,
+      Math.max(3, Math.min(Number.isFinite(sourceDurationSeconds) ? sourceDurationSeconds : duration, duration)),
+    )
 
     const endpoint = input.sourceVideoUrl
       ? `${root}/v1/ai-video-editor`

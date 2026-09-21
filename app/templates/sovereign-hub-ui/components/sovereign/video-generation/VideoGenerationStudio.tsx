@@ -289,7 +289,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       setDuration(5)
       setModelNotice(nextMode === "image"
         ? "Image → Video работает через Magic Hour: исходное фото остаётся первым кадром."
-        : "Видео → Видео: Magic Hour AI Video Editor редактирует исходный клип по тексту — можно добавить, убрать, заменить или изменить детали.")
+        : "Видео → Видео: Magic Hour AI Video Editor редактирует первые 5 секунд исходного клипа по тексту — можно добавить, убрать, заменить или изменить детали.")
     } else {
       setModelNotice("")
     }
@@ -360,7 +360,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       setPhase("idle")
       if (!imageMode) {
         setDuration(5)
-        setModelNotice(`Видео ${sourceDuration.toFixed(1)} сек · Magic Hour AI Video Editor. Опишите, что добавить, убрать, заменить или изменить.`)
+        setModelNotice(`Исходник ${sourceDuration.toFixed(1)} сек · будет обработано первые ${Math.min(5, sourceDuration).toFixed(1)} сек через Magic Hour AI Video Editor.`)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось прочитать файл.")
@@ -381,7 +381,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     if (mode === "video") {
       setDuration(5)
       setSelectedModelId("magichour")
-      setModelNotice("Видео → Видео обрабатывает загруженный фрагмент 3–10 секунд через Magic Hour AI Video Editor.")
+      setModelNotice(`Видео → Видео обработает первые ${Math.min(5, sourceDurationSeconds || 5).toFixed(1)} сек через Magic Hour AI Video Editor.`)
       return
     }
     setDuration(value)

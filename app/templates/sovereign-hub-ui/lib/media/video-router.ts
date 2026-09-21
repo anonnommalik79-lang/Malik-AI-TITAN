@@ -155,6 +155,10 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
     }
   }
 
+  const publicError = errors.length === 1
+    ? errors[0].replace(/^[^:]+:\s*/, "")
+    : errors.join(" → ")
+
   return {
     ok: false,
     provider: "dashscope",
@@ -162,7 +166,7 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
     taskId: "",
     status: "disabled",
     remainingDailyVideos: 0,
-    error: errors.join(" → ") || "No video provider configured. Configure MALIKVIDEO_H3_BASE_URL or another video provider.",
+    error: publicError || "No video provider configured. Configure MALIKVIDEO_H3_BASE_URL or another video provider.",
   }
 }
 
