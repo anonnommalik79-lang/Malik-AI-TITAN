@@ -635,6 +635,10 @@ function liveSseResponse(
           usedWeb: answer.usedWeb,
           sources: answer.sources,
           webSourceCount: answer.sources.length,
+          // The answer's own figures, checked against the pages it was written
+          // from. This rides on `done` rather than an event of its own so the
+          // durable-turn tee and every existing reader carry it unchanged.
+          factAudit: "factAudit" in answer ? answer.factAudit ?? null : null,
           tookMs: Date.now() - startedAt,
           agentRuntime: "agentRuntime" in answer ? answer.agentRuntime : undefined,
           projectArtifact: "projectArtifact" in answer ? answer.projectArtifact : undefined,

@@ -97,6 +97,9 @@ import "./business-model-reference-final.css"
 // Absolute last: the phone drawer. Every section pinned to the top, the chat
 // history elastic at the bottom, and nothing grey left on the panel.
 import "./mobile-drawer-final.css"
+// Truly last: loading, analysis, sources and status surfaces in black and
+// white only. It has to follow every accent rule above to strip their gold.
+import "./chat-monochrome-final.css"
 
 // Let Next emit one viewport tag. Read the visible area separately on iOS,
 // where the keyboard does not resize dvh. Keep deliberate pinch zoom available.

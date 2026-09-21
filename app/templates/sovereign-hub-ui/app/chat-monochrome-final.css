@@ -1,0 +1,134 @@
+/* MALIK AI — strictly black and white progress, analysis and source surfaces.
+   Loads last so it beats every gold/accent rule in the chain above it.
+
+   Why a filter and not a list of colours. The gold accent reaches these
+   surfaces from a dozen places at once — CSS variables, hard-coded rgba()
+   literals, gradients, box-shadows, conic spinners, inline SVG fills — and a
+   hand-written list of overrides would miss one and keep missing new ones.
+   `filter: grayscale(1)` cannot miss: the element and its whole subtree are
+   painted first and desaturated afterwards, so nothing coloured can survive,
+   including colour introduced later.
+
+   Deliberately scoped to interface chrome. Photographs, generated images,
+   video posters and anything else that IS the content keep their colour —
+   "black and white interface" is the request, not a black and white gallery.
+
+   Deliberately NOT applied to any element that contains a position: fixed
+   descendant. A filtered element becomes the containing block for fixed
+   children, which would tear overlays and drawers off the viewport. */
+
+/* --- the last colour on the page is the type itself ---------------------
+
+   Chromium renders text with RGB subpixel antialiasing: every glyph edge gets
+   a red fringe on one side and a blue one on the other. On small grey text
+   over black that reads as a warm cast, and no `color` rule can reach it,
+   because it is added when the glyph is rasterised rather than painted.
+
+   The surfaces filtered below never showed it — an element with a filter is
+   composited on its own layer, which silently drops subpixel antialiasing.
+   This asks for that everywhere instead of leaving it to a side effect, so
+   grey type is grey to the pixel. */
+
+#malik-root,
+#malik-root * {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- while the answer is being produced -------------------------------- */
+
+#malik-root .malik-thinking-line,
+#malik-root .malik-thinking-dots,
+#malik-root .malik-thinking-card,
+#malik-root .malik-thinking-orb,
+#malik-root .malik-thinking-title,
+#malik-root .malik-ai-avatar.is-working,
+#malik-root .malik-inline-send,
+#malik-root .malik-video-analysis-pulse,
+#malik-root .malik-photo-final-pulse,
+
+/* --- the live research / analysis trail --------------------------------- */
+
+#malik-root .malik-activity,
+#malik-root .malik-activity-row,
+#malik-root .malik-activity-icon,
+#malik-root .malik-live-source-icons,
+#malik-root .malik-research,
+
+/* --- the sources an answer was written from ----------------------------- */
+
+#malik-root .malik-source-inline,
+#malik-root .malik-source-pill,
+#malik-root .malik-source-chip,
+#malik-root .malik-source-icon,
+#malik-root .malik-source-top,
+
+/* --- progress bars and generation status -------------------------------- */
+
+#malik-root .malik-canvas-progress,
+#malik-root .malik-canvas-progress-bar,
+#malik-root .malik-art-progress,
+#malik-root .malik-art-status,
+#malik-root .malik-home-progress,
+#malik-root .malik-image-loading-pc-final,
+#malik-root .malik-image-loading-mobile-final,
+#malik-root .malik-founder-messages-loading,
+
+/* --- the line under an answer naming the model, and the composer's own
+       research shortcut: both were gold, both are status, not content ----- */
+
+#malik-root .malik-response-model,
+#malik-root .malik-composer-context-row {
+  filter: grayscale(1) !important;
+  -webkit-filter: grayscale(1) !important;
+}
+
+/* The fact-grounding panel is written in greys already. This states it, so a
+   later accent rule cannot tint the one surface whose whole job is to be read
+   as a neutral verdict rather than a brand flourish. */
+#malik-root .malik-fact-audit {
+  filter: grayscale(1) !important;
+  -webkit-filter: grayscale(1) !important;
+}
+
+/* Emoji ignore `color` — the glyph carries its own palette — so the ⚡ beside
+   a sent message can only be desaturated, not recoloured. */
+#malik-root .malik-user-lightning-reaction,
+#malik-root .malik-cognitive-brand b,
+#malik-root .malik-dual-card__identity i {
+  filter: grayscale(1) !important;
+  -webkit-filter: grayscale(1) !important;
+}
+
+/* The composer keeps its shape and its glow; only the gold leaves. A filter
+   is wrong here — the model menu and the attachment sheet open out of this
+   shell, and a filtered ancestor re-anchors anything fixed inside it. */
+#malik-root .malik-composer-panel,
+#malik-root .malik-composer-panel:focus-within {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  box-shadow:
+    0 -18px 86px rgba(0, 0, 0, 0.55),
+    0 2px 24px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+/* The lit strip along the composer's top edge — the single brightest piece of
+   gold left in the chat. Same light, no hue. */
+#malik-root .malik-composer-panel::before,
+#malik-root .malik-composer-panel:focus-within::before {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0.42),
+    rgba(255, 255, 255, 0)
+  ) !important;
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.22) !important;
+}
+
+/* Source favicons sit inside the surfaces above and are greyed with them —
+   deliberately. A row of coloured site logos is the loudest colour left on an
+   otherwise black and white answer.
+
+   The generated image itself is never touched: it lives in
+   .malik-generated / the media cards, none of which appear above. */

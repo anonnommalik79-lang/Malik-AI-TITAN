@@ -168,6 +168,7 @@ import {
 import type { AIPlan } from "@/lib/ai/types"
 import { isStoredGeneratedImageUrl, persistGeneratedImageReference, persistGeneratedImageUrl, resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
+import { normalizeFactAudit } from "@/lib/ai/fact-audit"
 import {
   responseDepthInstruction,
   responseDepthLimits,
@@ -6514,6 +6515,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
               sources,
               tookMs: Number(payload?.tookMs) || Date.now() - previous.startedAt,
               webSourceCount: Number(payload?.webSourceCount) || sources.length,
+              factAudit: normalizeFactAudit(payload?.factAudit),
             }
           }
           return

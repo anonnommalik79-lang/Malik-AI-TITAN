@@ -26,10 +26,12 @@ import {
   Search,
   SendHorizontal,
   Share,
+  ShieldCheck,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
   Timer,
+  TriangleAlert,
   Video,
   Volume2,
   Wand2,
@@ -39,6 +41,7 @@ import {
 import type { GenerationStatusType } from "./generation-status"
 import type { AIPlan } from "@/lib/ai/types"
 import type { MalikMessageResearch, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
+import type { MalikFactAudit, MalikFactClaim } from "@/lib/ai/fact-audit"
 import { DEFAULT_MALIK_MODEL_ID, getMalikModel, type MalikModelId } from "@/lib/ai/malik-models"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { MalikModelSelector } from "./MalikModelSelector"
@@ -475,10 +478,10 @@ function AttachmentPill({ item, onRemove }: { item: ChatAttachment; onRemove: ()
 
   const Icon = item.kind === "audio" ? Volume2 : item.kind === "code" ? Code : item.kind === "url" ? LinkIcon : FileText
   return (
-    <div className="group flex max-w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-xs text-slate-300">
+    <div className="group flex max-w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-xs text-zinc-300">
       <Icon className="h-4 w-4 shrink-0 text-zinc-300" />
       <span className="truncate">{item.name || item.url}</span>
-      <button type="button" onClick={onRemove} className="ml-1 rounded-md p-1 text-slate-500 hover:bg-white/10 hover:text-white">
+      <button type="button" onClick={onRemove} className="ml-1 rounded-md p-1 text-zinc-500 hover:bg-white/10 hover:text-white">
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
@@ -1154,6 +1157,138 @@ function SourceDeck({ research }: { research: MalikMessageResearch }) {
   )
 }
 
+/**
+ * One checked figure. The number itself carries the colour, because the number
+ * is what the reader has to decide about — the sentence is only there so they
+ * can find it in the answer above without hunting.
+ */
+function FactClaimRow({ claim, sources, repeatsSentence = false }: { claim: MalikFactClaim; sources: MalikWebSource[]; repeatsSentence?: boolean }) {
+  const supported = claim.verdict === "supported"
+  const chips = claim.sourceIndexes.map((index) => ({ index, source: sources[index - 1] })).filter((chip) => chip.source)
+
+  return (
+    <li className="flex gap-2.5 rounded-xl px-2 py-1.5">
+      {/* No colour anywhere in this panel. What a figure needs is told by
+          contrast instead: a solid white marker is a problem, a faint one is
+          a confirmation. That reads the same on a grayscale screen, for a
+          colour-blind reader, and in a printed screenshot. */}
+      <span
+        className={cn(
+          "mt-[3px] grid h-[17px] w-[17px] shrink-0 place-items-center rounded-full text-[10px] font-bold leading-none",
+          supported ? "bg-white/10 text-zinc-400" : "bg-white text-black",
+        )}
+        aria-hidden="true"
+      >
+        {supported ? "✓" : "!"}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[12.5px] leading-5">
+          <strong className={cn("font-semibold", supported ? "text-zinc-300" : "text-white")}>{claim.value}</strong>
+          {claim.sentence && !repeatsSentence ? <span className="text-zinc-500"> — {claim.sentence}</span> : null}
+        </span>
+        {/* Two figures out of one sentence say the same thing twice, so the
+            second one shows only the number. */}
+        {claim.note && !repeatsSentence ? <small className="mt-0.5 block text-[11px] leading-4 text-zinc-600">{claim.note}</small> : null}
+        {chips.length ? (
+          <span className="mt-1 flex flex-wrap gap-1">
+            {chips.slice(0, 4).map(({ index, source }) => (
+              <a
+                key={index}
+                href={source.url}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-white/10 px-1.5 py-px text-[10.5px] text-zinc-400 transition hover:border-white/25 hover:text-white"
+              >
+                [{index}] {sourceDisplayName(source)}
+              </a>
+            ))}
+          </span>
+        ) : null}
+      </span>
+    </li>
+  )
+}
+
+/**
+ * The answer's own figures, checked against the pages it was written from.
+ *
+ * Two rules decide what this looks like. Anything that failed is visible
+ * without a click, because a reader who has to open a panel to learn that a
+ * number is unverified will not open it. And a clean answer says so in one
+ * quiet line, because a badge that only ever appears when something is wrong
+ * teaches people to skim past it when it is right.
+ */
+function FactAuditPanel({ audit, sources }: { audit: MalikFactAudit; sources: MalikWebSource[] }) {
+  const [open, setOpen] = useState(false)
+  const flagged = audit.status === "flagged"
+  const problems = audit.claims.filter((claim) => claim.verdict !== "supported")
+  const confirmed = audit.claims.filter((claim) => claim.verdict === "supported")
+  const rows = open ? [...problems, ...confirmed] : problems.slice(0, 2)
+  const hidden = problems.length + confirmed.length - rows.length
+
+  return (
+    <section
+      data-malik-fact-audit={audit.status}
+      data-preserve-brand-color="true"
+      className={cn(
+        "malik-fact-audit mt-3 w-full max-w-[680px] overflow-hidden rounded-2xl border bg-[#0b0b0c] text-left",
+        flagged ? "border-white/25" : "border-white/10",
+      )}
+      aria-label="Проверка фактов по источникам"
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition hover:bg-white/[0.03]"
+      >
+        <span
+          className={cn(
+            "grid h-6 w-6 shrink-0 place-items-center rounded-lg",
+            flagged ? "bg-white text-black" : "bg-white/10 text-zinc-300",
+          )}
+          aria-hidden="true"
+        >
+          {flagged ? <TriangleAlert className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <strong className={cn("block text-[12.5px] font-semibold", flagged ? "text-white" : "text-zinc-300")}>
+            {flagged ? "Проверка фактов: есть что перепроверить" : "Проверка фактов пройдена"}
+          </strong>
+          {/* The count is the whole message, so on a phone it wraps rather
+              than getting cut off mid-word. */}
+          <small className="mt-px block text-[11px] leading-4 text-zinc-500">{audit.summary}</small>
+        </span>
+        <ChevronRight className={cn("h-4 w-4 shrink-0 text-zinc-600 transition-transform", open && "rotate-90")} />
+      </button>
+
+      {rows.length ? (
+        <ul className="border-t border-white/[0.06] px-2 py-2">
+          {rows.map((claim, index) => (
+            <FactClaimRow
+              key={claim.id}
+              claim={claim}
+              sources={sources}
+              repeatsSentence={index > 0 && Boolean(claim.sentence) && rows[index - 1].sentence === claim.sentence}
+            />
+          ))}
+          {!open && hidden > 0 ? (
+            <li>
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="w-full rounded-lg px-2 pb-0.5 pt-1 text-left text-[11px] text-zinc-500 transition hover:text-zinc-300"
+              >
+                Показать ещё {hidden} — и подтверждённые факты
+              </button>
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+    </section>
+  )
+}
+
 function MalikActionPlanCard({ plan, onOpenTarget }: { plan: MalikActionPlan; onOpenTarget?: (target: MalikActionTarget) => void }) {
   const [expanded, setExpanded] = useState(plan.status === "running")
   const completed = plan.steps.filter((step) => step.status === "done").length
@@ -1389,12 +1524,17 @@ function MessageBubble({
                 )
             )
             : (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} /> : "")}
+          {/* The verdict on the text above comes before the reading list it was
+              written from. */}
+          {!isUser && !message.isStreaming && message.research?.factAudit ? (
+            <FactAuditPanel audit={message.research.factAudit} sources={message.research.sources} />
+          ) : null}
           {!isUser && !message.isStreaming && message.research?.sources.length ? (
             <SourceDeck research={message.research} />
           ) : null}
         </div>
         {!isUser && message.content && !message.isStreaming && !message.imageConfirmation && (
-          <div className={cn("malik-message-actions mt-2 flex items-center gap-2 text-slate-500", Boolean(message.research?.sources.length) && "is-research")}>
+          <div className={cn("malik-message-actions mt-2 flex items-center gap-2 text-zinc-500", Boolean(message.research?.sources.length) && "is-research")}>
             <button type="button" title="Копировать" onClick={() => onCopy(message.id, displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
             <button type="button" title="Полезно" onClick={() => onFeedback?.(message.id, "up")} className={cn("rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "text-emerald-300")}><ThumbsUp className="h-4 w-4" /></button>
@@ -2039,7 +2179,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
             document.body,
           ) : null}
         </div>
-        <p className="mt-2 hidden text-center text-xs text-slate-600 sm:block">Malik AI может ошибаться. Проверяйте важную информацию.</p>
+        <p className="mt-2 hidden text-center text-xs text-zinc-600 sm:block">Malik AI может ошибаться. Проверяйте важную информацию.</p>
       </div>
 
       <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }} />

@@ -1,3 +1,5 @@
+import type { MalikFactAudit } from "@/lib/ai/fact-audit"
+
 export type MalikWebSource = {
   title: string
   url: string
@@ -28,6 +30,11 @@ export type MalikMessageResearch = {
   startedAt: number
   tookMs?: number
   webSourceCount?: number
+  /**
+   * The answer's own figures and [n] markers, checked against the pages above.
+   * Absent when there was nothing to check — see lib/ai/fact-audit.ts.
+   */
+  factAudit?: MalikFactAudit | null
 }
 
 export type MalikResearchProgress = Omit<MalikResearchStep, "id" | "at"> & {

@@ -1,5 +1,6 @@
 import type { MalikModelId } from "@/lib/ai/malik-models"
 import type { MalikResearchProgress, MalikWebSource } from "@/lib/ai/web-research-types"
+import { auditAnswerFacts, type MalikFactAudit } from "@/lib/ai/fact-audit"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
@@ -26,6 +27,26 @@ type GodAnswer = {
   sources: SourceItem[]
   attempts: ProviderAttempt[]
   selectedModelId?: MalikModelId
+  /** Null whenever the answer had nothing checkable in it. */
+  factAudit?: MalikFactAudit | null
+}
+
+/**
+ * Every answer written from open pages is compared against those pages before
+ * it leaves the server: each figure it states has to occur somewhere in what
+ * was read, and each [n] has to point at a source that exists. The check is
+ * arithmetic on strings, so it adds no call, no key and no measurable time —
+ * see lib/ai/fact-audit.ts for what it deliberately does not judge.
+ */
+function auditGroundedAnswer(content: string, sources: SourceItem[], prompt: string) {
+  if (!sources.length) return null
+  try {
+    return auditAnswerFacts({ answer: content, sources, prompt })
+  } catch (error) {
+    // A verification pass must never be the reason an answer fails to arrive.
+    console.warn("[MALIK_FACT_AUDIT]", error instanceof Error ? error.message : String(error))
+    return null
+  }
 }
 
 const CACHE = new Map<string, { expiresAt: number; value: GodAnswer }>()
@@ -951,13 +972,15 @@ export async function malikGodAnswer(
       temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
       allowCatalog: selection.allowCatalog === true,
     })
+    const content = cleanText(result.content)
     return {
-      content: cleanText(result.content),
+      content,
       provider: result.provider,
       model: result.model,
       selectedModelId: result.selectedModelId,
       usedWeb,
       sources,
+      factAudit: auditGroundedAnswer(content, sources, prompt),
       attempts: [{
         provider: result.provider,
         model: result.model,
@@ -994,7 +1017,15 @@ export async function malikGodAnswer(
 
   let answer: GodAnswer
   if (result.content) {
-    answer = { content: result.content, provider: result.provider, model: result.model, usedWeb, sources, attempts: result.attempts }
+    answer = {
+      content: result.content,
+      provider: result.provider,
+      model: result.model,
+      usedWeb,
+      sources,
+      factAudit: auditGroundedAnswer(result.content, sources, prompt),
+      attempts: result.attempts,
+    }
   } else {
     answer = sourceFallback(sources, result.attempts)
   }
@@ -1020,6 +1051,7 @@ export function asJson(answer: GodAnswer) {
     selectedModelId: answer.selectedModelId,
     usedWeb: answer.usedWeb,
     sources: answer.sources,
+    factAudit: answer.factAudit ?? null,
     attempts: answer.attempts,
   }
 }
