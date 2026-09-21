@@ -197,6 +197,10 @@ export async function createFreeVideoJob(provider: FreeVideoProviderId, input: V
     const root = baseUrl(provider)
     const duration = input.length === 10 ? 10 : 5
     const headers = jsonHeaders({ Authorization: `Bearer ${key}` })
+    const configuredEditorModel = env("MAGIC_HOUR_VIDEO_EDITOR_MODEL").toLowerCase()
+    const editorModel = configuredEditorModel === "gemini-omni-1.1" ? "gemini-omni-1.1" : "ltx-2.3"
+    const editorResolution = editorModel === "gemini-omni-1.1" ? "720p" : "480p"
+    const sourceEndSeconds = Math.min(10, Math.max(3, Number(input.sourceDurationSeconds || 5)))
 
     const endpoint = input.sourceVideoUrl
       ? `${root}/v1/ai-video-editor`
@@ -208,7 +212,9 @@ export async function createFreeVideoJob(provider: FreeVideoProviderId, input: V
       ? {
           name: "Malik AI Video Edit",
           start_seconds: 0,
-          end_seconds: Math.min(5, Math.max(3, Number(input.sourceDurationSeconds || 5))),
+          end_seconds: sourceEndSeconds,
+          model: editorModel,
+          resolution: editorResolution,
           assets: { video_file_path: input.sourceVideoUrl },
           style: {
             prompt: [
@@ -259,7 +265,7 @@ export async function createFreeVideoJob(provider: FreeVideoProviderId, input: V
     if (!taskId) throw new Error("Magic Hour submit: missing project id")
     return {
       taskId,
-      model: input.sourceVideoUrl ? "google-omni-video-editor" : "ltx-2.5",
+      model: input.sourceVideoUrl ? editorModel : "ltx-2.5",
       statusUrl: `${root}/v1/video-projects/${encodeURIComponent(taskId)}`,
     }
   }
