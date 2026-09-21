@@ -38,7 +38,7 @@
  * numbers the user supplied in the question count as grounded.
  */
 
-export type MalikFactVerdict = "supported" | "missing" | "bad-citation"
+export type MalikFactVerdict = "supported" | "missing" | "bad-citation" | "unchecked"
 
 export type MalikFactClaim = {
   id: string
@@ -64,7 +64,12 @@ export type MalikFactAudit = {
   brokenCitations: number
   claims: MalikFactClaim[]
   summary: string
-  status: "clean" | "flagged"
+  /**
+   * "unchecked" means no page was read at all: `checked` is then how many
+   * figures *could* be checked, and supported/missing are both zero. The
+   * reader is one tap away from turning it into one of the other two.
+   */
+  status: "clean" | "flagged" | "unchecked"
 }
 
 export type MalikFactAuditSource = {
@@ -290,6 +295,15 @@ function sentencesOf(text: string) {
     .filter(Boolean)
 }
 
+/**
+ * What makes two mentions of a figure the same figure. Rounded, because
+ * 8.3 × 10⁹ is 8300000000.000001 in binary floating point and an id is no
+ * place to carry that.
+ */
+function claimKey(figure: ScannedFigure) {
+  return `${figure.kind}:${Math.round(figure.expanded * 1000) / 1000}`
+}
+
 function shorten(sentence: string) {
   if (sentence.length <= SENTENCE_DISPLAY_LIMIT) return sentence
   return `${sentence.slice(0, SENTENCE_DISPLAY_LIMIT - 1).trimEnd()}…`
@@ -370,7 +384,7 @@ export function auditAnswerFacts(input: {
 
   for (const sentence of sentencesOf(answerBody)) {
     for (const figure of scanFigures(sentence)) {
-      const key = `${figure.kind}:${figure.expanded}`
+      const key = claimKey(figure)
       if (seen.has(key)) continue
       seen.add(key)
       checked += 1
@@ -385,15 +399,18 @@ export function auditAnswerFacts(input: {
 
       if (hits.length || fromPrompt) {
         supported += 1
-        claims.push({
+        const claim: MalikFactClaim = {
           id: `figure-${key}`,
           kind: "figure",
           value: figure.text,
           sentence: shorten(sentence),
           verdict: "supported",
           sourceIndexes: hits,
-          note: fromPrompt ? "Число взято из вашего вопроса." : undefined,
-        })
+        }
+        // Set only when there is one, so an audit read back off the wire is
+        // identical to the audit that was written.
+        if (fromPrompt) claim.note = "Число взято из вашего вопроса."
+        claims.push(claim)
         continue
       }
 
@@ -414,7 +431,7 @@ export function auditAnswerFacts(input: {
 
   const missing = checked - supported
   // Problems first: the reader opens this panel to find them.
-  const order = { missing: 0, "bad-citation": 1, supported: 2 } as const
+  const order: Record<MalikFactVerdict, number> = { missing: 0, "bad-citation": 1, unchecked: 2, supported: 3 }
   claims.sort((a, b) => order[a.verdict] - order[b.verdict])
 
   return {
@@ -428,7 +445,105 @@ export function auditAnswerFacts(input: {
   }
 }
 
-const VERDICTS: MalikFactVerdict[] = ["supported", "missing", "bad-citation"]
+/**
+ * The same scan, run on an answer that was written without opening a page.
+ *
+ * Nothing is judged here — there is nothing to judge against. It reports what
+ * *would* be checkable, so the answer can say "written without sources" in one
+ * quiet line instead of saying nothing and letting the reader assume the
+ * figures were verified. Every one of these claims can be turned into a real
+ * verdict by re-running the audit against pages fetched on demand.
+ */
+export function describeUncheckedAnswer(input: { answer: string; prompt?: string }): MalikFactAudit | null {
+  const answer = normalizeSpaces(input.answer)
+  if (!answer.trim()) return null
+
+  // An answer that carries code is answering a code question, and the numbers
+  // left in its prose are ports, timeouts and sizes — settings, not claims
+  // about the world. Offering to check those against the open web is the kind
+  // of noise that makes people stop reading the panel everywhere else.
+  if (/```/.test(answer)) return null
+
+  const body = stripUncheckable(answer).replace(CITATION_SCAN, " ")
+  const claims: MalikFactClaim[] = []
+  const seen = new Set<string>()
+
+  for (const sentence of sentencesOf(body)) {
+    for (const figure of scanFigures(sentence)) {
+      const key = claimKey(figure)
+      if (seen.has(key)) continue
+      seen.add(key)
+      claims.push({
+        id: `figure-${key}`,
+        kind: "figure",
+        value: figure.text,
+        sentence: shorten(sentence),
+        verdict: "unchecked",
+        sourceIndexes: [],
+      })
+    }
+  }
+
+  if (!claims.length) return null
+
+  return {
+    checked: claims.length,
+    supported: 0,
+    missing: 0,
+    brokenCitations: 0,
+    claims: claims.slice(0, MAX_REPORTED_CLAIMS),
+    status: "unchecked",
+    summary: claims.length === 1
+      ? "Ответ написан без источников — факт не проверен"
+      : `Ответ написан без источников — ${claims.length} ${factWord(claims.length)} не проверены`,
+  }
+}
+
+/**
+ * One figure, re-checked against pages fetched for it specifically.
+ *
+ * This is what a reader gets when they tap a flagged number: rather than being
+ * told to go and look, the same audit runs again over sources found for that
+ * number alone. A "missing" verdict here is much stronger than the first one —
+ * the first only said the figure was absent from pages fetched for the whole
+ * question; this says it was absent from pages fetched to find it.
+ */
+export function recheckFigure(input: {
+  claim: string
+  sources: MalikFactAuditSource[]
+  prompt?: string
+}): { verdict: "supported" | "missing"; value: string; sourceIndexes: number[]; summary: string } | null {
+  const figure = scanFigures(normalizeSpaces(input.claim))[0]
+  if (!figure) return null
+
+  const perSource = (input.sources || []).map((source) => scanValues(`${source.title || ""} ${source.snippet || ""}`))
+  const hits: number[] = []
+  perSource.forEach((values, index) => {
+    if (figureFoundIn(figure, values)) hits.push(index + 1)
+  })
+
+  if (hits.length) {
+    return {
+      verdict: "supported",
+      value: figure.text,
+      sourceIndexes: hits,
+      summary: hits.length === 1
+        ? "Подтверждено — число нашлось в источнике"
+        : `Подтверждено — число нашлось в ${hits.length} источниках`,
+    }
+  }
+
+  return {
+    verdict: "missing",
+    value: figure.text,
+    sourceIndexes: [],
+    summary: input.sources.length
+      ? `Не подтверждено — ${input.sources.length} ${plural(input.sources.length, "страница", "страницы", "страниц")} прочитано, числа нет ни на одной`
+      : "Не подтверждено — открытые источники ничего не вернули",
+  }
+}
+
+const VERDICTS: MalikFactVerdict[] = ["supported", "missing", "bad-citation", "unchecked"]
 
 /**
  * The same audit read back off the wire, or out of a turn that was persisted
@@ -452,7 +567,7 @@ export function normalizeFactAudit(value: unknown): MalikFactAudit | null {
       const id = String(claim.id || "")
       const text = String(claim.value || "")
       if (!id || !text) return null
-      return {
+      const restored: MalikFactClaim = {
         id,
         kind: claim.kind === "citation" ? "citation" : "figure",
         value: text,
@@ -461,8 +576,12 @@ export function normalizeFactAudit(value: unknown): MalikFactAudit | null {
         sourceIndexes: (Array.isArray(claim.sourceIndexes) ? claim.sourceIndexes : [])
           .map((index) => Number(index))
           .filter((index) => Number.isInteger(index) && index > 0),
-        note: claim.note ? String(claim.note) : undefined,
       }
+      // Added only when there is one: an explicit `note: undefined` is a key
+      // that survives JSON.stringify as nothing and makes two identical audits
+      // compare unequal.
+      if (claim.note) restored.note = String(claim.note)
+      return restored
     })
     .filter((claim): claim is MalikFactClaim => Boolean(claim))
     .slice(0, MAX_REPORTED_CLAIMS)
@@ -471,13 +590,17 @@ export function normalizeFactAudit(value: unknown): MalikFactAudit | null {
   const brokenCitations = Number.isFinite(Number(raw.brokenCitations)) ? Number(raw.brokenCitations) : 0
   if (!checked && !brokenCitations) return null
 
+  // The status is recomputed rather than trusted: it is what decides how loud
+  // the panel is, and a stored turn from an older build may not carry one.
+  const unchecked = raw.status === "unchecked" && !supported && !missing && !brokenCitations
+
   return {
     checked,
     supported,
     missing,
     brokenCitations,
     claims,
-    status: missing || brokenCitations ? "flagged" : "clean",
+    status: unchecked ? "unchecked" : missing || brokenCitations ? "flagged" : "clean",
     summary: String(raw.summary || buildSummary(checked, supported, missing, brokenCitations)),
   }
 }

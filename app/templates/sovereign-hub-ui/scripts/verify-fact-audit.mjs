@@ -256,9 +256,95 @@ check("gives every claim a stable id so the UI can key on it", () => {
   assert.deepEqual(ids, audit("Доля 42%, объём 8,3 млрд [9].", [source("доля 42%")]).claims.map((claim) => claim.id))
 })
 
-/* -------------------------------------------------------- reading it back */
+/* ------------------------------------- answers written without any source */
 
-const { normalizeFactAudit } = loadTypeScriptModule("lib/ai/fact-audit.ts")
+const { describeUncheckedAnswer, recheckFigure, normalizeFactAudit } = loadTypeScriptModule("lib/ai/fact-audit.ts")
+
+check("says nothing about an answer that states no figure", () => {
+  assert.equal(describeUncheckedAnswer({ answer: "Рынок заметно вырос за год." }), null)
+  assert.equal(describeUncheckedAnswer({ answer: "" }), null)
+})
+
+check("reports an unsourced answer as unchecked rather than staying quiet", () => {
+  const result = describeUncheckedAnswer({ answer: "Доля рынка — 42%, а объём 8,3 млрд." })
+  assert.equal(result.status, "unchecked")
+  assert.equal(result.checked, 2)
+  assert.equal(result.supported, 0)
+  assert.equal(result.missing, 0)
+  assert.equal(result.brokenCitations, 0)
+  assert.ok(result.claims.every((claim) => claim.verdict === "unchecked"))
+  assert.match(result.summary, /^Ответ написан без источников — 2 факта не проверены$/)
+})
+
+check("an unsourced answer with one figure reads in the singular", () => {
+  assert.match(describeUncheckedAnswer({ answer: "Доля 42%." }).summary, /факт не проверен$/)
+})
+
+check("never offers to fact-check a code answer", () => {
+  // Ports, timeouts and buffer sizes are settings, not claims about the world.
+  const answer = "Поставь таймаут:\n\n```js\nconst timeout = 30000\n```\n\nПорт 8080 менять не надо, и лимит 65536 тоже."
+  assert.equal(describeUncheckedAnswer({ answer }), null)
+})
+
+check("the unchecked scan ignores exactly what the audit ignores", () => {
+  assert.equal(describeUncheckedAnswer({ answer: "```js\nconst n = 99999\n```" }), null)
+  assert.equal(describeUncheckedAnswer({ answer: "Собрано на Next.js 16.1." }), null)
+  assert.equal(describeUncheckedAnswer({ answer: "Есть 5 причин и 24 часа." }), null)
+  assert.equal(describeUncheckedAnswer({ answer: "https://example.org/2019/12345" }), null)
+})
+
+check("the unchecked scan reports a repeated figure once", () => {
+  assert.equal(describeUncheckedAnswer({ answer: "42%. Снова 42%. И ещё 42%." }).checked, 1)
+})
+
+check("an unchecked audit survives the trip over the wire", () => {
+  const original = describeUncheckedAnswer({ answer: "Доля 42% и объём 8,3 млрд." })
+  const back = normalizeFactAudit(JSON.parse(JSON.stringify(original)))
+  assert.equal(back.status, "unchecked")
+  assert.deepEqual(back, original)
+})
+
+check("a forged unchecked status cannot hide a real problem", () => {
+  const result = normalizeFactAudit({ checked: 2, supported: 1, missing: 1, brokenCitations: 0, status: "unchecked", summary: "x", claims: [] })
+  assert.equal(result.status, "flagged")
+})
+
+/* ------------------------------------------- one figure, checked properly */
+
+check("clears a flag when the figure turns up on pages fetched for it", () => {
+  const result = recheckFigure({ claim: "8,3 млрд", sources: [source("объём рынка составил 8,3 млрд долларов")] })
+  assert.equal(result.verdict, "supported")
+  assert.deepEqual(result.sourceIndexes, [1])
+  assert.match(result.summary, /Подтверждено/)
+})
+
+check("keeps the flag when pages fetched for the figure do not have it", () => {
+  const result = recheckFigure({ claim: "8,3 млрд", sources: [source("рынок растёт"), source("данных нет")] })
+  assert.equal(result.verdict, "missing")
+  assert.match(result.summary, /2 страницы прочитано, числа нет ни на одной/)
+})
+
+check("says so plainly when the search came back empty", () => {
+  assert.match(recheckFigure({ claim: "8,3 млрд", sources: [] }).summary, /открытые источники ничего не вернули/i)
+})
+
+check("re-checking applies the same rounding rules as the first pass", () => {
+  assert.equal(recheckFigure({ claim: "1,2 млн", sources: [source("1 247 000")] }).verdict, "supported")
+  assert.equal(recheckFigure({ claim: "2021 году", sources: [source("в 2024 году")] }).verdict, "missing")
+})
+
+check("declines a claim with no figure in it instead of guessing", () => {
+  assert.equal(recheckFigure({ claim: "рынок вырос", sources: [source("рынок вырос")] }), null)
+})
+
+check("counts pages in Russian without breaking grammar", () => {
+  const pages = (n) => recheckFigure({ claim: "999 999", sources: Array.from({ length: n }, () => source("пусто")) }).summary
+  assert.match(pages(1), /1 страница прочитана|1 страница прочитано/)
+  assert.match(pages(3), /3 страницы прочитано/)
+  assert.match(pages(7), /7 страниц прочитано/)
+})
+
+/* -------------------------------------------------------- reading it back */
 
 check("reads its own output back unchanged", () => {
   const original = audit("Доля 42%, объём 8,3 млрд [9].", [source("доля 42%")])
@@ -301,7 +387,7 @@ const read = (file) => fs.readFileSync(file, "utf8")
 
 check("the router audits every answer written from open pages", () => {
   const router = read("lib/malik-god-router.ts")
-  assert.match(router, /import \{ auditAnswerFacts, type MalikFactAudit \} from "@\/lib\/ai\/fact-audit"/)
+  assert.match(router, /import \{ auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit \} from "@\/lib\/ai\/fact-audit"/)
   assert.match(router, /factAudit: auditGroundedAnswer\(content, sources, prompt\)/)
   assert.match(router, /factAudit: auditGroundedAnswer\(result\.content, sources, prompt\)/)
   assert.match(router, /factAudit: answer\.factAudit \?\? null/)
@@ -336,6 +422,52 @@ check("the chat renders the audit above the source list", () => {
 
 check("the audit is part of the JSON chat answer too", () => {
   assert.match(read("lib/malik-god-router.ts"), /export function asJson[\s\S]*factAudit/)
+})
+
+check("an answer with no sources still gets a verdict, not silence", () => {
+  const router = read("lib/malik-god-router.ts")
+  assert.match(router, /if \(!sources\.length\) return describeUncheckedAnswer\(\{ answer: content, prompt \}\)/)
+})
+
+/* -------------------------------------------- verification the reader runs */
+
+check("the on-demand verification route exists and is guarded", () => {
+  const route = read("app/api/ai/verify/route.ts")
+  assert.match(route, /readJsonBodyLimited\(request, MAX_BODY_BYTES\)/, "must cap the request body")
+  assert.match(route, /if \(!entitlement\.authenticated\)/, "a search costs money; it needs a signed-in user")
+  assert.match(route, /status: 401/)
+  assert.match(route, /gatherSourcesForPrompt\(query\)/)
+  assert.match(route, /recheckFigure\(\{ claim, sources, prompt: question \}\)/)
+  assert.match(route, /auditAnswerFacts\(\{ answer, sources, prompt: question \}\)/)
+})
+
+check("the route searches for the figure inside its own subject", () => {
+  // "200 тысяч" on its own returns a dictionary entry, not a fact.
+  const route = read("app/api/ai/verify/route.ts")
+  assert.match(route, /\[question, sentence \|\| claim\]\.filter\(Boolean\)\.join/)
+})
+
+check("the router exposes its research pipeline for a re-check", () => {
+  assert.match(read("lib/malik-god-router.ts"), /export async function gatherSourcesForPrompt\(prompt: string/)
+})
+
+check("a flagged or unchecked figure carries the button that checks it", () => {
+  const view = read("components/sovereign/chat-view.tsx")
+  assert.match(view, /const canRecheck = Boolean\(onRecheck\) && claim\.kind === "figure" && \(verdict === "missing" \|\| verdict === "unchecked"\)/)
+  assert.match(view, /Проверить это число/)
+  assert.match(view, /clientFetchWithTimeout\("\/api\/ai\/verify"/)
+})
+
+check("an unsourced answer offers to check itself", () => {
+  const view = read("components/sovereign/chat-view.tsx")
+  assert.match(view, /\{unchecked && answer \? \(/)
+  assert.match(view, /checkWholeAnswer/)
+})
+
+check("a re-check is given the question, or it is not offered at all", () => {
+  const view = read("components/sovereign/chat-view.tsx")
+  assert.match(view, /onRecheck=\{question \? recheckClaim : undefined\}/)
+  assert.match(view, /messages\.slice\(0, index\)\.reverse\(\)\.find\(\(item\) => item\.role === "user"\)/)
 })
 
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nfact grounding audit: all checks passed\n")

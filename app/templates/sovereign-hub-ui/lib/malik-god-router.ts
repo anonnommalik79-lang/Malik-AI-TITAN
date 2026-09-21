@@ -1,6 +1,6 @@
 import type { MalikModelId } from "@/lib/ai/malik-models"
 import type { MalikResearchProgress, MalikWebSource } from "@/lib/ai/web-research-types"
-import { auditAnswerFacts, type MalikFactAudit } from "@/lib/ai/fact-audit"
+import { auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit } from "@/lib/ai/fact-audit"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
@@ -39,14 +39,26 @@ type GodAnswer = {
  * see lib/ai/fact-audit.ts for what it deliberately does not judge.
  */
 function auditGroundedAnswer(content: string, sources: SourceItem[], prompt: string) {
-  if (!sources.length) return null
   try {
+    // With no page read there is nothing to judge against, so the answer says
+    // so rather than saying nothing — an unchecked figure that looks checked is
+    // the failure this whole layer exists to stop. One tap turns it into a
+    // real verdict through /api/ai/verify.
+    if (!sources.length) return describeUncheckedAnswer({ answer: content, prompt })
     return auditAnswerFacts({ answer: content, sources, prompt })
   } catch (error) {
     // A verification pass must never be the reason an answer fails to arrive.
     console.warn("[MALIK_FACT_AUDIT]", error instanceof Error ? error.message : String(error))
     return null
   }
+}
+
+/**
+ * The research pipeline, exposed on its own so a single claim can be checked
+ * after the fact without running a model again. /api/ai/verify uses it.
+ */
+export async function gatherSourcesForPrompt(prompt: string, emit?: ResearchEmitter) {
+  return gatherSources(prompt, emit)
 }
 
 const CACHE = new Map<string, { expiresAt: number; value: GodAnswer }>()

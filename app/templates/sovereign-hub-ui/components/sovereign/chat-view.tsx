@@ -1157,52 +1157,111 @@ function SourceDeck({ research }: { research: MalikMessageResearch }) {
   )
 }
 
+type FactRecheck = {
+  state: "loading" | "done" | "error"
+  verdict?: "supported" | "missing"
+  summary?: string
+  sources?: MalikWebSource[]
+}
+
+function SourceChips({ items }: { items: MalikWebSource[] }) {
+  if (!items.length) return null
+  return (
+    <span className="mt-1 flex flex-wrap gap-1">
+      {items.slice(0, 4).map((source, index) => (
+        <a
+          key={`${source.url}-${index}`}
+          href={source.url}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-md border border-white/10 px-1.5 py-px text-[10.5px] text-zinc-400 transition hover:border-white/25 hover:text-white"
+        >
+          {sourceDisplayName(source)}
+        </a>
+      ))}
+    </span>
+  )
+}
+
 /**
- * One checked figure. The number itself carries the colour, because the number
- * is what the reader has to decide about — the sentence is only there so they
- * can find it in the answer above without hunting.
+ * One checked figure, and the button that checks it properly.
+ *
+ * The first verdict can only say whether the figure was on the pages that
+ * happened to be open. That is a weak "no": those pages were fetched for the
+ * whole question, not for this number. So a figure that failed — or one that
+ * was never checked at all, because the answer was written without a search —
+ * carries a button that goes and looks for that number specifically. It either
+ * clears the flag, which a warning-only feature could never do, or fails to
+ * find it on pages fetched to find it, which is a much harder result.
  */
-function FactClaimRow({ claim, sources, repeatsSentence = false }: { claim: MalikFactClaim; sources: MalikWebSource[]; repeatsSentence?: boolean }) {
-  const supported = claim.verdict === "supported"
-  const chips = claim.sourceIndexes.map((index) => ({ index, source: sources[index - 1] })).filter((chip) => chip.source)
+function FactClaimRow({
+  claim,
+  sources,
+  repeatsSentence = false,
+  recheck,
+  onRecheck,
+}: {
+  claim: MalikFactClaim
+  sources: MalikWebSource[]
+  repeatsSentence?: boolean
+  recheck?: FactRecheck
+  onRecheck?: (claim: MalikFactClaim) => void
+}) {
+  const verdict = recheck?.state === "done" && recheck.verdict ? recheck.verdict : claim.verdict
+  const supported = verdict === "supported"
+  const unchecked = verdict === "unchecked"
+  const chips = claim.sourceIndexes.map((index) => sources[index - 1]).filter(Boolean) as MalikWebSource[]
+  const canRecheck = Boolean(onRecheck) && claim.kind === "figure" && (verdict === "missing" || verdict === "unchecked")
 
   return (
     <li className="flex gap-2.5 rounded-xl px-2 py-1.5">
       {/* No colour anywhere in this panel. What a figure needs is told by
           contrast instead: a solid white marker is a problem, a faint one is
-          a confirmation. That reads the same on a grayscale screen, for a
-          colour-blind reader, and in a printed screenshot. */}
+          a confirmation, an outlined one has not been looked at. That reads
+          the same on a grayscale screen, for a colour-blind reader, and in a
+          printed screenshot. */}
       <span
         className={cn(
           "mt-[3px] grid h-[17px] w-[17px] shrink-0 place-items-center rounded-full text-[10px] font-bold leading-none",
-          supported ? "bg-white/10 text-zinc-400" : "bg-white text-black",
+          supported && "bg-white/10 text-zinc-400",
+          unchecked && "border border-white/25 text-zinc-500",
+          !supported && !unchecked && "bg-white text-black",
         )}
         aria-hidden="true"
       >
-        {supported ? "✓" : "!"}
+        {supported ? "✓" : unchecked ? "?" : "!"}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[12.5px] leading-5">
-          <strong className={cn("font-semibold", supported ? "text-zinc-300" : "text-white")}>{claim.value}</strong>
+          <strong className={cn("font-semibold", supported || unchecked ? "text-zinc-300" : "text-white")}>{claim.value}</strong>
           {claim.sentence && !repeatsSentence ? <span className="text-zinc-500"> — {claim.sentence}</span> : null}
         </span>
+
         {/* Two figures out of one sentence say the same thing twice, so the
             second one shows only the number. */}
-        {claim.note && !repeatsSentence ? <small className="mt-0.5 block text-[11px] leading-4 text-zinc-600">{claim.note}</small> : null}
-        {chips.length ? (
-          <span className="mt-1 flex flex-wrap gap-1">
-            {chips.slice(0, 4).map(({ index, source }) => (
-              <a
-                key={index}
-                href={source.url}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-md border border-white/10 px-1.5 py-px text-[10.5px] text-zinc-400 transition hover:border-white/25 hover:text-white"
-              >
-                [{index}] {sourceDisplayName(source)}
-              </a>
-            ))}
-          </span>
+        {claim.note && !repeatsSentence && !recheck ? (
+          <small className="mt-0.5 block text-[11px] leading-4 text-zinc-600">{claim.note}</small>
+        ) : null}
+
+        {recheck?.state === "done" && recheck.summary ? (
+          <small className="mt-0.5 block text-[11px] leading-4 text-zinc-500">{recheck.summary}</small>
+        ) : null}
+        {recheck?.state === "error" ? (
+          <small className="mt-0.5 block text-[11px] leading-4 text-zinc-600">{recheck.summary || "Проверка не прошла."}</small>
+        ) : null}
+
+        {recheck?.sources?.length ? <SourceChips items={recheck.sources} /> : chips.length ? <SourceChips items={chips} /> : null}
+
+        {canRecheck ? (
+          <button
+            type="button"
+            onClick={() => onRecheck?.(claim)}
+            disabled={recheck?.state === "loading"}
+            className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-2 py-1 text-[11px] font-medium text-zinc-300 transition hover:border-white/30 hover:text-white disabled:cursor-wait disabled:text-zinc-500"
+          >
+            {recheck?.state === "loading" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+            {recheck?.state === "loading" ? "Ищу это число…" : "Проверить это число"}
+          </button>
         ) : null}
       </span>
     </li>
@@ -1218,17 +1277,89 @@ function FactClaimRow({ claim, sources, repeatsSentence = false }: { claim: Mali
  * quiet line, because a badge that only ever appears when something is wrong
  * teaches people to skim past it when it is right.
  */
-function FactAuditPanel({ audit, sources }: { audit: MalikFactAudit; sources: MalikWebSource[] }) {
+function FactAuditPanel({
+  audit,
+  sources,
+  question = "",
+  answer = "",
+}: {
+  audit: MalikFactAudit
+  sources: MalikWebSource[]
+  question?: string
+  answer?: string
+}) {
   const [open, setOpen] = useState(false)
-  const flagged = audit.status === "flagged"
-  const problems = audit.claims.filter((claim) => claim.verdict !== "supported")
-  const confirmed = audit.claims.filter((claim) => claim.verdict === "supported")
+  const [checks, setChecks] = useState<Record<string, FactRecheck>>({})
+  const [liveAudit, setLiveAudit] = useState<MalikFactAudit | null>(null)
+  const [liveSources, setLiveSources] = useState<MalikWebSource[] | null>(null)
+  const [checkingAll, setCheckingAll] = useState(false)
+  const [answerError, setAnswerError] = useState("")
+
+  const shown = liveAudit || audit
+  const shownSources = liveSources || sources
+  const flagged = shown.status === "flagged"
+  const unchecked = shown.status === "unchecked"
+
+  const problems = shown.claims.filter((claim) => claim.verdict !== "supported")
+  const confirmed = shown.claims.filter((claim) => claim.verdict === "supported")
   const rows = open ? [...problems, ...confirmed] : problems.slice(0, 2)
   const hidden = problems.length + confirmed.length - rows.length
 
+  const resolved = shown.claims.filter((claim) => checks[claim.id]?.state === "done")
+  const cleared = resolved.filter((claim) => checks[claim.id]?.verdict === "supported").length
+  const recheckNote = resolved.length
+    ? `Перепроверено отдельно: ${resolved.length} · подтвердилось ${cleared}`
+    : ""
+
+  const verify = async (payload: Record<string, string>) => {
+    const response = await clientFetchWithTimeout("/api/ai/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question, ...payload }),
+    }, 45_000)
+    const data = await response.json().catch(() => null)
+    if (!response.ok || !data?.ok) throw new Error(String(data?.error || "Проверка не прошла."))
+    return data
+  }
+
+  const recheckClaim = async (claim: MalikFactClaim) => {
+    setChecks((current) => ({ ...current, [claim.id]: { state: "loading" } }))
+    try {
+      const data = await verify({ claim: claim.value, sentence: claim.sentence || "" })
+      setChecks((current) => ({
+        ...current,
+        [claim.id]: { state: "done", verdict: data.verdict, summary: data.summary, sources: (data.sources || []).slice(0, 3) },
+      }))
+    } catch (error) {
+      setChecks((current) => ({
+        ...current,
+        [claim.id]: { state: "error", summary: error instanceof Error ? error.message : "Проверка не прошла." },
+      }))
+    }
+  }
+
+  const checkWholeAnswer = async () => {
+    setCheckingAll(true)
+    setAnswerError("")
+    try {
+      const data = await verify({ answer })
+      if (data.audit) {
+        setLiveAudit(data.audit as MalikFactAudit)
+        setLiveSources((data.sources || []) as MalikWebSource[])
+        setOpen(true)
+      } else {
+        setAnswerError("В открытых источниках не нашлось страниц по этому вопросу.")
+      }
+    } catch (error) {
+      setAnswerError(error instanceof Error ? error.message : "Проверка не прошла.")
+    } finally {
+      setCheckingAll(false)
+    }
+  }
+
   return (
     <section
-      data-malik-fact-audit={audit.status}
+      data-malik-fact-audit={shown.status}
       data-preserve-brand-color="true"
       className={cn(
         "malik-fact-audit mt-3 w-full max-w-[680px] overflow-hidden rounded-2xl border bg-[#0b0b0c] text-left",
@@ -1236,31 +1367,53 @@ function FactAuditPanel({ audit, sources }: { audit: MalikFactAudit; sources: Ma
       )}
       aria-label="Проверка фактов по источникам"
     >
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition hover:bg-white/[0.03]"
-      >
+      <div className="flex items-center gap-2.5 px-3.5 py-2.5">
         <span
           className={cn(
             "grid h-6 w-6 shrink-0 place-items-center rounded-lg",
-            flagged ? "bg-white text-black" : "bg-white/10 text-zinc-300",
+            flagged ? "bg-white text-black" : unchecked ? "border border-white/20 text-zinc-400" : "bg-white/10 text-zinc-300",
           )}
           aria-hidden="true"
         >
-          {flagged ? <TriangleAlert className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+          {flagged ? <TriangleAlert className="h-3.5 w-3.5" /> : unchecked ? <Search className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
         </span>
-        <span className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          className="-my-2 min-w-0 flex-1 py-2 text-left"
+        >
           <strong className={cn("block text-[12.5px] font-semibold", flagged ? "text-white" : "text-zinc-300")}>
-            {flagged ? "Проверка фактов: есть что перепроверить" : "Проверка фактов пройдена"}
+            {flagged ? "Проверка фактов: есть что перепроверить" : unchecked ? "Факты не проверены" : "Проверка фактов пройдена"}
           </strong>
           {/* The count is the whole message, so on a phone it wraps rather
               than getting cut off mid-word. */}
-          <small className="mt-px block text-[11px] leading-4 text-zinc-500">{audit.summary}</small>
-        </span>
-        <ChevronRight className={cn("h-4 w-4 shrink-0 text-zinc-600 transition-transform", open && "rotate-90")} />
-      </button>
+          <small className="mt-px block text-[11px] leading-4 text-zinc-500">{answerError || shown.summary}</small>
+          {/* The header keeps the verdict the server reached; what the reader
+              found by re-checking is reported next to it rather than quietly
+              rewritten into it. */}
+          {recheckNote ? <small className="mt-px block text-[11px] leading-4 text-zinc-600">{recheckNote}</small> : null}
+        </button>
+
+        {/* An answer written without a search has never been compared with
+            anything. Saying that is honest but useless on its own, so the way
+            to fix it sits right next to the sentence that reports it. */}
+        {unchecked && answer ? (
+          <button
+            type="button"
+            onClick={checkWholeAnswer}
+            disabled={checkingAll}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-medium text-zinc-200 transition hover:border-white/35 hover:text-white disabled:cursor-wait disabled:text-zinc-500"
+          >
+            {checkingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+            {checkingAll ? "Проверяю…" : "Проверить"}
+          </button>
+        ) : null}
+
+        <button type="button" onClick={() => setOpen((value) => !value)} aria-label={open ? "Свернуть" : "Развернуть"} className="shrink-0">
+          <ChevronRight className={cn("h-4 w-4 text-zinc-600 transition-transform", open && "rotate-90")} />
+        </button>
+      </div>
 
       {rows.length ? (
         <ul className="border-t border-white/[0.06] px-2 py-2">
@@ -1268,8 +1421,10 @@ function FactAuditPanel({ audit, sources }: { audit: MalikFactAudit; sources: Ma
             <FactClaimRow
               key={claim.id}
               claim={claim}
-              sources={sources}
+              sources={shownSources}
               repeatsSentence={index > 0 && Boolean(claim.sentence) && rows[index - 1].sentence === claim.sentence}
+              recheck={checks[claim.id]}
+              onRecheck={question ? recheckClaim : undefined}
             />
           ))}
           {!open && hidden > 0 ? (
@@ -1383,10 +1538,13 @@ function MessageBubble({
   imageCredits,
   onOpenActionTarget,
   videoAnalysis = false,
+  question = "",
 }: {
   message: Message
   onCopy: (id: string, text: string) => void
   copied: boolean
+  /** The user turn this answer replies to — what a re-check searches for. */
+  question?: string
   generationType?: GenerationStatusType
   
   thinkingQuery?: string
@@ -1527,7 +1685,12 @@ function MessageBubble({
           {/* The verdict on the text above comes before the reading list it was
               written from. */}
           {!isUser && !message.isStreaming && message.research?.factAudit ? (
-            <FactAuditPanel audit={message.research.factAudit} sources={message.research.sources} />
+            <FactAuditPanel
+              audit={message.research.factAudit}
+              sources={message.research.sources}
+              question={question}
+              answer={displayContent}
+            />
           ) : null}
           {!isUser && !message.isStreaming && message.research?.sources.length ? (
             <SourceDeck research={message.research} />
@@ -2048,10 +2211,18 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
           ) : (
             <>
               <div className="malik-date-chip">Сегодня</div>
-              {messages.map((message) => (
+              {messages.map((message, index) => (
                 <MessageBubble
                   key={message.id}
                   message={message}
+                  // The question this answer replies to. A re-check searches
+                  // for the flagged figure inside its own subject, not on its
+                  // own — "200 тысяч" alone returns a dictionary.
+                  question={
+                    message.role === "assistant"
+                      ? messages.slice(0, index).reverse().find((item) => item.role === "user")?.content || ""
+                      : ""
+                  }
                   onCopy={handleCopy}
                   copied={copiedId === message.id}
                   generationType={activeGenerationType}
