@@ -73,9 +73,9 @@ export async function POST(request: Request) {
     )
   }
 
-  if (mode === "video" && (!Number.isFinite(durationSeconds) || durationSeconds < 3 || durationSeconds > 5.05)) {
+  if (mode === "video" && (!Number.isFinite(durationSeconds) || durationSeconds < 3 || durationSeconds > 10.05)) {
     return Response.json(
-      { ok: false, code: "VIDEO_SOURCE_DURATION_UNSUPPORTED", error: "Для AI-редактирования загрузите видео длительностью от 3 до 5 секунд." },
+      { ok: false, code: "VIDEO_SOURCE_DURATION_UNSUPPORTED", error: "Для AI-редактирования загрузите видео длительностью от 3 до 10 секунд." },
       { status: 400 },
     )
   }
