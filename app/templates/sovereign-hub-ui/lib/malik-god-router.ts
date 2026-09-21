@@ -917,6 +917,24 @@ export async function malikGodAnswer(
 ): Promise<GodAnswer> {
   const prompt = extractPrompt(body)
 
+  // Never send tiny conversational turns through a heavyweight reasoning model.
+  // The main chat route always passes a selected model (including MalikLLM MAX),
+  // so keeping this below the selection branch made even "привет" pay full
+  // provider + reasoning latency. These deterministic replies are model-agnostic
+  // product behavior and should be instant regardless of the selected model.
+  const local = localSmart(prompt)
+  if (local) {
+    return {
+      content: local,
+      provider: "local-smart",
+      model: "instant",
+      selectedModelId: selection?.modelId,
+      usedWeb: false,
+      sources: [],
+      attempts: [],
+    }
+  }
+
   if (selection) {
     const usedWeb = shouldUseWeb(prompt, body)
     const sources = usedWeb ? await gatherSources(prompt, emitResearch) : []
@@ -947,12 +965,6 @@ export async function malikGodAnswer(
         latencyMs: result.latencyMs,
       }],
     }
-  }
-
-  const local = localSmart(prompt)
-
-  if (local) {
-    return { content: local, provider: "local-smart", model: "instant", usedWeb: false, sources: [], attempts: [] }
   }
 
   const usedWeb = shouldUseWeb(prompt, body)
