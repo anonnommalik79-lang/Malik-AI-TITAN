@@ -242,13 +242,17 @@ try {
     } },
     "@/lib/malik-research/fetch-page": { fetchPageText: async source => ({ title: source.title, text: source.snippet }) },
   })("lib/malik-god-router.ts")
-  await check("conversation skips web even with Home research=true", async () => {
+  await check("tiny conversation is instant even with Home research=true", async () => {
     const progress = []
+    const beforeInference = inference.length
     const result = await god.malikGodAnswer({ originalQuestion: "привет", question: "search the web for sources", research: true }, { modelId: "malik-20b" }, event => progress.push(event))
     assert.equal(searches, 0)
     assert.equal(result.usedWeb, false)
+    assert.equal(result.provider, "local-smart")
+    assert.equal(result.model, "instant")
+    assert.equal(result.selectedModelId, "malik-20b")
     assert.equal(progress.length, 0)
-    assert.equal(inference.at(-1).prompt, "привет")
+    assert.equal(inference.length, beforeInference)
   })
   await check("requested search returns sources and real reading events", async () => {
     const progress = []
