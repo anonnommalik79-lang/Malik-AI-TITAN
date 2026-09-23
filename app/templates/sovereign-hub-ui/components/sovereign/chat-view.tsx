@@ -52,6 +52,7 @@ import { isDataSvgUrl, isImageLikeUrl, isRealVideoUrl } from "@/lib/media/media-
 import { normalizeClientImage } from "@/lib/media/client-image-normalize"
 import { ImageGenerationMotion } from "./image-generation-motion"
 import type { MalikActionPlan, MalikActionTarget } from "@/lib/ai/action-os"
+import { ChatImageCreator } from "./ChatImageCreator"
 
 export type { ChatSendOptions }
 
@@ -105,6 +106,7 @@ interface Message {
 }
 
 type ImageResolution = "1K" | "2K" | "4K"
+type ImageAspectRatio = "1:1" | "16:9" | "9:16" | "4:5" | "4:3"
 
 function formatImageCreditCount(value: number) {
   const count = Math.max(0, Math.trunc(Number(value) || 0))
@@ -1751,6 +1753,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const [feedbackMap, setFeedbackMap] = useState<Record<string, "up" | "down">>({})
   const [imageCredits, setImageCredits] = useState<ImageCreditSnapshot | null>(null)
   const [showAttachMenu, setShowAttachMenu] = useState(false)
+  const [imageCreatorOpen, setImageCreatorOpen] = useState(false)
   useEffect(() => {
     let cancelled = false
 
@@ -2128,6 +2131,34 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     textareaRef.current?.focus()
   }
 
+  const handleImageCreatorGenerate = (input: {
+    prompt: string
+    style?: string
+    aspectRatio: ImageAspectRatio
+    imageSize: ImageResolution
+  }) => {
+    const clean = input.prompt.trim()
+    if (!clean) return
+    if (isLoading) {
+      setLocalError("Malik AI уже обрабатывает запрос.")
+      return
+    }
+
+    const imageAttachments = attachments.filter((item) => item.kind === "image" || item.mime?.startsWith("image/"))
+    setLocalError(null)
+    setLastSubmittedPrompt(clean)
+    try { window.localStorage.setItem("malik_last_user_prompt", clean) } catch {}
+    onSendMessage(`/image ${clean}`, imageAttachments, {
+      responseDepth,
+      imageSize: input.imageSize,
+      imageAspectRatio: input.aspectRatio,
+      imageStyle: input.style,
+    })
+    setAttachments([])
+    setImageCreatorOpen(false)
+    setShowAttachMenu(false)
+  }
+
   const toggleRecording = async () => {
     if (isRecording) {
       mediaRecorderRef.current?.stop()
@@ -2155,6 +2186,11 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   }
 
   const attachItems = useMemo(() => [
+    {
+      label: "Создать изображение",
+      icon: Wand2,
+      action: () => { setShowAttachMenu(false); setImageCreatorOpen(true) },
+    },
     {
       label: "Загрузить изображения",
       icon: ImageIcon,
@@ -2190,6 +2226,18 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       {/* No gradient wash, 44px grid or horizon glow behind the thread. Three
           stacked decorative layers are what made the surface read as panels
           with seams instead of one continuous background. */}
+
+      {imageCreatorOpen ? (
+        <ChatImageCreator
+          attachments={attachments}
+          credits={imageCredits}
+          busy={Boolean(isLoading)}
+          onAddImage={() => imageInputRef.current?.click()}
+          onRemoveAttachment={removeComposerAttachment}
+          onClose={() => setImageCreatorOpen(false)}
+          onGenerate={handleImageCreatorGenerate}
+        />
+      ) : null}
 
       <div data-message-list className="malik-chat-scroll relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-44 pt-6 md:px-8 md:pb-48 lg:px-10">
         <div className="malik-message-list mx-auto flex w-full max-w-[768px] flex-col gap-8 sm:gap-10">
