@@ -2,6 +2,7 @@ import { handleGenerateRequest } from "@/lib/generation-route"
 import { handleMalikPhotoGenerationRequest } from "@/lib/media/generate-photo-route"
 import { handleSkillWebsiteGenerationRequest } from "@/lib/sites/generate-site-route"
 import { isFeatureDisabled } from "@/lib/server/request-safety"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import {
   acquireVideoDailySlot,
   getVideoDailyGateStatus,
@@ -170,8 +171,11 @@ async function handlePOST(request: Request, context: RouteContext) {
     // generation-route only spends provider quota on explicit /video or /veo requests.
     // Keep invalid/text-routed requests from burning the single global slot.
     if (prompt && isExplicitVideoPrompt(prompt)) {
-      const slot = await acquireVideoDailySlot("generate-kind")
-      if (!slot.available) return withCors(videoDailyLimitResponse(slot, `/api/generate/${kind}`), kind, id)
+      const entitlement = await resolveRequestEntitlement(request).catch(() => null)
+      if (entitlement?.plan !== "owner") {
+        const slot = await acquireVideoDailySlot(entitlement?.userId || "generate-kind")
+        if (!slot.available) return withCors(videoDailyLimitResponse(slot, `/api/generate/${kind}`), kind, id)
+      }
     }
   }
 
@@ -204,26 +208,31 @@ export async function GET(request: Request, context: RouteContext) {
   if (!SUPPORTED_KINDS.has(kind)) return invalidKind(kind, id)
 
   if (kind === "video") {
-    const gate = await getVideoDailyGateStatus()
+    const entitlement = await resolveRequestEntitlement(request).catch(() => null)
+    const ownerMode = entitlement?.plan === "owner"
+    const gate = ownerMode ? null : await getVideoDailyGateStatus()
     return json({
-      ok: gate.available,
+      ok: ownerMode ? true : gate!.available,
       product: "MALIK AI 6.5 TITAN",
       route: `/api/generate/${kind}`,
       method: "POST",
       runtime,
       kind,
-      status: gate.available ? "ready" : "limited",
-      tier: gate.available ? "Free" : "Pro",
-      pro: !gate.available,
-      locked: !gate.available,
-      globalDailyLimit: 1,
-      remainingDailyVideos: gate.available ? 1 : 0,
-      resetAt: gate.resetAt,
-      retryAt: gate.resetAt,
-      storage: gate.storage,
-      message: gate.available
-        ? "MalikVideo доступен: осталась 1 бесплатная генерация для всех на текущий день."
-        : "Бесплатный дневной лимит MalikVideo уже использован. Модель временно доступна как Pro до обновления лимита.",
+      status: ownerMode ? "ready" : gate!.available ? "ready" : "limited",
+      tier: ownerMode ? "Owner" : gate!.available ? "Free" : "Pro",
+      pro: ownerMode ? false : !gate!.available,
+      locked: ownerMode ? false : !gate!.available,
+      unlimited: ownerMode,
+      globalDailyLimit: ownerMode ? null : 1,
+      remainingDailyVideos: ownerMode ? null : gate!.available ? 1 : 0,
+      resetAt: gate?.resetAt,
+      retryAt: gate?.resetAt,
+      storage: gate?.storage,
+      message: ownerMode
+        ? "Founder video generation: без лимита Malik AI."
+        : gate!.available
+          ? "MalikVideo доступен: осталась 1 бесплатная генерация для всех на текущий день."
+          : "Бесплатный дневной лимит MalikVideo уже использован. Модель временно доступна как Pro до обновления лимита.",
     }, { status: 200, headers: { "Cache-Control": "no-store" } }, id, kind)
   }
 
@@ -272,7 +281,9 @@ export async function HEAD(request: Request, context: RouteContext) {
   const supported = SUPPORTED_KINDS.has(kind)
 
   if (supported && kind === "video") {
-    const gate = await getVideoDailyGateStatus()
+    const entitlement = await resolveRequestEntitlement(request).catch(() => null)
+    const ownerMode = entitlement?.plan === "owner"
+    const gate = ownerMode ? null : await getVideoDailyGateStatus()
     return new Response(null, {
       status: 204,
       headers: {
@@ -280,9 +291,9 @@ export async function HEAD(request: Request, context: RouteContext) {
         "X-Malik-Request-Id": id,
         "X-Malik-Route": `/api/generate/${kind}`,
         "X-Malik-Kind": kind,
-        "X-Malik-Health": gate.available ? "ok" : "limited",
-        "X-Malik-Video-Tier": gate.available ? "Free" : "Pro",
-        "X-Malik-Video-Reset-At": gate.resetAt,
+        "X-Malik-Health": ownerMode || gate!.available ? "ok" : "limited",
+        "X-Malik-Video-Tier": ownerMode ? "Owner" : gate!.available ? "Free" : "Pro",
+        ...(ownerMode ? { "X-Malik-Unlimited": "true" } : { "X-Malik-Video-Reset-At": gate!.resetAt }),
       },
     })
   }
