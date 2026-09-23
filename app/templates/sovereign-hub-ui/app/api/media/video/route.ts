@@ -75,16 +75,19 @@ async function handlePOST(request: Request) {
     return Response.json({
       ok: false,
       code: "AUTH_REQUIRED",
-      error: "Войдите в аккаунт. MalikVideo доступен один раз в день на аккаунт.",
+      error: "Войдите в аккаунт, чтобы использовать MalikVideo.",
     }, { status: 401 })
   }
+  const ownerMode = user.plan === "owner"
 
   // Source-driven modes are deliberately pinned to Magic Hour: its current
   // API supports both image-to-video and prompt-driven AI video editing.
   if (mode === "image" || mode === "video") providerId = "magichour"
 
-  const persistedQuota = await getVideoAccountDailyQuota(user.userId)
-  if (!persistedQuota.available) {
+  // The verified founder account is unlimited at the Malik AI application layer.
+  // Regular accounts keep the durable one-video-per-day gate.
+  const persistedQuota = ownerMode ? null : await getVideoAccountDailyQuota(user.userId)
+  if (!ownerMode && persistedQuota && !persistedQuota.available) {
     return Response.json({
       ok: false,
       code: "VIDEO_ACCOUNT_DAILY_LIMIT_REACHED",
@@ -104,18 +107,20 @@ async function handlePOST(request: Request) {
       code: legacyLimit.code,
       resetAt: legacyLimit.resetAt,
       plan: legacyLimit.plan,
-      remainingDailyVideos: 0,
-      dailyVideoLimit: 1,
+      remainingDailyVideos: ownerMode ? null : 0,
+      dailyVideoLimit: ownerMode ? null : 1,
+      unlimited: ownerMode,
     }, { status: 429 })
   }
 
-  if (!acquireVideoAccountInFlight(user.userId)) {
+  if (!ownerMode && !acquireVideoAccountInFlight(user.userId)) {
     return Response.json({
       ok: false,
       code: "VIDEO_GENERATION_IN_PROGRESS",
       error: "На этом аккаунте уже идёт генерация видео. Дождитесь её завершения.",
       remainingDailyVideos: 1,
       dailyVideoLimit: 1,
+      unlimited: false,
     }, { status: 429 })
   }
 
@@ -144,15 +149,16 @@ async function handlePOST(request: Request) {
         status: result.status,
         stage: result.stage,
         outputResolution: result.outputResolution,
-        remainingDailyVideos: 1,
-        dailyVideoLimit: 1,
-        resetAt: persistedQuota.resetAt,
+        remainingDailyVideos: ownerMode ? null : 1,
+        dailyVideoLimit: ownerMode ? null : 1,
+        unlimited: ownerMode,
+        resetAt: persistedQuota?.resetAt,
         plan: legacyLimit.plan,
       }, { status: result.status === "disabled" ? 503 : 502 })
     }
 
-    const quota = await markVideoAccountDailyQuota(user.userId)
-    await recordMediaUsage(user.userId, "video")
+    const quota = ownerMode ? null : await markVideoAccountDailyQuota(user.userId)
+    if (!ownerMode) await recordMediaUsage(user.userId, "video")
 
     return Response.json({
       ok: true,
@@ -164,15 +170,16 @@ async function handlePOST(request: Request) {
       status: result.status,
       stage: result.stage,
       outputResolution: result.outputResolution || resolution,
-      remainingDailyVideos: 0,
-      dailyVideoLimit: 1,
+      remainingDailyVideos: ownerMode ? null : 0,
+      dailyVideoLimit: ownerMode ? null : 1,
+      unlimited: ownerMode,
       globalDailyLimit: null,
       statusUrl: `/api/media/video/status?taskId=${encodeURIComponent(result.taskId)}&provider=${encodeURIComponent(result.provider)}`,
-      resetAt: quota.resetAt,
-      quotaStorage: quota.storage,
+      resetAt: quota?.resetAt,
+      quotaStorage: quota?.storage,
       plan: legacyLimit.plan,
     })
   } finally {
-    releaseVideoAccountInFlight(user.userId)
+    if (!ownerMode) releaseVideoAccountInFlight(user.userId)
   }
 }
