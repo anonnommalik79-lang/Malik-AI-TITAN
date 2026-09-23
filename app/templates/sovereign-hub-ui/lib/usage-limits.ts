@@ -1,3 +1,5 @@
+import { isOwnerEmail } from "@/lib/auth/admin-policy"
+
 export type GenerationLimitType = "image" | "video" | "code" | "website"
 
 export type UsageState = {
@@ -11,12 +13,6 @@ const IMAGE_KEY = "MALIK_USAGE_IMAGE_COUNT"
 const VIDEO_KEY = "MALIK_USAGE_VIDEO_COUNT"
 const CODE_KEY = "MALIK_USAGE_CODE_COUNT"
 const RESET_KEY = "MALIK_USAGE_LAST_RESET"
-
-const OWNER_EMAILS = new Set([
-  "amangeldymalik38@gmail.com",
-  "anonnommalik79@gmail.com",
-  "admin@malik.ai",
-])
 
 const canUseStorage = () => typeof window !== "undefined" && Boolean(window.localStorage)
 
@@ -54,7 +50,7 @@ function keyForType(type: GenerationLimitType) {
 }
 
 export function isOwnerUser(email?: string | null) {
-  return OWNER_EMAILS.has(String(email || "").trim().toLowerCase())
+  return isOwnerEmail(email)
 }
 
 export function getUsageState(): UsageState {
@@ -68,9 +64,9 @@ export function getUsageState(): UsageState {
 }
 
 export function canUseGeneration(type: GenerationLimitType, userEmail?: string | null) {
-  // MalikVideo is intentionally one generation per account per day for
-  // everyone, including owner accounts. Other legacy owner bypasses stay as-is.
-  if (type !== "video" && isOwnerUser(userEmail)) return true
+  // The single verified founder account is unlimited at the Malik AI app layer,
+  // including video. Provider-side quotas/capacity can still fail independently.
+  if (isOwnerUser(userEmail)) return true
   const state = getUsageState()
   if (type === "image") return state.imageCount < 1
   if (type === "video") return state.videoCount < 1
