@@ -11,11 +11,21 @@ function limitSeconds() {
   return Number.isFinite(configured) && configured > 0 ? configured : 120
 }
 
-export function getVoiceUsage(userId: string) {
+export function getVoiceUsage(userId: string, unlimited = false) {
   const date = dayKey()
+  if (unlimited) {
+    return {
+      unlimited: true,
+      usedSeconds: 0,
+      limitSeconds: Number.MAX_SAFE_INTEGER,
+      remainingSeconds: Number.MAX_SAFE_INTEGER,
+      date,
+    }
+  }
   const key = `${userId}:${date}`
   const current = usage.get(key) || { seconds: 0, date }
   return {
+    unlimited: false,
     usedSeconds: current.seconds,
     limitSeconds: limitSeconds(),
     remainingSeconds: Math.max(0, limitSeconds() - current.seconds),
@@ -23,10 +33,10 @@ export function getVoiceUsage(userId: string) {
   }
 }
 
-export function consumeVoiceUsage(userId: string, seconds: number) {
+export function consumeVoiceUsage(userId: string, seconds: number, unlimited = false) {
   const safeSeconds = Math.max(0, Math.min(120, Number.isFinite(seconds) ? seconds : 0))
-  const snapshot = getVoiceUsage(userId)
-  if (safeSeconds <= 0) return { ok: true as const, ...snapshot }
+  const snapshot = getVoiceUsage(userId, unlimited)
+  if (unlimited || safeSeconds <= 0) return { ok: true as const, ...snapshot }
   if (snapshot.usedSeconds + safeSeconds > snapshot.limitSeconds + .25) {
     return { ok: false as const, ...snapshot }
   }
