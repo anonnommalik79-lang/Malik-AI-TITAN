@@ -26,6 +26,7 @@ import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { takePrefillPrompt } from "@/lib/malik-context"
 import { ROUTER_VIDEO_CATALOG, type RouterCatalogEntry } from "@/lib/ai/router-catalog"
+import type { VideoProviderId } from "@/lib/media/types"
 
 export type VideoGenerationStudioProps = {
   username?: string
@@ -187,7 +188,6 @@ const MODELS = [
   },
 ] as const
 
-
 function catalogVideoIcon(entry: RouterCatalogEntry) {
   const domains: Record<string, string> = {
     kling: "klingai.com",
@@ -197,6 +197,19 @@ function catalogVideoIcon(entry: RouterCatalogEntry) {
   const domain = domains[entry.brand] || (entry.provider === "nara" ? "router.bynara.id" : "llm7.io")
   return `https://www.google.com/s2/favicons?sz=128&domain_url=https://${domain}`
 }
+
+// Keep the desktop model cards unchanged; the mobile picker exposes every video
+// provider accepted by /api/media/video.
+const MOBILE_MODELS = [
+  ...MODELS,
+  { id: "h3", provider: "h3", name: "MalikVideo 1.0", subtitle: "Malik AI", tier: "Pro", icon: "", featured: false, audio: false, note: "MalikVideo 1.0" },
+  { id: "dashscope", provider: "dashscope", name: "Wan · DashScope", subtitle: "Alibaba Cloud", tier: "Pro", icon: "", featured: false, audio: false, note: "Wan через DashScope" },
+  { id: "pollo", provider: "pollo", name: "Pollo AI", subtitle: "Pollo Video", tier: "Pro", icon: "", featured: false, audio: false, note: "Pollo AI Video" },
+  { id: "runway", provider: "runway", name: "Runway", subtitle: "Runway Video", tier: "Pro", icon: "", featured: false, audio: false, note: "Runway Video" },
+  { id: "fal", provider: "fal", name: "fal.ai", subtitle: "fal Video", tier: "Pro", icon: "", featured: false, audio: false, note: "fal.ai Video" },
+  { id: "luma", provider: "luma", name: "Luma", subtitle: "Luma Video", tier: "Pro", icon: "", featured: false, audio: false, note: "Luma Video" },
+  { id: "veo", provider: "veo", name: "Google Veo", subtitle: "Veo Video", tier: "Pro", icon: "", featured: false, audio: true, note: "Google Veo Video" },
+] as const
 
 const CATEGORIES = ["Популярное", "Кинематографичные", "Анимация", "Реалистичные", "Природа", "Технологии", "Люди", "Продукты"] as const
 
@@ -229,6 +242,14 @@ function MalikMediaWatermark({ compact = false }: { compact?: boolean }) {
 }
 
 function HeroVideo({ item }: { item: ShowcaseVideoTemplate }) {
+  const [mobileControls, setMobileControls] = useState(false)
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 820px)")
+    const update = () => setMobileControls(media.matches)
+    update()
+    media.addEventListener("change", update)
+    return () => media.removeEventListener("change", update)
+  }, [])
   return (
     <video
       key={item.id}
@@ -237,6 +258,7 @@ function HeroVideo({ item }: { item: ShowcaseVideoTemplate }) {
       autoPlay
       muted
       loop
+      controls={mobileControls}
       playsInline
       preload="metadata"
       disablePictureInPicture
@@ -267,13 +289,15 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("Популярное")
   const [thumbPage, setThumbPage] = useState(0)
   const [modelNotice, setModelNotice] = useState("")
-  const [selectedModelId, setSelectedModelId] = useState<(typeof MODELS)[number]["id"]>("pixazo")
+  const [selectedModelId, setSelectedModelId] = useState<(typeof MOBILE_MODELS)[number]["id"]>("pixazo")
+  const [mobileModelOpen, setMobileModelOpen] = useState(false)
+  const [modelAvailability, setModelAvailability] = useState<Partial<Record<VideoProviderId, boolean>>>({})
   const [mobilePanel, setMobilePanel] = useState<"text" | "image" | "video" | "style">("text")
   const busy = phase === "queued" || phase === "rendering"
-  const selectedModel = MODELS.find((model) => model.id === selectedModelId) || MODELS[0]
+  const selectedModel = MOBILE_MODELS.find((model) => model.id === selectedModelId) || MOBILE_MODELS[0]
   const selectedItem = SHOWCASE_TEMPLATES[selected] || SHOWCASE_TEMPLATES[0]
   const cards = useMemo(() => SHOWCASE_TEMPLATES.slice(1), [])
-  const thumbSize = 6
+  const thumbSize = 3
   const thumbPages = Math.max(1, Math.ceil(SHOWCASE_TEMPLATES.length / thumbSize))
   const thumbs = SHOWCASE_TEMPLATES.slice(thumbPage * thumbSize, thumbPage * thumbSize + thumbSize)
 
@@ -283,11 +307,34 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     }
   }, [sourcePreview])
 
-  const supportsMode = (modelId: (typeof MODELS)[number]["id"], targetMode: VideoMode) =>
+  useEffect(() => {
+    let active = true
+    fetch("/api/media/video/models")
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!active || !data?.models) return
+        setModelAvailability(data.models)
+        setSelectedModelId((current) => {
+          if (current === "magichour" || data.models[current]) return current
+          return MOBILE_MODELS.find((model) => data.models[model.id])?.id || current
+        })
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 820px)").matches) {
+      setPrompt((current) => current === DEFAULT_PROMPT ? "" : current)
+    }
+  }, [])
+
+  const supportsMode = (modelId: (typeof MOBILE_MODELS)[number]["id"], targetMode: VideoMode) =>
     targetMode === "text" ? true : modelId === "magichour"
 
   const changeMode = (nextMode: VideoMode) => {
     if (busy || nextMode === mode) return
+    setMobileModelOpen(false)
     setMode(nextMode)
     setSourceFile(null)
     setSourceDurationSeconds(0)
@@ -421,7 +468,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   const chooseTemplate = (index: number) => {
     const item = SHOWCASE_TEMPLATES[index]
-    if (!item) return
+    if (!item || busy) return
+    if (window.matchMedia("(max-width: 820px)").matches && mode !== "text") {
+      changeMode("text")
+      setMobilePanel("text")
+    }
     setSelected(index)
     setPrompt(item.prompt)
     setVideoUrl("")
@@ -531,22 +582,6 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     setRatio(values[(index + 1) % values.length])
   }
 
-  const cycleMobileModel = () => {
-    if (busy) return
-    if (mode !== "text") {
-      setSelectedModelId("magichour")
-      setModelNotice(mode === "video"
-        ? "Видео → Видео работает через Magic Hour AI Video Editor."
-        : "Image → Video на мобильном работает через Magic Hour.")
-      return
-    }
-    const available = MODELS.filter((model) => duration !== 10 || model.id === "magichour")
-    const index = available.findIndex((model) => model.id === selectedModelId)
-    const next = available[(index + 1 + available.length) % available.length] || available[0]
-    setSelectedModelId(next.id)
-    setModelNotice(next.note)
-  }
-
   const openMobileImagePicker = () => {
     if (busy) return
     if (mode !== "image") changeMode("image")
@@ -603,7 +638,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             disabled={busy}
           >
             <span className="mv2m__tab-icon">T</span>
-            Текст
+            Текст → видео
           </button>
           <button
             type="button"
@@ -615,7 +650,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             disabled={busy}
           >
             <ImagePlus />
-            Фото
+            Фото → видео
           </button>
           <button
             type="button"
@@ -627,7 +662,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             disabled={busy}
           >
             <Video />
-            Видео
+            Видео → видео
           </button>
           <button
             type="button"
@@ -708,8 +743,32 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           <button type="button" onClick={cycleMobileDuration} disabled={busy || mode === "video"}><Clock3 /><span>{mode === "video" ? "до 10 сек" : `${duration} секунд`}</span></button>
           <button type="button" onClick={cycleMobileQuality} disabled={busy}><Monitor /><span>{QUALITY_RESOLUTION[quality]}</span></button>
           <button type="button" onClick={cycleMobileRatio} disabled={busy}><RectangleHorizontal /><span>{ratio}</span></button>
-          <button type="button" onClick={cycleMobileModel} disabled={busy}><Box /><span>{mode === "video" ? "Magic Hour" : selectedModel.name.split(" · ")[0]}</span><small>⌄</small></button>
+          <button type="button" onClick={() => setMobileModelOpen((open) => !open)} disabled={busy} aria-expanded={mobileModelOpen} aria-controls="mv2-mobile-models"><Box /><span>{selectedModel.name.split(" · ")[0]}</span><small>⌄</small></button>
         </div>
+        {mobileModelOpen ? (
+          <div id="mv2-mobile-models" className="mv2m__model-picker" role="group" aria-label="Выбор видеомодели">
+            {MOBILE_MODELS.map((model) => {
+              const available = modelAvailability[model.id] !== false
+              const supported = supportsMode(model.id, mode) && (duration !== 10 || model.id === "magichour")
+              return (
+                <button
+                  key={model.id}
+                  type="button"
+                  className={selectedModelId === model.id ? "is-active" : ""}
+                  disabled={!available || !supported || busy}
+                  onClick={() => {
+                    setSelectedModelId(model.id)
+                    setModelNotice(model.note)
+                    setMobileModelOpen(false)
+                  }}
+                >
+                  <span>{model.name}</span>
+                  <small>{!supported ? "Только текст → видео" : !available ? "Не подключена" : model.subtitle}</small>
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
 
         <button
           type="button"
@@ -796,7 +855,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         </div>
 
         <div className="mv2__thumb-strip">
-          <button className="mv2__arrow" type="button" onClick={() => setThumbPage((page) => (page - 1 + thumbPages) % thumbPages)} aria-label="Предыдущие видео"><ChevronLeft /></button>
+          <button className="mv2__arrow" type="button" disabled={thumbPage === 0} onClick={() => setThumbPage((page) => Math.max(0, page - 1))} aria-label="Предыдущие видео"><ChevronLeft /></button>
           <div className="mv2__thumbs">
             {thumbs.map((item, index) => {
               const actualIndex = thumbPage * thumbSize + index
@@ -808,11 +867,12 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
               )
             })}
           </div>
-          <button className="mv2__arrow" type="button" onClick={() => setThumbPage((page) => (page + 1) % thumbPages)} aria-label="Следующие видео"><ChevronRight /></button>
+          <button className="mv2__arrow" type="button" disabled={thumbPage >= thumbPages - 1} onClick={() => setThumbPage((page) => Math.min(thumbPages - 1, page + 1))} aria-label="Следующие видео"><ChevronRight /></button>
         </div>
 
         <div className="mv2__preview-info">
           <div className="mv2__preview-copy">
+            <div className="mv2__mobile-badges"><span>{videoUrl ? QUALITY_RESOLUTION[quality] : "MALIK VIDEO"}</span><span>CINEMATIC</span></div>
             <h3>{videoUrl ? "Готовое видео" : selectedItem.title}</h3>
             <p>{videoUrl ? "Готовый результат Malik AI с фирменным watermark." : selectedItem.prompt}</p>
             <div className="mv2__chips"><span>{duration} секунд</span><span>{QUALITY_RESOLUTION[quality]}</span><span>{ratio}</span><span>{videoUrl ? "Malik Video" : selectedModel.name}</span><span>{selectedModel.audio ? "Audio" : "Video"}</span></div>
@@ -971,7 +1031,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv2__stage{position:relative;aspect-ratio:16/10.4;overflow:hidden;background:#06080c}.mv2__media{position:absolute;inset:0;display:grid;place-items:center;background:#050608}.mv2__hero-video,.mv2__result,.mv2__source-image,.mv2__source-video{width:100%;height:100%;display:block;background:#050608}.malik-media-watermark{position:absolute;z-index:8;right:22px;bottom:18px;width:88px;display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;user-select:none;opacity:.82;color:#fff;filter:drop-shadow(0 2px 4px rgba(0,0,0,.82))}.malik-media-watermark svg{display:block;width:62px;height:auto;color:#fff}.malik-media-watermark span{color:#fff;font-size:13px;font-weight:650;line-height:1;letter-spacing:.01em;text-shadow:0 1px 3px rgba(0,0,0,.92)}.malik-media-watermark.is-compact{right:12px;bottom:10px;width:68px;gap:3px;opacity:.86}.malik-media-watermark.is-compact svg{width:48px}.malik-media-watermark.is-compact span{font-size:10px}.mv2__source-image,.mv2__source-video{object-fit:contain!important;object-position:center center!important;transform:none!important;max-width:100%!important;max-height:100%!important}.mv2__hero-video,.mv2__result{object-fit:contain}.mv2__stage:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.18),transparent 22%,transparent 70%,rgba(0,0,0,.36))}
         .mv2__stage-brand{position:absolute;z-index:2;top:24px;color:#d9e0eb;letter-spacing:.36em;font-size:11px}.mv2__stage-brand--left{left:28px;display:flex;flex-direction:column;gap:10px}.mv2__stage-brand--left small{font-size:9px}.mv2__stage-brand--right{right:26px}.mv2__rendering{position:absolute;z-index:4;inset:0;background:rgba(0,0,0,.68);backdrop-filter:blur(12px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}.mv2__render-box{width:96px;height:96px;border-radius:24px;border:1px solid rgba(255,255,255,.17);display:grid;place-items:center;background:#0c0e12;animation:mv2pulse 1.7s ease-in-out infinite}.mv2__rendering strong{font-size:14px}.mv2__rendering small{color:#939aa7;font-size:11px}@keyframes mv2pulse{50%{transform:scale(1.035);box-shadow:0 24px 70px rgba(0,0,0,.6)}}
         .mv2__thumb-strip{display:grid;grid-template-columns:28px 1fr 28px;gap:7px;align-items:center;margin-top:12px}.mv2__thumbs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}.mv2__arrow{width:28px;height:76px;border:0;background:transparent;color:#b9c2d1;display:grid;place-items:center}.mv2__arrow svg{width:18px;height:18px}.mv2__thumb{position:relative;height:76px;border:1px solid #262a31;border-radius:10px;overflow:hidden;background:#0b0e13;padding:0}.mv2__thumb.is-active{border-color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}.mv2__thumb-poster{width:100%;height:100%;object-fit:cover;display:block}.mv2__thumb:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(0,0,0,.72))}.mv2__thumb span{position:absolute;z-index:2;left:7px;bottom:5px;font-size:9px;color:#dce2ec}
-        .mv2__preview-info{margin-top:12px;padding:15px;display:grid;grid-template-columns:1fr 132px;gap:15px}.mv2__preview-copy h3{margin:0 0 8px;font-size:17px}.mv2__preview-copy p{margin:0;color:#9ca4b2;font-size:12px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.mv2__chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.mv2__chips span{height:28px;padding:0 9px;border:1px solid #292d34;border-radius:999px;background:#12161d;color:#adb5c2;display:inline-flex;align-items:center;font-size:10px}.mv2__preview-actions{display:flex;flex-direction:column;gap:7px}.mv2__preview-actions button{height:35px;border:1px solid #2c3038;border-radius:9px;background:#12161d;color:#edf1f7;display:flex;align-items:center;justify-content:center;gap:7px;font-size:11px}.mv2__preview-actions svg{width:14px;height:14px}
+        .mv2__preview-info{margin-top:12px;padding:15px;display:grid;grid-template-columns:1fr 132px;gap:15px}.mv2__mobile-badges{display:none}.mv2__preview-copy h3{margin:0 0 8px;font-size:17px}.mv2__preview-copy p{margin:0;color:#9ca4b2;font-size:12px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.mv2__chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.mv2__chips span{height:28px;padding:0 9px;border:1px solid #292d34;border-radius:999px;background:#12161d;color:#adb5c2;display:inline-flex;align-items:center;font-size:10px}.mv2__preview-actions{display:flex;flex-direction:column;gap:7px}.mv2__preview-actions button{height:35px;border:1px solid #2c3038;border-radius:9px;background:#12161d;color:#edf1f7;display:flex;align-items:center;justify-content:center;gap:7px;font-size:11px}.mv2__preview-actions svg{width:14px;height:14px}
         .mv2__controls-column{position:relative;padding:5px 0 24px}.mv2__mode-tabs{position:absolute;right:0;top:0;display:flex;border:1px solid #1d2027;background:#0b0d11;border-radius:12px;padding:3px;overflow:hidden}.mv2__mode-tabs button{height:34px;border:0;border-radius:9px;background:transparent;color:#8e96a4;padding:0 13px;font-size:10px;white-space:nowrap}.mv2__mode-tabs button.is-active{background:#f4f4f5 !important;color:#050505 !important;box-shadow:inset 0 0 0 1px #fff}.mv2__mode-tabs button:disabled{cursor:not-allowed;opacity:.6}.mv2__eyebrow{margin-top:13px;color:#707887;letter-spacing:.28em;font-size:10px}.mv2 h1{margin:14px 0 6px;font-size:clamp(34px,3.2vw,52px);line-height:1;letter-spacing:-.05em}.mv2__lead{margin:0 0 15px;color:#929aa8;font-size:13px}
         .mv2__prompt-card{padding:12px}.mv2__prompt-card textarea{width:100%;height:106px;border:0;outline:0;resize:none;background:transparent;color:#fff;font-size:14px;line-height:1.5;padding:3px}.mv2__prompt-card textarea::placeholder{color:#6f7887}.mv2__source-card{margin-top:9px;min-height:64px;padding:8px;border:1px solid #272a31;border-radius:12px;background:#0c0f14;display:grid;grid-template-columns:48px minmax(0,1fr) auto auto;align-items:center;gap:9px}.mv2__source-preview{width:48px;height:48px;border-radius:9px;overflow:hidden;border:1px solid #2d323b;background:#12161d;display:grid;place-items:center;color:#aeb6c4}.mv2__source-preview img,.mv2__source-preview video{width:100%;height:100%;object-fit:contain!important;object-position:center center!important;display:block;background:#050608;transform:none!important}.mv2__source-preview svg{width:19px}.mv2__source-copy{min-width:0;display:flex;flex-direction:column;gap:4px}.mv2__source-copy strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mv2__source-copy small{font-size:8px;color:#858d9b;line-height:1.35}.mv2__source-upload,.mv2__source-clear{height:34px;border:1px solid #303540;border-radius:9px;background:#151922;color:#eef2f8;display:flex;align-items:center;justify-content:center;gap:6px}.mv2__source-upload{padding:0 10px;font-size:9px}.mv2__source-upload svg,.mv2__source-clear svg{width:13px;height:13px}.mv2__source-clear{width:34px;padding:0}.mv2__daily-note{margin-top:8px;color:#7e8795;font-size:9px}.mv2__prompt-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.mv2__helper-row{display:flex;gap:6px;flex-wrap:wrap}.mv2__helper-row button{height:30px;border:1px solid #2a2e36;border-radius:8px;background:#151922;color:#cbd2dd;display:flex;align-items:center;gap:5px;padding:0 9px;font-size:9px}.mv2__helper-row svg{width:12px;height:12px}.mv2__count{font-size:9px;color:#777f8d;white-space:nowrap}
         .mv2__section-title{display:flex;align-items:center;gap:5px;margin:15px 0 8px;font-size:12px;font-weight:750}.mv2__section-title svg{width:13px;height:13px}.mv2__selected-model{margin-left:auto;max-width:56%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;font-size:9px;font-weight:750}.mv2__models{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.mv2__model{position:relative;min-width:0;height:66px;padding:8px;border:1px solid #272b33;border-radius:11px;background:#0f131a;color:#fff;display:flex;align-items:center;gap:7px;text-align:left;overflow:hidden;transition:border-color .14s ease,background .14s ease,box-shadow .14s ease,transform .14s ease}.mv2__model.is-active{z-index:1;border-color:#fff !important;background:#1d222b !important;outline:2px solid #fff !important;outline-offset:-2px !important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.72),0 0 0 1px rgba(255,255,255,.18) !important;transform:translateY(-1px)}.mv2__model.is-active .mv2__model-copy strong{color:#fff}.mv2__model:disabled{opacity:.28;cursor:not-allowed}.mv2__model.is-featured{grid-column:1/-1;height:72px;background:#121720}.mv2__model-icon{width:34px;height:34px;flex:0 0 34px;border-radius:8px;background:#fff;display:grid;place-items:center;overflow:hidden}.mv2__model-icon img{width:22px;height:22px;object-fit:contain}.mv2__model-copy{min-width:0;display:flex;flex-direction:column;gap:3px}.mv2__model-copy strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}.mv2__model-copy small{color:#858d9b;font-size:8px}.mv2__tier{position:absolute;right:6px;top:5px;padding:2px 5px;border-radius:999px;font-size:7px}.mv2__tier.is-free{background:#fff;color:#000}.mv2__tier.is-pro{background:#252935;color:#c9d0db}.mv2__model-notice{margin-top:8px;min-height:26px;padding:7px 9px;border:1px solid #2b3038;border-radius:8px;background:#0f1217;color:#c3cad4;font-size:10px}

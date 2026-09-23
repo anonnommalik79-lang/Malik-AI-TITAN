@@ -100,6 +100,7 @@ import "./mobile-drawer-final.css"
 // Truly last: loading, analysis, sources and status surfaces in black and
 // white only. It has to follow every accent rule above to strip their gold.
 import "./chat-monochrome-final.css"
+import "./video-mobile-refinement.css"
 
 // Let Next emit one viewport tag. Read the visible area separately on iOS,
 // where the keyboard does not resize dvh. Keep deliberate pinch zoom available.
