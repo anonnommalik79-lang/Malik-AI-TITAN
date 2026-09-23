@@ -14,8 +14,21 @@ const hiddenGemini = fs.readFileSync("lib/server/hidden-gemini-multimodal.ts", "
 const manifest = fs.readFileSync("app/manifest.ts", "utf8")
 const importUrl = fs.readFileSync("app/api/attachments/import-url/route.ts", "utf8")
 const shareTarget = fs.readFileSync("app/share-target/route.ts", "utf8")
+const drawingPad = fs.readFileSync("components/sovereign/ChatDrawingPad.tsx", "utf8")
+const libraryPicker = fs.readFileSync("components/sovereign/ChatLibraryPicker.tsx", "utf8")
+const pluginRegistry = fs.readFileSync("components/sovereign/features/plugin-registry.ts", "utf8")
 
-const requestedLabels = ["Загрузить изображения", "Загрузить видео", "Загрузить файлы"]
+const requestedLabels = [
+  "Добавить фото и файлы",
+  "Добавить файл из библиотеки",
+  "Создать изображение",
+  "Поиск в сети",
+  "Глубокое исследование",
+  "Нарисовать",
+  "GitHub",
+  "Gmail",
+  "OpenAI Platform",
+]
 
 function extractBlock(source, startText, endText) {
   const start = source.indexOf(startText)
@@ -24,8 +37,8 @@ function extractBlock(source, startText, endText) {
   return source.slice(start, end)
 }
 
-const chatMenu = extractBlock(chat, "const attachItems = useMemo", "  return (\n    <div data-malik-chat-fullwidth")
-const homeMenu = extractBlock(home, "const tools: Array<", "const hasSendableContent")
+const chatMenu = extractBlock(chat, "const attachItems: Array<", "\n\n  return (")
+const homeMenu = extractBlock(home, "const tools: Array<", "  const transferUrl")
 
 for (const menu of [chatMenu, homeMenu]) {
   let previous = -1
@@ -35,29 +48,47 @@ for (const menu of [chatMenu, homeMenu]) {
     previous = position
   }
 
-  for (const removed of ["Камера", "Фото", "Изображение", "Видео", "Код", "Плагины", "Веб-поиск", "Память"]) {
+  for (const removed of ["Загрузить изображения", "Загрузить видео", "Загрузить файлы", "Камера", "Код", "Плагины", "Память"]) {
     assert.equal(menu.includes(`label: "${removed}"`), false, `Old menu action must be gone: ${removed}`)
   }
 }
 
-assert.match(home, /ref={imageInputRef}[\s\S]*accept="image\/\*"/, "Home image upload must use an image-only picker")
-assert.match(home, /ref={videoInputRef}[\s\S]*accept="video\/\*"/, "Home video upload must use a video-only picker")
-assert.match(home, /ref={fileInputRef}[\s\S]*accept={HOME_FILE_ACCEPT}/, "Home file row must open a real document/code picker")
+assert.match(homeMenu, /description: "Загрузить с компьютера"/, "Home menu must show ChatGPT-style descriptions")
+assert.match(chatMenu, /description: "Загрузить с компьютера"/, "Chat menu must show ChatGPT-style descriptions")
+
+assert.match(home, /ref={allInputRef}[\s\S]*accept={`image\/\*,video\/\*,\$\{HOME_FILE_ACCEPT\}`}/, "Home unified picker must accept images, videos and documents")
 assert.match(home, /homeFileToAttachment/, "Home files must be converted into chat attachments")
 assert.match(home, /URL\.createObjectURL\(file\)/, "Home media must receive a lightweight visual preview URL")
 assert.match(home, /MAX_HOME_ATTACHMENTS = 8/, "Home upload count must align with the chat/router maximum")
 assert.match(home, /Максимум 10 MB/, "Home binary payload must stay below the JSON/base64 request safety ceiling")
 
-assert.match(chat, /ref={imageInputRef} type="file" accept="image\/\*"/, "Chat image row must open an image picker")
-assert.match(chat, /ref={videoInputRef} type="file" accept="video\/\*"/, "Chat video row must open a video picker")
-assert.match(chat, /ref={fileInputRef}[\s\S]*\.pdf,\.docx,\.xlsx,\.pptx/, "Chat file row must accept documents")
+assert.match(chat, /ref={imageInputRef} type="file" accept="image\/\*"/, "Chat image creator must keep its image picker")
+assert.match(chat, /ref={allInputRef}[\s\S]*accept="image\/\*,video\/\*,audio\/\*,\.pdf,\.docx,\.xlsx,\.pptx/, "Chat unified picker must accept media and documents")
+assert.equal(chat.includes("videoInputRef"), false, "Separate video-only picker must be replaced by the unified picker")
+assert.equal(chat.includes("fileInputRef"), false, "Separate document-only picker must be replaced by the unified picker")
 assert.equal(chat.includes('capture="environment"'), false, "The old separate camera row/input must be gone")
+
+assert.match(home, /\/api\/plugins\/connect\?id=/, "Home GitHub/Gmail actions must use the real plugin connection route")
+assert.match(chat, /\/api\/plugins\/connect\?id=/, "Chat GitHub/Gmail actions must use the real plugin connection route")
+assert.match(pluginRegistry, /id: "github"[\s\S]*providerSlug: "github"/, "GitHub must remain a real WorkOS Pipes plugin")
+assert.match(pluginRegistry, /id: "gmail"[\s\S]*providerSlug: "gmail"/, "Gmail must remain a real WorkOS Pipes plugin")
+assert.match(chat, /research:\s*researchMode !== "off"/, "Search menu actions must route a real research request")
+assert.match(chat, /researchMode === "deep" \? "deep" : responseDepth/, "Deep research must request deep response depth")
+assert.match(home, /responseDepth:\s*deepResearch \? "deep" : undefined/, "Home deep research must request deep response depth")
+assert.match(chat, /https:\/\/platform\.openai\.com\//, "OpenAI Platform row must open the official platform")
+assert.match(home, /https:\/\/platform\.openai\.com\//, "Home OpenAI Platform row must open the official platform")
+
+assert.match(libraryPicker, /\/api\/media\/library\?limit=120/, "Library picker must load the authenticated Malik media library")
+assert.match(libraryPicker, /onSelect\(item\.src/, "Library picker must return the selected saved asset")
+assert.match(drawingPad, /<canvas/, "Draw action must open a real canvas")
+assert.match(drawingPad, /canvas\.toBlob/, "Draw action must turn the canvas into an attachable PNG file")
+
 assert.match(chat, /UserAttachmentGallery/, "Sent attachments must render inside the user chat turn")
 assert.match(chat, /malik-user-attachment--image/, "Sent photos must render as actual image previews")
 assert.match(chat, /malik-user-attachment--video/, "Sent videos must render as actual video previews")
 assert.match(chat, /URL\.createObjectURL\(file\)/, "Chat media must receive a lightweight visual preview URL")
 assert.match(chat, /createPortal\([\s\S]*malik-attachment-menu/, "Chat plus menu must render through a body portal so the composer cannot clip it")
-assert.match(chat, /className="fixed z-\[10000\]/, "Chat plus menu must use viewport positioning")
+assert.match(chat, /className="fixed z-\[10000\][\s\S]*max-h-\[72dvh\]/, "Chat plus menu must use viewport positioning and remain scrollable")
 assert.match(chat, /onPaste={handleComposerPaste}/, "Chat composer must accept pasted media")
 assert.match(chat, /onDrop={handleComposerDrop}/, "Chat composer must accept dragged media")
 assert.match(chat, /malik-composer-attachment-preview/, "Pending media must render as a square preview before send")
@@ -73,17 +104,15 @@ assert.match(shareTarget, /form\.getAll\("files"\)/, "PWA share target must acce
 const userMessageBlock = extractBlock(dashboard, "const userMessage: Message = {", "  const assistantMessage: Message = {")
 assert.match(userMessageBlock, /attachments:\s*attachments\.map\(\(item\) => \(\{[\s\S]*url:\s*item\.url/, "User messages must keep lightweight attachment metadata")
 assert.equal(userMessageBlock.includes("base64: item.base64"), false, "Chat history must not duplicate base64 uploads")
-// `attachments,` became `attachments: apiRequestAttachments,` - the shorthand
-// went, the payload did not. The rule is that both keys are still in the body
-// sent to /api/stream, in that order.
 assert.match(dashboard, /attachments:?\s*[A-Za-z]*,\s*media_b64:/, "The full attachment payload must still be sent to /api/stream")
 assert.match(stream, /routeMalikAttachments/, "The main stream route must send attachments through the multimodal router")
 assert.match(multimodal, /runHiddenGeminiMultimodal/, "Binary attachments must reach the hidden Gemini multimodal path")
 
-assert.match(homeCss, /\.thome-tools-menu[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/, "Desktop Home upload menu must be one clean column")
-assert.match(attachmentCss, /\.thome-tools-menu[\s\S]*width:\s*292px\s*!important[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/, "Final desktop override must keep one clean column")
-assert.match(attachmentCss, /@media \(max-width: 767px\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/, "Mobile upload menu must use the same single-column layout")
-assert.match(attachmentCss, /@media \(max-width: 767px\)[\s\S]*height:\s*48px\s*!important/, "Mobile rows must keep full touch height without clipping")
+assert.match(homeCss, /\.thome-tools-menu[\s\S]*width:\s*420px[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/, "Desktop Home tools menu must be wide enough for two-line actions")
+assert.match(homeCss, /\.thome-tools-copy[\s\S]*\.thome-tools-copy small/, "Home menu must style action descriptions")
+assert.match(attachmentCss, /\.thome-tools-menu[\s\S]*width:\s*420px\s*!important[\s\S]*max-height:\s*min\(72dvh, 620px\)\s*!important/, "Final desktop override must fit the full tools list and scroll when needed")
+assert.match(attachmentCss, /@media \(max-width: 767px\)[\s\S]*width:\s*min\(360px, calc\(100vw - 24px\)\)\s*!important/, "Mobile tools menu must stay inside the viewport")
+assert.match(attachmentCss, /@media \(max-width: 767px\)[\s\S]*min-height:\s*58px\s*!important[\s\S]*height:\s*auto\s*!important/, "Mobile rows must keep readable two-line touch targets")
 
 assert.match(models, /qwen\/qwen3\.8-27b/, "Qwen 3.8 27B must remain available")
 assert.match(models, /gpt-oss-120b/, "Cerebras GPT-OSS 120B fallback must remain")
@@ -94,4 +123,4 @@ assert.match(hiddenGemini, /GEMINI_FALLBACK_MODEL/, "Hidden multimodal engine mu
 assert.match(hiddenGemini, /application\/pdf/, "Hidden multimodal engine must accept PDF documents")
 assert.equal(models.includes("gemini-3.5-flash-lite"), false, "Gemini must stay hidden from the model selector")
 
-console.log("Upload menu, desktop/mobile layout, sent previews, and multimodal transport verified.")
+console.log("Full ChatGPT-style tools menu, uploads, library, research, drawing, plugins, desktop/mobile layout, and multimodal transport verified.")
