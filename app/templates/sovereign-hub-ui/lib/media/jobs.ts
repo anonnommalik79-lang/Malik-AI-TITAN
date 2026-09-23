@@ -14,6 +14,8 @@ export type StoredVideoJob = {
   error?: string
   statusUrl?: string
   responseUrl?: string
+  /** Provider credential selector only; secrets are never persisted. */
+  credentialSlot?: number
   createdAt: string
   updatedAt: string
 }

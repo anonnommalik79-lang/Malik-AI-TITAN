@@ -12,6 +12,8 @@ type CreatedFreeVideoJob = {
   taskId: string
   model: string
   statusUrl?: string
+  /** 0 = PIXAZO_API_KEY, 1..4 = PIXAZO_API_KEY_1..4. Never stores the secret itself. */
+  credentialSlot?: number
 }
 
 const DEFAULT_BASES: Record<FreeVideoProviderId, string> = {
@@ -25,6 +27,29 @@ function env(name: string) {
   return String(process.env[name] || "").trim()
 }
 
+type PixazoCredential = {
+  slot: number
+  key: string
+}
+
+function pixazoApiKeys(): PixazoCredential[] {
+  return [
+    { slot: 0, key: env("PIXAZO_API_KEY") },
+    { slot: 1, key: env("PIXAZO_API_KEY_1") },
+    { slot: 2, key: env("PIXAZO_API_KEY_2") },
+    { slot: 3, key: env("PIXAZO_API_KEY_3") },
+    { slot: 4, key: env("PIXAZO_API_KEY_4") },
+  ].filter((credential) => Boolean(credential.key))
+}
+
+function pixazoApiKeyForSlot(slot?: number) {
+  const credentials = pixazoApiKeys()
+  if (typeof slot === "number") {
+    return credentials.find((credential) => credential.slot === slot)?.key || ""
+  }
+  return credentials[0]?.key || ""
+}
+
 function baseUrl(provider: FreeVideoProviderId) {
   const override = env({
     novai: "NOVAI_BASE_URL",
@@ -36,6 +61,7 @@ function baseUrl(provider: FreeVideoProviderId) {
 }
 
 function apiKey(provider: FreeVideoProviderId) {
+  if (provider === "pixazo") return pixazoApiKeyForSlot()
   return env({
     novai: "NOVAI_API_KEY",
     magichour: "MAGIC_HOUR_API_KEY",
@@ -81,9 +107,16 @@ async function requestJson(url: string, init: RequestInit, label: string) {
   }
   if (!response.ok) {
     const detail = detailFrom(payload, `HTTP ${response.status}`)
-    throw new Error(friendlyRequestError(label, detail))
+    const error = new Error(friendlyRequestError(label, detail)) as Error & { status?: number }
+    error.status = response.status
+    throw error
   }
   return payload
+}
+
+function requestStatus(error: unknown) {
+  const status = Number((error as { status?: unknown } | null)?.status)
+  return Number.isFinite(status) ? status : 0
 }
 
 function jsonHeaders(extra: Record<string, string> = {}) {
@@ -173,6 +206,7 @@ export function isFreeVideoProvider(value: unknown): value is FreeVideoProviderI
 }
 
 export function freeVideoProviderConfigured(provider: FreeVideoProviderId) {
+  if (provider === "pixazo") return pixazoApiKeys().length > 0
   return Boolean(apiKey(provider))
 }
 
@@ -290,22 +324,39 @@ export async function createFreeVideoJob(provider: FreeVideoProviderId, input: V
 
   if (provider === "pixazo") {
     const root = baseUrl(provider)
-    const payload = await requestJson(
-      `${root}/ltx-video/v1/text-to-video`,
-      {
-        method: "POST",
-        headers: jsonHeaders({ "Ocp-Apim-Subscription-Key": key }),
-        body: JSON.stringify({ prompt: input.prompt }),
-      },
-      "Pixazo submit",
-    )
-    const taskId = firstString(payload?.request_id, payload?.id, payload?.task_id)
-    if (!taskId) throw new Error("Pixazo submit: missing request_id")
-    return {
-      taskId,
-      model: "ltx-video",
-      statusUrl: firstString(payload?.polling_url) || `${root}/v2/requests/status/${encodeURIComponent(taskId)}`,
+    const credentials = pixazoApiKeys()
+    let lastError: unknown
+
+    for (const credential of credentials) {
+      try {
+        const payload = await requestJson(
+          `${root}/ltx-video/v1/text-to-video`,
+          {
+            method: "POST",
+            headers: jsonHeaders({ "Ocp-Apim-Subscription-Key": credential.key }),
+            body: JSON.stringify({ prompt: input.prompt }),
+          },
+          "Pixazo submit",
+        )
+        const taskId = firstString(payload?.request_id, payload?.id, payload?.task_id)
+        if (!taskId) throw new Error("Pixazo submit: missing request_id")
+        return {
+          taskId,
+          model: "ltx-video",
+          statusUrl: firstString(payload?.polling_url) || `${root}/v2/requests/status/${encodeURIComponent(taskId)}`,
+          credentialSlot: credential.slot,
+        }
+      } catch (error) {
+        lastError = error
+        const status = requestStatus(error)
+        // Fail over only when a configured credential is invalid/revoked.
+        // Do not rotate accounts on 429/quota responses; respect provider fair-use limits.
+        if (status === 401 || status === 403) continue
+        throw error
+      }
     }
+
+    throw lastError instanceof Error ? lastError : new Error("Pixazo submit: all configured credentials failed")
   }
 
   const root = baseUrl(provider)
@@ -348,10 +399,15 @@ export async function createFreeVideoJob(provider: FreeVideoProviderId, input: V
 export async function fetchFreeVideoStatus(
   provider: FreeVideoProviderId,
   taskId: string,
-  options: { statusUrl?: string } = {},
+  options: { statusUrl?: string; credentialSlot?: number } = {},
 ): Promise<RemoteVideoStatus> {
-  const key = apiKey(provider)
-  if (!key) return { status: "failed", error: `${provider.toUpperCase()} API key is not configured` }
+  const key = provider === "pixazo" ? pixazoApiKeyForSlot(options.credentialSlot) : apiKey(provider)
+  if (!key) {
+    const suffix = provider === "pixazo" && typeof options.credentialSlot === "number"
+      ? ` slot ${options.credentialSlot}`
+      : ""
+    return { status: "failed", error: `${provider.toUpperCase()} API key${suffix} is not configured` }
+  }
 
   if (provider === "novai") {
     const url = options.statusUrl || `${baseUrl(provider)}/v1/video/generations/${encodeURIComponent(taskId)}?model=cogvideox-flash`

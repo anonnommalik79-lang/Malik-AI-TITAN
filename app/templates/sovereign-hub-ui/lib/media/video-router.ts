@@ -99,6 +99,7 @@ export async function routeVideoGeneration(input: VideoGenerateInput): Promise<V
           status: "queued",
           model: created.model,
           statusUrl: created.statusUrl,
+          credentialSlot: created.credentialSlot,
           createdAt: now,
           updatedAt: now,
         })
@@ -272,7 +273,10 @@ export async function refreshVideoJobStatus(taskId: string, providerHint?: Video
 
   if (isFreeVideoProvider(stored.provider)) {
     try {
-      const remote = await fetchFreeVideoStatus(stored.provider as FreeVideoProviderId, taskId, { statusUrl: stored.statusUrl })
+      const remote = await fetchFreeVideoStatus(stored.provider as FreeVideoProviderId, taskId, {
+        statusUrl: stored.statusUrl,
+        credentialSlot: stored.credentialSlot,
+      })
       const status = mapRemoteStatus(remote.status)
       await patchVideoJob(taskId, { status, videoUrl: remote.videoUrl, error: remote.error }, stored.userId)
       return {
