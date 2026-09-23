@@ -18,7 +18,7 @@ assert.match(provider, /AGNES_API_KEY_2/)
 assert.match(provider, /AGNES_API_KEY_3/)
 assert.match(provider, /AGNES_RATE_LIMITED/)
 assert.match(provider, /agnes-image-2\.1-flash/)
-assert.match(provider, /extra_body:\s*\{ response_format: "url" \}/)
+assert.match(provider, /extra_body:\s*\{[\s\S]*?response_format:\s*"url"/)
 
 assert.match(limits, /IMAGE_DAILY_CREDITS/)
 assert.match(limits, /IMAGE_COST_1K/)
