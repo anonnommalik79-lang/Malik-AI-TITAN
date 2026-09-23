@@ -44,6 +44,7 @@ export function consumeVoiceUsage(userId: string, seconds: number, unlimited = f
   usage.set(`${userId}:${snapshot.date}`, { seconds: next, date: snapshot.date })
   return {
     ok: true as const,
+    unlimited: false,
     usedSeconds: next,
     limitSeconds: snapshot.limitSeconds,
     remainingSeconds: Math.max(0, snapshot.limitSeconds - next),
