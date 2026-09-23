@@ -42,7 +42,7 @@ const checks = [
   // is still going. This assertion checks the pair and their order, not the
   // numbers, because the numbers are tuning and the shape is the design.
   ["07 microphone uses analyser, hysteresis VAD and automatic silence submit", () => {
-    assert.match(mode, /getUserMedia/); assert.match(mode, /echoCancellation:\s*true/); assert.match(mode, /noiseSuppression:\s*true/)
+    assert.match(mode, /getUserMedia/); assert.match(mode, /echoCancellation:\s*true/); assert.match(mode, /noiseSuppression:\s*true/); assert.match(mode, /autoGainControl:\s*false/); assert.match(mode, /voiceIsolation/)
     assert.match(mode, /createAnalyser/); assert.match(mode, /getByteTimeDomainData/)
     const start = Number(/SPEECH_START_RMS = ([\d.]+)/.exec(mode)?.[1])
     const cont = Number(/SPEECH_CONTINUE_RMS = ([\d.]+)/.exec(mode)?.[1])
