@@ -27,6 +27,19 @@ assert.match(video, /if \(!ownerMode && !acquireVideoAccountInFlight/)
 assert.match(video, /if \(!ownerMode\) await recordMediaUsage/)
 assert.match(video, /unlimited:\s*ownerMode/)
 
+const generate = read("app/api/generate/route.ts")
+assert.match(generate, /const ownerMode = entitlement\?\.plan === "owner"/)
+assert.match(generate, /if \(!ownerMode\)[\s\S]*acquireVideoDailySlot/)
+
+const kindGenerate = read("app/api/generate/[kind]/route.ts")
+assert.match(kindGenerate, /entitlement\?\.plan !== "owner"/)
+assert.match(kindGenerate, /unlimited:\s*ownerMode/)
+
+const standaloneVideo = read("app/api/generate/video/route.ts")
+assert.match(standaloneVideo, /const ownerMode = entitlement\?\.plan === "owner"/)
+assert.match(standaloneVideo, /globalSlot = ownerMode[\s\S]*\? null[\s\S]*acquireVideoDailySlot/)
+assert.match(standaloneVideo, /unlimited:\s*ownerMode/)
+
 const computeIdentity = read("lib/malik-compute/identity.ts")
 assert.match(computeIdentity, /user\.emailVerified && isVerifiedOwner\(user\)/)
 
