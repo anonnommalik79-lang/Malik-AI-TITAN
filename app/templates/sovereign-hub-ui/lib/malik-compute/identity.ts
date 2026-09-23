@@ -35,7 +35,13 @@ export function verifyGuest(value: string | undefined, secret: string) {
 
 export async function getComputeIdentity() {
   const { user } = await getOptionalWorkOSAuth()
-  if (user?.id) return { userId: "workos:" + user.id, guest: false, admin: isVerifiedOwner(user) }
+  if (user?.id) {
+    return {
+      userId: "workos:" + user.id,
+      guest: false,
+      admin: Boolean(user.emailVerified && isVerifiedOwner(user)),
+    }
+  }
   const jar = await cookies()
   if (jar.get("malik-guest")?.value !== "1") {
     throw new MalikComputeError("MALIK_COMPUTE_AUTH_REQUIRED", "Войдите в аккаунт или выберите гостевой вход.")
