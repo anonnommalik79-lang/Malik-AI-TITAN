@@ -296,25 +296,28 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       })
     }
 
-    // When an effect is active the chat preview must come from the processed
-    // pixels too; otherwise the user would see the raw provider frame but
-    // download a different-looking master.
-    const nativePreviewPromise = effect === "off"
-      ? createMalikImageDisplayPreview({ sourceUrl: result.imageUrl })
-      : Promise.resolve(null)
+    // Always derive the visible preview from the FINAL delivery bytes. The same
+    // Sharp pass contains Malik Aura (when enabled) and the Malik AI logo +
+    // wordmark. Previously effect=off used the raw provider preview, which made
+    // the watermark disappear in chat even though the processed master had it.
     const delivered = await withMalikImageProcessingSlot(() =>
       postProcessGeneratedImage({ imageUrl: result.imageUrl, quality, effect }),
     )
 
-    let displayPreview = await nativePreviewPromise
-    if ((!displayPreview || delivered.effectApplied) && delivered.buffer?.length) {
-      displayPreview = await withMalikImageProcessingSlot(() =>
-        createMalikImageDisplayPreview({
-          buffer: delivered.buffer,
-          width: delivered.width,
-          height: delivered.height,
-        }),
-      )
+    let displayPreview = delivered.buffer?.length
+      ? await withMalikImageProcessingSlot(() =>
+          createMalikImageDisplayPreview({
+            buffer: delivered.buffer,
+            width: delivered.width,
+            height: delivered.height,
+          }),
+        )
+      : null
+
+    // Keep generation usable on a host where Sharp is temporarily unavailable.
+    // In that exceptional case we fall back to the provider frame.
+    if (!displayPreview) {
+      displayPreview = await createMalikImageDisplayPreview({ sourceUrl: result.imageUrl })
     }
 
     await recordImageCreditUsage(user.userId, imageSize)
@@ -371,18 +374,22 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     // users/<account-hash>/..., while the browser only receives short URLs.
     const imageUrl = storageUrl || delivered.imageUrl
     const previewUrl = previewStorageUrl
-    const displayUrl = displayImageReference(previewUrl, imageUrl)
 
-    // No cloud bucket? Send only the lightweight display derivative as a
-    // one-response browser cache seed. The client immediately moves it into
-    // account-scoped IndexedDB and drops this base64 string from React/history.
-    // Nothing is persisted on Render's filesystem.
+    // No cloud bucket? Send the lightweight BRANDED derivative as the one-response
+    // browser seed. This makes logo + "Malik AI" visible in every photo result
+    // even while durable object storage is unavailable.
     const browserCacheImageUrl =
       !storageUrl &&
       displayPreview?.buffer?.length &&
       displayPreview.buffer.length <= 8 * 1024 * 1024
         ? `data:${displayPreview.mime};base64,${displayPreview.buffer.toString("base64")}`
         : undefined
+
+    const displayUrl = storageUrl
+      ? displayImageReference(previewUrl, imageUrl)
+      : (browserCacheImageUrl || imageUrl)
+    const publicMasterUrl = storageUrl || browserCacheImageUrl || imageUrl
+
     const resolvedModelId = result.modelId || requestedModelId
     const resolvedImageModel = resolvedModelId ? getMalikImageModel(resolvedModelId) : undefined
     const durable = Boolean(storageUrl)
@@ -398,7 +405,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       modelLabel: resolvedImageModel?.label || "MalikImage Auto",
       providerModel: result.providerModel || resolvedImageModel?.providerModel,
       imageUrl,
-      masterUrl: imageUrl,
+      masterUrl: publicMasterUrl,
       url: displayUrl,
       mediaUrl: displayUrl,
       previewUrl,

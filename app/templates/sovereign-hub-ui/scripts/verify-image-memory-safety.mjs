@@ -23,14 +23,14 @@ assert.equal(/inlineImageUrl\s*:/.test(route), false, "photo route must not retu
 assert.match(route, /durable\s*=\s*Boolean\(storageUrl\)/, "route must expose cloud durable state")
 
 // Quality is not the performance tradeoff. The default master stays Ultra 8K;
-// the browser gets a separate 1600px display derivative and download resolves
-// back to the untouched master.
+// the browser gets a separate 1600px BRANDED display derivative and download
+// resolves back to the branded master/fallback.
 assert.match(quality, /DEFAULT_MALIK_IMAGE_QUALITY:\s*MalikImageQuality\s*=\s*["']ultra8k["']/, "default image master must remain Ultra 8K")
 assert.match(preview, /MALIK_IMAGE_DISPLAY_PREVIEW_LONG_EDGE\s*=\s*1600/, "chat preview must stay bounded")
-assert.match(preview, /sourceUrl/, "preview should prefer the provider-native render instead of re-decoding the 8K master")
+assert.match(preview, /sourceUrl/, "preview helper must still support provider-native fallback")
 assert.match(preview, /withoutEnlargement:\s*true/, "preview must never upscale small originals")
-assert.match(route, /sourceUrl:\s*result\.imageUrl/, "photo route must feed the native render into preview creation")
-assert.match(route, /masterUrl:\s*imageUrl/, "API must expose the untouched master")
+assert.match(route, /buffer:\s*delivered\.buffer/, "photo route must feed final branded pixels into preview creation")
+assert.match(route, /masterUrl:\s*publicMasterUrl/, "API must expose the branded master/fallback")
 assert.match(route, /url:\s*displayUrl/, "chat must receive the lightweight display URL")
 assert.match(route, /previewUrl,/, "API must expose the display derivative")
 assert.match(route, /#malik-master=/, "display URL must carry a master download reference")
@@ -74,7 +74,7 @@ assert.match(effects, /DEFAULT_MALIK_IMAGE_EFFECT:\s*MalikImageEffectId\s*=\s*["
 assert.match(route, /editing\s*\?\s*["']off["']\s*:\s*defaultGeneratedEffect/, "image edits must preserve exact pixels by default")
 assert.match(post, /pipeline\.modulate\(\{[\s\S]*brightness:\s*effect\.brightness[\s\S]*saturation:\s*effect\.saturation/, "Aura must run as real Sharp color grading")
 assert.match(route, /effectApplied:\s*delivered\.effectApplied/, "API must report the applied image effect")
-assert.match(route, /delivered\.effectApplied[\s\S]*createMalikImageDisplayPreview\(\{[\s\S]*buffer:\s*delivered\.buffer/, "effected chat preview must be rendered from effected pixels")
+assert.match(route, /displayPreview\s*=\s*delivered\.buffer\?\.length[\s\S]*createMalikImageDisplayPreview\(\{[\s\S]*buffer:\s*delivered\.buffer/, "every chat preview must be rendered from final effected + watermarked pixels")
 
 // Malik branding must survive downloads for generated photos and stay visible
 // over generated video players without exposing provider branding in the result.
@@ -82,6 +82,7 @@ assert.match(watermark, /Malik AI/, "watermark must carry the Malik AI wordmark"
 assert.match(watermark, /M0 68 60 8v60H0Z/, "watermark must use the approved two-triangle Malik mark")
 assert.match(post, /pipeline\.composite\(\[\{[\s\S]*createMalikImageWatermarkSvg\(finalWidth\)[\s\S]*gravity:\s*"southeast"/, "generated image bytes must contain the Malik watermark")
 assert.match(videoStudio, /function MalikMediaWatermark/, "video results must render the Malik watermark")
+assert.match(videoStudio, /<svg viewBox="0 0 100 58"/, "video watermark must use an inline Malik logo so it cannot disappear")
 assert.match(videoStudio, /videoUrl \? "Malik Video" : selectedModel\.name/, "finished video metadata must show Malik branding instead of the provider")
 
 // Browser image history is metadata only. Old data:/blob: entries are rejected,
