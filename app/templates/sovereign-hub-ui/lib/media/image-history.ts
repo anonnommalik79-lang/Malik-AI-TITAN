@@ -186,6 +186,10 @@ export async function syncMalikImageHistoryFromAccount() {
         provider: item.provider || cached?.provider || "MalikImage",
         quality: item.quality || cached?.quality,
         favorite: item.favorite || cached?.favorite || false,
+        parentId: item.parentId || cached?.parentId,
+        rootId: cached?.rootId || item.rootId || item.id,
+        versionIndex: Math.max(item.versionIndex || 0, cached?.versionIndex || 0),
+        operation: item.operation || cached?.operation,
       })
     }
 
