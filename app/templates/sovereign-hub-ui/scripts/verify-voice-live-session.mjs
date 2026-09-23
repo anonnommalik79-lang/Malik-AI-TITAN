@@ -146,14 +146,14 @@ function install({ token = "tok_live", sampleRate = 48000, nativeRate = true } =
     get tokenRequests() { return tokenRequests },
     /** The network goes away in the middle of a conversation. */
     breakToken() { liveToken = null },
-    /** Pushes one block of microphone audio through the real handler. */
-    feed(blocks = 1) {
+    /** Pushes microphone audio through the real handler. */
+    feed(blocks = 1, amplitude = .4, frequency = 440) {
       const last = processors[processors.length - 1]
       if (!last?.onaudioprocess) return 0
       const samples = last.size
       const data = new Float32Array(samples)
       for (let index = 0; index < samples; index += 1) {
-        data[index] = Math.sin((2 * Math.PI * 440 * index) / 48000) * .4
+        data[index] = Math.sin((2 * Math.PI * frequency * index) / 48000) * amplitude
       }
       for (let block = 0; block < blocks; block += 1) {
         last.onaudioprocess({ inputBuffer: { getChannelData: () => data } })
@@ -248,6 +248,27 @@ await check("changing the language restarts the session with the new prompt", as
 })
 
 console.log("\nwhat reaches the model")
+
+await check("distant room audio is gated before it reaches Gemini", async () => {
+  const { browser, session } = await connected()
+  assert.equal(await session.attachMicrophone(fakeStream(), browser.context), true)
+
+  // Continuous speech-like audio at a distant/background level must not be
+  // forwarded at all. This is what stops a TV or somebody across the room from
+  // becoming a fake user turn.
+  browser.feed(12, .008)
+  assert.equal(browser.sockets[0].audio().length, 0, "background audio leaked through the foreground gate")
+
+  // A close speaker crosses the gate and keeps normal packetisation.
+  browser.feed(4, .16)
+  assert.ok(browser.sockets[0].audio().length >= 2, "foreground speech was rejected")
+  const first = Buffer.from(browser.sockets[0].audio()[0].data, "base64")
+  assert.notEqual(first.readInt16LE(200), 0, "foreground speech was replaced with silence")
+
+  session.close()
+  browser.cleanup()
+  return "background rejected, foreground accepted"
+})
 
 await check("the microphone streams 16 kHz little-endian PCM", async () => {
   const { browser, session } = await connected()
@@ -506,7 +527,9 @@ await check("each smaller tier drops options and keeps the language rule", async
   assert.deepEqual(fullSetup.inputAudioTranscription.languageCodes, ["kk-KZ"])
   assert.equal(fullSetup.inputAudioTranscription.mode, "SMART")
   assert.ok(fullSetup.inputAudioTranscription.customVocabulary.includes("Malik AI"))
+  assert.equal(fullSetup.realtimeInputConfig.automaticActivityDetection.startOfSpeechSensitivity, "START_SENSITIVITY_LOW")
   assert.equal(fullSetup.realtimeInputConfig.automaticActivityDetection.endOfSpeechSensitivity, "END_SENSITIVITY_LOW")
+  assert.match(fullSetup.systemInstruction.parts[0].text, /далёкие разговоры|Алыстан естілген адамдар|distant conversations/)
   return sizes.map((keys) => keys.length).join(" → ")
 })
 
