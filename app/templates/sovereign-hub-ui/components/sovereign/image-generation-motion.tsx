@@ -63,10 +63,12 @@ function progressFor(status: Status | undefined, phaseSeconds: number) {
 }
 
 export function ImageGenerationMotion({
+  prompt,
   resultUrl,
   fallbackUrl,
   status,
   startedAt,
+  provider,
   failed,
   error,
   progress,
@@ -195,8 +197,10 @@ export function ImageGenerationMotion({
 
   return (
     <section
-      className="malik-photo-final"
+      className="malik-photo-final malik-photo-motion"
       data-malik-image-motion="1"
+      data-malik-image-prompt={prompt || ""}
+      data-malik-image-provider={provider || ""}
       data-malik-image-ready={imageLoaded ? "1" : "0"}
       data-malik-image-state={actuallyFailed ? "failed" : imageLoaded ? "ready" : "generating"}
     >
@@ -239,7 +243,7 @@ export function ImageGenerationMotion({
           <span>{failureText}</span>
         </div>
       ) : (
-        <div className="malik-photo-final__frame">
+        <div className={`malik-photo-final__frame malik-art-stage${imageLoaded ? " is-finished" : ""}`}>
           {!imageLoaded ? (
             <picture className="malik-photo-final__gif-picture" aria-hidden="true">
               <source media="(max-width: 640px)" srcSet="/animations/malik-image-loading-mobile-final.gif" />
@@ -255,7 +259,7 @@ export function ImageGenerationMotion({
 
           {imageLoaded && resolvedResultUrl ? (
             <img
-              className="malik-photo-final__result"
+              className={`malik-photo-final__result malik-art-result${imageLoaded ? " is-visible" : ""}`}
               src={resolvedResultUrl}
               alt="Сгенерированное изображение Malik AI"
               draggable={false}
@@ -264,6 +268,13 @@ export function ImageGenerationMotion({
           ) : null}
         </div>
       )}
+
+      {imageLoaded ? (
+        <div className="malik-art-report" aria-hidden="true">
+          <span className="malik-art-report__prompt">{prompt || ""}</span>
+          <span className="malik-art-report__row"><em>{provider || "MalikImage"}</em></span>
+        </div>
+      ) : null}
 
       {!actuallyFailed && !imageLoaded ? (
         <div className="malik-photo-final__progress">
