@@ -35,6 +35,12 @@ jobs:
       - name: Install
         run: npm ci --legacy-peer-deps
 
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run clean && npm run build
+
       - name: Verify Malik model registry
         run: npm run test:models
 
@@ -52,12 +58,6 @@ jobs:
 
       - name: Core release regression suite
         run: npm run test:release-core
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Production build
-        run: npm run clean && npm run build
 
       - name: Verify live domain health
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
