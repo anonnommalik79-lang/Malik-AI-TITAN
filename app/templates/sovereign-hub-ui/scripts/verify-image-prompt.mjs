@@ -222,9 +222,18 @@ assert.match(dashboardCode, /patchInlineMedia\(\{ understood/, "Понятое �
 assert.match(dashboardCode, /understood: understood \|\| undefined/, "Понятое должно уходить в генерацию")
 
 const motion = codeOf("components/sovereign/image-generation-motion.tsx")
-assert.match(motion, /Malik понял/, "Карточка должна показывать, что поняла")
+assert.doesNotMatch(motion, /Malik понял|malik-photo-understood/, "Готовое фото не должно показывать внутренний debug-текст")
+assert.match(motion, /!actuallyFailed && !imageLoaded/, "Прогресс должен исчезать после готового результата")
 
 // --- the pipeline is actually wired this way ---------------------------------
+
+const photoRoute = codeOf("lib/media/generate-photo-route.ts")
+assert.match(photoRoute, /buildVisualPrompt\(/, "Agnes primary тоже должна получать очищенный visual prompt")
+assert.match(photoRoute, /negativePrompt: visual\.negativePrompt/, "Agnes primary должна получать запрет текстовых артефактов")
+assert.doesNotMatch(photoRoute, /generateWithAgnesImage\(\{\s*prompt,\s*size:/s, "Raw chat prompt нельзя отправлять напрямую в Agnes")
+
+const agnesProvider = codeOf("lib/media/providers/agnes-image.ts")
+assert.match(agnesProvider, /negative_prompt/, "Agnes должна передавать negative prompt провайдеру")
 
 const router = codeOf("lib/media/image-router.ts")
 assert.match(router, /buildVisualPrompt/, "Роутер должен строить промпт через новый пайплайн")
