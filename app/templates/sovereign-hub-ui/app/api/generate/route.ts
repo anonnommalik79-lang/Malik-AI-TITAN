@@ -43,16 +43,21 @@ async function handlePOST(request: Request) {
 
   if (kind === "video" && prompt && explicitVideoPrompt(prompt)) {
     const entitlement = await resolveRequestEntitlement(request).catch(() => null)
-    const userId = String(entitlement?.userId || body.userEmail || "anonymous")
-    const slot = await acquireVideoDailySlot(userId)
-    if (!slot.available) return videoDailyLimitResponse(slot, "/api/generate")
+    const ownerMode = entitlement?.plan === "owner"
+    if (!ownerMode) {
+      const userId = String(entitlement?.userId || "anonymous")
+      const slot = await acquireVideoDailySlot(userId)
+      if (!slot.available) return videoDailyLimitResponse(slot, "/api/generate")
+    }
   }
 
   return handleGenerateRequest(request)
 }
 
-export async function GET() {
-  const video = await getVideoDailyGateStatus()
+export async function GET(request: Request) {
+  const entitlement = await resolveRequestEntitlement(request).catch(() => null)
+  const ownerMode = entitlement?.plan === "owner"
+  const video = ownerMode ? null : await getVideoDailyGateStatus()
   const manifest = generationManifest()
   return Response.json({
     ...manifest,
@@ -65,14 +70,15 @@ export async function GET() {
       code: "IMAGE_GENERATION_TEMPORARILY_PAUSED",
     },
     video: {
-      status: video.available ? "ready" : "limited",
-      tier: video.available ? "Free" : "Pro",
-      pro: !video.available,
-      locked: !video.available,
-      globalDailyLimit: 1,
-      remainingDailyVideos: video.available ? 1 : 0,
-      resetAt: video.resetAt,
-      retryAt: video.resetAt,
+      status: ownerMode ? "ready" : video!.available ? "ready" : "limited",
+      tier: ownerMode ? "Owner" : video!.available ? "Free" : "Pro",
+      pro: ownerMode ? false : !video!.available,
+      locked: ownerMode ? false : !video!.available,
+      unlimited: ownerMode,
+      globalDailyLimit: ownerMode ? null : 1,
+      remainingDailyVideos: ownerMode ? null : video!.available ? 1 : 0,
+      resetAt: video?.resetAt,
+      retryAt: video?.resetAt,
     },
   }, {
     headers: { "Cache-Control": "no-store, max-age=0" },
