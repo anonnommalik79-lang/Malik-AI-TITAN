@@ -88,7 +88,8 @@ export default function ComputePanel() {
   }, [refresh])
 
   const balance = data?.balance
-  const percent = balance && balance.dailyLimit ? balance.remaining / balance.dailyLimit * 100 : 0
+  const unlimited = Boolean(data?.unlimited)
+  const percent = unlimited ? 100 : balance && balance.dailyLimit ? balance.remaining / balance.dailyLimit * 100 : 0
 
   return <div className={styles.page} data-malik-compute>
     <div className={styles.content}>
@@ -107,9 +108,23 @@ export default function ComputePanel() {
       {!data && loading ? <div className={styles.loading} role="status">Загружаю Compute…</div> : null}
       {balance && view === "balance" ? <>
         <section className={styles.balance} aria-label="Daily compute remaining">
-          <div className={styles.balanceTop}><span>Daily compute remaining</span><span className={styles.reset}><Clock3 size={14} /> Resets daily · 00:00 UTC</span></div>
-          <div className={styles.balanceValue}><strong>{number(balance.remaining)}</strong><span>/ {number(balance.dailyLimit)} MCU</span></div>
-          <div className={styles.track} role="progressbar" aria-label="Осталось Compute" aria-valuemin={0} aria-valuemax={balance.dailyLimit} aria-valuenow={balance.remaining} aria-valuetext={`${balance.remaining} из ${balance.dailyLimit} MCU`}><span style={{ width: `${percent}%` }} /></div>
+          <div className={styles.balanceTop}>
+            <span>{unlimited ? "Founder compute" : "Daily compute remaining"}</span>
+            <span className={styles.reset}><Clock3 size={14} /> {unlimited ? "Unlimited · без дневного лимита" : "Resets daily · 00:00 UTC"}</span>
+          </div>
+          <div className={styles.balanceValue}>
+            <strong>{unlimited ? "∞" : number(balance.remaining)}</strong>
+            <span>{unlimited ? "Malik Compute" : `/ ${number(balance.dailyLimit)} MCU`}</span>
+          </div>
+          <div
+            className={styles.track}
+            role="progressbar"
+            aria-label="Осталось Compute"
+            aria-valuemin={0}
+            aria-valuemax={unlimited ? 100 : balance.dailyLimit}
+            aria-valuenow={unlimited ? 100 : balance.remaining}
+            aria-valuetext={unlimited ? "Без лимита" : `${balance.remaining} из ${balance.dailyLimit} MCU`}
+          ><span style={{ width: `${percent}%` }} /></div>
           <div className={styles.balanceBottom}><span>Used <strong>{number(balance.used)} MCU</strong></span><span>Reserved <strong>{number(balance.reserved)} MCU</strong></span></div>
         </section>
         <div className={styles.columns}>
