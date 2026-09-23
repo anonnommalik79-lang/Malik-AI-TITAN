@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { prefillPrompt } from "@/lib/malik-context"
 import { readMalikImageQuality } from "@/lib/media/image-client-settings"
+import { resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
+import { MalikImageFullscreenEditor } from "./MalikImageFullscreenEditor"
 import {
   MALIK_IMAGE_HISTORY_EVENT,
   isMalikImageFavorite,
@@ -65,7 +67,7 @@ function masterImageUrl(src: string) {
 }
 
 function readImageFromCard(card: HTMLElement): ViewerImage | null {
-  const image = card.querySelector<HTMLImageElement>(".malik-art-result.is-visible, .malik-art-result")
+  const image = card.querySelector<HTMLImageElement>(".malik-art-result.is-visible, .malik-art-result, .malik-photo-final__result")
   // Keep the literal src attribute first. currentSrc is useful for srcset, but
   // browsers may normalise URL fragments; the fragment carries the full-quality
   // master reference while the actual painted resource is the small preview.
@@ -73,12 +75,17 @@ function readImageFromCard(card: HTMLElement): ViewerImage | null {
   if (!src) return null
 
   const prompt = String(
-    card.querySelector<HTMLElement>(".malik-art-report__prompt")?.textContent
+    card.dataset.malikImagePrompt
+      || card.querySelector<HTMLElement>(".malik-art-report__prompt")?.textContent
       || image?.alt
       || "",
   ).trim()
 
-  const provider = String(card.querySelector<HTMLElement>(".malik-art-report__row em")?.textContent || "").trim()
+  const provider = String(
+    card.dataset.malikImageProvider
+      || card.querySelector<HTMLElement>(".malik-art-report__row em")?.textContent
+      || "",
+  ).trim()
   return { src, prompt, provider, quality: readMalikImageQuality() }
 }
 
@@ -152,6 +159,18 @@ async function copyText(text: string) {
     area.remove()
     return ok
   }
+}
+
+function HistoryImage({ src, alt }: { src: string; alt: string }) {
+  const [resolved, setResolved] = useState(src)
+  useEffect(() => {
+    let cancelled = false
+    resolveGeneratedImageUrl(masterImageUrl(src))
+      .then((value) => { if (!cancelled) setResolved(value || src) })
+      .catch(() => { if (!cancelled) setResolved(src) })
+    return () => { cancelled = true }
+  }, [src])
+  return <img src={resolved} alt={alt} loading="lazy" decoding="async" />
 }
 
 export function ImageResultExperience() {
@@ -359,36 +378,16 @@ export function ImageResultExperience() {
 
   const overlay = viewer && typeof document !== "undefined"
     ? createPortal(
-        <div className="malik-image-viewer" role="dialog" aria-modal="true" aria-label="Просмотр изображения" onMouseDown={(event) => { if (event.currentTarget === event.target) setViewer(null) }}>
-          <div className="malik-image-viewer__topbar">
-            <div className="malik-image-viewer__meta">
-              <strong>Malik Image</strong>
-              {viewer.provider ? <span>{viewer.provider}</span> : null}
-              {viewer.quality ? <span>{viewer.quality}</span> : null}
-            </div>
-            <div className="malik-image-viewer__actions">
-              <button type="button" onClick={() => copyText(viewer.prompt).then((ok) => setNotice(ok ? "Промпт скопирован" : "Не удалось скопировать"))}>Промпт</button>
-              <button type="button" onClick={() => safeDownload(viewer.src)}>Скачать</button>
-              <button type="button" className="is-close" onClick={() => setViewer(null)} aria-label="Закрыть">×</button>
-            </div>
-          </div>
-
-          <div className="malik-image-viewer__canvas" onDoubleClick={() => setViewer(null)}>
-            <img src={viewer.src} alt={viewer.prompt || "Malik AI generated image"} draggable={false} decoding="async" />
-          </div>
-
-          <div className="malik-image-viewer__bottom">
-            <button type="button" onClick={() => { const favorite = toggleMalikImageFavorite(viewer.src); setNotice(favorite ? "Добавлено в избранное" : "Убрано из избранного") }}>{isMalikImageFavorite(viewer.src) ? "★ Избранное" : "☆ Избранное"}</button>
-            <button type="button" onClick={() => { prefillPrompt(nextPrompt("variation", viewer.prompt)); setViewer(null) }}>Вариация</button>
-            <button type="button" onClick={() => { prefillPrompt(nextPrompt("enhance", viewer.prompt)); setViewer(null) }}>Ultra 2K</button>
-            <button type="button" onClick={() => { prefillPrompt(nextPrompt("detail", viewer.prompt)); setViewer(null) }}>Detail+</button>
-            <button type="button" onClick={() => { prefillPrompt(nextPrompt("remaster", viewer.prompt)); setViewer(null) }}>Remaster</button>
-            <button type="button" onClick={() => { prefillPrompt(nextPrompt("cinematic", viewer.prompt)); setViewer(null) }}>Cinema</button>
-            <button type="button" onClick={() => { prefillPrompt(nextPrompt("wide", viewer.prompt)); setViewer(null) }}>16:9</button>
-            <button type="button" onClick={() => { prefillPrompt(nextPrompt("portrait", viewer.prompt)); setViewer(null) }}>9:16</button>
-            <button type="button" onClick={() => { setViewer(null); setHistory(readMalikImageHistory()); setHistoryOpen(true) }}>История</button>
-          </div>
-        </div>,
+        <MalikImageFullscreenEditor
+          image={viewer}
+          onClose={() => setViewer(null)}
+          onOpenHistory={() => {
+            setViewer(null)
+            setHistory(readMalikImageHistory())
+            setHistoryOpen(true)
+          }}
+          onNotice={setNotice}
+        />,
         document.body,
       )
     : null
@@ -405,7 +404,7 @@ export function ImageResultExperience() {
               {history.length ? history.map((item) => (
                 <article key={item.id} className="malik-image-history__item">
                   <button type="button" onClick={() => setViewer({ src: item.src, prompt: item.prompt, provider: item.provider, quality: item.quality })} aria-label="Открыть изображение">
-                    <img src={item.src} alt={item.prompt || "Malik AI image"} loading="lazy" decoding="async" />
+                    <HistoryImage src={item.src} alt={item.prompt || "Malik AI image"} />
                   </button>
                   <button type="button" className={`malik-image-history__favorite ${item.favorite ? "is-active" : ""}`} onClick={() => { toggleMalikImageFavorite(item.src); setHistory(readMalikImageHistory()) }} aria-label="Избранное">{item.favorite ? "★" : "☆"}</button>
                   <div className="malik-image-history__meta">
