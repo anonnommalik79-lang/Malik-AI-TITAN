@@ -79,7 +79,7 @@ const LEGACY_VOICE_PIPELINE: boolean = false
 
 const SILENCE_MS = 1700
 /** Loud enough to be speech rather than the room. */
-const SPEECH_START_RMS = 0.020
+const SPEECH_START_RMS = 0.030
 /** Quiet enough to still be the tail of a word. */
 const SPEECH_CONTINUE_RMS = 0.008
 
@@ -914,14 +914,26 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       // Mono at 16 kHz is what the recognizer resamples to anyway; asking for it
       // here means the browser does the conversion with the raw signal instead
       // of the encoder throwing away detail first.
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-        },
-      })
+      // Treat Voice as a near-field conversation, not an always-listening room mic.
+      // AGC is deliberately disabled: automatic gain boosts distant TV/people
+      // until they look as loud as the person holding the phone. Browser echo
+      // cancellation + noise suppression stay enabled, and browsers that expose
+      // voiceIsolation get the OS-level foreground-voice filter as well.
+      const supported = navigator.mediaDevices.getSupportedConstraints?.() as
+        | (MediaTrackSupportedConstraints & { voiceIsolation?: boolean })
+        | undefined
+      const audioConstraints: MediaTrackConstraints & { voiceIsolation?: boolean } = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false,
+        channelCount: 1,
+      }
+      if (supported?.voiceIsolation) audioConstraints.voiceIsolation = true
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints })
+      for (const track of stream.getAudioTracks()) {
+        try { track.contentHint = "speech" } catch {}
+      }
       if (!mountedRef.current || closingRef.current || micRequestRef.current !== requestId) {
         stream.getTracks().forEach((track) => track.stop())
         return
