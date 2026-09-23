@@ -76,17 +76,19 @@ async function copyText(text: string) {
   }
 }
 
-function downloadImage(src: string) {
-  const href = masterImageUrl(src)
-  if (!href) return
+async function downloadImage(src: string) {
+  const source = masterImageUrl(src)
+  if (!source) return false
+  const href = await resolveGeneratedImageUrl(source).catch(() => source)
   const anchor = document.createElement("a")
-  anchor.href = href
+  anchor.href = href || source
   anchor.download = `malik-ai-${Date.now()}.png`
   anchor.target = "_blank"
   anchor.rel = "noopener noreferrer"
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
+  return true
 }
 
 function actionPrompt(mode: MalikImageEditorMode, sourcePrompt: string) {
@@ -269,7 +271,7 @@ export function MalikImageFullscreenEditor({
         </div>
         <div className="malik-image-viewer__actions">
           <button type="button" onClick={() => copyText(active.prompt).then((ok) => onNotice(ok ? "Промпт скопирован" : "Не удалось скопировать"))}>Промпт</button>
-          <button type="button" onClick={() => downloadImage(active.src)}><Download className="h-3.5 w-3.5" /> Скачать</button>
+          <button type="button" onClick={() => { void downloadImage(active.src).catch(() => onNotice("Не удалось скачать изображение")) }}><Download className="h-3.5 w-3.5" /> Скачать</button>
           <button type="button" className="is-close" onClick={onClose} aria-label="Закрыть"><X className="h-5 w-5" /></button>
         </div>
       </div>
