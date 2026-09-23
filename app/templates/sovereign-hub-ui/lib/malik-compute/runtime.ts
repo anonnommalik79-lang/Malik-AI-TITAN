@@ -136,6 +136,17 @@ export function withCompute<R extends Request, Args extends unknown[]>(
       const identity = await getComputeIdentity()
       const operation = typeof policy === "function" ? await policy(request) : policy
 
+      // The verified founder account has no Malik application/Compute quota.
+      // This is server-authoritative via the WorkOS identity above; request body
+      // fields can never enable it.
+      if (identity.admin === true) {
+        if (textQuotaOperation(operation)) {
+          context.textQuota = { userId: identity.userId, unlimited: true, recorded: false, output: "" }
+        }
+        context.metadata.ownerUnlimited = true
+        return active.run(context, () => handler(request, ...args))
+      }
+
       if (textQuotaOperation(operation)) {
         context.textQuota = { userId: identity.userId, unlimited: identity.admin === true, recorded: false, output: "" }
         const quota = getDailyTextTokenQuota(identity.userId, identity.admin === true)
@@ -268,6 +279,7 @@ export function withComputeVideoStatus<R extends Request>(handler: (request: R) 
   return async (request: R): Promise<Response> => {
     try {
       const identity = await getComputeIdentity()
+      if (identity.admin === true) return handler(request)
       const url = new URL(request.url)
       const jobId = url.searchParams.get("jobId") || url.searchParams.get("taskId") || url.searchParams.get("invocationArn") || ""
       const route = url.pathname === "/api/ai/video" ? "/api/ai/video/status" : url.pathname
