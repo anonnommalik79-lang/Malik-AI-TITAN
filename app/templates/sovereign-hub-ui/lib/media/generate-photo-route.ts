@@ -18,6 +18,8 @@ import {
   resolveMalikImageQuality,
 } from "./image-quality-presets"
 import { postProcessGeneratedImage } from "./image-postprocess"
+import { enhanceImagePrompt } from "./image-prompt-enhancer"
+import { buildVisualPrompt } from "./visual-prompt"
 import { resolveRequestedQuality } from "./image-resolution-intent"
 import { routeImageGeneration } from "./image-router"
 import {
@@ -200,8 +202,26 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
 
     if (!editing && agnesImageConfigured()) {
       try {
-        const agnes = await generateWithAgnesImage({
+        // Agnes used to receive the raw chat sentence (for example
+        // "сгенерируй фото ..."). Image models can treat that instruction as
+        // visible copy and literally paint the request into the picture.
+        // Compile the request through the same visual pipeline as every other
+        // provider: only the scene description reaches Agnes; UI/debug text
+        // stays outside the image prompt and text artifacts go to negativePrompt.
+        const visual = await buildVisualPrompt(
           prompt,
+          mode,
+          typeof body?.understood === "string" ? body.understood : undefined,
+        )
+        const agnesPrompt = enhanceImagePrompt(visual.prompt || prompt, {
+          mode,
+          quality,
+          detailBoost: typeof body?.detailBoost === "boolean" ? body.detailBoost : undefined,
+        })
+
+        const agnes = await generateWithAgnesImage({
+          prompt: agnesPrompt,
+          negativePrompt: visual.negativePrompt,
           size: imageSize,
           aspectRatio,
         })
@@ -212,8 +232,10 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
           providerModel: agnes.providerModel,
           remainingDailyImages: credit.remaining,
           quality,
-          enhancedPrompt: prompt,
-          routeReason: "agnes-primary",
+          understood: visual.understood,
+          enhancedPrompt: agnesPrompt,
+          negativePrompt: visual.negativePrompt,
+          routeReason: "agnes-primary-clean-visual-prompt",
           generationSource: "agnes-image-2.1-flash",
           generationTier: "quality",
         }
