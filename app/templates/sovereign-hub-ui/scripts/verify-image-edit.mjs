@@ -24,6 +24,13 @@ function load(file, stubs = {}) {
   }
   const resolve = (name) => {
     if (name === 'server-only') return {}
+    // AuthKit exposes ESM-only package exports, while this regression harness
+    // intentionally transpiles production modules to CJS. Authentication is
+    // infrastructure outside the image-edit behavior under test, so stub the
+    // unauthenticated shape exactly as the server auth wrapper expects.
+    if (name === '@workos-inc/authkit-nextjs') {
+      return { withAuth: async () => ({ user: null, sessionId: undefined }) }
+    }
     if (Object.hasOwn(stubs, name)) return stubs[name]
     if (name.startsWith('@/')) {
       const resolved = resolveModuleFile(path.resolve(process.cwd(), name.slice(2)))
