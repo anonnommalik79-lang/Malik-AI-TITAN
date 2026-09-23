@@ -9,6 +9,7 @@ import {
 import { providerFetch } from "@/lib/ai/providers/base"
 import { hasHiddenGeminiMedia, runHiddenGeminiMultimodal } from "@/lib/server/hidden-gemini-multimodal"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
+import { analyzeMalikBrainV1 } from "@/lib/ai/brain-v1"
 
 type HistoryMessage = { role: "user" | "assistant"; content: string }
 type MalikAttachment = { kind?: string; mime?: string; base64?: string; url?: string; name?: string }
@@ -540,25 +541,23 @@ function retryAfterMs(response: Response, detail: string) {
   return 15_000
 }
 
-function promptHash(value: string) {
-  let hash = 2166136261
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  return hash >>> 0
-}
-
-function fallbackModels(modelId: MalikModelId, prompt: string) {
-  const preferred = TEXT_FALLBACK_MODELS[modelId] || []
+function fallbackModels(modelId: MalikModelId, prompt: string, attachments?: MalikAttachment[]) {
+  const brain = modelId === "malik-max"
+    ? analyzeMalikBrainV1({
+        prompt,
+        attachments: (attachments || []).map((item) => ({
+          name: item.name || "attachment",
+          mime: item.mime || "application/octet-stream",
+          kind: item.kind as any,
+          url: item.url,
+          base64: item.base64,
+        })),
+      })
+    : null
+  const preferred = brain?.preferredModels || TEXT_FALLBACK_MODELS[modelId] || []
   const global = isCodeRequest(prompt) ? CODE_FALLBACKS : GLOBAL_TEXT_FALLBACKS
-  let candidates = [...new Set([...preferred, ...global])]
+  const candidates = [...new Set([...preferred, ...global])]
     .filter((candidate): candidate is MalikModelId => candidate !== modelId && isMalikModelId(candidate))
-
-  if (modelId === "malik-max" && candidates.length > 1) {
-    const offset = promptHash(prompt) % candidates.length
-    candidates = [...candidates.slice(offset), ...candidates.slice(0, offset)]
-  }
 
   const limit = modelId === "malik-max" ? 16 : isCodeRequest(prompt) ? 10 : 8
   return candidates
@@ -587,7 +586,7 @@ async function runFallback(input: {
   maxTokens?: number
   temperature?: number
 }): Promise<StrictMalikResult | null> {
-  for (const fallbackModelId of fallbackModels(input.failedModelId, input.prompt)) {
+  for (const fallbackModelId of fallbackModels(input.failedModelId, input.prompt, input.attachments)) {
     const fallbackModel = getMalikModel(fallbackModelId)
     const cooldownMs = remainingCooldownMs(fallbackModel)
     if (cooldownMs > 0) {
