@@ -1,0 +1,1093 @@
+"use client"
+
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Download,
+  FileDown,
+  Image as ImageIcon,
+  Loader2,
+  Play,
+  Plus,
+  Presentation,
+  RefreshCw,
+  StickyNote,
+  Trash2,
+  Wand2,
+  X,
+} from "lucide-react"
+import {
+  PRESENTATION_COSTS,
+  deckId as newDeckId,
+  detectDeckLanguage,
+  normalizeDeck,
+  normalizeSlide,
+  slideId,
+} from "@/lib/presentations/deck"
+import { DECK_THEMES, DEFAULT_THEME, THEME_IDS } from "@/lib/presentations/themes"
+import {
+  IMAGE_LAYOUTS,
+  SLIDE_LAYOUTS,
+  type Deck,
+  type DeckLanguage,
+  type DeckOutline,
+  type DeckTone,
+  type OutlineItem,
+  type Slide,
+  type SlideLayout,
+  type ThemeId,
+} from "@/lib/presentations/types"
+import { SlideCanvas, SlideFrame, type SlidePatch } from "./SlideRenderer"
+import "./presentation-studio.css"
+
+/**
+ * The presentation studio.
+ *
+ * The flow is the one people already know from the tools this competes with:
+ * describe the deck, look at the plan and fix it before anything expensive
+ * happens, then watch the slides arrive. After that everything is direct —
+ * click a word on a slide to change it, ask for one slide to be rewritten,
+ * switch the theme and see every slide change at once, present full screen,
+ * download it as PowerPoint or PDF.
+ *
+ * What it will not do is spend a credit silently. The cost of the plan and of
+ * the slides is on screen before the button that spends it.
+ */
+
+type Quota = {
+  tier: "guest" | "free" | "pro" | "ultra" | "owner"
+  unlimited: boolean
+  dailyCredits: number
+  used: number
+  remaining: number
+  maxSlides: number
+  resetAt: string
+}
+
+type EntryState = "pending" | "ready" | "failed"
+type Entry = { key: string; outline: OutlineItem; slide: Slide | null; state: EntryState }
+type Stage = "start" | "outline" | "deck"
+type Busy = null | "outline" | "slides" | "rewrite" | "images" | "export"
+
+const HANDOFF_KEY = "malik.presentation.handoff"
+const STORAGE_PREFIX = "malik.presentations.v1"
+const MAX_RECENT = 12
+const BATCH = 4
+const PARALLEL = 2
+
+const TONES: Array<{ id: DeckTone; label: string }> = [
+  { id: "confident", label: "Уверенный" },
+  { id: "friendly", label: "Дружелюбный" },
+  { id: "academic", label: "Академичный" },
+  { id: "bold", label: "Смелый" },
+]
+
+const COUNTS = [6, 8, 10, 12, 15, 20]
+
+const LAYOUT_LABELS: Record<SlideLayout, string> = {
+  title: "Обложка",
+  section: "Раздел",
+  bullets: "Список",
+  "two-column": "Две колонки",
+  stat: "Цифры",
+  quote: "Цитата",
+  "image-text": "Фото и текст",
+  cards: "Карточки",
+  timeline: "Таймлайн",
+  comparison: "Сравнение",
+  chart: "График",
+  closing: "Финал",
+}
+
+const EXAMPLES = [
+  "Питч-дек кофейни в Алматы для инвесторов",
+  "Итоги квартала отдела продаж",
+  "Как работает ИИ — лекция для школьников",
+  "Стратегия выхода на рынок Узбекистана",
+]
+
+/* ------------------------------------------------------------------ helpers */
+
+function headline(slide: Slide) {
+  return slide.layout === "quote" ? slide.quote : slide.title
+}
+
+function storageKey(username?: string) {
+  return `${STORAGE_PREFIX}:${(username || "guest").toLowerCase()}`
+}
+
+function readRecent(username?: string): Deck[] {
+  try {
+    const raw = window.localStorage.getItem(storageKey(username))
+    const list = raw ? JSON.parse(raw) : []
+    return (Array.isArray(list) ? list : []).map(normalizeDeck).filter((deck): deck is Deck => Boolean(deck)).slice(0, MAX_RECENT)
+  } catch {
+    return []
+  }
+}
+
+function writeRecent(username: string | undefined, decks: Deck[]) {
+  const key = storageKey(username)
+  try {
+    window.localStorage.setItem(key, JSON.stringify(decks.slice(0, MAX_RECENT)))
+  } catch {
+    // Pictures kept as data URLs are what fill storage. Keep the decks and
+    // drop only those, rather than losing the whole list.
+    try {
+      const light = decks.slice(0, MAX_RECENT).map((deck) => ({
+        ...deck,
+        slides: deck.slides.map((slide) => (slide.imageUrl?.startsWith("data:") ? { ...slide, imageUrl: undefined } : slide)),
+      }))
+      window.localStorage.setItem(key, JSON.stringify(light))
+    } catch {
+      /* Private mode or a full disk: the deck on screen is unaffected. */
+    }
+  }
+}
+
+async function callApi(body: Record<string, unknown>, timeoutMs = 180_000) {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch("/api/presentations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+    const data = await response.json().catch(() => null)
+    return { ok: response.ok && Boolean(data?.ok), status: response.status, data }
+  } catch (error) {
+    const aborted = error instanceof DOMException && error.name === "AbortError"
+    return { ok: false, status: 0, data: { error: aborted ? "Сервер слишком долго не отвечал. Попробуйте ещё раз." : "Нет связи с сервером." } }
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
+function chunk<T>(items: T[], size: number) {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>) {
+  const queue = [...items]
+  await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, async () => {
+    while (queue.length) await task(queue.shift() as T)
+  }))
+}
+
+function creditsLabel(quota: Quota | null) {
+  if (!quota) return "…"
+  if (quota.unlimited) return "∞"
+  return `${quota.remaining} / ${quota.dailyCredits}`
+}
+
+/** The plan the server writes against, rebuilt from the deck as it is now —
+ *  after edits, moves and deletions — so slide n in the plan is slide n on
+ *  screen. A title the user emptied falls back to the planned one, because
+ *  the server drops untitled items and every later index would shift. */
+function planOf(title: string, entries: Entry[]): DeckOutline {
+  return {
+    title,
+    items: entries.map((entry) => entry.slide
+      ? { title: headline(entry.slide) || entry.outline.title || "Слайд", point: entry.outline.point, layout: entry.slide.layout }
+      : entry.outline),
+  }
+}
+
+/* ------------------------------------------------------------------- studio */
+
+/** A one-line field that grows instead of cutting a long title off — on a
+ *  phone an outline title rarely fits on one line. */
+function GrowingField({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
+  const ref = useRef<HTMLTextAreaElement | null>(null)
+  useLayoutEffect(() => {
+    const node = ref.current
+    if (!node) return
+    node.style.height = "auto"
+    node.style.height = `${node.scrollHeight}px`
+  }, [value])
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      aria-label={label}
+      onChange={(event) => onChange(event.target.value.replace(/\n/g, " "))}
+      onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault() }}
+    />
+  )
+}
+
+export function PresentationStudio({ username }: { username?: string }) {
+  const [stage, setStage] = useState<Stage>("start")
+  const [topic, setTopic] = useState("")
+  const [requestedCount, setCount] = useState(10)
+  const [tone, setTone] = useState<DeckTone>("confident")
+  const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME)
+  const [language, setLanguage] = useState<DeckLanguage>("ru")
+  const [quota, setQuota] = useState<Quota | null>(null)
+  const [authenticated, setAuthenticated] = useState(true)
+  const [error, setError] = useState("")
+  const [busy, setBusy] = useState<Busy>(null)
+
+  const [outline, setOutline] = useState<DeckOutline | null>(null)
+  const [deckId, setDeckId] = useState("")
+  const [deckTitle, setDeckTitle] = useState("")
+  const [entries, setEntries] = useState<Entry[]>([])
+  const [current, setCurrent] = useState(0)
+  const [instruction, setInstruction] = useState("")
+  const [composer, setComposer] = useState(false)
+  const [newSlideText, setNewSlideText] = useState("")
+  const [newSlideLayout, setNewSlideLayout] = useState<SlideLayout>("bullets")
+  const [presenting, setPresenting] = useState(false)
+  const [showNotes, setShowNotes] = useState(false)
+  const [printing, setPrinting] = useState(false)
+  const [recent, setRecent] = useState<Deck[]>([])
+  const [imageProgress, setImageProgress] = useState<{ done: number; total: number } | null>(null)
+
+  const createdAtRef = useRef(0)
+  const handoffRef = useRef(false)
+
+  const applyQuota = useCallback((data: { quota?: Quota } | null) => {
+    if (data?.quota) setQuota(data.quota)
+  }, [])
+
+  /* ------------------------------------------------------------ bootstrap */
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/presentations", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => {
+        if (cancelled) return
+        applyQuota(data)
+        setAuthenticated(data?.authenticated !== false)
+      })
+      .catch(() => undefined)
+    setRecent(readRecent(username))
+    return () => { cancelled = true }
+  }, [applyQuota, username])
+
+  const maxSlides = quota?.maxSlides || 12
+  const countOptions = COUNTS.filter((option) => option <= maxSlides)
+
+  // A plan that allows fewer slides than were asked for gets the largest
+  // size it does allow.
+  const count = requestedCount <= maxSlides ? requestedCount : Math.max(...countOptions, 6)
+
+  /* ------------------------------------------------------------- the deck */
+
+  const readySlides = useMemo(() => entries.filter((entry) => entry.slide).map((entry) => entry.slide as Slide), [entries])
+
+  const currentDeck = useCallback((): Deck => ({
+    id: deckId || newDeckId(),
+    title: deckTitle || "Презентация",
+    theme,
+    language,
+    slides: readySlides,
+    prompt: topic,
+    createdAt: createdAtRef.current || Date.now(),
+    updatedAt: Date.now(),
+  }), [deckId, deckTitle, language, readySlides, theme, topic])
+
+  // Every change is kept, a moment after it stops.
+  useEffect(() => {
+    if (stage !== "deck" || !readySlides.length || !deckId) return
+    const timer = window.setTimeout(() => {
+      const deck = currentDeck()
+      setRecent((previous) => {
+        const next = [deck, ...previous.filter((item) => item.id !== deck.id)].slice(0, MAX_RECENT)
+        writeRecent(username, next)
+        return next
+      })
+    }, 700)
+    return () => window.clearTimeout(timer)
+  }, [currentDeck, deckId, readySlides, stage, username])
+
+  /* --------------------------------------------------------------- outline */
+
+  const requestOutline = useCallback(async (topicValue: string, countValue: number, toneValue: DeckTone) => {
+    const clean = topicValue.trim()
+    if (clean.length < 3) {
+      setError("Опишите, о чём презентация — хотя бы пару слов.")
+      return
+    }
+    const lang = detectDeckLanguage(clean)
+    setBusy("outline")
+    setError("")
+    const result = await callApi({ action: "outline", topic: clean, count: countValue, language: lang, tone: toneValue })
+    applyQuota(result.data)
+    setBusy(null)
+    if (!result.ok) {
+      setError(String(result.data?.error || "Не удалось составить план."))
+      if (result.status === 401) setAuthenticated(false)
+      return
+    }
+    setLanguage(lang)
+    setOutline(result.data.outline as DeckOutline)
+    setStage("outline")
+  }, [applyQuota])
+
+  // A deck asked for in the chat arrives here with its topic already set.
+  useEffect(() => {
+    if (handoffRef.current) return
+    handoffRef.current = true
+    try {
+      const raw = window.sessionStorage.getItem(HANDOFF_KEY)
+      if (!raw) return
+      window.sessionStorage.removeItem(HANDOFF_KEY)
+      const handoff = JSON.parse(raw) as { topic?: string; count?: number }
+      if (!handoff?.topic) return
+      setTopic(handoff.topic)
+      const handoffCount = Number(handoff.count) || 10
+      setCount(handoffCount)
+      void requestOutline(handoff.topic, handoffCount, "confident")
+    } catch {
+      /* A broken hand-off leaves the studio on its start screen. */
+    }
+  }, [requestOutline])
+
+  const updateOutlineItem = (index: number, patch: Partial<OutlineItem>) => {
+    setOutline((previous) => previous ? { ...previous, items: previous.items.map((item, i) => (i === index ? { ...item, ...patch } : item)) } : previous)
+  }
+
+  const removeOutlineItem = (index: number) => {
+    setOutline((previous) => previous && previous.items.length > 4 ? { ...previous, items: previous.items.filter((_, i) => i !== index) } : previous)
+  }
+
+  const addOutlineItem = (after: number) => {
+    setOutline((previous) => {
+      if (!previous || previous.items.length >= maxSlides) return previous
+      const items = [...previous.items]
+      items.splice(after + 1, 0, { title: "Новый слайд", point: "", layout: "bullets" })
+      return { ...previous, items }
+    })
+  }
+
+  /* ----------------------------------------------------------------- slides */
+
+  const fillSlides = useCallback(async (plan: DeckOutline, indexes: number[]) => {
+    const batches = chunk(indexes, BATCH)
+    await runLimited(batches, PARALLEL, async (batch) => {
+      // Indexes in a batch are contiguous by construction.
+      const result = await callApi({
+        action: "slides",
+        topic,
+        outline: plan,
+        startIndex: batch[0],
+        count: batch.length,
+        language,
+        tone,
+      })
+      applyQuota(result.data)
+      if (!result.ok) {
+        setError(String(result.data?.error || "Часть слайдов не получилась."))
+        setEntries((previous) => previous.map((entry, i) => (batch.includes(i) ? { ...entry, state: "failed" } : entry)))
+        return
+      }
+      const written = new Map<number, Slide>()
+      for (const item of (result.data.slides || []) as Array<{ index: number; slide: unknown }>) {
+        const slide = normalizeSlide(item.slide)
+        // Ids key the editor, the pictures and the export; never trust two
+        // batches not to repeat one.
+        if (slide) written.set(item.index, { ...slide, id: slideId() } as Slide)
+      }
+      setEntries((previous) => previous.map((entry, i) => {
+        if (!batch.includes(i)) return entry
+        const slide = written.get(i)
+        return slide ? { ...entry, slide, state: "ready" } : { ...entry, state: "failed" }
+      }))
+    })
+  }, [applyQuota, language, tone, topic])
+
+  const buildDeck = useCallback(async () => {
+    if (!outline) return
+    const plan = { ...outline, items: outline.items.filter((item) => item.title.trim()) }
+    setEntries(plan.items.map((item) => ({ key: slideId(), outline: item, slide: null, state: "pending" })))
+    setDeckTitle(plan.title)
+    setDeckId(newDeckId())
+    createdAtRef.current = Date.now()
+    setCurrent(0)
+    setStage("deck")
+    setError("")
+    setBusy("slides")
+    await fillSlides(plan, plan.items.map((_, i) => i))
+    setBusy(null)
+  }, [fillSlides, outline])
+
+  const planFromEntries = useCallback((): DeckOutline => planOf(deckTitle, entries), [deckTitle, entries])
+
+  // A new slide, written by the model, in the middle of a finished deck. It
+  // goes after the current slide — or before the closing one, because a deck
+  // should still end on its conclusion.
+  const addSlide = async () => {
+    const title = newSlideText.trim()
+    if (title.length < 3 || entries.length >= maxSlides) return
+    const last = entries[entries.length - 1]
+    const lastIsClosing = (last?.slide?.layout || last?.outline.layout) === "closing"
+    let at = current + 1
+    if (at >= entries.length && lastIsClosing) at = entries.length - 1
+    const entry: Entry = { key: slideId(), outline: { title, point: "", layout: newSlideLayout }, slide: null, state: "pending" }
+    const next = [...entries.slice(0, at), entry, ...entries.slice(at)]
+    setEntries(next)
+    setCurrent(at)
+    setNewSlideText("")
+    setComposer(false)
+    setBusy("slides")
+    setError("")
+    await fillSlides(planOf(deckTitle, next), [at])
+    setBusy(null)
+  }
+
+  const retrySlide = async (index: number) => {
+    setEntries((previous) => previous.map((entry, i) => (i === index ? { ...entry, state: "pending" } : entry)))
+    setBusy("slides")
+    setError("")
+    await fillSlides(planFromEntries(), [index])
+    setBusy(null)
+  }
+
+  /* ---------------------------------------------------------------- editing */
+
+  const patchSlide = (index: number, patch: SlidePatch) => {
+    setEntries((previous) => previous.map((entry, i) => (i === index && entry.slide ? { ...entry, slide: { ...entry.slide, ...patch } as Slide } : entry)))
+  }
+
+  const rewrite = async (index: number, layout?: SlideLayout) => {
+    const entry = entries[index]
+    if (!entry?.slide) return
+    setBusy("rewrite")
+    setError("")
+    const result = await callApi({
+      action: "rewrite",
+      deckTitle,
+      slide: entry.slide,
+      layout,
+      instruction,
+      neighbours: [entries[index - 1]?.slide, entries[index + 1]?.slide].map((slide) => (slide ? headline(slide) : "")),
+      language,
+      tone,
+    })
+    applyQuota(result.data)
+    setBusy(null)
+    if (!result.ok) {
+      setError(String(result.data?.error || "Не удалось переписать слайд."))
+      return
+    }
+    const slide = normalizeSlide(result.data.slide)
+    if (slide) {
+      setEntries((previous) => previous.map((item, i) => (i === index ? { ...item, slide, state: "ready" } : item)))
+      setInstruction("")
+    }
+  }
+
+  const move = (index: number, delta: number) => {
+    const target = index + delta
+    if (target < 0 || target >= entries.length) return
+    setEntries((previous) => {
+      const next = [...previous]
+      const [item] = next.splice(index, 1)
+      next.splice(target, 0, item)
+      return next
+    })
+    setCurrent(target)
+  }
+
+  const duplicate = (index: number) => {
+    const entry = entries[index]
+    if (!entry?.slide) return
+    const copy: Entry = { ...entry, key: slideId(), slide: { ...entry.slide, id: slideId() } as Slide }
+    setEntries((previous) => [...previous.slice(0, index + 1), copy, ...previous.slice(index + 1)])
+    setCurrent(index + 1)
+  }
+
+  const remove = (index: number) => {
+    if (entries.length <= 1) return
+    setEntries((previous) => previous.filter((_, i) => i !== index))
+    setCurrent((value) => Math.max(0, Math.min(value, entries.length - 2)))
+  }
+
+  /* ----------------------------------------------------------------- images */
+
+  const imageTargets = entries
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => entry.slide && IMAGE_LAYOUTS.has(entry.slide.layout) && !entry.slide.imageUrl)
+
+  const addImages = async () => {
+    if (!imageTargets.length) return
+    setBusy("images")
+    setError("")
+    setImageProgress({ done: 0, total: imageTargets.length })
+
+    for (const [position, { entry, index }] of imageTargets.entries()) {
+      const slide = entry.slide as Slide
+      const prompt = `${slide.imagePrompt || `${deckTitle}: ${headline(slide)}`}. Editorial photograph, natural light, rich detail, no text, no letters, no logos.`
+      let data: Record<string, unknown> | null = null
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const response = await fetch("/api/media/image", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ prompt, aspectRatio: "4:5", imageSize: "1K", mode: "cinematic" }),
+        }).catch(() => null)
+        data = response ? await response.json().catch(() => null) : null
+        // Another picture from this account is still rendering; wait for it.
+        if (response?.status === 409 && attempt === 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, 4000))
+          continue
+        }
+        if (!response?.ok || !data?.ok) {
+          setError(String(data?.error || data?.message || "Не удалось создать изображение. Фото-кредиты не списаны."))
+          data = null
+        }
+        break
+      }
+      if (!data) break
+
+      // A picture in the account's own storage survives; a provider's link
+      // may not. Without a bucket, the inline copy is the durable one.
+      const url = String(
+        (data.durable ? data.imageUrl : data.browserCacheImageUrl || data.imageUrl) || data.url || data.mediaUrl || "",
+      )
+      if (url) patchSlide(index, { imageUrl: url })
+      setImageProgress({ done: position + 1, total: imageTargets.length })
+    }
+
+    window.dispatchEvent(new Event("malik-image-credits-changed"))
+    setImageProgress(null)
+    setBusy(null)
+  }
+
+  /* ----------------------------------------------------------------- export */
+
+  const exportPptx = async () => {
+    setBusy("export")
+    setError("")
+    try {
+      const response = await fetch("/api/presentations/export", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deck: currentDeck() }),
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        throw new Error(String(data?.error || "Не удалось собрать файл."))
+      }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `${(deckTitle || "presentation").replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || "presentation"}.pptx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 4000)
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "Не удалось собрать файл.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  // PDF through the browser's own print dialog, with every slide laid out as
+  // one 13.333 × 7.5 inch page. "Save as PDF" is in every browser's dialog.
+  const exportPdf = () => {
+    setPrinting(true)
+  }
+
+  useEffect(() => {
+    if (!printing) return
+    const previousTitle = document.title
+    document.title = deckTitle || "Презентация"
+    const done = () => {
+      document.title = previousTitle
+      setPrinting(false)
+    }
+    window.addEventListener("afterprint", done, { once: true })
+    let cancelled = false
+    // Slides live in shadow roots; wait (briefly) for their pictures so the
+    // PDF does not come out with empty image panels.
+    const waitForImages = () => {
+      const images = Array.from(document.querySelectorAll(".deck-print .deck-host")).flatMap((host) =>
+        Array.from(host.shadowRoot?.querySelectorAll("img") || []),
+      )
+      const loads = images.map((image) => (image.complete ? Promise.resolve() : image.decode().catch(() => undefined)))
+      return Promise.race([Promise.all(loads), new Promise((resolve) => window.setTimeout(resolve, 4000))])
+    }
+    const frame = window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => {
+        void waitForImages().then(() => {
+          if (!cancelled) window.print()
+        })
+      }),
+    )
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener("afterprint", done)
+    }
+  }, [deckTitle, printing])
+
+  /* ---------------------------------------------------------------- present */
+
+  const presentable = entries.map((entry) => entry.slide).filter((slide): slide is Slide => Boolean(slide))
+  const [showIndex, setShowIndex] = useState(0)
+  const showRef = useRef<HTMLDivElement>(null)
+
+  const startShow = (from = 0) => {
+    if (!presentable.length) return
+    setShowIndex(Math.min(from, presentable.length - 1))
+    setPresenting(true)
+  }
+
+  useEffect(() => {
+    if (!presenting) return
+    const element = showRef.current
+    element?.requestFullscreen?.().catch(() => undefined)
+    const onKey = (event: KeyboardEvent) => {
+      if (["ArrowRight", "ArrowDown", "PageDown", " ", "Enter"].includes(event.key)) {
+        event.preventDefault()
+        setShowIndex((value) => Math.min(presentable.length - 1, value + 1))
+      } else if (["ArrowLeft", "ArrowUp", "PageUp", "Backspace"].includes(event.key)) {
+        event.preventDefault()
+        setShowIndex((value) => Math.max(0, value - 1))
+      } else if (event.key === "Home") setShowIndex(0)
+      else if (event.key === "End") setShowIndex(presentable.length - 1)
+      else if (event.key.toLowerCase() === "n") setShowNotes((value) => !value)
+      else if (event.key === "Escape") setPresenting(false)
+    }
+    const onFullscreen = () => { if (!document.fullscreenElement) setPresenting(false) }
+    window.addEventListener("keydown", onKey)
+    document.addEventListener("fullscreenchange", onFullscreen)
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      document.removeEventListener("fullscreenchange", onFullscreen)
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => undefined)
+    }
+  }, [presenting, presentable.length])
+
+  /* ----------------------------------------------------------- open & reset */
+
+  const openDeck = (deck: Deck) => {
+    setDeckId(deck.id)
+    setDeckTitle(deck.title)
+    setTheme(deck.theme)
+    setLanguage(deck.language)
+    setTopic(deck.prompt)
+    createdAtRef.current = deck.createdAt
+    setEntries(deck.slides.map((slide) => ({ key: slideId(), outline: { title: headline(slide), point: "", layout: slide.layout }, slide, state: "ready" })))
+    setCurrent(0)
+    setStage("deck")
+    setError("")
+  }
+
+  const deleteDeck = (id: string) => {
+    setRecent((previous) => {
+      const next = previous.filter((deck) => deck.id !== id)
+      writeRecent(username, next)
+      return next
+    })
+  }
+
+  const newDeck = () => {
+    setStage("start")
+    setOutline(null)
+    setEntries([])
+    setDeckId("")
+    setDeckTitle("")
+    setError("")
+    setInstruction("")
+  }
+
+  /* ------------------------------------------------------------------- view */
+
+  const generating = busy === "slides"
+  const active = entries[current]
+  const lowCredits = Boolean(quota && !quota.unlimited && quota.remaining < (outline?.items.length || count) + 1)
+  const slideCost = (outline?.items.length || 0) * PRESENTATION_COSTS.slide
+
+  const header = (
+    <div className="ps-top">
+      <Presentation size={18} aria-hidden="true" />
+      <h1>Презентации</h1>
+      <span className="ps-spacer" />
+      <span className="ps-credits" data-low={lowCredits} title={quota && !quota.unlimited ? `Обновится ${new Date(quota.resetAt).toLocaleString("ru-RU")}` : undefined}>
+        Кредиты <strong>{creditsLabel(quota)}</strong>
+      </span>
+      {stage !== "start" ? (
+        <button type="button" className="ps-btn ps-btn--small" onClick={newDeck} disabled={generating}>
+          <Plus size={15} /> Новая
+        </button>
+      ) : null}
+    </div>
+  )
+
+  /* ------------------------------------------------------------ start */
+  if (stage === "start") {
+    return (
+      <div className="ps-root" data-preserve-brand-color="true">
+        {header}
+        <div className="ps-start">
+          <h2 className="ps-start-title">Презентация за минуту</h2>
+          <p className="ps-start-sub">
+            Опишите тему — Malik AI составит план, напишет слайды и соберёт дизайн. Любой текст потом можно поправить прямо на слайде.
+          </p>
+
+          <div className="ps-prompt">
+            <textarea
+              value={topic}
+              onChange={(event) => setTopic(event.target.value)}
+              placeholder="Например: питч-дек кофейни у метро в Алматы для инвесторов — окупаемость, команда, что нужно от инвестора"
+              aria-label="Тема презентации"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void requestOutline(topic, count, tone)
+              }}
+            />
+            <div className="ps-prompt-row">
+              <label className="ps-field">
+                Слайдов
+                <select className="ps-select" value={count} onChange={(event) => setCount(Number(event.target.value))}>
+                  {countOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+              <label className="ps-field">
+                Тон
+                <select className="ps-select" value={tone} onChange={(event) => setTone(event.target.value as DeckTone)}>
+                  {TONES.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+              </label>
+              <span className="ps-spacer" />
+              {authenticated ? (
+                <button type="button" className="ps-btn ps-btn--primary" onClick={() => void requestOutline(topic, count, tone)} disabled={busy === "outline" || topic.trim().length < 3}>
+                  {busy === "outline" ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                  {busy === "outline" ? "Составляю план…" : `Составить план · ${PRESENTATION_COSTS.outline} кр.`}
+                </button>
+              ) : (
+                <a className="ps-btn ps-btn--primary" href="/auth">Войти, чтобы создавать</a>
+              )}
+            </div>
+          </div>
+          {error ? <p className="ps-error" role="alert">{error}</p> : null}
+          <p className="ps-hint">
+            Полная презентация из {count} слайдов стоит {count + PRESENTATION_COSTS.outline} кредитов: 1 за план и по 1 за каждый слайд. Переписать слайд — 1 кредит. Скачать PPTX и PDF — бесплатно.
+          </p>
+
+          <div className="ps-section-label">Примеры</div>
+          <div className="ps-chips">
+            {EXAMPLES.map((example) => (
+              <button key={example} type="button" className="ps-chip" onClick={() => setTopic(example)}>{example}</button>
+            ))}
+          </div>
+
+          <div className="ps-section-label">Тема оформления</div>
+          <div className="ps-themes">
+            {THEME_IDS.map((id) => {
+              const option = DECK_THEMES[id]
+              return (
+                <button key={id} type="button" className="ps-theme" aria-pressed={theme === id} onClick={() => setTheme(id)}>
+                  <span className="ps-theme-swatch" style={{ background: `#${option.bg}`, border: `1px solid #${option.border}` }}>
+                    <i style={{ background: `#${option.text}` }} />
+                    <i style={{ background: `#${option.muted}` }} />
+                    <b style={{ background: `#${option.accent}` }} />
+                  </span>
+                  <span className="ps-theme-name">{option.name}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {recent.length ? (
+            <>
+              <div className="ps-section-label">Мои презентации</div>
+              <div className="ps-recent">
+                {recent.map((deck) => (
+                  <div key={deck.id} style={{ position: "relative" }}>
+                    <button type="button" className="ps-recent-card" onClick={() => openDeck(deck)}>
+                      <SlideFrame slide={deck.slides[0]} theme={deck.theme} index={0} total={deck.slides.length} language={deck.language} />
+                      <span>{deck.title}</span>
+                      <small>{deck.slides.length} слайдов · {new Date(deck.updatedAt).toLocaleDateString("ru-RU")}</small>
+                    </button>
+                    <button type="button" className="ps-icon-btn" style={{ position: "absolute", right: 6, top: 6, background: "rgba(0,0,0,.6)" }} onClick={() => deleteDeck(deck.id)} aria-label={`Удалить «${deck.title}»`}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
+
+  /* ---------------------------------------------------------- outline */
+  if (stage === "outline" && outline) {
+    return (
+      <div className="ps-root" data-preserve-brand-color="true">
+        {header}
+        <div className="ps-outline">
+          <div className="ps-section-label" style={{ marginTop: 0 }}>План презентации — поправьте, прежде чем писать слайды</div>
+          <input className="ps-outline-title" value={outline.title} onChange={(event) => setOutline({ ...outline, title: event.target.value })} aria-label="Название презентации" />
+          <ol className="ps-outline-list">
+            {outline.items.map((item, index) => (
+              <li className="ps-outline-item" key={index}>
+                <b>{String(index + 1).padStart(2, "0")}</b>
+                <div style={{ minWidth: 0 }}>
+                  <GrowingField value={item.title} onChange={(title) => updateOutlineItem(index, { title })} label={`Слайд ${index + 1}`} />
+                  {item.point ? <small>{item.point}</small> : null}
+                </div>
+                <select className="ps-select" value={item.layout} onChange={(event) => updateOutlineItem(index, { layout: event.target.value as SlideLayout })} aria-label="Макет слайда">
+                  {SLIDE_LAYOUTS.map((layout) => <option key={layout} value={layout}>{LAYOUT_LABELS[layout]}</option>)}
+                </select>
+                <span style={{ display: "inline-flex" }}>
+                  <button type="button" className="ps-icon-btn" onClick={() => addOutlineItem(index)} disabled={outline.items.length >= maxSlides} aria-label="Добавить слайд ниже"><Plus size={15} /></button>
+                  <button type="button" className="ps-icon-btn" onClick={() => removeOutlineItem(index)} disabled={outline.items.length <= 4} aria-label="Убрать слайд"><Trash2 size={15} /></button>
+                </span>
+              </li>
+            ))}
+          </ol>
+          {error ? <p className="ps-error" role="alert">{error}</p> : null}
+          <div className="ps-outline-actions">
+            <button type="button" className="ps-btn" onClick={() => setStage("start")}><ChevronLeft size={16} /> Назад</button>
+            <span className="ps-spacer" />
+            <span className="ps-cost">{outline.items.length} слайдов · {slideCost} кредитов · осталось {creditsLabel(quota)}</span>
+            <button type="button" className="ps-btn ps-btn--primary" onClick={() => void buildDeck()} disabled={Boolean(quota && !quota.unlimited && quota.remaining < slideCost)}>
+              <Wand2 size={16} /> Создать презентацию
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  /* ------------------------------------------------------------- deck */
+  const readyCount = entries.filter((entry) => entry.state === "ready").length
+
+  return (
+    <div className="ps-root" data-preserve-brand-color="true">
+      {header}
+      <div className="ps-editor">
+        <nav className="ps-rail" aria-label="Слайды">
+          {entries.map((entry, index) => (
+            <button key={entry.key} type="button" className="ps-thumb" aria-current={index === current} onClick={() => setCurrent(index)} aria-label={`Слайд ${index + 1}`}>
+              <span className="ps-thumb-num">{index + 1}</span>
+              {entry.slide ? (
+                <SlideFrame slide={entry.slide} theme={theme} index={index} total={entries.length} language={language} />
+              ) : (
+                <div className="ps-pending" data-state={entry.state}>
+                  <div><span>{entry.outline.title}</span><small>{entry.state === "failed" ? "не получилось" : "пишу…"}</small></div>
+                </div>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        <div className="ps-stage" role="region" aria-label="Слайд">
+          <div className="ps-toolbar">
+            <input
+              className="ps-outline-title"
+              style={{ fontSize: 22, margin: 0, flex: "1 1 240px", minWidth: 0 }}
+              value={deckTitle}
+              onChange={(event) => setDeckTitle(event.target.value)}
+              aria-label="Название презентации"
+            />
+            <span className="ps-theme-dots" role="group" aria-label="Тема оформления">
+              {THEME_IDS.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="ps-theme-dot"
+                  aria-pressed={theme === id}
+                  title={DECK_THEMES[id].name}
+                  style={{ background: `linear-gradient(135deg, #${DECK_THEMES[id].bg} 50%, #${DECK_THEMES[id].accent} 50%)` }}
+                  onClick={() => setTheme(id)}
+                />
+              ))}
+            </span>
+            <button type="button" className="ps-btn ps-btn--small" onClick={() => startShow(current)} disabled={!presentable.length}><Play size={14} /> Показ</button>
+            <button type="button" className="ps-btn ps-btn--small" onClick={() => void exportPptx()} disabled={!presentable.length || generating || busy === "export"}>
+              {busy === "export" ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} PPTX
+            </button>
+            <button type="button" className="ps-btn ps-btn--small" onClick={exportPdf} disabled={!presentable.length || generating}><FileDown size={14} /> PDF</button>
+          </div>
+
+          {generating ? <p className="ps-hint" style={{ marginTop: -4, marginBottom: 12 }} aria-live="polite">Пишу слайды: готово {readyCount} из {entries.length}</p> : null}
+          {error ? <p className="ps-error" role="alert" style={{ marginTop: 0, marginBottom: 12 }}>{error}</p> : null}
+
+          {active ? (
+            <>
+              <div className="ps-main-slide">
+                {active.slide ? (
+                  <SlideFrame
+                    slide={active.slide}
+                    theme={theme}
+                    index={current}
+                    total={entries.length}
+                    editable={busy !== "rewrite"}
+                    language={language}
+                    onChange={(patch) => patchSlide(current, patch)}
+                  />
+                ) : (
+                  <div className="ps-pending" data-state={active.state}>
+                    <div>
+                      <span>{active.outline.title}</span>
+                      {active.state === "failed" ? (
+                        <small>
+                          Этот слайд не получился — кредит за него не списан.{" "}
+                          <button type="button" className="ps-btn ps-btn--small" style={{ marginTop: 12 }} onClick={() => void retrySlide(current)} disabled={generating}>
+                            <RefreshCw size={14} /> Написать ещё раз · 1 кр.
+                          </button>
+                        </small>
+                      ) : <small>Пишу этот слайд…</small>}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="ps-slide-tools">
+                <button type="button" className="ps-icon-btn" onClick={() => setCurrent((value) => Math.max(0, value - 1))} disabled={current === 0} aria-label="Предыдущий слайд"><ChevronLeft size={18} /></button>
+                <span className="ps-cost" style={{ fontVariantNumeric: "tabular-nums" }}>{current + 1} / {entries.length}</span>
+                <button type="button" className="ps-icon-btn" onClick={() => setCurrent((value) => Math.min(entries.length - 1, value + 1))} disabled={current >= entries.length - 1} aria-label="Следующий слайд"><ChevronRight size={18} /></button>
+
+                {active.slide ? (
+                  <>
+                    <form
+                      className="ps-rewrite"
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        void rewrite(current)
+                      }}
+                    >
+                      <input
+                        value={instruction}
+                        onChange={(event) => setInstruction(event.target.value)}
+                        placeholder="Что изменить? «короче», «добавь цифры», «сильнее заголовок»…"
+                        aria-label="Как переписать слайд"
+                        disabled={busy === "rewrite"}
+                      />
+                      <button type="submit" className="ps-btn ps-btn--small" disabled={busy === "rewrite" || generating} title="Переписать слайд · 1 кредит">
+                        {busy === "rewrite" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Переписать · 1 кр.
+                      </button>
+                    </form>
+                    <select
+                      className="ps-select"
+                      value={active.slide.layout}
+                      onChange={(event) => void rewrite(current, event.target.value as SlideLayout)}
+                      disabled={busy === "rewrite" || generating}
+                      aria-label="Сменить макет (1 кредит)"
+                      title="Сменить макет · 1 кредит"
+                    >
+                      {SLIDE_LAYOUTS.map((layout) => <option key={layout} value={layout}>{LAYOUT_LABELS[layout]}</option>)}
+                    </select>
+                    <span className="ps-spacer" />
+                    <button type="button" className="ps-icon-btn" onClick={() => move(current, -1)} disabled={generating || current === 0} aria-label="Переместить выше"><ArrowUp size={16} /></button>
+                    <button type="button" className="ps-icon-btn" onClick={() => move(current, 1)} disabled={generating || current >= entries.length - 1} aria-label="Переместить ниже"><ArrowDown size={16} /></button>
+                    <button type="button" className="ps-icon-btn" onClick={() => setComposer((value) => !value)} disabled={generating || entries.length >= maxSlides} aria-label="Новый слайд" aria-expanded={composer} title={entries.length >= maxSlides ? `Максимум ${maxSlides} слайдов на вашем тарифе` : "Новый слайд · 1 кредит"}><Plus size={16} /></button>
+                    <button type="button" className="ps-icon-btn" onClick={() => duplicate(current)} disabled={generating} aria-label="Дублировать"><Copy size={16} /></button>
+                    <button type="button" className="ps-icon-btn" onClick={() => remove(current)} disabled={generating || entries.length <= 1} aria-label="Удалить слайд"><Trash2 size={16} /></button>
+                  </>
+                ) : null}
+              </div>
+
+              {composer ? (
+                <form
+                  className="ps-rewrite ps-composer"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void addSlide()
+                  }}
+                >
+                  <input
+                    autoFocus
+                    value={newSlideText}
+                    onChange={(event) => setNewSlideText(event.target.value)}
+                    placeholder="О чём новый слайд? Например: «риски и как мы их закрываем»"
+                    aria-label="О чём новый слайд"
+                  />
+                  <select className="ps-select" value={newSlideLayout} onChange={(event) => setNewSlideLayout(event.target.value as SlideLayout)} aria-label="Макет нового слайда">
+                    {SLIDE_LAYOUTS.filter((layout) => layout !== "title" && layout !== "closing").map((layout) => (
+                      <option key={layout} value={layout}>{LAYOUT_LABELS[layout]}</option>
+                    ))}
+                  </select>
+                  <button type="submit" className="ps-btn ps-btn--small ps-btn--primary" disabled={newSlideText.trim().length < 3 || generating}>
+                    <Wand2 size={14} /> Добавить · {PRESENTATION_COSTS.slide} кр.
+                  </button>
+                </form>
+              ) : null}
+
+              {active.slide ? (
+                <div className="ps-notes">
+                  <label htmlFor="ps-notes-field"><StickyNote size={11} style={{ display: "inline", marginRight: 6 }} />Заметки докладчика</label>
+                  <textarea
+                    id="ps-notes-field"
+                    value={active.slide.notes || ""}
+                    onChange={(event) => patchSlide(current, { notes: event.target.value })}
+                    placeholder="Что сказать на этом слайде"
+                  />
+                </div>
+              ) : null}
+
+              {imageTargets.length || imageProgress ? (
+                <div className="ps-slide-tools">
+                  <button type="button" className="ps-btn ps-btn--small" onClick={() => void addImages()} disabled={Boolean(busy)}>
+                    {busy === "images" ? <Loader2 size={14} className="animate-spin" /> : <ImageIcon size={14} />}
+                    {imageProgress ? `Рисую изображения: ${imageProgress.done} из ${imageProgress.total}` : `Добавить изображения · ${imageTargets.length} шт.`}
+                  </button>
+                  <span className="ps-cost">Изображения тратят фото-кредиты, не кредиты презентаций.</span>
+                </div>
+              ) : null}
+
+              <p className="ps-hint">Нажмите на любой текст на слайде, чтобы исправить его. Enter — сохранить, Esc — отменить.</p>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {presenting && typeof document !== "undefined" ? createPortal(
+        <div
+          className="ps-show"
+          ref={showRef}
+          onClick={(event) => {
+            const half = event.clientX > window.innerWidth / 2
+            setShowIndex((value) => (half ? Math.min(presentable.length - 1, value + 1) : Math.max(0, value - 1)))
+          }}
+          role="dialog"
+          aria-label="Показ презентации"
+        >
+          <div className="ps-show-frame">
+            <SlideFrame slide={presentable[showIndex]} theme={theme} index={showIndex} total={presentable.length} language={language} />
+          </div>
+          {showNotes && presentable[showIndex]?.notes ? <div className="ps-show-notes">{presentable[showIndex].notes}</div> : null}
+          <div className="ps-show-bar" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="ps-icon-btn" style={{ color: "#fff" }} onClick={() => setShowIndex((value) => Math.max(0, value - 1))} aria-label="Назад"><ChevronLeft size={18} /></button>
+            <span>{showIndex + 1} / {presentable.length}</span>
+            <button type="button" className="ps-icon-btn" style={{ color: "#fff" }} onClick={() => setShowIndex((value) => Math.min(presentable.length - 1, value + 1))} aria-label="Вперёд"><ChevronRight size={18} /></button>
+            <button type="button" className="ps-icon-btn" style={{ color: "#fff" }} onClick={() => setShowNotes((value) => !value)} aria-label="Заметки (N)"><StickyNote size={16} /></button>
+            <button type="button" className="ps-icon-btn" style={{ color: "#fff" }} onClick={() => setPresenting(false)} aria-label="Выйти (Esc)"><X size={18} /></button>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+
+      {printing && typeof document !== "undefined" ? createPortal(
+        <div className="deck-print" aria-hidden="true">
+          {presentable.map((slide, index) => (
+            <div className="deck-print-page" key={slide.id}>
+              <SlideCanvas slide={slide} theme={theme} index={index} total={presentable.length} language={language} />
+            </div>
+          ))}
+        </div>,
+        document.body,
+      ) : null}
+    </div>
+  )
+}
+
+export default PresentationStudio

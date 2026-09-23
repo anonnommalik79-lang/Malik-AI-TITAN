@@ -26,6 +26,7 @@ import {
   Pin,
   PinOff,
   Plug,
+  Presentation,
   Search,
   Settings,
   Shield,
@@ -101,6 +102,7 @@ const CREATE_ACTIONS: SidebarAction[] = [
   { id: "websites", label: "Сайты", icon: LayoutTemplate, view: "website-generation" },
   { id: "video-generation", label: "Генерация видео", icon: Video, view: "video-generation" },
   { id: "music-generation", label: "Создать трек", icon: Music2, view: "music-generation" },
+  { id: "presentation-generation", label: "Презентации", icon: Presentation, view: "presentation-generation" },
   { id: "photo-generation", label: "Генерация изображений", icon: ImageIcon, view: "photo-generation" },
 ]
 

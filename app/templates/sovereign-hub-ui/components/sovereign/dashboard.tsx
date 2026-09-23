@@ -85,6 +85,22 @@ const MusicGenerationStudio = dynamic(
     ),
   },
 )
+// Gamma-class deck studio: plan → slides that arrive as they are written →
+// edit on the slide → present / PPTX / PDF, metered by presentation credits.
+const PresentationStudio = dynamic(
+  () => import("./presentations/PresentationStudio").then((mod) => mod.PresentationStudio),
+  {
+    ssr: false,
+    loading: () => (
+      <div data-presentation-studio-loading className="flex h-full min-h-[320px] flex-1 items-center justify-center bg-black text-white">
+        <div className="flex items-center gap-3 text-sm text-neutral-400">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Открываю презентации…</span>
+        </div>
+      </div>
+    ),
+  },
+)
 const AIGeneratorStudio = dynamic(
   () => import("./ai-generator/AIGeneratorStudio").then((mod) => mod.AIGeneratorStudio),
   { ssr: false },
@@ -171,6 +187,7 @@ import type { AIPlan } from "@/lib/ai/types"
 import { isStoredGeneratedImageUrl, persistGeneratedImageReference, persistGeneratedImageUrl, resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import { normalizeFactAudit } from "@/lib/ai/fact-audit"
+import { extractSlideCount, isPresentationCreationRequest, presentationTopic } from "@/lib/presentations/deck"
 import {
   responseDepthInstruction,
   responseDepthLimits,
@@ -2098,15 +2115,15 @@ const DASHBOARD_VIEW_REGISTRY: Record<string, DashboardViewRegistryEntry> = {
   },
   "presentation-generation": {
     id: "presentation-generation",
-    title: "Presentation Generation",
-    description: "Pitch decks, slides and structured presentation plans.",
+    title: "Презентации",
+    description: "Presentation studio: outline, AI-written slides, twelve layouts, six themes, present mode, PPTX and PDF export.",
     bucket: "generator",
     icon: "slides",
     status: "stable",
     mobileMode: "full",
-    fallbackView: "document-generation",
-    keywords: ["presentation", "slides", "презентация", "слайд", "deck"],
-    opensPreview: true,
+    fallbackView: "home",
+    keywords: ["presentation", "slides", "презентация", "презентации", "слайд", "deck", "pitch deck", "питч"],
+    opensPreview: false,
   },
   "template-generation": {
     id: "template-generation",
@@ -5867,6 +5884,23 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   if (isLoading || duplicateBurst || sameTickBurst) return
   sendGateRef.current = { signature: submissionSignature, at: submissionNow }
 
+  // "Сделай презентацию про …" is a job for the presentation studio, not a
+  // chat reply: the topic is handed across and the studio starts the plan
+  // itself. Questions *about* presentations stay in the chat — see
+  // isPresentationCreationRequest for where that line is drawn.
+  if (!attachments.length && isPresentationCreationRequest(cleanContent)) {
+    try {
+      window.sessionStorage.setItem("malik.presentation.handoff", JSON.stringify({
+        topic: presentationTopic(cleanContent),
+        count: extractSlideCount(cleanContent) ?? undefined,
+      }))
+    } catch {
+      /* Without storage the studio simply opens on its start screen. */
+    }
+    safeOpenView("presentation-generation", "manual")
+    return
+  }
+
   // Follow-up questions such as "кто на фото?" automatically receive the last
   // ready generated image from this chat as a hidden multimodal attachment.
   // The user does not need to upload the generated picture again.
@@ -6767,7 +6801,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setIsLoading(false)
     setStreamingText("")
   }
-}, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email])
+}, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email, safeOpenView])
 
   const handleImageConfirmation = useCallback((
     messageId: string,
@@ -7093,6 +7127,9 @@ const shouldShowMobilePreviewButton =
     if (activeView === "music-generation") {
       return <MusicGenerationStudio username={username} />
     }
+    if (activeView === "presentation-generation") {
+      return <PresentationStudio username={username} />
+    }
     if (
       activeView === "code-generation" ||
       activeView === "component-generation" ||
@@ -7100,7 +7137,6 @@ const shouldShowMobilePreviewButton =
       activeView === "landing-generation" ||
       activeView === "dashboard-generation" ||
       activeView === "document-generation" ||
-      activeView === "presentation-generation" ||
       activeView === "template-generation"
     ) {
       return (
