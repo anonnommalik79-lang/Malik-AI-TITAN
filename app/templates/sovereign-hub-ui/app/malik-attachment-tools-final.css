@@ -30,16 +30,46 @@
   top: auto !important;
   bottom: calc(100% + 12px) !important;
   left: 0 !important;
-  width: 292px !important;
+  width: 420px !important;
   max-width: calc(100vw - 24px) !important;
   grid-template-columns: minmax(0, 1fr) !important;
-  max-height: min(52dvh, 360px) !important;
+  max-height: min(72dvh, 620px) !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
   border: 1px solid rgba(255,255,255,.11) !important;
   background: #181818 !important;
   box-shadow: 0 24px 70px rgba(0,0,0,.72) !important;
   isolation: isolate !important;
+}
+
+
+#malik-root .malik-dashboard-shell .thome-tools-copy {
+  display: block !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-tools-copy strong {
+  display: block !important;
+  overflow: hidden !important;
+  color: #efeff1 !important;
+  font-size: 12.5px !important;
+  font-weight: 650 !important;
+  line-height: 1.35 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+#malik-root .malik-dashboard-shell .thome-tools-copy small {
+  display: block !important;
+  margin-top: 2px !important;
+  overflow: hidden !important;
+  color: #77777f !important;
+  font-size: 10px !important;
+  font-weight: 450 !important;
+  line-height: 1.35 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
 }
 
 #malik-root .malik-dashboard-shell .thome-attachments {
@@ -123,7 +153,7 @@
   #malik-root .malik-dashboard-shell .thome-tools-menu {
     bottom: calc(100% + 10px) !important;
     left: -4px !important;
-    width: min(300px, calc(100vw - 24px)) !important;
+    width: min(360px, calc(100vw - 24px)) !important;
     grid-template-columns: minmax(0, 1fr) !important;
     border-radius: 17px !important;
     padding: 8px !important;
@@ -131,10 +161,15 @@
   }
 
   #malik-root .malik-dashboard-shell .thome-tools-item {
-    min-height: 48px !important;
-    height: 48px !important;
-    padding-inline: 12px !important;
+    min-height: 58px !important;
+    height: auto !important;
+    padding: 8px 12px !important;
     font-size: 13px !important;
+  }
+
+  #malik-root .malik-dashboard-shell .thome-tools-copy small {
+    white-space: normal !important;
+    line-height: 1.25 !important;
   }
 
   #malik-root .malik-dashboard-shell .thome-attachments {
