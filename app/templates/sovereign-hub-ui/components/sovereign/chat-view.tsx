@@ -11,16 +11,20 @@ import {
   Code,
   Copy,
   FilePlus2,
+  FileSearch,
   FileText,
   FolderTree,
   Github,
   Globe,
   Image as ImageIcon,
+  KeyRound,
   Layers,
   Link as LinkIcon,
   Lightbulb,
+  Mail,
   Mic,
   Paperclip,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -56,6 +60,9 @@ import { MALIK_IMAGE_EDITOR_REQUEST_EVENT, type MalikImageEditorRequest } from "
 import { ImageGenerationMotion } from "./image-generation-motion"
 import type { MalikActionPlan, MalikActionTarget } from "@/lib/ai/action-os"
 import { ChatImageCreator } from "./ChatImageCreator"
+import { ChatDrawingPad } from "./ChatDrawingPad"
+import { ChatLibraryPicker } from "./ChatLibraryPicker"
+import { PREFILL_EVENT, prefillPrompt, takePrefillPrompt } from "@/lib/malik-context"
 
 export type { ChatSendOptions }
 
@@ -1757,6 +1764,9 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const [imageCredits, setImageCredits] = useState<ImageCreditSnapshot | null>(null)
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   const [imageCreatorOpen, setImageCreatorOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  const [drawingOpen, setDrawingOpen] = useState(false)
+  const [researchMode, setResearchMode] = useState<"off" | "web" | "deep">("off")
   useEffect(() => {
     let cancelled = false
 
@@ -1810,12 +1820,29 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const [isRecording, setIsRecording] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
-  const videoInputRef = useRef<HTMLInputElement>(null)
+  const allInputRef = useRef<HTMLInputElement>(null)
   const attachButtonRef = useRef<HTMLButtonElement>(null)
   const attachMenuRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+
+  useEffect(() => {
+    const fill = (event: Event) => {
+      const text = (event as CustomEvent<string>).detail
+      if (typeof text !== "string" || !text.trim()) return
+      setPrompt(text)
+      window.setTimeout(() => {
+        textareaRef.current?.focus()
+        textareaRef.current?.setSelectionRange(text.length, text.length)
+      }, 0)
+    }
+
+    const pending = takePrefillPrompt()
+    if (pending) fill(new CustomEvent(PREFILL_EVENT, { detail: pending }))
+
+    window.addEventListener(PREFILL_EVENT, fill)
+    return () => window.removeEventListener(PREFILL_EVENT, fill)
+  }, [])
   const chunksRef = useRef<Blob[]>([])
 
   const attachmentFromEditorSource = async (rawSource: string): Promise<ChatAttachment> => {
@@ -1999,7 +2026,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       const button = attachButtonRef.current
       if (!button) return
       const rect = button.getBoundingClientRect()
-      const width = Math.min(340, Math.max(248, window.innerWidth - 24))
+      const width = Math.min(430, Math.max(280, window.innerWidth - 24))
       const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - width - 12))
       setAttachMenuPosition({ left, top: Math.max(12, rect.top - 12), width })
     }
@@ -2171,9 +2198,13 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     setLocalError(null)
     try { window.localStorage.setItem("malik_last_user_prompt", outgoing) } catch {}
     setLastSubmittedPrompt(outgoing)
-    onSendMessage(routedOutgoing, attachments, { responseDepth })
+    onSendMessage(routedOutgoing, attachments, {
+      responseDepth: researchMode === "deep" ? "deep" : responseDepth,
+      research: researchMode !== "off" ? true : undefined,
+    })
     setPrompt("")
     setAttachments([])
+    setResearchMode("off")
     setShowAttachMenu(false)
   }
 
@@ -2280,28 +2311,90 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     }
   }
 
-  const attachItems = useMemo(() => [
+  const focusComposerWith = (value: string) => {
+    if (!prompt.trim()) setPrompt(value)
+    window.setTimeout(() => {
+      textareaRef.current?.focus()
+      const length = (prompt.trim() ? prompt : value).length
+      textareaRef.current?.setSelectionRange(length, length)
+    }, 0)
+  }
+
+  const startAccountPlugin = (pluginId: "github" | "gmail") => {
+    const command = `/plugin ${pluginId} `
+    prefillPrompt(command)
+    const current = new URL(window.location.href)
+    const returnTo = `${current.pathname}${current.search}${current.hash}` || "/dashboard"
+    window.location.assign(`/api/plugins/connect?id=${encodeURIComponent(pluginId)}&return_to=${encodeURIComponent(returnTo)}`)
+  }
+
+  const attachItems: Array<{
+    label: string
+    description: string
+    icon: React.ComponentType<{ className?: string }>
+    action: () => void
+  }> = [
+    {
+      label: "Добавить фото и файлы",
+      description: "Загрузить с компьютера",
+      icon: Paperclip,
+      action: () => allInputRef.current?.click(),
+    },
+    {
+      label: "Добавить файл из библиотеки",
+      description: "Просматривайте свои файлы и выполняйте поиск по ним",
+      icon: FileSearch,
+      action: () => setLibraryOpen(true),
+    },
     {
       label: "Создать изображение",
+      description: "Создать любое изображение",
       icon: Wand2,
-      action: () => { setShowAttachMenu(false); setImageCreatorOpen(true) },
+      action: () => setImageCreatorOpen(true),
     },
     {
-      label: "Загрузить изображения",
-      icon: ImageIcon,
-      action: () => { setShowAttachMenu(false); imageInputRef.current?.click() },
+      label: "Поиск в сети",
+      description: "Искать актуальную информацию",
+      icon: Search,
+      action: () => {
+        setResearchMode("web")
+        focusComposerWith("Найди в сети актуальную информацию по теме: ")
+      },
     },
     {
-      label: "Загрузить видео",
-      icon: Video,
-      action: () => { setShowAttachMenu(false); videoInputRef.current?.click() },
+      label: "Глубокое исследование",
+      description: "Получить подробный отчёт с источниками",
+      icon: Globe,
+      action: () => {
+        setResearchMode("deep")
+        focusComposerWith("Проведи глубокое исследование по теме: ")
+      },
     },
     {
-      label: "Загрузить файлы",
-      icon: Paperclip,
-      action: () => { setShowAttachMenu(false); fileInputRef.current?.click() },
+      label: "Нарисовать",
+      description: "Нарисуйте и прикрепите изображение",
+      icon: Pencil,
+      action: () => setDrawingOpen(true),
     },
-  ], [])
+    {
+      label: "GitHub",
+      description: "PR, issues, CI и репозитории",
+      icon: Github,
+      action: () => startAccountPlugin("github"),
+    },
+    {
+      label: "Gmail",
+      description: "Читайте и используйте почту Gmail в Malik AI",
+      icon: Mail,
+      action: () => startAccountPlugin("gmail"),
+    },
+    {
+      label: "OpenAI Platform",
+      description: "API keys, usage и billing в официальной платформе",
+      icon: KeyRound,
+      action: () => window.open("https://platform.openai.com/", "_blank", "noopener,noreferrer"),
+    },
+  ]
 
   return (
     <div data-malik-chat-fullwidth="1" className="malik-chat-fullwidth relative z-[2] flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-transparent text-white">
@@ -2468,8 +2561,16 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
             </div>
           </div>
           <div className="malik-composer-context-row">
-            <button type="button" onClick={() => handleQuickAction("Найди в открытом вебе свежую информацию и покажи источники")}>
-              <Globe className="h-3.5 w-3.5" /> Веб и источники
+            <button
+              type="button"
+              onClick={() => {
+                const next = researchMode === "off" ? "web" : "off"
+                setResearchMode(next)
+                if (next === "web") focusComposerWith("Найди в сети актуальную информацию по теме: ")
+              }}
+              className={cn(researchMode !== "off" && "is-active")}
+            >
+              <Globe className="h-3.5 w-3.5" /> {researchMode === "deep" ? "Глубокое исследование" : researchMode === "web" ? "Веб-поиск включён" : "Веб и источники"}
             </button>
             <span>
               Фото · {imageCredits ? (imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining) : "…"} кр. · Enter — отправить · Shift + Enter — новая строка
@@ -2481,7 +2582,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
               ref={attachMenuRef}
               role="menu"
               aria-label="Добавить в чат"
-              className="fixed z-[10000] overflow-hidden rounded-[22px] border border-white/[0.10] bg-[#1b1b1c]/98 p-2 shadow-[0_24px_80px_rgba(0,0,0,.78)] backdrop-blur-xl"
+              className="fixed z-[10000] max-h-[72dvh] overflow-x-hidden overflow-y-auto rounded-[22px] border border-white/[0.10] bg-[#1b1b1c]/98 p-2 shadow-[0_24px_80px_rgba(0,0,0,.78)] backdrop-blur-xl"
               style={{
                 left: attachMenuPosition.left,
                 top: attachMenuPosition.top,
@@ -2495,13 +2596,19 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                     key={item.label}
                     type="button"
                     role="menuitem"
-                    onClick={item.action}
-                    className="group flex min-h-12 w-full items-center gap-3 rounded-[15px] px-3 py-2.5 text-left text-[14px] font-semibold text-white transition-colors hover:bg-white/[0.07] active:bg-white/[0.11]"
+                    onClick={() => {
+                      setShowAttachMenu(false)
+                      item.action()
+                    }}
+                    className="group flex min-h-[58px] w-full items-center gap-3 rounded-[15px] px-3 py-2.5 text-left text-white transition-colors hover:bg-white/[0.07] active:bg-white/[0.11]"
                   >
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/[0.10] text-white">
-                      <item.icon className="h-5 w-5 stroke-[1.8]" />
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/[0.08] text-white">
+                      <item.icon className="h-[18px] w-[18px] stroke-[1.8]" />
                     </span>
-                    <span className="truncate">{item.label}</span>
+                    <span className="min-w-0 flex-1">
+                      <strong className="block truncate text-[13px] font-semibold leading-5">{item.label}</strong>
+                      <small className="block truncate text-[10.5px] font-normal leading-4 text-zinc-500">{item.description}</small>
+                    </span>
                   </button>
                 ))}
               </div>
@@ -2513,14 +2620,27 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       </div>
 
       <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }} />
-      <input ref={videoInputRef} type="file" accept="video/*" multiple className="hidden" onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }} />
       <input
-        ref={fileInputRef}
+        ref={allInputRef}
         type="file"
         multiple
-        accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.mdx,.csv,.tsv,.json,.jsonl,.yaml,.yml,.xml,.html,.htm,.css,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.kt,.go,.rs,.rb,.php,.swift,.c,.h,.cpp,.hpp,.cs,.sql,.sh,.bash,.zsh,.ps1,.toml,.ini,.log"
+        accept="image/*,video/*,audio/*,.pdf,.docx,.xlsx,.pptx,.txt,.md,.mdx,.csv,.tsv,.json,.jsonl,.yaml,.yml,.xml,.html,.htm,.css,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.kt,.go,.rs,.rb,.php,.swift,.c,.h,.cpp,.hpp,.cs,.sql,.sh,.bash,.zsh,.ps1,.toml,.ini,.log"
         className="hidden"
         onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }}
+      />
+
+      <ChatLibraryPicker
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        onSelect={async (url) => {
+          const ok = await importRemoteMedia(url)
+          if (!ok) throw new Error("Не удалось прикрепить файл из библиотеки")
+        }}
+      />
+      <ChatDrawingPad
+        open={drawingOpen}
+        onClose={() => setDrawingOpen(false)}
+        onAttach={async (file) => handleFiles([file])}
       />
 
       {codeModalOpen && (
