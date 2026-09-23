@@ -27,30 +27,36 @@ type ImageTemplate = {
   label: string
   prompt: string
   background: string
+  image: string
+  position?: string
   badge?: string
 }
 
+function ultraPreview(photoId: string) {
+  return `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=3200&h=2400&q=95`
+}
+
 const TEMPLATES: ImageTemplate[] = [
-  { id: "retro-80", label: "Назад в 80-е", prompt: "1980s analog photography, vintage street fashion, warm film grain, period-accurate colors, candid flash photography", background: "linear-gradient(135deg,#79503d 0%,#d27c55 38%,#254a5b 100%)" },
-  { id: "glam-80", label: "Глэм 80-х", prompt: "luxury 1980s glamour portrait, glossy magazine lighting, rich jewel tones, soft cinematic skin, premium editorial photography", background: "linear-gradient(135deg,#211016 0%,#7c243d 48%,#d39a6d 100%)", badge: "Фото" },
-  { id: "vacation-80", label: "Отпуск в 80-х", prompt: "sunny 1980s travel photography, Mediterranean vacation mood, vintage film stock, authentic retro wardrobe, natural sunlight", background: "linear-gradient(135deg,#51b8d9 0%,#f4d28a 48%,#bc664a 100%)" },
-  { id: "disco-80", label: "Диско 80-х", prompt: "1980s disco nightclub, colorful spotlights, energetic dance floor, glamorous fashion, flash photography, cinematic motion", background: "linear-gradient(135deg,#25002f 0%,#d52574 44%,#f7b33d 100%)" },
-  { id: "monochrome", label: "Монохром", prompt: "timeless black and white portrait, deep contrast, sculpted studio lighting, fine-art photography, subtle film grain", background: "linear-gradient(135deg,#050505 0%,#555 45%,#111 100%)" },
-  { id: "color-block", label: "Колор-блок", prompt: "bold color-block editorial set, geometric architecture, saturated clean colors, fashion campaign lighting, crisp composition", background: "linear-gradient(135deg,#00a6c8 0 42%,#f2c7cf 42% 68%,#ba3a31 68%)" },
-  { id: "podium", label: "Подиум", prompt: "high-fashion runway portrait, dramatic gradient studio lighting, minimalist stage, premium editorial look, full-body composition", background: "linear-gradient(135deg,#192d65 0%,#8f5e8f 50%,#d6a25f 100%)" },
-  { id: "technicolor", label: "Техниколор", prompt: "technicolor portrait, bold geometric shadows, saturated complementary colors, retro-futurist editorial photography", background: "linear-gradient(120deg,#04a0ad 0 25%,#f6c221 25% 50%,#ec4b47 50% 75%,#792a7d 75%)" },
-  { id: "gothic", label: "Готика", prompt: "ornate gothic fantasy interior, dramatic candlelight, dark carved architecture, intricate detail, cinematic character portrait", background: "linear-gradient(135deg,#19120f 0%,#6b401f 45%,#202731 100%)" },
-  { id: "dynamite", label: "Динамит", prompt: "high-impact action portrait, controlled cinematic explosion in background, flying sparks, sharp subject separation, blockbuster lighting", background: "radial-gradient(circle at 65% 38%,#ffb11a 0 7%,#d74715 20%,#1a2027 48%,#060606 100%)" },
-  { id: "salon", label: "Салон", prompt: "minimal luxury salon portrait, clean architectural backdrop, soft diffused studio light, natural skin texture, premium fashion campaign", background: "linear-gradient(135deg,#b8aca2 0%,#6b5c58 52%,#272323 100%)" },
-  { id: "sketch", label: "Эскиз", prompt: "hand-drawn graphite pencil sketch on textured cream paper, refined linework, realistic shading, artist study, elegant unfinished details", background: "linear-gradient(135deg,#eee6d5 0%,#c9b78c 100%)" },
-  { id: "cinema", label: "Киноэффект", prompt: "dark cinematic still, moody practical lighting, deep shadows, anamorphic atmosphere, subtle haze, premium film color grading", background: "linear-gradient(135deg,#06131b 0%,#1b3b4b 35%,#9a5c2c 100%)" },
-  { id: "steampunk", label: "Стимпанк", prompt: "epic steampunk city, brass machinery, Victorian industrial architecture, warm sunset haze, cinematic adventure concept art", background: "linear-gradient(135deg,#3f2614 0%,#a36d2f 46%,#2b3031 100%)" },
-  { id: "sunrise", label: "Восход", prompt: "golden sunrise landscape, soft atmospheric haze, cinematic lens flare, serene wide composition, photorealistic natural light", background: "linear-gradient(180deg,#7fb8e8 0%,#f4c66c 55%,#4a4b25 100%)" },
-  { id: "mythic", label: "Мифический боец", prompt: "mythic warrior duel in an icy mountain storm, epic scale, dramatic blue light, flying snow, premium fantasy key art", background: "linear-gradient(135deg,#1b3148 0%,#6688a3 52%,#d6e6f0 100%)" },
-  { id: "surreal", label: "Сюрреализм", prompt: "surreal fine-art portrait, dreamlike environment, impossible geometry, elegant symbolism, museum-grade editorial finish", background: "linear-gradient(135deg,#d6b66e 0%,#547f7d 45%,#9a5a55 100%)" },
-  { id: "night-room", label: "Мрак", prompt: "dark luxury interior at night, rain-lit window, cinematic blue practical light, deep shadows, quiet dramatic atmosphere", background: "linear-gradient(135deg,#060708 0%,#152c3c 55%,#74421f 100%)" },
-  { id: "cyborg", label: "Киборг", prompt: "photorealistic humanoid cyborg, exposed precision mechanics, red sensor glow, advanced robotics lab, cinematic sci-fi lighting", background: "linear-gradient(135deg,#10161b 0%,#505b62 52%,#8b171c 100%)" },
-  { id: "luxury", label: "Люкс", prompt: "ultra-premium luxury campaign, polished materials, controlled highlights, deep black background, high-end advertising photography", background: "linear-gradient(135deg,#050505 0%,#4b3d28 46%,#d2b26b 100%)" },
+  { id: "retro-80", label: "Назад в 80-е", prompt: "1980s analog photography, vintage street fashion, warm film grain, period-accurate colors, candid flash photography", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1515886657613-9f3515b0c78f"), position: "center 38%" },
+  { id: "glam-80", label: "Глэм 80-х", prompt: "luxury 1980s glamour portrait, glossy magazine lighting, rich jewel tones, soft cinematic skin, premium editorial photography", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1492684223066-81342ee5ff30"), badge: "Фото" },
+  { id: "vacation-80", label: "Отпуск в 80-х", prompt: "sunny 1980s travel photography, Mediterranean vacation mood, vintage film stock, authentic retro wardrobe, natural sunlight", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1507525428034-b723cf961d3e"), position: "center 56%" },
+  { id: "disco-80", label: "Диско 80-х", prompt: "1980s disco nightclub, colorful spotlights, energetic dance floor, glamorous fashion, flash photography, cinematic motion", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1514525253161-7a46d19cd819"), position: "center 40%" },
+  { id: "monochrome", label: "Монохром", prompt: "timeless black and white portrait, deep contrast, sculpted studio lighting, fine-art photography, subtle film grain", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1507003211169-0a1dd7228f2d"), position: "center 28%" },
+  { id: "color-block", label: "Колор-блок", prompt: "bold color-block editorial set, geometric architecture, saturated clean colors, fashion campaign lighting, crisp composition", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1524504388940-b1c1722653e1"), position: "center 30%" },
+  { id: "podium", label: "Подиум", prompt: "high-fashion runway portrait, dramatic gradient studio lighting, minimalist stage, premium editorial look, full-body composition", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1490481651871-ab68de25d43d"), position: "center 30%" },
+  { id: "technicolor", label: "Техниколор", prompt: "technicolor portrait, bold geometric shadows, saturated complementary colors, retro-futurist editorial photography", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1519608487953-e999c86e7455"), position: "center 42%" },
+  { id: "gothic", label: "Готика", prompt: "ornate gothic fantasy interior, dramatic candlelight, dark carved architecture, intricate detail, cinematic character portrait", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1518709268805-4e9042af9f23") },
+  { id: "dynamite", label: "Динамит", prompt: "high-impact action portrait, controlled cinematic explosion in background, flying sparks, sharp subject separation, blockbuster lighting", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1542751371-adc38448a05e") },
+  { id: "salon", label: "Салон", prompt: "minimal luxury salon portrait, clean architectural backdrop, soft diffused studio light, natural skin texture, premium fashion campaign", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1560066984-138dadb4c035") },
+  { id: "sketch", label: "Эскиз", prompt: "hand-drawn graphite pencil sketch on textured cream paper, refined linework, realistic shading, artist study, elegant unfinished details", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1513364776144-60967b0f800f") },
+  { id: "cinema", label: "Киноэффект", prompt: "dark cinematic still, moody practical lighting, deep shadows, anamorphic atmosphere, subtle haze, premium film color grading", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1485846234645-a62644f84728") },
+  { id: "steampunk", label: "Стимпанк", prompt: "epic steampunk city, brass machinery, Victorian industrial architecture, warm sunset haze, cinematic adventure concept art", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1518770660439-4636190af475") },
+  { id: "sunrise", label: "Восход", prompt: "golden sunrise landscape, soft atmospheric haze, cinematic lens flare, serene wide composition, photorealistic natural light", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1500534314209-a25ddb2bd429") },
+  { id: "mythic", label: "Мифический боец", prompt: "mythic warrior duel in an icy mountain storm, epic scale, dramatic blue light, flying snow, premium fantasy key art", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1506905925346-21bda4d32df4") },
+  { id: "surreal", label: "Сюрреализм", prompt: "surreal fine-art portrait, dreamlike environment, impossible geometry, elegant symbolism, museum-grade editorial finish", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1541961017774-22349e4a1262") },
+  { id: "night-room", label: "Мрак", prompt: "dark luxury interior at night, rain-lit window, cinematic blue practical light, deep shadows, quiet dramatic atmosphere", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1497366754035-f200968a6e72") },
+  { id: "cyborg", label: "Киборг", prompt: "photorealistic humanoid cyborg, exposed precision mechanics, red sensor glow, advanced robotics lab, cinematic sci-fi lighting", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1485827404703-89b55fcc595e") },
+  { id: "luxury", label: "Люкс", prompt: "ultra-premium luxury campaign, polished materials, controlled highlights, deep black background, high-end advertising photography", background: "linear-gradient(135deg,#171717,#050505)", image: ultraPreview("photo-1503376780353-7e6692767b70"), position: "center 55%" },
 ]
 
 const RATIOS: ChatImageAspectRatio[] = ["1:1", "16:9", "9:16", "4:5", "4:3"]
@@ -114,8 +120,8 @@ export function ChatImageCreator({
   return (
     <section className="absolute inset-0 z-[90] flex min-h-0 flex-col overflow-hidden bg-[#0b0b0c] text-white" aria-label="Создание изображений">
       <header className="relative z-10 shrink-0 border-b border-white/[0.05] bg-[#0b0b0c]/96 px-4 py-4 backdrop-blur-xl sm:px-6">
-        <div className="mx-auto flex w-full max-w-[930px] items-center gap-3">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-yellow-300/25 bg-yellow-300/[0.08] text-yellow-300">
+        <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/[0.12] bg-black text-white">
             <Wand2 className="h-4.5 w-4.5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -129,7 +135,7 @@ export function ChatImageCreator({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[310px] pt-5 sm:px-6 sm:pb-[260px]">
-        <div className="mx-auto w-full max-w-[930px]">
+        <div className="mx-auto w-full max-w-[1600px]">
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
             {TEMPLATES.map((item) => {
               const active = item.id === selectedId
@@ -141,8 +147,18 @@ export function ChatImageCreator({
                   className={`group relative aspect-[1.16/1] overflow-hidden rounded-[22px] border text-left transition duration-200 ${active ? "border-white/70 ring-2 ring-white/25" : "border-white/[0.07] hover:border-white/20"}`}
                   aria-pressed={active}
                 >
-                  <span className="absolute inset-0 transition duration-300 group-hover:scale-[1.03]" style={{ background: item.background }} />
-                  <span className="absolute inset-0 bg-[linear-gradient(180deg,transparent_35%,rgba(0,0,0,.78)_100%)]" />
+                  <span className="absolute inset-0" style={{ background: item.background }} />
+                  <img
+                    src={item.image}
+                    alt=""
+                    draggable={false}
+                    loading="lazy"
+                    decoding="async"
+                    onError={(event) => { event.currentTarget.style.display = "none" }}
+                    className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.035]"
+                    style={{ objectPosition: item.position ?? "center" }}
+                  />
+                  <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,.08)_0%,rgba(0,0,0,.02)_42%,rgba(0,0,0,.82)_100%)]" />
                   <span className="absolute left-3 top-3 grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-black/25 text-white/85 backdrop-blur-md">
                     {active ? <Check className="h-4 w-4" /> : <Sparkles className="h-3.5 w-3.5" />}
                   </span>
@@ -156,11 +172,11 @@ export function ChatImageCreator({
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-20 px-3 pb-[max(10px,env(safe-area-inset-bottom))] sm:px-5 sm:pb-5">
-        <div className="mx-auto w-full max-w-[760px] rounded-[26px] border border-white/[0.08] bg-[#202022]/95 p-3 shadow-[0_28px_90px_rgba(0,0,0,.72)] backdrop-blur-2xl sm:p-4">
+        <div className="mx-auto w-full max-w-[1540px] rounded-[26px] border border-white/[0.08] bg-[#202022]/95 p-3 shadow-[0_28px_90px_rgba(0,0,0,.72)] backdrop-blur-2xl sm:p-4">
           <div className="mb-2 flex min-h-10 items-center gap-2 overflow-x-auto">
             {selected ? (
               <button type="button" onClick={() => setSelectedId(null)} className="flex h-10 shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] bg-black/25 px-2.5 text-[11px] font-semibold text-zinc-200">
-                <span className="h-7 w-7 rounded-lg" style={{ background: selected.background }} />
+                <span className="h-7 w-7 rounded-lg bg-cover bg-center" style={{ backgroundImage: `url(${selected.image})`, backgroundColor: "#111" }} />
                 <span>{selected.label}</span>
                 <X className="h-3.5 w-3.5 text-zinc-500" />
               </button>
