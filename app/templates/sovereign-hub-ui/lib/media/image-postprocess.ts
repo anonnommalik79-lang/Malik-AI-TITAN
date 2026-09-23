@@ -10,6 +10,7 @@ import { decodeDataUrl } from "./asset-store"
 import type { MalikImageDeliveryResolution, MalikImageQuality } from "./image-quality-presets"
 import { getMalikImageQualityProfile } from "./image-quality-presets"
 import { getMalikImageEffectProfile, type MalikImageEffectId } from "./image-effects"
+import { createMalikImageWatermarkSvg } from "./malik-watermark"
 
 const MAX_SOURCE_BYTES = 24 * 1024 * 1024
 const REMOTE_IMAGE_TIMEOUT_MS = 20_000
@@ -256,6 +257,20 @@ export async function postProcessGeneratedImage(input: {
     const sharpenSigma = Math.min(1.2, Math.max(0, profile.sharpen + effect.sharpenBoost))
     if (sharpenSigma > 0 && finalLong <= SHARPEN_UP_TO) {
       pipeline = pipeline.sharpen(Math.max(0.35, sharpenSigma))
+    }
+
+    // Brand every generated master with the Malik AI signature: translucent
+    // two-triangle mark with "Malik AI" directly underneath, bottom-right.
+    // This is composited into the real output bytes, so downloads retain it.
+    const finalWidth = landscape
+      ? finalLong
+      : Math.max(1, Math.round(finalLong * Math.max(0.01, aspect)))
+    if (finalWidth > 0) {
+      pipeline = pipeline.composite([{
+        input: createMalikImageWatermarkSvg(finalWidth),
+        gravity: "southeast",
+        blend: "over",
+      }])
     }
 
     const heavy = finalLong > JPEG_ABOVE_LONG_EDGE

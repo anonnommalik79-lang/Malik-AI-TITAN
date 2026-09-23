@@ -216,6 +216,15 @@ function PosterAsset({ item, className = "" }: { item: ShowcaseVideoTemplate; cl
   return <img className={className} src={item.poster} alt={item.title} loading="lazy" decoding="async" draggable={false} />
 }
 
+function MalikMediaWatermark({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`malik-media-watermark${compact ? " is-compact" : ""}`} aria-label="Malik AI">
+      <img src="/brand/malik-mark.svg" alt="" draggable={false} />
+      <span>Malik AI</span>
+    </div>
+  )
+}
+
 function HeroVideo({ item }: { item: ShowcaseVideoTemplate }) {
   return (
     <video
@@ -717,13 +726,16 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         ) : null}
         {videoUrl ? (
           <div className="mv2m__result-video">
-            <video
-              key={videoUrl}
-              src={videoUrl}
-              controls
-              playsInline
-              preload="metadata"
-            />
+            <div className="mv2m__result-media">
+              <video
+                key={videoUrl}
+                src={videoUrl}
+                controls
+                playsInline
+                preload="metadata"
+              />
+              <MalikMediaWatermark compact />
+            </div>
             <button type="button" onClick={downloadCurrent}>Скачать видео</button>
           </div>
         ) : null}
@@ -759,7 +771,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           <div className="mv2__stage-brand mv2__stage-brand--right">MALIK AI</div>
           <div className="mv2__media">
             {videoUrl ? (
-              <video src={videoUrl} controls autoPlay playsInline preload="metadata" className="mv2__result" />
+              <>
+                <video src={videoUrl} controls autoPlay playsInline preload="metadata" className="mv2__result" />
+                <MalikMediaWatermark />
+              </>
             ) : sourcePreview && mode === "image" ? (
               <img src={sourcePreview} alt="Загруженное фото" className="mv2__source-image" draggable={false} />
             ) : sourcePreview && mode === "video" ? (
@@ -796,8 +811,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         <div className="mv2__preview-info">
           <div className="mv2__preview-copy">
             <h3>{videoUrl ? "Готовое видео" : selectedItem.title}</h3>
-            <p>{videoUrl ? "Результат MalikVideo без дополнительного перекодирования интерфейсом." : selectedItem.prompt}</p>
-            <div className="mv2__chips"><span>{duration} секунд</span><span>{QUALITY_RESOLUTION[quality]}</span><span>{ratio}</span><span>{selectedModel.name}</span><span>{selectedModel.audio ? "Audio" : "Video"}</span></div>
+            <p>{videoUrl ? "Готовый результат Malik AI с фирменным watermark." : selectedItem.prompt}</p>
+            <div className="mv2__chips"><span>{duration} секунд</span><span>{QUALITY_RESOLUTION[quality]}</span><span>{ratio}</span><span>{videoUrl ? "Malik Video" : selectedModel.name}</span><span>{selectedModel.audio ? "Audio" : "Video"}</span></div>
           </div>
           <div className="mv2__preview-actions">
             <button type="button" onClick={downloadCurrent}><Download /><span>Скачать</span></button>
@@ -950,7 +965,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv2__mobile-only{display:none}
         .mv2m__tabs,.mv2m__styles,.mv2m__source,.mv2m__prompt,.mv2m__controls,.mv2m__generate,.mv2m__brand,.mv2m__status{box-sizing:border-box}
         .mv2__preview-column,.mv2__controls-column{min-width:0}.mv2__stage,.mv2__prompt-card,.mv2__preview-info{border:1px solid #272a31;background:#0c0f14;border-radius:16px}
-        .mv2__stage{position:relative;aspect-ratio:16/10.4;overflow:hidden;background:#06080c}.mv2__media{position:absolute;inset:0;display:grid;place-items:center;background:#050608}.mv2__hero-video,.mv2__result,.mv2__source-image,.mv2__source-video{width:100%;height:100%;display:block;background:#050608}.mv2__source-image,.mv2__source-video{object-fit:contain!important;object-position:center center!important;transform:none!important;max-width:100%!important;max-height:100%!important}.mv2__hero-video,.mv2__result{object-fit:contain}.mv2__stage:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.18),transparent 22%,transparent 70%,rgba(0,0,0,.36))}
+        .mv2__stage{position:relative;aspect-ratio:16/10.4;overflow:hidden;background:#06080c}.mv2__media{position:absolute;inset:0;display:grid;place-items:center;background:#050608}.mv2__hero-video,.mv2__result,.mv2__source-image,.mv2__source-video{width:100%;height:100%;display:block;background:#050608}.malik-media-watermark{position:absolute;z-index:6;right:22px;bottom:18px;width:82px;display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;user-select:none;opacity:.44;filter:drop-shadow(0 1px 2px rgba(0,0,0,.65))}.malik-media-watermark img{display:block;width:58px;height:auto;filter:invert(1)}.malik-media-watermark span{color:#fff;font-size:13px;font-weight:500;line-height:1;letter-spacing:.01em;text-shadow:0 1px 2px rgba(0,0,0,.7)}.malik-media-watermark.is-compact{right:12px;bottom:10px;width:64px;gap:3px}.malik-media-watermark.is-compact img{width:44px}.malik-media-watermark.is-compact span{font-size:10px}.mv2__source-image,.mv2__source-video{object-fit:contain!important;object-position:center center!important;transform:none!important;max-width:100%!important;max-height:100%!important}.mv2__hero-video,.mv2__result{object-fit:contain}.mv2__stage:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.18),transparent 22%,transparent 70%,rgba(0,0,0,.36))}
         .mv2__stage-brand{position:absolute;z-index:2;top:24px;color:#d9e0eb;letter-spacing:.36em;font-size:11px}.mv2__stage-brand--left{left:28px;display:flex;flex-direction:column;gap:10px}.mv2__stage-brand--left small{font-size:9px}.mv2__stage-brand--right{right:26px}.mv2__rendering{position:absolute;z-index:4;inset:0;background:rgba(0,0,0,.68);backdrop-filter:blur(12px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}.mv2__render-box{width:96px;height:96px;border-radius:24px;border:1px solid rgba(255,255,255,.17);display:grid;place-items:center;background:#0c0e12;animation:mv2pulse 1.7s ease-in-out infinite}.mv2__rendering strong{font-size:14px}.mv2__rendering small{color:#939aa7;font-size:11px}@keyframes mv2pulse{50%{transform:scale(1.035);box-shadow:0 24px 70px rgba(0,0,0,.6)}}
         .mv2__thumb-strip{display:grid;grid-template-columns:28px 1fr 28px;gap:7px;align-items:center;margin-top:12px}.mv2__thumbs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}.mv2__arrow{width:28px;height:76px;border:0;background:transparent;color:#b9c2d1;display:grid;place-items:center}.mv2__arrow svg{width:18px;height:18px}.mv2__thumb{position:relative;height:76px;border:1px solid #262a31;border-radius:10px;overflow:hidden;background:#0b0e13;padding:0}.mv2__thumb.is-active{border-color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}.mv2__thumb-poster{width:100%;height:100%;object-fit:cover;display:block}.mv2__thumb:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(0,0,0,.72))}.mv2__thumb span{position:absolute;z-index:2;left:7px;bottom:5px;font-size:9px;color:#dce2ec}
         .mv2__preview-info{margin-top:12px;padding:15px;display:grid;grid-template-columns:1fr 132px;gap:15px}.mv2__preview-copy h3{margin:0 0 8px;font-size:17px}.mv2__preview-copy p{margin:0;color:#9ca4b2;font-size:12px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.mv2__chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.mv2__chips span{height:28px;padding:0 9px;border:1px solid #292d34;border-radius:999px;background:#12161d;color:#adb5c2;display:inline-flex;align-items:center;font-size:10px}.mv2__preview-actions{display:flex;flex-direction:column;gap:7px}.mv2__preview-actions button{height:35px;border:1px solid #2c3038;border-radius:9px;background:#12161d;color:#edf1f7;display:flex;align-items:center;justify-content:center;gap:7px;font-size:11px}.mv2__preview-actions svg{width:14px;height:14px}
@@ -974,7 +989,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           .mv2m__source-preview{width:44px;height:44px;padding:0;border:1px solid #30343b;border-radius:9px;background:#14171c;color:#bfc5cd;display:grid;place-items:center;overflow:hidden}.mv2m__source-preview svg{width:18px;height:18px}.mv2m__source-preview img,.mv2m__source-preview video{width:100%;height:100%;object-fit:contain!important;object-position:center center!important;display:block;background:#050608;transform:none!important}
           .mv2m__source-copy{min-width:0;padding:0;border:0;background:transparent;color:#fff;text-align:left;display:flex;flex-direction:column;gap:3px}.mv2m__source-copy strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mv2m__source-copy small{font-size:8px;color:#818894}
           .mv2m__source-remove{width:30px;height:30px;border:0;border-radius:50%;background:#2d3036;color:#aeb4bd;display:grid;place-items:center}.mv2m__source-remove svg{width:13px;height:13px}
-          .mv2m__result-video{margin-top:10px;border:1px solid #292d35;border-radius:14px;overflow:hidden;background:#090b0e}.mv2m__result-video video{display:block;width:100%;max-height:52vh;background:#000;object-fit:contain}.mv2m__result-video button{width:100%;height:40px;border:0;border-top:1px solid #292d35;background:#14171c;color:#fff;font-size:10px;font-weight:700}
+          .mv2m__result-video{margin-top:10px;border:1px solid #292d35;border-radius:14px;overflow:hidden;background:#090b0e}.mv2m__result-media{position:relative;background:#000}.mv2m__result-video video{display:block;width:100%;max-height:52vh;background:#000;object-fit:contain}.mv2m__result-video button{width:100%;height:40px;border:0;border-top:1px solid #292d35;background:#14171c;color:#fff;font-size:10px;font-weight:700}
           .mv2m__prompt{margin-top:8px;padding:11px 10px 9px;border:1px solid #2b2e35;border-radius:14px;background:linear-gradient(180deg,#101216,#0d0f12);box-shadow:inset 0 1px 0 rgba(255,255,255,.018)}
           .mv2m__prompt textarea{width:100%;height:75px;resize:none;border:0;outline:0;background:transparent;color:#f7f7f8;font-size:11px;line-height:1.45;padding:0}.mv2m__prompt textarea::placeholder{color:#717783}
           .mv2m__prompt-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.mv2m__prompt-tools{display:flex;gap:7px}.mv2m__prompt-tools button{width:29px;height:29px;padding:0;border:1px solid #2c3037;border-radius:8px;background:#14171c;color:#c1c6ce;display:grid;place-items:center}.mv2m__prompt-tools button svg{width:14px;height:14px}

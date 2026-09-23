@@ -5,6 +5,8 @@ const route = fs.readFileSync("lib/media/generate-photo-route.ts", "utf8")
 const history = fs.readFileSync("lib/media/image-history.ts", "utf8")
 const post = fs.readFileSync("lib/media/image-postprocess.ts", "utf8")
 const effects = fs.readFileSync("lib/media/image-effects.ts", "utf8")
+const watermark = fs.readFileSync("lib/media/malik-watermark.ts", "utf8")
+const videoStudio = fs.readFileSync("components/sovereign/video-generation/VideoGenerationStudio.tsx", "utf8")
 const preview = fs.readFileSync("lib/media/image-display-preview.ts", "utf8")
 const capacity = fs.readFileSync("lib/media/image-processing-capacity.ts", "utf8")
 const cloudUpload = fs.readFileSync("lib/storage/cloud-upload.ts", "utf8")
@@ -73,6 +75,14 @@ assert.match(route, /editing\s*\?\s*["']off["']\s*:\s*defaultGeneratedEffect/, "
 assert.match(post, /pipeline\.modulate\(\{[\s\S]*brightness:\s*effect\.brightness[\s\S]*saturation:\s*effect\.saturation/, "Aura must run as real Sharp color grading")
 assert.match(route, /effectApplied:\s*delivered\.effectApplied/, "API must report the applied image effect")
 assert.match(route, /delivered\.effectApplied[\s\S]*createMalikImageDisplayPreview\(\{[\s\S]*buffer:\s*delivered\.buffer/, "effected chat preview must be rendered from effected pixels")
+
+// Malik branding must survive downloads for generated photos and stay visible
+// over generated video players without exposing provider branding in the result.
+assert.match(watermark, /Malik AI/, "watermark must carry the Malik AI wordmark")
+assert.match(watermark, /M0 68 60 8v60H0Z/, "watermark must use the approved two-triangle Malik mark")
+assert.match(post, /pipeline\.composite\(\[\{[\s\S]*createMalikImageWatermarkSvg\(finalWidth\)[\s\S]*gravity:\s*"southeast"/, "generated image bytes must contain the Malik watermark")
+assert.match(videoStudio, /function MalikMediaWatermark/, "video results must render the Malik watermark")
+assert.match(videoStudio, /videoUrl \? "Malik Video" : selectedModel\.name/, "finished video metadata must show Malik branding instead of the provider")
 
 // Browser image history is metadata only. Old data:/blob: entries are rejected,
 // oversized snapshots are compacted, and duplicate cards are a no-op.
