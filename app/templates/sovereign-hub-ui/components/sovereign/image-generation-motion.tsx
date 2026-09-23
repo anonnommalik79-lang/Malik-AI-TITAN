@@ -201,6 +201,7 @@ export function ImageGenerationMotion({
       data-malik-image-motion="1"
       data-malik-image-prompt={prompt || ""}
       data-malik-image-provider={provider || ""}
+      data-malik-image-source={resultUrl || fallbackUrl || ""}
       data-malik-image-ready={imageLoaded ? "1" : "0"}
       data-malik-image-state={actuallyFailed ? "failed" : imageLoaded ? "ready" : "generating"}
     >
