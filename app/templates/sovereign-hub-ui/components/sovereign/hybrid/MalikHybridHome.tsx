@@ -906,14 +906,14 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     setWebOn(true)
     setDeepResearch(false)
     prefetchChatShell()
-    focusPrompt("Найди в сети актуальную информацию по теме: ")
+    focusPrompt(prompt.trim() || "Найди в сети актуальную информацию по теме: ")
   }
 
   const startDeepResearch = () => {
     setWebOn(true)
     setDeepResearch(true)
     prefetchChatShell()
-    focusPrompt("Проведи глубокое исследование по теме: ")
+    focusPrompt(prompt.trim() || "Проведи глубокое исследование по теме: ")
   }
 
   return (
