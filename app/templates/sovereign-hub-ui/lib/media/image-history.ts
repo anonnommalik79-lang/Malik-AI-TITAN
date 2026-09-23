@@ -207,7 +207,13 @@ export async function syncMalikImageHistoryFromAccount() {
   }
 }
 
-export function rememberMalikImage(input: Omit<MalikImageHistoryItem, "id" | "createdAt" | "favorite"> & { id?: string }) {
+export function rememberMalikImage(input: Pick<MalikImageHistoryItem, "src" | "prompt" | "provider" | "quality"> & {
+  id?: string
+  parentId?: string
+  rootId?: string
+  versionIndex?: number
+  operation?: string
+}) {
   const src = String(input.src || "").trim()
   if (!isPersistableMalikImageReference(src)) return null
   const current = readMalikImageHistory()
