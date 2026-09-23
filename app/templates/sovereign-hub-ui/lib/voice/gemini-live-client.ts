@@ -76,6 +76,27 @@ const STRUGGLING_AFTER = 6
  */
 const ANTI_ALIAS_HZ = 7000
 
+/**
+ * Foreground / near-field gate.
+ *
+ * A laptop or phone microphone cannot identify a person by identity, but it can
+ * reliably avoid treating low-level room speech, TV and far-away voices as the
+ * conversation. The browser does echo/noise suppression first; this gate then
+ * keeps only speech that is clearly above the learned room floor. While Malik
+ * is speaking the threshold is intentionally stricter so distant sounds do not
+ * barge in and cut the reply.
+ */
+const NEAR_FIELD_MIN_RMS = 0.014
+const NEAR_FIELD_MIN_PEAK = 0.045
+const NEAR_FIELD_BARGE_RMS = 0.024
+const NEAR_FIELD_BARGE_PEAK = 0.070
+const NEAR_FIELD_NOISE_MULTIPLIER = 2.8
+const NEAR_FIELD_BARGE_NOISE_MULTIPLIER = 4.2
+const NEAR_FIELD_CONTINUE_RMS = 0.006
+const NEAR_FIELD_HOLD_MS = 520
+const NEAR_FIELD_END_SILENCE_MS = 1800
+const NEAR_FIELD_PREROLL_FRAMES = 3
+
 function toBase64(bytes: Uint8Array) {
   let binary = ""
   const step = 0x8000
@@ -157,6 +178,13 @@ export class GeminiLiveSession {
   private lastMicLossAt = 0
   private watchdog = 0
   private inputSampleQueue: number[] = []
+
+  private nearFieldNoiseFloor = 0.0035
+  private nearFieldOpen = false
+  private nearFieldCandidateFrames = 0
+  private nearFieldLastSpeechAt = 0
+  private nearFieldSilenceUntil = 0
+  private nearFieldPreRoll: Float32Array[] = []
 
   private micStream: MediaStream | null = null
   private hostContext: AudioContext | null = null
@@ -511,6 +539,104 @@ export class GeminiLiveSession {
     this.callbacks.onMicrophoneLost?.()
   }
 
+  private resetNearFieldGate() {
+    this.nearFieldNoiseFloor = 0.0035
+    this.nearFieldOpen = false
+    this.nearFieldCandidateFrames = 0
+    this.nearFieldLastSpeechAt = 0
+    this.nearFieldSilenceUntil = 0
+    this.nearFieldPreRoll = []
+  }
+
+  /**
+   * Returns only audio that belongs to the close conversational speaker.
+   * Silence is emitted briefly after a real utterance so Gemini's server VAD
+   * can close the turn naturally; room noise before a turn is not forwarded.
+   */
+  private foregroundFrames(samples: Float32Array) {
+    if (!samples.length) return [] as Float32Array[]
+
+    let squareSum = 0
+    let peak = 0
+    for (let index = 0; index < samples.length; index += 1) {
+      const value = Math.abs(samples[index])
+      squareSum += value * value
+      if (value > peak) peak = value
+    }
+    const rms = Math.sqrt(squareSum / samples.length)
+    const now = Date.now()
+    const assistantSpeaking = this.outputSources.size > 0
+
+    // Learn only the quiet room floor, never a foreground utterance. Capping it
+    // prevents a noisy room from teaching the gate that the user's voice is
+    // "normal background".
+    if (!this.nearFieldOpen && rms < 0.028) {
+      this.nearFieldNoiseFloor = Math.max(
+        0.0015,
+        Math.min(0.012, this.nearFieldNoiseFloor * 0.985 + rms * 0.015),
+      )
+    }
+
+    const openRms = Math.max(
+      assistantSpeaking ? NEAR_FIELD_BARGE_RMS : NEAR_FIELD_MIN_RMS,
+      this.nearFieldNoiseFloor * (assistantSpeaking ? NEAR_FIELD_BARGE_NOISE_MULTIPLIER : NEAR_FIELD_NOISE_MULTIPLIER),
+    )
+    const openPeak = Math.max(
+      assistantSpeaking ? NEAR_FIELD_BARGE_PEAK : NEAR_FIELD_MIN_PEAK,
+      openRms * 2.25,
+    )
+    const candidate = rms >= openRms && peak >= openPeak
+
+    if (!this.nearFieldOpen) {
+      if (candidate) {
+        this.nearFieldCandidateFrames += 1
+        this.nearFieldPreRoll.push(samples.slice())
+        if (this.nearFieldPreRoll.length > NEAR_FIELD_PREROLL_FRAMES) this.nearFieldPreRoll.shift()
+
+        // Barge-in is stricter than a normal new turn: a close human voice is
+        // sustained for a few frames; a click, chair movement or distant word
+        // usually is not.
+        const confirmations = assistantSpeaking ? 3 : 2
+        if (this.nearFieldCandidateFrames >= confirmations) {
+          this.nearFieldOpen = true
+          this.nearFieldLastSpeechAt = now
+          this.nearFieldSilenceUntil = now + NEAR_FIELD_END_SILENCE_MS
+          const frames = this.nearFieldPreRoll
+          this.nearFieldPreRoll = []
+          this.nearFieldCandidateFrames = 0
+          return frames
+        }
+        return []
+      }
+
+      this.nearFieldCandidateFrames = 0
+      this.nearFieldPreRoll = []
+      if (now < this.nearFieldSilenceUntil) return [new Float32Array(samples.length)]
+      return []
+    }
+
+    const continueRms = Math.max(NEAR_FIELD_CONTINUE_RMS, this.nearFieldNoiseFloor * 1.55)
+    const continuing = rms >= continueRms && peak >= Math.max(0.018, continueRms * 2)
+
+    if (continuing) {
+      this.nearFieldLastSpeechAt = now
+      this.nearFieldSilenceUntil = now + NEAR_FIELD_END_SILENCE_MS
+      return [samples]
+    }
+
+    if (now - this.nearFieldLastSpeechAt <= NEAR_FIELD_HOLD_MS) {
+      // Do not leak newly-arrived background audio while holding the gate open.
+      // The low threshold above already keeps quiet word tails.
+      return [new Float32Array(samples.length)]
+    }
+
+    this.nearFieldOpen = false
+    this.nearFieldCandidateFrames = 0
+    this.nearFieldPreRoll = []
+    if (now < this.nearFieldSilenceUntil) return [new Float32Array(samples.length)]
+    return []
+  }
+
   private sendInputPacket(samples: number[]) {
     if (!samples.length || !this.isReady()) return
     const socket = this.socket
@@ -571,6 +697,7 @@ export class GeminiLiveSession {
     if (!stream || !this.isReady()) return false
     this.stopCapture()
     this.inputSampleQueue = []
+    this.resetNearFieldGate()
 
     // A stream whose track has already ended can never produce audio again.
     if (!stream.getAudioTracks().some((track) => track.readyState === "live")) {
@@ -627,7 +754,7 @@ export class GeminiLiveSession {
         this.lastFrameAt = Date.now()
         const mono = event.inputBuffer.getChannelData(0)
         const samples = downsample(mono, rate, INPUT_RATE)
-        this.queueInputSamples(samples)
+        for (const frame of this.foregroundFrames(samples)) this.queueInputSamples(frame)
       }
 
       let tail: AudioNode = source
@@ -706,6 +833,7 @@ export class GeminiLiveSession {
     this.captureContext = null
     this.captureOwned = false
     this.inputSampleQueue = []
+    this.resetNearFieldGate()
   }
 
   /**
