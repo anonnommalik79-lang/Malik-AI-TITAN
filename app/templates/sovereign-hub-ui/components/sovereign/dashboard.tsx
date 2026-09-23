@@ -6281,7 +6281,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: inlineMediaApiPrompt,
+          prompt: inlineMediaKind === "image" && options?.imageStyle
+            ? `${inlineMediaApiPrompt}\n\nVisual style: ${options.imageStyle}`
+            : inlineMediaApiPrompt,
           operation: editingImage ? "edit" : "generate",
           // The picture must match the line the user was just shown.
           understood: understood || undefined,
