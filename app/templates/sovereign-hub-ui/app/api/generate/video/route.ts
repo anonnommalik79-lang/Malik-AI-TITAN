@@ -6,6 +6,7 @@ import {
   getVideoDailyGateStatus,
   videoDailyLimitResponse,
 } from "@/lib/server/media-availability"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
@@ -34,8 +35,12 @@ async function handlePOST(req: NextRequest) {
     return json({ ok: false, status: "failed", message: "Prompt is required." }, 400)
   }
 
-  const globalSlot = await acquireVideoDailySlot(String(body.userEmail || body.email || "generate-video"))
-  if (!globalSlot.available) {
+  const entitlement = await resolveRequestEntitlement(req).catch(() => null)
+  const ownerMode = entitlement?.plan === "owner"
+  const globalSlot = ownerMode
+    ? null
+    : await acquireVideoDailySlot(String(entitlement?.userId || "generate-video"))
+  if (globalSlot && !globalSlot.available) {
     return videoDailyLimitResponse(globalSlot, "/api/generate/video")
   }
 
@@ -56,9 +61,10 @@ async function handlePOST(req: NextRequest) {
         prompt,
         enhancedPrompt: compiled.englishPrompt,
         negativePrompt: compiled.negativePrompt,
-        globalDailyLimit: 1,
-        remainingDailyVideos: 0,
-        resetAt: globalSlot.resetAt,
+        unlimited: ownerMode,
+        globalDailyLimit: ownerMode ? null : 1,
+        remainingDailyVideos: ownerMode ? null : 0,
+        resetAt: globalSlot?.resetAt,
       })
     }
 
@@ -115,18 +121,21 @@ async function handlePOST(req: NextRequest) {
   }
 }
 
-export async function GET() {
-  const gate = await getVideoDailyGateStatus()
+export async function GET(req: NextRequest) {
+  const entitlement = await resolveRequestEntitlement(req).catch(() => null)
+  const ownerMode = entitlement?.plan === "owner"
+  const gate = ownerMode ? null : await getVideoDailyGateStatus()
   return json({
-    ok: gate.available,
+    ok: ownerMode ? true : gate!.available,
     kind: "video",
-    status: gate.available ? "ready" : "limited",
-    tier: gate.available ? "Free" : "Pro",
-    pro: !gate.available,
-    locked: !gate.available,
-    globalDailyLimit: 1,
-    remainingDailyVideos: gate.available ? 1 : 0,
-    resetAt: gate.resetAt,
-    retryAt: gate.resetAt,
+    status: ownerMode ? "ready" : gate!.available ? "ready" : "limited",
+    tier: ownerMode ? "Owner" : gate!.available ? "Free" : "Pro",
+    pro: ownerMode ? false : !gate!.available,
+    locked: ownerMode ? false : !gate!.available,
+    unlimited: ownerMode,
+    globalDailyLimit: ownerMode ? null : 1,
+    remainingDailyVideos: ownerMode ? null : gate!.available ? 1 : 0,
+    resetAt: gate?.resetAt,
+    retryAt: gate?.resetAt,
   })
 }
