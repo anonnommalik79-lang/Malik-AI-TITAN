@@ -10,6 +10,7 @@ export async function GET() {
     const balance = await retryCompute(() => computeService.getComputeBalance(identity.userId))
     return Response.json({
       mode: "live", balance, guest: identity.guest,
+      unlimited: identity.admin === true,
       storage: process.env.MALIK_COMPUTE_DATA_DIR ? "configured-directory" : "local-directory",
       ...(identity.admin ? { admin: computeService.getAdminStats() } : {}),
     }, { headers })
