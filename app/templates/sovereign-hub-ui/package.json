@@ -15,6 +15,7 @@
     "launch": "npm run build && npm run start",
     "lint": "eslint .",
     "test:models": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-malik-models.mjs",
+    "test:brain": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-malik-brain-v1.mjs",
     "test:models:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-malik-models-live.mjs",
     "test:voice": "node scripts/verify-voice-mode.mjs && node scripts/verify-voice-audio.mjs && node scripts/verify-voice-intent.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-streaming.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-accuracy.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-path.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-session.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-answer.mjs",
     "test:auth-audio": "node scripts/verify-auth-audio.mjs",
