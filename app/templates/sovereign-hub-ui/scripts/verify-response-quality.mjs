@@ -2,15 +2,38 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import ts from "typescript"
 
+const moduleCache = new Map()
 function loadTypeScriptModule(file) {
-  const source = fs.readFileSync(file, "utf8")
+  const absolute = path.resolve(file)
+  if (moduleCache.has(absolute)) return moduleCache.get(absolute).exports
+
+  const source = fs.readFileSync(absolute, "utf8")
   const js = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
   }).outputText
   const box = { exports: {} }
-  new Function("require", "module", "exports", js)(
-    (name) => { throw new Error(`unexpected require(${name})`) }, box, box.exports,
-  )
+  moduleCache.set(absolute, box)
+
+  const resolveTs = (base) => {
+    const candidates = [base, base + ".ts", base + ".tsx", path.join(base, "index.ts"), path.join(base, "index.tsx")]
+    return candidates.find((candidate) => fs.existsSync(candidate))
+  }
+
+  const localRequire = (name) => {
+    if (name.startsWith("@/")) {
+      const target = resolveTs(path.resolve(process.cwd(), name.slice(2)))
+      if (!target) throw new Error(`cannot resolve app alias ${name}`)
+      return loadTypeScriptModule(target)
+    }
+    if (name.startsWith(".")) {
+      const target = resolveTs(path.resolve(path.dirname(absolute), name))
+      if (!target) throw new Error(`cannot resolve relative import ${name} from ${absolute}`)
+      return loadTypeScriptModule(target)
+    }
+    throw new Error(`unexpected external require(${name})`)
+  }
+
+  new Function("require", "module", "exports", js)(localRequire, box, box.exports)
   return box.exports
 }
 
