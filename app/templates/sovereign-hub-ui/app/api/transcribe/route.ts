@@ -10,7 +10,8 @@ const MAX_BYTES = 25 * 1024 * 1024
 
 export async function GET(request: Request) {
   const entitlement = await resolveRequestEntitlement(request)
-  const quota = getVoiceUsage(entitlement.userId)
+  const ownerMode = entitlement.plan === "owner"
+  const quota = getVoiceUsage(entitlement.userId, ownerMode)
   return Response.json({ ok: true, configured: isVoiceTranscribeConfigured(), quota })
 }
 
@@ -22,8 +23,9 @@ async function handlePOST(request: Request) {
   }
 
   const entitlement = await resolveRequestEntitlement(request)
-  const before = getVoiceUsage(entitlement.userId)
-  if (before.remainingSeconds <= 0) {
+  const ownerMode = entitlement.plan === "owner"
+  const before = getVoiceUsage(entitlement.userId, ownerMode)
+  if (!ownerMode && before.remainingSeconds <= 0) {
     return Response.json({ ok: false, error: "Лимит Voice на сегодня использован. Доступ восстановится завтра.", quota: before }, { status: 429 })
   }
 
@@ -45,7 +47,7 @@ async function handlePOST(request: Request) {
   const mime = file.type || "application/octet-stream"
   const claimedDuration = Math.max(0, Number(form.get("durationSec") || 0))
 
-  if (claimedDuration > before.remainingSeconds + .5) {
+  if (!ownerMode && claimedDuration > before.remainingSeconds + .5) {
     return Response.json({ ok: false, error: `Осталось ${Math.ceil(before.remainingSeconds)} сек. Voice на сегодня.`, quota: before }, { status: 429 })
   }
 
@@ -56,7 +58,7 @@ async function handlePOST(request: Request) {
   }
 
   const measuredDuration = Math.max(1, Math.min(120, claimedDuration || result.durationSec || 10))
-  const quota = consumeVoiceUsage(entitlement.userId, measuredDuration)
+  const quota = consumeVoiceUsage(entitlement.userId, measuredDuration, ownerMode)
   if (!quota.ok) {
     return Response.json({ ok: false, error: "Лимит Voice на сегодня использован. Доступ восстановится завтра.", quota }, { status: 429 })
   }
@@ -70,6 +72,7 @@ async function handlePOST(request: Request) {
     // browser's own live transcript instead of discarding one of the two.
     confidence: result.confidence,
     durationSec: measuredDuration,
-    remainingSeconds: quota.remainingSeconds,
+    remainingSeconds: quota.unlimited ? null : quota.remainingSeconds,
+    unlimited: quota.unlimited,
   })
 }
