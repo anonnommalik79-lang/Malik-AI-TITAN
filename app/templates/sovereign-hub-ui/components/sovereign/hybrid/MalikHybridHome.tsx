@@ -6,17 +6,23 @@ import {
   BookOpen,
   Brain,
   Film,
+  FileSearch,
   Github,
   Globe,
   GraduationCap,
   Image as ImageIcon,
+  KeyRound,
+  Mail,
   Paperclip,
+  Pencil,
   Plus,
+  Search,
+  Sparkles,
   X,
   type LucideIcon,
 } from "lucide-react"
 import { prefetchChatShell } from "@/lib/studio-prefetch"
-import { PREFILL_EVENT, takePrefillPrompt, useContextEnabled } from "@/lib/malik-context"
+import { PREFILL_EVENT, prefillPrompt, takePrefillPrompt, useContextEnabled } from "@/lib/malik-context"
 import { DEFAULT_MALIK_MODEL_ID, type MalikModelId } from "@/lib/ai/malik-models"
 import type { ChatSendOptions } from "@/lib/ai/response-depth"
 import { useWebSearchEnabled } from "@/lib/ai/web-search-preference"
@@ -27,6 +33,8 @@ import type { ChatAttachment } from "../chat-view"
 import type { AiModeId } from "../power-registry"
 import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 import { normalizeClientImage } from "@/lib/media/client-image-normalize"
+import { ChatDrawingPad } from "../ChatDrawingPad"
+import { ChatLibraryPicker } from "../ChatLibraryPicker"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
@@ -386,6 +394,9 @@ function HomeComposer({
   onSubmit,
   onToggleWeb,
   onToggleMemory,
+  onStartWeb,
+  onStartDeepResearch,
+  onCreateImage,
   onSelectMediaFiles,
   onRemoveAttachment,
   selectedModelId,
@@ -405,6 +416,9 @@ function HomeComposer({
   onSubmit: () => void
   onToggleWeb: () => void
   onToggleMemory: () => void
+  onStartWeb: () => void
+  onStartDeepResearch: () => void
+  onCreateImage?: () => void
   onSelectMediaFiles: (files: File[]) => void
   onRemoveAttachment: (id: string) => void
   selectedModelId: MalikModelId
@@ -416,11 +430,11 @@ function HomeComposer({
 }) {
   const [toolsOpen, setToolsOpen] = useState(false)
   const [dragActive, setDragActive] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  const [drawingOpen, setDrawingOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const toolsRef = useRef<HTMLDivElement>(null)
-  const imageInputRef = useRef<HTMLInputElement>(null)
-  const videoInputRef = useRef<HTMLInputElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const allInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const field = textareaRef.current
@@ -444,17 +458,6 @@ function HomeComposer({
     action?.()
     setToolsOpen(false)
   }
-
-  const tools: Array<{
-    id: string
-    label: string
-    icon: LucideIcon
-    action: () => void
-  }> = [
-    { id: "upload-image", label: "Загрузить изображения", icon: ImageIcon, action: () => imageInputRef.current?.click() },
-    { id: "upload-video", label: "Загрузить видео", icon: Film, action: () => videoInputRef.current?.click() },
-    { id: "upload-files", label: "Загрузить файлы", icon: Paperclip, action: () => fileInputRef.current?.click() },
-  ]
 
   const importRemoteAsFile = async (rawUrl: string) => {
     const url = rawUrl.trim()
@@ -480,6 +483,36 @@ function HomeComposer({
       return false
     }
   }
+
+  const startPlugin = (pluginId: "github" | "gmail") => {
+    const command = `/plugin ${pluginId} `
+    prefillPrompt(command)
+    const current = new URL(window.location.href)
+    const returnTo = `${current.pathname}${current.search}${current.hash}` || "/dashboard"
+    window.location.assign(`/api/plugins/connect?id=${encodeURIComponent(pluginId)}&return_to=${encodeURIComponent(returnTo)}`)
+  }
+
+  const openOpenAIPlatform = () => {
+    window.open("https://platform.openai.com/", "_blank", "noopener,noreferrer")
+  }
+
+  const tools: Array<{
+    id: string
+    label: string
+    description: string
+    icon: LucideIcon
+    action: () => void
+  }> = [
+    { id: "upload", label: "Добавить фото и файлы", description: "Загрузить с компьютера", icon: Paperclip, action: () => allInputRef.current?.click() },
+    { id: "library", label: "Добавить файл из библиотеки", description: "Просматривайте свои файлы и выполняйте поиск по ним", icon: FileSearch, action: () => setLibraryOpen(true) },
+    { id: "create-image", label: "Создать изображение", description: "Создать любое изображение", icon: Sparkles, action: () => onCreateImage?.() },
+    { id: "web", label: "Поиск в сети", description: "Искать актуальную информацию", icon: Search, action: onStartWeb },
+    { id: "deep-research", label: "Глубокое исследование", description: "Получить подробный отчёт с источниками", icon: Globe, action: onStartDeepResearch },
+    { id: "draw", label: "Нарисовать", description: "Нарисуйте и прикрепите изображение", icon: Pencil, action: () => setDrawingOpen(true) },
+    { id: "github", label: "GitHub", description: "PR, issues, CI и репозитории", icon: Github, action: () => startPlugin("github") },
+    { id: "gmail", label: "Gmail", description: "Читайте и используйте почту Gmail в Malik AI", icon: Mail, action: () => startPlugin("gmail") },
+    { id: "openai-platform", label: "OpenAI Platform", description: "API keys, usage и billing в официальной платформе", icon: KeyRound, action: openOpenAIPlatform },
+  ]
 
   const transferUrl = (transfer: DataTransfer | null) => {
     if (!transfer) return ""
@@ -559,7 +592,10 @@ function HomeComposer({
                     onClick={() => openAndClose(tool.action)}
                   >
                     <Icon aria-hidden="true" />
-                    <span>{tool.label}</span>
+                    <span className="thome-tools-copy">
+                      <strong>{tool.label}</strong>
+                      <small>{tool.description}</small>
+                    </span>
                   </button>
                 )
               })}
@@ -567,9 +603,9 @@ function HomeComposer({
           ) : null}
 
           <input
-            ref={imageInputRef}
+            ref={allInputRef}
             type="file"
-            accept="image/*"
+            accept={`image/*,video/*,${HOME_FILE_ACCEPT}`}
             multiple
             className="hidden"
             aria-hidden="true"
@@ -579,31 +615,19 @@ function HomeComposer({
               event.currentTarget.value = ""
             }}
           />
-          <input
-            ref={videoInputRef}
-            type="file"
-            accept="video/*"
-            multiple
-            className="hidden"
-            aria-hidden="true"
-            tabIndex={-1}
-            onChange={(event) => {
-              onSelectMediaFiles(Array.from(event.currentTarget.files || []))
-              event.currentTarget.value = ""
+
+          <ChatLibraryPicker
+            open={libraryOpen}
+            onClose={() => setLibraryOpen(false)}
+            onSelect={async (url) => {
+              const ok = await importRemoteAsFile(url)
+              if (!ok) throw new Error("Не удалось прикрепить файл из библиотеки")
             }}
           />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={HOME_FILE_ACCEPT}
-            multiple
-            className="hidden"
-            aria-hidden="true"
-            tabIndex={-1}
-            onChange={(event) => {
-              onSelectMediaFiles(Array.from(event.currentTarget.files || []))
-              event.currentTarget.value = ""
-            }}
+          <ChatDrawingPad
+            open={drawingOpen}
+            onClose={() => setDrawingOpen(false)}
+            onAttach={async (file) => onSelectMediaFiles([file])}
           />
         </div>
 
@@ -720,6 +744,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [imageCredits, setImageCredits] = useState<{ remaining: number; daily: number } | null>(null)
   const [webOn, setWebOn] = useWebSearchEnabled()
   const [memoryOn, setMemoryOn] = useContextEnabled()
+  const [deepResearch, setDeepResearch] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -850,10 +875,14 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
         ? "Проанализируй прикреплённое изображение и подробно ответь по его содержанию."
         : "Прочитай прикреплённые файлы и подробно ответь по их содержанию."
 
-    props.onSubmit(text || attachmentPrompt, attachments, { research: webOn })
+    props.onSubmit(text || attachmentPrompt, attachments, {
+      research: webOn,
+      responseDepth: deepResearch ? "deep" : undefined,
+    })
     setPrompt("")
     setAttachments([])
     setAttachmentError("")
+    setDeepResearch(false)
   }
 
   const focusPrompt = (value: string) => {
@@ -868,8 +897,23 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
 
   const openSourcePlugin = (pluginPrompt: string) => {
     setWebOn(true)
+    setDeepResearch(false)
     prefetchChatShell()
     focusPrompt(pluginPrompt)
+  }
+
+  const startWebSearch = () => {
+    setWebOn(true)
+    setDeepResearch(false)
+    prefetchChatShell()
+    focusPrompt("Найди в сети актуальную информацию по теме: ")
+  }
+
+  const startDeepResearch = () => {
+    setWebOn(true)
+    setDeepResearch(true)
+    prefetchChatShell()
+    focusPrompt("Проведи глубокое исследование по теме: ")
   }
 
   return (
@@ -905,8 +949,11 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               attachmentError={attachmentError}
               onPromptChange={setPrompt}
               onSubmit={submit}
-              onToggleWeb={() => setWebOn(!webOn)}
+              onToggleWeb={() => { setWebOn(!webOn); if (webOn) setDeepResearch(false) }}
               onToggleMemory={() => setMemoryOn(!memoryOn)}
+              onStartWeb={startWebSearch}
+              onStartDeepResearch={startDeepResearch}
+              onCreateImage={props.onOpenPhoto}
               onSelectMediaFiles={(files) => { void addFiles(files) }}
               onRemoveAttachment={removeAttachment}
               selectedModelId={props.selectedModelId || DEFAULT_MALIK_MODEL_ID}
@@ -976,8 +1023,11 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                   attachmentError={attachmentError}
                   onPromptChange={setPrompt}
                   onSubmit={submit}
-                  onToggleWeb={() => setWebOn(!webOn)}
+                  onToggleWeb={() => { setWebOn(!webOn); if (webOn) setDeepResearch(false) }}
                   onToggleMemory={() => setMemoryOn(!memoryOn)}
+                  onStartWeb={startWebSearch}
+                  onStartDeepResearch={startDeepResearch}
+                  onCreateImage={props.onOpenPhoto}
                   onSelectMediaFiles={(files) => { void addFiles(files) }}
                   onRemoveAttachment={removeAttachment}
                   selectedModelId={props.selectedModelId || DEFAULT_MALIK_MODEL_ID}
@@ -985,6 +1035,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                   onModelChange={props.onModelChange || (() => {})}
                   onOpenBilling={props.onOpenBilling}
                   onOpenVoice={props.onOpenVoice}
+                  imageCredits={imageCredits}
                 />
               </div>
             </div>
