@@ -50,6 +50,9 @@ import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 import { isExplicitImageEditRequest, isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
 import { isDataSvgUrl, isImageLikeUrl, isRealVideoUrl } from "@/lib/media/media-url"
 import { normalizeClientImage } from "@/lib/media/client-image-normalize"
+import { resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
+import { queueMalikImageLineage } from "@/lib/media/image-history"
+import { MALIK_IMAGE_EDITOR_REQUEST_EVENT, type MalikImageEditorRequest } from "@/lib/media/image-editor-events"
 import { ImageGenerationMotion } from "./image-generation-motion"
 import type { MalikActionPlan, MalikActionTarget } from "@/lib/ai/action-os"
 import { ChatImageCreator } from "./ChatImageCreator"
@@ -1814,6 +1817,98 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const attachMenuRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+
+  const attachmentFromEditorSource = async (rawSource: string): Promise<ChatAttachment> => {
+    const source = String(rawSource || "").trim()
+    if (!source) throw new Error("Исходное изображение не найдено.")
+
+    const masterMarker = source.lastIndexOf("#malik-master=")
+    let sourceReference = source
+    if (masterMarker >= 0) {
+      try {
+        sourceReference = decodeURIComponent(source.slice(masterMarker + "#malik-master=".length)) || source.slice(0, masterMarker)
+      } catch {
+        sourceReference = source.slice(0, masterMarker)
+      }
+    }
+
+    const resolved = await resolveGeneratedImageUrl(sourceReference)
+    let blob: Blob | null = null
+
+    try {
+      const response = await fetch(resolved, { cache: "force-cache", credentials: "same-origin" })
+      if (response.ok) blob = await response.blob()
+    } catch {
+      blob = null
+    }
+
+    if ((!blob || !blob.type.startsWith("image/")) && /^https?:\/\//i.test(resolved)) {
+      const imported = await fetch("/api/attachments/import-url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ url: resolved }),
+      })
+      const payload = await imported.json().catch(() => ({}))
+      if (imported.ok && payload?.ok && payload?.file?.base64) {
+        const binary = atob(String(payload.file.base64))
+        const bytes = new Uint8Array(binary.length)
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+        blob = new Blob([bytes], { type: String(payload.file.mime || "image/png") })
+      }
+    }
+
+    if (!blob || !blob.size || !blob.type.startsWith("image/")) {
+      throw new Error("Не удалось подготовить исходное изображение для редактирования.")
+    }
+
+    const extension = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg"
+    const file = new File([blob], `malik-editor-source-${Date.now()}.${extension}`, { type: blob.type })
+    return fileToAttachment(file)
+  }
+
+  useEffect(() => {
+    const onEditorRequest = (event: Event) => {
+      const detail = (event as CustomEvent<MalikImageEditorRequest>).detail
+      if (!detail?.sourceSrc || !detail?.prompt) return
+      if (isLoading) {
+        setLocalError("Дождитесь завершения текущей генерации.")
+        return
+      }
+
+      void (async () => {
+        try {
+          setLocalError(null)
+          const sourceAttachment = await attachmentFromEditorSource(detail.sourceSrc)
+          const selection = detail.selection
+          const selectedRegionInstruction = selection
+            ? [
+                "",
+                "IMPORTANT EDIT REGION:",
+                `Edit only the user-selected region: left ${selection.left.toFixed(1)}%, top ${selection.top.toFixed(1)}%, width ${selection.width.toFixed(1)}%, height ${selection.height.toFixed(1)}%.`,
+                "Preserve everything outside that selected region as closely as possible: identity, composition, colors, geometry, text, lighting and background.",
+              ].join("\n")
+            : ""
+
+          const prompt = `${detail.prompt.trim()}${selectedRegionInstruction}`
+          queueMalikImageLineage(detail.sourceSrc, detail.mode)
+          setLastSubmittedPrompt(prompt)
+          try { window.localStorage.setItem("malik_last_user_prompt", prompt) } catch {}
+
+          onSendMessage(`/image ${prompt}`, [sourceAttachment], {
+            responseDepth,
+            imageSize: detail.imageSize || "1K",
+            imageAspectRatio: detail.imageAspectRatio,
+          })
+        } catch (error) {
+          setLocalError(error instanceof Error ? error.message : "Не удалось открыть изображение в редакторе.")
+        }
+      })()
+    }
+
+    window.addEventListener(MALIK_IMAGE_EDITOR_REQUEST_EVENT, onEditorRequest)
+    return () => window.removeEventListener(MALIK_IMAGE_EDITOR_REQUEST_EVENT, onEditorRequest)
+  }, [isLoading, onSendMessage, responseDepth])
 
   useEffect(() => {
     if (!window.matchMedia("(max-width: 767px)").matches) {
