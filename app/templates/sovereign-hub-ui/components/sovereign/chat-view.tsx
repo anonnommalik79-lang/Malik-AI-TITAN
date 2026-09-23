@@ -2600,7 +2600,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                       setShowAttachMenu(false)
                       item.action()
                     }}
-                    className="group flex min-h-[58px] w-full items-center gap-3 rounded-[15px] px-3 py-2.5 text-left text-white transition-colors hover:bg-white/[0.07] active:bg-white/[0.11]"
+                    className="group flex min-h-[50px] w-full items-center gap-3 rounded-[15px] px-3 py-1.5 text-left text-white transition-colors hover:bg-white/[0.07] active:bg-white/[0.11]"
                   >
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/[0.08] text-white">
                       <item.icon className="h-[18px] w-[18px] stroke-[1.8]" />
