@@ -148,18 +148,35 @@ async function persistState(userId: string, state: MusicQuotaState) {
 }
 
 export function getMusicPlanLimits(plan: AIPlan) {
-  const isPro = plan === "pro" || plan === "ultra" || plan === "owner"
-  const dailyLimit = isPro
-    ? readPositiveInt("MUSIC_PRO_DAILY_LIMIT", 30)
-    : readPositiveInt("MUSIC_FREE_DAILY_LIMIT", 3)
+  const owner = plan === "owner"
+  const isPro = plan === "pro" || plan === "ultra" || owner
+  const dailyLimit = owner
+    ? Number.MAX_SAFE_INTEGER
+    : isPro
+      ? readPositiveInt("MUSIC_PRO_DAILY_LIMIT", 30)
+      : readPositiveInt("MUSIC_FREE_DAILY_LIMIT", 3)
   const maxDurationSeconds = isPro
     ? readPositiveInt("MUSIC_PRO_MAX_DURATION_SECONDS", 180)
     : readPositiveInt("MUSIC_FREE_DURATION_SECONDS", 30)
-  return { dailyLimit, maxDurationSeconds, tier: isPro ? "pro" as const : "free" as const }
+  return {
+    dailyLimit,
+    maxDurationSeconds,
+    unlimited: owner,
+    tier: owner ? "owner" as const : isPro ? "pro" as const : "free" as const,
+  }
 }
 
 export async function getMusicQuota(userId: string, plan: AIPlan) {
   const limits = getMusicPlanLimits(plan)
+  if (limits.unlimited) {
+    return {
+      ...limits,
+      used: 0,
+      remaining: Number.MAX_SAFE_INTEGER,
+      resetAt: nextUtcResetAt(),
+      storage: storageConfig() ? "object-storage" as const : "runtime-memory" as const,
+    }
+  }
   const key = memoryKey(userId)
   let state = memory().get(key)
   if (!state || state.day !== utcDay()) {
@@ -189,6 +206,7 @@ export function releaseMusicInFlight(userId: string) {
 
 export async function recordMusicUsage(userId: string, plan: AIPlan) {
   const quota = await getMusicQuota(userId, plan)
+  if (quota.unlimited) return quota
   const next: MusicQuotaState = {
     day: utcDay(),
     count: quota.used + 1,
