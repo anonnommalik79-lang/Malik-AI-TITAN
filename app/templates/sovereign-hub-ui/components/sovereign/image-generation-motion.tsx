@@ -67,7 +67,6 @@ export function ImageGenerationMotion({
   fallbackUrl,
   status,
   startedAt,
-  understood,
   failed,
   error,
   progress,
@@ -266,11 +265,10 @@ export function ImageGenerationMotion({
         </div>
       )}
 
-      {!actuallyFailed ? (
+      {!actuallyFailed && !imageLoaded ? (
         <div className="malik-photo-final__progress">
           <div className="malik-photo-final__track"><span style={{ width: `${shownProgress}%` }} /></div>
-          <div className="malik-photo-final__status">{imageLoaded ? `Готово за ${seconds.toFixed(1)} с` : shownStage}</div>
-          {understood ? <div className="malik-photo-understood"><strong>Malik понял</strong><span>{understood}</span></div> : null}
+          <div className="malik-photo-final__status">{shownStage}</div>
         </div>
       ) : null}
 
@@ -293,7 +291,6 @@ export function ImageGenerationMotion({
         .malik-photo-final__backdrop{z-index:0!important;object-fit:cover!important;filter:grayscale(1) contrast(1.22) brightness(.72)!important}.malik-photo-final__canvas{z-index:1!important;background:transparent!important;transform:translateZ(0)!important;will-change:transform!important}.malik-photo-final__result{z-index:2!important;object-fit:contain!important;background:#050506!important;animation:malik-photo-final-result 180ms ease-out both!important}
         .malik-photo-final__sweep{position:absolute!important;inset:-12% -24%!important;z-index:3!important;pointer-events:none!important;background:linear-gradient(112deg,transparent 45%,rgba(255,255,255,.008) 48%,rgba(255,255,255,.075) 50%,rgba(255,255,255,.008) 52%,transparent 55%)!important;transform:translateX(-120%)!important;mix-blend-mode:screen!important;animation:malik-photo-final-sweep .58s linear infinite!important}
         .malik-photo-final__progress{display:grid!important;gap:7px!important;width:100%!important}.malik-photo-final__track{width:100%!important;height:3px!important;overflow:hidden!important;border-radius:999px!important;background:rgba(255,255,255,.075)!important}.malik-photo-final__track>span{display:block!important;height:100%!important;border-radius:inherit!important;background:#ededee!important;transition:width 180ms linear!important}.malik-photo-final__status{min-height:15px!important;color:#66676e!important;font-size:10px!important;line-height:1.4!important;text-align:center!important}
-        .malik-photo-understood{margin-top:3px!important;display:grid!important;gap:4px!important;color:#9a9ba1!important;font-size:11px!important;line-height:1.45!important;text-align:left!important}.malik-photo-understood strong{color:#676870!important;font-size:9px!important;letter-spacing:.08em!important;text-transform:uppercase!important}
         .malik-photo-final__failure{width:100%!important;min-height:120px!important;padding:22px!important;display:grid!important;place-items:center!important;align-content:center!important;gap:8px!important;border:1px solid rgba(255,255,255,.07)!important;border-radius:22px!important;background:#060607!important;color:#dddde1!important;text-align:center!important}.malik-photo-final__failure strong{font-size:13px!important;color:#f3f3f4!important}.malik-photo-final__failure span{max-width:330px!important;color:#777880!important;font-size:11px!important;line-height:1.45!important}
         .malik-message-row-assistant:has(.malik-photo-final)>.malik-ai-avatar.is-working{display:none!important}
         .malik-message-row:has(.malik-photo-final[data-malik-image-state="generating"]) .malik-message-actions,.malik-message-row:has(.malik-photo-final[data-malik-image-state="failed"]) .malik-message-actions{display:none!important}
