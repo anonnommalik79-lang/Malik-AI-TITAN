@@ -255,7 +255,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("Популярное")
   const [thumbPage, setThumbPage] = useState(0)
   const [modelNotice, setModelNotice] = useState("")
-  const [selectedModelId, setSelectedModelId] = useState<(typeof MODELS)[number]["id"]>("novai")
+  const [selectedModelId, setSelectedModelId] = useState<(typeof MODELS)[number]["id"]>("pixazo")
   const [mobilePanel, setMobilePanel] = useState<"text" | "image" | "video" | "style">("text")
   const busy = phase === "queued" || phase === "rendering"
   const selectedModel = MODELS.find((model) => model.id === selectedModelId) || MODELS[0]
@@ -290,7 +290,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         ? "Image → Video работает через Magic Hour: исходное фото остаётся первым кадром."
         : "Видео → Видео: Magic Hour AI Video Editor редактирует первые 5 секунд исходного клипа по тексту — можно добавить, убрать, заменить или изменить детали.")
     } else {
-      setModelNotice("")
+      setSelectedModelId(duration === 10 ? "magichour" : "pixazo")
+      setModelNotice(duration === 10
+        ? "10 секунд → Magic Hour LTX, чтобы длительность реально соблюдалась."
+        : "Pixazo · LTX Free выбран автоматически как основная модель.")
     }
   }
 
