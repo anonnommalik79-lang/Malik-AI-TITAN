@@ -148,8 +148,11 @@ export function withCompute<R extends Request, Args extends unknown[]>(
       }
 
       if (textQuotaOperation(operation)) {
-        context.textQuota = { userId: identity.userId, unlimited: identity.admin === true, recorded: false, output: "" }
-        const quota = getDailyTextTokenQuota(identity.userId, identity.admin === true)
+        // The admin=true path returned above, so this branch is guaranteed non-admin.
+        // Keep the literal false here instead of re-checking identity.admin; TypeScript
+        // correctly narrows identity.admin to false after the early return.
+        context.textQuota = { userId: identity.userId, unlimited: false, recorded: false, output: "" }
+        const quota = getDailyTextTokenQuota(identity.userId, false)
         if (!quota.unlimited && (quota.remaining ?? 0) <= 0) {
           throw new MalikComputeError("MALIK_TEXT_TOKEN_LIMIT_REACHED", "Daily generated text token limit reached.")
         }
