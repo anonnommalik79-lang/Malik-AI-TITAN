@@ -1,5 +1,6 @@
 ﻿import type { AIPlan, AITaskType } from "./types"
 import { canBypassLimits, getUserPlan, isDevBypassEnabled, type AdminUserLike } from "./admin-bypass"
+import { isOwnerEmail } from "../auth/admin-policy"
 import { getUsage } from "./usage"
 
 const DAILY_LIMITS: Record<AIPlan, Record<"chat" | "image" | "video" | "project", number>> = {
@@ -45,13 +46,14 @@ export function checkRateLimit(input: { userId?: string; ip?: string; plan?: AIP
   const userId = input.userId || input.ip || (typeof input.user === "string" ? input.user : input.user?.email || input.user?.userEmail) || "guest"
   const trustedUser = typeof input.user === "object" && input.user ? input.user : null
 
-  if ((trustedUser && canBypassLimits(trustedUser)) || isDevBypassEnabled()) {
+  const verifiedOwnerPlan = input.plan === "owner" && isOwnerEmail(userId)
+  if ((trustedUser && canBypassLimits(trustedUser)) || verifiedOwnerPlan || isDevBypassEnabled()) {
     return {
       ok: true,
       bypass: true,
       code: "BYPASS_ACTIVE",
-      message: "Admin/dev bypass active.",
-      remaining: 999999,
+      message: "Owner/dev bypass active.",
+      remaining: Number.MAX_SAFE_INTEGER,
       resetAt: nextDailyReset(),
     }
   }
