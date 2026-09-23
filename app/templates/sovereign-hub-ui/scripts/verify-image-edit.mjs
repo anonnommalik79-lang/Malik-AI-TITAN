@@ -12,10 +12,29 @@ function load(file, stubs = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText
   const module = { exports: {} }
+  const resolveModuleFile = (base) => {
+    const candidates = [
+      base,
+      base + '.ts',
+      base + '.tsx',
+      path.join(base, 'index.ts'),
+      path.join(base, 'index.tsx'),
+    ]
+    return candidates.find((candidate) => fs.existsSync(candidate))
+  }
   const resolve = (name) => {
     if (name === 'server-only') return {}
     if (Object.hasOwn(stubs, name)) return stubs[name]
-    if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name + '.ts'), stubs)
+    if (name.startsWith('@/')) {
+      const resolved = resolveModuleFile(path.resolve(process.cwd(), name.slice(2)))
+      if (!resolved) throw new Error(`Cannot resolve app alias module: ${name}`)
+      return load(resolved, stubs)
+    }
+    if (name.startsWith('.')) {
+      const resolved = resolveModuleFile(path.resolve(path.dirname(file), name))
+      if (!resolved) throw new Error(`Cannot resolve relative module: ${name} from ${file}`)
+      return load(resolved, stubs)
+    }
     return require(name)
   }
   new Function('require', 'module', 'exports', code)(resolve, module, module.exports)
