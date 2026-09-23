@@ -8,11 +8,17 @@ export type MalikImageHistoryItem = {
   quality?: string
   createdAt: string
   favorite: boolean
+  parentId?: string
+  rootId: string
+  versionIndex: number
+  operation?: string
 }
 
 const STORAGE_KEY = "malik_image_history_v2"
+const LINEAGE_STORAGE_KEY = "malik_image_pending_lineage_v1"
 export const MALIK_IMAGE_HISTORY_EVENT = "malik-image-history-changed"
 const MAX_HISTORY = 200
+const LINEAGE_TTL_MS = 10 * 60 * 1000
 const MAX_PROMPT_CHARS = 900
 const MASTER_FRAGMENT = "#malik-master="
 
@@ -45,14 +51,19 @@ function cleanItem(value: unknown): MalikImageHistoryItem | null {
   const item = value as Partial<MalikImageHistoryItem>
   const src = String(item.src || "").trim()
   if (!isPersistableMalikImageReference(src)) return null
+  const id = String(item.id || `img_${hash(src)}`).slice(0, 160)
   return {
-    id: String(item.id || `img_${hash(src)}`).slice(0, 160),
+    id,
     src,
     prompt: String(item.prompt || "").replace(/\s+/g, " ").trim().slice(0, MAX_PROMPT_CHARS),
     provider: String(item.provider || "").trim().slice(0, 120),
     quality: String(item.quality || "").trim().slice(0, 32) || undefined,
     createdAt: String(item.createdAt || new Date().toISOString()).slice(0, 64),
     favorite: Boolean(item.favorite),
+    parentId: String(item.parentId || "").slice(0, 160) || undefined,
+    rootId: String(item.rootId || id).slice(0, 160),
+    versionIndex: Math.max(0, Math.min(999, Math.trunc(Number(item.versionIndex) || 0))),
+    operation: String(item.operation || "").slice(0, 64) || undefined,
   }
 }
 
@@ -64,6 +75,54 @@ function writeRaw(items: MalikImageHistoryItem[]) {
   } catch {
     return false
   }
+}
+
+type PendingLineage = {
+  parentSrc: string
+  operation: string
+  createdAt: number
+}
+
+export function queueMalikImageLineage(parentSrc: string, operation = "edit") {
+  if (typeof window === "undefined") return
+  const clean = String(parentSrc || "").trim()
+  if (!isPersistableMalikImageReference(clean)) return
+  const payload: PendingLineage = {
+    parentSrc: clean,
+    operation: String(operation || "edit").slice(0, 64),
+    createdAt: Date.now(),
+  }
+  try { window.sessionStorage.setItem(LINEAGE_STORAGE_KEY, JSON.stringify(payload)) } catch {}
+}
+
+function takeMalikImageLineage(nextSrc: string) {
+  if (typeof window === "undefined") return null
+  let pending: PendingLineage | null = null
+  try {
+    const raw = window.sessionStorage.getItem(LINEAGE_STORAGE_KEY)
+    if (raw) pending = JSON.parse(raw) as PendingLineage
+    window.sessionStorage.removeItem(LINEAGE_STORAGE_KEY)
+  } catch {
+    return null
+  }
+  if (!pending || Date.now() - Number(pending.createdAt || 0) > LINEAGE_TTL_MS) return null
+  if (!isPersistableMalikImageReference(pending.parentSrc)) return null
+  if (masterReference(pending.parentSrc) === masterReference(nextSrc)) return null
+  const parent = readMalikImageHistory().find((item) => masterReference(item.src) === masterReference(pending!.parentSrc))
+  if (!parent) return null
+  return { parent, operation: pending.operation || "edit" }
+}
+
+export function imageVersionChain(itemOrSrc: MalikImageHistoryItem | string) {
+  const history = readMalikImageHistory()
+  const item = typeof itemOrSrc === "string"
+    ? history.find((candidate) => masterReference(candidate.src) === masterReference(itemOrSrc))
+    : itemOrSrc
+  if (!item) return []
+  const rootId = item.rootId || item.id
+  return history
+    .filter((candidate) => (candidate.rootId || candidate.id) === rootId)
+    .sort((a, b) => (a.versionIndex - b.versionIndex) || Date.parse(a.createdAt) - Date.parse(b.createdAt))
 }
 
 export function readMalikImageHistory(): MalikImageHistoryItem[] {
@@ -165,14 +224,20 @@ export function rememberMalikImage(input: Omit<MalikImageHistoryItem, "id" | "cr
     return existing
   }
 
+  const lineage = existing ? null : takeMalikImageLineage(src)
+  const nextId = existing?.id || id
   const next: MalikImageHistoryItem = {
-    id: existing?.id || id,
+    id: nextId,
     src,
     prompt: prompt || existing?.prompt || "",
     provider: provider || existing?.provider || "",
     quality: quality || existing?.quality,
     createdAt: existing?.createdAt || new Date().toISOString(),
     favorite: existing?.favorite || false,
+    parentId: lineage?.parent.id || existing?.parentId,
+    rootId: lineage?.parent.rootId || lineage?.parent.id || existing?.rootId || nextId,
+    versionIndex: lineage ? Math.min(999, (lineage.parent.versionIndex || 0) + 1) : (existing?.versionIndex || 0),
+    operation: lineage?.operation || existing?.operation,
   }
   write([next, ...current.filter((item) => item.id !== next.id && masterReference(item.src) !== identity)])
   return next
