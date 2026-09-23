@@ -21,16 +21,18 @@ export async function GET(request: Request) {
     provider: musicProviderName(),
     model: musicModel(),
     plan: user.plan,
-    dailyLimit: quota.dailyLimit,
+    unlimited: quota.unlimited,
+    dailyLimit: quota.unlimited ? null : quota.dailyLimit,
     used: quota.used,
-    remaining: quota.remaining,
+    remaining: quota.unlimited ? null : quota.remaining,
     maxDurationSeconds: quota.maxDurationSeconds,
     resetAt: quota.resetAt,
     limits: {
-      daily: quota.dailyLimit,
+      unlimited: quota.unlimited,
+      daily: quota.unlimited ? null : quota.dailyLimit,
       maxDurationSeconds: quota.maxDurationSeconds,
       used: quota.used,
-      remaining: quota.remaining,
+      remaining: quota.unlimited ? null : quota.remaining,
       resetAt: quota.resetAt,
     },
   }, { headers: { "Cache-Control": "no-store" } })
@@ -66,7 +68,8 @@ export async function POST(request: Request) {
   }
 
   const quota = await getMusicQuota(user.userId, user.plan)
-  if (quota.remaining <= 0) {
+  const ownerMode = user.plan === "owner"
+  if (!ownerMode && quota.remaining <= 0) {
     return Response.json({
       ok: false,
       code: "MUSIC_DAILY_LIMIT_REACHED",
@@ -94,7 +97,7 @@ export async function POST(request: Request) {
     }, { status: 503 })
   }
 
-  if (!acquireMusicInFlight(user.userId)) {
+  if (!ownerMode && !acquireMusicInFlight(user.userId)) {
     return Response.json({
       ok: false,
       code: "MUSIC_SUBMIT_IN_PROGRESS",
@@ -164,9 +167,10 @@ export async function POST(request: Request) {
       status: "queued",
       statusUrl: `/api/media/music/status?requestId=${encodeURIComponent(requestId)}`,
       downloadUrl: `/api/media/music/download?requestId=${encodeURIComponent(requestId)}`,
-      dailyLimit: updatedQuota.dailyLimit,
+      unlimited: updatedQuota.unlimited,
+      dailyLimit: updatedQuota.unlimited ? null : updatedQuota.dailyLimit,
       used: updatedQuota.used,
-      remaining: updatedQuota.remaining,
+      remaining: updatedQuota.unlimited ? null : updatedQuota.remaining,
       maxDurationSeconds: updatedQuota.maxDurationSeconds,
       resetAt: updatedQuota.resetAt,
       lyrics: instrumental ? "" : resolvedLyrics,
@@ -175,6 +179,6 @@ export async function POST(request: Request) {
       lyricsEngine: lyricsGenerated ? "Malik AI" : "user",
     }, { headers: { "Cache-Control": "no-store" } })
   } finally {
-    releaseMusicInFlight(user.userId)
+    if (!ownerMode) releaseMusicInFlight(user.userId)
   }
 }
