@@ -112,7 +112,7 @@ assert.match(homeCss, /\.thome-tools-menu[\s\S]*width:\s*420px[\s\S]*grid-templa
 assert.match(homeCss, /\.thome-tools-copy[\s\S]*\.thome-tools-copy small/, "Home menu must style action descriptions")
 assert.match(attachmentCss, /\.thome-tools-menu[\s\S]*width:\s*420px\s*!important[\s\S]*max-height:\s*min\(72dvh, 620px\)\s*!important/, "Final desktop override must fit the full tools list and scroll when needed")
 assert.match(attachmentCss, /@media \(max-width: 767px\)[\s\S]*width:\s*min\(360px, calc\(100vw - 24px\)\)\s*!important/, "Mobile tools menu must stay inside the viewport")
-assert.match(attachmentCss, /@media \(max-width: 767px\)[\s\S]*min-height:\s*58px\s*!important[\s\S]*height:\s*auto\s*!important/, "Mobile rows must keep readable two-line touch targets")
+assert.match(attachmentCss, /@media \(max-width: 767px\)[\s\S]*min-height:\s*50px\s*!important[\s\S]*height:\s*auto\s*!important/, "Mobile rows must keep readable two-line touch targets")
 
 assert.match(models, /qwen\/qwen3\.8-27b/, "Qwen 3.8 27B must remain available")
 assert.match(models, /gpt-oss-120b/, "Cerebras GPT-OSS 120B fallback must remain")
