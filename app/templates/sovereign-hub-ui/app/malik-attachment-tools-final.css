@@ -161,9 +161,9 @@
   }
 
   #malik-root .malik-dashboard-shell .thome-tools-item {
-    min-height: 58px !important;
+    min-height: 50px !important;
     height: auto !important;
-    padding: 8px 12px !important;
+    padding: 5px 12px !important;
     font-size: 13px !important;
   }
 
