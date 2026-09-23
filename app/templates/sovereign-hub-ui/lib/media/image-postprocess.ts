@@ -9,6 +9,7 @@ import * as os from "node:os"
 import { decodeDataUrl } from "./asset-store"
 import type { MalikImageDeliveryResolution, MalikImageQuality } from "./image-quality-presets"
 import { getMalikImageQualityProfile } from "./image-quality-presets"
+import { getMalikImageEffectProfile, type MalikImageEffectId } from "./image-effects"
 
 const MAX_SOURCE_BYTES = 24 * 1024 * 1024
 const REMOTE_IMAGE_TIMEOUT_MS = 20_000
@@ -92,6 +93,9 @@ export type ImagePostProcessResult = {
   upscaleApplied: boolean
   processor: "sharp" | "passthrough"
   deliveryResolution: MalikImageDeliveryResolution
+  effectId: MalikImageEffectId
+  effectLabel: string
+  effectApplied: boolean
   /** What the delivery actually cost, so a slow tier can be seen rather than guessed at. */
   elapsedMs?: number
 }
@@ -172,8 +176,10 @@ async function sourceBytes(imageUrl: string): Promise<{ buffer: Buffer; mime: st
 export async function postProcessGeneratedImage(input: {
   imageUrl: string
   quality: MalikImageQuality
+  effect?: MalikImageEffectId
 }): Promise<ImagePostProcessResult> {
   const startedAt = Date.now()
+  const effect = getMalikImageEffectProfile(input.effect || "off")
   const profile = getMalikImageQualityProfile(input.quality)
   const bytes = await sourceBytes(input.imageUrl)
   if (!bytes) {
@@ -183,6 +189,9 @@ export async function postProcessGeneratedImage(input: {
       upscaleApplied: false,
       processor: "passthrough",
       deliveryResolution: "native",
+      effectId: effect.id,
+      effectLabel: effect.label,
+      effectApplied: false,
     }
   }
 
@@ -229,8 +238,24 @@ export async function postProcessGeneratedImage(input: {
       })
     }
 
-    if (profile.sharpen > 0 && finalLong <= SHARPEN_UP_TO) {
-      pipeline = pipeline.sharpen(Math.max(0.35, Math.min(1.2, profile.sharpen)))
+    // Malik Aura is a delivery-grade color finish, not another generation.
+    // Keep it in this same Sharp pass so faces/text/composition stay untouched
+    // and Render does not pay for another full decode + model request.
+    if (effect.id !== "off") {
+      pipeline = pipeline.modulate({
+        brightness: effect.brightness,
+        saturation: effect.saturation,
+      })
+      // Linear contrast can also change alpha. Generated photos are normally
+      // opaque, but preserve transparent inputs exactly at their edges.
+      if (!metadata.hasAlpha && Number(metadata.channels || 3) !== 4) {
+        pipeline = pipeline.linear(effect.linearGain, effect.linearOffset)
+      }
+    }
+
+    const sharpenSigma = Math.min(1.2, Math.max(0, profile.sharpen + effect.sharpenBoost))
+    if (sharpenSigma > 0 && finalLong <= SHARPEN_UP_TO) {
+      pipeline = pipeline.sharpen(Math.max(0.35, sharpenSigma))
     }
 
     const heavy = finalLong > JPEG_ABOVE_LONG_EDGE
@@ -275,6 +300,9 @@ export async function postProcessGeneratedImage(input: {
       upscaleApplied: upscaling,
       processor: "sharp",
       deliveryResolution: deliveredTier(Math.max(info.width, info.height)),
+      effectId: effect.id,
+      effectLabel: effect.label,
+      effectApplied: effect.id !== "off",
       elapsedMs: Date.now() - startedAt,
     }
   } catch {
@@ -288,6 +316,9 @@ export async function postProcessGeneratedImage(input: {
       upscaleApplied: false,
       processor: "passthrough",
       deliveryResolution: "native",
+      effectId: effect.id,
+      effectLabel: effect.label,
+      effectApplied: false,
       elapsedMs: Date.now() - startedAt,
     }
   }

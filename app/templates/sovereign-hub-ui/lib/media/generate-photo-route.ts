@@ -18,6 +18,7 @@ import {
   resolveMalikImageQuality,
 } from "./image-quality-presets"
 import { postProcessGeneratedImage } from "./image-postprocess"
+import { DEFAULT_MALIK_IMAGE_EFFECT, resolveMalikImageEffect } from "./image-effects"
 import { enhanceImagePrompt } from "./image-prompt-enhancer"
 import { buildVisualPrompt } from "./visual-prompt"
 import { resolveRequestedQuality } from "./image-resolution-intent"
@@ -116,6 +117,8 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   }
   const rawPrompt = normalizeImagePrompt(body?.prompt || body?.message)
   const editing = body.operation === "edit" || imageAttachments(body).length > 0 || isExplicitImageEditRequest(rawPrompt)
+  const defaultGeneratedEffect = resolveMalikImageEffect(process.env.MALIK_IMAGE_DEFAULT_EFFECT, DEFAULT_MALIK_IMAGE_EFFECT)
+  const effect = resolveMalikImageEffect(body?.effect ?? body?.imageEffect, editing ? "off" : defaultGeneratedEffect)
   const aspectRatio = ASPECTS.has(body?.aspectRatio) ? body.aspectRatio : "1:1"
   const requestedMode = String(body?.mode || body?.style || "").toLowerCase()
   const mode: ImageMode = MODES.has(requestedMode as ImageMode) ? requestedMode as ImageMode : "cinematic"
@@ -293,13 +296,18 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       })
     }
 
-    const nativePreviewPromise = createMalikImageDisplayPreview({ sourceUrl: result.imageUrl })
+    // When an effect is active the chat preview must come from the processed
+    // pixels too; otherwise the user would see the raw provider frame but
+    // download a different-looking master.
+    const nativePreviewPromise = effect === "off"
+      ? createMalikImageDisplayPreview({ sourceUrl: result.imageUrl })
+      : Promise.resolve(null)
     const delivered = await withMalikImageProcessingSlot(() =>
-      postProcessGeneratedImage({ imageUrl: result.imageUrl, quality }),
+      postProcessGeneratedImage({ imageUrl: result.imageUrl, quality, effect }),
     )
 
     let displayPreview = await nativePreviewPromise
-    if (!displayPreview && delivered.buffer?.length) {
+    if ((!displayPreview || delivered.effectApplied) && delivered.buffer?.length) {
       displayPreview = await withMalikImageProcessingSlot(() =>
         createMalikImageDisplayPreview({
           buffer: delivered.buffer,
@@ -416,6 +424,9 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       postProcessed: delivered.postProcessed,
       upscaleApplied: delivered.upscaleApplied,
       processor: delivered.processor,
+      effectId: delivered.effectId,
+      effectLabel: delivered.effectLabel,
+      effectApplied: delivered.effectApplied,
       routeReason: result.routeReason,
       storageUrl,
       durable,

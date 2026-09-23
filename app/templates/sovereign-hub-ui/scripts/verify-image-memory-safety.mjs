@@ -4,6 +4,7 @@ import fs from "node:fs"
 const route = fs.readFileSync("lib/media/generate-photo-route.ts", "utf8")
 const history = fs.readFileSync("lib/media/image-history.ts", "utf8")
 const post = fs.readFileSync("lib/media/image-postprocess.ts", "utf8")
+const effects = fs.readFileSync("lib/media/image-effects.ts", "utf8")
 const preview = fs.readFileSync("lib/media/image-display-preview.ts", "utf8")
 const capacity = fs.readFileSync("lib/media/image-processing-capacity.ts", "utf8")
 const cloudUpload = fs.readFileSync("lib/storage/cloud-upload.ts", "utf8")
@@ -64,6 +65,14 @@ assert.match(cloudUpload, /publicBaseUrl/, "cloud upload must return short publi
 // Sharp must keep the high-resolution master as bytes until persistence.
 assert.equal(/data\.toString\(["']base64["']\)/.test(post), false, "post-process must not eagerly base64 encode output")
 assert.match(post, /buffer:\s*data/, "post-process must hand the processed buffer to persistence")
+
+// Signature finish: new generations default to Malik Aura X without spending a
+// second model request. Edits stay neutral unless an effect is explicitly asked for.
+assert.match(effects, /DEFAULT_MALIK_IMAGE_EFFECT:\s*MalikImageEffectId\s*=\s*["']malik-aura-x["']/, "Aura X must be the generated-image default")
+assert.match(route, /editing\s*\?\s*["']off["']\s*:\s*defaultGeneratedEffect/, "image edits must preserve exact pixels by default")
+assert.match(post, /pipeline\.modulate\(\{[\s\S]*brightness:\s*effect\.brightness[\s\S]*saturation:\s*effect\.saturation/, "Aura must run as real Sharp color grading")
+assert.match(route, /effectApplied:\s*delivered\.effectApplied/, "API must report the applied image effect")
+assert.match(route, /delivered\.effectApplied[\s\S]*createMalikImageDisplayPreview\(\{[\s\S]*buffer:\s*delivered\.buffer/, "effected chat preview must be rendered from effected pixels")
 
 // Browser image history is metadata only. Old data:/blob: entries are rejected,
 // oversized snapshots are compacted, and duplicate cards are a no-op.
