@@ -6,6 +6,7 @@ export type ChatSendOptions = {
   responseDepth?: ResponseDepth
   research?: boolean
   imageSize?: "1K" | "2K" | "4K"
+  imageAspectRatio?: "1:1" | "16:9" | "9:16" | "4:5" | "4:3"
 }
 
 const STORAGE_KEY = "malik_response_depth"
