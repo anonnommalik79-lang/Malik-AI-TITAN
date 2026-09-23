@@ -683,6 +683,14 @@ export class GeminiLiveSession {
    */
   endUtterance() {
     if (!this.isReady() || !this.wantsMic) return false
+    // A very short foreground word can still be sitting in the confirmation
+    // pre-roll when the local VAD closes the turn. Preserve it instead of
+    // turning "да"/"нет"/"иә" into an empty utterance.
+    if (this.nearFieldPreRoll.length) {
+      for (const frame of this.nearFieldPreRoll) this.queueInputSamples(frame)
+      this.nearFieldPreRoll = []
+      this.nearFieldCandidateFrames = 0
+    }
     this.flushInputSamples()
     try {
       this.socket?.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }))
