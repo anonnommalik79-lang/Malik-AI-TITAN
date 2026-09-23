@@ -6,6 +6,7 @@ export type AgnesImageSize = "1K" | "2K" | "4K"
 
 type AgnesGenerateInput = {
   prompt: string
+  negativePrompt?: string
   size: AgnesImageSize
   aspectRatio?: ImageAspectRatio
 }
@@ -100,7 +101,10 @@ async function runOneKey(key: string, input: AgnesGenerateInput) {
         prompt: input.prompt,
         size: input.size,
         ratio: agnesRatio(input.aspectRatio),
-        extra_body: { response_format: "url" },
+        extra_body: {
+          response_format: "url",
+          ...(input.negativePrompt ? { negative_prompt: input.negativePrompt } : {}),
+        },
       }),
       cache: "no-store",
       signal: controller.signal,
