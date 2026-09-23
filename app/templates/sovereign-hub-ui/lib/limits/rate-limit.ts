@@ -1,5 +1,6 @@
 import type { AITaskType, AIPlan } from "@/lib/ai/types"
 import { canBypassLimits, isDevBypassEnabled, type AdminUserLike } from "@/lib/ai/admin-bypass"
+import { isOwnerEmail } from "@/lib/auth/admin-policy"
 import { getUsage, incrementUsage as incrementCoreUsage } from "@/lib/ai/usage"
 import { getPersistedUsage, incrementPersistedUsage, type UsageEventType } from "@/lib/server/usage-persistence"
 import { resolveUserTier } from "./user-plan"
@@ -89,8 +90,16 @@ export async function checkUsageLimit(input: {
   const userId = input.userId || "guest"
   const trustedUser = typeof input.user === "object" && input.user ? input.user : null
 
-  if ((trustedUser && canBypassLimits(trustedUser)) || isDevBypassEnabled()) {
-    return { ok: true, bypass: true, code: "BYPASS_ACTIVE", remaining: 999999, resetAt: nextResetAt(), plan: "owner" }
+  const verifiedOwnerPlan = input.plan === "owner" && isOwnerEmail(userId)
+  if ((trustedUser && canBypassLimits(trustedUser)) || verifiedOwnerPlan || isDevBypassEnabled()) {
+    return {
+      ok: true,
+      bypass: true,
+      code: "BYPASS_ACTIVE",
+      remaining: Number.MAX_SAFE_INTEGER,
+      resetAt: nextResetAt(),
+      plan: "owner",
+    }
   }
 
   const tier = resolveUserTier(userId, input.plan || "free")
