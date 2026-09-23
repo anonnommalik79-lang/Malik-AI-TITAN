@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import fs from "node:fs"
+import path from "node:path"
 import ts from "typescript"
 
 const moduleCache = new Map()
