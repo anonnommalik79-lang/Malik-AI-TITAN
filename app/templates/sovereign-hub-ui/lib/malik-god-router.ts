@@ -5,6 +5,7 @@ import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { buildMalikResponseSystemPrompt, cleanModelText } from "@/lib/ai/response-intelligence"
+import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
 
 type ProviderAttempt = {
   provider: string
@@ -749,8 +750,9 @@ function sourceContext(sources: SourceItem[]) {
     .join("\n\n")
 }
 
-function systemPrompt(usedWeb: boolean, prompt: string) {
-  return buildMalikResponseSystemPrompt({ prompt, usedWeb })
+function systemPrompt(usedWeb: boolean, prompt: string, brainInstruction?: string) {
+  const brain = brainInstruction || buildMalikBrainSystemInstruction(analyzeMalikBrainV1({ prompt }))
+  return [buildMalikResponseSystemPrompt({ prompt, usedWeb }), brain].filter(Boolean).join("\n\n")
 }
 
 type ProviderConfig = {
@@ -969,6 +971,22 @@ export async function malikGodAnswer(
   }
 
   if (selection) {
+    const history = Array.isArray(body?.history) ? body.history : Array.isArray(body?.messages) ? body.messages : []
+    const attachments = Array.isArray(body?.attachments) ? body.attachments : []
+    const brain = analyzeMalikBrainV1({
+      prompt,
+      attachments,
+      historyLength: history.length,
+      requestedDepth: body?.responseDepth || body?.metadata?.responseDepth,
+    })
+    const brainInstruction = buildMalikBrainSystemInstruction(brain)
+    console.info("[MALIK_BRAIN_V1]", JSON.stringify({
+      task: brain.task,
+      depth: brain.depth,
+      complexityScore: brain.complexityScore,
+      needsVerification: brain.needsVerification,
+      needsFreshEvidence: brain.needsFreshEvidence,
+    }))
     const usedWeb = shouldUseWeb(prompt, body)
     const sources = usedWeb ? await gatherSources(prompt, emitResearch) : []
     const strictPrompt = usedWeb
@@ -977,11 +995,11 @@ export async function malikGodAnswer(
     const result = await runStrictMalikModel({
       modelId: selection.modelId,
       prompt: strictPrompt,
-      systemPrompt: systemPrompt(usedWeb, prompt),
-      history: Array.isArray(body?.history) ? body.history : Array.isArray(body?.messages) ? body.messages : [],
-      attachments: Array.isArray(body?.attachments) ? body.attachments : [],
-      maxTokens: Number(body?.maxTokens) || undefined,
-      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+      systemPrompt: systemPrompt(usedWeb, prompt, brainInstruction),
+      history,
+      attachments,
+      maxTokens: Number(body?.maxTokens) || brain.outputTokenTarget,
+      temperature: typeof body?.temperature === "number" ? body.temperature : brain.temperature,
       allowCatalog: selection.allowCatalog === true,
     })
     const content = cleanText(result.content)
