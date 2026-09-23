@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
 import { Image as ImageIcon, Search, X } from "lucide-react"
 
 type LibraryItem = {
@@ -60,9 +61,9 @@ export function ChatLibraryPicker({ open, onClose, onSelect }: ChatLibraryPicker
     )
   }, [items, query])
 
-  if (!open) return null
+  if (!open || typeof document === "undefined") return null
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[2147483000] grid place-items-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Библиотека файлов">
       <div className="flex max-h-[82dvh] w-full max-w-[860px] flex-col overflow-hidden rounded-[22px] border border-white/10 bg-[#151516] shadow-[0_30px_120px_rgba(0,0,0,.7)]">
         <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
@@ -108,5 +109,5 @@ export function ChatLibraryPicker({ open, onClose, onSelect }: ChatLibraryPicker
         </div>
       </div>
     </div>
-  )
+    , document.body)
 }
