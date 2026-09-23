@@ -6292,8 +6292,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           // Chat sends no style on purpose. "cinematic Gemini-style transparent
           // chat generation" used to travel into the image prompt and repaint
           // every request in a look nobody asked for.
-          aspectRatio: inlineMediaKind === "video" ? "16:9" : "1:1",
-          format: inlineMediaKind === "video" ? "16:9" : "1:1",
+          aspectRatio: inlineMediaKind === "video" ? "16:9" : (options?.imageAspectRatio || "1:1"),
+          format: inlineMediaKind === "video" ? "16:9" : (options?.imageAspectRatio || "1:1"),
           duration: inlineMediaKind === "video" ? 5 : undefined,
           userEmail: normalizedEmail,
           mediaProAccessCode: "Malik ai",
