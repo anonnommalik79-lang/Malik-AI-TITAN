@@ -24,11 +24,13 @@ type MusicConfig = {
   plan: string
   model: string
   provider?: string
+  unlimited?: boolean
   limits: {
-    daily: number
+    unlimited?: boolean
+    daily: number | null
     maxDurationSeconds: number
     used: number
-    remaining: number
+    remaining: number | null
     resetAt?: string
   }
 }
@@ -280,6 +282,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   }
 
   const genre = GENRES.find((item) => item.id === genreId) || GENRES[0]
+  const musicUnlimited = Boolean(config?.unlimited || config?.limits.unlimited)
   const availableDurations = useMemo(
     () => DURATION_OPTIONS.filter((value) => value <= (config?.limits.maxDurationSeconds || 30)),
     [config?.limits.maxDurationSeconds],
@@ -458,7 +461,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       setNotice("Музыкальный провайдер не настроен на сервере.")
       return
     }
-    if (config.limits.remaining <= 0) {
+    if (!musicUnlimited && Number(config.limits.remaining ?? 0) <= 0) {
       setNotice("Дневной лимит генерации музыки исчерпан.")
       return
     }
@@ -540,14 +543,22 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       setHistory((rows) => [item, ...rows.filter((row) => row.requestId !== item.requestId)].slice(0, 30))
       setTrackTitle(item.title)
       setActiveRequestId(item.requestId)
-      setConfig((current) => current ? {
-        ...current,
-        limits: {
-          ...current.limits,
-          used: Number(data.used ?? current.limits.used),
-          remaining: Number(data.remaining ?? Math.max(0, current.limits.remaining - 1)),
-        },
-      } : current)
+      setConfig((current) => {
+        if (!current) return current
+        const unlimited = Boolean(data.unlimited || current.unlimited || current.limits.unlimited)
+        return {
+          ...current,
+          unlimited,
+          limits: {
+            ...current.limits,
+            unlimited,
+            used: Number(data.used ?? current.limits.used),
+            remaining: unlimited
+              ? null
+              : Number(data.remaining ?? Math.max(0, Number(current.limits.remaining ?? 0) - 1)),
+          },
+        }
+      })
       setNotice(
         data?.lyricsGenerated
           ? "Malik AI написал слова. request_id получен — AceStep создаёт музыку и вокал…"
@@ -715,7 +726,9 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   })
 
   const startGeneration = () => {
-    const allowed = Math.max(1, Math.min(variants, config?.limits.remaining ?? variants))
+    const allowed = musicUnlimited
+      ? variants
+      : Math.max(1, Math.min(variants, Number(config?.limits.remaining ?? variants)))
     pendingVariantsRef.current = allowed - 1
     if (allowed < variants) {
       flash("Осталось генераций: " + allowed)
@@ -728,7 +741,9 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   /* ------------------------------------------------------------------ view */
 
   const quotaLabel = config
-    ? config.limits.remaining + " / " + config.limits.daily + " сегодня"
+    ? musicUnlimited
+      ? "∞ · без лимита"
+      : config.limits.remaining + " / " + config.limits.daily + " сегодня"
     : "Проверяю лимит…"
 
   const statusLabel =
@@ -1028,7 +1043,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
                 </div>
               </div>
 
-              <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || config?.limits.remaining === 0}>
+              <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || (!musicUnlimited && config?.limits.remaining === 0)}>
                 {generating ? <IconSpinner /> : <IconPlay />}
                 <span>{generateLabel}</span>
               </button>
@@ -1145,7 +1160,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           <IconBox /><span>{modelName}</span><small>⌄</small>
         </button>
 
-        <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || config?.limits.remaining === 0}>
+        <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || (!musicUnlimited && config?.limits.remaining === 0)}>
           {generating ? <IconSpinner /> : <IconPlay />}
           <span>{generateLabel}</span>
         </button>
