@@ -102,7 +102,9 @@ assert.match(manifest, /share_target/, "Installed Malik AI must register as an O
 assert.match(shareTarget, /form\.getAll\("files"\)/, "PWA share target must accept shared files")
 
 const userMessageBlock = extractBlock(dashboard, "const userMessage: Message = {", "  const assistantMessage: Message = {")
-assert.match(userMessageBlock, /attachments:\s*attachments\.map\(\(item\) => \(\{[\s\S]*url:\s*item\.url/, "User messages must keep lightweight attachment metadata")
+assert.match(userMessageBlock, /attachments:\s*historyAttachments/, "User messages must use the lightweight persisted attachment list")
+assert.match(dashboard, /function lightweightHistoryAttachment\([\s\S]*toStorableAttachment\(item\)/, "Chat history attachments must be stripped to storable metadata")
+assert.match(dashboard, /persistChatAttachmentsForHistory\(attachments\)/, "User attachments must be normalized before entering chat history")
 assert.equal(userMessageBlock.includes("base64: item.base64"), false, "Chat history must not duplicate base64 uploads")
 assert.match(dashboard, /attachments:?\s*[A-Za-z]*,\s*media_b64:/, "The full attachment payload must still be sent to /api/stream")
 assert.match(stream, /routeMalikAttachments/, "The main stream route must send attachments through the multimodal router")
