@@ -68,6 +68,7 @@ export interface ComputePageData {
   mode: "live"
   balance: ComputeBalance
   guest: boolean
+  unlimited?: boolean
   storage: "configured-directory" | "local-directory"
   admin?: ComputeAdminStats
 }
