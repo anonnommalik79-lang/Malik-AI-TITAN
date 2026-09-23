@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { Eraser, Paperclip, X } from "lucide-react"
 
 type ChatDrawingPadProps = {
@@ -33,7 +34,7 @@ export function ChatDrawingPad({ open, onClose, onAttach }: ChatDrawingPadProps)
     paintWhite(canvas)
   }, [open])
 
-  if (!open) return null
+  if (!open || typeof document === "undefined") return null
 
   const point = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current!
@@ -94,7 +95,7 @@ export function ChatDrawingPad({ open, onClose, onAttach }: ChatDrawingPadProps)
     }
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[2147483000] grid place-items-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Нарисовать">
       <div className="w-full max-w-[760px] overflow-hidden rounded-[22px] border border-white/10 bg-[#151516] shadow-[0_30px_120px_rgba(0,0,0,.7)]">
         <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
@@ -129,5 +130,5 @@ export function ChatDrawingPad({ open, onClose, onAttach }: ChatDrawingPadProps)
         </div>
       </div>
     </div>
-  )
+    , document.body)
 }
