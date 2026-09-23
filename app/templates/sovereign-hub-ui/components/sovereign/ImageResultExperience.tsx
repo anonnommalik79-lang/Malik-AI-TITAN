@@ -71,7 +71,7 @@ function readImageFromCard(card: HTMLElement): ViewerImage | null {
   // Keep the literal src attribute first. currentSrc is useful for srcset, but
   // browsers may normalise URL fragments; the fragment carries the full-quality
   // master reference while the actual painted resource is the small preview.
-  const src = String(image?.getAttribute("src") || image?.src || image?.currentSrc || "").trim()
+  const src = String(card.dataset.malikImageSource || image?.getAttribute("src") || image?.src || image?.currentSrc || "").trim()
   if (!src) return null
 
   const prompt = String(
