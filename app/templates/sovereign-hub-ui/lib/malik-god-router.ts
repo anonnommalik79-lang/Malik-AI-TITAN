@@ -949,6 +949,7 @@ export async function malikGodAnswer(
   body: any,
   selection?: { modelId: MalikModelId; allowCatalog?: boolean },
   emitResearch?: ResearchEmitter,
+  emitToken?: (chunk: string) => void,
 ): Promise<GodAnswer> {
   const prompt = extractPrompt(body)
 
@@ -1001,6 +1002,7 @@ export async function malikGodAnswer(
       maxTokens: Number(body?.maxTokens) || brain.outputTokenTarget,
       temperature: typeof body?.temperature === "number" ? body.temperature : brain.temperature,
       allowCatalog: selection.allowCatalog === true,
+      onToken: emitToken,
     })
     const content = cleanText(result.content)
     return {
