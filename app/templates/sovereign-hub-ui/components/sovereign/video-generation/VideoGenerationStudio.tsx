@@ -23,7 +23,6 @@ import {
   X,
 } from "lucide-react"
 import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
-import { clientFetchWithTimeout } from "@/lib/api-client"
 import { takePrefillPrompt } from "@/lib/malik-context"
 import { ROUTER_VIDEO_CATALOG, type RouterCatalogEntry } from "@/lib/ai/router-catalog"
 import type { VideoProviderId } from "@/lib/media/types"
