@@ -53,6 +53,7 @@ export type MalikSuperpowerId =
   | "adaptive-effort"
   | "large-output"
   | "computer-use"
+  | "code-execution"
 
 export type MalikSuperpower = {
   id: MalikSuperpowerId
@@ -707,6 +708,19 @@ export const MALIK_SUPERPOWERS: readonly MalikSuperpower[] = [
     "Operate a GUI only when a real computer-control runtime is connected and the user has granted access. Keep actions visible and auditable, require confirmation for destructive or externally visible operations, and never pretend to have clicked a device that is not connected.",
     ["computer-control runtime"],
   ),
+  P(
+    "code-execution",
+    "Malik Execution Lab",
+    "Data",
+    "Runs approved Python, JavaScript, TypeScript or R inside an isolated external sandbox rather than the web server.",
+    ["Python execution", "JavaScript/TypeScript execution", "R execution", "Stdout/stderr capture", "Generated artifact receipts"],
+    "workflow",
+    "file_analysis",
+    99,
+    [/запусти.*python|выполни.*код|посчитай.*через.*python|code execution|run.*python|execute.*code|jupyter.*run|run.*javascript|run.*typescript/iu],
+    "Execute code only through the isolated execution runtime. Never use server-side eval or claim execution from model reasoning alone. Capture stdout, stderr, exit status and generated artifact receipts, then use those concrete results in the answer.",
+    ["isolated code execution runtime"],
+  ),
 ] as const
 
 const byId = new Map<MalikSuperpowerId, MalikSuperpower>(MALIK_SUPERPOWERS.map((item) => [item.id, item]))
@@ -789,6 +803,7 @@ export function detectMalikSuperpowers(
   if (ids.has("long-workflows") || ids.has("work-agent") || ids.has("cloud-jobs")) addCompanion("recovery")
   if (ids.has("reasoning") || ids.has("deep-research") || ids.has("long-workflows") || ids.has("science")) addCompanion("adaptive-effort")
   if (ids.has("long-context")) addCompanion("large-output")
+  if (ids.has("data-analysis") || ids.has("science")) addCompanion("code-execution")
 
   return selected.length ? selected : [byId.get("chat-core")!]
 }
@@ -827,6 +842,7 @@ export function superpowerOutputBudget(powers: readonly MalikSuperpower[]) {
     || ids.has("science")
     || ids.has("office")
     || ids.has("large-output")
+    || ids.has("code-execution")
   ) return Number(process.env.MAX_SUPERPOWER_OUTPUT_TOKENS || 12000)
 
   if (
