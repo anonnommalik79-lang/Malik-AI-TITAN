@@ -364,17 +364,46 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     setVideoUrl("")
     setError("")
     setPhase("idle")
-    if (nextMode !== "text") {
-      setSelectedModelId("magichour")
-      setDuration(5)
-      setModelNotice(nextMode === "image"
-        ? "Image → Video работает через Magic Hour: исходное фото остаётся первым кадром."
-        : "Видео → Видео: Magic Hour AI Video Editor редактирует первые 5 секунд исходного клипа по тексту — можно добавить, убрать, заменить или изменить детали.")
+
+    if (nextMode === "text") {
+      setModelNotice(
+        duration === 10 && selectedModelId !== "magichour"
+          ? `Выбрано: ${selectedModel.name}. Модель сохранена; для 10 секунд выберите Magic Hour или переключите длительность на 5 сек.`
+          : `Выбрано: ${selectedModel.name}. ${selectedModel.note}`,
+      )
+      return
+    }
+
+    setDuration(5)
+    setModelNotice(
+      selectedModelId === "magichour"
+        ? nextMode === "image"
+          ? "Image → Video работает через Magic Hour: исходное фото остаётся первым кадром."
+          : "Видео → Видео: Magic Hour AI Video Editor редактирует первые 5 секунд исходного клипа по тексту."
+        : `Выбрано: ${selectedModel.name}. Модель не сброшена, но ${nextMode === "image" ? "Фото → Видео" : "Видео → Видео"} сейчас поддерживает Magic Hour. Можно в любой момент выбрать другую карточку или Magic Hour для генерации.`,
+    )
+  }
+
+  const selectVideoModel = (model: (typeof MOBILE_MODELS)[number]) => {
+    if (busy) return
+    if (modelAvailability[model.id] === false) {
+      setModelNotice(`${model.name} сейчас не подключена к серверу.`)
+      return
+    }
+
+    setSelectedModelId(model.id)
+    setVideoUrl("")
+    setError("")
+    setPhase("idle")
+
+    if (!supportsMode(model.id, mode)) {
+      setModelNotice(
+        `Выбрано: ${model.name}. Переключение моделей не заблокировано; для ${mode === "image" ? "Фото → Видео" : "Видео → Видео"} генерация сейчас доступна через Magic Hour. Эта модель работает в Текст → Видео.`,
+      )
+    } else if (duration === 10 && model.id !== "magichour") {
+      setModelNotice(`Выбрано: ${model.name}. Для этой модели выберите 5 секунд; 10 секунд сейчас доступны через Magic Hour.`)
     } else {
-      setSelectedModelId(duration === 10 ? "magichour" : "pixazo")
-      setModelNotice(duration === 10
-        ? "10 секунд → Magic Hour LTX, чтобы длительность реально соблюдалась."
-        : "Pixazo · LTX Free выбран автоматически как основная модель.")
+      setModelNotice(`Выбрано: ${model.name}. ${model.note}`)
     }
   }
 
@@ -463,14 +492,16 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     if (busy) return
     if (mode === "video") {
       setDuration(5)
-      setSelectedModelId("magichour")
-      setModelNotice(`Видео → Видео обработает первые ${Math.min(5, sourceDurationSeconds || 5).toFixed(1)} сек через Magic Hour AI Video Editor.`)
+      setModelNotice(
+        selectedModelId === "magichour"
+          ? `Видео → Видео обработает первые ${Math.min(5, sourceDurationSeconds || 5).toFixed(1)} сек через Magic Hour AI Video Editor.`
+          : `Выбрано: ${selectedModel.name}. Видео → Видео сейчас рендерится через Magic Hour; выбранная модель не будет самопроизвольно заменена.`,
+      )
       return
     }
     setDuration(value)
     if (value === 10 && selectedModelId !== "magichour") {
-      setSelectedModelId("magichour")
-      setModelNotice("10 секунд → Magic Hour LTX, чтобы длительность реально соблюдалась.")
+      setModelNotice(`Выбрано: ${selectedModel.name}. Выбор сохранён; для 10 секунд выберите Magic Hour или верните 5 секунд.`)
     }
   }
 
@@ -510,6 +541,16 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       setError(mode === "image" ? "Сначала загрузите фото." : "Сначала загрузите видео.")
       return
     }
+    if (!supportsMode(selectedModelId, mode)) {
+      setPhase("failed")
+      setError(`${selectedModel.name} сейчас работает в режиме Текст → Видео. Для ${mode === "image" ? "Фото → Видео" : "Видео → Видео"} выберите Magic Hour.`)
+      return
+    }
+    if (duration === 10 && selectedModelId !== "magichour") {
+      setPhase("failed")
+      setError(`${selectedModel.name}: выберите 5 секунд. 10 секунд сейчас поддерживает Magic Hour.`)
+      return
+    }
     setError("")
     setVideoUrl("")
     setAttempt(0)
@@ -538,7 +579,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             resolution: QUALITY_RESOLUTION[quality],
             ratio: ratio === "4:3" ? "16:9" : ratio,
             generateAudio: selectedModel.audio,
-            provider: mode === "text" ? selectedModel.provider : "magichour",
+            provider: selectedModel.provider,
           }),
         },
         120_000,
@@ -777,15 +818,14 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                   key={model.id}
                   type="button"
                   className={selectedModelId === model.id ? "is-active" : ""}
-                  disabled={!available || !supported || busy}
+                  disabled={!available || busy}
                   onClick={() => {
-                    setSelectedModelId(model.id)
-                    setModelNotice(model.note)
+                    selectVideoModel(model)
                     setMobileModelOpen(false)
                   }}
                 >
                   <span>{model.name}</span>
-                  <small>{!supported ? "Только текст → видео" : !available ? "Не подключена" : model.subtitle}</small>
+                  <small>{!available ? "Не подключена" : !supported ? "Можно выбрать · генерация в Текст → Видео" : duration === 10 && model.id !== "magichour" ? "Можно выбрать · 5 сек" : model.subtitle}</small>
                 </button>
               )
             })}
@@ -992,13 +1032,17 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                 key={model.id}
                 type="button"
                 className={`mv2__model${active ? " is-active" : ""}${model.featured ? " is-featured" : ""}`}
-                onClick={() => {
-                  setSelectedModelId(model.id)
-                  setModelNotice(`Выбрано: ${model.name}. ${model.note}`)
-                }}
+                data-model-id={model.id}
+                onClick={() => selectVideoModel(model)}
                 aria-pressed={active}
-                disabled={!supportsMode(model.id, mode) || (duration === 10 && model.id !== "magichour")}
-                title={!supportsMode(model.id, mode) ? "Этот режим сейчас работает через Magic Hour LTX" : duration === 10 && model.id !== "magichour" ? "10 секунд сейчас гарантируются через Magic Hour LTX" : model.note}
+                disabled={busy || modelAvailability[model.id] === false}
+                title={modelAvailability[model.id] === false
+                  ? "Модель сейчас не подключена к серверу"
+                  : !supportsMode(model.id, mode)
+                    ? "Модель можно выбрать. Для текущего Фото/Видео режима генерация доступна через Magic Hour; эта модель работает в Текст → Видео."
+                    : duration === 10 && model.id !== "magichour"
+                      ? "Модель можно выбрать. Для генерации выберите 5 секунд или Magic Hour для 10 секунд."
+                      : model.note}
               >
                 <span className="mv2__model-icon"><img src={model.icon} alt="" draggable={false} /></span>
                 <span className="mv2__model-copy"><strong>{model.name}</strong><small>{model.subtitle}</small></span>
