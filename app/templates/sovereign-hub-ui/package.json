@@ -54,11 +54,12 @@
     "test:core-hardening": "node scripts/verify-core-hardening.mjs",
     "test:presentations": "node scripts/verify-presentations.mjs",
     "test:answer-sheet": "node --experimental-strip-types --no-warnings scripts/verify-answer-sheet.mjs",
-    "test:release-core": "npm run test:models && npm run test:long-code && npm run test:multimodal && npm run test:media && npm run test:image-edit && npm run test:image-memory && npm run test:image-credits && npm run test:video-speed && npm run test:responses && npm run test:action-os && npm run test:generation-survives && npm run test:library && npm run test:core-hardening && npm run test:fact-audit && npm run test:chat-monochrome && npm run test:instagram && npm run test:presentations && npm run test:answer-sheet",
+    "test:release-core": "npm run test:models && npm run test:long-code && npm run test:multimodal && npm run test:media && npm run test:image-edit && npm run test:image-memory && npm run test:image-credits && npm run test:video-speed && npm run test:responses && npm run test:action-os && npm run test:generation-survives && npm run test:library && npm run test:core-hardening && npm run test:fact-audit && npm run test:chat-monochrome && npm run test:instagram && npm run test:presentations && npm run test:answer-sheet && npm run test:superpowers",
     "test:voice-live-session": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-session.mjs",
     "test:fact-audit": "node scripts/verify-fact-audit.mjs",
     "test:chat-monochrome": "node scripts/verify-chat-monochrome.mjs",
-    "test:instagram": "node scripts/verify-instagram.mjs"
+    "test:instagram": "node scripts/verify-instagram.mjs",
+    "test:superpowers": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-superpowers.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",
