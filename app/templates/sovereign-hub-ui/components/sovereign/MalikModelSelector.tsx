@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
-import { Check, ChevronDown, Crown, Lock, Search } from "lucide-react"
+import { Check, ChevronDown, Crown, Lock, Search, Star } from "lucide-react"
 import { PUBLIC_MALIK_MODELS, getMalikModel, hasMalikProAccess, type MalikModelDefinition, type MalikModelId } from "@/lib/ai/malik-models"
 import type { AIPlan } from "@/lib/ai/types"
 
@@ -22,27 +22,47 @@ const MALIK_MAX_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACA
 
 const BRAND_ICONS: Record<string, BrandIcon> = {
   malik: { label: "MalikLLM MAX", urls: [MALIK_MAX_ICON], fallback: "M" },
-  mistral: { label: "Mistral AI", urls: ["https://mistral.ai/favicon.ico"], fallback: "M" },
-  minimax: { label: "MiniMax", urls: ["https://www.minimax.io/favicon.ico", "https://minimax.io/favicon.ico"], fallback: "M" },
-  qwen: { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
-  sensenova: { label: "SenseNova", urls: ["https://www.sensetime.com/favicon.ico"], fallback: "S" },
-  deepseek: { label: "DeepSeek", urls: ["https://www.deepseek.com/favicon.ico", "https://deepseek.com/favicon.ico"], fallback: "D" },
-  zai: { label: "Z.ai", urls: ["https://chat.z.ai/favicon.ico", "https://z.ai/favicon.ico"], fallback: "Z" },
-  anthropic: { label: "Anthropic", urls: ["https://www.anthropic.com/favicon.ico"], fallback: "A" },
-  google: { label: "Google Gemini", urls: ["https://ai.google.dev/favicon.ico", "https://aistudio.google.com/favicon.ico", "https://www.google.com/favicon.ico"], fallback: "G" },
-  openai: { label: "OpenAI", urls: ["https://openai.com/favicon.ico"], fallback: "O" },
-  xai: { label: "xAI", urls: ["https://x.ai/favicon.ico"], fallback: "X" },
-  kimi: { label: "Kimi", urls: ["https://www.kimi.com/favicon.ico", "https://kimi.moonshot.cn/favicon.ico"], fallback: "K" },
-  meta: { label: "Meta", urls: ["https://www.meta.com/favicon.ico"], fallback: "M" },
-  xiaomi: { label: "Xiaomi", urls: ["https://www.mi.com/favicon.ico"], fallback: "M" },
-  kling: { label: "Kling AI", urls: ["https://klingai.com/favicon.ico"], fallback: "K" },
-  bytedance: { label: "ByteDance", urls: ["https://www.bytedance.com/favicon.ico"], fallback: "B" },
-  nvidia: { label: "NVIDIA", urls: ["https://www.nvidia.com/favicon.ico"], fallback: "N" },
-  nara: { label: "NaraRouter", urls: ["https://router.bynara.id/favicon.ico"], fallback: "N" },
-  baidu: { label: "Baidu", urls: ["https://www.baidu.com/favicon.ico"], fallback: "B" },
-  xkiro: { label: "xKiro", urls: ["https://xkiro.com/favicon.ico"], fallback: "X" },
-  llm7: { label: "LLM7", urls: ["https://llm7.io/favicon.ico"], fallback: "L" },
+  mistral: { label: "Mistral AI", urls: ["/api/ai/model-icon/mistral"], fallback: "M" },
+  minimax: { label: "MiniMax", urls: ["/api/ai/model-icon/minimax"], fallback: "M" },
+  qwen: { label: "Qwen", urls: ["/api/ai/model-icon/qwen"], fallback: "Q" },
+  sensenova: { label: "SenseNova", urls: ["/api/ai/model-icon/sensenova"], fallback: "S" },
+  deepseek: { label: "DeepSeek", urls: ["/api/ai/model-icon/deepseek"], fallback: "D" },
+  zai: { label: "Z.ai", urls: ["/api/ai/model-icon/zai"], fallback: "Z" },
+  anthropic: { label: "Anthropic", urls: ["/api/ai/model-icon/anthropic"], fallback: "A" },
+  google: { label: "Google Gemini", urls: ["/api/ai/model-icon/google"], fallback: "G" },
+  openai: { label: "OpenAI", urls: ["/api/ai/model-icon/openai"], fallback: "O" },
+  xai: { label: "xAI", urls: ["/api/ai/model-icon/xai"], fallback: "X" },
+  kimi: { label: "Kimi", urls: ["/api/ai/model-icon/kimi"], fallback: "K" },
+  meta: { label: "Meta", urls: ["/api/ai/model-icon/meta"], fallback: "M" },
+  xiaomi: { label: "Xiaomi", urls: ["/api/ai/model-icon/xiaomi"], fallback: "M" },
+  kling: { label: "Kling AI", urls: ["/api/ai/model-icon/kling"], fallback: "K" },
+  bytedance: { label: "ByteDance", urls: ["/api/ai/model-icon/bytedance"], fallback: "B" },
+  nvidia: { label: "NVIDIA", urls: ["/api/ai/model-icon/nvidia"], fallback: "N" },
+  nara: { label: "NaraRouter", urls: ["/api/ai/model-icon/nara"], fallback: "N" },
+  baidu: { label: "Baidu", urls: ["/api/ai/model-icon/baidu"], fallback: "B" },
+  xkiro: { label: "xKiro", urls: ["/api/ai/model-icon/xkiro"], fallback: "X" },
+  llm7: { label: "LLM7", urls: ["/api/ai/model-icon/llm7"], fallback: "L" },
   router: { label: "AI model", urls: [], fallback: "AI" },
+}
+
+const FAVORITES_KEY = "malik_model_favorites_v1"
+const RECENT_KEY = "malik_model_recent_v1"
+const SHORTLIST_SIZE = 10
+
+function readModelList(key: string) {
+  if (typeof window === "undefined") return [] as MalikModelId[]
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) || "[]")
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is MalikModelId => typeof value === "string" && PUBLIC_MALIK_MODELS.some((model) => model.id === value)).slice(0, 12)
+      : []
+  } catch {
+    return []
+  }
+}
+
+function saveModelList(key: string, values: MalikModelId[]) {
+  try { window.localStorage.setItem(key, JSON.stringify(values.slice(0, 12))) } catch {}
 }
 
 function brandFor(model: MalikModelDefinition): BrandIcon {
@@ -54,6 +74,14 @@ function brandFor(model: MalikModelDefinition): BrandIcon {
   return BRAND_ICONS[model.brand] || BRAND_ICONS.router
 }
 
+function capabilityLabel(value: MalikModelDefinition["capabilities"][number]) {
+  if (value === "vision") return "Vision"
+  if (value === "code") return "Code"
+  if (value === "tools") return "Tools"
+  if (value === "reasoning") return "Reasoning"
+  return "Text"
+}
+
 function ModelBrandIcon({ model, compact = false }: { model: MalikModelDefinition; compact?: boolean }) {
   const [sourceIndex, setSourceIndex] = useState(0)
   const brand = brandFor(model)
@@ -62,7 +90,7 @@ function ModelBrandIcon({ model, compact = false }: { model: MalikModelDefinitio
   return (
     <span className={cn("malik-model-selector__brand", compact && "is-compact")} aria-label={brand.label} title={brand.label}>
       {source ? (
-        <img src={source} alt={brand.label} loading="eager" referrerPolicy="no-referrer" onError={() => setSourceIndex((index) => index + 1)} />
+        <img src={source} alt={brand.label} loading="eager" onError={() => setSourceIndex((index) => index + 1)} />
       ) : (
         <span className="malik-model-selector__brand-fallback" aria-hidden="true">{brand.fallback}</span>
       )}
@@ -74,40 +102,67 @@ function ModelRow({
   model,
   selected,
   locked,
+  favorite,
   onChoose,
   onUpgrade,
+  onToggleFavorite,
 }: {
   model: MalikModelDefinition
   selected: boolean
   locked: boolean
+  favorite: boolean
   onChoose: () => void
   onUpgrade: () => void
+  onToggleFavorite: () => void
 }) {
   const pro = model.tier === "pro"
   return (
-    <button
-      type="button"
-      role="menuitemradio"
-      aria-checked={selected}
-      className={cn("malik-model-selector__row", selected && "is-selected", pro && "is-pro", locked && "is-locked")}
-      onClick={locked ? onUpgrade : onChoose}
-      title={locked ? "MalikAI Plus · нажмите, чтобы открыть подписку" : pro ? "MalikAI Plus model" : undefined}
-    >
-      <ModelBrandIcon model={model} />
-      <span className="malik-model-selector__copy">
-        <span className="malik-model-selector__name">{model.label}</span>
-        <span className="malik-model-selector__description">{model.description}</span>
-      </span>
-      <span className="malik-model-selector__state">
-        {selected ? <Check aria-label="Выбрано" /> : pro ? (
-          <span className="malik-model-selector__pro-badge" aria-label={locked ? "Требуется MalikAI Plus" : "MalikAI Plus"}>
-            <Crown aria-hidden="true" />
-            <span>PRO</span>
-            {locked ? <Lock className="malik-model-selector__lock" aria-hidden="true" /> : null}
+    <div style={{ position: "relative" }}>
+      <button
+        type="button"
+        role="menuitemradio"
+        aria-checked={selected}
+        className={cn("malik-model-selector__row", selected && "is-selected", pro && "is-pro", locked && "is-locked")}
+        onClick={locked ? onUpgrade : onChoose}
+        title={locked ? "MalikAI Plus · нажмите, чтобы открыть подписку" : pro ? "MalikAI Plus model" : undefined}
+        style={{ width: "100%", paddingRight: 62 }}
+      >
+        <ModelBrandIcon model={model} />
+        <span className="malik-model-selector__copy">
+          <span className="malik-model-selector__name">{model.label}</span>
+          <span className="malik-model-selector__description">{model.description}</span>
+          <span style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 3 }}>
+            {model.capabilities.slice(0, 4).map((capability) => (
+              <span key={capability} style={{ padding: "1px 5px", borderRadius: 999, border: "1px solid rgba(255,255,255,.12)", color: "#9fa2aa", fontSize: 8, lineHeight: "14px" }}>
+                {capabilityLabel(capability)}
+              </span>
+            ))}
           </span>
-        ) : null}
-      </span>
-    </button>
+        </span>
+        <span className="malik-model-selector__state">
+          {selected ? <Check aria-label="Выбрано" /> : pro ? (
+            <span className="malik-model-selector__pro-badge" aria-label={locked ? "Требуется MalikAI Plus" : "MalikAI Plus"}>
+              <Crown aria-hidden="true" />
+              <span>PRO</span>
+              {locked ? <Lock className="malik-model-selector__lock" aria-hidden="true" /> : null}
+            </span>
+          ) : null}
+        </span>
+      </button>
+      <button
+        type="button"
+        aria-label={favorite ? "Убрать из избранного" : "Добавить в избранное"}
+        title={favorite ? "Убрать из избранного" : "В избранное"}
+        onClick={(event) => { event.stopPropagation(); onToggleFavorite() }}
+        style={{
+          position: "absolute", right: 34, top: "50%", transform: "translateY(-50%)",
+          width: 26, height: 26, border: 0, borderRadius: 7, display: "grid", placeItems: "center",
+          background: favorite ? "rgba(255,255,255,.12)" : "transparent", color: favorite ? "#fff" : "#74777f",
+        }}
+      >
+        <Star size={13} fill={favorite ? "currentColor" : "none"} aria-hidden="true" />
+      </button>
+    </div>
   )
 }
 
@@ -129,24 +184,70 @@ export function MalikModelSelector({
   const isMobile = useSyncExternalStore(subscribeMobileSelector, getMobileSnapshot, getServerMobileSnapshot)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
+  const [showAll, setShowAll] = useState(false)
+  const [favorites, setFavorites] = useState<MalikModelId[]>(() => readModelList(FAVORITES_KEY))
+  const [recent, setRecent] = useState<MalikModelId[]>(() => readModelList(RECENT_KEY))
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({})
   const [resolvedPlacement, setResolvedPlacement] = useState<"top" | "bottom">("bottom")
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const selectedModel = getMalikModel(selectedModelId)
+
   const visibleModels = useMemo(() => {
     const value = query.trim().toLowerCase()
-    if (!value) return PUBLIC_MALIK_MODELS
-    return PUBLIC_MALIK_MODELS.filter((model) =>
-      `${model.label} ${model.provider} ${model.providerModel}`.toLowerCase().includes(value),
-    )
-  }, [query])
+    if (value) {
+      return PUBLIC_MALIK_MODELS.filter((model) =>
+        `${model.label} ${model.provider} ${model.providerModel} ${model.capabilities.join(" ")}`.toLowerCase().includes(value),
+      )
+    }
+    if (showAll) return PUBLIC_MALIK_MODELS
+
+    const ids = [selectedModelId, "malik-max", ...favorites, ...recent, ...PUBLIC_MALIK_MODELS.map((model) => model.id)]
+    const seen = new Set<string>()
+    const models: MalikModelDefinition[] = []
+    for (const id of ids) {
+      if (seen.has(id)) continue
+      const model = PUBLIC_MALIK_MODELS.find((candidate) => candidate.id === id)
+      if (!model) continue
+      seen.add(id)
+      models.push(model)
+      if (models.length >= SHORTLIST_SIZE) break
+    }
+    return models
+  }, [favorites, query, recent, selectedModelId, showAll])
+
   const hasProAccess = hasMalikProAccess(plan)
   const freeModels = visibleModels.filter((model) => model.tier === "free")
   const proModels = visibleModels
     .filter((model) => model.tier === "pro")
     .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: "base" }))
+
+  const rememberRecent = (modelId: MalikModelId) => {
+    setRecent((current) => {
+      const next = [modelId, ...current.filter((id) => id !== modelId)].slice(0, 6)
+      saveModelList(RECENT_KEY, next)
+      return next
+    })
+  }
+
+  const chooseModel = (modelId: MalikModelId) => {
+    rememberRecent(modelId)
+    onSelect(modelId)
+    setOpen(false)
+    setQuery("")
+  }
+
+  const toggleFavorite = (modelId: MalikModelId) => {
+    setFavorites((current) => {
+      const next = current.includes(modelId)
+        ? current.filter((id) => id !== modelId)
+        : [modelId, ...current].slice(0, 12)
+      saveModelList(FAVORITES_KEY, next)
+      return next
+    })
+  }
+
   const requestUpgrade = () => {
     setOpen(false)
     setQuery("")
@@ -189,9 +290,9 @@ export function MalikModelSelector({
         return
       }
       const edge = 12, gap = 8
-      const width = Math.min(382, viewportWidth - edge * 2)
+      const width = Math.min(410, viewportWidth - edge * 2)
       const left = Math.min(Math.max(edge, rect.left), viewportWidth - width - edge)
-      const measuredHeight = Math.min(popoverRef.current?.scrollHeight || 560, 560)
+      const measuredHeight = Math.min(popoverRef.current?.scrollHeight || 600, 600)
       const spaceBelow = Math.max(0, viewportHeight - rect.bottom - gap - edge)
       const spaceAbove = Math.max(0, rect.top - gap - edge)
       const openAbove = placement === "top" || (placement === "auto" && spaceAbove > spaceBelow)
@@ -224,14 +325,29 @@ export function MalikModelSelector({
           <Search size={14} aria-hidden="true" />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск модели..." autoFocus style={{ width: "100%", border: 0, outline: 0, background: "transparent", color: "inherit", font: "inherit" }} />
         </label>
+        {!query.trim() ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 7 }}>
+            <span style={{ color: "#777b84", fontSize: 9 }}>
+              {showAll ? `Все модели · ${PUBLIC_MALIK_MODELS.length}` : `Быстрый выбор · ${visibleModels.length} · избранное + недавние`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowAll((value) => !value)}
+              style={{ height: 25, padding: "0 8px", border: "1px solid rgba(255,255,255,.12)", borderRadius: 7, background: "#17171a", color: "#d7d7db", fontSize: 9 }}
+            >
+              {showAll ? "Свернуть" : `Все модели (${PUBLIC_MALIK_MODELS.length})`}
+            </button>
+          </div>
+        ) : null}
       </div>
       {freeModels.length ? (
         <>
-          <div className="malik-model-selector__group-label">Бесплатные модели</div>
+          <div className="malik-model-selector__group-label">{showAll || query.trim() ? "Бесплатные модели" : "Рекомендуемые"}</div>
           <div className="malik-model-selector__group">
             {freeModels.map((model) => (
               <ModelRow key={model.id} model={model} selected={model.id === selectedModelId} locked={false}
-                onChoose={() => { onSelect(model.id); setOpen(false); setQuery("") }} onUpgrade={requestUpgrade} />
+                favorite={favorites.includes(model.id)} onToggleFavorite={() => toggleFavorite(model.id)}
+                onChoose={() => chooseModel(model.id)} onUpgrade={requestUpgrade} />
             ))}
           </div>
         </>
@@ -242,11 +358,13 @@ export function MalikModelSelector({
           <div className="malik-model-selector__group">
             {proModels.map((model) => (
               <ModelRow key={model.id} model={model} selected={model.id === selectedModelId} locked={!hasProAccess}
-                onChoose={() => { onSelect(model.id); setOpen(false); setQuery("") }} onUpgrade={requestUpgrade} />
+                favorite={favorites.includes(model.id)} onToggleFavorite={() => toggleFavorite(model.id)}
+                onChoose={() => chooseModel(model.id)} onUpgrade={requestUpgrade} />
             ))}
           </div>
         </section>
       ) : null}
+      {!visibleModels.length ? <div style={{ padding: 18, color: "#7d8088", fontSize: 11 }}>Модель не найдена.</div> : null}
     </div>
   ) : null
 
