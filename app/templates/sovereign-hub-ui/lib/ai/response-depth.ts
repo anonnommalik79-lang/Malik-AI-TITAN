@@ -8,6 +8,8 @@ export type ChatSendOptions = {
   imageSize?: "1K" | "2K" | "4K"
   imageAspectRatio?: "1:1" | "16:9" | "9:16" | "4:5" | "4:3"
   imageStyle?: string
+  /** Replace the conversation from this user message forward before sending. */
+  replaceFromMessageId?: string
 }
 
 const STORAGE_KEY = "malik_response_depth"
