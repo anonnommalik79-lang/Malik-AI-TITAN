@@ -17,7 +17,6 @@ import {
   Github,
   Globe,
   Image as ImageIcon,
-  KeyRound,
   Layers,
   Link as LinkIcon,
   Lightbulb,
@@ -62,7 +61,8 @@ import type { MalikActionPlan, MalikActionTarget } from "@/lib/ai/action-os"
 import { ChatImageCreator } from "./ChatImageCreator"
 import { ChatDrawingPad } from "./ChatDrawingPad"
 import { ChatLibraryPicker } from "./ChatLibraryPicker"
-import { PREFILL_EVENT, prefillPrompt, takePrefillPrompt } from "@/lib/malik-context"
+import { ChatToolWorkspace, type ChatToolWorkspaceMode } from "./ChatToolWorkspace"
+import { PREFILL_EVENT, takePrefillPrompt } from "@/lib/malik-context"
 import { AnswerSheet } from "./answer-sheet/AnswerSheet"
 import { isSheetRequest, isSheetWorthy } from "@/lib/ai/answer-sheet"
 
@@ -1781,6 +1781,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const [imageCreatorOpen, setImageCreatorOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [drawingOpen, setDrawingOpen] = useState(false)
+  const [toolWorkspace, setToolWorkspace] = useState<ChatToolWorkspaceMode | null>(null)
   const [researchMode, setResearchMode] = useState<"off" | "web" | "deep">("off")
   useEffect(() => {
     let cancelled = false
@@ -2365,9 +2366,26 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     }, 0)
   }
 
-  const startAccountPlugin = (pluginId: "github" | "gmail") => {
-    const command = `/plugin ${pluginId} `
-    prefillPrompt(command)
+  const runResearchWorkspace = (mode: "web" | "deep", query: string) => {
+    const clean = query.trim()
+    if (!clean) return
+    if (isLoading) {
+      setLocalError("Malik AI уже обрабатывает запрос.")
+      return
+    }
+    setLocalError(null)
+    setLastSubmittedPrompt(clean)
+    try { window.localStorage.setItem("malik_last_user_prompt", clean) } catch {}
+    onSendMessage(clean, [], {
+      research: true,
+      responseDepth: mode === "deep" ? "deep" : responseDepth,
+    })
+    setToolWorkspace(null)
+    setShowAttachMenu(false)
+  }
+
+  const connectAccountTool = (pluginId: "github" | "gmail") => {
+    setToolWorkspace(null)
     const current = new URL(window.location.href)
     const returnTo = `${current.pathname}${current.search}${current.hash}` || "/dashboard"
     window.location.assign(`/api/plugins/connect?id=${encodeURIComponent(pluginId)}&return_to=${encodeURIComponent(returnTo)}`)
@@ -2401,19 +2419,13 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       label: "Поиск в сети",
       description: "Искать актуальную информацию",
       icon: Search,
-      action: () => {
-        setResearchMode("web")
-        focusComposerWith("Найди в сети актуальную информацию по теме: ")
-      },
+      action: () => setToolWorkspace("web"),
     },
     {
       label: "Глубокое исследование",
       description: "Получить подробный отчёт с источниками",
       icon: Globe,
-      action: () => {
-        setResearchMode("deep")
-        focusComposerWith("Проведи глубокое исследование по теме: ")
-      },
+      action: () => setToolWorkspace("deep"),
     },
     {
       label: "Нарисовать",
@@ -2425,19 +2437,13 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       label: "GitHub",
       description: "PR, issues, CI и репозитории",
       icon: Github,
-      action: () => startAccountPlugin("github"),
+      action: () => setToolWorkspace("github"),
     },
     {
       label: "Gmail",
       description: "Читайте и используйте почту Gmail в Malik AI",
       icon: Mail,
-      action: () => startAccountPlugin("gmail"),
-    },
-    {
-      label: "OpenAI Platform",
-      description: "API keys, usage и billing в официальной платформе",
-      icon: KeyRound,
-      action: () => window.open("https://platform.openai.com/", "_blank", "noopener,noreferrer"),
+      action: () => setToolWorkspace("gmail"),
     },
   ]
 
@@ -2471,6 +2477,13 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
           onGenerate={handleImageCreatorGenerate}
         />
       ) : null}
+
+      <ChatToolWorkspace
+        mode={toolWorkspace}
+        onClose={() => setToolWorkspace(null)}
+        onRunResearch={runResearchWorkspace}
+        onConnect={connectAccountTool}
+      />
 
       <div data-message-list className="malik-chat-scroll relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-44 pt-6 md:px-8 md:pb-48 lg:px-10">
         <div className="malik-message-list mx-auto flex w-full max-w-[768px] flex-col gap-8 sm:gap-10">
