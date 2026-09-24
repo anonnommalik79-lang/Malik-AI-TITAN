@@ -29,7 +29,7 @@ const BRAND_ICONS: Record<string, BrandIcon> = {
   deepseek: { label: "DeepSeek", urls: ["https://www.deepseek.com/favicon.ico", "https://deepseek.com/favicon.ico"], fallback: "D" },
   zai: { label: "Z.ai", urls: ["https://chat.z.ai/favicon.ico", "https://z.ai/favicon.ico"], fallback: "Z" },
   anthropic: { label: "Anthropic", urls: ["https://www.anthropic.com/favicon.ico"], fallback: "A" },
-  google: { label: "Google", urls: ["https://www.google.com/favicon.ico"], fallback: "G" },
+  google: { label: "Google Gemini", urls: ["https://ai.google.dev/favicon.ico", "https://aistudio.google.com/favicon.ico", "https://www.google.com/favicon.ico"], fallback: "G" },
   openai: { label: "OpenAI", urls: ["https://openai.com/favicon.ico"], fallback: "O" },
   xai: { label: "xAI", urls: ["https://x.ai/favicon.ico"], fallback: "X" },
   kimi: { label: "Kimi", urls: ["https://www.kimi.com/favicon.ico", "https://kimi.moonshot.cn/favicon.ico"], fallback: "K" },
