@@ -8,9 +8,12 @@ import { checkUsageLimit } from "@/lib/limits/rate-limit"
 import { incrementUsage } from "./usage"
 import { identityAnswerFor, sanitizeModelAnswer, MALIK_STRICT_SYSTEM_PROMPT } from "./identity"
 import { isOwnerEmail } from "@/lib/auth/admin-policy"
+import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers, superpowerOutputBudget } from "./superpowers"
 
 function normalize(input: AIRequest): AIRequest {
   const detected = detectTask(input.prompt, input.attachments)
+  const superpowers = detectMalikSuperpowers(input.prompt, input.attachments || [], input.metadata)
+  const superpowerPrompt = buildMalikSuperpowerSystemPrompt(superpowers)
   const task = input.task || detected.task
   const ownerSession = input.plan === "owner" || isOwnerEmail(input.userEmail || input.userId)
   const strictSystemPrompt = ownerSession
@@ -29,16 +32,27 @@ function normalize(input: AIRequest): AIRequest {
       const configured = Number(process.env.CHAT_HISTORY_WINDOW || 12)
       const limit = Number.isFinite(configured) ? Math.max(1, Math.floor(configured)) : 12
       const windowed = messages.filter((message) => message.role !== "system").slice(-limit)
-      return [...(system.length ? system : [{ role: "system" as const, content: strictSystemPrompt }]), ...windowed]
+      const baseSystem = system.length ? system : [{ role: "system" as const, content: strictSystemPrompt }]
+      const powerSystem = superpowerPrompt ? [{ role: "system" as const, content: superpowerPrompt }] : []
+      return [...baseSystem, ...powerSystem, ...windowed]
     })(),
     maxTokens:
       input.maxTokens ||
-      (task === "code" || task === "debug" || task === "project"
-        ? Number(process.env.MAX_CODE_OUTPUT_TOKENS || 16000)
-        : Number(process.env.MAX_OUTPUT_TOKENS || 1200)),
+      Math.max(
+        task === "code" || task === "debug" || task === "project"
+          ? Number(process.env.MAX_CODE_OUTPUT_TOKENS || 16000)
+          : Number(process.env.MAX_OUTPUT_TOKENS || 1200),
+        superpowerOutputBudget(superpowers),
+      ),
     metadata: {
       ...input.metadata,
       detection: detected,
+      superpowers: superpowers.map((power) => ({
+        id: power.id,
+        title: power.title,
+        category: power.category,
+        execution: power.execution,
+      })),
     },
   }
 }
