@@ -5901,12 +5901,20 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return
   }
 
+  const liveMessages = messagesRef.current
+  const replaceFromMessageId = String(options?.replaceFromMessageId || "").trim()
+  const replaceIndex = replaceFromMessageId
+    ? liveMessages.findIndex((message) => message.id === replaceFromMessageId && message.role === "user")
+    : -1
+  const conversationBase = replaceIndex >= 0 ? liveMessages.slice(0, replaceIndex) : liveMessages
+  const replacingTurn = replaceIndex >= 0
+
   // Follow-up questions such as "кто на фото?" automatically receive the last
   // ready generated image from this chat as a hidden multimodal attachment.
   // The user does not need to upload the generated picture again.
   const implicitGeneratedImage = attachments.some((item) => item.kind === "image")
     ? null
-    : await latestGeneratedImageAttachment(messagesRef.current, cleanContent)
+    : await latestGeneratedImageAttachment(conversationBase, cleanContent)
   const requestAttachments = implicitGeneratedImage
     ? [...attachments, implicitGeneratedImage]
     : attachments
@@ -5993,7 +6001,15 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setChats(prev => [newChat, ...prev])
     setActiveChatId(chatId)
   } else {
-    setChats(prev => prev.map(c => c.id === chatId ? { ...c, selectedModelId, status: runtimePlan.status, techStack: runtimePlan.techStack } : c))
+    setChats(prev => prev.map(c => c.id === chatId
+      ? {
+          ...c,
+          selectedModelId,
+          status: runtimePlan.status,
+          techStack: runtimePlan.techStack,
+          messages: replacingTurn ? conversationBase : c.messages,
+        }
+      : c))
   }
 
   const historyAttachments = await persistChatAttachmentsForHistory(attachments)
@@ -6026,14 +6042,19 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     actionPlan: actionPlan || undefined,
   }
 
-  setMessages(prev => [...prev, userMessage, assistantMessage])
-  setChats((previous) => previous.map((chat) => {
-    if (chat.id !== chatId) return chat
-    const nextMessages = [...chat.messages]
+  const mergeTurnMessages = (current: Message[], finalAssistant: Message = assistantMessage) => {
+    const nextMessages = replacingTurn ? [...conversationBase] : [...current]
     if (!nextMessages.some((message) => message.id === userMessage.id)) nextMessages.push(userMessage)
-    if (!nextMessages.some((message) => message.id === assistantMessage.id)) nextMessages.push(assistantMessage)
-    return { ...chat, messages: nextMessages }
-  }))
+    const assistantIndex = nextMessages.findIndex((message) => message.id === assistantMessage.id)
+    if (assistantIndex >= 0) nextMessages[assistantIndex] = finalAssistant
+    else nextMessages.push(finalAssistant)
+    return nextMessages
+  }
+
+  setMessages(mergeTurnMessages(conversationBase))
+  setChats((previous) => previous.map((chat) => chat.id === chatId
+    ? { ...chat, messages: mergeTurnMessages(chat.messages) }
+    : chat))
   if (needsImageConfirmation) {
     setIsLoading(false)
     setStreamingText("")
@@ -6061,7 +6082,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // with the request. Off means the model sees this message and nothing else.
   const carryContext = readContextEnabled()
   const historyWindow = 32
-  const history = (carryContext ? [...messages, userMessage].slice(-historyWindow) : [userMessage]).map(m => {
+  const history = (carryContext ? [...conversationBase, userMessage].slice(-historyWindow) : [userMessage]).map(m => {
     const mediaFact = describeReadyMediaAction(m.generatedMedia)
     return {
       role: m.role,
@@ -6071,8 +6092,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     }
   })
   const memoryContext = buildMalikMemoryContext()
-  const sessionMemoryContext = carryContext ? buildPersistentSessionMemoryContext(messages, historyWindow - 1) : ""
-  const mediaHistoryContext = buildMalikMediaHistoryContext(messages)
+  const sessionMemoryContext = carryContext ? buildPersistentSessionMemoryContext(conversationBase, historyWindow - 1) : ""
+  const mediaHistoryContext = buildMalikMediaHistoryContext(conversationBase)
 
   const attachmentSummary = attachments.length
     ? "\n\n[Вложения]: " + attachments.map(a => `${a.kind}:${a.name || a.url || "untitled"} (${a.mime || "text"})`).join(", ")
@@ -6145,19 +6166,15 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
               ...c,
               status: "draft",
               title: c.messages.length === 0 ? title : c.title,
-              messages: [
-                ...c.messages,
-                userMessage,
-                {
-                  ...assistantMessage,
-                  content: safeContent,
-                  generatedCode: openPreview ? finalCode : undefined,
-                  isStreaming: false,
-                  intentType: openPreview ? "project" : "chat",
-                  research: finalResearch || assistantMessage.research,
-                  actionPlan: finalActionPlan || assistantMessage.actionPlan,
-                },
-              ],
+              messages: mergeTurnMessages(c.messages, {
+                ...assistantMessage,
+                content: safeContent,
+                generatedCode: openPreview ? finalCode : undefined,
+                isStreaming: false,
+                intentType: openPreview ? "project" : "chat",
+                research: finalResearch || assistantMessage.research,
+                actionPlan: finalActionPlan || assistantMessage.actionPlan,
+              }),
             }
           : c
       )
@@ -6187,14 +6204,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
               status: media.status === "ready" ? "deployed" : "draft",
               title: c.messages.length === 0 ? title : c.title,
               techStack: [media.provider || "Media API", media.kind === "video" ? "Video" : "Image", "Inline chat"],
-              messages: (() => {
-                const next = [...c.messages]
-                if (!next.some((message) => message.id === userMessage.id)) next.push(userMessage)
-                const assistantIndex = next.findIndex((message) => message.id === assistantMessage.id)
-                if (assistantIndex >= 0) next[assistantIndex] = finalAssistant
-                else next.push(finalAssistant)
-                return next
-              })(),
+              messages: mergeTurnMessages(c.messages, finalAssistant),
             }
           : c
       )
@@ -6269,7 +6279,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }
 
   if (asksAboutMalikMediaActions(cleanContent)) {
-    const factualMediaAnswer = buildMalikMediaActionAnswer(messages)
+    const factualMediaAnswer = buildMalikMediaActionAnswer(conversationBase)
     if (factualMediaAnswer) {
       finalizeAssistant(factualMediaAnswer)
       setIsGeneratingTerminal(false)
