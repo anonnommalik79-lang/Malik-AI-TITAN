@@ -1,8 +1,9 @@
 "use client"
 
 import { Fragment, useState, type ReactNode } from "react"
-import { Archive, Check, Copy, Download } from "lucide-react"
+import { Archive, Check, Copy, Download, ExternalLink, Eye, RefreshCw } from "lucide-react"
 import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
+import { buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 
 /**
  * Renders an assistant answer as structured text.
@@ -370,8 +371,19 @@ function codeFilesFrom(blocks: Block[]): ProjectZipFile[] {
     : [])
 }
 
+function isPreviewableCode(language: string, code: string) {
+  const normalized = String(language || "").toLowerCase()
+  if (["html", "htm", "svg", "jsx", "tsx", "react"].includes(normalized)) return true
+  return /<!doctype html|<(?:html|body|main|section|div|svg|canvas)[\s>]|export\s+default\s+(?:function|class)|\breturn\s*\(\s*</i.test(code)
+}
+
 function CodeBlock({ language, filename, code }: { language: string; filename: string; code: string }) {
   const [copied, setCopied] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewKey, setPreviewKey] = useState(0)
+  const previewable = isPreviewableCode(language, code)
+  const previewSrcDoc = previewable ? buildCanvasSrcDoc(code) : ""
+  const lineCount = Math.max(1, code.split("\n").length)
 
   const copy = async () => {
     try {
@@ -383,25 +395,81 @@ function CodeBlock({ language, filename, code }: { language: string; filename: s
     }
   }
 
+  const openPreviewInNewTab = () => {
+    if (!previewSrcDoc) return
+    const url = createCanvasBlobUrl(previewSrcDoc)
+    window.open(url, "_blank", "noopener,noreferrer")
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+
   return (
-    <div className="malik-md-codeblock">
-      <div className="malik-md-codebar">
-        <span title={filename}>{filename || language || "code"}</span>
-        <div className="malik-md-codebar-actions">
-          <button type="button" onClick={() => downloadTextArtifact(filename, code)} aria-label={`Скачать ${filename}`}>
-            <Download aria-hidden="true" />
-            Скачать
-          </button>
-          <button type="button" onClick={() => void copy()} aria-label="Копировать код">
-            {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            {copied ? "Скопировано" : "Копировать"}
-          </button>
+    <>
+      <div className={"malik-md-codeblock" + (previewOpen ? " has-live-preview" : "")}>
+        <div className="malik-md-codebar">
+          <span title={filename}>{filename || language || "code"}</span>
+          <div className="malik-md-codebar-actions">
+            {previewable ? (
+              <button
+                type="button"
+                className={previewOpen ? "is-active" : undefined}
+                onClick={() => setPreviewOpen((value) => !value)}
+                aria-expanded={previewOpen}
+                aria-label={previewOpen ? "Скрыть предпросмотр" : "Открыть предпросмотр"}
+              >
+                <Eye aria-hidden="true" />
+                {previewOpen ? "Скрыть" : "Предпросмотр"}
+              </button>
+            ) : null}
+            <button type="button" onClick={() => downloadTextArtifact(filename, code)} aria-label={"Скачать " + filename}>
+              <Download aria-hidden="true" />
+              Скачать
+            </button>
+            <button type="button" onClick={() => void copy()} aria-label="Копировать код">
+              {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+              {copied ? "Скопировано" : "Копировать"}
+            </button>
+          </div>
         </div>
+        <pre className="malik-md-pre" data-language={language || undefined} data-filename={filename}>
+          <code>{highlightedCode(code, language)}</code>
+        </pre>
       </div>
-      <pre className="malik-md-pre" data-language={language || undefined} data-filename={filename}>
-        <code>{highlightedCode(code, language)}</code>
-      </pre>
-    </div>
+
+      {previewOpen && previewSrcDoc ? (
+        <section className="malik-md-live-preview" aria-label="Предпросмотр результата кода">
+          <div className="malik-md-live-preview__bar">
+            <div className="malik-md-live-preview__title">
+              <span className="malik-md-live-preview__mark" aria-hidden="true" />
+              <strong>LIVE PREVIEW</strong>
+              <span title={filename}>{filename || "generated artifact"}</span>
+            </div>
+            <div className="malik-md-live-preview__actions">
+              <button type="button" onClick={() => setPreviewKey((value) => value + 1)} aria-label="Обновить предпросмотр">
+                <RefreshCw aria-hidden="true" />
+                Обновить
+              </button>
+              <button type="button" onClick={openPreviewInNewTab} aria-label="Открыть предпросмотр в новой вкладке">
+                <ExternalLink aria-hidden="true" />
+                Открыть
+              </button>
+            </div>
+          </div>
+          <div className="malik-md-live-preview__stage">
+            <iframe
+              key={"preview-" + previewKey}
+              srcDoc={previewSrcDoc}
+              title={"Предпросмотр " + (filename || "кода")}
+              sandbox="allow-scripts allow-forms allow-modals allow-popups"
+            />
+          </div>
+          <div className="malik-md-live-preview__report" role="status">
+            <span className="malik-md-live-preview__report-label">ОТЧЁТ</span>
+            <strong>Готово</strong>
+            <span>{lineCount} строк · изолированный sandbox · результат показан прямо в Malik AI</span>
+          </div>
+        </section>
+      ) : null}
+    </>
   )
 }
 
