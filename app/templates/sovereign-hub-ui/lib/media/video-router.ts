@@ -265,6 +265,40 @@ export async function refreshVideoJobStatus(taskId: string, providerHint?: Video
     return { ok: false, provider: "dashscope", model: dashscopeVideoModel(), taskId, status: "failed", remainingDailyVideos: 0, error: "Video job not found" }
   }
 
+  if (stored.status === "cancelled") {
+    return {
+      ok: true,
+      provider: stored.provider,
+      model: stored.model,
+      taskId,
+      status: "cancelled",
+      remainingDailyVideos: 0,
+      error: stored.error,
+    }
+  }
+  if (stored.status === "completed" && stored.videoUrl) {
+    return {
+      ok: true,
+      provider: stored.provider,
+      model: stored.model,
+      taskId,
+      status: "completed",
+      remainingDailyVideos: 0,
+      videoUrl: stored.videoUrl,
+    }
+  }
+  if (stored.status === "failed") {
+    return {
+      ok: false,
+      provider: stored.provider,
+      model: stored.model,
+      taskId,
+      status: "failed",
+      remainingDailyVideos: 0,
+      error: stored.error || "Video generation failed",
+    }
+  }
+
   if (stored.provider === "h3") {
     const result = await refreshH3(taskId, stored.model)
     await patchVideoJob(taskId, { status: result.status, videoUrl: result.videoUrl, error: result.error }, stored.userId)
