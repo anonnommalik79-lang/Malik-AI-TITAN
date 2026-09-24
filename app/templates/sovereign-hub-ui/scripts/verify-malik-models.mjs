@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import {
   DEFAULT_MALIK_MODEL_ID,
   FREE_MALIK_MODELS,
+  GOOGLE_AI_POOL_MODELS,
   MALIK_MODELS,
   MAX_ROUTER_MODEL_IDS,
   PRO_MALIK_MODELS,
@@ -21,9 +22,19 @@ assert.equal(DEFAULT_MALIK_MODEL_ID, "malik-max", "MalikLLM MAX must be the defa
 assert.equal(PUBLIC_MALIK_MODELS[0]?.id, "malik-max", "MalikLLM MAX must be first in the selector")
 assert.equal(getMalikModel("malik-max").label, "MalikLLM MAX")
 assert.equal(getMalikModel("malik-max").provider, "malik-orchestrator")
+assert.deepEqual(
+  PUBLIC_MALIK_MODELS.slice(1, 1 + GOOGLE_AI_POOL_MODELS.length).map((model) => model.id),
+  GOOGLE_AI_POOL_MODELS.map((model) => model.id),
+  "Official Google Gemini/Gemma pool must sit immediately below MalikLLM MAX",
+)
+assert.deepEqual(
+  GOOGLE_AI_POOL_MODELS.map((model) => model.providerModel),
+  ["gemini-3.6-flash", "gemini-3.5-flash", "gemma-4-26b-a4b-it", "gemma-4-31b-it", "gemini-3-flash-preview", "gemini-flash-lite-latest"],
+)
+assert.ok(GOOGLE_AI_POOL_MODELS.every((model) => model.provider === "google-ai" && model.brand === "google" && model.tier === "free"))
 
-assert.equal(PUBLIC_MALIK_MODELS.length, 125, "Selector must expose MAX + 123 router text entries + LLM7 Default")
-assert.equal(FREE_MALIK_MODELS.length, 49, "Free selector must expose MAX + 47 verified free routes + LLM7 Default")
+assert.equal(PUBLIC_MALIK_MODELS.length, 131, "Selector must expose MAX + 6 Google AI entries + 123 router text entries + LLM7 Default")
+assert.equal(FREE_MALIK_MODELS.length, 55, "Free selector must expose MAX + 6 Google AI entries + 47 verified free routes + LLM7 Default")
 assert.equal(PRO_MALIK_MODELS.length, 76, "Provider catalog routes must be grouped as MalikAI Plus models")
 assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, MALIK_MODELS.length, "Model IDs must be unique")
 
