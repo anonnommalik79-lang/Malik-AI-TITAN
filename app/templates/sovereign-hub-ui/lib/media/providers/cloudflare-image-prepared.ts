@@ -7,7 +7,7 @@ import { imageProviderTimeoutMs } from "../config"
 import type { ProviderQualityTuning } from "../image-quality-presets"
 import type { ImageAspectRatio, ImageGenerateInput } from "../types"
 
-type Slot = "primary" | "secondary" | "tertiary"
+type Slot = "primary" | "secondary" | "flux9b" | "tertiary"
 type Account = { slot: Slot; accountId: string; token: string }
 
 const cooldownUntil = new Map<Slot, number>()
@@ -26,6 +26,11 @@ function account(slot: Slot): Account | null {
     const token = process.env.CLOUDFLARE_API_TOKEN?.trim() || process.env.CF_API_TOKEN?.trim() || ""
     return accountId && token ? { slot, accountId, token } : null
   }
+  if (slot === "flux9b") {
+    const accountId = process.env.CF_FLUX9B_ACCOUNT_ID?.trim() || ""
+    const token = process.env.CF_FLUX9B_API_TOKEN?.trim() || ""
+    return accountId && token ? { slot, accountId, token } : null
+  }
   const accountId = process.env.CLOUDFLARE_IMAGE_ACCOUNT_ID_3?.trim() || ""
   const token = process.env.CLOUDFLARE_IMAGE_API_TOKEN_3?.trim() || ""
   return accountId && token ? { slot, accountId, token } : null
@@ -37,6 +42,10 @@ function qualityAccounts() {
 
 export function preparedCloudflareImageConfigured() {
   return qualityAccounts().length > 0
+}
+
+export function flux9bCloudflareImageConfigured() {
+  return Boolean(account("flux9b"))
 }
 
 export function tertiaryCloudflareImageConfigured() {
@@ -156,6 +165,16 @@ async function runQuality(model: string, init: RequestInit, signal?: AbortSignal
   throw new Error("Cloudflare quality pool unavailable")
 }
 
+async function runFlux9b(model: string, init: RequestInit, signal?: AbortSignal) {
+  const current = account("flux9b")
+  if (!current) throw new Error("FLUX.2 Klein 9B reserve account is not configured")
+  if (cooling("flux9b")) throw new Error("FLUX.2 Klein 9B reserve daily quota is exhausted")
+  const response = await runAccount(current, model, init, signal)
+  const state = await failure(response)
+  if (state.failed) coolFailedAccount(current, response, state.message)
+  return response
+}
+
 async function runTertiary(model: string, init: RequestInit, signal?: AbortSignal) {
   const current = account("tertiary")
   if (!current) throw new Error("Third Cloudflare image account is not configured")
@@ -246,6 +265,25 @@ export async function generatePreparedCloudflareImage({ strictPrompt, negativePr
     accountSlot: call.slot,
     steps: tuning?.steps,
     guidance: tuning?.guidance,
+  }
+}
+
+export async function generateFlux9bReserveImage({ prompt, aspectRatio = "1:1", signal }: {
+  prompt: string
+  aspectRatio?: ImageAspectRatio
+  signal?: AbortSignal
+}) {
+  const providerModel = process.env.CF_FLUX9B_MODEL?.trim() || "@cf/black-forest-labs/flux-2-klein-9b"
+  const { width, height } = size(aspectRatio)
+  const form = new FormData()
+  form.append("prompt", String(prompt || "").trim())
+  form.append("width", String(width))
+  form.append("height", String(height))
+  const response = await runFlux9b(providerModel, { method: "POST", body: form }, signal)
+  return {
+    imageUrl: await decode(response, "FLUX.2 Klein 9B Reserve"),
+    providerModel,
+    accountSlot: "flux9b" as const,
   }
 }
 
