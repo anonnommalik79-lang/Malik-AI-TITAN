@@ -16,6 +16,7 @@ import {
   FolderTree,
   Github,
   Globe,
+  GitBranch,
   Image as ImageIcon,
   Layers,
   Link as LinkIcon,
@@ -205,6 +206,7 @@ interface ChatViewProps {
   onForceCanvas?: () => void
   onOpenVoice?: () => void
   onOpenActionTarget?: (target: MalikActionTarget) => void
+  onBranchMessage?: (messageId: string) => void
   projectName?: string
   projectDescription?: string
 }
@@ -1561,6 +1563,8 @@ function MessageBubble({
   generationType = "text",
   thinkingQuery = "",
   onRegenerate,
+  onEdit,
+  onBranch,
   onShare,
   onFeedback,
   feedback,
@@ -1582,6 +1586,8 @@ function MessageBubble({
   
   thinkingQuery?: string
   onRegenerate?: (id: string) => void
+  onEdit?: (message: Message) => void
+  onBranch?: (id: string) => void
   onShare?: (text: string) => void
   onFeedback?: (id: string, value: "up" | "down") => void
   feedback?: "up" | "down" | null
@@ -1729,10 +1735,17 @@ function MessageBubble({
             <SourceDeck research={message.research} />
           ) : null}
         </div>
+        {isUser && message.content && !message.isStreaming ? (
+          <div className="malik-message-actions mt-1 flex items-center justify-end gap-1 text-zinc-600">
+            <button type="button" title="Редактировать сообщение" aria-label="Редактировать сообщение" onClick={() => onEdit?.(message)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Pencil className="h-3.5 w-3.5" /></button>
+            <button type="button" title="Создать ветку отсюда" aria-label="Создать ветку отсюда" onClick={() => onBranch?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><GitBranch className="h-3.5 w-3.5" /></button>
+          </div>
+        ) : null}
         {!isUser && message.content && !message.isStreaming && !message.imageConfirmation && (
           <div className={cn("malik-message-actions mt-2 flex items-center gap-2 text-zinc-500", Boolean(message.research?.sources.length) && "is-research")}>
             <button type="button" title="Копировать" onClick={() => onCopy(message.id, displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
+            <button type="button" title="Создать ветку отсюда" aria-label="Создать ветку отсюда" onClick={() => onBranch?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><GitBranch className="h-4 w-4" /></button>
             <button type="button" title="Полезно" onClick={() => onFeedback?.(message.id, "up")} className={cn("rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "text-emerald-300")}><ThumbsUp className="h-4 w-4" /></button>
             <button type="button" title="Не полезно" onClick={() => onFeedback?.(message.id, "down")} className={cn("rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "text-amber-300")}><ThumbsDown className="h-4 w-4" /></button>
             <button type="button" title="Поделиться" onClick={() => onShare?.(displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
@@ -1751,7 +1764,7 @@ function MessageBubble({
   )
 }
 
-export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, onOpenActionTarget, projectName, projectDescription }: ChatViewProps) {
+export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, onOpenActionTarget, onBranchMessage, projectName, projectDescription }: ChatViewProps) {
   // One short pulse after the complete answer lands. Passing a number (rather
   // than a pattern) deliberately keeps this to a single haptic event.
   const wasLoading = useRef(false)
@@ -1767,6 +1780,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   }, [isLoading])
 
   const [prompt, setPrompt] = useState("")
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [lastSubmittedPrompt, setLastSubmittedPrompt] = useState("")
   const [effectivePlan, setEffectivePlan] = useState<AIPlan>(userPlan)
   const [responseDepth, setResponseDepth] = useState<ResponseDepth>(() => loadResponseDepth(userPlan))
@@ -2188,6 +2202,26 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     setShowAttachMenu(false)
   }
 
+  const beginEditMessage = (message: Message) => {
+    if (isLoading || message.role !== "user") return
+    setEditingMessageId(message.id)
+    setPrompt(message.content)
+    setAttachments((message.attachments || []).map((item) => ({ ...item })))
+    setLocalError(null)
+    window.setTimeout(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(message.content.length, message.content.length)
+    }, 0)
+  }
+
+  const cancelEditMessage = () => {
+    setEditingMessageId(null)
+    setPrompt("")
+    setAttachments([])
+    setLocalError(null)
+    textareaRef.current?.focus()
+  }
+
   const handleGuardedSubmit = () => {
     const rawText = prompt.trim()
     if (!rawText && attachments.length === 0) return
@@ -2217,7 +2251,9 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     onSendMessage(routedOutgoing, attachments, {
       responseDepth: researchMode === "deep" ? "deep" : responseDepth,
       research: researchMode !== "off" ? true : undefined,
+      replaceFromMessageId: editingMessageId || undefined,
     })
+    setEditingMessageId(null)
     setPrompt("")
     setAttachments([])
     setResearchMode("off")
@@ -2538,6 +2574,8 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                   generationType={activeGenerationType}
                   thinkingQuery={lastUserPrompt}
                   onRegenerate={handleRegenerate}
+                  onEdit={beginEditMessage}
+                  onBranch={onBranchMessage}
                   onShare={handleShare}
                   onFeedback={handleFeedback}
                   feedback={feedbackMap[message.id] ?? null}
@@ -2564,6 +2602,12 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
           }}
           onDrop={handleComposerDrop}
         >
+          {editingMessageId ? (
+            <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-[11px] text-zinc-300">
+              <span className="inline-flex min-w-0 items-center gap-2"><Pencil className="h-3.5 w-3.5 shrink-0" /><span className="truncate">Редактирование сообщения · старая ветка после него будет заменена</span></span>
+              <button type="button" onClick={cancelEditMessage} className="shrink-0 rounded-md px-2 py-1 text-zinc-500 hover:bg-white/10 hover:text-white">Отмена</button>
+            </div>
+          ) : null}
           {localError && <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">{localError}</div>}
           {attachments.length > 0 && <div className="malik-composer-attachments mb-3 flex max-w-full flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => removeComposerAttachment(attachment.id)} />)}</div>}
           {dragActive ? <div className="pointer-events-none absolute inset-2 z-40 grid place-items-center rounded-[20px] border border-dashed border-white/30 bg-black/70 text-sm font-medium text-white">Отпустите фото, видео или файл</div> : null}
