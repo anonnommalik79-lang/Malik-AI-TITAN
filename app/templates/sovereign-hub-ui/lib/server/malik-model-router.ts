@@ -3,6 +3,7 @@ import {
   getMalikModel,
   isMalikModelId,
   MAX_ROUTER_MODEL_IDS,
+  PUBLIC_MALIK_MODELS,
   type MalikModelDefinition,
   type MalikModelId,
 } from "@/lib/ai/malik-models"
@@ -554,6 +555,34 @@ function setCooldown(model: MalikModelDefinition, durationMs: number, reason: st
   const safe = Math.max(1_000, Math.min(durationMs, HARD_PROVIDER_COOLDOWN_MS))
   PROVIDER_COOLDOWN_UNTIL.set(providerHealthKey(model), Date.now() + safe)
   console.warn("[MALIK_MODEL_ROUTE] cooldown", JSON.stringify({ modelId: model.id, provider: model.provider, providerModel: model.providerModel, durationMs: safe, reason }))
+}
+
+export function malikProviderHealthSnapshot() {
+  return PUBLIC_MALIK_MODELS
+    .filter((model) => model.provider !== "malik-orchestrator")
+    .map((model) => {
+      const state = runtimeHealth(model)
+      const total = state.successes + state.failures
+      const cooldownMs = remainingCooldownMs(model)
+      return {
+        modelId: model.id,
+        label: model.label,
+        provider: model.provider,
+        providerModel: model.providerModel,
+        successes: state.successes,
+        failures: state.failures,
+        requestsObserved: total,
+        successRate: total ? Math.round((state.successes / total) * 1000) / 10 : null,
+        latencyMs: state.ewmaLatencyMs || null,
+        lastFailureAt: state.lastFailureAt ? new Date(state.lastFailureAt).toISOString() : null,
+        cooldownMs,
+        healthy: cooldownMs === 0 && state.failures <= Math.max(2, state.successes),
+      }
+    })
+    .sort((left, right) => {
+      if (left.healthy !== right.healthy) return left.healthy ? -1 : 1
+      return (left.latencyMs || Number.MAX_SAFE_INTEGER) - (right.latencyMs || Number.MAX_SAFE_INTEGER)
+    })
 }
 
 function retryAfterMs(response: Response, detail: string) {
