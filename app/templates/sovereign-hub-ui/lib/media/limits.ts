@@ -23,13 +23,12 @@ function dateKey(date: Date, timeZone: string) {
   }
 }
 
-function imageTimeZone() {
-  return process.env.IMAGE_RESET_TIMEZONE?.trim() || "UTC"
+export function mediaResetTimeZone() {
+  return process.env.MEDIA_RESET_TIMEZONE?.trim() || process.env.IMAGE_RESET_TIMEZONE?.trim() || "Asia/Almaty"
 }
 
-function dayKey(userId: string, kind: MediaKind = "video") {
-  const zone = kind === "image" ? imageTimeZone() : "UTC"
-  return `${dateKey(new Date(), zone)}:${userId}`
+function dayKey(userId: string, _kind: MediaKind = "video") {
+  return `${dateKey(new Date(), mediaResetTimeZone())}:${userId}`
 }
 
 function readLimit(name: string, fallback: number): number {
@@ -107,7 +106,7 @@ export function getMediaDailyLimits() {
   return {
     guest: { images: readLimit("GUEST_DAILY_IMAGE_LIMIT", 10), videos: readLimit("GUEST_DAILY_VIDEO_LIMIT", 0) },
     free: { images: readLimit("FREE_DAILY_IMAGE_LIMIT", 50), videos: readLimit("FREE_DAILY_VIDEO_LIMIT", 1) },
-    premium: { images: readLimit("PREMIUM_DAILY_IMAGE_LIMIT", 200), videos: readLimit("PREMIUM_DAILY_VIDEO_LIMIT", 1) },
+    premium: { images: readLimit("PREMIUM_DAILY_IMAGE_LIMIT", 200), videos: readLimit("PREMIUM_DAILY_VIDEO_LIMIT", 5) },
   }
 }
 
@@ -136,10 +135,8 @@ function memoryMap(kind: MediaKind) {
   return kind === "image" ? memoryImage : memoryVideo
 }
 
-export function nextMediaResetAt(kind: MediaKind = "video"): string {
-  if (kind === "image") return nextMidnightInZone(imageTimeZone()).toISOString()
-  const now = new Date()
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString()
+export function nextMediaResetAt(_kind: MediaKind = "video"): string {
+  return nextMidnightInZone(mediaResetTimeZone()).toISOString()
 }
 
 export async function getImageCreditStatus(input: { userId?: string; plan?: AIPlan }) {
@@ -217,9 +214,9 @@ export async function checkMediaLimit(input: { userId?: string; plan?: AIPlan; k
   const remaining = Math.max(0, max - used)
 
   if (used >= max) {
-    return { ok: false as const, error: "Daily limit reached", code: "DAILY_LIMIT_REACHED", plan: tier, remaining: 0, resetAt: nextMediaResetAt(input.kind) }
+    return { ok: false as const, error: "Daily limit reached", code: "DAILY_LIMIT_REACHED", plan: tier, max, used, remaining: 0, resetAt: nextMediaResetAt(input.kind) }
   }
-  return { ok: true as const, plan: tier, remaining, resetAt: nextMediaResetAt(input.kind) }
+  return { ok: true as const, plan: tier, max, used, remaining, resetAt: nextMediaResetAt(input.kind) }
 }
 
 export async function recordMediaUsage(userId: string, kind: MediaKind, count = 1) {
