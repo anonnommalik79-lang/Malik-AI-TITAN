@@ -133,6 +133,65 @@ export async function uploadMediaAsset(input: {
   }
 }
 
+/*
+ * Objects that belong to the app, not to an account (for example the covers of
+ * the image studio's templates). Keys always live under "shared/".
+ */
+function sharedKey(key: string) {
+  const clean = String(key || "").replace(/^\/+/, "")
+  if (!/^shared\/[a-z0-9._/-]+$/.test(clean) || clean.includes("..")) throw new Error("Invalid shared storage key.")
+  return clean
+}
+
+export async function putSharedObject(input: { key: string; buffer: Buffer; mime: string; cacheControl?: string }) {
+  const storage = client()
+  if (!storage) return { stored: false, reason: "Cloud media storage is not configured.", publicUrl: "" }
+  try {
+    const key = sharedKey(input.key)
+    await storage.s3.send(new PutObjectCommand({
+      Bucket: storage.cfg.bucket,
+      Key: key,
+      Body: input.buffer,
+      ContentType: input.mime,
+      CacheControl: input.cacheControl || "public, max-age=31536000, immutable",
+      Metadata: { kind: "shared" },
+    }))
+    const publicUrl = `${storage.cfg.publicBaseUrl.replace(/\/+$/, "")}/${key.split("/").map(encodeURIComponent).join("/")}`
+    return { stored: true, reason: "", publicUrl }
+  } catch (error) {
+    return { stored: false, reason: error instanceof Error ? error.message : "Cloud upload failed.", publicUrl: "" }
+  }
+}
+
+export async function readSharedJson<T>(key: string): Promise<T | null> {
+  const storage = client()
+  if (!storage) return null
+  try {
+    const result = await storage.s3.send(new GetObjectCommand({ Bucket: storage.cfg.bucket, Key: sharedKey(key) }))
+    return JSON.parse(await bodyToString(result.Body) || "null") as T
+  } catch {
+    return null
+  }
+}
+
+export async function writeSharedJson(key: string, value: unknown) {
+  const storage = client()
+  if (!storage) return false
+  try {
+    await storage.s3.send(new PutObjectCommand({
+      Bucket: storage.cfg.bucket,
+      Key: sharedKey(key),
+      Body: Buffer.from(JSON.stringify(value)),
+      ContentType: "application/json; charset=utf-8",
+      CacheControl: "no-store",
+      Metadata: { kind: "shared" },
+    }))
+    return true
+  } catch {
+    return false
+  }
+}
+
 function libraryKey(userId: string) {
   return `users/${ownerId(userId)}/library/images.json`
 }

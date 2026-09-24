@@ -119,7 +119,6 @@ interface Message {
 }
 
 type ImageResolution = "1K" | "2K" | "4K"
-type ImageAspectRatio = "1:1" | "16:9" | "9:16" | "4:5" | "4:3"
 
 function formatImageCreditCount(value: number) {
   const count = Math.max(0, Math.trunc(Number(value) || 0))
@@ -2321,34 +2320,6 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     textareaRef.current?.focus()
   }
 
-  const handleImageCreatorGenerate = (input: {
-    prompt: string
-    style?: string
-    aspectRatio: ImageAspectRatio
-    imageSize: ImageResolution
-  }) => {
-    const clean = input.prompt.trim()
-    if (!clean) return
-    if (isLoading) {
-      setLocalError("Malik AI уже обрабатывает запрос.")
-      return
-    }
-
-    const imageAttachments = attachments.filter((item) => item.kind === "image" || item.mime?.startsWith("image/"))
-    setLocalError(null)
-    setLastSubmittedPrompt(clean)
-    try { window.localStorage.setItem("malik_last_user_prompt", clean) } catch {}
-    onSendMessage(`/image ${clean}`, imageAttachments, {
-      responseDepth,
-      imageSize: input.imageSize,
-      imageAspectRatio: input.aspectRatio,
-      imageStyle: input.style,
-    })
-    setAttachments([])
-    setImageCreatorOpen(false)
-    setShowAttachMenu(false)
-  }
-
   const toggleRecording = async () => {
     if (isRecording) {
       mediaRecorderRef.current?.stop()
@@ -2494,11 +2465,11 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
         <ChatImageCreator
           attachments={attachments}
           credits={imageCredits}
-          busy={Boolean(isLoading)}
+          plan={effectivePlan}
           onAddImage={() => imageInputRef.current?.click()}
+          onAddFiles={(files) => void handleFiles(files)}
           onRemoveAttachment={removeComposerAttachment}
           onClose={() => setImageCreatorOpen(false)}
-          onGenerate={handleImageCreatorGenerate}
         />
       ) : null}
 

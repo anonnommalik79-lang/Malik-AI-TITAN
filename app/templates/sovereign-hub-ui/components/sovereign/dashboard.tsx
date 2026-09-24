@@ -6908,6 +6908,17 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return () => window.removeEventListener("malik-open-command-palette", open)
   }, [])
 
+  // The image studio's "Видео" and "Аудио" tabs open the matching studios.
+  useEffect(() => {
+    const allowed = new Set(["video-generation", "music-generation"])
+    const open = (event: Event) => {
+      const view = String((event as CustomEvent<{ view?: string }>).detail?.view || "")
+      if (allowed.has(view)) safeOpenView(view, "manual")
+    }
+    window.addEventListener("malik-open-view", open)
+    return () => window.removeEventListener("malik-open-view", open)
+  }, [safeOpenView])
+
   /**
    * Runs a command-palette action.
    *

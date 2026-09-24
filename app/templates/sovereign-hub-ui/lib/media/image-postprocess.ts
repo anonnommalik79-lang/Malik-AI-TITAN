@@ -122,7 +122,7 @@ function applyConcurrency(sharp: typeof import("sharp")) {
   }
 }
 
-async function sourceBytes(imageUrl: string): Promise<{ buffer: Buffer; mime: string } | null> {
+export async function sourceBytes(imageUrl: string): Promise<{ buffer: Buffer; mime: string } | null> {
   const inline = decodeDataUrl(imageUrl)
   if (inline) return inline
   if (!/^https:\/\//i.test(imageUrl)) return null

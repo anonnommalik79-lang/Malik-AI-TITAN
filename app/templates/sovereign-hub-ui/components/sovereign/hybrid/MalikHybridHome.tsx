@@ -35,7 +35,7 @@ import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 import { normalizeClientImage } from "@/lib/media/client-image-normalize"
 import { ChatDrawingPad } from "../ChatDrawingPad"
 import { ChatLibraryPicker } from "../ChatLibraryPicker"
-import { ChatImageCreator, type ChatImageAspectRatio, type ChatImageResolution } from "../ChatImageCreator"
+import { ChatImageCreator, type ChatImageResolution } from "../ChatImageCreator"
 import { ChatToolWorkspace, type ChatToolWorkspaceMode } from "../ChatToolWorkspace"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
@@ -957,26 +957,6 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     window.location.assign(`/api/plugins/connect?id=${encodeURIComponent(provider)}&return_to=${encodeURIComponent(returnTo)}`)
   }
 
-  const generateFromImageWorkspace = (input: {
-    prompt: string
-    style?: string
-    aspectRatio: ChatImageAspectRatio
-    imageSize: ChatImageResolution
-  }) => {
-    const clean = input.prompt.trim()
-    if (!clean || props.isLoading) return
-    const imageAttachments = attachments.filter((item) => item.kind === "image" || item.mime.startsWith("image/"))
-    props.onSubmit(`/image ${clean}`, imageAttachments, {
-      imageSize: input.imageSize,
-      imageAspectRatio: input.aspectRatio,
-      imageStyle: input.style,
-    })
-    setAttachments([])
-    setAttachmentError("")
-    setImageCreatorOpen(false)
-    setPrompt("")
-  }
-
   return (
     <div className="thome">
       <input
@@ -995,11 +975,11 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
         <ChatImageCreator
           attachments={attachments}
           credits={imageCredits}
-          busy={Boolean(props.isLoading)}
+          plan={props.userPlan}
           onAddImage={() => imageInputRef.current?.click()}
+          onAddFiles={(files) => void addFiles(files)}
           onRemoveAttachment={removeAttachment}
           onClose={() => setImageCreatorOpen(false)}
-          onGenerate={generateFromImageWorkspace}
         />
       ) : null}
 
