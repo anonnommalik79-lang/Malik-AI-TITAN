@@ -23,13 +23,12 @@ function dateKey(date: Date, timeZone: string) {
   }
 }
 
-function imageTimeZone() {
-  return process.env.IMAGE_RESET_TIMEZONE?.trim() || "UTC"
+export function mediaResetTimeZone() {
+  return process.env.MEDIA_RESET_TIMEZONE?.trim() || process.env.IMAGE_RESET_TIMEZONE?.trim() || "Asia/Almaty"
 }
 
-function dayKey(userId: string, kind: MediaKind = "video") {
-  const zone = kind === "image" ? imageTimeZone() : "UTC"
-  return `${dateKey(new Date(), zone)}:${userId}`
+function dayKey(userId: string, _kind: MediaKind = "video") {
+  return `${dateKey(new Date(), mediaResetTimeZone())}:${userId}`
 }
 
 function readLimit(name: string, fallback: number): number {
@@ -107,7 +106,7 @@ export function getMediaDailyLimits() {
   return {
     guest: { images: readLimit("GUEST_DAILY_IMAGE_LIMIT", 10), videos: readLimit("GUEST_DAILY_VIDEO_LIMIT", 0) },
     free: { images: readLimit("FREE_DAILY_IMAGE_LIMIT", 50), videos: readLimit("FREE_DAILY_VIDEO_LIMIT", 1) },
-    premium: { images: readLimit("PREMIUM_DAILY_IMAGE_LIMIT", 200), videos: readLimit("PREMIUM_DAILY_VIDEO_LIMIT", 1) },
+    premium: { images: readLimit("PREMIUM_DAILY_IMAGE_LIMIT", 200), videos: readLimit("PREMIUM_DAILY_VIDEO_LIMIT", 5) },
   }
 }
 
@@ -136,10 +135,8 @@ function memoryMap(kind: MediaKind) {
   return kind === "image" ? memoryImage : memoryVideo
 }
 
-export function nextMediaResetAt(kind: MediaKind = "video"): string {
-  if (kind === "image") return nextMidnightInZone(imageTimeZone()).toISOString()
-  const now = new Date()
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString()
+export function nextMediaResetAt(_kind: MediaKind = "video"): string {
+  return nextMidnightInZone(mediaResetTimeZone()).toISOString()
 }
 
 export async function getImageCreditStatus(input: { userId?: string; plan?: AIPlan }) {
