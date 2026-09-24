@@ -584,6 +584,13 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         const statusData = await statusResponse.json().catch(() => ({}))
         if (!statusResponse.ok) throw new Error(statusData?.error || `Status ${statusResponse.status}`)
         setServerStage(String(statusData?.stage || statusData?.status || "rendering"))
+        if (statusData?.status === "cancelled") {
+          setPhase("idle")
+          setServerStage("cancelled")
+          setError("Генерация отменена.")
+          try { window.localStorage.removeItem(ACTIVE_VIDEO_JOB_KEY) } catch {}
+          return
+        }
         if (statusData?.status === "failed") throw new Error(statusData?.error || "Видеомодель не смогла завершить рендер")
         const readyUrl = String(statusData?.videoUrl || statusData?.url || "")
         if (readyUrl) {
@@ -631,8 +638,23 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   }, [pollVideoTask])
 
   const cancelGeneration = () => {
+    let taskId = ""
+    try {
+      const raw = window.localStorage.getItem(ACTIVE_VIDEO_JOB_KEY)
+      const job = raw ? JSON.parse(raw) as ActiveVideoJob : null
+      taskId = String(job?.taskId || "")
+    } catch {}
     generationAbortRef.current?.abort()
     generationAbortRef.current = null
+    if (taskId) {
+      void fetch("/api/media/video/cancel", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ taskId }),
+      }).catch(() => null)
+    }
     try { window.localStorage.removeItem(ACTIVE_VIDEO_JOB_KEY) } catch {}
     setPhase("idle")
     setServerStage("cancelled")
