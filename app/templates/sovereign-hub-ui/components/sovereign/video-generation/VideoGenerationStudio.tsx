@@ -22,10 +22,10 @@ import {
   Video,
   X,
 } from "lucide-react"
-import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
 import { takePrefillPrompt } from "@/lib/malik-context"
 import { ROUTER_VIDEO_CATALOG, type RouterCatalogEntry } from "@/lib/ai/router-catalog"
-import type { VideoProviderId } from "@/lib/media/types"
+import type { VideoProviderId, VideoResolution } from "@/lib/media/types"
+import { DEFAULT_VIDEO_PROVIDER_ID, videoCapability, videoSupportsMode } from "@/lib/media/video-capabilities"
 
 export type VideoGenerationStudioProps = {
   username?: string
@@ -54,16 +54,22 @@ const ENDPOINT = "/api/media/video"
 
 async function videoFetch(path: string, init: RequestInit = {}, timeoutMs = 120_000) {
   const controller = new AbortController()
+  const upstream = init.signal
+  const abortFromUpstream = () => controller.abort()
+  if (upstream?.aborted) controller.abort()
+  else upstream?.addEventListener("abort", abortFromUpstream, { once: true })
   const timer = window.setTimeout(() => controller.abort(), timeoutMs)
   try {
+    const { signal: _ignored, ...rest } = init
     return await fetch(path, {
-      ...init,
+      ...rest,
       credentials: "same-origin",
       cache: "no-store",
       signal: controller.signal,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error || "")
+    if (upstream?.aborted) throw new Error("Генерация остановлена.")
     if (controller.signal.aborted) throw new Error("Сервер видео отвечает слишком долго. Попробуйте ещё раз.")
     if (/load failed|failed to fetch|network/i.test(message)) {
       throw new Error("Не удалось связаться с MalikVideo. Проверьте сеть и повторите генерацию.")
@@ -71,12 +77,22 @@ async function videoFetch(path: string, init: RequestInit = {}, timeoutMs = 120_
     throw error
   } finally {
     window.clearTimeout(timer)
+    upstream?.removeEventListener("abort", abortFromUpstream)
   }
 }
 
-const QUALITY_RESOLUTION: Record<Quality, "720p" | "1080p"> = {
+const QUALITY_RESOLUTION: Record<Quality, VideoResolution> = {
   fast: "720p",
   max: "1080p",
+}
+
+const ACTIVE_VIDEO_JOB_KEY = "malik_video_active_job_v2"
+type ActiveVideoJob = {
+  taskId: string
+  statusUrl: string
+  provider: VideoProviderId
+  prompt: string
+  createdAt: number
 }
 const DEFAULT_PROMPT = "Ночной Алматы после дождя. Чёрный премиальный автомобиль медленно едет по мокрой улице, отражения городских огней на асфальте, камера низко следует сбоку, реалистичная физика, кинематографичный свет и естественный звук города."
 
