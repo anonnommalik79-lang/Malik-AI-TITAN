@@ -76,6 +76,48 @@ function protectChatCodeFences(content: string) {
   return text.replace(/```([a-zA-Z0-9_+\-]*)[ \t]*\n/g, "```$1\r")
 }
 
+function createStreamingFenceProtector() {
+  let pending = ""
+  return (chunk = "", flush = false) => {
+    pending += chunk
+    let out = ""
+    while (pending) {
+      const fence = pending.indexOf("```")
+      if (fence < 0) {
+        if (flush) {
+          out += pending
+          pending = ""
+        } else {
+          const keep = Math.min(2, pending.length)
+          out += pending.slice(0, pending.length - keep)
+          pending = pending.slice(pending.length - keep)
+        }
+        break
+      }
+      if (fence > 0) {
+        out += pending.slice(0, fence)
+        pending = pending.slice(fence)
+      }
+      const newline = pending.indexOf("\n")
+      if (newline < 0) {
+        if (flush) {
+          out += pending
+          pending = ""
+        }
+        break
+      }
+      const header = pending.slice(0, newline)
+      if (/^```[a-zA-Z0-9_+\-]*[ \t]*$/.test(header)) {
+        out += header.replace(/[ \t]+$/, "") + "\r"
+      } else {
+        out += pending.slice(0, newline + 1)
+      }
+      pending = pending.slice(newline + 1)
+    }
+    return out
+  }
+}
+
 function textResponse(content: string) {
   return new Response(protectChatCodeFences(content), {
     headers: {
@@ -307,6 +349,7 @@ async function runSelectedAnswer(
   selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>,
   onProgress?: (progress: any) => void,
   maxOutputTokens?: number,
+  onToken?: (chunk: string) => void,
 ) {
   let executionBody = body
   const requestAttachments = hasMalikAttachments(body?.attachments) ? body.attachments : []
@@ -416,6 +459,7 @@ async function runSelectedAnswer(
         allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
       },
       onProgress,
+      onToken,
     )
     return agentRuntime ? { ...answer, agentRuntime } : answer
   }
@@ -582,6 +626,9 @@ function liveSseResponse(
   const startedAt = Date.now()
   let cancelled = false
   let heartbeat: ReturnType<typeof setInterval> | null = null
+  let streamedAny = false
+  let writingStatusSent = false
+  const protectStreamChunk = createStreamingFenceProtector()
 
   const stopHeartbeat = () => {
     if (heartbeat) clearInterval(heartbeat)
@@ -603,6 +650,9 @@ function liveSseResponse(
       }
 
       send("status", { type: "status", text: isProjectBuildRequest(body) ? "Malik AI начинает сборку проекта" : "Malik AI принял запрос" })
+      if (!isProjectBuildRequest(body)) {
+        send("progress", { type: "progress", phase: "thinking", text: "Думает…" })
+      }
       heartbeat = setInterval(() => {
         send("progress", {
           type: "progress",
@@ -615,7 +665,22 @@ function liveSseResponse(
 
       const answerPromise = isProjectBuildRequest(body)
         ? runProjectAnswer(body, selection, entitlement.userId, (text) => send("status", { type: "status", text }))
-        : runSelectedAnswer(body, selection, (progress) => send("progress", { type: "progress", ...progress }), maxOutputTokens)
+        : runSelectedAnswer(
+            body,
+            selection,
+            (progress) => send("progress", { type: "progress", ...progress }),
+            maxOutputTokens,
+            (chunk) => {
+              if (!chunk || cancelled) return
+              streamedAny = true
+              if (!writingStatusSent) {
+                writingStatusSent = true
+                send("progress", { type: "progress", phase: "writing", text: "Пишет ответ…" })
+              }
+              const safeChunk = protectStreamChunk(chunk)
+              if (safeChunk) send("content", { type: "content", content: safeChunk })
+            },
+          )
 
       void answerPromise.then(async (answer) => {
         const multimodalCost = estimateMultimodalTokens(hasMalikAttachments(body?.attachments) ? body.attachments : [])
@@ -632,10 +697,15 @@ function liveSseResponse(
         // Quota admission already happened before generation, so this keeps
         // accounting intact without making an instant answer look like it is
         // still "thinking" while a database write finishes.
-        send("content", {
-          type: "content",
-          content: protectChatCodeFences(content),
-        })
+        if (streamedAny) {
+          const tail = protectStreamChunk("", true)
+          if (tail) send("content", { type: "content", content: tail })
+        } else {
+          send("content", {
+            type: "content",
+            content: protectChatCodeFences(content),
+          })
+        }
         await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0).catch((error) => {
           console.warn("[MALIK_CHAT_USAGE]", error instanceof Error ? error.message : String(error))
         })
