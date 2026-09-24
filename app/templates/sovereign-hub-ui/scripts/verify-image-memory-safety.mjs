@@ -83,6 +83,9 @@ assert.match(watermark, /M0 68 60 8v60H0Z/, "watermark must use the approved two
 assert.match(post, /pipeline\.composite\(\[\{[\s\S]*createMalikImageWatermarkSvg\(finalWidth\)[\s\S]*gravity:\s*"southeast"/, "generated image bytes must contain the Malik watermark")
 assert.match(videoStudio, /function MalikMediaWatermark/, "video results must render the Malik watermark")
 assert.match(videoStudio, /<svg viewBox="0 0 100 58"/, "video watermark must use an inline Malik logo so it cannot disappear")
+assert.match(videoStudio, /className="mv2__result-frame"[\s\S]*<MalikMediaWatermark \/>/, "desktop video watermark must be inside the fitted video frame")
+assert.match(videoStudio, /\.malik-media-watermark\{[^}]*left:18px;right:auto;bottom:16px/, "desktop video watermark must sit at the bottom-left of the video")
+assert.match(videoStudio, /\.malik-media-watermark\.is-compact\{[^}]*left:10px;right:auto;bottom:10px/, "mobile video watermark must sit at the bottom-left of the video")
 assert.match(videoStudio, /videoUrl \? "Malik Video" : selectedModel\.name/, "finished video metadata must show Malik branding instead of the provider")
 
 // Browser image history is metadata only. Old data:/blob: entries are rejected,
