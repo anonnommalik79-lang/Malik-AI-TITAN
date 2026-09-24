@@ -80,9 +80,16 @@ async function handlePOST(request: Request) {
   }
   const ownerMode = user.plan === "owner"
 
-  // Source-driven modes are deliberately pinned to Magic Hour: its current
-  // API supports both image-to-video and prompt-driven AI video editing.
-  if (mode === "image" || mode === "video") providerId = "magichour"
+  // Source-driven modes must use a provider that can consume the uploaded
+  // provider-native asset. Magic Hour and Runway both support source media.
+  if ((mode === "image" || mode === "video") && providerId && providerId !== "magichour" && providerId !== "runway") {
+    return Response.json({
+      ok: false,
+      code: "VIDEO_SOURCE_PROVIDER_UNSUPPORTED",
+      error: "Для Фото/Видео → Видео выберите Magic Hour или Runway.",
+    }, { status: 400 })
+  }
+  if ((mode === "image" || mode === "video") && !providerId) providerId = "magichour"
 
   // The verified founder account is unlimited at the Malik AI application layer.
   // Regular accounts keep the durable one-video-per-day gate.
