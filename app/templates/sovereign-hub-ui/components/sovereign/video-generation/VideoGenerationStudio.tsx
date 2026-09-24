@@ -52,6 +52,29 @@ type ShowcaseVideoTemplate = {
 }
 
 const ENDPOINT = "/api/media/video"
+
+async function videoFetch(path: string, init: RequestInit = {}, timeoutMs = 120_000) {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(path, {
+      ...init,
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: controller.signal,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "")
+    if (controller.signal.aborted) throw new Error("Сервер видео отвечает слишком долго. Попробуйте ещё раз.")
+    if (/load failed|failed to fetch|network/i.test(message)) {
+      throw new Error("Не удалось связаться с MalikVideo. Проверьте сеть и повторите генерацию.")
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
 const QUALITY_RESOLUTION: Record<Quality, "720p" | "1080p"> = {
   fast: "720p",
   max: "1080p",
@@ -458,7 +481,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     form.append("file", sourceFile, sourceFile.name)
     form.append("mode", mode)
     if (mode === "video") form.append("durationSeconds", String(sourceDurationSeconds))
-    const response = await clientFetchWithTimeout("/api/media/video/source", { method: "POST", body: form }, 90_000)
+    const response = await videoFetch("/api/media/video/source", { method: "POST", body: form }, 120_000)
     const data = await response.json().catch(() => ({}))
     if (!response.ok || !data?.filePath) {
       throw new Error(data?.error || "Не удалось загрузить исходный файл.")
@@ -501,7 +524,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     setPhase("queued")
     try {
       const sourcePath = mode === "text" ? "" : await uploadSource()
-      const response = await clientFetchWithTimeout(
+      const response = await videoFetch(
         ENDPOINT,
         {
           method: "POST",
@@ -519,7 +542,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             provider: mode === "text" ? selectedModel.provider : "magichour",
           }),
         },
-        60_000,
+        120_000,
       )
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
@@ -536,7 +559,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       for (let i = 0; i < 96; i += 1) {
         setAttempt(i)
         await sleep(i === 0 ? 1500 : i < 12 ? 2500 : 5000)
-        const statusResponse = await clientFetchWithTimeout(statusUrl, { method: "GET" }, 30_000)
+        const statusResponse = await videoFetch(statusUrl, { method: "GET" }, 45_000)
         const statusData = await statusResponse.json().catch(() => ({}))
         if (!statusResponse.ok) throw new Error(statusData?.error || `Status ${statusResponse.status}`)
         if (statusData?.status === "failed") throw new Error(statusData?.error || "Видеомодель не смогла завершить рендер")
@@ -1059,6 +1082,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           .mv2m__counter{display:flex;align-items:center;gap:7px;color:#777e89;font-size:8px}.mv2m__counter button{width:20px;height:20px;padding:0;border:0;border-radius:50%;background:#343840;color:#aeb4bd;display:grid;place-items:center}.mv2m__counter button svg{width:11px;height:11px}
           .mv2m__controls{display:grid;grid-template-columns:1fr 1fr .9fr 1.2fr;gap:6px;margin-top:8px}
           .mv2m__controls button{min-width:0;height:38px;padding:0 7px;border:1px solid #2b2e35;border-radius:10px;background:#111318;color:#bcc2cb;display:flex;align-items:center;justify-content:center;gap:5px;font-size:9px;white-space:nowrap}.mv2m__controls button svg{width:13px;height:13px;flex:0 0 13px}.mv2m__controls button span{overflow:hidden;text-overflow:ellipsis}.mv2m__controls button small{font-size:8px;color:#858c96}
+          .mv2m__model-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px;padding:8px;border:1px solid #292d35;border-radius:12px;background:#0b0d11;max-height:260px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+          .mv2m__model-picker button{position:relative;min-width:0;min-height:58px;padding:9px 10px;border:1px solid #292d35;border-radius:10px;background:#11141a;color:#fff;text-align:left;display:flex;flex-direction:column;justify-content:center;gap:4px}
+          .mv2m__model-picker button span{font-size:10px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}.mv2m__model-picker button small{font-size:8px;color:#858d99;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+          .mv2m__model-picker button.is-active{border-color:#fff;background:#1c2129;box-shadow:inset 0 0 0 1px rgba(255,255,255,.7)}.mv2m__model-picker button.is-active:after{content:"✓";position:absolute;right:8px;top:7px;font-size:10px;color:#fff}.mv2m__model-picker button:disabled{opacity:.35;cursor:not-allowed}
           .mv2m__generate{width:100%;height:48px;margin-top:8px;border:0;border-radius:12px;background:#39f75a;color:#041107;font-weight:850;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 0 22px rgba(57,247,90,.16)}.mv2m__generate svg{width:15px;height:15px;fill:currentColor}.mv2m__generate:disabled{opacity:.48;cursor:not-allowed}
           .mv2m__brand{margin-top:13px;color:#9fa6b0;font-size:8px;display:flex;align-items:center;justify-content:center;gap:6px}.mv2m__brand svg{width:13px;height:13px;color:#39f75a}
           .mv2m__status{margin-top:8px;min-height:28px;padding:7px 9px;border:1px solid #26302a;border-radius:9px;background:#0c130e;color:#8ee89d;font-size:9px;display:flex;align-items:center;justify-content:space-between;gap:8px}.mv2m__status.is-error{border-color:#3c2828;background:#160d0d;color:#f0a0a0}.mv2m__status button{border:0;background:transparent;color:inherit;text-decoration:underline;font-size:9px}
