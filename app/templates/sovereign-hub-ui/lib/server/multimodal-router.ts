@@ -399,7 +399,7 @@ export async function routeMalikAttachments(input: {
   attachments?: MalikMultimodalAttachment[]
   signal?: AbortSignal
 }): Promise<MalikAttachmentRoute> {
-  const attachments = (input.attachments || []).filter(Boolean).slice(0, 8)
+  const attachments = (input.attachments || []).filter(Boolean).slice(0, 12)
   if (!attachments.length) return { kind: "none", estimatedTokens: 0 }
 
   const estimatedTokens = estimateMultimodalTokens(attachments)
