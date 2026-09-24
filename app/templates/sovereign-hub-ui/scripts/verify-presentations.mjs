@@ -567,10 +567,12 @@ check("the wide start screen lives in desktop media queries only; the phone layo
 
 check("the sample deck on the start screen is drawn by the real renderer and marked as an example", () => {
   const showcase = read("components/sovereign/presentations/PresentationShowcase.tsx")
-  assert.match(showcase, /<SlideFrame slide=\{SHOWCASE_SLIDES\[at\]\}[^>]*build=/)
+  assert.match(showcase, /<SlideFrame slide=\{current\.slide\}[^>]*build=/)
   assert.match(showcase, /Пример · Malik AI собирает презентацию/)
   const samples = read("lib/presentations/showcase.ts")
-  assert.doesNotMatch(samples.replaceAll("http://www.w3.org/2000/svg", ""), /https?:\/\//, "no external pictures")
+  assert.doesNotMatch(samples, /https?:\/\//, "no external pictures")
+  const { existsSync } = require("node:fs")
+  for (const [, file] of samples.matchAll(/imageUrl: "(\/[^"]+)"/g)) assert.ok(existsSync(path.join(ROOT, "public", file)), `${file} is in public/`)
 })
 
 /* =================================================================== pptx */
