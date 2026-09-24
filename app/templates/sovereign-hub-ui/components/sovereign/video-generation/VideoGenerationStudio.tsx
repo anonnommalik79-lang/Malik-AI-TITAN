@@ -748,7 +748,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const cycleMobileDuration = () => chooseDuration(duration === 5 ? 10 : 5)
 
   const cycleMobileQuality = () => {
-    if (busy) return
+    if (busy || supportedResolutions.length < 2) return
     setQuality((value) => value === "max" ? "fast" : "max")
   }
 
@@ -888,7 +888,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
               <small>
                 {sourceFile && mode === "video"
                   ? `${sourceDurationSeconds.toFixed(1)} сек · AI-редактирование`
-                  : "MP4, MOV, WebM · фрагмент 3–10 сек"}
+                  : "MP4, MOV, WebM · фрагмент до 10 сек"}
               </small>
             </button>
             {sourceFile ? <button type="button" className="mv2m__source-remove" onClick={clearSource} aria-label="Убрать видео" disabled={busy}><X /></button> : null}
@@ -917,8 +917,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         </div>
 
         <div className="mv2m__controls">
-          <button type="button" onClick={cycleMobileDuration} disabled={busy || mode === "video"}><Clock3 /><span>{mode === "video" ? "до 10 сек" : `${duration} секунд`}</span></button>
-          <button type="button" onClick={cycleMobileQuality} disabled={busy}><Monitor /><span>{QUALITY_RESOLUTION[quality]}</span></button>
+          <button type="button" onClick={cycleMobileDuration} disabled={busy || activeCapability.durations.length < 2}><Clock3 /><span>{duration} секунд</span></button>
+          <button type="button" onClick={cycleMobileQuality} disabled={busy || supportedResolutions.length < 2}><Monitor /><span>{selectedResolution}</span></button>
           <button type="button" onClick={cycleMobileRatio} disabled={busy}><RectangleHorizontal /><span>{ratio}</span></button>
           <button type="button" onClick={() => setMobileModelOpen((open) => !open)} disabled={busy} aria-expanded={mobileModelOpen} aria-controls="mv2-mobile-models"><Box /><span>{selectedModel.name.split(" · ")[0]}</span><small>⌄</small></button>
         </div>
@@ -926,7 +926,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           <div id="mv2-mobile-models" className="mv2m__model-picker" role="group" aria-label="Выбор видеомодели">
             {MOBILE_MODELS.map((model) => {
               const available = modelAvailability[model.id] !== false
-              const supported = supportsMode(model.id, mode) && (duration !== 10 || model.id === "magichour")
+              const capability = videoCapability(model.provider as VideoProviderId)
+              const supported = supportsMode(model.id, mode) && capability.durations.includes(duration)
               return (
                 <button
                   key={model.id}
@@ -939,7 +940,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                   }}
                 >
                   <span>{model.name}</span>
-                  <small>{!available ? "Не подключена" : !supported ? "Можно выбрать · генерация в Текст → Видео" : duration === 10 && model.id !== "magichour" ? "Можно выбрать · 5 сек" : model.subtitle}</small>
+                  <small>{!available ? "Не подключена" : !supported ? `Режимы: ${capability.modes.join(" / ")} · ${capability.durations.join("/")}с` : `${selectedModelId === model.id ? "Выбрано · " : ""}${capability.resolutions.join("/")}`}</small>
                 </button>
               )
             })}
@@ -949,11 +950,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         <button
           type="button"
           className="mv2m__generate"
-          onClick={generate}
-          disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile)}
+          onClick={busy ? cancelGeneration : generate}
+          disabled={!busy && (!prompt.trim() || (mode !== "text" && !sourceFile) || !supportsMode(selectedModelId, mode))}
         >
-          <Play />
-          <span>{busy ? statusLabel(phase, attempt) : mode === "video" ? "Изменить видео" : "Генерировать"}</span>
+          {busy ? <X /> : <Play />}
+          <span>{busy ? "Остановить генерацию" : mode === "video" ? "Изменить видео" : "Генерировать"}</span>
         </button>
 
         <div className="mv2m__brand"><Crown />Превращай идеи в реальность с Malik AI</div>
@@ -1024,8 +1025,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           {busy ? (
             <div className="mv2__rendering">
               <div className="mv2__render-box"><Sparkles size={34} /></div>
-              <strong>{statusLabel(phase, attempt)}</strong>
-              <small>{selectedModel.name} · {ratio} · {duration}s · {selectedModel.audio ? "Audio" : "Video"}</small>
+              <strong>{serverStage ? `${statusLabel(phase, attempt)} · ${serverStage}` : statusLabel(phase, attempt)}</strong>
+              <small>{selectedModel.name} · {ratio} · {duration}s · {selectedResolution} · {activeCapability.audio ? "Audio" : "Video"}</small>
             </div>
           ) : null}
         </div>
@@ -1048,10 +1049,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
         <div className="mv2__preview-info">
           <div className="mv2__preview-copy">
-            <div className="mv2__mobile-badges"><span>{videoUrl ? QUALITY_RESOLUTION[quality] : "MALIK VIDEO"}</span><span>CINEMATIC</span></div>
+            <div className="mv2__mobile-badges"><span>{videoUrl ? selectedResolution : "MALIK VIDEO"}</span><span>CINEMATIC</span></div>
             <h3>{videoUrl ? "Готовое видео" : selectedItem.title}</h3>
             <p>{videoUrl ? "Готовый результат Malik AI с фирменным watermark." : selectedItem.prompt}</p>
-            <div className="mv2__chips"><span>{duration} секунд</span><span>{QUALITY_RESOLUTION[quality]}</span><span>{ratio}</span><span>{videoUrl ? "Malik Video" : selectedModel.name}</span><span>{selectedModel.audio ? "Audio" : "Video"}</span></div>
+            <div className="mv2__chips"><span>{duration} секунд</span><span>{selectedResolution}</span><span>{ratio}</span><span>{videoUrl ? "Malik Video" : selectedModel.name}</span><span>{activeCapability.audio ? "Audio" : "Video"}</span></div>
           </div>
           <div className="mv2__preview-actions">
             <button type="button" onClick={downloadCurrent}><Download /><span>Скачать</span></button>
@@ -1126,7 +1127,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                   : "Оригинальное видео будет основой для AI-редактирования."
                 : mode === "image"
                   ? "PNG, JPG, WebP или AVIF"
-                  : "MP4, WebM, MOV или M4V · 3–10 секунд"}</small>
+                  : "MP4, WebM, MOV или M4V · до 10 секунд"}</small>
             </div>
             <button className="mv2__source-upload" type="button" onClick={() => sourceInputRef.current?.click()} disabled={busy}>
               <Upload />{sourceFile ? "Заменить" : "Загрузить"}
@@ -1135,11 +1136,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           </div>
         ) : null}
 
-        <div className="mv2__daily-note">1 генерация видео в день на один аккаунт</div>
+        <div className="mv2__daily-note">{quotaLabel || "Дневной лимит зависит от плана; точный остаток показывает сервер после генерации."}</div>
 
         <div className="mv2__section-title"><span>Модель</span><Info /><span className="mv2__selected-model">Выбрано: {selectedModel.name}</span></div>
         <div className="mv2__models">
-          {MODELS.map((model) => {
+          {MOBILE_MODELS.map((model) => {
             const active = model.id === selectedModelId
             return (
               <button
@@ -1153,12 +1154,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                 title={modelAvailability[model.id] === false
                   ? "Модель сейчас не подключена к серверу"
                   : !supportsMode(model.id, mode)
-                    ? "Модель можно выбрать. Для текущего Фото/Видео режима генерация доступна через Magic Hour; эта модель работает в Текст → Видео."
-                    : duration === 10 && model.id !== "magichour"
-                      ? "Модель можно выбрать. Для генерации выберите 5 секунд или Magic Hour для 10 секунд."
-                      : model.note}
+                    ? `Не поддерживает текущий режим. Доступно: ${videoCapability(model.provider as VideoProviderId).modes.join(" / ")}`
+                    : videoCapability(model.provider as VideoProviderId).note}
               >
-                <span className="mv2__model-icon"><img src={model.icon} alt="" draggable={false} /></span>
+                <span className="mv2__model-icon">{model.icon ? <img src={model.icon} alt="" draggable={false} /> : <b>{model.name.slice(0, 2).toUpperCase()}</b>}</span>
                 <span className="mv2__model-copy"><strong>{model.name}</strong><small>{model.subtitle}</small></span>
                 <span className="mv2__tier is-free">{model.tier}</span>
               </button>
@@ -1182,13 +1181,13 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         {modelNotice ? <div className="mv2__model-notice">{modelNotice}</div> : null}
 
         <div className="mv2__settings-grid">
-          <div><div className="mv2__section-title">Качество <Info /></div><div className="mv2__segments"><button type="button" aria-pressed={quality === "fast"} className={quality === "fast" ? "is-active" : ""} onClick={() => setQuality("fast")} disabled={busy}>720p · Быстро</button><button type="button" aria-pressed={quality === "max"} className={quality === "max" ? "is-active" : ""} onClick={() => setQuality("max")} disabled={busy}>1080p · Max</button><button type="button" className="is-disabled" disabled>2K · Pro</button></div></div>
-          <div><div className="mv2__section-title">Длительность</div><div className="mv2__segments">{([5, 10] as Duration[]).map((value) => <button key={value} type="button" aria-pressed={duration === value} className={duration === value ? "is-active" : ""} onClick={() => chooseDuration(value)} disabled={busy}>{value} сек</button>)}<button type="button" className="is-disabled" disabled>16 сек · Pro</button></div></div>
+          <div><div className="mv2__section-title">Качество <Info /></div><div className="mv2__segments"><button type="button" aria-pressed={quality === "fast" || supportedResolutions.length === 1} className={quality === "fast" || supportedResolutions.length === 1 ? "is-active" : ""} onClick={() => setQuality("fast")} disabled={busy}>{supportedResolutions[0]} · Быстро</button><button type="button" aria-pressed={quality === "max" && supportedResolutions.length > 1} className={quality === "max" && supportedResolutions.length > 1 ? "is-active" : ""} onClick={() => setQuality("max")} disabled={busy || supportedResolutions.length < 2}>{supportedResolutions[supportedResolutions.length - 1]} · Max</button></div></div>
+          <div><div className="mv2__section-title">Длительность</div><div className="mv2__segments">{([5, 10] as Duration[]).map((value) => <button key={value} type="button" aria-pressed={duration === value} className={duration === value ? "is-active" : ""} onClick={() => chooseDuration(value)} disabled={busy || !activeCapability.durations.includes(value)}>{value} сек</button>)}</div></div>
           <div><div className="mv2__section-title">Соотношение сторон</div><div className="mv2__segments">{(["16:9", "9:16", "1:1"] as Ratio[]).map((value) => <button key={value} type="button" aria-pressed={ratio === value} className={ratio === value ? "is-active" : ""} onClick={() => setRatio(value)} disabled={busy}>{value}</button>)}</div></div>
         </div>
 
-        <div className="mv2__generate-row"><button type="button" className="mv2__generate" onClick={generate} disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile)}><span>{busy ? statusLabel(phase, attempt) : mode === "image" ? `Оживить фото · ${duration} сек` : mode === "video" ? `Изменить видео · ${duration} сек` : "Сгенерировать видео"}</span><ArrowUp /></button><div className="mv2__credits">◉ 1 видео / день</div><button type="button" className="mv2__tune"><SlidersHorizontal /></button></div>
-        <div className="mv2__status"><span className={`mv2__status-dot is-${phase}`} />{statusLabel(phase, attempt)}{error ? <b>{error}</b> : null}</div>
+        <div className="mv2__generate-row"><button type="button" className="mv2__generate" onClick={busy ? cancelGeneration : generate} disabled={!busy && (!prompt.trim() || (mode !== "text" && !sourceFile) || !supportsMode(selectedModelId, mode))}><span>{busy ? "Остановить генерацию" : mode === "image" ? `Оживить фото · ${duration} сек` : mode === "video" ? `Изменить видео · ${duration} сек` : "Сгенерировать видео"}</span>{busy ? <X /> : <ArrowUp />}</button><div className="mv2__credits">{quotaLabel || "server quota"}</div><button type="button" className="mv2__tune"><SlidersHorizontal /></button></div>
+        <div className="mv2__status"><span className={`mv2__status-dot is-${phase}`} />{serverStage ? `${statusLabel(phase, attempt)} · ${serverStage}` : statusLabel(phase, attempt)}{error ? <b>{error}</b> : null}</div>
 
         <div className="mv2__gallery-tabs">{CATEGORIES.map((item) => <button key={item} type="button" className={activeCategory === item ? "is-active" : ""} onClick={() => setActiveCategory(item)}>{item}</button>)}</div>
         <div className="mv2__gallery">
