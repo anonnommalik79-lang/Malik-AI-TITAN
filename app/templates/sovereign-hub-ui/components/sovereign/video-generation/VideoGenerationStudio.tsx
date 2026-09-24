@@ -327,12 +327,18 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("Популярное")
   const [thumbPage, setThumbPage] = useState(0)
   const [modelNotice, setModelNotice] = useState("")
-  const [selectedModelId, setSelectedModelId] = useState<(typeof MOBILE_MODELS)[number]["id"]>("pixazo")
+  const [selectedModelId, setSelectedModelId] = useState<(typeof MOBILE_MODELS)[number]["id"]>(DEFAULT_VIDEO_PROVIDER_ID)
   const [mobileModelOpen, setMobileModelOpen] = useState(false)
   const [modelAvailability, setModelAvailability] = useState<Partial<Record<VideoProviderId, boolean>>>({})
   const [mobilePanel, setMobilePanel] = useState<"text" | "image" | "video" | "style">("text")
+  const [serverStage, setServerStage] = useState("")
+  const [quotaLabel, setQuotaLabel] = useState("")
+  const generationAbortRef = useRef<AbortController | null>(null)
   const busy = phase === "queued" || phase === "rendering"
   const selectedModel = MOBILE_MODELS.find((model) => model.id === selectedModelId) || MOBILE_MODELS[0]
+  const activeCapability = videoCapability(selectedModel.provider as VideoProviderId)
+  const supportedResolutions = activeCapability.resolutions
+  const selectedResolution = (quality === "max" ? supportedResolutions[supportedResolutions.length - 1] : supportedResolutions[0]) || "720p"
   const selectedItem = SHOWCASE_TEMPLATES[selected] || SHOWCASE_TEMPLATES[0]
   const cards = useMemo(() => SHOWCASE_TEMPLATES.slice(1), [])
   const thumbSize = 3
@@ -353,7 +359,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         if (!active || !data?.models) return
         setModelAvailability(data.models)
         setSelectedModelId((current) => {
-          if (current === "magichour" || data.models[current]) return current
+          if (data.models[current]) return current
+          if (data.models[DEFAULT_VIDEO_PROVIDER_ID]) return DEFAULT_VIDEO_PROVIDER_ID
           return MOBILE_MODELS.find((model) => data.models[model.id])?.id || current
         })
       })
@@ -368,7 +375,14 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   }, [])
 
   const supportsMode = (modelId: (typeof MOBILE_MODELS)[number]["id"], targetMode: VideoMode) =>
-    targetMode === "text" ? true : modelId === "magichour"
+    videoSupportsMode(modelId as VideoProviderId, targetMode)
+
+  const compatibleNames = (targetMode: VideoMode) =>
+    MOBILE_MODELS
+      .filter((model) => modelAvailability[model.id] !== false && supportsMode(model.id, targetMode))
+      .map((model) => model.name)
+      .slice(0, 4)
+      .join(", ")
 
   const changeMode = (nextMode: VideoMode) => {
     if (busy || nextMode === mode) return
@@ -379,24 +393,16 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     setSourcePreview("")
     setVideoUrl("")
     setError("")
+    setServerStage("")
     setPhase("idle")
 
-    if (nextMode === "text") {
-      setModelNotice(
-        duration === 10 && selectedModelId !== "magichour"
-          ? `Выбрано: ${selectedModel.name}. Модель сохранена; для 10 секунд выберите Magic Hour или переключите длительность на 5 сек.`
-          : `Выбрано: ${selectedModel.name}. ${selectedModel.note}`,
-      )
+    if (!activeCapability.durations.includes(duration)) setDuration(activeCapability.durations[0])
+    if (supportsMode(selectedModelId, nextMode)) {
+      setModelNotice(`Выбрано: ${selectedModel.name}. ${activeCapability.note}`)
       return
     }
-
-    setDuration(5)
     setModelNotice(
-      selectedModelId === "magichour"
-        ? nextMode === "image"
-          ? "Image → Video работает через Magic Hour: исходное фото остаётся первым кадром."
-          : "Видео → Видео: Magic Hour AI Video Editor редактирует первые 5 секунд исходного клипа по тексту."
-        : `Выбрано: ${selectedModel.name}. Модель не сброшена, но ${nextMode === "image" ? "Фото → Видео" : "Видео → Видео"} сейчас поддерживает Magic Hour. Можно в любой момент выбрать другую карточку или Magic Hour для генерации.`,
+      `${selectedModel.name} не поддерживает ${nextMode === "image" ? "Фото → Видео" : nextMode === "video" ? "Видео → Видео" : "Текст → Видео"}. Модель НЕ будет заменена скрытно. Подходят: ${compatibleNames(nextMode) || "нет подключённых моделей"}.`,
     )
   }
 
@@ -407,19 +413,21 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       return
     }
 
+    const capability = videoCapability(model.provider as VideoProviderId)
     setSelectedModelId(model.id)
+    setDuration((current) => capability.durations.includes(current) ? current : capability.durations[0])
+    setQuality(capability.resolutions.includes("1080p") || capability.resolutions.includes("2k") ? "max" : "fast")
     setVideoUrl("")
     setError("")
+    setServerStage("")
     setPhase("idle")
 
     if (!supportsMode(model.id, mode)) {
       setModelNotice(
-        `Выбрано: ${model.name}. Переключение моделей не заблокировано; для ${mode === "image" ? "Фото → Видео" : "Видео → Видео"} генерация сейчас доступна через Magic Hour. Эта модель работает в Текст → Видео.`,
+        `Выбрано: ${model.name}. Этот режим модель не поддерживает; генерация заблокирована, скрытой подмены не будет. Подходят: ${compatibleNames(mode) || "нет подключённых моделей"}.`,
       )
-    } else if (duration === 10 && model.id !== "magichour") {
-      setModelNotice(`Выбрано: ${model.name}. Для этой модели выберите 5 секунд; 10 секунд сейчас доступны через Magic Hour.`)
     } else {
-      setModelNotice(`Выбрано: ${model.name}. ${model.note}`)
+      setModelNotice(`Выбрано: ${model.name}. ${capability.note}`)
     }
   }
 
@@ -473,8 +481,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           setError(`Для Видео → Видео загрузите клип до 10 секунд. Сейчас: ${sourceDuration.toFixed(1)} сек.`)
           return
         }
-        if (sourceDuration < 3) {
-          setError(`Magic Hour AI Video Editor принимает клипы от 3 до 10 секунд.`)
+        if (sourceDuration < 1) {
+          setError("Для Видео → Видео загрузите клип длительностью хотя бы 1 секунду.")
           return
         }
       }
@@ -487,8 +495,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       setError("")
       setPhase("idle")
       if (!imageMode) {
-        setDuration(5)
-        setModelNotice(`Исходник ${sourceDuration.toFixed(1)} сек · будет обработано первые ${Math.min(5, sourceDuration).toFixed(1)} сек через Magic Hour AI Video Editor.`)
+        setModelNotice(`Исходник ${sourceDuration.toFixed(1)} сек · выбранная модель: ${selectedModel.name}. Основа видео будет сохранена настолько, насколько это поддерживает провайдер.`)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось прочитать файл.")
@@ -506,19 +513,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   const chooseDuration = (value: Duration) => {
     if (busy) return
-    if (mode === "video") {
-      setDuration(5)
-      setModelNotice(
-        selectedModelId === "magichour"
-          ? `Видео → Видео обработает первые ${Math.min(5, sourceDurationSeconds || 5).toFixed(1)} сек через Magic Hour AI Video Editor.`
-          : `Выбрано: ${selectedModel.name}. Видео → Видео сейчас рендерится через Magic Hour; выбранная модель не будет самопроизвольно заменена.`,
-      )
+    if (!activeCapability.durations.includes(value)) {
+      setModelNotice(`${selectedModel.name}: доступны ${activeCapability.durations.join(" / ")} сек.`)
       return
     }
     setDuration(value)
-    if (value === 10 && selectedModelId !== "magichour") {
-      setModelNotice(`Выбрано: ${selectedModel.name}. Выбор сохранён; для 10 секунд выберите Magic Hour или верните 5 секунд.`)
-    }
   }
 
   const uploadSource = async () => {
@@ -526,6 +525,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     const form = new FormData()
     form.append("file", sourceFile, sourceFile.name)
     form.append("mode", mode)
+    form.append("provider", selectedModel.provider)
     if (mode === "video") form.append("durationSeconds", String(sourceDurationSeconds))
     const response = await videoFetch("/api/media/video/source", { method: "POST", body: form }, 120_000)
     const data = await response.json().catch(() => ({}))
