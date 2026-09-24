@@ -10,12 +10,16 @@ const VIDEO_MIME = new Set(["video/mp4", "video/webm", "video/quicktime", "video
 const MAX_IMAGE_BYTES = Number(process.env.MAX_UPLOAD_IMAGE_MB || 12) * 1024 * 1024
 const MAX_VIDEO_BYTES = Number(process.env.MAX_UPLOAD_VIDEO_MB || 50) * 1024 * 1024
 
-function apiBase() {
+function magicHourApiBase() {
   return String(process.env.MAGIC_HOUR_BASE_URL || "https://api.magichour.ai").trim().replace(/\/+$/, "")
 }
 
-function apiKey() {
+function magicHourApiKey() {
   return String(process.env.MAGIC_HOUR_API_KEY || "").trim()
+}
+
+function runwayApiKey() {
+  return String(process.env.RUNWAYML_API_SECRET || process.env.RUNWAY_API_KEY || "").trim()
 }
 
 function extension(name: string, mime: string) {
@@ -38,6 +42,127 @@ function pickString(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
+async function uploadToRunway(file: File, ext: string) {
+  const key = runwayApiKey()
+  if (!key) {
+    return {
+      ok: false as const,
+      status: 503,
+      code: "RUNWAY_NOT_CONFIGURED",
+      error: "Runway API не настроен.",
+    }
+  }
+
+  const filename = `malik-source-${Date.now()}.${ext}`
+  const createResponse = await fetch("https://api.dev.runwayml.com/v1/uploads", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "X-Runway-Version": "2024-11-06",
+    },
+    body: JSON.stringify({ filename, type: "ephemeral" }),
+    cache: "no-store",
+  })
+
+  const createPayload = await createResponse.json().catch(() => ({} as any))
+  const uploadUrl = pickString(createPayload?.uploadUrl || createPayload?.upload_url)
+  const runwayUri = pickString(createPayload?.runwayUri || createPayload?.runway_uri)
+  const fields = createPayload?.fields && typeof createPayload.fields === "object" ? createPayload.fields : {}
+
+  if (!createResponse.ok || !uploadUrl || !runwayUri) {
+    const detail = pickString(createPayload?.message || createPayload?.error?.message || createPayload?.error)
+    return {
+      ok: false as const,
+      status: 502,
+      code: "RUNWAY_UPLOAD_INIT_FAILED",
+      error: detail || `Runway не подготовил загрузку (HTTP ${createResponse.status}).`,
+    }
+  }
+
+  const uploadForm = new FormData()
+  for (const [keyName, value] of Object.entries(fields)) {
+    if (typeof value === "string") uploadForm.append(keyName, value)
+  }
+  uploadForm.append("file", file, filename)
+
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "POST",
+    body: uploadForm,
+    cache: "no-store",
+  })
+
+  if (!uploadResponse.ok) {
+    const detail = await uploadResponse.text().catch(() => "")
+    return {
+      ok: false as const,
+      status: 502,
+      code: "RUNWAY_UPLOAD_FAILED",
+      error: detail.slice(0, 500) || `Runway upload failed (HTTP ${uploadResponse.status}).`,
+    }
+  }
+
+  return { ok: true as const, filePath: runwayUri, provider: "runway" as const }
+}
+
+async function uploadToMagicHour(file: File, mode: "image" | "video", ext: string, mime: string) {
+  const key = magicHourApiKey()
+  if (!key) {
+    return {
+      ok: false as const,
+      status: 503,
+      code: "MAGIC_HOUR_NOT_CONFIGURED",
+      error: "Magic Hour API не настроен.",
+    }
+  }
+
+  const createResponse = await fetch(`${magicHourApiBase()}/v1/files/upload-urls`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ items: [{ type: mode, extension: ext }] }),
+    cache: "no-store",
+  })
+
+  const createPayload = await createResponse.json().catch(() => ({} as any))
+  const item = Array.isArray(createPayload?.items) ? createPayload.items[0] : undefined
+  const uploadUrl = pickString(item?.upload_url || item?.uploadUrl)
+  const filePath = pickString(item?.file_path || item?.filePath)
+  if (!createResponse.ok || !uploadUrl || !filePath) {
+    const detail = pickString(createPayload?.message || createPayload?.error?.message || createPayload?.error)
+    return {
+      ok: false as const,
+      status: 502,
+      code: "SOURCE_UPLOAD_INIT_FAILED",
+      error: detail || `Не удалось подготовить загрузку (HTTP ${createResponse.status}).`,
+    }
+  }
+
+  const bytes = await file.arrayBuffer()
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": mime || "application/octet-stream" },
+    body: bytes,
+    cache: "no-store",
+  })
+
+  if (!uploadResponse.ok) {
+    const detail = await uploadResponse.text().catch(() => "")
+    return {
+      ok: false as const,
+      status: 502,
+      code: "SOURCE_UPLOAD_FAILED",
+      error: detail.slice(0, 500) || `Загрузка файла не удалась (HTTP ${uploadResponse.status}).`,
+    }
+  }
+
+  return { ok: true as const, filePath, provider: "magichour" as const }
+}
+
 export async function POST(request: Request) {
   const user = await resolveMediaUser(request)
   if (!user.authenticated || user.userId === "guest") {
@@ -47,18 +172,12 @@ export async function POST(request: Request) {
     )
   }
 
-  const key = apiKey()
-  if (!key) {
-    return Response.json(
-      { ok: false, code: "MAGIC_HOUR_NOT_CONFIGURED", error: "Magic Hour API не настроен." },
-      { status: 503 },
-    )
-  }
-
   const form = await request.formData().catch(() => null)
   const file = form?.get("file")
   const requestedMode = String(form?.get("mode") || "").trim()
+  const requestedProvider = String(form?.get("provider") || "").trim().toLowerCase()
   const durationSeconds = Number(form?.get("durationSeconds") || 0)
+
   if (!(file instanceof File) || file.size <= 0) {
     return Response.json({ ok: false, code: "FILE_REQUIRED", error: "Выберите файл." }, { status: 400 })
   }
@@ -89,49 +208,23 @@ export async function POST(request: Request) {
   }
 
   const ext = extension(file.name || "source", mime)
-  const createResponse = await fetch(`${apiBase()}/v1/files/upload-urls`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ items: [{ type: mode, extension: ext }] }),
-    cache: "no-store",
-  })
+  const provider = requestedProvider === "runway" ? "runway" : "magichour"
+  const result = provider === "runway"
+    ? await uploadToRunway(file, ext)
+    : await uploadToMagicHour(file, mode, ext, mime)
 
-  const createPayload = await createResponse.json().catch(() => ({} as any))
-  const item = Array.isArray(createPayload?.items) ? createPayload.items[0] : undefined
-  const uploadUrl = pickString(item?.upload_url || item?.uploadUrl)
-  const filePath = pickString(item?.file_path || item?.filePath)
-  if (!createResponse.ok || !uploadUrl || !filePath) {
-    const detail = pickString(createPayload?.message || createPayload?.error?.message || createPayload?.error)
+  if (!result.ok) {
     return Response.json(
-      { ok: false, code: "SOURCE_UPLOAD_INIT_FAILED", error: detail || `Не удалось подготовить загрузку (HTTP ${createResponse.status}).` },
-      { status: 502 },
-    )
-  }
-
-  const bytes = await file.arrayBuffer()
-  const uploadResponse = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": mime || "application/octet-stream" },
-    body: bytes,
-    cache: "no-store",
-  })
-
-  if (!uploadResponse.ok) {
-    const detail = await uploadResponse.text().catch(() => "")
-    return Response.json(
-      { ok: false, code: "SOURCE_UPLOAD_FAILED", error: detail.slice(0, 500) || `Загрузка файла не удалась (HTTP ${uploadResponse.status}).` },
-      { status: 502 },
+      { ok: false, code: result.code, error: result.error, provider },
+      { status: result.status },
     )
   }
 
   return Response.json({
     ok: true,
     mode,
-    filePath,
+    provider: result.provider,
+    filePath: result.filePath,
     name: file.name,
     mime,
     size: file.size,
