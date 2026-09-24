@@ -95,7 +95,7 @@ export function ChatToolWorkspace({
   const Icon = config.icon
   const researchMode = mode === "web" || mode === "deep"
   const submit = () => {
-    if (researchMode) {
+    if (mode === "web" || mode === "deep") {
       const clean = query.trim()
       if (!clean) return
       onRunResearch?.(mode, clean)
