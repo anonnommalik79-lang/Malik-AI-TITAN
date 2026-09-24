@@ -11,7 +11,6 @@ import {
   Globe,
   GraduationCap,
   Image as ImageIcon,
-  KeyRound,
   Mail,
   Paperclip,
   Pencil,
@@ -22,7 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { prefetchChatShell } from "@/lib/studio-prefetch"
-import { PREFILL_EVENT, prefillPrompt, takePrefillPrompt, useContextEnabled } from "@/lib/malik-context"
+import { PREFILL_EVENT, takePrefillPrompt, useContextEnabled } from "@/lib/malik-context"
 import { DEFAULT_MALIK_MODEL_ID, type MalikModelId } from "@/lib/ai/malik-models"
 import type { ChatSendOptions } from "@/lib/ai/response-depth"
 import { useWebSearchEnabled } from "@/lib/ai/web-search-preference"
@@ -35,6 +34,8 @@ import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 import { normalizeClientImage } from "@/lib/media/client-image-normalize"
 import { ChatDrawingPad } from "../ChatDrawingPad"
 import { ChatLibraryPicker } from "../ChatLibraryPicker"
+import { ChatImageCreator, type ChatImageAspectRatio, type ChatImageResolution } from "../ChatImageCreator"
+import { ChatToolWorkspace, type ChatToolWorkspaceMode } from "../ChatToolWorkspace"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
@@ -397,6 +398,7 @@ function HomeComposer({
   onStartWeb,
   onStartDeepResearch,
   onCreateImage,
+  onOpenAccountTool,
   onSelectMediaFiles,
   onRemoveAttachment,
   selectedModelId,
@@ -419,6 +421,7 @@ function HomeComposer({
   onStartWeb: () => void
   onStartDeepResearch: () => void
   onCreateImage?: () => void
+  onOpenAccountTool: (provider: "github" | "gmail") => void
   onSelectMediaFiles: (files: File[]) => void
   onRemoveAttachment: (id: string) => void
   selectedModelId: MalikModelId
@@ -484,18 +487,6 @@ function HomeComposer({
     }
   }
 
-  const startPlugin = (pluginId: "github" | "gmail") => {
-    const command = `/plugin ${pluginId} `
-    prefillPrompt(command)
-    const current = new URL(window.location.href)
-    const returnTo = `${current.pathname}${current.search}${current.hash}` || "/dashboard"
-    window.location.assign(`/api/plugins/connect?id=${encodeURIComponent(pluginId)}&return_to=${encodeURIComponent(returnTo)}`)
-  }
-
-  const openOpenAIPlatform = () => {
-    window.open("https://platform.openai.com/", "_blank", "noopener,noreferrer")
-  }
-
   const tools: Array<{
     id: string
     label: string
@@ -509,9 +500,8 @@ function HomeComposer({
     { id: "web", label: "Поиск в сети", description: "Искать актуальную информацию", icon: Search, action: onStartWeb },
     { id: "deep-research", label: "Глубокое исследование", description: "Получить подробный отчёт с источниками", icon: Globe, action: onStartDeepResearch },
     { id: "draw", label: "Нарисовать", description: "Нарисуйте и прикрепите изображение", icon: Pencil, action: () => setDrawingOpen(true) },
-    { id: "github", label: "GitHub", description: "PR, issues, CI и репозитории", icon: Github, action: () => startPlugin("github") },
-    { id: "gmail", label: "Gmail", description: "Читайте и используйте почту Gmail в Malik AI", icon: Mail, action: () => startPlugin("gmail") },
-    { id: "openai-platform", label: "OpenAI Platform", description: "API keys, usage и billing в официальной платформе", icon: KeyRound, action: openOpenAIPlatform },
+    { id: "github", label: "GitHub", description: "PR, issues, CI и репозитории", icon: Github, action: () => onOpenAccountTool("github") },
+    { id: "gmail", label: "Gmail", description: "Читайте и используйте почту Gmail в Malik AI", icon: Mail, action: () => onOpenAccountTool("gmail") },
   ]
 
   const transferUrl = (transfer: DataTransfer | null) => {
@@ -741,7 +731,15 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [prompt, setPrompt] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [attachmentError, setAttachmentError] = useState("")
-  const [imageCredits, setImageCredits] = useState<{ remaining: number; daily: number } | null>(null)
+  const [imageCredits, setImageCredits] = useState<{
+    remaining: number
+    daily: number
+    costs: Record<ChatImageResolution, number>
+    remaining4k: number
+  } | null>(null)
+  const [imageCreatorOpen, setImageCreatorOpen] = useState(false)
+  const [toolWorkspace, setToolWorkspace] = useState<ChatToolWorkspaceMode | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
   const [webOn, setWebOn] = useWebSearchEnabled()
   const [memoryOn, setMemoryOn] = useContextEnabled()
   const [deepResearch, setDeepResearch] = useState(false)
@@ -756,6 +754,12 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
           setImageCredits({
             remaining: Number(payload.remaining || 0),
             daily: Number(payload.daily || 0),
+            costs: {
+              "1K": Number(payload?.costs?.["1K"] ?? 1),
+              "2K": Number(payload?.costs?.["2K"] ?? 2),
+              "4K": Number(payload?.costs?.["4K"] ?? 5),
+            },
+            remaining4k: Number(payload.remaining4k ?? 0),
           })
         }
       } catch {
@@ -903,21 +907,87 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   }
 
   const startWebSearch = () => {
-    setWebOn(true)
-    setDeepResearch(false)
-    prefetchChatShell()
-    focusPrompt(prompt.trim() || "Найди в сети актуальную информацию по теме: ")
+    setToolWorkspace("web")
   }
 
   const startDeepResearch = () => {
+    setToolWorkspace("deep")
+  }
+
+  const runResearchWorkspace = (mode: "web" | "deep", query: string) => {
+    const clean = query.trim()
+    if (!clean || props.isLoading) return
     setWebOn(true)
-    setDeepResearch(true)
+    setDeepResearch(mode === "deep")
     prefetchChatShell()
-    focusPrompt(prompt.trim() || "Проведи глубокое исследование по теме: ")
+    props.onSubmit(clean, [], {
+      research: true,
+      responseDepth: mode === "deep" ? "deep" : undefined,
+    })
+    setToolWorkspace(null)
+    setPrompt("")
+  }
+
+  const connectAccountTool = (provider: "github" | "gmail") => {
+    setToolWorkspace(null)
+    const current = new URL(window.location.href)
+    const returnTo = `${current.pathname}${current.search}${current.hash}` || "/dashboard"
+    window.location.assign(`/api/plugins/connect?id=${encodeURIComponent(provider)}&return_to=${encodeURIComponent(returnTo)}`)
+  }
+
+  const generateFromImageWorkspace = (input: {
+    prompt: string
+    style?: string
+    aspectRatio: ChatImageAspectRatio
+    imageSize: ChatImageResolution
+  }) => {
+    const clean = input.prompt.trim()
+    if (!clean || props.isLoading) return
+    const imageAttachments = attachments.filter((item) => item.kind === "image" || item.mime.startsWith("image/"))
+    props.onSubmit(`/image ${clean}`, imageAttachments, {
+      imageSize: input.imageSize,
+      imageAspectRatio: input.aspectRatio,
+      imageStyle: input.style,
+    })
+    setAttachments([])
+    setAttachmentError("")
+    setImageCreatorOpen(false)
+    setPrompt("")
   }
 
   return (
     <div className="thome">
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(event) => {
+          void addFiles(Array.from(event.currentTarget.files || []))
+          event.currentTarget.value = ""
+        }}
+      />
+
+      {imageCreatorOpen ? (
+        <ChatImageCreator
+          attachments={attachments}
+          credits={imageCredits}
+          busy={Boolean(props.isLoading)}
+          onAddImage={() => imageInputRef.current?.click()}
+          onRemoveAttachment={removeAttachment}
+          onClose={() => setImageCreatorOpen(false)}
+          onGenerate={generateFromImageWorkspace}
+        />
+      ) : null}
+
+      <ChatToolWorkspace
+        mode={toolWorkspace}
+        onClose={() => setToolWorkspace(null)}
+        onRunResearch={runResearchWorkspace}
+        onConnect={connectAccountTool}
+      />
+
       <div className="thome-inner">
         <section className="thome-launcher" aria-label="Malik AI">
           <div className="thome-welcome">
@@ -953,7 +1023,8 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               onToggleMemory={() => setMemoryOn(!memoryOn)}
               onStartWeb={startWebSearch}
               onStartDeepResearch={startDeepResearch}
-              onCreateImage={props.onOpenPhoto}
+              onCreateImage={() => setImageCreatorOpen(true)}
+              onOpenAccountTool={(provider) => setToolWorkspace(provider)}
               onSelectMediaFiles={(files) => { void addFiles(files) }}
               onRemoveAttachment={removeAttachment}
               selectedModelId={props.selectedModelId || DEFAULT_MALIK_MODEL_ID}
@@ -1027,7 +1098,8 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                   onToggleMemory={() => setMemoryOn(!memoryOn)}
                   onStartWeb={startWebSearch}
                   onStartDeepResearch={startDeepResearch}
-                  onCreateImage={props.onOpenPhoto}
+                  onCreateImage={() => setImageCreatorOpen(true)}
+                  onOpenAccountTool={(provider) => setToolWorkspace(provider)}
                   onSelectMediaFiles={(files) => { void addFiles(files) }}
                   onRemoveAttachment={removeAttachment}
                   selectedModelId={props.selectedModelId || DEFAULT_MALIK_MODEL_ID}
