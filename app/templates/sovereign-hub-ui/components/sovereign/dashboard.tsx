@@ -5336,6 +5336,50 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     }
   }, [activeChatId, currentPlan])
 
+  const handleBranchMessage = useCallback((messageId: string) => {
+    if (isLoading) return
+    const sourceMessages = messagesRef.current
+    const messageIndex = sourceMessages.findIndex((message) => message.id === messageId)
+    if (messageIndex < 0) return
+
+    const sourceChat = chatsRef.current.find((chat) => chat.id === activeChatId)
+    const branchMessages = sourceMessages.slice(0, messageIndex + 1).map((message) => ({
+      ...message,
+      id: crypto.randomUUID(),
+      timestamp: new Date(message.timestamp),
+      isStreaming: false,
+    }))
+    const lastUser = [...branchMessages].reverse().find((message) => message.role === "user")
+    const branchId = crypto.randomUUID()
+    const branchTitleBase = sourceChat?.title || lastUser?.content?.slice(0, 42) || "Новая ветка"
+    const branch: Chat = {
+      id: branchId,
+      title: `${branchTitleBase.replace(/\s+·\s+ветка.*$/i, "")} · ветка`,
+      timestamp: new Date(),
+      messages: branchMessages,
+      selectedModelId: sourceChat?.selectedModelId || selectedModelId,
+      status: "draft",
+      techStack: sourceChat?.techStack?.length ? [...sourceChat.techStack] : ["Malik AI"],
+      kind: sourceChat?.kind || "chat",
+      projectDescription: sourceChat?.projectDescription,
+      projectInstructions: sourceChat?.projectInstructions,
+      projectColor: sourceChat?.projectColor,
+    }
+
+    setChats((previous) => [branch, ...previous])
+    setActiveChatId(branchId)
+    setActiveProjectWorkspaceId(branch.kind === "project" ? branchId : null)
+    setMessages(branchMessages)
+    setSelectedModelId(branch.selectedModelId)
+    saveMalikModelSelection(branch.selectedModelId)
+    const lastCode = [...branchMessages].reverse().find((message) => message.role === "assistant" && message.generatedCode)?.generatedCode
+    setGeneratedCode(lastCode || "")
+    setStreamingText("")
+    setIsGeneratingTerminal(false)
+    setMobilePreviewOpen(Boolean(lastCode) && window.innerWidth < 1024)
+    safeOpenView(branch.kind === "project" ? "projects" : "home", "history")
+  }, [activeChatId, isLoading, safeOpenView, selectedModelId])
+
   const handleNewChat = useCallback(() => {
     safeOpenView("home", "manual")
     setMobilePreviewOpen(false)
@@ -7218,6 +7262,7 @@ const shouldShowMobilePreviewButton =
                 onForceCanvas={() => safeOpenCanvas(undefined, "project-chat")}
                 onOpenVoice={openVoiceMode}
                 onOpenActionTarget={handleActionTarget}
+                onBranchMessage={handleBranchMessage}
                 projectName={chats.find((chat) => chat.id === activeProjectWorkspaceId)?.title}
                 projectDescription={chats.find((chat) => chat.id === activeProjectWorkspaceId)?.projectDescription}
               />
@@ -7255,6 +7300,7 @@ const shouldShowMobilePreviewButton =
               onForceCanvas={() => safeOpenCanvas(undefined, "chat-force")}
               onOpenVoice={openVoiceMode}
               onOpenActionTarget={handleActionTarget}
+              onBranchMessage={handleBranchMessage}
             />
 
             </div>
