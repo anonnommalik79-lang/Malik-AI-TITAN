@@ -246,15 +246,82 @@ export async function createTitanVideoJob(provider: TitanVideoProviderId, input:
   if (provider === "runway") {
     const key = runwayKey()
     if (!key) throw new Error("RUNWAY_API_KEY missing")
-    const model = process.env.RUNWAY_VIDEO_MODEL || "gen4.5"
-    const response = await fetch("https://api.dev.runwayml.com/v1/text_to_video", {
+
+    const headers = {
+      authorization: `Bearer ${key}`,
+      "content-type": "application/json",
+      "X-Runway-Version": "2024-11-06",
+    }
+
+    let endpoint = "https://api.dev.runwayml.com/v1/text_to_video"
+    let model = process.env.RUNWAY_VIDEO_MODEL || "gen4.5"
+    let body: Record<string, unknown> = {
+      model,
+      promptText: input.prompt,
+      ratio: input.ratio === "9:16" ? "720:1280" : input.ratio === "1:1" ? "960:960" : "1280:720",
+      duration: length,
+    }
+
+    if (input.sourceVideoUrl) {
+      const configured = String(process.env.RUNWAY_VIDEO_EDIT_MODEL || "gemini_omni_flash").trim()
+      model = ["aleph2", "gemini_omni_flash", "gemini_omni_flash_1.1", "seedance2_5"].includes(configured)
+        ? configured
+        : "gemini_omni_flash"
+      endpoint = "https://api.dev.runwayml.com/v1/video_to_video"
+
+      body = model === "seedance2_5"
+        ? {
+            model,
+            promptVideo: input.sourceVideoUrl,
+            promptText: input.prompt,
+            mode: "edit",
+            duration: "auto",
+            audio: input.generateAudio !== false,
+          }
+        : model === "gemini_omni_flash_1.1"
+          ? {
+              model,
+              videoUri: input.sourceVideoUrl,
+              promptText: input.prompt,
+              mode: "edit",
+              duration: "auto",
+            }
+          : {
+              model,
+              videoUri: input.sourceVideoUrl,
+              promptText: input.prompt,
+            }
+    } else if (input.imageUrl) {
+      model = process.env.RUNWAY_IMAGE_VIDEO_MODEL || "gen4.5"
+      endpoint = "https://api.dev.runwayml.com/v1/image_to_video"
+      body = {
+        model,
+        promptImage: input.imageUrl,
+        promptText: input.prompt,
+        ratio: input.ratio === "9:16" ? "720:1280" : input.ratio === "1:1" ? "960:960" : "1280:720",
+        duration: length,
+      }
+    }
+
+    const response = await fetch(endpoint, {
       method: "POST",
-      headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "X-Runway-Version": "2024-11-06" },
-      body: JSON.stringify({ model, promptText: input.prompt, ratio: "1280:720", duration: length }),
+      headers,
+      body: JSON.stringify(body),
     })
     const payload = await response.json().catch(() => ({}))
-    if (!response.ok || !payload?.id) throw new Error(payload?.error || payload?.message || "Runway failed")
-    return { taskId: payload.id, model, statusUrl: `https://api.dev.runwayml.com/v1/tasks/${payload.id}`, responseUrl: undefined }
+    if (!response.ok || !payload?.id) {
+      const detail =
+        typeof payload?.error === "string"
+          ? payload.error
+          : payload?.error?.message || payload?.message || "Runway failed"
+      throw new Error(detail)
+    }
+    return {
+      taskId: String(payload.id),
+      model,
+      statusUrl: `https://api.dev.runwayml.com/v1/tasks/${encodeURIComponent(String(payload.id))}`,
+      responseUrl: undefined,
+    }
   }
 
   if (provider === "fal") {
@@ -320,13 +387,21 @@ export async function fetchTitanVideoStatus(provider: TitanVideoProviderId, task
 
   if (provider === "runway") {
     const key = runwayKey()
-    const response = await fetch(`https://api.dev.runwayml.com/v1/tasks/${taskId}`, {
+    const response = await fetch(extras?.statusUrl || `https://api.dev.runwayml.com/v1/tasks/${encodeURIComponent(taskId)}`, {
       headers: { authorization: `Bearer ${key}`, "X-Runway-Version": "2024-11-06" },
+      cache: "no-store",
     })
     const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(payload?.error?.message || payload?.error || payload?.message || `Runway status ${response.status}`)
+    }
     const status = payload?.status === "SUCCEEDED" ? "succeed" : payload?.status === "FAILED" ? "failed" : "processing"
-    const videoUrl = payload?.output?.[0]?.url || payload?.output?.url
-    return { status, videoUrl, error: payload?.failure || payload?.error }
+    const firstOutput = Array.isArray(payload?.output) ? payload.output[0] : payload?.output
+    const videoUrl =
+      typeof firstOutput === "string"
+        ? firstOutput
+        : firstOutput?.url || firstOutput?.uri || payload?.videoUrl || payload?.video_url
+    return { status, videoUrl, error: payload?.failure || payload?.error?.message || payload?.error }
   }
 
   if (provider === "fal" && extras?.responseUrl) {
