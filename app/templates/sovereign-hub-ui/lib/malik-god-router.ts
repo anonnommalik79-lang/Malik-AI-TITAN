@@ -6,6 +6,7 @@ import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { buildMalikResponseSystemPrompt, cleanModelText } from "@/lib/ai/response-intelligence"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
+import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers } from "@/lib/ai/superpowers"
 
 type ProviderAttempt = {
   provider: string
@@ -150,7 +151,7 @@ function isCapabilities(prompt: string) {
 function localSmart(prompt: string) {
   if (isTinyCasual(prompt)) return "Привет, брат. Я здесь. Чем помогаю?"
   if (isIdentity(prompt)) return "Я MALIK AI V6.5 TITAN — твой AI-командный центр для ответов, кода, идей, дизайна, анализа, поиска свежей информации и запуска проектов."
-  if (isCapabilities(prompt)) return "Я могу отвечать, писать код, анализировать файлы, искать свежую информацию через открытые источники, помогать с бизнесом, дизайном, проектами и запуском MALIK AI."
+  if (isCapabilities(prompt)) return "Я работаю через Malik Superpower OS: глубокое мышление и research, Web Scout, Vision, изображения и редактирование, файлы и Data Lab, голос, память, проекты и библиотеку, Study, Work/Agent, документы, таблицы, презентации, сайты, browser actions, подключённые приложения, автоматизации и длинные workflow. Кодекс остаётся отдельным режимом и в Superpower OS не смешивается."
   return ""
 }
 
@@ -750,9 +751,17 @@ function sourceContext(sources: SourceItem[]) {
     .join("\n\n")
 }
 
-function systemPrompt(usedWeb: boolean, prompt: string, brainInstruction?: string) {
-  const brain = brainInstruction || buildMalikBrainSystemInstruction(analyzeMalikBrainV1({ prompt }))
-  return [buildMalikResponseSystemPrompt({ prompt, usedWeb }), brain].filter(Boolean).join("\n\n")
+function systemPrompt(
+  usedWeb: boolean,
+  prompt: string,
+  brainInstruction?: string,
+  attachments: any[] = [],
+  metadata?: Record<string, unknown>,
+) {
+  const brain = brainInstruction || buildMalikBrainSystemInstruction(analyzeMalikBrainV1({ prompt, attachments }))
+  const powers = detectMalikSuperpowers(prompt, attachments, metadata)
+  const superpower = buildMalikSuperpowerSystemPrompt(powers)
+  return [buildMalikResponseSystemPrompt({ prompt, usedWeb }), brain, superpower].filter(Boolean).join("\n\n")
 }
 
 type ProviderConfig = {
@@ -996,7 +1005,7 @@ export async function malikGodAnswer(
     const result = await runStrictMalikModel({
       modelId: selection.modelId,
       prompt: strictPrompt,
-      systemPrompt: systemPrompt(usedWeb, prompt, brainInstruction),
+      systemPrompt: systemPrompt(usedWeb, prompt, brainInstruction, attachments, body?.metadata),
       history,
       attachments,
       maxTokens: Number(body?.maxTokens) || brain.outputTokenTarget,
