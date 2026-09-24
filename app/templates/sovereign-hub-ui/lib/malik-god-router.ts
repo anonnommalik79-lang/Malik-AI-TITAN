@@ -1018,6 +1018,7 @@ export async function malikGodAnswer(
       scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
     ])
     const sources: SourceItem[] = [...webSources, ...(connected.sources as SourceItem[]), ...(science.sources as SourceItem[])].slice(0, 32)
+    const usedEvidence = usedWeb || connected.sources.length > 0 || science.sources.length > 0
     const strictPrompt = [
       `Question:\n${prompt}`,
       usedWeb && webSources.length ? `Web sources:\n${sourceContext(webSources)}` : "",
@@ -1027,7 +1028,7 @@ export async function malikGodAnswer(
     const result = await runStrictMalikModel({
       modelId: selection.modelId,
       prompt: strictPrompt,
-      systemPrompt: systemPrompt(usedWeb, prompt, brainInstruction, attachments, body?.metadata),
+      systemPrompt: systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata),
       history,
       attachments,
       maxTokens: Number(body?.maxTokens) || Math.max(brain.outputTokenTarget, powerOutputTokens),
@@ -1042,7 +1043,7 @@ export async function malikGodAnswer(
       provider: result.provider,
       model: result.model,
       selectedModelId: result.selectedModelId,
-      usedWeb,
+      usedWeb: usedEvidence,
       sources,
       factAudit: auditGroundedAnswer(content, sources, prompt),
       attempts: [{
@@ -1081,8 +1082,9 @@ export async function malikGodAnswer(
     scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
   ])
   const sources: SourceItem[] = [...webSources, ...(science.sources as SourceItem[])].slice(0, 32)
+  const usedEvidence = usedWeb || science.sources.length > 0
   const providerPrompt = science.context ? [prompt, science.context].join("\n\n") : prompt
-  const result = await callProviderChain(providerPrompt, usedWeb || science.sources.length > 0, sources, maxTokens)
+  const result = await callProviderChain(providerPrompt, usedEvidence, sources, maxTokens)
 
   let answer: GodAnswer
   if (result.content) {
@@ -1090,7 +1092,7 @@ export async function malikGodAnswer(
       content: result.content,
       provider: result.provider,
       model: result.model,
-      usedWeb,
+      usedWeb: usedEvidence,
       sources,
       factAudit: auditGroundedAnswer(result.content, sources, prompt),
       attempts: result.attempts,
@@ -1099,7 +1101,7 @@ export async function malikGodAnswer(
     answer = sourceFallback(sources, result.attempts)
   }
 
-  if (usedWeb) setCache(prompt, answer)
+  if (usedEvidence) setCache(prompt, answer)
   return answer
 }
 
