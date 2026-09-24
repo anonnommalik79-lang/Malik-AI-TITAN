@@ -38,6 +38,21 @@ export type MalikSuperpowerId =
   | "event-triggers"
   | "interactive-results"
   | "long-workflows"
+  | "long-context"
+  | "context-fusion"
+  | "artifacts"
+  | "cloud-jobs"
+  | "cross-device"
+  | "local-workspace"
+  | "mcp"
+  | "skills"
+  | "office"
+  | "science"
+  | "self-check"
+  | "recovery"
+  | "adaptive-effort"
+  | "large-output"
+  | "computer-use"
 
 export type MalikSuperpower = {
   id: MalikSuperpowerId
@@ -509,6 +524,189 @@ export const MALIK_SUPERPOWERS: readonly MalikSuperpower[] = [
     [/сначала.*потом|найди.*затем|проанализ.*и.*создай|от начала до конца|multi.?step|workflow|then.*create|research.*then|end.?to.?end/iu],
     "Coordinate the minimum set of powers needed for the goal. Keep intermediate facts and artifacts consistent across steps, retry only safe operations, stop on unresolved destructive/paid actions, and deliver one coherent final result with the state of each attempted action.",
   ),
+  P(
+    "long-context",
+    "Malik Long Context",
+    "Context",
+    "Preserves far more conversation and document context while routing around providers that cannot fit it.",
+    ["Large conversation windows", "Long-document dependency tracking", "Cross-section references", "Context-aware provider routing", "History compaction guards"],
+    "native",
+    "enterprise",
+    99,
+    [/огромн.*документ|очень.*длинн.*контекст|весь.*диалог|всю.*переписк|1m context|million context|long context|huge document|large codebase context/iu],
+    "Use the largest relevant context that safely fits the selected route. Preserve distant constraints, names and dependencies; never silently drop an old requirement that still changes the answer. If a provider cannot fit the context, route to a larger-context fallback rather than truncating blindly.",
+  ),
+  P(
+    "context-fusion",
+    "Malik Context Fusion",
+    "Research",
+    "Combines open-web evidence with explicitly requested connected work data in one synthesis.",
+    ["Web + connected data", "Cross-source joins", "Conflict detection", "Source provenance", "Unified synthesis"],
+    "workflow",
+    "research",
+    100,
+    [/интернет.*мои данные|мои данные.*интернет|подключенн.*данн|web.*connected data|research.*gmail|research.*drive|research.*slack|internet.*my data|cross-source/iu],
+    "Fuse only sources the user explicitly requested or supplied. Keep public web evidence and private connected-data evidence distinguishable, preserve provenance, and never broaden into unrelated connected accounts.",
+  ),
+  P(
+    "artifacts",
+    "Malik Artifacts",
+    "Artifacts",
+    "Turns answers into reusable interactive outputs instead of leaving them as prose.",
+    ["Interactive pages", "Dashboards", "Diagrams", "Visualizations", "Reusable standalone artifacts"],
+    "workflow",
+    "chat",
+    90,
+    [/artifact|артефакт|интерактивн.*страниц|дашборд.*результ|flowchart|diagram|visualization|мини.*прилож/iu],
+    "When the user asks for a usable artifact, produce the artifact itself or route to the appropriate Malik studio. Keep the artifact self-contained, editable where possible, and aligned with the factual answer.",
+  ),
+  P(
+    "cloud-jobs",
+    "Malik Cloud Jobs",
+    "Agent",
+    "Lets long chat work continue server-side and persist after the browser disconnects.",
+    ["Background execution", "Durable result storage", "Disconnect recovery", "Resume later", "Cross-device retrieval"],
+    "workflow",
+    "enterprise",
+    98,
+    [/в фоне|закрою.*ноут|продолж.*после закрытия|cloud job|background task|continue in cloud|keep working after.*close/iu],
+    "Use durable background execution for long work when the runtime supports it. Persist the result, expose a stable task identifier, recover after disconnect, and never claim a job survived unless durable storage accepted it.",
+  ),
+  P(
+    "cross-device",
+    "Malik Continuity",
+    "Workspace",
+    "Keeps authenticated chat state and completed background work synchronized across devices.",
+    ["Account-backed chat state", "Resume on phone or desktop", "Background result recovery", "Project continuity", "Device-independent history"],
+    "native",
+    "chat",
+    88,
+    [/с телефона.*пк|с пк.*телефон|другом устройстве|cross-device|another device|resume on phone|continue on desktop/iu],
+    "Use account-backed state as the source of truth across devices. Rehydrate completed background turns and project context without relying on one browser's local storage as the only copy.",
+  ),
+  P(
+    "local-workspace",
+    "Malik Local Workspace",
+    "Files",
+    "Works with user-selected local files or folders only after explicit device permission.",
+    ["Folder selection", "Batch local files", "Read/write handoff", "Multi-file tasks", "Permission boundaries"],
+    "workflow",
+    "file_analysis",
+    91,
+    [/локальн.*папк|папк.*компьютер|local folder|local files|folder access|directory access/iu],
+    "Never imply unrestricted device filesystem access. Use only files or folders the user explicitly selected through a supported client permission flow; preserve paths only within that granted scope.",
+    ["client file/folder permission"],
+  ),
+  P(
+    "mcp",
+    "Malik MCP",
+    "Connectors",
+    "Connects standards-based external tool servers through an auditable MCP adapter.",
+    ["MCP discovery", "Tool listing", "Tool calls", "Server isolation", "Permission-aware routing"],
+    "connector",
+    "enterprise",
+    96,
+    [/\bmcp\b|model context protocol|mcp server|mcp tool/iu],
+    "Discover tools from configured MCP servers, call only explicitly allowed tools, validate tool arguments, and preserve server/tool provenance. Never send secrets to an untrusted MCP server.",
+    ["configured MCP server"],
+  ),
+  P(
+    "skills",
+    "Malik Skills",
+    "Agent",
+    "Applies specialized domain workflows without changing the core model.",
+    ["Finance workflows", "Legal workflows", "Sales workflows", "Engineering workflows", "Composable skill selection"],
+    "native",
+    "enterprise",
+    89,
+    [/skill|навык.*ии|финанс.*режим|legal workflow|sales workflow|engineering workflow|specialized workflow/iu],
+    "Select only skills relevant to the task, compose them without contradictory instructions, and keep skill output grounded in the user's actual data and tool permissions.",
+  ),
+  P(
+    "office",
+    "Malik Office",
+    "Artifacts",
+    "Moves structured work between document, spreadsheet and presentation outputs.",
+    ["DOCX workflows", "XLSX formulas", "PPTX decks", "Office cross-handoff", "Outlook/OneDrive context"],
+    "workflow",
+    "enterprise",
+    94,
+    [/word.*excel|excel.*powerpoint|microsoft office|office workflow|docx.*xlsx|xlsx.*pptx|outlook.*excel/iu],
+    "Preserve facts and calculations while moving work between document, spreadsheet and presentation forms. Keep formulas live where possible and do not flatten structured data into screenshots when an editable artifact is required.",
+  ),
+  P(
+    "science",
+    "Malik Science",
+    "Research",
+    "Builds evidence-oriented scientific research workflows across scholarly sources and quantitative analysis.",
+    ["arXiv", "PubMed", "Semantic Scholar", "OpenAlex/Crossref", "Reproducible quantitative reasoning"],
+    "workflow",
+    "research",
+    98,
+    [/научн.*исслед|статьи.*pubmed|arxiv|semantic scholar|openalex|jupyter|scientific research|research paper|literature review/iu],
+    "Prefer scholarly and primary sources, distinguish peer review from preprints, preserve methods and sample limitations, and make calculations reproducible. Do not present a literature search as experimental proof.",
+  ),
+  P(
+    "self-check",
+    "Malik Verify",
+    "Intelligence",
+    "Runs a private acceptance-criteria check before presenting a complex result.",
+    ["Constraint audit", "Fact consistency", "Calculation verification", "Artifact completeness", "Source-to-claim checks"],
+    "native",
+    "enterprise",
+    100,
+    [/перепроверь|самопровер|проверь себя|убедись.*всё|double-check|self-check|verify your work|check your work/iu],
+    "Before finalizing, privately compare the result against every explicit acceptance criterion. Repair omissions, contradictions, unsupported figures and unfinished artifacts before returning the answer; report remaining uncertainty without exposing hidden chain-of-thought.",
+  ),
+  P(
+    "recovery",
+    "Malik Recovery",
+    "Agent",
+    "Recovers from retryable provider and tool failures by changing route instead of immediately stopping.",
+    ["Retry with backoff", "Provider failover", "Alternate strategy", "Partial-progress preservation", "Failure receipts"],
+    "workflow",
+    "enterprise",
+    100,
+    [/если.*ошибк.*продолж|не останавливайся.*ошиб|recovery|recover from failure|retry.*another|fallback strategy/iu],
+    "Retry only failures that are safe and likely transient. Respect rate limits and confirmation boundaries, preserve completed work, switch provider or strategy when justified, and stop with a precise failure receipt when recovery is no longer safe.",
+  ),
+  P(
+    "adaptive-effort",
+    "Malik Adaptive Effort",
+    "Intelligence",
+    "Changes reasoning depth per turn instead of using one expensive mode for every request.",
+    ["Instant mode", "Balanced mode", "Deep mode", "Ultra mode", "Per-turn model routing"],
+    "native",
+    "enterprise",
+    97,
+    [/максимальн.*думай|усиль.*мышлен|быстро.*ответ|adaptive effort|reasoning effort|think harder|extra high|ultra reasoning/iu],
+    "Spend reasoning budget in proportion to task difficulty. Tiny conversational turns stay instant; complex research, planning and verification can escalate to deep or ultra effort and stronger routes.",
+  ),
+  P(
+    "large-output",
+    "Malik Large Output",
+    "Intelligence",
+    "Completes long deliverables through continuation-aware generation instead of silently cutting them off.",
+    ["Continuation across provider limits", "Large reports", "Long code/text deliverables", "Fence completion", "Truncation detection"],
+    "workflow",
+    "enterprise",
+    96,
+    [/очень.*длинн.*ответ|огромн.*ответ|полный.*отч[её]т|не обрезай|large output|very long answer|full report|do not truncate|128k/iu],
+    "Detect truncation and continue from the exact stopping point without restarting or repeating. Respect provider and account budgets; prefer a complete multi-part deliverable over claiming a single-call output size the active provider does not support.",
+  ),
+  P(
+    "computer-use",
+    "Malik Computer Use",
+    "Actions",
+    "Controls a graphical desktop only through an explicitly connected remote-computer runtime.",
+    ["Screen observation", "Mouse actions", "Keyboard input", "App navigation", "GUI verification"],
+    "workflow",
+    "enterprise",
+    97,
+    [/управляй.*компьютер|кликни.*прилож|открой.*програм|computer use|control my computer|desktop agent|click.*desktop/iu],
+    "Operate a GUI only when a real computer-control runtime is connected and the user has granted access. Keep actions visible and auditable, require confirmation for destructive or externally visible operations, and never pretend to have clicked a device that is not connected.",
+    ["computer-control runtime"],
+  ),
 ] as const
 
 const byId = new Map<MalikSuperpowerId, MalikSuperpower>(MALIK_SUPERPOWERS.map((item) => [item.id, item]))
@@ -600,10 +798,23 @@ export function superpowerOutputBudget(powers: readonly MalikSuperpower[]) {
     || ids.has("presentations")
     || ids.has("sites")
     || ids.has("work-agent")
-  ) return Number(process.env.MAX_SUPERPOWER_OUTPUT_TOKENS || 7000)
+    || ids.has("long-context")
+    || ids.has("context-fusion")
+    || ids.has("science")
+    || ids.has("office")
+    || ids.has("large-output")
+  ) return Number(process.env.MAX_SUPERPOWER_OUTPUT_TOKENS || 12000)
 
-  if (ids.has("reasoning") || ids.has("files") || ids.has("vision") || ids.has("programming")) {
-    return Number(process.env.MAX_SUPERPOWER_OUTPUT_TOKENS || 4500)
+  if (
+    ids.has("reasoning")
+    || ids.has("files")
+    || ids.has("vision")
+    || ids.has("programming")
+    || ids.has("self-check")
+    || ids.has("recovery")
+    || ids.has("adaptive-effort")
+  ) {
+    return Number(process.env.MAX_SUPERPOWER_OUTPUT_TOKENS || 6000)
   }
 
   return Number(process.env.MAX_OUTPUT_TOKENS || 1200)
