@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import {
   ArrowUp,
   Box,
@@ -251,8 +251,32 @@ const MOBILE_MODELS = [
 
 const CATEGORIES = ["Популярное", "Кинематографичные", "Анимация", "Реалистичные", "Природа", "Технологии", "Люди", "Продукты"] as const
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function sleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error("Генерация остановлена."))
+      return
+    }
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener("abort", abort)
+      resolve()
+    }, ms)
+    const abort = () => {
+      window.clearTimeout(timer)
+      reject(new Error("Генерация остановлена."))
+    }
+    signal?.addEventListener("abort", abort, { once: true })
+  })
+}
+
+function resetCountdown(resetAt: unknown) {
+  const target = Date.parse(String(resetAt || ""))
+  if (!Number.isFinite(target)) return ""
+  const seconds = Math.max(0, Math.ceil((target - Date.now()) / 1000))
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  if (hours > 0) return `${hours} ч ${minutes} мин`
+  return `${Math.max(1, minutes)} мин`
 }
 
 function statusLabel(phase: GenerationPhase, attempt: number) {
