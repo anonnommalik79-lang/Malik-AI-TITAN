@@ -3,8 +3,10 @@ import { generateWithPollinations } from "./providers/pollinations"
 import { generateWithStability, stabilityConfigured } from "./providers/stability"
 import { awsImageConfigured, falImageConfigured, generateAwsImage, generateFalImage } from "./providers/titan-image"
 import {
+  generateFlux9bReserveImage,
   generatePreparedCloudflareImage,
   generateRawTertiaryCloudflareImage,
+  flux9bCloudflareImageConfigured,
   preparedCloudflareImageConfigured,
   tertiaryCloudflareImageConfigured,
 } from "./providers/cloudflare-image-prepared"
@@ -278,6 +280,45 @@ export async function routeImageGeneration(
     }
   } else {
     errors.push("cloudflare-quality: not configured")
+  }
+
+  // Dedicated FLUX.2 Klein 9B reserve. This pool is intentionally isolated
+  // from the regular Cloudflare accounts so its small daily neuron allowance
+  // is preserved until the normal quality pool is unavailable.
+  if (flux9bCloudflareImageConfigured()) {
+    try {
+      const result = await withAttemptSignal(
+        options?.signal,
+        timeoutFromEnv("IMAGE_FLUX9B_RESERVE_TIMEOUT_MS", 60_000, 10_000, 90_000),
+        (signal) => retryTransientImageProvider(
+          () => generateFlux9bReserveImage({
+            prompt,
+            aspectRatio: input.aspectRatio,
+            signal,
+          }),
+          signal,
+        ),
+      )
+      return {
+        ok: true,
+        provider: "cloudflare",
+        imageUrl: result.imageUrl,
+        modelId: preferredModelId,
+        providerModel: result.providerModel,
+        understood: visual.understood,
+        enhancedPrompt: prompt,
+        negativePrompt,
+        quality,
+        routeReason: `${decision.reason}; dedicated FLUX.2 Klein 9B reserve`,
+        generationTier: "quality",
+        generationSource: "cloudflare-flux9b-reserve",
+        remainingDailyImages: 0,
+      }
+    } catch (error) {
+      errors.push(`cloudflare-flux9b-reserve: ${error instanceof Error ? error.message : "failed"}`)
+    }
+  } else {
+    errors.push("cloudflare-flux9b-reserve: not configured")
   }
 
   // Account #3 is a cheap continuity pool. It receives the normalized user
