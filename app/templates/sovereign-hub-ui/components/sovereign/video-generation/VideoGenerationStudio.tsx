@@ -35,7 +35,7 @@ export type VideoGenerationStudioProps = {
   onNewChat?: () => void
 }
 
-type Ratio = "16:9" | "9:16" | "1:1" | "4:3"
+type Ratio = "16:9" | "9:16" | "1:1"
 type Duration = 5 | 10
 type Quality = "fast" | "max"
 type VideoMode = "text" | "image" | "video"
@@ -754,7 +754,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   const cycleMobileRatio = () => {
     if (busy) return
-    const values: Ratio[] = ["16:9", "9:16", "1:1", "4:3"]
+    const values: Ratio[] = ["16:9", "9:16", "1:1"]
     const index = values.indexOf(ratio)
     setRatio(values[(index + 1) % values.length])
   }
@@ -1184,7 +1184,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         <div className="mv2__settings-grid">
           <div><div className="mv2__section-title">Качество <Info /></div><div className="mv2__segments"><button type="button" aria-pressed={quality === "fast"} className={quality === "fast" ? "is-active" : ""} onClick={() => setQuality("fast")} disabled={busy}>720p · Быстро</button><button type="button" aria-pressed={quality === "max"} className={quality === "max" ? "is-active" : ""} onClick={() => setQuality("max")} disabled={busy}>1080p · Max</button><button type="button" className="is-disabled" disabled>2K · Pro</button></div></div>
           <div><div className="mv2__section-title">Длительность</div><div className="mv2__segments">{([5, 10] as Duration[]).map((value) => <button key={value} type="button" aria-pressed={duration === value} className={duration === value ? "is-active" : ""} onClick={() => chooseDuration(value)} disabled={busy}>{value} сек</button>)}<button type="button" className="is-disabled" disabled>16 сек · Pro</button></div></div>
-          <div><div className="mv2__section-title">Соотношение сторон</div><div className="mv2__segments">{(["16:9", "9:16", "1:1", "4:3"] as Ratio[]).map((value) => <button key={value} type="button" aria-pressed={ratio === value} className={ratio === value ? "is-active" : ""} onClick={() => setRatio(value)} disabled={busy}>{value}</button>)}</div></div>
+          <div><div className="mv2__section-title">Соотношение сторон</div><div className="mv2__segments">{(["16:9", "9:16", "1:1"] as Ratio[]).map((value) => <button key={value} type="button" aria-pressed={ratio === value} className={ratio === value ? "is-active" : ""} onClick={() => setRatio(value)} disabled={busy}>{value}</button>)}</div></div>
         </div>
 
         <div className="mv2__generate-row"><button type="button" className="mv2__generate" onClick={generate} disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile)}><span>{busy ? statusLabel(phase, attempt) : mode === "image" ? `Оживить фото · ${duration} сек` : mode === "video" ? `Изменить видео · ${duration} сек` : "Сгенерировать видео"}</span><ArrowUp /></button><div className="mv2__credits">◉ 1 видео / день</div><button type="button" className="mv2__tune"><SlidersHorizontal /></button></div>
