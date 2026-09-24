@@ -24,6 +24,7 @@ import { getDailyTextTokenQuota } from "@/lib/server/daily-text-token-quota"
 import { isExplicitImageEditRequest } from "@/lib/ai/image-intent"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
+import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers } from "@/lib/ai/superpowers"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
@@ -353,6 +354,9 @@ async function runSelectedAnswer(
 ) {
   let executionBody = body
   const requestAttachments = hasMalikAttachments(body?.attachments) ? body.attachments : []
+  const superpowerPrompt = buildMalikSuperpowerSystemPrompt(
+    detectMalikSuperpowers(coderPrompt(body), requestAttachments, body?.metadata),
+  )
   const hasVideoAttachment = requestAttachments.some((item: any) =>
     item && typeof item === "object" && (
       item.kind === "video"
@@ -388,6 +392,7 @@ async function runSelectedAnswer(
         "MALIK AI as a product has integrated image generation and image editing. Never claim the product cannot generate or edit images just because the currently selected text/vision model itself cannot manipulate pixels.",
         "If conversation history says MALIK AI generated or edited media, treat that as a factual completed product action.",
         "Answer in the user's language unless explicitly asked otherwise.",
+        superpowerPrompt,
         buildChatArtifactSkillPrompt(coderPrompt(body)),
       ].filter(Boolean).join("\n"),
     })
