@@ -162,6 +162,27 @@ type ActivityPayload = {
   error?: string
 }
 
+type ProviderHealthPayload = {
+  ok?: boolean
+  generatedAt?: string
+  error?: string
+  summary?: { models: number; observed: number; healthy: number; coolingDown: number }
+  providers?: Array<{
+    modelId: string
+    label: string
+    provider: string
+    providerModel: string
+    successes: number
+    failures: number
+    requestsObserved: number
+    successRate: number | null
+    latencyMs: number | null
+    lastFailureAt: string | null
+    cooldownMs: number
+    healthy: boolean
+  }>
+}
+
 export function FounderConsoleRuntime() {
   const [founder, setFounder] = useState(false)
   const [navTarget, setNavTarget] = useState<HTMLElement | null>(null)
@@ -176,6 +197,9 @@ export function FounderConsoleRuntime() {
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityQuery, setActivityQuery] = useState("")
   const [activityError, setActivityError] = useState("")
+  const [providerHealth, setProviderHealth] = useState<ProviderHealthPayload | null>(null)
+  const [providerHealthLoading, setProviderHealthLoading] = useState(false)
+  const [providerHealthError, setProviderHealthError] = useState("")
   /* Requests are shown one line each and opened on click. A page of forty full
      conversations is unreadable, and the founder question is usually "who is
      using this and roughly what for", not "read me every answer". */
@@ -210,6 +234,22 @@ export function FounderConsoleRuntime() {
       setActivityError(requestError instanceof Error ? requestError.message : "Не удалось загрузить запросы")
     } finally {
       setActivityLoading(false)
+    }
+  }, [founder])
+
+  const refreshProviderHealth = useCallback(async () => {
+    if (!founder) return
+    setProviderHealthLoading(true)
+    setProviderHealthError("")
+    try {
+      const response = await fetch("/api/founder/provider-health", { cache: "no-store" })
+      const data = await response.json().catch(() => ({})) as ProviderHealthPayload
+      if (!response.ok || !data?.ok) throw new Error(data?.error || `Provider Health API ${response.status}`)
+      setProviderHealth(data)
+    } catch (requestError) {
+      setProviderHealthError(requestError instanceof Error ? requestError.message : "Не удалось загрузить состояние AI-провайдеров")
+    } finally {
+      setProviderHealthLoading(false)
     }
   }, [founder])
 
@@ -264,7 +304,8 @@ export function FounderConsoleRuntime() {
     if (!open || !founder) return
     void refresh()
     void refreshActivity()
-  }, [open, founder, refresh, refreshActivity])
+    void refreshProviderHealth()
+  }, [open, founder, refresh, refreshActivity, refreshProviderHealth])
 
   useEffect(() => {
     if (!open) return
@@ -353,8 +394,8 @@ export function FounderConsoleRuntime() {
           <p>Живая внутренняя аналитика Malik AI</p>
         </div>
         <div className="malik-founder-header__actions">
-          <button type="button" onClick={() => void refresh()} disabled={loading} title="Обновить" aria-label="Обновить аналитику">
-            <RefreshCw className={loading ? "is-spinning" : ""} />
+          <button type="button" onClick={() => { void refresh(); void refreshActivity(); void refreshProviderHealth() }} disabled={loading || activityLoading || providerHealthLoading} title="Обновить" aria-label="Обновить аналитику">
+            <RefreshCw className={loading || activityLoading || providerHealthLoading ? "is-spinning" : ""} />
           </button>
           <button type="button" onClick={() => setOpen(false)} title="Закрыть" aria-label="Закрыть"><X /></button>
         </div>
@@ -414,6 +455,37 @@ export function FounderConsoleRuntime() {
           {safety?.disabledFeatures?.length ? (
             <div className="malik-founder-disabled"><strong>Отключено через env:</strong><span>{safety.disabledFeatures.join(", ")}</span></div>
           ) : null}
+        </section>
+
+        <div className="malik-founder-section-title">
+          <div><strong>AI Provider Health</strong><span>Только реальные запросы текущего runtime · без API-ключей и придуманных метрик</span></div>
+          <span className={`malik-founder-health-pill${providerHealth?.summary ? " is-live" : ""}`}><span />{providerHealthLoading ? "SCAN" : providerHealth?.summary ? "LIVE" : "WAIT"}</span>
+        </div>
+
+        <section className="malik-founder-panel">
+          <div className="malik-founder-panel__head">
+            <div>
+              <strong>Модели и роутеры</strong>
+              <span>{providerHealth?.summary
+                ? `${providerHealth.summary.healthy} healthy · ${providerHealth.summary.observed} observed · ${providerHealth.summary.coolingDown} cooldown`
+                : "Увидишь latency/success после реальных запросов"}</span>
+            </div>
+            <button type="button" className="malik-founder-requests-refresh" onClick={() => void refreshProviderHealth()} disabled={providerHealthLoading} aria-label="Обновить AI Provider Health" title="Обновить AI Provider Health">
+              <RefreshCw className={providerHealthLoading ? "is-spinning" : ""} />
+            </button>
+          </div>
+          {providerHealthError ? <div className="malik-founder-empty">{providerHealthError}</div> : null}
+          <div className="malik-founder-table">
+            <div className="malik-founder-table__row is-head"><span>Модель / провайдер</span><span>Успех</span><span>Latency</span></div>
+            {(providerHealth?.providers || []).slice(0, 16).map((entry) => (
+              <div key={entry.modelId} className="malik-founder-table__row" title={entry.providerModel}>
+                <span>{entry.healthy ? "●" : entry.cooldownMs > 0 ? "◷" : "○"} {entry.label} · {entry.provider}</span>
+                <span>{entry.requestsObserved ? `${entry.successRate ?? 0}% · ${entry.successes}/${entry.requestsObserved}` : "не было"}</span>
+                <span>{entry.cooldownMs > 0 ? `CD ${Math.ceil(entry.cooldownMs / 1000)}с` : entry.latencyMs ? `${entry.latencyMs} ms` : "—"}</span>
+              </div>
+            ))}
+            {!providerHealthLoading && !(providerHealth?.providers || []).length ? <div className="malik-founder-empty">Provider telemetry появится после первых реальных запросов.</div> : null}
+          </div>
         </section>
 
         <div className="malik-founder-columns">

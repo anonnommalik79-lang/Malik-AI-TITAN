@@ -72,7 +72,7 @@ export type ImageGenerateResult = {
   storageUrl?: string
 }
 
-export type VideoJobStatus = "disabled" | "queued" | "generating" | "completed" | "failed"
+export type VideoJobStatus = "disabled" | "queued" | "generating" | "completed" | "failed" | "cancelled"
 
 export type VideoGenerateInput = {
   prompt: string

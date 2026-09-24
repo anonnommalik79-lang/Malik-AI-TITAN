@@ -5,12 +5,16 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3
 
 type VideoQuotaState = {
   day: string
+  count: number
   usedAt: string
 }
 
 type VideoQuotaStatus = {
   available: boolean
   used: boolean
+  count: number
+  limit: number
+  remaining: number
   resetAt: string
   storage: "object-storage" | "runtime-memory"
   usedAt?: string
@@ -56,12 +60,61 @@ function config() {
   }
 }
 
-function utcDay(now = new Date()) {
-  return now.toISOString().slice(0, 10)
+function resetZone() {
+  return process.env.MEDIA_RESET_TIMEZONE?.trim() || process.env.IMAGE_RESET_TIMEZONE?.trim() || "Asia/Almaty"
 }
 
-function nextUtcResetAt(now = new Date()) {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString()
+function zonedParts(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date)
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
+  }
+}
+
+function timeZoneOffsetMs(date: Date, timeZone: string) {
+  try {
+    const p = zonedParts(date, timeZone)
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(date.getTime() / 1000) * 1000
+  } catch {
+    return 0
+  }
+}
+
+function quotaDay(now = new Date()) {
+  try {
+    const p = zonedParts(now, resetZone())
+    return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`
+  } catch {
+    return now.toISOString().slice(0, 10)
+  }
+}
+
+function nextResetAt(now = new Date()) {
+  try {
+    const zone = resetZone()
+    const p = zonedParts(now, zone)
+    const nextLocal = new Date(Date.UTC(p.year, p.month - 1, p.day + 1, 0, 0, 0))
+    let guess = nextLocal.getTime() - timeZoneOffsetMs(nextLocal, zone)
+    guess = nextLocal.getTime() - timeZoneOffsetMs(new Date(guess), zone)
+    return new Date(guess).toISOString()
+  } catch {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString()
+  }
 }
 
 function accountHash(userId: string) {
@@ -81,11 +134,11 @@ function inFlight() {
 }
 
 function memoryKey(userId: string) {
-  return `${utcDay()}:${accountHash(userId)}`
+  return `${quotaDay()}:${accountHash(userId)}`
 }
 
 function objectKey(userId: string) {
-  return `private/system/malik-video-account-daily/${utcDay()}/${accountHash(userId)}.json`
+  return `private/system/malik-video-account-daily/${quotaDay()}/${accountHash(userId)}.json`
 }
 
 function storage() {
@@ -113,50 +166,54 @@ async function bodyToString(body: any) {
   return Buffer.concat(chunks).toString("utf8")
 }
 
+function normalizeLimit(limit: number) {
+  if (!Number.isFinite(limit)) return Number.MAX_SAFE_INTEGER
+  return Math.max(0, Math.floor(limit))
+}
+
+function statusFor(state: VideoQuotaState | null, dailyLimit: number, storageMode: VideoQuotaStatus["storage"]): VideoQuotaStatus {
+  const limit = normalizeLimit(dailyLimit)
+  const count = state?.day === quotaDay() ? Math.max(0, Math.floor(Number(state.count) || 0)) : 0
+  const remaining = limit === Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : Math.max(0, limit - count)
+  return {
+    available: remaining > 0,
+    used: count > 0,
+    count,
+    limit,
+    remaining,
+    resetAt: nextResetAt(),
+    usedAt: state?.usedAt,
+    storage: storageMode,
+  }
+}
+
 async function cloudState(userId: string): Promise<VideoQuotaState | null> {
   const s = storage()
   if (!s) return null
   try {
     const result = await s.client.send(new GetObjectCommand({ Bucket: s.cfg.bucket, Key: objectKey(userId) }))
-    const parsed = JSON.parse(await bodyToString(result.Body) || "{}") as Partial<VideoQuotaState>
-    if (parsed.day !== utcDay() || !parsed.usedAt) return null
-    return { day: parsed.day, usedAt: parsed.usedAt }
+    const parsed = JSON.parse(await bodyToString(result.Body) || "{}") as Partial<VideoQuotaState> & { usedAt?: string }
+    if (parsed.day !== quotaDay() || !parsed.usedAt) return null
+    // Backward compatibility with the old boolean one-generation state.
+    const count = Number.isFinite(Number(parsed.count)) ? Math.max(0, Math.floor(Number(parsed.count))) : 1
+    return { day: parsed.day, count, usedAt: parsed.usedAt }
   } catch {
     return null
   }
 }
 
-export async function getVideoAccountDailyQuota(userId: string): Promise<VideoQuotaStatus> {
+export async function getVideoAccountDailyQuota(userId: string, dailyLimit = 1): Promise<VideoQuotaStatus> {
   const key = memoryKey(userId)
   const cached = memory().get(key)
-  if (cached?.day === utcDay()) {
-    return {
-      available: false,
-      used: true,
-      resetAt: nextUtcResetAt(),
-      usedAt: cached.usedAt,
-      storage: config() ? "object-storage" : "runtime-memory",
-    }
-  }
+  const mode: VideoQuotaStatus["storage"] = config() ? "object-storage" : "runtime-memory"
+  if (cached?.day === quotaDay()) return statusFor(cached, dailyLimit, mode)
 
   const persisted = await cloudState(userId)
   if (persisted) {
     memory().set(key, persisted)
-    return {
-      available: false,
-      used: true,
-      resetAt: nextUtcResetAt(),
-      usedAt: persisted.usedAt,
-      storage: "object-storage",
-    }
+    return statusFor(persisted, dailyLimit, "object-storage")
   }
-
-  return {
-    available: true,
-    used: false,
-    resetAt: nextUtcResetAt(),
-    storage: config() ? "object-storage" : "runtime-memory",
-  }
+  return statusFor(null, dailyLimit, mode)
 }
 
 export function acquireVideoAccountInFlight(userId: string) {
@@ -171,8 +228,13 @@ export function releaseVideoAccountInFlight(userId: string) {
   inFlight().delete(memoryKey(userId))
 }
 
-export async function markVideoAccountDailyQuota(userId: string): Promise<VideoQuotaStatus> {
-  const state: VideoQuotaState = { day: utcDay(), usedAt: new Date().toISOString() }
+export async function refundVideoAccountDailyQuota(userId: string, dailyLimit = 1): Promise<VideoQuotaStatus> {
+  const previous = memory().get(memoryKey(userId)) || await cloudState(userId)
+  const state: VideoQuotaState = {
+    day: quotaDay(),
+    count: Math.max(0, Math.max(0, Number(previous?.count) || 0) - 1),
+    usedAt: new Date().toISOString(),
+  }
   memory().set(memoryKey(userId), state)
 
   const s = storage()
@@ -186,11 +248,37 @@ export async function markVideoAccountDailyQuota(userId: string): Promise<VideoQ
         CacheControl: "private, no-store",
         Metadata: { kind: "malik-video-account-daily" },
       }))
-      return { available: false, used: true, resetAt: nextUtcResetAt(), usedAt: state.usedAt, storage: "object-storage" }
+      return statusFor(state, dailyLimit, "object-storage")
+    } catch {}
+  }
+  return statusFor(state, dailyLimit, "runtime-memory")
+}
+
+export async function markVideoAccountDailyQuota(userId: string, dailyLimit = 1): Promise<VideoQuotaStatus> {
+  const previous = memory().get(memoryKey(userId)) || await cloudState(userId)
+  const state: VideoQuotaState = {
+    day: quotaDay(),
+    count: Math.max(0, Number(previous?.count) || 0) + 1,
+    usedAt: new Date().toISOString(),
+  }
+  memory().set(memoryKey(userId), state)
+
+  const s = storage()
+  if (s) {
+    try {
+      await s.client.send(new PutObjectCommand({
+        Bucket: s.cfg.bucket,
+        Key: objectKey(userId),
+        Body: Buffer.from(JSON.stringify(state), "utf8"),
+        ContentType: "application/json; charset=utf-8",
+        CacheControl: "private, no-store",
+        Metadata: { kind: "malik-video-account-daily" },
+      }))
+      return statusFor(state, dailyLimit, "object-storage")
     } catch {
       // Runtime memory still prevents repeat use for this server process.
     }
   }
 
-  return { available: false, used: true, resetAt: nextUtcResetAt(), usedAt: state.usedAt, storage: "runtime-memory" }
+  return statusFor(state, dailyLimit, "runtime-memory")
 }

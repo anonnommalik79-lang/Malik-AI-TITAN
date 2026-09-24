@@ -26,8 +26,10 @@ function dateKey(date: Date, timeZone: string) {
 }
 
 function today(eventType?: UsageEventType) {
-  const imageEvent = eventType === "image" || eventType === "image4k"
-  const zone = imageEvent ? (process.env.IMAGE_RESET_TIMEZONE?.trim() || "UTC") : "UTC"
+  const mediaEvent = eventType === "image" || eventType === "image4k" || eventType === "video"
+  const zone = mediaEvent
+    ? (process.env.MEDIA_RESET_TIMEZONE?.trim() || process.env.IMAGE_RESET_TIMEZONE?.trim() || "Asia/Almaty")
+    : "UTC"
   return dateKey(new Date(), zone)
 }
 

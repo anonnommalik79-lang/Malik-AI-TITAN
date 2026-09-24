@@ -1,6 +1,8 @@
 import "server-only"
 
 import { resolveMediaUser } from "@/lib/media/request"
+import { isCloudStorageConfigured, uploadMediaAsset } from "@/lib/storage/cloud-upload"
+import type { VideoProviderId } from "@/lib/media/types"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -9,6 +11,7 @@ const IMAGE_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/avif
 const VIDEO_MIME = new Set(["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"])
 const MAX_IMAGE_BYTES = Number(process.env.MAX_UPLOAD_IMAGE_MB || 12) * 1024 * 1024
 const MAX_VIDEO_BYTES = Number(process.env.MAX_UPLOAD_VIDEO_MB || 50) * 1024 * 1024
+const SOURCE_PROVIDERS = new Set<VideoProviderId>(["magichour", "runway", "luma", "h3"])
 
 function magicHourApiBase() {
   return String(process.env.MAGIC_HOUR_BASE_URL || "https://api.magichour.ai").trim().replace(/\/+$/, "")
@@ -192,9 +195,14 @@ export async function POST(request: Request) {
     )
   }
 
-  if (mode === "video" && (!Number.isFinite(durationSeconds) || durationSeconds < 3 || durationSeconds > 10.05)) {
+  const provider = SOURCE_PROVIDERS.has(requestedProvider as VideoProviderId)
+    ? requestedProvider as VideoProviderId
+    : "magichour"
+
+  const minVideoSeconds = provider === "luma" ? 1 : 3
+  if (mode === "video" && (!Number.isFinite(durationSeconds) || durationSeconds < minVideoSeconds || durationSeconds > 10.05)) {
     return Response.json(
-      { ok: false, code: "VIDEO_SOURCE_DURATION_UNSUPPORTED", error: "Для AI-редактирования загрузите видео длительностью от 3 до 10 секунд." },
+      { ok: false, code: "VIDEO_SOURCE_DURATION_UNSUPPORTED", error: `Для ${provider} загрузите видео длительностью от ${minVideoSeconds} до 10 секунд.` },
       { status: 400 },
     )
   }
@@ -208,23 +216,73 @@ export async function POST(request: Request) {
   }
 
   const ext = extension(file.name || "source", mime)
-  const provider = requestedProvider === "runway" ? "runway" : "magichour"
-  const result = provider === "runway"
-    ? await uploadToRunway(file, ext)
-    : await uploadToMagicHour(file, mode, ext, mime)
 
-  if (!result.ok) {
-    return Response.json(
-      { ok: false, code: result.code, error: result.error, provider },
-      { status: result.status },
-    )
+  if (provider === "runway") {
+    const result = await uploadToRunway(file, ext)
+    if (!result.ok) {
+      return Response.json({ ok: false, code: result.code, error: result.error, provider }, { status: result.status })
+    }
+    return Response.json({
+      ok: true,
+      mode,
+      provider,
+      filePath: result.filePath,
+      name: file.name,
+      mime,
+      size: file.size,
+      durationSeconds: mode === "video" ? durationSeconds : undefined,
+    })
+  }
+
+  if (provider === "magichour") {
+    const result = await uploadToMagicHour(file, mode, ext, mime)
+    if (!result.ok) {
+      return Response.json({ ok: false, code: result.code, error: result.error, provider }, { status: result.status })
+    }
+    return Response.json({
+      ok: true,
+      mode,
+      provider,
+      filePath: result.filePath,
+      name: file.name,
+      mime,
+      size: file.size,
+      durationSeconds: mode === "video" ? durationSeconds : undefined,
+    })
+  }
+
+  if (!isCloudStorageConfigured()) {
+    return Response.json({
+      ok: false,
+      code: "PUBLIC_MEDIA_STORAGE_REQUIRED",
+      error: `${provider} нужен публичный URL исходника. Настройте MEDIA_STORAGE_* в Render.`,
+      provider,
+    }, { status: 503 })
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const uploaded = await uploadMediaAsset({
+    userId: user.userId,
+    fileName: file.name || `source.${ext}`,
+    mime,
+    buffer: bytes,
+    kind: "video-source",
+  })
+  if (!uploaded.stored || !uploaded.publicUrl) {
+    return Response.json({
+      ok: false,
+      code: "SOURCE_STORAGE_FAILED",
+      error: uploaded.reason || "Не удалось сохранить исходник.",
+      provider,
+    }, { status: 502 })
   }
 
   return Response.json({
     ok: true,
     mode,
-    provider: result.provider,
-    filePath: result.filePath,
+    provider,
+    filePath: uploaded.publicUrl,
+    publicUrl: uploaded.publicUrl,
     name: file.name,
     mime,
     size: file.size,
