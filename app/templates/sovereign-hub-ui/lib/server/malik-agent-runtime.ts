@@ -107,17 +107,44 @@ function subagentSystem(kind: AgentMissionKind) {
 
 async function runMission(prompt: string, mission: AgentMission): Promise<AgentReport> {
   const startedAt = Date.now()
-  try {
-    const result = await runMalikCoderOrchestrator({
-      prompt: [`ORIGINAL TASK:\n${prompt}`, "", `YOUR ASSIGNED MISSION:\n${mission.title}`, mission.detail, "", "Return only the report the parent agent needs."].join("\n"),
-      systemPrompt: subagentSystem(mission.kind),
-      maxTokens: envInt("MALIK_AGENT_SUBAGENT_MAX_TOKENS", 1100, 384, 2400),
-      temperature: 0.2,
-    })
-    return { ...mission, ok: true, content: clean(result.content, MAX_REPORT_CHARS), latencyMs: Date.now() - startedAt }
-  } catch (error) {
-    return { ...mission, ok: false, content: clean(error instanceof Error ? error.message : error, 700) || "Subagent unavailable", latencyMs: Date.now() - startedAt }
+  const maxAttempts = envInt("MALIK_AGENT_MISSION_ATTEMPTS", 2, 1, 3)
+  let lastError = ""
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const recoveryInstruction = attempt > 1
+        ? [
+            "",
+            "RECOVERY ATTEMPT:",
+            "The previous attempt failed or returned unusable output.",
+            "Change strategy, simplify assumptions, avoid the failed path, and still return a concrete evidence-oriented report.",
+          ].join("\n")
+        : ""
+      const result = await runMalikCoderOrchestrator({
+        prompt: [
+          `ORIGINAL TASK:\n${prompt}`,
+          "",
+          `YOUR ASSIGNED MISSION:\n${mission.title}`,
+          mission.detail,
+          recoveryInstruction,
+          "",
+          "Return only the report the parent agent needs.",
+        ].join("\n"),
+        systemPrompt: subagentSystem(mission.kind),
+        maxTokens: envInt("MALIK_AGENT_SUBAGENT_MAX_TOKENS", 1400, 384, 3200),
+        temperature: attempt === 1 ? 0.2 : 0.1,
+      })
+      const content = clean(result.content, MAX_REPORT_CHARS)
+      if (content.length >= 40) {
+        return { ...mission, ok: true, content, latencyMs: Date.now() - startedAt }
+      }
+      lastError = "Subagent returned too little usable content"
+    } catch (error) {
+      lastError = clean(error instanceof Error ? error.message : error, 700) || "Subagent unavailable"
+    }
   }
+
+  return { ...mission, ok: false, content: lastError || "Subagent unavailable after recovery attempts", latencyMs: Date.now() - startedAt }
 }
 
 function formatReports(runId: string, reports: AgentReport[]) {
