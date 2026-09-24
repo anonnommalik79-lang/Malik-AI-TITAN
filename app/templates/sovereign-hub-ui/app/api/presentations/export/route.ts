@@ -77,14 +77,23 @@ export async function POST(request: Request) {
     const deck = normalizeDeck(body.deck)
     if (!deck) return Response.json({ ok: false, error: "Презентация пуста или повреждена." }, { status: 400, headers: { "cache-control": "no-store" } })
 
+    // Every picture on the deck: one per photo slide, one per gallery photo
+    // (keyed "slideId#index"). Four at a time — enough to be quick, few
+    // enough not to open a dozen connections for one download.
     const images = new Map<string, string>()
-    const withPictures = deck.slides.filter((slide) => IMAGE_LAYOUTS.has(slide.layout) && slide.imageUrl)
-    // One at a time: a deck has few pictures and there is no reason to open
-    // a dozen outbound connections for one download.
-    for (const slide of withPictures) {
-      const data = await imageAsDataUrl(slide.imageUrl as string)
-      if (data) images.set(slide.id, data)
-    }
+    const jobs: Array<[string, string]> = deck.slides.flatMap((slide): Array<[string, string]> => {
+      if (slide.layout === "gallery") {
+        return slide.items.flatMap((item, index): Array<[string, string]> => (item.image?.url ? [[`${slide.id}#${index}`, item.image.url]] : []))
+      }
+      return IMAGE_LAYOUTS.has(slide.layout) && slide.imageUrl ? [[slide.id, slide.imageUrl]] : []
+    }).slice(0, 40)
+    await Promise.all(Array.from({ length: Math.min(4, jobs.length) }, async () => {
+      while (jobs.length) {
+        const [key, url] = jobs.shift() as [string, string]
+        const data = await imageAsDataUrl(url)
+        if (data) images.set(key, data)
+      }
+    }))
 
     const file = await buildPptx(deck, images)
     const name = pptxFileName(deck.title)

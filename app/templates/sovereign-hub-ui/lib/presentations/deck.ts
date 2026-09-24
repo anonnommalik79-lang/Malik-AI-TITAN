@@ -1,6 +1,11 @@
 import {
+  DECK_ICON_NAMES,
   SLIDE_LAYOUTS,
   type ChartDatum,
+  type DeckIconName,
+  type FeatureItem,
+  type GalleryItem,
+  type ProcessStep,
   type Deck,
   type DeckLanguage,
   type DeckOutline,
@@ -59,7 +64,12 @@ const LIMITS = {
   takeaway: 200,
   notes: 700,
   imagePrompt: 320,
+  imageQuery: 90,
+  imageCredit: 160,
   contact: 90,
+  caption: 90,
+  featureTitle: 60,
+  featureBody: 150,
 } as const
 
 const LIST_BOUNDS = {
@@ -71,6 +81,9 @@ const LIST_BOUNDS = {
   chart: [2, 8],
   columnPoints: [2, 5],
   imagePoints: [0, 4],
+  features: [3, 6],
+  process: [3, 5],
+  gallery: [2, 3],
 } as const
 
 let idCounter = 0
@@ -158,8 +171,24 @@ export function isSlideLayout(value: unknown): value is SlideLayout {
 
 const LAYOUT_ALIASES: Record<string, SlideLayout> = {
   cover: "title",
-  hero: "title",
   intro: "title",
+  "full-image": "hero",
+  "full-bleed": "hero",
+  "cover-image": "hero",
+  "image-cover": "hero",
+  photo: "hero",
+  background: "hero",
+  icons: "features",
+  "icon-cards": "features",
+  benefits: "features",
+  pillars: "features",
+  flow: "process",
+  workflow: "process",
+  funnel: "process",
+  photos: "gallery",
+  images: "gallery",
+  "photo-grid": "gallery",
+  "image-grid": "gallery",
   divider: "section",
   chapter: "section",
   list: "bullets",
@@ -177,11 +206,9 @@ const LAYOUT_ALIASES: Record<string, SlideLayout> = {
   image: "image-text",
   "image-left": "image-text",
   "image-right": "image-text",
-  features: "cards",
   grid: "cards",
   roadmap: "timeline",
-  process: "timeline",
-  steps: "timeline",
+  steps: "process",
   table: "comparison",
   versus: "comparison",
   vs: "comparison",
@@ -282,17 +309,94 @@ function toColumn(value: unknown) {
   return heading && points ? { heading, points } : null
 }
 
+/** Pictures are https addresses or inline data; nothing else reaches an <img>. */
+function safeImageUrl(value: unknown) {
+  return typeof value === "string" && /^(https:\/\/|data:image\/)/.test(value) && value.length <= 3_000_000 ? value : undefined
+}
+
+const ICON_ALIASES: Record<string, DeckIconName> = {
+  growth: "trending", grow: "trending", increase: "trending", "trending-up": "trending", analytics: "chart",
+  data: "database", team: "users", people: "users", customers: "users", community: "users", person: "user",
+  security: "shield", safety: "shield", privacy: "lock", world: "globe", global: "globe", international: "globe",
+  location: "map", place: "map", speed: "zap", fast: "zap", energy: "zap", power: "zap", time: "clock",
+  schedule: "calendar", quality: "star", favorite: "star", love: "heart", health: "stethoscope", medicine: "stethoscope",
+  eco: "leaf", nature: "leaf", green: "leaf", money: "coins", finance: "coins", price: "coins", savings: "wallet",
+  payment: "wallet", office: "building", company: "building", house: "home", delivery: "truck", logistics: "truck",
+  ai: "brain", intelligence: "brain", tech: "cpu", technology: "cpu", software: "code", education: "graduation",
+  learning: "book", study: "book", award: "trophy", win: "trophy", partner: "handshake", partnership: "handshake",
+  deal: "handshake", idea: "lightbulb", innovation: "lightbulb", chat: "message", support: "message", call: "phone",
+  email: "mail", photo: "camera", design: "palette", creative: "palette", marketing: "megaphone", ads: "megaphone",
+  bonus: "gift", goal: "flag", mission: "flag", challenge: "mountain", access: "key", happy: "smile", internet: "wifi",
+  cloud: "cloud", discount: "percent", shop: "store", retail: "store", production: "factory", manufacturing: "factory",
+  law: "scale", legal: "scale", balance: "scale", tools: "settings", process: "settings", done: "check", quality2: "check",
+  research: "search", stack: "layers", product: "package", travel: "plane", transport: "car", sun: "sun", launch: "rocket",
+  aim: "target", focus: "target",
+}
+
+/** Whatever the model called an icon, one the renderer can draw. */
+export function coerceIcon(value: unknown): DeckIconName {
+  const key = String(value ?? "").trim().toLowerCase().replace(/[\s_]+/g, "-")
+  if ((DECK_ICON_NAMES as readonly string[]).includes(key)) return key as DeckIconName
+  return ICON_ALIASES[key] || ICON_ALIASES[key.split("-")[0]] || "sparkles"
+}
+
+function toFeature(value: unknown): FeatureItem | null {
+  const point = toPoint(value)
+  if (!point) return null
+  const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+  return {
+    icon: coerceIcon(firstOf(raw, "icon", "emoji", "symbol")),
+    title: cleanText(point.title, LIMITS.featureTitle),
+    ...(point.body ? { body: cleanText(point.body, LIMITS.featureBody) } : {}),
+  }
+}
+
+function toProcessStep(value: unknown): ProcessStep | null {
+  const point = toPoint(value)
+  if (!point) return null
+  return { title: cleanText(point.title, LIMITS.featureTitle), ...(point.body ? { body: cleanText(point.body, LIMITS.featureBody) } : {}) }
+}
+
+function toGalleryItem(value: unknown): GalleryItem | null {
+  if (typeof value === "string") {
+    const caption = cleanText(value, LIMITS.caption)
+    return caption ? { caption } : null
+  }
+  if (!value || typeof value !== "object") return null
+  const raw = value as Record<string, unknown>
+  const caption = cleanText(firstOf(raw, "caption", "title", "label", "text"), LIMITS.caption)
+  if (!caption) return null
+  const imageQuery = optionalText(firstOf(raw, "imageQuery", "image_query", "query"), LIMITS.imageQuery)
+  const imageRaw = raw.image && typeof raw.image === "object" ? (raw.image as Record<string, unknown>) : null
+  const url = safeImageUrl(imageRaw?.url ?? raw.imageUrl)
+  const credit = url ? optionalText(imageRaw?.credit ?? raw.imageCredit, LIMITS.imageCredit) : undefined
+  const link = url && typeof (imageRaw?.link ?? raw.imageLink) === "string" && /^https:\/\//.test(String(imageRaw?.link ?? raw.imageLink)) ? String(imageRaw?.link ?? raw.imageLink).slice(0, 600) : undefined
+  return {
+    caption,
+    ...(imageQuery ? { imageQuery } : {}),
+    ...(url ? { image: { url, ...(credit ? { credit } : {}), ...(link ? { link } : {}) } } : {}),
+  }
+}
+
 /* ----------------------------------------------------------------- slides */
 
 function common(raw: Record<string, unknown>) {
   const notes = optionalText(firstOf(raw, "notes", "speakerNotes", "speaker_notes"), LIMITS.notes)
   const imagePrompt = optionalText(firstOf(raw, "imagePrompt", "image_prompt", "image"), LIMITS.imagePrompt)
-  const imageUrl = typeof raw.imageUrl === "string" && /^(https:|data:image\/)/.test(raw.imageUrl) ? raw.imageUrl : undefined
+  const imageUrl = safeImageUrl(raw.imageUrl)
+  const imageQuery = optionalText(firstOf(raw, "imageQuery", "image_query", "photoQuery", "searchQuery"), LIMITS.imageQuery)
+  const imageKind: "subject" | "mood" | undefined = raw.imageKind === "subject" || raw.imageKind === "mood" ? raw.imageKind : undefined
+  const imageCredit = imageUrl ? optionalText(raw.imageCredit, LIMITS.imageCredit) : undefined
+  const imageLink = imageUrl && typeof raw.imageLink === "string" && /^https:\/\//.test(raw.imageLink) ? raw.imageLink.slice(0, 600) : undefined
   return {
     id: typeof raw.id === "string" && /^[\w-]{3,64}$/.test(raw.id) ? raw.id : slideId(),
     ...(notes ? { notes } : {}),
     ...(imagePrompt ? { imagePrompt } : {}),
     ...(imageUrl ? { imageUrl } : {}),
+    ...(imageQuery ? { imageQuery } : {}),
+    ...(imageKind ? { imageKind } : {}),
+    ...(imageCredit ? { imageCredit } : {}),
+    ...(imageLink ? { imageLink } : {}),
   }
 }
 
@@ -423,6 +527,32 @@ export function normalizeSlide(value: unknown, fallbackLayout: SlideLayout = "bu
       const contact = optionalText(firstOf(raw, "contact", "email", "website"), LIMITS.contact)
       return { ...base, layout, title, ...(subtitle ? { subtitle } : {}), ...(contact ? { contact } : {}) }
     }
+    case "hero": {
+      if (!title) return null
+      const kicker = optionalText(raw.kicker, LIMITS.kicker)
+      const subtitle = optionalText(firstOf(raw, "subtitle", "subheading", "body"), LIMITS.subtitle)
+      return { ...base, layout, title, ...(kicker ? { kicker } : {}), ...(subtitle ? { subtitle } : {}) }
+    }
+    case "features": {
+      if (!title) return null
+      const items = bounded(asArray(firstOf(raw, "items", "features", "cards", "points")).map(toFeature).filter((f): f is FeatureItem => Boolean(f)), LIST_BOUNDS.features)
+      if (!items) return degradeToBullets(raw, title)
+      const intro = optionalText(firstOf(raw, "intro", "subtitle", "lead"), LIMITS.intro)
+      return { ...base, layout, title, items, ...(intro ? { intro } : {}) }
+    }
+    case "process": {
+      if (!title) return null
+      const steps = bounded(asArray(firstOf(raw, "steps", "items", "stages", "points")).map(toProcessStep).filter((p): p is ProcessStep => Boolean(p)), LIST_BOUNDS.process)
+      if (!steps) return degradeToBullets(raw, title)
+      return { ...base, layout, title, steps }
+    }
+    case "gallery": {
+      if (!title) return null
+      const items = bounded(asArray(firstOf(raw, "items", "images", "photos")).map(toGalleryItem).filter((g): g is GalleryItem => Boolean(g)), LIST_BOUNDS.gallery)
+      if (!items) return degradeToBullets(raw, title)
+      const intro = optionalText(firstOf(raw, "intro", "subtitle", "lead"), LIMITS.intro)
+      return { ...base, layout, title, items, ...(intro ? { intro } : {}) }
+    }
   }
 }
 
@@ -466,9 +596,9 @@ export function normalizeOutline(value: unknown, fallbackTitle: string, count: n
 
   // A deck opens with a cover and ends on a conclusion whatever the model
   // thought, because a deck that starts on bullet points looks unfinished.
-  items[0] = { ...items[0], layout: "title" }
+  if (items[0].layout !== "hero") items[0] = { ...items[0], layout: "title" }
   const last = items[items.length - 1]
-  if (last.layout !== "closing" && last.layout !== "quote") items[items.length - 1] = { ...last, layout: "closing" }
+  if (last.layout !== "closing" && last.layout !== "quote" && last.layout !== "hero") items[items.length - 1] = { ...last, layout: "closing" }
 
   return { title, items }
 }

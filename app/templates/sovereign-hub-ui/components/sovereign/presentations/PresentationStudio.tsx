@@ -59,6 +59,7 @@ import {
   type ThemeId,
 } from "@/lib/presentations/types"
 import { SlideCanvas, SlideFrame, slideBuildTiming, type SlidePatch } from "./SlideRenderer"
+import { applyPhoto, photoSlots, usedPhotoUrls, type PhotoSlot } from "@/lib/presentations/images"
 import { PresentationShowcase } from "./PresentationShowcase"
 import "./presentation-studio.css"
 import "./presentation-desktop.css"
@@ -120,6 +121,10 @@ const LAYOUT_LABELS: Record<SlideLayout, string> = {
   comparison: "Сравнение",
   chart: "График",
   closing: "Финал",
+  hero: "Фото на весь слайд",
+  features: "Иконки",
+  process: "Процесс",
+  gallery: "Галерея",
 }
 
 const EXAMPLES = [
@@ -242,6 +247,35 @@ function creditsLabel(quota: Quota | null) {
   if (!quota) return "…"
   if (quota.unlimited) return "∞"
   return `${quota.remaining} / ${quota.dailyCredits}`
+}
+
+type FoundPhoto = { url: string; credit?: string; link?: string }
+
+/**
+ * Real photographs for the given slots — found by the server in photo
+ * libraries, by each slide's own search words. Free; never throws: a failed
+ * search simply leaves the slot for the next try or for an AI picture.
+ */
+async function searchPhotos(slots: PhotoSlot[], exclude: string[]): Promise<Record<string, FoundPhoto | null>> {
+  if (!slots.length) return {}
+  try {
+    const response = await fetch("/api/presentations/photos", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ items: slots.slice(0, 12), exclude: exclude.slice(-60) }),
+    })
+    const data = await response.json().catch(() => null)
+    return response.ok && data?.ok && data.photos && typeof data.photos === "object" ? data.photos : {}
+  } catch {
+    return {}
+  }
+}
+
+function withPhotos(slide: Slide, photos: Record<string, FoundPhoto | null>) {
+  return photoSlots(slide).reduce((current, slot) => {
+    const photo = photos[slot.key]
+    return photo?.url ? applyPhoto(current, slot.key, photo) : current
+  }, slide)
 }
 
 /** The plan the server writes against, rebuilt from the deck as it is now —
@@ -373,6 +407,8 @@ export function PresentationStudio({ username }: { username?: string }) {
   const [assemblyAt, setAssemblyAt] = useState(0)
   const [spotlight, setSpotlight] = useState<{ index: number; nonce: number } | null>(null)
   const assemblyRef = useRef<{ index: number; at: number } | null>(null)
+  // Photos already on the deck, so a new search never repeats one.
+  const usedPhotosRef = useRef<Set<string>>(new Set())
   const [recent, setRecent] = useState<Deck[]>([])
   const [imageProgress, setImageProgress] = useState<{ done: number; total: number } | null>(null)
 
@@ -524,6 +560,26 @@ export function PresentationStudio({ username }: { username?: string }) {
         // batches not to repeat one.
         if (slide) written.set(item.index, { ...slide, id: slideId() } as Slide)
       }
+      // Photos for these slides are searched right away. A slide waits a
+      // moment for them, so it usually appears with its picture; photos that
+      // take longer are put in as soon as they arrive.
+      const slots = [...written.values()].flatMap(photoSlots)
+      const photoSearch = searchPhotos(slots, [...usedPhotosRef.current])
+      const early = slots.length ? await Promise.race([photoSearch, new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 3500))]) : null
+      const place = (photos: Record<string, FoundPhoto | null>) => {
+        for (const photo of Object.values(photos)) if (photo?.url) usedPhotosRef.current.add(photo.url)
+      }
+      if (early) {
+        place(early)
+        for (const [index, slide] of written) written.set(index, withPhotos(slide, early))
+      } else if (slots.length) {
+        void photoSearch.then((photos) => {
+          place(photos)
+          const ids = new Set([...written.values()].map((slide) => slide.id))
+          setEntries((previous) => previous.map((entry) => (entry.slide && ids.has(entry.slide.id) ? { ...entry, slide: withPhotos(entry.slide, photos) } : entry)))
+        })
+      }
+
       for (const [index, slide] of written) delivered.set(index, slide)
       setEntries((previous) => previous.map((entry, i) => {
         if (!batch.includes(i)) return entry
@@ -655,8 +711,12 @@ export function PresentationStudio({ username }: { username?: string }) {
       setError(String(result.data?.error || "Не удалось переписать слайд."))
       return
     }
-    const slide = normalizeSlide(result.data.slide)
-    if (slide) {
+    const written = normalizeSlide(result.data.slide)
+    if (written) {
+      const slots = photoSlots(written)
+      const photos = slots.length ? await searchPhotos(slots, [...usedPhotosRef.current]) : {}
+      for (const photo of Object.values(photos)) if (photo?.url) usedPhotosRef.current.add(photo.url)
+      const slide = withPhotos(written, photos)
       setEntries((previous) => previous.map((item, i) => (i === index ? { ...item, slide, state: "ready" } : item)))
       setInstruction("")
       spotlightSlide(index, slide)
@@ -691,6 +751,32 @@ export function PresentationStudio({ username }: { username?: string }) {
 
   /* ----------------------------------------------------------------- images */
 
+  // Another photograph for the current slide: the same search, skipping
+  // every photo the deck already shows (including this slide's own).
+  const otherPhotos = async (index: number) => {
+    const entry = entries[index]
+    if (!entry?.slide) return
+    const current = entry.slide
+    const cleared: Slide = current.layout === "gallery"
+      ? ({ ...current, items: current.items.map(({ image: _image, ...item }) => { void _image; return item }) } as Slide)
+      : ({ ...current, imageUrl: undefined, imageCredit: undefined, imageLink: undefined } as Slide)
+    const slots = photoSlots(cleared)
+    if (!slots.length) return
+    setBusy("images")
+    setError("")
+    const exclude = [...new Set([...usedPhotosRef.current, ...usedPhotoUrls(entries.map((item) => item.slide).filter((slide): slide is Slide => Boolean(slide)))])]
+    const photos = await searchPhotos(slots, exclude)
+    setBusy(null)
+    const found = Object.values(photos).filter((photo) => photo?.url)
+    if (!found.length) {
+      setError("Другого подходящего фото не нашлось — можно создать ИИ-изображение.")
+      return
+    }
+    for (const photo of found) if (photo?.url) usedPhotosRef.current.add(photo.url)
+    const slide = withPhotos(cleared, photos)
+    setEntries((previous) => previous.map((item, i) => (i === index ? { ...item, slide } : item)))
+  }
+
   const imageTargets = entries
     .map((entry, index) => ({ entry, index }))
     .filter(({ entry }) => entry.slide && IMAGE_LAYOUTS.has(entry.slide.layout) && !entry.slide.imageUrl)
@@ -709,7 +795,7 @@ export function PresentationStudio({ username }: { username?: string }) {
         const response = await fetch("/api/media/image", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ prompt, aspectRatio: "4:5", imageSize: "1K", mode: "cinematic" }),
+          body: JSON.stringify({ prompt, aspectRatio: slide.layout === "hero" ? "16:9" : "4:5", imageSize: "1K", mode: "cinematic" }),
         }).catch(() => null)
         data = response ? await response.json().catch(() => null) : null
         // Another picture from this account is still rendering; wait for it.
@@ -730,7 +816,7 @@ export function PresentationStudio({ username }: { username?: string }) {
       const url = String(
         (data.durable ? data.imageUrl : data.browserCacheImageUrl || data.imageUrl) || data.url || data.mediaUrl || "",
       )
-      if (url) patchSlide(index, { imageUrl: url })
+      if (url) patchSlide(index, { imageUrl: url, imageCredit: "Изображение: Malik AI", imageLink: undefined })
       setImageProgress({ done: position + 1, total: imageTargets.length })
     }
 
@@ -1286,6 +1372,9 @@ export function PresentationStudio({ username }: { username?: string }) {
                     <button type="button" className="ps-icon-btn" onClick={() => move(current, -1)} disabled={generating || current === 0} aria-label="Переместить выше"><ArrowUp size={16} /></button>
                     <button type="button" className="ps-icon-btn" onClick={() => move(current, 1)} disabled={generating || current >= entries.length - 1} aria-label="Переместить ниже"><ArrowDown size={16} /></button>
                     <button type="button" className="ps-icon-btn" onClick={() => setComposer((value) => !value)} disabled={generating || entries.length >= maxSlides} aria-label="Новый слайд" aria-expanded={composer} title={entries.length >= maxSlides ? `Максимум ${maxSlides} слайдов на вашем тарифе` : "Новый слайд · 1 кредит"}><Plus size={16} /></button>
+                    {IMAGE_LAYOUTS.has(active.slide.layout) || active.slide.layout === "gallery" ? (
+                      <button type="button" className="ps-icon-btn" onClick={() => void otherPhotos(current)} disabled={Boolean(busy)} aria-label="Другое фото" title="Подобрать другое фото"><ImageIcon size={16} /></button>
+                    ) : null}
                     <button type="button" className="ps-icon-btn" onClick={() => duplicate(current)} disabled={generating} aria-label="Дублировать"><Copy size={16} /></button>
                     <button type="button" className="ps-icon-btn" onClick={() => remove(current)} disabled={generating || entries.length <= 1} aria-label="Удалить слайд"><Trash2 size={16} /></button>
                   </>
@@ -1334,9 +1423,9 @@ export function PresentationStudio({ username }: { username?: string }) {
                 <div className="ps-slide-tools">
                   <button type="button" className="ps-btn ps-btn--small" onClick={() => void addImages()} disabled={Boolean(busy)}>
                     {busy === "images" ? <Loader2 size={14} className="animate-spin" /> : <ImageIcon size={14} />}
-                    {imageProgress ? `Рисую изображения: ${imageProgress.done} из ${imageProgress.total}` : `Добавить изображения · ${imageTargets.length} шт.`}
+                    {imageProgress ? `Рисую изображения: ${imageProgress.done} из ${imageProgress.total}` : `Нарисовать ИИ-изображения · ${imageTargets.length} шт.`}
                   </button>
-                  <span className="ps-cost">Изображения тратят фото-кредиты, не кредиты презентаций.</span>
+                  <span className="ps-cost">Фото подбираются сами и бесплатно. Для слайдов без подходящего фото ИИ нарисует картинку — это фото-кредиты.</span>
                 </div>
               ) : null}
 

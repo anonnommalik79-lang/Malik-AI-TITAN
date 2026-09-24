@@ -120,9 +120,23 @@ function placeSlides(raw: unknown, startIndex: number, items: OutlineItem[]): Wr
  * either — pictures are drawn by the image tool and attached by the studio.
  */
 function freshSlide(slide: Slide): Slide {
-  const { imageUrl: _ignored, ...rest } = slide
-  void _ignored
-  return { ...rest, id: slideId() } as Slide
+  return { ...withoutPictures(slide), id: slideId() } as Slide
+}
+
+/**
+ * A slide as the model wrote it, minus any picture address or credit: those
+ * are only ever attached by the studio, from a photo it actually found or an
+ * image it actually generated.
+ */
+function withoutPictures(slide: Slide): Slide {
+  const { imageUrl: _url, imageCredit: _credit, imageLink: _link, ...rest } = slide
+  void _url
+  void _credit
+  void _link
+  if (rest.layout === "gallery") {
+    return { ...rest, items: rest.items.map(({ image: _image, ...item }) => { void _image; return item }) } as Slide
+  }
+  return rest as Slide
 }
 
 export async function generateSlides(input: ModelChoice & {
@@ -192,13 +206,27 @@ export async function rewriteSlide(input: ModelChoice & {
       : parsed
     const slide = normalizeSlide(candidate, layout)
     if (slide) {
-      // The rewrite keeps its place and its picture unless it was asked to change.
-      const { imageUrl: _ignored, ...written } = slide
-      void _ignored
+      // The rewrite keeps its place and its pictures unless it was asked to change layout.
+      const written = withoutPictures(slide)
+      const sameLayout = slide.layout === input.slide.layout
+      const keep = input.slide
+      if (sameLayout && written.layout === "gallery" && keep.layout === "gallery") {
+        return {
+          ...written,
+          id: keep.id,
+          items: written.items.map((item, index) => (keep.items[index]?.image ? { ...item, image: keep.items[index].image } : item)),
+        } as Slide
+      }
       return {
         ...written,
-        id: input.slide.id,
-        ...(input.slide.imageUrl && slide.layout === input.slide.layout ? { imageUrl: input.slide.imageUrl } : {}),
+        id: keep.id,
+        ...(keep.imageUrl && sameLayout
+          ? {
+              imageUrl: keep.imageUrl,
+              ...(keep.imageCredit ? { imageCredit: keep.imageCredit } : {}),
+              ...(keep.imageLink ? { imageLink: keep.imageLink } : {}),
+            }
+          : {}),
       } as Slide
     }
     prompt += `\n\nYour previous answer was not a valid "${layout}" slide object. Return only that JSON object.`

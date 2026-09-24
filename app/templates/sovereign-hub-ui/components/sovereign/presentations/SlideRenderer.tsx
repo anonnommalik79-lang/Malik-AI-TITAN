@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import { deckTheme, themeCssVariables } from "@/lib/presentations/themes"
 import type { Slide, ThemeId } from "@/lib/presentations/types"
 import { formatCounted, splitNumber } from "@/lib/presentations/count-up"
+import { DECK_ICONS } from "@/lib/presentations/icon-components"
 import { DECK_CSS } from "./deck-css"
 
 /**
@@ -121,6 +122,10 @@ function itemCount(slide: Slide) {
     case "timeline": return slide.steps.length + 1
     case "comparison": return slide.rows.length + 1
     case "chart": return slide.data.length
+    case "features": return slide.items.length
+    case "process": return slide.steps.length + 1
+    case "gallery": return slide.items.length + 1
+    case "hero": return 2
     default: return 2
   }
 }
@@ -218,6 +223,21 @@ function formatNumber(value: number, language: string) {
   }
 }
 
+/** Who took the photo, small in its corner, as the licence asks. */
+function Credit({ text }: { text?: string }) {
+  return text ? <span className="deck-credit">{text}</span> : null
+}
+
+/** The picture of a slide, or a quiet placeholder until one arrives. */
+function Photo({ url, credit, className = "deck-image" }: { url?: string; credit?: string; className?: string }) {
+  return (
+    <div className={className} data-empty={!url}>
+      {url ? <img src={url} alt="" loading="eager" decoding="async" /> : <div className="deck-image-empty" />}
+      <Credit text={url ? credit : undefined} />
+    </div>
+  )
+}
+
 function SlideBody({
   slide,
   index,
@@ -246,7 +266,7 @@ function SlideBody({
     ) : (
       <Editable value={value} editable={editable} onCommit={edit(field)} className={className} placeholder={placeholder} block={block} />
     )
-  const page = slide.layout === "title" || slide.layout === "closing" ? null : <div className="deck-page">{index + 1} / {total}</div>
+  const page = slide.layout === "title" || slide.layout === "closing" || slide.layout === "hero" ? null : <div className="deck-page">{index + 1} / {total}</div>
 
   switch (slide.layout) {
     case "title":
@@ -258,12 +278,94 @@ function SlideBody({
             <div className="deck-title-rule" />
             {slide.subtitle || editable ? <p className="deck-sub" style={{ margin: "26px 0 0" }}>{text(slide.subtitle || "", "subtitle", "", "Подзаголовок")}</p> : null}
           </div>
-          {slide.imageUrl ? (
-            <div className="deck-image">
-              <img src={slide.imageUrl} alt="" />
-            </div>
-          ) : null}
+          {slide.imageUrl ? <Photo url={slide.imageUrl} credit={slide.imageCredit} /> : null}
         </div>
+      )
+
+    case "hero":
+      return (
+        <div className="deck-hero" data-image={Boolean(slide.imageUrl)} style={{ position: "absolute", inset: 0 }}>
+          <Photo url={slide.imageUrl} credit={slide.imageCredit} className="deck-hero-photo" />
+          <div className="deck-hero-shade" />
+          <div className="deck-copy">
+            {slide.kicker || editable ? <div className="deck-kicker">{text(slide.kicker || "", "kicker", "", "Надзаголовок")}</div> : null}
+            <h1 className="deck-h">{text(slide.title, "title", "", "Заголовок")}</h1>
+            {slide.subtitle || editable ? <p className="deck-sub">{text(slide.subtitle || "", "subtitle", "", "Подзаголовок")}</p> : null}
+          </div>
+        </div>
+      )
+
+    case "features": {
+      const count = slide.items.length
+      return (
+        <>
+          <div className="deck-pad">
+            <div className="deck-head"><h2 className="deck-h">{text(slide.title, "title")}</h2></div>
+            {slide.intro ? <p className="deck-intro">{text(slide.intro, "intro")}</p> : null}
+            <div className="deck-body deck-body--center">
+              <div className="deck-features" data-count={count}>
+                {slide.items.map((item, i) => {
+                  const Icon = DECK_ICONS[item.icon] || DECK_ICONS.sparkles
+                  return (
+                    <div className="deck-feature" key={i}>
+                      <span className="deck-feature-icon"><Icon strokeWidth={1.8} /></span>
+                      <div>
+                        <h3><Editable value={item.title} editable={editable} onCommit={(next) => onChange({ items: slide.items.map((x, j) => (j === i ? { ...x, title: next } : x)) })} /></h3>
+                        <p><Editable value={item.body || ""} editable={editable} placeholder="Описание" onCommit={(next) => onChange({ items: slide.items.map((x, j) => (j === i ? { ...x, body: next || undefined } : x)) })} /></p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+          {page}
+        </>
+      )
+    }
+
+    case "process":
+      return (
+        <>
+          <div className="deck-pad">
+            <div className="deck-head"><h2 className="deck-h">{text(slide.title, "title")}</h2></div>
+            <div className="deck-body deck-body--center">
+              <div className="deck-process" data-count={slide.steps.length}>
+                {slide.steps.map((step, i) => (
+                  <div className="deck-process-step" key={i}>
+                    <div className="deck-process-arrow">
+                      <b>{String(i + 1).padStart(2, "0")}</b>
+                      <h3><Editable value={step.title} editable={editable} onCommit={(next) => onChange({ steps: slide.steps.map((x, j) => (j === i ? { ...x, title: next } : x)) })} /></h3>
+                    </div>
+                    <p><Editable value={step.body || ""} editable={editable} placeholder="Описание" onCommit={(next) => onChange({ steps: slide.steps.map((x, j) => (j === i ? { ...x, body: next || undefined } : x)) })} /></p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          {page}
+        </>
+      )
+
+    case "gallery":
+      return (
+        <>
+          <div className="deck-pad">
+            <div className="deck-head"><h2 className="deck-h">{text(slide.title, "title")}</h2></div>
+            {slide.intro ? <p className="deck-intro">{text(slide.intro, "intro")}</p> : null}
+            <div className="deck-body">
+              <div className="deck-gallery" data-count={slide.items.length}>
+                {slide.items.map((item, i) => (
+                  <figure className="deck-gallery-item" key={i}>
+                    <Photo url={item.image?.url} credit={item.image?.credit} className="deck-gallery-photo" />
+                    <figcaption><Editable value={item.caption} editable={editable} onCommit={(next) => onChange({ items: slide.items.map((x, j) => (j === i ? { ...x, caption: next } : x)) })} /></figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          </div>
+          {page}
+        </>
       )
 
     case "section":
@@ -387,13 +489,7 @@ function SlideBody({
     case "image-text":
       return (
         <div className="deck-imgtext" data-side={slide.imageSide} style={{ position: "absolute", inset: 0 }}>
-          <div className="deck-image">
-            {slide.imageUrl ? (
-              <img src={slide.imageUrl} alt="" />
-            ) : (
-              <div className="deck-image-empty">Изображение</div>
-            )}
-          </div>
+          <Photo url={slide.imageUrl} credit={slide.imageCredit} />
           <div className="deck-copy">
             <h2 className="deck-h">{text(slide.title, "title")}</h2>
             {slide.body ? <p className="deck-text">{text(slide.body, "body")}</p> : null}
@@ -607,7 +703,10 @@ export function SlideCanvas({
     <div ref={hostRef} className="deck-host" data-layout={slide.layout} data-preserve-brand-color="true">
       {root
         ? createPortal(
-            <div className="deck-slide" style={style} data-layout={slide.layout} data-editable={editable && !build} data-build={build}>
+            <div className="deck-slide" style={style} data-layout={slide.layout} data-dark={deckTheme(theme).dark} data-editable={editable && !build} data-build={build}>
+              {/* Soft shapes of light behind the content — what keeps a text
+                  slide from looking like a document. Drawn per layout in CSS. */}
+              <div className="deck-deco" aria-hidden="true"><i /><b /></div>
               <SlideBody
                 slide={slide}
                 index={index}

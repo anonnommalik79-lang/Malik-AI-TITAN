@@ -124,16 +124,70 @@ const SAMPLES = {
   comparison: { layout: "comparison", title: "Мы против сети", columns: ["Сеть", "Мы"], rows: [{ label: "Цена", values: ["1500", "1100"] }, { label: "Скорость", values: ["5 мин", "2 мин"] }], verdict: "Дешевле и быстрее" },
   chart: { layout: "chart", title: "Выручка", unit: "млн ₸", data: [{ label: "2024", value: "12,5" }, { label: "2025", value: 18 }, { label: "2026", value: "24" }], takeaway: "Рост вдвое" },
   closing: { layout: "closing", title: "Инвестируйте 40 млн ₸", subtitle: "Возврат за 14 месяцев", contact: "hello@cafe.kz" },
+  hero: { layout: "hero", kicker: "Алматы", title: "Кофе в двух минутах от метро", subtitle: "Спешелти для тех, кто спешит", imageQuery: "coffee shop interior morning", imageKind: "mood" },
+  features: { layout: "features", title: "Почему нас выберут", items: [{ icon: "zap", title: "Быстро", body: "90 секунд" }, { icon: "money", title: "Дешевле", body: "на 25%" }, { icon: "leaf", title: "Свежо", body: "обжарка раз в неделю" }] },
+  process: { layout: "process", title: "Как мы откроемся", steps: [{ title: "Подписать аренду", body: "3 года" }, { title: "Сделать ремонт" }, { title: "Нанять команду" }, { title: "Открыться" }] },
+  gallery: { layout: "gallery", title: "Как это выглядит", items: [{ caption: "Стойка", imageQuery: "coffee bar counter" }, { caption: "Зал", imageQuery: "cafe seating window" }, { caption: "Выпечка", imageQuery: "croissants display" }], imageKind: "mood" },
 }
 
-check("accepts a valid example of every one of the twelve layouts", () => {
+check("accepts a valid example of every one of the sixteen layouts", () => {
   for (const [layout, raw] of Object.entries(SAMPLES)) {
     const slide = deck.normalizeSlide(raw)
     assert.ok(slide, `${layout} was rejected`)
     assert.equal(slide.layout, layout)
     assert.ok(slide.id, `${layout} has no id`)
   }
-  assert.equal(Object.keys(SAMPLES).length, 12)
+  assert.equal(Object.keys(SAMPLES).length, 16)
+  assert.deepEqual(Object.keys(SAMPLES).sort(), [...load("lib/presentations/types.ts").SLIDE_LAYOUTS].sort())
+})
+
+check("feature icons are always ones the renderer can draw", () => {
+  const slide = deck.normalizeSlide(SAMPLES.features)
+  assert.deepEqual(slide.items.map((item) => item.icon), ["zap", "coins", "leaf"])
+  assert.equal(deck.coerceIcon("growth"), "trending")
+  assert.equal(deck.coerceIcon("🚀"), "sparkles")
+  const icons = load("lib/presentations/icon-components.ts").DECK_ICONS
+  for (const name of load("lib/presentations/types.ts").DECK_ICON_NAMES) assert.ok(icons[name], `${name} has no drawing`)
+})
+
+check("layouts the model names differently still land on the right one", () => {
+  assert.equal(deck.coerceLayout("full-bleed"), "hero")
+  assert.equal(deck.coerceLayout("icon cards"), "features")
+  assert.equal(deck.coerceLayout("steps"), "process")
+  assert.equal(deck.coerceLayout("photos"), "gallery")
+  assert.equal(deck.coerceLayout("roadmap"), "timeline")
+})
+
+check("a slide keeps its photo search words, and only https or inline pictures", () => {
+  const slide = deck.normalizeSlide({ ...SAMPLES.hero, imageUrl: "https://images.test/a.jpg", imageCredit: "Фото: A · Pexels", imageLink: "https://pexels.test/a" })
+  assert.equal(slide.imageQuery, "coffee shop interior morning")
+  assert.equal(slide.imageKind, "mood")
+  assert.equal(slide.imageCredit, "Фото: A · Pexels")
+  assert.equal(deck.normalizeSlide({ ...SAMPLES.hero, imageUrl: "javascript:alert(1)" }).imageUrl, undefined)
+  assert.equal(deck.normalizeSlide({ ...SAMPLES.hero, imageUrl: "http://plain.test/a.jpg" }).imageUrl, undefined)
+  const gallery = deck.normalizeSlide({ ...SAMPLES.gallery, items: [{ caption: "a", image: { url: "https://x.test/1.jpg", credit: "c" } }, { caption: "b", image: { url: "ftp://bad" } }] })
+  assert.equal(gallery.items[0].image.url, "https://x.test/1.jpg")
+  assert.equal(gallery.items[1].image, undefined)
+})
+
+check("the studio knows which photos each slide still needs, and puts them in", () => {
+  const images = load("lib/presentations/images.ts")
+  const hero = deck.normalizeSlide(SAMPLES.hero)
+  assert.deepEqual(images.photoSlots(hero), [{ key: hero.id, query: "coffee shop interior morning", kind: "mood" }])
+  const withPhoto = images.applyPhoto(hero, hero.id, { url: "https://p.test/1.jpg", credit: "Фото: X · Pexels", link: "https://p.test" })
+  assert.equal(withPhoto.imageUrl, "https://p.test/1.jpg")
+  assert.equal(withPhoto.imageCredit, "Фото: X · Pexels")
+  assert.deepEqual(images.photoSlots(withPhoto), [], "a slide with its photo needs no more")
+  const gallery = deck.normalizeSlide(SAMPLES.gallery)
+  const slots = images.photoSlots(gallery)
+  assert.deepEqual(slots.map((slot) => slot.key), [`${gallery.id}#0`, `${gallery.id}#1`, `${gallery.id}#2`])
+  const filled = images.applyPhoto(gallery, `${gallery.id}#1`, { url: "https://p.test/2.jpg" })
+  assert.equal(filled.items[1].image.url, "https://p.test/2.jpg")
+  assert.deepEqual(images.usedPhotoUrls([withPhoto, filled]), ["https://p.test/1.jpg", "https://p.test/2.jpg"])
+  // No search words from the model: the picture description is used instead.
+  const title = deck.normalizeSlide(SAMPLES.title)
+  assert.equal(images.photoSlots(title)[0].query, "cozy coffee shop")
+  assert.equal(images.queryFromPrompt("A cinematic photo of the Charyn Canyon at sunset, 8k"), "Charyn Canyon sunset")
 })
 
 check("reads 'Title: body' strings as a titled point", () => {
@@ -275,7 +329,7 @@ check("a whole deck survives the trip through storage and back", () => {
     updatedAt: 2,
   }
   const back = deck.normalizeDeck(JSON.parse(JSON.stringify(original)))
-  assert.equal(back.slides.length, 12)
+  assert.equal(back.slides.length, Object.keys(SAMPLES).length)
   assert.equal(back.theme, "ember")
   assert.deepEqual(back.slides.map((s) => s.id), original.slides.map((s) => s.id))
 })
@@ -575,6 +629,93 @@ check("the sample deck on the start screen is drawn by the real renderer and mar
   for (const [, file] of samples.matchAll(/imageUrl: "(\/[^"]+)"/g)) assert.ok(existsSync(path.join(ROOT, "public", file)), `${file} is in public/`)
 })
 
+/* ================================================================= photos */
+
+const photos = load("lib/server/presentation-photos.ts")
+
+function fakeFetch(routes) {
+  const calls = []
+  const fn = async (url) => {
+    calls.push(String(url))
+    for (const [pattern, reply] of routes) {
+      if (pattern.test(String(url))) return { ok: true, json: async () => (typeof reply === "function" ? reply(String(url)) : reply) }
+    }
+    return { ok: false, json: async () => ({}) }
+  }
+  fn.calls = calls
+  return fn
+}
+
+const COMMONS_REPLY = {
+  query: {
+    pages: {
+      "2": { index: 2, imageinfo: [{ mime: "image/jpeg", width: 2400, height: 1600, thumburl: "https://upload.test/second.jpg", descriptionurl: "https://commons.test/File:2", extmetadata: { LicenseShortName: { value: "CC BY-SA 4.0" }, Artist: { value: "<a href='x'>Jane Doe</a>" } } }] },
+      "1": { index: 1, imageinfo: [{ mime: "image/jpeg", width: 3000, height: 2000, thumburl: "https://upload.test/first.jpg", descriptionurl: "https://commons.test/File:1", extmetadata: { LicenseShortName: { value: "Fair use" }, Artist: { value: "Someone" } } }] },
+      "3": { index: 3, imageinfo: [{ mime: "image/svg+xml", width: 3000, height: 2000, thumburl: "https://upload.test/map.svg", extmetadata: { LicenseShortName: { value: "CC0" } } }] },
+    },
+  },
+}
+
+check("photos of a real subject come from Wikimedia Commons, only under licences a product may use", async () => {
+  delete process.env.PEXELS_API_KEY
+  delete process.env.UNSPLASH_ACCESS_KEY
+  const fetcher = fakeFetch([[/commons\.wikimedia\.org/, COMMONS_REPLY]])
+  const photo = await photos.findPhoto({ query: "Abylai Khan monument", kind: "subject" }, fetcher)
+  assert.equal(photo.url, "https://upload.test/second.jpg", "fair use and vector files are skipped")
+  assert.equal(photo.credit, "Фото: Jane Doe · Wikimedia Commons · CC BY-SA 4.0")
+  assert.equal(photo.link, "https://commons.test/File:2")
+  assert.match(fetcher.calls[0], /gsrsearch=Abylai\+Khan\+monument\+filetype%3Abitmap/)
+})
+
+check("a general scene goes to the stock libraries first when their keys are set", async () => {
+  process.env.PEXELS_API_KEY = "test-key"
+  const fetcher = fakeFetch([
+    [/api\.pexels\.com/, { photos: [{ src: { large2x: "https://pexels.test/1.jpg" }, photographer: "Ann Lee", url: "https://pexels.test/photo/1", width: 4000, height: 2600 }] }],
+    [/commons\.wikimedia\.org/, COMMONS_REPLY],
+  ])
+  const photo = await photos.findPhoto({ query: "barista latte art closeup", kind: "mood" }, fetcher)
+  assert.equal(photo.url, "https://pexels.test/1.jpg")
+  assert.equal(photo.credit, "Фото: Ann Lee · Pexels")
+  assert.match(fetcher.calls[0], /api\.pexels\.com/)
+  delete process.env.PEXELS_API_KEY
+})
+
+check("a search that finds nothing tries broader words, and never repeats a photo", async () => {
+  const fetcher = fakeFetch([
+    [/gsrsearch=Charyn\+Canyon\+sunset\+golden\+hour/, { query: { pages: {} } }],
+    [/api\.openverse\.org.*q=Charyn\+Canyon\+sunset/, { results: [] }],
+    [/gsrsearch=Charyn\+Canyon\+sunset\+filetype/, COMMONS_REPLY],
+  ])
+  const photo = await photos.findPhoto({ query: "Charyn Canyon sunset golden hour", kind: "subject", exclude: ["https://upload.test/second.jpg"] }, fetcher)
+  assert.equal(photo, null, "the only usable photo is already on the deck")
+  assert.deepEqual(photos.queryVariants("Charyn Canyon sunset golden hour"), ["Charyn Canyon sunset golden hour", "Charyn Canyon sunset", "Charyn Canyon"])
+})
+
+check("licences are read strictly: commercial use with credit, nothing else", () => {
+  for (const ok of ["CC BY 4.0", "CC BY-SA 3.0", "CC0", "Public domain", "PD"]) assert.ok(photos.isCommercialLicence(ok), ok)
+  for (const no of ["CC BY-NC 2.0", "Fair use", "All rights reserved", "", "GFDL"]) assert.ok(!photos.isCommercialLicence(no), no)
+})
+
+check("photo search is free, for signed-in accounts, rate limited, and never repeats a photo in a batch", () => {
+  const route = read("app/api/presentations/photos/route.ts")
+  assert.match(route, /if \(!entitlement\.authenticated\)/)
+  assert.match(route, /MAX_PER_WINDOW/)
+  assert.doesNotMatch(route, /reservePresentationCredits/)
+  assert.match(route, /exclude\.add\(photo\.url\)/)
+})
+
+check("the model is asked for precise photo search words, and cannot set a picture address itself", async () => {
+  assert.match(load("lib/presentations/prompts.ts").LAYOUT_SCHEMAS.hero, /imageQuery/)
+  const outline = deck.normalizeOutline(JSON.parse(outlineJson), "кофейня", 6)
+  modelScript = [JSON.stringify({ slides: [{ n: 1, ...SAMPLES.title, imageUrl: "https://evil.test/x.jpg", imageCredit: "fake" }] })]
+  modelCalls.length = 0
+  const result = await engine.generateSlides({ topic: "кофейня", outline, startIndex: 0, count: 1, language: "ru", tone: "confident" })
+  assert.equal(result.slides[0].slide.imageUrl, undefined)
+  assert.equal(result.slides[0].slide.imageCredit, undefined)
+  assert.match(modelCalls[0].systemPrompt, /imageQuery: English words a photographer would tag/)
+  assert.match(modelCalls[0].systemPrompt, /encyclopedic photo/)
+})
+
 /* =================================================================== pptx */
 
 check("exports a real PowerPoint file with every slide, the chart, the table and the notes", async () => {
@@ -585,7 +726,7 @@ check("exports a real PowerPoint file with every slide, the chart, the table and
 
   const zip = await JSZip.loadAsync(file)
   const slideFiles = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
-  assert.equal(slideFiles.length, 12)
+  assert.equal(slideFiles.length, Object.keys(SAMPLES).length)
   assert.ok(Object.keys(zip.files).some((name) => /^ppt\/charts\/chart\d+\.xml$/.test(name)), "the chart is a real chart")
   assert.ok(Object.keys(zip.files).some((name) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name)), "speaker notes are in the notes pane")
 
@@ -593,6 +734,15 @@ check("exports a real PowerPoint file with every slide, the chart, the table and
   assert.match(allText, /Кофейня, которая окупается за 14 месяцев/)
   assert.match(allText, /<a:tbl>/, "the comparison is a native table")
   assert.match(allText, /000000/, "the theme background made it into the file")
+})
+
+check("feature icons reach PowerPoint as real vector drawings", () => {
+  const { createElement } = require("react")
+  const icons = load("lib/presentations/icon-components.ts").DECK_ICONS
+  const svg = pptx.svgMarkup(createElement(icons.rocket, { size: 96, color: "#FFFFFF", strokeWidth: 1.8 }))
+  assert.match(svg, /^<svg[^>]*xmlns="http:\/\/www\.w3\.org\/2000\/svg"[^>]*stroke-width="1\.8"/)
+  assert.match(svg, /<path d="M4\.5 16\.5/)
+  assert.doesNotMatch(read("lib/presentations/pptx.ts"), /from "react-dom\/server"/, "Next.js forbids react-dom/server in a route")
 })
 
 check("an image that could not be fetched leaves a panel, not a broken file", async () => {

@@ -1,4 +1,4 @@
-import type { DeckLanguage, DeckOutline, DeckTone, OutlineItem, Slide, SlideLayout } from "@/lib/presentations/types"
+import { DECK_ICON_NAMES, type DeckLanguage, type DeckOutline, type DeckTone, type OutlineItem, type Slide, type SlideLayout } from "@/lib/presentations/types"
 
 /**
  * What the model is told.
@@ -32,18 +32,24 @@ const TONE_GUIDE: Record<DeckTone, string> = {
   bold: "Punchy and memorable. Strong verbs, provocative headlines, no hedging where none is needed.",
 }
 
+const IMAGE_FIELDS = `"imageQuery":"English photo search words, 2–6 words, exactly this slide's subject","imageKind":"subject|mood","imagePrompt":"English, a concrete photographic scene, no text"`
+
 export const LAYOUT_SCHEMAS: Record<SlideLayout, string> = {
-  title: `{"layout":"title","kicker":"≤4 words above the title","title":"≤9 words","subtitle":"≤20 words","imagePrompt":"English, concrete scene, no text in the image","notes":"…"}`,
+  title: `{"layout":"title","kicker":"≤4 words above the title","title":"≤9 words","subtitle":"≤20 words",${IMAGE_FIELDS},"notes":"…"}`,
+  hero: `{"layout":"hero","kicker":"≤4 words","title":"≤8 words, set large over a full-bleed photograph","subtitle":"≤18 words",${IMAGE_FIELDS},"notes":"…"}`,
   section: `{"layout":"section","number":"01","title":"≤7 words","subtitle":"≤16 words","notes":"…"}`,
   bullets: `{"layout":"bullets","title":"a claim, ≤10 words","intro":"optional, ≤20 words","points":[{"title":"≤7 words","body":"≤22 words"}],"notes":"…"}  — 3 to 5 points`,
   "two-column": `{"layout":"two-column","title":"a claim","left":{"heading":"≤4 words","points":["≤14 words", "…"]},"right":{"heading":"≤4 words","points":["…"]},"notes":"…"}  — 2 to 4 points per side`,
   stat: `{"layout":"stat","title":"what the numbers prove","stats":[{"value":"≤8 chars, e.g. 14 мес, 3×, ≈40%","label":"≤10 words"}],"context":"≤25 words: where the numbers come from","notes":"…"}  — 1 to 3 stats`,
   quote: `{"layout":"quote","quote":"≤35 words","author":"name","role":"who they are","notes":"…"}`,
-  "image-text": `{"layout":"image-text","title":"a claim","body":"≤45 words","points":["≤14 words"],"imageSide":"left|right","imagePrompt":"English, concrete scene, no text","notes":"…"}  — 0 to 3 points`,
+  "image-text": `{"layout":"image-text","title":"a claim","body":"≤45 words","points":["≤14 words"],"imageSide":"left|right",${IMAGE_FIELDS},"notes":"…"}  — 0 to 3 points`,
   cards: `{"layout":"cards","title":"a claim","cards":[{"title":"≤5 words","body":"≤20 words"}],"notes":"…"}  — 3 or 4 cards`,
-  timeline: `{"layout":"timeline","title":"a claim","steps":[{"label":"Q1 2026 | Шаг 1 | Неделя 1","title":"≤5 words","body":"≤16 words"}],"notes":"…"}  — 3 to 5 steps`,
+  features: `{"layout":"features","title":"a claim","intro":"optional, ≤18 words","items":[{"icon":"one of: ${DECK_ICON_NAMES.join(", ")}","title":"≤5 words","body":"≤18 words"}],"notes":"…"}  — 3 to 6 items, the icon must fit the item's meaning`,
+  process: `{"layout":"process","title":"a claim about how it gets done","steps":[{"title":"≤4 words, a verb first","body":"≤16 words"}],"notes":"…"}  — 3 to 5 steps, in order`,
+  timeline: `{"layout":"timeline","title":"a claim","steps":[{"label":"Q1 2026 | 1771 | Неделя 1","title":"≤5 words","body":"≤16 words"}],"notes":"…"}  — 3 to 5 dated steps`,
   comparison: `{"layout":"comparison","title":"a claim","columns":["option A","option B"],"rows":[{"label":"criterion","values":["≤8 words","≤8 words"]}],"verdict":"≤18 words","notes":"…"}  — 3 to 5 rows`,
   chart: `{"layout":"chart","title":"what the chart shows","unit":"%, млн ₸, users…","data":[{"label":"≤3 words","value":123}],"takeaway":"≤20 words","notes":"…"}  — 3 to 7 bars, value is a plain number`,
+  gallery: `{"layout":"gallery","title":"a claim","intro":"optional, ≤18 words","items":[{"caption":"≤8 words","imageQuery":"English photo search words for exactly this item"}],"imageKind":"subject|mood","notes":"…"}  — 2 or 3 items`,
   closing: `{"layout":"closing","title":"the one thing to remember or do","subtitle":"≤20 words","contact":"optional: site, email or handle","notes":"…"}`,
 }
 
@@ -54,17 +60,24 @@ WRITING RULES — these decide whether the deck is good:
 2. One idea per slide. If a slide needs two ideas, it is two slides.
 3. Respect the word limits in the schema. Fewer words always beat more words.
 4. No filler: never "в современном мире", "играет важную роль", "уникальный", "инновационный", "In today's world".
-5. Be specific: names, places, amounts, timeframes, examples from the person's own request.
+5. Be specific: names, places, dates, amounts, examples from the person's own request. Teach something the audience
+   did not know: a fact, a cause, a consequence, a concrete example — not a generality anyone could write.
 6. NEVER invent precise statistics and present them as fact. Use a figure only if it is widely known or the person gave it.
    Otherwise write an estimate with "≈" or "оценка" and, in notes, say what real source would confirm it.
 7. Speaker notes: 2–4 natural sentences the presenter actually says — not a repeat of the slide text.
-8. imagePrompt is always English and describes a concrete photograph or illustration: subject, setting, light, mood.
-   Never ask for text, logos or letters inside the image.
+8. PHOTOS. Every slide with an image slot gets:
+   - imageQuery: English words a photographer would tag the picture with, about THIS slide's subject, not the deck in
+     general. Specific beats generic: "Abylai Khan monument Almaty" not "history"; "barista pouring latte art" not
+     "coffee"; "wind turbines Kazakhstan steppe" not "energy". No abstract words (success, growth, innovation).
+   - imageKind: "subject" when the picture must show a specific real person, place, building, event or artwork
+     (encyclopedic photo); "mood" when any good photograph of the scene will do (stock photo).
+   - imagePrompt: an English description of the ideal photograph (subject, setting, light), used if no photo is found.
+   Never ask for text, logos or letters inside an image.
 9. Plain text only inside JSON strings: no Markdown, no asterisks, no emoji, no leading dashes.
 `.trim()
 
 function languageLine(language: DeckLanguage) {
-  return `Write every visible string in ${LANGUAGE_NAME[language]}. imagePrompt stays in English.`
+  return `Write every visible string in ${LANGUAGE_NAME[language]}. imageQuery and imagePrompt stay in English.`
 }
 
 export function outlineSystemPrompt(input: { language: DeckLanguage; tone: DeckTone; count: number }) {
@@ -77,21 +90,32 @@ Return ONLY a JSON object, no prose, no code fence:
 Produce EXACTLY ${input.count} items.
 
 Layouts you may choose, by what the slide's idea IS:
-- title: the cover. Always item 1.
+- title: a cover with a photograph beside the title. Item 1, unless hero is better.
+- hero: a full-bleed photograph with a large headline over it. A powerful cover, a chapter opener, or an emotional
+  moment (a place, a person, a vision). Can be item 1 instead of title.
 - section: a chapter break in a long deck (only if ${input.count} ≥ 12; at most 2).
-- stat: the idea is a number or two.
+- stat: the idea is one to three numbers.
 - chart: the idea is a trend or comparison of 3–7 quantities.
-- timeline: the idea is a sequence, plan, roadmap or process.
-- comparison: the idea is a choice between two options, or before/after.
-- cards: the idea is 3–4 parallel things (features, pillars, segments).
+- timeline: the idea is dated events or a roadmap with dates.
+- process: the idea is how something gets done, step by step (no dates needed).
+- comparison: the idea is a choice between two options, or before/after, criterion by criterion.
+- features: the idea is 3–6 parallel things — benefits, pillars, services, reasons — each with an icon.
+- cards: the idea is 3–4 parallel things that need a little more text than features.
 - two-column: the idea is a contrast of two sides (problem/solution, today/tomorrow).
-- image-text: the idea is best felt through a picture (a place, a product, a person).
-- quote: the idea is someone else's voice (a customer, an expert).
+- image-text: the idea is best felt through one photograph (a place, a product, a person) plus a few lines.
+- gallery: the idea is shown by 2–3 photographs side by side (places, products, examples, people).
+- quote: the idea is someone else's voice (a customer, an expert, a historical figure).
 - bullets: only when nothing above fits.
 - closing: the last item. The one thing to remember or do.
 
-Arc: open with why this matters to THIS audience, show what is broken or possible, show what changes, prove it, say how, end with the ask.
-Variety: never three slides of the same layout in a row; use at least 5 different layouts in a 10-slide deck.
+Design like a world-class deck, not a document:
+- Photos carry a deck. In a 10-slide deck use at least 4 photo slides (title/hero, image-text, gallery).
+- Show structure visually: steps → process, dates → timeline, parallel ideas → features, numbers → stat or chart.
+- Never three slides of the same layout in a row; at least 6 different layouts in a 10-slide deck; bullets at most twice.
+
+Arc: open with why this matters to THIS audience, show what is broken or possible, show what changes, prove it, say how,
+end with the ask or the one thing to remember. For a history or education topic: context, key events, people, meaning
+today, what to remember.
 
 Tone: ${TONE_GUIDE[input.tone]}
 ${languageLine(input.language)}
@@ -167,7 +191,9 @@ ${WRITING_RULES}
 }
 
 export function rewriteSlideUserPrompt(input: { deckTitle: string; slide: Slide; instruction?: string; neighbours: string[] }) {
-  const { id: _id, imageUrl: _imageUrl, ...content } = input.slide as Slide & { imageUrl?: string }
+  const { id: _id, imageUrl: _imageUrl, imageCredit: _credit, imageLink: _link, ...content } = input.slide as Slide & { imageUrl?: string }
+  void _credit
+  void _link
   return `
 Deck: "${input.deckTitle}"
 Neighbouring slide titles, for context: ${input.neighbours.filter(Boolean).join(" | ") || "—"}

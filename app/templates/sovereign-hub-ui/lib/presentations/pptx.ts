@@ -1,6 +1,8 @@
 import PptxGenJSModule from "pptxgenjs"
+import { createElement } from "react"
+import { DECK_ICONS } from "@/lib/presentations/icon-components"
 import { deckTheme, type DeckTheme } from "@/lib/presentations/themes"
-import type { Deck, Slide } from "@/lib/presentations/types"
+import { IMAGE_LAYOUTS, type Deck, type DeckIconName, type Slide } from "@/lib/presentations/types"
 
 /**
  * The deck as a real PowerPoint file.
@@ -83,26 +85,113 @@ function pageNumber(ctx: Ctx) {
   })
 }
 
-function image(ctx: Ctx, data: string | undefined, x: number, y: number, w: number, h: number) {
+function image(ctx: Ctx, data: string | undefined, x: number, y: number, w: number, h: number, credit?: string) {
   if (!data) {
-    // No picture was generated: a quiet panel keeps the composition instead
+    // No picture was found: a quiet panel keeps the composition instead
     // of leaving a hole where the image was designed to be.
     panel(ctx, x, y, w, h)
     return
   }
   ctx.slide.addImage({ data, x, y, w, h, sizing: { type: "cover", w, h } })
+  if (credit) {
+    // The credit the photo's licence asks for, small in its corner.
+    const cw = Math.min(w - 0.2, Math.max(1.6, credit.length * 0.062))
+    ctx.slide.addText(credit, {
+      x: x + w - cw - 0.1, y: y + h - 0.34, w: cw, h: 0.24,
+      fontFace: ctx.theme.pptxBodyFont, fontSize: 7, color: "FFFFFF", align: "right", valign: "middle",
+      fill: { color: "000000", transparency: 45 }, margin: [0, 5, 0, 5], fit: "shrink",
+    })
+  }
+}
+
+const svgData = (svg: string) => `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
+
+/**
+ * The soft glow in a corner that the screen draws behind text slides. A
+ * PowerPoint shape cannot hold a radial gradient, but an SVG picture can, so
+ * the glow is placed as a small vector image — soft on every screen size.
+ */
+function glow(ctx: Ctx) {
+  const opacity = ctx.theme.dark ? 0.24 : 0.13
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><radialGradient id="g" cx="50" cy="50" r="50" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#${ctx.theme.accent}" stop-opacity="${opacity}"/><stop offset="1" stop-color="#${ctx.theme.accent}" stop-opacity="0"/></radialGradient></defs><circle cx="50" cy="50" r="50" fill="url(#g)"/></svg>`
+  ctx.slide.addImage({ data: svgData(svg), x: SLIDE_W - 3.9, y: -3.9, w: 7.2, h: 7.2 })
+}
+
+/** The dark gradient that keeps words readable over a full-bleed photo. */
+function heroShade(ctx: Ctx) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90" preserveAspectRatio="none"><defs><linearGradient id="h" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".82"/><stop offset=".42" stop-color="#000" stop-opacity=".52"/><stop offset=".74" stop-color="#000" stop-opacity=".12"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient><linearGradient id="v" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset=".5" stop-color="#000" stop-opacity="0"/></linearGradient></defs><rect width="160" height="90" fill="url(#h)"/><rect width="160" height="90" fill="url(#v)"/></svg>`
+  ctx.slide.addImage({ data: svgData(svg), x: 0, y: 0, w: SLIDE_W, h: SLIDE_H })
+}
+
+/**
+ * An icon component as SVG text. Next.js does not allow react-dom/server in
+ * a route, and an icon is only an <svg> with a few paths, so the element tree
+ * is walked by hand: components are called, host elements are written out.
+ */
+type Node = { type: unknown; props: Record<string, unknown> } | string | number | boolean | null | undefined | Node[]
+
+function escapeXml(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+function attributeName(name: string) {
+  if (name === "className") return "class"
+  if (name === "viewBox" || name.startsWith("aria-") || name.startsWith("data-")) return name
+  return name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)
+}
+
+export function svgMarkup(node: Node): string {
+  if (node === null || node === undefined || typeof node === "boolean") return ""
+  if (Array.isArray(node)) return node.map(svgMarkup).join("")
+  if (typeof node === "string" || typeof node === "number") return escapeXml(String(node))
+  const { type, props } = node
+  if (typeof type === "string") {
+    const attributes = Object.entries(props)
+      .filter(([name, value]) => !["children", "ref", "key"].includes(name) && value !== null && value !== undefined && value !== false && ["string", "number"].includes(typeof value))
+      .map(([name, value]) => ` ${attributeName(name)}="${escapeXml(String(value))}"`)
+      .join("")
+    return `<${type}${attributes}>${svgMarkup(props.children as Node)}</${type}>`
+  }
+  if (type && typeof type === "object" && typeof (type as { render?: unknown }).render === "function") {
+    return svgMarkup((type as { render: (props: unknown, ref: null) => Node }).render(props, null))
+  }
+  if (typeof type === "function") return svgMarkup((type as (props: unknown) => Node)(props))
+  return ""
+}
+
+const iconCache = new Map<string, string>()
+
+/** A card's icon, drawn from the same vector the screen uses. */
+function iconData(name: DeckIconName, color: string) {
+  const key = `${name}:${color}`
+  const cached = iconCache.get(key)
+  if (cached) return cached
+  const Icon = DECK_ICONS[name] || DECK_ICONS.sparkles
+  const svg = svgMarkup(createElement(Icon, { size: 96, color: `#${color}`, strokeWidth: 1.8 }) as unknown as Node)
+  const withNamespace = svg.includes("xmlns=") ? svg : svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"')
+  const data = svgData(withNamespace)
+  iconCache.set(key, data)
+  return data
 }
 
 /* ---------------------------------------------------------------- layouts */
 
-function drawSlide(ctx: Ctx, slide: Slide, imageData: string | undefined) {
+function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
   const { theme } = ctx
+  const imageData = images.get(slide.id)
 
   switch (slide.layout) {
     case "title": {
       const hasImage = Boolean(imageData)
       const textW = hasImage ? 6.2 : CONTENT_W
-      if (hasImage) image(ctx, imageData, SLIDE_W - 6.2, 0, 6.2, SLIDE_H)
+      if (hasImage) {
+        image(ctx, imageData, SLIDE_W - 6.35, 0, 6.35, SLIDE_H, slide.imageCredit)
+        // The photo meets the text on a diagonal, as on screen.
+        ctx.slide.addShape("rtTriangle", {
+          x: SLIDE_W - 6.36, y: 0, w: 0.98, h: SLIDE_H, flipV: true,
+          fill: { color: theme.bg }, line: { color: theme.bg, width: 0 },
+        })
+      }
       if (slide.kicker) {
         ctx.slide.addText(slide.kicker.toUpperCase(), {
           x: M, y: 2.0, w: textW - 0.4, h: 0.4, fontFace: theme.pptxBodyFont, fontSize: 13, bold: true,
@@ -213,11 +302,12 @@ function drawSlide(ctx: Ctx, slide: Slide, imageData: string | undefined) {
     }
 
     case "image-text": {
-      const imgW = 5.6
+      const imgW = 5.42
+      const inset = 0.46
       const onLeft = slide.imageSide === "left"
-      const textX = onLeft ? imgW + 0.6 : M
-      const textW = SLIDE_W - imgW - 0.6 - M
-      image(ctx, imageData, onLeft ? 0 : SLIDE_W - imgW, 0, imgW, SLIDE_H)
+      const textX = onLeft ? imgW + inset + 0.6 : M
+      const textW = SLIDE_W - imgW - inset - 0.6 - M
+      image(ctx, imageData, onLeft ? inset : SLIDE_W - imgW - inset, inset, imgW, SLIDE_H - inset * 2, slide.imageCredit)
       ctx.slide.addText(slide.title, {
         x: textX, y: 1.2, w: textW, h: 1.6, fontFace: theme.pptxHeadingFont, fontSize: 32, bold: true,
         color: theme.text, valign: "bottom", fit: "shrink", margin: 0,
@@ -352,11 +442,118 @@ function drawSlide(ctx: Ctx, slide: Slide, imageData: string | undefined) {
       }
       return
     }
+
+    case "hero": {
+      if (imageData) image(ctx, imageData, 0, 0, SLIDE_W, SLIDE_H, slide.imageCredit)
+      else ctx.slide.addShape("rect", { x: 0, y: 0, w: SLIDE_W, h: SLIDE_H, fill: { color: "0B0B0F" }, line: { color: "0B0B0F", width: 0 } })
+      // Darken the photo where the words sit, with the screen's own gradient.
+      heroShade(ctx)
+      if (slide.kicker) {
+        ctx.slide.addText(slide.kicker.toUpperCase(), {
+          x: 0.92, y: 3.0, w: 8, h: 0.4, fontFace: theme.pptxBodyFont, fontSize: 13, bold: true, color: "FFFFFF", charSpacing: 3, margin: 0,
+        })
+      }
+      ctx.slide.addText(slide.title, {
+        x: 0.92, y: 3.45, w: 8.6, h: 2.0, fontFace: theme.pptxHeadingFont, fontSize: 54, bold: true,
+        color: "FFFFFF", valign: "top", fit: "shrink", margin: 0, lineSpacingMultiple: 0.95,
+      })
+      if (slide.subtitle) body(ctx, slide.subtitle, { x: 0.92, y: 5.55, w: 7.8, h: 1.1, fontSize: 19, color: "EDEDED" })
+      return
+    }
+
+    case "features": {
+      heading(ctx, slide.title)
+      const count = slide.items.length
+      const columns = count === 4 ? 2 : 3
+      const rows = Math.ceil(count / columns)
+      const gap = 0.28
+      let top = BODY_Y
+      if (slide.intro) {
+        body(ctx, slide.intro, { x: M, y: top - 0.1, w: CONTENT_W, h: 0.5, fontSize: 16 })
+        top += 0.5
+      }
+      const cardW = (CONTENT_W - gap * (columns - 1)) / columns
+      const cardH = (SLIDE_H - 0.7 - top - gap * (rows - 1)) / rows
+      const compact = rows > 1
+      slide.items.forEach((item, i) => {
+        const x = M + (i % columns) * (cardW + gap)
+        const y = top + Math.floor(i / columns) * (cardH + gap)
+        panel(ctx, x, y, cardW, cardH)
+        const iconBox = compact ? 0.62 : 0.72
+        ctx.slide.addShape("roundRect", {
+          x: x + 0.3, y: y + 0.3, w: iconBox, h: iconBox, rectRadius: 0.12,
+          fill: { color: theme.accent, transparency: 84 }, line: { color: theme.accent, transparency: 100, width: 0 },
+        })
+        const pad = iconBox * 0.24
+        ctx.slide.addImage({ data: iconData(item.icon, theme.accent), x: x + 0.3 + pad, y: y + 0.3 + pad, w: iconBox - pad * 2, h: iconBox - pad * 2 })
+        const textTop = y + 0.3 + iconBox + 0.2
+        ctx.slide.addText(item.title, {
+          x: x + 0.3, y: textTop, w: cardW - 0.6, h: compact ? 0.45 : 0.6, fontFace: theme.pptxHeadingFont, fontSize: compact ? 16 : 19,
+          bold: true, color: theme.text, valign: "top", fit: "shrink", margin: 0,
+        })
+        if (item.body) {
+          body(ctx, item.body, { x: x + 0.3, y: textTop + (compact ? 0.45 : 0.62), w: cardW - 0.6, h: Math.max(0.4, y + cardH - textTop - (compact ? 0.6 : 0.8)), fontSize: compact ? 12 : 14 })
+        }
+      })
+      return
+    }
+
+    case "process": {
+      heading(ctx, slide.title)
+      const count = slide.steps.length
+      const overlap = 0.22
+      const stepW = (CONTENT_W + overlap * (count - 1)) / count
+      // A chevron's notch is half its height deep, so the arrows are kept
+      // low enough for the words inside to have room.
+      const arrowH = 1.15
+      const y = BODY_Y + 0.5
+      slide.steps.forEach((step, i) => {
+        const x = M + i * (stepW - overlap)
+        ctx.slide.addShape(i === 0 ? "homePlate" : "chevron", {
+          x, y, w: stepW, h: arrowH,
+          fill: { color: theme.accent, transparency: i % 2 ? 18 : 0 },
+          line: { color: theme.accent, transparency: 100, width: 0 },
+        })
+        const textX = x + (i === 0 ? 0.3 : 0.64)
+        ctx.slide.addText([
+          { text: String(i + 1).padStart(2, "0"), options: { fontSize: 11, bold: true, breakLine: true } },
+          { text: step.title, options: { fontSize: count === 5 ? 14 : 17, bold: true, fontFace: theme.pptxHeadingFont } },
+        ], {
+          x: textX, y: y + 0.12, w: stepW - (textX - x) - 0.62, h: arrowH - 0.24,
+          fontFace: theme.pptxBodyFont, color: theme.onAccent, valign: "middle", fit: "shrink", margin: 0,
+        })
+        if (step.body) body(ctx, step.body, { x: textX, y: y + arrowH + 0.25, w: stepW - 0.8, h: SLIDE_H - (y + arrowH + 0.25) - 0.8, fontSize: count === 5 ? 12 : 14 })
+      })
+      return
+    }
+
+    case "gallery": {
+      heading(ctx, slide.title)
+      let top = BODY_Y
+      if (slide.intro) {
+        body(ctx, slide.intro, { x: M, y: top - 0.1, w: CONTENT_W, h: 0.5, fontSize: 16 })
+        top += 0.5
+      }
+      const count = slide.items.length
+      const gap = 0.3
+      const w = (CONTENT_W - gap * (count - 1)) / count
+      const photoH = SLIDE_H - top - 1.35
+      slide.items.forEach((item, i) => {
+        const x = M + i * (w + gap)
+        image(ctx, images.get(`${slide.id}#${i}`), x, top, w, photoH, item.image?.credit)
+        ctx.slide.addText(item.caption, {
+          x, y: top + photoH + 0.15, w, h: 0.55, fontFace: theme.pptxHeadingFont, fontSize: 16, bold: true,
+          color: theme.text, valign: "top", fit: "shrink", margin: 0,
+        })
+      })
+      return
+    }
   }
 }
 
 /**
- * Builds the file. `images` maps a slide id to a data URL; the caller is
+ * Builds the file. `images` maps a slide id (or "slideId#index" for a
+ * gallery photo) to a data URL; the caller is
  * responsible for fetching pictures, so this module never touches the network
  * and can be exercised entirely offline.
  */
@@ -373,8 +570,10 @@ export async function buildPptx(deck: Pick<Deck, "title" | "theme" | "slides">, 
     const pageSlide = pptx.addSlide()
     pageSlide.background = { color: theme.bg }
     const ctx: Ctx = { slide: pageSlide, theme, index, total: deck.slides.length }
-    drawSlide(ctx, slide, images.get(slide.id))
-    if (slide.layout !== "title" && slide.layout !== "closing") pageNumber(ctx)
+    // The glow sits under the content, on every slide without a photograph.
+    if (!(IMAGE_LAYOUTS.has(slide.layout) && images.get(slide.id)) && slide.layout !== "gallery") glow(ctx)
+    drawSlide(ctx, slide, images)
+    if (slide.layout !== "title" && slide.layout !== "closing" && slide.layout !== "hero") pageNumber(ctx)
     if (slide.notes) pageSlide.addNotes(slide.notes)
   })
 
