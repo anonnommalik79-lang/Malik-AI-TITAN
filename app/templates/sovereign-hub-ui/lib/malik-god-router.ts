@@ -7,6 +7,7 @@ import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { buildMalikResponseSystemPrompt, cleanModelText } from "@/lib/ai/response-intelligence"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
 import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers, superpowerOutputBudget } from "@/lib/ai/superpowers"
+import { collectMalikConnectedContext } from "@/lib/server/context-fusion"
 
 type ProviderAttempt = {
   provider: string
@@ -967,9 +968,11 @@ export async function malikGodAnswer(
     body?.metadata,
   )
   const powerOutputTokens = superpowerOutputBudget(activeSuperpowers)
+  const fusionActive = activeSuperpowers.some((power) => power.id === "context-fusion")
+  const fusionWantsWeb = fusionActive && /(интернет|сеть|open web|\bweb\b|online)/iu.test(prompt)
   const powerForcesWeb = activeSuperpowers.some((power) =>
     power.id === "web-search" || power.id === "deep-research" || power.id === "monitoring",
-  )
+  ) || fusionWantsWeb
 
   // Never send tiny conversational turns through a heavyweight reasoning model.
   // The main chat route always passes a selected model (including MalikLLM MAX),
@@ -1007,10 +1010,16 @@ export async function malikGodAnswer(
       needsFreshEvidence: brain.needsFreshEvidence,
     }))
     const usedWeb = powerForcesWeb || shouldUseWeb(prompt, body)
-    const sources = usedWeb ? await gatherSources(prompt, emitResearch) : []
-    const strictPrompt = usedWeb
-      ? `Question:\n${prompt}\n\nWeb sources:\n${sourceContext(sources)}`
-      : prompt
+    const [webSources, connected] = await Promise.all([
+      usedWeb ? gatherSources(prompt, emitResearch) : Promise.resolve([] as SourceItem[]),
+      fusionActive ? collectMalikConnectedContext(prompt) : Promise.resolve({ requested: false, connectorIds: [] as string[], context: "", sources: [] as any[], executions: [] as any[] }),
+    ])
+    const sources: SourceItem[] = [...webSources, ...(connected.sources as SourceItem[])].slice(0, 24)
+    const strictPrompt = [
+      `Question:\n${prompt}`,
+      usedWeb && webSources.length ? `Web sources:\n${sourceContext(webSources)}` : "",
+      connected.context,
+    ].filter(Boolean).join("\n\n")
     const result = await runStrictMalikModel({
       modelId: selection.modelId,
       prompt: strictPrompt,
@@ -1019,6 +1028,7 @@ export async function malikGodAnswer(
       attachments,
       maxTokens: Number(body?.maxTokens) || Math.max(brain.outputTokenTarget, powerOutputTokens),
       temperature: typeof body?.temperature === "number" ? body.temperature : brain.temperature,
+      reasoningEffort: brain.depth === "instant" ? "low" : brain.depth === "balanced" ? "medium" : "high",
       allowCatalog: selection.allowCatalog === true,
       onToken: emitToken,
     })
