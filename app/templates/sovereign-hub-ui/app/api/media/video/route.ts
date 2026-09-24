@@ -3,6 +3,7 @@ import { checkMediaLimit, recordMediaUsage } from "@/lib/media/limits"
 import { resolveMediaUser } from "@/lib/media/request"
 import { routeVideoGeneration } from "@/lib/media/video-router"
 import type { VideoProviderId, VideoResolution } from "@/lib/media/types"
+import { videoCapability, videoSupportsDuration, videoSupportsMode, videoSupportsResolution } from "@/lib/media/video-capabilities"
 import {
   acquireVideoAccountInFlight,
   getVideoAccountDailyQuota,
@@ -80,33 +81,53 @@ async function handlePOST(request: Request) {
   }
   const ownerMode = user.plan === "owner"
 
-  // Source-driven modes must use a provider that can consume the uploaded
-  // provider-native asset. Magic Hour and Runway both support source media.
-  if ((mode === "image" || mode === "video") && providerId && providerId !== "magichour" && providerId !== "runway") {
-    return Response.json({
-      ok: false,
-      code: "VIDEO_SOURCE_PROVIDER_UNSUPPORTED",
-      error: "Для Фото/Видео → Видео выберите Magic Hour или Runway.",
-    }, { status: 400 })
+  if (providerId) {
+    const capability = videoCapability(providerId)
+    if (!videoSupportsMode(providerId, mode)) {
+      return Response.json({
+        ok: false,
+        code: "VIDEO_MODE_UNSUPPORTED_BY_PROVIDER",
+        error: `${capability.label} не поддерживает режим ${mode === "image" ? "Фото → Видео" : mode === "video" ? "Видео → Видео" : "Текст → Видео"}.`,
+        provider: providerId,
+        supportedModes: capability.modes,
+      }, { status: 422 })
+    }
+    if (!videoSupportsDuration(providerId, length)) {
+      return Response.json({
+        ok: false,
+        code: "VIDEO_DURATION_UNSUPPORTED_BY_PROVIDER",
+        error: `${capability.label} не поддерживает ${length} секунд.`,
+        provider: providerId,
+        supportedDurations: capability.durations,
+      }, { status: 422 })
+    }
+    if (!videoSupportsResolution(providerId, resolution)) {
+      return Response.json({
+        ok: false,
+        code: "VIDEO_RESOLUTION_UNSUPPORTED_BY_PROVIDER",
+        error: `${capability.label} не поддерживает ${resolution}.`,
+        provider: providerId,
+        supportedResolutions: capability.resolutions,
+      }, { status: 422 })
+    }
   }
-  if ((mode === "image" || mode === "video") && !providerId) providerId = "magichour"
 
-  // The verified founder account is unlimited at the Malik AI application layer.
-  // Regular accounts keep the durable one-video-per-day gate.
-  const persistedQuota = ownerMode ? null : await getVideoAccountDailyQuota(user.userId)
+  const legacyLimit = await checkMediaLimit({ userId: user.userId, plan: user.plan, kind: "video" })
+  const dailyVideoLimit = ownerMode ? Number.MAX_SAFE_INTEGER : Math.max(0, Number(legacyLimit.max || 0))
+  const persistedQuota = ownerMode ? null : await getVideoAccountDailyQuota(user.userId, dailyVideoLimit)
   if (!ownerMode && persistedQuota && !persistedQuota.available) {
     return Response.json({
       ok: false,
       code: "VIDEO_ACCOUNT_DAILY_LIMIT_REACHED",
-      error: "Сегодняшняя генерация видео на этом аккаунте уже использована. Лимит обновится завтра.",
-      remainingDailyVideos: 0,
-      dailyVideoLimit: 1,
+      error: "Лимит видео на сегодня исчерпан.",
+      remainingDailyVideos: persistedQuota.remaining,
+      dailyVideoLimit,
       resetAt: persistedQuota.resetAt,
       quotaStorage: persistedQuota.storage,
     }, { status: 429 })
   }
 
-  const legacyLimit = await checkMediaLimit({ userId: user.userId, plan: user.plan, kind: "video" })
+
   if (!legacyLimit.ok) {
     return Response.json({
       ok: false,
@@ -114,8 +135,8 @@ async function handlePOST(request: Request) {
       code: legacyLimit.code,
       resetAt: legacyLimit.resetAt,
       plan: legacyLimit.plan,
-      remainingDailyVideos: ownerMode ? null : 0,
-      dailyVideoLimit: ownerMode ? null : 1,
+      remainingDailyVideos: ownerMode ? null : legacyLimit.remaining,
+      dailyVideoLimit: ownerMode ? null : dailyVideoLimit,
       unlimited: ownerMode,
     }, { status: 429 })
   }
@@ -125,8 +146,8 @@ async function handlePOST(request: Request) {
       ok: false,
       code: "VIDEO_GENERATION_IN_PROGRESS",
       error: "На этом аккаунте уже идёт генерация видео. Дождитесь её завершения.",
-      remainingDailyVideos: 1,
-      dailyVideoLimit: 1,
+      remainingDailyVideos: ownerMode ? null : Math.max(0, legacyLimit.remaining),
+      dailyVideoLimit: ownerMode ? null : dailyVideoLimit,
       unlimited: false,
     }, { status: 429 })
   }
@@ -156,15 +177,15 @@ async function handlePOST(request: Request) {
         status: result.status,
         stage: result.stage,
         outputResolution: result.outputResolution,
-        remainingDailyVideos: ownerMode ? null : 1,
-        dailyVideoLimit: ownerMode ? null : 1,
+        remainingDailyVideos: ownerMode ? null : Math.max(0, legacyLimit.remaining),
+        dailyVideoLimit: ownerMode ? null : dailyVideoLimit,
         unlimited: ownerMode,
         resetAt: persistedQuota?.resetAt,
         plan: legacyLimit.plan,
       }, { status: result.status === "disabled" ? 503 : 502 })
     }
 
-    const quota = ownerMode ? null : await markVideoAccountDailyQuota(user.userId)
+    const quota = ownerMode ? null : await markVideoAccountDailyQuota(user.userId, dailyVideoLimit)
     if (!ownerMode) await recordMediaUsage(user.userId, "video")
 
     return Response.json({
@@ -177,8 +198,8 @@ async function handlePOST(request: Request) {
       status: result.status,
       stage: result.stage,
       outputResolution: result.outputResolution || resolution,
-      remainingDailyVideos: ownerMode ? null : 0,
-      dailyVideoLimit: ownerMode ? null : 1,
+      remainingDailyVideos: ownerMode ? null : Math.max(0, Number(quota?.remaining ?? legacyLimit.remaining - 1)),
+      dailyVideoLimit: ownerMode ? null : dailyVideoLimit,
       unlimited: ownerMode,
       globalDailyLimit: null,
       statusUrl: `/api/media/video/status?taskId=${encodeURIComponent(result.taskId)}&provider=${encodeURIComponent(result.provider)}`,
