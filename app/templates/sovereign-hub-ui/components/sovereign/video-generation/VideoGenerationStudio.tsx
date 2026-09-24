@@ -208,6 +208,17 @@ const MODELS = [
     audio: true,
     note: "ClipTaps — резервный daily-провайдер; результат может содержать watermark и автоматически созданный голос.",
   },
+  {
+    id: "runway",
+    provider: "runway",
+    name: "Runway · Video Edit",
+    subtitle: "Видео → Видео · Gemini Omni Flash",
+    tier: "Pro",
+    icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://runwayml.com",
+    featured: false,
+    audio: true,
+    note: "Runway редактирует исходное видео по тексту и служит резервом, если Magic Hour недоступен.",
+  },
 ] as const
 
 function catalogVideoIcon(entry: RouterCatalogEntry) {
@@ -227,7 +238,6 @@ const MOBILE_MODELS = [
   { id: "h3", provider: "h3", name: "MalikVideo 1.0", subtitle: "Malik AI", tier: "Pro", icon: "", featured: false, audio: false, note: "MalikVideo 1.0" },
   { id: "dashscope", provider: "dashscope", name: "Wan · DashScope", subtitle: "Alibaba Cloud", tier: "Pro", icon: "", featured: false, audio: false, note: "Wan через DashScope" },
   { id: "pollo", provider: "pollo", name: "Pollo AI", subtitle: "Pollo Video", tier: "Pro", icon: "", featured: false, audio: false, note: "Pollo AI Video" },
-  { id: "runway", provider: "runway", name: "Runway", subtitle: "Runway Video", tier: "Pro", icon: "", featured: false, audio: false, note: "Runway Video" },
   { id: "fal", provider: "fal", name: "fal.ai", subtitle: "fal Video", tier: "Pro", icon: "", featured: false, audio: false, note: "fal.ai Video" },
   { id: "luma", provider: "luma", name: "Luma", subtitle: "Luma Video", tier: "Pro", icon: "", featured: false, audio: false, note: "Luma Video" },
   { id: "veo", provider: "veo", name: "Google Veo", subtitle: "Veo Video", tier: "Pro", icon: "", featured: false, audio: true, note: "Google Veo Video" },
@@ -352,7 +362,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   }, [])
 
   const supportsMode = (modelId: (typeof MOBILE_MODELS)[number]["id"], targetMode: VideoMode) =>
-    targetMode === "text" ? true : modelId === "magichour"
+    targetMode === "text" ? true : modelId === "magichour" || modelId === "runway"
 
   const changeMode = (nextMode: VideoMode) => {
     if (busy || nextMode === mode) return
@@ -367,7 +377,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
     if (nextMode === "text") {
       setModelNotice(
-        duration === 10 && selectedModelId !== "magichour"
+        duration === 10 && selectedModelId !== "magichour" && selectedModelId !== "runway"
           ? `Выбрано: ${selectedModel.name}. Модель сохранена; для 10 секунд выберите Magic Hour или переключите длительность на 5 сек.`
           : `Выбрано: ${selectedModel.name}. ${selectedModel.note}`,
       )
@@ -375,12 +385,22 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     }
 
     setDuration(5)
+    if (!supportsMode(selectedModelId, nextMode)) {
+      const compatibleId = modelAvailability.runway ? "runway" : "magichour"
+      const compatibleModel = MOBILE_MODELS.find((model) => model.id === compatibleId) || MOBILE_MODELS[0]
+      setSelectedModelId(compatibleId)
+      setModelNotice(
+        `${nextMode === "image" ? "Фото → Видео" : "Видео → Видео"}: автоматически выбрана ${compatibleModel.name}. Можно переключиться между Magic Hour и Runway.`,
+      )
+      return
+    }
+
     setModelNotice(
-      selectedModelId === "magichour"
-        ? nextMode === "image"
+      selectedModelId === "runway"
+        ? `Выбрано: ${selectedModel.name}. Исходник будет загружен напрямую в Runway для AI-редактирования.`
+        : nextMode === "image"
           ? "Image → Video работает через Magic Hour: исходное фото остаётся первым кадром."
-          : "Видео → Видео: Magic Hour AI Video Editor редактирует первые 5 секунд исходного клипа по тексту."
-        : `Выбрано: ${selectedModel.name}. Модель не сброшена, но ${nextMode === "image" ? "Фото → Видео" : "Видео → Видео"} сейчас поддерживает Magic Hour. Можно в любой момент выбрать другую карточку или Magic Hour для генерации.`,
+          : "Видео → Видео: Magic Hour редактирует исходный клип; при ошибке кредитов Malik AI автоматически попробует Runway.",
     )
   }
 
@@ -398,9 +418,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
     if (!supportsMode(model.id, mode)) {
       setModelNotice(
-        `Выбрано: ${model.name}. Переключение моделей не заблокировано; для ${mode === "image" ? "Фото → Видео" : "Видео → Видео"} генерация сейчас доступна через Magic Hour. Эта модель работает в Текст → Видео.`,
+        `Выбрано: ${model.name}. Для ${mode === "image" ? "Фото → Видео" : "Видео → Видео"} доступны Magic Hour и Runway; эта модель работает только в Текст → Видео.`,
       )
-    } else if (duration === 10 && model.id !== "magichour") {
+    } else if (duration === 10 && model.id !== "magichour" && model.id !== "runway") {
       setModelNotice(`Выбрано: ${model.name}. Для этой модели выберите 5 секунд; 10 секунд сейчас доступны через Magic Hour.`)
     } else {
       setModelNotice(`Выбрано: ${model.name}. ${model.note}`)
@@ -500,16 +520,17 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       return
     }
     setDuration(value)
-    if (value === 10 && selectedModelId !== "magichour") {
+    if (value === 10 && selectedModelId !== "magichour" && selectedModelId !== "runway") {
       setModelNotice(`Выбрано: ${selectedModel.name}. Выбор сохранён; для 10 секунд выберите Magic Hour или верните 5 секунд.`)
     }
   }
 
-  const uploadSource = async () => {
+  const uploadSource = async (provider: VideoProviderId = selectedModel.provider as VideoProviderId) => {
     if (!sourceFile || mode === "text") return ""
     const form = new FormData()
     form.append("file", sourceFile, sourceFile.name)
     form.append("mode", mode)
+    form.append("provider", provider)
     if (mode === "video") form.append("durationSeconds", String(sourceDurationSeconds))
     const response = await videoFetch("/api/media/video/source", { method: "POST", body: form }, 120_000)
     const data = await response.json().catch(() => ({}))
@@ -543,14 +564,15 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     }
     if (!supportsMode(selectedModelId, mode)) {
       setPhase("failed")
-      setError(`${selectedModel.name} сейчас работает в режиме Текст → Видео. Для ${mode === "image" ? "Фото → Видео" : "Видео → Видео"} выберите Magic Hour.`)
+      setError(`${selectedModel.name} сейчас работает в режиме Текст → Видео. Для ${mode === "image" ? "Фото → Видео" : "Видео → Видео"} выберите Magic Hour или Runway.`)
       return
     }
-    if (duration === 10 && selectedModelId !== "magichour") {
+    if (duration === 10 && selectedModelId !== "magichour" && selectedModelId !== "runway") {
       setPhase("failed")
-      setError(`${selectedModel.name}: выберите 5 секунд. 10 секунд сейчас поддерживает Magic Hour.`)
+      setError(`${selectedModel.name}: выберите 5 секунд. 10 секунд доступны через Magic Hour или Runway.`)
       return
     }
+
     setError("")
     setVideoUrl("")
     setAttempt(0)
@@ -561,9 +583,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       return
     }
 
-    setPhase("queued")
-    try {
-      const sourcePath = mode === "text" ? "" : await uploadSource()
+    const submit = async (provider: VideoProviderId, sourcePath: string) => {
       const response = await videoFetch(
         ENDPOINT,
         {
@@ -579,14 +599,40 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             resolution: QUALITY_RESOLUTION[quality],
             ratio: ratio === "4:3" ? "16:9" : ratio,
             generateAudio: selectedModel.audio,
-            provider: selectedModel.provider,
+            provider,
           }),
         },
         120_000,
       )
       const data = await response.json().catch(() => ({}))
+      return { response, data }
+    }
+
+    setPhase("queued")
+    try {
+      let provider = selectedModel.provider as VideoProviderId
+      let sourcePath = mode === "text" ? "" : await uploadSource(provider)
+      let { response, data } = await submit(provider, sourcePath)
+
+      const providerMessage = String(data?.error || data?.publicError || data?.message || "")
+      const canFallbackToRunway =
+        mode !== "text" &&
+        provider === "magichour" &&
+        modelAvailability.runway === true &&
+        !response.ok &&
+        /credit|quota|limit|payment|balance|unavailable|temporar|429|402|503/i.test(providerMessage + " " + response.status)
+
+      if (canFallbackToRunway) {
+        setModelNotice("Magic Hour сейчас недоступен — автоматически переключаю эту генерацию на Runway.")
+        provider = "runway"
+        sourcePath = await uploadSource("runway")
+        ;({ response, data } = await submit(provider, sourcePath))
+      }
+
       if (!response.ok) {
-        if (response.status === 429) throw new Error("Сегодняшняя генерация уже использована. Лимит обновится завтра.")
+        if (response.status === 429 && data?.code === "VIDEO_ACCOUNT_DAILY_LIMIT_REACHED") {
+          throw new Error("Сегодняшняя генерация уже использована. Лимит обновится завтра.")
+        }
         throw new Error(data?.error || data?.publicError || data?.message || `Ошибка ${response.status}`)
       }
 
@@ -802,11 +848,23 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           </div>
         </div>
 
+        <button
+          type="button"
+          className="mv2m__model-select"
+          onClick={() => setMobileModelOpen((open) => !open)}
+          disabled={busy}
+          aria-expanded={mobileModelOpen}
+          aria-controls="mv2-mobile-models"
+        >
+          <Box />
+          <span className="mv2m__model-select-copy"><small>Модель</small><strong>{selectedModel.name}</strong></span>
+          <span className="mv2m__model-chevron">{mobileModelOpen ? "⌃" : "⌄"}</span>
+        </button>
+
         <div className="mv2m__controls">
           <button type="button" onClick={cycleMobileDuration} disabled={busy || mode === "video"}><Clock3 /><span>{mode === "video" ? "до 10 сек" : `${duration} секунд`}</span></button>
           <button type="button" onClick={cycleMobileQuality} disabled={busy}><Monitor /><span>{QUALITY_RESOLUTION[quality]}</span></button>
           <button type="button" onClick={cycleMobileRatio} disabled={busy}><RectangleHorizontal /><span>{ratio}</span></button>
-          <button type="button" onClick={() => setMobileModelOpen((open) => !open)} disabled={busy} aria-expanded={mobileModelOpen} aria-controls="mv2-mobile-models"><Box /><span>{selectedModel.name.split(" · ")[0]}</span><small>⌄</small></button>
         </div>
         {mobileModelOpen ? (
           <div id="mv2-mobile-models" className="mv2m__model-picker" role="group" aria-label="Выбор видеомодели">
@@ -818,14 +876,14 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                   key={model.id}
                   type="button"
                   className={selectedModelId === model.id ? "is-active" : ""}
-                  disabled={!available || busy}
+                  disabled={!available || !supported || busy}
                   onClick={() => {
                     selectVideoModel(model)
                     setMobileModelOpen(false)
                   }}
                 >
                   <span>{model.name}</span>
-                  <small>{!available ? "Не подключена" : !supported ? "Можно выбрать · генерация в Текст → Видео" : duration === 10 && model.id !== "magichour" ? "Можно выбрать · 5 сек" : model.subtitle}</small>
+                  <small>{!available ? "Не подключена" : !supported ? "Только Текст → Видео" : duration === 10 && model.id !== "magichour" && model.id !== "runway" ? "Только 5 сек" : model.subtitle}</small>
                 </button>
               )
             })}
@@ -1044,18 +1102,18 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                 data-model-id={model.id}
                 onClick={() => selectVideoModel(model)}
                 aria-pressed={active}
-                disabled={busy || modelAvailability[model.id] === false}
+                disabled={busy || modelAvailability[model.id] === false || !supportsMode(model.id, mode)}
                 title={modelAvailability[model.id] === false
                   ? "Модель сейчас не подключена к серверу"
                   : !supportsMode(model.id, mode)
-                    ? "Модель можно выбрать. Для текущего Фото/Видео режима генерация доступна через Magic Hour; эта модель работает в Текст → Видео."
-                    : duration === 10 && model.id !== "magichour"
-                      ? "Модель можно выбрать. Для генерации выберите 5 секунд или Magic Hour для 10 секунд."
+                    ? "Эта модель работает только в Текст → Видео. Для текущего режима доступны Magic Hour и Runway."
+                    : duration === 10 && model.id !== "magichour" && model.id !== "runway"
+                      ? "Для генерации выберите 5 секунд или Magic Hour/Runway для 10 секунд."
                       : model.note}
               >
                 <span className="mv2__model-icon"><img src={model.icon} alt="" draggable={false} /></span>
                 <span className="mv2__model-copy"><strong>{model.name}</strong><small>{model.subtitle}</small></span>
-                <span className="mv2__tier is-free">{model.tier}</span>
+                <span className={`mv2__tier ${model.tier === "Free" ? "is-free" : "is-pro"}`}>{model.tier}</span>
               </button>
             )
           })}
@@ -1132,7 +1190,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           .mv2m__prompt textarea{width:100%;height:75px;resize:none;border:0;outline:0;background:transparent;color:#f7f7f8;font-size:11px;line-height:1.45;padding:0}.mv2m__prompt textarea::placeholder{color:#717783}
           .mv2m__prompt-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.mv2m__prompt-tools{display:flex;gap:7px}.mv2m__prompt-tools button{width:29px;height:29px;padding:0;border:1px solid #2c3037;border-radius:8px;background:#14171c;color:#c1c6ce;display:grid;place-items:center}.mv2m__prompt-tools button svg{width:14px;height:14px}
           .mv2m__counter{display:flex;align-items:center;gap:7px;color:#777e89;font-size:8px}.mv2m__counter button{width:20px;height:20px;padding:0;border:0;border-radius:50%;background:#343840;color:#aeb4bd;display:grid;place-items:center}.mv2m__counter button svg{width:11px;height:11px}
-          .mv2m__controls{display:grid;grid-template-columns:1fr 1fr .9fr 1.2fr;gap:6px;margin-top:8px}
+          .mv2m__model-select{width:100%;min-height:48px;margin-top:8px;padding:7px 10px;border:1px solid #343941;border-radius:12px;background:#12151a;color:#fff;display:grid;grid-template-columns:28px minmax(0,1fr) 22px;align-items:center;gap:8px;text-align:left}.mv2m__model-select>svg{width:18px;height:18px}.mv2m__model-select-copy{min-width:0;display:flex;flex-direction:column;gap:2px}.mv2m__model-select-copy small{font-size:8px;color:#7f8792}.mv2m__model-select-copy strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mv2m__model-chevron{text-align:right;color:#aeb5bf;font-size:13px}
+          .mv2m__controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}
           .mv2m__controls button{min-width:0;height:38px;padding:0 7px;border:1px solid #2b2e35;border-radius:10px;background:#111318;color:#bcc2cb;display:flex;align-items:center;justify-content:center;gap:5px;font-size:9px;white-space:nowrap}.mv2m__controls button svg{width:13px;height:13px;flex:0 0 13px}.mv2m__controls button span{overflow:hidden;text-overflow:ellipsis}.mv2m__controls button small{font-size:8px;color:#858c96}
           .mv2m__model-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px;padding:8px;border:1px solid #292d35;border-radius:12px;background:#0b0d11;max-height:260px;overflow-y:auto;-webkit-overflow-scrolling:touch}
           .mv2m__model-picker button{position:relative;min-width:0;min-height:58px;padding:9px 10px;border:1px solid #292d35;border-radius:10px;background:#11141a;color:#fff;text-align:left;display:flex;flex-direction:column;justify-content:center;gap:4px}
