@@ -6,7 +6,7 @@ import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { buildMalikResponseSystemPrompt, cleanModelText } from "@/lib/ai/response-intelligence"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
-import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers } from "@/lib/ai/superpowers"
+import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers, superpowerOutputBudget } from "@/lib/ai/superpowers"
 
 type ProviderAttempt = {
   provider: string
@@ -961,6 +961,15 @@ export async function malikGodAnswer(
   emitToken?: (chunk: string) => void,
 ): Promise<GodAnswer> {
   const prompt = extractPrompt(body)
+  const activeSuperpowers = detectMalikSuperpowers(
+    prompt,
+    Array.isArray(body?.attachments) ? body.attachments : [],
+    body?.metadata,
+  )
+  const powerOutputTokens = superpowerOutputBudget(activeSuperpowers)
+  const powerForcesWeb = activeSuperpowers.some((power) =>
+    power.id === "web-search" || power.id === "deep-research" || power.id === "monitoring",
+  )
 
   // Never send tiny conversational turns through a heavyweight reasoning model.
   // The main chat route always passes a selected model (including MalikLLM MAX),
@@ -997,7 +1006,7 @@ export async function malikGodAnswer(
       needsVerification: brain.needsVerification,
       needsFreshEvidence: brain.needsFreshEvidence,
     }))
-    const usedWeb = shouldUseWeb(prompt, body)
+    const usedWeb = powerForcesWeb || shouldUseWeb(prompt, body)
     const sources = usedWeb ? await gatherSources(prompt, emitResearch) : []
     const strictPrompt = usedWeb
       ? `Question:\n${prompt}\n\nWeb sources:\n${sourceContext(sources)}`
@@ -1008,7 +1017,7 @@ export async function malikGodAnswer(
       systemPrompt: systemPrompt(usedWeb, prompt, brainInstruction, attachments, body?.metadata),
       history,
       attachments,
-      maxTokens: Number(body?.maxTokens) || brain.outputTokenTarget,
+      maxTokens: Number(body?.maxTokens) || Math.max(brain.outputTokenTarget, powerOutputTokens),
       temperature: typeof body?.temperature === "number" ? body.temperature : brain.temperature,
       allowCatalog: selection.allowCatalog === true,
       onToken: emitToken,
@@ -1032,11 +1041,11 @@ export async function malikGodAnswer(
     }
   }
 
-  const usedWeb = shouldUseWeb(prompt, body)
+  const usedWeb = powerForcesWeb || shouldUseWeb(prompt, body)
   const requestedMaxTokens = Number(body?.maxTokens)
   const maxTokens = Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0
     ? Math.floor(requestedMaxTokens)
-    : undefined
+    : powerOutputTokens
   const cache = usedWeb ? getCache(prompt) : null
   const cacheFitsBudget = !cache || !maxTokens || Math.ceil(String(cache.content || "").length / 3) <= maxTokens
   if (cache && cacheFitsBudget) {
