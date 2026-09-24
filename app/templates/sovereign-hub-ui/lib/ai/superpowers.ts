@@ -766,6 +766,30 @@ export function detectMalikSuperpowers(
     if (selected.length >= Math.max(1, Math.min(limit, 6))) break
   }
 
+  const ids = new Set(selected.map((item) => item.id))
+  const addCompanion = (id: MalikSuperpowerId) => {
+    const power = byId.get(id)
+    if (power && !ids.has(id) && selected.length < 6) {
+      selected.push(power)
+      ids.add(id)
+    }
+  }
+
+  if (
+    ids.has("deep-research")
+    || ids.has("long-workflows")
+    || ids.has("work-agent")
+    || ids.has("programming")
+    || ids.has("data-analysis")
+    || ids.has("science")
+    || ids.has("presentations")
+    || ids.has("office")
+  ) addCompanion("self-check")
+
+  if (ids.has("long-workflows") || ids.has("work-agent") || ids.has("cloud-jobs")) addCompanion("recovery")
+  if (ids.has("reasoning") || ids.has("deep-research") || ids.has("long-workflows") || ids.has("science")) addCompanion("adaptive-effort")
+  if (ids.has("long-context")) addCompanion("large-output")
+
   return selected.length ? selected : [byId.get("chat-core")!]
 }
 
