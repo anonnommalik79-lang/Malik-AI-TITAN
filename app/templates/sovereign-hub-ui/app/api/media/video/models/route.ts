@@ -2,6 +2,7 @@ import { freeVideoProviderConfigured } from "@/lib/media/providers/free-video"
 import { malikH3Configured } from "@/lib/media/providers/malik-h3"
 import { videoProviderConfigured } from "@/lib/media/providers/titan-video"
 import type { VideoProviderId } from "@/lib/media/types"
+import { DEFAULT_VIDEO_PROVIDER_ID, VIDEO_CAPABILITIES } from "@/lib/media/video-capabilities"
 
 export const runtime = "nodejs"
 
@@ -21,5 +22,5 @@ export async function GET() {
     veo: videoProviderConfigured("veo"),
   }
 
-  return Response.json({ ok: true, models }, { headers: { "Cache-Control": "no-store" } })
+  return Response.json({ ok: true, models, capabilities: VIDEO_CAPABILITIES, defaultProvider: DEFAULT_VIDEO_PROVIDER_ID }, { headers: { "Cache-Control": "private, no-store" } })
 }
