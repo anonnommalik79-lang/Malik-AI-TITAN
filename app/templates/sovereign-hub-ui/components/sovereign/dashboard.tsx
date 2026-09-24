@@ -5370,8 +5370,9 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     setActiveChatId(branchId)
     setActiveProjectWorkspaceId(branch.kind === "project" ? branchId : null)
     setMessages(branchMessages)
-    setSelectedModelId(branch.selectedModelId)
-    saveMalikModelSelection(branch.selectedModelId)
+    const branchModelId = branch.selectedModelId || DEFAULT_MALIK_MODEL_ID
+    setSelectedModelId(branchModelId)
+    saveMalikModelSelection(branchModelId)
     const lastCode = [...branchMessages].reverse().find((message) => message.role === "assistant" && message.generatedCode)?.generatedCode
     setGeneratedCode(lastCode || "")
     setStreamingText("")
