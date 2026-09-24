@@ -228,6 +228,32 @@ export function releaseVideoAccountInFlight(userId: string) {
   inFlight().delete(memoryKey(userId))
 }
 
+export async function refundVideoAccountDailyQuota(userId: string, dailyLimit = 1): Promise<VideoQuotaStatus> {
+  const previous = memory().get(memoryKey(userId)) || await cloudState(userId)
+  const state: VideoQuotaState = {
+    day: quotaDay(),
+    count: Math.max(0, Math.max(0, Number(previous?.count) || 0) - 1),
+    usedAt: new Date().toISOString(),
+  }
+  memory().set(memoryKey(userId), state)
+
+  const s = storage()
+  if (s) {
+    try {
+      await s.client.send(new PutObjectCommand({
+        Bucket: s.cfg.bucket,
+        Key: objectKey(userId),
+        Body: Buffer.from(JSON.stringify(state), "utf8"),
+        ContentType: "application/json; charset=utf-8",
+        CacheControl: "private, no-store",
+        Metadata: { kind: "malik-video-account-daily" },
+      }))
+      return statusFor(state, dailyLimit, "object-storage")
+    } catch {}
+  }
+  return statusFor(state, dailyLimit, "runtime-memory")
+}
+
 export async function markVideoAccountDailyQuota(userId: string, dailyLimit = 1): Promise<VideoQuotaStatus> {
   const previous = memory().get(memoryKey(userId)) || await cloudState(userId)
   const state: VideoQuotaState = {
