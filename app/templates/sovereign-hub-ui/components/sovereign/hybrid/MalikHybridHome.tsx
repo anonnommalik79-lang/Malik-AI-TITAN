@@ -7,6 +7,7 @@ import {
   Brain,
   Film,
   FileSearch,
+  FolderOpen,
   Github,
   Globe,
   GraduationCap,
@@ -39,7 +40,7 @@ import { ChatToolWorkspace, type ChatToolWorkspaceMode } from "../ChatToolWorksp
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
-const MAX_HOME_ATTACHMENTS = 8
+const MAX_HOME_ATTACHMENTS = 12
 const MAX_HOME_VIDEO_SECONDS = 10
 const MAX_HOME_VIDEO_BYTES = 150 * 1024 * 1024
 const HOME_VIDEO_FRAME_COUNT = 6
@@ -438,6 +439,12 @@ function HomeComposer({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const toolsRef = useRef<HTMLDivElement>(null)
   const allInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    folderInputRef.current?.setAttribute("webkitdirectory", "")
+    folderInputRef.current?.setAttribute("directory", "")
+  }, [])
 
   useEffect(() => {
     const field = textareaRef.current
@@ -495,6 +502,7 @@ function HomeComposer({
     action: () => void
   }> = [
     { id: "upload", label: "Добавить фото и файлы", description: "Загрузить с компьютера", icon: Paperclip, action: () => allInputRef.current?.click() },
+    { id: "folder", label: "Добавить папку", description: "Выбрать локальную папку с файлами", icon: FolderOpen, action: () => folderInputRef.current?.click() },
     { id: "library", label: "Добавить файл из библиотеки", description: "Просматривайте свои файлы и выполняйте поиск по ним", icon: FileSearch, action: () => setLibraryOpen(true) },
     { id: "create-image", label: "Создать изображение", description: "Создать любое изображение", icon: Sparkles, action: () => onCreateImage?.() },
     { id: "web", label: "Поиск в сети", description: "Искать актуальную информацию", icon: Search, action: onStartWeb },
@@ -591,6 +599,20 @@ function HomeComposer({
               })}
             </div>
           ) : null}
+
+          <input
+            ref={folderInputRef}
+            type="file"
+            accept={`image/*,video/*,${HOME_FILE_ACCEPT}`}
+            multiple
+            className="hidden"
+            aria-hidden="true"
+            tabIndex={-1}
+            onChange={(event) => {
+              onSelectMediaFiles(Array.from(event.currentTarget.files || []))
+              event.currentTarget.value = ""
+            }}
+          />
 
           <input
             ref={allInputRef}
