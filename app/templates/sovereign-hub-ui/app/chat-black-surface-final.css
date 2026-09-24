@@ -269,6 +269,144 @@
 #malik-root .malik-md-token-number { color: #f2ae77; }
 #malik-root .malik-md-token-comment { color: #87909b; }
 
+#malik-root .malik-md-codeblock.has-live-preview {
+  margin-bottom: 0.55em;
+}
+
+#malik-root .malik-md-codebar button.is-active {
+  background: #fff;
+  color: #000;
+}
+
+#malik-root .malik-md-live-preview {
+  width: 100%;
+  margin: 0 0 1.05em;
+  overflow: hidden;
+  border: 2px solid #fff;
+  border-radius: 0;
+  background: #000;
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+#malik-root .malik-md-live-preview__bar {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px 8px 13px;
+  border-bottom: 1px solid #fff;
+  background: #000;
+}
+
+#malik-root .malik-md-live-preview__title,
+#malik-root .malik-md-live-preview__actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+#malik-root .malik-md-live-preview__title {
+  overflow: hidden;
+  font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.08em;
+}
+
+#malik-root .malik-md-live-preview__title strong {
+  flex: 0 0 auto;
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
+#malik-root .malik-md-live-preview__title > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  color: #98989f;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#malik-root .malik-md-live-preview__mark {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border: 1px solid #fff;
+  background: #fff;
+}
+
+#malik-root .malik-md-live-preview__actions {
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+#malik-root .malik-md-live-preview__actions button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 0;
+  background: #000;
+  color: #e8e8eb;
+  font: 700 10px/1 system-ui, sans-serif;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+#malik-root .malik-md-live-preview__actions button:hover {
+  background: #fff;
+  color: #000;
+}
+
+#malik-root .malik-md-live-preview__actions svg {
+  width: 13px;
+  height: 13px;
+}
+
+#malik-root .malik-md-live-preview__stage {
+  height: clamp(320px, 48vw, 520px);
+  min-height: 320px;
+  background: #fff;
+}
+
+#malik-root .malik-md-live-preview__stage iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+#malik-root .malik-md-live-preview__report {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px;
+  border-top: 1px solid #fff;
+  background: #000;
+  color: #9f9fa6;
+  font: 600 10px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+#malik-root .malik-md-live-preview__report-label {
+  padding: 3px 6px;
+  border: 1px solid #fff;
+  background: #fff;
+  color: #000;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+#malik-root .malik-md-live-preview__report strong {
+  color: #fff;
+  font-weight: 800;
+}
+
 #malik-root .malik-md-table-wrap {
   max-width: 100%;
   margin: 0 0 1em;
@@ -323,6 +461,40 @@
 
   #malik-root .malik-md-codebar {
     min-height: 36px;
+    align-items: stretch;
+    flex-direction: column;
+    padding: 8px 10px;
+  }
+
+  #malik-root .malik-md-codebar-actions {
+    width: 100%;
+    justify-content: flex-end;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  #malik-root .malik-md-codebar-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  #malik-root .malik-md-live-preview__bar,
+  #malik-root .malik-md-live-preview__report {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  #malik-root .malik-md-live-preview__actions {
+    width: 100%;
+  }
+
+  #malik-root .malik-md-live-preview__actions button {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  #malik-root .malik-md-live-preview__stage {
+    height: 340px;
+    min-height: 280px;
   }
 
   #malik-root .malik-md-codebar-actions button {
