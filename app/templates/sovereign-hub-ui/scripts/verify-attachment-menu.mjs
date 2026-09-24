@@ -17,6 +17,8 @@ const shareTarget = fs.readFileSync("app/share-target/route.ts", "utf8")
 const drawingPad = fs.readFileSync("components/sovereign/ChatDrawingPad.tsx", "utf8")
 const libraryPicker = fs.readFileSync("components/sovereign/ChatLibraryPicker.tsx", "utf8")
 const pluginRegistry = fs.readFileSync("components/sovereign/features/plugin-registry.ts", "utf8")
+const imageCreator = fs.readFileSync("components/sovereign/ChatImageCreator.tsx", "utf8")
+const toolWorkspace = fs.readFileSync("components/sovereign/ChatToolWorkspace.tsx", "utf8")
 
 const requestedLabels = [
   "Добавить фото и файлы",
@@ -27,7 +29,6 @@ const requestedLabels = [
   "Нарисовать",
   "GitHub",
   "Gmail",
-  "OpenAI Platform",
 ]
 
 function extractBlock(source, startText, endText) {
@@ -48,7 +49,7 @@ for (const menu of [chatMenu, homeMenu]) {
     previous = position
   }
 
-  for (const removed of ["Загрузить изображения", "Загрузить видео", "Загрузить файлы", "Камера", "Код", "Плагины", "Память"]) {
+  for (const removed of ["Загрузить изображения", "Загрузить видео", "Загрузить файлы", "Камера", "Код", "Плагины", "Память", "OpenAI Platform"]) {
     assert.equal(menu.includes(`label: "${removed}"`), false, `Old menu action must be gone: ${removed}`)
   }
 }
@@ -72,11 +73,22 @@ assert.match(home, /\/api\/plugins\/connect\?id=/, "Home GitHub/Gmail actions mu
 assert.match(chat, /\/api\/plugins\/connect\?id=/, "Chat GitHub/Gmail actions must use the real plugin connection route")
 assert.match(pluginRegistry, /id: "github"[\s\S]*providerSlug: "github"/, "GitHub must remain a real WorkOS Pipes plugin")
 assert.match(pluginRegistry, /id: "gmail"[\s\S]*providerSlug: "gmail"/, "Gmail must remain a real WorkOS Pipes plugin")
-assert.match(chat, /research:\s*researchMode !== "off"/, "Search menu actions must route a real research request")
-assert.match(chat, /researchMode === "deep" \? "deep" : responseDepth/, "Deep research must request deep response depth")
-assert.match(home, /responseDepth:\s*deepResearch \? "deep" : undefined/, "Home deep research must request deep response depth")
-assert.match(chat, /https:\/\/platform\.openai\.com\//, "OpenAI Platform row must open the official platform")
-assert.match(home, /https:\/\/platform\.openai\.com\//, "Home OpenAI Platform row must open the official platform")
+assert.match(chatMenu, /action:\s*\(\) => setToolWorkspace\("web"\)/, "Chat web search row must open its own workspace")
+assert.match(chatMenu, /action:\s*\(\) => setToolWorkspace\("deep"\)/, "Chat deep research row must open its own workspace")
+assert.match(homeMenu, /action:\s*onStartWeb/, "Home web search row must open the dedicated research workspace")
+assert.match(homeMenu, /action:\s*onStartDeepResearch/, "Home deep research row must open the dedicated research workspace")
+assert.match(chat, /onRunResearch={runResearchWorkspace}/, "Chat research workspace must execute the real research route")
+assert.match(home, /onRunResearch={runResearchWorkspace}/, "Home research workspace must execute the real research route")
+assert.match(chat, /research:\s*true,[\s\S]*responseDepth:\s*mode === "deep" \? "deep" : responseDepth/, "Chat research workspace must route web/deep requests directly")
+assert.match(home, /research:\s*true,[\s\S]*responseDepth:\s*mode === "deep" \? "deep" : undefined/, "Home research workspace must route web/deep requests directly")
+assert.equal(chat.includes("https://platform.openai.com/"), false, "OpenAI Platform row must be removed from chat")
+assert.equal(home.includes("https://platform.openai.com/"), false, "OpenAI Platform row must be removed from home")
+assert.match(toolWorkspace, /fixed inset-0[\s\S]*bg-black text-white/, "Tool workspaces must use the full-screen black/white UI")
+assert.match(toolWorkspace, /mode === "web" \|\| mode === "deep"/, "Research workspace must distinguish web and deep research")
+assert.match(toolWorkspace, /onConnect\?\.\(mode\)/, "GitHub/Gmail workspace must invoke the real connector action")
+assert.match(imageCreator, /createPortal\(/, "Image creator must render above the whole app")
+assert.match(imageCreator, /className="fixed inset-0/, "Image creator must cover the full viewport")
+assert.match(imageCreator, /aspect-square/, "Image style templates must be square")
 
 assert.match(libraryPicker, /\/api\/media\/library\?limit=120/, "Library picker must load the authenticated Malik media library")
 assert.match(libraryPicker, /onSelect\(item\.src/, "Library picker must return the selected saved asset")
