@@ -71,6 +71,7 @@ export type { ChatSendOptions }
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
 const MALIK_CHATVIEW_SAFE_TEXT = ""
+const MAX_CHAT_ATTACHMENTS = 12
 
 function isChatViewBadText(value: string) {
   const text = String(value || "")
@@ -1783,6 +1784,11 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const [drawingOpen, setDrawingOpen] = useState(false)
   const [toolWorkspace, setToolWorkspace] = useState<ChatToolWorkspaceMode | null>(null)
   const [researchMode, setResearchMode] = useState<"off" | "web" | "deep">("off")
+
+  useEffect(() => {
+    folderInputRef.current?.setAttribute("webkitdirectory", "")
+    folderInputRef.current?.setAttribute("directory", "")
+  }, [])
   useEffect(() => {
     let cancelled = false
 
@@ -1838,6 +1844,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const allInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
   const attachButtonRef = useRef<HTMLButtonElement>(null)
   const attachMenuRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -1996,7 +2003,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
         const imported = (Array.isArray(payload.files) ? payload.files : [])
           .map(attachmentFromSharedFile)
           .filter((item: ChatAttachment | null): item is ChatAttachment => Boolean(item))
-        if (imported.length) setAttachments((previous) => [...previous, ...imported].slice(0, 8))
+        if (imported.length) setAttachments((previous) => [...previous, ...imported].slice(0, MAX_CHAT_ATTACHMENTS))
         const sharedText = [payload.text, payload.url].map((value) => String(value || "").trim()).filter(Boolean).join("\n")
         if (sharedText) setPrompt((previous) => previous.trim() ? previous : sharedText)
       })
@@ -2076,13 +2083,24 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const handleFiles = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return
     setLocalError(null)
-    try {
-      const parsed = await Promise.all(Array.from(files).slice(0, 8).map(fileToAttachment))
-      setAttachments((previous) => [...previous, ...parsed].slice(0, 8))
-      setShowAttachMenu(false)
-    } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Ошибка файла")
+    const room = Math.max(0, MAX_CHAT_ATTACHMENTS - attachments.length)
+    if (!room) {
+      setLocalError(`Можно прикрепить максимум ${MAX_CHAT_ATTACHMENTS} файлов.`)
+      return
     }
+    const parsed: ChatAttachment[] = []
+    let firstError = ""
+    for (const file of Array.from(files).slice(0, room)) {
+      try {
+        parsed.push(await fileToAttachment(file))
+      } catch (error) {
+        if (!firstError) firstError = error instanceof Error ? error.message : "Ошибка файла"
+      }
+    }
+    if (parsed.length) setAttachments((previous) => [...previous, ...parsed].slice(0, MAX_CHAT_ATTACHMENTS))
+    if (files.length > room && !firstError) firstError = `Можно прикрепить максимум ${MAX_CHAT_ATTACHMENTS} файлов.`
+    setLocalError(firstError || null)
+    setShowAttachMenu(false)
   }
 
   const importRemoteMedia = async (rawUrl: string) => {
@@ -2114,7 +2132,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
         base64: String(payload.file.base64),
         url: URL.createObjectURL(blob),
       }
-      setAttachments((previous) => [...previous, attachment].slice(0, 8))
+      setAttachments((previous) => [...previous, attachment].slice(0, MAX_CHAT_ATTACHMENTS))
       setLocalError(null)
       return true
     } catch (error) {
@@ -2172,7 +2190,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const addCodeAttachment = () => {
     if (!codeText.trim()) return
     const attachment: ChatAttachment = { id: crypto.randomUUID(), name: "Вставленный код", mime: "text/plain", size: codeText.length, kind: "code", text: codeText }
-    setAttachments((previous) => [...previous, attachment].slice(0, 8))
+    setAttachments((previous) => [...previous, attachment].slice(0, MAX_CHAT_ATTACHMENTS))
     setCodeText("")
     setCodeModalOpen(false)
     setShowAttachMenu(false)
@@ -2182,7 +2200,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     const clean = urlText.trim()
     if (!clean) return
     const attachment: ChatAttachment = { id: crypto.randomUUID(), name: clean, mime: "text/uri-list", size: clean.length, kind: "url", url: clean }
-    setAttachments((previous) => [...previous, attachment].slice(0, 8))
+    setAttachments((previous) => [...previous, attachment].slice(0, MAX_CHAT_ATTACHMENTS))
     setUrlText("")
     setUrlModalOpen(false)
     setShowAttachMenu(false)
@@ -2348,7 +2366,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
         const blob = new Blob(chunksRef.current, { type: "audio/webm" })
         const file = new File([blob], `voice-${Date.now()}.webm`, { type: "audio/webm" })
         const attachment = await fileToAttachment(file)
-        setAttachments((previous) => [...previous, attachment].slice(0, 8))
+        setAttachments((previous) => [...previous, attachment].slice(0, MAX_CHAT_ATTACHMENTS))
       }
       recorder.start()
       setIsRecording(true)
@@ -2402,6 +2420,12 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       description: "Загрузить с компьютера",
       icon: Paperclip,
       action: () => allInputRef.current?.click(),
+    },
+    {
+      label: "Добавить папку",
+      description: "Выбрать локальную папку с файлами",
+      icon: FolderTree,
+      action: () => folderInputRef.current?.click(),
     },
     {
       label: "Добавить файл из библиотеки",
@@ -2679,6 +2703,14 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       </div>
 
       <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }} />
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        accept="image/*,video/*,audio/*,.pdf,.docx,.xlsx,.pptx,.txt,.md,.mdx,.csv,.tsv,.json,.jsonl,.yaml,.yml,.xml,.html,.htm,.css,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.kt,.go,.rs,.rb,.php,.swift,.c,.h,.cpp,.hpp,.cs,.sql,.sh,.bash,.zsh,.ps1,.toml,.ini,.log"
+        className="hidden"
+        onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }}
+      />
       <input
         ref={allInputRef}
         type="file"
