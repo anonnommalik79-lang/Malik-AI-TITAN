@@ -247,10 +247,17 @@ export async function createTitanVideoJob(provider: TitanVideoProviderId, input:
     const key = runwayKey()
     if (!key) throw new Error("RUNWAY_API_KEY missing")
     const model = process.env.RUNWAY_VIDEO_MODEL || "gen4.5"
-    const response = await fetch("https://api.dev.runwayml.com/v1/text_to_video", {
+    const ratio = input.ratio === "9:16" ? "720:1280" : input.ratio === "1:1" ? "1024:1024" : "1280:720"
+    const imageMode = input.mode === "image"
+    if (imageMode && !input.imageUrl) throw new Error("Runway image-to-video requires imageUrl")
+    const endpoint = imageMode ? "image_to_video" : "text_to_video"
+    const body = imageMode
+      ? { model, promptImage: input.imageUrl, promptText: input.prompt, ratio, duration: length }
+      : { model, promptText: input.prompt, ratio, duration: length }
+    const response = await fetch(`https://api.dev.runwayml.com/v1/${endpoint}`, {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "X-Runway-Version": "2024-11-06" },
-      body: JSON.stringify({ model, promptText: input.prompt, ratio: "1280:720", duration: length }),
+      body: JSON.stringify(body),
     })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok || !payload?.id) throw new Error(payload?.error || payload?.message || "Runway failed")
@@ -275,10 +282,34 @@ export async function createTitanVideoJob(provider: TitanVideoProviderId, input:
     const key = process.env.LUMA_API_KEY
     if (!key) throw new Error("LUMA_API_KEY missing")
     const model = process.env.LUMA_VIDEO_MODEL || "ray-2"
-    const response = await fetch("https://api.lumalabs.ai/dream-machine/v1/generations", {
+    if (input.mode === "image" && !input.imageUrl) throw new Error("Luma image-to-video requires imageUrl")
+    if (input.mode === "video" && !input.sourceVideoUrl) throw new Error("Luma video-to-video requires sourceVideoUrl")
+
+    const modifyMode = input.mode === "video"
+    const endpoint = modifyMode
+      ? "https://api.lumalabs.ai/dream-machine/v1/generations/video/modify"
+      : "https://api.lumalabs.ai/dream-machine/v1/generations"
+    const body = modifyMode
+      ? {
+          generation_type: "modify_video",
+          media: { url: input.sourceVideoUrl },
+          model,
+          mode: process.env.LUMA_VIDEO_MODIFY_MODE || "adhere_2",
+          prompt: input.prompt,
+        }
+      : {
+          prompt: input.prompt,
+          model,
+          resolution: input.resolution || "720p",
+          duration: `${length}s`,
+          aspect_ratio: input.ratio || "16:9",
+          ...(input.mode === "image" ? { keyframes: { frame0: { type: "image", url: input.imageUrl } } } : {}),
+        }
+
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ prompt: input.prompt, model, resolution: input.resolution || "720p", duration: `${length}s`, aspect_ratio: input.ratio || "16:9" }),
+      body: JSON.stringify(body),
     })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok || !payload?.id) throw new Error(payload?.detail || payload?.message || "Luma failed")
