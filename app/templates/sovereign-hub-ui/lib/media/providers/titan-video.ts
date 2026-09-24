@@ -333,6 +333,23 @@ export async function createTitanVideoJob(provider: TitanVideoProviderId, input:
   throw new Error(`Provider ${provider} not handled here — use Pollo module`)
 }
 
+export async function cancelTitanVideoJob(provider: TitanVideoProviderId, taskId: string) {
+  if (provider === "runway") {
+    const key = runwayKey()
+    if (!key) return false
+    const response = await fetch(`https://api.dev.runwayml.com/v1/tasks/${encodeURIComponent(taskId)}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${key}`, "X-Runway-Version": "2024-11-06" },
+    }).catch(() => null)
+    return Boolean(response && (response.ok || response.status === 404 || response.status === 409))
+  }
+
+  // Not every provider exposes a cancellation endpoint. Returning false is
+  // deliberate: Malik AI still stops polling and marks the account-owned job
+  // cancelled without pretending an unsupported upstream cancel succeeded.
+  return false
+}
+
 export async function fetchTitanVideoStatus(provider: TitanVideoProviderId, taskId: string, extras?: { statusUrl?: string; responseUrl?: string }) {
   if (provider === "dashscope") {
     const key = dashscopeKey()
