@@ -8,6 +8,7 @@ import { buildMalikResponseSystemPrompt, cleanModelText } from "@/lib/ai/respons
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
 import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers, superpowerOutputBudget } from "@/lib/ai/superpowers"
 import { collectMalikConnectedContext } from "@/lib/server/context-fusion"
+import { collectMalikScienceContext } from "@/lib/server/science-context"
 
 type ProviderAttempt = {
   provider: string
@@ -884,7 +885,7 @@ async function callOpenRouterModels(prompt: string, usedWeb: boolean, sources: S
         },
       },
       prompt,
-      usedWeb,
+      usedWeb: usedWeb || sources.length > webSources.length,
       sources,
       maxTokens,
     )
@@ -969,6 +970,7 @@ export async function malikGodAnswer(
   )
   const powerOutputTokens = superpowerOutputBudget(activeSuperpowers)
   const fusionActive = activeSuperpowers.some((power) => power.id === "context-fusion")
+  const scienceActive = activeSuperpowers.some((power) => power.id === "science")
   const fusionWantsWeb = fusionActive && /(интернет|сеть|open web|\bweb\b|online)/iu.test(prompt)
   const powerForcesWeb = activeSuperpowers.some((power) =>
     power.id === "web-search" || power.id === "deep-research" || power.id === "monitoring",
@@ -1010,15 +1012,17 @@ export async function malikGodAnswer(
       needsFreshEvidence: brain.needsFreshEvidence,
     }))
     const usedWeb = powerForcesWeb || shouldUseWeb(prompt, body)
-    const [webSources, connected] = await Promise.all([
+    const [webSources, connected, science] = await Promise.all([
       usedWeb ? gatherSources(prompt, emitResearch) : Promise.resolve([] as SourceItem[]),
       fusionActive ? collectMalikConnectedContext(prompt) : Promise.resolve({ requested: false, connectorIds: [] as string[], context: "", sources: [] as any[], executions: [] as any[] }),
+      scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
     ])
-    const sources: SourceItem[] = [...webSources, ...(connected.sources as SourceItem[])].slice(0, 24)
+    const sources: SourceItem[] = [...webSources, ...(connected.sources as SourceItem[]), ...(science.sources as SourceItem[])].slice(0, 32)
     const strictPrompt = [
       `Question:\n${prompt}`,
       usedWeb && webSources.length ? `Web sources:\n${sourceContext(webSources)}` : "",
       connected.context,
+      science.context,
     ].filter(Boolean).join("\n\n")
     const result = await runStrictMalikModel({
       modelId: selection.modelId,
@@ -1072,8 +1076,13 @@ export async function malikGodAnswer(
     return { ...cache, provider: `${cache.provider}-cache` }
   }
 
-  const sources = usedWeb ? await gatherSources(prompt, emitResearch) : []
-  const result = await callProviderChain(prompt, usedWeb, sources, maxTokens)
+  const [webSources, science] = await Promise.all([
+    usedWeb ? gatherSources(prompt, emitResearch) : Promise.resolve([] as SourceItem[]),
+    scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
+  ])
+  const sources: SourceItem[] = [...webSources, ...(science.sources as SourceItem[])].slice(0, 32)
+  const providerPrompt = science.context ? [prompt, science.context].join("\n\n") : prompt
+  const result = await callProviderChain(providerPrompt, usedWeb || science.sources.length > 0, sources, maxTokens)
 
   let answer: GodAnswer
   if (result.content) {
