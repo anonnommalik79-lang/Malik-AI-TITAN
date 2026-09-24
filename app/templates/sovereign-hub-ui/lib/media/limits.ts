@@ -214,9 +214,9 @@ export async function checkMediaLimit(input: { userId?: string; plan?: AIPlan; k
   const remaining = Math.max(0, max - used)
 
   if (used >= max) {
-    return { ok: false as const, error: "Daily limit reached", code: "DAILY_LIMIT_REACHED", plan: tier, remaining: 0, resetAt: nextMediaResetAt(input.kind) }
+    return { ok: false as const, error: "Daily limit reached", code: "DAILY_LIMIT_REACHED", plan: tier, max, used, remaining: 0, resetAt: nextMediaResetAt(input.kind) }
   }
-  return { ok: true as const, plan: tier, remaining, resetAt: nextMediaResetAt(input.kind) }
+  return { ok: true as const, plan: tier, max, used, remaining, resetAt: nextMediaResetAt(input.kind) }
 }
 
 export async function recordMediaUsage(userId: string, kind: MediaKind, count = 1) {
