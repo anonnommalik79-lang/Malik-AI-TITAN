@@ -1,0 +1,362 @@
+/* MALIK AI — the answer sheet.
+ *
+ * A full page that opens over the chat: white paper by default, black on
+ * request, both strictly black and white. It lives under <body>, outside
+ * #malik-root, so everything the page needs is here, markdown included.
+ */
+
+.malik-sheet {
+  --s-bg: #ffffff;
+  --s-text: #0a0a0a;
+  --s-muted: #6b6b6b;
+  --s-faint: #a3a3a3;
+  --s-line: #e8e8e8;
+  --s-soft: #f5f5f5;
+  --s-code-bg: #0b0b0b;
+  --s-code-line: #262626;
+  --s-code-text: #ededed;
+  --s-ease: cubic-bezier(.22, .8, .2, 1);
+
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  background: var(--s-bg);
+  color: var(--s-text);
+  font-family: "Inter", "SF Pro Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  animation: malik-sheet-open .5s var(--s-ease) both;
+}
+/* The app styles every [role="dialog"] as a floating card on phones (a
+   narrower max-width and rounded corners, with !important). The sheet is a
+   whole page, not a card. */
+.malik-sheet.malik-sheet[role="dialog"] {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+}
+.malik-sheet[data-paper="dark"] {
+  --s-bg: #000000;
+  --s-text: #f5f5f5;
+  --s-muted: #a3a3a3;
+  --s-faint: #737373;
+  --s-line: #232323;
+  --s-soft: #111111;
+  --s-code-bg: #0e0e0e;
+  --s-code-line: #262626;
+}
+.malik-sheet *,
+.malik-sheet *::before,
+.malik-sheet *::after { box-sizing: border-box; }
+
+/* The page opens out of the middle of the screen, like a sheet unfolding. */
+@keyframes malik-sheet-open {
+  from { clip-path: inset(16% 12% 16% 12% round 28px); opacity: 0; }
+  35% { opacity: 1; }
+  to { clip-path: inset(0 0 0 0 round 0); opacity: 1; }
+}
+
+/* ------------------------------------------------------------------- bar */
+
+.malik-sheet-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 60px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--s-line);
+  background: var(--s-bg);
+}
+.malik-sheet-status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--s-muted);
+  white-space: nowrap;
+}
+.malik-sheet-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--s-text);
+}
+.malik-sheet-status[data-live="true"] i { animation: malik-sheet-pulse 1.2s ease-in-out infinite; }
+@keyframes malik-sheet-pulse { 50% { opacity: .25; transform: scale(.7); } }
+.malik-sheet-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+  font-weight: 650;
+}
+.malik-sheet-actions { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.malik-sheet-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--s-line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--s-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, opacity .15s;
+}
+.malik-sheet-actions button:hover:not(:disabled) { background: var(--s-soft); border-color: var(--s-faint); }
+.malik-sheet-actions button:disabled { opacity: .35; cursor: default; }
+.malik-sheet-actions button:focus-visible { outline: 2px solid var(--s-text); outline-offset: 2px; }
+.malik-sheet-actions svg { width: 15px; height: 15px; flex: none; }
+.malik-sheet-actions .malik-sheet-close { width: 34px; padding: 0; justify-content: center; border-color: transparent; }
+
+/* ------------------------------------------------------------------ page */
+
+.malik-sheet-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.malik-sheet-page {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 56px 32px 140px;
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+/* ------------------------------------------------- while the model writes */
+
+.malik-sheet-writing-title {
+  margin: 0 0 34px;
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  min-height: 1.12em;
+}
+.malik-sheet-caret {
+  display: inline-block;
+  width: 0;
+  height: .92em;
+  margin-left: 2px;
+  vertical-align: -0.1em;
+  border-left: 3px solid var(--s-text);
+  animation: malik-sheet-blink .9s steps(1) infinite;
+}
+@keyframes malik-sheet-blink { 50% { opacity: 0; } }
+.malik-sheet-writing-lines { display: grid; gap: 14px; }
+.malik-sheet-writing-lines i {
+  display: block;
+  height: 12px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--s-soft) 0%, var(--s-line) 45%, var(--s-soft) 90%);
+  background-size: 220% 100%;
+  animation: malik-sheet-shimmer 1.8s linear infinite, malik-sheet-line-in .6s var(--s-ease) both;
+}
+.malik-sheet-writing-lines b { display: block; height: 10px; }
+@keyframes malik-sheet-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes malik-sheet-line-in { from { opacity: 0; transform: scaleX(.4); transform-origin: left; } to { opacity: 1; transform: none; } }
+
+/* -------------------------------------------------------------- markdown */
+
+.malik-sheet .malik-md { color: var(--s-text); }
+.malik-sheet .malik-md > *:first-child { margin-top: 0; }
+.malik-sheet .malik-md-h {
+  margin: 1.7em 0 .55em;
+  font-weight: 750;
+  line-height: 1.22;
+  letter-spacing: -0.02em;
+  color: var(--s-text);
+}
+.malik-sheet .malik-md-h1 { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.12; margin: 0 0 .7em; }
+.malik-sheet .malik-md-h2 { font-size: 25px; }
+.malik-sheet .malik-md-h3 { font-size: 20px; }
+.malik-sheet .malik-md-h4,
+.malik-sheet .malik-md-h5,
+.malik-sheet .malik-md-h6 { font-size: 17px; }
+.malik-sheet .malik-md-p { margin: 0 0 1em; }
+.malik-sheet .malik-md-ul,
+.malik-sheet .malik-md-ol { margin: 0 0 1.1em; padding-left: 1.35em; }
+.malik-sheet .malik-md-ul { list-style: disc; }
+.malik-sheet .malik-md-ol { list-style: decimal; }
+.malik-sheet .malik-md-ul li,
+.malik-sheet .malik-md-ol li { margin: .38em 0; padding-left: .2em; }
+.malik-sheet .malik-md li::marker { color: var(--s-faint); }
+.malik-sheet .malik-md-strong { font-weight: 700; }
+.malik-sheet .malik-md-em { font-style: italic; }
+.malik-sheet .malik-md-link { color: var(--s-text); text-decoration: underline; text-underline-offset: 3px; }
+.malik-sheet .malik-md-code {
+  padding: .1em .38em;
+  border: 1px solid var(--s-line);
+  border-radius: 6px;
+  background: var(--s-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .86em;
+}
+.malik-sheet .malik-md-quote {
+  margin: 0 0 1.1em;
+  padding: .1em 0 .1em 1em;
+  border-left: 3px solid var(--s-text);
+  color: var(--s-muted);
+}
+.malik-sheet .malik-md-hr { margin: 2em 0; border: 0; border-top: 1px solid var(--s-line); }
+
+.malik-sheet .malik-md-table-wrap {
+  margin: 0 0 1.3em;
+  overflow-x: auto;
+  border: 1px solid var(--s-line);
+  border-radius: 12px;
+}
+.malik-sheet .malik-md-table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.5; }
+.malik-sheet .malik-md-table th,
+.malik-sheet .malik-md-table td { padding: 10px 14px; border-bottom: 1px solid var(--s-line); text-align: left; vertical-align: top; }
+.malik-sheet .malik-md-table th { background: var(--s-soft); font-weight: 650; }
+.malik-sheet .malik-md-table tr:last-child td { border-bottom: 0; }
+
+.malik-sheet .malik-md-codeblock {
+  margin: 0 0 1.3em;
+  overflow: hidden;
+  border: 1px solid var(--s-code-line);
+  border-radius: 14px;
+  background: var(--s-code-bg);
+}
+.malik-sheet .malik-md-codebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px 8px 14px;
+  border-bottom: 1px solid var(--s-code-line);
+  color: #a3a3a3;
+  font-size: 12px;
+}
+.malik-sheet .malik-md-codebar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.malik-sheet .malik-md-codebar-actions { display: inline-flex; gap: 6px; }
+.malik-sheet .malik-md-codebar button,
+.malik-sheet .malik-md-artifact-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: transparent;
+  color: #e5e5e5;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.malik-sheet .malik-md-codebar button svg,
+.malik-sheet .malik-md-artifact-toolbar svg { width: 13px; height: 13px; }
+.malik-sheet .malik-md-pre { margin: 0; padding: 14px 16px; overflow-x: auto; background: transparent; }
+.malik-sheet .malik-md-pre code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--s-code-text);
+  white-space: pre;
+}
+.malik-sheet .malik-md-code-line { display: block; }
+.malik-sheet .malik-md-code-line-number { display: inline-block; width: 2.2em; margin-right: 1em; color: #525252; text-align: right; user-select: none; }
+.malik-sheet .malik-md-token-keyword,
+.malik-sheet .malik-md-token-tag,
+.malik-sheet .malik-md-token-function { color: #ffffff; font-weight: 600; }
+.malik-sheet .malik-md-token-string,
+.malik-sheet .malik-md-token-attribute { color: #bdbdbd; }
+.malik-sheet .malik-md-token-number { color: #e5e5e5; }
+.malik-sheet .malik-md-token-comment { color: #737373; font-style: italic; }
+.malik-sheet .malik-md-artifact-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 1.2em;
+  padding: 10px 12px;
+  border: 1px solid var(--s-line);
+  border-radius: 12px;
+  font-size: 13px;
+}
+.malik-sheet .malik-md-artifact-toolbar button { border-color: var(--s-line); color: var(--s-text); }
+
+/* ------------------------------------------------------------- the writing
+ *
+ * Each block has its start (--sd) and length (--sl), set by the sheet from
+ * the length of the text. Headings are drawn in from the left; paragraphs,
+ * quotes and code appear line by line from the top; list items and table
+ * rows arrive one after another.
+ */
+
+@keyframes malik-sheet-draw { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes malik-sheet-lines {
+  from { -webkit-mask-position: 0 100%; mask-position: 0 100%; transform: translateY(6px); }
+  to { -webkit-mask-position: 0 0; mask-position: 0 0; transform: none; }
+}
+@keyframes malik-sheet-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes malik-sheet-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.malik-sheet-doc[data-phase="revealing"] .malik-md > *,
+.malik-sheet-doc[data-phase="revealing"] .malik-md > :is(ul, ol) > li,
+.malik-sheet-doc[data-phase="revealing"] .malik-md tr {
+  animation-delay: var(--sd, 0ms);
+  animation-duration: var(--sl, 500ms);
+  animation-timing-function: var(--s-ease);
+  animation-fill-mode: both;
+}
+.malik-sheet-doc[data-phase="revealing"] .malik-md > [data-sheet-kind="h"] {
+  animation-name: malik-sheet-draw;
+  animation-timing-function: steps(24, end);
+}
+.malik-sheet-doc[data-phase="revealing"] .malik-md > :is([data-sheet-kind="p"], [data-sheet-kind="quote"], [data-sheet-kind="code"]) {
+  -webkit-mask-image: linear-gradient(180deg, #000 0 44%, transparent 56% 100%);
+  mask-image: linear-gradient(180deg, #000 0 44%, transparent 56% 100%);
+  -webkit-mask-size: 100% 250%;
+  mask-size: 100% 250%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation-name: malik-sheet-lines;
+}
+.malik-sheet-doc[data-phase="revealing"] .malik-md > :is(ul, ol) > li,
+.malik-sheet-doc[data-phase="revealing"] .malik-md tr,
+.malik-sheet-doc[data-phase="revealing"] .malik-md > [data-sheet-kind="other"] { animation-name: malik-sheet-rise; }
+.malik-sheet-doc[data-phase="revealing"] .malik-md > [data-sheet-kind="hr"] { transform-origin: left center; animation-name: malik-sheet-grow; }
+.malik-sheet-doc[data-phase="revealing"] .malik-md > [data-sheet-kind="table"] { animation-name: malik-sheet-rise; animation-duration: 300ms; }
+
+/* ---------------------------------------------------------------- phones */
+
+@media (max-width: 720px) {
+  .malik-sheet-bar { gap: 10px; min-height: 54px; padding: 8px 10px 8px 14px; }
+  .malik-sheet-status { font-size: 0; gap: 0; }
+  .malik-sheet-title { font-size: 14px; }
+  .malik-sheet-actions { gap: 2px; }
+  .malik-sheet-actions button { padding: 0 9px; border-color: transparent; }
+  .malik-sheet-actions button span { display: none; }
+  .malik-sheet-page { padding: 32px 18px 110px; font-size: 16px; line-height: 1.7; }
+  .malik-sheet-writing-title,
+  .malik-sheet .malik-md-h1 { font-size: 28px; }
+  .malik-sheet .malik-md-h2 { font-size: 21px; }
+  .malik-sheet .malik-md-h3 { font-size: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .malik-sheet,
+  .malik-sheet *,
+  .malik-sheet *::before,
+  .malik-sheet *::after { animation: none !important; }
+}

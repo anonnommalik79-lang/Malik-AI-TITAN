@@ -65,6 +65,7 @@ const themes = load("lib/presentations/themes.ts")
 const quota = load("lib/server/presentation-quota.ts")
 const engine = load("lib/server/presentation-engine.ts")
 const pptx = load("lib/presentations/pptx.ts")
+const countUp = load("lib/presentations/count-up.ts")
 
 let failures = 0
 const pending = []
@@ -498,6 +499,42 @@ check("the model is told never to invent statistics", async () => {
   assert.match(modelCalls[0].systemPrompt, /CLAIM/)
 })
 
+/* ============================================================== assembly */
+
+check("a figure counts up with its sign, unit and separators kept", () => {
+  const cases = [["≈3 200", 3200, "≈1\u00A0600"], ["40%", 40, "20%"], ["$1.2M", 1.2, "$0.6M"], ["1 600 ₸", 1600, "800 ₸"], ["12,5 млн", 12.5, "6,3 млн"]]
+  for (const [value, target, half] of cases) {
+    const parts = countUp.splitNumber(value)
+    assert.ok(parts, value)
+    assert.equal(parts.target, target, value)
+    assert.equal(countUp.formatCounted(parts, target), value.replace(/ /g, parts.groupMark === "\u00A0" ? "\u00A0" : " ").replace(/\u00A0₸/, " ₸").replace(/\u00A0млн/, " млн"), value)
+    assert.equal(countUp.formatCounted(parts, target / 2).replace(/\u00A0/g, " "), half.replace(/\u00A0/g, " "), value)
+  }
+})
+
+check("what is not one plain number is shown as written, never counted", () => {
+  for (const value of ["1/14", "2024–2026", "3.14159", "x3 и x5"]) assert.equal(countUp.splitNumber(value), null, value)
+})
+
+check("slides assemble on screen: typed headline, staged elements, a pace that catches up", () => {
+  const renderer = read("components/sovereign/presentations/SlideRenderer.tsx")
+  assert.match(renderer, /export function slideBuildTiming\(slide: Slide, pace = 1\)/)
+  assert.match(renderer, /function TypeText/)
+  assert.match(renderer, /function CountUp/)
+  assert.match(renderer, /prefersReducedMotion\(\)/)
+  const css = read("components/sovereign/presentations/deck-css.ts")
+  assert.match(css, /\.deck-slide\[data-build="true"\]/)
+  assert.match(css, /animation-delay: calc\(\(var\(--t\) \+ var\(--n, 1\) \* 160ms\) \* var\(--k, 1\)\)/)
+  assert.match(css, /prefers-reduced-motion: reduce/, "the shadow stylesheet honours reduced motion itself")
+  const studio = read("components/sovereign/presentations/PresentationStudio.tsx")
+  assert.match(studio, /className="ps-build"/)
+  assert.match(studio, /function WritingPage/)
+  assert.match(studio, /function assemblyPace/)
+  assert.match(studio, /spotlightSlide\(index, slide\)/, "a rewritten slide assembles in the editor too")
+  const studioCss = read("components/sovereign/presentations/presentation-studio.css")
+  assert.match(studioCss, /background:[\s\S]{0,160}var\(--b-bg\)/, "the scene takes the chosen theme's colours")
+})
+
 /* =================================================================== pptx */
 
 check("exports a real PowerPoint file with every slide, the chart, the table and the notes", async () => {
@@ -559,7 +596,8 @@ check("a slide is drawn in its own shadow root, out of reach of the app's global
 
 check("the studio chrome stays black and white", () => {
   const studioCss = read("components/sovereign/presentations/presentation-studio.css")
-  const chrome = studioCss.slice(0, studioCss.indexOf("the deck"))
+  const chrome = studioCss.slice(0, studioCss.indexOf("= the deck"))
+  assert.ok(chrome.length > 5000, "the chrome section was found")
   const colours = chrome.match(/#[0-9a-fA-F]{3,6}\b/g) || []
   for (const colour of colours) {
     const hex = colour.slice(1).length === 3 ? colour.slice(1).split("").map((c) => c + c).join("") : colour.slice(1)

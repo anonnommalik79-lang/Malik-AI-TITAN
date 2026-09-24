@@ -63,6 +63,8 @@ import { ChatImageCreator } from "./ChatImageCreator"
 import { ChatDrawingPad } from "./ChatDrawingPad"
 import { ChatLibraryPicker } from "./ChatLibraryPicker"
 import { PREFILL_EVENT, prefillPrompt, takePrefillPrompt } from "@/lib/malik-context"
+import { AnswerSheet } from "./answer-sheet/AnswerSheet"
+import { isSheetRequest, isSheetWorthy } from "@/lib/ai/answer-sheet"
 
 export type { ChatSendOptions }
 
@@ -1567,9 +1569,12 @@ function MessageBubble({
   onOpenActionTarget,
   videoAnalysis = false,
   question = "",
+  onOpenSheet,
 }: {
   message: Message
   onCopy: (id: string, text: string) => void
+  /** Open this answer on its own page (the answer sheet). */
+  onOpenSheet?: (id: string) => void
   copied: boolean
   /** The user turn this answer replies to — what a re-check searches for. */
   question?: string
@@ -1731,6 +1736,12 @@ function MessageBubble({
             <button type="button" title="Полезно" onClick={() => onFeedback?.(message.id, "up")} className={cn("rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "text-emerald-300")}><ThumbsUp className="h-4 w-4" /></button>
             <button type="button" title="Не полезно" onClick={() => onFeedback?.(message.id, "down")} className={cn("rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "text-amber-300")}><ThumbsDown className="h-4 w-4" /></button>
             <button type="button" title="Поделиться" onClick={() => onShare?.(displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
+            {onOpenSheet && (isSheetWorthy(displayContent) || isSheetRequest(question)) ? (
+              <button type="button" title="Открыть на листе" aria-label="Открыть на листе" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
+                <FileText className="h-4 w-4" />
+                <span>Лист</span>
+              </button>
+            ) : null}
           </div>
         )}
       </div>
@@ -1761,6 +1772,10 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const [responseDepth, setResponseDepth] = useState<ResponseDepth>(() => loadResponseDepth(userPlan))
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [feedbackMap, setFeedbackMap] = useState<Record<string, "up" | "down">>({})
+  // The answer sheet: one answer on its own page. `auto` is a sheet that
+  // opened by itself because a document was asked for.
+  const [sheet, setSheet] = useState<{ id: string; auto: boolean } | null>(null)
+  const closedSheets = useRef<Set<string>>(new Set())
   const [imageCredits, setImageCredits] = useState<ImageCreditSnapshot | null>(null)
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   const [imageCreatorOpen, setImageCreatorOpen] = useState(false)
@@ -2230,6 +2245,36 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     }
   }
 
+  // A document request opens the sheet the moment the answer starts being
+  // written, so the reader watches it being written there. Answers that were
+  // already in the chat never pop open by themselves.
+  const lastMessage = messages[messages.length - 1]
+  const lastMessageId = lastMessage?.id
+  const lastMessageStreaming = Boolean(lastMessage?.isStreaming)
+  useEffect(() => {
+    if (!lastMessage || lastMessage.role !== "assistant" || !lastMessage.isStreaming) return
+    if (lastMessage.imageConfirmation || lastMessage.generatedMedia) return
+    if (closedSheets.current.has(lastMessage.id)) return
+    const request = [...messages].reverse().find((item) => item.role === "user")
+    if (!request || request.attachments?.length || !isSheetRequest(request.content)) return
+    setSheet((current) => (current?.id === lastMessage.id ? current : { id: lastMessage.id, auto: true }))
+    // Only a new streaming answer matters here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMessageId, lastMessageStreaming])
+
+  const closeSheet = React.useCallback(() => {
+    setSheet((current) => {
+      if (current) closedSheets.current.add(current.id)
+      return null
+    })
+  }, [])
+
+  const sheetIndex = sheet ? messages.findIndex((item) => item.id === sheet.id) : -1
+  const sheetMessage = sheetIndex >= 0 ? messages[sheetIndex] : null
+  const sheetRequest = sheetMessage
+    ? messages.slice(0, sheetIndex).reverse().find((item) => item.role === "user")?.content || ""
+    : ""
+
   const handleShare = async (text: string) => {
     const payload = text.trim()
     if (!payload) return
@@ -2487,6 +2532,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                   imageCredits={imageCredits}
                   onOpenActionTarget={onOpenActionTarget}
                   videoAnalysis={activeVideoAnalysis}
+                  onOpenSheet={(id) => setSheet({ id, auto: false })}
                 />
               ))}
             </>
@@ -2668,6 +2714,17 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
           </div>
         </div>
       )}
+
+      {sheet && sheetMessage ? (
+        <AnswerSheet
+          key={sheet.id}
+          content={cleanResearchDisplayText(sheetMessage.content, sheetMessage.research)}
+          streaming={Boolean(sheetMessage.isStreaming)}
+          request={sheetRequest}
+          auto={sheet.auto}
+          onClose={closeSheet}
+        />
+      ) : null}
     </div>
   )
 }

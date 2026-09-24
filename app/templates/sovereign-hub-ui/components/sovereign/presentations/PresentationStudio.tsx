@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 import {
   ArrowDown,
@@ -42,7 +42,7 @@ import {
   type SlideLayout,
   type ThemeId,
 } from "@/lib/presentations/types"
-import { SlideCanvas, SlideFrame, type SlidePatch } from "./SlideRenderer"
+import { SlideCanvas, SlideFrame, slideBuildTiming, type SlidePatch } from "./SlideRenderer"
 import "./presentation-studio.css"
 
 /**
@@ -202,7 +202,68 @@ function planOf(title: string, entries: Entry[]): DeckOutline {
   }
 }
 
+/**
+ * How fast the assembly scene plays a slide. Each slide keeps the pace it
+ * started with (so an animation never changes speed halfway); a new slide
+ * speeds up when several finished slides are already waiting behind it.
+ */
+function assemblyPace(entries: Entry[], at: number) {
+  const waiting = entries.slice(at + 1).filter((entry) => entry.state === "ready").length
+  return waiting >= 4 ? 0.5 : waiting >= 2 ? 0.7 : 1
+}
+
 /* ------------------------------------------------------------------- studio */
+
+/**
+ * The page a slide is being written on, while the model is still writing it:
+ * the planned headline types itself out and lines of text shimmer where the
+ * body will be.
+ */
+function WritingPage({ title, layout, failed }: { title: string; layout: string; failed: boolean }) {
+  const [shown, setShown] = useState(0)
+
+  useEffect(() => {
+    let reduced = false
+    try {
+      reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    } catch {
+      /* no matchMedia: animate */
+    }
+    if (reduced) {
+      setShown(title.length)
+      return
+    }
+    let frame = 0
+    const start = performance.now()
+    const duration = Math.min(1600, 300 + title.length * 28)
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration)
+      setShown(Math.round(progress * title.length))
+      if (progress < 1) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [title])
+
+  return (
+    <div className="ps-writing" data-failed={failed}>
+      <div className="ps-writing-kicker">{failed ? "Этот слайд не получился — кредит не списан" : `Пишу · ${layout}`}</div>
+      <div className="ps-writing-title">
+        {title.slice(0, shown)}
+        {!failed ? <span className="ps-writing-caret" aria-hidden="true" /> : null}
+        <span style={{ visibility: "hidden" }}>{title.slice(shown)}</span>
+      </div>
+      {!failed ? (
+        <div className="ps-writing-lines" aria-hidden="true">
+          <i style={{ width: "78%" }} />
+          <i style={{ width: "64%" }} />
+          <i style={{ width: "71%" }} />
+          <i style={{ width: "42%" }} />
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 /** A one-line field that grows instead of cutting a long title off — on a
  *  phone an outline title rarely fits on one line. */
@@ -250,6 +311,10 @@ export function PresentationStudio({ username }: { username?: string }) {
   const [presenting, setPresenting] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   const [printing, setPrinting] = useState(false)
+  const [assembling, setAssembling] = useState(false)
+  const [assemblyAt, setAssemblyAt] = useState(0)
+  const [spotlight, setSpotlight] = useState<{ index: number; nonce: number } | null>(null)
+  const assemblyRef = useRef<{ index: number; at: number } | null>(null)
   const [recent, setRecent] = useState<Deck[]>([])
   const [imageProgress, setImageProgress] = useState<{ done: number; total: number } | null>(null)
 
@@ -375,6 +440,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   /* ----------------------------------------------------------------- slides */
 
   const fillSlides = useCallback(async (plan: DeckOutline, indexes: number[]) => {
+    const delivered = new Map<number, Slide>()
     const batches = chunk(indexes, BATCH)
     await runLimited(batches, PARALLEL, async (batch) => {
       // Indexes in a batch are contiguous by construction.
@@ -400,12 +466,14 @@ export function PresentationStudio({ username }: { username?: string }) {
         // batches not to repeat one.
         if (slide) written.set(item.index, { ...slide, id: slideId() } as Slide)
       }
+      for (const [index, slide] of written) delivered.set(index, slide)
       setEntries((previous) => previous.map((entry, i) => {
         if (!batch.includes(i)) return entry
         const slide = written.get(i)
         return slide ? { ...entry, slide, state: "ready" } : { ...entry, state: "failed" }
       }))
     })
+    return delivered
   }, [applyQuota, language, tone, topic])
 
   const buildDeck = useCallback(async () => {
@@ -419,9 +487,52 @@ export function PresentationStudio({ username }: { username?: string }) {
     setStage("deck")
     setError("")
     setBusy("slides")
+    assemblyRef.current = null
+    setAssemblyAt(0)
+    setAssembling(true)
     await fillSlides(plan, plan.items.map((_, i) => i))
     setBusy(null)
   }, [fillSlides, outline])
+
+  /* --------------------------------------------------------------- assembly */
+
+  // The pace is decided when the scene reaches a slide and kept for it.
+  const scenePace = useMemo(
+    () => assemblyPace(entries, assemblyAt),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [assemblyAt, assembling],
+  )
+
+  // The assembly scene shows the deck being made: slide by slide, in order,
+  // each one assembling itself as soon as it has been written. A slide that
+  // is still being written is shown as a page being written. When the
+  // writing gets ahead of the show, the show speeds up instead of making the
+  // user wait for animations of slides that are already done.
+  useEffect(() => {
+    if (!assembling) return
+    if (assemblyAt >= entries.length) {
+      const timer = window.setTimeout(() => {
+        setAssembling(false)
+        setCurrent(0)
+      }, 350)
+      return () => window.clearTimeout(timer)
+    }
+    const entry = entries[assemblyAt]
+    if (!entry || entry.state === "pending") return
+    if (assemblyRef.current?.index !== assemblyAt) assemblyRef.current = { index: assemblyAt, at: performance.now() }
+    const show = entry.state === "failed" || !entry.slide ? 1200 : slideBuildTiming(entry.slide, scenePace).total
+    const hold = show + (scenePace < 1 ? 250 : 900)
+    const timer = window.setTimeout(() => setAssemblyAt((value) => value + 1), Math.max(0, assemblyRef.current.at + hold - performance.now()))
+    return () => window.clearTimeout(timer)
+  }, [assembling, assemblyAt, entries, scenePace])
+
+  // One slide assembling in the editor after it was rewritten or added.
+  const spotlightSlide = (index: number, slide: Slide) => {
+    const ms = slideBuildTiming(slide).total + 250
+    const nonce = Date.now()
+    setSpotlight({ index, nonce })
+    window.setTimeout(() => setSpotlight((value) => (value?.nonce === nonce ? null : value)), ms)
+  }
 
   const planFromEntries = useCallback((): DeckOutline => planOf(deckTitle, entries), [deckTitle, entries])
 
@@ -443,16 +554,20 @@ export function PresentationStudio({ username }: { username?: string }) {
     setComposer(false)
     setBusy("slides")
     setError("")
-    await fillSlides(planOf(deckTitle, next), [at])
+    const delivered = await fillSlides(planOf(deckTitle, next), [at])
     setBusy(null)
+    const slide = delivered.get(at)
+    if (slide) spotlightSlide(at, slide)
   }
 
   const retrySlide = async (index: number) => {
     setEntries((previous) => previous.map((entry, i) => (i === index ? { ...entry, state: "pending" } : entry)))
     setBusy("slides")
     setError("")
-    await fillSlides(planFromEntries(), [index])
+    const delivered = await fillSlides(planFromEntries(), [index])
     setBusy(null)
+    const slide = delivered.get(index)
+    if (slide) spotlightSlide(index, slide)
   }
 
   /* ---------------------------------------------------------------- editing */
@@ -486,6 +601,7 @@ export function PresentationStudio({ username }: { username?: string }) {
     if (slide) {
       setEntries((previous) => previous.map((item, i) => (i === index ? { ...item, slide, state: "ready" } : item)))
       setInstruction("")
+      spotlightSlide(index, slide)
     }
   }
 
@@ -684,6 +800,8 @@ export function PresentationStudio({ username }: { username?: string }) {
     createdAtRef.current = deck.createdAt
     setEntries(deck.slides.map((slide) => ({ key: slideId(), outline: { title: headline(slide), point: "", layout: slide.layout }, slide, state: "ready" })))
     setCurrent(0)
+    setAssembling(false)
+    setSpotlight(null)
     setStage("deck")
     setError("")
   }
@@ -697,6 +815,8 @@ export function PresentationStudio({ username }: { username?: string }) {
   }
 
   const newDeck = () => {
+    setAssembling(false)
+    setSpotlight(null)
     setStage("start")
     setOutline(null)
     setEntries([])
@@ -870,6 +990,63 @@ export function PresentationStudio({ username }: { username?: string }) {
   /* ------------------------------------------------------------- deck */
   const readyCount = entries.filter((entry) => entry.state === "ready").length
 
+  if (assembling && entries.length) {
+    const at = Math.min(assemblyAt, entries.length - 1)
+    const entry = entries[at]
+    const palette = DECK_THEMES[theme]
+    const sceneStyle = {
+      "--b-bg": `#${palette.bg}`,
+      "--b-surface": `#${palette.surface}`,
+      "--b-text": `#${palette.text}`,
+      "--b-muted": `#${palette.muted}`,
+      "--b-accent": `#${palette.accent}`,
+      "--b-border": `#${palette.border}`,
+      "--b-heading-font": palette.headingFont,
+    } as CSSProperties
+    return (
+      <div className="ps-root" data-preserve-brand-color="true">
+        {header}
+        <div className="ps-build" style={sceneStyle} aria-live="polite">
+          <div className="ps-build-top">
+            <span className="ps-build-pulse" aria-hidden="true" />
+            <span className="ps-build-label">
+              {entry.state === "pending" ? "Malik AI пишет" : "Malik AI собирает"} слайд <b>{at + 1}</b> из {entries.length}
+            </span>
+            <span className="ps-spacer" />
+            <button type="button" className="ps-build-skip" onClick={() => setAssembling(false)}>
+              {generating ? "Открыть редактор" : "Пропустить анимацию"}
+            </button>
+          </div>
+
+          <div className="ps-build-stage">
+            {entry.slide ? (
+              <div className="ps-build-frame" key={`slide-${at}-${entry.slide.id}`}>
+                <SlideFrame slide={entry.slide} theme={theme} index={at} total={entries.length} language={language} build pace={scenePace} />
+              </div>
+            ) : (
+              <div className="ps-build-frame ps-build-frame--writing" key={`writing-${at}-${entry.state}`}>
+                <WritingPage title={entry.outline.title} layout={LAYOUT_LABELS[entry.outline.layout]} failed={entry.state === "failed"} />
+              </div>
+            )}
+          </div>
+
+          <div className="ps-build-track" aria-hidden="true">
+            {entries.map((item, index) => (
+              <span
+                key={item.key}
+                className="ps-build-tick"
+                data-state={index < at ? "done" : index === at ? "now" : item.state}
+              />
+            ))}
+          </div>
+          <div className="ps-build-caption">
+            {generating ? `Готово ${readyCount} из ${entries.length}` : "Все слайды написаны"} · {creditsLabel(quota)} кредитов
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="ps-root" data-preserve-brand-color="true">
       {header}
@@ -926,11 +1103,13 @@ export function PresentationStudio({ username }: { username?: string }) {
               <div className="ps-main-slide">
                 {active.slide ? (
                   <SlideFrame
+                    key={spotlight?.index === current ? `spotlight-${spotlight.nonce}` : "main"}
                     slide={active.slide}
                     theme={theme}
                     index={current}
                     total={entries.length}
                     editable={busy !== "rewrite"}
+                    build={spotlight?.index === current}
                     language={language}
                     onChange={(patch) => patchSlide(current, patch)}
                   />

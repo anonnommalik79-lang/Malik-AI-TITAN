@@ -1,9 +1,10 @@
 "use client"
 
-import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react"
 import { createPortal } from "react-dom"
 import { deckTheme, themeCssVariables } from "@/lib/presentations/themes"
 import type { Slide, ThemeId } from "@/lib/presentations/types"
+import { formatCounted, splitNumber } from "@/lib/presentations/count-up"
 import { DECK_CSS } from "./deck-css"
 
 /**
@@ -20,6 +21,12 @@ import { DECK_CSS } from "./deck-css"
  * layouts; inside the shadow root none of them apply, so a slide is exactly
  * the slide the stylesheet in deck-css.ts describes — on a phone, in the
  * dashboard, in the show and on the printed page.
+ *
+ * With `build`, the slide assembles itself instead of simply appearing: the
+ * headline is typed out, then the rule, the points, the cards, the numbers
+ * (counting up) and the chart bars (growing) take their places one after
+ * another. It is how a freshly written slide is shown, so the user watches
+ * the deck being made rather than waiting for it.
  */
 
 export type SlidePatch = Record<string, unknown>
@@ -91,6 +98,118 @@ function Editable({ value, editable, onCommit, className = "", placeholder = "",
   )
 }
 
+function prefersReducedMotion() {
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  } catch {
+    return false
+  }
+}
+
+/** The line a slide is typed out from. */
+export function slideHeadline(slide: Slide) {
+  return slide.layout === "quote" ? slide.quote : slide.title
+}
+
+function itemCount(slide: Slide) {
+  switch (slide.layout) {
+    case "bullets": return slide.points.length
+    case "two-column": return Math.max(slide.left.points.length, slide.right.points.length) + 1
+    case "stat": return slide.stats.length
+    case "image-text": return slide.points.length + 1
+    case "cards": return slide.cards.length
+    case "timeline": return slide.steps.length + 1
+    case "comparison": return slide.rows.length + 1
+    case "chart": return slide.data.length
+    default: return 2
+  }
+}
+
+/**
+ * How long a slide takes to assemble: `type` is the headline being typed,
+ * `total` is until the last element has settled. The studio uses `total` to
+ * know when to move on to the next slide.
+ */
+export function slideBuildTiming(slide: Slide, pace = 1) {
+  const headline = slideHeadline(slide) || ""
+  const type = Math.round(Math.min(1300, 260 + headline.length * 20))
+  const total = type + 750 + Math.min(itemCount(slide), 8) * 160
+  return { type: Math.round(type * pace), total: Math.round(total * pace) }
+}
+
+/**
+ * Text that writes itself. The part not yet written is kept in the layout,
+ * invisible, so the headline wraps exactly where it will end up and nothing
+ * below it jumps while it is being typed.
+ */
+function TypeText({ value, duration }: { value: string; duration: number }) {
+  const [shown, setShown] = useState(0)
+
+  useEffect(() => {
+    if (prefersReducedMotion()) {
+      setShown(value.length)
+      return
+    }
+    let frame = 0
+    const start = performance.now()
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / Math.max(1, duration))
+      setShown(Math.round(progress * value.length))
+      if (progress < 1) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [value, duration])
+
+  const done = shown >= value.length
+  return (
+    <span aria-label={value}>
+      <span aria-hidden="true">{value.slice(0, shown)}</span>
+      <span className="deck-caret" data-done={done} aria-hidden="true" />
+      <span aria-hidden="true" style={{ visibility: "hidden" }}>{value.slice(shown)}</span>
+    </span>
+  )
+}
+
+/**
+ * "≈3 200", "40%", "$1.2M": the number counts up from zero and whatever
+ * surrounds it — a sign, a unit, a currency — stays put. Anything that is not
+ * a number is shown as it is.
+ */
+function CountUp({ value, delay, duration = 900 }: { value: string; delay: number; duration?: number }) {
+  const [text, setText] = useState(() => {
+    const parts = splitNumber(value)
+    return parts ? formatCounted(parts, 0) : value
+  })
+
+  useEffect(() => {
+    const parts = splitNumber(value)
+    if (!parts || prefersReducedMotion()) {
+      setText(value)
+      return
+    }
+    let frame = 0
+    let start = 0
+    const tick = (now: number) => {
+      if (!start) start = now
+      const progress = Math.min(1, (now - start) / duration)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      // The last frame is the original text, exactly as written.
+      setText(progress < 1 ? formatCounted(parts, parts.target * eased) : value)
+      if (progress < 1) frame = requestAnimationFrame(tick)
+    }
+    const timer = window.setTimeout(() => {
+      frame = requestAnimationFrame(tick)
+    }, delay)
+    return () => {
+      window.clearTimeout(timer)
+      cancelAnimationFrame(frame)
+    }
+  }, [value, delay, duration])
+
+  return <span>{text}</span>
+}
+
 function formatNumber(value: number, language: string) {
   try {
     return new Intl.NumberFormat(language === "en" ? "en-US" : "ru-RU", { maximumFractionDigits: 1 }).format(value)
@@ -106,6 +225,9 @@ function SlideBody({
   editable,
   onChange,
   language,
+  build,
+  typeMs,
+  pace,
 }: {
   slide: Slide
   index: number
@@ -113,11 +235,17 @@ function SlideBody({
   editable: boolean
   onChange: (patch: SlidePatch) => void
   language: string
+  build: boolean
+  typeMs: number
+  pace: number
 }) {
   const edit = (field: string) => (next: string) => onChange({ [field]: next })
-  const text = (value: string, field: string, className = "", placeholder = "", block = false) => (
-    <Editable value={value} editable={editable} onCommit={edit(field)} className={className} placeholder={placeholder} block={block} />
-  )
+  const text = (value: string, field: string, className = "", placeholder = "", block = false) =>
+    build && (field === "title" || field === "quote") ? (
+      <TypeText value={value} duration={typeMs} />
+    ) : (
+      <Editable value={value} editable={editable} onCommit={edit(field)} className={className} placeholder={placeholder} block={block} />
+    )
   const page = slide.layout === "title" || slide.layout === "closing" ? null : <div className="deck-page">{index + 1} / {total}</div>
 
   switch (slide.layout) {
@@ -219,7 +347,11 @@ function SlideBody({
                 {slide.stats.map((stat, i) => (
                   <div className="deck-stat" key={i}>
                     <div className="deck-stat-value" style={{ fontSize: valueSize }}>
-                      <Editable value={stat.value} editable={editable} onCommit={(next) => onChange({ stats: slide.stats.map((s, j) => (j === i ? { ...s, value: next } : s)) })} />
+                      {build ? (
+                        <CountUp value={stat.value} delay={typeMs + ((i + 1) * 160 + 150) * pace} />
+                      ) : (
+                        <Editable value={stat.value} editable={editable} onCommit={(next) => onChange({ stats: slide.stats.map((s, j) => (j === i ? { ...s, value: next } : s)) })} />
+                      )}
                     </div>
                     <div className="deck-stat-label">
                       <Editable value={stat.label} editable={editable} onCommit={(next) => onChange({ stats: slide.stats.map((s, j) => (j === i ? { ...s, label: next } : s)) })} />
@@ -449,6 +581,8 @@ export function SlideCanvas({
   editable = false,
   onChange,
   language = "ru",
+  build = false,
+  pace = 1,
 }: {
   slide: Slide
   theme: ThemeId
@@ -457,15 +591,34 @@ export function SlideCanvas({
   editable?: boolean
   onChange?: (patch: SlidePatch) => void
   language?: string
+  /** Assemble the slide on screen instead of showing it finished. */
+  build?: boolean
+  /** Speed of the assembly: 1 is normal, 0.5 is twice as fast. */
+  pace?: number
 }) {
   const [hostRef, root] = useShadowRoot()
-  const style = themeCssVariables(deckTheme(theme)) as CSSProperties
+  const typeMs = build ? slideBuildTiming(slide, pace).type : 0
+  // --t is the headline's typing time before pace; the stylesheet applies --k.
+  const style = {
+    ...themeCssVariables(deckTheme(theme)),
+    ...(build ? { "--t": `${Math.round(typeMs / pace)}ms`, "--k": String(pace) } : {}),
+  } as CSSProperties
   return (
     <div ref={hostRef} className="deck-host" data-layout={slide.layout} data-preserve-brand-color="true">
       {root
         ? createPortal(
-            <div className="deck-slide" style={style} data-layout={slide.layout} data-editable={editable}>
-              <SlideBody slide={slide} index={index} total={total} editable={editable} onChange={onChange || (() => undefined)} language={language} />
+            <div className="deck-slide" style={style} data-layout={slide.layout} data-editable={editable && !build} data-build={build}>
+              <SlideBody
+                slide={slide}
+                index={index}
+                total={total}
+                editable={editable && !build}
+                onChange={onChange || (() => undefined)}
+                language={language}
+                build={build}
+                typeMs={typeMs}
+                pace={pace}
+              />
             </div>,
             root,
           )

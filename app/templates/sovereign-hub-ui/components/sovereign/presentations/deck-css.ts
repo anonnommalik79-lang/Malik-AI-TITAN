@@ -269,4 +269,143 @@ export const DECK_CSS = `
 .deck-slide[data-editable="true"] .deck-edit:hover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--deck-accent) 35%, transparent); }
 .deck-slide[data-editable="true"] .deck-edit:focus { box-shadow: 0 0 0 2px var(--deck-accent); }
 .deck-edit:empty::before { content: attr(data-placeholder); opacity: .4; }
+
+/* ------------------------------------------------------------- assembling
+ *
+ * data-build="true" is a slide that has just been written. The headline is
+ * typed by the renderer; everything else waits for it (--t, set on the slide)
+ * and then takes its place in reading order. --n is an element's position in
+ * its row of siblings, --m a list item's position inside its column.
+ */
+
+@keyframes deck-rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+@keyframes deck-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes deck-grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes deck-grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes deck-pop { 0% { opacity: 0; transform: scale(.55); } 70% { opacity: 1; transform: scale(1.08); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes deck-wipe { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0 0 0 0); } }
+@keyframes deck-blink { 50% { opacity: 0; } }
+
+.deck-caret {
+  display: inline-block;
+  width: 0;
+  height: .9em;
+  margin: 0 -1px -0.08em 0;
+  border-left: 3px solid var(--deck-accent);
+  animation: deck-blink .9s steps(1) infinite;
+}
+.deck-caret[data-done="true"] { animation: deck-fade .3s reverse forwards; animation-delay: .5s; }
+
+.deck-slide[data-build="true"] {
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --t: 800ms;
+  /* Pace: below 1 when the writing is ahead of the show and it catches up. */
+  --k: 1;
+}
+.deck-slide[data-build="true"] :is(.deck-row, .deck-col, .deck-stat, .deck-card, .deck-step, .deck-bar, .deck-table tbody tr):nth-child(1) { --n: 1; }
+.deck-slide[data-build="true"] :is(.deck-row, .deck-col, .deck-stat, .deck-card, .deck-step, .deck-bar, .deck-table tbody tr):nth-child(2) { --n: 2; }
+.deck-slide[data-build="true"] :is(.deck-row, .deck-col, .deck-stat, .deck-card, .deck-step, .deck-bar, .deck-table tbody tr):nth-child(3) { --n: 3; }
+.deck-slide[data-build="true"] :is(.deck-row, .deck-col, .deck-stat, .deck-card, .deck-step, .deck-bar, .deck-table tbody tr):nth-child(4) { --n: 4; }
+.deck-slide[data-build="true"] :is(.deck-row, .deck-col, .deck-stat, .deck-card, .deck-step, .deck-bar, .deck-table tbody tr):nth-child(5) { --n: 5; }
+.deck-slide[data-build="true"] :is(.deck-row, .deck-col, .deck-stat, .deck-card, .deck-step, .deck-bar, .deck-table tbody tr):nth-child(6) { --n: 6; }
+.deck-slide[data-build="true"] :is(.deck-row, .deck-col, .deck-stat, .deck-card, .deck-step, .deck-bar, .deck-table tbody tr):nth-child(7) { --n: 7; }
+.deck-slide[data-build="true"] :is(.deck-row, .deck-col, .deck-stat, .deck-card, .deck-step, .deck-bar, .deck-table tbody tr):nth-child(n+8) { --n: 8; }
+.deck-slide[data-build="true"] li:nth-child(1) { --m: 1; }
+.deck-slide[data-build="true"] li:nth-child(2) { --m: 2; }
+.deck-slide[data-build="true"] li:nth-child(3) { --m: 3; }
+.deck-slide[data-build="true"] li:nth-child(4) { --m: 4; }
+.deck-slide[data-build="true"] li:nth-child(5) { --m: 5; }
+.deck-slide[data-build="true"] li:nth-child(n+6) { --m: 6; }
+
+/* Before the headline: the frame of the slide. */
+.deck-slide[data-build="true"] :is(.deck-kicker, .deck-num) { animation: deck-rise .5s var(--ease) both; }
+.deck-slide[data-build="true"] .deck-quote-mark { animation: deck-pop .6s var(--ease) both; }
+.deck-slide[data-build="true"] .deck-image { animation: deck-wipe .9s var(--ease) both; animation-delay: .15s; }
+.deck-slide[data-build="true"] .deck-closing-slide .deck-title-rule { animation: deck-grow-x .5s var(--ease) both; }
+
+/* After the headline: everything else, in reading order. */
+.deck-slide[data-build="true"] :is(.deck-title-slide, .deck-section-slide) .deck-title-rule {
+  transform-origin: left center;
+  animation: deck-grow-x .55s var(--ease) both;
+  animation-delay: calc(var(--t) * var(--k, 1));
+}
+.deck-slide[data-build="true"] :is(.deck-sub, .deck-intro, .deck-text, .deck-quote-by, .deck-unit) {
+  animation: deck-rise .6s var(--ease) both;
+  animation-delay: calc((var(--t) + 150ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] :is(.deck-row, .deck-col, .deck-stat, .deck-card) {
+  animation: deck-rise .6s var(--ease) both;
+  animation-delay: calc((var(--t) + var(--n, 1) * 160ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] .deck-stat { border-top-color: transparent; position: relative; }
+.deck-slide[data-build="true"] .deck-stat::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -3px;
+  height: 3px;
+  background: var(--deck-accent);
+  transform-origin: left center;
+  animation: deck-grow-x .7s var(--ease) both;
+  animation-delay: calc((var(--t) + var(--n, 1) * 160ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] :is(.deck-col, .deck-imgtext) li {
+  animation: deck-rise .5s var(--ease) both;
+  animation-delay: calc((var(--t) + var(--n, 1) * 160ms + var(--m, 1) * 100ms + 120ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] .deck-timeline::before {
+  transform-origin: left center;
+  animation: deck-grow-x .9s var(--ease) both;
+  animation-delay: calc(var(--t) * var(--k, 1));
+}
+.deck-slide[data-build="true"] .deck-step {
+  animation: deck-rise .6s var(--ease) both;
+  animation-delay: calc((var(--t) + 200ms + var(--n, 1) * 170ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] .deck-step-dot {
+  animation: deck-pop .5s var(--ease) both;
+  animation-delay: calc((var(--t) + 200ms + var(--n, 1) * 170ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] .deck-table thead tr {
+  animation: deck-fade .5s var(--ease) both;
+  animation-delay: calc(var(--t) * var(--k, 1));
+}
+.deck-slide[data-build="true"] .deck-table tbody tr {
+  animation: deck-rise .5s var(--ease) both;
+  animation-delay: calc((var(--t) + 100ms + var(--n, 1) * 120ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] .deck-verdict {
+  animation: deck-rise .6s var(--ease) both;
+  animation-delay: calc((var(--t) + 950ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] .deck-bar-fill {
+  transform-origin: center bottom;
+  animation: deck-grow-y .8s var(--ease) both;
+  animation-delay: calc((var(--t) + var(--n, 1) * 120ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] .deck-bar-value {
+  animation: deck-fade .4s var(--ease) both;
+  animation-delay: calc((var(--t) + var(--n, 1) * 120ms + 500ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] :is(.deck-bar-label, .deck-page, .deck-context) {
+  animation: deck-fade .5s var(--ease) both;
+  animation-delay: calc((var(--t) + 200ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] .deck-takeaway {
+  animation: deck-rise .6s var(--ease) both;
+  animation-delay: calc((var(--t) + 900ms) * var(--k, 1));
+}
+.deck-slide[data-build="true"] .deck-contact {
+  animation: deck-pop .6s var(--ease) both;
+  animation-delay: calc((var(--t) + 350ms) * var(--k, 1));
+}
+
+/* The app's own reduced-motion rule cannot reach into a shadow root. */
+@media (prefers-reduced-motion: reduce) {
+  .deck-slide[data-build="true"] *,
+  .deck-slide[data-build="true"] *::before,
+  .deck-caret { animation: none !important; }
+  .deck-caret { display: none; }
+}
 `
