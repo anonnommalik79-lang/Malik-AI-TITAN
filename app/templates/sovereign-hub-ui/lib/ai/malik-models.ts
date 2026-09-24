@@ -6,7 +6,7 @@ export type MalikModelTier = "free" | "pro"
 export type MalikModelProvider =
   | "malik-orchestrator" | "modelscope" | "aihubmix" | "groq" | "cloudflare"
   | "cerebras" | "nemotron-openrouter" | "together" | "deepseek"
-  | "xkiro" | "llm7" | "nara"
+  | "xkiro" | "llm7" | "nara" | "google-ai"
 
 export type MalikModelBrand = RouterCatalogBrand | "malik" | "baidu"
 
@@ -109,8 +109,89 @@ export const MALIK_MAX_MODEL: MalikModelDefinition = {
   autoEligible: true,
 }
 
+/**
+ * Dedicated Google AI Studio pool. These entries intentionally keep Google's
+ * official public names instead of being relabeled as Malik models. They sit
+ * directly below MalikLLM MAX in the selector and use GOOGLE_AI_POOL_API_KEY.
+ */
+export const GOOGLE_AI_POOL_MODELS: readonly MalikModelDefinition[] = [
+  {
+    id: "google-ai:gemini-3.6-flash",
+    label: "Gemini 3.6 Flash",
+    description: "Google Gemini · fast text + code",
+    tier: "free",
+    provider: "google-ai",
+    providerModel: "gemini-3.6-flash",
+    capabilities: ["text", "code", "tools", "reasoning"],
+    brand: "google",
+    access: "free",
+    autoEligible: false,
+  },
+  {
+    id: "google-ai:gemini-3.5-flash",
+    label: "Gemini 3.5 Flash",
+    description: "Google Gemini · text + code",
+    tier: "free",
+    provider: "google-ai",
+    providerModel: "gemini-3.5-flash",
+    capabilities: ["text", "code", "tools", "reasoning"],
+    brand: "google",
+    access: "free",
+    autoEligible: false,
+  },
+  {
+    id: "google-ai:gemma-4-26b-a4b-it",
+    label: "Gemma 4 26B MoE IT",
+    description: "Google Gemma · fast open model",
+    tier: "free",
+    provider: "google-ai",
+    providerModel: "gemma-4-26b-a4b-it",
+    capabilities: ["text", "code", "reasoning"],
+    brand: "google",
+    access: "free",
+    autoEligible: false,
+  },
+  {
+    id: "google-ai:gemma-4-31b-it",
+    label: "Gemma 4 31B IT",
+    description: "Google Gemma · larger open model",
+    tier: "free",
+    provider: "google-ai",
+    providerModel: "gemma-4-31b-it",
+    capabilities: ["text", "code", "reasoning"],
+    brand: "google",
+    access: "free",
+    autoEligible: false,
+  },
+  {
+    id: "google-ai:gemini-3-flash-preview",
+    label: "Gemini 3 Flash Preview",
+    description: "Google Gemini · preview",
+    tier: "free",
+    provider: "google-ai",
+    providerModel: "gemini-3-flash-preview",
+    capabilities: ["text", "code", "tools", "reasoning"],
+    brand: "google",
+    access: "free",
+    autoEligible: false,
+  },
+  {
+    id: "google-ai:gemini-flash-lite-latest",
+    label: "Gemini Flash Lite Latest",
+    description: "Google Gemini · lightweight fallback",
+    tier: "free",
+    provider: "google-ai",
+    providerModel: "gemini-flash-lite-latest",
+    capabilities: ["text", "code", "tools"],
+    brand: "google",
+    access: "free",
+    autoEligible: false,
+  },
+]
+
 export const MALIK_MODELS: readonly MalikModelDefinition[] = [
   MALIK_MAX_MODEL,
+  ...GOOGLE_AI_POOL_MODELS,
   ...ROUTER_TEXT_MODELS,
   LLM7_DEFAULT_MODEL,
   ...LEGACY_INTERNAL_MODELS,
