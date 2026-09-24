@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
 import { Check, Image as ImageIcon, Plus, SendHorizontal, Sparkles, Wand2, X } from "lucide-react"
 
 export type ChatImageAspectRatio = "1:1" | "16:9" | "9:16" | "4:5" | "4:3"
@@ -117,8 +118,10 @@ export function ChatImageCreator({
     })
   }
 
-  return (
-    <section className="absolute inset-0 z-[90] flex min-h-0 flex-col overflow-hidden bg-[#0b0b0c] text-white" aria-label="Создание изображений">
+  if (typeof document === "undefined") return null
+
+  return createPortal(
+    <section className="fixed inset-0 z-[2147483200] flex min-h-0 flex-col overflow-hidden bg-black text-white" aria-label="Создание изображений" role="dialog" aria-modal="true">
       <header className="relative z-10 shrink-0 border-b border-white/[0.05] bg-[#0b0b0c]/96 px-4 py-4 backdrop-blur-xl sm:px-6">
         <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/[0.12] bg-black text-white">
@@ -144,7 +147,7 @@ export function ChatImageCreator({
                   key={item.id}
                   type="button"
                   onClick={() => setSelectedId((current) => current === item.id ? null : item.id)}
-                  className={`group relative aspect-[1.16/1] overflow-hidden rounded-[22px] border text-left transition duration-200 ${active ? "border-white/70 ring-2 ring-white/25" : "border-white/[0.07] hover:border-white/20"}`}
+                  className={`group relative aspect-square overflow-hidden rounded-[22px] border text-left transition duration-200 ${active ? "border-white/70 ring-2 ring-white/25" : "border-white/[0.07] hover:border-white/20"}`}
                   aria-pressed={active}
                 >
                   <span className="absolute inset-0" style={{ background: item.background }} />
@@ -256,7 +259,8 @@ export function ChatImageCreator({
           </div>
         </div>
       </div>
-    </section>
+    </section>,
+    document.body,
   )
 }
 
