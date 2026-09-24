@@ -1,10 +1,26 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 import {
   ArrowDown,
+  ArrowRight,
   ArrowUp,
+  BarChart3,
+  Check,
+  Globe2,
+  GraduationCap,
+  HeartPulse,
+  Landmark,
+  LayoutList,
+  Leaf,
+  Lightbulb,
+  MonitorPlay,
+  Palette,
+  Rocket,
+  Sparkles,
+  TrendingUp,
+  Zap,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -43,7 +59,9 @@ import {
   type ThemeId,
 } from "@/lib/presentations/types"
 import { SlideCanvas, SlideFrame, slideBuildTiming, type SlidePatch } from "./SlideRenderer"
+import { PresentationShowcase } from "./PresentationShowcase"
 import "./presentation-studio.css"
+import "./presentation-desktop.css"
 
 /**
  * The presentation studio.
@@ -110,6 +128,43 @@ const EXAMPLES = [
   "Как работает ИИ — лекция для школьников",
   "Стратегия выхода на рынок Узбекистана",
 ]
+
+const MORE_EXAMPLES = [
+  "Запуск мобильного приложения для фитнеса",
+  "Здоровое питание — урок для 7 класса",
+  "История Абылай хана",
+  "Экологичный офис: план на год",
+]
+
+const EXAMPLE_ICONS = [TrendingUp, BarChart3, GraduationCap, Globe2, Rocket, HeartPulse, Landmark, Leaf]
+
+// The magic button: a topic written the way that gets the best deck.
+const RICH_TOPICS = [
+  "Кинематографичная презентация об Абылай хане: путь к власти, дипломатия между Россией и Цинской империей, ключевые битвы, наследие для Казахстана",
+  "Питч-дек кофейни у метро в Алматы для инвесторов: проблема, решение, рынок, цифры окупаемости, команда и что нужно от инвестора",
+  "Итоги квартала отдела продаж: выручка против плана, лучшие сделки, что не сработало и три решения на следующий квартал",
+  "Как работает искусственный интеллект — лекция для школьников: простые примеры, чем ИИ полезен и где он ошибается",
+]
+
+const THEME_NOTES: Record<ThemeId, string> = {
+  obsidian: "Элегантная тьма",
+  paper: "Чистый и минималистичный",
+  ember: "Энергия и смелость",
+  forest: "Гармония природы",
+  sand: "Тёплая классика",
+  royal: "Премиальный стиль",
+}
+
+/** Wide screens get the two-column start screen with the live preview. */
+const DESKTOP_QUERY = "(min-width: 901px)"
+function subscribeDesktop(onChange: () => void) {
+  const query = window.matchMedia(DESKTOP_QUERY)
+  query.addEventListener("change", onChange)
+  return () => query.removeEventListener("change", onChange)
+}
+function useDesktop() {
+  return useSyncExternalStore(subscribeDesktop, () => window.matchMedia(DESKTOP_QUERY).matches, () => false)
+}
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -306,6 +361,9 @@ export function PresentationStudio({ username }: { username?: string }) {
   const [current, setCurrent] = useState(0)
   const [instruction, setInstruction] = useState("")
   const [composer, setComposer] = useState(false)
+  const [showAllExamples, setShowAllExamples] = useState(false)
+  const [richIndex, setRichIndex] = useState(0)
+  const desktop = useDesktop()
   const [newSlideText, setNewSlideText] = useState("")
   const [newSlideLayout, setNewSlideLayout] = useState<SlideLayout>("bullets")
   const [presenting, setPresenting] = useState(false)
@@ -851,97 +909,156 @@ export function PresentationStudio({ username }: { username?: string }) {
 
   /* ------------------------------------------------------------ start */
   if (stage === "start") {
+    const examples = showAllExamples ? [...EXAMPLES, ...MORE_EXAMPLES] : EXAMPLES
     return (
       <div className="ps-root" data-preserve-brand-color="true">
         {header}
-        <div className="ps-start">
-          <h2 className="ps-start-title">Презентация за минуту</h2>
-          <p className="ps-start-sub">
-            Опишите тему — Malik AI составит план, напишет слайды и соберёт дизайн. Любой текст потом можно поправить прямо на слайде.
-          </p>
-
-          <div className="ps-prompt">
-            <textarea
-              value={topic}
-              onChange={(event) => setTopic(event.target.value)}
-              placeholder="Например: питч-дек кофейни у метро в Алматы для инвесторов — окупаемость, команда, что нужно от инвестора"
-              aria-label="Тема презентации"
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void requestOutline(topic, count, tone)
-              }}
-            />
-            <div className="ps-prompt-row">
-              <label className="ps-field">
-                Слайдов
-                <select className="ps-select" value={count} onChange={(event) => setCount(Number(event.target.value))}>
-                  {countOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
-              </label>
-              <label className="ps-field">
-                Тон
-                <select className="ps-select" value={tone} onChange={(event) => setTone(event.target.value as DeckTone)}>
-                  {TONES.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </select>
-              </label>
-              <span className="ps-spacer" />
-              {authenticated ? (
-                <button type="button" className="ps-btn ps-btn--primary" onClick={() => void requestOutline(topic, count, tone)} disabled={busy === "outline" || topic.trim().length < 3}>
-                  {busy === "outline" ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
-                  {busy === "outline" ? "Составляю план…" : `Составить план · ${PRESENTATION_COSTS.outline} кр.`}
-                </button>
-              ) : (
-                <a className="ps-btn ps-btn--primary" href="/auth">Войти, чтобы создавать</a>
-              )}
-            </div>
-          </div>
-          {error ? <p className="ps-error" role="alert">{error}</p> : null}
-          <p className="ps-hint">
-            Полная презентация из {count} слайдов стоит {count + PRESENTATION_COSTS.outline} кредитов: 1 за план и по 1 за каждый слайд. Переписать слайд — 1 кредит. Скачать PPTX и PDF — бесплатно.
-          </p>
-
-          <div className="ps-section-label">Примеры</div>
-          <div className="ps-chips">
-            {EXAMPLES.map((example) => (
-              <button key={example} type="button" className="ps-chip" onClick={() => setTopic(example)}>{example}</button>
-            ))}
+        <div className="ps-start-scene">
+          {/* The light behind the start screen on a wide screen. */}
+          <div className="ps-scene-light ps-desk-only" aria-hidden="true">
+            <i className="ps-glow ps-glow--1" />
+            <i className="ps-glow ps-glow--2" />
+            <i className="ps-glow ps-glow--3" />
+            <b className="ps-arc ps-arc--1" />
+            <b className="ps-arc ps-arc--2" />
           </div>
 
-          <div className="ps-section-label">Тема оформления</div>
-          <div className="ps-themes">
-            {THEME_IDS.map((id) => {
-              const option = DECK_THEMES[id]
-              return (
-                <button key={id} type="button" className="ps-theme" aria-pressed={theme === id} onClick={() => setTheme(id)}>
-                  <span className="ps-theme-swatch" style={{ background: `#${option.bg}`, border: `1px solid #${option.border}` }}>
-                    <i style={{ background: `#${option.text}` }} />
-                    <i style={{ background: `#${option.muted}` }} />
-                    <b style={{ background: `#${option.accent}` }} />
-                  </span>
-                  <span className="ps-theme-name">{option.name}</span>
-                </button>
-              )
-            })}
-          </div>
+          <div className="ps-start">
+            <div className="ps-start-main">
+              <h2 className="ps-start-title">Презентация <span className="ps-grad">за минуту</span></h2>
+              <p className="ps-start-sub">
+                <span className="ps-mob-only">Опишите тему — Malik AI составит план, напишет слайды и соберёт дизайн. Любой текст потом можно поправить прямо на слайде.</span>
+                <span className="ps-desk-only">Опишите тему — Malik AI составит план, напишет слайды, подберёт дизайн и создаст готовую презентацию. Просто, быстро, профессионально.</span>
+              </p>
 
-          {recent.length ? (
-            <>
-              <div className="ps-section-label">Мои презентации</div>
-              <div className="ps-recent">
-                {recent.map((deck) => (
-                  <div key={deck.id} style={{ position: "relative" }}>
-                    <button type="button" className="ps-recent-card" onClick={() => openDeck(deck)}>
-                      <SlideFrame slide={deck.slides[0]} theme={deck.theme} index={0} total={deck.slides.length} language={deck.language} />
-                      <span>{deck.title}</span>
-                      <small>{deck.slides.length} слайдов · {new Date(deck.updatedAt).toLocaleDateString("ru-RU")}</small>
-                    </button>
-                    <button type="button" className="ps-icon-btn" style={{ position: "absolute", right: 6, top: 6, background: "rgba(0,0,0,.6)" }} onClick={() => deleteDeck(deck.id)} aria-label={`Удалить «${deck.title}»`}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
+              <div className="ps-features ps-desk-only">
+                <span><Zap size={15} /> На основе ИИ</span>
+                <span><Palette size={15} /> Красивый дизайн</span>
+                <span><LayoutList size={15} /> Структурированный контент</span>
+                <span><MonitorPlay size={15} /> Готово к презентации</span>
               </div>
-            </>
-          ) : null}
+
+              <div className="ps-prompt">
+                <textarea
+                  value={topic}
+                  onChange={(event) => setTopic(event.target.value)}
+                  placeholder="Например: питч-дек кофейни у метро в Алматы для инвесторов — окупаемость, команда, что нужно от инвестора"
+                  aria-label="Тема презентации"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void requestOutline(topic, count, tone)
+                  }}
+                />
+                <div className="ps-prompt-row">
+                  <label className="ps-field">
+                    <Presentation size={15} className="ps-desk-only" aria-hidden="true" />
+                    Слайдов
+                    <select className="ps-select" value={count} onChange={(event) => setCount(Number(event.target.value))}>
+                      {countOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  </label>
+                  <label className="ps-field">
+                    Тон
+                    <select className="ps-select" value={tone} onChange={(event) => setTone(event.target.value as DeckTone)}>
+                      {TONES.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="ps-magic ps-desk-only"
+                    onClick={() => {
+                      const next = RICH_TOPICS[richIndex % RICH_TOPICS.length]
+                      setRichIndex((value) => value + 1)
+                      setTopic(next)
+                    }}
+                    title="Подсказать подробную тему"
+                    aria-label="Подсказать подробную тему"
+                  >
+                    <Sparkles size={16} />
+                  </button>
+                  <span className="ps-spacer" />
+                  {authenticated ? (
+                    <button type="button" className="ps-btn ps-btn--primary ps-create" onClick={() => void requestOutline(topic, count, tone)} disabled={busy === "outline" || topic.trim().length < 3}>
+                      {busy === "outline" ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                      <span className="ps-mob-only">{busy === "outline" ? "Составляю план…" : `Составить план · ${PRESENTATION_COSTS.outline} кр.`}</span>
+                      <span className="ps-desk-only">{busy === "outline" ? "Составляю план…" : "Создать презентацию"}</span>
+                      {busy === "outline" ? null : <ArrowRight size={16} className="ps-desk-only" />}
+                    </button>
+                  ) : (
+                    <a className="ps-btn ps-btn--primary ps-create" href="/auth">Войти, чтобы создавать</a>
+                  )}
+                </div>
+              </div>
+              {error ? <p className="ps-error" role="alert">{error}</p> : null}
+              <p className="ps-hint">
+                Полная презентация из {count} слайдов стоит {count + PRESENTATION_COSTS.outline} кредитов: 1 за план и по 1 за каждый слайд. Переписать слайд — 1 кредит. Скачать PPTX и PDF — бесплатно.
+              </p>
+
+              <div className="ps-section-label">
+                <Lightbulb size={17} className="ps-desk-only" aria-hidden="true" />
+                <span>Примеры</span>
+                <button type="button" className="ps-more ps-desk-only" onClick={() => setShowAllExamples((value) => !value)}>
+                  {showAllExamples ? "Свернуть" : "Показать все"} <ArrowRight size={13} />
+                </button>
+              </div>
+              <div className="ps-chips">
+                {examples.map((example, index) => {
+                  const Icon = EXAMPLE_ICONS[index % EXAMPLE_ICONS.length]
+                  return (
+                    <button key={example} type="button" className="ps-chip" onClick={() => setTopic(example)}>
+                      <span className="ps-chip-icon ps-desk-only" aria-hidden="true"><Icon size={17} /></span>
+                      <span>{example}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {desktop ? <PresentationShowcase /> : null}
+
+            <div className="ps-start-themes">
+              <div className="ps-section-label">
+                <Sparkles size={17} className="ps-desk-only" aria-hidden="true" />
+                <span>Тема оформления</span>
+              </div>
+              <div className="ps-themes">
+                {THEME_IDS.map((id) => {
+                  const option = DECK_THEMES[id]
+                  return (
+                    <button key={id} type="button" className="ps-theme" data-theme-id={id} aria-pressed={theme === id} onClick={() => setTheme(id)}>
+                      <span className="ps-theme-swatch" style={{ background: `#${option.bg}`, border: `1px solid #${option.border}` }}>
+                        <i style={{ background: `#${option.text}` }} />
+                        <i style={{ background: `#${option.muted}` }} />
+                        <b style={{ background: `#${option.accent}` }} />
+                        {theme === id ? <span className="ps-theme-check ps-desk-only" aria-hidden="true"><Check size={12} strokeWidth={3} /></span> : null}
+                      </span>
+                      <span className="ps-theme-name">{option.name}</span>
+                      <span className="ps-theme-desc ps-desk-only">{THEME_NOTES[id]}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {recent.length ? (
+              <div className="ps-start-recent">
+                <div className="ps-section-label">Мои презентации</div>
+                <div className="ps-recent">
+                  {recent.map((deck) => (
+                    <div key={deck.id} style={{ position: "relative" }}>
+                      <button type="button" className="ps-recent-card" onClick={() => openDeck(deck)}>
+                        <SlideFrame slide={deck.slides[0]} theme={deck.theme} index={0} total={deck.slides.length} language={deck.language} />
+                        <span>{deck.title}</span>
+                        <small>{deck.slides.length} слайдов · {new Date(deck.updatedAt).toLocaleDateString("ru-RU")}</small>
+                      </button>
+                      <button type="button" className="ps-icon-btn" style={{ position: "absolute", right: 6, top: 6, background: "rgba(0,0,0,.6)" }} onClick={() => deleteDeck(deck.id)} aria-label={`Удалить «${deck.title}»`}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     )

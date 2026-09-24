@@ -535,6 +535,44 @@ check("slides assemble on screen: typed headline, staged elements, a pace that c
   assert.match(studioCss, /background:[\s\S]{0,160}var\(--b-bg\)/, "the scene takes the chosen theme's colours")
 })
 
+check("the wide start screen lives in desktop media queries only; the phone layout is untouched", () => {
+  const css = read("components/sovereign/presentations/presentation-desktop.css").replace(/\/\*[\s\S]*?\*\//g, "")
+  let depth = 0
+  let statement = ""
+  const topLevel = []
+  for (const char of css) {
+    if (depth === 0) statement += char
+    if (char === "{") {
+      if (depth === 0) topLevel.push(statement.trim())
+      depth += 1
+    }
+    if (char === "}") {
+      depth -= 1
+      if (depth === 0) statement = ""
+    }
+  }
+  assert.ok(topLevel.length >= 3)
+  for (const head of topLevel) {
+    if (head.startsWith("@media (max-width: 900px)")) continue
+    const minWidth = Number(head.match(/^@media \(min-width: (\d+)px\)/)?.[1])
+    assert.ok(minWidth >= 901, `${head} must only apply on a wide screen`)
+  }
+  const phone = css.slice(css.indexOf("@media (max-width: 900px)"), css.indexOf("@media (min-width: 901px)"))
+  assert.match(phone, /\.ps-desk-only \{ display: none !important; \}/)
+  assert.doesNotMatch(phone, /#[0-9a-f]{3,6}\b/i, "no colour reaches the phone")
+  const studio = read("components/sovereign/presentations/PresentationStudio.tsx")
+  assert.match(studio, /\{desktop \? <PresentationShowcase \/> : null\}/, "the preview is not even mounted on a phone")
+  assert.match(studio, /<span className="ps-mob-only">\{busy === "outline" \? "Составляю план…" : `Составить план/, "the phone keeps its button")
+})
+
+check("the sample deck on the start screen is drawn by the real renderer and marked as an example", () => {
+  const showcase = read("components/sovereign/presentations/PresentationShowcase.tsx")
+  assert.match(showcase, /<SlideFrame slide=\{SHOWCASE_SLIDES\[at\]\}[^>]*build=/)
+  assert.match(showcase, /Пример · Malik AI собирает презентацию/)
+  const samples = read("lib/presentations/showcase.ts")
+  assert.doesNotMatch(samples.replaceAll("http://www.w3.org/2000/svg", ""), /https?:\/\//, "no external pictures")
+})
+
 /* =================================================================== pptx */
 
 check("exports a real PowerPoint file with every slide, the chart, the table and the notes", async () => {
