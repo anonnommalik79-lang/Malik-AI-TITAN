@@ -354,7 +354,7 @@ export function MalikVideoModelRuntime() {
     const syncCurrentStudio = () => {
       const studio = document.querySelector<HTMLElement>('.mv2[data-view="video-generation-v2"]')
       if (!studio) return
-      const malikButton = studio.querySelector<HTMLButtonElement>(".mv2__models .mv2__model")
+      const malikButton = studio.querySelector<HTMLButtonElement>('.mv2__models .mv2__model[data-model-id="malikvideo-1"]')
       if (malikButton) {
         const copy = malikButton.querySelector<HTMLElement>(".mv2__model-copy small")
         const tier = malikButton.querySelector<HTMLElement>(".mv2__tier")
