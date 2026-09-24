@@ -80,7 +80,9 @@ check("the video limit observer cannot trigger an infinite mutation loop", () =>
 
 check("the studio no longer hardcodes 1080p on every render", () => {
   assert.ok(!/resolution:\s*"1080p"/.test(studio), "1080p must not be pinned in the request")
-  assert.match(studio, /resolution:\s*QUALITY_RESOLUTION\[quality\]/, "resolution must follow the quality control")
+  assert.match(studio, /resolution:\s*selectedResolution/, "resolution must follow the capability-safe quality control")
+  assert.match(studio, /QUALITY_RESOLUTION\[quality\]/, "the quality toggle must still drive the requested resolution")
+  assert.match(studio, /selectedCapability\.resolutions/, "provider capabilities must prevent impossible resolution requests")
 })
 
 check("1080p is the default, and 720p is available for a faster render", () => {
@@ -126,8 +128,12 @@ check("1080p is the server-side default too", () => {
 })
 
 check("polling does not add five seconds to a fast render", () => {
-  assert.match(studio, /i === 0 \? 1500 : i < 12 \? 2500 : 5000/,
-    "the first checks must be tight so a one minute render is not rounded up")
+  const polling = /i === 0 \? (\d+) : i < 12 \? (\d+) : (\d+)/.exec(studio)
+  assert.ok(polling, "polling cadence must remain explicit and reviewable")
+  const [, first, early, late] = polling.map(Number)
+  assert.ok(first <= 1500, "the first status check must happen within 1.5 seconds")
+  assert.ok(early <= 2500, "early polling must stay within 2.5 seconds")
+  assert.ok(late <= 5000, "late polling must never regress past five seconds")
 })
 
 // The classifier that decides whether a prompt needs rewriting is real logic,
