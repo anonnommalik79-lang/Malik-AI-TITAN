@@ -573,6 +573,72 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     setError("")
   }
 
+  const pollVideoTask = useCallback(async (job: ActiveVideoJob, signal: AbortSignal) => {
+    setPhase("rendering")
+    setServerStage("rendering")
+    try {
+      for (let i = 0; i < 120; i += 1) {
+        setAttempt(i)
+        await sleep(i === 0 ? 900 : i < 12 ? 2000 : 4000, signal)
+        const statusResponse = await videoFetch(job.statusUrl, { method: "GET", signal }, 45_000)
+        const statusData = await statusResponse.json().catch(() => ({}))
+        if (!statusResponse.ok) throw new Error(statusData?.error || `Status ${statusResponse.status}`)
+        setServerStage(String(statusData?.stage || statusData?.status || "rendering"))
+        if (statusData?.status === "failed") throw new Error(statusData?.error || "Видеомодель не смогла завершить рендер")
+        const readyUrl = String(statusData?.videoUrl || statusData?.url || "")
+        if (readyUrl) {
+          setVideoUrl(readyUrl)
+          setPhase("ready")
+          setServerStage("ready")
+          setError("")
+          try { window.localStorage.removeItem(ACTIVE_VIDEO_JOB_KEY) } catch {}
+          return
+        }
+      }
+      throw new Error("Видео всё ещё рендерится. Задача сохранена и продолжит проверяться после возврата.")
+    } catch (err) {
+      if (signal.aborted) {
+        setPhase("idle")
+        setServerStage("cancelled")
+        setError("Генерация остановлена.")
+      } else {
+        setPhase("failed")
+        setServerStage("failed")
+        setError(err instanceof Error ? err.message : "Генерация видео недоступна")
+        try { window.localStorage.removeItem(ACTIVE_VIDEO_JOB_KEY) } catch {}
+      }
+    } finally {
+      if (generationAbortRef.current?.signal === signal) generationAbortRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    let job: ActiveVideoJob | null = null
+    try {
+      const raw = window.localStorage.getItem(ACTIVE_VIDEO_JOB_KEY)
+      const parsed = raw ? JSON.parse(raw) as ActiveVideoJob : null
+      if (parsed?.taskId && parsed?.statusUrl && parsed?.provider && Date.now() - Number(parsed.createdAt || 0) < 6 * 60 * 60 * 1000) job = parsed
+      else if (raw) window.localStorage.removeItem(ACTIVE_VIDEO_JOB_KEY)
+    } catch {}
+    if (!job) return
+    const controller = new AbortController()
+    generationAbortRef.current = controller
+    setPrompt((current) => current.trim() ? current : job!.prompt)
+    setSelectedModelId(job.provider as (typeof MOBILE_MODELS)[number]["id"])
+    setError("")
+    void pollVideoTask(job, controller.signal)
+    return () => controller.abort()
+  }, [pollVideoTask])
+
+  const cancelGeneration = () => {
+    generationAbortRef.current?.abort()
+    generationAbortRef.current = null
+    try { window.localStorage.removeItem(ACTIVE_VIDEO_JOB_KEY) } catch {}
+    setPhase("idle")
+    setServerStage("cancelled")
+    setError("Генерация остановлена пользователем.")
+  }
+
   const generate = async () => {
     const cleanPrompt = prompt.trim()
     if (!cleanPrompt || busy) return
@@ -583,31 +649,32 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     }
     if (!supportsMode(selectedModelId, mode)) {
       setPhase("failed")
-      setError(`${selectedModel.name} сейчас работает в режиме Текст → Видео. Для ${mode === "image" ? "Фото → Видео" : "Видео → Видео"} выберите Magic Hour.`)
+      setError(`${selectedModel.name} не поддерживает этот режим. Выберите совместимую модель: ${compatibleNames(mode) || "нет подключённых"}.`)
       return
     }
-    if (duration === 10 && selectedModelId !== "magichour") {
+    if (!activeCapability.durations.includes(duration)) {
       setPhase("failed")
-      setError(`${selectedModel.name}: выберите 5 секунд. 10 секунд сейчас поддерживает Magic Hour.`)
+      setError(`${selectedModel.name}: доступны ${activeCapability.durations.join(" / ")} сек.`)
       return
     }
+
     setError("")
     setVideoUrl("")
     setAttempt(0)
-
-    if (!canUseGeneration("video", operator)) {
-      setPhase("failed")
-      setError("Сегодняшняя генерация видео на этом аккаунте уже использована. Лимит обновится завтра.")
-      return
-    }
-
+    setServerStage("queued")
     setPhase("queued")
+    const controller = new AbortController()
+    generationAbortRef.current?.abort()
+    generationAbortRef.current = controller
+
     try {
       const sourcePath = mode === "text" ? "" : await uploadSource()
+      if (controller.signal.aborted) return
       const response = await videoFetch(
         ENDPOINT,
         {
           method: "POST",
+          signal: controller.signal,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt: cleanPrompt,
@@ -615,10 +682,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             imageUrl: mode === "image" ? sourcePath : undefined,
             sourceVideoUrl: mode === "video" ? sourcePath : undefined,
             sourceDurationSeconds: mode === "video" ? sourceDurationSeconds : undefined,
-            length: mode === "video" ? 5 : duration,
-            resolution: QUALITY_RESOLUTION[quality],
-            ratio: ratio === "4:3" ? "16:9" : ratio,
-            generateAudio: selectedModel.audio,
+            length: duration,
+            resolution: selectedResolution,
+            ratio,
+            generateAudio: activeCapability.audio,
             provider: selectedModel.provider,
           }),
         },
@@ -626,34 +693,41 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       )
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        if (response.status === 429) throw new Error("Сегодняшняя генерация уже использована. Лимит обновится завтра.")
+        const countdown = resetCountdown(data?.resetAt)
+        if (response.status === 429) {
+          throw new Error(countdown ? `Лимит видео исчерпан. Сброс через ${countdown}.` : (data?.error || "Лимит видео исчерпан."))
+        }
         throw new Error(data?.error || data?.publicError || data?.message || `Ошибка ${response.status}`)
       }
 
       const taskId = String(data?.taskId || "")
       if (!taskId) throw new Error("Видеомодель не вернула taskId")
-      incrementUsage("video")
-      setPhase("rendering")
-
-      const statusUrl = String(data?.statusUrl || `/api/media/video/status?taskId=${encodeURIComponent(taskId)}`)
-      for (let i = 0; i < 96; i += 1) {
-        setAttempt(i)
-        await sleep(i === 0 ? 1500 : i < 12 ? 2500 : 5000)
-        const statusResponse = await videoFetch(statusUrl, { method: "GET" }, 45_000)
-        const statusData = await statusResponse.json().catch(() => ({}))
-        if (!statusResponse.ok) throw new Error(statusData?.error || `Status ${statusResponse.status}`)
-        if (statusData?.status === "failed") throw new Error(statusData?.error || "Видеомодель не смогла завершить рендер")
-        const readyUrl = String(statusData?.videoUrl || statusData?.url || "")
-        if (readyUrl) {
-          setVideoUrl(readyUrl)
-          setPhase("ready")
-          return
-        }
+      const statusUrl = String(data?.statusUrl || `/api/media/video/status?taskId=${encodeURIComponent(taskId)}&provider=${encodeURIComponent(selectedModel.provider)}`)
+      const job: ActiveVideoJob = {
+        taskId,
+        statusUrl,
+        provider: selectedModel.provider as VideoProviderId,
+        prompt: cleanPrompt,
+        createdAt: Date.now(),
       }
-      throw new Error("Видео всё ещё рендерится. Проверьте задачу позже.")
+      try { window.localStorage.setItem(ACTIVE_VIDEO_JOB_KEY, JSON.stringify(job)) } catch {}
+      const daily = Number(data?.dailyVideoLimit)
+      const remaining = Number(data?.remainingDailyVideos)
+      if (data?.unlimited) setQuotaLabel("∞ видео")
+      else if (Number.isFinite(daily) && Number.isFinite(remaining)) setQuotaLabel(`${remaining} из ${daily} осталось`)
+      setServerStage(String(data?.stage || "queued"))
+      await pollVideoTask(job, controller.signal)
     } catch (err) {
-      setPhase("failed")
-      setError(err instanceof Error ? err.message : "Генерация видео недоступна")
+      if (controller.signal.aborted) {
+        setPhase("idle")
+        setServerStage("cancelled")
+        setError("Генерация остановлена.")
+      } else {
+        setPhase("failed")
+        setServerStage("failed")
+        setError(err instanceof Error ? err.message : "Генерация видео недоступна")
+      }
+      generationAbortRef.current = null
     }
   }
 
