@@ -1,0 +1,79 @@
+import assert from "node:assert/strict"
+import fs from "node:fs"
+
+const read = (path) => fs.readFileSync(path, "utf8")
+
+const brain = read("lib/ai/brain-v1.ts")
+const router = read("lib/server/malik-model-router.ts")
+const agent = read("lib/server/malik-agent-runtime.ts")
+const fusion = read("lib/server/context-fusion.ts")
+const science = read("lib/server/science-context.ts")
+const mcp = read("lib/server/mcp-runtime.ts")
+const mcpRoute = read("app/api/mcp/route.ts")
+const execution = read("lib/server/code-execution-runtime.ts")
+const executionRoute = read("app/api/ai/execute/route.ts")
+const computer = read("lib/server/computer-use-runtime.ts")
+const computerRoute = read("app/api/ai/computer/route.ts")
+const background = read("app/api/stream/background/route.ts")
+const backgroundStore = read("lib/server/background-chat-turns.ts")
+const chat = read("components/sovereign/chat-view.tsx")
+const home = read("components/sovereign/hybrid/MalikHybridHome.tsx")
+const god = read("lib/malik-god-router.ts")
+
+assert.match(brain, /"instant" \| "balanced" \| "deep" \| "ultra"/)
+assert.match(brain, /complexityScore >= 8/)
+assert.match(brain, /ULTRA effort/)
+
+assert.match(router, /MALIK_MAX_HISTORY_MESSAGES/)
+assert.match(router, /MALIK_MAX_HISTORY_CHARS/)
+assert.match(router, /reasoningEffort\?: "low" \| "medium" \| "high"/)
+assert.match(router, /longOutputContinuationPrompt/)
+assert.match(router, /long-output-continuation failed/)
+
+assert.match(agent, /MALIK_AGENT_MISSION_ATTEMPTS/)
+assert.match(agent, /RECOVERY ATTEMPT/)
+assert.match(agent, /verifierMission/)
+
+assert.match(fusion, /MALIK_CONNECTED_CONTEXT/)
+assert.match(fusion, /runMalikPlugin/)
+assert.match(god, /collectMalikConnectedContext/)
+assert.match(god, /collectMalikScienceContext/)
+assert.match(god, /usedEvidence/)
+
+for (const source of ["arxiv", "pubmed", "semanticscholar", "openalex", "crossref"]) {
+  assert.match(science, new RegExp(`"${source}"`))
+}
+
+assert.match(mcp, /MALIK_MCP_SERVERS_JSON/)
+assert.match(mcp, /"initialize"/)
+assert.match(mcp, /"tools\/list"/)
+assert.match(mcp, /"tools\/call"/)
+assert.doesNotMatch(mcp, /body\.url|input\.url|serverUrl/)
+assert.match(mcpRoute, /CONFIRMATION_REQUIRED/)
+assert.match(mcpRoute, /body\.confirm !== true/)
+
+assert.match(execution, /MALIK_CODE_EXECUTION_URL/)
+assert.match(execution, /network: false/)
+assert.doesNotMatch(execution, /\beval\s*\(|new\s+Function\s*\(/)
+assert.match(executionRoute, /CONFIRMATION_REQUIRED/)
+assert.match(executionRoute, /body\.confirm !== true/)
+
+assert.match(computer, /MALIK_COMPUTER_USE_URL/)
+assert.match(computer, /requireHumanConfirmationFor/)
+assert.match(computerRoute, /CONFIRMATION_REQUIRED/)
+assert.match(computerRoute, /body\.confirm !== true/)
+
+assert.match(background, /\bafter\s*\(/)
+assert.match(background, /\.tee\(\)/)
+assert.match(backgroundStore, /aes-256-gcm/)
+assert.match(backgroundStore, /BACKGROUND_CHAT_BUCKET/)
+assert.match(backgroundStore, /7 \* 24 \* 60 \* 60 \* 1000/)
+
+assert.match(chat, /MAX_CHAT_ATTACHMENTS = 12/)
+assert.match(chat, /webkitdirectory/)
+assert.match(chat, /Добавить папку/)
+assert.match(home, /MAX_HOME_ATTACHMENTS = 12/)
+assert.match(home, /webkitdirectory/)
+assert.match(home, /Добавить папку/)
+
+console.log("MALIK Claude-class architecture verification passed")
