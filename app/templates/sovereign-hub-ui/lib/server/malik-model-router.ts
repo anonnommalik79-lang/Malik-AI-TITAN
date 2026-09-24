@@ -150,11 +150,21 @@ function buildMessages(input: {
   publicModelLabel?: string
   fastMode?: boolean
 }): ProviderMessage[] {
-  const history = (input.history || [])
+  const normalizedHistory = (input.history || [])
     .filter((message) => (message?.role === "user" || message?.role === "assistant") && typeof message.content === "string")
-    .slice(-12)
     .map((message) => ({ role: message.role, content: message.content.trim() }))
     .filter((message) => message.content)
+  const historyMessageLimit = Math.max(12, Math.min(128, Number(process.env.MALIK_MAX_HISTORY_MESSAGES || 64)))
+  const historyCharLimit = Math.max(24_000, Math.min(800_000, Number(process.env.MALIK_MAX_HISTORY_CHARS || 180_000)))
+  const history: HistoryMessage[] = []
+  let historyChars = 0
+  for (let index = normalizedHistory.length - 1; index >= 0 && history.length < historyMessageLimit; index -= 1) {
+    const message = normalizedHistory[index]
+    const cost = message.content.length
+    if (history.length && historyChars + cost > historyCharLimit) break
+    history.unshift(message)
+    historyChars += cost
+  }
   const images = (input.attachments || [])
     .filter((attachment) => attachment?.kind === "image" || attachment?.mime?.startsWith("image/"))
     .map(imageUrl)
@@ -747,21 +757,26 @@ function providerAttempts(model: MalikModelDefinition) {
   return 2
 }
 
-function providerSpecificBody(model: MalikModelDefinition, runtime: ProviderRuntime, fastMode = false) {
+function providerSpecificBody(
+  model: MalikModelDefinition,
+  runtime: ProviderRuntime,
+  fastMode = false,
+  reasoningEffort: "low" | "medium" | "high" = "medium",
+) {
   if (fastMode && model.provider === "modelscope" && /qwen\/qwen3(?:\.|-)/i.test(runtime.model)) {
     return { enable_thinking: false }
   }
   if (model.provider === "groq" && /^openai\/gpt-oss-(?:20b|120b)$/.test(runtime.model)) {
-    return { reasoning_effort: "low", include_reasoning: false }
+    return { reasoning_effort: fastMode ? "low" : reasoningEffort, include_reasoning: false }
   }
   if (model.provider === "groq" && /^qwen\/qwen3\./.test(runtime.model)) {
     return { reasoning_effort: "none" }
   }
-  if (fastMode && model.provider === "cerebras" && /^gpt-oss-120b$/i.test(runtime.model)) {
-    return { reasoning_effort: "low" }
+  if (model.provider === "cerebras" && /^gpt-oss-120b$/i.test(runtime.model)) {
+    return { reasoning_effort: fastMode ? "low" : reasoningEffort }
   }
   if (model.provider === "nemotron-openrouter") {
-    return { reasoning: { effort: "low", exclude: true } }
+    return { reasoning: { effort: fastMode ? "low" : reasoningEffort, exclude: true } }
   }
   return {}
 }
@@ -779,6 +794,24 @@ function continuationPrompt(originalPrompt: string, content: string) {
   ].join("\n")
 }
 
+function wantsLargeOutput(prompt: string, requestedTokens?: number) {
+  return Number(requestedTokens || 0) >= 12_000
+    || /(очень\s+длинн|огромн.*ответ|полный.*отч[её]т|не\s+обрезай|large\s+output|very\s+long\s+answer|full\s+report|do\s+not\s+truncate|128k)/iu.test(prompt)
+}
+
+function longOutputContinuationPrompt(originalPrompt: string, content: string) {
+  const tail = content.length > 16_000 ? content.slice(-16_000) : content
+  return [
+    "Continue the previous answer from the exact stopping point.",
+    "Do not restart, repeat, summarize, add a new introduction, or claim the task is complete until all requested deliverables are finished.",
+    "Return only the missing continuation.",
+    "",
+    `ORIGINAL REQUEST:\n${originalPrompt.slice(0, 14_000)}`,
+    "",
+    `CURRENT ANSWER TAIL:\n${tail}`,
+  ].join("\n")
+}
+
 export async function runStrictMalikModel(input: {
   modelId: MalikModelId
   prompt: string
@@ -787,6 +820,7 @@ export async function runStrictMalikModel(input: {
   attachments?: MalikAttachment[]
   maxTokens?: number
   temperature?: number
+  reasoningEffort?: "low" | "medium" | "high"
   publicModelLabel?: string
   allowCatalog?: boolean
   onToken?: (chunk: string) => void
@@ -849,7 +883,7 @@ export async function runStrictMalikModel(input: {
                 messages,
                 max_tokens: runtime.maxTokens,
                 temperature: runtime.temperature,
-                ...providerSpecificBody(model, runtime, fastMode),
+                ...providerSpecificBody(model, runtime, fastMode, input.reasoningEffort || "medium"),
                 stream: runtime.stream,
               }),
         }, runtime.timeoutMs)
@@ -960,6 +994,39 @@ export async function runStrictMalikModel(input: {
         }
         if (truncated && options.allowFallback !== false) {
           throw new MalikModelRouteError("INCOMPLETE_CODE", `${model.label} не завершила код; переключаюсь на резервную модель.`, 503, model.id)
+        }
+
+        const longDepth = options.continuationDepth || 0
+        const longTruncated = !codeMode
+          && wantsLargeOutput(input.prompt, input.maxTokens)
+          && (parsed.finishReason === "length" || parsed.finishReason === "MAX_TOKENS")
+        if (longTruncated && longDepth < 3) {
+          const totalBudget = Math.max(1, Number(input.maxTokens || runtime.maxTokens))
+          const remainingBudget = Math.max(0, totalBudget - estimateVisibleTokens(parsed.content))
+          if (remainingBudget > 256) {
+            try {
+              const continuation = await runStrictMalikModel({
+                modelId: input.modelId,
+                prompt: longOutputContinuationPrompt(input.prompt, parsed.content),
+                systemPrompt: input.systemPrompt,
+                maxTokens: Math.min(remainingBudget, 8_000),
+                temperature: input.temperature,
+                reasoningEffort: input.reasoningEffort,
+                allowCatalog: input.allowCatalog,
+                onToken: emitToken,
+              }, { allowFallback: true, continuationDepth: longDepth + 1 })
+              if (visibleFinalText(continuation.content)) {
+                return {
+                  ...base,
+                  content: `${parsed.content.trim()}\n${continuation.content.trim()}`.trim(),
+                  latencyMs: Date.now() - started,
+                  usage: { primary: parsed.usage, continuation: continuation.usage },
+                }
+              }
+            } catch (error) {
+              console.warn("[MALIK_MODEL_ROUTE] long-output-continuation failed", error instanceof Error ? error.message : String(error))
+            }
+          }
         }
         return base
       }
