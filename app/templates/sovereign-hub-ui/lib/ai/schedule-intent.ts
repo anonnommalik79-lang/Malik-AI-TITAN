@@ -58,7 +58,7 @@ export function detectScheduleIntent(promptValue: string, timeZoneValue = "UTC",
   if (!prompt) return null
   const lower = prompt.toLowerCase()
   const timeZone = String(timeZoneValue || "UTC").trim() || "UTC"
-  const mode: "task" | "condition" = /(?:^|\s)(когда|если появ|следи|отслеж|монитор|when|if .*available|monitor|watch for)(?:\s|$)/iu.test(lower)
+  const mode: "task" | "condition" = /(следи|отслеж|монитор|уведоми|сообщи.*когда|когда.*сообщ|когда.*уведом|дай\s+знать.*когда|напомни.*когда|notify.*when|when.*notify|let\s+me\s+know.*when|tell\s+me.*when|monitor|watch\s+for)/iu.test(lower)
     ? "condition"
     : "task"
 
