@@ -80,8 +80,18 @@ function client() {
 }
 
 export function scheduledTasksStatus() {
-  const configured = Boolean(storageConfig())
-  return { configured, durable: configured }
+  const storageConfigured = Boolean(storageConfig())
+  const runnerConfigured = Boolean(String(process.env.MALIK_SCHEDULER_SECRET || "").trim())
+  const active = storageConfigured
+    && runnerConfigured
+    && String(process.env.MALIK_SCHEDULER_ACTIVE || "").trim().toLowerCase() === "true"
+  return {
+    configured: active,
+    active,
+    durable: storageConfigured,
+    storageConfigured,
+    runnerConfigured,
+  }
 }
 
 function userHash(userId: string) {
