@@ -34,7 +34,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const MAX_CHAT_BODY_BYTES = 16 * 1024 * 1024
-const MAX_TEXT_CONTEXT_CHARS = 260_000
+const MAX_TEXT_CONTEXT_CHARS = Math.max(260_000, Math.min(2_000_000, Number(process.env.MALIK_MAX_TEXT_CONTEXT_CHARS || 800_000)))
 const MALIK_CODER_MODEL_ID = "malik-coder-32b" as const
 const MALIK_ADMIN_COMMAND = "/malik"
 
