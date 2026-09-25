@@ -87,6 +87,18 @@ function incomingSignal(input: RequestInfo | URL, init?: RequestInit) {
   return typeof Request !== "undefined" && input instanceof Request ? input.signal : undefined
 }
 
+function withClientTimeZone(init?: RequestInit) {
+  if (!init || typeof init.body !== "string") return init
+  try {
+    const body = JSON.parse(init.body)
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+    body.metadata = { ...(body?.metadata && typeof body.metadata === "object" ? body.metadata : {}), timeZone }
+    return { ...init, body: JSON.stringify(body) }
+  } catch {
+    return init
+  }
+}
+
 function parsePrompt(init?: RequestInit) {
   if (typeof init?.body !== "string") return ""
   try {
@@ -355,7 +367,8 @@ function installBackgroundRuntime(
   const backgroundFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (requestPath(input) !== CHAT_STREAM_PATH) return runtime.baseFetch(input, init)
 
-    const malikTurnSignal = incomingSignal(input, init)
+    const nextInit = withClientTimeZone(init)
+    const malikTurnSignal = incomingSignal(input, nextInit)
     if (malikTurnSignal) runtime.protectedChatSignals.add(malikTurnSignal)
 
     const turnId = crypto.randomUUID()
@@ -367,7 +380,7 @@ function installBackgroundRuntime(
 
     const pending: PendingBackgroundTurn = {
       turnId,
-      prompt: parsePrompt(init),
+      prompt: parsePrompt(nextInit),
       createdAt: Date.now(),
       pageId: runtime.pageId,
     }
@@ -377,14 +390,14 @@ function installBackgroundRuntime(
     const target = requestUrl(input)
     target.pathname = BACKGROUND_STREAM_PATH
     const headers = new Headers(typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined)
-    if (init?.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value))
+    if (nextInit?.headers) new Headers(nextInit.headers).forEach((value, key) => headers.set(key, value))
     headers.set("x-malik-background-turn-id", turnId)
 
     if (typeof Request !== "undefined" && input instanceof Request) {
       const rewritten = new Request(target.href, input)
-      return runtime.baseFetch(rewritten, { ...(init || {}), headers, signal: controller.signal })
+      return runtime.baseFetch(rewritten, { ...(nextInit || {}), headers, signal: controller.signal })
     }
-    return runtime.baseFetch(target.href, { ...(init || {}), headers, signal: controller.signal })
+    return runtime.baseFetch(target.href, { ...(nextInit || {}), headers, signal: controller.signal })
   }) as typeof window.fetch
 
   window.fetch = backgroundFetch
