@@ -25,6 +25,8 @@ import { isExplicitImageEditRequest } from "@/lib/ai/image-intent"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
 import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers } from "@/lib/ai/superpowers"
+import { detectScheduleIntent } from "@/lib/ai/schedule-intent"
+import { createScheduledTask, scheduledTasksStatus } from "@/lib/server/scheduled-tasks"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
@@ -129,14 +131,14 @@ function textResponse(content: string) {
   })
 }
 
-function identitySseResponse(content: string, selectedModelId?: string) {
+function identitySseResponse(content: string, selectedModelId?: string, provider = "malik-identity-core") {
   const encoder = new TextEncoder()
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(encoder.encode(`event: content\ndata: ${JSON.stringify({ type: "content", content, at: Date.now() })}\n\n`))
       controller.enqueue(encoder.encode(`event: done\ndata: ${JSON.stringify({
         type: "done",
-        provider: "malik-identity-core",
+        provider,
         model: "verified-brand-profile",
         selectedModelId,
         usedWeb: false,
@@ -155,7 +157,7 @@ function identitySseResponse(content: string, selectedModelId?: string) {
       "cache-control": "no-cache, no-transform",
       connection: "keep-alive",
       "x-accel-buffering": "no",
-      "x-malik-router": "verified-founder-identity",
+      "x-malik-router": provider === "malik-identity-core" ? "verified-founder-identity" : provider,
     },
   })
 }
@@ -320,6 +322,53 @@ async function malikAdminCommandAnswer(request: Request, body: any, ownerMode: b
 
   lines.push("", "Credentials и похожие на секреты значения автоматически маскируются в этой выдаче.")
   return lines.join("\n")
+}
+
+async function scheduledCommandAnswer(body: any, entitlement: RequestEntitlement) {
+  const prompt = coderPrompt(body)
+  const timeZone = String(body?.metadata?.timeZone || "UTC").trim() || "UTC"
+  const intent = detectScheduleIntent(prompt, timeZone)
+  if (!intent) return null
+
+  if (!entitlement.authenticated) {
+    return "Чтобы сохранить облачную задачу между устройствами, войдите в аккаунт Malik AI."
+  }
+
+  const runtime = scheduledTasksStatus()
+  if (!runtime.configured) {
+    return "Планировщик распознал задачу, но durable-хранилище автоматизаций сейчас не подключено. Задача не была создана."
+  }
+
+  try {
+    const task = await createScheduledTask({
+      userId: entitlement.userId,
+      title: intent.title,
+      prompt,
+      schedule: intent.schedule,
+      mode: intent.mode,
+    })
+    const next = task.nextRunAt
+      ? new Intl.DateTimeFormat("ru-RU", {
+          timeZone,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        }).format(new Date(task.nextRunAt))
+      : "не назначено"
+    const kind = intent.mode === "condition" ? "Мониторинг" : "Задача"
+    return [
+      "✅ " + kind + " создан.",
+      "",
+      "**Следующий запуск:** " + next + " (" + timeZone + ")",
+      "**Task ID:** " + task.id,
+      task.schedule.kind === "once" ? "**Повтор:** один раз" : "**Повтор:** " + task.schedule.kind,
+    ].join("\n")
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return "Не удалось создать задачу: " + message.slice(0, 700)
+  }
 }
 
 async function persistFounderChatTurn(body: any, entitlement: RequestEntitlement, answer: any) {
@@ -835,6 +884,12 @@ async function handlePOST(request: Request) {
     if (identity) {
       if (wantsSse(request, body)) return identitySseResponse(identity, selection?.modelId || DEFAULT_MALIK_MODEL_ID)
       return textResponse(identity)
+    }
+
+    const scheduled = await scheduledCommandAnswer(body, entitlement)
+    if (scheduled !== null) {
+      if (wantsSse(request, body)) return identitySseResponse(scheduled, "malik-scheduler", "malik-scheduler")
+      return textResponse(scheduled)
     }
 
     const requestAttachments = hasMalikAttachments(body?.attachments) ? body.attachments : []
