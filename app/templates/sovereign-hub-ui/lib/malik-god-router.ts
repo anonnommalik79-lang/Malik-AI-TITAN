@@ -885,7 +885,7 @@ async function callOpenRouterModels(prompt: string, usedWeb: boolean, sources: S
         },
       },
       prompt,
-      usedWeb: usedWeb || sources.length > webSources.length,
+      usedWeb,
       sources,
       maxTokens,
     )
