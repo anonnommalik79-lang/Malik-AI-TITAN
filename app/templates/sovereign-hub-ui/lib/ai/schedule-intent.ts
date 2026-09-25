@@ -57,6 +57,8 @@ export function detectScheduleIntent(promptValue: string, timeZoneValue = "UTC",
   const prompt = String(promptValue || "").replace(/\s+/g, " ").trim()
   if (!prompt) return null
   const lower = prompt.toLowerCase()
+  const explicitAutomation = /(напом|уведом|сообщ|дай\s+знать|присыл|отправ|готовь|подготов|проверяй|проверить\s+по\s+расписанию|следи|отслеж|монитор|запланир|поставь\s+(?:задачу|напоминание)|кажд(?:ый|ую|ые).*\b(?:дай|делай|сделай|создавай|показывай)|remind|notify|let\s+me\s+know|schedule|send\s+me|prepare|check\s+every|monitor|watch\s+for|every\s+(?:day|week|hour).*\b(?:give|send|make|create|check))/iu.test(lower)
+  if (!explicitAutomation) return null
   const timeZone = String(timeZoneValue || "UTC").trim() || "UTC"
   const mode: "task" | "condition" = /(следи|отслеж|монитор|уведоми|сообщи.*когда|когда.*сообщ|когда.*уведом|дай\s+знать.*когда|напомни.*когда|notify.*when|when.*notify|let\s+me\s+know.*when|tell\s+me.*when|monitor|watch\s+for)/iu.test(lower)
     ? "condition"
