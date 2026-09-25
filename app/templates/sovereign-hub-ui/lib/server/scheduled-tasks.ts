@@ -89,7 +89,7 @@ function userHash(userId: string) {
 }
 
 function taskKey(userId: string, taskId: string) {
-  return \`\${PREFIX}/\${userHash(userId)}/\${taskId}.json\`
+  return `${PREFIX}/${userHash(userId)}/${taskId}.json`
 }
 
 function encryptionKey(secret: string) {
@@ -138,7 +138,7 @@ function validTimeZone(value: string) {
 function normalizeClock(value: unknown) {
   const match = String(value || "").trim().match(/^([01]\d|2[0-3]):([0-5]\d)$/)
   if (!match) throw new Error("time must use HH:MM")
-  return \`\${match[1]}:\${match[2]}\`
+  return `${match[1]}:${match[2]}`
 }
 
 function zonedParts(date: Date, timeZone: string) {
@@ -151,7 +151,7 @@ function zonedParts(date: Date, timeZone: string) {
   }).formatToParts(date)
   const map = Object.fromEntries(parts.map((part) => [part.type, part.value]))
   const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
-  return { time: \`\${map.hour}:\${map.minute}\`, dayOfWeek: dayMap[map.weekday] ?? -1 }
+  return { time: `${map.hour}:${map.minute}`, dayOfWeek: dayMap[map.weekday] ?? -1 }
 }
 
 function nextClockOccurrence(input: { time: string; timeZone: string; dayOfWeek?: number; afterMs: number }) {
@@ -259,7 +259,7 @@ export async function createScheduledTask(input: { userId: string; title?: strin
 export async function listScheduledTasks(userId: string) {
   const storage = client()
   if (!storage) return []
-  const prefix = \`\${PREFIX}/\${userHash(userId)}/\`
+  const prefix = `${PREFIX}/${userHash(userId)}/`
   const results: MalikScheduledTask[] = []
   let continuationToken: string | undefined
   do {
@@ -300,7 +300,7 @@ export async function listDueScheduledTasks(nowMs = Date.now(), limit = 50) {
   const results: MalikScheduledTask[] = []
   let continuationToken: string | undefined
   do {
-    const page = await storage.s3.send(new ListObjectsV2Command({ Bucket: storage.cfg.bucket, Prefix: \`\${PREFIX}/\`, ContinuationToken: continuationToken, MaxKeys: 250 }))
+    const page = await storage.s3.send(new ListObjectsV2Command({ Bucket: storage.cfg.bucket, Prefix: `${PREFIX}/`, ContinuationToken: continuationToken, MaxKeys: 250 }))
     const tasks = await Promise.all((page.Contents || []).flatMap((item) => item.Key ? [readObject(item.Key)] : []))
     for (const task of tasks) {
       if (!task?.enabled || !task.nextRunAt) continue
