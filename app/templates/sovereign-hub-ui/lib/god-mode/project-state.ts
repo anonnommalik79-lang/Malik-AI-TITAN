@@ -403,3 +403,68 @@ export async function deleteGodProject(projectIdValue: string, ownerId: string) 
   await deletePrivateJson(projectKey(owner, id))
   return true
 }
+
+
+export async function listActiveGodTasks(ownerId: string, limit = 50) {
+  const index = await readIndex(ownerId)
+  const active: Array<{ projectId: string; projectTitle: string; task: GodTask }> = []
+  for (const item of index.slice(0, 40)) {
+    const project = await getGodProject(item.id, ownerId)
+    if (!project) continue
+    for (const task of Object.values(project.tasks)) {
+      if (!["queued", "running", "waiting", "retrying"].includes(task.status)) continue
+      active.push({ projectId: project.id, projectTitle: project.title, task })
+    }
+  }
+  return active
+    .sort((a, b) => Date.parse(b.task.updatedAt) - Date.parse(a.task.updatedAt))
+    .slice(0, Math.max(1, Math.min(100, limit)))
+}
+
+export async function compareGodArtifacts(
+  projectIdValue: string,
+  ownerId: string,
+  leftId: string,
+  rightId: string,
+) {
+  const project = await getGodProject(projectIdValue, ownerId)
+  const left = project?.artifacts[leftId]
+  const right = project?.artifacts[rightId]
+  if (!project || !left || !right) return null
+
+  const metadataKeys = [...new Set([...Object.keys(left.metadata || {}), ...Object.keys(right.metadata || {})])].sort()
+  const metadataDiff = metadataKeys.flatMap((key) => {
+    const before = left.metadata?.[key]
+    const after = right.metadata?.[key]
+    return JSON.stringify(before) === JSON.stringify(after) ? [] : [{ key, before, after }]
+  })
+
+  return {
+    projectId: project.id,
+    left: {
+      id: left.id,
+      kind: left.kind,
+      title: left.title,
+      version: left.version,
+      parentArtifactId: left.parentArtifactId,
+      createdAt: left.createdAt,
+      url: left.url,
+    },
+    right: {
+      id: right.id,
+      kind: right.kind,
+      title: right.title,
+      version: right.version,
+      parentArtifactId: right.parentArtifactId,
+      createdAt: right.createdAt,
+      url: right.url,
+    },
+    sameKind: left.kind === right.kind,
+    sameLineage: left.id === right.parentArtifactId
+      || right.id === left.parentArtifactId
+      || Boolean(left.derivedFrom.includes(right.id) || right.derivedFrom.includes(left.id)),
+    titleChanged: left.title !== right.title,
+    urlChanged: left.url !== right.url,
+    metadataDiff,
+  }
+}
