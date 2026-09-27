@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto"
 
 import { deletePrivateJson, readPrivateJson, writePrivateJson } from "@/lib/server/private-json-store"
 import type { GodArtifact, GodArtifactKind, GodProject, GodTask, GodTaskStatus } from "./contracts"
+import { pushGodNotification } from "./notifications"
 
 type ProjectGlobal = typeof globalThis & {
   __malikGodProjects?: Map<string, GodProject>
@@ -234,6 +235,24 @@ export async function transitionGodTask(
     })
     result = structuredClone(task)
   })
+  if (project && result && ["completed", "failed", "cancelled"].includes(result.status)) {
+    const type = result.status === "completed"
+      ? "task-completed"
+      : result.status === "failed"
+        ? "task-failed"
+        : "task-cancelled"
+    await pushGodNotification(ownerId, {
+      type,
+      title: result.label,
+      message: result.status === "completed"
+        ? "Задача завершена."
+        : result.status === "failed"
+          ? (result.errorMessage || "Задача завершилась ошибкой.")
+          : "Задача отменена.",
+      projectId: project.id,
+      taskId: result.id,
+    }).catch(() => undefined)
+  }
   return project ? result : null
 }
 
