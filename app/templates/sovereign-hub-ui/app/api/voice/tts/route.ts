@@ -26,7 +26,7 @@ const TTS_TIMEOUT_MS = Math.max(2000, Number(process.env.VOICE_TTS_TIMEOUT_MS ||
 const TTS_COOLDOWN_MS = Math.max(10_000, Number(process.env.VOICE_TTS_COOLDOWN_MS || 120_000))
 const TTS_RENDER_MAX_BYTES = Math.min(
   renderResponseBudgetBytes(),
-  Math.max(128_000, Number(process.env.VOICE_RENDER_MAX_AUDIO_BYTES || 850_000)),
+  Math.max(128_000, Number(process.env.VOICE_RENDER_MAX_AUDIO_BYTES || 320_000)),
 )
 
 function audioResponse(bytes: ArrayBuffer | Uint8Array, headers: Record<string, string>) {
@@ -36,7 +36,9 @@ function audioResponse(bytes: ArrayBuffer | Uint8Array, headers: Record<string, 
   return new Response(body, { headers: {
     ...headers,
     "content-length": String(size),
+    "x-malik-render-audio-bytes": String(size),
     "x-malik-render-audio-budget": String(TTS_RENDER_MAX_BYTES),
+    "x-malik-bandwidth-mode": "adaptive-neural-under-320kb",
   } })
 }
 
