@@ -122,6 +122,17 @@ export function pollinationsUrl(input: {
     + `&nologo=true&private=true&enhance=false&negative_prompt=${negative}`
 }
 
+export function pollinationsDirectUrl(input: {
+  prompt: string
+  negativePrompt?: string
+  aspectRatio?: ImageAspectRatio
+  variant?: number
+}) {
+  const prompt = String(input.prompt || "").replace(/\s+/g, " ").trim()
+  const base = stableSeed(prompt) + (Number(input.variant) || 0) * 7919
+  return pollinationsUrl({ ...input, prompt, seed: base })
+}
+
 export async function generateWithPollinations(input: {
   prompt: string
   negativePrompt?: string
