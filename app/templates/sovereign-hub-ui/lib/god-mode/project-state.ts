@@ -135,6 +135,37 @@ async function mutateProject(id: string, ownerId: string, change: (project: GodP
   return persist(project)
 }
 
+async function settleProjectIfReady(projectIdValue: string, ownerId: string) {
+  let becameReady = false
+  const project = await mutateProject(projectIdValue, ownerId, (draft) => {
+    const tasks = Object.values(draft.tasks)
+    if (!tasks.length || draft.status === "completed") return
+    if (tasks.every((task) => task.status === "completed")) {
+      draft.status = "completed"
+      draft.activity.push({
+        id: randomUUID(),
+        at: now(),
+        type: "project.completed",
+        message: "PROJECT READY",
+      })
+      becameReady = true
+      return
+    }
+    if (tasks.some((task) => task.status === "failed") && tasks.every((task) => ["completed", "failed", "cancelled"].includes(task.status))) {
+      draft.status = "failed"
+    }
+  })
+  if (becameReady && project) {
+    await pushGodNotification(ownerId, {
+      type: "project-ready",
+      title: project.title,
+      message: "PROJECT READY — все задачи проекта завершены.",
+      projectId: project.id,
+    }).catch(() => undefined)
+  }
+  return project
+}
+
 function allowedTransition(from: GodTaskStatus, to: GodTaskStatus) {
   const map: Record<GodTaskStatus, GodTaskStatus[]> = {
     queued: ["running", "cancelled", "failed"],
@@ -252,6 +283,7 @@ export async function transitionGodTask(
       projectId: project.id,
       taskId: result.id,
     }).catch(() => undefined)
+    await settleProjectIfReady(project.id, ownerId)
   }
   return project ? result : null
 }
