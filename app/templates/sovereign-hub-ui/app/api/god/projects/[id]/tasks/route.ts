@@ -1,4 +1,5 @@
 import { createGodTask } from "@/lib/god-mode/project-state"
+import { appendGodAudit } from "@/lib/god-mode/audit-log"
 import { createGodTrace, withGodTraceHeaders } from "@/lib/god-mode/trace"
 import { readJsonBodyLimited } from "@/lib/server/request-safety"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
@@ -27,5 +28,9 @@ export async function POST(request: Request, context: Context) {
     provider: String(body.provider || "").trim() || undefined,
   })
   if (!task) return withGodTraceHeaders(Response.json({ ok: false, code: "PROJECT_NOT_FOUND", error: "Проект не найден." }, { status: 404 }), trace, { operation: "project-state", budgetMs: 1500 })
+  await appendGodAudit(entitlement.userId, {
+    category: "project", action: "task.create", success: true, traceId: trace.traceId,
+    resourceId: task.id, metadata: { projectId: id, type: task.type },
+  }).catch(() => undefined)
   return withGodTraceHeaders(Response.json({ ok: true, task }, { status: 201, headers: { "cache-control": "private, no-store" } }), trace, { operation: "project-state", budgetMs: 1500 })
 }
