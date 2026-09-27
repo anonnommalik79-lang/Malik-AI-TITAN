@@ -18,7 +18,11 @@ async function handleGET(req: NextRequest) {
 
   try {
     const result = await pollAwsNovaReelVideo(jobId)
-    return NextResponse.json(result)
+    return NextResponse.json({
+      ...result,
+      deliveryMode: result.videoUrl || result.url ? "provider-direct-browser" : "metadata-only",
+      renderVideoBytes: 0,
+    }, { headers: { "Cache-Control": "private, no-store" } })
   } catch (error: any) {
     return NextResponse.json({
       ok: false,
