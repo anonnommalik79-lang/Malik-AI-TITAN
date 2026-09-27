@@ -1,6 +1,7 @@
 import "server-only"
 
 import { classifyProviderFailure, providerAvailable, recordProviderAttempt } from "./provider-health"
+import { rankProviders } from "./provider-policy"
 
 export type ProviderLane<T> = {
   id: string
@@ -31,9 +32,12 @@ export async function runProviderChain<T>(
     signal?: AbortSignal
     retryDelayMs?: number
     validate?: (value: T) => boolean
+    preferEconomical?: boolean
   } = {},
 ): Promise<RetryResult<T>> {
-  const usable = lanes.filter((lane, index, all) => lane?.id && all.findIndex((item) => item.id === lane.id) === index)
+  const unique = lanes.filter((lane, index, all) => lane?.id && all.findIndex((item) => item.id === lane.id) === index)
+  const ranked = rankProviders(unique.map((lane) => lane.id), { preferEconomical: options.preferEconomical })
+  const usable = ranked.map((item) => unique.find((lane) => lane.id === item.provider)).filter((lane): lane is ProviderLane<T> => Boolean(lane))
   if (!usable.length) throw new Error("NO_PROVIDER_LANES")
 
   const attempts: RetryResult<T>["attempts"] = []
