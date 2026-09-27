@@ -31,10 +31,18 @@ export async function GET(request: Request) {
   } catch {
     return Response.json({ ok: false, code: "INVALID_RESULT_URL", error: "Музыкальный provider вернул неверную ссылку." }, { status: 502 })
   }
-  if (resultUrl.protocol !== "https:" && resultUrl.protocol !== "http:") {
-    return Response.json({ ok: false, code: "INVALID_RESULT_URL", error: "Неподдерживаемая ссылка на трек." }, { status: 502 })
+  if (resultUrl.protocol !== "https:") {
+    return Response.json({ ok: false, code: "INVALID_RESULT_URL", error: "Музыкальный provider должен вернуть HTTPS-ссылку." }, { status: 502 })
   }
 
-  // Redirect instead of proxying the MP3 body through Render.
-  return Response.redirect(resultUrl.toString(), 302)
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: resultUrl.toString(),
+      "cache-control": "private, no-store",
+      "referrer-policy": "no-referrer",
+      "x-malik-delivery": "provider-direct-browser",
+      "x-malik-render-audio-bytes": "0",
+    },
+  })
 }
