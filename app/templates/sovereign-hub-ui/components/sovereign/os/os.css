@@ -1,0 +1,500 @@
+/*
+ * Malik AI OS surfaces: the Superflow block in the chat, the result cards,
+ * the artifact viewer and mission control. Black and white, like the rest of
+ * Malik AI: white text on black, hairline borders, one pulsing dot for
+ * "working". Everything is scoped to .malik-os-*; nothing here touches the
+ * dashboard, the sidebar or the composer.
+ */
+
+.malik-os-block {
+  --os-line: rgba(255, 255, 255, 0.1);
+  --os-line-strong: rgba(255, 255, 255, 0.2);
+  --os-muted: rgba(255, 255, 255, 0.56);
+  --os-faint: rgba(255, 255, 255, 0.34);
+  width: 100%;
+  max-width: 680px;
+  border: 1px solid var(--os-line);
+  border-radius: 18px;
+  background: #050505;
+  color: #fff;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.malik-os-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 10px;
+}
+
+.malik-os-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  min-width: 0;
+}
+
+.malik-os-title svg { width: 16px; height: 16px; flex: none; }
+
+.malik-os-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--os-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.malik-os-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--os-line-strong, rgba(255, 255, 255, 0.2));
+  background: transparent;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.malik-os-button:hover { background: rgba(255, 255, 255, 0.08); }
+.malik-os-button:disabled { opacity: 0.45; cursor: default; }
+.malik-os-button.is-primary { background: #fff; color: #000; border-color: #fff; }
+.malik-os-button.is-primary:hover { background: #e4e4e4; }
+.malik-os-button svg { width: 14px; height: 14px; }
+
+.malik-os-progress {
+  height: 2px;
+  margin: 0 14px;
+  background: var(--os-line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.malik-os-progress > i {
+  display: block;
+  height: 100%;
+  background: #fff;
+  transition: width 0.5s ease;
+}
+
+.malik-os-goal {
+  padding: 8px 14px 2px;
+  color: var(--os-muted);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.malik-os-rows { list-style: none; margin: 6px 0 0; padding: 0 6px 6px; }
+
+.malik-os-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 10px;
+}
+
+.malik-os-row.is-clickable { cursor: pointer; }
+.malik-os-row.is-clickable:hover { background: rgba(255, 255, 255, 0.05); }
+.malik-os-row.is-clickable:focus-visible { outline: 1px solid rgba(255, 255, 255, 0.5); outline-offset: -1px; }
+
+.malik-os-icon {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--os-faint);
+}
+
+.malik-os-icon svg { width: 15px; height: 15px; }
+.malik-os-row.is-completed .malik-os-icon { color: #fff; }
+.malik-os-row.is-failed .malik-os-icon { color: #fff; }
+
+.malik-os-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: malik-os-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes malik-os-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+.malik-os-label { min-width: 0; }
+.malik-os-label strong { font-weight: 600; }
+.malik-os-row.is-planned .malik-os-label strong,
+.malik-os-row.is-queued .malik-os-label strong,
+.malik-os-row.is-waiting .malik-os-label strong { color: var(--os-muted); font-weight: 500; }
+.malik-os-row.is-cancelled .malik-os-label strong { color: var(--os-faint); text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, 0.25); }
+
+.malik-os-activity {
+  display: block;
+  margin-top: 1px;
+  color: var(--os-muted);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.malik-os-error {
+  display: block;
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12.5px;
+}
+
+.malik-os-time {
+  color: var(--os-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.malik-os-time svg { width: 14px; height: 14px; }
+
+.malik-os-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 12px;
+  border-top: 1px solid var(--os-line);
+}
+
+.malik-os-note { color: var(--os-muted); font-size: 12.5px; }
+
+.malik-os-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--os-line-strong, rgba(255, 255, 255, 0.2));
+  color: var(--os-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------- final result */
+
+.malik-os-result {
+  padding: 4px 14px 14px;
+}
+
+.malik-os-result h3 {
+  margin: 4px 0 10px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.malik-os-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.malik-os-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--os-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  min-width: 0;
+}
+
+.malik-os-card:hover { background: rgba(255, 255, 255, 0.07); border-color: var(--os-line-strong, rgba(255, 255, 255, 0.2)); }
+.malik-os-card .malik-os-card-icon {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #fff;
+  color: #000;
+  overflow: hidden;
+}
+.malik-os-card .malik-os-card-icon img { width: 100%; height: 100%; object-fit: cover; }
+.malik-os-card .malik-os-card-icon svg { width: 17px; height: 17px; }
+.malik-os-card-text { min-width: 0; display: grid; gap: 2px; }
+.malik-os-card-text strong { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.malik-os-card-text span { font-size: 11.5px; color: var(--os-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 520px) {
+  .malik-os-cards { grid-template-columns: minmax(0, 1fr); }
+  .malik-os-head { flex-wrap: wrap; }
+  .malik-os-meta { margin-left: 0; width: 100%; justify-content: space-between; }
+}
+
+/* ------------------------------------------------------ sheet and viewer */
+
+.malik-os-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  padding: 24px;
+  animation: malik-os-fade 0.18s ease both;
+}
+
+@keyframes malik-os-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.malik-os-sheet {
+  --os-line: rgba(255, 255, 255, 0.1);
+  --os-line-strong: rgba(255, 255, 255, 0.2);
+  --os-muted: rgba(255, 255, 255, 0.56);
+  --os-faint: rgba(255, 255, 255, 0.34);
+  width: min(1120px, 100%);
+  height: min(860px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: #050505;
+  color: #fff;
+  border: 1px solid var(--os-line);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.7);
+}
+
+.malik-os-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--os-line);
+  min-height: 56px;
+}
+
+.malik-os-sheet-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.malik-os-sheet-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+
+.malik-os-close {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--os-line);
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  flex: none;
+}
+
+.malik-os-close svg { width: 16px; height: 16px; }
+
+.malik-os-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.malik-os-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  border: 0;
+  background: #fff;
+  display: block;
+}
+
+.malik-os-doc {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 22px 20px 40px;
+}
+
+.malik-os-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--os-line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.malik-os-tabs::-webkit-scrollbar { display: none; }
+
+.malik-os-tab {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--os-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.malik-os-tab.is-active { background: #fff; color: #000; }
+
+.malik-os-list { list-style: none; margin: 0; padding: 8px; display: grid; gap: 6px; }
+
+.malik-os-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--os-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.malik-os-list-item button.malik-os-link {
+  all: unset;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.malik-os-list-item strong { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.malik-os-list-item span { font-size: 12px; color: var(--os-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.malik-os-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--os-line-strong);
+  background: #0b0b0b;
+  color: #fff;
+  font-size: 16px; /* 16px: iOS does not zoom the page on focus */
+  outline: none;
+}
+
+.malik-os-input:focus { border-color: rgba(255, 255, 255, 0.5); }
+
+.malik-os-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--os-line);
+}
+
+.malik-os-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--os-line);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+}
+
+.malik-os-banner code {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.malik-os-table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.malik-os-table th, .malik-os-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--os-line); white-space: nowrap; }
+.malik-os-table th { color: var(--os-muted); font-weight: 600; }
+
+.malik-os-diff { margin: 0; padding: 12px 0; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.malik-os-diff div { padding: 0 14px; white-space: pre-wrap; word-break: break-word; }
+.malik-os-diff .is-add { background: rgba(255, 255, 255, 0.12); }
+.malik-os-diff .is-add::before { content: "+ "; }
+.malik-os-diff .is-remove { color: rgba(255, 255, 255, 0.45); text-decoration: line-through; }
+.malik-os-diff .is-remove::before { content: "− "; }
+.malik-os-diff .is-gap { color: var(--os-faint); padding: 4px 14px; }
+
+.malik-os-files { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100%; }
+.malik-os-files nav { border-right: 1px solid var(--os-line); padding: 8px; overflow: auto; }
+.malik-os-files nav button { all: unset; display: block; width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 8px; font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--os-muted); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.malik-os-files nav button.is-active { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.malik-os-files pre { margin: 0; padding: 14px; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; overflow: auto; }
+
+.malik-os-slides { display: grid; gap: 10px; padding: 16px; max-width: 900px; margin: 0 auto; }
+.malik-os-slide { border: 1px solid var(--os-line); border-radius: 14px; padding: 14px 16px; background: rgba(255, 255, 255, 0.02); }
+.malik-os-slide h4 { margin: 0 0 6px; font-size: 15px; }
+.malik-os-slide p, .malik-os-slide li { color: rgba(255, 255, 255, 0.72); font-size: 13.5px; margin: 0; }
+.malik-os-slide ul { margin: 6px 0 0; padding-left: 18px; }
+
+.malik-os-swatches { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 18px; }
+.malik-os-swatches span { display: grid; gap: 4px; font-size: 11px; color: var(--os-muted); }
+.malik-os-swatches i { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--os-line-strong); }
+
+.malik-os-image { display: grid; place-items: center; padding: 20px; min-height: 100%; }
+.malik-os-image img { max-width: min(100%, 720px); max-height: 70vh; border-radius: 16px; border: 1px solid var(--os-line); background: #fff; }
+
+.malik-os-empty { padding: 40px 20px; text-align: center; color: var(--os-muted); font-size: 13.5px; }
+
+@media (max-width: 720px) {
+  .malik-os-overlay { padding: 0; align-items: stretch; }
+  .malik-os-sheet {
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    border-radius: 0;
+    border: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .malik-os-sheet-head { padding-top: calc(10px + env(safe-area-inset-top)); }
+  .malik-os-sheet-actions .malik-os-button span.malik-os-hide-sm { display: none; }
+  .malik-os-files { grid-template-columns: minmax(0, 1fr); }
+  .malik-os-files nav { border-right: 0; border-bottom: 1px solid var(--os-line); display: flex; gap: 4px; overflow-x: auto; }
+  .malik-os-files nav button { width: auto; flex: none; }
+  .malik-os-doc { padding: 16px 16px 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .malik-os-dot, .malik-os-overlay { animation: none; }
+  .malik-os-progress > i { transition: none; }
+}

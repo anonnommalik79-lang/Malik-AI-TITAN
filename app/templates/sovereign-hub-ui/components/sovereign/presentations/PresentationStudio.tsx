@@ -503,7 +503,13 @@ export function PresentationStudio({ username }: { username?: string }) {
       const raw = window.sessionStorage.getItem(HANDOFF_KEY)
       if (!raw) return
       window.sessionStorage.removeItem(HANDOFF_KEY)
-      const handoff = JSON.parse(raw) as { topic?: string; count?: number }
+      const handoff = JSON.parse(raw) as { topic?: string; count?: number; deck?: unknown }
+      // A finished deck (made by a Superflow) opens as it is, ready to edit.
+      const deck = handoff?.deck ? normalizeDeck(handoff.deck) : null
+      if (deck) {
+        openDeck(deck)
+        return
+      }
       if (!handoff?.topic) return
       setTopic(handoff.topic)
       const handoffCount = Number(handoff.count) || 10

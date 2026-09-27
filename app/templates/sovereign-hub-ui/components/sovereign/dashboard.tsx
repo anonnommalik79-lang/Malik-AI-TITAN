@@ -85,6 +85,12 @@ const MusicGenerationStudio = dynamic(
     ),
   },
 )
+// Malik AI OS: mission control (flows, library, data, plugins, health),
+// opened on demand from the Superflow block or the command palette.
+const MissionControlHost = dynamic(
+  () => import("./os/MissionControl").then((mod) => mod.MissionControlHost),
+  { ssr: false, loading: () => null },
+)
 // Gamma-class deck studio: plan → slides that arrive as they are written →
 // edit on the slide → present / PPTX / PDF, metered by presentation credits.
 const PresentationStudio = dynamic(
@@ -188,6 +194,8 @@ import { isStoredGeneratedImageUrl, persistGeneratedImageReference, persistGener
 import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import { normalizeFactAudit } from "@/lib/ai/fact-audit"
 import { extractSlideCount, isPresentationCreationRequest, presentationTopic } from "@/lib/presentations/deck"
+import { decideSuperflow } from "@/lib/os/capabilities"
+import { newRequestId, openOs, SUPERFLOW_UPDATE_EVENT, type SuperflowRef } from "./os/os-client"
 import {
   responseDepthInstruction,
   responseDepthLimits,
@@ -262,6 +270,8 @@ interface Message {
   attachments?: ChatAttachment[]
   /** Short server status ("Думает…", "Пишет ответ…") shown while the turn streams. */
   liveStatus?: string
+  /** A Superflow started by this turn: a small reference, the flow lives on the server. */
+  superflow?: SuperflowRef
 }
 
 type ImageResolution = "1K" | "2K" | "4K"
@@ -1455,6 +1465,21 @@ function reviveMessage(message: any): Message {
     research: reviveResearch(message?.research),
     actionPlan: reviveMalikActionPlan(message?.actionPlan),
     attachments,
+    superflow: reviveSuperflowRef(message?.superflow),
+  }
+}
+
+function reviveSuperflowRef(value: any): SuperflowRef | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const clientRequestId = String(value.clientRequestId || "")
+  const goal = String(value.goal || "").slice(0, 4000)
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(clientRequestId) || !goal) return undefined
+  return {
+    clientRequestId,
+    goal,
+    flowId: typeof value.flowId === "string" && /^[\w-]{3,80}$/.test(value.flowId) ? value.flowId : undefined,
+    status: typeof value.status === "string" ? value.status.slice(0, 20) : undefined,
+    projectId: typeof value.projectId === "string" && /^[\w-]{3,80}$/.test(value.projectId) ? value.projectId : undefined,
   }
 }
 
@@ -5929,6 +5954,36 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   if (isLoading || duplicateBurst || sameTickBurst) return
   sendGateRef.current = { signature: submissionSignature, at: submissionNow }
 
+  // Auto mode: a goal that needs several tools ("создай стартап и подготовь
+  // его к презентации инвесторам") becomes a Superflow — a live block of real
+  // tasks in this chat — instead of one text answer. Questions and single
+  // deliverables keep their usual path. Signed-in accounts only: projects are
+  // stored per account.
+  if (!attachments.length && !guestMode && workOSUser?.email && decideSuperflow(cleanContent).run) {
+    const flowChatId = activeChatId || crypto.randomUUID()
+    const reference: SuperflowRef = { clientRequestId: newRequestId("sf"), goal: cleanContent }
+    const userTurn: Message = { id: crypto.randomUUID(), role: "user", content: cleanContent, timestamp: new Date() }
+    const flowTurn: Message = { id: crypto.randomUUID(), role: "assistant", content: "", timestamp: new Date(), superflow: reference }
+    if (!activeChatId) {
+      const newChat: Chat = {
+        id: flowChatId,
+        title: cleanContent.slice(0, 34) + (cleanContent.length > 34 ? "..." : ""),
+        timestamp: new Date(),
+        messages: [],
+        selectedModelId,
+        kind: "project",
+        projectDescription: cleanContent.slice(0, 240),
+      }
+      setChats((previous) => [newChat, ...previous])
+      setActiveChatId(flowChatId)
+    }
+    setMessages((previous) => [...previous, userTurn, flowTurn])
+    setChats((previous) => previous.map((chat) => chat.id === flowChatId
+      ? { ...chat, kind: "project", projectDescription: chat.projectDescription || cleanContent.slice(0, 240), messages: [...chat.messages.filter((item) => item.id !== userTurn.id && item.id !== flowTurn.id), userTurn, flowTurn] }
+      : chat))
+    return
+  }
+
   // "Сделай презентацию про …" is a job for the presentation studio, not a
   // chat reply: the topic is handed across and the studio starts the plan
   // itself. Questions *about* presentations stay in the chat — see
@@ -7067,9 +7122,25 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return () => window.removeEventListener("malik-open-command-palette", open)
   }, [])
 
-  // The image studio's "Видео" and "Аудио" tabs open the matching studios.
+  // A Superflow block reports its flow id and final status; the reference is
+  // kept on the message so a reload reconnects to the same flow.
   useEffect(() => {
-    const allowed = new Set(["video-generation", "music-generation"])
+    const onUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ messageId?: string; patch?: Partial<SuperflowRef> }>).detail
+      const messageId = String(detail?.messageId || "")
+      if (!messageId || !detail?.patch) return
+      const patch = (message: Message) => (message.id === messageId && message.superflow ? { ...message, superflow: { ...message.superflow, ...detail.patch } } : message)
+      setMessages((previous) => (previous.some((message) => message.id === messageId) ? previous.map(patch) : previous))
+      setChats((previous) => previous.map((chat) => (chat.messages.some((message) => message.id === messageId) ? { ...chat, messages: chat.messages.map(patch) } : chat)))
+    }
+    window.addEventListener(SUPERFLOW_UPDATE_EVENT, onUpdate)
+    return () => window.removeEventListener(SUPERFLOW_UPDATE_EVENT, onUpdate)
+  }, [])
+
+  // The image studio's "Видео" and "Аудио" tabs open the matching studios;
+  // a deck made by a Superflow opens in the presentation studio.
+  useEffect(() => {
+    const allowed = new Set(["video-generation", "music-generation", "presentation-generation"])
     const open = (event: Event) => {
       const view = String((event as CustomEvent<{ view?: string }>).detail?.view || "")
       if (allowed.has(view)) safeOpenView(view, "manual")
@@ -7125,6 +7196,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
     setCommandPaletteOpen(false)
 
+    if (type.startsWith("open-os:")) {
+      openOs(type.replace("open-os:", "") as Parameters<typeof openOs>[0])
+      return
+    }
     if (type.startsWith("set-mode:")) {
       setActiveAiMode(type.replace("set-mode:", "") as AiModeId)
       safeOpenView("home", "manual")
@@ -7820,6 +7895,7 @@ const shouldShowMobilePreviewButton =
   {renderActiveView()}
   <MalikCodexModal open={codexOpen} onClose={() => setCodexOpen(false)} onSendToCanvas={(code) => safeOpenCanvas(code, "generator-panel")} />
   <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} onRunAction={runCommandPaletteAction} />
+  <MissionControlHost />
   {voiceModeOpen ? <VoiceMode onClose={() => setVoiceModeOpen(false)} onSubmit={(prompt) => handleSendMessage(prompt)} /> : null}
 </main>
         </div>

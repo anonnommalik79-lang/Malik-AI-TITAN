@@ -1,9 +1,14 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
+import type { SuperflowRef } from "./os/os-client"
 import "./chat-live.css"
+
+// The live Superflow block loads only when a conversation has one.
+const SuperflowBlock = dynamic(() => import("./os/SuperflowBlock").then((mod) => mod.SuperflowBlock), { ssr: false, loading: () => null })
 import {
   ArrowDown,
   BookOpen,
@@ -126,6 +131,8 @@ interface Message {
   attachments?: ChatAttachment[]
   /** Latest server status while the answer is being prepared. */
   liveStatus?: string
+  /** A Superflow started by this turn. */
+  superflow?: SuperflowRef
 }
 
 type ImageResolution = "1K" | "2K" | "4K"
@@ -1673,7 +1680,9 @@ function MessageBubble({
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
           {isUser && message.attachments?.length ? <UserAttachmentGallery items={message.attachments} /> : null}
-          {message.generatedMedia ? (
+          {!isUser && message.superflow ? (
+            <SuperflowBlock messageId={message.id} reference={message.superflow} />
+          ) : message.generatedMedia ? (
             <GeminiMediaGenerationCard media={message.generatedMedia} />
           ) : message.imageConfirmation ? (
             <section className="malik-image-credit-confirmation w-full max-w-[560px] rounded-[1.4rem] border border-white/20 bg-black p-4 shadow-[0_18px_60px_rgba(0,0,0,.72)] sm:p-5" aria-label="Подтверждение генерации изображения">

@@ -104,6 +104,20 @@ export const CORE_POWER_ACTIONS: PowerAction[] = [
   { id: "notifications", title: "Уведомления", category: "Поддержка", description: "Центр событий: деплой, вход, канвас, Codex.", actionType: "open-notifications", safeStatus: "Готово" },
   { id: "usage-meter", title: "Счётчик расхода", category: "Оплата", description: "Кредиты, тариф, оценка стоимости и время сброса.", actionType: "open-billing", safeStatus: "Готово" },
   { id: "owner-tools", title: "Инструменты владельца", category: "Система", description: "Консоль основателя. Доступна только владельцу аккаунта.", actionType: "owner-tools", safeStatus: "Только владелец" },
+  { id: "os-mission-control", title: "Mission Control", category: "Malik AI OS", description: "Все Superflow-задачи: что выполняется, что готово, что повторить.", actionType: "open-os:tasks", safeStatus: "Готово" },
+  { id: "os-library", title: "Библиотека проектов", category: "Malik AI OS", description: "Все сайты, презентации, планы, изображения и код — с поиском по смыслу и версиями.", actionType: "open-os:library", safeStatus: "Готово" },
+  { id: "os-data-analyst", title: "Анализ данных CSV/XLSX", category: "Malik AI OS", description: "Точная статистика по таблице и объяснение, что она показывает.", actionType: "open-os:data", safeStatus: "Готово" },
+  { id: "os-plugin-actions", title: "Плагины как действия", category: "Malik AI OS", description: "Запустить плагин с разрешением и сохранить результат в библиотеку.", actionType: "open-os:plugins", safeStatus: "С разрешением" },
+  { id: "os-health", title: "Здоровье моделей", category: "Malik AI OS", description: "Реальная матрица моделей и инструментов, бюджет скорости.", actionType: "open-os:health", safeStatus: "Только реальные данные" },
+  {
+    id: "os-digital-bridge",
+    title: "Superflow: стартап для инвесторов",
+    category: "Malik AI OS",
+    description: "Исследование, бренд, логотип, бизнес-план, сайт, Investor Deck и сценарий видео одной задачей.",
+    actionType: "prompt-chat",
+    safeStatus: "Заполняет поле ввода",
+    prompt: "Создай казахстанский технологический стартап и подготовь его к презентации инвесторам.",
+  },
   { id: "render-guard", title: "Проверка перед деплоем", category: "Деплой", description: "Напоминает прогнать сборку перед пушем.", actionType: "open-deploy", safeStatus: "Готово" },
 ]
 
