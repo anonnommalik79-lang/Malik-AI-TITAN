@@ -1,4 +1,5 @@
 import { artifactQuickActions } from "@/lib/god-mode/actions"
+import { appendGodAudit } from "@/lib/god-mode/audit-log"
 import { deleteGodProject, getGodProject, projectManifest } from "@/lib/god-mode/project-state"
 import { createGodTrace, withGodTraceHeaders } from "@/lib/god-mode/trace"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
@@ -32,6 +33,9 @@ export async function DELETE(request: Request, context: Context) {
   if (!userId) return withGodTraceHeaders(Response.json({ ok: false, code: "AUTH_REQUIRED", error: "Войдите в аккаунт." }, { status: 401 }), trace, { operation: "project-state", budgetMs: 1500 })
   const { id } = await context.params
   const deleted = await deleteGodProject(id, userId)
+  await appendGodAudit(userId, {
+    category: "project", action: "project.delete", success: deleted, traceId: trace.traceId, resourceId: id,
+  }).catch(() => undefined)
   return withGodTraceHeaders(Response.json(deleted
     ? { ok: true, deleted: id }
     : { ok: false, code: "PROJECT_NOT_FOUND", error: "Проект не найден." },
