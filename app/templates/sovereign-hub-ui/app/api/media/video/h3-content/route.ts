@@ -7,7 +7,18 @@ import {
 
 export const runtime = "nodejs"
 
+function renderVideoBandwidthGuard() {
+  return /^(?:1|true|yes|on)$/i.test(String(process.env.MALIK_VIDEO_RENDER_BANDWIDTH_GUARD || "").trim())
+}
+
 export async function GET(request: Request) {
+  if (renderVideoBandwidthGuard()) {
+    return Response.json({
+      ok: false,
+      error: "direct_video_delivery_required",
+      message: "Heavy video proxying through Render is disabled. Use the provider/CDN URL directly.",
+    }, { status: 409, headers: { "cache-control": "private, no-store" } })
+  }
   const taskId = new URL(request.url).searchParams.get("taskId")?.trim() || ""
 
   if (!malikH3Configured()) {
