@@ -1,5 +1,9 @@
 ﻿export const runtime = "nodejs"
 
+function renderVideoBandwidthGuard() {
+  return /^(?:1|true|yes|on)$/i.test(String(process.env.MALIK_VIDEO_RENDER_BANDWIDTH_GUARD || "").trim())
+}
+
 function googleVideoKey() {
   return (
     process.env.GOOGLE_VEO_API_KEY ||
@@ -20,6 +24,13 @@ function isAllowedGoogleVideoUri(uri: string) {
 }
 
 export async function GET(request: Request) {
+  if (renderVideoBandwidthGuard()) {
+    return Response.json({
+      ok: false,
+      error: "direct_video_delivery_required",
+      message: "Authenticated Veo media proxying through Render is disabled in low-bandwidth mode.",
+    }, { status: 409, headers: { "cache-control": "private, no-store" } })
+  }
   const current = new URL(request.url)
   const uri = current.searchParams.get("uri") || ""
   const apiKey = googleVideoKey()
