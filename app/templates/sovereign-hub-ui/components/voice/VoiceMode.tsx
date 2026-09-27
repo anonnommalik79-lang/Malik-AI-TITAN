@@ -77,6 +77,14 @@ const STORAGE_KEY = "malik.voice.preferences.v4"
  */
 const LEGACY_VOICE_PIPELINE: boolean = false
 
+/**
+ * Neural fallback audio is allowed for only the opening of a turn. Each server
+ * chunk is capped at 320 KB, so even the reserve pipeline cannot turn one long
+ * answer into multi-megabyte Render egress. The tail is spoken locally with the
+ * closest installed system voice.
+ */
+const VOICE_NEURAL_CHUNKS_PER_TURN = 2
+
 const SILENCE_MS = 1700
 /** Loud enough to be speech rather than the room. */
 const SPEECH_START_RMS = 0.030
@@ -464,6 +472,8 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
     const worker = (async () => {
       let spoke = false
+      let neuralChunks = 0
+      let browserOnly = false
       let ahead: { text: string; blob: Promise<Blob | null> } | null = null
       replyPlayingRef.current = true
 
@@ -473,15 +483,35 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         if (!current()) return false
 
         const part = queue.shift() as string
+
+        if (browserOnly || neuralChunks >= VOICE_NEURAL_CHUNKS_PER_TURN) {
+          const played = await speakBrowser(part, selectedVoice, selectedLanguage)
+          if (!current()) return false
+          if (!played) break
+          browserOnly = true
+          spoke = true
+          continue
+        }
+
         const pending = ahead && ahead.text === part ? ahead.blob : synth(part)
-        // Ask for the next piece before playing this one, so the provider works
-        // during playback instead of after it.
-        ahead = queue.length ? { text: queue[0], blob: synth(queue[0]) } : null
+        // Only the opening neural chunks are prefetched. After that the tail
+        // stays on-device and costs Render zero audio bytes.
+        ahead = neuralChunks + 1 < VOICE_NEURAL_CHUNKS_PER_TURN && queue.length
+          ? { text: queue[0], blob: synth(queue[0]) }
+          : null
 
         const blob = await pending
         if (!current()) return false
-        if (!blob) break
+        if (!blob) {
+          browserOnly = true
+          const played = await speakBrowser(part, selectedVoice, selectedLanguage)
+          if (!current()) return false
+          if (!played) break
+          spoke = true
+          continue
+        }
 
+        neuralChunks += 1
         const played = await playBlobAudio(blob)
         if (!current()) return false
         if (!played) break
@@ -511,7 +541,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       done: worker,
       voice: selectedVoice,
     }
-  }, [expressivity, playBlobAudio, speed, voice])
+  }, [expressivity, playBlobAudio, speakBrowser, speed, voice])
 
   const speakReply = useCallback(async (text: string, overrideVoice?: string, overrideLanguage?: VoiceLanguage, spokenLocale?: string) => {
     if (!text.trim()) return false
@@ -560,6 +590,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       // which is the entire difference between this and an assistant that
       // answers instantly.
       const chunks = speechChunks(text)
+      const neuralChunks = chunks.slice(0, VOICE_NEURAL_CHUNKS_PER_TURN)
       const speakChunk = async (part: string) => {
         const response = await fetch("/api/voice/tts", {
           method: "POST",
@@ -572,15 +603,15 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         return { response, blob: audio ? await response.blob() : null }
       }
 
-      let ahead: ReturnType<typeof speakChunk> | null = chunks.length ? speakChunk(chunks[0]) : null
+      let ahead: ReturnType<typeof speakChunk> | null = neuralChunks.length ? speakChunk(neuralChunks[0]) : null
       let firstResponse: Response | null = null
       let spoke = false
 
-      for (let index = 0; index < chunks.length && ahead; index += 1) {
+      for (let index = 0; index < neuralChunks.length && ahead; index += 1) {
         const piece = await ahead
-        // Ask for the next piece before playing this one, so the provider works
-        // during playback instead of after it.
-        ahead = index + 1 < chunks.length ? speakChunk(chunks[index + 1]) : null
+        // Never prefetch more than the per-turn neural budget. Long replies
+        // continue locally after the opening neural voice.
+        ahead = index + 1 < neuralChunks.length ? speakChunk(neuralChunks[index + 1]) : null
 
         if (index === 0) firstResponse = piece.response
         if (!current()) return false
@@ -600,6 +631,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       }
 
       if (spoke) {
+        const tail = chunks.slice(neuralChunks.length).join(" ").trim()
+        if (tail && current() && !replyInterruptedRef.current) {
+          await speakBrowser(tail, selectedVoice, selectedLanguage, spokenLocale)
+        }
         replyPlayingRef.current = false
         return true
       }

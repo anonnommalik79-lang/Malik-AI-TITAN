@@ -36,11 +36,20 @@ export async function GET(request: Request) {
     return Response.json({ ok: false, code: "INVALID_RESULT_URL", error: "Provider returned an invalid result URL." }, { status: 502 })
   }
 
-  if (resultUrl.protocol !== "https:" && resultUrl.protocol !== "http:") {
-    return Response.json({ ok: false, code: "INVALID_RESULT_URL", error: "Unsupported result URL." }, { status: 502 })
+  if (resultUrl.protocol !== "https:") {
+    return Response.json({ ok: false, code: "INVALID_RESULT_URL", error: "Provider audio must use HTTPS." }, { status: 502 })
   }
 
-  // Never relay the MP3 body through Render. A 302 response is only a few
-  // hundred bytes; the browser then downloads/plays the provider file directly.
-  return Response.redirect(resultUrl.toString(), 302)
+  // Never relay the MP3 body through Render. This response has no body at all;
+  // the browser downloads/plays the provider/CDN file directly.
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: resultUrl.toString(),
+      "cache-control": "private, no-store",
+      "referrer-policy": "no-referrer",
+      "x-malik-delivery": "provider-direct-browser",
+      "x-malik-render-audio-bytes": "0",
+    },
+  })
 }

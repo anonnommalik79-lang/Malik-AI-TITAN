@@ -3,6 +3,17 @@ import { getDeapiMusicJob, musicModel, musicProviderName } from "@/lib/server/de
 
 export const runtime = "nodejs"
 
+function directAudioUrl(value: string, request: Request) {
+  try {
+    const url = new URL(value)
+    if (url.protocol !== "https:") return ""
+    if (url.origin === new URL(request.url).origin) return ""
+    return url.toString()
+  } catch {
+    return ""
+  }
+}
+
 export async function GET(request: Request) {
   const user = await resolveMediaUser(request)
   if (!user.authenticated || user.userId === "guest") {
@@ -29,6 +40,19 @@ export async function GET(request: Request) {
   }
 
   if (result.status === "done") {
+    const audioUrl = directAudioUrl(result.resultUrl, request)
+    if (!audioUrl) {
+      return Response.json({
+        ok: false,
+        code: "DIRECT_AUDIO_URL_REQUIRED",
+        provider: musicProviderName(requestId),
+        model: musicModel(requestId),
+        requestId,
+        request_id: requestId,
+        status: "failed",
+        error: "Музыкальный provider не вернул безопасную прямую HTTPS-ссылку.",
+      }, { status: 502, headers: { "Cache-Control": "no-store" } })
+    }
     return Response.json({
       ok: true,
       provider: musicProviderName(requestId),
@@ -38,13 +62,17 @@ export async function GET(request: Request) {
       status: "ready",
       providerStatus: "done",
       progress: 100,
-      resultUrl: result.resultUrl,
-      result_url: result.resultUrl,
-      audioUrl: result.resultUrl,
-      downloadUrl: result.resultUrl,
+      resultUrl: audioUrl,
+      result_url: audioUrl,
+      audioUrl,
+      downloadUrl: audioUrl,
       deliveryMode: "provider-direct-browser",
       renderAudioBytes: 0,
-    }, { headers: { "Cache-Control": "no-store" } })
+    }, { headers: {
+      "Cache-Control": "no-store",
+      "X-Malik-Delivery": "provider-direct-browser",
+      "X-Malik-Render-Audio-Bytes": "0",
+    } })
   }
 
   return Response.json({
