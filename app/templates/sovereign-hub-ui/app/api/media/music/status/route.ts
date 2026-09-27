@@ -41,7 +41,9 @@ export async function GET(request: Request) {
       resultUrl: result.resultUrl,
       result_url: result.resultUrl,
       audioUrl: result.resultUrl,
-      downloadUrl: `/api/media/music/download?requestId=${encodeURIComponent(requestId)}`,
+      downloadUrl: result.resultUrl,
+      deliveryMode: "provider-direct-browser",
+      renderAudioBytes: 0,
     }, { headers: { "Cache-Control": "no-store" } })
   }
 
