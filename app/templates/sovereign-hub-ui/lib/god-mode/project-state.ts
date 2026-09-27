@@ -136,7 +136,7 @@ async function mutateProject(id: string, ownerId: string, change: (project: GodP
 }
 
 async function settleProjectIfReady(projectIdValue: string, ownerId: string) {
-  let becameReady = false
+  const readyBox = { value: false }
   const project = await mutateProject(projectIdValue, ownerId, (draft) => {
     const tasks = Object.values(draft.tasks)
     if (!tasks.length || draft.status === "completed") return
@@ -148,14 +148,14 @@ async function settleProjectIfReady(projectIdValue: string, ownerId: string) {
         type: "project.completed",
         message: "PROJECT READY",
       })
-      becameReady = true
+      readyBox.value = true
       return
     }
     if (tasks.some((task) => task.status === "failed") && tasks.every((task) => ["completed", "failed", "cancelled"].includes(task.status))) {
       draft.status = "failed"
     }
   })
-  if (becameReady && project) {
+  if (readyBox.value && project) {
     await pushGodNotification(ownerId, {
       type: "project-ready",
       title: project.title,
@@ -190,14 +190,14 @@ export async function createGodTask(
     maxAttempts?: number
     provider?: string
   },
-) {
-  let result: GodTask | null = null
+): Promise<GodTask | null> {
+  const resultBox: { value: GodTask | null } = { value: null }
   const project = await mutateProject(projectIdValue, ownerId, (draft) => {
     const key = String(input.idempotencyKey || "").trim().slice(0, 180)
     if (key) {
       const existing = Object.values(draft.tasks).find((task) => task.idempotencyKey === key)
       if (existing) {
-        result = structuredClone(existing)
+        resultBox.value = structuredClone(existing)
         return
       }
     }
@@ -219,9 +219,9 @@ export async function createGodTask(
     }
     draft.tasks[task.id] = task
     draft.activity.push({ id: randomUUID(), at: timestamp, type: "task.created", message: task.label, taskId: task.id })
-    result = structuredClone(task)
+    resultBox.value = structuredClone(task)
   })
-  return project ? result : null
+  return project ? resultBox.value : null
 }
 
 export async function transitionGodTask(
@@ -237,8 +237,8 @@ export async function transitionGodTask(
     errorMessage?: string
     traceId?: string
   },
-) {
-  let result: GodTask | null = null
+): Promise<GodTask | null> {
+  const resultBox: { value: GodTask | null } = { value: null }
   const project = await mutateProject(projectIdValue, ownerId, (draft) => {
     const task = draft.tasks[taskId]
     if (!task) return
@@ -264,8 +264,9 @@ export async function transitionGodTask(
       taskId: task.id,
       traceId: input.traceId,
     })
-    result = structuredClone(task)
+    resultBox.value = structuredClone(task)
   })
+  const result = resultBox.value
   if (project && result && ["completed", "failed", "cancelled"].includes(result.status)) {
     const type = result.status === "completed"
       ? "task-completed"
@@ -310,8 +311,8 @@ export async function addGodArtifact(
     url?: string
     metadata?: Record<string, unknown>
   },
-) {
-  let result: GodArtifact | null = null
+): Promise<GodArtifact | null> {
+  const resultBox: { value: GodArtifact | null } = { value: null }
   const project = await mutateProject(projectIdValue, ownerId, (draft) => {
     const parent = input.parentArtifactId ? draft.artifacts[input.parentArtifactId] : undefined
     const artifact: GodArtifact = {
@@ -335,9 +336,9 @@ export async function addGodArtifact(
       if (!task.artifactIds.includes(artifact.id)) task.artifactIds.push(artifact.id)
     }
     draft.activity.push({ id: randomUUID(), at: artifact.createdAt, type: "artifact.created", message: artifact.title, taskId: artifact.sourceTaskId, artifactId: artifact.id })
-    result = structuredClone(artifact)
+    resultBox.value = structuredClone(artifact)
   })
-  return project ? result : null
+  return project ? resultBox.value : null
 }
 
 export async function pinGodArtifact(projectIdValue: string, ownerId: string, artifactId: string) {
@@ -400,8 +401,8 @@ export async function searchGodProjects(ownerId: string, query: string, limit = 
     .map(({ project, score }) => ({ score, manifest: projectManifest(project) }))
 }
 
-export async function rollbackGodArtifact(projectIdValue: string, ownerId: string, artifactId: string) {
-  let rolledBackTo: GodArtifact | null = null
+export async function rollbackGodArtifact(projectIdValue: string, ownerId: string, artifactId: string): Promise<GodArtifact | null> {
+  const rollbackBox: { value: GodArtifact | null } = { value: null }
   const project = await mutateProject(projectIdValue, ownerId, (draft) => {
     const current = draft.artifacts[artifactId]
     if (!current?.parentArtifactId) return
@@ -418,9 +419,9 @@ export async function rollbackGodArtifact(projectIdValue: string, ownerId: strin
       artifactId: parent.id,
       metadata: { fromArtifactId: current.id },
     })
-    rolledBackTo = structuredClone(parent)
+    rollbackBox.value = structuredClone(parent)
   })
-  return project ? rolledBackTo : null
+  return project ? rollbackBox.value : null
 }
 
 export async function deleteGodProject(projectIdValue: string, ownerId: string) {
