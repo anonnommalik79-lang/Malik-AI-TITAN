@@ -206,7 +206,7 @@ export function ImageResultExperience() {
         const item = readImageFromCard(card)
         // A ready card is immutable. Do not re-read/parse image history every
         // time an unrelated class changes elsewhere in the chat.
-        if (item && card.dataset.malikRememberedSrc !== item.src) {
+        if (item && card.dataset.malikImageEphemeral !== "1" && card.dataset.malikRememberedSrc !== item.src) {
           rememberMalikImage(item)
           card.dataset.malikRememberedSrc = item.src
         }
