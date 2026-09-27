@@ -1,4 +1,5 @@
 import type { GodArtifactKind } from "@/lib/god-mode/contracts"
+import { appendGodAudit } from "@/lib/god-mode/audit-log"
 import { addGodArtifact } from "@/lib/god-mode/project-state"
 import { createGodTrace, withGodTraceHeaders } from "@/lib/god-mode/trace"
 import { readJsonBodyLimited } from "@/lib/server/request-safety"
@@ -45,5 +46,9 @@ export async function POST(request: Request, context: Context) {
     metadata: body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata) ? body.metadata as Record<string, unknown> : {},
   })
   if (!artifact) return withGodTraceHeaders(Response.json({ ok: false, code: "PROJECT_NOT_FOUND", error: "Проект не найден." }, { status: 404 }), trace, { operation: "project-state", budgetMs: 1500 })
+  await appendGodAudit(entitlement.userId, {
+    category: "project", action: "artifact.create", success: true, traceId: trace.traceId,
+    resourceId: artifact.id, metadata: { projectId: id, kind: artifact.kind, version: artifact.version },
+  }).catch(() => undefined)
   return withGodTraceHeaders(Response.json({ ok: true, artifact }, { status: 201 }), trace, { operation: "project-state", budgetMs: 1500 })
 }
