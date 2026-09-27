@@ -139,3 +139,8 @@ export function providerAvailable(provider: string) {
   const health = providerHealth(provider)
   return !health.disabled && !health.cooldownUntil
 }
+
+
+export function resetProviderHealth() {
+  healthStore().clear()
+}
