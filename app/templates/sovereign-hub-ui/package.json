@@ -62,9 +62,10 @@
     "test:instagram": "node scripts/verify-instagram.mjs",
     "test:superpowers": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-superpowers.mjs",
     "test:claude-class": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-claude-class.mjs",
-    "test:god-mode": "node scripts/verify-god-mode.mjs && npm run test:bandwidth-guard && npm run test:god-security",
+    "test:god-mode": "node scripts/verify-god-mode.mjs && npm run test:bandwidth-guard && npm run test:god-security && npm run test:upload-safety",
     "test:bandwidth-guard": "node scripts/verify-bandwidth-guard.mjs",
-    "test:god-security": "node scripts/verify-god-security.mjs"
+    "test:god-security": "node scripts/verify-god-security.mjs",
+    "test:upload-safety": "node scripts/verify-upload-safety.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",
