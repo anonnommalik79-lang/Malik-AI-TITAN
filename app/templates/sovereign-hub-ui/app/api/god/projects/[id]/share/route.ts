@@ -31,7 +31,8 @@ export async function POST(request: Request, context: Context) {
   return withGodTraceHeaders(Response.json({
     ok: true,
     shareId: share.id,
-    shareUrl: `/api/god/share/${encodeURIComponent(share.token)}`,
+    shareUrl: `/project/share/${encodeURIComponent(share.token)}`,
+    apiUrl: `/api/god/share/${encodeURIComponent(share.token)}`,
     expiresAt: share.expiresAt,
   }, { status: 201, headers: { "cache-control": "private, no-store" } }), trace, { operation: "project-state", budgetMs: 1500 })
 }
