@@ -5,7 +5,7 @@ import { IMAGE_LAYOUTS } from "@/lib/presentations/types"
 import { buildPptx, pptxFileName } from "@/lib/presentations/pptx"
 import { readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
-import { renderBandwidthBlocked, renderResponseFitsBudget } from "@/lib/server/render-bandwidth"
+import { renderBandwidthBlocked, renderResponseBudgetBytes } from "@/lib/server/render-bandwidth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic"
 const MAX_BODY_BYTES = 12 * 1024 * 1024
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024
 const IMAGE_TIMEOUT_MS = 8_000
+const PRESENTATION_RENDER_FALLBACK_MAX_BYTES = Math.min(renderResponseBudgetBytes(), 600_000)
 
 /**
  * Only public https images are fetched, from hosts that are names rather than
@@ -39,8 +40,8 @@ async function compactPptxImage(buffer: Buffer) {
   // source stays in the Malik AI UI/provider; only the PPTX embed is reduced.
   const compact = await sharp(buffer)
     .rotate()
-    .resize({ width: 480, height: 320, fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 42, mozjpeg: true })
+    .resize({ width: 360, height: 240, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 36, mozjpeg: true })
     .toBuffer()
   return compact.length ? `data:image/jpeg;base64,${compact.toString("base64")}` : null
 }
@@ -117,13 +118,16 @@ export async function POST(request: Request) {
 
     let file = await buildPptx(deck, images)
     let slimmed = false
-    if (!renderResponseFitsBudget(file.length) && images.size) {
-      // Preserve all text, shapes, charts and notes. Only the embedded photo
-      // copies are dropped if they would push Render over the hard budget.
+    if (file.length > PRESENTATION_RENDER_FALLBACK_MAX_BYTES && images.size) {
+      // Browser-local export is the normal path. This server route is only a
+      // CORS fallback, so it uses a stricter 600 KB ceiling and keeps the
+      // editable text/shapes/charts/notes even if photos must be omitted.
       file = await buildPptx(deck, new Map())
       slimmed = true
     }
-    if (!renderResponseFitsBudget(file.length)) return renderBandwidthBlocked("presentation-pptx", file.length)
+    if (file.length > PRESENTATION_RENDER_FALLBACK_MAX_BYTES) {
+      return renderBandwidthBlocked("presentation-pptx-fallback", file.length)
+    }
 
     const name = pptxFileName(deck.title)
     return new Response(new Uint8Array(file), {
@@ -133,7 +137,9 @@ export async function POST(request: Request) {
         "content-length": String(file.length),
         "cache-control": "no-store",
         "x-malik-router": "presentation-export-v1",
-        "x-malik-bandwidth-mode": slimmed ? "slimmed-under-1mb" : "full-under-1mb",
+        "x-malik-bandwidth-mode": slimmed ? "slimmed-under-600kb" : "full-under-600kb",
+        "x-malik-render-binary-bytes": String(file.length),
+        "x-malik-render-binary-budget": String(PRESENTATION_RENDER_FALLBACK_MAX_BYTES),
       },
     })
   } catch (error) {
