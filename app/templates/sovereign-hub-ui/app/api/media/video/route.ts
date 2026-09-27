@@ -2,6 +2,8 @@ import { maxVideoPromptLength } from "@/lib/media/config"
 import { checkMediaLimit, recordMediaUsage } from "@/lib/media/limits"
 import { resolveMediaUser } from "@/lib/media/request"
 import { routeVideoGeneration } from "@/lib/media/video-router"
+import { getArtifact } from "@/lib/os/store"
+import { directMediaUrl } from "@/lib/os/media-reference"
 import type { VideoProviderId, VideoResolution } from "@/lib/media/types"
 import {
   acquireVideoAccountInFlight,
@@ -18,7 +20,8 @@ export const POST = withCompute(handlePOST, "video")
 async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const prompt = String(body?.prompt || "").trim()
-  const imageUrl = typeof body?.imageUrl === "string" ? body.imageUrl.trim() : undefined
+  let imageUrl = typeof body?.imageUrl === "string" ? body.imageUrl.trim() : undefined
+  const imageArtifactId = typeof body?.imageArtifactId === "string" ? body.imageArtifactId.trim() : ""
   const sourceVideoUrl = typeof body?.sourceVideoUrl === "string" ? body.sourceVideoUrl.trim() : undefined
   const sourceDurationSeconds = Number(body?.sourceDurationSeconds || 0)
   const requestedMode = String(body?.mode || "").trim()
@@ -45,7 +48,7 @@ async function handlePOST(request: Request) {
   if (!prompt) {
     return Response.json({ ok: false, error: "Prompt is required", code: "PROMPT_REQUIRED" }, { status: 400 })
   }
-  if (mode === "image" && !imageUrl) {
+  if (mode === "image" && !imageUrl && !imageArtifactId) {
     return Response.json({ ok: false, error: "Загрузите фото для режима Изображение → Видео.", code: "IMAGE_SOURCE_REQUIRED" }, { status: 400 })
   }
   if (mode === "video" && !sourceVideoUrl) {
@@ -58,7 +61,7 @@ async function handlePOST(request: Request) {
       code: "VIDEO_SOURCE_DURATION_UNSUPPORTED",
     }, { status: 400 })
   }
-  if (mode === "text" && (imageUrl || sourceVideoUrl)) {
+  if (mode === "text" && (imageUrl || imageArtifactId || sourceVideoUrl)) {
     return Response.json({ ok: false, error: "Source media is not accepted in text-to-video mode", code: "UNEXPECTED_VIDEO_SOURCE" }, { status: 400 })
   }
 
@@ -79,6 +82,18 @@ async function handlePOST(request: Request) {
     }, { status: 401 })
   }
   const ownerMode = user.plan === "owner"
+
+  if (imageArtifactId) {
+    if (mode !== "image" || imageUrl || providerId && providerId !== "runway") {
+      return Response.json({ ok: false, code: "INVALID_IMAGE_ARTIFACT", error: "Изображение проекта можно передать только в режим Фото → Видео через Runway." }, { status: 400 })
+    }
+    const artifact = await getArtifact(user.userId, imageArtifactId)
+    if (artifact?.kind !== "image" || !artifact.url || !directMediaUrl(artifact.url, String(process.env.NEXT_PUBLIC_APP_URL || process.env.MALIK_PUBLIC_ORIGIN || ""))) {
+      return Response.json({ ok: false, code: "IMAGE_ARTIFACT_NOT_FOUND", error: "Изображение проекта не найдено или недоступно по прямой ссылке." }, { status: 404 })
+    }
+    imageUrl = artifact.url
+    providerId = "runway"
+  }
 
   // Source-driven modes must use a provider that can consume the uploaded
   // provider-native asset. Magic Hour and Runway both support source media.

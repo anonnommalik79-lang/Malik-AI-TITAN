@@ -307,6 +307,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [mode, setMode] = useState<VideoMode>("text")
   const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [sourcePreview, setSourcePreview] = useState("")
+  const [projectImage, setProjectImage] = useState<{ id: string; projectId: string; title: string } | null>(null)
   const sourceInputRef = useRef<HTMLInputElement | null>(null)
   const mobileSourceInputRef = useRef<HTMLInputElement | null>(null)
   const [sourceDurationSeconds, setSourceDurationSeconds] = useState(0)
@@ -335,9 +336,31 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   useEffect(() => {
     return () => {
-      if (sourcePreview) URL.revokeObjectURL(sourcePreview)
+      if (sourcePreview.startsWith("blob:")) URL.revokeObjectURL(sourcePreview)
     }
   }, [sourcePreview])
+
+  useEffect(() => {
+    const artifactId = window.sessionStorage.getItem("malik.video.image-artifact")
+    if (!artifactId) return
+    window.sessionStorage.removeItem("malik.video.image-artifact")
+    let active = true
+    videoFetch(`/api/os/artifacts/${encodeURIComponent(artifactId)}`, {}, 30_000)
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || payload?.artifact?.kind !== "image" || !/^https:\/\//i.test(String(payload.artifact.url || ""))) throw new Error("Изображение проекта недоступно.")
+        if (!active) return
+        setProjectImage({ id: artifactId, projectId: String(payload.artifact.projectId), title: String(payload.artifact.title || "Изображение проекта") })
+        setSourcePreview(String(payload.artifact.url))
+        setSourceFile(null)
+        setMode("image")
+        setSelectedModelId("runway")
+        setDuration(5)
+        setModelNotice("Изображение проекта передано по ссылке без повторной загрузки. Для этого маршрута нужен Runway.")
+      })
+      .catch((error) => { if (active) setError(error instanceof Error ? error.message : "Не удалось открыть изображение проекта.") })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -369,6 +392,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     setMobileModelOpen(false)
     setMode(nextMode)
     setSourceFile(null)
+    setProjectImage(null)
     setSourceDurationSeconds(0)
     setSourcePreview("")
     setVideoUrl("")
@@ -411,6 +435,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       return
     }
 
+    if (projectImage && model.id !== "runway") {
+      setModelNotice("Изображение проекта без повторной загрузки сейчас поддерживает только Runway. Чтобы выбрать Magic Hour, загрузите файл вручную.")
+      return
+    }
     setSelectedModelId(model.id)
     setVideoUrl("")
     setError("")
@@ -483,7 +511,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         }
       }
 
-      if (sourcePreview) URL.revokeObjectURL(sourcePreview)
+      if (sourcePreview.startsWith("blob:")) URL.revokeObjectURL(sourcePreview)
+      setProjectImage(null)
       setSourceFile(file)
       setSourceDurationSeconds(sourceDuration)
       setSourcePreview(URL.createObjectURL(file))
@@ -501,6 +530,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   const clearSource = () => {
     setSourceFile(null)
+    setProjectImage(null)
     setSourceDurationSeconds(0)
     setSourcePreview("")
     setVideoUrl("")
@@ -526,6 +556,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   }
 
   const uploadSource = async (provider: VideoProviderId = selectedModel.provider as VideoProviderId) => {
+    if (projectImage && mode === "image" && provider === "runway") return ""
     if (!sourceFile || mode === "text") return ""
     const form = new FormData()
     form.append("file", sourceFile, sourceFile.name)
@@ -557,7 +588,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const generate = async () => {
     const cleanPrompt = prompt.trim()
     if (!cleanPrompt || busy) return
-    if (mode !== "text" && !sourceFile) {
+    if (mode !== "text" && !sourceFile && !projectImage) {
       setPhase("failed")
       setError(mode === "image" ? "Сначала загрузите фото." : "Сначала загрузите видео.")
       return
@@ -565,6 +596,16 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     if (!supportsMode(selectedModelId, mode)) {
       setPhase("failed")
       setError(`${selectedModel.name} сейчас работает в режиме Текст → Видео. Для ${mode === "image" ? "Фото → Видео" : "Видео → Видео"} выберите Magic Hour или Runway.`)
+      return
+    }
+    if (projectImage && selectedModelId !== "runway") {
+      setPhase("failed")
+      setError("Для прямой ссылки на изображение проекта выберите Runway или загрузите файл вручную для Magic Hour.")
+      return
+    }
+    if (projectImage && modelAvailability.runway === false) {
+      setPhase("failed")
+      setError("Runway сейчас не подключён. Ссылка на изображение проекта не может быть использована без него.")
       return
     }
     if (duration === 10 && selectedModelId !== "magichour" && selectedModelId !== "runway") {
@@ -592,6 +633,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           body: JSON.stringify({
             prompt: cleanPrompt,
             mode,
+            imageArtifactId: mode === "image" ? projectImage?.id : undefined,
             imageUrl: mode === "image" ? sourcePath : undefined,
             sourceVideoUrl: mode === "video" ? sourcePath : undefined,
             sourceDurationSeconds: mode === "video" ? sourceDurationSeconds : undefined,
@@ -617,6 +659,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       const providerMessage = String(data?.error || data?.publicError || data?.message || "")
       const canFallbackToRunway =
         mode !== "text" &&
+        !projectImage &&
         provider === "magichour" &&
         modelAvailability.runway === true &&
         !response.ok &&
@@ -653,6 +696,18 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         if (readyUrl) {
           setVideoUrl(readyUrl)
           setPhase("ready")
+          if (projectImage) {
+            void videoFetch(`/api/os/projects/${encodeURIComponent(projectImage.projectId)}/video-artifacts`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ taskId, sourceImageId: projectImage.id }),
+            }, 45_000).then(async (saved) => {
+              if (!saved.ok) {
+                const failure = await saved.json().catch(() => ({}))
+                setModelNotice(`Видео готово, но не сохранено в проекте: ${String(failure.error || "повторите позже")}`)
+              }
+            }).catch(() => setModelNotice("Видео готово, но связь с проектом пока не подтверждена."))
+          }
           return
         }
       }
@@ -801,10 +856,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                 : <ImagePlus />}
             </button>
             <button type="button" className="mv2m__source-copy" onClick={openMobileImagePicker} disabled={busy}>
-              <strong>{sourceFile?.name || "Добавить изображение"}</strong>
-              <small>{sourceFile ? "Нажмите, чтобы заменить" : "JPG, PNG, WebP или AVIF"}</small>
+              <strong>{sourceFile?.name || projectImage?.title || "Добавить изображение"}</strong>
+              <small>{sourceFile || projectImage ? "Нажмите, чтобы заменить" : "JPG, PNG, WebP или AVIF"}</small>
             </button>
-            {sourceFile ? <button type="button" className="mv2m__source-remove" onClick={clearSource} aria-label="Убрать изображение" disabled={busy}><X /></button> : null}
+            {sourceFile || projectImage ? <button type="button" className="mv2m__source-remove" onClick={clearSource} aria-label="Убрать изображение" disabled={busy}><X /></button> : null}
           </div>
         ) : null}
 
@@ -894,7 +949,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           type="button"
           className="mv2m__generate"
           onClick={generate}
-          disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile)}
+          disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile && !projectImage)}
         >
           <Play />
           <span>{busy ? statusLabel(phase, attempt) : mode === "video" ? "Изменить видео" : "Генерировать"}</span>
@@ -1072,8 +1127,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
               )}
             </div>
             <div className="mv2__source-copy">
-              <strong>{sourceFile?.name || (mode === "image" ? "Исходное фото" : "Исходное видео")}</strong>
-              <small>{sourceFile
+              <strong>{sourceFile?.name || projectImage?.title || (mode === "image" ? "Исходное фото" : "Исходное видео")}</strong>
+              <small>{sourceFile || projectImage
                 ? mode === "image"
                   ? "Фото будет сохранено как исходный первый кадр."
                   : "Оригинальное видео будет основой для AI-редактирования."
@@ -1082,9 +1137,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                   : "MP4, WebM, MOV или M4V · 3–10 секунд"}</small>
             </div>
             <button className="mv2__source-upload" type="button" onClick={() => sourceInputRef.current?.click()} disabled={busy}>
-              <Upload />{sourceFile ? "Заменить" : "Загрузить"}
+              <Upload />{sourceFile || projectImage ? "Заменить" : "Загрузить"}
             </button>
-            {sourceFile ? <button className="mv2__source-clear" type="button" onClick={clearSource} aria-label="Убрать файл" disabled={busy}><X /></button> : null}
+            {sourceFile || projectImage ? <button className="mv2__source-clear" type="button" onClick={clearSource} aria-label="Убрать файл" disabled={busy}><X /></button> : null}
           </div>
         ) : null}
 
@@ -1140,7 +1195,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           <div><div className="mv2__section-title">Соотношение сторон</div><div className="mv2__segments">{(["16:9", "9:16", "1:1", "4:3"] as Ratio[]).map((value) => <button key={value} type="button" aria-pressed={ratio === value} className={ratio === value ? "is-active" : ""} onClick={() => setRatio(value)} disabled={busy}>{value}</button>)}</div></div>
         </div>
 
-        <div className="mv2__generate-row"><button type="button" className="mv2__generate" onClick={generate} disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile)}><span>{busy ? statusLabel(phase, attempt) : mode === "image" ? `Оживить фото · ${duration} сек` : mode === "video" ? `Изменить видео · ${duration} сек` : "Сгенерировать видео"}</span><ArrowUp /></button><div className="mv2__credits">◉ 1 видео / день</div><button type="button" className="mv2__tune"><SlidersHorizontal /></button></div>
+        <div className="mv2__generate-row"><button type="button" className="mv2__generate" onClick={generate} disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile && !projectImage)}><span>{busy ? statusLabel(phase, attempt) : mode === "image" ? `Оживить фото · ${duration} сек` : mode === "video" ? `Изменить видео · ${duration} сек` : "Сгенерировать видео"}</span><ArrowUp /></button><div className="mv2__credits">◉ 1 видео / день</div><button type="button" className="mv2__tune"><SlidersHorizontal /></button></div>
         <div className="mv2__status"><span className={`mv2__status-dot is-${phase}`} />{statusLabel(phase, attempt)}{error ? <b>{error}</b> : null}</div>
 
         <div className="mv2__gallery-tabs">{CATEGORIES.map((item) => <button key={item} type="button" className={activeCategory === item ? "is-active" : ""} onClick={() => setActiveCategory(item)}>{item}</button>)}</div>
