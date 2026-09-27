@@ -627,7 +627,9 @@ check("the microphone is opened at the rate the recognizer wants", () => {
 check("the client speaks pieces instead of waiting for the whole answer", () => {
   const client = codeOf("components/voice/VoiceMode.tsx")
   assert.match(client, /speechChunks\(text\)/, "the reply must be chunked")
-  assert.match(client, /ahead = index \+ 1 < chunks\.length/, "the next piece must be requested before the current one plays")
+  assert.match(client, /ahead = index \+ 1 < neuralChunks\.length/, "only budgeted neural chunks may be prefetched")
+  assert.match(client, /VOICE_NEURAL_CHUNKS_PER_TURN = 2/, "long voice turns must have a hard neural bandwidth ceiling")
+  assert.match(client, /speakBrowser\(tail, selectedVoice, selectedLanguage/, "the remaining speech must continue on-device")
 })
 
 check("the recognizer is no longer forced into the picker's language", () => {
