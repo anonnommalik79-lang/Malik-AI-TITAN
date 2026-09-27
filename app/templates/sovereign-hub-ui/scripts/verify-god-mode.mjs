@@ -12,7 +12,7 @@ const perf = read("lib/god-mode/performance.ts")
 const flags = read("lib/god-mode/feature-flags.ts")
 const trace = read("lib/god-mode/trace.ts")
 const status = read("app/api/god/status/route.ts")
-const roadmap = read("../../../../docs/MALIK_GOD_MODE_100.md")
+const roadmap = read("../../../docs/MALIK_GOD_MODE_100.md")
 
 const checks = [
   ["100 roadmap entries exist", () => {
