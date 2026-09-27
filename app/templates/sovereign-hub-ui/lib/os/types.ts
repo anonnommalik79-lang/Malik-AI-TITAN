@@ -52,6 +52,7 @@ export type ToolName =
   | "video.script"
   | "code.project"
   | "data.analyze"
+  | "artifact.edit"
   | "result.assemble"
 
 export type SideEffect = "none" | "paid" | "external"

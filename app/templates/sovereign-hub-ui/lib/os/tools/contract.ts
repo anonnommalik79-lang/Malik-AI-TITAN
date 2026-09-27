@@ -88,6 +88,8 @@ export type ToolDeps = {
     slides(input: { topic: string; outline: DeckOutlineResult; startIndex: number; count: number; language: "ru" | "kk" | "en" }): Promise<{ slides: Array<{ index: number; slide: DeckSlide }>; missing: number[] }>
   }
   code(request: CodeRequest): Promise<CodeResult>
+  /** Renders an edited site plan again (the site skill engine). */
+  renderSite?(plan: Record<string, unknown>, prompt: string): Promise<{ html: string; plan: Record<string, unknown> }>
   now(): number
   sleep(ms: number, signal?: AbortSignal): Promise<void>
   random(): number

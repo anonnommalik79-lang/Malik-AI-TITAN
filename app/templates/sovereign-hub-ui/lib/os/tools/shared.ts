@@ -135,7 +135,7 @@ export function normalizeBrand(raw: unknown): Brand | null {
 /** The brief from the "understand" step. It always exists once that step completed. */
 export function briefOf(context: ToolContext): Brief | null {
   const output = context.dependency("understand")
-  const artifact = output?.artifacts[0]
+  const artifact = output?.artifacts[0] || context.inputs.find((item) => item.metadata?.role === "brief")
   const brief = artifact?.metadata?.brief
   return brief && typeof brief === "object" ? brief as Brief : null
 }
@@ -158,7 +158,7 @@ export function planOf(context: ToolContext): Artifact | null {
 }
 
 export function logoOf(context: ToolContext): Artifact | null {
-  const artifact = context.dependency("logo")?.artifacts[0]
+  const artifact = context.dependency("logo")?.artifacts[0] || context.inputs.find((item) => item.kind === "image" && item.metadata?.role === "logo")
   return artifact?.url && /^https:\/\//i.test(artifact.url) ? artifact : null
 }
 

@@ -220,6 +220,14 @@ export function serverToolDeps(): ToolDeps {
         error: project.error,
       }
     },
+    async renderSite(raw, prompt) {
+      const [{ parseWebsitePlan, renderWebsiteFromPlan }, { selectSiteSkills }] = await Promise.all([
+        import("@/lib/sites/skill-engine"),
+        import("@/lib/sites/skill-registry"),
+      ])
+      const plan = parseWebsitePlan(raw, prompt, "adaptive")
+      return { html: renderWebsiteFromPlan(plan, selectSiteSkills(prompt, "adaptive")), plan: plan as never }
+    },
     now: () => Date.now(),
     sleep,
     random: Math.random,

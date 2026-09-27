@@ -118,6 +118,8 @@ export const siteTool: ToolDefinition = {
         links: logo ? [{ relation: "derived-from", artifactId: logo.id }] : [],
         metadata: {
           role: "website",
+          // Kept so the site can be edited as a plan and rendered again.
+          plan: result.plan,
           planScore: result.quality.score,
           planIssues: result.quality.issues.slice(0, 6),
           plannerUsed: result.plannerUsed,

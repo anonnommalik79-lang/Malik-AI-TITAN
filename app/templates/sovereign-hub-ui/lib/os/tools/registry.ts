@@ -1,6 +1,7 @@
 import type { ToolName } from "../types"
 import type { ToolDefinition } from "./contract"
 import { dataTool } from "./data-tool"
+import { editTool } from "./edit-tool"
 import { codeTool, imageTool, presentationTool, siteTool } from "./media-tools"
 import { assembleTool, brandTool, businessPlanTool, documentTool, researchTool, understandTool, videoScriptTool } from "./text-tools"
 
@@ -17,6 +18,7 @@ export const TOOLS: Record<ToolName, ToolDefinition> = {
   "video.script": videoScriptTool,
   "code.project": codeTool,
   "data.analyze": dataTool,
+  "artifact.edit": editTool,
   "result.assemble": assembleTool,
 }
 

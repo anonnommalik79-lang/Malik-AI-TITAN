@@ -23,6 +23,7 @@ export const PERF_BUDGETS_MS: Record<string, number> = {
   "tool.document.write": 150_000,
   "tool.code.project": 420_000,
   "tool.data.analyze": 90_000,
+  "tool.artifact.edit": 120_000,
   "tool.result.assemble": 5_000,
 }
 
