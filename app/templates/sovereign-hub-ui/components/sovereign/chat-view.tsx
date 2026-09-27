@@ -1,9 +1,11 @@
 "use client"
 
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
+import "./chat-live.css"
 import {
+  ArrowDown,
   BookOpen,
   Bot,
   Check,
@@ -77,7 +79,13 @@ function isChatViewBadText(value: string) {
   const text = String(value || "")
   const prose = text.replace(/```[\s\S]*?(?:```|$)/g, "")
   const commaCount = (prose.match(/,/g) || []).length
+  // Spam means commas (or "per-" fragments) with almost no words between
+  // them. A normal detailed answer has 25+ commas; an absolute limit made it
+  // vanish — while streaming it even flipped back to the thinking indicator.
+  const wordCount = (prose.match(/[\p{L}\p{N}]+/gu) || []).length
+  const commaSpam = commaCount >= 25 && commaCount > wordCount * 0.6
   const perSpamCount = (prose.match(/\bper[-\w]*/gi) || []).length
+  const perSpam = perSpamCount >= 5 && perSpamCount > wordCount * 0.2
   const badMarks = [
     "\u00D0", "\u00D1", "\u00E2",
     "\u0420\u045F", "\u0420\u0491", "\u0420\u0451", "\u0420\u00B0", "\u0420\u00B5", "\u0421\u0453", "\u0421\u201A", "\u0421\u0152",
@@ -92,8 +100,8 @@ function isChatViewBadText(value: string) {
     /Mode:\s*choose\s+(chat|code|canvas|Codex|media)\s+flow/i.test(text) ||
     /^\s*(START:|BEGIN:|END:)\s*$/i.test(text) ||
     /^[,;:]/.test(text.trim()) ||
-    commaCount >= 25 ||
-    perSpamCount >= 5
+    commaSpam ||
+    perSpam
   )
 }
 
@@ -116,6 +124,8 @@ interface Message {
   imageConfirmation?: ImageGenerationConfirmation
   actionPlan?: MalikActionPlan
   attachments?: ChatAttachment[]
+  /** Latest server status while the answer is being prepared. */
+  liveStatus?: string
 }
 
 type ImageResolution = "1K" | "2K" | "4K"
@@ -1007,11 +1017,14 @@ function ThinkingBubble({
   query = "",
   research,
   videoAnalysis = false,
+  liveStatus = "",
 }: {
   generationType: GenerationStatusType
   query?: string
   research?: MalikMessageResearch
   videoAnalysis?: boolean
+  /** Latest server status ("Думает…", "Пишет ответ…"); plain chat shows it without a timer. */
+  liveStatus?: string
 }) {
   const [elapsed, setElapsed] = useState(0)
   const isResearch = Boolean(research?.usedWeb || research?.steps.length || isWorldResearchPrompt(query))
@@ -1019,12 +1032,15 @@ function ThinkingBubble({
   const visibleSources = research?.sources.slice(0, 6) || []
 
   // Elapsed time is measured, not animated — the row at the end reports how long
-  // the turn actually took.
+  // the turn actually took. Only a web research timeline has that row; plain
+  // chat never shows a timer. The bubble exists only while its answer streams,
+  // so the interval dies with it the moment the first text arrives.
   useEffect(() => {
+    if (!isResearch) return
     const startedAt = research?.startedAt || Date.now()
     const timer = window.setInterval(() => setElapsed(Math.round((Date.now() - startedAt) / 1000)), 1000)
     return () => window.clearInterval(timer)
-  }, [query, research?.startedAt])
+  }, [isResearch, query, research?.startedAt])
 
   const labelMap: Record<GenerationStatusType, string> = {
     text: "Думаю",
@@ -1038,14 +1054,17 @@ function ThinkingBubble({
 
   if (!isResearch) {
     if (videoAnalysis) return <VideoAnalysisPulse />
+    // Plain chat: a label and one live status line — no step list, no timer.
+    // MalikSearchMotion reads data-malik-status to render its animated widget.
     return (
-      <p className="malik-thinking-line" aria-live="polite">
+      <p className="malik-thinking-line" aria-live="polite" data-malik-status={liveStatus || undefined}>
         {labelMap[generationType] || labelMap.text}
         <span className="malik-thinking-dots" aria-hidden="true">
           <i />
           <i />
           <i />
         </span>
+        {liveStatus ? <span className="malik-thinking-status">{liveStatus}</span> : null}
       </p>
     )
   }
@@ -1573,6 +1592,8 @@ function MessageBubble({
   videoAnalysis = false,
   question = "",
   onOpenSheet,
+  isLatest = false,
+  freshTurn = false,
 }: {
   message: Message
   onCopy: (id: string, text: string) => void
@@ -1582,7 +1603,7 @@ function MessageBubble({
   /** The user turn this answer replies to — what a re-check searches for. */
   question?: string
   generationType?: GenerationStatusType
-  
+
   thinkingQuery?: string
   onRegenerate?: (id: string) => void
   onShare?: (text: string) => void
@@ -1592,18 +1613,40 @@ function MessageBubble({
   imageCredits?: ImageCreditSnapshot | null
   onOpenActionTarget?: (target: MalikActionTarget) => void
   videoAnalysis?: boolean
+  /** The newest row of the thread — the only one that may still be live. */
+  isLatest?: boolean
+  /** Part of the turn that was just sent (entry animation). */
+  freshTurn?: boolean
 }) {
   const isUser = message.role === "user"
-  const isThinking = Boolean(message.isStreaming && !message.content && !message.generatedMedia)
+  // Only the newest answer can be in progress. An older row that still says
+  // isStreaming is a leftover placeholder (an interrupted or duplicated turn);
+  // it must never keep a thinking indicator or a timer alive above the thread.
+  const streaming = Boolean(message.isStreaming) && isLatest
+  const isThinking = Boolean(streaming && !message.content && !message.generatedMedia)
   const displayContent = isUser ? message.content : cleanResearchDisplayText(message.content, message.research)
   const responseModel = !isUser && message.modelId ? getMalikModel(message.modelId) : null
+  if (!isUser && message.isStreaming && !streaming && !displayContent && !message.generatedMedia && !message.imageConfirmation) {
+    return null
+  }
+  const writingLive = !isUser && streaming && Boolean(displayContent) && !message.generatedMedia && !message.imageConfirmation
   return (
-    <div data-malik-message={message.role} className={cn("malik-message-row flex w-full gap-3 sm:gap-4", isUser ? "malik-message-row-user justify-end" : "malik-message-row-assistant justify-start")}>
+    <div
+      data-malik-message={message.role}
+      className={cn(
+        "malik-message-row flex w-full gap-3 sm:gap-4",
+        isUser ? "malik-message-row-user justify-end" : "malik-message-row-assistant justify-start",
+        freshTurn && "malik-live-enter",
+        writingLive && "malik-live-writing",
+      )}
+    >
       {/* The mark is a progress indicator, not a byline: it appears while the
           answer is being produced and leaves with the spinner. A finished
           answer stands on its own, the way every mainstream assistant shows
-          one. */}
-      {!isUser && message.isStreaming && (
+          one. While text is already streaming it stays in the DOM (other
+          runtimes read it as "turn in progress") but chat-live.css hides it,
+          so the answer does not shift sideways when it completes. */}
+      {!isUser && streaming && (
         <div className="malik-ai-avatar is-working flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black">
           <svg viewBox="0 0 44 44" className="h-full w-full" aria-hidden="true"><rect width="44" height="44" rx="12" fill="white" /><path d="M9 29 L22 15 L22 29 Z" fill="#03040a" /><path d="M24 15 H38 L24 29 Z" fill="#03040a" /></svg>
         </div>
@@ -1712,15 +1755,20 @@ function MessageBubble({
                 ? displayContent
                 : (
                   <>
-                    <MalikMarkdown text={displayContent} />
-                    {message.isStreaming && videoAnalysis ? <VideoAnalysisPulse compact /> : null}
+                    {/* While streaming, `malik-streaming` gives the growing
+                        answer its caret and lets only newly added blocks
+                        fade in (chat-live.css). It is dropped when done. */}
+                    <MalikMarkdown text={displayContent} className={writingLive ? "malik-streaming" : undefined} />
+                    {streaming && videoAnalysis ? <VideoAnalysisPulse compact /> : null}
                   </>
                 )
             )
-            : (message.isStreaming ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} /> : "")}
+            : (streaming
+              ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} liveStatus={message.liveStatus} />
+              : "")}
           {/* The verdict on the text above comes before the reading list it was
               written from. */}
-          {!isUser && !message.isStreaming && message.research?.factAudit ? (
+          {!isUser && !streaming && message.research?.factAudit ? (
             <FactAuditPanel
               audit={message.research.factAudit}
               sources={message.research.sources}
@@ -1728,16 +1776,25 @@ function MessageBubble({
               answer={displayContent}
             />
           ) : null}
-          {!isUser && !message.isStreaming && message.research?.sources.length ? (
+          {!isUser && !streaming && message.research?.sources.length ? (
             <SourceDeck research={message.research} />
           ) : null}
         </div>
-        {!isUser && message.content && !message.isStreaming && !message.imageConfirmation && (
-          <div className={cn("malik-message-actions mt-2 flex items-center gap-2 text-zinc-500", Boolean(message.research?.sources.length) && "is-research")}>
-            <button type="button" title="Копировать" onClick={() => onCopy(message.id, displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>
+        {!isUser && message.content && !streaming && !message.imageConfirmation && (
+          <div className={cn("malik-message-actions mt-2 flex items-center gap-2 text-zinc-500", Boolean(message.research?.sources.length) && "is-research", isLatest && "is-latest")}>
+            <button
+              type="button"
+              title={copied ? "Скопировано" : "Копировать"}
+              aria-label={copied ? "Скопировано" : "Копировать ответ"}
+              onClick={() => onCopy(message.id, displayContent)}
+              className={cn("malik-copy-action inline-flex items-center gap-1.5 rounded-md p-1 hover:bg-white/10 hover:text-white", copied && "is-copied")}
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? <span className="malik-copy-action__label" role="status">Скопировано</span> : null}
+            </button>
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
-            <button type="button" title="Полезно" onClick={() => onFeedback?.(message.id, "up")} className={cn("rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "text-emerald-300")}><ThumbsUp className="h-4 w-4" /></button>
-            <button type="button" title="Не полезно" onClick={() => onFeedback?.(message.id, "down")} className={cn("rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "text-amber-300")}><ThumbsDown className="h-4 w-4" /></button>
+            <button type="button" title="Полезно" aria-pressed={feedback === "up"} onClick={() => onFeedback?.(message.id, "up")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "is-active")}><ThumbsUp className="h-4 w-4" /></button>
+            <button type="button" title="Не полезно" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>
             <button type="button" title="Поделиться" onClick={() => onShare?.(displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
             {onOpenSheet && (isSheetWorthy(displayContent) || isSheetRequest(question)) ? (
               <button type="button" title="Открыть на листе" aria-label="Открыть на листе" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
@@ -1753,6 +1810,16 @@ function MessageBubble({
     </div>
   )
 }
+
+// A live answer updates `messages` many times a second. Memoising the row
+// keeps every settled message (and its Markdown parse) out of those renders:
+// only the row whose message object changed re-renders.
+const MemoMessageBubble = React.memo(MessageBubble)
+
+/** Distance (px) from the bottom of the thread at which the reader counts as "at the newest line". */
+const FOLLOW_EPSILON_PX = 6
+/** Scrolled further up than this, the round "to the newest" button appears. */
+const JUMP_BUTTON_THRESHOLD_PX = 200
 
 export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, onOpenActionTarget, projectName, projectDescription }: ChatViewProps) {
   // One short pulse after the complete answer lands. Passing a number (rather
@@ -1962,16 +2029,160 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     return () => window.removeEventListener(MALIK_IMAGE_EDITOR_REQUEST_EVENT, onEditorRequest)
   }, [isLoading, onSendMessage, responseDepth])
 
+  // ---- Following the newest line ------------------------------------------
+  // The thread sticks to the bottom only while the reader is already there.
+  // Any upward move by the person (wheel, touch drag, keys, scrollbar) stops
+  // the following at once, so a streaming answer never yanks them back down
+  // while they read something above; reaching the bottom again, sending a
+  // message or pressing the round arrow button turns it back on.
+  //
+  // Only the thread element scrolls (never scrollIntoView: that can also pan
+  // Safari's document while the keyboard is up). The target is the real
+  // maximum scrollTop, which ChatTurnScrollRuntime deliberately leaves alone —
+  // it only swallows the legacy "jump to scrollHeight on every token" shape.
+  const threadRef = useRef<HTMLDivElement>(null)
+  const followRef = useRef(true)
+  // Until this moment (performance.now) following glides instead of jumping:
+  // the short window right after a send, while the new rows settle.
+  const smoothFollowUntilRef = useRef(0)
+  const turnKeyRef = useRef<{ first?: string; lastUser?: string }>({})
+  const [showJumpButton, setShowJumpButton] = useState(false)
+  const firstMessageId = messages[0]?.id
+  const lastUserMessageId = useMemo(() => [...messages].reverse().find((message) => message.role === "user")?.id, [messages])
+
+  const scrollThreadToBottom = useCallback((behavior: ScrollBehavior) => {
+    const thread = threadRef.current
+    if (!thread) return
+    const top = Math.max(0, thread.scrollHeight - thread.clientHeight)
+    if (Math.abs(thread.scrollTop - top) < 1) return
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    thread.scrollTo({ top, behavior: reduceMotion ? "auto" : behavior })
+  }, [])
+
+  // Another chat opened → start at its newest line at once. A new message
+  // sent in this chat → follow again and glide down to it (two frames, so
+  // ChatTurnScrollRuntime's one-time viewport restore runs first).
   useEffect(() => {
-    if (!window.matchMedia("(max-width: 767px)").matches) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-      return
+    const previous = turnKeyRef.current
+    turnKeyRef.current = { first: firstMessageId, lastUser: lastUserMessageId }
+    followRef.current = true
+    const sameChat = previous.first !== undefined && previous.first === firstMessageId
+    const sent = sameChat && Boolean(lastUserMessageId) && previous.lastUser !== lastUserMessageId
+    if (sent) smoothFollowUntilRef.current = performance.now() + 700
+    let second = 0
+    const first = window.requestAnimationFrame(() => {
+      if (!sent) {
+        scrollThreadToBottom("auto")
+        return
+      }
+      second = window.requestAnimationFrame(() => scrollThreadToBottom("smooth"))
+    })
+    return () => {
+      window.cancelAnimationFrame(first)
+      if (second) window.cancelAnimationFrame(second)
     }
-    // Scroll the thread only. scrollIntoView can also pan Safari's document
-    // while the keyboard is up, pulling the header and composer off screen.
-    const thread = messagesEndRef.current?.closest<HTMLElement>(".malik-chat-scroll")
-    thread?.scrollTo({ top: thread.scrollHeight, behavior: "smooth" })
-  }, [messages])
+  }, [firstMessageId, lastUserMessageId, scrollThreadToBottom])
+
+  useEffect(() => {
+    const thread = threadRef.current
+    if (!thread) return
+    const list = thread.querySelector<HTMLElement>(".malik-message-list")
+    let lastTop = thread.scrollTop
+    let touchY: number | null = null
+
+    const distance = () => thread.scrollHeight - thread.scrollTop - thread.clientHeight
+    const syncJumpButton = () => setShowJumpButton(distance() > JUMP_BUTTON_THRESHOLD_PX)
+    const stopFollowing = () => {
+      followRef.current = false
+      smoothFollowUntilRef.current = 0
+    }
+
+    const onScroll = () => {
+      const top = thread.scrollTop
+      const away = distance()
+      if (away <= FOLLOW_EPSILON_PX) followRef.current = true
+      // Moving up and ending away from the bottom is the person reading
+      // above (this also catches find-in-page and middle-click scrolling).
+      // A clamp after content shrinks keeps the view at the bottom, so it
+      // does not count.
+      else if (top < lastTop - 2 && away > 24) stopFollowing()
+      lastTop = top
+      syncJumpButton()
+    }
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) stopFollowing()
+    }
+    const onTouchStart = (event: TouchEvent) => {
+      touchY = event.touches[0]?.clientY ?? null
+    }
+    const onTouchMove = (event: TouchEvent) => {
+      const y = event.touches[0]?.clientY
+      // Finger moving down scrolls the thread up, towards older messages.
+      if (touchY !== null && typeof y === "number" && y > touchY + 4) stopFollowing()
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) stopFollowing()
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      // A press on the thread itself (not on a message) is its scrollbar.
+      if (event.target === thread) stopFollowing()
+    }
+    const onResize = () => {
+      if (followRef.current) {
+        scrollThreadToBottom(performance.now() < smoothFollowUntilRef.current ? "smooth" : "auto")
+      }
+      syncJumpButton()
+    }
+
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onResize) : null
+    observer?.observe(thread)
+    if (list) observer?.observe(list)
+    thread.addEventListener("scroll", onScroll, { passive: true })
+    thread.addEventListener("wheel", onWheel, { passive: true })
+    thread.addEventListener("touchstart", onTouchStart, { passive: true })
+    thread.addEventListener("touchmove", onTouchMove, { passive: true })
+    thread.addEventListener("keydown", onKeyDown)
+    thread.addEventListener("pointerdown", onPointerDown)
+    return () => {
+      observer?.disconnect()
+      thread.removeEventListener("scroll", onScroll)
+      thread.removeEventListener("wheel", onWheel)
+      thread.removeEventListener("touchstart", onTouchStart)
+      thread.removeEventListener("touchmove", onTouchMove)
+      thread.removeEventListener("keydown", onKeyDown)
+      thread.removeEventListener("pointerdown", onPointerDown)
+    }
+  }, [scrollThreadToBottom])
+
+  const jumpToNewest = useCallback(() => {
+    followRef.current = true
+    smoothFollowUntilRef.current = performance.now() + 500
+    setShowJumpButton(false)
+    scrollThreadToBottom("smooth")
+  }, [scrollThreadToBottom])
+
+  // On some layouts (phones) the composer floats over the bottom of the
+  // thread. The thread then reserves exactly that much room at its end, so
+  // the last lines and the answer's actions are never hidden under it.
+  useEffect(() => {
+    const thread = threadRef.current
+    const dock = thread?.parentElement?.querySelector<HTMLElement>(".malik-composer-dock")
+    if (!thread || !dock) return
+    const measure = () => {
+      const overlap = Math.max(0, Math.round(thread.getBoundingClientRect().bottom - dock.getBoundingClientRect().top))
+      thread.style.setProperty("--malik-dock-overlap", `${overlap}px`)
+      if (followRef.current) scrollThreadToBottom("auto")
+    }
+    measure()
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null
+    observer?.observe(dock)
+    observer?.observe(thread)
+    window.addEventListener("resize", measure)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener("resize", measure)
+    }
+  }, [scrollThreadToBottom])
   useEffect(() => {
     setEffectivePlan(userPlan)
     if (!currentUser || currentUser === "User") return
@@ -2244,27 +2455,36 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     setShowAttachMenu(false)
   }
 
-  const handleCopy = async (id: string, text: string) => {
+  // The row callbacks below are stable (useCallback + a ref to the latest
+  // values), so the memoised rows are not re-rendered by every streamed chunk.
+  const copyResetTimerRef = useRef(0)
+  const handleCopy = useCallback(async (id: string, text: string) => {
     try {
       await navigator.clipboard?.writeText(text || "")
       setCopiedId(id)
-      window.setTimeout(() => setCopiedId(null), 1500)
+      window.clearTimeout(copyResetTimerRef.current)
+      copyResetTimerRef.current = window.setTimeout(() => setCopiedId(null), 1600)
     } catch {
       setLocalError("Clipboard blocked. Текст можно выделить и скопировать вручную.")
       window.setTimeout(() => setLocalError(null), 2200)
     }
-  }
+  }, [])
 
-  const handleRegenerate = (messageId: string) => {
-    const index = messages.findIndex((item) => item.id === messageId)
+  const regenerateContextRef = useRef({ messages, onSendMessage, responseDepth })
+  useEffect(() => {
+    regenerateContextRef.current = { messages, onSendMessage, responseDepth }
+  }, [messages, onSendMessage, responseDepth])
+  const handleRegenerate = useCallback((messageId: string) => {
+    const { messages: current, onSendMessage: send, responseDepth: depth } = regenerateContextRef.current
+    const index = current.findIndex((item) => item.id === messageId)
     if (index <= 0) return
     for (let i = index - 1; i >= 0; i -= 1) {
-      if (messages[i].role === "user" && messages[i].content.trim()) {
-        onSendMessage(messages[i].content, [], { responseDepth })
+      if (current[i].role === "user" && current[i].content.trim()) {
+        send(current[i].content, [], { responseDepth: depth })
         return
       }
     }
-  }
+  }, [])
 
   // A document request opens the sheet the moment the answer starts being
   // written, so the reader watches it being written there. Answers that were
@@ -2272,6 +2492,8 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const lastMessage = messages[messages.length - 1]
   const lastMessageId = lastMessage?.id
   const lastMessageStreaming = Boolean(lastMessage?.isStreaming)
+  // The turn being answered right now: its two rows get the entry animation.
+  const liveTurn = Boolean(lastMessage && lastMessage.role === "assistant" && lastMessage.isStreaming)
   useEffect(() => {
     if (!lastMessage || lastMessage.role !== "assistant" || !lastMessage.isStreaming) return
     if (lastMessage.imageConfirmation || lastMessage.generatedMedia) return
@@ -2296,7 +2518,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     ? messages.slice(0, sheetIndex).reverse().find((item) => item.role === "user")?.content || ""
     : ""
 
-  const handleShare = async (text: string) => {
+  const handleShare = useCallback(async (text: string) => {
     const payload = text.trim()
     if (!payload) return
     try {
@@ -2311,11 +2533,13 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       setLocalError("Не удалось поделиться ответом.")
       window.setTimeout(() => setLocalError(null), 1800)
     }
-  }
+  }, [])
 
-  const handleFeedback = (messageId: string, value: "up" | "down") => {
+  const handleFeedback = useCallback((messageId: string, value: "up" | "down") => {
     setFeedbackMap((previous) => ({ ...previous, [messageId]: value }))
-  }
+  }, [])
+
+  const openSheetFor = useCallback((id: string) => setSheet({ id, auto: false }), [])
 
   const handleQuickAction = (prefix: string) => {
     setPrompt((previous) => previous ? `${prefix}: ${previous}` : prefix)
@@ -2483,7 +2707,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
         onConnect={connectAccountTool}
       />
 
-      <div data-message-list className="malik-chat-scroll relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-44 pt-6 md:px-8 md:pb-48 lg:px-10">
+      <div ref={threadRef} data-message-list className="malik-chat-scroll relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-44 pt-6 md:px-8 md:pb-48 lg:px-10">
         <div className="malik-message-list mx-auto flex w-full max-w-[768px] flex-col gap-8 sm:gap-10">
           {messages.length === 0 ? (
             projectName ? (
@@ -2520,9 +2744,11 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
             <>
               <div className="malik-date-chip">Сегодня</div>
               {messages.map((message, index) => (
-                <MessageBubble
+                <MemoMessageBubble
                   key={message.id}
                   message={message}
+                  isLatest={index === messages.length - 1}
+                  freshTurn={liveTurn && index >= messages.length - 2}
                   // The question this answer replies to. A re-check searches
                   // for the flagged figure inside its own subject, not on its
                   // own — "200 тысяч" alone returns a dictionary.
@@ -2543,7 +2769,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                   imageCredits={imageCredits}
                   onOpenActionTarget={onOpenActionTarget}
                   videoAnalysis={activeVideoAnalysis}
-                  onOpenSheet={(id) => setSheet({ id, auto: false })}
+                  onOpenSheet={openSheetFor}
                 />
               ))}
             </>
@@ -2553,6 +2779,21 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       </div>
 
       <div data-composer className="malik-composer-dock relative z-20 w-full shrink-0 bg-transparent px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 md:px-8 md:pb-6 lg:px-10">
+        {/* Round "to the newest message" button. It lives in the dock (always
+            positioned on every layout) and floats just above it, centred on
+            the thread; it only shows once the reader is well above the end. */}
+        <button
+          type="button"
+          className="malik-jump-bottom"
+          data-visible={showJumpButton && messages.length > 0 ? "1" : "0"}
+          onClick={jumpToNewest}
+          aria-label="Прокрутить к последнему сообщению"
+          title="К последнему сообщению"
+          aria-hidden={!(showJumpButton && messages.length > 0)}
+          tabIndex={showJumpButton && messages.length > 0 ? 0 : -1}
+        >
+          <ArrowDown aria-hidden="true" />
+        </button>
         <div
           className={cn("malik-composer-panel chat-composer relative mx-auto w-full max-w-[768px] rounded-[1.55rem] border border-white/10 bg-[#111112] p-3 transition sm:p-4", dragActive && "ring-2 ring-white/35")}
           onDragEnter={(event) => { event.preventDefault(); setDragActive(true) }}

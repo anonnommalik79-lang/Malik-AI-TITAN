@@ -212,7 +212,15 @@ function isDashboardBadText(value: string) {
   // inspect prose only or a valid downloadable answer can disappear entirely.
   const prose = text.replace(/```[\s\S]*?(?:```|$)/g, "")
   const commaCount = (prose.match(/,/g) || []).length
+  // Comma *spam* is commas with almost nothing between them. A long, normal
+  // Russian answer easily has 25+ commas (about one per eight words), and the
+  // old absolute limit silently wiped every detailed answer \u2014 mid-stream too.
+  const wordCount = (prose.match(/[\p{L}\p{N}]+/gu) || []).length
+  const commaSpam = commaCount >= 25 && commaCount > wordCount * 0.6
+  // Same idea for the "per-per-per" loop: "performance", "percent" and
+  // "period" are ordinary words in a long English answer.
   const perSpamCount = (prose.match(/\bper[-\w]*/gi) || []).length
+  const perSpam = perSpamCount >= 5 && perSpamCount > wordCount * 0.2
   const badMarks = [
     "\u00D0", "\u00D1", "\u00E2",
     "\u0420\u045F", "\u0420\u0491", "\u0420\u0451", "\u0420\u00B0", "\u0420\u00B5", "\u0421\u0453", "\u0421\u201A", "\u0421\u0152",
@@ -225,8 +233,8 @@ function isDashboardBadText(value: string) {
     /CURRENT\s+(USER|TIME|DATE|YEAR|LANGUAGE|DOMAIN|CONTEXT):/i.test(text) ||
     /^\s*(START:|BEGIN:|END:)\s*$/i.test(text) ||
     /^[,;:]/.test(text.trim()) ||
-    commaCount >= 25 ||
-    perSpamCount >= 5
+    commaSpam ||
+    perSpam
   )
 }
 
@@ -234,6 +242,9 @@ function cleanDashboardAIText(value: string) {
   const text = String(value || "").trim()
   return isDashboardBadText(text) ? "" : text
 }
+
+/** `progress` events with one of these kinds belong to a real web search. */
+const RESEARCH_PROGRESS_KINDS = new Set(["plan", "search", "source", "reading", "done", "error"])
 
 interface Message {
   id: string
@@ -249,6 +260,8 @@ interface Message {
   research?: MalikMessageResearch
   actionPlan?: MalikActionPlan
   attachments?: ChatAttachment[]
+  /** Short server status ("Думает…", "Пишет ответ…") shown while the turn streams. */
+  liveStatus?: string
 }
 
 type ImageResolution = "1K" | "2K" | "4K"
@@ -5160,20 +5173,39 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     }
   }, [initialView])
 
+  const lastDashboardPersistRef = useRef(0)
   useEffect(() => {
     if (!storageRestored) return
-    try {
-      persistDashboardState(DASHBOARD_STORAGE_KEY, {
-        chats,
-        activeChatId,
-        messages,
-        generatedCode,
-        activeView,
-        selectedModelId,
-      })
-    } catch (err) {
-      console.warn("[DASHBOARD SAVE ERROR]", err)
+    const save = () => {
+      lastDashboardPersistRef.current = Date.now()
+      try {
+        persistDashboardState(DASHBOARD_STORAGE_KEY, {
+          chats,
+          activeChatId,
+          messages,
+          generatedCode,
+          activeView,
+          selectedModelId,
+        })
+      } catch (err) {
+        console.warn("[DASHBOARD SAVE ERROR]", err)
+      }
     }
+    // A live answer changes `messages` many times a second. Serialising the
+    // whole history on every frame would stall the phone, so while a turn
+    // streams the snapshot is written at most once a second (the latest state
+    // always lands: the trailing timer carries it). Settled state saves at once.
+    if (!messages.some((message) => message.isStreaming)) {
+      save()
+      return
+    }
+    const wait = 1000 - (Date.now() - lastDashboardPersistRef.current)
+    if (wait <= 0) {
+      save()
+      return
+    }
+    const timer = window.setTimeout(save, wait)
+    return () => window.clearTimeout(timer)
   }, [storageRestored, chats, activeChatId, messages, generatedCode, activeView, selectedModelId])
 
   // Image jobs live on the server and are keyed to the assistant card. This
@@ -6134,6 +6166,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
               content: safeContent,
               generatedCode: openPreview ? finalCode : undefined,
               isStreaming: false,
+              liveStatus: undefined,
               intentType: openPreview ? "project" : "chat",
               research: finalResearch || m.research,
               actionPlan: finalActionPlan || m.actionPlan,
@@ -6151,29 +6184,35 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       setIsGeneratingTerminal(false)
     }
 
+    const finalAssistant: Message = {
+      ...assistantMessage,
+      content: safeContent,
+      generatedCode: openPreview ? finalCode : undefined,
+      isStreaming: false,
+      liveStatus: undefined,
+      intentType: openPreview ? "project" : "chat",
+      research: finalResearch || assistantMessage.research,
+      actionPlan: finalActionPlan || assistantMessage.actionPlan,
+    }
     setChats(prev =>
-      prev.map(c =>
-        c.id === chatId
-          ? {
-              ...c,
-              status: "draft",
-              title: c.messages.length === 0 ? title : c.title,
-              messages: [
-                ...c.messages,
-                userMessage,
-                {
-                  ...assistantMessage,
-                  content: safeContent,
-                  generatedCode: openPreview ? finalCode : undefined,
-                  isStreaming: false,
-                  intentType: openPreview ? "project" : "chat",
-                  research: finalResearch || assistantMessage.research,
-                  actionPlan: finalActionPlan || assistantMessage.actionPlan,
-                },
-              ],
-            }
-          : c
-      )
+      prev.map(c => {
+        if (c.id !== chatId) return c
+        // The user turn and the streaming placeholder were already pushed when
+        // the message was sent. Replace the placeholder in place: appending a
+        // second copy left a forever-"thinking" empty answer in the history,
+        // which reappeared (with its timer) whenever the chat was reopened.
+        const nextMessages = [...c.messages]
+        if (!nextMessages.some((message) => message.id === userMessage.id)) nextMessages.push(userMessage)
+        const assistantIndex = nextMessages.findIndex((message) => message.id === assistantMessage.id)
+        if (assistantIndex >= 0) nextMessages[assistantIndex] = finalAssistant
+        else nextMessages.push(finalAssistant)
+        return {
+          ...c,
+          status: "draft",
+          title: c.messages.length === 0 ? title : c.title,
+          messages: nextMessages,
+        }
+      })
     )
   }
 
@@ -6541,6 +6580,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }
 
   let finalResearch = assistantMessage.research
+  // The part of the answer the reader has already watched arrive. If the turn
+  // then fails, the error is added under it instead of wiping it.
+  let liveShownText = ""
+  let stopLive: () => void = () => {}
 
   try {
     dashboardEventBus.emit({
@@ -6549,6 +6592,19 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       view: activeViewRef.current,
       payload: { chatId, mode, generationKind: routeDecision.generationKind },
     })
+
+    // Server phase updates ("Думает…", "Пишет ответ…") carry no research
+    // `kind`. They are a status line for the thinking indicator, not a web
+    // search, so they must not switch the turn into the research timeline.
+    let lastLiveStatus = ""
+    const applyLiveStatus = (value: unknown) => {
+      const text = String(value || "").replace(/\s+/g, " ").trim().slice(0, 90)
+      if (!text || text === lastLiveStatus) return
+      lastLiveStatus = text
+      setMessages((current) => current.map((message) =>
+        message.id === assistantMessage.id && message.isStreaming ? { ...message, liveStatus: text } : message
+      ))
+    }
 
     const applyResearchProgress = (progress: MalikResearchProgress) => {
       const source = reviveWebSource(progress.source || progress)
@@ -6664,7 +6720,54 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     }
 
     let fullText = ""
+    // True once the server said the answer is complete (`done`). A stream that
+    // simply stops without it was cut on the way (proxy timeout, network).
+    let sawDone = false
     const responseType = response.headers.get("content-type") || ""
+
+    // Live rendering: the answer is written into the message as the chunks
+    // arrive — at most one React update per animation frame, and no more
+    // often than every ~48ms, because every update re-renders the dashboard.
+    // Project builds keep their previous behaviour (terminal + preview).
+    const liveRender = !isProjReq
+    let liveFrame = 0
+    let liveTimer = 0
+    let liveClosed = false
+    let lastLiveFlushAt = 0
+    const flushLive = () => {
+      liveFrame = 0
+      if (liveClosed) return
+      // Same light cleaning as the final answer: it only trims, or hides text
+      // that is mojibake/garbage. Partial Markdown and open code fences stay
+      // as they are; MalikMarkdown renders them while they complete.
+      const visible = cleanDashboardAIText(fullText)
+      if (!visible || visible === liveShownText) return
+      liveShownText = visible
+      lastLiveFlushAt = performance.now()
+      setStreamingText(visible)
+      setMessages((current) => current.map((message) =>
+        message.id === assistantMessage.id && message.isStreaming ? { ...message, content: visible } : message
+      ))
+    }
+    const scheduleLive = () => {
+      if (!liveRender || liveClosed || liveFrame || liveTimer) return
+      const wait = 48 - (performance.now() - lastLiveFlushAt)
+      if (wait > 0) {
+        liveTimer = window.setTimeout(() => {
+          liveTimer = 0
+          if (!liveClosed && !liveFrame) liveFrame = window.requestAnimationFrame(flushLive)
+        }, wait)
+        return
+      }
+      liveFrame = window.requestAnimationFrame(flushLive)
+    }
+    stopLive = () => {
+      liveClosed = true
+      if (liveFrame) window.cancelAnimationFrame(liveFrame)
+      if (liveTimer) window.clearTimeout(liveTimer)
+      liveFrame = 0
+      liveTimer = 0
+    }
 
     if (responseType.includes("text/event-stream") && response.body) {
       const reader = response.body.getReader()
@@ -6682,7 +6785,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         try { payload = JSON.parse(rawData) } catch { return }
 
         if (eventName === "progress" || payload?.type === "progress") {
-          applyResearchProgress(payload as MalikResearchProgress)
+          if (RESEARCH_PROGRESS_KINDS.has(String(payload?.kind || ""))) {
+            applyResearchProgress(payload as MalikResearchProgress)
+          } else if (!fullText) {
+            applyLiveStatus(payload?.text)
+          }
           return
         }
         if (eventName === "content" || payload?.type === "content") {
@@ -6691,9 +6798,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           const nextText = String(chunk)
           // Providers differ: some send a cumulative payload, others deltas.
           fullText = nextText.startsWith(fullText) ? nextText : `${fullText}${nextText}`
+          scheduleLive()
           return
         }
         if (eventName === "done" || payload?.type === "done") {
+          sawDone = true
           const sources = Array.isArray(payload?.sources)
             ? payload.sources.map(reviveWebSource).filter(Boolean).slice(0, 12) as MalikWebSource[]
             : finalResearch?.sources || []
@@ -6732,12 +6841,27 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       }
       buffer += decoder.decode()
       if (buffer.trim()) consumeEvent(buffer)
+      stopLive()
       fullText = cleanDashboardAIText(fullText)
     } else {
+      stopLive()
+      // A plain (non-SSE) reply is complete by definition.
+      sawDone = true
       fullText = cleanDashboardAIText(await response.text())
     }
 
-    if (fullText && !isProjReq) {
+    const connectionCut = !sawDone
+    // The Stop button closes the stream itself (after its own marker), which
+    // is not a broken connection.
+    const stoppedByUser = /Остановлено пользователем\.?\s*$/u.test(fullText)
+    if (connectionCut && fullText && !stoppedByUser && !isProjReq) {
+      fullText = `${fullText}\n\n_Соединение прервалось — ответ может быть неполным. Нажмите «Перегенерировать», чтобы повторить._`
+    }
+
+    // Text that already streamed in live needs no second, simulated reveal.
+    // The burst reveal stays for answers that arrived as one block at the end
+    // (or while the tab was hidden and no frame could paint).
+    if (fullText && !isProjReq && !liveShownText) {
       await revealAssistantTextQuickly(fullText, (visibleText) => {
         setStreamingText(visibleText)
         setMessages((current) => current.map((message) =>
@@ -6762,7 +6886,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       setIsGeneratingTerminal(false)
 
       finalizeAssistant(
-        fullText || `${getMalikModel(selectedModelId).label} не вернула готовый ответ. Попробуйте ещё раз или выберите другую модель.`,
+        fullText || (connectionCut
+          ? "Соединение прервалось до ответа. Нажмите «Перегенерировать», чтобы повторить."
+          : `${getMalikModel(selectedModelId).label} не вернула готовый ответ. Попробуйте ещё раз или выберите другую модель.`),
         undefined,
         finalResearch,
         true,
@@ -6796,6 +6922,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     })
     finalizeAssistant(cleanDashboardAIText(cleanText || fullText), code, finalResearch)
   } catch (error) {
+    stopLive()
     console.error("Streaming error:", error)
     dashboardEventBus.emit({
       type: "runtime:error",
@@ -6803,9 +6930,18 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       view: activeViewRef.current,
       payload: error instanceof Error ? error.message : error,
     })
-    const errorMessage = error instanceof Error && error.message
-      ? error.message
-      : `${getMalikModel(selectedModelId).label} временно недоступна. Попробуйте ещё раз или выберите другую модель.`
+    // fetch()/reader.read() reject with a TypeError when the connection drops
+    // ("Failed to fetch", "network error", "Load failed"). That is not a model
+    // failure, so it gets the plain connection message instead.
+    const connectionDropped = error instanceof TypeError
+      && /network|failed to fetch|load failed|fetch failed|terminated|connection|ERR_/i.test(error.message)
+    const errorMessage = connectionDropped
+      ? (liveShownText
+          ? "Соединение прервалось — ответ может быть неполным. Нажмите «Перегенерировать», чтобы повторить."
+          : "Соединение прервалось до ответа. Нажмите «Перегенерировать», чтобы повторить.")
+      : error instanceof Error && error.message
+        ? error.message
+        : `${getMalikModel(selectedModelId).label} временно недоступна. Попробуйте ещё раз или выберите другую модель.`
     setErrorNotification(errorMessage)
 
     const elapsed = Date.now() - startTime
@@ -6815,7 +6951,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
     setIsGeneratingTerminal(false)
 
-    finalizeAssistant(errorMessage, undefined, finalResearch ? { ...finalResearch, status: "error", tookMs: Date.now() - finalResearch.startedAt } : undefined, true)
+    // Keep what the reader already watched arrive; the failure goes under it.
+    const failedText = liveShownText
+      ? `${liveShownText}\n\n> ${errorMessage.replace(/\s+/g, " ").trim()}`
+      : errorMessage
+    finalizeAssistant(failedText, undefined, finalResearch ? { ...finalResearch, status: "error", tookMs: Date.now() - finalResearch.startedAt } : undefined, true)
   } finally {
     setIsLoading(false)
     setStreamingText("")

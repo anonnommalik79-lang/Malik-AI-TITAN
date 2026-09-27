@@ -1,4 +1,5 @@
 import type { MalikModelId } from "@/lib/ai/malik-models"
+import { answerBudget } from "@/lib/ai/answer-budget"
 import type { MalikResearchProgress, MalikWebSource } from "@/lib/ai/web-research-types"
 import { auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit } from "@/lib/ai/fact-audit"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
@@ -1031,7 +1032,7 @@ export async function malikGodAnswer(
       systemPrompt: systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata),
       history,
       attachments,
-      maxTokens: Number(body?.maxTokens) || Math.max(brain.outputTokenTarget, powerOutputTokens),
+      maxTokens: answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)),
       temperature: typeof body?.temperature === "number" ? body.temperature : brain.temperature,
       reasoningEffort: brain.depth === "instant" ? "low" : brain.depth === "balanced" ? "medium" : "high",
       allowCatalog: selection.allowCatalog === true,

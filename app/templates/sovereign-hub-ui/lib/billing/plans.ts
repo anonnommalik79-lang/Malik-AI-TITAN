@@ -8,7 +8,9 @@ export const PUBLIC_PLANS = [
     price: "0",
     description: "Для знакомства и повседневных задач.",
     features: [
-      `${FREE_MALIK_MODELS.length} бесплатных моделей/маршрутов в селекторе`,
+      FREE_MALIK_MODELS.length === 1
+        ? "MalikLLM MAX — все модели и API в одной, бесплатно"
+        : `${FREE_MALIK_MODELS.length} бесплатных моделей/маршрутов в селекторе`,
       "Веб-поиск по запросу с источниками",
       "История чатов и контекст диалога",
       "Проекты и готовые шаблоны",
@@ -22,7 +24,7 @@ export const PUBLIC_PLANS = [
     description: "Больше моделей для сложных идей и проектов.",
     features: [
       "Расширенные лимиты Malik AI",
-      `${PRO_MALIK_MODELS.length} Pro-моделей: Claude, GPT, DeepSeek, Gemini и другие`,
+      `Выбор любой из ${PRO_MALIK_MODELS.length} моделей по отдельности: Gemini, Qwen, DeepSeek, GLM, Kimi и другие`,
       "Всё, что включено в бесплатный тариф",
       "MalikCoder 1.0 для продвинутого кода",
       "Vision-модели для анализа изображений",

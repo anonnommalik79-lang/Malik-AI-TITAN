@@ -503,6 +503,9 @@ async function runSelectedAnswer(
           maxTokens: Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0
             ? Math.min(Math.floor(requestedMaxTokens), maxOutputTokens)
             : maxOutputTokens,
+          // The answer may grow past the chat's depth setting when the task
+          // needs it, but never past the account's remaining allowance.
+          maxTokensCap: maxOutputTokens,
         }
       : executionBody
     const selectedModelId = selection?.modelId || DEFAULT_MALIK_MODEL_ID
@@ -713,7 +716,9 @@ function liveSseResponse(
           phase: "generating",
           text: isProjectBuildRequest(body)
             ? "Malik AI продолжает собирать и проверять проект…"
-            : "Malik AI продолжает писать полный ответ…",
+            : streamedAny
+              ? "Malik AI продолжает писать полный ответ…"
+              : "Подключаю самую сильную свободную модель…",
         })
       }, 15_000)
 

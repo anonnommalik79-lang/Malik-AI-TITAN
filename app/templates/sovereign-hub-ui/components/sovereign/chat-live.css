@@ -1,0 +1,189 @@
+/*
+ * The chat, alive: the answer is written in front of the reader.
+ *
+ * - the turn that was just sent rises into place;
+ * - while the answer streams, a soft dot pulses at the end of the last line
+ *   and each new paragraph, list item or code block fades in (only the new
+ *   one — blocks already on screen never re-animate);
+ * - the actions under an answer fade in when it is complete; older answers
+ *   show them on hover (on a device with a mouse);
+ * - a round arrow brings the reader back to the newest line.
+ *
+ * Black and white only. Everything is off for prefers-reduced-motion.
+ */
+
+#malik-root .malik-chat-fullwidth .malik-live-enter {
+  animation: malik-live-rise 0.34s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+#malik-root .malik-chat-fullwidth .malik-message-row-user.malik-live-enter {
+  animation-duration: 0.28s;
+}
+
+@keyframes malik-live-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The mark beside a thinking answer leaves as soon as words appear, so the
+   finished answer does not jump sideways when the turn ends. */
+#malik-root .malik-chat-fullwidth .malik-live-writing .malik-ai-avatar {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------ streaming */
+
+#malik-root .malik-chat-fullwidth .malik-md.malik-streaming > :last-child {
+  animation: malik-live-block 0.24s ease-out both;
+}
+
+@keyframes malik-live-block {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+
+#malik-root .malik-chat-fullwidth .malik-md.malik-streaming > .malik-md-p:last-child::after,
+#malik-root .malik-chat-fullwidth .malik-md.malik-streaming > .malik-md-h:last-child::after,
+#malik-root .malik-chat-fullwidth .malik-md.malik-streaming > .malik-md-quote:last-child::after,
+#malik-root .malik-chat-fullwidth .malik-md.malik-streaming > .malik-md-ul:last-child > li:last-child::after,
+#malik-root .malik-chat-fullwidth .malik-md.malik-streaming > .malik-md-ol:last-child > li:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 0.62em;
+  height: 0.62em;
+  margin-left: 0.3em;
+  border-radius: 999px;
+  background: #f4f4f5;
+  vertical-align: -0.02em;
+  animation: malik-live-caret 1.05s ease-in-out infinite;
+}
+
+/* After a code block or a table the dot sits on its own line below it. */
+#malik-root .malik-chat-fullwidth .malik-md.malik-streaming > :last-child:not(.malik-md-p):not(.malik-md-h):not(.malik-md-quote):not(.malik-md-ul):not(.malik-md-ol)::after {
+  content: "";
+  display: block;
+  width: 0.62em;
+  height: 0.62em;
+  margin-top: 0.7em;
+  border-radius: 999px;
+  background: #f4f4f5;
+  animation: malik-live-caret 1.05s ease-in-out infinite;
+}
+
+@keyframes malik-live-caret {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.82); }
+}
+
+/* The server's own words while the answer is being prepared, when the
+   animated widget is not attached (e.g. before it scans the page). */
+#malik-root .malik-chat-fullwidth .malik-thinking-status {
+  margin-left: 10px;
+  color: #8b8b92;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+/* -------------------------------------------------------------- actions */
+
+#malik-root .malik-chat-fullwidth .malik-message-actions {
+  animation: malik-live-actions 0.4s ease-out both;
+}
+
+@keyframes malik-live-actions {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #malik-root .malik-chat-fullwidth .malik-message-row-assistant .malik-message-actions:not(.is-latest) {
+    opacity: 0;
+    animation: none;
+    transition: opacity 0.18s ease;
+  }
+  #malik-root .malik-chat-fullwidth .malik-message-row-assistant:hover .malik-message-actions,
+  #malik-root .malik-chat-fullwidth .malik-message-row-assistant .malik-message-actions:focus-within {
+    opacity: 1;
+  }
+}
+
+#malik-root .malik-chat-fullwidth .malik-copy-action.is-copied {
+  color: #fff;
+}
+
+#malik-root .malik-chat-fullwidth .malik-copy-action__label {
+  font-size: 12px;
+  font-weight: 600;
+  animation: malik-live-block 0.2s ease-out both;
+}
+
+#malik-root .malik-chat-fullwidth .malik-feedback-action.is-active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ------------------------------------------------------- jump to newest */
+
+#malik-root .malik-chat-fullwidth .malik-jump-bottom {
+  position: absolute;
+  left: 50%;
+  top: -50px;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(22, 22, 24, 0.94);
+  color: #fff;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 8px) scale(0.92);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.2s ease;
+}
+
+#malik-root .malik-chat-fullwidth .malik-jump-bottom[data-visible="1"] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0) scale(1);
+}
+
+#malik-root .malik-chat-fullwidth .malik-jump-bottom:hover {
+  background: #2a2a2d;
+}
+
+#malik-root .malik-chat-fullwidth .malik-jump-bottom svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* ------------------------------------------------ room under the thread */
+
+/* Phones: when the composer floats over the thread, the thread keeps that
+   much room at its end (measured in chat-view as --malik-dock-overlap). */
+@media (max-width: 767px) {
+  html body #malik-root .malik-dashboard-shell .malik-chat-fullwidth .malik-chat-scroll {
+    padding-bottom: calc(var(--malik-dock-overlap, 0px) + 14px) !important;
+    scroll-padding-bottom: calc(var(--malik-dock-overlap, 0px) + 14px) !important;
+  }
+}
+
+/* ------------------------------------------------------------- reduced */
+
+@media (prefers-reduced-motion: reduce) {
+  #malik-root .malik-chat-fullwidth .malik-live-enter,
+  #malik-root .malik-chat-fullwidth .malik-md.malik-streaming > :last-child,
+  #malik-root .malik-chat-fullwidth .malik-md.malik-streaming *::after,
+  #malik-root .malik-chat-fullwidth .malik-message-actions,
+  #malik-root .malik-chat-fullwidth .malik-copy-action__label {
+    animation: none !important;
+  }
+  #malik-root .malik-chat-fullwidth .malik-jump-bottom {
+    transition: none;
+  }
+}

@@ -11,12 +11,12 @@ import { hasHiddenGeminiMedia, runHiddenGeminiMultimodal } from "@/lib/server/hi
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
 import { analyzeMalikBrainV1 } from "@/lib/ai/brain-v1"
 
-type HistoryMessage = { role: "user" | "assistant"; content: string }
-type MalikAttachment = { kind?: string; mime?: string; base64?: string; url?: string; name?: string }
+export type HistoryMessage = { role: "user" | "assistant"; content: string }
+export type MalikAttachment = { kind?: string; mime?: string; base64?: string; url?: string; name?: string }
 type TextPart = { type: "text"; text: string }
 type ImagePart = { type: "image_url"; image_url: { url: string } }
-type ProviderMessage = { role: "system" | "user" | "assistant"; content: string | Array<TextPart | ImagePart> }
-type StrictMalikResult = {
+export type ProviderMessage = { role: "system" | "user" | "assistant"; content: string | Array<TextPart | ImagePart> }
+export type StrictMalikResult = {
   content: string
   provider: string
   model: string
@@ -25,7 +25,7 @@ type StrictMalikResult = {
   usage?: any
 }
 
-type ProviderRuntime = {
+export type ProviderRuntime = {
   url: string
   key: string
   model: string
@@ -100,13 +100,13 @@ function env(name: string) {
   return typeof value === "string" ? value.trim() : ""
 }
 
-function isCodeRequest(prompt: string) {
+export function isCodeRequest(prompt: string) {
   const value = String(prompt || "")
   return /(код|code|html|css|javascript|typescript|python|react|next\.?js|node\.?js|sql|api|index\.html|component|компонент|функц|скрипт|сайт|приложен|программ|алгоритм|бот|презентац|слайд|presentation|slides?|csv|openapi|mermaid|debug|баг|ошибк|fix|build|repository|репозитор|class\s|function\s|const\s|let\s|import\s|```)/i.test(value)
 }
 
 
-function isFastChatRequest(prompt: string, attachments?: MalikAttachment[]) {
+export function isFastChatRequest(prompt: string, attachments?: MalikAttachment[]) {
   const value = String(prompt || "").trim()
   if (!value || attachments?.length || isCodeRequest(value)) return false
   if (value.length > 320 || value.split(/\r?\n/).length > 4) return false
@@ -141,7 +141,7 @@ function systemPrompt(model: MalikModelDefinition, basePrompt: string, publicMod
   ].join("\n")
 }
 
-function buildMessages(input: {
+export function buildMessages(input: {
   model: MalikModelDefinition
   prompt: string
   systemPrompt: string
@@ -196,7 +196,7 @@ function clampTokens(value: number, fallback: number, max = 65_536) {
   return Math.min(max, Math.max(1, Math.floor(safe)))
 }
 
-function estimateProviderInputTokens(messages: ProviderMessage[]) {
+export function estimateProviderInputTokens(messages: ProviderMessage[]) {
   // Conservative estimate for code + multilingual prompts. We use it only to
   // avoid sending requests that cannot fit a provider's per-minute budget.
   const chars = JSON.stringify(messages).length
@@ -229,7 +229,7 @@ function safeProviderTokens(model: MalikModelDefinition, requested: number, code
   return Math.min(requested, 10_000)
 }
 
-function providerRuntime(
+export function providerRuntime(
   model: MalikModelDefinition,
   requestedTokens?: number,
   requestedTemperature?: number,
@@ -403,13 +403,13 @@ function providerRuntime(
   return { url: `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/v1/chat/completions`, key, model: model.providerModel, stream: false, maxTokens: commonTokens, temperature: commonTemperature, timeoutMs: commonTimeout }
 }
 
-function contentPart(value: unknown) {
+export function contentPart(value: unknown) {
   if (typeof value === "string") return value
   if (!Array.isArray(value)) return ""
   return value.map((part) => typeof part === "string" ? part : part && typeof part === "object" && "text" in part ? String((part as any).text || "") : "").join("")
 }
 
-function contentFrom(payload: any) {
+export function contentFrom(payload: any) {
   const primary = contentPart(payload?.choices?.[0]?.message?.content)
   if (primary.trim()) return primary.trim()
   for (const candidate of [payload?.result?.response, payload?.result?.text, payload?.response, payload?.output_text]) {
@@ -419,7 +419,7 @@ function contentFrom(payload: any) {
   return ""
 }
 
-function visibleFinalText(value: string) {
+export function visibleFinalText(value: string) {
   return String(value || "")
     .replace(/<think>[\s\S]*?<\/think>/gi, "\n")
     .replace(/<think>[\s\S]*$/gi, "\n")
@@ -428,7 +428,7 @@ function visibleFinalText(value: string) {
     .trim()
 }
 
-function codeAnswerNeedsMore(value: string, prompt: string) {
+export function codeAnswerNeedsMore(value: string, prompt: string) {
   const text = String(value || "").trim()
   if (!text) return true
   if ((text.match(/```/g) || []).length % 2 === 1) return true
@@ -486,7 +486,7 @@ async function readStream(response: Response, onToken?: (chunk: string) => void)
   return { content: content.trim(), usage, finishReason }
 }
 
-async function upstreamError(response: Response) {
+export async function upstreamError(response: Response) {
   const text = await response.text().catch(() => "")
   if (!text) return `HTTP ${response.status}`
   try {
@@ -566,7 +566,7 @@ function setCooldown(model: MalikModelDefinition, durationMs: number, reason: st
   console.warn("[MALIK_MODEL_ROUTE] cooldown", JSON.stringify({ modelId: model.id, provider: model.provider, providerModel: model.providerModel, durationMs: safe, reason }))
 }
 
-function retryAfterMs(response: Response, detail: string) {
+export function retryAfterMs(response: Response, detail: string) {
   const raw = response.headers.get("retry-after")?.trim() || ""
   if (raw) {
     const seconds = Number(raw)
@@ -730,7 +730,7 @@ function googleNativeParts(content: ProviderMessage["content"]) {
     .filter(Boolean)
 }
 
-function googleNativeBody(messages: ProviderMessage[], runtime: ProviderRuntime) {
+export function googleNativeBody(messages: ProviderMessage[], runtime: ProviderRuntime) {
   const systemText = messages
     .filter((message) => message.role === "system")
     .map((message) => contentPart(message.content))
@@ -757,7 +757,7 @@ function providerAttempts(model: MalikModelDefinition) {
   return 2
 }
 
-function providerSpecificBody(
+export function providerSpecificBody(
   model: MalikModelDefinition,
   runtime: ProviderRuntime,
   fastMode = false,
@@ -781,7 +781,7 @@ function providerSpecificBody(
   return {}
 }
 
-function continuationPrompt(originalPrompt: string, content: string) {
+export function continuationPrompt(originalPrompt: string, content: string) {
   const tail = content.length > 12_000 ? content.slice(-12_000) : content
   return [
     "Continue the coding answer exactly where it stopped.",
@@ -794,12 +794,12 @@ function continuationPrompt(originalPrompt: string, content: string) {
   ].join("\n")
 }
 
-function wantsLargeOutput(prompt: string, requestedTokens?: number) {
+export function wantsLargeOutput(prompt: string, requestedTokens?: number) {
   return Number(requestedTokens || 0) >= 12_000
     || /(очень\s+длинн|огромн.*ответ|полный.*отч[её]т|не\s+обрезай|large\s+output|very\s+long\s+answer|full\s+report|do\s+not\s+truncate|128k)/iu.test(prompt)
 }
 
-function longOutputContinuationPrompt(originalPrompt: string, content: string) {
+export function longOutputContinuationPrompt(originalPrompt: string, content: string) {
   const tail = content.length > 16_000 ? content.slice(-16_000) : content
   return [
     "Continue the previous answer from the exact stopping point.",
@@ -836,6 +836,39 @@ export async function runStrictMalikModel(input: {
   }
 
   const model = getMalikModel(input.modelId)
+
+  // MalikLLM MAX and models picked by name run on the streaming engine:
+  // every key of every model is a lane, lanes race, and a lane that stalls
+  // is replaced in seconds instead of minutes. Internal single-model calls
+  // (allowFallback: false) keep the direct path below.
+  if (options.allowFallback !== false && !options.continuationDepth) {
+    const engine = await import("./malik-max-engine")
+    const engineInput = {
+      prompt: input.prompt,
+      systemPrompt: input.systemPrompt,
+      history: input.history,
+      attachments: input.attachments,
+      maxTokens: input.maxTokens,
+      temperature: input.temperature,
+      reasoningEffort: input.reasoningEffort,
+      allowCatalog: input.allowCatalog,
+      onToken: input.onToken,
+    }
+    if (model.id === "malik-max") return engine.runMalikMax(engineInput)
+    if (model.provider !== "malik-orchestrator") {
+      let wrote = false
+      try {
+        const result = await engine.runSelectedModel({ ...engineInput, onToken: (chunk: string) => { wrote = true; input.onToken?.(chunk) } }, model)
+        return { ...result, selectedModelId: model.id }
+      } catch (error) {
+        if (wrote) throw error
+        console.warn("[MALIK_MODEL_ROUTE] selected model unavailable, MAX answers", model.id, error instanceof Error ? error.message : String(error))
+      }
+      const rescued = await engine.runMalikMax({ ...engineInput, publicLabel: model.label })
+      return { ...rescued, selectedModelId: model.id }
+    }
+  }
+
   const started = Date.now()
   let streamedAny = false
   const emitToken = (chunk: string) => {

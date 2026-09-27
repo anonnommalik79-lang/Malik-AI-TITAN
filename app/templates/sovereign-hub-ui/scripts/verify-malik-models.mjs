@@ -31,11 +31,13 @@ assert.deepEqual(
   GOOGLE_AI_POOL_MODELS.map((model) => model.providerModel),
   ["gemini-3.6-flash", "gemini-3.5-flash", "gemma-4-26b-a4b-it", "gemma-4-31b-it", "gemini-3-flash-preview", "gemini-flash-lite-latest"],
 )
-assert.ok(GOOGLE_AI_POOL_MODELS.every((model) => model.provider === "google-ai" && model.brand === "google" && model.tier === "free"))
+assert.ok(GOOGLE_AI_POOL_MODELS.every((model) => model.provider === "google-ai" && model.brand === "google" && model.tier === "pro"))
 
 assert.equal(PUBLIC_MALIK_MODELS.length, 131, "Selector must expose MAX + 6 Google AI entries + 123 router text entries + LLM7 Default")
-assert.equal(FREE_MALIK_MODELS.length, 55, "Free selector must expose MAX + 6 Google AI entries + 47 verified free routes + LLM7 Default")
-assert.equal(PRO_MALIK_MODELS.length, 76, "Provider catalog routes must be grouped as MalikAI Plus models")
+// Product rule: MalikLLM MAX is the one free model (it combines every
+// provider). Every other model is MalikAI Plus.
+assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id), ["malik-max"], "Only MalikLLM MAX is free")
+assert.equal(PRO_MALIK_MODELS.length, 130, "Every other public model is grouped as MalikAI Plus")
 assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, MALIK_MODELS.length, "Model IDs must be unique")
 
 for (const model of FREE_MALIK_MODELS) {
@@ -46,7 +48,7 @@ for (const model of FREE_MALIK_MODELS) {
 for (const model of PRO_MALIK_MODELS) {
   assert.equal(model.hidden, undefined)
   assert.equal(model.tier, "pro")
-  assert.equal(model.access, "catalog")
+  assert.ok(model.access === "catalog" || model.access === "free")
   assert.equal(canUseMalikModel(model.id, "free"), false, `${model.id} must be locked on Free`)
   assert.equal(canUseMalikModel(model.id, "pro"), true, `${model.id} must unlock on MalikAI Plus`)
   assert.equal(canUseMalikModel(model.id, "owner"), true, `${model.id} must unlock for owner`)
@@ -72,5 +74,7 @@ assert.equal(canUseMalikModel(llm7Sol.id, "pro"), true)
 const naraNemotron = getMalikModel("router:nara:nemotron-3-ultra-free")
 assert.equal(naraNemotron.label, "Nemotron 3 Ultra Free")
 assert.equal(naraNemotron.access, "free")
+assert.equal(naraNemotron.tier, "pro", "Free provider routes are still MalikAI Plus picks; free users get them through MAX")
+assert.equal(canUseMalikModel("malik-max", "free"), true)
 
 console.log(`Verified ${PUBLIC_MALIK_MODELS.length} public text choices, ${MAX_ROUTER_MODEL_IDS.length} MAX failover lanes and 138 router catalogue entries.`)

@@ -72,7 +72,9 @@ async function handlePOST(request: Request) {
 
     // Only a server-verified owner session receives this context. Client body
     // fields such as email/username can never grant founder mode.
-    const quotaBoundBody = maxOutputTokens ? { ...body, maxTokens: maxOutputTokens } : body
+    const quotaBoundBody = maxOutputTokens
+      ? { ...body, maxTokens: maxOutputTokens, maxTokensCap: textQuota.unlimited ? undefined : Math.max(1, Math.floor(textQuota.remaining ?? 0)) }
+      : body
     const routedBody = ownerMode ? withVerifiedOwnerChatContext(quotaBoundBody) : quotaBoundBody
     const answer = await malikGodAnswer(routedBody, {
       modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,

@@ -25,7 +25,8 @@ export async function GET(request: Request, context: RouteContext) {
     content: file.content,
   })))
 
-  if (!renderResponseFitsBudget(zip.byteLength)) return renderBandwidthBlocked("project-zip", zip.byteLength)
+  // buildProjectZip returns a Blob: its length is `size`.
+  if (!renderResponseFitsBudget(zip.size)) return renderBandwidthBlocked("project-zip", zip.size)
 
   return new Response(zip, {
     status: 200,
