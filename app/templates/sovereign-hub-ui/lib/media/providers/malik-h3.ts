@@ -297,7 +297,9 @@ export async function fetchMalikH3Status(taskId: string) {
     if (!job) return { status: "failed", error: "MalikVideo task state was lost after a server restart" }
     return {
       status: job.status,
-      videoUrl: job.status === "succeed" ? malikH3ContentPath(taskId) : undefined,
+      // Hugging Face already gives us the final media URL. Return it straight
+      // to the browser instead of proxying tens of MB through Render.
+      videoUrl: job.status === "succeed" ? job.videoUrl : undefined,
       stage: job.status === "succeed" ? "ready" : job.status,
       outputResolution: "720p",
       error: job.error,
@@ -316,9 +318,16 @@ export async function fetchMalikH3Status(taskId: string) {
     throw new Error(payload?.detail || payload?.error?.message || payload?.message || `H3 status failed (${response.status})`)
   }
   const status = normalizeH3Status(payload?.status || payload?.state)
+  const browserVideoUrl = status === "succeed"
+    ? (malikH3ApiKey()
+        ? malikH3ContentPath(taskId)
+        : `${malikH3BaseUrl()}/v1/videos/${encodeURIComponent(id)}/content`)
+    : undefined
   return {
     status,
-    videoUrl: status === "succeed" ? malikH3ContentPath(taskId) : undefined,
+    // Public workers can stream directly to the browser. Keep the Render proxy
+    // only for private workers that actually require a server-side API key.
+    videoUrl: browserVideoUrl,
     stage: typeof payload?.stage === "string" ? payload.stage : undefined,
     outputResolution: typeof payload?.output_resolution === "string" ? payload.output_resolution : undefined,
     error: status === "failed" ? String(payload?.detail || payload?.error?.message || payload?.error || payload?.message || "H3 generation failed") : undefined,
