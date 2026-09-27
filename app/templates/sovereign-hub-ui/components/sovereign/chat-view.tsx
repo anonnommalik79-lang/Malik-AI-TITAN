@@ -178,6 +178,8 @@ export type InlineMediaGeneration = {
   provider?: string
   progress?: number
   url?: string
+  /** Provider-direct images exist only for the current browser session. */
+  ephemeral?: boolean
   /** Inline copy of the finished image, used only when `url` cannot be loaded. */
   fallbackUrl?: string
   /** What Malik understood the request to be, shown while the picture renders. */
@@ -686,6 +688,7 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
         startedAt={liveMedia.createdAt}
         provider={liveMedia.provider}
         understood={liveMedia.understood}
+        ephemeral={liveMedia.ephemeral}
         failed={isFailed}
         error={liveMedia.error}
       />
