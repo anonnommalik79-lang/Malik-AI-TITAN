@@ -84,3 +84,8 @@ export async function measureOperation<T>(
     throw error
   }
 }
+
+
+export function resetPerformanceMetrics() {
+  store().clear()
+}
