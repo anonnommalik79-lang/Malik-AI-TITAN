@@ -1,4 +1,5 @@
 import { searchGodProjects, createGodProject, listGodProjects } from "@/lib/god-mode/project-state"
+import { appendGodAudit } from "@/lib/god-mode/audit-log"
 import { createGodTrace, withGodTraceHeaders } from "@/lib/god-mode/trace"
 import { readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
@@ -37,6 +38,10 @@ export async function POST(request: Request) {
     const goal = String(body.goal || "").trim()
     if (!goal) return withGodTraceHeaders(Response.json({ ok: false, code: "GOAL_REQUIRED", error: "Опишите цель проекта." }, { status: 400 }), trace, { operation: "project-state", budgetMs: 1500 })
     const project = await createGodProject(entitlement.userId, { title: String(body.title || "").trim(), goal })
+    await appendGodAudit(entitlement.userId, {
+      category: "project", action: "project.create", success: true, traceId: trace.traceId,
+      resourceId: project.id, metadata: { title: project.title },
+    }).catch(() => undefined)
     return withGodTraceHeaders(Response.json({ ok: true, project }, { status: 201, headers: { "cache-control": "private, no-store" } }), trace, { operation: "project-state", budgetMs: 1500 })
   } catch (error) {
     const status = error instanceof RequestSafetyError ? error.status : 500
