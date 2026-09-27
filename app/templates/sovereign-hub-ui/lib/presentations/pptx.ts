@@ -25,7 +25,7 @@ type PptxInstance = {
   company: string
   subject: string
   addSlide: () => PptxSlide
-  write: (options: { outputType: "nodebuffer" }) => Promise<unknown>
+  write: (options: { outputType: "nodebuffer" | "blob" }) => Promise<unknown>
 }
 
 type PptxSlide = {
@@ -104,7 +104,18 @@ function image(ctx: Ctx, data: string | undefined, x: number, y: number, w: numb
   }
 }
 
-const svgData = (svg: string) => `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
+function utf8Base64(value: string) {
+  if (typeof Buffer !== "undefined") return Buffer.from(value).toString("base64")
+  const bytes = new TextEncoder().encode(value)
+  let binary = ""
+  const step = 0x8000
+  for (let offset = 0; offset < bytes.length; offset += step) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(bytes.length, offset + step)))
+  }
+  return btoa(binary)
+}
+
+const svgData = (svg: string) => `data:image/svg+xml;base64,${utf8Base64(svg)}`
 
 /**
  * The soft glow in a corner that the screen draws behind text slides. A
@@ -557,7 +568,7 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
  * responsible for fetching pictures, so this module never touches the network
  * and can be exercised entirely offline.
  */
-export async function buildPptx(deck: Pick<Deck, "title" | "theme" | "slides">, images: Map<string, string> = new Map()): Promise<Buffer> {
+function createPptx(deck: Pick<Deck, "title" | "theme" | "slides">, images: Map<string, string>) {
   const theme = deckTheme(deck.theme)
   const pptx = new PptxGenJS()
   pptx.layout = "LAYOUT_WIDE"
@@ -570,15 +581,33 @@ export async function buildPptx(deck: Pick<Deck, "title" | "theme" | "slides">, 
     const pageSlide = pptx.addSlide()
     pageSlide.background = { color: theme.bg }
     const ctx: Ctx = { slide: pageSlide, theme, index, total: deck.slides.length }
-    // The glow sits under the content, on every slide without a photograph.
     if (!(IMAGE_LAYOUTS.has(slide.layout) && images.get(slide.id)) && slide.layout !== "gallery") glow(ctx)
     drawSlide(ctx, slide, images)
     if (slide.layout !== "title" && slide.layout !== "closing" && slide.layout !== "hero") pageNumber(ctx)
     if (slide.notes) pageSlide.addNotes(slide.notes)
   })
+  return pptx
+}
 
-  const output = await pptx.write({ outputType: "nodebuffer" })
+export async function buildPptx(deck: Pick<Deck, "title" | "theme" | "slides">, images: Map<string, string> = new Map()): Promise<Buffer> {
+  const output = await createPptx(deck, images).write({ outputType: "nodebuffer" })
   return Buffer.isBuffer(output) ? output : Buffer.from(output as ArrayBuffer)
+}
+
+/**
+ * Browser-native export. The PPTX bytes are assembled on the user's device,
+ * so downloading a large deck does not turn Render into a file server.
+ */
+export async function buildPptxBlob(deck: Pick<Deck, "title" | "theme" | "slides">, images: Map<string, string> = new Map()): Promise<Blob> {
+  const output = await createPptx(deck, images).write({ outputType: "blob" })
+  if (typeof Blob !== "undefined" && output instanceof Blob) return output
+  if (output instanceof ArrayBuffer) {
+    return new Blob([output], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" })
+  }
+  if (ArrayBuffer.isView(output)) {
+    return new Blob([output as ArrayBufferView], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" })
+  }
+  throw new Error("PPTX_BROWSER_EXPORT_UNAVAILABLE")
 }
 
 /** A filename that survives every operating system and every download bar. */
