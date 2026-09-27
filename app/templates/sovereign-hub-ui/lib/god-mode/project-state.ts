@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash, randomUUID } from "node:crypto"
 
-import { readPrivateJson, writePrivateJson } from "@/lib/server/private-json-store"
+import { deletePrivateJson, readPrivateJson, writePrivateJson } from "@/lib/server/private-json-store"
 import type { GodArtifact, GodArtifactKind, GodProject, GodTask, GodTaskStatus } from "./contracts"
 
 type ProjectGlobal = typeof globalThis & {
@@ -10,6 +10,16 @@ type ProjectGlobal = typeof globalThis & {
 }
 
 const MAX_ACTIVITY = 400
+const MAX_PROJECT_INDEX = 80
+
+type ProjectSummary = Pick<GodProject, "id" | "title" | "goal" | "status" | "createdAt" | "updatedAt">
+type IndexGlobal = typeof globalThis & { __malikGodProjectIndex?: Map<string, ProjectSummary[]> }
+
+function indexMemory() {
+  const scope = globalThis as IndexGlobal
+  if (!scope.__malikGodProjectIndex) scope.__malikGodProjectIndex = new Map()
+  return scope.__malikGodProjectIndex
+}
 
 function memory() {
   const scope = globalThis as ProjectGlobal
@@ -34,6 +44,42 @@ function projectKey(ownerId: string, id: string) {
   return `private/system/malik-god-projects/${ownerHash(ownerId)}/${id}.json`
 }
 
+function projectIndexKey(ownerId: string) {
+  return `private/system/malik-god-projects/${ownerHash(ownerId)}/index.json`
+}
+
+function summary(project: GodProject): ProjectSummary {
+  return {
+    id: project.id,
+    title: project.title,
+    goal: project.goal,
+    status: project.status,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  }
+}
+
+async function readIndex(ownerId: string) {
+  const owner = normalizedOwner(ownerId)
+  const cached = indexMemory().get(owner)
+  if (cached) return structuredClone(cached)
+  const stored = await readPrivateJson<ProjectSummary[]>(projectIndexKey(owner))
+  const safe = Array.isArray(stored)
+    ? stored.filter((item) => item && validProjectId(item.id)).slice(0, MAX_PROJECT_INDEX)
+    : []
+  indexMemory().set(owner, safe)
+  return structuredClone(safe)
+}
+
+async function writeIndex(ownerId: string, projects: ProjectSummary[]) {
+  const owner = normalizedOwner(ownerId)
+  const safe = projects
+    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+    .slice(0, MAX_PROJECT_INDEX)
+  indexMemory().set(owner, structuredClone(safe))
+  await writePrivateJson(projectIndexKey(owner), safe)
+}
+
 function now() {
   return new Date().toISOString()
 }
@@ -42,6 +88,9 @@ async function persist(project: GodProject) {
   project.updatedAt = now()
   memory().set(project.id, structuredClone(project))
   await writePrivateJson(projectKey(project.ownerId, project.id), project)
+  const projects = await readIndex(project.ownerId)
+  const next = [summary(project), ...projects.filter((item) => item.id !== project.id)]
+  await writeIndex(project.ownerId, next)
   return structuredClone(project)
 }
 
@@ -263,4 +312,75 @@ export function projectManifest(project: GodProject) {
     pinnedArtifactIds: project.pinnedArtifactIds,
     activity: project.activity,
   }
+}
+
+
+export async function listGodProjects(ownerId: string) {
+  return readIndex(ownerId)
+}
+
+function searchableProjectText(project: GodProject) {
+  return [
+    project.title,
+    project.goal,
+    ...Object.values(project.tasks).flatMap((task) => [task.label, task.type, task.stage || ""]),
+    ...Object.values(project.artifacts).flatMap((artifact) => [artifact.title, artifact.kind, artifact.sourceTool || ""]),
+  ].join("\n").toLowerCase()
+}
+
+export async function searchGodProjects(ownerId: string, query: string, limit = 20) {
+  const normalized = String(query || "").trim().toLowerCase()
+  if (!normalized) return []
+  const terms = normalized.split(/\s+/).filter(Boolean).slice(0, 12)
+  const index = await readIndex(ownerId)
+  const results: Array<{ project: GodProject; score: number }> = []
+
+  for (const item of index.slice(0, 40)) {
+    const project = await getGodProject(item.id, ownerId)
+    if (!project) continue
+    const text = searchableProjectText(project)
+    const score = terms.reduce((total, term) => total + (text.includes(term) ? 1 : 0), 0)
+    if (score) results.push({ project, score })
+  }
+
+  return results
+    .sort((a, b) => b.score - a.score || Date.parse(b.project.updatedAt) - Date.parse(a.project.updatedAt))
+    .slice(0, Math.max(1, Math.min(50, limit)))
+    .map(({ project, score }) => ({ score, manifest: projectManifest(project) }))
+}
+
+export async function rollbackGodArtifact(projectIdValue: string, ownerId: string, artifactId: string) {
+  let rolledBackTo: GodArtifact | null = null
+  const project = await mutateProject(projectIdValue, ownerId, (draft) => {
+    const current = draft.artifacts[artifactId]
+    if (!current?.parentArtifactId) return
+    const parent = draft.artifacts[current.parentArtifactId]
+    if (!parent) return
+    current.approved = false
+    parent.approved = true
+    draft.pinnedArtifactIds = [parent.id, ...draft.pinnedArtifactIds.filter((id) => id !== parent.id && id !== current.id)].slice(0, 32)
+    draft.activity.push({
+      id: randomUUID(),
+      at: now(),
+      type: "artifact.rollback",
+      message: `Rolled back ${current.title} to v${parent.version}`,
+      artifactId: parent.id,
+      metadata: { fromArtifactId: current.id },
+    })
+    rolledBackTo = structuredClone(parent)
+  })
+  return project ? rolledBackTo : null
+}
+
+export async function deleteGodProject(projectIdValue: string, ownerId: string) {
+  const id = validProjectId(projectIdValue)
+  const owner = normalizedOwner(ownerId)
+  if (!id) return false
+  const project = await getGodProject(id, owner)
+  if (!project) return false
+  memory().delete(id)
+  const index = await readIndex(owner)
+  await writeIndex(owner, index.filter((item) => item.id !== id))
+  await deletePrivateJson(projectKey(owner, id))
+  return true
 }
