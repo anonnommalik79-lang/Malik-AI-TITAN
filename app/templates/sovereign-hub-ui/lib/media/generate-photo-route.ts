@@ -275,6 +275,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
             aspectRatio,
             variant: optionalNumber(body?.variant),
           }),
+          remainingDailyImages: credit.remaining,
           quality,
           understood: visual.understood,
           enhancedPrompt: directPrompt,
