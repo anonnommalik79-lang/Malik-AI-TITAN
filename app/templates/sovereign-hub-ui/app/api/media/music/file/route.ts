@@ -40,23 +40,7 @@ export async function GET(request: Request) {
     return Response.json({ ok: false, code: "INVALID_RESULT_URL", error: "Unsupported result URL." }, { status: 502 })
   }
 
-  const upstream = await fetch(resultUrl, {
-    method: "GET",
-    cache: "no-store",
-    signal: AbortSignal.timeout(60_000),
-  })
-
-  if (!upstream.ok || !upstream.body) {
-    return Response.json({ ok: false, code: "MUSIC_DOWNLOAD_FAILED", error: "Unable to download generated MP3." }, { status: 502 })
-  }
-
-  const contentType = upstream.headers.get("content-type") || "audio/mpeg"
-  return new Response(upstream.body, {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Content-Disposition": `attachment; filename="malik-music-${requestId.slice(0, 12)}.mp3"`,
-      "Cache-Control": "private, no-store",
-    },
-  })
+  // Never relay the MP3 body through Render. A 302 response is only a few
+  // hundred bytes; the browser then downloads/plays the provider file directly.
+  return Response.redirect(resultUrl.toString(), 302)
 }
