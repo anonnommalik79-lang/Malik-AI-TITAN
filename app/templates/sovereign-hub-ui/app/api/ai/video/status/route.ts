@@ -28,6 +28,8 @@ function googleVideoKey() {
 
 function proxyGoogleVideoUri(uri: string) {
   if (!uri) return ""
+  const guard = /^(?:1|true|yes|on)$/i.test(String(process.env.MALIK_VIDEO_RENDER_BANDWIDTH_GUARD || "").trim())
+  if (guard) return ""
   return `/api/ai/video/file?uri=${encodeURIComponent(uri)}`
 }
 
