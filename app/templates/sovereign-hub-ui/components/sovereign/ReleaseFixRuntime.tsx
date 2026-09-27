@@ -2,8 +2,6 @@
 
 import { useEffect } from "react"
 import { prefillPrompt } from "@/lib/malik-context"
-import { MALIK_PLUGINS } from "@/components/sovereign/features/plugin-registry"
-import { pluginDisplayName } from "@/components/sovereign/features/plugin-brand-icons"
 
 const SITE_INLINE_ID = "malik-sites-inline-send"
 const BUSINESS_FINAL_ATTR = "data-malik-business-final"
@@ -254,13 +252,6 @@ function ensureBusinessFinal() {
   else host.prepend(panel)
 }
 
-function pluginByDisplayedName(name: string) {
-  const clean = name.trim().toLowerCase()
-  return MALIK_PLUGINS.find((plugin) =>
-    pluginDisplayName(plugin.id, plugin.name).trim().toLowerCase() === clean || plugin.name.trim().toLowerCase() === clean,
-  ) || null
-}
-
 function startPluginAuthorization(pluginId: string) {
   const returnTo = `/dashboard?${PLUGIN_RETURN_PARAM}=${encodeURIComponent(pluginId)}`
   const connectUrl = `/api/plugins/connect?id=${encodeURIComponent(pluginId)}&return_to=${encodeURIComponent(returnTo)}`
@@ -292,7 +283,18 @@ function openPluginSection() {
   return false
 }
 
-function handlePluginReturn() {
+async function verifyPluginConnection(pluginId: string) {
+  try {
+    const response = await fetch("/api/plugins/status", { cache: "no-store", credentials: "same-origin" })
+    if (!response.ok) return false
+    const data = await response.json()
+    return data?.plugins?.some((item: { id: string; state: string }) => item.id === pluginId && item.state === "connected") === true
+  } catch {
+    return false
+  }
+}
+
+async function handlePluginReturn() {
   const current = new URL(window.location.href)
   const pluginId = current.searchParams.get(PLUGIN_RETURN_PARAM)
   if (!pluginId) return
@@ -301,6 +303,12 @@ function handlePluginReturn() {
   const cleanUrl = `${current.pathname}${current.search}${current.hash}`
   window.history.replaceState(window.history.state, "", cleanUrl)
   try { localStorage.removeItem("malik-plugin-auth-pending") } catch {}
+
+  const connected = await verifyPluginConnection(pluginId)
+  if (!connected) {
+    showToast("Подключение не подтверждено. Проверьте разрешения сервиса и попробуйте снова.")
+    return
+  }
 
   if (window.opener && !window.opener.closed) {
     window.opener.postMessage({ type: "malik-plugin-connected", pluginId }, window.location.origin)
@@ -315,36 +323,29 @@ function handlePluginReturn() {
     if (openPluginSection() || attempts > 30) window.clearInterval(timer)
   }, 100)
   showToast("Подключение завершено. Возвращаю в Плагины.", "success")
+  window.dispatchEvent(new Event("malik-plugin-status-refresh"))
 }
 
 export function ReleaseFixRuntime() {
   useEffect(() => {
-    handlePluginReturn()
+    void handlePluginReturn()
 
-    const onMessage = (event: MessageEvent) => {
+    const onMessage = async (event: MessageEvent) => {
       if (event.origin !== window.location.origin || event.data?.type !== "malik-plugin-connected") return
+      const pluginId = String(event.data.pluginId || "")
+      if (!pluginId || !await verifyPluginConnection(pluginId)) {
+        showToast("Подключение не подтверждено. Попробуйте снова.")
+        return
+      }
       try { localStorage.removeItem("malik-plugin-auth-pending") } catch {}
       openPluginSection()
+      window.dispatchEvent(new Event("malik-plugin-status-refresh"))
       showToast("Плагин подключён. Можно использовать внутри Malik AI.", "success")
     }
 
     const onClickCapture = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null
       if (!target) return
-
-      const pluginRun = target.closest<HTMLElement>(".plugin-run")
-      if (pluginRun) {
-        const detail = pluginRun.closest<HTMLElement>(".plugin-detail")
-        const name = detail?.querySelector<HTMLElement>("h2")?.textContent || ""
-        const plugin = pluginByDisplayedName(name)
-        if (plugin?.runtime === "pipes") {
-          event.preventDefault()
-          event.stopPropagation()
-          event.stopImmediatePropagation()
-          startPluginAuthorization(plugin.id)
-          return
-        }
-      }
 
       const connectLink = target.closest<HTMLAnchorElement>('a[href*="/api/plugins/connect"]')
       if (connectLink) {

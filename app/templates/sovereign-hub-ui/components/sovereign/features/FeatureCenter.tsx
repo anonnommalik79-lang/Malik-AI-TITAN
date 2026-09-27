@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   ArrowRight,
   Check,
@@ -10,7 +10,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react"
-import { prefillPrompt } from "@/lib/malik-context"
+import { prefillPrompt, VERIFIED_PLUGIN_USE_KEY } from "@/lib/malik-context"
 import {
   MALIK_PLUGINS,
   PLUGIN_CATEGORIES,
@@ -31,6 +31,29 @@ const CATEGORY_LABEL: Record<PluginCategory, string> = {
   Media: "Медиа",
   Business: "Бизнес",
   Data: "Данные",
+}
+
+type PluginConnection = {
+  id: string
+  state: "public" | "sign_in" | "unavailable" | "available" | "connected" | "reauthorize"
+  providerName?: string
+  authMethods?: string[]
+  scopes?: string[]
+  grantedScopes?: string[]
+  accountName?: string | null
+}
+
+function connectionLabel(connection?: PluginConnection, failed = false) {
+  if (failed) return "Статус подключения недоступен"
+  if (!connection) return "Проверяем подключение…"
+  switch (connection.state) {
+    case "public": return "Открытый API · готов к работе"
+    case "connected": return "Аккаунт подключён"
+    case "available": return "Требуется разрешение доступа"
+    case "reauthorize": return "Нужно обновить разрешение"
+    case "sign_in": return "Сначала войдите в Malik AI"
+    default: return "Провайдер ещё не настроен"
+  }
 }
 
 function BrandIcon({ plugin, large = false }: { plugin: MalikPlugin; large?: boolean }) {
@@ -67,7 +90,7 @@ function BrandIcon({ plugin, large = false }: { plugin: MalikPlugin; large?: boo
   )
 }
 
-function PluginCard({ plugin, onOpen }: { plugin: MalikPlugin; onOpen: (plugin: MalikPlugin) => void }) {
+function PluginCard({ plugin, connection, onOpen }: { plugin: MalikPlugin; connection?: PluginConnection; onOpen: (plugin: MalikPlugin) => void }) {
   const brandName = pluginDisplayName(plugin.id, plugin.name)
 
   return (
@@ -76,21 +99,27 @@ function PluginCard({ plugin, onOpen }: { plugin: MalikPlugin; onOpen: (plugin: 
       <span className="plugin-card-copy">
         <span className="plugin-card-name">{brandName}</span>
         <span className="plugin-card-meta">
-          {plugin.tier === "free" ? "Бесплатно" : "Free / Freemium"}
+          {connection?.state === "connected" ? "Подключён" : connection?.state === "public" ? "Открытый API" : plugin.tier === "free" ? "Бесплатно" : "Free / Freemium"}
         </span>
       </span>
     </button>
   )
 }
 
-function PluginDetail({ plugin, onClose, onRun }: {
+function PluginDetail({ plugin, connection, statusFailed, onClose, onRun }: {
   plugin: MalikPlugin
+  connection?: PluginConnection
+  statusFailed: boolean
   onClose: () => void
   onRun: (plugin: MalikPlugin) => void
 }) {
   const openSource = plugin.access === "open"
   const brandName = pluginDisplayName(plugin.id, plugin.name)
   const description = plugin.description.replace(plugin.name, brandName)
+  const ready = openSource || connection?.state === "connected"
+  const canConnect = connection?.state === "available" || connection?.state === "reauthorize" || connection?.state === "sign_in"
+  const scopes = connection?.state === "connected" ? connection.grantedScopes : connection?.scopes
+  const connectUrl = `/api/plugins/connect?id=${encodeURIComponent(plugin.id)}&return_to=${encodeURIComponent("/dashboard")}`
 
   return (
     <aside className="plugin-detail" aria-label={`${brandName} — возможности`}>
@@ -115,11 +144,24 @@ function PluginDetail({ plugin, onClose, onRun }: {
       <p className="plugin-detail-description">{description}</p>
 
       <div className="plugin-detail-badges">
-        <span className={openSource ? "is-open" : "is-connect"}>
-          {openSource ? "Открытые данные" : "OAuth / API при необходимости"}
+        <span className={ready ? "is-open" : "is-connect"}>
+          {openSource ? "Открытый API · готов к работе" : connectionLabel(connection, statusFailed)}
         </span>
         <span>{plugin.tier === "free" ? "Бесплатный доступ" : "Есть бесплатный режим"}</span>
       </div>
+
+      {!openSource ? (
+        <section className="plugin-detail-section plugin-permissions">
+          <h3>{connection?.state === "connected" ? "Выданный доступ" : "Запрос доступа"}</h3>
+          {connection?.accountName ? <p>Аккаунт: {connection.accountName}</p> : null}
+          {scopes?.length ? (
+            <ul>{scopes.map((scope) => <li key={scope}><span><Check /></span>{scope}</li>)}</ul>
+          ) : (
+            <p>Точные разрешения покажет {connection?.providerName || brandName} на официальном экране авторизации.</p>
+          )}
+          <p>Malik AI выполнит запросы только после вашего подтверждения. Доступом управляет подключённый сервис.</p>
+        </section>
+      ) : null}
 
       <section className="plugin-detail-section">
         <h3>Что умеет внутри Malik AI</h3>
@@ -142,11 +184,19 @@ function PluginDetail({ plugin, onClose, onRun }: {
         </p>
       </section>
 
-      <button type="button" className="plugin-run" onClick={() => onRun(plugin)}>
-        <Sparkles />
-        Использовать в Malik AI
-        <ArrowRight />
-      </button>
+      {ready ? (
+        <button type="button" className="plugin-run" onClick={() => onRun(plugin)}>
+          <Sparkles />Использовать в Malik AI<ArrowRight />
+        </button>
+      ) : canConnect ? (
+        <a className="plugin-run" href={connectUrl}>
+          <ShieldCheck />
+          {connection?.state === "sign_in" ? "Войти и подключить" : connection?.state === "reauthorize" ? "Обновить доступ" : `Подключить ${brandName}`}
+          <ArrowRight />
+        </a>
+      ) : (
+        <p className="plugin-unavailable">{statusFailed ? "Не удалось проверить WorkOS. Попробуйте позже." : connection ? "Сервису нужна настройка в WorkOS Pipes. Сейчас подключение недоступно." : "Проверяем настройки провайдера…"}</p>
+      )}
     </aside>
   )
 }
@@ -156,6 +206,40 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
   const [category, setCategory] = useState<"All" | PluginCategory>("All")
   const [freeOnly, setFreeOnly] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [connections, setConnections] = useState<Record<string, PluginConnection>>({})
+  const [statusFailed, setStatusFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/plugins/status", { cache: "no-store", credentials: "same-origin" })
+        if (!response.ok) throw new Error("plugin_status_unavailable")
+        const data = await response.json()
+        if (!data?.ok || !Array.isArray(data.plugins)) throw new Error("plugin_status_invalid")
+        if (active) {
+          setConnections(Object.fromEntries(data.plugins.map((item: PluginConnection) => [item.id, item])))
+          setStatusFailed(false)
+        }
+      } catch {
+        if (active) {
+          setConnections({})
+          setStatusFailed(true)
+        }
+      }
+    }
+    void refresh()
+    const onVisible = () => { if (!document.hidden) void refresh() }
+    window.addEventListener("focus", refresh)
+    window.addEventListener("malik-plugin-status-refresh", refresh)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      active = false
+      window.removeEventListener("focus", refresh)
+      window.removeEventListener("malik-plugin-status-refresh", refresh)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [])
 
   const selected = selectedId ? MALIK_PLUGINS.find((plugin) => plugin.id === selectedId) || null : null
 
@@ -187,6 +271,9 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
    * renders this panel without a view switcher.
    */
   const runPlugin = (plugin: MalikPlugin) => {
+    if (connections[plugin.id]?.state === "connected") {
+      try { window.sessionStorage.setItem(VERIFIED_PLUGIN_USE_KEY, plugin.id) } catch {}
+    }
     prefillPrompt(plugin.prompt)
     setSelectedId(null)
     if (onUsePlugin) {
@@ -259,7 +346,7 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
             </div>
             <div className="plugin-grid plugin-grid-featured">
               {featured.map((plugin) => (
-                <PluginCard key={plugin.id} plugin={plugin} onOpen={(item) => setSelectedId(item.id)} />
+                <PluginCard key={plugin.id} plugin={plugin} connection={connections[plugin.id]} onOpen={(item) => setSelectedId(item.id)} />
               ))}
             </div>
           </section>
@@ -268,7 +355,7 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
         <section className="plugin-section">
           <div className="plugin-section-head">
             <div>
-              <span>{filtered.length} доступно</span>
+              <span>{filtered.length} в каталоге</span>
               <h2>{category === "All" ? "Все плагины" : CATEGORY_LABEL[category]}</h2>
             </div>
             <p>Иконка берётся с официального домена сервиса; Simple Icons используется только как резерв.</p>
@@ -277,7 +364,7 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
           {filtered.length ? (
             <div className="plugin-grid">
               {filtered.map((plugin) => (
-                <PluginCard key={plugin.id} plugin={plugin} onOpen={(item) => setSelectedId(item.id)} />
+                <PluginCard key={plugin.id} plugin={plugin} connection={connections[plugin.id]} onOpen={(item) => setSelectedId(item.id)} />
               ))}
             </div>
           ) : (
@@ -290,7 +377,7 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
         </section>
       </div>
 
-      {selected ? <PluginDetail plugin={selected} onClose={() => setSelectedId(null)} onRun={runPlugin} /> : null}
+      {selected ? <PluginDetail plugin={selected} connection={connections[selected.id]} statusFailed={statusFailed} onClose={() => setSelectedId(null)} onRun={runPlugin} /> : null}
 
       <style jsx global>{`
         body:has(.malik-plugin-market) .titan-rail {
@@ -727,6 +814,11 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
         .plugin-detail-badges span.is-open { color: #9fb9a5; }
         .plugin-detail-badges span.is-connect { color: #b6a783; }
 
+        .plugin-permissions p, .plugin-unavailable { color: #85858d; font-size: 11px; line-height: 1.6; }
+        .plugin-permissions p { margin: 0 0 12px; }
+        .plugin-permissions li { overflow-wrap: anywhere; }
+        .plugin-unavailable { margin: 24px 0 0; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 13px; }
+
         .plugin-detail-section {
           margin-top: 28px;
           padding-top: 22px;
@@ -795,6 +887,7 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
           border-radius: 13px;
           background: #f4f4f5;
           color: #111113;
+          text-decoration: none;
           font-size: 12px;
           font-weight: 650;
           transition: background-color 130ms ease, transform 130ms ease;

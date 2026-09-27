@@ -1,5 +1,5 @@
 import { getMalikPlugin, type MalikPlugin } from "@/components/sovereign/features/plugin-registry"
-import { getPluginSessionUser, getPipesCredential } from "@/lib/server/plugin-pipes"
+import { getPipesProviderState, getPluginSessionUser, getPipesCredential } from "@/lib/server/plugin-pipes"
 
 export type MalikPluginSource = {
   title: string
@@ -579,6 +579,24 @@ export async function runMalikPlugin(pluginId: string, rawQuery: string): Promis
 
     const user = await getPluginSessionUser()
     if (!user?.id) return connectRequired(plugin, "Сначала войди в Malik AI")
+
+    const providerState = await getPipesProviderState(user.id, String(plugin.providerSlug || ""))
+    if (!providerState.configured) {
+      return {
+        content: `### ${plugin.name}\nЭтот сервис пока не настроен владельцем Malik AI в WorkOS Pipes. После настройки OAuth/API он станет доступен для подключения.`,
+        provider: `plugin:${plugin.id}`,
+        model: "malik-plugin-runtime-v1.1",
+        usedWeb: false,
+        sources: [],
+        attempts: [{ provider: plugin.id, model: "workos-pipes", ok: false, error: "provider_not_configured" }],
+        pluginId: plugin.id,
+        pluginName: plugin.name,
+        connected: false,
+      }
+    }
+    if (!providerState.connected) {
+      return connectRequired(plugin, providerState.provider?.connected_account?.state === "needs_reauthorization" ? "Нужно повторно разрешить доступ" : "Плагин ещё не подключён")
+    }
 
     const credential = await getPipesCredential(user.id, String(plugin.providerSlug || ""))
     if (!credential.active || !credential.value) {

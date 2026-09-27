@@ -14,6 +14,7 @@ export type PipesProvider = {
     scopes?: string[]
     auth_method?: string
     api_key_last_4?: string | null
+    account_display_name?: string | null
   } | null
 }
 
@@ -62,7 +63,7 @@ export async function getPluginSessionUser() {
 
 export async function listPipesProviders(userId: string): Promise<PipesProvider[]> {
   const { response, payload } = await workosFetch(`/user_management/users/${encodeURIComponent(userId)}/data_providers`)
-  if (!response.ok) return []
+  if (!response.ok) throw new Error(`WorkOS Pipes provider status is unavailable (${response.status})`)
   return Array.isArray(payload?.data) ? payload.data : []
 }
 

@@ -203,6 +203,7 @@ export function formatTokens(count: number): string {
 export const PREFILL_EVENT = "malik-prefill-prompt"
 const PREFILL_STORAGE_KEY = "malik.prefill.prompt.v1"
 const PLUGIN_COMMAND = /^\/plugin\s+([a-z0-9_-]+)(?:\s|$)/i
+export const VERIFIED_PLUGIN_USE_KEY = "malik.plugin.verified.once"
 
 function accountPluginConnectTarget(text: string): string {
   if (typeof window === "undefined") return ""
@@ -212,6 +213,16 @@ function accountPluginConnectTarget(text: string): string {
 
   const plugin = getMalikPlugin(match[1])
   if (!plugin || plugin.runtime !== "pipes") return ""
+
+  // The marketplace has just checked this connection server-side. Avoid a
+  // redundant OAuth redirect when the user presses "Use" on a connected card.
+  // The plugin runtime still validates the credential before any API call.
+  try {
+    if (window.sessionStorage.getItem(VERIFIED_PLUGIN_USE_KEY) === plugin.id) {
+      window.sessionStorage.removeItem(VERIFIED_PLUGIN_USE_KEY)
+      return ""
+    }
+  } catch {}
 
   const current = new URL(window.location.href)
   const returnedPlugin = current.searchParams.get("plugin")
