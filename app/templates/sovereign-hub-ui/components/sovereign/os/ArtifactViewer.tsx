@@ -75,6 +75,10 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
   const [diff, setDiff] = useState<{ against: LineageEntry; data: DiffPayload } | null>(null)
   const [activeFile, setActiveFile] = useState(0)
   const [showPreview, setShowPreview] = useState(true)
+  const [showEconomics, setShowEconomics] = useState(false)
+  const [economicsBusy, setEconomicsBusy] = useState(false)
+  const [economicsInputs, setEconomicsInputs] = useState<Record<string, string>>({ currency: "KZT" })
+  const [mediaError, setMediaError] = useState(false)
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   const tokenRef = useRef(newRequestId("pv"))
 
@@ -89,6 +93,7 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
   }, [])
 
   useEffect(() => { void load(currentId) }, [currentId, load])
+  useEffect(() => { setMediaError(false) }, [currentId])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose() }
@@ -159,6 +164,24 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
     else setActionError(result.message)
   }
 
+  const calculateEconomics = async () => {
+    if (!artifact || artifact.kind !== "business-plan") return
+    setActionError("")
+    setEconomicsBusy(true)
+    try {
+      const result = await osFetch<{ artifact: { id: string } }>(`/api/os/artifacts/${artifact.id}/economics`, {
+        method: "POST",
+        json: economicsInputs,
+      })
+      if (result.ok) {
+        setShowEconomics(false)
+        setCurrentId(result.data.artifact.id)
+      } else setActionError(result.message)
+    } finally {
+      setEconomicsBusy(false)
+    }
+  }
+
   const showDiff = async (against: LineageEntry) => {
     if (!artifact) return
     const result = await osFetch<DiffPayload>(`/api/os/artifacts/${artifact.id}/diff?against=${encodeURIComponent(against.id)}`)
@@ -204,6 +227,18 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
     onClose()
   }
 
+  const openImageInVideoStudio = () => {
+    if (!artifact || artifact.kind !== "image" || !artifact.url) return
+    try {
+      window.sessionStorage.setItem("malik.video.image-artifact", artifact.id)
+    } catch {
+      setActionError("Браузер не дал передать изображение в видеостудию.")
+      return
+    }
+    window.dispatchEvent(new CustomEvent("malik-open-view", { detail: { view: "video-generation" } }))
+    onClose()
+  }
+
   const versions = payload?.lineage?.versions || []
   const continueTargets = artifact ? CONTINUE_BY_KIND[artifact.kind] || [] : []
   const editable = artifact && !["image", "video", "audio", "dataset"].includes(artifact.kind)
@@ -223,6 +258,8 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
               {artifact ? <button type="button" className="malik-os-button" onClick={download} aria-label="Скачать"><Download aria-hidden="true" /><span className="malik-os-hide-sm">Скачать</span></button> : null}
               {versions.length > 1 ? <button type="button" className="malik-os-button" onClick={() => setPanel(panel === "versions" ? "" : "versions")} aria-label="Версии"><History aria-hidden="true" /><span className="malik-os-hide-sm">Версии</span></button> : null}
               {editable ? <button type="button" className="malik-os-button" onClick={() => setPanel(panel === "edit" ? "" : "edit")} aria-label="Изменить"><PencilLine aria-hidden="true" /><span className="malik-os-hide-sm">Изменить</span></button> : null}
+              {artifact?.kind === "business-plan" ? <button type="button" className="malik-os-button" onClick={() => setShowEconomics(!showEconomics)} aria-label="Рассчитать юнит-экономику">Юнит-экономика</button> : null}
+              {artifact?.kind === "image" && artifact.url ? <button type="button" className="malik-os-button" onClick={openImageInVideoStudio}>Фото → Видео</button> : null}
               {continueTargets.length ? <button type="button" className="malik-os-button" onClick={() => setPanel(panel === "continue" ? "" : "continue")} aria-label="Продолжить в другом инструменте"><Sparkles aria-hidden="true" /><span className="malik-os-hide-sm">Дальше</span></button> : null}
               <button type="button" className="malik-os-close" onClick={onClose} aria-label="Закрыть"><X aria-hidden="true" /></button>
             </div>
@@ -235,6 +272,26 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
             </div>
           ) : null}
           {actionError ? <div className="malik-os-banner" role="alert"><span>{actionError}</span></div> : null}
+
+          {showEconomics && artifact?.kind === "business-plan" ? (
+            <form className="malik-os-toolbar" style={{ alignItems: "end" }} onSubmit={(event) => { event.preventDefault(); void calculateEconomics() }}>
+              {([
+                ["price", "Цена за клиента"], ["variableCost", "Переменные затраты/клиент"], ["monthlyCustomers", "Клиентов в месяц"],
+                ["monthlyFixedCosts", "Постоянные затраты/мес"], ["monthlyMarketingSpend", "Маркетинг/мес"],
+                ["newCustomers", "Новых клиентов/мес"], ["monthlyChurnPercent", "Отток/мес, %"],
+              ] as const).map(([key, label]) => (
+                <label key={key} style={{ display: "grid", gap: 5, minWidth: 130, flex: "1 1 130px", fontSize: 11 }}>
+                  {label}
+                  <input className="malik-os-input" type="number" min="0" max={key === "monthlyChurnPercent" ? "100" : "1000000000"} step="any" inputMode="decimal" value={economicsInputs[key] || ""} onChange={(event) => setEconomicsInputs((current) => ({ ...current, [key]: event.target.value }))} placeholder="Нет данных" />
+                </label>
+              ))}
+              <label style={{ display: "grid", gap: 5, minWidth: 65, fontSize: 11 }}>Валюта
+                <input className="malik-os-input" style={{ width: 75 }} maxLength={3} value={economicsInputs.currency || ""} onChange={(event) => setEconomicsInputs((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />
+              </label>
+              <button type="submit" className="malik-os-button is-primary" disabled={economicsBusy}>{economicsBusy ? "Считаю…" : "Рассчитать"}</button>
+              <span className="malik-os-note" style={{ width: "100%" }}>Пустые поля не заменяются придуманными значениями. Сценарии цен не прогнозируют спрос.</span>
+            </form>
+          ) : null}
 
           {panel === "edit" ? (
             <form className="malik-os-toolbar" onSubmit={(event) => { event.preventDefault(); if (instruction.trim()) void startEdit() }}>
@@ -312,6 +369,20 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
             {artifact && !diff ? (
               artifact.kind === "image" && artifact.url ? (
                 <div className="malik-os-image"><img src={artifact.url} alt={artifact.title} referrerPolicy="no-referrer" /></div>
+              ) : artifact.kind === "video" && artifact.url ? (
+                <div className="malik-os-image" style={{ display: "grid", placeItems: "center" }}>
+                  {mediaError ? <div className="malik-os-banner" role="alert">Видео недоступно по ссылке провайдера. Возможно, срок действия ссылки истёк.</div> : (
+                    <video src={artifact.url} controls playsInline preload="metadata" style={{ maxWidth: "100%", maxHeight: "100%" }} onError={() => setMediaError(true)} aria-label={artifact.title} />
+                  )}
+                </div>
+              ) : artifact.kind === "audio" && artifact.url ? (
+                <div className="malik-os-doc" style={{ display: "grid", alignContent: "center", gap: 16 }}>
+                  <h3>{artifact.title}</h3>
+                  {mediaError ? <div className="malik-os-banner" role="alert">Аудио недоступно по ссылке провайдера. Возможно, срок действия ссылки истёк.</div> : (
+                    <audio src={artifact.url} controls preload="metadata" style={{ width: "100%" }} onError={() => setMediaError(true)} aria-label={artifact.title} />
+                  )}
+                  {artifact.summary ? <p>{artifact.summary}</p> : null}
+                </div>
               ) : artifact.kind === "code" ? (
                 <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
                   <div className="malik-os-toolbar">
