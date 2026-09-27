@@ -15,8 +15,8 @@
  */
 
 /** Small enough to synthesize fast; long enough not to sound clipped. */
-const FIRST_CHUNK = 140
-const LATER_CHUNK = 220
+const FIRST_CHUNK = 110
+const LATER_CHUNK = 160
 
 /**
  * Sentence ends, including the ones Russian and Kazakh actually use. The
