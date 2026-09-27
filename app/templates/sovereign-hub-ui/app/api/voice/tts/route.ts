@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
+import { renderResponseBudgetBytes } from "@/lib/server/render-bandwidth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -23,6 +24,21 @@ const TTS_TIMEOUT_MS = Math.max(2000, Number(process.env.VOICE_TTS_TIMEOUT_MS ||
 
 /** How long a failed provider stays skipped. Long enough to matter, short enough to recover. */
 const TTS_COOLDOWN_MS = Math.max(10_000, Number(process.env.VOICE_TTS_COOLDOWN_MS || 120_000))
+const TTS_RENDER_MAX_BYTES = Math.min(
+  renderResponseBudgetBytes(),
+  Math.max(128_000, Number(process.env.VOICE_RENDER_MAX_AUDIO_BYTES || 850_000)),
+)
+
+function audioResponse(bytes: ArrayBuffer | Uint8Array, headers: Record<string, string>) {
+  const size = bytes.byteLength
+  if (!size || size > TTS_RENDER_MAX_BYTES) return null
+  const body = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes
+  return new Response(body, { headers: {
+    ...headers,
+    "content-length": String(size),
+    "x-malik-render-audio-budget": String(TTS_RENDER_MAX_BYTES),
+  } })
+}
 
 const ttsUnavailableUntil = new Map<string, number>()
 
@@ -201,10 +217,10 @@ async function deepgramTts(text: string, voice: string, speed: number, expressiv
       const bytes = await response.arrayBuffer()
       if (!isAudio(response, bytes) || !isMp3(bytes)) continue
       ttsWorked("deepgram")
-      return new Response(bytes, { headers: {
+      return audioResponse(bytes, {
         "content-type": "audio/mpeg", "cache-control": "no-store",
         "x-malik-tts-provider": "deepgram", "x-malik-tts-engine": "deepgram-flux-batch", "x-malik-tts-voice": model, "x-malik-tts-language": "en",
-      } })
+      })
     } catch (error) {
       console.warn("[VOICE_DEEPGRAM_TTS_ERROR]", error instanceof Error ? error.message : error)
     }
@@ -255,11 +271,14 @@ async function geminiTts(text: string, voice: string, language: VoiceLanguage, s
         const pcm = Buffer.from(part.data, "base64")
         if (pcm.byteLength < 128) continue
         const rate = Math.max(8000, Math.min(96000, Number(part.mimeType.match(/rate=(\d+)/i)?.[1] || 24000)))
-        ttsWorked("gemini")
-        return new Response(pcm16ToWav(pcm, rate), { headers: {
+        const wav = pcm16ToWav(pcm, rate)
+        const guarded = audioResponse(wav, {
           "content-type": "audio/wav", "cache-control": "no-store",
           "x-malik-tts-provider": "gemini", "x-malik-tts-engine": model, "x-malik-tts-voice": voiceName, "x-malik-tts-language": language,
-        } })
+        })
+        if (!guarded) continue
+        ttsWorked("gemini")
+        return guarded
       } catch (error) {
         console.warn(`[VOICE_GEMINI_TTS_ERROR] model=${model}`, error instanceof Error ? error.message : error)
       }
@@ -289,10 +308,10 @@ async function elevenlabsTts(text: string, voice: string, language: "ru" | "kk",
     const bytes = await response.arrayBuffer()
     if (!isAudio(response, bytes) || !isMp3(bytes)) return ttsFailed("elevenlabs")
     ttsWorked("elevenlabs")
-    return new Response(bytes, { headers: {
+    return audioResponse(bytes, {
       "content-type": "audio/mpeg", "cache-control": "no-store",
       "x-malik-tts-provider": "elevenlabs", "x-malik-tts-engine": "eleven_v3", "x-malik-tts-voice": voiceId, "x-malik-tts-language": language,
-    } })
+    })
   } catch {
     return ttsFailed("elevenlabs")
   }
@@ -315,10 +334,10 @@ async function multilingualTts(text: string, language: VoiceLanguage, speed: num
       const bytes = await response.arrayBuffer()
       if (!isAudio(response, bytes) || !isMp3(bytes)) continue
       ttsWorked("xai")
-      return new Response(bytes, { headers: {
+      return audioResponse(bytes, {
         "content-type": "audio/mpeg", "cache-control": "no-store",
         "x-malik-tts-provider": "xai", "x-malik-tts-engine": "xai-multilingual", "x-malik-tts-voice": "leo", "x-malik-tts-language": language,
-      } })
+      })
     } catch {
       continue
     }
@@ -342,10 +361,10 @@ async function kazakhTts(request: Request, text: string, voice: string, speed: n
     })
     const bytes = await response.arrayBuffer()
     if (!response.ok || !isAudio(response, bytes)) return ttsFailed("kokoro")
-    return new Response(bytes, { headers: {
+    return audioResponse(bytes, {
       "content-type": response.headers.get("content-type") || "audio/wav", "cache-control": "no-store",
       "x-malik-tts-provider": "kokoro-kazakh", "x-malik-tts-voice": voice, "x-malik-tts-language": "kk",
-    } })
+    })
   } catch {
     return null
   }
