@@ -611,7 +611,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       return
     }
     const anchor = document.createElement("a")
-    anchor.href = source.downloadUrl || ("/api/media/music/download?requestId=" + encodeURIComponent(source.requestId))
+    anchor.href = source.resultUrl || source.downloadUrl || ("/api/media/music/download?requestId=" + encodeURIComponent(source.requestId))
     anchor.rel = "noopener"
     document.body.appendChild(anchor)
     anchor.click()
