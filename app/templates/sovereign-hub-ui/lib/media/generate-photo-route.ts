@@ -281,7 +281,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
           negativePrompt: visual.negativePrompt,
           routeReason: "provider-direct-fallback",
           generationSource: "pollinations-direct",
-          generationTier: "ephemeral",
+          generationTier: "standard-fallback",
         }
       } catch (error) {
         console.warn("[image] direct fallback URL could not be prepared.", error)
