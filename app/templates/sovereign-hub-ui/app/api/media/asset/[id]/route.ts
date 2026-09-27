@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { Readable } from "node:stream"
 import { isValidMediaAssetId, mediaAssetDirectory } from "@/lib/media/asset-store"
+import { renderBandwidthBlocked, renderResponseFitsBudget } from "@/lib/server/render-bandwidth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -68,6 +69,7 @@ export async function GET(_request: Request, context: RouteContext) {
   const id = await resolveId(context)
   const asset = await assetInfo(id)
   if (!asset) return missing()
+  if (!renderResponseFitsBudget(asset.bytes)) return renderBandwidthBlocked("media-asset", asset.bytes)
 
   const body = Readable.toWeb(createReadStream(asset.file)) as ReadableStream<Uint8Array>
   return new Response(body, {
