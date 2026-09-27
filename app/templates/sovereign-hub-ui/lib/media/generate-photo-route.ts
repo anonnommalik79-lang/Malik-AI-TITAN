@@ -29,6 +29,7 @@ import {
   recordImageCreditUsage,
 } from "./limits"
 import { agnesImageConfigured, generateWithAgnesImage } from "./providers/agnes-image"
+import { pollinationsDirectUrl } from "./providers/pollinations"
 import { resolveMediaUser } from "./request"
 import type { ImageAspectRatio, ImageGenerateResult, ImageMode } from "./types"
 
@@ -104,6 +105,10 @@ function displayImageReference(previewUrl: string | undefined, masterUrl: string
 function transientImageFailure(value: unknown) {
   const message = String(value || "")
   return /\b(?:408|425|429|500|502|503|504|520|521|522|523|524)\b|rate limit|quota|busy|overload|temporar|timeout|fetch failed|network|socket|econnreset|eai_again|upstream/i.test(message)
+}
+
+function ephemeralDirectImageDeliveryEnabled() {
+  return /^(?:1|true|yes|on)$/i.test(String(process.env.MALIK_IMAGE_EPHEMERAL_DIRECT || "").trim())
 }
 
 export async function handleMalikPhotoGenerationRequest(request: Request) {
@@ -202,6 +207,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
 
   try {
     let result: ImageGenerateResult | undefined
+    const directDelivery = !editing && ephemeralDirectImageDeliveryEnabled()
 
     if (!editing && agnesImageConfigured()) {
       try {
@@ -245,6 +251,40 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error || "AGNES_UNAVAILABLE")
         console.warn("[image] Agnes primary unavailable; continuing with Malik fallback.", reason.slice(0, 220))
+      }
+    }
+
+    if (!result && directDelivery) {
+      try {
+        const visual = await buildVisualPrompt(
+          prompt,
+          mode,
+          typeof body?.understood === "string" ? body.understood : undefined,
+        )
+        const directPrompt = enhanceImagePrompt(visual.prompt || prompt, {
+          mode,
+          quality,
+          detailBoost: typeof body?.detailBoost === "boolean" ? body.detailBoost : undefined,
+        })
+        result = {
+          ok: true,
+          provider: "pollinations",
+          imageUrl: pollinationsDirectUrl({
+            prompt: directPrompt,
+            negativePrompt: visual.negativePrompt,
+            aspectRatio,
+            variant: optionalNumber(body?.variant),
+          }),
+          quality,
+          understood: visual.understood,
+          enhancedPrompt: directPrompt,
+          negativePrompt: visual.negativePrompt,
+          routeReason: "provider-direct-fallback",
+          generationSource: "pollinations-direct",
+          generationTier: "ephemeral",
+        }
+      } catch (error) {
+        console.warn("[image] direct fallback URL could not be prepared.", error)
       }
     }
 
@@ -293,6 +333,66 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       }, {
         status: transient ? 503 : 502,
         headers: transient ? { "Retry-After": "2", "Cache-Control": "no-store" } : { "Cache-Control": "no-store" },
+      })
+    }
+
+    if (directDelivery && /^https:\/\//i.test(String(result.imageUrl || ""))) {
+      await recordImageCreditUsage(user.userId, imageSize)
+      const remaining = credit.plan === "owner"
+        ? credit.remaining
+        : Math.max(0, credit.remaining - credit.cost)
+      const remaining4k = credit.plan === "owner"
+        ? credit.remaining4k
+        : imageSize === "4K"
+          ? Math.max(0, credit.remaining4k - 1)
+          : credit.remaining4k
+      const resolvedModelId = result.modelId || requestedModelId
+      const resolvedImageModel = resolvedModelId ? getMalikImageModel(resolvedModelId) : undefined
+      const directUrl = String(result.imageUrl)
+
+      // Critical bandwidth invariant: Render returns JSON metadata only. The
+      // browser fetches the generated image straight from the provider CDN.
+      // No Sharp pass, base64 response, Render asset route, object-store copy,
+      // or browser-persistence seed is created in this mode.
+      return Response.json({
+        ok: true,
+        status: "ready",
+        kind: "photo",
+        operation: "generate",
+        provider: result.provider,
+        engine: resolvedImageModel?.label || "MalikImage Auto",
+        modelId: resolvedModelId,
+        modelLabel: resolvedImageModel?.label || "MalikImage Auto",
+        providerModel: result.providerModel || resolvedImageModel?.providerModel,
+        imageUrl: directUrl,
+        masterUrl: directUrl,
+        url: directUrl,
+        mediaUrl: directUrl,
+        understood: result.understood,
+        originalPrompt: prompt,
+        enhancedPrompt: result.enhancedPrompt,
+        negativePrompt: result.negativePrompt,
+        quality,
+        requestedResolution: getMalikImageQualityProfile(quality).deliveryResolution,
+        qualityFromPrompt: requested.fromPrompt,
+        postProcessed: false,
+        upscaleApplied: false,
+        processor: "provider-direct",
+        routeReason: result.routeReason || "provider-direct",
+        durable: false,
+        ephemeral: true,
+        deliveryMode: "provider-direct-browser",
+        cloudStorageConfigured: false,
+        remainingDailyImages: remaining,
+        remainingImageCredits: remaining,
+        dailyImageCredits: credit.daily,
+        imageCreditCost: credit.cost,
+        imageSize,
+        remaining4k,
+        resetAt: credit.resetAt,
+        plan: credit.plan,
+      }, {
+        headers: { "Cache-Control": "private, no-store, max-age=0" },
       })
     }
 
