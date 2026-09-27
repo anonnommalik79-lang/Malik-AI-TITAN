@@ -1,4 +1,6 @@
 import { handleGenerateRequest } from "@/lib/generation-route"
+import { measureOperation, performanceBudgetMs } from "@/lib/god-mode/performance"
+import { createGodTrace, withGodTraceHeaders } from "@/lib/god-mode/trace"
 import { handleMalikPhotoGenerationRequest } from "@/lib/media/generate-photo-route"
 import { handleSkillWebsiteGenerationRequest } from "@/lib/sites/generate-site-route"
 import { isFeatureDisabled } from "@/lib/server/request-safety"
@@ -160,11 +162,16 @@ function isExplicitVideoPrompt(prompt: string) {
 export const POST = withCompute(handlePOST, generationComputeOperation)
 
 async function handlePOST(request: Request, context: RouteContext) {
-  const id = request.headers.get("X-Malik-Request-Id") || requestId()
+  const trace = createGodTrace(request)
+  const id = request.headers.get("X-Malik-Request-Id") || trace.traceId
   const kind = await readKind(context)
+  const traced = (response: Response) => withGodTraceHeaders(response, trace, {
+    operation: "generation-gateway",
+    budgetMs: performanceBudgetMs("generation-gateway"),
+  })
 
-  if (!SUPPORTED_KINDS.has(kind)) return invalidKind(kind, id)
-  if (isFeatureDisabled("generation") || isFeatureDisabled(kind)) return disabledKind(kind, id)
+  if (!SUPPORTED_KINDS.has(kind)) return traced(invalidKind(kind, id))
+  if (isFeatureDisabled("generation") || isFeatureDisabled(kind)) return traced(disabledKind(kind, id))
 
   if (kind === "video") {
     const prompt = await bodyPrompt(request)
@@ -174,23 +181,22 @@ async function handlePOST(request: Request, context: RouteContext) {
       const entitlement = await resolveRequestEntitlement(request).catch(() => null)
       if (entitlement?.plan !== "owner") {
         const slot = await acquireVideoDailySlot(entitlement?.userId || "generate-kind")
-        if (!slot.available) return withCors(videoDailyLimitResponse(slot, `/api/generate/${kind}`), kind, id)
+        if (!slot.available) return traced(withCors(videoDailyLimitResponse(slot, `/api/generate/${kind}`), kind, id))
       }
     }
   }
 
   try {
-    const startedAt = Date.now()
-    const response = kind === "photo"
-      ? await handleMalikPhotoGenerationRequest(request)
-      : kind === "website"
-        ? await handleSkillWebsiteGenerationRequest(request)
-        : await handleGenerateRequest(request, kind)
-    const wrapped = withCors(response, kind, id)
-    wrapped.headers.set("X-Malik-Duration-Ms", String(Date.now() - startedAt))
-    return wrapped
+    const response = await measureOperation("generation-gateway", async () => (
+      kind === "photo"
+        ? handleMalikPhotoGenerationRequest(request)
+        : kind === "website"
+          ? handleSkillWebsiteGenerationRequest(request)
+          : handleGenerateRequest(request, kind)
+    ), trace.traceId)
+    return traced(withCors(response, kind, id))
   } catch (error) {
-    return json({
+    return traced(json({
       ok: false,
       route: `/api/generate/${kind}`,
       kind,
@@ -198,7 +204,8 @@ async function handlePOST(request: Request, context: RouteContext) {
       message: "MALIK AI kind route could not complete the request. Safe client fallback may continue the demo.",
       detail: publicError(error),
       requestId: id,
-    }, { status: 500 }, id, kind)
+      diagnosticId: trace.diagnosticId,
+    }, { status: 500 }, id, kind))
   }
 }
 
