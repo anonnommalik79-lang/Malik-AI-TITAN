@@ -1,4 +1,5 @@
 import { getGodProject, pinGodArtifact, rollbackGodArtifact } from "@/lib/god-mode/project-state"
+import { appendGodAudit } from "@/lib/god-mode/audit-log"
 import { createGodTrace, withGodTraceHeaders } from "@/lib/god-mode/trace"
 import { readJsonBodyLimited } from "@/lib/server/request-safety"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
@@ -20,10 +21,18 @@ export async function PATCH(request: Request, context: Context) {
   const action = String(body.action || "").trim().toLowerCase()
   if (action === "pin") {
     const next = await pinGodArtifact(id, entitlement.userId, artifactId)
+    await appendGodAudit(entitlement.userId, {
+      category: "project", action: "artifact.pin", success: Boolean(next), traceId: trace.traceId,
+      resourceId: artifactId, metadata: { projectId: id },
+    }).catch(() => undefined)
     return withGodTraceHeaders(Response.json({ ok: true, project: next }), trace, { operation: "project-state", budgetMs: 1500 })
   }
   if (action === "rollback") {
     const artifact = await rollbackGodArtifact(id, entitlement.userId, artifactId)
+    await appendGodAudit(entitlement.userId, {
+      category: "project", action: "artifact.rollback", success: Boolean(artifact), traceId: trace.traceId,
+      resourceId: artifactId, metadata: { projectId: id, rolledBackTo: artifact?.id },
+    }).catch(() => undefined)
     return withGodTraceHeaders(Response.json(artifact ? { ok: true, artifact } : { ok: false, code: "ROLLBACK_NOT_AVAILABLE", error: "У этой версии нет предыдущей версии." }, { status: artifact ? 200 : 409 }), trace, { operation: "project-state", budgetMs: 1500 })
   }
   return withGodTraceHeaders(Response.json({ ok: false, code: "INVALID_ACTION", error: "Поддерживаются действия pin и rollback." }, { status: 400 }), trace, { operation: "project-state", budgetMs: 1500 })
