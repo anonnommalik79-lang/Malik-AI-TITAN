@@ -33,10 +33,11 @@ async function handleGET(request: Request) {
             ? "queued"
             : result.status
 
-  const publicVideoUrl =
-    result.provider === "magichour" && publicStatus === "ready" && result.videoUrl
-      ? `/api/media/video/file?taskId=${encodeURIComponent(result.taskId)}`
-      : result.videoUrl
+  // Bandwidth-safe delivery: when a provider already returns a browser-accessible
+  // media URL (Magic Hour, Pixazo, etc.), return that URL directly. The <video>
+  // element still renders inside Malik AI, but the heavy MP4 bytes travel from
+  // the provider/CDN to the user's browser instead of through Render.
+  const publicVideoUrl = result.videoUrl
 
   return Response.json({
     ok: result.ok,
