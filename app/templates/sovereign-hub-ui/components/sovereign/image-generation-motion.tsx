@@ -13,6 +13,7 @@ type ImageGenerationMotionProps = {
   startedAt?: string
   provider?: string
   understood?: string
+  ephemeral?: boolean
   failed?: boolean
   error?: string
   progress?: number
@@ -69,6 +70,7 @@ export function ImageGenerationMotion({
   status,
   startedAt,
   provider,
+  ephemeral,
   failed,
   error,
   progress,
@@ -154,12 +156,12 @@ export function ImageGenerationMotion({
     if (!resolvedResultUrl || imageLoaded || actuallyFailed) return
     let cancelled = false
 
-    loadImage(resolvedResultUrl)
+    loadImage(resolvedResultUrl, ephemeral ? 90_000 : 25_000)
       .then(() => {
         if (cancelled) return
         setAssetError("")
         setImageLoaded(true)
-        void cacheGeneratedImageByUrl(resolvedResultUrl)
+        if (!ephemeral) void cacheGeneratedImageByUrl(resolvedResultUrl)
       })
       .catch(async () => {
         if (cancelled) return
@@ -176,7 +178,7 @@ export function ImageGenerationMotion({
     return () => {
       cancelled = true
     }
-  }, [resolvedResultUrl, imageLoaded, actuallyFailed])
+  }, [resolvedResultUrl, imageLoaded, actuallyFailed, ephemeral])
 
   const shownProgress = useMemo(() => {
     if (imageLoaded || actuallyFailed) return 100
@@ -202,6 +204,7 @@ export function ImageGenerationMotion({
       data-malik-image-prompt={prompt || ""}
       data-malik-image-provider={provider || ""}
       data-malik-image-source={resultUrl || fallbackUrl || ""}
+      data-malik-image-ephemeral={ephemeral ? "1" : "0"}
       data-malik-image-ready={imageLoaded ? "1" : "0"}
       data-malik-image-state={actuallyFailed ? "failed" : imageLoaded ? "ready" : "generating"}
     >
