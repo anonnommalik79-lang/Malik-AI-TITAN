@@ -19,8 +19,8 @@ type ImageGenerationMotionProps = {
   progress?: number
 }
 
-const GENERATION_WATCHDOG_MS = 3 * 60 * 1000
-const READY_RESULT_GRACE_MS = 8_000
+const GENERATION_WATCHDOG_MS = 6 * 60 * 1000
+const READY_RESULT_GRACE_MS = 20_000
 
 
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value))
@@ -156,7 +156,7 @@ export function ImageGenerationMotion({
     if (!resolvedResultUrl || imageLoaded || actuallyFailed) return
     let cancelled = false
 
-    loadImage(resolvedResultUrl, ephemeral ? 90_000 : 25_000)
+    loadImage(resolvedResultUrl, ephemeral ? 5 * 60_000 : 45_000)
       .then(() => {
         if (cancelled) return
         setAssetError("")
