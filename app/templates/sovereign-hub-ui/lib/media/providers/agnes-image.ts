@@ -103,7 +103,9 @@ async function runOneKey(key: string, input: AgnesGenerateInput) {
         ratio: agnesRatio(input.aspectRatio),
         extra_body: {
           response_format: "url",
-          ...(input.negativePrompt ? { negative_prompt: input.negativePrompt } : {}),
+          // Agnes text-image queue rejects negative_prompt with HTTP 400.
+          // Keep the negative prompt in Malik's own routing metadata, but do
+          // not send this unsupported field to Agnes.
         },
       }),
       cache: "no-store",
