@@ -44,6 +44,15 @@ function query(value: string, max = 180) {
   return clean(value, max) || "latest"
 }
 
+function requestedRepository(value: string, host: "github" | "gitlab") {
+  const text = String(value || "")
+  const url = host === "github"
+    ? text.match(/(?:https?:\/\/)?github\.com\/([a-z0-9_.-]+\/[a-z0-9_.-]+)(?=[\s?#/`]|$)/i)
+    : text.match(/(?:https?:\/\/)?gitlab\.com\/([a-z0-9_.-]+(?:\/(?!-\/)[a-z0-9_.-]+){1,4})(?=[\s?#/`]|$)/i)
+  const bare = text.match(/(?:^|[\s`«])([a-z0-9_.-]+\/[a-z0-9_.-]+)(?=[\s`».,!?]|$)/i)
+  return (url?.[1] || bare?.[1] || "").replace(/\.git$/i, "")
+}
+
 function array<T = any>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : []
 }
@@ -308,12 +317,74 @@ async function runConnected(plugin: MalikPlugin, token: string, rawQuery: string
   const q = query(rawQuery)
 
   if (plugin.id === "github") {
+    const repository = requestedRepository(rawQuery, "github")
+    if (repository) {
+      const base = `https://api.github.com/repos/${repository}`
+      const headers = bearer(token, { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" })
+      const project = await fetchJson(base, { headers })
+      const [readme, files, issues, pulls] = await Promise.all([
+        fetchJson(`${base}/readme`, { headers }).catch(() => null),
+        fetchJson(`${base}/contents`, { headers }).catch(() => []),
+        fetchJson(`${base}/issues?state=open&per_page=5`, { headers }).catch(() => []),
+        fetchJson(`${base}/pulls?state=open&per_page=5`, { headers }).catch(() => []),
+      ])
+      const readmeText = readme?.encoding === "base64" && typeof readme?.content === "string"
+        ? Buffer.from(readme.content.replace(/\s/g, ""), "base64").toString("utf8")
+        : ""
+      const openIssues = array<any>(issues).filter((item) => !item.pull_request)
+      const openPulls = array<any>(pulls)
+      const sources = sourceList([
+        source(project.full_name, project.html_url, "github", project.description),
+        source("README", readme?.html_url, "github"),
+        ...openIssues.map((item) => source(`#${item.number} ${item.title}`, item.html_url, "github")),
+        ...openPulls.map((item) => source(`PR #${item.number} ${item.title}`, item.html_url, "github")),
+      ])
+      return {
+        heading: `GitHub — ${clean(project.full_name)}`,
+        lines: [
+          `Репозиторий: ${clean(project.full_name)}; ${project.private ? "private" : "public"}; ветка ${clean(project.default_branch)}; язык ${clean(project.language || "не указан")}`,
+          `Описание: ${clean(project.description || "нет")}`,
+          `README: ${clean(readmeText || "недоступен", 2200)}`,
+          `Файлы в корне: ${array<any>(files).slice(0, 35).map((item) => `${clean(item.path, 80)} (${clean(item.type, 12)})`).join(", ") || "нет данных"}`,
+          ...openIssues.slice(0, 3).map((item) => `Issue #${item.number}: ${clean(item.title)} — ${clean(item.html_url, 300)}`),
+          ...openPulls.slice(0, 3).map((item) => `PR #${item.number}: ${clean(item.title)} — ${clean(item.html_url, 300)}`),
+        ],
+        sources,
+      }
+    }
     const items = array<any>(await fetchJson("https://api.github.com/user/repos?per_page=10&sort=updated&affiliation=owner,collaborator,organization_member", { headers: bearer(token, { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }) }))
     const sources = sourceList(items.map((item: any) => source(item.full_name, item.html_url, "github", item.description)))
     return { heading: "GitHub — последние репозитории", lines: items.map((item: any) => `${clean(item.full_name)} — ${item.private ? "private" : "public"}${item.description ? `; ${clean(item.description)}` : ""}`), sources }
   }
 
   if (plugin.id === "gitlab") {
+    const repository = requestedRepository(rawQuery, "gitlab")
+    if (repository) {
+      const projectId = encodeURIComponent(repository)
+      const base = `https://gitlab.com/api/v4/projects/${projectId}`
+      const headers = bearer(token)
+      const project = await fetchJson(base, { headers })
+      const [tree, readme, issues] = await Promise.all([
+        fetchJson(`${base}/repository/tree?per_page=35`, { headers }).catch(() => []),
+        fetchText(`${base}/repository/files/README.md/raw?ref=${encodeURIComponent(project.default_branch || "HEAD")}`, { headers }).then((item) => item.text).catch(() => ""),
+        fetchJson(`${base}/issues?state=opened&per_page=5`, { headers }).catch(() => []),
+      ])
+      const openIssues = array<any>(issues)
+      return {
+        heading: `GitLab — ${clean(project.path_with_namespace)}`,
+        lines: [
+          `Проект: ${clean(project.path_with_namespace)}; ${clean(project.visibility)}; ветка ${clean(project.default_branch)}`,
+          `Описание: ${clean(project.description || "нет")}`,
+          `README: ${clean(readme || "недоступен", 2200)}`,
+          `Файлы в корне: ${array<any>(tree).map((item) => `${clean(item.path, 80)} (${clean(item.type, 12)})`).join(", ") || "нет данных"}`,
+          ...openIssues.slice(0, 4).map((item) => `Issue #${item.iid}: ${clean(item.title)} — ${clean(item.web_url, 300)}`),
+        ],
+        sources: sourceList([
+          source(project.path_with_namespace, project.web_url, "gitlab", project.description),
+          ...openIssues.map((item) => source(`#${item.iid} ${item.title}`, item.web_url, "gitlab")),
+        ]),
+      }
+    }
     const items = array<any>(await fetchJson("https://gitlab.com/api/v4/projects?membership=true&simple=true&order_by=last_activity_at&sort=desc&per_page=10", { headers: bearer(token) }))
     const sources = sourceList(items.map((item: any) => source(item.path_with_namespace, item.web_url, "gitlab", item.description)))
     return { heading: "GitLab — проекты", lines: items.map((item: any) => `${clean(item.path_with_namespace)} — ${clean(item.description)}`), sources }
@@ -417,16 +488,43 @@ async function runConnected(plugin: MalikPlugin, token: string, rawQuery: string
   if (plugin.id === "asana") {
     const data = await fetchJson("https://app.asana.com/api/1.0/workspaces?limit=20", { headers: bearer(token) })
     const items = array<any>(data?.data)
-    return { heading: "Asana — рабочие пространства", lines: items.map((item: any) => `${clean(item.name)} — gid ${clean(item.gid)}`) }
+    const projects = (await Promise.all(items.slice(0, 3).map(async (workspace: any) => {
+      try {
+        const url = new URL("https://app.asana.com/api/1.0/projects")
+        url.searchParams.set("workspace", String(workspace.gid))
+        url.searchParams.set("limit", "20")
+        url.searchParams.set("opt_fields", "name,permalink_url,notes,modified_at")
+        const response = await fetchJson(url.toString(), { headers: bearer(token) })
+        return array<any>(response?.data)
+      } catch { return [] }
+    }))).flat()
+    return {
+      heading: "Asana — проекты",
+      lines: projects.length
+        ? projects.slice(0, 12).map((item) => `${clean(item.name)} — ${clean(item.notes || "без описания")}; обновлён ${clean(item.modified_at)}`)
+        : items.map((item) => `${clean(item.name)} — workspace ${clean(item.gid)}; проекты недоступны`),
+      sources: sourceList(projects.map((item) => source(item.name, item.permalink_url, "asana", item.notes))),
+    }
   }
 
   if (plugin.id === "linear") {
-    const gql = "query MalikPlugin { viewer { name email assignedIssues(first: 10, orderBy: updatedAt) { nodes { identifier title url state { name } updatedAt } } } }"
+    const gql = "query MalikPlugin { projects(first: 20) { nodes { name description url state } } viewer { assignedIssues(first: 10, orderBy: updatedAt) { nodes { identifier title url state { name } updatedAt } } } }"
     const data = await fetchJson("https://api.linear.app/graphql", { method: "POST", headers: bearer(token, { "Content-Type": "application/json" }), body: JSON.stringify({ query: gql }) })
     if (array<any>(data?.errors).length) throw new Error(clean(data.errors[0]?.message))
+    const projects = array<any>(data?.data?.projects?.nodes)
     const items = array<any>(data?.data?.viewer?.assignedIssues?.nodes)
-    const sources = sourceList(items.map((item: any) => source(`${item.identifier} ${item.title}`, item.url, "linear")))
-    return { heading: "Linear — назначенные задачи", lines: items.map((item: any) => `${clean(item.identifier)} ${clean(item.title)} — ${clean(item.state?.name)}`), sources }
+    const sources = sourceList([
+      ...projects.map((item) => source(item.name, item.url, "linear", item.description)),
+      ...items.map((item) => source(`${item.identifier} ${item.title}`, item.url, "linear")),
+    ])
+    return {
+      heading: "Linear — проекты и задачи",
+      lines: [
+        ...projects.slice(0, 7).map((item) => `Проект: ${clean(item.name)} — ${clean(item.state)}; ${clean(item.description)}`),
+        ...items.slice(0, 5).map((item) => `Задача: ${clean(item.identifier)} ${clean(item.title)} — ${clean(item.state?.name)}`),
+      ],
+      sources,
+    }
   }
 
   if (plugin.id === "jira") {
@@ -437,16 +535,41 @@ async function runConnected(plugin: MalikPlugin, token: string, rawQuery: string
     url.searchParams.set("jql", "assignee = currentUser() ORDER BY updated DESC")
     url.searchParams.set("maxResults", "10")
     url.searchParams.set("fields", "summary,status,updated")
-    const data = await fetchJson(url.toString(), { headers: bearer(token) })
+    const [data, projectData] = await Promise.all([
+      fetchJson(url.toString(), { headers: bearer(token) }),
+      fetchJson(`https://api.atlassian.com/ex/jira/${encodeURIComponent(cloud.id)}/rest/api/3/project/search?maxResults=20`, { headers: bearer(token) }).catch(() => ({ values: [] })),
+    ])
     const items = array<any>(data?.issues)
-    const sources = sourceList(items.map((item: any) => source(`${item.key} ${clean(item.fields?.summary)}`, `${cloud.url}/browse/${item.key}`, "jira")))
-    return { heading: "Jira — назначенные задачи", lines: items.map((item: any) => `${clean(item.key)} ${clean(item.fields?.summary)} — ${clean(item.fields?.status?.name)}`), sources }
+    const projects = array<any>(projectData?.values)
+    const sources = sourceList([
+      ...projects.map((item) => source(item.name, `${cloud.url}/browse/${encodeURIComponent(item.key)}`, "jira")),
+      ...items.map((item) => source(`${item.key} ${clean(item.fields?.summary)}`, `${cloud.url}/browse/${item.key}`, "jira")),
+    ])
+    return {
+      heading: "Jira — проекты и задачи",
+      lines: [
+        ...projects.slice(0, 6).map((item) => `Проект: ${clean(item.key)} ${clean(item.name)} — ${Number(item.insight?.totalIssueCount ?? 0)} задач`),
+        ...items.slice(0, 6).map((item) => `Задача: ${clean(item.key)} ${clean(item.fields?.summary)} — ${clean(item.fields?.status?.name)}`),
+      ],
+      sources,
+    }
   }
 
   if (plugin.id === "clickup") {
     const data = await fetchJson("https://api.clickup.com/api/v2/team", { headers: bearer(token) })
     const items = array<any>(data?.teams)
-    return { heading: "ClickUp — workspaces", lines: items.map((item: any) => `${clean(item.name)} — id ${clean(item.id)}`) }
+    const spaces = (await Promise.all(items.slice(0, 2).map(async (team) => {
+      try {
+        const response = await fetchJson(`https://api.clickup.com/api/v2/team/${encodeURIComponent(team.id)}/space?archived=false`, { headers: bearer(token) })
+        return array<any>(response?.spaces)
+      } catch { return [] }
+    }))).flat()
+    return {
+      heading: "ClickUp — рабочие пространства и проекты",
+      lines: spaces.length
+        ? spaces.slice(0, 12).map((item) => `Space: ${clean(item.name)} — ${clean(item.status?.status || "активный")}; id ${clean(item.id)}`)
+        : items.map((item) => `${clean(item.name)} — workspace ${clean(item.id)}; проекты недоступны`),
+    }
   }
 
   if (plugin.id === "airtable") {
@@ -487,7 +610,17 @@ async function runConnected(plugin: MalikPlugin, token: string, rawQuery: string
 
   if (plugin.id === "sentry") {
     const items = array<any>(await fetchJson("https://sentry.io/api/0/organizations/", { headers: bearer(token) }))
-    return { heading: "Sentry — организации", lines: items.map((item: any) => `${clean(item.name || item.slug)} — ${clean(item.slug)}`) }
+    const projects = (await Promise.all(items.slice(0, 2).map(async (organization) => {
+      try {
+        return array<any>(await fetchJson(`https://sentry.io/api/0/organizations/${encodeURIComponent(organization.slug)}/projects/?per_page=20`, { headers: bearer(token) }))
+      } catch { return [] }
+    }))).flat()
+    return {
+      heading: "Sentry — проекты",
+      lines: projects.length
+        ? projects.slice(0, 12).map((item) => `${clean(item.name)} — ${clean(item.slug)}; платформа ${clean(item.platform || "не указана")}`)
+        : items.map((item) => `${clean(item.name || item.slug)} — организация ${clean(item.slug)}; проекты недоступны`),
+    }
   }
 
   if (plugin.id === "reddit") {

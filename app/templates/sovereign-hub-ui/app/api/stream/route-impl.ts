@@ -1,4 +1,6 @@
 import { asPlainText, malikGodAnswer } from "@/lib/malik-god-router"
+import { parsePluginCommand } from "@/lib/server/plugin-runtime"
+import { runPluginModelAnswer } from "@/lib/server/plugin-model-answer"
 import { generateProjectWithBrain } from "@/lib/ai/project-builder"
 import { DEFAULT_MALIK_MODEL_ID, hasMalikProAccess } from "@/lib/ai/malik-models"
 import { checkUsageLimit, recordChatUsage } from "@/lib/limits/rate-limit"
@@ -76,7 +78,7 @@ function requiresImageEditPipeline(body: any) {
  */
 function protectChatCodeFences(content: string) {
   const text = content || "MALIK AI: empty response prevented."
-  return text.replace(/```([a-zA-Z0-9_+\-]*)[ \t]*\n/g, "```$1\r")
+  return text.replace(/```([a-zA-Z0-9_+-]*)[ \t]*\n/g, "```$1\r")
 }
 
 function createStreamingFenceProtector() {
@@ -110,7 +112,7 @@ function createStreamingFenceProtector() {
         break
       }
       const header = pending.slice(0, newline)
-      if (/^```[a-zA-Z0-9_+\-]*[ \t]*$/.test(header)) {
+      if (/^```[a-zA-Z0-9_+-]*[ \t]*$/.test(header)) {
         out += header.replace(/[ \t]+$/, "") + "\r"
       } else {
         out += pending.slice(0, newline + 1)
@@ -200,7 +202,7 @@ function redactCredentialLikeText(value: unknown) {
   return String(value ?? "")
     .replace(/\bsk-(?:proj-)?[a-z0-9_-]{12,}\b/gi, "sk-[REDACTED]")
     .replace(/\bgh[pousr]_[a-z0-9]{20,}\b/gi, "gh_[REDACTED]")
-    .replace(/\b(Bearer\s+)[a-z0-9._~+\/-]{20,}/gi, "$1[REDACTED]")
+    .replace(/\b(Bearer\s+)[a-z0-9._~+/-]{20,}/gi, "$1[REDACTED]")
     .replace(/((?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|token|secret|password|пароль|секрет|ключ)\s*[:=]\s*)[^\s,;]+/gi, "$1[REDACTED]")
 }
 
@@ -401,6 +403,15 @@ async function runSelectedAnswer(
   maxOutputTokens?: number,
   onToken?: (chunk: string) => void,
 ) {
+  const pluginCommand = parsePluginCommand(coderPrompt(body))
+  if (pluginCommand) {
+    const result = await runPluginModelAnswer(pluginCommand, body, {
+      modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
+      allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
+    }, onProgress, onToken)
+    return result.answer
+  }
+
   let executionBody = body
   const requestAttachments = hasMalikAttachments(body?.attachments) ? body.attachments : []
   const superpowerPrompt = buildMalikSuperpowerSystemPrompt(

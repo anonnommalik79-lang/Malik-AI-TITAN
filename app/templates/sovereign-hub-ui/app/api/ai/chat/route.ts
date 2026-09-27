@@ -1,7 +1,8 @@
 import { asJson, extractPrompt, malikGodAnswer } from "@/lib/malik-god-router"
 import { DEFAULT_MALIK_MODEL_ID, hasMalikProAccess } from "@/lib/ai/malik-models"
 import { appendFounderMessage } from "@/lib/server/founder-message-log"
-import { parsePluginCommandFromBody, runMalikPlugin } from "@/lib/server/plugin-runtime"
+import { parsePluginCommandFromBody } from "@/lib/server/plugin-runtime"
+import { runPluginModelAnswer } from "@/lib/server/plugin-model-answer"
 import {
   MalikModelRouteError,
   malikModelErrorPayload,
@@ -21,20 +22,7 @@ export const POST = withCompute(handlePOST, async (request) => { const body = aw
 async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
 
-  // Plugin commands are intentionally intercepted before the model router.
-  // This makes a selected plugin a real server-side tool call instead of a
-  // decorative prompt that hallucinates access to an external service.
   const pluginCommand = parsePluginCommandFromBody(body)
-  if (pluginCommand) {
-    const result = await runMalikPlugin(pluginCommand.id, pluginCommand.query)
-    return Response.json(result, {
-      headers: {
-        "cache-control": "no-store",
-        "x-malik-router": "plugin-runtime-v1",
-        "x-malik-plugin": result.pluginId,
-      },
-    })
-  }
 
   try {
     const selection = await resolveStrictMalikSelection(request, body)
@@ -76,6 +64,21 @@ async function handlePOST(request: Request) {
       ? { ...body, maxTokens: maxOutputTokens, maxTokensCap: textQuota.unlimited ? undefined : Math.max(1, Math.floor(textQuota.remaining ?? 0)) }
       : body
     const routedBody = ownerMode ? withVerifiedOwnerChatContext(quotaBoundBody) : quotaBoundBody
+    if (pluginCommand) {
+      const result = await runPluginModelAnswer(pluginCommand, routedBody, {
+        modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
+        allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
+      })
+      if (!result.modelUsed) {
+        return Response.json({ ...result.answer, ok: result.live }, {
+          headers: { "cache-control": "no-store", "x-malik-router": "plugin-runtime-v1", "x-malik-plugin": result.plugin.pluginId },
+        })
+      }
+      return Response.json({ ...asJson(result.answer), pluginId: result.plugin.pluginId, pluginName: result.plugin.pluginName, connected: true }, {
+        headers: { "cache-control": "no-store", "x-malik-router": "plugin-model-context-v1", "x-malik-plugin": result.plugin.pluginId },
+      })
+    }
+
     const answer = await malikGodAnswer(routedBody, {
       modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
       allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),

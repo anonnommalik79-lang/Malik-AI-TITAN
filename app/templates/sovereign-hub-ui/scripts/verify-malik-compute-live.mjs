@@ -37,13 +37,14 @@ const stubs = {
     asPlainText: (answer) => answer.content, asJson: (answer) => answer,
   },
   "@/lib/server/malik-model-router": {
-    resolveStrictMalikSelection: async () => ({ modelId: "selected-test-model" }),
+    resolveStrictMalikSelection: async () => ({ modelId: "selected-test-model", entitlement: { plan: "plus", userId: actor?.id || "test-user" } }),
     malikModelErrorPayload: () => ({ message: "Model unavailable" }),
     MalikModelRouteError: class extends Error {},
   },
   "@/lib/server/plugin-runtime": {
+    parsePluginCommand: () => null,
     parsePluginCommandFromBody: (body) => body.plugin === "test-plugin" ? { id: "test-plugin", query: "query" } : null,
-    runMalikPlugin: async () => ({ ok: true, pluginId: "test-plugin", content: "Plugin result" }),
+    runMalikPlugin: async () => ({ ok: true, connected: true, pluginId: "test-plugin", pluginName: "Test Plugin", content: "Plugin result", sources: [], attempts: [{ provider: "test-plugin", model: "live-api", ok: true }] }),
   },
   "../../../lib/malik-research/research": {
     runResearch: async (_message, emit) => {
@@ -170,7 +171,7 @@ try {
   await check("real plain-text chat route charges the signed-in account only", async () => {
     login("plain-chat")
     const response = await stream.POST(request("/api/stream", { prompt: "привет", userId: "someone-else", compute: 0 }))
-    assert.equal(response.status, 200)
+    assert.equal(response.status, 200, await response.clone().text())
     assert.equal(await response.text(), "Готово")
     assert.equal(balance("plain-chat").used, 1)
     assert.equal(balance("someone-else").used, 0)

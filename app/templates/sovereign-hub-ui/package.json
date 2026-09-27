@@ -61,7 +61,7 @@
     "test:chat-monochrome": "node scripts/verify-chat-monochrome.mjs",
     "test:instagram": "node scripts/verify-instagram.mjs",
     "test:superpowers": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-superpowers.mjs",
-    "test:claude-class": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-claude-class.mjs",
+    "test:claude-class": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-claude-class.mjs && node scripts/verify-plugin-project-context.mjs",
     "test:os-core": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-os-core.mjs",
     "test:os-flow": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-os-flow.mjs",
     "test:os-library": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-os-library.mjs",
