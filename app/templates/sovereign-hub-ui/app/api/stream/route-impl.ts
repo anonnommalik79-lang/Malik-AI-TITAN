@@ -409,7 +409,7 @@ async function runSelectedAnswer(
       modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
       allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
     }, onProgress, onToken)
-    return result.answer
+    return { ...result.answer, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID }
   }
 
   let executionBody = body
