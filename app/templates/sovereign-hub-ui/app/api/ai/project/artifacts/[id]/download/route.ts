@@ -1,6 +1,7 @@
 import { buildProjectZip } from "@/lib/business/project-zip"
 import { getProjectArtifact } from "@/lib/server/project-artifact-store"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { renderBandwidthBlocked, renderResponseFitsBudget } from "@/lib/server/render-bandwidth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -23,6 +24,8 @@ export async function GET(request: Request, context: RouteContext) {
     name: file.path,
     content: file.content,
   })))
+
+  if (!renderResponseFitsBudget(zip.byteLength)) return renderBandwidthBlocked("project-zip", zip.byteLength)
 
   return new Response(zip, {
     status: 200,
