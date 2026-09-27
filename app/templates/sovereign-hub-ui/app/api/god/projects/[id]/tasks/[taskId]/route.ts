@@ -1,4 +1,5 @@
 import { getGodProject, retryGodTask, transitionGodTask } from "@/lib/god-mode/project-state"
+import { appendGodAudit } from "@/lib/god-mode/audit-log"
 import type { GodTaskStatus } from "@/lib/god-mode/contracts"
 import { createGodTrace, withGodTraceHeaders } from "@/lib/god-mode/trace"
 import { readJsonBodyLimited } from "@/lib/server/request-safety"
@@ -23,6 +24,10 @@ export async function PATCH(request: Request, context: Context) {
 
   if (action === "retry") {
     const task = await retryGodTask(id, entitlement.userId, taskId, trace.traceId)
+    await appendGodAudit(entitlement.userId, {
+      category: "project", action: "task.retry", success: Boolean(task), traceId: trace.traceId,
+      resourceId: taskId, metadata: { projectId: id },
+    }).catch(() => undefined)
     return withGodTraceHeaders(Response.json(task ? { ok: true, task } : { ok: false, code: "RETRY_NOT_ALLOWED", error: "Повтор этой задачи сейчас невозможен." }, { status: task ? 200 : 409 }), trace, { operation: "project-state", budgetMs: 1500 })
   }
 
@@ -39,6 +44,10 @@ export async function PATCH(request: Request, context: Context) {
       errorMessage: String(body.errorMessage || "").trim() || undefined,
       traceId: trace.traceId,
     })
+    await appendGodAudit(entitlement.userId, {
+      category: "project", action: action === "cancel" ? "task.cancel" : "task.transition", success: Boolean(task), traceId: trace.traceId,
+      resourceId: taskId, metadata: { projectId: id, status },
+    }).catch(() => undefined)
     return withGodTraceHeaders(Response.json({ ok: true, task }), trace, { operation: "project-state", budgetMs: 1500 })
   } catch {
     return withGodTraceHeaders(Response.json({ ok: false, code: "INVALID_TASK_TRANSITION", error: "Этот переход состояния задачи запрещён." }, { status: 409 }), trace, { operation: "project-state", budgetMs: 1500 })
