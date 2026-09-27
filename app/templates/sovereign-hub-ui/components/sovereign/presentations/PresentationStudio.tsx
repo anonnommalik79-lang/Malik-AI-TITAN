@@ -837,16 +837,31 @@ export function PresentationStudio({ username }: { username?: string }) {
     setBusy("export")
     setError("")
     try {
-      const response = await fetch("/api/presentations/export", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ deck: currentDeck() }),
-      })
-      if (!response.ok) {
-        const data = await response.json().catch(() => null)
-        throw new Error(String(data?.error || "Не удалось собрать файл."))
+      const deck = currentDeck()
+      let blob: Blob | null = null
+
+      // First choice: build the complete editable PowerPoint on the user's
+      // device. Render receives no PPTX binary at all.
+      try {
+        const { buildPresentationPptxInBrowser } = await import("@/lib/presentations/browser-export")
+        const local = await buildPresentationPptxInBrowser(deck)
+        blob = local.blob
+      } catch {
+        // Some image CDNs block browser CORS. In that case the server exporter
+        // is only a fallback and is hard-capped below the Render bandwidth
+        // budget, so export quality survives without reopening a multi-MB path.
+        const response = await fetch("/api/presentations/export", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ deck }),
+        })
+        if (!response.ok) {
+          const data = await response.json().catch(() => null)
+          throw new Error(String(data?.error || "Не удалось собрать файл."))
+        }
+        blob = await response.blob()
       }
-      const blob = await response.blob()
+
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
