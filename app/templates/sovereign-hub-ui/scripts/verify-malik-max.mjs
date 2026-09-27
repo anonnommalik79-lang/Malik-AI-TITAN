@@ -288,5 +288,26 @@ await check("lane power puts frontier models above small ones", () => {
   })
 }
 
+await check("a cancelled request stops every lane and blames none", async () => {
+  const slow = lane("slow-cancel", { power: 95 })
+  const silent = lane("silent-cancel", { power: 90 })
+  const controller = new AbortController()
+  setTimeout(() => controller.abort(), 120)
+  const started = Date.now()
+  await assert.rejects(
+    engine.raceLanes({ lanes: [slow, silent], call, onToken: () => {}, minFlush: 8, fetcher: makeFetcher(), ...raceTiming, signal: controller.signal }),
+    (error) => error.name === "AbortError",
+  )
+  assert.ok(Date.now() - started < 1_000, "stopped at once")
+  const status = await engine.maxLaneStatus().catch(() => [])
+  assert.equal(status.filter((row) => /cancel/.test(row.id) && row.restingMs > 0).length, 0)
+  // An already-aborted signal never starts a lane.
+  const log = []
+  const done = new AbortController()
+  done.abort()
+  await assert.rejects(engine.raceLanes({ lanes: [lane("fast-never")], call, onToken: () => {}, minFlush: 8, fetcher: makeFetcher(log), ...raceTiming, signal: done.signal }))
+  assert.equal(log.length, 0)
+})
+
 console.log(`\n${count - failures}/${count} checks passed`)
 if (failures) process.exit(1)

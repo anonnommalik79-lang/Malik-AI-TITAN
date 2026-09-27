@@ -824,6 +824,8 @@ export async function runStrictMalikModel(input: {
   publicModelLabel?: string
   allowCatalog?: boolean
   onToken?: (chunk: string) => void
+  /** Honoured by the streaming engine (MAX and models picked by name). */
+  signal?: AbortSignal
 }, options: { allowFallback?: boolean; continuationDepth?: number } = {}): Promise<StrictMalikResult> {
   if (hasHiddenGeminiMedia(input.attachments)) {
     try {
@@ -853,6 +855,7 @@ export async function runStrictMalikModel(input: {
       reasoningEffort: input.reasoningEffort,
       allowCatalog: input.allowCatalog,
       onToken: input.onToken,
+      signal: input.signal,
     }
     if (model.id === "malik-max") return engine.runMalikMax(engineInput)
     if (model.provider !== "malik-orchestrator") {
@@ -861,7 +864,7 @@ export async function runStrictMalikModel(input: {
         const result = await engine.runSelectedModel({ ...engineInput, onToken: (chunk: string) => { wrote = true; input.onToken?.(chunk) } }, model)
         return { ...result, selectedModelId: model.id }
       } catch (error) {
-        if (wrote) throw error
+        if (wrote || input.signal?.aborted) throw error
         console.warn("[MALIK_MODEL_ROUTE] selected model unavailable, MAX answers", model.id, error instanceof Error ? error.message : String(error))
       }
       const rescued = await engine.runMalikMax({ ...engineInput, publicLabel: model.label })

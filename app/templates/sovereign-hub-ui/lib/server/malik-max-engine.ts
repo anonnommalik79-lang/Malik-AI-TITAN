@@ -731,6 +731,8 @@ type RaceOptions = {
   minFlush: number
   overlapWith?: string
   fetcher?: typeof fetch
+  /** Cancels the whole race (the caller gave up); no lane is blamed. */
+  signal?: AbortSignal
 }
 
 type RaceResult = {
@@ -749,6 +751,12 @@ function classify(status: number, detail: string) {
   if (status === 429) return { ms: 60_000, reason: "rate-limit" }
   if (status === 400 || status === 413 || status === 422) return { ms: 5 * 60 * 1000, reason: `http-${status}` }
   return { ms: 20_000, reason: `http-${status}` }
+}
+
+function abortError() {
+  const error = new Error("MalikLLM MAX: запрос отменён.")
+  error.name = "AbortError"
+  return error
 }
 
 export function raceLanes(options: RaceOptions): Promise<RaceResult> {
@@ -821,6 +829,15 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
     }
 
     const firstDeadline = setTimeout(() => { if (!winner) fail() }, options.firstDeadlineMs)
+
+    const cancel = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      for (const attempt of [...running]) retire(attempt)
+      reject(abortError())
+    }
+    options.signal?.addEventListener("abort", cancel, { once: true })
 
     const scheduleHedge = () => {
       if (hedgeTimer) clearTimeout(hedgeTimer)
@@ -1028,7 +1045,8 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       return false
     }
 
-    if (!launch()) fail()
+    if (options.signal?.aborted) cancel()
+    else if (!launch()) fail()
   })
 }
 
@@ -1049,6 +1067,8 @@ export type MaxInput = {
   temperature?: number
   reasoningEffort?: "low" | "medium" | "high"
   onToken?: (chunk: string) => void
+  /** Stops every lane when the caller no longer needs the answer. */
+  signal?: AbortSignal
 }
 
 export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetch; lanes?: MaxLane[] } = {}): Promise<StrictMalikResult> {
@@ -1105,6 +1125,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     totalMs,
     minFlush: fastMode ? 2 : 24,
     fetcher: deps.fetcher,
+    signal: input.signal,
   })
   const used = [result.lane.id]
   let usage: unknown = result.usage
@@ -1115,6 +1136,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     const codeOpen = codeMode && codeAnswerNeedsMore(content, input.prompt)
     if (!result.interrupted && !cutShort && !codeOpen) break
     if (Date.now() - started > totalMs) break
+    if (input.signal?.aborted) throw abortError()
     console.info("[MALIK_MAX] continue", JSON.stringify({ round: round + 1, interrupted: result.interrupted, finishReason: result.finishReason, spent, budget }))
     const order = result.interrupted
       ? lanes.filter((lane) => lane.id !== result.lane.id)
@@ -1136,10 +1158,12 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
         minFlush: 40,
         overlapWith: content,
         fetcher: deps.fetcher,
+        signal: input.signal,
       })
       used.push(result.lane.id)
       usage = { previous: usage, continuation: result.usage }
-    } catch {
+    } catch (error) {
+      if (input.signal?.aborted) throw error
       break
     }
   }
