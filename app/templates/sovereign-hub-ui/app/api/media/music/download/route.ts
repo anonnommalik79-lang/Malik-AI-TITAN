@@ -25,22 +25,16 @@ export async function GET(request: Request) {
     }, { status: job.status === "failed" ? 502 : 409 })
   }
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 30000)
+  let resultUrl: URL
   try {
-    const upstream = await fetch(job.resultUrl, { signal: controller.signal, cache: "no-store" })
-    if (!upstream.ok || !upstream.body) {
-      return Response.json({ ok: false, code: "MUSIC_DOWNLOAD_FAILED", error: "Не удалось скачать готовый аудиофайл." }, { status: 502 })
-    }
-
-    const headers = new Headers()
-    headers.set("Content-Type", upstream.headers.get("content-type") || "audio/mpeg")
-    const length = upstream.headers.get("content-length")
-    if (length) headers.set("Content-Length", length)
-    headers.set("Content-Disposition", `attachment; filename="malik-music-${requestId.slice(0, 12)}.mp3"`)
-    headers.set("Cache-Control", "private, no-store")
-    return new Response(upstream.body, { status: 200, headers })
-  } finally {
-    clearTimeout(timer)
+    resultUrl = new URL(job.resultUrl)
+  } catch {
+    return Response.json({ ok: false, code: "INVALID_RESULT_URL", error: "Музыкальный provider вернул неверную ссылку." }, { status: 502 })
   }
+  if (resultUrl.protocol !== "https:" && resultUrl.protocol !== "http:") {
+    return Response.json({ ok: false, code: "INVALID_RESULT_URL", error: "Неподдерживаемая ссылка на трек." }, { status: 502 })
+  }
+
+  // Redirect instead of proxying the MP3 body through Render.
+  return Response.redirect(resultUrl.toString(), 302)
 }
