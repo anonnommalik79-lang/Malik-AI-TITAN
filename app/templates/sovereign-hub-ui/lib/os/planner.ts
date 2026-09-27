@@ -32,7 +32,7 @@ const STEPS: Step[] = [
   { id: "plan", type: "business.plan", label: "Пишу бизнес-план", capability: "business-plan", needs: ["understand"], uses: ["research", "brand"] },
   { id: "document", type: "document.write", label: "Пишу документ", capability: "document", needs: ["understand"], uses: ["research", "brand", "plan"] },
   { id: "site", type: "site.generate", label: "Собираю сайт", capability: "website", needs: ["understand"], uses: ["brand", "logo", "research"] },
-  { id: "deck", type: "presentation.generate", label: "Готовлю Investor Deck", capability: "presentation", needs: ["understand"], uses: ["plan", "brand", "research"] },
+  { id: "deck", type: "presentation.generate", label: "Готовлю Investor Deck", capability: "presentation", needs: ["understand"], uses: ["plan", "brand", "logo", "research"] },
   { id: "video", type: "video.script", label: "Пишу сценарий видео", capability: "video-script", needs: ["understand"], uses: ["brand", "research"] },
   { id: "code", type: "code.project", label: "Пишу код проекта", capability: "code", needs: ["understand"], uses: ["brand", "research"] },
   { id: "data", type: "data.analyze", label: "Анализирую данные", capability: "data", needs: ["understand"], uses: [] },
