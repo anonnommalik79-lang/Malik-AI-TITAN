@@ -1,9 +1,11 @@
 import { isIP } from "node:net"
+import sharp from "sharp"
 import { normalizeDeck } from "@/lib/presentations/deck"
 import { IMAGE_LAYOUTS } from "@/lib/presentations/types"
 import { buildPptx, pptxFileName } from "@/lib/presentations/pptx"
 import { readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { renderBandwidthBlocked, renderResponseFitsBudget } from "@/lib/server/render-bandwidth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -32,9 +34,27 @@ function fetchableImageUrl(value: string) {
   return url
 }
 
+async function compactPptxImage(buffer: Buffer) {
+  // Export pictures are intentionally lightweight copies. The full-resolution
+  // source stays in the Malik AI UI/provider; only the PPTX embed is reduced.
+  const compact = await sharp(buffer)
+    .rotate()
+    .resize({ width: 480, height: 320, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 42, mozjpeg: true })
+    .toBuffer()
+  return compact.length ? `data:image/jpeg;base64,${compact.toString("base64")}` : null
+}
+
 async function imageAsDataUrl(value: string): Promise<string | null> {
   if (/^data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(value)) {
-    return value.length <= MAX_IMAGE_BYTES * 1.4 ? value : null
+    try {
+      const raw = value.slice(value.indexOf(",") + 1)
+      const buffer = Buffer.from(raw, "base64")
+      if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) return null
+      return await compactPptxImage(buffer)
+    } catch {
+      return null
+    }
   }
   const url = fetchableImageUrl(value)
   if (!url) return null
@@ -49,8 +69,8 @@ async function imageAsDataUrl(value: string): Promise<string | null> {
     const declared = Number(response.headers.get("content-length") || 0)
     if (declared > MAX_IMAGE_BYTES) return null
     const buffer = Buffer.from(await response.arrayBuffer())
-    if (buffer.length > MAX_IMAGE_BYTES) return null
-    return `data:${type};base64,${buffer.toString("base64")}`
+    if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) return null
+    return await compactPptxImage(buffer)
   } catch {
     return null
   } finally {
@@ -95,7 +115,16 @@ export async function POST(request: Request) {
       }
     }))
 
-    const file = await buildPptx(deck, images)
+    let file = await buildPptx(deck, images)
+    let slimmed = false
+    if (!renderResponseFitsBudget(file.length) && images.size) {
+      // Preserve all text, shapes, charts and notes. Only the embedded photo
+      // copies are dropped if they would push Render over the hard budget.
+      file = await buildPptx(deck, new Map())
+      slimmed = true
+    }
+    if (!renderResponseFitsBudget(file.length)) return renderBandwidthBlocked("presentation-pptx", file.length)
+
     const name = pptxFileName(deck.title)
     return new Response(new Uint8Array(file), {
       headers: {
@@ -104,6 +133,7 @@ export async function POST(request: Request) {
         "content-length": String(file.length),
         "cache-control": "no-store",
         "x-malik-router": "presentation-export-v1",
+        "x-malik-bandwidth-mode": slimmed ? "slimmed-under-1mb" : "full-under-1mb",
       },
     })
   } catch (error) {
