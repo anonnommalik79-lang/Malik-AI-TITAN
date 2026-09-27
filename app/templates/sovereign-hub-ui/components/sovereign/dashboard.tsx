@@ -1317,6 +1317,14 @@ function toStorableMessage(message: Message): Message {
   const attachments = message.attachments?.map(toStorableAttachment)
   if (!message.generatedMedia) return attachments ? { ...message, attachments } : message
   const generatedMedia = stripInlineMediaBytes(message.generatedMedia)
+  if (generatedMedia.kind === "image" && generatedMedia.ephemeral) {
+    return {
+      ...message,
+      attachments,
+      generatedMedia: undefined,
+      content: "🖼️ Временное изображение удалено после завершения сессии.",
+    }
+  }
   return {
     ...message,
     attachments,
@@ -1399,6 +1407,7 @@ function reviveMessage(message: any): Message {
           provider: typeof message.generatedMedia.provider === "string" ? message.generatedMedia.provider : undefined,
           progress: typeof message.generatedMedia.progress === "number" ? message.generatedMedia.progress : undefined,
           url: typeof message.generatedMedia.url === "string" ? message.generatedMedia.url : undefined,
+          ephemeral: message.generatedMedia.ephemeral === true,
           fallbackUrl: typeof message.generatedMedia.fallbackUrl === "string" ? message.generatedMedia.fallbackUrl : undefined,
           understood: typeof message.generatedMedia.understood === "string" ? message.generatedMedia.understood : undefined,
           thumbnailUrl: typeof message.generatedMedia.thumbnailUrl === "string" ? message.generatedMedia.thumbnailUrl : undefined,
@@ -5221,13 +5230,15 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
 
           const mediaUrl = extractInlineMediaUrl(payload, media.kind)
           if (mediaUrl) {
-            const durableMediaUrl = media.kind === "image"
+            const ephemeralImage = media.kind === "image" && payload?.ephemeral === true
+            const durableMediaUrl = media.kind === "image" && !ephemeralImage
               ? await persistGeneratedImageReference(media.id, mediaUrl)
               : mediaUrl
             applyPersistentMediaPatch(media.id, {
               status: "ready",
               progress: 100,
               url: durableMediaUrl,
+              ephemeral: ephemeralImage || undefined,
               provider: payload?.provider || payload?.job?.provider || media.provider,
               jobId: payload?.jobId || payload?.id || media.jobId,
               statusUrl,
@@ -6456,7 +6467,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         typeof finalPayload?.browserCacheImageUrl === "string" ? finalPayload.browserCacheImageUrl :
         typeof finalPayload?.inlineImageUrl === "string" ? finalPayload.inlineImageUrl :
         ""
+      const ephemeralImage = inlineMediaKind === "image" && finalPayload?.ephemeral === true
       if (inlineMediaKind === "image" && mediaUrl) {
+        if (ephemeralImage) {
+          inlineFallbackUrl = ""
+        } else {
         const serverDurableUrl = finalPayload?.durable === true
           ? String(finalPayload?.masterUrl || finalPayload?.storageUrl || mediaUrl || "")
           : ""
@@ -6478,6 +6493,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           mediaUrl = durableMediaUrl
           if (isStoredGeneratedImageUrl(mediaUrl)) inlineFallbackUrl = ""
         }
+        }
       }
 
       const readyMedia: InlineMediaGeneration = {
@@ -6485,6 +6501,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         status: finalStatusIsProcessing ? "rendering" : "ready",
         progress: finalStatusIsProcessing ? 92 : 100,
         url: mediaUrl || undefined,
+        ephemeral: ephemeralImage || undefined,
         fallbackUrl: inlineFallbackUrl && inlineFallbackUrl !== mediaUrl ? inlineFallbackUrl : undefined,
         understood: (typeof finalPayload?.understood === "string" ? finalPayload.understood : "") || understood || undefined,
         thumbnailUrl:
