@@ -5,6 +5,29 @@ import type { VideoProviderId } from "@/lib/media/types"
 import { withComputeVideoStatus } from "@/lib/malik-compute/runtime"
 export const runtime = "nodejs"
 
+function renderVideoBandwidthGuard() {
+  return /^(?:1|true|yes|on)$/i.test(String(process.env.MALIK_VIDEO_RENDER_BANDWIDTH_GUARD || "").trim())
+}
+
+function browserDirectVideoUrl(value?: string) {
+  const url = String(value || "").trim()
+  if (!url) return undefined
+  if (!renderVideoBandwidthGuard()) return url
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== "https:") return undefined
+    const appOrigin = String(process.env.NEXT_PUBLIC_APP_URL || process.env.MALIK_PUBLIC_ORIGIN || "").trim()
+    if (appOrigin) {
+      try {
+        if (parsed.host === new URL(appOrigin).host) return undefined
+      } catch {}
+    }
+    return parsed.toString()
+  } catch {
+    return undefined
+  }
+}
+
 export const GET = withComputeVideoStatus(handleGET)
 
 async function handleGET(request: Request) {
@@ -37,18 +60,21 @@ async function handleGET(request: Request) {
   // media URL (Magic Hour, Pixazo, etc.), return that URL directly. The <video>
   // element still renders inside Malik AI, but the heavy MP4 bytes travel from
   // the provider/CDN to the user's browser instead of through Render.
-  const publicVideoUrl = result.videoUrl
+  const publicVideoUrl = browserDirectVideoUrl(result.videoUrl)
+  const proxyBlocked = Boolean(renderVideoBandwidthGuard() && result.videoUrl && !publicVideoUrl)
 
   return Response.json({
-    ok: result.ok,
+    ok: proxyBlocked ? false : result.ok,
     provider: result.provider,
     model: result.model,
     taskId: result.taskId,
-    status: publicStatus,
+    status: proxyBlocked ? "failed" : publicStatus,
     stage: result.stage,
     outputResolution: result.outputResolution,
     videoUrl: publicVideoUrl,
     url: publicVideoUrl,
-    error: result.error,
+    deliveryMode: publicVideoUrl ? "provider-direct-browser" : "metadata-only",
+    renderVideoBytes: 0,
+    error: proxyBlocked ? "VIDEO_DIRECT_DELIVERY_REQUIRED" : result.error,
   }, { headers: { "cache-control": "private, no-store" } })
 }
