@@ -1,0 +1,71 @@
+/*
+ * Typeset maths (malik-tex.tsx): fractions stacked, roots with a bar,
+ * powers and indices, sums with limits, matrices. Colour follows the text
+ * around it, so it reads the same in the chat, the answer sheet and the
+ * result viewer.
+ */
+
+.mtx {
+  font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", "Times New Roman", serif;
+  font-size: 1.06em;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.mtx-display {
+  display: block;
+  margin: 14px 0;
+  padding: 4px 0;
+  text-align: center;
+  font-size: 1.18em;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+
+.mtx-var { font-style: italic; }
+.mtx-op { margin: 0 0.24em; }
+.mtx sup .mtx-op, .mtx sub .mtx-op, .mtx-over .mtx-op, .mtx-under .mtx-op { margin: 0 0.08em; }
+.mtx-fn { font-style: normal; margin: 0 0.12em; }
+.mtx-roman { font-style: normal; }
+.mtx-roman .mtx-var { font-style: normal; }
+.mtx-bold { font-weight: 700; }
+.mtx-bold .mtx-var { font-style: normal; }
+.mtx-overline { text-decoration: overline; }
+.mtx-underline { text-decoration: underline; }
+.mtx-raw { opacity: 0.7; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; }
+
+.mtx-frac {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: middle;
+  margin: 0 0.12em;
+  font-size: 0.9em;
+}
+
+.mtx-display .mtx-frac { font-size: 0.95em; }
+.mtx-num { padding: 0 0.2em 0.12em; border-bottom: 0.06em solid currentColor; }
+.mtx-den { padding: 0.14em 0.2em 0; }
+
+.mtx-sqrt { display: inline-flex; align-items: stretch; vertical-align: middle; }
+.mtx-root { font-size: 0.6em; margin-right: -0.4em; align-self: flex-start; }
+.mtx-radical { display: block; flex: none; width: 0.62em; height: auto; min-height: 1.05em; align-self: stretch; overflow: visible; margin-right: -0.02em; }
+.mtx-radicand { display: inline-flex; align-items: baseline; border-top: 0.07em solid currentColor; padding: 0.14em 0.12em 0; line-height: 1.05; }
+
+.mtx sup, .mtx sub { font-size: 0.7em; line-height: 0; }
+.mtx-supsub { display: inline-flex; flex-direction: column; vertical-align: middle; font-size: 0.7em; line-height: 1.1; }
+.mtx-supsub sup, .mtx-supsub sub { font-size: 1em; line-height: 1.1; vertical-align: baseline; }
+
+.mtx-limits { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 0.15em; }
+.mtx-big { font-size: 1.5em; line-height: 1; }
+.mtx-over, .mtx-under { font-size: 0.65em; line-height: 1.2; min-height: 0.2em; }
+.mtx-big-inline { font-size: 1.25em; }
+
+.mtx-accent { display: inline-block; }
+
+.mtx-matrix { display: inline-flex; align-items: center; vertical-align: middle; gap: 0.15em; }
+.mtx-delim { font-size: 1.9em; font-weight: 300; line-height: 1; transform: scaleY(1.15); }
+.mtx-grid { display: inline-grid; gap: 0.25em 0.9em; align-items: center; justify-items: center; }
+.mtx-cell { white-space: nowrap; }

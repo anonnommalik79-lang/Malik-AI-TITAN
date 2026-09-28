@@ -4,6 +4,7 @@ import { Fragment, useState, type ReactNode } from "react"
 import { Archive, Check, Copy, Download, ExternalLink, Eye, RefreshCw } from "lucide-react"
 import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
 import { buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
+import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
 
 /**
  * Renders an assistant answer as structured text.
@@ -18,8 +19,39 @@ function isProjectArtifactHref(href: string) {
   return /^\/api\/ai\/project\/artifacts\/[^/]+\/download(?:\?|$)/.test(href)
 }
 
-/** `**bold**`, `*italic*`, `code`, and safe http(s)/same-origin API links. */
+/**
+ * A line of text: inline maths ($…$, \(…\)) set as formulas, everything
+ * else through the ordinary inline rules. Code spans are left alone, so a
+ * `$HOME` in backticks stays code.
+ */
 function inline(text: string, keyPrefix: string): ReactNode[] {
+  if (!/[$\\]/.test(text)) return inlineBase(text, keyPrefix)
+  const out: ReactNode[] = []
+  const parts = text.split(/(`[^`\n]+`)/)
+  parts.forEach((part, partIndex) => {
+    if (!part) return
+    if (part.length > 1 && part.startsWith("`") && part.endsWith("`")) {
+      out.push(...inlineBase(part, `${keyPrefix}-c${partIndex}`))
+      return
+    }
+    let last = 0
+    let piece = 0
+    const pattern = new RegExp(INLINE_MATH.source, "g")
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(part)) !== null) {
+      const tex = match[1] ?? match[2] ?? match[3] ?? ""
+      if (match[2] !== undefined && !looksLikeMath(tex)) continue
+      if (match.index > last) out.push(...inlineBase(part.slice(last, match.index), `${keyPrefix}-${partIndex}-${piece++}`))
+      out.push(<TexMath key={`${keyPrefix}-${partIndex}-m${piece++}`} tex={tex} display={match[1] !== undefined} />)
+      last = match.index + match[0].length
+    }
+    if (last < part.length) out.push(...inlineBase(part.slice(last), `${keyPrefix}-${partIndex}-${piece++}`))
+  })
+  return out.length ? out : [text]
+}
+
+/** `**bold**`, `*italic*`, `code`, and safe http(s)/same-origin API links. */
+function inlineBase(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = []
   const pattern = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\(((?:https?:\/\/|\/api\/)[^\s)]+)\))/g
 
@@ -71,15 +103,86 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
   return nodes.length ? nodes : [text]
 }
 
+type ListItem = { text: string; checked: boolean | null; children: ListBlock[] }
+type ListBlock = { ordered: boolean; start: number; items: ListItem[]; indent: number }
+
 type Block =
   | { kind: "p"; lines: string[] }
   | { kind: "h"; level: number; text: string }
-  | { kind: "ul"; items: string[] }
-  | { kind: "ol"; items: string[] }
+  | { kind: "list"; list: ListBlock }
+  | { kind: "math"; tex: string }
   | { kind: "code"; language: string; filename: string; lines: string[] }
   | { kind: "table"; headers: string[]; rows: string[][] }
   | { kind: "quote"; lines: string[] }
   | { kind: "hr" }
+
+const LIST_ITEM = /^(\s*)([-*•+]|\d{1,3}[.)])\s+(.*)$/
+
+function indentOf(value: string) {
+  return value.replace(/\t/g, "    ").length
+}
+
+function taskState(text: string): { text: string; checked: boolean | null } {
+  const match = /^\[([ xX])\]\s+(.*)$/.exec(text)
+  return match ? { text: match[2], checked: match[1] !== " " } : { text, checked: null }
+}
+
+/**
+ * A list with its nesting: indented items become a sub-list of the item
+ * above them, numbered lists keep their starting number (a list split by a
+ * blank line no longer restarts at 1), and "- [x]" becomes a checked box.
+ */
+function parseList(lines: string[], start: number): { block: ListBlock; next: number } {
+  const first = LIST_ITEM.exec(lines[start])!
+  const root: ListBlock = { ordered: /\d/.test(first[2]), start: /\d/.test(first[2]) ? Number.parseInt(first[2], 10) || 1 : 1, items: [], indent: indentOf(first[1]) }
+  const stack: ListBlock[] = [root]
+  let lastItem: ListItem | null = null
+  let index = start
+  while (index < lines.length) {
+    const line = lines[index]
+    const match = LIST_ITEM.exec(line)
+    if (!match) {
+      if (!line.trim()) {
+        // A blank line inside a list: it continues when the next line is
+        // another item or an indented continuation.
+        let ahead = index + 1
+        while (ahead < lines.length && !lines[ahead].trim()) ahead += 1
+        const nextLine = lines[ahead] || ""
+        const nextItem = LIST_ITEM.exec(nextLine)
+        if (nextItem && (indentOf(nextItem[1]) > root.indent || /\d/.test(nextItem[2]) === root.ordered)) {
+          index = ahead
+          continue
+        }
+        break
+      }
+      if (lastItem && /^\s{2,}\S/.test(line) && !/^\s*```/.test(line)) {
+        lastItem.text = `${lastItem.text} ${line.trim()}`
+        index += 1
+        continue
+      }
+      break
+    }
+    const indent = indentOf(match[1])
+    const ordered = /\d/.test(match[2])
+    while (stack.length > 1 && indent < stack[stack.length - 1].indent) stack.pop()
+    let top = stack[stack.length - 1]
+    if (indent >= top.indent + 2 && lastItem) {
+      const child: ListBlock = { ordered, start: ordered ? Number.parseInt(match[2], 10) || 1 : 1, items: [], indent }
+      lastItem.children.push(child)
+      stack.push(child)
+      top = child
+    } else if (stack.length === 1 && indent <= root.indent && ordered !== root.ordered) {
+      // A different kind of list at the top level starts a new block.
+      break
+    }
+    const task = taskState(match[3])
+    const item: ListItem = { text: task.text, checked: task.checked, children: [] }
+    top.items.push(item)
+    lastItem = item
+    index += 1
+  }
+  return { block: root, next: index }
+}
 
 function tableCells(line: string) {
   return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim())
@@ -209,6 +312,35 @@ function parseBlocks(source: string): Block[] {
       continue
     }
 
+    // Display maths: $$ … $$ or \[ … \], on one line or several. An unclosed
+    // block (the answer is still streaming) stays text until it closes.
+    const trimmed = line.trim()
+    if (trimmed.startsWith("$$") || trimmed.startsWith("\\[")) {
+      const close = trimmed.startsWith("$$") ? "$$" : "\\]"
+      const opening = trimmed.slice(2)
+      if (opening.trim().endsWith(close) && opening.trim().length > close.length) {
+        blocks.push({ kind: "math", tex: opening.trim().slice(0, -close.length) })
+        index += 1
+        continue
+      }
+      const body = [opening]
+      let end = index + 1
+      while (end < lines.length && !lines[end].includes(close)) {
+        body.push(lines[end])
+        end += 1
+      }
+      if (end < lines.length) {
+        body.push(lines[end].slice(0, lines[end].indexOf(close)))
+        blocks.push({ kind: "math", tex: body.join("\n").trim() })
+        index = end + 1
+        continue
+      }
+      // Not closed yet (still streaming): the rest is shown as it is.
+      blocks.push({ kind: "p", lines: lines.slice(index).filter((item) => item.trim()) })
+      index = lines.length
+      continue
+    }
+
     if (isTableStart(lines, index)) {
       const headers = tableCells(lines[index])
       const rows: string[][] = []
@@ -230,23 +362,10 @@ function parseBlocks(source: string): Block[] {
       continue
     }
 
-    if (/^\s*[-*•]\s+/.test(line)) {
-      const items: string[] = []
-      while (index < lines.length && /^\s*[-*•]\s+/.test(lines[index])) {
-        items.push(lines[index].replace(/^\s*[-*•]\s+/, ""))
-        index += 1
-      }
-      blocks.push({ kind: "ul", items })
-      continue
-    }
-
-    if (/^\s*\d+[.)]\s+/.test(line)) {
-      const items: string[] = []
-      while (index < lines.length && /^\s*\d+[.)]\s+/.test(lines[index])) {
-        items.push(lines[index].replace(/^\s*\d+[.)]\s+/, ""))
-        index += 1
-      }
-      blocks.push({ kind: "ol", items })
+    if (LIST_ITEM.test(line)) {
+      const parsed = parseList(lines, index)
+      blocks.push({ kind: "list", list: parsed.block })
+      index = Math.max(index + 1, parsed.next)
       continue
     }
 
@@ -264,9 +383,14 @@ function parseBlocks(source: string): Block[] {
     while (
       index < lines.length
       && lines[index].trim()
-      && !/^\s*(#{1,6}\s|[-*•]\s|\d+[.)]\s|>|```)/.test(lines[index])
+      && !/^\s*(#{1,6}\s|[-*•+]\s|\d+[.)]\s|>|```|\$\$|\\\[)/.test(lines[index])
       && !isTableStart(lines, index)
     ) {
+      paragraph.push(lines[index])
+      index += 1
+    }
+    // Every pass must consume at least one line, whatever the line is.
+    if (!paragraph.length) {
       paragraph.push(lines[index])
       index += 1
     }
@@ -473,6 +597,22 @@ function CodeBlock({ language, filename, code }: { language: string; filename: s
   )
 }
 
+function MarkdownList({ list, keyPrefix }: { list: ListBlock; keyPrefix: string }) {
+  const items = list.items.map((item, itemIndex) => {
+    const key = `${keyPrefix}-${itemIndex}`
+    return (
+      <li key={key} className={item.checked === null ? undefined : "malik-md-task"}>
+        {item.checked === null ? null : <span className={`malik-md-check${item.checked ? " is-checked" : ""}`} aria-label={item.checked ? "выполнено" : "не выполнено"} role="img">{item.checked ? "✓" : ""}</span>}
+        {inline(item.text, key)}
+        {item.children.map((child, childIndex) => <MarkdownList key={`${key}-c${childIndex}`} list={child} keyPrefix={`${key}-c${childIndex}`} />)}
+      </li>
+    )
+  })
+  return list.ordered
+    ? <ol className="malik-md-ol" start={list.start !== 1 ? list.start : undefined}>{items}</ol>
+    : <ul className="malik-md-ul">{items}</ul>
+}
+
 export function MalikMarkdown({ text, className }: Props) {
   const blocks = parseBlocks(text)
   const codeFiles = codeFilesFrom(blocks)
@@ -527,21 +667,9 @@ export function MalikMarkdown({ text, className }: Props) {
           return <Tag key={key} className={`malik-md-h malik-md-h${block.level}`}>{inline(block.text, key)}</Tag>
         }
 
-        if (block.kind === "ul") {
-          return (
-            <ul key={key} className="malik-md-ul">
-              {block.items.map((item, itemIndex) => <li key={`${key}-${itemIndex}`}>{inline(item, `${key}-${itemIndex}`)}</li>)}
-            </ul>
-          )
-        }
+        if (block.kind === "list") return <MarkdownList key={key} list={block.list} keyPrefix={key} />
 
-        if (block.kind === "ol") {
-          return (
-            <ol key={key} className="malik-md-ol">
-              {block.items.map((item, itemIndex) => <li key={`${key}-${itemIndex}`}>{inline(item, `${key}-${itemIndex}`)}</li>)}
-            </ol>
-          )
-        }
+        if (block.kind === "math") return <TexMath key={key} tex={block.tex} display />
 
         if (block.kind === "quote") {
           return <blockquote key={key} className="malik-md-quote">{inline(block.lines.join(" "), key)}</blockquote>

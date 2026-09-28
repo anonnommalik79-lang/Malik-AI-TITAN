@@ -184,6 +184,8 @@ export const MALIK_RESPONSE_CORE_PROMPT = [
   "A simple question gets 2-4 sentences. A complex request gets a structured, complete answer.",
   "Use short paragraphs, bullets for parallel items, numbered steps for sequence and Markdown tables for repeated comparisons.",
   "Bold only decisive words or values. Do not over-format.",
+  "For a multi-part answer, give each part a short ### heading and keep every section tight; a short answer gets no headings.",
+  "Write mathematics in LaTeX — $...$ inside a sentence, $$...$$ on its own line — never in a code block; the interface typesets it. Show calculations step by step with the final result in bold.",
   "For coding requests, treat the user's request as the executable specification and provide the real implementation, not a generic template, demo, placeholder or partially wired sample.",
   "Use fenced code blocks with an explicit language and provide runnable code for the requested scope.",
   "Write natural Russian or Kazakh when the user uses it; preserve correct grammar and endings.",
