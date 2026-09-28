@@ -5040,6 +5040,8 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
   const messagesRef = useRef<Message[]>([])
   const chatsRef = useRef<Chat[]>([])
   const sendGateRef = useRef<{ signature: string; at: number }>({ signature: "", at: 0 })
+  const activeStreamAbortRef = useRef<AbortController | null>(null)
+  const [streamAbortable, setStreamAbortable] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isGeneratingTerminal, setIsGeneratingTerminal] = useState(false) // Новое состояние для терминала
   const [generatedCode, setGeneratedCode] = useState<string>("")
@@ -5950,9 +5952,23 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const previousSubmission = sendGateRef.current
   const duplicateBurst = previousSubmission.signature === submissionSignature
     && submissionNow - previousSubmission.at < 2500
-  const sameTickBurst = submissionNow - previousSubmission.at < 350
-  if (isLoading || duplicateBurst || sameTickBurst) return
+  // A second *different* prompt is legitimate (ChatView may have queued it).
+  // Only repeat submissions of the same turn are suppressed.
+  if (isLoading || (!options?.queueDispatch && duplicateBurst)) return
   sendGateRef.current = { signature: submissionSignature, at: submissionNow }
+
+  const requestedBranchMessageId = String(options?.branchFromMessageId || "").trim()
+  const branchSourceIndex = requestedBranchMessageId
+    ? messagesRef.current.findIndex((message) => message.id === requestedBranchMessageId && message.role === "user")
+    : -1
+  const branching = branchSourceIndex >= 0
+  const conversationBase = branching
+    ? messagesRef.current.slice(0, branchSourceIndex)
+    : messagesRef.current
+  const sourceChat = branching && activeChatId
+    ? chatsRef.current.find((chat) => chat.id === activeChatId)
+    : undefined
+  const branchChatId = branching ? crypto.randomUUID() : null
 
   // Auto mode: a goal that needs several tools ("создай стартап и подготовь
   // его к презентации инвесторам") becomes a Superflow — a live block of real
@@ -5960,27 +5976,53 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // deliverables keep their usual path. Signed-in accounts only: projects are
   // stored per account.
   if (!attachments.length && !guestMode && workOSUser?.email && decideSuperflow(cleanContent).run) {
-    const flowChatId = activeChatId || crypto.randomUUID()
+    const flowChatId = branchChatId || activeChatId || crypto.randomUUID()
     const reference: SuperflowRef = { clientRequestId: newRequestId("sf"), goal: cleanContent }
     const userTurn: Message = { id: crypto.randomUUID(), role: "user", content: cleanContent, timestamp: new Date() }
     const flowTurn: Message = { id: crypto.randomUUID(), role: "assistant", content: "", timestamp: new Date(), superflow: reference }
-    if (!activeChatId) {
-      const newChat: Chat = {
-        id: flowChatId,
-        title: cleanContent.slice(0, 34) + (cleanContent.length > 34 ? "..." : ""),
-        timestamp: new Date(),
-        messages: [],
-        selectedModelId,
-        kind: "project",
-        projectDescription: cleanContent.slice(0, 240),
-      }
-      setChats((previous) => [newChat, ...previous])
+    if (branching) {
+      const branchChat: Chat = sourceChat
+        ? {
+            ...sourceChat,
+            id: flowChatId,
+            title: `${sourceChat.title} · ветка`,
+            timestamp: new Date(),
+            messages: [...conversationBase, userTurn, flowTurn],
+            selectedModelId,
+            kind: "project",
+            projectDescription: sourceChat.projectDescription || cleanContent.slice(0, 240),
+          }
+        : {
+            id: flowChatId,
+            title: cleanContent.slice(0, 34) + (cleanContent.length > 34 ? "..." : ""),
+            timestamp: new Date(),
+            messages: [...conversationBase, userTurn, flowTurn],
+            selectedModelId,
+            kind: "project",
+            projectDescription: cleanContent.slice(0, 240),
+          }
+      setChats((previous) => [branchChat, ...previous])
       setActiveChatId(flowChatId)
+      setMessages([...conversationBase, userTurn, flowTurn])
+    } else {
+      if (!activeChatId) {
+        const newChat: Chat = {
+          id: flowChatId,
+          title: cleanContent.slice(0, 34) + (cleanContent.length > 34 ? "..." : ""),
+          timestamp: new Date(),
+          messages: [],
+          selectedModelId,
+          kind: "project",
+          projectDescription: cleanContent.slice(0, 240),
+        }
+        setChats((previous) => [newChat, ...previous])
+        setActiveChatId(flowChatId)
+      }
+      setMessages((previous) => [...previous, userTurn, flowTurn])
+      setChats((previous) => previous.map((chat) => chat.id === flowChatId
+        ? { ...chat, kind: "project", projectDescription: chat.projectDescription || cleanContent.slice(0, 240), messages: [...chat.messages.filter((item) => item.id !== userTurn.id && item.id !== flowTurn.id), userTurn, flowTurn] }
+        : chat))
     }
-    setMessages((previous) => [...previous, userTurn, flowTurn])
-    setChats((previous) => previous.map((chat) => chat.id === flowChatId
-      ? { ...chat, kind: "project", projectDescription: chat.projectDescription || cleanContent.slice(0, 240), messages: [...chat.messages.filter((item) => item.id !== userTurn.id && item.id !== flowTurn.id), userTurn, flowTurn] }
-      : chat))
     return
   }
 
@@ -6006,7 +6048,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // The user does not need to upload the generated picture again.
   const implicitGeneratedImage = attachments.some((item) => item.kind === "image")
     ? null
-    : await latestGeneratedImageAttachment(messagesRef.current, cleanContent)
+    : await latestGeneratedImageAttachment(conversationBase, cleanContent)
   const requestAttachments = implicitGeneratedImage
     ? [...attachments, implicitGeneratedImage]
     : attachments
@@ -6076,10 +6118,34 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     ? cleanContent
     : `${inlineMediaKind === "video" ? "/video" : "/image"} ${cleanContent}`
   setActiveGenerationKind(needsImageConfirmation ? "text" : inlineMediaKind || detectDashboardGenerationKind(cleanContent, requestAttachments, activeAiMode))
-  const chatId = activeChatId || crypto.randomUUID()
+  const chatId = branchChatId || activeChatId || crypto.randomUUID()
   const title = cleanContent.slice(0, 34) + (cleanContent.length > 34 ? "..." : "")
 
-  if (!activeChatId) {
+  if (branching) {
+    const branchChat: Chat = sourceChat
+      ? {
+          ...sourceChat,
+          id: chatId,
+          title: `${sourceChat.title} · ветка`,
+          timestamp: new Date(),
+          messages: [...conversationBase],
+          selectedModelId,
+          status: runtimePlan.status,
+          techStack: runtimePlan.techStack,
+        }
+      : {
+          id: chatId,
+          title,
+          timestamp: new Date(),
+          messages: [...conversationBase],
+          selectedModelId,
+          status: runtimePlan.status,
+          techStack: runtimePlan.techStack,
+          kind: isProjReq ? "project" : "chat",
+        }
+    setChats((previous) => [branchChat, ...previous])
+    setActiveChatId(chatId)
+  } else if (!activeChatId) {
     const newChat: Chat = {
       id: chatId,
       title,
@@ -6126,10 +6192,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     actionPlan: actionPlan || undefined,
   }
 
-  setMessages(prev => [...prev, userMessage, assistantMessage])
+  setMessages((previous) => [...(branching ? conversationBase : previous), userMessage, assistantMessage])
   setChats((previous) => previous.map((chat) => {
     if (chat.id !== chatId) return chat
-    const nextMessages = [...chat.messages]
+    const nextMessages = branching ? [...conversationBase] : [...chat.messages]
     if (!nextMessages.some((message) => message.id === userMessage.id)) nextMessages.push(userMessage)
     if (!nextMessages.some((message) => message.id === assistantMessage.id)) nextMessages.push(assistantMessage)
     return { ...chat, messages: nextMessages }
@@ -6161,7 +6227,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // with the request. Off means the model sees this message and nothing else.
   const carryContext = readContextEnabled()
   const historyWindow = 32
-  const history = (carryContext ? [...messages, userMessage].slice(-historyWindow) : [userMessage]).map(m => {
+  const history = (carryContext ? [...conversationBase, userMessage].slice(-historyWindow) : [userMessage]).map(m => {
     const mediaFact = describeReadyMediaAction(m.generatedMedia)
     return {
       role: m.role,
@@ -6171,14 +6237,14 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     }
   })
   const memoryContext = buildMalikMemoryContext()
-  const sessionMemoryContext = carryContext ? buildPersistentSessionMemoryContext(messages, historyWindow - 1) : ""
-  const mediaHistoryContext = buildMalikMediaHistoryContext(messages)
+  const sessionMemoryContext = carryContext ? buildPersistentSessionMemoryContext(conversationBase, historyWindow - 1) : ""
+  const mediaHistoryContext = buildMalikMediaHistoryContext(conversationBase)
 
   const attachmentSummary = attachments.length
     ? "\n\n[Вложения]: " + attachments.map(a => `${a.kind}:${a.name || a.url || "untitled"} (${a.mime || "text"})`).join(", ")
     : ""
 
-  const activeProject = chats.find((chat) => chat.id === chatId)
+  const activeProject = branching ? sourceChat : chats.find((chat) => chat.id === chatId)
   const projectContext = activeProject && (activeProject.projectDescription || activeProject.projectInstructions)
     ? [
         "[MALIK_PROJECT_CONTEXT]",
@@ -6638,7 +6704,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // The part of the answer the reader has already watched arrive. If the turn
   // then fails, the error is added under it instead of wiping it.
   let liveShownText = ""
+  let fullText = ""
   let stopLive: () => void = () => {}
+  const streamController = new AbortController()
+  activeStreamAbortRef.current?.abort()
+  activeStreamAbortRef.current = streamController
+  setStreamAbortable(true)
 
   try {
     dashboardEventBus.emit({
@@ -6709,6 +6780,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         'Content-Type': 'application/json; charset=utf-8',
         'Accept': 'text/event-stream',
       },
+      signal: streamController.signal,
       body: JSON.stringify({
         question,
         originalQuestion: cleanContent,
@@ -6774,7 +6846,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       throw new Error(message || `${getMalikModel(selectedModelId).label} временно недоступна.`)
     }
 
-    let fullText = ""
+    fullText = ""
     // True once the server said the answer is complete (`done`). A stream that
     // simply stops without it was cut on the way (proxy timeout, network).
     let sawDone = false
@@ -6978,6 +7050,17 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     finalizeAssistant(cleanDashboardAIText(cleanText || fullText), code, finalResearch)
   } catch (error) {
     stopLive()
+    if (streamController.signal.aborted) {
+      const partial = cleanDashboardAIText(liveShownText || fullText)
+      finalizeAssistant(
+        partial ? `${partial}\n\n_Остановлено пользователем._` : "_Остановлено пользователем._",
+        undefined,
+        finalResearch,
+      )
+      setErrorNotification(null)
+      setIsGeneratingTerminal(false)
+      return
+    }
     console.error("Streaming error:", error)
     dashboardEventBus.emit({
       type: "runtime:error",
@@ -7012,10 +7095,16 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       : errorMessage
     finalizeAssistant(failedText, undefined, finalResearch ? { ...finalResearch, status: "error", tookMs: Date.now() - finalResearch.startedAt } : undefined, true)
   } finally {
+    if (activeStreamAbortRef.current === streamController) activeStreamAbortRef.current = null
+    setStreamAbortable(false)
     setIsLoading(false)
     setStreamingText("")
   }
 }, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email, safeOpenView])
+
+  const handleStopGeneration = useCallback(() => {
+    activeStreamAbortRef.current?.abort("user")
+  }, [])
 
   const handleImageConfirmation = useCallback((
     messageId: string,
@@ -7475,6 +7564,10 @@ const shouldShowMobilePreviewButton =
                 onSendMessage={handleSendMessage}
                 onImageConfirmation={handleImageConfirmation}
                 isLoading={isLoading}
+
+                canStopGeneration={streamAbortable}
+
+                onStopGeneration={handleStopGeneration}
                 streamingText={streamingText}
                 currentUser={username}
                 userPlan={currentPlan}
@@ -7512,6 +7605,10 @@ const shouldShowMobilePreviewButton =
               onSendMessage={handleSendMessage}
               onImageConfirmation={handleImageConfirmation}
               isLoading={isLoading}
+
+              canStopGeneration={streamAbortable}
+
+              onStopGeneration={handleStopGeneration}
               streamingText={streamingText}
               currentUser={username}
               userPlan={currentPlan}
