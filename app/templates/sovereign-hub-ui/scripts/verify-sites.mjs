@@ -188,6 +188,13 @@ assert.match(engine, /RULE: \$\{|RULE: /, "Правила скиллов дол�
 assert.match(engine, /understood/, "Планировщик обязан отчитаться, что он понял")
 assert.match(engine, /Never "Добро пожаловать"/, "Промпт должен прямо запрещать шаблонные заголовки")
 
+const siteRenderer = await loadModule("lib/sites/skill-engine.ts")
+const generated = siteRenderer.renderWebsiteFromPlan(siteRenderer.fallbackWebsitePlan("Сайт кофейни в Алматы", "adaptive"), [])
+assert.match(generated, /property="og:title"/, "Экспортируемый HTML должен содержать OG title")
+assert.match(generated, /type="application\/ld\+json"/, "Экспортируемый HTML должен содержать JSON-LD")
+assert.match(generated, /class="skip-link"/, "Должен быть доступный переход к содержимому")
+assert.match(generated, /@media\(max-width:640px\)/, "Должны быть мобильные стили")
+
 console.log(`✅ Sites: планировщик без привязки к модели, ${SITE_SKILLS.length} скиллов с правилами, качество плана проверяется`)
 
 /**

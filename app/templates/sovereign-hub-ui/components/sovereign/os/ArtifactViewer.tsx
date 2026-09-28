@@ -5,7 +5,7 @@ import { ArrowUpRight, Download, GitCompare, History, Loader2, PencilLine, Spark
 
 import { MalikMarkdown } from "../MalikMarkdown"
 import { OverlayPortal } from "../OverlayPortal"
-import type { Artifact, ArtifactKind } from "@/lib/os/types"
+import type { Artifact, ArtifactKind, ArtifactSummary } from "@/lib/os/types"
 
 import { newRequestId, osFetch, useLiveFlow, type FlowView } from "./os-client"
 import { PREVIEW_ERROR_MESSAGE, downloadBlob, foldProjectForPreview, safeFileName, withErrorReporter, zipFiles, type ProjectFile } from "./preview"
@@ -22,11 +22,12 @@ import "./os.css"
 type LineageEntry = { id: string; title: string; kind: ArtifactKind; version?: number; createdAt: number }
 type Lineage = { versions: LineageEntry[]; sources: LineageEntry[]; derived: LineageEntry[] }
 type ArtifactPayload = { artifact: Omit<Artifact, "ownerId">; lineage: Lineage | null }
+type ProjectPackEntry = Pick<ArtifactSummary, "id" | "kind" | "title" | "summary" | "url" | "sourceTool" | "links"> & { bytes?: number }
 type DiffHunk = { type: "same" | "add" | "remove" | "gap"; text?: string; count?: number }
 type DiffPayload = { mode: "lines"; hunks: DiffHunk[]; added: number; removed: number } | { mode: "files"; files: Array<{ path: string; status: string; added: number; removed: number; hunks: DiffHunk[] }> }
 
 const CONTINUE_BY_KIND: Partial<Record<ArtifactKind, Array<{ target: string; label: string }>>> = {
-  "business-plan": [{ target: "presentation", label: "Презентация для инвесторов" }, { target: "website", label: "Сайт" }, { target: "video-script", label: "Сценарий видео" }],
+  "business-plan": [{ target: "launch-pack", label: "План запуска + питчи" }, { target: "presentation", label: "Презентация для инвесторов" }, { target: "website", label: "Сайт" }, { target: "video-script", label: "Сценарий видео" }],
   analysis: [{ target: "business-plan", label: "Бизнес-план" }, { target: "presentation", label: "Презентация" }, { target: "document", label: "Отчёт" }],
   document: [{ target: "presentation", label: "Презентация" }, { target: "website", label: "Сайт" }],
   text: [{ target: "presentation", label: "Презентация" }, { target: "website", label: "Сайт" }, { target: "logo", label: "Логотип" }],
@@ -79,6 +80,7 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
   const [economicsBusy, setEconomicsBusy] = useState(false)
   const [economicsInputs, setEconomicsInputs] = useState<Record<string, string>>({ currency: "KZT" })
   const [mediaError, setMediaError] = useState(false)
+  const [packBusy, setPackBusy] = useState(false)
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   const tokenRef = useRef(newRequestId("pv"))
 
@@ -208,6 +210,46 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
     if (artifact.url) window.open(artifact.url, "_blank", "noopener,noreferrer")
   }
 
+  const downloadBusinessPack = async () => {
+    if (!artifact || artifact.kind !== "business-plan") return
+    setPackBusy(true)
+    setActionError("")
+    try {
+      const projectResponse = await osFetch<{ project: { id: string; title: string; goal: string }; artifacts: ProjectPackEntry[] }>(`/api/os/projects/${artifact.projectId}`)
+      if (!projectResponse.ok) throw new Error(projectResponse.message)
+      const { project, artifacts } = projectResponse.data
+      const selected = artifacts.filter((item) => ["business-plan", "analysis", "text", "document", "website", "presentation", "image", "video", "audio"].includes(item.kind)).slice(0, 30)
+      const files: ProjectFile[] = []
+      const failed: string[] = []
+      const textKinds = new Set<ArtifactKind>(["business-plan", "analysis", "text", "document", "website", "presentation"])
+      for (let offset = 0; offset < selected.length; offset += 4) {
+        const batch = selected.slice(offset, offset + 4).filter((item) => textKinds.has(item.kind) && Number(item.bytes) > 0)
+        const results = await Promise.all(batch.map((item) => osFetch<ArtifactPayload>(`/api/os/artifacts/${item.id}`)))
+        results.forEach((result, index) => {
+          const item = batch[index]
+          if (!result.ok || !result.data.artifact.content) { failed.push(item.title); return }
+          const ext = item.kind === "website" ? "html" : item.kind === "presentation" ? "json" : "md"
+          const content = result.data.artifact.content
+          files.push({ path: `artifacts/${item.id}.${ext}`, content })
+        })
+      }
+      const manifest = {
+        format: "malik-business-pack-v1", project: { id: project.id, title: project.title, goal: project.goal },
+        exportedAt: new Date().toISOString(),
+        note: "Медиафайлы не копируются через сервер Malik AI. URL провайдера может истечь; сохраняйте оригиналы отдельно.",
+        artifacts: selected.map((item) => ({ id: item.id, kind: item.kind, title: item.title, summary: item.summary, url: item.url || null, contentFile: files.find((file) => file.path.startsWith(`artifacts/${item.id}.`))?.path || null, sourceTool: item.sourceTool, links: item.links })),
+        omittedCount: Math.max(0, artifacts.length - selected.length), failed,
+      }
+      files.unshift({ path: "manifest.json", content: JSON.stringify(manifest, null, 2) })
+      downloadBlob(zipFiles(files), safeFileName(`${project.title}-business-pack`, "zip"))
+      if (failed.length) setActionError(`Экспорт создан, но ${failed.length} текстовых материалов не удалось загрузить.`)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Не удалось собрать материалы проекта.")
+    } finally {
+      setPackBusy(false)
+    }
+  }
+
   const openInNewTab = () => {
     if (!html) return
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }))
@@ -259,6 +301,7 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
               {versions.length > 1 ? <button type="button" className="malik-os-button" onClick={() => setPanel(panel === "versions" ? "" : "versions")} aria-label="Версии"><History aria-hidden="true" /><span className="malik-os-hide-sm">Версии</span></button> : null}
               {editable ? <button type="button" className="malik-os-button" onClick={() => setPanel(panel === "edit" ? "" : "edit")} aria-label="Изменить"><PencilLine aria-hidden="true" /><span className="malik-os-hide-sm">Изменить</span></button> : null}
               {artifact?.kind === "business-plan" ? <button type="button" className="malik-os-button" onClick={() => setShowEconomics(!showEconomics)} aria-label="Рассчитать юнит-экономику">Юнит-экономика</button> : null}
+              {artifact?.kind === "business-plan" ? <button type="button" className="malik-os-button" disabled={packBusy} onClick={() => void downloadBusinessPack()} aria-label="Скачать материалы проекта ZIP">{packBusy ? "Собираю ZIP…" : "Экспорт проекта"}</button> : null}
               {artifact?.kind === "image" && artifact.url ? <button type="button" className="malik-os-button" onClick={openImageInVideoStudio}>Фото → Видео</button> : null}
               {continueTargets.length ? <button type="button" className="malik-os-button" onClick={() => setPanel(panel === "continue" ? "" : "continue")} aria-label="Продолжить в другом инструменте"><Sparkles aria-hidden="true" /><span className="malik-os-hide-sm">Дальше</span></button> : null}
               <button type="button" className="malik-os-close" onClick={onClose} aria-label="Закрыть"><X aria-hidden="true" /></button>

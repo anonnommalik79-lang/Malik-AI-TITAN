@@ -19,6 +19,7 @@ export const CONTINUE_TARGETS: Record<string, { tool: ToolName; label: string }>
   presentation: { tool: "presentation.generate", label: "Готовлю презентацию" },
   website: { tool: "site.generate", label: "Собираю сайт" },
   "business-plan": { tool: "business.plan", label: "Пишу бизнес-план" },
+  "launch-pack": { tool: "business.launch", label: "Готовлю план запуска и питч" },
   "video-script": { tool: "video.script", label: "Пишу сценарий видео" },
   document: { tool: "document.write", label: "Пишу документ" },
   research: { tool: "research.web", label: "Исследую рынок" },

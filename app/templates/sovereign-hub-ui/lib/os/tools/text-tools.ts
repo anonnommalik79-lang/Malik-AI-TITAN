@@ -1,4 +1,5 @@
 import { OsToolError } from "../failures"
+import { normalizeLaunchPack, pitchesMarkdown, roadmapMarkdown } from "@/lib/business/launch-pack"
 import type { ProjectSource } from "../types"
 import type { ToolDefinition, WebSource } from "./contract"
 import {
@@ -252,7 +253,7 @@ export const businessPlanTool: ToolDefinition = {
     const answer = await askText(context, {
       system: [
         "Ты — финансовый консультант и автор бизнес-планов для инвесторов Malik AI.",
-        `Пиши на ${LANGUAGE_NAME[language]} языке, в Markdown, с разделами ##: Резюме, Проблема, Решение и продукт, Рынок (с цитатами [n] из исследования), Конкуренты, Бизнес-модель и юнит-экономика, Go-to-market, Операционный план, Команда (какие роли нужны — без выдуманных людей), Финансовый план на 3 года (таблица; все цифры — оценки с объяснением допущений), Риски и как их снижать, Инвестиции: сколько нужно и на что.`,
+        `Пиши на ${LANGUAGE_NAME[language]} языке, в Markdown, с разделами ##: Резюме, Проблема, Решение и продукт, Рынок (с цитатами [n] из исследования), Конкуренты, Бизнес-модель и юнит-экономика, Go-to-market, Операционный план, Команда (какие роли нужны — без выдуманных людей), Финансовый план на 3 года, Риски и как их снижать, Инвестиции: сколько нужно и на что. Если нет явных исходных данных для финансового прогноза — не вставляй придуманные суммы и таблицы; перечисли нужные входные показатели и расчётные формулы. Отделяй подтверждённые факты пользователя, проверенные источники, допущения и предложения.`,
         brand ? `Название компании везде — ${brand.name}.` : "",
         NO_INVENTION,
       ].join(" "),
@@ -272,6 +273,46 @@ export const businessPlanTool: ToolDefinition = {
         summary: clip(answer.content.split(/\n## /)[1]?.replace(/^Резюме\s*/i, "") || answer.content, 300),
         metadata: { role: "business-plan" },
       }],
+    }
+  },
+}
+
+/* -------------------------------------------------------- business.launch */
+
+export const businessLaunchTool: ToolDefinition = {
+  name: "business.launch",
+  label: "Готовлю запуск и питч",
+  sideEffect: "none",
+  timeoutMs: 240_000,
+  async run(context) {
+    const plan = planOf(context)
+    if (!plan?.content) throw new OsToolError("INVALID_INPUT", "Для плана запуска нужен бизнес-план проекта.", { retryable: false })
+    const brand = brandOf(context)
+    const brief = briefOf(context)
+    const language = brief?.language || languageOf(context.flow.goal)
+    context.activity("Планирую шаги на 7, 30 и 90 дней", 0.2)
+    const answer = await askJson(context, {
+      system: [
+        `Ты — операционный стратег. Отвечай на ${LANGUAGE_NAME[language]} языке строго JSON-объектом.`,
+        'Схема: {"roadmap":{"day7":{"outcome":"","actions":["",""],"evidence":[""]},"day30":{"outcome":"","actions":["",""],"evidence":[""]},"day90":{"outcome":"","actions":["",""],"evidence":[""]}},"pitches":{"seconds30":"","minutes2":"","minutes5":""},"openQuestions":[""]}.',
+        "Действия должны быть конкретными для этой идеи, аудитории и страны. evidence — измеримые способы проверить шаги, не выдуманные достижения.",
+        "Три питча различаются длиной и детализацией. Не называй неуказанные продажи, клиентов, инвестиции или членов команды фактом: сформулируй вопрос или оставь [уточнить].",
+        "Укажи источники [n] только если они есть во входном исследовании. Избегай пустых стартап-штампов.",
+        NO_INVENTION,
+      ].join(" "),
+      prompt: projectContext(context, { research: 3_500, plan: 5_000 }),
+      maxTokens: 5_000,
+      normalize: normalizeLaunchPack,
+    })
+    const pack = answer.value
+    context.activity("Сверяю питч с бизнес-планом", 0.9)
+    const link = { relation: "derived-from" as const, artifactId: plan.id }
+    return {
+      provider: answer.provider,
+      artifacts: [
+        { projectId: context.project.id, kind: "document", title: `План запуска ${brand?.name || "проекта"}`, sourceTool: "business.launch", sourceTask: context.task.id, content: roadmapMarkdown(pack), mime: "text/markdown", summary: "План на 7, 30 и 90 дней с проверяемыми результатами", links: [link], metadata: { role: "launch-roadmap", openQuestions: pack.openQuestions } },
+        { projectId: context.project.id, kind: "document", title: `Питч ${brand?.name || "проекта"}`, sourceTool: "business.launch", sourceTask: context.task.id, content: pitchesMarkdown(pack), mime: "text/markdown", summary: "Питч на 30 секунд, 2 и 5 минут", links: [link], metadata: { role: "business-pitches", openQuestions: pack.openQuestions } },
+      ],
     }
   },
 }

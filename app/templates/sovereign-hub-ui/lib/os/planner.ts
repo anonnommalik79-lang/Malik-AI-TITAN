@@ -30,6 +30,7 @@ const STEPS: Step[] = [
   { id: "brand", type: "brand.create", label: "Создаю бренд", capability: "brand", needs: ["understand"], uses: ["research"] },
   { id: "logo", type: "image.generate", label: "Рисую логотип", capability: "image", needs: ["understand"], uses: ["brand"], optional: true },
   { id: "plan", type: "business.plan", label: "Пишу бизнес-план", capability: "business-plan", needs: ["understand"], uses: ["research", "brand"] },
+  { id: "launch", type: "business.launch", label: "Готовлю запуск и питч", capability: "business-plan", needs: ["plan"], uses: ["research", "brand"], optional: true },
   { id: "document", type: "document.write", label: "Пишу документ", capability: "document", needs: ["understand"], uses: ["research", "brand", "plan"] },
   { id: "site", type: "site.generate", label: "Собираю сайт", capability: "website", needs: ["understand"], uses: ["brand", "logo", "research"] },
   { id: "deck", type: "presentation.generate", label: "Готовлю Investor Deck", capability: "presentation", needs: ["understand"], uses: ["plan", "brand", "logo", "research"] },

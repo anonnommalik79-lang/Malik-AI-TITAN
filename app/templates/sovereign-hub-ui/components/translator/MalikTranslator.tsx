@@ -10,6 +10,8 @@ import {
   Clipboard,
   ClipboardPaste,
   Clock,
+  Download,
+  FileText,
   Globe,
   Languages,
   Layers,
@@ -27,6 +29,7 @@ import {
   languageLabel,
   speechLocale,
 } from "@/lib/translator/languages"
+import { prepareDocument, translatePreparedDocument } from "@/lib/translator/document"
 
 const MAX_LENGTH = 5000
 const HISTORY_KEY = "malik_translator_history_v1"
@@ -224,8 +227,31 @@ export function MalikTranslator() {
   const [copied, setCopied] = useState(false)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [showAllHistory, setShowAllHistory] = useState(false)
+  const [documentFile, setDocumentFile] = useState<File | null>(null)
+  const [documentLoading, setDocumentLoading] = useState(false)
+  const [documentProgress, setDocumentProgress] = useState(0)
+  const [documentError, setDocumentError] = useState("")
+  const [documentResult, setDocumentResult] = useState<{ name: string; content: string; extension: "txt" | "md" } | null>(null)
+  const [projectOptions, setProjectOptions] = useState<Array<{ id: string; title: string }>>([])
+  const [projectStorageReady, setProjectStorageReady] = useState(false)
+  const [selectedProject, setSelectedProject] = useState("")
+  const [documentSaving, setDocumentSaving] = useState(false)
+  const [savedArtifactId, setSavedArtifactId] = useState("")
+  const documentAbort = useRef<AbortController | null>(null)
 
   useEffect(() => setHistory(readHistory()), [])
+  useEffect(() => () => documentAbort.current?.abort(), [])
+  useEffect(() => {
+    if (!documentResult) return
+    let active = true
+    void fetch("/api/os/projects", { cache: "no-store" }).then((response) => response.json()).then((payload) => {
+      if (!active) return
+      setProjectStorageReady(Boolean(payload?.durable))
+      setProjectOptions(Array.isArray(payload?.projects) ? payload.projects.filter((project: unknown): project is { id: string; title: string } =>
+        Boolean(project && typeof project === "object" && typeof (project as { id?: unknown }).id === "string" && typeof (project as { title?: unknown }).title === "string")) : [])
+    }).catch(() => { if (active) setProjectOptions([]) })
+    return () => { active = false }
+  }, [documentResult])
 
   // legendary-aurora.css paints gold radial gradients on body::before and
   // body::after for every page in the app. Behind this section they read as a
@@ -335,6 +361,68 @@ export function MalikTranslator() {
   }
 
   const visibleHistory = showAllHistory ? history : history.slice(0, 3)
+
+  const translateDocument = async () => {
+    if (!documentFile || documentLoading) return
+    setDocumentLoading(true)
+    setDocumentError("")
+    setDocumentResult(null)
+    setSavedArtifactId("")
+    setDocumentProgress(0)
+    const controller = new AbortController()
+    documentAbort.current = controller
+    try {
+      if (documentFile.size > 160_000) throw new Error("Файл слишком большой для текстового режима. Максимум 160 КБ UTF-8.")
+      const prepared = prepareDocument(documentFile.name, await documentFile.text())
+      const translated = await translatePreparedDocument(prepared, async (part) => {
+        const response = await fetch("/api/translator", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: part, source, target }), signal: controller.signal,
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || typeof payload.translatedText !== "string") throw new Error(payload.error || "Не удалось перевести часть документа.")
+        return payload.translatedText
+      }, (completed, total) => setDocumentProgress(total ? Math.round(completed / total * 100) : 100))
+      const base = documentFile.name.replace(/\.(?:txt|md)$/i, "").replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(0, 80) || "document"
+      setDocumentResult({ name: `${base}-${target}.${prepared.extension}`, content: translated, extension: prepared.extension })
+      setDocumentProgress(100)
+    } catch (cause) {
+      setDocumentError(controller.signal.aborted ? "Перевод остановлен." : cause instanceof Error ? cause.message : "Не удалось перевести документ.")
+    } finally {
+      setDocumentLoading(false)
+      documentAbort.current = null
+    }
+  }
+
+  const downloadDocument = () => {
+    if (!documentResult) return
+    const blob = new Blob([documentResult.content], { type: documentResult.extension === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = documentResult.name
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
+  }
+
+  const saveDocumentToProject = async () => {
+    if (!documentResult || !selectedProject || documentSaving || !projectStorageReady) return
+    setDocumentSaving(true)
+    setDocumentError("")
+    try {
+      const response = await fetch(`/api/os/projects/${encodeURIComponent(selectedProject)}/translations`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...documentResult, source, target }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.artifactId) throw new Error(payload?.error || "Не удалось сохранить перевод в проект.")
+      setSavedArtifactId(String(payload.artifactId))
+    } catch (cause) {
+      setDocumentError(cause instanceof Error ? cause.message : "Не удалось сохранить перевод в проект.")
+    } finally {
+      setDocumentSaving(false)
+    }
+  }
 
   return (
     <main className="malik-translator-page min-h-[100dvh] bg-black text-zinc-100 antialiased">
@@ -539,6 +627,35 @@ export function MalikTranslator() {
             </button>
           </div>
         </div>
+
+        <section className="mt-4 rounded-[16px] border border-white/[0.09] bg-[#0a0a0b] p-4" aria-label="Перевод документа">
+          <div className="flex flex-wrap items-center gap-3">
+            <FileText className="h-5 w-5 text-zinc-300" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <h3 className="text-[13px] font-semibold text-white">Перевести документ</h3>
+              <p className="mt-0.5 text-[11px] text-zinc-500">TXT и Markdown · файл остаётся в браузере · строки, заголовки, списки и кодовые блоки сохраняются. DOCX/PDF пока не поддерживаются.</p>
+            </div>
+            <label className="cursor-pointer rounded-lg border border-white/[0.12] px-3 py-2 text-[12px] text-zinc-200 hover:bg-white/[0.06]">
+              Выбрать файл
+              <input type="file" accept=".txt,.md,text/plain,text/markdown" className="sr-only" disabled={documentLoading} onChange={(event) => { setDocumentFile(event.target.files?.[0] || null); setDocumentResult(null); setSavedArtifactId(""); setDocumentError(""); event.target.value = "" }} />
+            </label>
+            <button type="button" onClick={() => void translateDocument()} disabled={!documentFile || documentLoading} className="rounded-lg bg-white px-3 py-2 text-[12px] font-semibold text-black disabled:opacity-30">{documentLoading ? `Перевожу ${documentProgress}%` : "Перевести файл"}</button>
+            {documentLoading ? <button type="button" onClick={() => documentAbort.current?.abort()} className="rounded-lg border border-white/[0.12] px-3 py-2 text-[12px] text-zinc-300">Остановить</button> : null}
+            {documentResult ? <button type="button" onClick={downloadDocument} className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] px-3 py-2 text-[12px] text-zinc-100"><Download className="h-3.5 w-3.5" />Скачать перевод</button> : null}
+          </div>
+          {documentFile ? <p className="mt-2 text-[11px] text-zinc-500">{documentFile.name} · перевод {languageLabel(source)} → {languageLabel(target)}</p> : null}
+          {documentError ? <p className="mt-2 text-[12px] text-zinc-300" role="alert">{documentError}</p> : null}
+          {documentResult ? <p className="mt-2 text-[12px] text-zinc-300" role="status">Готово: {documentResult.name}. Перевод не добавлен в историю текста, чтобы не хранить документ в localStorage.</p> : null}
+          {documentResult && projectStorageReady && projectOptions.length > 0 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <select aria-label="Проект для перевода" value={selectedProject} onChange={(event) => setSelectedProject(event.target.value)} className="rounded-lg border border-white/[0.12] bg-[#111] px-3 py-2 text-[12px] text-white">
+                <option value="">Выберите проект</option>
+                {projectOptions.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+              </select>
+              <button type="button" disabled={!selectedProject || documentSaving || Boolean(savedArtifactId)} onClick={() => void saveDocumentToProject()} className="rounded-lg border border-white/[0.12] px-3 py-2 text-[12px] text-zinc-100 disabled:opacity-40">{documentSaving ? "Сохраняю…" : savedArtifactId ? "Сохранено в проект" : "Сохранить в проект"}</button>
+            </div>
+          ) : null}
+        </section>
 
         {/* Icon on the left, text block beside it — the layout in the design. */}
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -49,6 +49,7 @@ export type ToolName =
   | "presentation.generate"
   | "document.write"
   | "business.plan"
+  | "business.launch"
   | "video.script"
   | "code.project"
   | "data.analyze"

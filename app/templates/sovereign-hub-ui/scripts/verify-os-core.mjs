@@ -215,7 +215,7 @@ await check("the showcase plan is a valid graph with the expected order", () => 
   const tasks = planner.planFlow({ flowId: "flow_t", goal: SHOWCASE, capabilities: decision.capabilities, quality: "deep" })
   assert.equal(graph.validateGraph(tasks).ok, true)
   const ids = tasks.map((t) => planner.stepIdOf(t))
-  assert.deepEqual(ids, ["understand", "research", "brand", "logo", "plan", "site", "deck", "video", "result"])
+  assert.deepEqual(ids, ["understand", "research", "brand", "logo", "plan", "launch", "site", "deck", "video", "result"])
   const labels = tasks.map((t) => t.label)
   assert.ok(labels.includes("Готовлю Investor Deck"))
   assert.ok(labels.includes("Рисую логотип"))
@@ -223,6 +223,7 @@ await check("the showcase plan is a valid graph with the expected order", () => 
   assert.deepEqual(byStep.research.dependencies, ["flow_t.understand"])
   assert.ok(byStep.site.softDependencies.includes("flow_t.logo"))
   assert.equal(byStep.logo.optional, true)
+  assert.deepEqual(byStep.launch.dependencies, ["flow_t.plan", "flow_t.research", "flow_t.brand"])
   assert.equal(byStep.result.dependencies.length, tasks.length - 1)
   // Idempotency keys are unique and stable.
   assert.equal(new Set(tasks.map((t) => t.idempotencyKey)).size, tasks.length)

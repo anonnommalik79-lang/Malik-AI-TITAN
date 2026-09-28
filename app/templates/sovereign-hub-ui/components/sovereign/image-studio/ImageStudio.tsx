@@ -20,6 +20,7 @@ import {
   canUseMalikImageModel, loadMalikImageModelSelection, MALIK_IMAGE_MODELS, saveMalikImageModelSelection,
   type MalikImageModelId,
 } from "@/lib/media/image-models"
+import { brandImageInBrowser } from "@/lib/media/browser-watermark"
 
 export type StudioAspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "4:5"
 export type StudioResolution = "1K" | "2K" | "4K"
@@ -211,6 +212,8 @@ export function ImageStudio({
   const [showResults, setShowResults] = useState(false)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState("")
+  const [watermarkError, setWatermarkError] = useState("")
+  const [watermarkingId, setWatermarkingId] = useState("")
   const [lightbox, setLightbox] = useState<Result | null>(null)
   const [covers, setCovers] = useState<Record<string, string>>({})
   const [painting, setPainting] = useState<string[]>([])
@@ -566,6 +569,28 @@ export function ImageStudio({
     }
   }
 
+  const downloadBranded = async (item: Result) => {
+    const url = item.master || item.url
+    if (!url || watermarkingId) return
+    setWatermarkError("")
+    setWatermarkingId(item.id)
+    try {
+      const blob = await brandImageInBrowser(url)
+      const href = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = href
+      link.download = `malik-ai-${item.id.slice(0, 8)}-brand.png`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(href), 30_000)
+    } catch (cause) {
+      setWatermarkError(cause instanceof Error ? cause.message : "Не удалось создать водяной знак.")
+    } finally {
+      setWatermarkingId("")
+    }
+  }
+
   const onDrop = (event: React.DragEvent) => {
     event.preventDefault()
     event.stopPropagation()
@@ -722,6 +747,7 @@ export function ImageStudio({
                           </button>
                           <div className="mis-result-actions">
                             <button type="button" onClick={() => void download(item)} aria-label="Скачать" title="Скачать"><Download /></button>
+                            <button type="button" disabled={Boolean(watermarkingId)} onClick={() => void downloadBranded(item)} aria-label="Скачать с логотипом Malik AI" title="Скачать с водяным знаком Malik AI">{watermarkingId === item.id ? <Loader2 className="mis-spin" /> : <Brush />}</button>
                             <button type="button" onClick={() => setLightbox(item)} aria-label="Открыть" title="Открыть"><Maximize2 /></button>
                             <button type="button" onClick={retry} disabled={running} aria-label="Ещё вариант" title="Ещё вариант"><RotateCcw /></button>
                           </div>
@@ -746,6 +772,7 @@ export function ImageStudio({
                   )
                 })}
               </div>
+              {watermarkError ? <p className="mis-error" role="alert">{watermarkError}</p> : null}
               <p className="mis-section-label">{tab === "edit" ? "Фото для редактирования" : "Шаблоны"}</p>
             </section>
           ) : null}

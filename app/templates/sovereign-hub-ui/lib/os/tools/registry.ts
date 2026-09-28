@@ -3,7 +3,7 @@ import type { ToolDefinition } from "./contract"
 import { dataTool } from "./data-tool"
 import { editTool } from "./edit-tool"
 import { codeTool, imageTool, presentationTool, siteTool } from "./media-tools"
-import { assembleTool, brandTool, businessPlanTool, documentTool, researchTool, understandTool, videoScriptTool } from "./text-tools"
+import { assembleTool, brandTool, businessLaunchTool, businessPlanTool, documentTool, researchTool, understandTool, videoScriptTool } from "./text-tools"
 
 /** Every action a flow may take. Nothing outside this list can be run. */
 export const TOOLS: Record<ToolName, ToolDefinition> = {
@@ -15,6 +15,7 @@ export const TOOLS: Record<ToolName, ToolDefinition> = {
   "presentation.generate": presentationTool,
   "document.write": documentTool,
   "business.plan": businessPlanTool,
+  "business.launch": businessLaunchTool,
   "video.script": videoScriptTool,
   "code.project": codeTool,
   "data.analyze": dataTool,
