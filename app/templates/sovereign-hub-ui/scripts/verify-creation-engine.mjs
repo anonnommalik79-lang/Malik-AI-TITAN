@@ -7,6 +7,7 @@ import { normalizeLaunchPack, pitchesMarkdown, roadmapMarkdown } from "../lib/bu
 import { prepareDocument, translatePreparedDocument } from "../lib/translator/document.ts"
 import { brandImageInBrowser } from "../lib/media/browser-watermark.ts"
 import { verifyDirectVideo } from "../lib/media/browser-video-qa.ts"
+import { buildRunwayVideoEditBody } from "../lib/media/providers/runway-video-edit.ts"
 
 const inputs = parseEconomicsInputs({ currency: "KZT", price: 1000, variableCost: 200, monthlyCustomers: 100, monthlyFixedCosts: 40000, monthlyMarketingSpend: 10000, newCustomers: 20, monthlyChurnPercent: 10 })
 const result = calculateUnitEconomics(inputs)
@@ -134,3 +135,22 @@ assert.match(audioArtifactRoute, /musicJobBelongsTo\(requestId, owner\.userId\)/
 assert.match(audioArtifactRoute, /kind: "audio"/)
 assert.doesNotMatch(audioArtifactRoute, /response\.arrayBuffer\(/)
 console.log("creation engine: music route ownership and direct delivery passed")
+
+const runwayBase = { prompt: "Продолжи движение камеры", mode: "video", sourceVideoUrl: "https://cdn.example.com/source.mp4", length: 5 }
+const extended = buildRunwayVideoEditBody({ ...runwayBase, editOperation: "extend" }, "seedance2_5", 5)
+const edited = buildRunwayVideoEditBody({ ...runwayBase, editOperation: "edit" }, "seedance2_5", 5)
+assert.equal(extended.mode, "extend")
+assert.equal(extended.duration, 5)
+assert.equal(extended.ratio, undefined)
+assert.equal(extended.promptVideo, runwayBase.sourceVideoUrl)
+assert.equal(edited.mode, "edit")
+assert.equal(edited.duration, "auto")
+assert.throws(() => buildRunwayVideoEditBody({ ...runwayBase, editOperation: "extend" }, "gemini_omni_flash", 5), /requires Runway Seedance/)
+const extendRoute = fs.readFileSync("app/api/media/video/route.ts", "utf8")
+assert.match(extendRoute, /getVideoJob\(sourceTaskId, user\.userId\)/)
+assert.match(extendRoute, /sourceJob\.status !== "completed"/)
+assert.match(extendRoute, /VIDEO_EXTEND_UNAVAILABLE/)
+const extendUi = fs.readFileSync("components/sovereign/video-generation/VideoGenerationStudio.tsx", "utf8")
+assert.match(extendUi, /videoExtendAvailable && readyVideo\.durationSeconds/)
+assert.match(extendUi, /sourceTaskId: extendTaskId/)
+console.log("creation engine: owner-scoped Runway video extension contract passed")

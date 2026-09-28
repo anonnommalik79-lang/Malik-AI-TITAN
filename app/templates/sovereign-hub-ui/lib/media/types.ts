@@ -82,6 +82,8 @@ export type VideoGenerateInput = {
   sourceVideoUrl?: string
   /** Duration of an uploaded source clip, validated client/server for video editing. */
   sourceDurationSeconds?: number
+  /** Continue a completed, owner-scoped video job rather than editing an uploaded clip. */
+  editOperation?: "edit" | "extend"
   mode?: "text" | "image" | "video"
   length?: 5 | 10
   resolution?: VideoResolution

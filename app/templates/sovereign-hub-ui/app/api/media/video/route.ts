@@ -4,6 +4,7 @@ import { resolveMediaUser } from "@/lib/media/request"
 import { routeVideoGeneration } from "@/lib/media/video-router"
 import { getArtifact } from "@/lib/os/store"
 import { directMediaUrl } from "@/lib/os/media-reference"
+import { getVideoJob } from "@/lib/media/jobs"
 import type { VideoProviderId, VideoResolution } from "@/lib/media/types"
 import {
   acquireVideoAccountInFlight,
@@ -24,6 +25,8 @@ async function handlePOST(request: Request) {
   const imageArtifactId = typeof body?.imageArtifactId === "string" ? body.imageArtifactId.trim() : ""
   const sourceVideoUrl = typeof body?.sourceVideoUrl === "string" ? body.sourceVideoUrl.trim() : undefined
   const sourceDurationSeconds = Number(body?.sourceDurationSeconds || 0)
+  const editOperation = body?.editOperation === "extend" ? "extend" : "edit"
+  const sourceTaskId = typeof body?.sourceTaskId === "string" ? body.sourceTaskId.trim() : ""
   const requestedMode = String(body?.mode || "").trim()
   const mode = requestedMode === "image" || requestedMode === "video" || requestedMode === "text"
     ? requestedMode
@@ -82,6 +85,17 @@ async function handlePOST(request: Request) {
     }, { status: 401 })
   }
   const ownerMode = user.plan === "owner"
+
+  if (editOperation === "extend") {
+    const sourceJob = sourceTaskId ? await getVideoJob(sourceTaskId, user.userId) : null
+    const safeSource = directMediaUrl(sourceVideoUrl || "", String(process.env.NEXT_PUBLIC_APP_URL || process.env.MALIK_PUBLIC_ORIGIN || ""))
+    if (mode !== "video" || !sourceJob || sourceJob.status !== "completed" || !safeSource || directMediaUrl(sourceJob.videoUrl || "") !== safeSource) {
+      return Response.json({ ok: false, code: "VIDEO_EXTEND_SOURCE_INVALID", error: "Продлить можно только своё готовое видео по проверенной прямой ссылке." }, { status: 400 })
+    }
+    if (providerId !== "runway" || !(process.env.RUNWAY_API_KEY || process.env.RUNWAYML_API_SECRET) || String(process.env.RUNWAY_VIDEO_EDIT_MODEL || "").trim() !== "seedance2_5") {
+      return Response.json({ ok: false, code: "VIDEO_EXTEND_UNAVAILABLE", error: "Продление видео через Runway Seedance 2.5 сейчас не подключено." }, { status: 503 })
+    }
+  }
 
   if (imageArtifactId) {
     if (mode !== "image" || imageUrl || providerId && providerId !== "runway") {
@@ -152,6 +166,7 @@ async function handlePOST(request: Request) {
       imageUrl: mode === "image" ? imageUrl : undefined,
       sourceVideoUrl: mode === "video" ? sourceVideoUrl : undefined,
       sourceDurationSeconds: mode === "video" ? sourceDurationSeconds : undefined,
+      editOperation: mode === "video" ? editOperation : undefined,
       mode,
       length,
       resolution,

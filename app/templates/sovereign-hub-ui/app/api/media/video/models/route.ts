@@ -21,5 +21,11 @@ export async function GET() {
     veo: videoProviderConfigured("veo"),
   }
 
-  return Response.json({ ok: true, models }, { headers: { "Cache-Control": "no-store" } })
+  return Response.json({
+    ok: true,
+    models,
+    capabilities: {
+      videoExtend: models.runway && String(process.env.RUNWAY_VIDEO_EDIT_MODEL || "").trim() === "seedance2_5",
+    },
+  }, { headers: { "Cache-Control": "no-store" } })
 }

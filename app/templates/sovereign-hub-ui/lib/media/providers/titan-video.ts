@@ -1,5 +1,6 @@
 import type { VideoGenerateInput } from "../types"
 import { ensure8KQualityPrompt } from "../visual-prompt"
+import { buildRunwayVideoEditBody } from "./runway-video-edit"
 
 export type TitanVideoProviderId = "dashscope" | "pollo" | "runway" | "fal" | "luma" | "veo"
 
@@ -269,28 +270,7 @@ export async function createTitanVideoJob(provider: TitanVideoProviderId, input:
         : "gemini_omni_flash"
       endpoint = "https://api.dev.runwayml.com/v1/video_to_video"
 
-      body = model === "seedance2_5"
-        ? {
-            model,
-            promptVideo: input.sourceVideoUrl,
-            promptText: input.prompt,
-            mode: "edit",
-            duration: "auto",
-            audio: input.generateAudio !== false,
-          }
-        : model === "gemini_omni_flash_1.1"
-          ? {
-              model,
-              videoUri: input.sourceVideoUrl,
-              promptText: input.prompt,
-              mode: "edit",
-              duration: "auto",
-            }
-          : {
-              model,
-              videoUri: input.sourceVideoUrl,
-              promptText: input.prompt,
-            }
+      body = buildRunwayVideoEditBody(input, model as "aleph2" | "gemini_omni_flash" | "gemini_omni_flash_1.1" | "seedance2_5", length)
     } else if (input.imageUrl) {
       model = process.env.RUNWAY_IMAGE_VIDEO_MODEL || "gen4.5"
       endpoint = "https://api.dev.runwayml.com/v1/image_to_video"

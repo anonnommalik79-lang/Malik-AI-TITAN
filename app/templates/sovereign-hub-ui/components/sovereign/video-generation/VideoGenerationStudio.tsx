@@ -319,6 +319,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [attempt, setAttempt] = useState(0)
   const [videoUrl, setVideoUrl] = useState("")
   const [verifiedVideo, setVerifiedVideo] = useState<VerifiedVideo | null>(null)
+  const [readyTaskId, setReadyTaskId] = useState("")
+  const [extendTaskId, setExtendTaskId] = useState("")
+  const [videoExtendAvailable, setVideoExtendAvailable] = useState(false)
   const [error, setError] = useState("")
   const [selected, setSelected] = useState(0)
   const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("Популярное")
@@ -372,6 +375,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       .then((data) => {
         if (!active || !data?.models) return
         setModelAvailability(data.models)
+        setVideoExtendAvailable(data.capabilities?.videoExtend === true)
         setSelectedModelId((current) => {
           if (current === "magichour" || data.models[current]) return current
           return MOBILE_MODELS.find((model) => data.models[model.id])?.id || current
@@ -398,6 +402,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     setProjectImage(null)
     setSourceDurationSeconds(0)
     setSourcePreview("")
+    setExtendTaskId("")
     setVideoUrl("")
     setError("")
     setPhase("idle")
@@ -433,6 +438,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   const selectVideoModel = (model: (typeof MOBILE_MODELS)[number]) => {
     if (busy) return
+    if (extendTaskId && model.id !== "runway") {
+      setModelNotice("Продление готового ролика доступно через Runway Seedance 2.5. Уберите исходник, чтобы выбрать другую модель.")
+      return
+    }
     if (modelAvailability[model.id] === false) {
       setModelNotice(`${model.name} сейчас не подключена к серверу.`)
       return
@@ -517,6 +526,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       if (sourcePreview.startsWith("blob:")) URL.revokeObjectURL(sourcePreview)
       setProjectImage(null)
       setSourceFile(file)
+      setExtendTaskId("")
       setSourceDurationSeconds(sourceDuration)
       setSourcePreview(URL.createObjectURL(file))
       setVideoUrl("")
@@ -534,6 +544,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const clearSource = () => {
     setSourceFile(null)
     setProjectImage(null)
+    setExtendTaskId("")
     setSourceDurationSeconds(0)
     setSourcePreview("")
     setVideoUrl("")
@@ -577,11 +588,13 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const chooseTemplate = (index: number) => {
     const item = SHOWCASE_TEMPLATES[index]
     if (!item || busy) return
+    if (extendTaskId) changeMode("text")
     if (window.matchMedia("(max-width: 820px)").matches && mode !== "text") {
       changeMode("text")
       setMobilePanel("text")
     }
     setSelected(index)
+    setExtendTaskId("")
     setPrompt(item.prompt)
     setVideoUrl("")
     setPhase("idle")
@@ -591,7 +604,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const generate = async () => {
     const cleanPrompt = prompt.trim()
     if (!cleanPrompt || busy) return
-    if (mode !== "text" && !sourceFile && !projectImage) {
+    if (mode !== "text" && !sourceFile && !projectImage && !extendTaskId) {
       setPhase("failed")
       setError(mode === "image" ? "Сначала загрузите фото." : "Сначала загрузите видео.")
       return
@@ -611,6 +624,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       setError("Runway сейчас не подключён. Ссылка на изображение проекта не может быть использована без него.")
       return
     }
+    if (extendTaskId && (!videoExtendAvailable || selectedModelId !== "runway")) {
+      setPhase("failed")
+      setError("Продление через Runway Seedance 2.5 сейчас недоступно.")
+      return
+    }
     if (duration === 10 && selectedModelId !== "magichour" && selectedModelId !== "runway") {
       setPhase("failed")
       setError(`${selectedModel.name}: выберите 5 секунд. 10 секунд доступны через Magic Hour или Runway.`)
@@ -620,6 +638,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     setError("")
     setVideoUrl("")
     setVerifiedVideo(null)
+    setReadyTaskId("")
     setAttempt(0)
 
     if (!canUseGeneration("video", operator)) {
@@ -641,6 +660,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             imageUrl: mode === "image" ? sourcePath : undefined,
             sourceVideoUrl: mode === "video" ? sourcePath : undefined,
             sourceDurationSeconds: mode === "video" ? sourceDurationSeconds : undefined,
+            editOperation: extendTaskId ? "extend" : "edit",
+            sourceTaskId: extendTaskId || undefined,
             length: mode === "video" ? 5 : duration,
             resolution: QUALITY_RESOLUTION[quality],
             ratio: ratio === "4:3" ? "16:9" : ratio,
@@ -657,7 +678,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     setPhase("queued")
     try {
       let provider = selectedModel.provider as VideoProviderId
-      let sourcePath = mode === "text" ? "" : await uploadSource(provider)
+      let sourcePath = extendTaskId ? sourcePreview : mode === "text" ? "" : await uploadSource(provider)
       let { response, data } = await submit(provider, sourcePath)
 
       const providerMessage = String(data?.error || data?.publicError || data?.message || "")
@@ -701,6 +722,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           const verified = await verifyDirectVideo(readyUrl, window.location.origin)
           setVerifiedVideo(verified)
           setVideoUrl(verified.url)
+          setReadyTaskId(taskId)
           setPhase("ready")
           if (projectImage) {
             void videoFetch(`/api/os/projects/${encodeURIComponent(projectImage.projectId)}/video-artifacts`, {
@@ -722,6 +744,26 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       setPhase("failed")
       setError(err instanceof Error ? err.message : "Генерация видео недоступна")
     }
+  }
+
+  const extendReadyVideo = () => {
+    if (!readyVideo || !readyTaskId || !videoExtendAvailable || busy || readyVideo.durationSeconds < 3 || readyVideo.durationSeconds > 10.05) return
+    setMode("video")
+    setMobilePanel("video")
+    setSourceFile(null)
+    setProjectImage(null)
+    setSourcePreview(readyVideo.url)
+    setSourceDurationSeconds(readyVideo.durationSeconds)
+    setExtendTaskId(readyTaskId)
+    setSelectedModelId("runway")
+    setDuration(5)
+    setRatio(readyVideo.width > readyVideo.height ? "16:9" : readyVideo.width < readyVideo.height ? "9:16" : "1:1")
+    setPrompt("Продолжи предыдущую сцену естественно, сохрани героя, окружение, освещение и движение камеры.")
+    setVideoUrl("")
+    setVerifiedVideo(null)
+    setError("")
+    setPhase("idle")
+    setModelNotice("Готовое видео выбрано как исходник. Опишите продолжение и нажмите «Изменить видео». Runway добавит новую сцену без повторной загрузки файла.")
   }
 
   const improvePrompt = () => {
@@ -877,14 +919,14 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                 : <Video />}
             </button>
             <button type="button" className="mv2m__source-copy" onClick={openMobileVideoPicker} disabled={busy}>
-              <strong>{sourceFile?.name || "Добавить видео"}</strong>
+              <strong>{sourceFile?.name || (extendTaskId ? "Готовое видео" : "Добавить видео")}</strong>
               <small>
-                {sourceFile && mode === "video"
+                {(sourceFile || extendTaskId) && mode === "video"
                   ? `${sourceDurationSeconds.toFixed(1)} сек · AI-редактирование`
                   : "MP4, MOV, WebM · фрагмент 3–10 сек"}
               </small>
             </button>
-            {sourceFile ? <button type="button" className="mv2m__source-remove" onClick={clearSource} aria-label="Убрать видео" disabled={busy}><X /></button> : null}
+            {sourceFile || extendTaskId ? <button type="button" className="mv2m__source-remove" onClick={clearSource} aria-label="Убрать видео" disabled={busy}><X /></button> : null}
           </div>
         ) : null}
 
@@ -955,7 +997,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           type="button"
           className="mv2m__generate"
           onClick={generate}
-          disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile && !projectImage)}
+          disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile && !projectImage && !extendTaskId)}
         >
           <Play />
           <span>{busy ? statusLabel(phase, attempt) : mode === "video" ? "Изменить видео" : "Генерировать"}</span>
@@ -980,6 +1022,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
               <MalikMediaWatermark compact />
             </div>
             <button type="button" onClick={downloadCurrent}>Скачать видео</button>
+            {readyVideo && readyTaskId && videoExtendAvailable && readyVideo.durationSeconds >= 3 && readyVideo.durationSeconds <= 10.05 ? (
+              <button type="button" onClick={extendReadyVideo}>Продлить через Runway</button>
+            ) : null}
           </div>
         ) : null}
 
@@ -1069,6 +1114,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           </div>
           <div className="mv2__preview-actions">
             <button type="button" onClick={downloadCurrent}><Download /><span>Скачать</span></button>
+            {readyVideo && readyTaskId && videoExtendAvailable && readyVideo.durationSeconds >= 3 && readyVideo.durationSeconds <= 10.05 ? (
+              <button type="button" onClick={extendReadyVideo}><Video /><span>Продлить</span></button>
+            ) : null}
             <button type="button" onClick={shareCurrent}><Share2 /><span>Поделиться</span></button>
             <button type="button" onClick={() => onViewChange("projects")}><FolderPlus /><span>В проект</span></button>
           </div>
@@ -1133,8 +1181,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
               )}
             </div>
             <div className="mv2__source-copy">
-              <strong>{sourceFile?.name || projectImage?.title || (mode === "image" ? "Исходное фото" : "Исходное видео")}</strong>
-              <small>{sourceFile || projectImage
+              <strong>{sourceFile?.name || projectImage?.title || (extendTaskId ? "Готовое видео" : mode === "image" ? "Исходное фото" : "Исходное видео")}</strong>
+              <small>{sourceFile || projectImage || extendTaskId
                 ? mode === "image"
                   ? "Фото будет сохранено как исходный первый кадр."
                   : "Оригинальное видео будет основой для AI-редактирования."
@@ -1143,9 +1191,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                   : "MP4, WebM, MOV или M4V · 3–10 секунд"}</small>
             </div>
             <button className="mv2__source-upload" type="button" onClick={() => sourceInputRef.current?.click()} disabled={busy}>
-              <Upload />{sourceFile || projectImage ? "Заменить" : "Загрузить"}
+              <Upload />{sourceFile || projectImage || extendTaskId ? "Заменить" : "Загрузить"}
             </button>
-            {sourceFile || projectImage ? <button className="mv2__source-clear" type="button" onClick={clearSource} aria-label="Убрать файл" disabled={busy}><X /></button> : null}
+            {sourceFile || projectImage || extendTaskId ? <button className="mv2__source-clear" type="button" onClick={clearSource} aria-label="Убрать файл" disabled={busy}><X /></button> : null}
           </div>
         ) : null}
 
@@ -1201,7 +1249,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           <div><div className="mv2__section-title">Соотношение сторон</div><div className="mv2__segments">{(["16:9", "9:16", "1:1", "4:3"] as Ratio[]).map((value) => <button key={value} type="button" aria-pressed={ratio === value} className={ratio === value ? "is-active" : ""} onClick={() => setRatio(value)} disabled={busy}>{value}</button>)}</div></div>
         </div>
 
-        <div className="mv2__generate-row"><button type="button" className="mv2__generate" onClick={generate} disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile && !projectImage)}><span>{busy ? statusLabel(phase, attempt) : mode === "image" ? `Оживить фото · ${duration} сек` : mode === "video" ? `Изменить видео · ${duration} сек` : "Сгенерировать видео"}</span><ArrowUp /></button><div className="mv2__credits">◉ 1 видео / день</div><button type="button" className="mv2__tune"><SlidersHorizontal /></button></div>
+        <div className="mv2__generate-row"><button type="button" className="mv2__generate" onClick={generate} disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile && !projectImage && !extendTaskId)}><span>{busy ? statusLabel(phase, attempt) : mode === "image" ? `Оживить фото · ${duration} сек` : mode === "video" ? `Изменить видео · ${duration} сек` : "Сгенерировать видео"}</span><ArrowUp /></button><div className="mv2__credits">◉ 1 видео / день</div><button type="button" className="mv2__tune"><SlidersHorizontal /></button></div>
         <div className="mv2__status"><span className={`mv2__status-dot is-${phase}`} />{statusLabel(phase, attempt)}{error ? <b>{error}</b> : null}</div>
 
         <div className="mv2__gallery-tabs">{CATEGORIES.map((item) => <button key={item} type="button" className={activeCategory === item ? "is-active" : ""} onClick={() => setActiveCategory(item)}>{item}</button>)}</div>
