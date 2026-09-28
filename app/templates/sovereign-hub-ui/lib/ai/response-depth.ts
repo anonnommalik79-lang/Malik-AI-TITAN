@@ -12,6 +12,11 @@ export type ChatSendOptions = {
   branchFromMessageId?: string
   /** Client-only: this send came from the one-turn queue, so duplicate-burst protection must not swallow it. */
   queueDispatch?: boolean
+  /**
+   * Regenerate this assistant answer in place: the previous text is kept as a
+   * version the reader can page back to, and no second question is added.
+   */
+  regenerateMessageId?: string
 }
 
 const STORAGE_KEY = "malik_response_depth"

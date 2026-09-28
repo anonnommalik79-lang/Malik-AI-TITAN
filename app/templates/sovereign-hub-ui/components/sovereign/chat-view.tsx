@@ -5,7 +5,7 @@ import dynamic from "next/dynamic"
 import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
 import type { SuperflowRef } from "./os/os-client"
-import { FollowUpChips, ReadAloudButton, UserMessageActions, useChatShortcuts } from "./chat-extras"
+import { FollowUpChips, ReadAloudButton, ThoughtTrace, UserMessageActions, VersionPager, useChatShortcuts } from "./chat-extras"
 import "./chat-live.css"
 
 // The live Superflow block loads only when a conversation has one.
@@ -135,6 +135,10 @@ interface Message {
   liveStatus?: string
   /** A Superflow started by this turn. */
   superflow?: SuperflowRef
+  /** How long the turn took before its first word, with the reported steps. */
+  thought?: { ms: number; steps: string[] }
+  /** Earlier answers to the same question (regenerated in place). */
+  versions?: Array<{ content: string; at: number }>
 }
 
 type ImageResolution = "1K" | "2K" | "4K"
@@ -1645,7 +1649,19 @@ function MessageBubble({
   // it must never keep a thinking indicator or a timer alive above the thread.
   const streaming = Boolean(message.isStreaming) && isLatest
   const isThinking = Boolean(streaming && !message.content && !message.generatedMedia)
-  const displayContent = isUser ? message.content : cleanResearchDisplayText(message.content, message.research)
+  // Regenerated answers: the newest is shown; earlier ones can be paged back to.
+  const versionTotal = !isUser && !streaming && message.versions?.length ? message.versions.length + 1 : 1
+  const [versionIndex, setVersionIndex] = useState(-1)
+  const versionCount = message.versions?.length || 0
+  // A new version arrived: show it, not the one that was being looked at.
+  useEffect(() => { setVersionIndex(-1) }, [versionCount])
+  const shownVersion = versionIndex < 0 || versionIndex >= versionTotal - 1 ? versionTotal - 1 : versionIndex
+  const olderVersion = versionTotal > 1 && shownVersion < versionTotal - 1 ? message.versions![shownVersion] : null
+  const displayContent = isUser
+    ? message.content
+    : olderVersion
+      ? olderVersion.content
+      : cleanResearchDisplayText(message.content, message.research)
   const responseModel = !isUser && message.modelId ? getMalikModel(message.modelId) : null
   if (!isUser && message.isStreaming && !streaming && !displayContent && !message.generatedMedia && !message.imageConfirmation) {
     return null
@@ -1693,6 +1709,9 @@ function MessageBubble({
             </div>
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
+          {!isUser && !streaming && message.thought && !olderVersion && !message.generatedMedia && !message.superflow ? (
+            <ThoughtTrace thought={message.thought} sources={message.research?.usedWeb ? message.research.sources.length : 0} />
+          ) : null}
           {isUser && message.attachments?.length ? <UserAttachmentGallery items={message.attachments} /> : null}
           {!isUser && message.superflow ? (
             <SuperflowBlock messageId={message.id} reference={message.superflow} />
@@ -1815,6 +1834,7 @@ function MessageBubble({
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? <span className="malik-copy-action__label" role="status">Скопировано</span> : null}
             </button>
+            <VersionPager index={shownVersion} total={versionTotal} onChange={setVersionIndex} />
             <ReadAloudButton id={message.id} text={displayContent} />
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
             <button type="button" title="Полезно" aria-pressed={feedback === "up"} onClick={() => onFeedback?.(message.id, "up")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "is-active")}><ThumbsUp className="h-4 w-4" /></button>
@@ -2548,7 +2568,10 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     if (index <= 0) return
     for (let i = index - 1; i >= 0; i -= 1) {
       if (current[i].role === "user" && current[i].content.trim()) {
-        send(current[i].content, [], { responseDepth: depth })
+        // The newest answer is regenerated in place, keeping the old one as a
+        // version; an older answer is asked again below, as before.
+        const latest = index === current.length - 1
+        send(current[i].content, [], latest ? { responseDepth: depth, regenerateMessageId: messageId } : { responseDepth: depth })
         return
       }
     }

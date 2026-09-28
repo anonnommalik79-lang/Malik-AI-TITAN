@@ -272,7 +272,14 @@ interface Message {
   liveStatus?: string
   /** A Superflow started by this turn: a small reference, the flow lives on the server. */
   superflow?: SuperflowRef
+  /** How long Malik worked before the first word, and the steps it reported. */
+  thought?: MessageThought
+  /** Earlier answers to the same question, kept when the answer was regenerated. */
+  versions?: MessageVersion[]
 }
+
+type MessageThought = { ms: number; steps: string[] }
+type MessageVersion = { content: string; at: number }
 
 type ImageResolution = "1K" | "2K" | "4K"
 
@@ -1466,7 +1473,22 @@ function reviveMessage(message: any): Message {
     actionPlan: reviveMalikActionPlan(message?.actionPlan),
     attachments,
     superflow: reviveSuperflowRef(message?.superflow),
+    thought: reviveThought(message?.thought),
+    versions: Array.isArray(message?.versions)
+      ? message.versions
+          .filter((item: any) => item && typeof item.content === "string" && item.content.trim())
+          .map((item: any) => ({ content: String(item.content).slice(0, 60_000), at: Number(item.at) || Date.now() }))
+          .slice(-8)
+      : undefined,
   }
+}
+
+function reviveThought(value: any): MessageThought | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const ms = Number(value.ms)
+  if (!Number.isFinite(ms) || ms < 0) return undefined
+  const steps = Array.isArray(value.steps) ? value.steps.map((step: unknown) => String(step || "").slice(0, 120)).filter(Boolean).slice(0, 10) : []
+  return { ms: Math.min(ms, 3_600_000), steps }
 }
 
 function reviveSuperflowRef(value: any): SuperflowRef | undefined {
@@ -5954,7 +5976,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     && submissionNow - previousSubmission.at < 2500
   // A second *different* prompt is legitimate (ChatView may have queued it).
   // Only repeat submissions of the same turn are suppressed.
-  if (isLoading || (!options?.queueDispatch && duplicateBurst)) return
+  // An explicit "Перегенерировать" click repeats the question on purpose.
+  if (isLoading || (!options?.queueDispatch && !options?.regenerateMessageId && duplicateBurst)) return
   sendGateRef.current = { signature: submissionSignature, at: submissionNow }
 
   const requestedBranchMessageId = String(options?.branchFromMessageId || "").trim()
@@ -6162,8 +6185,24 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setChats(prev => prev.map(c => c.id === chatId ? { ...c, selectedModelId, status: runtimePlan.status, techStack: runtimePlan.techStack } : c))
   }
 
-  const historyAttachments = await persistChatAttachmentsForHistory(attachments)
-  const userMessage: Message = {
+  // "Перегенерировать" on the newest answer: the same question is answered
+  // again in place of the old answer, which is kept as a version to page back
+  // to — instead of the question and a second answer being appended below.
+  const regenTarget = options?.regenerateMessageId && !attachments.length
+    ? (() => {
+        const list = messagesRef.current
+        const index = list.findIndex((item) => item.id === options.regenerateMessageId)
+        const target = list[index]
+        if (index < 0 || index !== list.length - 1 || target?.role !== "assistant") return null
+        if (target.generatedMedia || target.imageConfirmation || target.superflow || target.isStreaming) return null
+        const question = [...list.slice(0, index)].reverse().find((item) => item.role === "user")
+        if (!question || question.content.trim() !== cleanContent) return null
+        return { message: target, user: question }
+      })()
+    : null
+
+  const historyAttachments = regenTarget ? [] : await persistChatAttachmentsForHistory(attachments)
+  const userMessage: Message = regenTarget ? regenTarget.user : {
     id: crypto.randomUUID(),
     role: "user",
     content: parsedMediaCommand ? inlineMediaPrompt : cleanContent,
@@ -6174,7 +6213,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }
 
   const assistantMessage: Message = {
-    id: crypto.randomUUID(),
+    id: regenTarget ? regenTarget.message.id : crypto.randomUUID(),
+    versions: regenTarget && regenTarget.message.content.trim()
+      ? [...(regenTarget.message.versions || []), { content: regenTarget.message.content, at: Date.now() }].slice(-8)
+      : regenTarget?.message.versions,
     role: "assistant",
     content: needsImageConfirmation
       ? "Запрос на изображение распознан. Генерация начнётся только после вашего подтверждения."
@@ -6192,8 +6234,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     actionPlan: actionPlan || undefined,
   }
 
-  setMessages((previous) => [...(branching ? conversationBase : previous), userMessage, assistantMessage])
-  setChats((previous) => previous.map((chat) => {
+  if (regenTarget) {
+    setMessages((prev) => prev.map((item) => (item.id === assistantMessage.id ? assistantMessage : item)))
+    setChats((previous) => previous.map((chat) => (chat.id === chatId
+      ? { ...chat, messages: chat.messages.map((item) => (item.id === assistantMessage.id ? assistantMessage : item)) }
+      : chat)))
+  } else setMessages((previous) => [...(branching ? conversationBase : previous), userMessage, assistantMessage])
+  if (!regenTarget) setChats((previous) => previous.map((chat) => {
     if (chat.id !== chatId) return chat
     const nextMessages = branching ? [...conversationBase] : [...chat.messages]
     if (!nextMessages.some((message) => message.id === userMessage.id)) nextMessages.push(userMessage)
@@ -6227,7 +6274,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // with the request. Off means the model sees this message and nothing else.
   const carryContext = readContextEnabled()
   const historyWindow = 32
-  const history = (carryContext ? [...conversationBase, userMessage].slice(-historyWindow) : [userMessage]).map(m => {
+  // A regenerated answer is asked without the answer it replaces.
+  const priorMessages = regenTarget ? conversationBase.filter((item) => item.id !== regenTarget.message.id) : conversationBase
+  const history = (carryContext ? (regenTarget ? priorMessages : [...priorMessages, userMessage]).slice(-historyWindow) : [userMessage]).map(m => {
     const mediaFact = describeReadyMediaAction(m.generatedMedia)
     return {
       role: m.role,
@@ -6237,8 +6286,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     }
   })
   const memoryContext = buildMalikMemoryContext()
-  const sessionMemoryContext = carryContext ? buildPersistentSessionMemoryContext(conversationBase, historyWindow - 1) : ""
-  const mediaHistoryContext = buildMalikMediaHistoryContext(conversationBase)
+  const sessionMemoryContext = carryContext ? buildPersistentSessionMemoryContext(priorMessages, historyWindow - 1) : ""
+  const mediaHistoryContext = buildMalikMediaHistoryContext(priorMessages)
 
   const attachmentSummary = attachments.length
     ? "\n\n[Вложения]: " + attachments.map(a => `${a.kind}:${a.name || a.url || "untitled"} (${a.mime || "text"})`).join(", ")
@@ -6266,7 +6315,17 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const instruction = `${buildSovereignInstruction(mode, cleanContent + attachmentSummary)}\n\n${runtimePlan.instruction}\n\n${responseDepthInstruction(responseDepth)}${memoryContext ? `\n\n[MALIK_USER_CONTROLLED_MEMORY]\n${memoryContext}` : ""}${sessionMemoryContext ? `\n\n${sessionMemoryContext}` : ""}${mediaHistoryContext ? `\n\n${mediaHistoryContext}` : ""}${actionInstruction ? `\n\n${actionInstruction}` : ""}${projectContext ? `\n\n${projectContext}` : ""}${ownerInstruction ? `\n\n${ownerInstruction}` : ""}`
   const question = `${cleanContent}\n\n${instruction}`
 
+  // "Думал 4 с": how long the turn took before its first word and the steps
+  // the server reported on the way — operational status only, never reasoning.
+  const thoughtState = { startedAt: Date.now(), firstTextAt: 0, trail: [] as string[] }
+  const thoughtOf = (): MessageThought | undefined => {
+    const ms = (thoughtState.firstTextAt || Date.now()) - thoughtState.startedAt
+    if (ms < 1_200 && !thoughtState.trail.length) return undefined
+    return { ms, steps: thoughtState.trail.slice(-8) }
+  }
+
   const finalizeAssistant = (finalText: string, finalCode?: string, finalResearch?: MalikMessageResearch, failed = false) => {
+    const thought = failed ? undefined : thoughtOf()
     const hasProjectCode = Boolean(finalCode && finalCode.trim().split("\n").length >= 25)
     const openPreview = isProjReq && hasProjectCode
     const finalActionPlan = settleMalikActionPlan(actionPlan, {
@@ -6291,6 +6350,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
               intentType: openPreview ? "project" : "chat",
               research: finalResearch || m.research,
               actionPlan: finalActionPlan || m.actionPlan,
+              thought,
             }
           : m
       )
@@ -6314,6 +6374,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       intentType: openPreview ? "project" : "chat",
       research: finalResearch || assistantMessage.research,
       actionPlan: finalActionPlan || assistantMessage.actionPlan,
+      thought,
     }
     setChats(prev =>
       prev.map(c => {
@@ -6727,6 +6788,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       const text = String(value || "").replace(/\s+/g, " ").trim().slice(0, 90)
       if (!text || text === lastLiveStatus) return
       lastLiveStatus = text
+      if (thoughtState.trail[thoughtState.trail.length - 1] !== text) thoughtState.trail = [...thoughtState.trail, text].slice(-10)
       setMessages((current) => current.map((message) =>
         message.id === assistantMessage.id && message.isStreaming ? { ...message, liveStatus: text } : message
       ))
@@ -6923,6 +6985,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           const chunk = normalizeStreamChunk(payload)
           if (!chunk) return
           const nextText = String(chunk)
+          if (!thoughtState.firstTextAt && nextText.trim()) thoughtState.firstTextAt = Date.now()
           // Providers differ: some send a cumulative payload, others deltas.
           fullText = nextText.startsWith(fullText) ? nextText : `${fullText}${nextText}`
           scheduleLive()

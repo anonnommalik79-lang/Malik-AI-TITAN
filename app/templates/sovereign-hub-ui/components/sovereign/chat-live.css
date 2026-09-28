@@ -263,3 +263,88 @@
 @media (prefers-reduced-motion: reduce) {
   #malik-root .malik-follow-ups { animation: none; }
 }
+
+
+/* "Думал 4 с" above a finished answer; opens to the reported steps. */
+#malik-root .malik-thought {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+#malik-root .malik-thought__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+#malik-root button.malik-thought__label { cursor: pointer; }
+#malik-root button.malik-thought__label:hover { color: rgba(255, 255, 255, 0.82); }
+#malik-root .malik-thought__label svg { width: 12px; height: 12px; transition: transform 0.15s ease; }
+#malik-root .malik-thought.is-open .malik-thought__label svg { transform: rotate(90deg); }
+
+#malik-root .malik-thought__steps {
+  margin: 6px 0 2px;
+  padding: 0 0 0 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  list-style: none;
+  display: grid;
+  gap: 3px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.56);
+}
+
+/* "‹ 2/3 ›" beside the actions of a regenerated answer. */
+#malik-root .malik-versions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+#malik-root .malik-versions button {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
+  line-height: 1;
+}
+
+#malik-root .malik-versions button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); color: #fff; }
+#malik-root .malik-versions button:disabled { opacity: 0.3; }
+
+
+/* Nested lists and task boxes (MalikMarkdown). */
+#malik-root .malik-md li > .malik-md-ul,
+#malik-root .malik-md li > .malik-md-ol {
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+
+#malik-root .malik-md li > .malik-md-ul { list-style: circle; }
+#malik-root .malik-md li > .malik-md-ul li > .malik-md-ul { list-style: square; }
+
+#malik-root .malik-md li.malik-md-task { list-style: none; margin-left: -1.15em; }
+
+#malik-root .malik-md-check {
+  display: inline-grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  line-height: 1;
+}
+
+#malik-root .malik-md-check.is-checked { background: #fff; color: #000; border-color: #fff; }

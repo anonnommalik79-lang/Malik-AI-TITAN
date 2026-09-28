@@ -232,3 +232,51 @@ export function useChatShortcuts(input: {
     return () => window.removeEventListener("keydown", onKey)
   }, [composerEmpty, focusComposer, messages, notify, restoreLastPrompt])
 }
+
+/* ------------------------------------------------------- thought trace */
+
+function seconds(ms: number) {
+  const value = Math.max(1, Math.round(ms / 1000))
+  if (value < 60) return `${value} с`
+  const minutes = Math.floor(value / 60)
+  return `${minutes} мин ${value % 60} с`
+}
+
+/**
+ * "Думал 4 с" above a finished answer, like the reasoning line in ChatGPT.
+ * It opens to the steps the server actually reported (searching, reading a
+ * site, writing) — operational status, never the model's hidden reasoning.
+ */
+export function ThoughtTrace({ thought, sources = 0 }: { thought: { ms: number; steps: string[] }; sources?: number }) {
+  const [open, setOpen] = useState(false)
+  const steps = thought.steps.filter(Boolean)
+  const label = `Думал ${seconds(thought.ms)}${sources ? ` · источников: ${sources}` : ""}`
+  if (!steps.length) return <div className="malik-thought"><span className="malik-thought__label">{label}</span></div>
+  return (
+    <div className={`malik-thought${open ? " is-open" : ""}`}>
+      <button type="button" className="malik-thought__label" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        {label}
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      {open ? (
+        <ol className="malik-thought__steps">
+          {steps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}
+        </ol>
+      ) : null}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------ answer versions */
+
+/** "‹ 2/3 ›" under an answer that was regenerated. */
+export function VersionPager({ index, total, onChange }: { index: number; total: number; onChange: (index: number) => void }) {
+  if (total < 2) return null
+  return (
+    <span className="malik-versions" role="group" aria-label="Версии ответа">
+      <button type="button" disabled={index <= 0} onClick={() => onChange(index - 1)} aria-label="Предыдущая версия">‹</button>
+      <span aria-live="polite">{index + 1}/{total}</span>
+      <button type="button" disabled={index >= total - 1} onClick={() => onChange(index + 1)} aria-label="Следующая версия">›</button>
+    </span>
+  )
+}
