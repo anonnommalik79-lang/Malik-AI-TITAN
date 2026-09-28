@@ -66,6 +66,7 @@
     "test:os-flow": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-os-flow.mjs",
     "test:os-library": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-os-library.mjs",
     "test:os": "npm run test:os-core && npm run test:os-flow && npm run test:os-library",
+    "test:voice-universal": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-universal.mjs",
     "test:creation-engine": "node --experimental-transform-types --no-warnings scripts/verify-creation-engine.mjs"
   },
   "dependencies": {

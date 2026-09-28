@@ -4,7 +4,8 @@ import { Check, Volume2 } from "lucide-react"
 import { useEffect, useRef } from "react"
 import styles from "./VoiceSettingsPanel.module.css"
 
-export type VoiceLanguage = "kk" | "ru" | "en"
+/** "auto" answers in whatever language the person speaks; the others lock one language. */
+export type VoiceLanguage = "auto" | "kk" | "ru" | "en"
 
 export type VoiceProfile = {
   name: string
@@ -74,7 +75,24 @@ const ENGLISH_VOICES: readonly VoiceProfile[] = [
   { name: "Sharon", description: "Australian feminine · formal, relaxed", model: "flux-sharon-en", language: "en", rate: .98, pitch: 1.04, hints: femaleHints },
 ] as const
 
-export const VOICES: readonly VoiceProfile[] = [...KAZAKH_VOICES, ...RUSSIAN_VOICES, ...ENGLISH_VOICES]
+/**
+ * Gemini Live's own voices speak every language the model speaks, so in
+ * "auto" these are the choices: one voice that answers in Kazakh, Russian,
+ * English or anything else the person uses.
+ */
+const AUTO_VOICES: readonly VoiceProfile[] = [
+  { name: "Charon", description: "Низкий, спокойный мужской", model: "gemini-charon", language: "auto", rate: .98, pitch: .9, hints: maleHints },
+  { name: "Kore", description: "Чистый, уверенный женский", model: "gemini-kore", language: "auto", rate: 1, pitch: 1.04, hints: femaleHints },
+  { name: "Aoede", description: "Мягкий, естественный женский", model: "gemini-aoede", language: "auto", rate: .99, pitch: 1.03, hints: femaleHints },
+  { name: "Fenrir", description: "Энергичный, выразительный мужской", model: "gemini-fenrir", language: "auto", rate: 1.02, pitch: .92, hints: maleHints },
+  { name: "Orus", description: "Твёрдый, уверенный мужской", model: "gemini-orus", language: "auto", rate: 1, pitch: .9, hints: maleHints },
+  { name: "Leda", description: "Молодой, светлый женский", model: "gemini-leda", language: "auto", rate: 1, pitch: 1.05, hints: femaleHints },
+  { name: "Zephyr", description: "Яркий, лёгкий женский", model: "gemini-zephyr", language: "auto", rate: 1.01, pitch: 1.06, hints: femaleHints },
+] as const
+
+// The locked-language lists come first so a name shared with them (Charon,
+// Kore …) resolves to the same profile everywhere.
+export const VOICES: readonly VoiceProfile[] = [...KAZAKH_VOICES, ...RUSSIAN_VOICES, ...ENGLISH_VOICES, ...AUTO_VOICES]
 
 export const PERSONALITIES = ["Assistant", "Therapist", "Storyteller", "Kids Story Time", "Kids Trivia Game", "Meditation", "Motivation", "Romantic", "Argumentative"] as const
 
@@ -83,7 +101,7 @@ export function voicesForLanguage(language: VoiceLanguage) {
 }
 
 export function defaultVoiceForLanguage(language: VoiceLanguage) {
-  return language === "kk" ? "Kokoro M1" : language === "ru" ? "Charon" : "Cliff"
+  return language === "kk" ? "Kokoro M1" : language === "ru" || language === "auto" ? "Charon" : "Cliff"
 }
 
 export function voiceBelongsToLanguage(name: string, language: VoiceLanguage) {
@@ -125,6 +143,7 @@ export function liveVoiceFor(name: string) {
 }
 
 const LANGUAGE_BUTTONS: readonly { id: VoiceLanguage; label: string }[] = [
+  { id: "auto", label: "Авто" },
   { id: "kk", label: "Қазақша" },
   { id: "ru", label: "Русский" },
   { id: "en", label: "English" },
@@ -170,11 +189,11 @@ export function VoiceSettings({ open, language, voice, personality, speed, expre
 
       <div className={styles.columns}>
         <section className={styles.column} aria-label="Выбор голоса">
-          <div className={styles.heading}><span>Голос</span><small>{language === "kk" ? "Только Қазақша" : language === "ru" ? "Только Русский" : "Deepgram Flux · English"}</small></div>
+          <div className={styles.heading}><span>Голос</span><small>{language === "auto" ? "Отвечает на языке собеседника" : language === "kk" ? "Только Қазақша" : language === "ru" ? "Только Русский" : "Only English"}</small></div>
           <div className={styles.list}>
             {visibleVoices.map((profile) => (
               <button key={profile.name} type="button" className={`${styles.item} ${voice === profile.name ? styles.selected : ""}`} onClick={() => { onVoiceChange(profile.name); onPreviewVoice(profile.name) }}>
-                <span className={styles.itemText}><strong>{profile.name} <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">{profile.language === "kk" ? "Қазақша" : profile.language === "ru" ? "Русский" : "English"}</span></strong><small>{profile.description}</small></span>
+                <span className={styles.itemText}><strong>{profile.name} <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">{profile.language === "auto" ? "Все языки" : profile.language === "kk" ? "Қазақша" : profile.language === "ru" ? "Русский" : "English"}</span></strong><small>{profile.description}</small></span>
                 <span className={styles.actions}><span className={styles.preview} aria-hidden="true"><Volume2 size={14} /></span>{voice === profile.name ? <Check className={styles.check} size={15} /> : null}</span>
               </button>
             ))}

@@ -18,6 +18,7 @@ import { takeSentence } from "@/lib/voice/voice-llm-stream"
 import { PauseTracker } from "@/lib/voice/dsp"
 import { GeminiLiveSession } from "@/lib/voice/gemini-live-client"
 import { detectSpokenLanguageDetailed } from "@/lib/voice/voice-language"
+import { languageLabel } from "@/lib/translator/languages"
 import { VOICE_HISTORY_TURNS, type VoiceMessage } from "@/lib/voice/conversation"
 
 type SpeechResult = { isFinal: boolean; 0: { transcript: string } }
@@ -52,7 +53,15 @@ type VoiceTurnPayload = {
 }
 type TranscribePayload = { ok?: boolean; text?: string; error?: string; remainingSeconds?: number; confidence?: number }
 
-const STORAGE_KEY = "malik.voice.preferences.v4"
+/**
+ * v5: "any language" became the default. Saved voice, personality, speed and
+ * emotion carry over from v4; the old fixed language does not, so everyone
+ * starts with Malik answering in the language they speak.
+ */
+const STORAGE_KEY = "malik.voice.preferences.v5"
+const PREVIOUS_STORAGE_KEY = "malik.voice.preferences.v4"
+
+export type VoiceConversationTurn = { user: string; assistant: string }
 
 /**
  * When the microphone decides you have stopped talking.
@@ -83,7 +92,12 @@ const SPEECH_START_RMS = 0.030
 /** Quiet enough to still be the tail of a word. */
 const SPEECH_CONTINUE_RMS = 0.008
 
-export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit?: (prompt: string) => void }) {
+export function VoiceMode({ onClose, onSubmit, onConversation }: {
+  onClose: () => void
+  onSubmit?: (prompt: string) => void
+  /** The finished conversation, turn by turn, so it stays in the chat like any other. */
+  onConversation?: (turns: VoiceConversationTurn[]) => void
+}) {
   const [phase, setPhase] = useState<"enter" | "open" | "leave">("enter")
   const [micActive, setMicActive] = useState(false)
   const [micError, setMicError] = useState<string | null>(null)
@@ -95,8 +109,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const [soundEnabled, setSoundEnabled] = useState(isVoiceSoundEnabled)
   const [screenActive, setScreenActive] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [language, setLanguage] = useState<VoiceLanguage>("kk")
-  const [voice, setVoice] = useState(defaultVoiceForLanguage("kk"))
+  const [language, setLanguage] = useState<VoiceLanguage>("auto")
+  const [voice, setVoice] = useState(defaultVoiceForLanguage("auto"))
+  /** The language the person was last heard speaking (any language), shown in "auto". */
+  const [heardLanguage, setHeardLanguage] = useState("")
   const [personality, setPersonality] = useState("Assistant")
   const [speed, setSpeed] = useState(1)
   const [expressivity, setExpressivity] = useState(0)
@@ -111,7 +127,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   const energyRef = useRef(.07)
   const speedRef = useRef(1)
-  const languageRef = useRef<VoiceLanguage>("kk")
+  const languageRef = useRef<VoiceLanguage>("auto")
   /** The language the person actually spoke last turn, which is what to listen for next. */
   const spokenLanguageRef = useRef<VoiceLanguage | null>(null)
   const demoRef = useRef(false)
@@ -178,7 +194,10 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const geminiLiveReadyRef = useRef(false)
   const liveInputRef = useRef("")
   const liveOutputRef = useRef("")
+  /** Every finished exchange of this session, handed to the chat when Voice closes. */
+  const turnsRef = useRef<VoiceConversationTurn[]>([])
   const voiceRef = useRef(voice)
+  const styleRef = useRef({ personality: "Assistant", speed: 1, expressivity: 0 })
 
   useEffect(() => {
     languageRef.current = language
@@ -195,11 +214,13 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}")
-      const savedLanguage: VoiceLanguage = saved.language === "ru" || saved.language === "en" || saved.language === "kk" ? saved.language : "kk"
+      const current = localStorage.getItem(STORAGE_KEY)
+      const saved = JSON.parse(current || localStorage.getItem(PREVIOUS_STORAGE_KEY) || "{}")
+      const savedLanguage: VoiceLanguage = current && (saved.language === "ru" || saved.language === "en" || saved.language === "kk" || saved.language === "auto") ? saved.language : "auto"
       languageRef.current = savedLanguage
       setLanguage(savedLanguage)
       if (typeof saved.voice === "string" && voiceBelongsToLanguage(saved.voice, savedLanguage)) setVoice(saved.voice)
+      else if (typeof saved.voice === "string" && savedLanguage === "auto" && voiceBelongsToLanguage(liveVoiceFor(saved.voice), "auto")) setVoice(liveVoiceFor(saved.voice))
       else setVoice(defaultVoiceForLanguage(savedLanguage))
       if (typeof saved.personality === "string") setPersonality(saved.personality)
       if (typeof saved.speed === "number" && saved.speed >= .85 && saved.speed <= 1.15) setSpeed(saved.speed)
@@ -210,6 +231,23 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ language, voice, personality, speed, expressivity })) } catch {}
   }, [language, voice, personality, speed, expressivity])
+
+  // Personality, speed and emotion are part of how Malik talks, so the live
+  // session gets them too. Sliders move in steps; the session restarts once
+  // the hand has stopped, keeping the conversation.
+  useEffect(() => {
+    styleRef.current = { personality, speed, expressivity }
+    const timer = window.setTimeout(() => {
+      void geminiLiveRef.current?.setStyle(styleRef.current)
+    }, 700)
+    return () => window.clearTimeout(timer)
+  }, [personality, speed, expressivity])
+
+  const rememberTurn = useCallback(() => {
+    const user = liveInputRef.current.replace(/\s+/g, " ").trim()
+    const assistant = liveOutputRef.current.replace(/\s+/g, " ").trim()
+    if (user || assistant) turnsRef.current = [...turnsRef.current, { user, assistant }].slice(-60)
+  }, [])
 
   const showNotice = useCallback((message: string) => {
     setNotice(message)
@@ -225,6 +263,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       geminiLiveRef.current = new GeminiLiveSession({
         voice: liveVoiceFor(voiceRef.current),
         language: languageRef.current,
+        style: styleRef.current,
         callbacks: {
           onReady: (_model) => {
             geminiLiveReadyRef.current = true
@@ -241,11 +280,15 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
           onInputText: (text) => {
             if (!mountedRef.current || closingRef.current) return
             if (liveOutputRef.current) {
+              // The previous answer was cut short by this new question.
+              rememberTurn()
               liveInputRef.current = ""
               liveOutputRef.current = ""
             }
             liveInputRef.current += text
             const repaired = repairTranscript(liveInputRef.current) || liveInputRef.current
+            const heard = detectSpokenLanguageDetailed(repaired)
+            if (heard.code && heard.confident) setHeardLanguage(heard.code)
             setFinalTranscript(repaired.trim())
             setInterimTranscript("")
             setTitle("Слушаю")
@@ -267,6 +310,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
           },
           onTurnComplete: () => {
             if (!mountedRef.current || closingRef.current) return
+            rememberTurn()
             liveInputRef.current = ""
             liveOutputRef.current = ""
             setTitle("Слушаю")
@@ -325,13 +369,14 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     // restart it.
     await geminiLiveRef.current.setLanguage(languageRef.current)
     await geminiLiveRef.current.setVoice(liveVoiceFor(voiceRef.current))
+    await geminiLiveRef.current.setStyle(styleRef.current)
     const ready = await geminiLiveRef.current.connect()
     geminiLiveReadyRef.current = ready
     if (!ready && mountedRef.current && !closingRef.current) {
       setLiveError("Голосовой режим сейчас недоступен.")
     }
     return ready
-  }, [])
+  }, [rememberTurn])
 
   const stopReplyAudio = useCallback((interrupted = true) => {
     geminiLiveRef.current?.stopOutput()
@@ -951,7 +996,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       micActiveRef.current = true
       setMicActive(true)
       setTitle("Слушаю")
-      setSubtitle(languageRef.current === "kk" ? "Қазақша сөйле — жауап тек қазақша болады" : languageRef.current === "ru" ? "Говори по-русски — ответ будет только по-русски" : "Speak English — the reply stays English")
+      setSubtitle(languageRef.current === "auto" ? "Говори на любом языке — отвечу на нём же" : languageRef.current === "kk" ? "Қазақша сөйле — жауап тек қазақша болады" : languageRef.current === "ru" ? "Говори по-русски — ответ будет только по-русски" : "Speak English — the reply stays English")
       speechDetectedRef.current = false
       lastSpeechAtRef.current = 0
       recordingStartedAtRef.current = Date.now()
@@ -1465,12 +1510,21 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const closeMode = useCallback(() => {
     if (closingRef.current) return
     closingRef.current = true
+    // What was said stays in the chat, the way a voice call's transcript does.
+    rememberTurn()
+    liveInputRef.current = ""
+    liveOutputRef.current = ""
+    const turns = turnsRef.current.filter((turn) => turn.user || turn.assistant)
+    turnsRef.current = []
+    if (turns.length) {
+      try { onConversation?.(turns) } catch {}
+    }
     if (isVoiceSoundEnabled()) playVoiceTransitionSound("close")
     cleanupAll()
     setSettingsOpen(false)
     setPhase("leave")
     closeTimerRef.current = window.setTimeout(onClose, 220)
-  }, [cleanupAll, onClose])
+  }, [cleanupAll, onClose, onConversation, rememberTurn])
 
   const toggleSound = useCallback(() => {
     setSoundEnabled((current) => {
@@ -1488,6 +1542,11 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     if (!value) return
     // Typed or spoken, it is the same conversation and the same session.
     if (geminiLiveReadyRef.current && geminiLiveRef.current?.sendText(value)) {
+      if (liveOutputRef.current) {
+        rememberTurn()
+        liveOutputRef.current = ""
+      }
+      liveInputRef.current = value
       setFinalTranscript(value)
       setInterimTranscript("")
       setTitle("Отвечаю")
@@ -1499,7 +1558,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       return
     }
     void runVoiceTurn(value)
-  }, [runVoiceTurn, showNotice])
+  }, [rememberTurn, runVoiceTurn, showNotice])
 
   const retryReply = useCallback(async () => {
     unlockVoiceAudio()
@@ -1540,8 +1599,9 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
     setFinalTranscript("")
     setInterimTranscript("")
     stopReplyAudio(true)
-    setTitle(nextLanguage === "kk" ? "Қазақша" : nextLanguage === "ru" ? "Русский" : "English")
-    setSubtitle(nextLanguage === "kk" ? "Тек қазақша жауап беремін" : nextLanguage === "ru" ? "Отвечаю только по-русски" : "English only")
+    setTitle(nextLanguage === "auto" ? "Любой язык" : nextLanguage === "kk" ? "Қазақша" : nextLanguage === "ru" ? "Русский" : "English")
+    setSubtitle(nextLanguage === "auto" ? "Отвечаю на языке, на котором ты говоришь" : nextLanguage === "kk" ? "Тек қазақша жауап беремін" : nextLanguage === "ru" ? "Отвечаю только по-русски" : "English only")
+    setHeardLanguage("")
     if (shouldRestartMic) {
       void stopMicrophone().then(() => window.setTimeout(() => {
         if (mountedRef.current && !closingRef.current) void startMicrophone()
@@ -1588,6 +1648,9 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
         <div className={styles.orbSpacer} aria-hidden="true" />
         <h1>{title}</h1>
         <p>{subtitle}</p>
+        {language === "auto" && heardLanguage ? (
+          <span className={styles.languageChip} aria-live="polite" title="Язык, на котором ты говоришь — отвечаю на нём же">{languageLabel(heardLanguage)}</span>
+        ) : null}
         <div className={styles.transcript} aria-live="polite">
           <span>{finalTranscript}</span>{interimTranscript ? <span className={styles.interim}> {interimTranscript}</span> : null}
         </div>
@@ -1645,7 +1708,7 @@ export function VoiceMode({ onClose, onSubmit }: { onClose: () => void; onSubmit
       />
 
       <div className={`${styles.notice} ${notice ? styles.open : ""}`}>{notice}</div>
-      <div className={styles.hint}>{busy ? "Voice обрабатывает запрос…" : "Можно перебить голос · қазақша / русский / English"}</div>
+      <div className={styles.hint}>{busy ? "Voice обрабатывает запрос…" : language === "auto" ? "Любой язык — отвечу на нём же · можно перебить голосом" : "Можно перебить голос · қазақша / русский / English"}</div>
     </section>
   )
 }

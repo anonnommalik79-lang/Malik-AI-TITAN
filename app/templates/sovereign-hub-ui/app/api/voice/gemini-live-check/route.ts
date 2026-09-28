@@ -48,6 +48,7 @@ type CheckGlobal = typeof globalThis & {
 
 const HOLD_MS = 30_000
 const PROMPTS: Record<LiveLanguage, string> = {
+  auto: "Сәлем! Қалайсың? Бір қысқа сөйлеммен жауап бер.",
   kk: "Қазақша бір қысқа сөйлеммен амандас.",
   ru: "Поздоровайся одним коротким предложением по-русски.",
   en: "Say hello in one short English sentence.",
@@ -244,7 +245,7 @@ async function runCheck(language: LiveLanguage): Promise<CheckResult> {
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const language = safeLiveLanguage(url.searchParams.get("language") || "kk")
+  const language = safeLiveLanguage(url.searchParams.get("language") || "auto")
   const scope = globalThis as CheckGlobal
   const key = `${language}`
 

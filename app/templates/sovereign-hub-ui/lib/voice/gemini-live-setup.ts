@@ -12,7 +12,12 @@
  * both.
  */
 
-export type LiveLanguage = "kk" | "ru" | "en"
+/**
+ * "auto" is the default: Malik answers in whatever language the person speaks,
+ * any language, and follows them when they switch. The three fixed languages
+ * stay for anyone who wants a lock.
+ */
+export type LiveLanguage = "auto" | "kk" | "ru" | "en"
 
 export const LIVE_WS_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained"
 export const LIVE_TOKEN_URL = "https://generativelanguage.googleapis.com/v1beta/auth_tokens"
@@ -36,6 +41,13 @@ export const LIVE_INPUT_RATE = 16000
  * name or an invented number ends up spoken with total confidence.
  */
 export const LIVE_INSTRUCTIONS: Record<LiveLanguage, string> = {
+  auto: [
+    "You are Malik AI, a natural, warm, very capable voice AI conversation partner. Your name is Malik AI; never introduce yourself as Gemini, Google or an internal model name. If asked who created you: Malik AI was created by Абдумалик (Malik).",
+    "LANGUAGE — MIRROR THE USER: always answer in the language the user is speaking in their latest turn, whatever it is: Kazakh (қазақша), Russian, English, Uzbek, Kyrgyz, Turkish, Tajik, Ukrainian, Arabic, Chinese, Spanish, German, French, Hindi, Korean, Japanese or any other language. Speak it like a native speaker, with its own pronunciation, grammar and script.",
+    "Kazakh is not Russian: when the user speaks Kazakh — even with some Russian or English words mixed in — answer in Kazakh (Сәлем! Қалайсыз? → answer in Kazakh). When the user speaks Russian, answer in Russian. When the sentence mixes languages, answer in the language most of it is in.",
+    "When the user switches language, switch with them at once. When they explicitly ask for a language (\"ответь по-английски\", \"қазақша айтшы\", \"answer in Spanish\"), use that language until they ask otherwise.",
+    "A short or unclear sound (\"ok\", \"ага\", a cough, noise) never changes the language: keep the language of the conversation so far. Never jump to Chinese, Japanese or any unrelated language because of noise or a misheard word; a single foreign term is not a language switch.",
+  ].join(" "),
   kk: [
     "Сен — Malik AI, табиғи сөйлесетін дауыстық ИИ-көмекшісің. Сенің атың Malik AI; өзіңді Gemini, Google немесе ішкі модель атауымен таныстырма.",
     "Егер кім жасағанын сұраса: Malik AI-ды Абдумалик (Malik) жасағанын айт.",
@@ -59,6 +71,88 @@ export const LIVE_INSTRUCTIONS: Record<LiveLanguage, string> = {
   ].join(" "),
 }
 
+/**
+ * How Malik talks, in every language. This is what makes a voice feel like a
+ * person in a conversation rather than a document being read out.
+ */
+const CONVERSATION_RULES = [
+  "HOW TO TALK: this is a spoken conversation, not a document. Answer naturally and directly, like a smart friend on a call: usually one to four short sentences, then stop and let the user talk; go longer only when they ask for detail, a story, steps or an explanation — then give it fully, in a clear spoken order.",
+  "Always finish the sentence and the thought you started; never stop in the middle of a word or an idea. If the user starts speaking over you, stop at once and listen, then answer what they said now.",
+  "Never read markdown, bullet symbols, URLs, code or tables aloud — say them the way a person would. Say numbers, dates, money and units the natural spoken way in the reply language.",
+  "Keep the whole conversation in mind: refer back to what was said, never repeat an answer you already gave, and continue from where you left off when asked.",
+  "If you did not catch the words, ask once, briefly, in the conversation language. Do not invent facts, names or numbers; say plainly when you are not sure.",
+  "Ignore distant voices, TV, music and room sounds; answer only the clear voice of the person close to the microphone.",
+].join(" ")
+
+/** One closing line in the locked language, so style notes in English never pull the reply into English. */
+const LANGUAGE_REMINDER: Record<LiveLanguage, string> = {
+  auto: "Reply language: the language the user speaks right now.",
+  kk: "Жауап тілі — тек қазақша.",
+  ru: "Язык ответа — только русский.",
+  en: "Reply language: English only.",
+}
+
+export type LiveStyle = {
+  /** One of the personalities in the Voice settings. */
+  personality?: string
+  /** 0.85…1.15, the speed slider. */
+  speed?: number
+  /** -2…2, the emotion slider. */
+  expressivity?: number
+}
+
+const PERSONALITY_STYLE: Record<string, string> = {
+  Assistant: "",
+  Therapist: "Personality: a calm, caring listener. Reflect feelings back briefly, ask gentle open questions, never judge, never diagnose.",
+  Storyteller: "Personality: a vivid storyteller. Use images, rhythm and small pauses; build suspense when telling a story.",
+  "Kids Story Time": "Personality: a kind storyteller for small children. Simple words, short sentences, gentle and cheerful, always age-appropriate.",
+  "Kids Trivia Game": "Personality: a fun quiz host for children. Ask one question at a time, cheer every answer, give the right answer kindly, keep score.",
+  Meditation: "Personality: a meditation guide. Speak slowly and softly, with calm pauses, guide breathing step by step.",
+  Motivation: "Personality: an energetic coach. Confident, positive, concrete next steps, no filler.",
+  Romantic: "Personality: warm, tender and poetic, always respectful.",
+  Argumentative: "Personality: a sharp debate partner. Challenge weak arguments with reasons and evidence, stay polite.",
+}
+
+/** The Voice settings (personality, speed, emotion) as instructions the model follows. */
+export function styleInstruction(style: LiveStyle = {}) {
+  const parts: string[] = []
+  const personality = PERSONALITY_STYLE[String(style.personality || "Assistant")]
+  if (personality) parts.push(personality)
+  const speed = Number(style.speed)
+  if (Number.isFinite(speed) && speed >= 1.08) parts.push("Pace: speak noticeably faster than usual, crisp and brisk.")
+  else if (Number.isFinite(speed) && speed > 1.01) parts.push("Pace: speak a little faster than usual.")
+  else if (Number.isFinite(speed) && speed <= 0.92) parts.push("Pace: speak noticeably slower than usual, with clear pauses.")
+  else if (Number.isFinite(speed) && speed < 0.99) parts.push("Pace: speak a little slower than usual.")
+  const expressivity = Math.round(Number(style.expressivity) || 0)
+  if (expressivity >= 2) parts.push("Emotion: very expressive and animated, lively intonation.")
+  else if (expressivity === 1) parts.push("Emotion: warm and expressive.")
+  else if (expressivity === -1) parts.push("Emotion: calm and even.")
+  else if (expressivity <= -2) parts.push("Emotion: very calm, neutral and steady.")
+  return parts.join(" ")
+}
+
+export type LiveContextTurn = { role: "user" | "assistant"; text: string }
+
+/**
+ * A new session (after a language, voice or style change, or a link that
+ * could not be resumed) starts with no memory. The last turns are handed to
+ * it here so the conversation continues instead of starting over.
+ */
+export function contextInstruction(turns: LiveContextTurn[] = []) {
+  const recent = turns.filter((turn) => turn.text.trim()).slice(-10)
+  if (!recent.length) return ""
+  let budget = 2_400
+  const lines: string[] = []
+  for (const turn of [...recent].reverse()) {
+    const text = turn.text.replace(/\s+/g, " ").trim().slice(0, 420)
+    const line = `${turn.role === "user" ? "User" : "You"}: ${text}`
+    if (budget - line.length < 0) break
+    budget -= line.length
+    lines.unshift(line)
+  }
+  return `CONVERSATION SO FAR (continue it naturally; do not greet again and do not repeat these answers): ${lines.join(" | ")}`
+}
+
 /** The prebuilt voices Gemini Live actually has. Anything else fails the setup. */
 const LIVE_VOICE_NAMES = new Set([
   "Puck", "Charon", "Kore", "Aoede", "Fenrir", "Leda", "Achird", "Sulafat",
@@ -74,10 +168,11 @@ export function safeLiveVoice(value: string) {
 }
 
 export function safeLiveLanguage(value: unknown): LiveLanguage {
-  return value === "ru" || value === "en" || value === "kk" ? value : "kk"
+  return value === "ru" || value === "en" || value === "kk" || value === "auto" ? value : "auto"
 }
 
-const LIVE_INPUT_LANGUAGE_CODE: Record<LiveLanguage, string> = {
+/** Locked languages tell the transcriber what to expect; "auto" lets it hear any language. */
+const LIVE_INPUT_LANGUAGE_CODE: Record<Exclude<LiveLanguage, "auto">, string> = {
   kk: "kk-KZ",
   ru: "ru-RU",
   en: "en-US",
@@ -87,6 +182,7 @@ const LIVE_INPUT_LANGUAGE_CODE: Record<LiveLanguage, string> = {
 // without putting a second speech recognizer in front of Gemini. This is only
 // vocabulary guidance; the native audio model still hears the original PCM.
 const LIVE_CUSTOM_VOCABULARY: Record<LiveLanguage, string[]> = {
+  auto: ["Malik AI", "Абдумалик", "Қазақстан", "Казахстан", "Kazakhstan", "Алматы", "Астана", "қазақша", "OpenAI", "ChatGPT"],
   kk: ["Malik AI", "Абдумалик", "Қазақстан", "Алматы", "Астана", "қазақша", "жасанды интеллект", "OpenAI", "ChatGPT"],
   ru: ["Malik AI", "Абдумалик", "Казахстан", "Алматы", "Астана", "искусственный интеллект", "OpenAI", "ChatGPT"],
   en: ["Malik AI", "Abdumalik", "Kazakhstan", "Almaty", "Astana", "artificial intelligence", "OpenAI", "ChatGPT"],
@@ -99,6 +195,9 @@ export type LiveSetupInput = {
   /** 0 = every documented option, 1 = core options, 2 = the bare minimum. */
   tier?: 0 | 1 | 2
   resumeHandle?: string | null
+  style?: LiveStyle
+  /** Earlier turns, used only when the session cannot be resumed. */
+  context?: LiveContextTurn[]
 }
 
 /**
@@ -120,17 +219,19 @@ export function buildLiveSetup(input: LiveSetupInput = {}) {
         voiceConfig: { prebuiltVoiceConfig: { voiceName: safeLiveVoice(input.voice || "Charon") } },
       },
     },
-    inputAudioTranscription: tier === 0
-      ? {
-          languageCodes: [LIVE_INPUT_LANGUAGE_CODE[language]],
-          customVocabulary: LIVE_CUSTOM_VOCABULARY[language],
-          mode: "SMART",
-        }
-      : tier === 1
-        ? { languageCodes: [LIVE_INPUT_LANGUAGE_CODE[language]] }
-        : {},
+    inputAudioTranscription: language === "auto"
+      ? (tier === 0 ? { customVocabulary: LIVE_CUSTOM_VOCABULARY.auto, mode: "SMART" } : {})
+      : tier === 0
+        ? {
+            languageCodes: [LIVE_INPUT_LANGUAGE_CODE[language]],
+            customVocabulary: LIVE_CUSTOM_VOCABULARY[language],
+            mode: "SMART",
+          }
+        : tier === 1
+          ? { languageCodes: [LIVE_INPUT_LANGUAGE_CODE[language]] }
+          : {},
     outputAudioTranscription: {},
-    systemInstruction: { parts: [{ text: LIVE_INSTRUCTIONS[language] }] },
+    systemInstruction: { parts: [{ text: systemText(language, input.style, input.resumeHandle ? [] : input.context) }] },
   }
 
   if (tier <= 1) {
@@ -174,4 +275,15 @@ export function buildLiveSetup(input: LiveSetupInput = {}) {
   // runs in their own studio, which is the behaviour being asked for.
 
   return { setup }
+}
+
+/** The whole system prompt: who Malik is, the language rule, how to talk, style, memory. */
+export function systemText(language: LiveLanguage, style?: LiveStyle, context?: LiveContextTurn[]) {
+  return [
+    LIVE_INSTRUCTIONS[language],
+    CONVERSATION_RULES,
+    styleInstruction(style),
+    contextInstruction(context),
+    LANGUAGE_REMINDER[language],
+  ].filter(Boolean).join("\n\n")
 }

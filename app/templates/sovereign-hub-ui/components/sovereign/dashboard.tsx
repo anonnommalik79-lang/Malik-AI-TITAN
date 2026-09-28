@@ -7122,6 +7122,39 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return () => window.removeEventListener("malik-open-command-palette", open)
   }, [])
 
+  // A voice conversation stays in the chat when Voice closes, turn by turn,
+  // the way a call's transcript does — in the open chat, or a new one.
+  const appendVoiceConversation = useCallback((turns: Array<{ user: string; assistant: string }>) => {
+    const clean = turns
+      .map((turn) => ({ user: String(turn.user || "").trim().slice(0, 4000), assistant: String(turn.assistant || "").trim().slice(0, 12000) }))
+      .filter((turn) => turn.user || turn.assistant)
+      .slice(-40)
+    if (!clean.length) return
+    const now = Date.now()
+    const added: Message[] = clean.flatMap((turn, index) => {
+      const at = new Date(now - (clean.length - index) * 1000)
+      const rows: Message[] = []
+      if (turn.user) rows.push({ id: crypto.randomUUID(), role: "user", content: turn.user, timestamp: at })
+      if (turn.assistant) rows.push({ id: crypto.randomUUID(), role: "assistant", content: turn.assistant, timestamp: at })
+      return rows
+    })
+    const chatId = activeChatId || crypto.randomUUID()
+    if (!activeChatId) {
+      const first = clean.find((turn) => turn.user)?.user || "Голосовой разговор"
+      const newChat: Chat = {
+        id: chatId,
+        title: `🎙 ${first.slice(0, 32)}${first.length > 32 ? "..." : ""}`,
+        timestamp: new Date(),
+        messages: [],
+        kind: "chat",
+      }
+      setChats((previous) => [newChat, ...previous])
+      setActiveChatId(chatId)
+    }
+    setMessages((previous) => [...previous, ...added])
+    setChats((previous) => previous.map((chat) => (chat.id === chatId ? { ...chat, messages: [...chat.messages, ...added] } : chat)))
+  }, [activeChatId])
+
   // A Superflow block reports its flow id and final status; the reference is
   // kept on the message so a reload reconnects to the same flow.
   useEffect(() => {
@@ -7896,7 +7929,7 @@ const shouldShowMobilePreviewButton =
   <MalikCodexModal open={codexOpen} onClose={() => setCodexOpen(false)} onSendToCanvas={(code) => safeOpenCanvas(code, "generator-panel")} />
   <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} onRunAction={runCommandPaletteAction} />
   <MissionControlHost />
-  {voiceModeOpen ? <VoiceMode onClose={() => setVoiceModeOpen(false)} onSubmit={(prompt) => handleSendMessage(prompt)} /> : null}
+  {voiceModeOpen ? <VoiceMode onClose={() => setVoiceModeOpen(false)} onSubmit={(prompt) => handleSendMessage(prompt)} onConversation={appendVoiceConversation} /> : null}
 </main>
         </div>
       </div>

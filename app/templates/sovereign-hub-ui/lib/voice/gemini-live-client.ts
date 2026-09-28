@@ -8,10 +8,15 @@ import {
   buildLiveSetup,
   safeLiveLanguage,
   safeLiveVoice,
+  type LiveContextTurn,
   type LiveLanguage,
+  type LiveStyle,
 } from "./gemini-live-setup"
 
-export type { LiveLanguage }
+export type { LiveLanguage, LiveStyle }
+
+/** Turns kept to carry the conversation into a session that could not be resumed. */
+const MEMORY_TURNS = 12
 
 type LiveCallbacks = {
   onReady?: (model: string) => void
@@ -96,6 +101,26 @@ const NEAR_FIELD_CONTINUE_RMS = 0.006
 const NEAR_FIELD_HOLD_MS = 520
 const NEAR_FIELD_END_SILENCE_MS = 1800
 const NEAR_FIELD_PREROLL_FRAMES = 3
+
+/**
+ * Echo guard.
+ *
+ * The commonest reason a voice assistant stops talking in the middle of its
+ * own sentence is that it heard itself: the reply comes out of the speaker,
+ * goes back into the microphone, and the far end takes it for the person
+ * talking over it. The browser's echo canceller removes most of it, not all.
+ *
+ * The reply's own loudness is known here, moment by moment, because this
+ * client plays it. While it plays, a sound at the microphone has to be clearly
+ * louder than what an echo of the reply could be before it counts as the
+ * person interrupting. A person speaking into the microphone is far louder
+ * than a speaker's echo; the echo of a loud syllable is not.
+ */
+const ECHO_COUPLING = 0.35
+/** How long sound takes from the output buffer to the microphone, roughly. */
+const ECHO_LAG_MS = 140
+/** Output loudness is kept in slices this long. */
+const ECHO_SLICE_SAMPLES = 1024
 
 function toBase64(bytes: Uint8Array) {
   let binary = ""
@@ -199,15 +224,38 @@ export class GeminiLiveSession {
 
   private outputHead = 0
   private outputSources = new Set<AudioBufferSourceNode>()
+  /** Loudness of the reply being played, per slice, on the page clock (ms). */
+  private outputEnvelope: Array<{ start: number; end: number; rms: number }> = []
   private callbacks: LiveCallbacks
   private voice: string
   private language: LiveLanguage
+  private style: LiveStyle
   private model = DEFAULT_LIVE_MODEL
+  /** What was said, turn by turn, from the live transcripts. */
+  private memory: LiveContextTurn[] = []
+  private turnInput = ""
+  private turnOutput = ""
 
-  constructor(input: { voice?: string; language?: LiveLanguage; callbacks?: LiveCallbacks }) {
+  constructor(input: { voice?: string; language?: LiveLanguage; style?: LiveStyle; callbacks?: LiveCallbacks }) {
     this.voice = safeLiveVoice(input.voice || "Charon")
     this.language = safeLiveLanguage(input.language)
+    this.style = { ...(input.style || {}) }
     this.callbacks = input.callbacks || {}
+  }
+
+  /** The conversation so far, oldest first. */
+  getMemory(): LiveContextTurn[] {
+    return [...this.memory]
+  }
+
+  private remember(interrupted = false) {
+    const user = this.turnInput.replace(/\s+/g, " ").trim()
+    const assistant = this.turnOutput.replace(/\s+/g, " ").trim()
+    if (user) this.memory.push({ role: "user", text: user })
+    if (assistant) this.memory.push({ role: "assistant", text: interrupted ? `${assistant} …` : assistant })
+    if (this.memory.length > MEMORY_TURNS * 2) this.memory = this.memory.slice(-MEMORY_TURNS * 2)
+    this.turnInput = ""
+    this.turnOutput = ""
   }
 
   isReady() {
@@ -227,6 +275,20 @@ export class GeminiLiveSession {
     const next = safeLiveLanguage(language)
     if (next === this.language) return
     this.language = next
+    this.resumeHandle = null
+    if (!this.socket && !this.wantsMic) return
+    await this.restart()
+  }
+
+  /**
+   * Personality, pace and emotion live in the system prompt too. The new
+   * session is told what was said so far, so changing the style mid-talk does
+   * not wipe the conversation.
+   */
+  async setStyle(style: LiveStyle) {
+    const next = { personality: style.personality, speed: style.speed, expressivity: style.expressivity }
+    if (JSON.stringify(next) === JSON.stringify({ personality: this.style.personality, speed: this.style.speed, expressivity: this.style.expressivity })) return
+    this.style = next
     this.resumeHandle = null
     if (!this.socket && !this.wantsMic) return
     await this.restart()
@@ -259,6 +321,8 @@ export class GeminiLiveSession {
       language: this.language,
       tier: this.setupTier,
       resumeHandle: this.resumeHandle,
+      style: this.style,
+      context: this.memory,
     })
   }
 
@@ -363,6 +427,7 @@ export class GeminiLiveSession {
 
         if (server.interrupted) {
           this.stopOutput()
+          if (this.turnOutput) this.remember(true)
           this.callbacks.onInterrupted?.()
         }
 
@@ -370,10 +435,18 @@ export class GeminiLiveSession {
         if (interimInputText) this.callbacks.onInputInterim?.(interimInputText)
 
         const inputText = String(server.inputTranscription?.text || "")
-        if (inputText) this.callbacks.onInputText?.(inputText)
+        if (inputText) {
+          // A new question after an answer that never got its turnComplete.
+          if (this.turnOutput) this.remember()
+          this.turnInput += inputText
+          this.callbacks.onInputText?.(inputText)
+        }
 
         const outputText = String(server.outputTranscription?.text || "")
-        if (outputText) this.callbacks.onOutputText?.(outputText)
+        if (outputText) {
+          this.turnOutput += outputText
+          this.callbacks.onOutputText?.(outputText)
+        }
 
         for (const part of server.modelTurn?.parts || []) {
           const inline = part?.inlineData || part?.inline_data
@@ -385,7 +458,10 @@ export class GeminiLiveSession {
           }
         }
 
-        if (server.turnComplete) this.callbacks.onTurnComplete?.()
+        if (server.turnComplete) {
+          this.remember()
+          this.callbacks.onTurnComplete?.()
+        }
       }
 
       socket.onerror = () => {
@@ -566,6 +642,8 @@ export class GeminiLiveSession {
     const rms = Math.sqrt(squareSum / samples.length)
     const now = Date.now()
     const assistantSpeaking = this.outputSources.size > 0
+    // What an echo of the reply could reach at the microphone right now.
+    const echoFloor = assistantSpeaking ? this.echoLevel() * ECHO_COUPLING : 0
 
     // Learn only the quiet room floor, never a foreground utterance. Capping it
     // prevents a noisy room from teaching the gate that the user's voice is
@@ -580,6 +658,7 @@ export class GeminiLiveSession {
     const openRms = Math.max(
       assistantSpeaking ? NEAR_FIELD_BARGE_RMS : NEAR_FIELD_MIN_RMS,
       this.nearFieldNoiseFloor * (assistantSpeaking ? NEAR_FIELD_BARGE_NOISE_MULTIPLIER : NEAR_FIELD_NOISE_MULTIPLIER),
+      echoFloor,
     )
     const openPeak = Math.max(
       assistantSpeaking ? NEAR_FIELD_BARGE_PEAK : NEAR_FIELD_MIN_PEAK,
@@ -635,6 +714,19 @@ export class GeminiLiveSession {
     this.nearFieldPreRoll = []
     if (now < this.nearFieldSilenceUntil) return [new Float32Array(samples.length)]
     return []
+  }
+
+  /** The loudest slice of the reply that could be arriving at the microphone now. */
+  private echoLevel() {
+    const now = performance.now()
+    let level = 0
+    const from = now - ECHO_LAG_MS - 160
+    const to = now - ECHO_LAG_MS + 80
+    this.outputEnvelope = this.outputEnvelope.filter((slice) => slice.end > now - 2_000)
+    for (const slice of this.outputEnvelope) {
+      if (slice.end >= from && slice.start <= to && slice.rms > level) level = slice.rms
+    }
+    return level
   }
 
   private sendInputPacket(samples: number[]) {
@@ -899,6 +991,17 @@ export class GeminiLiveSession {
     const when = Math.max(context.currentTime + .012, this.outputHead)
     source.start(when)
     this.outputHead = when + audio.duration
+
+    // Remember how loud each slice of this chunk is, on the page clock, for the echo guard.
+    const startMs = performance.now() + (when - context.currentTime) * 1000
+    const sliceMs = (ECHO_SLICE_SAMPLES / rate) * 1000
+    for (let offset = 0, slice = 0; offset < frames; offset += ECHO_SLICE_SAMPLES, slice += 1) {
+      const end = Math.min(frames, offset + ECHO_SLICE_SAMPLES)
+      let sum = 0
+      for (let index = offset; index < end; index += 1) sum += channel[index] * channel[index]
+      this.outputEnvelope.push({ start: startMs + slice * sliceMs, end: startMs + (slice + 1) * sliceMs, rms: Math.sqrt(sum / Math.max(1, end - offset)) })
+    }
+    if (this.outputEnvelope.length > 4_000) this.outputEnvelope = this.outputEnvelope.slice(-2_000)
     this.outputSources.add(source)
     source.onended = () => {
       this.outputSources.delete(source)
@@ -911,6 +1014,7 @@ export class GeminiLiveSession {
       try { source.stop(); source.disconnect() } catch {}
     }
     this.outputSources.clear()
+    this.outputEnvelope = []
     const context = getVoiceAudioContext()
     this.outputHead = context?.currentTime || 0
   }
