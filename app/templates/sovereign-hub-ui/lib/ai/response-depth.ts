@@ -8,6 +8,10 @@ export type ChatSendOptions = {
   imageSize?: "1K" | "2K" | "4K"
   imageAspectRatio?: "1:1" | "16:9" | "9:16" | "4:5" | "4:3"
   imageStyle?: string
+  /** Client-only: edit a historical user turn by forking from this message. */
+  branchFromMessageId?: string
+  /** Client-only: this send came from the one-turn queue, so duplicate-burst protection must not swallow it. */
+  queueDispatch?: boolean
 }
 
 const STORAGE_KEY = "malik_response_depth"
