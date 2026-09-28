@@ -135,7 +135,7 @@ export function ReadAloudButton({ id, text }: { id: string; text: string }) {
 
 /* ------------------------------------------------------- your own message */
 
-export function UserMessageActions({ text, onEdit }: { text: string; onEdit?: (text: string) => void }) {
+export function UserMessageActions({ id, text, onEdit }: { id: string; text: string; onEdit?: (id: string, text: string) => void }) {
   const [copied, setCopied] = useState(false)
   if (!text.trim()) return null
   const copy = async () => {
@@ -153,7 +153,7 @@ export function UserMessageActions({ text, onEdit }: { text: string; onEdit?: (t
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
       {onEdit ? (
-        <button type="button" onClick={() => onEdit(text)} title="Изменить и отправить заново" aria-label="Изменить сообщение">
+        <button type="button" onClick={() => onEdit(id, text)} title="Изменить и создать новую ветку" aria-label="Изменить сообщение и создать ветку">
           <Pencil className="h-3.5 w-3.5" />
         </button>
       ) : null}
