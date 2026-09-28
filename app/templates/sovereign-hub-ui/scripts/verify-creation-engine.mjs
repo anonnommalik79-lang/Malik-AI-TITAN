@@ -1,4 +1,6 @@
 import assert from "node:assert/strict"
+import fs from "node:fs"
+import ts from "typescript"
 import { calculateUnitEconomics, economicsMarkdown, parseEconomicsInputs } from "../lib/business/unit-economics.ts"
 import { directMediaUrl } from "../lib/os/media-reference.ts"
 import { normalizeLaunchPack, pitchesMarkdown, roadmapMarkdown } from "../lib/business/launch-pack.ts"
@@ -98,3 +100,37 @@ try {
   globalThis.window = savedWindow
 }
 console.log("creation engine: browser video metadata QA passed")
+
+const ownershipSource = ts.transpileModule(fs.readFileSync("lib/server/music-job-ownership.ts", "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText.replace(/import ["']server-only["'];?/, "").replace(/import \{[^}]+\} from ["']\.\/private-json-store["'];?/, `
+  const privateJsonStoreConfigured = () => true;
+  const writePrivateJson = async (key, value) => { globalThis.__testMusicStore.set(key, value); return true; };
+  const readPrivateJson = async (key) => globalThis.__testMusicStore.get(key) || null;
+`)
+const musicStoreBefore = globalThis.__testMusicStore
+globalThis.__testMusicStore = new Map()
+try {
+  const ownership = await import(`data:text/javascript,${encodeURIComponent(ownershipSource)}`)
+  await ownership.recordMusicJobOwner("CaseSensitive-01", "alice@example.com")
+  assert.equal(await ownership.musicJobBelongsTo("CaseSensitive-01", "alice@example.com"), true)
+  assert.equal(await ownership.musicJobBelongsTo("CaseSensitive-01", "bob@example.com"), false)
+  assert.equal(await ownership.musicJobBelongsTo("casesensitive-01", "alice@example.com"), false)
+  globalThis.__malikMusicJobOwners?.clear()
+  assert.equal(await ownership.musicJobBelongsTo("CaseSensitive-01", "alice@example.com"), true, "ownership survives process cache loss when durable storage works")
+} finally {
+  globalThis.__testMusicStore = musicStoreBefore
+  delete globalThis.__malikMusicJobOwners
+}
+console.log("creation engine: music job ownership passed")
+
+for (const route of ["status", "download", "file"]) {
+  const code = fs.readFileSync(`app/api/media/music/${route}/route.ts`, "utf8")
+  assert.match(code, /musicJobBelongsTo\(requestId, user\.userId\)/, `${route}: status must be scoped to the owner`)
+  assert.match(code, /directMediaUrl/, `${route}: provider audio must go directly to the browser`)
+}
+const audioArtifactRoute = fs.readFileSync("app/api/os/projects/[id]/audio-artifacts/route.ts", "utf8")
+assert.match(audioArtifactRoute, /musicJobBelongsTo\(requestId, owner\.userId\)/)
+assert.match(audioArtifactRoute, /kind: "audio"/)
+assert.doesNotMatch(audioArtifactRoute, /response\.arrayBuffer\(/)
+console.log("creation engine: music route ownership and direct delivery passed")

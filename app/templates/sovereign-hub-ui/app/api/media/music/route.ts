@@ -1,6 +1,7 @@
 import { resolveMediaUser } from "@/lib/media/request"
 import { musicModel, musicProviderConfigured, musicProviderName, submitDeapiMusic } from "@/lib/server/deapi-music"
 import { generateMusicLyrics, resolveMusicLyricsLanguage } from "@/lib/server/music-lyrics"
+import { recordMusicJobOwner } from "@/lib/server/music-job-ownership"
 import {
   acquireMusicInFlight,
   getMusicQuota,
@@ -157,6 +158,7 @@ export async function POST(request: Request) {
 
     const updatedQuota = await recordMusicUsage(user.userId, user.plan)
     const requestId = result.requestId
+    const ownershipDurable = await recordMusicJobOwner(requestId, user.userId)
 
     return Response.json({
       ok: true,
@@ -164,6 +166,7 @@ export async function POST(request: Request) {
       model: result.model,
       requestId,
       request_id: requestId,
+      ownershipDurable,
       status: "queued",
       statusUrl: `/api/media/music/status?requestId=${encodeURIComponent(requestId)}`,
       downloadUrl: `/api/media/music/download?requestId=${encodeURIComponent(requestId)}`,

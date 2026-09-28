@@ -1,5 +1,7 @@
 import { resolveMediaUser } from "@/lib/media/request"
 import { getDeapiMusicJob, musicModel, musicProviderName } from "@/lib/server/deapi-music"
+import { musicJobBelongsTo } from "@/lib/server/music-job-ownership"
+import { directMediaUrl } from "@/lib/os/media-reference"
 
 export const runtime = "nodejs"
 
@@ -13,6 +15,9 @@ export async function GET(request: Request) {
   const requestId = String(url.searchParams.get("requestId") || url.searchParams.get("request_id") || "").trim()
   if (!requestId) {
     return Response.json({ ok: false, code: "REQUEST_ID_REQUIRED", error: "request_id is required" }, { status: 400 })
+  }
+  if (!(await musicJobBelongsTo(requestId, user.userId))) {
+    return Response.json({ ok: false, code: "MUSIC_JOB_NOT_FOUND", error: "Трек этого аккаунта не найден." }, { status: 404 })
   }
 
   const result = await getDeapiMusicJob(requestId)
@@ -29,6 +34,8 @@ export async function GET(request: Request) {
   }
 
   if (result.status === "done") {
+    const resultUrl = directMediaUrl(result.resultUrl || "", String(process.env.NEXT_PUBLIC_APP_URL || process.env.MALIK_PUBLIC_ORIGIN || ""))
+    if (!resultUrl) return Response.json({ ok: false, code: "MUSIC_DIRECT_DELIVERY_REQUIRED", error: "Провайдер не вернул безопасный аудиофайл." }, { status: 502 })
     return Response.json({
       ok: true,
       provider: musicProviderName(requestId),
@@ -38,10 +45,10 @@ export async function GET(request: Request) {
       status: "ready",
       providerStatus: "done",
       progress: 100,
-      resultUrl: result.resultUrl,
-      result_url: result.resultUrl,
-      audioUrl: result.resultUrl,
-      downloadUrl: result.resultUrl,
+      resultUrl,
+      result_url: resultUrl,
+      audioUrl: resultUrl,
+      downloadUrl: resultUrl,
       deliveryMode: "provider-direct-browser",
       renderAudioBytes: 0,
     }, { headers: { "Cache-Control": "no-store" } })

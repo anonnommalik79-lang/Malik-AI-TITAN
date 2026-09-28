@@ -260,6 +260,12 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const [lastSubmitFailed, setLastSubmitFailed] = useState(false)
   const [config, setConfig] = useState<MusicConfig | null>(null)
   const [history, setHistory] = useState<MusicHistoryItem[]>([])
+  const [projectOptions, setProjectOptions] = useState<Array<{ id: string; title: string }>>([])
+  const [projectStorageReady, setProjectStorageReady] = useState(false)
+  const [selectedProject, setSelectedProject] = useState("")
+  const [savingProject, setSavingProject] = useState(false)
+  const [savedRequestId, setSavedRequestId] = useState("")
+  const [projectNotice, setProjectNotice] = useState("")
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const coverInputRef = useRef<HTMLInputElement | null>(null)
   const modelBoxRef = useRef<HTMLDivElement | null>(null)
@@ -333,6 +339,20 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   }, [history])
 
   useEffect(() => {
+    if (!trackUrl || !config?.authenticated) return
+    let active = true
+    void fetch("/api/os/projects", { cache: "no-store" }).then((response) => response.json()).then((payload) => {
+      if (!active) return
+      setProjectStorageReady(Boolean(payload?.durable))
+      setProjectOptions(Array.isArray(payload?.projects) ? payload.projects.filter((project: unknown): project is { id: string; title: string } =>
+        Boolean(project && typeof project === "object" && typeof (project as { id?: unknown }).id === "string" && typeof (project as { title?: unknown }).title === "string")) : [])
+    }).catch(() => { if (active) setProjectOptions([]) })
+    return () => { active = false }
+  }, [trackUrl, config?.authenticated])
+
+  useEffect(() => { setAudioDuration(0) }, [trackUrl])
+
+  useEffect(() => {
     return () => {
       if (coverPreview) URL.revokeObjectURL(coverPreview)
     }
@@ -354,6 +374,14 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
         if (!response.ok) {
           setNotice(data?.error || "Не удалось проверить статус трека.")
+          if (data?.code === "MUSIC_JOB_NOT_FOUND") {
+            setHistory((rows) => rows.map((item) => item.requestId === activeRequestId
+              ? { ...item, status: "failed", error: "Доступ к задаче этого аккаунта не подтверждён." }
+              : item))
+            setGenerating(false)
+            setActiveRequestId("")
+            return
+          }
           timer = window.setTimeout(poll, 4500)
           return
         }
@@ -604,6 +632,25 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   }
 
   const currentReady = history.find((item) => item.resultUrl === trackUrl && item.status === "ready")
+  const saveCurrentTrack = async () => {
+    if (!currentReady?.requestId || !selectedProject || !projectStorageReady || savingProject) return
+    setSavingProject(true)
+    setProjectNotice("")
+    try {
+      const response = await fetch(`/api/os/projects/${encodeURIComponent(selectedProject)}/audio-artifacts`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: currentReady.requestId, title: currentReady.title }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Не удалось сохранить трек.")
+      setSavedRequestId(currentReady.requestId)
+      setProjectNotice("Ссылка на трек сохранена в проекте. Она может истечь — скачайте оригинал отдельно.")
+    } catch (cause) {
+      setProjectNotice(cause instanceof Error ? cause.message : "Не удалось сохранить трек.")
+    } finally {
+      setSavingProject(false)
+    }
+  }
   const downloadTrack = (item?: MusicHistoryItem) => {
     const source = item || currentReady
     if (!source?.requestId) {
@@ -750,10 +797,20 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     activeHistoryItem?.status === "queued" ? "В очереди" :
     activeHistoryItem?.status === "processing" ? "Генерация" :
     lastSubmitFailed ? "ОШИБКА" :
-    trackUrl ? "AUDIO READY" : genre.label.toUpperCase()
+    trackUrl && audioDuration > 0 ? "AUDIO READY" : trackUrl ? "Проверяю аудио" : genre.label.toUpperCase()
 
   // The chosen length until the file itself says otherwise, then the truth.
   const totalSeconds = trackUrl && audioDuration > 0 ? Math.round(audioDuration) : duration
+  const projectSaveControls = currentReady && projectStorageReady && projectOptions.length > 0 ? (
+    <div className="mm-project-save">
+      <select aria-label="Проект для трека" value={selectedProject} onChange={(event) => setSelectedProject(event.target.value)}>
+        <option value="">Сохранить трек в проект…</option>
+        {projectOptions.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
+      </select>
+      <button type="button" disabled={!selectedProject || savingProject || savedRequestId === currentReady.requestId} onClick={() => void saveCurrentTrack()}>{savingProject ? "Сохраняю…" : savedRequestId === currentReady.requestId ? "Сохранено" : "Сохранить"}</button>
+      {projectNotice ? <span role="status">{projectNotice}</span> : null}
+    </div>
+  ) : null
 
   const genreTiles = (mobile: boolean) => GENRES.map((item) => (
     <button
@@ -890,7 +947,14 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         preload="metadata"
         onLoadedMetadata={(event) => {
           const value = event.currentTarget.duration
-          setAudioDuration(Number.isFinite(value) ? value : 0)
+          setAudioDuration(Number.isFinite(value) && value > 0 ? value : 0)
+        }}
+        onError={() => {
+          if (!trackUrl) return
+          setNotice("Трек создан, но аудиофайл не воспроизводится в этом браузере. Ссылка провайдера могла истечь.")
+          setPlaying(false)
+          setHistory((rows) => rows.map((item) => item.resultUrl === trackUrl ? { ...item, status: "failed", error: "Аудиофайл не воспроизводится." } : item))
+          setTrackUrl("")
         }}
         onEmptied={() => setAudioDuration(0)}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
@@ -1073,6 +1137,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
               </div>
 
               {notice ? <div className="mm-notice">{notice}</div> : null}
+              {projectSaveControls}
               {historyPanel}
             </div>
           </section>
@@ -1194,6 +1259,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         </section>
 
         {notice ? <div className="mm-notice">{notice}</div> : null}
+        {projectSaveControls}
         {historyPanel}
       </div>
 

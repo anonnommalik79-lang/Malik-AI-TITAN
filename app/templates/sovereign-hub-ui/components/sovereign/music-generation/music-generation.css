@@ -1065,5 +1065,11 @@
 }
 .mm-toast.is-show { opacity: 1; transform: translate(-50%, 0); }
 
+.mm-project-save { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; color: #c9c9cb; font-size: 11px; }
+.mm-project-save select, .mm-project-save button { min-height: 32px; border: 1px solid #343438; border-radius: 8px; background: #111113; color: #f4f4f5; padding: 5px 10px; font: inherit; }
+.mm-project-save select { max-width: min(100%, 220px); }
+.mm-project-save button:disabled { opacity: .45; cursor: not-allowed; }
+.mm-project-save span { flex-basis: 100%; }
+
 .mm-spin { animation: mm-spin 1s linear infinite; }
 @keyframes mm-spin { to { transform: rotate(360deg); } }
