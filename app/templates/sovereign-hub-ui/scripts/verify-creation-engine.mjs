@@ -4,6 +4,7 @@ import { directMediaUrl } from "../lib/os/media-reference.ts"
 import { normalizeLaunchPack, pitchesMarkdown, roadmapMarkdown } from "../lib/business/launch-pack.ts"
 import { prepareDocument, translatePreparedDocument } from "../lib/translator/document.ts"
 import { brandImageInBrowser } from "../lib/media/browser-watermark.ts"
+import { verifyDirectVideo } from "../lib/media/browser-video-qa.ts"
 
 const inputs = parseEconomicsInputs({ currency: "KZT", price: 1000, variableCost: 200, monthlyCustomers: 100, monthlyFixedCosts: 40000, monthlyMarketingSpend: 10000, newCustomers: 20, monthlyChurnPercent: 10 })
 const result = calculateUnitEconomics(inputs)
@@ -74,3 +75,26 @@ try {
 }
 
 console.log("creation engine: economics, launch, translation, watermark, direct media passed")
+
+const savedDocument = globalThis.document
+const savedWindow = globalThis.window
+try {
+  globalThis.window = { setTimeout, clearTimeout }
+  let videoWidth = 1920
+  globalThis.document = { createElement: () => ({
+    preload: "", muted: false, playsInline: false, videoWidth, videoHeight: 1080, duration: 7.5,
+    src: "", onloadedmetadata: null, onerror: null,
+    removeAttribute(name) { if (name === "src") this.src = "" },
+    load() { if (this.src) queueMicrotask(() => this.onloadedmetadata?.()) },
+  }) }
+  assert.deepEqual(await verifyDirectVideo("https://cdn.example.com/movie.mp4", "https://malikaiworld.world"), {
+    url: "https://cdn.example.com/movie.mp4", width: 1920, height: 1080, durationSeconds: 7.5,
+  })
+  videoWidth = 0
+  await assert.rejects(() => verifyDirectVideo("https://cdn.example.com/empty.mp4", "https://malikaiworld.world"), /пустой или повреждённый/)
+  await assert.rejects(() => verifyDirectVideo("https://malikaiworld.world/api/media/video/file", "https://malikaiworld.world"), /прямую ссылку/)
+} finally {
+  globalThis.document = savedDocument
+  globalThis.window = savedWindow
+}
+console.log("creation engine: browser video metadata QA passed")

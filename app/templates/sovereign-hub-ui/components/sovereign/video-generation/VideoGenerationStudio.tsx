@@ -26,6 +26,7 @@ import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
 import { takePrefillPrompt } from "@/lib/malik-context"
 import { ROUTER_VIDEO_CATALOG, type RouterCatalogEntry } from "@/lib/ai/router-catalog"
 import type { VideoProviderId } from "@/lib/media/types"
+import { verifyDirectVideo, type VerifiedVideo } from "@/lib/media/browser-video-qa"
 
 export type VideoGenerationStudioProps = {
   username?: string
@@ -317,6 +318,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [phase, setPhase] = useState<GenerationPhase>("idle")
   const [attempt, setAttempt] = useState(0)
   const [videoUrl, setVideoUrl] = useState("")
+  const [verifiedVideo, setVerifiedVideo] = useState<VerifiedVideo | null>(null)
   const [error, setError] = useState("")
   const [selected, setSelected] = useState(0)
   const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("Популярное")
@@ -329,6 +331,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const busy = phase === "queued" || phase === "rendering"
   const selectedModel = MOBILE_MODELS.find((model) => model.id === selectedModelId) || MOBILE_MODELS[0]
   const selectedItem = SHOWCASE_TEMPLATES[selected] || SHOWCASE_TEMPLATES[0]
+  const readyVideo = videoUrl && verifiedVideo?.url === videoUrl ? verifiedVideo : null
   const cards = useMemo(() => SHOWCASE_TEMPLATES.slice(1), [])
   const thumbSize = 3
   const thumbPages = Math.max(1, Math.ceil(SHOWCASE_TEMPLATES.length / thumbSize))
@@ -616,6 +619,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
     setError("")
     setVideoUrl("")
+    setVerifiedVideo(null)
     setAttempt(0)
 
     if (!canUseGeneration("video", operator)) {
@@ -694,7 +698,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         if (statusData?.status === "failed") throw new Error(statusData?.error || "Видеомодель не смогла завершить рендер")
         const readyUrl = String(statusData?.videoUrl || statusData?.url || "")
         if (readyUrl) {
-          setVideoUrl(readyUrl)
+          const verified = await verifyDirectVideo(readyUrl, window.location.origin)
+          setVerifiedVideo(verified)
+          setVideoUrl(verified.url)
           setPhase("ready")
           if (projectImage) {
             void videoFetch(`/api/os/projects/${encodeURIComponent(projectImage.projectId)}/video-artifacts`, {
@@ -1056,10 +1062,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
         <div className="mv2__preview-info">
           <div className="mv2__preview-copy">
-            <div className="mv2__mobile-badges"><span>{videoUrl ? QUALITY_RESOLUTION[quality] : "MALIK VIDEO"}</span><span>CINEMATIC</span></div>
+            <div className="mv2__mobile-badges"><span>{readyVideo ? `${readyVideo.width}×${readyVideo.height}` : "MALIK VIDEO"}</span><span>CINEMATIC</span></div>
             <h3>{videoUrl ? "Готовое видео" : selectedItem.title}</h3>
-            <p>{videoUrl ? "Готовый результат Malik AI с фирменным watermark." : selectedItem.prompt}</p>
-            <div className="mv2__chips"><span>{duration} секунд</span><span>{QUALITY_RESOLUTION[quality]}</span><span>{ratio}</span><span>{videoUrl ? "Malik Video" : selectedModel.name}</span><span>{selectedModel.audio ? "Audio" : "Video"}</span></div>
+            <p>{videoUrl ? "Видео проверено в браузере. Отметка Malik AI видна в плеере; оригинальный файл скачивается без неё." : selectedItem.prompt}</p>
+            <div className="mv2__chips"><span>{readyVideo ? `${Math.round(readyVideo.durationSeconds)} секунд` : `${duration} секунд`}</span><span>{readyVideo ? `${readyVideo.width}×${readyVideo.height}` : QUALITY_RESOLUTION[quality]}</span><span>{ratio}</span><span>{videoUrl ? "Malik Video" : selectedModel.name}</span><span>{selectedModel.audio ? "Audio" : "Video"}</span></div>
           </div>
           <div className="mv2__preview-actions">
             <button type="button" onClick={downloadCurrent}><Download /><span>Скачать</span></button>
