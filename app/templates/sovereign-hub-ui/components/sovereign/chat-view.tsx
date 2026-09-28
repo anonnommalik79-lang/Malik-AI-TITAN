@@ -36,6 +36,7 @@ import {
   RefreshCw,
   Search,
   SendHorizontal,
+  Square,
   Share,
   ShieldCheck,
   Sparkles,
@@ -214,6 +215,9 @@ interface ChatViewProps {
   onSendMessage: (message: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => void
   onImageConfirmation?: (messageId: string, prompt: string, action: "confirm" | "cancel" | "generate", imageSize?: ImageResolution) => void
   isLoading?: boolean
+  /** True only while the current text stream has a live AbortController. */
+  canStopGeneration?: boolean
+  onStopGeneration?: () => void
   streamingText?: string
   currentUser?: string
   userPlan?: AIPlan
@@ -1620,7 +1624,7 @@ function MessageBubble({
   onShare?: (text: string) => void
   onFeedback?: (id: string, value: "up" | "down") => void
   /** Puts a message back in the composer to edit and send again. */
-  onEditPrompt?: (text: string) => void
+  onEditPrompt?: (id: string, text: string) => void
   /** Sends a follow-up ("Подробнее", "Короче" …). */
   onFollowUp?: (text: string) => void
   /** Only under the newest finished answer. */
@@ -1825,7 +1829,7 @@ function MessageBubble({
           </div>
         )}
         {!isUser && showFollowUps && onFollowUp ? <FollowUpChips onSend={onFollowUp} /> : null}
-        {isUser && message.content ? <UserMessageActions text={message.content} onEdit={onEditPrompt} /> : null}
+        {isUser && message.content ? <UserMessageActions id={message.id} text={message.content} onEdit={onEditPrompt} /> : null}
       </div>
       {/* No initials disc beside the user's own turn either — the bubble and
           its right alignment already say who wrote it. */}
@@ -1843,7 +1847,7 @@ const FOLLOW_EPSILON_PX = 6
 /** Scrolled further up than this, the round "to the newest" button appears. */
 const JUMP_BUTTON_THRESHOLD_PX = 200
 
-export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoading, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, onOpenActionTarget, projectName, projectDescription }: ChatViewProps) {
+export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoading, canStopGeneration = false, onStopGeneration, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, onOpenActionTarget, projectName, projectDescription }: ChatViewProps) {
   // One short pulse after the complete answer lands. Passing a number (rather
   // than a pattern) deliberately keeps this to a single haptic event.
   const wasLoading = useRef(false)
@@ -1875,6 +1879,15 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const [drawingOpen, setDrawingOpen] = useState(false)
   const [toolWorkspace, setToolWorkspace] = useState<ChatToolWorkspaceMode | null>(null)
   const [researchMode, setResearchMode] = useState<"off" | "web" | "deep">("off")
+  const [editSourceId, setEditSourceId] = useState<string | null>(null)
+  const [queuedTurn, setQueuedTurn] = useState<{
+    id: string
+    message: string
+    display: string
+    attachments: ChatAttachment[]
+    options: ChatSendOptions
+  } | null>(null)
+  const queueDispatchRef = useRef(false)
 
   useEffect(() => {
     folderInputRef.current?.setAttribute("webkitdirectory", "")
@@ -2444,10 +2457,6 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   const handleGuardedSubmit = () => {
     const rawText = prompt.trim()
     if (!rawText && attachments.length === 0) return
-    if (isLoading) {
-      setLocalError("Malik AI уже обрабатывает запрос.")
-      return
-    }
 
     // The message is sent exactly as the user wrote it. Media generation is gated
     // by the slash-command check in the dashboard and by the server-side cost
@@ -2463,19 +2472,56 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     const routedOutgoing = imageEditRequest && !/^\s*\/(?:image|img|photo|foto|фото|картинка)\b/iu.test(outgoing)
       ? `/image ${outgoing}`
       : outgoing
+    const sendOptions: ChatSendOptions = {
+      responseDepth: researchMode === "deep" ? "deep" : responseDepth,
+      research: researchMode !== "off" ? true : undefined,
+      branchFromMessageId: editSourceId || undefined,
+    }
 
     setLocalError(null)
     try { window.localStorage.setItem("malik_last_user_prompt", outgoing) } catch {}
     setLastSubmittedPrompt(outgoing)
-    onSendMessage(routedOutgoing, attachments, {
-      responseDepth: researchMode === "deep" ? "deep" : responseDepth,
-      research: researchMode !== "off" ? true : undefined,
-    })
+
+    if (isLoading) {
+      if (queuedTurn) {
+        setLocalError("В очереди уже есть следующий запрос. Отмените его или дождитесь запуска.")
+        return
+      }
+      setQueuedTurn({
+        id: crypto.randomUUID(),
+        message: routedOutgoing,
+        display: outgoing,
+        attachments: [...attachments],
+        options: { ...sendOptions, queueDispatch: true },
+      })
+    } else {
+      onSendMessage(routedOutgoing, attachments, sendOptions)
+    }
+
     setPrompt("")
     setAttachments([])
+    setEditSourceId(null)
     setResearchMode("off")
     setShowAttachMenu(false)
   }
+
+  // One real queued follow-up: while Malik is writing, Enter stores the next
+  // turn instead of rejecting it. It launches as soon as the current stream
+  // settles (including after the user presses Stop).
+  useEffect(() => {
+    if (isLoading) {
+      queueDispatchRef.current = false
+      return
+    }
+    if (!queuedTurn || queueDispatchRef.current) return
+    queueDispatchRef.current = true
+    const next = queuedTurn
+    setQueuedTurn(null)
+    window.setTimeout(() => {
+      onSendMessage(next.message, next.attachments, next.options)
+      queueDispatchRef.current = false
+    }, 0)
+  }, [isLoading, onSendMessage, queuedTurn])
 
   // The row callbacks below are stable (useCallback + a ref to the latest
   // values), so the memoised rows are not re-rendered by every streamed chunk.
@@ -2508,8 +2554,19 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     }
   }, [])
 
-  // Edit a sent message: it goes back into the composer, ready to change and send.
-  const handleEditPrompt = useCallback((text: string) => {
+  // Editing a historical turn is not destructive: dashboard forks the chat at
+  // the exact message when the edited prompt is sent.
+  const handleEditPrompt = useCallback((messageId: string, text: string) => {
+    setEditSourceId(messageId || null)
+    setPrompt(text)
+    window.setTimeout(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(text.length, text.length)
+    }, 0)
+  }, [])
+
+  const restoreLastPrompt = useCallback((text: string) => {
+    setEditSourceId(null)
     setPrompt(text)
     window.setTimeout(() => {
       textareaRef.current?.focus()
@@ -2530,7 +2587,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     setLocalError(text)
     window.setTimeout(() => setLocalError(null), 1600)
   }, [])
-  useChatShortcuts({ messages, focusComposer, composerEmpty, restoreLastPrompt: handleEditPrompt, notify: notifyShortcut })
+  useChatShortcuts({ messages, focusComposer, composerEmpty, restoreLastPrompt, notify: notifyShortcut })
 
   // A document request opens the sheet the moment the answer starts being
   // written, so the reader watches it being written there. Answers that were
@@ -2862,6 +2919,18 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
           onDrop={handleComposerDrop}
         >
           {localError && <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">{localError}</div>}
+          {editSourceId ? (
+            <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-[11px] text-zinc-300">
+              <span><strong className="text-white">Новая ветка</strong> · измените сообщение и отправьте — исходный чат сохранится.</span>
+              <button type="button" onClick={() => setEditSourceId(null)} className="rounded-md p-1 text-zinc-500 hover:bg-white/10 hover:text-white" aria-label="Отменить создание ветки"><X className="h-3.5 w-3.5" /></button>
+            </div>
+          ) : null}
+          {queuedTurn ? (
+            <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/70 px-3 py-2 text-[11px] text-zinc-400">
+              <span className="min-w-0 truncate"><strong className="text-white">В очереди:</strong> {queuedTurn.display}</span>
+              <button type="button" onClick={() => setQueuedTurn(null)} className="rounded-md p-1 text-zinc-500 hover:bg-white/10 hover:text-white" aria-label="Убрать запрос из очереди"><X className="h-3.5 w-3.5" /></button>
+            </div>
+          ) : null}
           {attachments.length > 0 && <div className="malik-composer-attachments mb-3 flex max-w-full flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => removeComposerAttachment(attachment.id)} />)}</div>}
           {dragActive ? <div className="pointer-events-none absolute inset-2 z-40 grid place-items-center rounded-[20px] border border-dashed border-white/30 bg-black/70 text-sm font-medium text-white">Отпустите фото, видео или файл</div> : null}
           <div className="malik-inline-composer">
@@ -2891,28 +2960,47 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                 placement="top"
               />
               <span className="malik-inline-action-swap">
-                <button
-                  type="button"
-                  onClick={onOpenVoice}
-                  disabled={isLoading}
-                  className={cn("malik-voice-entry", prompt.trim() && "is-hidden")}
-                  aria-label="Открыть голосовой режим"
-                  aria-hidden={Boolean(prompt.trim())}
-                  tabIndex={prompt.trim() ? -1 : 0}
-                >
-                  <VoiceWaveIcon />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGuardedSubmit}
-                  disabled={isLoading || (!prompt.trim() && attachments.length === 0)}
-                  className={cn("malik-inline-send", !prompt.trim() && "is-hidden")}
-                  aria-label={isLoading ? "Malik AI отвечает" : "Отправить"}
-                  aria-hidden={!prompt.trim()}
-                  tabIndex={prompt.trim() ? 0 : -1}
-                >
-                  {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <SendHorizontal className="h-5 w-5" />}
-                </button>
+                {isLoading ? (
+                  canStopGeneration ? (
+                    <button
+                      type="button"
+                      onClick={onStopGeneration}
+                      className="malik-inline-send"
+                      aria-label="Остановить генерацию"
+                      title="Остановить генерацию"
+                    >
+                      <Square className="h-[15px] w-[15px] fill-current" />
+                    </button>
+                  ) : (
+                    <button type="button" disabled className="malik-inline-send" aria-label="Malik AI отвечает">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    </button>
+                  )
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={onOpenVoice}
+                      className={cn("malik-voice-entry", prompt.trim() && "is-hidden")}
+                      aria-label="Открыть голосовой режим"
+                      aria-hidden={Boolean(prompt.trim())}
+                      tabIndex={prompt.trim() ? -1 : 0}
+                    >
+                      <VoiceWaveIcon />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGuardedSubmit}
+                      disabled={!prompt.trim() && attachments.length === 0}
+                      className={cn("malik-inline-send", !prompt.trim() && attachments.length === 0 && "is-hidden")}
+                      aria-label="Отправить"
+                      aria-hidden={!prompt.trim() && attachments.length === 0}
+                      tabIndex={prompt.trim() || attachments.length ? 0 : -1}
+                    >
+                      <SendHorizontal className="h-5 w-5" />
+                    </button>
+                  </>
+                )}
               </span>
             </div>
           </div>
