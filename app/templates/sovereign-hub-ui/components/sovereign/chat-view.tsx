@@ -5,6 +5,7 @@ import dynamic from "next/dynamic"
 import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
 import type { SuperflowRef } from "./os/os-client"
+import { FollowUpChips, ReadAloudButton, UserMessageActions, useChatShortcuts } from "./chat-extras"
 import "./chat-live.css"
 
 // The live Superflow block loads only when a conversation has one.
@@ -1598,6 +1599,9 @@ function MessageBubble({
   onOpenActionTarget,
   videoAnalysis = false,
   question = "",
+  onEditPrompt,
+  onFollowUp,
+  showFollowUps = false,
   onOpenSheet,
   isLatest = false,
   freshTurn = false,
@@ -1615,6 +1619,12 @@ function MessageBubble({
   onRegenerate?: (id: string) => void
   onShare?: (text: string) => void
   onFeedback?: (id: string, value: "up" | "down") => void
+  /** Puts a message back in the composer to edit and send again. */
+  onEditPrompt?: (text: string) => void
+  /** Sends a follow-up ("Подробнее", "Короче" …). */
+  onFollowUp?: (text: string) => void
+  /** Only under the newest finished answer. */
+  showFollowUps?: boolean
   feedback?: "up" | "down" | null
   onImageConfirmation?: (messageId: string, prompt: string, action: "confirm" | "cancel" | "generate", imageSize?: ImageResolution) => void
   imageCredits?: ImageCreditSnapshot | null
@@ -1801,6 +1811,7 @@ function MessageBubble({
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? <span className="malik-copy-action__label" role="status">Скопировано</span> : null}
             </button>
+            <ReadAloudButton id={message.id} text={displayContent} />
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
             <button type="button" title="Полезно" aria-pressed={feedback === "up"} onClick={() => onFeedback?.(message.id, "up")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "is-active")}><ThumbsUp className="h-4 w-4" /></button>
             <button type="button" title="Не полезно" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>
@@ -1813,6 +1824,8 @@ function MessageBubble({
             ) : null}
           </div>
         )}
+        {!isUser && showFollowUps && onFollowUp ? <FollowUpChips onSend={onFollowUp} /> : null}
+        {isUser && message.content ? <UserMessageActions text={message.content} onEdit={onEditPrompt} /> : null}
       </div>
       {/* No initials disc beside the user's own turn either — the bubble and
           its right alignment already say who wrote it. */}
@@ -2495,6 +2508,30 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     }
   }, [])
 
+  // Edit a sent message: it goes back into the composer, ready to change and send.
+  const handleEditPrompt = useCallback((text: string) => {
+    setPrompt(text)
+    window.setTimeout(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(text.length, text.length)
+    }, 0)
+  }, [])
+
+  const handleFollowUp = useCallback((text: string) => {
+    const { onSendMessage: send, responseDepth: depth } = regenerateContextRef.current
+    send(text, [], { responseDepth: depth })
+  }, [])
+
+  const promptValueRef = useRef("")
+  promptValueRef.current = prompt
+  const focusComposer = useCallback(() => textareaRef.current?.focus(), [])
+  const composerEmpty = useCallback(() => !promptValueRef.current.trim(), [])
+  const notifyShortcut = useCallback((text: string) => {
+    setLocalError(text)
+    window.setTimeout(() => setLocalError(null), 1600)
+  }, [])
+  useChatShortcuts({ messages, focusComposer, composerEmpty, restoreLastPrompt: handleEditPrompt, notify: notifyShortcut })
+
   // A document request opens the sheet the moment the answer starts being
   // written, so the reader watches it being written there. Answers that were
   // already in the chat never pop open by themselves.
@@ -2779,6 +2816,18 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                   onOpenActionTarget={onOpenActionTarget}
                   videoAnalysis={activeVideoAnalysis}
                   onOpenSheet={openSheetFor}
+                  onEditPrompt={handleEditPrompt}
+                  onFollowUp={handleFollowUp}
+                  showFollowUps={
+                    index === messages.length - 1
+                    && message.role === "assistant"
+                    && !message.isStreaming
+                    && !isLoading
+                    && Boolean(message.content.trim())
+                    && !message.generatedMedia
+                    && !message.imageConfirmation
+                    && !message.superflow
+                  }
                 />
               ))}
             </>

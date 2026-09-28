@@ -187,3 +187,79 @@
     transition: none;
   }
 }
+
+
+/* ------------------------------------------------ assistant-grade extras */
+
+/* Copy / edit under your own message: quiet until the row is hovered. */
+#malik-root .malik-user-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+#malik-root .malik-message-row-user:hover .malik-user-actions,
+#malik-root .malik-user-actions:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  #malik-root .malik-user-actions { opacity: 0.7; }
+}
+
+#malik-root .malik-user-actions button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  background: transparent;
+}
+
+#malik-root .malik-user-actions button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Follow-up chips under the newest answer. */
+#malik-root .malik-follow-ups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  animation: malik-live-rise 0.3s ease both;
+}
+
+#malik-root .malik-follow-ups button {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+#malik-root .malik-follow-ups button:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#malik-root .malik-follow-ups button:disabled { opacity: 0.4; }
+
+/* Reading aloud: the button stays lit while the voice speaks. */
+#malik-root .malik-read-aloud.is-speaking {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #malik-root .malik-follow-ups { animation: none; }
+}
