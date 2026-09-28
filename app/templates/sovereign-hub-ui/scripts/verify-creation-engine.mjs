@@ -8,6 +8,8 @@ import { prepareDocument, translatePreparedDocument } from "../lib/translator/do
 import { brandImageInBrowser } from "../lib/media/browser-watermark.ts"
 import { verifyDirectVideo } from "../lib/media/browser-video-qa.ts"
 import { buildRunwayVideoEditBody } from "../lib/media/providers/runway-video-edit.ts"
+import { INVESTOR_SECTIONS, investorOutlineIsComplete, isInvestorDeckRequest, outlineSystemPrompt, outlineUserPrompt, slidesUserPrompt } from "../lib/presentations/prompts.ts"
+import { unsupportedInvestorFigures } from "../lib/presentations/investor-facts.ts"
 
 const inputs = parseEconomicsInputs({ currency: "KZT", price: 1000, variableCost: 200, monthlyCustomers: 100, monthlyFixedCosts: 40000, monthlyMarketingSpend: 10000, newCustomers: 20, monthlyChurnPercent: 10 })
 const result = calculateUnitEconomics(inputs)
@@ -154,3 +156,21 @@ const extendUi = fs.readFileSync("components/sovereign/video-generation/VideoGen
 assert.match(extendUi, /videoExtendAvailable && readyVideo\.durationSeconds/)
 assert.match(extendUi, /sourceTaskId: extendTaskId/)
 console.log("creation engine: owner-scoped Runway video extension contract passed")
+
+assert.equal(isInvestorDeckRequest("Питч-дек для инвесторов"), true)
+assert.equal(isInvestorDeckRequest("История Казахстана"), false)
+const investorItems = INVESTOR_SECTIONS.map((section) => ({ section, title: section, point: "Данные не предоставлены", layout: "bullets" }))
+assert.equal(investorOutlineIsComplete({ items: investorItems }, 10), true)
+assert.equal(investorOutlineIsComplete({ items: [...investorItems.slice(0, 9), { section: "extra", title: "Детали продукта", point: "Данные не предоставлены", layout: "bullets" }, { section: "extra", title: "Доказательства", point: "Данные не предоставлены", layout: "bullets" }, investorItems[9]] }, 12), true)
+assert.equal(investorOutlineIsComplete({ items: [...investorItems.slice(0, 8), investorItems[9], investorItems[8]] }, 10), false)
+assert.equal(investorOutlineIsComplete({ items: investorItems.slice(0, 9) }, 10), false)
+assert.match(outlineSystemPrompt({ language: "ru", tone: "confident", count: 10, investor: true }), /problem → market → solution/)
+assert.match(outlineUserPrompt("Питч-дек для инвесторов", 10), /Unknown facts must be explicitly marked as missing/)
+assert.match(slidesUserPrompt({ topic: "Питч-дек для инвесторов", outline: { title: "Тест", items: investorItems }, startIndex: 0, items: investorItems.slice(0, 2) }), /never invent traction/)
+assert.deepEqual(unsupportedInvestorFigures({ id: "slide-2026", title: "Выручка 12 млн ₸", notes: "5 клиентов" }, "Выручка 12 млн ₸"), ["5"])
+assert.deepEqual(unsupportedInvestorFigures({ title: "Выручка 1 200 ₸" }, "Выручка 1200 ₸"), [])
+assert.deepEqual(unsupportedInvestorFigures({ layout: "chart", data: [{ label: "Клиенты", value: 42 }] }, "Питч-дек для инвесторов"), ["42"])
+const presentationRoute = fs.readFileSync("app/api/presentations/route.ts", "utf8")
+assert.ok(presentationRoute.indexOf("INVESTOR_DECK_TOO_SHORT") < presentationRoute.indexOf("reservePresentationCredits(userId, plan, authenticated, PRESENTATION_COSTS.outline)"))
+assert.match(fs.readFileSync("components/sovereign/presentations/PresentationStudio.tsx", "utf8"), /Для инвестора<\/button>/)
+console.log("creation engine: evidence-bound investor outline and no-credit short-deck guard passed")

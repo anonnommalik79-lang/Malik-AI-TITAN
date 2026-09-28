@@ -8,6 +8,7 @@ import {
 } from "@/lib/presentations/deck"
 import type { DeckLanguage, DeckTone } from "@/lib/presentations/types"
 import { isSlideLayout } from "@/lib/presentations/deck"
+import { isInvestorDeckRequest } from "@/lib/presentations/prompts"
 import {
   PresentationEngineError,
   SLIDE_BATCH_SIZE,
@@ -111,6 +112,7 @@ export async function POST(request: Request) {
 
       const quotaBefore = await getPresentationQuota(userId, plan, authenticated)
       const count = Math.min(clampSlideCount(body.count), quotaBefore.maxSlides)
+      if (isInvestorDeckRequest(topic) && count < 10) return json({ ok: false, code: "INVESTOR_DECK_TOO_SHORT", error: "Для полного инвестиционного питч-дека выберите минимум 10 слайдов. Кредиты не списаны." }, 400)
 
       const reservation = await reservePresentationCredits(userId, plan, authenticated, PRESENTATION_COSTS.outline)
       if (!reservation.ok) return json({ ok: false, code: reservation.code, error: reservation.error, quota: reservation.quota }, reservation.status)
@@ -171,6 +173,7 @@ export async function POST(request: Request) {
     if (!slide) return json({ ok: false, error: "Слайд повреждён." }, 400)
     const layout = isSlideLayout(body.layout) ? body.layout : undefined
     const instruction = String(body.instruction || "").trim().slice(0, 600)
+    const sourceTopic = String(body.topic || "").trim().slice(0, MAX_TOPIC_CHARS)
     const deckTitle = String(body.deckTitle || "").trim().slice(0, 200)
     const neighbours = Array.isArray(body.neighbours) ? body.neighbours.map((item) => String(item || "").slice(0, 120)).slice(0, 4) : []
 
@@ -182,6 +185,7 @@ export async function POST(request: Request) {
     const rewritten = await rewriteSlide({
       ...model,
       deckTitle,
+      topic: sourceTopic,
       slide,
       layout,
       instruction,

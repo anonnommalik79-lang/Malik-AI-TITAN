@@ -11,12 +11,15 @@ import {
 import {
   outlineSystemPrompt,
   outlineUserPrompt,
+  investorOutlineIsComplete,
+  isInvestorDeckRequest,
   rewriteSlideSystemPrompt,
   rewriteSlideUserPrompt,
   slidesSystemPrompt,
   slidesUserPrompt,
 } from "@/lib/presentations/prompts"
 import type { DeckLanguage, DeckOutline, DeckTone, OutlineItem, Slide, SlideLayout } from "@/lib/presentations/types"
+import { unsupportedInvestorFigures } from "@/lib/presentations/investor-facts"
 
 /**
  * The model calls behind the studio.
@@ -68,15 +71,18 @@ export async function generateOutline(input: ModelChoice & {
   language: DeckLanguage
   tone: DeckTone
 }): Promise<DeckOutline> {
-  const systemPrompt = outlineSystemPrompt({ language: input.language, tone: input.tone, count: input.count })
+  const investor = isInvestorDeckRequest(input.topic)
+  if (investor && input.count < 10) throw new PresentationEngineError("Инвесторскому питч-деку нужны минимум 10 слайдов.", 400, "INVESTOR_DECK_TOO_SHORT")
+  const systemPrompt = outlineSystemPrompt({ language: input.language, tone: input.tone, count: input.count, investor })
   let prompt = outlineUserPrompt(input.topic, input.count)
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: 2_400, temperature: attempt ? 0.35 : 0.6 })
-    const outline = normalizeOutline(extractJson(raw), input.topic, input.count)
-    if (outline && outline.items.length >= Math.min(input.count, 4)) return outline
+    const parsed = extractJson(raw)
+    const outline = normalizeOutline(parsed, input.topic, input.count)
+    if (outline && (investor ? outline.items.length === input.count && investorOutlineIsComplete(parsed, input.count) : outline.items.length >= Math.min(input.count, 4))) return outline
 
-    prompt = `${outlineUserPrompt(input.topic, input.count)}\n\nYour previous answer could not be used: it was not a JSON object with an "items" array of ${input.count} slides. Return only that JSON object.`
+    prompt = `${outlineUserPrompt(input.topic, input.count)}\n\nYour previous answer could not be used: return a JSON object with exactly ${input.count} items.${investor ? " It must include all ten investor section ids in order, with ask last." : ""}`
   }
 
   throw new PresentationEngineError("Модель не смогла составить план презентации. Попробуйте ещё раз или переформулируйте тему.", 502, "OUTLINE_FAILED")
@@ -162,10 +168,13 @@ export async function generateSlides(input: ModelChoice & {
     const systemPrompt = slidesSystemPrompt({ language: input.language, tone: input.tone, items: runItems })
     let prompt = slidesUserPrompt({ topic: input.topic, outline: input.outline, startIndex: first, items: runItems })
     prompt += `\n\nInclude "n" (the slide number) in every slide object.`
-    if (attempt) prompt += `\nYour previous answer was missing or invalid for these slides. Return only {"slides":[…]} with all ${run.length} of them.`
+    if (attempt) prompt += `\nYour previous answer was missing or contained figures not supplied by the founder. Remove unsupported figures and return only {"slides":[…]} with all ${run.length} slides.`
 
     const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: 900 * run.length + 600, temperature: attempt ? 0.4 : 0.7 })
-    for (const { index, slide } of placeSlides(extractJson(raw), first, runItems)) written.set(index, slide)
+    for (const { index, slide } of placeSlides(extractJson(raw), first, runItems)) {
+      if (isInvestorDeckRequest(input.topic) && unsupportedInvestorFigures(slide, input.topic).length) continue
+      written.set(index, slide)
+    }
     wanted = wanted.filter((index) => !written.has(index))
   }
 
@@ -179,6 +188,7 @@ export async function generateSlides(input: ModelChoice & {
 
 export async function rewriteSlide(input: ModelChoice & {
   deckTitle: string
+  topic?: string
   slide: Slide
   layout?: SlideLayout
   instruction?: string
@@ -206,6 +216,10 @@ export async function rewriteSlide(input: ModelChoice & {
       : parsed
     const slide = normalizeSlide(candidate, layout)
     if (slide) {
+      if (input.topic && isInvestorDeckRequest(input.topic) && unsupportedInvestorFigures(slide, `${input.topic} ${input.instruction || ""} ${JSON.stringify(input.slide)}`).length) {
+        prompt += "\n\nThe previous answer invented a numeric figure. Keep only numbers supplied by the founder or in the original slide; unknowns must be explicit questions."
+        continue
+      }
       // The rewrite keeps its place and its pictures unless it was asked to change layout.
       const written = withoutPictures(slide)
       const sameLayout = slide.layout === input.slide.layout

@@ -59,6 +59,7 @@ import {
   type ThemeId,
 } from "@/lib/presentations/types"
 import { SlideCanvas, SlideFrame, slideBuildTiming, type SlidePatch } from "./SlideRenderer"
+import { isInvestorDeckRequest } from "@/lib/presentations/prompts"
 import { applyPhoto, photoSlots, usedPhotoUrls, type PhotoSlot } from "@/lib/presentations/images"
 import { PresentationShowcase } from "./PresentationShowcase"
 import "./presentation-studio.css"
@@ -703,6 +704,7 @@ export function PresentationStudio({ username }: { username?: string }) {
     setError("")
     const result = await callApi({
       action: "rewrite",
+      topic,
       deckTitle,
       slide: entry.slide,
       layout,
@@ -1054,6 +1056,16 @@ export function PresentationStudio({ username }: { username?: string }) {
                       {TONES.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
                     </select>
                   </label>
+                  <button
+                    type="button"
+                    className="ps-btn ps-btn--small"
+                    disabled={maxSlides < 10 || busy === "outline"}
+                    title={maxSlides < 10 ? "Для питч-дека нужны минимум 10 слайдов на тарифе" : "Проблема, рынок, решение, продукт, traction, бизнес-модель, конкуренты, GTM, команда и запрос"}
+                    onClick={() => {
+                      setCount(Math.max(10, count))
+                      setTopic((current) => isInvestorDeckRequest(current) ? current : `Питч-дек для инвесторов: ${current.trim() || "опишите компанию, продукт и подтверждённые данные"}`)
+                    }}
+                  >Для инвестора</button>
                   <button
                     type="button"
                     className="ps-magic ps-desk-only"

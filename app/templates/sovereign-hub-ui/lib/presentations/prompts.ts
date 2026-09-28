@@ -14,8 +14,8 @@ import { DECK_ICON_NAMES, type DeckLanguage, type DeckOutline, type DeckTone, ty
  *  - an arc: why this matters, what is broken, what changes, why it works,
  *    what to do next;
  *  - and no invented statistics dressed as facts. When the person has not
- *    given numbers, the deck says "≈" and "оценка" and the notes say where a
- *    real number should come from. A deck is presented to people who will
+ *    given numbers, the deck states that they are missing and the notes say
+ *    which evidence is needed. A deck is presented to people who will
  *    ask where a figure came from.
  */
 
@@ -33,6 +33,28 @@ const TONE_GUIDE: Record<DeckTone, string> = {
 }
 
 const IMAGE_FIELDS = `"imageQuery":"English photo search words, 2–6 words, exactly this slide's subject","imageKind":"subject|mood","imagePrompt":"English, a concrete photographic scene, no text"`
+
+export const INVESTOR_SECTIONS = ["problem", "market", "solution", "product", "traction", "business-model", "competition", "gtm", "team", "ask"] as const
+
+export function isInvestorDeckRequest(topic: string) {
+  return /инвестор|инвестиц|питч[ -]?дек|pitch[ -]?deck|investor|investment|инвесторлық/i.test(topic)
+}
+
+/** Validate the model's plan before any investor slides are paid for. */
+export function investorOutlineIsComplete(raw: unknown, count: number) {
+  if (!raw || typeof raw !== "object" || !Array.isArray((raw as { items?: unknown }).items)) return false
+  const items = (raw as { items: Array<{ section?: unknown }> }).items
+  if (count < INVESTOR_SECTIONS.length || items.length !== count) return false
+  const sections = items.map((item) => String(item?.section || "").trim().toLowerCase())
+  if (sections.at(-1) !== "ask") return false
+  let previous = -1
+  for (const section of INVESTOR_SECTIONS) {
+    const index = sections.indexOf(section, previous + 1)
+    if (index < 0) return false
+    previous = index
+  }
+  return true
+}
 
 export const LAYOUT_SCHEMAS: Record<SlideLayout, string> = {
   title: `{"layout":"title","kicker":"≤4 words above the title","title":"≤9 words","subtitle":"≤20 words",${IMAGE_FIELDS},"notes":"…"}`,
@@ -56,14 +78,15 @@ export const LAYOUT_SCHEMAS: Record<SlideLayout, string> = {
 const WRITING_RULES = `
 WRITING RULES — these decide whether the deck is good:
 1. Every title is a CLAIM the audience should believe after the slide, not a topic label.
-   Bad: "Рынок". Good: "Рынок кофе в Алматы растёт на 12% в год".
+   Bad: "Рынок". Good: "Покупателям у метро не хватает быстрого утреннего кофе" (only if the request supports it).
 2. One idea per slide. If a slide needs two ideas, it is two slides.
 3. Respect the word limits in the schema. Fewer words always beat more words.
 4. No filler: never "в современном мире", "играет важную роль", "уникальный", "инновационный", "In today's world".
 5. Be specific: names, places, dates, amounts, examples from the person's own request. Teach something the audience
    did not know: a fact, a cause, a consequence, a concrete example — not a generality anyone could write.
-6. NEVER invent precise statistics and present them as fact. Use a figure only if it is widely known or the person gave it.
-   Otherwise write an estimate with "≈" or "оценка" and, in notes, say what real source would confirm it.
+6. NEVER invent statistics, traction, revenue, market size, team members or funding. Use a figure only when supplied
+   in the request with its provenance. Otherwise state "Данные не предоставлены" (translated to the deck language)
+   and put the exact missing-data question in speaker notes. Do not turn an unknown into an unlabelled estimate.
 7. Speaker notes: 2–4 natural sentences the presenter actually says — not a repeat of the slide text.
 8. PHOTOS. Every slide with an image slot gets:
    - imageQuery: English words a photographer would tag the picture with, about THIS slide's subject, not the deck in
@@ -80,7 +103,7 @@ function languageLine(language: DeckLanguage) {
   return `Write every visible string in ${LANGUAGE_NAME[language]}. imageQuery and imagePrompt stay in English.`
 }
 
-export function outlineSystemPrompt(input: { language: DeckLanguage; tone: DeckTone; count: number }) {
+export function outlineSystemPrompt(input: { language: DeckLanguage; tone: DeckTone; count: number; investor?: boolean }) {
   return `
 You are the story architect of a world-class presentation studio. You plan decks; you do not design them.
 
@@ -88,6 +111,12 @@ Return ONLY a JSON object, no prose, no code fence:
 {"title":"deck title, ≤8 words","items":[{"title":"slide claim, ≤10 words","point":"one sentence: what this slide must make the audience believe","layout":"<layout>"}]}
 
 Produce EXACTLY ${input.count} items.
+${input.investor ? `This is an INVESTOR DECK. Each item MUST also have "section". Include these ten sections, in this exact order:
+${INVESTOR_SECTIONS.join(" → ")}.
+The final item MUST have section "ask". If more than ten slides are requested, insert additional evidence/detail slides
+before the final ask and give them section "extra". Do not replace any of the ten required sections.
+Never invent market size, traction, customers, revenue, team members, funding or partnerships. A missing fact is a
+question/place-holder for the founder, not a made-up claim.` : ""}
 
 Layouts you may choose, by what the slide's idea IS:
 - title: a cover with a photograph beside the title. Item 1, unless hero is better.
@@ -125,7 +154,8 @@ ${WRITING_RULES}
 }
 
 export function outlineUserPrompt(topic: string, count: number) {
-  return `Plan a ${count}-slide presentation.\n\nRequest from the person:\n"""\n${topic}\n"""`
+  const investor = isInvestorDeckRequest(topic)
+  return `Plan a ${count}-slide presentation.\n\nRequest from the person:\n"""\n${topic}\n"""${investor ? `\n\nInvestor sequence: Problem → Market → Solution → Product → Traction → Business Model → Competition → GTM → Team → Ask. Each of the ten sections needs a separate slide and its exact section id. Put Ask last. Unknown facts must be explicitly marked as missing, not estimated.` : ""}`
 }
 
 function schemaFor(items: OutlineItem[]) {
@@ -167,6 +197,8 @@ ${input.topic}
 
 The full plan, so every slide knows its neighbours:
 ${plan}
+
+${isInvestorDeckRequest(input.topic) ? "Investor integrity: never invent traction, revenue, market figures, funding or team members. When not provided, show a factual question or 'Data not provided' in the deck language and ask for evidence in notes." : ""}
 
 Write ONLY these ${input.items.length} slide(s):
 ${assigned}
