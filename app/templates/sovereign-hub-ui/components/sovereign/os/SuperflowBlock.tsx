@@ -294,6 +294,7 @@ export function SuperflowBlock({ messageId, reference, chatId }: { messageId: st
 
       <footer className="malik-os-foot">
         {error ? <span className="malik-os-note">{error}</span> : null}
+        {startError && flow ? <span className="malik-os-note" role="alert">{startError.message}</span> : null}
         {flow?.interrupted ? <span className="malik-os-note">Работа прервалась при перезапуске сервера.</span> : null}
         {done && failedCount ? (
           <button type="button" className="malik-os-button" disabled={Boolean(busy)} onClick={() => void retry()}>

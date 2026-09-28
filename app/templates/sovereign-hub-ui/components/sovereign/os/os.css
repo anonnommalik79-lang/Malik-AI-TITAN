@@ -494,6 +494,19 @@
   .malik-os-doc { padding: 16px 16px 40px; }
 }
 
+/* The app styles every [role="dialog"] as a floating card on phones (narrower
+   max-width and rounded corners, with !important). The OS sheet is a whole
+   screen there, like the answer sheet, so it answers with the same doubled
+   selector — scoped to .malik-os-sheet only. */
+@media (max-width: 720px) {
+  .malik-os-sheet.malik-os-sheet[role="dialog"] {
+    width: 100% !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .malik-os-dot, .malik-os-overlay { animation: none; }
   .malik-os-progress > i { transition: none; }
