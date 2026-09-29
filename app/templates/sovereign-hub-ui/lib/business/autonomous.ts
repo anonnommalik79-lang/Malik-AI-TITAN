@@ -592,3 +592,202 @@ export function stressTestInput(
 
   return `${framing}${body}`
 }
+
+/* ======================================================== GEMINI RUNTIME */
+
+/**
+ * What each agent hands over, section by section.
+ *
+ * The generic business formats ("Вердикт / Диагноз / Топ-5") were written for
+ * one-off questions. A company is not a question: the CEO has to decide, the
+ * analyst has to count, the salesperson has to write the actual message. So
+ * each agent gets the document a real specialist in that seat would hand the
+ * next one, and the model is told to fill it, not to discuss it.
+ */
+export const AGENT_DELIVERABLES: Record<AgentId, string> = {
+  ceo: [
+    "## Решение — одна фраза: что строим, для кого и на чём зарабатываем.",
+    "## Компания на одной странице — таблица: продукт · клиент (ICP) · его боль · оффер · цена и модель дохода · канал №1 · чем отличаемся.",
+    "## Первым делом / позже — таблица: что делаем в первые 30 дней и почему, что сознательно откладываем.",
+    "## Главный риск — какая одна вещь убьёт бизнес и как проверить её за неделю дешевле всего.",
+    "## Цели на 90 дней — таблица: метрика · цель · срок · кто отвечает.",
+  ].join("\n"),
+  research: [
+    "## Спрос — кто покупает и сколько их: расчёт по формуле (TAM → SAM → SOM), каждое допущение помечено.",
+    "## Конкуренты — таблица: игрок · что продаёт · цена (только с источником) · сильная сторона · слабое место.",
+    "## Свободная ниша — где конкуренты слабы и почему туда можно войти с этим бюджетом.",
+    "## Каналы первых клиентов — таблица: канал · почему он · как проверить за 3 дня · стоимость проверки.",
+    "## Проверка в поле — 7 вопросов для интервью с клиентами и что считается подтверждением.",
+  ].join("\n"),
+  coder: [
+    "## Первая версия — 5 функций, без которых продукт не работает, и что выброшено до второй версии.",
+    "## Страницы и экраны — таблица: экран · что на нём · какое действие клиента.",
+    "## Стек — конкретные технологии и сервисы, почему они, сколько стоят в месяц (или «бесплатный тариф»).",
+    "## Данные — сущности и их поля (клиент, заказ, …) в виде таблицы.",
+    "## Интеграции — оплата, CRM, мессенджеры, аналитика: что подключаем и в каком порядке.",
+    "## План сборки — по неделям, с критерием готовности каждой недели.",
+  ].join("\n"),
+  design: [
+    "## Имя — 3 варианта, выбор и почему. Отметь, что домен и товарный знак надо проверить.",
+    "## Позиционирование — одна фраза «для кого, что, в отличие от кого».",
+    "## Голос бренда — таблица: как говорим · как не говорим · пример фразы.",
+    "## Визуальная система — палитра (HEX), шрифты, стиль фото и иконок, что запрещено.",
+    "## Первый экран сайта — заголовок, подзаголовок, кнопка, что на фоне.",
+    "## 5 слоганов — коротких, под этот бренд.",
+  ].join("\n"),
+  marketing: [
+    "## Стратегия — 3 темы (столпа) контента и почему они продают этот оффер.",
+    "## План на 30 дней — таблица: неделя · формат · тема · хук первых 2 секунд · цель.",
+    "## 10 готовых хуков — дословно, под этот продукт.",
+    "## 3 сценария роликов — кадр за кадром, с текстом на экране и призывом.",
+    "## Бюджет и метрики — сколько тратим, на что, какая цифра считается успехом.",
+  ].join("\n"),
+  sales: [
+    "## Воронка — таблица: этап · что происходит · конверсия (допущение) · инструмент.",
+    "## Скрипты — дословно: первое сообщение, ответ на «дорого», дожим, follow-up в WhatsApp и Telegram.",
+    "## Возражения — таблица из 6 строк: возражение · ответ · что показать.",
+    "## CRM — стадии сделки и обязательные поля.",
+    "## Первые 10 продаж — где взять этих людей и что сделать по дням.",
+  ].join("\n"),
+  support: [
+    "## Путь клиента — до покупки, во время, после: где он сомневается и что мы делаем.",
+    "## 10 вопросов клиентов — и готовые ответы дословно.",
+    "## Удержание — что делаем на 1-й, 7-й и 30-й день после покупки.",
+    "## Жалобы — регламент: кто, за сколько времени, что можно предложить.",
+    "## Метрики сервиса — что смотрим каждую неделю.",
+  ].join("\n"),
+  analyst: [
+    "## Юнит-экономика — таблица: показатель · формула · значение (из брифа, из плана или «допущение»).",
+    "## Точка безубыточности — расчёт по шагам.",
+    "## Бюджет запуска — таблица статей в пределах заявленного бюджета, с остатком на непредвиденное.",
+    "## Прогноз на 6 месяцев — таблица: месяц · клиенты · выручка · расходы · результат; допущения перечислены под таблицей.",
+    "## Дашборд недели — 6 цифр, которые смотрим каждый понедельник, и порог тревоги для каждой.",
+    "## Рычаги роста — что двигать первым и насколько это меняет выручку.",
+  ].join("\n"),
+}
+
+export type CompanyBrief = {
+  brief: string
+  instruction?: string | null
+  market?: string
+  country?: string
+  budget?: string
+  requirements?: string
+}
+
+export type PriorStep = { agent: AutonomousAgent; content: string }
+
+const PRIOR_EACH_MAX = 9_000
+const PRIOR_TOTAL_MAX = 45_000
+
+function stateBlock(text: string) {
+  const index = text.search(/(?:^|\n)#{1,4}\s*(?:company state|состояние компании)/i)
+  return index >= 0 ? text.slice(index).trim() : ""
+}
+
+/**
+ * Everything the agents before this one wrote, as much as fits.
+ *
+ * Gemini reads a long context without trouble, so the next agent gets the
+ * previous documents in full rather than the three-paragraph excerpts the old
+ * pipeline could afford. When the total is still too large, the oldest
+ * documents shrink first - to their opening and their COMPANY STATE, which is
+ * the part written for exactly this handover.
+ */
+export function priorDocuments(previous: PriorStep[]) {
+  const docs = previous.map((step) => {
+    const full = step.content.trim()
+    if (full.length <= PRIOR_EACH_MAX) return { step, text: full }
+    // Too long: keep the opening and, always, the handover at the end.
+    const state = stateBlock(full).slice(0, 3_000)
+    return { step, text: `${full.slice(0, PRIOR_EACH_MAX - state.length - 10).trim()}\n[…]\n${state}`.trim() }
+  })
+  let total = docs.reduce((sum, doc) => sum + doc.text.length, 0)
+  for (const doc of docs) {
+    if (total <= PRIOR_TOTAL_MAX) break
+    const state = stateBlock(doc.text)
+    const shorter = `${doc.text.slice(0, 1_500).trim()}\n[…]\n${state}`.trim()
+    total -= doc.text.length - shorter.length
+    doc.text = shorter
+  }
+  return docs
+    .map((doc) => `### ${doc.step.agent.name} · ${doc.step.agent.role}\n${doc.text}`)
+    .join("\n\n")
+}
+
+function conditions(company: CompanyBrief) {
+  return [
+    company.market ? `Рынок: ${company.market}` : "",
+    company.country ? `Страна: ${company.country}` : "",
+    company.budget ? `Бюджет на запуск: ${company.budget}` : "",
+    company.requirements ? `Особые требования: ${company.requirements}` : "",
+  ].filter(Boolean).join("\n")
+}
+
+const QUALITY_BAR = [
+  "Планка: так пишет партнёр сильного консалтинга для основателя, который завтра тратит свои деньги. Каждый пункт — решение, число или действие. Никаких «можно рассмотреть», «важно учитывать», «в зависимости от ситуации». Есть выбор — выбери и одной фразой объясни почему.",
+  "Цифры бери только из брифа, из найденных источников или считай по формуле, помечая исходные значения словом «допущение». Не выдумывай статистику рынка, цены конкурентов, законы, названия компаний и отзывы. Если числа нет — скажи, как получить его за 1–3 дня.",
+  "Формат — Markdown: разделы через ##, таблицы для сравнений и расчётов, нумерованные шаги для действий, **жирным** — ключевые решения. Без вступления, без приветствия, без вопросов пользователю: сразу работа.",
+]
+
+function languageLine(language?: string) {
+  return language === "en" ? "Write in English." : language === "kk" ? "Жауапты қазақ тілінде жаз." : "Пиши по-русски."
+}
+
+export function companySystemPrompt(agent: AutonomousAgent, options: { search?: boolean; language?: string } = {}) {
+  return [
+    `Ты — ${agent.name} (${agent.role}) в MALIK Autonomous Company: восемь ИИ-агентов строят одну компанию по очереди — ${AUTONOMOUS_AGENTS.map((item) => item.name).join(" → ")}. Каждый получает решения предыдущих и продолжает их, а не начинает заново.`,
+    ...QUALITY_BAR,
+    options.search
+      ? "У тебя есть поиск Google. Проверь спрос, конкурентов и цены на реальных источниках и называй источник рядом с фактом. То, что не нашёл, так и помечай."
+      : "",
+    languageLine(options.language),
+  ].filter(Boolean).join("\n\n")
+}
+
+export function companyAgentPrompt(agent: AutonomousAgent, company: CompanyBrief, previous: PriorStep[]) {
+  const prior = priorDocuments(previous)
+  const facts = conditions(company)
+  return [
+    `ИДЕЯ БИЗНЕСА:\n${company.brief.trim()}`,
+    facts ? `УСЛОВИЯ:\n${facts}` : "",
+    company.instruction?.trim() || "",
+    prior ? `РЕШЕНИЯ ПРЕДЫДУЩИХ АГЕНТОВ (канон — не меняй их без явной причины):\n\n${prior}` : "",
+    `ТВОЯ ЗАДАЧА — ${agent.name} · ${agent.role}:\n${agent.brief}`,
+    `СДАЙ ДОКУМЕНТ ИЗ ЭТИХ РАЗДЕЛОВ:\n${AGENT_DELIVERABLES[agent.id]}`,
+    "Не повторяй то, что уже решили другие агенты: ссылайся на их решения и иди дальше.",
+  ].filter(Boolean).join("\n\n")
+}
+
+/** The one page a founder reads first, written after all eight have finished. */
+export const SUMMARY_STAGE = {
+  id: "summary" as const,
+  name: "Итог",
+  title: "Итог запуска",
+}
+
+export function companySummarySystem(language?: string) {
+  return [
+    "Ты — управляющий партнёр MALIK Autonomous Company. Восемь агентов только что построили компанию. Твоя работа — одна страница, которую основатель прочитает первой и по которой начнёт действовать завтра утром.",
+    ...QUALITY_BAR,
+    "Ничего нового не придумывай: всё берётся из документов агентов. Если агенты противоречат друг другу — назови противоречие и выбери одно решение.",
+    languageLine(language),
+  ].join("\n\n")
+}
+
+export function companySummaryPrompt(company: CompanyBrief, previous: PriorStep[]) {
+  const facts = conditions(company)
+  return [
+    `ИДЕЯ БИЗНЕСА:\n${company.brief.trim()}`,
+    facts ? `УСЛОВИЯ:\n${facts}` : "",
+    `ДОКУМЕНТЫ АГЕНТОВ:\n\n${priorDocuments(previous)}`,
+    [
+      "СОБЕРИ ИТОГ ИЗ ЭТИХ РАЗДЕЛОВ:",
+      "## Компания — пять строк: что продаём, кому, почём, где, почему купят именно у нас.",
+      "## Принятые решения — таблица: решение · кто из агентов · почему.",
+      "## Цифры, которые проверить первыми — таблица: величина · как посчитать · где взять · срок.",
+      "## Первые 7 дней — таблица: день · действие · результат к вечеру.",
+      "## Три главных риска — и самый дешёвый способ снять каждый.",
+    ].join("\n"),
+  ].filter(Boolean).join("\n\n")
+}
