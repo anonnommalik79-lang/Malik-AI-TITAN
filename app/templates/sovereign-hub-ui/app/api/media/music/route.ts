@@ -1,4 +1,5 @@
 import { resolveMediaUser } from "@/lib/media/request"
+import { analyzeMusicPrompt } from "@/lib/media/music-intent"
 import { musicModel, musicProviderConfigured, musicProviderName, submitDeapiMusic } from "@/lib/server/deapi-music"
 import { generateMusicLyrics, resolveMusicLyricsLanguage } from "@/lib/server/music-lyrics"
 import { recordMusicJobOwner } from "@/lib/server/music-job-ownership"
@@ -43,9 +44,15 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const prompt = String(body?.prompt || body?.caption || "").trim()
   const lyrics = String(body?.lyrics || "").trim()
-  const instrumental = body?.instrumental !== false
-  const genre = String(body?.genre || "").trim()
-  const mood = String(body?.mood || "").trim()
+  const requestedInstrumental = body?.instrumental !== false
+  const requestedGenre = String(body?.genre || "").trim()
+  const requestedMood = String(body?.mood || "").trim()
+  const promptIntent = analyzeMusicPrompt(prompt)
+  // Natural language is authoritative when it explicitly says what to make.
+  // UI toggles/presets are fallbacks for prompts that do not specify it.
+  const instrumental = promptIntent.instrumental ?? requestedInstrumental
+  const genre = promptIntent.genre || requestedGenre
+  const mood = promptIntent.mood || requestedMood
   const requestedLyricsLanguage = body?.lyricsLanguage
   const requestedDuration = Number(body?.duration || 30)
 
@@ -134,8 +141,9 @@ export async function POST(request: Request) {
 
     const styledPrompt = [
       prompt,
-      genre ? `Genre: ${genre}` : "",
-      mood ? `Mood: ${mood}` : "",
+      ...promptIntent.providerHints,
+      genre && !promptIntent.genre && genre !== "other" ? `Genre preset: ${genre}` : "",
+      mood && !promptIntent.mood && mood !== "Другое" ? `Mood preset: ${mood}` : "",
       !instrumental ? `Vocal song. Lyrics language: ${resolvedLyricsLanguage}` : "Instrumental track. No vocals.",
     ].filter(Boolean).join(". ")
 
@@ -181,6 +189,13 @@ export async function POST(request: Request) {
       lyricsGenerated,
       lyricsLanguage: instrumental ? null : resolvedLyricsLanguage,
       lyricsEngine: lyricsGenerated ? "Malik AI" : "user",
+      instrumental,
+      genre: promptIntent.genre || genre || "other",
+      mood: promptIntent.mood || mood || "Другое",
+      detectedIntent: {
+        instruments: promptIntent.instruments,
+        explicit: promptIntent.explicit,
+      },
     }, { headers: { "Cache-Control": "no-store" } })
   } finally {
     if (!ownerMode) releaseMusicInFlight(user.userId)

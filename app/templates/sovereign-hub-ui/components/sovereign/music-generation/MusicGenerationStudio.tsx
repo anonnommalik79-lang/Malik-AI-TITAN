@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react"
+import { analyzeMusicPrompt } from "@/lib/media/music-intent"
 import "./music-generation.css"
 
 type GenreId = "phonk" | "trap" | "hiphop" | "lofi" | "edm" | "other"
@@ -231,14 +232,14 @@ const IconBack = () => <svg {...stroke} aria-hidden="true"><path d="m15 18-6-6 6
 const IconSpinner = () => <svg {...stroke} className="mm-spin" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.2-8.6" /></svg>
 
 export function MusicGenerationStudio({ username }: { username?: string }) {
-  const [genreId, setGenreId] = useState<GenreId>("phonk")
+  const [genreId, setGenreId] = useState<GenreId>("other")
   const [prompt, setPrompt] = useState("")
   const [lyrics, setLyrics] = useState("")
   const [lyricsEnabled, setLyricsEnabled] = useState(true)
   const [lyricsLanguage, setLyricsLanguage] = useState<LyricsLanguage>("ru")
   const [duration, setDuration] = useState<number>(30)
-  const [mood, setMood] = useState<Mood>("Агрессивный")
-  const [instrumental, setInstrumental] = useState(false)
+  const [mood, setMood] = useState<Mood>("Другое")
+  const [instrumental, setInstrumental] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [activeRequestId, setActiveRequestId] = useState("")
   const [trackUrl, setTrackUrl] = useState("")
@@ -252,7 +253,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const [modelChoice, setModelChoice] = useState("")
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [mastering, setMastering] = useState(true)
-  const [phonkMode, setPhonkMode] = useState(true)
+  const [phonkMode, setPhonkMode] = useState(false)
   const [toast, setToast] = useState("")
   /** The real length of the loaded audio file, once the browser has read its header. */
   const [audioDuration, setAudioDuration] = useState(0)
@@ -311,6 +312,22 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       // The Generate action will surface a useful server error if needed.
     }
   }
+
+  useEffect(() => {
+    const intent = analyzeMusicPrompt(prompt)
+    if (intent.genre) {
+      setGenreId(intent.genre)
+      setPhonkMode(intent.genre === "phonk")
+    } else if (intent.instruments.length > 0) {
+      setGenreId("other")
+      setPhonkMode(false)
+    }
+    if (intent.mood) setMood(intent.mood)
+    if (typeof intent.instrumental === "boolean") {
+      setInstrumental(intent.instrumental)
+      setLyricsEnabled(!intent.instrumental)
+    }
+  }, [prompt])
 
   useEffect(() => {
     refreshConfig()
@@ -548,11 +565,22 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       const resolvedLanguage = (["kk", "ru", "en"].includes(String(data?.lyricsLanguage))
         ? String(data.lyricsLanguage)
         : nextLanguage) as LyricsLanguage
+      const resolvedInstrumental = typeof data?.instrumental === "boolean" ? data.instrumental : nextInstrumental
+      const resolvedGenreId = (["phonk", "trap", "hiphop", "lofi", "edm", "other"].includes(String(data?.genre))
+        ? String(data.genre)
+        : nextGenreId) as GenreId
+      const resolvedMood = (MOODS.includes(String(data?.mood) as Mood)
+        ? String(data.mood)
+        : nextMood) as Mood
 
-      if (!nextInstrumental && resolvedLyrics) {
+      setInstrumental(resolvedInstrumental)
+      setGenreId(resolvedGenreId)
+      setMood(resolvedMood)
+      setPhonkMode(resolvedGenreId === "phonk")
+      setLyricsEnabled(!resolvedInstrumental)
+      if (!resolvedInstrumental && resolvedLyrics) {
         setLyrics(resolvedLyrics)
         setLyricsLanguage(resolvedLanguage)
-        setLyricsEnabled(true)
       }
 
       setLastSubmitFailed(false)
@@ -561,13 +589,13 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         requestId: String(data.requestId),
         title: historyTitle(nextPrompt, nextGenre),
         prompt: nextPrompt,
-        lyrics: resolvedLyrics,
-        lyricsEnabled: !nextInstrumental,
+        lyrics: resolvedInstrumental ? "" : resolvedLyrics,
+        lyricsEnabled: !resolvedInstrumental,
         lyricsLanguage: resolvedLanguage,
-        instrumental: nextInstrumental,
+        instrumental: resolvedInstrumental,
         duration: nextDuration,
-        genreId: nextGenreId,
-        mood: nextMood,
+        genreId: resolvedGenreId,
+        mood: resolvedMood,
         status: "queued",
         progress: 0,
         downloadUrl: String(data.downloadUrl || ""),

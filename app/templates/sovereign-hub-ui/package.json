@@ -67,7 +67,8 @@
     "test:os-library": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-os-library.mjs",
     "test:os": "npm run test:os-core && npm run test:os-flow && npm run test:os-library",
     "test:voice-universal": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-universal.mjs",
-    "test:creation-engine": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-creation-engine.mjs"
+    "test:creation-engine": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-creation-engine.mjs",
+    "test:music-intent": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-music-prompt-intent.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",
