@@ -64,40 +64,42 @@ check("no agent runs the same mode twice", new Set(agentModes).size === agentMod
 
 const component = read("components/sovereign/business/AutonomousCompany.tsx")
 
+// The section runs on Gemini through its own streaming endpoint. The older
+// /api/business/run stays for the other business screens.
+const agentClient = read("lib/business/agent-client.ts")
+const agentRoute = read("app/api/business/agent/route.ts")
 console.log("\nEndpoint")
-check(
-  'the component posts to /api/business/run',
-  /const ENDPOINT = "\/api\/business\/run"/.test(component),
-)
+check("the component streams through the agent client", component.includes("streamAgent(") && component.includes('from "@/lib/business/agent-client"'))
+check('the client posts to /api/business/agent', /AGENT_ENDPOINT = "\/api\/business\/agent"/.test(agentClient))
 check("that route file exists", (() => {
-  try { return statSync(join(ROOT, "app/api/business/run/route.ts")).isFile() } catch { return false }
+  try { return statSync(join(ROOT, "app/api/business/agent/route.ts")).isFile() } catch { return false }
 })())
+check("the route answers with Gemini, not the shared provider chain",
+  agentRoute.includes("runGemini(") && !agentRoute.includes("routeAI("))
 check(
   "the component does not invent an /api/business/autonomous endpoint",
   !component.includes("/api/business/autonomous"),
 )
 
-// The server reads body.context as a BusinessRunContext. Keys it does not
-// declare are dropped in silence, which is how the country, budget and
-// requirements answers went missing the first time.
-const contextKeys = new Set(
-  (types.match(/export type BusinessRunContext = \{([\s\S]*?)\n\}/)?.[1] || "")
-    .match(/^\s*(\w+)\?:/gm)?.map((s) => s.trim().replace(/\?:$/, "")) || [],
-)
-const sentKeys = [...(component.match(/const context = \{([\s\S]*?)\n\s*\}/)?.[1] || "")
+// Every answer on the form must reach the server, and the server must read
+// each one - a field dropped in silence is how country, budget and
+// requirements went missing the first time.
+const sentKeys = [...(component.match(/const companyBody = useCallback\(\(\) => \(\{([\s\S]*?)\n\s*\}\)/)?.[1] || "")
   .matchAll(/^\s*(\w+):/gm)].map((m) => m[1])
-check("the component sends context keys the server declares", sentKeys.length > 0
-  && sentKeys.every((k) => contextKeys.has(k)), `sent ${sentKeys.join(", ")}`)
+const expectedKeys = ["brief", "instruction", "market", "country", "budget", "requirements", "model"]
+check("the component sends every answer on the form", expectedKeys.every((k) => sentKeys.includes(k)), `sent ${sentKeys.join(", ")}`)
+check("the route reads every answer it is sent", expectedKeys.every((k) => agentRoute.includes(`body.${k}`)))
 
-// The model chip must reach the server, and the server must be willing to read it.
-const runBusiness = read("lib/server/run-business.ts")
 console.log("\nModel selection")
-check("the component sends the chosen model", /modelId,?\n/.test(component) && component.includes("modelId"))
-check("runBusinessEngine reads modelId", runBusiness.includes("body?.modelId"))
-check("an unknown or ungranted model is ignored, not trusted",
+check("the component sends the chosen model", component.includes("model: modelId"))
+check("the route only trusts a model id of Gemini's shape", agentRoute.includes("MODEL_ID.test(body.model)"))
+check("the chosen model leads, the rest of the chain still backs it up", agentRoute.includes("preferredModel: preferred"))
+const runBusiness = read("lib/server/run-business.ts")
+check("the older business route still reads modelId", runBusiness.includes("body?.modelId"))
+check("the older business route ignores an unknown or ungranted model",
   runBusiness.includes("isMalikModelId") && runBusiness.includes("canUseMalikModel"))
-check("the automatic route still runs when the pinned model fails",
-  /result = await routeAI\(base\)/.test(runBusiness))
+check("the older business route still runs when the pinned model fails",
+  /result = await routeAI\(requestWithoutProviders\(base, rejected\)\)/.test(runBusiness))
 
 /* ------------------------------------------------------------- 3. templates */
 
@@ -153,7 +155,8 @@ check("the instruction reaches every agent, not only the first",
   autonomous.includes("instruction?: string | null")
   && autonomous.includes("ОТРАСЛЕВАЯ ИНСТРУКЦИЯ"))
 check("the run sends the instruction that is on screen",
-  component.includes("agentInput(agent, brief, done, instruction)"))
+  component.includes("instruction: instruction.trim() || undefined")
+  && autonomous.includes("company.instruction?.trim()"))
 check("choosing a template is visible on the card",
   component.includes("templateCardActive"))
 // The instruction must be shown in full and be editable. A summary of it -
@@ -182,9 +185,10 @@ check("the stress format demands a kill criterion, not a score",
   /При каком результате план мёртв/.test(templates5)
   && !/stress: `[\s\S]*?Оценка \/100/.test(templates5))
 check("it runs on the same endpoint as everything else",
-  component.includes("mode: STRESS_TEST.mode") && component.includes("ENDPOINT,"))
-check("a too-long input is resized from the server's own limit, not guessed",
-  component.includes('data?.code === "PROMPT_TOO_LONG"') && component.includes("cap - 400"))
+  component.includes('kind: "stress"') && agentRoute.includes("STRESS_TEST.mode"))
+check("what earlier agents wrote is bounded on the server, not by the person's prompt cap",
+  agentRoute.includes("stressTestInput(company.brief, previous, 40_000)")
+  && agentRoute.includes("checkPromptLength(authored, tier)"))
 check("a failed stress test does not fail the run",
   component.includes("setStressError") && component.includes("stressBusy"))
 

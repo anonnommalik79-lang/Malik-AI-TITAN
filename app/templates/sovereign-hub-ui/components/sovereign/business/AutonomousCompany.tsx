@@ -10,12 +10,13 @@
  *   workspace  the brief: composer, the eight agents, the templates
  *   running    the pipeline, live, with what each agent actually returned
  *
- * The agents are real. Each is a business mode that already exists, run through
- * POST /api/business/run - the endpoint this section has always used - in the
- * order a company is actually built, each one handed what the ones before it
- * produced. Nothing here reports success that the API did not return: a step
- * that fails says so, with the error, and the run stops rather than printing a
- * finished company that was never made.
+ * The agents are real. Each is a business mode that already exists, answered
+ * by Google Gemini through POST /api/business/agent, in the order a company is
+ * actually built, each one handed everything the ones before it produced. The
+ * answer streams: the card shows Gemini thinking, then the document being
+ * written. Nothing here reports success that the API did not return: a step
+ * that fails says why in words, and "Продолжить" resumes from that step
+ * instead of throwing away the agents that already finished.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -41,28 +42,58 @@ import {
   TriangleAlert,
   Users,
 } from "lucide-react"
-import { clientFetchWithTimeout } from "@/lib/api-client"
+import { AgentStreamError, streamAgent, type AgentSource } from "@/lib/business/agent-client"
 import { takePrefillPrompt } from "@/lib/malik-context"
 import {
   AUTONOMOUS_AGENTS,
   BUSINESS_TEMPLATES,
   TEMPLATE_CATEGORIES,
   STRESS_TEST,
-  agentInput,
-  stressTestInput,
+  SUMMARY_STAGE,
   templateInstruction,
   type AutonomousAgent,
   type BusinessTemplate,
   type TemplateCategory,
 } from "@/lib/business/autonomous"
-import { DEFAULT_MALIK_MODEL_ID, PUBLIC_MALIK_MODELS, type MalikModelId } from "@/lib/ai/malik-models"
 import { CompanyLaunchPad } from "./CompanyLaunchPad"
 import styles from "./AutonomousCompany.module.css"
 
-const ENDPOINT = "/api/business/run"
+/** "auto" lets the server pick the newest Gemini the key can see. */
+const AUTO_MODEL = "auto"
 
-/** The section's own default, named in the reference. */
-const DEFAULT_MODEL: MalikModelId = DEFAULT_MALIK_MODEL_ID
+type GeminiStatus = { ok: boolean; configured: boolean; label?: string; models?: string[]; summary?: string }
+
+/** "gemini-3.8-flash" → "Gemini 3.8 Flash", the way Google writes it. */
+function geminiName(id: string) {
+  if (id === "gemini-flash-latest") return "Gemini Flash (latest)"
+  if (id === "gemini-flash-lite-latest") return "Gemini Flash-Lite (latest)"
+  return id.split("-").map((part) => (
+    part === "gemini" ? "Gemini" : part === "flash" ? "Flash" : part === "pro" ? "Pro" : part === "lite" ? "Lite" : part === "preview" ? "Preview" : part
+  )).join(" ").replace("Flash Lite", "Flash-Lite")
+}
+
+/** The part of an agent's answer written for the next agent, not for people. */
+function splitState(text: string) {
+  const index = text.search(/(?:^|\n)#{1,4}\s*(?:company state|состояние компании)/i)
+  if (index < 0) return { body: text, state: "" }
+  return { body: text.slice(0, index).trim(), state: text.slice(index).replace(/^\s*#{1,4}[^\n]*\n?/, "").trim() }
+}
+
+/** Gemini's thought summaries open with a bold title; that title is the status line. */
+function thoughtTitle(text: string) {
+  const bold = text.match(/\*\*([^*]{3,90})\*\*/)
+  const line = (bold?.[1] || text.split("\n").find((item) => item.trim()) || "").trim()
+  return line.replace(/^#+\s*/, "").slice(0, 90)
+}
+
+function sleep(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    const timer = window.setTimeout(resolve, ms)
+    signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve() }, { once: true })
+  })
+}
+
+const formatTokens = (value?: number) => (value ? `${value.toLocaleString("ru-RU")} токенов` : "")
 
 type Stage = "intro" | "workspace" | "running"
 type StepState = "waiting" | "running" | "done" | "failed"
@@ -75,7 +106,16 @@ type Step = {
   provider?: string
   model?: string
   ms?: number
+  /** Gemini's latest thought summaries while it is thinking. */
+  thoughts?: string[]
+  sources?: AgentSource[]
+  tokens?: number
+  /** Waiting out a Gemini rate limit (or a brief overload) until this time. */
+  waitUntil?: number
+  waitReason?: "quota" | "busy"
 }
+
+type Stage2 = { state: "idle" | "running" | "done" | "failed"; content: string; model?: string; ms?: number; error?: string; thoughts?: string[] }
 
 const CAPABILITIES: Array<{ icon: typeof Search; title: string; desc: string }> = [
   { icon: Search, title: "Исследует рынок", desc: "Спрос, конкуренты и возможности." },
@@ -115,12 +155,17 @@ function Rich({ text }: { text: string }) {
   const blocks: React.ReactNode[] = []
   let i = 0
 
+  // Bold, `code` and [links](https://…). Links are rendered only for http(s)
+  // targets, so a model cannot slip a javascript: URL into the page.
   const inline = (value: string, key: string): React.ReactNode =>
-    value.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((part, index) => (
-      part.startsWith("**") && part.endsWith("**")
-        ? <b key={`${key}-${index}`}>{part.slice(2, -2)}</b>
-        : <span key={`${key}-${index}`}>{part}</span>
-    ))
+    value.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]{1,200}\]\(https?:\/\/[^\s)]{1,500}\))/g).filter(Boolean).map((part, index) => {
+      const id = `${key}-${index}`
+      if (part.startsWith("**") && part.endsWith("**")) return <b key={id}>{part.slice(2, -2)}</b>
+      if (part.startsWith("`") && part.endsWith("`") && part.length > 2) return <code key={id} className={styles.richCode}>{part.slice(1, -1)}</code>
+      const link = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/)
+      if (link) return <a key={id} href={link[2]} target="_blank" rel="noreferrer noopener" className={styles.richLink}>{link[1]}</a>
+      return <span key={id}>{part}</span>
+    })
 
   while (i < lines.length) {
     const line = lines[i].trim()
@@ -214,7 +259,9 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   const [country, setCountry] = useState("")
   const [budget, setBudget] = useState("")
   const [requirements, setRequirements] = useState("")
-  const [modelId, setModelId] = useState<MalikModelId>(DEFAULT_MODEL)
+  const [modelId, setModelId] = useState<string>(AUTO_MODEL)
+  const [gemini, setGemini] = useState<GeminiStatus | null>(null)
+  const [summary, setSummary] = useState<Stage2>({ state: "idle", content: "" })
   const [category, setCategory] = useState<TemplateCategory>("Все")
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [steps, setSteps] = useState<Step[]>([])
@@ -228,15 +275,38 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   const [stress, setStress] = useState("")
   const [stressBusy, setStressBusy] = useState(false)
   const [stressError, setStressError] = useState<string | null>(null)
+  const [now, setNow] = useState(() => Date.now())
 
   const abortRef = useRef<AbortController | null>(null)
   const runningRef = useRef(false)
+  const stepsRef = useRef<Step[]>([])
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
-  const model = useMemo(
-    () => PUBLIC_MALIK_MODELS.find((item) => item.id === modelId) || PUBLIC_MALIK_MODELS.find((item) => item.id === DEFAULT_MODEL),
-    [modelId],
-  )
+  useEffect(() => { stepsRef.current = steps }, [steps])
+
+  // Which Gemini this server can actually reach, asked once. It costs nothing:
+  // the server only lists the models each key can see.
+  useEffect(() => {
+    let alive = true
+    fetch("/api/business/gemini-check", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: GeminiStatus) => { if (alive) setGemini(data) })
+      .catch(() => { if (alive) setGemini({ ok: false, configured: false, summary: "Не удалось проверить Gemini." }) })
+    return () => { alive = false }
+  }, [])
+
+  const modelLabel = modelId === AUTO_MODEL
+    ? gemini?.label ? `${gemini.label}` : "Gemini"
+    : geminiName(modelId)
+  const modelOptions = useMemo(() => [...new Set([...(gemini?.models || []), "gemini-flash-latest"])], [gemini?.models])
+
+  // A second hand for the rate-limit countdown, only while something waits.
+  const waiting = steps.some((step) => step.waitUntil && step.waitUntil > now)
+  useEffect(() => {
+    if (!waiting) return
+    const timer = window.setInterval(() => setNow(Date.now()), 500)
+    return () => window.clearInterval(timer)
+  }, [waiting])
 
   const templates = useMemo(() => {
     const byCategory = category === "Мои"
@@ -291,7 +361,30 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
   }, [])
 
-  const run = useCallback(async () => {
+  const patchStep = useCallback((id: string, patch: Partial<Step> | ((step: Step) => Partial<Step>)) => {
+    setSteps((current) => current.map((step) => (step.agent.id === id
+      ? { ...step, ...(typeof patch === "function" ? patch(step) : patch) }
+      : step)))
+  }, [])
+
+  const companyBody = useCallback(() => ({
+    brief: prompt.trim(),
+    instruction: instruction.trim() || undefined,
+    market: market || undefined,
+    country: country || undefined,
+    budget: budget || undefined,
+    requirements: requirements || undefined,
+    model: modelId,
+  }), [budget, country, instruction, market, modelId, prompt, requirements])
+
+  /**
+   * The eight agents, then the one-page summary.
+   *
+   * `resume` keeps every agent that already finished and starts at the first
+   * one that did not - a failure at Sales no longer costs the CEO, Research
+   * and everything else a second run.
+   */
+  const run = useCallback(async (resume = false) => {
     const brief = prompt.trim()
     if (!brief || runningRef.current) return
 
@@ -302,140 +395,145 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     setRunning(true)
 
     setRunError(null)
-    setStress("")
-    setStressError(null)
     setStage("running")
-    setSteps(AUTONOMOUS_AGENTS.map((agent) => ({ agent, state: "waiting", content: "" })))
-    setExpanded(AUTONOMOUS_AGENTS[0].id)
-
-    const extra = [
-      country ? `Страна / рынок: ${country}` : "",
-      budget ? `Бюджет на запуск: ${budget}` : "",
-      requirements ? `Особые требования: ${requirements}` : "",
-    ].filter(Boolean).join("\n")
-
-    const context = {
-      language: "ru" as const,
-      industry: market || undefined,
-      extra: extra || undefined,
+    const kept = resume ? stepsRef.current : []
+    const initial: Step[] = AUTONOMOUS_AGENTS.map((agent) => {
+      const previous = kept.find((step) => step.agent.id === agent.id)
+      return previous && previous.state === "done" ? previous : { agent, state: "waiting", content: "" }
+    })
+    setSteps(initial)
+    stepsRef.current = initial
+    if (!resume) {
+      setStress("")
+      setStressError(null)
     }
+    setSummary({ state: "idle", content: "" })
 
-    const done: Array<{ agent: AutonomousAgent; content: string }> = []
+    const body = companyBody()
+    const done: Array<{ agentId: string; content: string }> = initial
+      .filter((step) => step.state === "done")
+      .map((step) => ({ agentId: step.agent.id, content: step.content }))
 
+    let failed = false
     for (const agent of AUTONOMOUS_AGENTS) {
       if (controller.signal.aborted) break
-      setSteps((current) => current.map((step) => (step.agent.id === agent.id ? { ...step, state: "running" } : step)))
+      if (done.some((item) => item.agentId === agent.id)) continue
       setExpanded(agent.id)
-      const started = Date.now()
 
-      try {
-        const response = await clientFetchWithTimeout(
-          ENDPOINT,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+      let retries = 0
+      while (!controller.signal.aborted) {
+        const started = Date.now()
+        patchStep(agent.id, { state: "running", content: "", error: undefined, thoughts: [], sources: undefined, waitUntil: undefined, waitReason: undefined, model: undefined })
+        try {
+          const result = await streamAgent({ ...body, kind: "agent", agentId: agent.id, previous: done }, {
             signal: controller.signal,
-            body: JSON.stringify({
-              mode: agent.mode,
-              input: agentInput(agent, brief, done, instruction),
-              context,
-              language: "ru",
-              modelId,
-            }),
-          },
-          120_000,
-        )
-        const data = await response.json().catch(() => ({}))
-        if (!response.ok || data.ok === false) {
-          throw new Error(data.error || data.publicError || `HTTP ${response.status}`)
-        }
-        const content = String(data.content || data.text || "").trim()
-        if (!content) throw new Error("Пустой ответ от модели")
-
-        done.push({ agent, content })
-        setSteps((current) => current.map((step) => (step.agent.id === agent.id
-          ? {
-            ...step,
+            onEvent: (event) => {
+              if (event.type === "model") patchStep(agent.id, { model: event.label })
+              else if (event.type === "thought") patchStep(agent.id, (step) => ({ thoughts: [...(step.thoughts || []), thoughtTitle(event.text)].filter(Boolean).slice(-4) }))
+              else if (event.type === "delta") patchStep(agent.id, (step) => ({ content: step.content + event.text }))
+              else if (event.type === "reset") patchStep(agent.id, { content: "" })
+              else if (event.type === "sources") patchStep(agent.id, { sources: event.items })
+            },
+          })
+          done.push({ agentId: agent.id, content: result.content })
+          patchStep(agent.id, {
             state: "done",
-            content,
-            provider: typeof data.provider === "string" ? data.provider : undefined,
-            model: typeof data.model === "string" ? data.model : (typeof data.engine === "string" ? data.engine : undefined),
-            ms: Date.now() - started,
+            content: result.content,
+            provider: "Google Gemini",
+            model: result.label,
+            ms: result.ms || Date.now() - started,
+            sources: result.sources?.length ? result.sources : undefined,
+            tokens: result.usage?.totalTokens,
+            thoughts: undefined,
+          })
+          break
+        } catch (error) {
+          if (controller.signal.aborted) break
+          const failure = error instanceof AgentStreamError ? error : new AgentStreamError("ERROR", "Ошибка запроса")
+          // A per-minute limit or a brief overload clears by itself: wait it
+          // out on screen, a few times at most, instead of stopping a company
+          // halfway. Keys, safety and daily limits are not waited on.
+          const quota = failure.code === "QUOTA" || failure.code === "RATE_LIMIT_REACHED"
+          const busy = ["UNAVAILABLE", "TIMEOUT", "NETWORK", "INCOMPLETE", "EMPTY"].includes(failure.code)
+          if ((quota && retries < 3) || (busy && retries < 2)) {
+            retries += 1
+            const wait = quota
+              ? Math.min(Math.max(failure.retryAfterMs || 20_000, 5_000), 65_000)
+              : Math.min(Math.max(failure.retryAfterMs || 8_000, 5_000), 20_000) * retries
+            setNow(Date.now())
+            patchStep(agent.id, { state: "running", content: "", waitUntil: Date.now() + wait, waitReason: quota ? "quota" : "busy" })
+            await sleep(wait, controller.signal)
+            continue
           }
-          : step)))
+          patchStep(agent.id, { state: "failed", error: failure.message, waitUntil: undefined, ms: Date.now() - started })
+          setRunError(`${agent.name}: ${failure.message}`)
+          failed = true
+          break
+        }
+      }
+      if (failed || controller.signal.aborted) break
+    }
+
+    // All eight finished: the page a founder reads first.
+    if (!failed && !controller.signal.aborted && done.length === AUTONOMOUS_AGENTS.length) {
+      const started = Date.now()
+      setSummary({ state: "running", content: "", thoughts: [] })
+      try {
+        const result = await streamAgent({ ...body, kind: "summary", previous: done }, {
+          signal: controller.signal,
+          onEvent: (event) => {
+            if (event.type === "delta") setSummary((current) => ({ ...current, content: current.content + event.text }))
+            else if (event.type === "reset") setSummary((current) => ({ ...current, content: "" }))
+            else if (event.type === "model") setSummary((current) => ({ ...current, model: event.label }))
+            else if (event.type === "thought") setSummary((current) => ({ ...current, thoughts: [...(current.thoughts || []), thoughtTitle(event.text)].filter(Boolean).slice(-3) }))
+          },
+        })
+        setSummary({ state: "done", content: result.content, model: result.label, ms: result.ms || Date.now() - started })
       } catch (error) {
-        if (controller.signal.aborted) break
-        const message = error instanceof Error ? error.message : "Ошибка запроса"
-        setSteps((current) => current.map((step) => (step.agent.id === agent.id
-          ? { ...step, state: "failed", error: message, ms: Date.now() - started }
-          : step)))
-        setRunError(`${agent.name} остановился: ${message}`)
-        break
+        if (!controller.signal.aborted) {
+          setSummary({ state: "failed", content: "", error: error instanceof Error ? error.message : "Итог не собрался" })
+        }
       }
     }
 
     runningRef.current = false
     setRunning(false)
-  }, [budget, country, instruction, market, modelId, prompt, requirements])
+  }, [companyBody, patchStep, prompt])
 
   const runStressTest = useCallback(async () => {
     const done = steps
       .filter((step) => step.state === "done" && step.content)
-      .map((step) => ({ agent: step.agent, content: step.content }))
+      .map((step) => ({ agentId: step.agent.id, content: step.content }))
     if (!done.length || stressBusy) return
 
     setStressBusy(true)
     setStressError(null)
     setStress("")
 
-    const ask = async (budget: number) => {
-      const response = await clientFetchWithTimeout(
-        ENDPOINT,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mode: STRESS_TEST.mode,
-            input: stressTestInput(prompt.trim(), done, budget),
-            context: { language: "ru" as const, industry: market || undefined },
-            language: "ru",
-            modelId,
-          }),
-        },
-        120_000,
-      )
-      return { response, data: await response.json().catch(() => ({})) }
-    }
-
     try {
-      let { response, data } = await ask(11_000)
-
-      if (data?.code === "PROMPT_TOO_LONG") {
-        const cap = Number(String(data.error || "").match(/\/(\d+)\s*chars/)?.[1])
-        if (!Number.isFinite(cap)) throw new Error(data.error || "Запрос слишком длинный")
-        ;({ response, data } = await ask(Math.max(900, cap - 400)))
-      }
-
-      if (!response.ok || data.ok === false) {
-        throw new Error(data.error || data.publicError || `HTTP ${response.status}`)
-      }
-      const content = String(data.content || data.text || "").trim()
-      if (!content) throw new Error("Пустой ответ от модели")
-      setStress(content)
+      const result = await streamAgent({ ...companyBody(), kind: "stress", previous: done }, {
+        onEvent: (event) => {
+          if (event.type === "delta") setStress((current) => current + event.text)
+          else if (event.type === "reset") setStress("")
+        },
+      })
+      setStress(result.content)
     } catch (error) {
       setStressError(error instanceof Error ? error.message : "Не удалось выполнить проверку")
     } finally {
       setStressBusy(false)
     }
-  }, [market, modelId, prompt, steps, stressBusy])
+  }, [companyBody, steps, stressBusy])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
     runningRef.current = false
     setRunning(false)
     setSteps((current) => current.map((step) => (step.state === "running"
-      ? { ...step, state: "failed", error: "Остановлено" }
+      ? { ...step, state: "failed", error: "Остановлено. «Продолжить» начнёт этого агента заново.", waitUntil: undefined }
       : step)))
+    setSummary((current) => (current.state === "running" ? { state: "idle", content: "" } : current))
+    setRunError("Запуск остановлен.")
   }, [])
 
   const restart = useCallback(() => {
@@ -446,6 +544,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     setRunError(null)
     setStress("")
     setStressError(null)
+    setSummary({ state: "idle", content: "" })
     setStage("workspace")
     onNewChat?.()
   }, [onNewChat])
@@ -506,9 +605,16 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
           <div className={styles.briefcase}><Briefcase strokeWidth={1.7} /></div>
           <h1 className={styles.heroTitle}>MALIK AUTONOMOUS COMPANY</h1>
           <p className={styles.heroLead}>Одна идея → исследование → продукт → клиенты → продажи.</p>
+
           <div className={styles.heroMeta}>
-            <span>{model?.label}</span><i /><span>8 AI-агентов</span><i /><span>API orchestration</span>
+            <span>{modelLabel}</span><i /><span>8 AI-агентов</span><i /><span>Google Gemini</span>
           </div>
+          {gemini && (
+            <div className={`${styles.engine} ${gemini.ok ? styles.engineOk : styles.engineOff}`} title={gemini.summary}>
+              <span className={styles.engineDot} />
+              {gemini.ok ? "Gemini подключён" : gemini.configured ? "Gemini: ключи не отвечают" : "Gemini не подключён"}
+            </div>
+          )}
         </div>
 
         {stage === "workspace" && (
@@ -571,28 +677,37 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                   <button
                     type="button"
                     className={styles.modelSelect}
+                    data-business-model-icon="gemini"
                     onClick={() => setOpenMenu(openMenu === "model" ? null : "model")}
                     aria-haspopup="listbox"
                     aria-expanded={openMenu === "model"}
                   >
                     <span className={styles.modelMark}><MalikMark /></span>
                     <span className={styles.modelText}>
-                      <span className={styles.modelName}>{model?.label}</span>
-                      <span className={styles.modelMini}>{model?.providerModel}</span>
+                      <span className={styles.modelName}>{modelLabel}</span>
+                      <span className={styles.modelMini}>{modelId === AUTO_MODEL ? "Авто · лучшая доступная" : modelId}</span>
                     </span>
                     <ChevronDown className={styles.chevron} strokeWidth={2} />
                   </button>
                   {openMenu === "model" && (
-                    <div className={styles.menu} role="listbox">
-                      {PUBLIC_MALIK_MODELS.filter((item) => item.tier === "free").map((item) => (
+                    <div className={styles.menu} role="listbox" data-engine="gemini">
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={modelId === AUTO_MODEL}
+                        onClick={() => { setModelId(AUTO_MODEL); setOpenMenu(null) }}
+                      >
+                        Gemini · Авто
+                      </button>
+                      {modelOptions.map((id) => (
                         <button
-                          key={item.id}
+                          key={id}
                           type="button"
                           role="option"
-                          aria-selected={item.id === modelId}
-                          onClick={() => { setModelId(item.id); setOpenMenu(null) }}
+                          aria-selected={id === modelId}
+                          onClick={() => { setModelId(id); setOpenMenu(null) }}
                         >
-                          {item.label}
+                          {geminiName(id)}
                         </button>
                       ))}
                     </div>
@@ -691,7 +806,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
             <div className={styles.strip} role="group" aria-label="Autonomous agent pipeline">
               <div className={styles.stripLabel}>
                 <span className={styles.dot} />
-                <span><b>{model?.label}</b><small>API orchestration</small></span>
+                <span><b>{modelLabel}</b><small>Google Gemini</small></span>
               </div>
               <div className={styles.flow}>
                 {steps.map((step, index) => (
@@ -705,14 +820,36 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
               </div>
             </div>
 
-            {runError && (
+            {runError && !running && (
               <div className={styles.runHead}>
                 <div className={styles.runBrief}>
-                  <b style={{ color: "#f2b4b4" }}><TriangleAlert size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />{runError}</b>
-                  <span>Запуск остановлен. Следующие агенты работают на результатах предыдущих.</span>
+                  <b className={styles.runErrorText}><TriangleAlert size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />{runError}</b>
+                  <span>Готовые агенты сохранены. «Продолжить» начнёт с того, кто остановился.</span>
                 </div>
-                <button type="button" className={styles.ghost} onClick={() => void run()}>Повторить</button>
+                <button type="button" className={styles.ghost} onClick={() => void run(true)}>Продолжить</button>
               </div>
+            )}
+
+            {summary.state !== "idle" && (
+              <section className={styles.summary} aria-live="polite">
+                <div className={styles.summaryHead}>
+                  <span className={styles.summaryIcon}>{summary.state === "running" ? <Loader2 size={15} className={styles.spin} /> : <Sparkles size={15} strokeWidth={1.8} />}</span>
+                  <div>
+                    <b>{SUMMARY_STAGE.title}</b>
+                    <small>
+                      {summary.state === "running" && (summary.content ? "Gemini пишет итог…" : summary.thoughts?.length ? `Думает: ${summary.thoughts[summary.thoughts.length - 1]}` : "Собирает восемь документов в одну страницу…")}
+                      {summary.state === "done" && [summary.model, summary.ms ? `${(summary.ms / 1000).toFixed(1)} с` : ""].filter(Boolean).join(" · ")}
+                      {summary.state === "failed" && summary.error}
+                    </small>
+                  </div>
+                </div>
+                {summary.content && (
+                  <div className={styles.summaryBody}>
+                    <Rich text={summary.content} />
+                    {summary.state === "running" && <span className={styles.caret} aria-hidden />}
+                  </div>
+                )}
+              </section>
             )}
 
             <div className={styles.steps}>
@@ -730,18 +867,67 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                       </span>
                       <span className={styles.stepState}>
                         {step.state === "waiting" && "в очереди"}
-                        {step.state === "running" && "работает…"}
-                        {step.state === "done" && `готово${step.ms ? ` · ${(step.ms / 1000).toFixed(1)}с` : ""}`}
+                        {step.state === "running" && (step.waitUntil && step.waitUntil > now
+                          ? `${step.waitReason === "busy" ? "повтор" : "лимит Gemini"} · ${Math.ceil((step.waitUntil - now) / 1000)} с`
+                          : step.content ? "пишет…" : "думает…")}
+                        {step.state === "done" && `готово${step.ms ? ` · ${(step.ms / 1000).toFixed(1)} с` : ""}`}
                         {step.state === "failed" && "ошибка"}
                       </span>
                     </button>
 
-                    {open && (step.content || step.error) && (
-                      <div className={`${styles.stepBody} ${step.error ? styles.stepError : ""}`}>
-                        {step.error ? step.error : <Rich text={step.content} />}
-                        {step.state === "done" && (step.provider || step.model) && <div className={styles.stepMeta}>{[step.provider, step.model].filter(Boolean).join(" · ")}</div>}
+                    {open && step.state === "running" && !step.content && (
+                      <div className={styles.stepBody}>
+                        <div className={styles.thinking}>
+                          <span className={styles.thinkingPulse} aria-hidden />
+                          <span>
+                            {step.waitUntil && step.waitUntil > now
+                              ? step.waitReason === "busy"
+                                ? `Gemini перегружен — повторю сам через ${Math.ceil((step.waitUntil - now) / 1000)} с.`
+                                : `Gemini просит подождать — продолжу сам через ${Math.ceil((step.waitUntil - now) / 1000)} с.`
+                              : step.thoughts?.length
+                                ? step.thoughts[step.thoughts.length - 1]
+                                : `${step.model || "Gemini"} читает решения предыдущих агентов…`}
+                          </span>
+                        </div>
+                        {!!step.thoughts && step.thoughts.length > 1 && (
+                          <ul className={styles.thoughtTrail}>
+                            {step.thoughts.slice(0, -1).map((item, n) => <li key={n}>{item}</li>)}
+                          </ul>
+                        )}
                       </div>
                     )}
+
+                    {open && (step.content || step.error) && (() => {
+                      if (step.error) return <div className={`${styles.stepBody} ${styles.stepError}`}>{step.error}</div>
+                      const { body, state } = splitState(step.content)
+                      return (
+                        <div className={styles.stepBody}>
+                          <Rich text={body} />
+                          {step.state === "running" && <span className={styles.caret} aria-hidden />}
+                          {state && step.state === "done" && (
+                            <details className={styles.handoff}>
+                              <summary>Передано следующему агенту · состояние компании</summary>
+                              <Rich text={state} />
+                            </details>
+                          )}
+                          {!!step.sources?.length && (
+                            <div className={styles.sources}>
+                              <span>Источники Google</span>
+                              <ol>
+                                {step.sources.map((source) => (
+                                  <li key={source.uri}><a href={source.uri} target="_blank" rel="noreferrer noopener">{source.title}</a></li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+                          {step.state === "done" && (
+                            <div className={styles.stepMeta}>
+                              {[step.model, step.ms ? `${(step.ms / 1000).toFixed(1)} с` : "", formatTokens(step.tokens), step.sources?.length ? `${step.sources.length} источн.` : ""].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </article>
                 )
               })}
@@ -778,7 +964,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                 )}
 
                 {stressError && <p className={`${styles.stressLead} ${styles.stressFailed}`}><TriangleAlert size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />{stressError}</p>}
-                {stress && <div className={styles.stressBody}><Rich text={stress} /></div>}
+                {stress && <div className={styles.stressBody}><Rich text={stress} />{stressBusy && <span className={styles.caret} aria-hidden />}</div>}
               </section>
             )}
           </div>
