@@ -491,6 +491,9 @@ export async function buildMaxLanes(input: {
     try { return `${getMalikModel(id as MalikModelId).provider}:${getMalikModel(id as MalikModelId).providerModel}` } catch { return "" }
   }))
   const rotation = (scope.__malikMaxRotation = ((scope.__malikMaxRotation || 0) + 1) % 1_000_000)
+  const promptChars = input.prompt.length
+  const longContext = promptChars >= 80_000
+  const hugeContext = promptChars >= 240_000
 
   const scored = [...direct, ...catalog]
     .filter((lane) => !input.needsVision || lane.vision)
@@ -503,6 +506,15 @@ export async function buildMaxLanes(input: {
       if (input.fastMode && FAST_PROVIDERS.has(lane.provider)) score += 8
       if (input.fastMode && /reasoner|ultra|550b|-pro\b|opus/i.test(lane.providerModel)) score -= 6
       if (preferred.has(`${lane.provider}:${lane.providerModel}`)) score += 4
+      if (longContext) {
+        const longContextLane = lane.provider === "google-direct"
+          || lane.provider === "google-ai"
+          || lane.provider === "anthropic"
+          || lane.provider === "openai"
+        if (lane.provider === "google-direct" || lane.provider === "google-ai") score += hugeContext ? 36 : 18
+        else if (longContextLane) score += hugeContext ? 12 : 6
+        else score -= hugeContext ? 18 : 7
+      }
       score -= failureRate * 20
       if (entry?.lastFail && Date.now() - entry.lastFail < 60_000) score -= 10
       if (entry?.latency && entry.latency > 8_000) score -= Math.min(10, (entry.latency - 8_000) / 1_000)
@@ -617,7 +629,8 @@ export function structuredAnswerNeedsMore(prompt: string, content: string) {
     .map((match) => Number(match[1]))
     .filter((value) => Number.isFinite(value))
   const uniqueNumbers = [...new Set(numbered)]
-  if (uniqueNumbers.length >= 4) {
+  const requiresEverySection = /(выполни\s+вс[её]|сделай\s+вс[её]|не\s+пропускай|кажд(?:ый|ую|ое|ого)|all\s+(?:items|steps|requirements|sections)|do\s+not\s+skip|complete\s+every)/iu.test(request)
+  if (requiresEverySection && uniqueNumbers.length >= 4) {
     const last = Math.max(...uniqueNumbers)
     const seen = uniqueNumbers.filter((value) =>
       new RegExp(`(?:^|\\n)\\s*(?:#{1,6}\\s*)?(?:\\*\\*)?${value}[.)]\\s`, "mu").test(answer),

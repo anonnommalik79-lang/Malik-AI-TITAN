@@ -155,7 +155,18 @@ export function buildMessages(input: {
     .map((message) => ({ role: message.role, content: message.content.trim() }))
     .filter((message) => message.content)
   const historyMessageLimit = Math.max(12, Math.min(128, Number(process.env.MALIK_MAX_HISTORY_MESSAGES || 64)))
-  const historyCharLimit = Math.max(24_000, Math.min(800_000, Number(process.env.MALIK_MAX_HISTORY_CHARS || 180_000)))
+  const configuredHistoryChars = Math.max(24_000, Math.min(800_000, Number(process.env.MALIK_MAX_HISTORY_CHARS || 180_000)))
+  // Preserve the new prompt first. On huge pasted documents, old turns are the
+  // expendable part of the context and should not push otherwise capable
+  // providers over their window.
+  const adaptiveHistoryChars = input.prompt.length >= 240_000
+    ? 24_000
+    : input.prompt.length >= 120_000
+      ? 48_000
+      : input.prompt.length >= 60_000
+        ? 90_000
+        : configuredHistoryChars
+  const historyCharLimit = Math.min(configuredHistoryChars, adaptiveHistoryChars)
   const history: HistoryMessage[] = []
   let historyChars = 0
   for (let index = normalizedHistory.length - 1; index >= 0 && history.length < historyMessageLimit; index -= 1) {
