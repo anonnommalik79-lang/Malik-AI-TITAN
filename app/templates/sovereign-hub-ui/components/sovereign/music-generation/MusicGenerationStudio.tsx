@@ -433,7 +433,13 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
             : item,
         ))
         setGenerating(true)
-        setNotice(nextStatus === "queued" ? "Задание в очереди музыкального провайдера…" : "Музыкальный провайдер генерирует трек…")
+        setNotice(
+          nextStatus === "queued"
+            ? activeRequestId.startsWith("malik-music-wait:")
+              ? "Free.ai переполнен — Malik AI автоматически ждёт слот и повторяет отправку сам…"
+              : "Задание в очереди музыкального провайдера…"
+            : "Музыкальный провайдер генерирует трек…",
+        )
         timer = window.setTimeout(poll, 3000)
       } catch {
         if (!cancelled) timer = window.setTimeout(poll, 5000)
@@ -588,9 +594,11 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         }
       })
       setNotice(
-        data?.lyricsGenerated
-          ? "Malik AI написал слова. request_id получен — AceStep создаёт музыку и вокал…"
-          : "request_id получен. Ожидаю очередь музыкального провайдера…",
+        data?.deferred
+          ? "Free.ai сейчас забит. Malik AI поставил трек в свою автоочередь и сам будет ловить свободный слот — нажимать заново не нужно."
+          : data?.lyricsGenerated
+            ? "Malik AI написал слова. request_id получен — AceStep создаёт музыку и вокал…"
+            : "request_id получен. Ожидаю очередь музыкального провайдера…",
       )
     } catch (error) {
       setGenerating(false)

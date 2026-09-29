@@ -1,18 +1,41 @@
 import "server-only"
 
+import { privateJsonStoreConfigured, readPrivateJson, writePrivateJson } from "./private-json-store"
+
 type ApiEnvelope = Record<string, any>
 
 type KeySource = { key: string; label: "primary" | "friend-1" | "friend-2" }
 
+type DeferredMusicInput = {
+  prompt: string
+  lyrics?: string
+  instrumental: boolean
+  duration: number
+}
+
+type DeferredMusicJob = {
+  requestId: string
+  createdAt: number
+  updatedAt: number
+  nextRetryAt: number
+  attempts: number
+  lastError: string
+  input: DeferredMusicInput
+  providerRequestId?: string
+  directResultUrl?: string
+}
+
 type MusicJobGlobal = typeof globalThis & {
   __malikMusicJobKeyLabel?: Map<string, KeySource["label"]>
   __malikFreeAiDirectMusic?: Map<string, string>
+  __malikDeferredMusicJobs?: Map<string, DeferredMusicJob>
 }
 
 const DEAPI_BASE = "https://api.deapi.ai/api/v2"
 const FREE_AI_BASE = "https://api.free.ai"
 const FREE_AI_PREFIX = "freeai:"
 const FREE_AI_DIRECT_PREFIX = "freeai-direct:"
+const DEFERRED_MUSIC_PREFIX = "malik-music-wait:"
 
 function deapiKeys(): KeySource[] {
   const candidates: KeySource[] = [
@@ -47,6 +70,71 @@ function freeAiDirectMap() {
   const scope = globalThis as MusicJobGlobal
   if (!scope.__malikFreeAiDirectMusic) scope.__malikFreeAiDirectMusic = new Map()
   return scope.__malikFreeAiDirectMusic
+}
+
+function deferredMusicMap() {
+  const scope = globalThis as MusicJobGlobal
+  if (!scope.__malikDeferredMusicJobs) scope.__malikDeferredMusicJobs = new Map()
+  return scope.__malikDeferredMusicJobs
+}
+
+function isDeferredMusicRequest(requestId?: string) {
+  return Boolean(requestId?.startsWith(DEFERRED_MUSIC_PREFIX))
+}
+
+function deferredStateKey(requestId: string) {
+  const id = requestId.startsWith(DEFERRED_MUSIC_PREFIX)
+    ? requestId.slice(DEFERRED_MUSIC_PREFIX.length)
+    : requestId
+  return `private/system/malik-music-wait/${id}.json`
+}
+
+async function readDeferredMusicJob(requestId: string) {
+  const memory = deferredMusicMap().get(requestId)
+  if (memory) return memory
+  if (!privateJsonStoreConfigured()) return null
+  const stored = await readPrivateJson<DeferredMusicJob>(deferredStateKey(requestId))
+  if (stored?.requestId === requestId) deferredMusicMap().set(requestId, stored)
+  return stored?.requestId === requestId ? stored : null
+}
+
+async function saveDeferredMusicJob(job: DeferredMusicJob) {
+  deferredMusicMap().set(job.requestId, job)
+  if (privateJsonStoreConfigured()) await writePrivateJson(deferredStateKey(job.requestId), job)
+}
+
+function retryableFreeAiFailure(status: number, error: string) {
+  const text = String(error || "")
+  if (status === 429 || status >= 500) return true
+  return /queue_at_capacity|free music queue is full|queue is full|hours? of jobs ahead|too many requests|rate.?limit|temporar|timeout|network/i.test(text)
+}
+
+function deferredRetryDelayMs(attempt: number) {
+  const base = Math.max(10_000, Number(process.env.MUSIC_FREE_QUEUE_RETRY_BASE_MS || 20_000))
+  return Math.min(90_000, base * Math.max(1, Math.min(4, attempt)))
+}
+
+async function createDeferredMusicJob(input: DeferredMusicInput, error: string) {
+  const requestId = `${DEFERRED_MUSIC_PREFIX}${crypto.randomUUID()}`
+  const now = Date.now()
+  const job: DeferredMusicJob = {
+    requestId,
+    createdAt: now,
+    updatedAt: now,
+    nextRetryAt: now + deferredRetryDelayMs(1),
+    attempts: 0,
+    lastError: String(error || "Free.ai queue is busy"),
+    input,
+  }
+  await saveDeferredMusicJob(job)
+  return {
+    ok: true as const,
+    requestId,
+    provider: "Free.ai" as const,
+    model: "ACE-Step",
+    status: "queued" as const,
+    deferred: true as const,
+  }
 }
 
 function orderedKeys(requestId?: string) {
@@ -173,12 +261,12 @@ function freeAiNativeId(requestId: string) {
 }
 
 export function musicModel(requestId?: string) {
-  if (isFreeAiRequest(requestId) || (!requestId && freeAiKey())) return "ACE-Step"
+  if (isDeferredMusicRequest(requestId) || isFreeAiRequest(requestId) || (!requestId && freeAiKey())) return "ACE-Step"
   return String(process.env.DEAPI_MUSIC_MODEL || "").trim() || "AceStep_1_5_XL_Turbo_INT8"
 }
 
 export function musicProviderName(requestId?: string) {
-  if (isFreeAiRequest(requestId) || (!requestId && freeAiKey())) return "Free.ai"
+  if (isDeferredMusicRequest(requestId) || isFreeAiRequest(requestId) || (!requestId && freeAiKey())) return "Free.ai"
   return "deAPI"
 }
 
@@ -486,6 +574,13 @@ export async function submitDeapiMusic(input: {
     const fallback = await submitDeapiFallback(input)
     if (fallback.ok) return fallback
 
+    // A saturated public queue is temporary, not a failed generation. Keep a
+    // Malik-owned deferred job and retry Free.ai from the normal status poll
+    // instead of forcing the user to repeatedly press Generate.
+    if (freeFailure && retryableFreeAiFailure(freeFailure.status, freeFailure.error)) {
+      return createDeferredMusicJob(input, `Free.ai: ${freeFailure.error}; deAPI fallback: ${fallback.error}`)
+    }
+
     return {
       ok: false as const,
       status: fallback.status || freeFailure?.status || 502,
@@ -496,6 +591,9 @@ export async function submitDeapiMusic(input: {
   }
 
   if (freeFailure) {
+    if (retryableFreeAiFailure(freeFailure.status, freeFailure.error)) {
+      return createDeferredMusicJob(input, freeFailure.error)
+    }
     return { ok: false as const, status: freeFailure.status, error: freeFailure.error }
   }
 
@@ -566,7 +664,109 @@ async function getDeapiFallbackJob(requestId: string) {
   return { ok: false as const, statusCode: lastStatus, status: "failed" as const, error: lastError, provider: "deAPI" as const, model: musicModel(requestId) }
 }
 
+async function getDeferredMusicJob(requestId: string) {
+  const job = await readDeferredMusicJob(requestId)
+  if (!job) {
+    return {
+      ok: false as const,
+      statusCode: 404,
+      status: "failed" as const,
+      error: "Deferred music job was not found.",
+      provider: "Free.ai" as const,
+      model: "ACE-Step",
+    }
+  }
+
+  if (job.directResultUrl) {
+    return {
+      ok: true as const,
+      statusCode: 200,
+      status: "done" as const,
+      resultUrl: job.directResultUrl,
+      progress: 100,
+      provider: "Free.ai" as const,
+      model: "ACE-Step",
+    }
+  }
+
+  if (job.providerRequestId) {
+    return getFreeAiMusicJob(job.providerRequestId)
+  }
+
+  const now = Date.now()
+  const maxWaitMs = Math.max(30 * 60_000, Number(process.env.MUSIC_FREE_QUEUE_MAX_WAIT_MS || 6 * 60 * 60_000))
+  if (now - job.createdAt > maxWaitMs) {
+    return {
+      ok: false as const,
+      statusCode: 503,
+      status: "failed" as const,
+      error: "Free.ai не освободил слот за время ожидания. Запустите генерацию ещё раз позже.",
+      provider: "Free.ai" as const,
+      model: "ACE-Step",
+    }
+  }
+
+  if (now < job.nextRetryAt) {
+    return {
+      ok: true as const,
+      statusCode: 200,
+      status: "queued" as const,
+      progress: Math.min(8, Math.max(1, job.attempts + 1)),
+      provider: "Free.ai" as const,
+      model: "ACE-Step",
+    }
+  }
+
+  const submitted = await submitFreeAiMusic(job.input)
+  if (submitted.ok) {
+    job.providerRequestId = submitted.requestId
+    job.directResultUrl = submitted.resultUrl
+    job.updatedAt = now
+    job.nextRetryAt = 0
+    job.lastError = ""
+    await saveDeferredMusicJob(job)
+    if (submitted.resultUrl) {
+      return {
+        ok: true as const,
+        statusCode: 200,
+        status: "done" as const,
+        resultUrl: submitted.resultUrl,
+        progress: 100,
+        provider: "Free.ai" as const,
+        model: "ACE-Step",
+      }
+    }
+    return getFreeAiMusicJob(submitted.requestId)
+  }
+
+  if (!retryableFreeAiFailure(submitted.status, submitted.error)) {
+    return {
+      ok: false as const,
+      statusCode: submitted.status || 502,
+      status: "failed" as const,
+      error: submitted.error,
+      provider: "Free.ai" as const,
+      model: "ACE-Step",
+    }
+  }
+
+  job.attempts += 1
+  job.updatedAt = now
+  job.lastError = submitted.error
+  job.nextRetryAt = now + deferredRetryDelayMs(job.attempts + 1)
+  await saveDeferredMusicJob(job)
+  return {
+    ok: true as const,
+    statusCode: 200,
+    status: "queued" as const,
+    progress: Math.min(12, Math.max(1, job.attempts + 1)),
+    provider: "Free.ai" as const,
+    model: "ACE-Step",
+  }
+}
+
 export async function getDeapiMusicJob(requestId: string) {
+  if (isDeferredMusicRequest(requestId)) return getDeferredMusicJob(requestId)
   if (isFreeAiRequest(requestId)) return getFreeAiMusicJob(requestId)
   return getDeapiFallbackJob(requestId)
 }
