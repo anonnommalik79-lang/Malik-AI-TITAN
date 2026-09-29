@@ -245,7 +245,7 @@ export function analyzeMalikBrainV1(input: AnalyzeBrainInput): MalikBrainProfile
   let depth: MalikBrainDepth = forcedDepth || "balanced"
   if (!forcedDepth) {
     if (task === "casual") depth = "instant"
-    else if (complexityScore >= 9) depth = "ultra"
+    else if (complexityScore >= 8) depth = "ultra"
     else if (complexityScore >= 5 || task === "project" || task === "research" || task === "debug") depth = "deep"
     else depth = "balanced"
   } else if (forcedDepth === "instant" && task !== "casual") {
