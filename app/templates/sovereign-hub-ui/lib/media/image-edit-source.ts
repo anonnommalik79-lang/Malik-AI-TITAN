@@ -12,7 +12,7 @@ export function imageAttachments(body: { attachments?: unknown }) {
     : []
 }
 
-export async function prepareImageEditSource(body: { attachments?: unknown }): Promise<NonNullable<ImageGenerateInput["editSource"]>> {
+export async function prepareImageEditSource(body: { attachments?: unknown; aspectRatio?: unknown }): Promise<NonNullable<ImageGenerateInput["editSource"]>> {
   const files = imageAttachments(body)
   if (files.length !== 1) throw new RequestSafetyError(
     files.length ? "Для редактирования прикрепите одно исходное фото." : "Прикрепите фото, которое нужно изменить.",
@@ -49,7 +49,12 @@ export async function prepareImageEditSource(body: { attachments?: unknown }): P
     // preserve the whole uploaded frame and orientation, never crop it.
     const reference = await decoder.rotate().resize({ width: 512, height: 512, fit: "inside", withoutEnlargement: true }).png().toBuffer()
     const scale = 1024 / Math.max(width, height)
-    return { bytes: reference, mime: "image/png", width: Math.max(256, Math.round(width * scale / 16) * 16), height: Math.max(256, Math.round(height * scale / 16) * 16) }
+    const target = body.aspectRatio === "16:9" ? { width: 1344, height: 768 }
+      : body.aspectRatio === "9:16" ? { width: 768, height: 1344 }
+      : body.aspectRatio === "4:5" ? { width: 896, height: 1120 }
+      : body.aspectRatio === "4:3" ? { width: 1152, height: 864 }
+      : null
+    return { bytes: reference, mime: "image/png", width: target?.width ?? Math.max(256, Math.round(width * scale / 16) * 16), height: target?.height ?? Math.max(256, Math.round(height * scale / 16) * 16) }
   } catch {
     throw new RequestSafetyError("Не удалось прочитать фото. Используйте PNG, JPEG или WebP до 40 Мп с соотношением сторон не больше 4:1.", 400, "IMAGE_EDIT_INVALID")
   }

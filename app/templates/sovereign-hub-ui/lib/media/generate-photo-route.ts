@@ -148,7 +148,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   let editSource
   if (editing) {
     try {
-      editSource = await withMalikImageProcessingSlot(() => prepareImageEditSource(body))
+      editSource = await withMalikImageProcessingSlot(() => prepareImageEditSource({ ...body, aspectRatio }))
     } catch (error) {
       return Response.json({ ok: false, status: "failed", error: error instanceof RequestSafetyError ? error.code : "IMAGE_EDIT_INVALID",
         publicError: error instanceof RequestSafetyError ? error.message : "Не удалось прочитать исходное фото." },

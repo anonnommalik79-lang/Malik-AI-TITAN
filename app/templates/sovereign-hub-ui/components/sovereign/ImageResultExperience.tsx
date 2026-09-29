@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
-import { prefillPrompt } from "@/lib/malik-context"
 import { readMalikImageQuality } from "@/lib/media/image-client-settings"
 import { resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
+import { requestMalikImageEditor, type MalikImageEditorMode } from "@/lib/media/image-editor-events"
 import { MalikImageFullscreenEditor } from "./MalikImageFullscreenEditor"
 import {
   MALIK_IMAGE_HISTORY_EVENT,
@@ -101,25 +101,25 @@ function nextPrompt(action: ImageAction, sourcePrompt: string) {
   const prompt = stripImageCommand(sourcePrompt) || "сохрани главный объект и композицию исходного кадра"
 
   if (action === "variation") {
-    return `/image ${prompt}. Сделай новую премиальную вариацию: сохрани главный объект и идею, но улучши композицию, свет, глубину и мелкие детали. Без текста и водяных знаков.`
+    return `Сделай новую премиальную вариацию исходного изображения: сохрани главный объект и идею, но улучши композицию, свет, глубину и мелкие детали. Исходный замысел: ${prompt}. Без текста и водяных знаков.`
   }
   if (action === "enhance") {
-    return `/image ${prompt}. Ultra 2K master: максимальная реалистичность, точные микротекстуры, натуральные материалы, чистые края, корректные отражения, точная перспектива, профессиональный свет, высокий динамический диапазон, без артефактов.`
+    return `Улучши исходное изображение как Ultra 2K master: сохрани композицию и главный объект, усиль микротекстуры, натуральные материалы, чистые края и профессиональный свет. Исходный замысел: ${prompt}. Без артефактов.`
   }
   if (action === "detail") {
-    return `/image ${prompt}. Detail master: сохрани сцену, усили микродетали поверхностей, фактуру материалов, естественные края, реалистичные отражения, локальный контраст и резкость главного объекта. Без перешарпа, шума, текста и артефактов.`
+    return `Улучши детали исходного изображения: сохрани сцену, усили фактуры материалов, естественные края, реалистичные отражения, локальный контраст и резкость главного объекта. Исходный замысел: ${prompt}. Без перешарпа и артефактов.`
   }
   if (action === "remaster") {
-    return `/image ${prompt}. Remaster: пересобери этот замысел как финальный premium master, сохрани главный объект и смысл, исправь геометрию, перспективу, материалы, свет, глубину, мелкие дефекты и визуальные артефакты.`
+    return `Сделай remaster исходного изображения: сохрани главный объект и смысл, исправь геометрию, перспективу, материалы, свет, глубину и визуальные артефакты. Исходный замысел: ${prompt}.`
   }
   if (action === "cinematic") {
-    return `/image ${prompt}. Cinematic master: дорогая кино-композиция, реалистичная оптика, естественная глубина резкости, объёмный свет, film color grading, premium commercial photography, без текста и водяных знаков.`
+    return `Создай кинематографичную версию исходного изображения, сохранив главный объект: реалистичная оптика, естественная глубина резкости, объёмный свет и профессиональный film color grading. Исходный замысел: ${prompt}. Без текста и водяных знаков.`
   }
   if (action === "wide") {
-    return `/image ${prompt}. Пересобери сцену в формате 16:9, сохрани главный объект полностью в кадре, добавь естественное пространство по краям, premium composition, без текста.`
+    return `Пересобери исходную сцену в формате 16:9, сохрани главный объект полностью в кадре и естественное пространство по краям. Исходный замысел: ${prompt}. Без текста.`
   }
   if (action === "portrait") {
-    return `/image ${prompt}. Пересобери сцену в вертикальном формате 9:16, сохрани главный объект полностью в кадре, оптимизируй композицию под экран телефона, premium composition, без текста.`
+    return `Пересобери исходную сцену в вертикальном формате 9:16, сохрани главный объект полностью в кадре и оптимизируй композицию под экран телефона. Исходный замысел: ${prompt}. Без текста.`
   }
   return ""
 }
@@ -318,17 +318,15 @@ export function ImageResultExperience() {
 
       const prompt = nextPrompt(action, image.prompt)
       if (prompt) {
-        prefillPrompt(prompt)
-        const label: Record<string, string> = {
-          variation: "Вариация подготовлена",
-          enhance: "Ultra 2K подготовлен",
-          detail: "Detail+ подготовлен",
-          remaster: "Remaster подготовлен",
-          cinematic: "Cinema-версия подготовлена",
-          wide: "Формат 16:9 подготовлен",
-          portrait: "Формат 9:16 подготовлен",
-        }
-        setNotice(label[action] || "Новая версия подготовлена")
+        const started = requestMalikImageEditor({
+          sourceSrc: image.src,
+          sourcePrompt: image.prompt,
+          prompt,
+          mode: action as MalikImageEditorMode,
+          imageSize: action === "enhance" ? "2K" : "1K",
+          imageAspectRatio: action === "wide" ? "16:9" : action === "portrait" ? "9:16" : undefined,
+        })
+        setNotice(started ? "Редактирование исходного фото запущено" : "Не удалось запустить редактирование")
       }
     }
 
