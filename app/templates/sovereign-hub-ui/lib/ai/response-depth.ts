@@ -1,33 +1,96 @@
+import type { AIPlan } from "./types"
+
 export type ResponseDepth = "fast" | "deep" | "ultra"
 
-export function normalizeResponseDepth(value: unknown): ResponseDepth {
-  const normalized = String(value || "").toLowerCase()
-  if (normalized === "deep") return "deep"
-  if (normalized === "ultra" || normalized === "maximum" || normalized === "extra-high") return "ultra"
-  return "fast"
+export type ChatSendOptions = {
+  responseDepth?: ResponseDepth
+  research?: boolean
+  imageSize?: "1K" | "2K" | "4K"
+  imageAspectRatio?: "1:1" | "16:9" | "9:16" | "4:5" | "4:3"
+  imageStyle?: string
+  /** Client-only: edit a historical user turn by forking from this message. */
+  branchFromMessageId?: string
+  /** Client-only: this send came from the one-turn queue, so duplicate-burst protection must not swallow it. */
+  queueDispatch?: boolean
+  /**
+   * Regenerate this assistant answer in place: the previous text is kept as a
+   * version the reader can page back to, and no second question is added.
+   */
+  regenerateMessageId?: string
 }
 
-export function responseDepthInstruction(depth: ResponseDepth) {
+const STORAGE_KEY = "malik_response_depth"
+
+export function canUseUltra(plan: AIPlan = "free"): boolean {
+  return plan === "pro" || plan === "ultra" || plan === "owner"
+}
+
+export function loadResponseDepth(plan: AIPlan = "free"): ResponseDepth {
+  if (typeof window === "undefined") return "fast"
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved === "ultra" && canUseUltra(plan)) return "ultra"
+    if (saved === "deep") return "deep"
+    return "fast"
+  } catch {
+    return "fast"
+  }
+}
+
+export function saveResponseDepth(depth: ResponseDepth): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(STORAGE_KEY, depth)
+  } catch {
+    /* best effort */
+  }
+}
+
+export function responseDepthInstruction(depth: ResponseDepth): string {
   if (depth === "ultra") {
-    return [
-      "Use maximum useful reasoning depth for this answer.",
-      "Privately verify calculations, assumptions, code paths, edge cases and contradictions before finalizing.",
-      "For a multi-part prompt, keep a private acceptance checklist and do not finish until every requested section and exact output-format requirement is satisfied.",
-      "Prefer a complete correct answer over a short answer; avoid filler and never expose chain-of-thought.",
-    ].join(" ")
+    return `
+[MALIK_RESPONSE_DEPTH_ULTRA]
+Режим ULTRA (Pro/Max): максимальное качество для сложных задач.
+Сначала молча разбери задачу на слои и составь приватный чеклист всех явных требований, затем выдай production-ready результат.
+Для многочастных, нумерованных и rubric-style запросов: не пропускай ни один пункт; сохрани точные фразы, таблицы, лимиты, порядок секций и финальный формат.
+Не объявляй задачу завершённой, пока все требуемые секции и финальные маркеры реально не присутствуют в ответе.
+Для кода: полная архитектура, все файлы, типы, edge cases, тесты, безопасность, деплой-чеклист.
+Для проектов: стратегия, структура, риски, метрики, пошаговый план внедрения.
+Для СМИ: материал «под публикацию» без сокращений и без выдуманных фактов.
+Используй лучшие доступные модели — ответ должен быть на уровне senior-эксперта.
+`.trim()
   }
   if (depth === "deep") {
-    return [
-      "Reason carefully before answering and privately verify the result.",
-      "For numbered, bulleted or rubric-style requests, satisfy every explicit requirement and preserve the requested final format.",
-      "Be complete where the task is complex, but do not expose hidden chain-of-thought.",
-    ].join(" ")
+    return `
+[MALIK_RESPONSE_DEPTH_DEEP]
+Режим глубокого мышления: сначала молча разбери задачу и проверь все явные требования, затем дай развёрнутый ответ.
+Для нумерованных, многочастных и rubric-style запросов: закрой каждый пункт и сохрани требуемый финальный формат.
+Для сложного кода: архитектура, файлы, edge cases, тесты, безопасность, пошаговая проверка.
+Для проектов: полный план, структура, риски, чеклист внедрения.
+Не сокращай ответ ради скорости — журналисты и инженеры должны получить готовый материал.
+`.trim()
   }
-  return "Answer quickly and directly, but never omit an explicit requested section, constraint, exact phrase, or final format merely to be brief."
+  return `
+[MALIK_RESPONSE_DEPTH_FAST]
+Режим быстрого ответа: сразу по делу, без длинных вступлений.
+Короткие абзацы, главное в начале. Для простых вопросов — 3–8 предложений.
+Скорость не разрешает пропускать явные пункты, ограничения, точные фразы или обязательный финальный формат сложного запроса.
+`.trim()
 }
 
-export function responseDepthLimits(depth: ResponseDepth) {
-  if (depth === "ultra") return { maxTokens: 16_000, temperature: 0.4, minAnswerChars: 600 }
-  if (depth === "deep") return { maxTokens: 8_000, temperature: 0.35, minAnswerChars: 250 }
-  return { maxTokens: 2_200, temperature: 0.3, minAnswerChars: 40 }
+export function responseDepthLimits(depth: ResponseDepth): { maxTokens: number; temperature: number; minAnswerChars: number } {
+  if (depth === "ultra") {
+    return { maxTokens: 16000, temperature: 0.4, minAnswerChars: 600 }
+  }
+  if (depth === "deep") {
+    return { maxTokens: 8000, temperature: 0.35, minAnswerChars: 250 }
+  }
+  return { maxTokens: 2200, temperature: 0.3, minAnswerChars: 40 }
+}
+
+/** Server-side: downgrade ultra if plan does not allow it. */
+export function resolveResponseDepth(depth: unknown, plan: AIPlan): ResponseDepth {
+  const wanted = depth === "ultra" ? "ultra" : depth === "deep" ? "deep" : "fast"
+  if (wanted === "ultra" && !canUseUltra(plan)) return "deep"
+  return wanted
 }
