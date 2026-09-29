@@ -623,7 +623,8 @@ export function structuredAnswerNeedsMore(prompt: string, content: string) {
       new RegExp(`(?:^|\\n)\\s*(?:#{1,6}\\s*)?(?:\\*\\*)?${value}[.)]\\s`, "mu").test(answer),
     )
     const hasLast = new RegExp(`(?:^|\\n)\\s*(?:#{1,6}\\s*)?(?:\\*\\*)?${last}[.)]\\s`, "mu").test(answer)
-    if (seen.length >= 2 && !hasLast) return true
+    const missing = uniqueNumbers.filter((value) => !seen.includes(value))
+    if (seen.length >= 2 && (missing.length > 0 || !hasLast)) return true
   }
 
   // Preserve an explicitly required final marker such as TEST COMPLETE.

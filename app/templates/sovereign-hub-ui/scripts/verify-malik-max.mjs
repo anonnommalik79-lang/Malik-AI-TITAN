@@ -281,7 +281,17 @@ await check("a structured stress-test answer is not considered finished before i
   ].join("\n")
   const partial = "1. ЛОГИКА\nготово\n\n2. ТЕКСТ\nготово\n\n3. КОД\nготово"
   assert.equal(engine.structuredAnswerNeedsMore(prompt, partial), true)
-  assert.equal(engine.structuredAnswerNeedsMore(prompt, `${partial}\n\n8. ФИНАЛ\nTEST COMPLETE`), false)
+  const complete = [
+    "1. ЛОГИКА", "готово",
+    "2. ТЕКСТ", "готово",
+    "3. КОД", "готово",
+    "4. DEBUG", "готово",
+    "5. АРХИТЕКТУРА", "готово",
+    "6. IMAGE", "готово",
+    "7. VISION", "готово",
+    "8. ФИНАЛ", "TEST COMPLETE",
+  ].join("\n")
+  assert.equal(engine.structuredAnswerNeedsMore(prompt, complete), false)
 })
 
 await check("the strongest Google models a key can call are chosen, newest and Pro first", () => {
