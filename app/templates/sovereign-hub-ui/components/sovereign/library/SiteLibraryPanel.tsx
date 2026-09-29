@@ -32,10 +32,12 @@ import { OverlayPortal } from "@/components/sovereign/OverlayPortal"
 export type SiteLibraryPanelProps = {
   /** Hands a style to the site generator, which is what stops this being a museum. */
   onUseStyle?: (prompt: string, template: LibraryTemplate) => void
+  onEditSavedSite?: (id: string) => void
 }
 
 type Sort = "popular" | "name" | "category"
 type ViewMode = "grid" | "list"
+type SavedSite = { id: string; title: string; prompt: string; html: string; createdAt: string }
 
 const SORTS: Array<[Sort, string]> = [
   ["popular", "Сначала популярные"],
@@ -45,6 +47,16 @@ const SORTS: Array<[Sort, string]> = [
 
 const FAVOURITES_KEY = "malik-library-favourites-v1"
 const VIEW_KEY = "malik-library-view-v1"
+const SITES_KEY = "malik-sites-v6"
+
+function readSavedSites(): SavedSite[] {
+  if (typeof window === "undefined") return []
+  try {
+    const stored: unknown = JSON.parse(window.localStorage.getItem(SITES_KEY) || "[]")
+    if (!Array.isArray(stored)) return []
+    return stored.filter((item): item is SavedSite => Boolean(item && typeof item === "object" && typeof item.id === "string" && typeof item.title === "string" && typeof item.html === "string" && /<html[\s>]/i.test(item.html))).slice(0, 24)
+  } catch { return [] }
+}
 
 function readFavourites(): number[] {
   if (typeof window === "undefined") return []
@@ -70,13 +82,17 @@ function tagsOf(template: LibraryTemplate) {
   return parts.filter(Boolean)
 }
 
-export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
+export function SiteLibraryPanel({ onUseStyle, onEditSavedSite }: SiteLibraryPanelProps) {
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<string>("Все")
   const [direction, setDirection] = useState<string>("Все")
   const [sort, setSort] = useState<Sort>("popular")
   const [view, setView] = useState<ViewMode>("grid")
   const [onlyFavourites, setOnlyFavourites] = useState(false)
+  const [showMine, setShowMine] = useState(false)
+  const [mySites, setMySites] = useState<SavedSite[]>([])
+  const [selectedSite, setSelectedSite] = useState<SavedSite | null>(null)
+  const [openedSite, setOpenedSite] = useState<SavedSite | null>(null)
   const [favourites, setFavourites] = useState<number[]>([])
   const [selected, setSelected] = useState<LibraryTemplate | null>(null)
   const [opened, setOpened] = useState<LibraryTemplate | null>(null)
@@ -89,10 +105,18 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
 
   useEffect(() => {
     setFavourites(readFavourites())
+    setMySites(readSavedSites())
     try {
       const storedView = window.localStorage.getItem(VIEW_KEY)
       if (storedView === "grid" || storedView === "list") setView(storedView)
     } catch {}
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => setMySites(readSavedSites())
+    window.addEventListener("storage", refresh)
+    window.addEventListener("malik-sites-updated", refresh)
+    return () => { window.removeEventListener("storage", refresh); window.removeEventListener("malik-sites-updated", refresh) }
   }, [])
 
   // One handler for both dropdowns: two separate outside-click listeners on the
@@ -151,6 +175,10 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
     if (sort === "category") sorted.sort((a, b) => a.category.localeCompare(b.category, "ru") || b.popularity - a.popularity)
     return sorted
   }, [query, category, direction, sort, onlyFavourites, favourites])
+  const shownMine = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("ru")
+    return mySites.filter((site) => !needle || `${site.title} ${site.prompt}`.toLocaleLowerCase("ru").includes(needle))
+  }, [mySites, query])
 
   // A hundred cards is too many to mount at once on a phone. They arrive a
   // screenful at a time as the person reaches the end of the list.
@@ -187,6 +215,15 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
     }
   }, [opened])
 
+  useEffect(() => {
+    if (!openedSite) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpenedSite(null) }
+    const previous = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    window.addEventListener("keydown", onKey)
+    return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", onKey) }
+  }, [openedSite])
+
   const origin = typeof window === "undefined" ? "" : window.location.origin
   const openedHtml = opened ? buildLibrarySite(opened, origin) : ""
 
@@ -209,6 +246,17 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
+  const downloadSaved = (site: SavedSite) => {
+    const url = URL.createObjectURL(new Blob([site.html], { type: "text/html" }))
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `${site.title.replace(/[^\p{L}\p{N}-]+/gu, "-").toLowerCase() || "malik-site"}.html`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+
   /** Copies the finished page, because there is no public URL to share. */
   const share = async (template: LibraryTemplate) => {
     const html = buildLibrarySite(template, origin)
@@ -222,6 +270,10 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
   }
 
   const surprise = () => {
+    if (showMine) {
+      if (shownMine.length) setSelectedSite(shownMine[Math.floor(Math.random() * shownMine.length)])
+      return
+    }
     const pool = shown.length ? shown : LIBRARY_TEMPLATES
     setSelected(pool[Math.floor(Math.random() * pool.length)])
   }
@@ -239,7 +291,7 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
         </label>
       </header>
 
-      <div className={`libBody${selected ? " has-detail" : ""}`}>
+      <div className={`libBody${selected || selectedSite ? " has-detail" : ""}`}>
         <div className="libMain">
           <section className="libIntro">
             <div>
@@ -252,20 +304,23 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
           </section>
 
           <nav className="libTabs" aria-label="Категории">
-            <button type="button" className={category === "Все" && !onlyFavourites ? "is-active" : ""} onClick={() => { setCategory("Все"); setOnlyFavourites(false) }}>
+            <button type="button" className={category === "Все" && !onlyFavourites && !showMine ? "is-active" : ""} onClick={() => { setCategory("Все"); setOnlyFavourites(false); setShowMine(false); setSelectedSite(null) }}>
               <Sparkles aria-hidden="true" /> Все
             </button>
-            <button type="button" className={onlyFavourites ? "is-active" : ""} onClick={() => setOnlyFavourites((current) => !current)} aria-pressed={onlyFavourites}>
+            <button type="button" className={showMine ? "is-active" : ""} onClick={() => { setShowMine(true); setSelected(null); setOnlyFavourites(false); setMySites(readSavedSites()) }}>
+              <Folder aria-hidden="true" /> Мои сайты{mySites.length ? ` · ${mySites.length}` : ""}
+            </button>
+            <button type="button" className={onlyFavourites && !showMine ? "is-active" : ""} onClick={() => { setShowMine(false); setSelectedSite(null); setOnlyFavourites((current) => !current) }} aria-pressed={onlyFavourites}>
               <Star aria-hidden="true" /> Избранное{favourites.length ? ` · ${favourites.length}` : ""}
             </button>
             {LIBRARY_CATEGORIES.map((item) => (
-              <button key={item} type="button" className={item === category && !onlyFavourites ? "is-active" : ""} onClick={() => { setCategory(item); setOnlyFavourites(false) }}>
+              <button key={item} type="button" className={item === category && !onlyFavourites && !showMine ? "is-active" : ""} onClick={() => { setCategory(item); setOnlyFavourites(false); setShowMine(false); setSelectedSite(null) }}>
                 <ImageIcon aria-hidden="true" /> {item}
               </button>
             ))}
           </nav>
 
-          <div className="libTools" ref={toolsRef}>
+          {!showMine && <div className="libTools" ref={toolsRef}>
             <label className="libFilterSearch">
               <Search aria-hidden="true" />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по библиотеке…" />
@@ -304,9 +359,18 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
               <button type="button" className={view === "grid" ? "is-on" : ""} onClick={() => chooseView("grid")} aria-label="Сеткой" aria-pressed={view === "grid"}><LayoutGrid /></button>
               <button type="button" className={view === "list" ? "is-on" : ""} onClick={() => chooseView("list")} aria-label="Списком" aria-pressed={view === "list"}><List /></button>
             </div>
-          </div>
+          </div>}
 
-          {shown.length === 0 ? (
+          {showMine ? (shownMine.length === 0 ? (
+            <p className="libEmpty">{mySites.length ? "Ничего не нашлось. Попробуйте другое слово." : "Сохранённых сайтов пока нет. Создайте сайт в разделе «Сайты» — он появится здесь в этом браузере."}</p>
+          ) : <section className={view === "grid" ? "libGrid" : "libList"}>
+            {shownMine.map((site) => <article key={site.id} className={`libCard${selectedSite?.id === site.id ? " is-selected" : ""}`}>
+              <button className="libShot" onClick={() => { setSelectedSite(site); setSelected(null) }} aria-label={`Показать ${site.title}`}>
+                <iframe className="libSiteThumb" title={`Предпросмотр ${site.title}`} srcDoc={site.html} sandbox="" loading="lazy" tabIndex={-1} aria-hidden="true" />
+              </button>
+              <div className="libCardFoot"><span className="libKind" aria-hidden="true"><Folder /></span><span className="libCardText"><b>{site.title}</b><small>Мой сайт · {new Date(site.createdAt).toLocaleDateString("ru-RU")}</small></span></div>
+            </article>)}
+          </section>) : shown.length === 0 ? (
             <p className="libEmpty">Ничего не нашлось. Попробуйте другое слово или снимите фильтр.</p>
           ) : (
             <section className={view === "grid" ? "libGrid" : "libList"}>
@@ -350,10 +414,18 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
             </section>
           )}
 
-          <div ref={sentinelRef} aria-hidden="true" />
-          {visible < shown.length && <p className="libMore">Показано {visible} из {shown.length} — прокрутите дальше</p>}
+          {!showMine && <div ref={sentinelRef} aria-hidden="true" />}
+          {!showMine && visible < shown.length && <p className="libMore">Показано {visible} из {shown.length} — прокрутите дальше</p>}
         </div>
 
+        {selectedSite && <aside className="libDetail" aria-label={`О сайте ${selectedSite.title}`}>
+          <div className="libDetailShot"><iframe className="libSiteThumb" title={`Предпросмотр ${selectedSite.title}`} srcDoc={selectedSite.html} sandbox="" /><button type="button" className="libDetailClose" onClick={() => setSelectedSite(null)} aria-label="Закрыть панель"><X /></button></div>
+          <div className="libDetailBody"><h2>{selectedSite.title}</h2><p className="libDetailMeta"><Folder aria-hidden="true" /> Мой сайт · сохранён в этом браузере</p><p className="libDetailText">{selectedSite.prompt}</p>
+            <button type="button" className="libPrimary is-wide" onClick={() => setOpenedSite(selectedSite)}><ExternalLink aria-hidden="true" /> Открыть</button>
+            {onEditSavedSite && <button type="button" className="libDetailWide" onClick={() => onEditSavedSite(selectedSite.id)}><Wand2 aria-hidden="true" /> Изменить в Сайтах</button>}
+            <button type="button" className="libDetailWide" onClick={() => downloadSaved(selectedSite)}><Download aria-hidden="true" /> Скачать HTML</button>
+          </div>
+        </aside>}
         {selected && (
           <aside className="libDetail" aria-label={`О шаблоне ${selected.name}`} style={{ ["--accent" as string]: accentOf(selected) }}>
             <div className="libDetailShot">
@@ -426,6 +498,11 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
         </OverlayPortal>
       )}
 
+      {openedSite && <OverlayPortal><div className="libViewer" role="dialog" aria-modal="true" aria-label={openedSite.title} onClick={() => setOpenedSite(null)}><div className="libViewerBox" onClick={(event) => event.stopPropagation()}>
+        <div className="libViewerHead"><div><b>{openedSite.title}</b><small>Мой сайт · сохранён в этом браузере</small></div><div className="libViewerActions"><button type="button" onClick={() => downloadSaved(openedSite)}><Download aria-hidden="true" /> Скачать HTML</button><button type="button" onClick={() => setOpenedSite(null)} aria-label="Закрыть"><X aria-hidden="true" /></button></div></div>
+        <iframe title={`Сайт ${openedSite.title}`} srcDoc={openedSite.html} sandbox="allow-scripts allow-forms allow-modals allow-popups" />
+      </div></div></OverlayPortal>}
+
       <LibraryCss />
     </main>
   )
@@ -433,6 +510,7 @@ export function SiteLibraryPanel({ onUseStyle }: SiteLibraryPanelProps) {
 
 function LibraryCss() {
   return <style jsx global>{`
+    .libSiteThumb{display:block;width:100%;height:100%;aspect-ratio:16/10;border:0;background:#08090a;pointer-events:none}.libDetailShot .libSiteThumb{min-height:205px}.libList .libSiteThumb{aspect-ratio:16/9}
     .malikLibrary{--lib-bg:#08090a;--lib-panel:#101113;--lib-panel-2:#17181b;--lib-line:rgba(255,255,255,.085);--lib-line-2:rgba(255,255,255,.14);--lib-text:#f3f4f5;--lib-dim:rgba(255,255,255,.56);--lib-dim-2:rgba(255,255,255,.36);width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;background:var(--lib-bg);color:var(--lib-text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
     .malikLibrary *{box-sizing:border-box}
     .malikLibrary button,.malikLibrary input{font:inherit}

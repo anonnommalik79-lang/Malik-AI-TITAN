@@ -7592,8 +7592,12 @@ const shouldShowMobilePreviewButton =
       // it is a hundred pictures nobody can do anything with.
       return (
         <SiteLibraryPanel
+          onEditSavedSite={(id) => {
+            try { window.sessionStorage.setItem("malik-site-open-id-v1", id) } catch {}
+            safeOpenView("website-generation", "template")
+          }}
           onUseStyle={(prompt) => {
-            prefillPrompt(prompt)
+            try { window.sessionStorage.setItem("malik-site-template-prompt-v1", prompt) } catch {}
             safeOpenView("website-generation", "template")
           }}
         />

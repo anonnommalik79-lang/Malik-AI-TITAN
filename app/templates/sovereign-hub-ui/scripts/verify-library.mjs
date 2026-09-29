@@ -7,11 +7,9 @@ import { createRequire } from "node:module"
  * The Library is a hundred finished websites, not a hundred pictures of them.
  *
  * The source pack shipped 100 standalone HTML files next to 100 previews.
- * Diffing them showed one template with eight substituted values, so shipping
- * all hundred would have been 680KB of near-identical markup that could never
- * be improved in one place. These checks hold the two things that makes true:
- * the builder really does produce a complete site, and every preview really
- * exists.
+ * The original source pack repeated one layout and one hero image. The
+ * catalogue keeps its existing UI, but the exported sites must have their own
+ * visual identity, content and working standalone interactions.
  */
 
 const require_ = createRequire(import.meta.url)
@@ -45,7 +43,7 @@ function check(name, fn) {
 const library = load("lib/library/site-library.ts")
 const panel = codeOf("components/sovereign/library/SiteLibraryPanel.tsx")
 
-console.log("\na hundred sites, from one template")
+console.log("\na hundred distinct site directions")
 
 check("all hundred templates are present and distinct", () => {
   const all = library.LIBRARY_TEMPLATES
@@ -95,6 +93,25 @@ check("each site carries its own identity, not the template's", () => {
   assert.ok(b.includes(library.LIBRARY_STYLES[second.category].accent))
 })
 
+check("site previews use their own image, not the same automotive hero", () => {
+  for (const template of library.LIBRARY_TEMPLATES) {
+    const site = library.buildLibrarySite(template, "https://malikaiworld.world")
+    assert.ok(site.includes(`<img class="bg" src="https://malikaiworld.world${template.preview}"`), `${template.name} uses another hero`)
+    assert.ok(site.includes(`<h1>${template.name.replace(/&/g, "&amp;")}</h1>`) || site.includes(`<h1>${template.name}</h1>`), `${template.name} has no own headline`)
+  }
+})
+
+check("layouts, industries and interactions are not identical", () => {
+  const sites = [1, 2, 3, 4, 9, 25, 50, 83].map((id) => library.buildLibrarySite(library.libraryTemplateById(id)))
+  assert.equal(new Set(sites.map((site) => /<body class="(v\d)"/.exec(site)?.[1])).size, 4)
+  assert.equal(new Set(sites.map((site) => /<div class="kicker">([^<]+)<\/div><h1>/.exec(site)?.[1])).size, 8)
+  for (const site of sites) {
+    assert.equal((site.match(/<details>/g) || []).length, 3, "FAQ must expand without a backend")
+    assert.match(site, /aria-expanded="false"/, "mobile navigation exposes its state")
+    assert.doesNotMatch(site, /Этот шаблон уже работает как отдельный адаптивный сайт/, "no generic template sales copy")
+  }
+})
+
 check("a name with a quote in it cannot break the page", () => {
   const site = library.buildLibrarySite({
     ...library.libraryTemplateById(1),
@@ -135,6 +152,9 @@ check("a style can be handed to the site generator", () => {
   const dashboard = codeOf("components/sovereign/dashboard.tsx")
   assert.match(dashboard, /<SiteLibraryPanel/)
   assert.match(dashboard, /safeOpenView\("website-generation", "template"\)/, "the hand-off must reach the generator")
+  assert.match(dashboard, /malik-site-template-prompt-v1/, "the style must reach the visible studio")
+  const studio = codeOf("components/sovereign/website-generation/WebsiteGenerationStudio.tsx")
+  assert.match(studio, /sessionStorage\.getItem\("malik-site-template-prompt-v1"\)/)
 })
 
 check("the site can be opened, and taken away", () => {
@@ -154,6 +174,29 @@ check("favourites survive a reload", () => {
   assert.match(panel, /localStorage\.getItem\(FAVOURITES_KEY/)
 })
 
+check("created sites also appear in the Library without changing its cards", () => {
+  const studio = codeOf("components/sovereign/website-generation/WebsiteGenerationStudio.tsx")
+  assert.match(studio, /malik-sites-updated/)
+  assert.match(panel, /malik-sites-v6/)
+  assert.match(panel, /Мои сайты/)
+  assert.match(panel, /srcDoc=\{site\.html\} sandbox=""/, "saved-site thumbnails must not run scripts")
+  assert.match(panel, /downloadSaved\(selectedSite\)/)
+  assert.match(panel, /onEditSavedSite\(selectedSite\.id\)/)
+  assert.match(studio, /malik-site-open-id-v1/)
+})
+
+check("website studio supports source-preserving revisions and export", () => {
+  const studio = codeOf("components/sovereign/website-generation/WebsiteGenerationStudio.tsx")
+  const route = codeOf("app/api/generate/website/route.ts")
+  const generateBody = studio.slice(studio.indexOf("async function generate("), studio.indexOf("const importHtml ="))
+  assert.match(studio, /previousHtml: html/)
+  assert.match(studio, /Отменить правку/)
+  assert.match(studio, /Скачать HTML/)
+  assert.doesNotMatch(generateBody, /setHtml\(""\)/, "a failed revision must not erase the current site")
+  assert.match(route, /REVISION_INSTRUCTION/)
+  assert.match(route, /htmlProblems\(html\)/)
+})
+
 console.log("\nthe photograph is the point on a phone")
 
 check("sites: the caption is asked for, not painted over every picture", () => {
@@ -162,7 +205,7 @@ check("sites: the caption is asked for, not painted over every picture", () => {
   // covered the bottom third of every photograph.
   assert.match(source, /matchMedia\("\(hover: none\)"\)/)
   assert.match(source, /is-open/)
-  const mobile = /@media\(max-width:720px\)\{([\s\S]*?)\n  `/.exec(source)?.[1] || source
+  const mobile = /@media\(max-width:720px\)\{([\s\S]*?)\n[ ]{2}`/.exec(source)?.[1] || source
   assert.doesNotMatch(mobile, /(templateShade|templateOverlay)\{opacity:1/,
     "the caption must not be forced visible on mobile")
 })
@@ -199,7 +242,7 @@ check("both galleries open a running site, not a photograph of one", () => {
 check("every category in the Сайты gallery can build a real site", () => {
   const sites = fs.readFileSync("components/sovereign/website-generation/WebsiteGenerationStudio.tsx", "utf8")
   const categories = new Set([...sites.matchAll(/\["[a-z0-9-]+", "[^"]+", "[^"]+", "([^"]+)",/g)].map((m) => m[1]))
-  const styled = new Set([...sites.matchAll(/^  "([^"]+)": \{ accent:/gm)].map((m) => m[1]))
+  const styled = new Set([...sites.matchAll(/^[ ]{2}"([^"]+)": \{ accent:/gm)].map((m) => m[1]))
   assert.ok(categories.size >= 10, `expected the gallery's categories, found ${categories.size}`)
   for (const category of categories) {
     assert.ok(styled.has(category), `${category} has no colour or voice, so its templates cannot open`)

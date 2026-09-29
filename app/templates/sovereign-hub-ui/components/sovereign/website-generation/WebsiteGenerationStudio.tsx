@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
-import { ArrowLeft, Code2, ExternalLink, Globe2, Loader2, Plus, Search, Trash2, Upload } from "lucide-react"
+import { ArrowLeft, Code2, Download, ExternalLink, Globe2, Loader2, Plus, RotateCcw, Search, Trash2, Upload } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { buildTemplateSite } from "@/lib/library/site-library"
 import { OverlayPortal } from "@/components/sovereign/OverlayPortal"
@@ -14,7 +14,7 @@ export type WebsiteGenerationStudioProps = {
   onNewChat?: () => void
 }
 
-type Site = { id: string; title: string; prompt: string; html: string; createdAt: string }
+type Site = { id: string; title: string; prompt: string; html: string; createdAt: string; previousVersions?: string[] }
 type Template = { id: string; title: string; subtitle: string; category: string; prompt: string; index: number }
 
 const ENDPOINT = "/api/generate/website"
@@ -153,6 +153,8 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
   const [builder, setBuilder] = useState(false)
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT)
   const [html, setHtml] = useState("")
+  const [siteId, setSiteId] = useState<string | null>(null)
+  const [editInstruction, setEditInstruction] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [zoomed, setZoomed] = useState<Template | null>(null)
@@ -196,15 +198,45 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
   }, [zoomed])
 
   useEffect(() => {
+    let storedSites: Site[] = []
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]")
-      if (Array.isArray(stored)) setSites(stored.slice(0, 24))
+      if (Array.isArray(stored)) {
+        storedSites = stored.filter((item): item is Site => Boolean(item && typeof item.id === "string" && typeof item.html === "string")).slice(0, 24)
+        setSites(storedSites)
+      }
+    } catch {}
+    try {
+      const savedId = window.sessionStorage.getItem("malik-site-open-id-v1")
+      if (savedId) {
+        window.sessionStorage.removeItem("malik-site-open-id-v1")
+        const saved = storedSites.find((site) => site.id === savedId)
+        if (saved) {
+          window.sessionStorage.removeItem("malik-site-template-prompt-v1")
+          setPrompt(saved.prompt)
+          setHtml(saved.html)
+          setSiteId(saved.id)
+          setBuilder(true)
+          return
+        }
+      }
+      const templatePrompt = window.sessionStorage.getItem("malik-site-template-prompt-v1")
+      if (templatePrompt) {
+        window.sessionStorage.removeItem("malik-site-template-prompt-v1")
+        setPrompt(templatePrompt)
+        setHtml("")
+        setSiteId(null)
+        setBuilder(true)
+      }
     } catch {}
   }, [])
 
   const saveSites = (next: Site[]) => {
     setSites(next)
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next.slice(0, 24))) } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next.slice(0, 24)))
+      window.dispatchEvent(new Event("malik-sites-updated"))
+    } catch { setError("Сайт создан, но память браузера заполнена. Скачайте HTML, чтобы не потерять работу.") }
   }
 
   const categories = useMemo(() => ["Все", ...Array.from(new Set(TEMPLATES.map((item) => item.category)))], [])
@@ -238,31 +270,47 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
-  const useTemplate = (template: Template) => {
+  const selectTemplate = (template: Template) => {
     setPrompt(template.prompt)
     setHtml("")
+    setSiteId(null)
+    setEditInstruction("")
     setError("")
     setBuilder(true)
   }
 
-  async function generate() {
-    if (!prompt.trim() || loading) return
+  async function generate(revise = false) {
+    const instruction = revise ? editInstruction.trim() : prompt.trim()
+    if (!instruction || loading || (revise && !html)) return
     setLoading(true)
     setError("")
-    setHtml("")
     try {
       const response = await clientFetchWithTimeout(ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt: instruction, ...(revise ? { previousHtml: html } : {}) }),
       }, 120000)
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(typeof data?.error === "string" ? data.error : `Ошибка генерации (${response.status})`)
       const output = normalizeHtml(typeof data?.html === "string" ? data.html : typeof data?.content === "string" ? data.content : "")
       if (!output) throw new Error("Генератор вернул пустой HTML")
       setHtml(output)
-      const site: Site = { id: crypto.randomUUID(), title: prompt.slice(0, 52) || "Новый сайт", prompt, html: output, createdAt: new Date().toISOString() }
-      saveSites([site, ...sites.filter((item) => item.html !== output)].slice(0, 24))
+      if (revise && siteId) {
+        const previous = sites.find((item) => item.id === siteId)
+        if (previous) {
+          saveSites(sites.map((item) => item.id === siteId ? {
+            ...item,
+            html: output,
+            previousVersions: [...(item.previousVersions || []), html].slice(-3),
+          } : item))
+        }
+        setEditInstruction("")
+      } else {
+        const id = crypto.randomUUID()
+        const site: Site = { id, title: prompt.slice(0, 52) || "Новый сайт", prompt, html: output, createdAt: new Date().toISOString() }
+        setSiteId(id)
+        saveSites([site, ...sites.filter((item) => item.html !== output)].slice(0, 24))
+      }
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "Ошибка генерации")
     } finally {
@@ -273,10 +321,24 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
   const importHtml = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
+    if (file.size > 300_000) {
+      setError("HTML-файл больше 300 КБ. Уменьшите его перед импортом.")
+      event.target.value = ""
+      return
+    }
     const output = await file.text()
+    if (!/<html[\s>]/i.test(output) || !/<body[\s>]/i.test(output)) {
+      setError("Выберите полноценный HTML-файл сайта")
+      event.target.value = ""
+      return
+    }
     setHtml(output)
-    setPrompt(`Импортированный сайт: ${file.name}`)
+    const importedPrompt = `Импортированный сайт: ${file.name}`
+    setPrompt(importedPrompt)
+    const id = crypto.randomUUID()
+    setSiteId(id)
     setError("")
+    saveSites([{ id, title: file.name, prompt: importedPrompt, html: output, createdAt: new Date().toISOString() }, ...sites].slice(0, 24))
     setBuilder(true)
     event.target.value = ""
   }
@@ -286,6 +348,27 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }))
     window.open(url, "_blank", "noopener,noreferrer")
     setTimeout(() => URL.revokeObjectURL(url), 60000)
+  }
+
+  const downloadHtml = () => {
+    if (!html) return
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }))
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `${siteId ? sites.find((site) => site.id === siteId)?.title.replace(/[^\p{L}\p{N}-]+/gu, "-").toLowerCase() || "malik-site" : "malik-site"}.html`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+
+  const undoRevision = () => {
+    const site = sites.find((item) => item.id === siteId)
+    if (!site?.previousVersions?.length) return
+    const previousVersions = [...site.previousVersions]
+    const restored = previousVersions.pop()!
+    setHtml(restored)
+    saveSites(sites.map((item) => item.id === siteId ? { ...item, html: restored, previousVersions } : item))
   }
 
   if (builder) {
@@ -305,6 +388,13 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
             {error && <p className="siteError">{error}</p>}
           </section>
 
+          {html && <section className="builderPanel">
+            <div className="stepTitle"><b>3</b><div><strong>Изменить готовый сайт</strong><small>Опишите только правку. Остальная страница сохранится; предыдущую версию можно вернуть.</small></div></div>
+            <textarea className="promptBox" value={editInstruction} onChange={(event) => setEditInstruction(event.target.value)} placeholder="Например: добавь раздел с ценами, а остальные блоки оставь без изменений…" />
+            <div className="builderActions"><button className="primaryButton" disabled={loading || !editInstruction.trim()} onClick={() => void generate(true)}>{loading ? <Loader2 className="spin" /> : <Globe2 />}{loading ? "Применяем…" : "Применить правку"}</button>
+              <button className="secondaryButton" disabled={!sites.find((site) => site.id === siteId)?.previousVersions?.length || loading} onClick={undoRevision}><RotateCcw /> Отменить правку</button></div>
+          </section>}
+
           <section className="builderPanel">
             <div className="stepTitle"><b>2</b><div><strong>Быстрые направления</strong><small>Те же премиальные макеты, что и в главной галерее.</small></div></div>
             <div className="quickGrid">
@@ -318,11 +408,12 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
           </section>
 
           <div className="builderActions">
-            <button className="primaryButton" disabled={loading || !prompt.trim()} onClick={generate}>{loading ? <Loader2 className="spin" /> : <Globe2 />}{loading ? "Генерация…" : "Сгенерировать сайт"}</button>
+            <button className="primaryButton" disabled={loading || !prompt.trim()} onClick={() => void generate(false)}>{loading ? <Loader2 className="spin" /> : <Globe2 />}{loading ? "Генерация…" : html ? "Сгенерировать заново" : "Сгенерировать сайт"}</button>
             <button className="secondaryButton" onClick={() => fileRef.current?.click()}><Upload /> Импорт HTML</button>
             <button className="secondaryButton" onClick={onOpenCodex}><Code2 /> Код</button>
             {onOpenCanvas && <button className="secondaryButton" disabled={!html} onClick={() => onOpenCanvas(html)}>Canvas</button>}
             <button className="secondaryButton" disabled={!html} onClick={openInNewTab}><ExternalLink /> Открыть</button>
+            <button className="secondaryButton" disabled={!html} onClick={downloadHtml}><Download /> Скачать HTML</button>
           </div>
 
           {html && <section className="livePreview"><div className="browserBar"><i /><i /><i /><span>Live preview</span></div><iframe title="Generated website" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" /></section>}
@@ -338,7 +429,7 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
       <div className="sitesWorkspace">
         <header className="galleryHero">
           <div><span>Malik AI · Website Studio</span><h1>Сайты</h1><p>30 премиальных широких макетов. Все превью локальные, одинакового размера и сразу ведут в рабочий генератор.</p></div>
-          <button className="primaryButton createButton" onClick={() => { setPrompt(DEFAULT_PROMPT); setHtml(""); setError(""); setBuilder(true) }}><Plus /> Создать сайт</button>
+          <button className="primaryButton createButton" onClick={() => { setPrompt(DEFAULT_PROMPT); setHtml(""); setSiteId(null); setEditInstruction(""); setError(""); setBuilder(true) }}><Plus /> Создать сайт</button>
         </header>
 
         <section className="galleryTools">
@@ -376,8 +467,8 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
               <span className="templateOverlay">
                 <b>{template.title}</b><small>{template.subtitle}</small><em>{template.category}</em>
                 <strong role="button" tabIndex={0}
-                  onClick={() => useTemplate(template)}
-                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); useTemplate(template) } }}
+                  onClick={() => selectTemplate(template)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectTemplate(template) } }}
                 >Использовать стиль</strong>
               </span>
             </article>
@@ -396,7 +487,7 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
                   <div className="shotLightboxActions">
                     <button className="secondaryButton" onClick={openTemplateInTab}>В новой вкладке</button>
                     <button className="secondaryButton" onClick={downloadTemplate}>Скачать HTML</button>
-                    <button className="primaryButton" onClick={() => { setZoomed(null); useTemplate(zoomed) }}>Использовать стиль</button>
+                    <button className="primaryButton" onClick={() => { setZoomed(null); selectTemplate(zoomed) }}>Использовать стиль</button>
                     <button className="secondaryButton" onClick={() => setZoomed(null)} aria-label="Закрыть">Закрыть ✕</button>
                   </div>
                 </div>
@@ -407,7 +498,7 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
           </OverlayPortal>
         )}
 
-        {sites.length > 0 && <section className="savedSites"><h2>Мои сайты</h2>{sites.map((site) => <div className="savedRow" key={site.id}><button onClick={() => { setPrompt(site.prompt); setHtml(site.html); setError(""); setBuilder(true) }}><b>{site.title}</b><small>{new Date(site.createdAt).toLocaleString("ru-RU")}</small></button><button className="deleteSite" aria-label="Удалить сайт" onClick={() => saveSites(sites.filter((item) => item.id !== site.id))}><Trash2 /></button></div>)}</section>}
+        {sites.length > 0 && <section className="savedSites"><h2>Мои сайты</h2>{sites.map((site) => <div className="savedRow" key={site.id}><button onClick={() => { setPrompt(site.prompt); setHtml(site.html); setSiteId(site.id); setEditInstruction(""); setError(""); setBuilder(true) }}><b>{site.title}</b><small>{new Date(site.createdAt).toLocaleString("ru-RU")}</small></button><button className="deleteSite" aria-label="Удалить сайт" onClick={() => saveSites(sites.filter((item) => item.id !== site.id))}><Trash2 /></button></div>)}</section>}
         <input ref={fileRef} hidden type="file" accept=".html,.htm,text/html" onChange={importHtml} />
       </div>
       <SitesCss />
