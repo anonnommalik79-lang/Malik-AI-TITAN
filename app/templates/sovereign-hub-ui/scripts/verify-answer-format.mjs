@@ -48,7 +48,7 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
   (name) => {
     if (name === "lucide-react") return lucide
     if (name === "@/lib/business/project-zip") return { downloadProjectZip() {} }
-    if (name === "@/lib/canvas-preview") return { buildCanvasSrcDoc: (code) => code, createCanvasBlobUrl: () => "blob:test" }
+    if (name === "@/lib/canvas-preview") return { buildCanvasSrcDoc: (code) => code, buildCanvasProjectSrcDoc: (files, filename) => files.find((file) => file.name === filename)?.content || "", createCanvasBlobUrl: () => "blob:test" }
     if (name === "./malik-tex") return texBox.exports
     throw new Error(`unexpected require(${name})`)
   }, box, box.exports, React,

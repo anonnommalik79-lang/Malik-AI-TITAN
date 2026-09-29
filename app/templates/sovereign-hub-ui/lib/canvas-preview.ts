@@ -71,6 +71,57 @@ export function buildCanvasSrcDoc(rawInput: string) {
   return wrapHtmlFragment(code, tailwind)
 }
 
+type PreviewFile = { name: string; content: string }
+
+function localPreviewPath(value: string) {
+  const path = String(value || "").split(/[?#]/, 1)[0].replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\//, "")
+  if (!path || /^(?:https?:|data:|blob:|\/\/)/i.test(value) || path.split("/").includes("..")) return ""
+  return path.toLowerCase()
+}
+
+/** Preview the model's actual HTML/CSS/JS files together, without uploading code. */
+export function buildCanvasProjectSrcDoc(files: PreviewFile[], htmlFilename: string) {
+  const htmlFile = files.find((file) => localPreviewPath(file.name) === localPreviewPath(htmlFilename))
+  if (!htmlFile) return ""
+  const byPath = new Map(files.map((file) => [localPreviewPath(file.name), file.content]))
+  const used = new Set<string>()
+  let doc = buildCanvasSrcDoc(htmlFile.content)
+  const assetPath = (reference: string) => {
+    const path = localPreviewPath(reference)
+    if (!path || byPath.has(path)) return path
+    const directory = localPreviewPath(htmlFilename).split("/").slice(0, -1).join("/")
+    const relative = directory ? `${directory}/${path}` : path
+    return byPath.has(relative) ? relative : path
+  }
+
+  doc = doc.replace(/<link\b[^>]*>/gi, (tag) => {
+    const href = /\bhref\s*=\s*(["'])(.*?)\1/i.exec(tag)?.[2] || ""
+    const path = assetPath(href)
+    const content = path.endsWith(".css") ? byPath.get(path) : undefined
+    if (content === undefined) return tag
+    used.add(path)
+    return `<style>${content.replace(/<\/style/gi, "<\\/style")}</style>`
+  })
+  doc = doc.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, (tag) => {
+    const src = /\bsrc\s*=\s*(["'])(.*?)\1/i.exec(tag)?.[2] || ""
+    const path = assetPath(src)
+    const content = /\.(?:js|mjs)$/.test(path) ? byPath.get(path) : undefined
+    if (content === undefined) return tag
+    used.add(path)
+    return `<script>${content.replace(/<\/script/gi, "<\\/script")}</script>`
+  })
+
+  // Models sometimes return HTML, CSS and JS as separate fenced files but
+  // forget their link/script tags. Wire only the unambiguous single-file case.
+  const css = files.filter((file) => /\.css$/i.test(file.name) && !used.has(localPreviewPath(file.name)))
+  if (css.length === 1) doc = doc.replace(/<\/head>/i, `<style>${css[0].content.replace(/<\/style/gi, "<\\/style")}</style></head>`)
+  const js = files.filter((file) => /\.(?:js|mjs)$/i.test(file.name) && !used.has(localPreviewPath(file.name)))
+  if (js.length === 1 && !/^\s*(?:import|export)\b/m.test(js[0].content)) {
+    doc = doc.replace(/<\/body>/i, `<script>${js[0].content.replace(/<\/script/gi, "<\\/script")}</script></body>`)
+  }
+  return doc
+}
+
 export function createCanvasBlobUrl(srcDoc: string) {
   const blob = new Blob([srcDoc], { type: "text/html;charset=utf-8" })
   return URL.createObjectURL(blob)

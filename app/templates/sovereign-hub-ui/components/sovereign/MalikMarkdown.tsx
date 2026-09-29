@@ -3,7 +3,7 @@
 import { Fragment, useState, type ReactNode } from "react"
 import { Archive, Check, Copy, Download, ExternalLink, Eye, RefreshCw } from "lucide-react"
 import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
-import { buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
+import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
 
 /**
@@ -501,12 +501,16 @@ function isPreviewableCode(language: string, code: string) {
   return /<!doctype html|<(?:html|body|main|section|div|svg|canvas)[\s>]|export\s+default\s+(?:function|class)|\breturn\s*\(\s*</i.test(code)
 }
 
-function CodeBlock({ language, filename, code }: { language: string; filename: string; code: string }) {
+function CodeBlock({ language, filename, code, previewFiles }: { language: string; filename: string; code: string; previewFiles: ProjectZipFile[] }) {
   const [copied, setCopied] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewKey, setPreviewKey] = useState(0)
   const previewable = isPreviewableCode(language, code)
-  const previewSrcDoc = previewable ? buildCanvasSrcDoc(code) : ""
+  const previewSrcDoc = previewable
+    ? /\.html?$/i.test(filename) && previewFiles.length > 1
+      ? buildCanvasProjectSrcDoc(previewFiles, filename)
+      : buildCanvasSrcDoc(code)
+    : ""
   const lineCount = Math.max(1, code.split("\n").length)
 
   const copy = async () => {
@@ -588,8 +592,8 @@ function CodeBlock({ language, filename, code }: { language: string; filename: s
           </div>
           <div className="malik-md-live-preview__report" role="status">
             <span className="malik-md-live-preview__report-label">ОТЧЁТ</span>
-            <strong>Готово</strong>
-            <span>{lineCount} строк · изолированный sandbox · результат показан прямо в Malik AI</span>
+            <strong>Предпросмотр</strong>
+            <span>{lineCount} строк · изолированный sandbox · работу кода проверьте в окне выше</span>
           </div>
         </section>
       ) : null}
@@ -639,7 +643,7 @@ export function MalikMarkdown({ text, className }: Props) {
         const key = `b${position}`
 
         if (block.kind === "code") {
-          return <CodeBlock key={key} language={block.language} filename={block.filename} code={block.lines.join("\n")} />
+          return <CodeBlock key={key} language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} />
         }
 
         if (block.kind === "table") {
