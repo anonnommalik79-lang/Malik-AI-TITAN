@@ -265,6 +265,25 @@ await check("continuations do not repeat the end of the answer", () => {
   assert.equal(engine.trimOverlap("abc", "def"), "def")
 })
 
+await check("a structured stress-test answer is not considered finished before its last required section", () => {
+  const prompt = [
+    "Выполни все пункты.",
+    "1. ЛОГИКА",
+    "2. ТЕКСТ",
+    "3. КОД",
+    "4. DEBUG",
+    "5. АРХИТЕКТУРА",
+    "6. IMAGE",
+    "7. VISION",
+    "8. ФИНАЛ",
+    "В самом конце выведи:",
+    "TEST COMPLETE",
+  ].join("\n")
+  const partial = "1. ЛОГИКА\nготово\n\n2. ТЕКСТ\nготово\n\n3. КОД\nготово"
+  assert.equal(engine.structuredAnswerNeedsMore(prompt, partial), true)
+  assert.equal(engine.structuredAnswerNeedsMore(prompt, `${partial}\n\n8. ФИНАЛ\nTEST COMPLETE`), false)
+})
+
 await check("the strongest Google models a key can call are chosen, newest and Pro first", () => {
   const picked = engine.strongestGoogleModels([
     "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3-pro-preview", "gemini-3-flash-preview",

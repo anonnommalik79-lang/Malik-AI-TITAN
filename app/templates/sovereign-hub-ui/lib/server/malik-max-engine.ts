@@ -604,6 +604,37 @@ function truncatedFinish(reason?: string) {
   return /^(?:length|max_tokens|MAX_TOKENS)$/.test(String(reason || ""))
 }
 
+export function structuredAnswerNeedsMore(prompt: string, content: string) {
+  const request = String(prompt || "")
+  const answer = String(content || "").trim()
+  if (!request || !answer) return false
+
+  // An unfinished Markdown/code fence is always a strong sign that the visible
+  // answer ended before the deliverable did, even when the provider said "stop".
+  if ((answer.match(/```/g) || []).length % 2 === 1) return true
+
+  const numbered = [...request.matchAll(/^\s*(\d{1,2})[.)]\s+\S.*$/gmu)]
+    .map((match) => Number(match[1]))
+    .filter((value) => Number.isFinite(value))
+  const uniqueNumbers = [...new Set(numbered)]
+  if (uniqueNumbers.length >= 4) {
+    const last = Math.max(...uniqueNumbers)
+    const seen = uniqueNumbers.filter((value) =>
+      new RegExp(`(?:^|\\n)\\s*(?:#{1,6}\\s*)?(?:\\*\\*)?${value}[.)]\\s`, "mu").test(answer),
+    )
+    const hasLast = new RegExp(`(?:^|\\n)\\s*(?:#{1,6}\\s*)?(?:\\*\\*)?${last}[.)]\\s`, "mu").test(answer)
+    if (seen.length >= 2 && !hasLast) return true
+  }
+
+  // Preserve an explicitly required final marker such as TEST COMPLETE.
+  const marker = request.match(
+    /(?:в\s+(?:самом\s+)?конце\s+(?:выведи|напиши)|(?:finish|end)\s+with)\s*:?\s*\n+\s*([^\n]{2,120})/iu,
+  )?.[1]?.trim()
+  if (marker && !answer.includes(marker)) return true
+
+  return false
+}
+
 /** The continuation must not repeat the end of what was already written. */
 export function trimOverlap(previous: string, next: string) {
   const limit = Math.min(240, previous.length, next.length)
@@ -1088,7 +1119,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
 
   // The caller has already fitted the budget to the task and the account's
   // daily allowance.
-  const budget = Math.max(256, Math.min(Number(input.maxTokens) || (codeMode ? 12_000 : 6_000), codeMode ? 48_000 : 32_000))
+  const budget = Math.max(256, Math.min(Number(input.maxTokens) || (codeMode ? 16_000 : 8_000), codeMode ? 48_000 : 32_000))
   const perCall = (spent: number) => Math.max(256, Math.min(fastMode ? 1_500 : 16_000, budget - spent + 200))
   const timing = fastMode
     ? { hedgeMs: 3_500, firstTokenMs: 30_000, firstDeadlineMs: 60_000, idleMs: 45_000 }
@@ -1134,10 +1165,18 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     const spent = estimateTokens(content)
     const cutShort = truncatedFinish(result.finishReason) && spent < budget - 150
     const codeOpen = codeMode && codeAnswerNeedsMore(content, input.prompt)
-    if (!result.interrupted && !cutShort && !codeOpen) break
+    const structuredOpen = !codeMode && spent < budget - 256 && structuredAnswerNeedsMore(input.prompt, content)
+    if (!result.interrupted && !cutShort && !codeOpen && !structuredOpen) break
     if (Date.now() - started > totalMs) break
     if (input.signal?.aborted) throw abortError()
-    console.info("[MALIK_MAX] continue", JSON.stringify({ round: round + 1, interrupted: result.interrupted, finishReason: result.finishReason, spent, budget }))
+    console.info("[MALIK_MAX] continue", JSON.stringify({
+      round: round + 1,
+      interrupted: result.interrupted,
+      finishReason: result.finishReason,
+      structuredOpen,
+      spent,
+      budget,
+    }))
     const order = result.interrupted
       ? lanes.filter((lane) => lane.id !== result.lane.id)
       : [result.lane, ...lanes.filter((lane) => lane.id !== result.lane.id)]

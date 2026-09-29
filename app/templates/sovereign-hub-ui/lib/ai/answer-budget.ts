@@ -1,19 +1,25 @@
-/**
- * How long an answer may be. The chat's depth setting asks for a size, the
- * brain knows what the task needs, and the user may say it outright ("на
- * 4000 токенов", "2000 слов"). The largest of those wins, but never more
- * than the account's remaining daily allowance (maxTokensCap).
- */
 export function answerBudget(body: any, prompt: string, taskTarget: number) {
   const requested = Number(body?.maxTokens) || 0
-  const asked = (() => {
-    const tokens = String(prompt || "").match(/(\d[\d\s.,]{1,7})\s*(?:токен|tokens?\b)/iu)
-    if (tokens) return Math.round(Number(tokens[1].replace(/[\s.,]/g, "")) * 1.15)
-    const words = String(prompt || "").match(/(\d[\d\s.,]{1,7})\s*(?:слов|words?\b)/iu)
-    if (words) return Math.round(Number(words[1].replace(/[\s.,]/g, "")) * 1.8)
-    return 0
-  })()
-  const wanted = Math.max(requested, taskTarget, Math.min(asked, 32_000))
+  const tokenMatch = prompt.match(/(?:на|about|around|approximately|примерно)\s+(\d{3,6})\s*(?:токен|tokens?)/i)
+  const wordMatch = prompt.match(/(?:на|about|around|approximately|примерно)\s+(\d{3,6})\s*(?:слов|words?)/i)
+  const asked = tokenMatch
+    ? Math.ceil(Number(tokenMatch[1]) * 1.15)
+    : wordMatch
+      ? Math.ceil(Number(wordMatch[1]) * 1.8)
+      : 0
+
+  const lines = String(prompt || "").split(/\r?\n/)
+  const requirementCount = lines.filter((line) => /^\s*(?:\d{1,2}[.)]|[-*•])\s+\S/u.test(line)).length
+  const strictContract = /(не пропускай|кажд(?:ый|ую|ое)|строго|в самом конце|в конце выведи|таблиц|exact|every requirement|do not skip|finish with|end with|output format)/iu.test(prompt)
+  const structuredFloor = prompt.length >= 18_000 || requirementCount >= 12
+    ? 14_000
+    : prompt.length >= 6_000 || requirementCount >= 8
+      ? 10_000
+      : prompt.length >= 2_000 || requirementCount >= 5 || strictContract
+        ? 7_000
+        : 0
+
+  const wanted = Math.max(requested, taskTarget, structuredFloor, Math.min(asked, 32_000))
   const cap = Number(body?.maxTokensCap)
   return Number.isFinite(cap) && cap > 0 ? Math.min(wanted, Math.floor(cap)) : wanted
 }
