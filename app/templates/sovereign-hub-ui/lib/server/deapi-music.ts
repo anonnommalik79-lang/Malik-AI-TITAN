@@ -37,6 +37,14 @@ const FREE_AI_PREFIX = "freeai:"
 const FREE_AI_DIRECT_PREFIX = "freeai-direct:"
 const DEFERRED_MUSIC_PREFIX = "malik-music-wait:"
 
+// The music queue must stay essentially free on small Render instances.
+// Durable jobs live in object storage. If storage is unavailable, the entire
+// in-process deferred queue is capped at 128 KiB serialized, which leaves
+// substantial headroom below the requested 1 MiB ceiling for JS Map/object
+// overhead as well.
+const DEFERRED_MUSIC_MEMORY_BUDGET_BYTES = 128 * 1024
+const MUSIC_RUNTIME_MAP_MAX_ENTRIES = 64
+
 function deapiKeys(): KeySource[] {
   const candidates: KeySource[] = [
     { key: String(process.env.DEAPI_API_KEY_PRIMARY || "").trim(), label: "primary" },
@@ -60,15 +68,25 @@ function freeAiKey() {
   ).trim()
 }
 
+function trimMapToLimit<K, V>(map: Map<K, V>, maxEntries = MUSIC_RUNTIME_MAP_MAX_ENTRIES) {
+  while (map.size > maxEntries) {
+    const oldest = map.keys().next()
+    if (oldest.done) break
+    map.delete(oldest.value)
+  }
+}
+
 function jobMap() {
   const scope = globalThis as MusicJobGlobal
   if (!scope.__malikMusicJobKeyLabel) scope.__malikMusicJobKeyLabel = new Map()
+  trimMapToLimit(scope.__malikMusicJobKeyLabel)
   return scope.__malikMusicJobKeyLabel
 }
 
 function freeAiDirectMap() {
   const scope = globalThis as MusicJobGlobal
   if (!scope.__malikFreeAiDirectMusic) scope.__malikFreeAiDirectMusic = new Map()
+  trimMapToLimit(scope.__malikFreeAiDirectMusic)
   return scope.__malikFreeAiDirectMusic
 }
 
@@ -76,6 +94,40 @@ function deferredMusicMap() {
   const scope = globalThis as MusicJobGlobal
   if (!scope.__malikDeferredMusicJobs) scope.__malikDeferredMusicJobs = new Map()
   return scope.__malikDeferredMusicJobs
+}
+
+function deferredJobBytes(job: DeferredMusicJob) {
+  try {
+    return Buffer.byteLength(JSON.stringify(job), "utf8")
+  } catch {
+    return DEFERRED_MUSIC_MEMORY_BUDGET_BYTES
+  }
+}
+
+function deferredMemoryBytes(map = deferredMusicMap()) {
+  let total = 0
+  for (const job of map.values()) total += deferredJobBytes(job)
+  return total
+}
+
+function storeDeferredInBoundedMemory(job: DeferredMusicJob) {
+  const map = deferredMusicMap()
+  // Refresh insertion order so the least-recently-updated jobs are evicted first.
+  map.delete(job.requestId)
+  map.set(job.requestId, job)
+  while (map.size > 1 && deferredMemoryBytes(map) > DEFERRED_MUSIC_MEMORY_BUDGET_BYTES) {
+    const oldest = map.keys().next()
+    if (oldest.done) break
+    map.delete(oldest.value)
+  }
+  // A single accepted request is bounded by the API prompt/lyrics limits and
+  // should normally be far smaller than 128 KiB. Refuse to retain an abnormal
+  // object rather than violate the memory ceiling.
+  if (deferredMemoryBytes(map) > DEFERRED_MUSIC_MEMORY_BUDGET_BYTES) {
+    map.delete(job.requestId)
+    return false
+  }
+  return true
 }
 
 function isDeferredMusicRequest(requestId?: string) {
@@ -93,14 +145,22 @@ async function readDeferredMusicJob(requestId: string) {
   const memory = deferredMusicMap().get(requestId)
   if (memory) return memory
   if (!privateJsonStoreConfigured()) return null
+
+  // Do not cache durable queue payloads in RAM. Read-on-demand keeps the
+  // persistent Render memory cost near zero when R2/S3 is configured.
   const stored = await readPrivateJson<DeferredMusicJob>(deferredStateKey(requestId))
-  if (stored?.requestId === requestId) deferredMusicMap().set(requestId, stored)
   return stored?.requestId === requestId ? stored : null
 }
 
 async function saveDeferredMusicJob(job: DeferredMusicJob) {
-  deferredMusicMap().set(job.requestId, job)
-  if (privateJsonStoreConfigured()) await writePrivateJson(deferredStateKey(job.requestId), job)
+  if (privateJsonStoreConfigured()) {
+    const durable = await writePrivateJson(deferredStateKey(job.requestId), job)
+    if (durable) {
+      deferredMusicMap().delete(job.requestId)
+      return true
+    }
+  }
+  return storeDeferredInBoundedMemory(job)
 }
 
 function retryableFreeAiFailure(status: number, error: string) {
@@ -123,10 +183,22 @@ async function createDeferredMusicJob(input: DeferredMusicInput, error: string) 
     updatedAt: now,
     nextRetryAt: now + deferredRetryDelayMs(1),
     attempts: 0,
-    lastError: String(error || "Free.ai queue is busy"),
-    input,
+    lastError: String(error || "Free.ai queue is busy").slice(0, 1000),
+    input: {
+      prompt: String(input.prompt || "").slice(0, 2000),
+      lyrics: input.lyrics ? String(input.lyrics).slice(0, 12000) : undefined,
+      instrumental: Boolean(input.instrumental),
+      duration: Math.max(10, Math.min(300, Math.floor(Number(input.duration) || 30))),
+    },
   }
-  await saveDeferredMusicJob(job)
+  const retained = await saveDeferredMusicJob(job)
+  if (!retained) {
+    return {
+      ok: false as const,
+      status: 503,
+      error: "Локальная музыкальная очередь достигла лимита памяти. Попробуйте позже.",
+    }
+  }
   return {
     ok: true as const,
     requestId,
@@ -333,7 +405,9 @@ async function submitFreeAiMusic(input: {
 
     if (resultUrl) {
       const requestId = `${FREE_AI_DIRECT_PREFIX}${crypto.randomUUID()}`
-      freeAiDirectMap().set(requestId, resultUrl)
+      const direct = freeAiDirectMap()
+      direct.set(requestId, resultUrl)
+      trimMapToLimit(direct)
       return {
         ok: true as const,
         requestId,
@@ -533,7 +607,9 @@ async function submitDeapiFallback(input: {
 
       const requestId = requestIdOf(json)
       if (response.ok && requestId) {
-        jobMap().set(requestId, source.label)
+        const keys = jobMap()
+        keys.set(requestId, source.label)
+        trimMapToLimit(keys)
         return {
           ok: true as const,
           requestId,
@@ -635,7 +711,9 @@ async function getDeapiFallbackJob(requestId: string) {
       const resultUrl = resultUrlOf(json)
       const progress = progressOf(json)
 
-      jobMap().set(requestId, source.label)
+      const keys = jobMap()
+      keys.set(requestId, source.label)
+      trimMapToLimit(keys)
 
       if (rawStatus === "done" && resultUrl) {
         return { ok: true as const, statusCode: 200, status: "done" as const, resultUrl, progress: 100, provider: "deAPI" as const, model: musicModel(requestId) }
