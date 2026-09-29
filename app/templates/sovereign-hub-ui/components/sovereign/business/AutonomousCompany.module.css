@@ -878,6 +878,7 @@
 .richList li { display: flex; gap: 9px; }
 .richList li::before { content: "—"; flex: none; color: #6f6f6f; }
 .richTask::before { content: none !important; }
+.richText { min-width: 0; }
 
 .richBox {
   display: grid;

@@ -220,7 +220,9 @@ function Rich({ text }: { text: string }) {
           {items.map((item, n) => (
             <li key={n} className={item.checked === null ? "" : styles.richTask}>
               {item.checked !== null && <span className={styles.richBox} aria-hidden>{item.checked ? "✓" : ""}</span>}
-              {inline(item.text, `li${i}-${n}`)}
+              {/* One flex item for the whole line: bold or a link inside it must
+                  flow with the text, not become a column of its own. */}
+              <span className={styles.richText}>{inline(item.text, `li${i}-${n}`)}</span>
             </li>
           ))}
         </ul>,
@@ -232,7 +234,7 @@ function Rich({ text }: { text: string }) {
     if (numbered) {
       blocks.push(
         <p key={i} className={styles.richNumbered}>
-          <span>{numbered[1]}.</span>{inline(numbered[2], `n${i}`)}
+          <span>{numbered[1]}.</span><span className={styles.richText}>{inline(numbered[2], `n${i}`)}</span>
         </p>,
       )
       i += 1
