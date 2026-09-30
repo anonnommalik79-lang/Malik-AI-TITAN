@@ -83,6 +83,7 @@ type SidebarAction = {
   action?: "new" | "voice" | "translate" | "data"
   href?: string
   badge?: string
+  requiresPro?: boolean
 }
 
 const GENERIC_CHAT_TITLE = /^(?:новый\s+(?:проект|чат)|new\s+(?:project|chat)|untitled(?:\s+(?:project|chat))?|без\s+названия)$/iu
@@ -92,8 +93,8 @@ const TITLE_WORD_LIMIT = 8
 const MAIN_ACTIONS: SidebarAction[] = [
   { id: "new", label: "Новый чат", icon: MessageSquarePlus, action: "new" },
   { id: "voice", label: "Голосовой режим", icon: Mic, action: "voice" },
-  { id: "library", label: "Библиотека", icon: LayoutTemplate, view: "templates" },
-  { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects" },
+  { id: "library", label: "Библиотека", icon: LayoutTemplate, view: "templates", badge: "PRO" },
+  { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects", badge: "PRO", requiresPro: true },
 ]
 
 const CREATE_ACTIONS: SidebarAction[] = [
@@ -101,7 +102,7 @@ const CREATE_ACTIONS: SidebarAction[] = [
   { id: "shorts", label: "Malik Shorts", icon: Clapperboard, href: "/shorts", badge: "BETA" },
   { id: "websites", label: "Сайты", icon: LayoutTemplate, view: "website-generation" },
   { id: "video-generation", label: "Генерация видео", icon: Video, view: "video-generation" },
-  { id: "music-generation", label: "Создать трек", icon: Music2, view: "music-generation" },
+  { id: "music-generation", label: "Создать трек", icon: Music2, view: "music-generation", badge: "PRO", requiresPro: true },
   { id: "presentation-generation", label: "Презентации", icon: Presentation, view: "presentation-generation" },
   { id: "photo-generation", label: "Генерация изображений", icon: ImageIcon, view: "photo-generation" },
 ]
@@ -297,6 +298,10 @@ function SidebarInner({
   }, [onOpenSearch])
 
   const runAction = useCallback((action: SidebarAction) => {
+    if (action.requiresPro && !isPro) {
+      openView("billing")
+      return
+    }
     if (action.action === "new") return onNewChat?.()
     if (action.action === "voice") return onOpenVoice?.()
     if (action.href) {
@@ -313,7 +318,7 @@ function SidebarInner({
       return
     }
     if (action.view) openView(action.view)
-  }, [onNewChat, onOpenVoice, onViewChange, openView])
+  }, [isPro, onNewChat, onOpenVoice, onViewChange, openView])
 
   const actionIsActive = useCallback((action: SidebarAction) => {
     if (action.id === "new") return activeView === "home" && !activeChatId
