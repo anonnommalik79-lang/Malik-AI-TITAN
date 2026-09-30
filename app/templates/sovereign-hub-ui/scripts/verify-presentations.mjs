@@ -387,8 +387,8 @@ check("gives each tier its documented daily credits", () => {
   assert.equal(quota.presentationPlanLimits("pro").maxSlides, 20)
 })
 
-check("lets pricing change from the environment without a deploy", () => withEnv({ PRESENTATION_FREE_DAILY_CREDITS: "50", PRESENTATION_FREE_MAX_SLIDES: "8" }, () => {
-  assert.equal(quota.presentationPlanLimits("free").dailyCredits, 50)
+check("never lets an old environment value raise Free above five credits", () => withEnv({ PRESENTATION_FREE_DAILY_CREDITS: "50", PRESENTATION_FREE_MAX_SLIDES: "8" }, () => {
+  assert.equal(quota.presentationPlanLimits("free").dailyCredits, 5)
   assert.equal(quota.presentationPlanLimits("free").maxSlides, 8)
 }))
 
