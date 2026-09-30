@@ -671,9 +671,9 @@ export function presentationTopic(text: string): string {
     .trim() || String(text || "").trim()
 }
 
-/** Credits a deck of this many slides will cost, outline included. */
+/** Product-level price for a deck when only slide count is known. */
 export function deckCost(slideCount: number) {
-  return PRESENTATION_COSTS.outline + clampSlideCount(slideCount) * PRESENTATION_COSTS.slide
+  return clampSlideCount(slideCount) >= 12 ? PRESENTATION_COSTS.complex : PRESENTATION_COSTS.standard
 }
 
 const DECK_LANGUAGES: DeckLanguage[] = ["ru", "kk", "en"]
