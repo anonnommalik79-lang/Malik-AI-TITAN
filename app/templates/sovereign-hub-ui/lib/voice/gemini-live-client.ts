@@ -365,7 +365,9 @@ export class GeminiLiveSession {
 
     this.model = token.model || this.model
     this.quotaUnlimited = token.unlimited === true
-    this.quotaRemainingSeconds = this.quotaUnlimited ? null : Math.max(0, Number(token.remainingSeconds) || 0)
+    this.quotaRemainingSeconds = this.quotaUnlimited
+      ? null
+      : typeof token.remainingSeconds === "number" ? Math.max(0, token.remainingSeconds) : null
     const base = token.websocketUrl || DEFAULT_WS
 
     let socket: WebSocket
@@ -1011,6 +1013,9 @@ export class GeminiLiveSession {
     this.quotaRemainingSeconds = 0
     this.stopUsageMeter(false)
     this.wantsMic = false
+    this.resumeHandle = null
+    this.generation += 1
+    if (this.retryTimer) { window.clearTimeout(this.retryTimer); this.retryTimer = 0 }
     this.stopWatchdog()
     this.stopCapture()
     this.stopOutput()
