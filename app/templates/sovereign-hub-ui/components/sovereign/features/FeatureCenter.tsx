@@ -99,7 +99,7 @@ function PluginCard({ plugin, connection, onOpen }: { plugin: MalikPlugin; conne
       <span className="plugin-card-copy">
         <span className="plugin-card-name">{brandName}</span>
         <span className="plugin-card-meta">
-          {connection?.state === "connected" ? "Подключён" : connection?.state === "public" ? "Открытый API" : plugin.tier === "free" ? "Бесплатно" : "Free / Freemium"}
+          {connection?.state === "connected" ? "Подключён · бесплатно" : connection?.state === "public" ? "Открытый API · бесплатно" : "Бесплатно"}
         </span>
       </span>
     </button>
@@ -147,7 +147,7 @@ function PluginDetail({ plugin, connection, statusFailed, onClose, onRun }: {
         <span className={ready ? "is-open" : "is-connect"}>
           {openSource ? "Открытый API · готов к работе" : connectionLabel(connection, statusFailed)}
         </span>
-        <span>{plugin.tier === "free" ? "Бесплатный доступ" : "Есть бесплатный режим"}</span>
+        <span>Бесплатный доступ в Malik AI</span>
       </div>
 
       {!openSource ? (
@@ -243,18 +243,28 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
 
   const selected = selectedId ? MALIK_PLUGINS.find((plugin) => plugin.id === selectedId) || null : null
 
+  const isWorking = (plugin: MalikPlugin) => {
+    if (plugin.runtime === "public") return true
+    const state = connections[plugin.id]?.state
+    return state === "available" || state === "connected" || state === "reauthorize"
+  }
+
+  const visiblePlugins = useMemo(
+    () => MALIK_PLUGINS.filter((plugin) => isWorking(plugin)),
+    [connections],
+  )
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return MALIK_PLUGINS.filter((plugin) => {
+    return visiblePlugins.filter((plugin) => {
       const displayName = pluginDisplayName(plugin.id, plugin.name)
       if (category !== "All" && plugin.category !== category) return false
-      if (freeOnly && plugin.tier !== "free") return false
       if (!q) return true
       return `${displayName} ${plugin.name} ${plugin.category} ${plugin.description}`.toLowerCase().includes(q)
     })
-  }, [category, freeOnly, query])
+  }, [category, freeOnly, query, visiblePlugins])
 
-  const featured = useMemo(() => MALIK_PLUGINS.filter((plugin) => plugin.featured), [])
+  const featured = useMemo(() => visiblePlugins.filter((plugin) => plugin.featured), [visiblePlugins])
 
   /**
    * "Использовать в Malik AI" has to land in the composer.
@@ -294,11 +304,11 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
                 services beside a badge reading 42 and a grid of 42 cards - three
                 numbers on one screen and only the last one true. */}
             <p className="plugin-market-subtitle">
-              {MALIK_PLUGINS.length} сервисов и AI‑инструментов. Официальные иконки, единый интерфейс, запуск внутри Malik AI.
+              {visiblePlugins.length} рабочих сервисов и AI‑инструментов. Ненастроенные интеграции скрыты до подключения.
             </p>
           </div>
-          <div className="plugin-market-count" aria-label={`${MALIK_PLUGINS.length} плагинов`}>
-            <strong>{MALIK_PLUGINS.length}</strong>
+          <div className="plugin-market-count" aria-label={`${visiblePlugins.length} рабочих плагинов`}>
+            <strong>{visiblePlugins.length}</strong>
             <span>плагинов</span>
           </div>
         </header>
