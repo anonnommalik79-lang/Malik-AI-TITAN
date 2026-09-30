@@ -16,6 +16,7 @@ import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
 import { FeatureCenter } from "./features/FeatureCenter"
 import { CapabilitiesPanel } from "./capabilities"
 import { MalikCodexModal } from "./codex/malik-codex-modal"
@@ -7555,6 +7556,9 @@ const shouldShowMobilePreviewButton =
       return <VideoGenerationStudio {...studioBridgeProps} />
     }
     if (activeView === "music-generation") {
+      if (!hasMalikProAccess(currentPlan)) {
+        return <SovereignBillingPanel plan={currentPlan} authenticated={!guestMode && Boolean(workOSUser)} onClose={closeAccountPanel} />
+      }
       return <MusicGenerationStudio username={username} />
     }
     if (activeView === "presentation-generation") {
@@ -7592,6 +7596,8 @@ const shouldShowMobilePreviewButton =
       // it is a hundred pictures nobody can do anything with.
       return (
         <SiteLibraryPanel
+          plan={currentPlan}
+          onOpenBilling={() => safeOpenView("billing")}
           onEditSavedSite={(id) => {
             try { window.sessionStorage.setItem("malik-site-open-id-v1", id) } catch {}
             safeOpenView("website-generation", "template")
@@ -7604,6 +7610,9 @@ const shouldShowMobilePreviewButton =
       );
     }
     if (activeView === "projects") {
+      if (!hasMalikProAccess(currentPlan)) {
+        return <SovereignBillingPanel plan={currentPlan} authenticated={!guestMode && Boolean(workOSUser)} onClose={closeAccountPanel} />
+      }
       const projectChats = chats.filter((chat) =>
         chat.kind === "project"
         || Boolean(chat.projectDescription || chat.projectInstructions)
