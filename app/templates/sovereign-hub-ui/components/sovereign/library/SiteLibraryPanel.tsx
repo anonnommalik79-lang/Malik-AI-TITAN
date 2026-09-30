@@ -28,11 +28,14 @@ import {
   type LibraryTemplate,
 } from "@/lib/library/site-library"
 import { OverlayPortal } from "@/components/sovereign/OverlayPortal"
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
 
 export type SiteLibraryPanelProps = {
   /** Hands a style to the site generator, which is what stops this being a museum. */
   onUseStyle?: (prompt: string, template: LibraryTemplate) => void
   onEditSavedSite?: (id: string) => void
+  plan?: string
+  onOpenBilling?: () => void
 }
 
 type Sort = "popular" | "name" | "category"
@@ -48,6 +51,11 @@ const SORTS: Array<[Sort, string]> = [
 const FAVOURITES_KEY = "malik-library-favourites-v1"
 const VIEW_KEY = "malik-library-view-v1"
 const SITES_KEY = "malik-sites-v6"
+const FREE_LIBRARY_TEMPLATE_IDS = new Set(LIBRARY_TEMPLATES.slice(0, 8).map((template) => template.id))
+
+function isFreeLibraryTemplate(template: LibraryTemplate) {
+  return FREE_LIBRARY_TEMPLATE_IDS.has(template.id)
+}
 
 function readSavedSites(): SavedSite[] {
   if (typeof window === "undefined") return []
@@ -82,7 +90,18 @@ function tagsOf(template: LibraryTemplate) {
   return parts.filter(Boolean)
 }
 
-export function SiteLibraryPanel({ onUseStyle, onEditSavedSite }: SiteLibraryPanelProps) {
+export function SiteLibraryPanel({ onUseStyle, onEditSavedSite, plan, onOpenBilling }: SiteLibraryPanelProps) {
+  const proAccess = hasMalikProAccess(plan)
+  const canUseTemplate = (template: LibraryTemplate) => proAccess || isFreeLibraryTemplate(template)
+  const requireTemplateAccess = (template: LibraryTemplate) => {
+    if (canUseTemplate(template)) return true
+    onOpenBilling?.()
+    return false
+  }
+  const useTemplate = (template: LibraryTemplate) => {
+    if (!requireTemplateAccess(template)) return
+    onUseStyle?.(libraryPrompt(template), template)
+  }
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<string>("Все")
   const [direction, setDirection] = useState<string>("Все")
@@ -228,13 +247,14 @@ export function SiteLibraryPanel({ onUseStyle, onEditSavedSite }: SiteLibraryPan
   const openedHtml = opened ? buildLibrarySite(opened, origin) : ""
 
   const openInTab = () => {
-    if (!openedHtml) return
+    if (!openedHtml || !opened || !requireTemplateAccess(opened)) return
     const url = URL.createObjectURL(new Blob([openedHtml], { type: "text/html" }))
     window.open(url, "_blank", "noopener,noreferrer")
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
   const download = (template: LibraryTemplate) => {
+    if (!requireTemplateAccess(template)) return
     const html = buildLibrarySite(template, origin)
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }))
     const link = document.createElement("a")
@@ -259,6 +279,7 @@ export function SiteLibraryPanel({ onUseStyle, onEditSavedSite }: SiteLibraryPan
 
   /** Copies the finished page, because there is no public URL to share. */
   const share = async (template: LibraryTemplate) => {
+    if (!requireTemplateAccess(template)) return
     const html = buildLibrarySite(template, origin)
     try {
       await navigator.clipboard.writeText(html)
@@ -390,6 +411,7 @@ export function SiteLibraryPanel({ onUseStyle, onEditSavedSite }: SiteLibraryPan
                       decoding="async"
                       draggable={false}
                     />
+                    <span className="libAccessBadge">{isFreeLibraryTemplate(template) ? "FREE" : "PRO"}</span>
                     {template.featured && <span className="libBadge"><Sparkles aria-hidden="true" /> Выбор Malik</span>}
                   </button>
 
@@ -460,8 +482,8 @@ export function SiteLibraryPanel({ onUseStyle, onEditSavedSite }: SiteLibraryPan
                 <button type="button" onClick={() => void share(selected)}>
                   <Share2 aria-hidden="true" /> {shared ? "Скопировано" : "Поделиться"}
                 </button>
-                <button type="button" onClick={() => { const t = selected; setSelected(null); onUseStyle?.(libraryPrompt(t), t) }}>
-                  <Wand2 aria-hidden="true" /> Использовать стиль
+                <button type="button" onClick={() => { const t = selected; if (canUseTemplate(t)) setSelected(null); useTemplate(t) }}>
+                  <Wand2 aria-hidden="true" /> {canUseTemplate(selected) ? "Использовать стиль" : "Открыть в MalikAI Plus"}
                 </button>
               </div>
               <button type="button" className="libDetailWide" onClick={() => download(selected)}>
@@ -485,7 +507,7 @@ export function SiteLibraryPanel({ onUseStyle, onEditSavedSite }: SiteLibraryPan
                 <small>{opened.category} · {opened.subcategory}</small>
               </div>
               <div className="libViewerActions">
-                <button type="button" className="is-primary" onClick={() => { const t = opened; setOpened(null); onUseStyle?.(libraryPrompt(t), t) }}><Wand2 aria-hidden="true" /> Использовать стиль</button>
+                <button type="button" className="is-primary" onClick={() => { const t = opened; if (canUseTemplate(t)) setOpened(null); useTemplate(t) }}><Wand2 aria-hidden="true" /> {canUseTemplate(opened) ? "Использовать стиль" : "MalikAI Plus"}</button>
                 <button type="button" onClick={openInTab}><ExternalLink aria-hidden="true" /> В новой вкладке</button>
                 <button type="button" onClick={() => download(opened)}><Download aria-hidden="true" /> Скачать HTML</button>
                 <button type="button" onClick={() => setOpened(null)} aria-label="Закрыть"><X aria-hidden="true" /></button>
@@ -511,6 +533,7 @@ export function SiteLibraryPanel({ onUseStyle, onEditSavedSite }: SiteLibraryPan
 function LibraryCss() {
   return <style jsx global>{`
     .libSiteThumb{display:block;width:100%;height:100%;aspect-ratio:16/10;border:0;background:#08090a;pointer-events:none}.libDetailShot .libSiteThumb{min-height:205px}.libList .libSiteThumb{aspect-ratio:16/9}
+    .libShot{position:relative}.libAccessBadge{position:absolute;top:10px;right:10px;z-index:3;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:rgba(7,7,8,.82);padding:4px 7px;color:#f5f5f5;font-size:9px;font-weight:800;letter-spacing:.08em;backdrop-filter:blur(8px)}
     .malikLibrary{--lib-bg:#08090a;--lib-panel:#101113;--lib-panel-2:#17181b;--lib-line:rgba(255,255,255,.085);--lib-line-2:rgba(255,255,255,.14);--lib-text:#f3f4f5;--lib-dim:rgba(255,255,255,.56);--lib-dim-2:rgba(255,255,255,.36);width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;background:var(--lib-bg);color:var(--lib-text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
     .malikLibrary *{box-sizing:border-box}
     .malikLibrary button,.malikLibrary input{font:inherit}
