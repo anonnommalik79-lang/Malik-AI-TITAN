@@ -9,8 +9,9 @@ import { PRESENTATION_COSTS } from "@/lib/presentations/deck"
  * Presentation credits.
  *
  * A normal finished presentation costs 1 credit. The heaviest presentation
- * path (large/investor deck) costs 3 credits. Rewriting or adding one slide
- * afterwards costs 1 credit. The backend may use several model calls, but the
+ * path (large/investor deck) costs 3 credits. Rewriting a finished slide
+ * afterwards costs 1 credit; initial assembly and retrying a missing slide are
+ * included in the deck price. The backend may use several model calls, but the
  * user sees one predictable product-level price.
  *
  * Credits are **reserved before** the model is called and **refunded if it
