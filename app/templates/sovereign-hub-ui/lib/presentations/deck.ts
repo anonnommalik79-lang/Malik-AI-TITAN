@@ -38,7 +38,11 @@ export const DEFAULT_SLIDES = 10
 
 /** What each operation costs, in presentation credits. */
 export const PRESENTATION_COSTS = {
-  outline: 1,
+  /** One normal finished presentation. */
+  standard: 1,
+  /** Investor / large presentation with the heaviest generation path. */
+  complex: 3,
+  /** Editing or regenerating one slide after the deck exists. */
   slide: 1,
 } as const
 
