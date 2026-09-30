@@ -11,7 +11,8 @@ function response(payload: unknown, status = 200) {
 export async function GET(request: Request) {
   const entitlement = await resolveRequestEntitlement(request)
   const unlimited = entitlement.plan === "owner"
-  return response({ ok: true, quota: getVoiceUsage(entitlement.userId, unlimited) })
+  const quota = await getVoiceUsage(entitlement.userId, unlimited)
+  return response({ ok: true, quota })
 }
 
 /**
