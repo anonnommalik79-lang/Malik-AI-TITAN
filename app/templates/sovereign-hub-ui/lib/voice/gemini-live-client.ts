@@ -275,6 +275,10 @@ export class GeminiLiveSession {
     return this.ready && this.socket?.readyState === WebSocket.OPEN
   }
 
+  isQuotaExhausted() {
+    return !this.quotaUnlimited && this.quotaRemainingSeconds === 0
+  }
+
   getLanguage() {
     return this.language
   }
@@ -353,6 +357,12 @@ export class GeminiLiveSession {
       })
       token = await response.json().catch(() => ({})) as TokenPayload
       if (!response.ok || !token.ok || !token.accessToken) {
+        if (response.status === 429) {
+          this.quotaUnlimited = false
+          this.quotaRemainingSeconds = 0
+          this.finishVoiceQuota()
+          return false
+        }
         console.error("[VOICE_GEMINI_LIVE_TOKEN_UNAVAILABLE]", response.status)
         return false
       }
