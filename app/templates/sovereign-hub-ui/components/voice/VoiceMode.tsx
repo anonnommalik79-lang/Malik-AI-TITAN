@@ -360,6 +360,14 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
             if (!mountedRef.current || closingRef.current) return
             setLiveError("Голосовой режим временно недоступен.")
           },
+          onQuotaExceeded: () => {
+            geminiLiveReadyRef.current = false
+            if (!mountedRef.current || closingRef.current) return
+            setTitle("Лимит Voice исчерпан")
+            setSubtitle("2 минуты на сегодня использованы · доступ вернётся завтра")
+            setLiveError("Дневной лимит голосового режима — 2 минуты.")
+            showNotice("Voice: 2 минуты в день")
+          },
           onError: () => { geminiLiveReadyRef.current = false },
         },
       })
@@ -376,7 +384,7 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
       setLiveError("Голосовой режим сейчас недоступен.")
     }
     return ready
-  }, [rememberTurn])
+  }, [rememberTurn, showNotice])
 
   const stopReplyAudio = useCallback((interrupted = true) => {
     geminiLiveRef.current?.stopOutput()
