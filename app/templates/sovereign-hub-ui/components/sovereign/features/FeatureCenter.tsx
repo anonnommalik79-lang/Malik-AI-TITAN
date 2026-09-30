@@ -204,7 +204,6 @@ function PluginDetail({ plugin, connection, statusFailed, onClose, onRun }: {
 export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, plugin: MalikPlugin) => void } = {}) {
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState<"All" | PluginCategory>("All")
-  const [freeOnly, setFreeOnly] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [connections, setConnections] = useState<Record<string, PluginConnection>>({})
   const [statusFailed, setStatusFailed] = useState(false)
@@ -241,18 +240,16 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
     }
   }, [])
 
-  const selected = selectedId ? MALIK_PLUGINS.find((plugin) => plugin.id === selectedId) || null : null
-
-  const isWorking = (plugin: MalikPlugin) => {
-    if (plugin.runtime === "public") return true
-    const state = connections[plugin.id]?.state
-    return state === "available" || state === "connected" || state === "reauthorize"
-  }
-
   const visiblePlugins = useMemo(
-    () => MALIK_PLUGINS.filter((plugin) => isWorking(plugin)),
+    () => MALIK_PLUGINS.filter((plugin) => {
+      if (plugin.runtime === "public") return true
+      const state = connections[plugin.id]?.state
+      return state === "available" || state === "connected" || state === "reauthorize"
+    }),
     [connections],
   )
+
+  const selected = selectedId ? visiblePlugins.find((plugin) => plugin.id === selectedId) || null : null
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -262,7 +259,7 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
       if (!q) return true
       return `${displayName} ${plugin.name} ${plugin.category} ${plugin.description}`.toLowerCase().includes(q)
     })
-  }, [category, freeOnly, query, visiblePlugins])
+  }, [category, query, visiblePlugins])
 
   const featured = useMemo(() => visiblePlugins.filter((plugin) => plugin.featured), [visiblePlugins])
 
@@ -335,17 +332,10 @@ export function FeatureCenter({ onUsePlugin }: { onUsePlugin?: (prompt: string, 
                 {item.label}
               </button>
             ))}
-            <button
-              type="button"
-              className={freeOnly ? "is-active" : undefined}
-              onClick={() => setFreeOnly((value) => !value)}
-            >
-              Бесплатные
-            </button>
           </div>
         </div>
 
-        {!query && category === "All" && !freeOnly ? (
+        {!query && category === "All" ? (
           <section className="plugin-section plugin-section-featured">
             <div className="plugin-section-head">
               <div>
