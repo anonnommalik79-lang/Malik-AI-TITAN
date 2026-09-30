@@ -6,6 +6,11 @@ function dayKey() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function nextResetAt() {
+  const now = new Date()
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString()
+}
+
 function limitSeconds() {
   const configured = Number(process.env.VOICE_DAILY_LIMIT_SECONDS || 120)
   return Number.isFinite(configured) && configured > 0 ? configured : 120
@@ -20,6 +25,7 @@ export function getVoiceUsage(userId: string, unlimited = false) {
       limitSeconds: Number.MAX_SAFE_INTEGER,
       remainingSeconds: Number.MAX_SAFE_INTEGER,
       date,
+      resetAt: nextResetAt(),
     }
   }
   const key = `${userId}:${date}`
@@ -30,6 +36,7 @@ export function getVoiceUsage(userId: string, unlimited = false) {
     limitSeconds: limitSeconds(),
     remainingSeconds: Math.max(0, limitSeconds() - current.seconds),
     date,
+    resetAt: nextResetAt(),
   }
 }
 
@@ -49,5 +56,6 @@ export function consumeVoiceUsage(userId: string, seconds: number, unlimited = f
     limitSeconds: snapshot.limitSeconds,
     remainingSeconds: Math.max(0, snapshot.limitSeconds - next),
     date: snapshot.date,
+    resetAt: snapshot.resetAt,
   }
 }
