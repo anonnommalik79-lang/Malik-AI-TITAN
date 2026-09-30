@@ -109,6 +109,12 @@ const TONES: Array<{ id: DeckTone; label: string }> = [
 
 const COUNTS = [6, 8, 10, 12, 15, 20]
 
+function presentationGenerationCost(topic: string, count: number) {
+  return isInvestorDeckRequest(topic) || count >= 12
+    ? PRESENTATION_COSTS.complex
+    : PRESENTATION_COSTS.standard
+}
+
 const LAYOUT_LABELS: Record<SlideLayout, string> = {
   title: "Обложка",
   section: "Раздел",
@@ -442,6 +448,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   // A plan that allows fewer slides than were asked for gets the largest
   // size it does allow.
   const count = requestedCount <= maxSlides ? requestedCount : Math.max(...countOptions, 6)
+  const generationCost = presentationGenerationCost(topic, count)
 
   /* ------------------------------------------------------------- the deck */
 
@@ -982,8 +989,7 @@ export function PresentationStudio({ username }: { username?: string }) {
 
   const generating = busy === "slides"
   const active = entries[current]
-  const lowCredits = Boolean(quota && !quota.unlimited && quota.remaining < (outline?.items.length || count) + 1)
-  const slideCost = (outline?.items.length || 0) * PRESENTATION_COSTS.slide
+  const lowCredits = Boolean(quota && !quota.unlimited && quota.remaining < generationCost)
 
   const header = (
     <div className="ps-top">
@@ -1083,8 +1089,8 @@ export function PresentationStudio({ username }: { username?: string }) {
                   {authenticated ? (
                     <button type="button" className="ps-btn ps-btn--primary ps-create" onClick={() => void requestOutline(topic, count, tone)} disabled={busy === "outline" || topic.trim().length < 3}>
                       {busy === "outline" ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
-                      <span className="ps-mob-only">{busy === "outline" ? "Составляю план…" : `Составить план · ${PRESENTATION_COSTS.outline} кр.`}</span>
-                      <span className="ps-desk-only">{busy === "outline" ? "Составляю план…" : "Создать презентацию"}</span>
+                      <span className="ps-mob-only">{busy === "outline" ? "Составляю план…" : `Создать · ${generationCost} кр.`}</span>
+                      <span className="ps-desk-only">{busy === "outline" ? "Составляю план…" : `Создать презентацию · ${generationCost} кр.`}</span>
                       {busy === "outline" ? null : <ArrowRight size={16} className="ps-desk-only" />}
                     </button>
                   ) : (
@@ -1094,7 +1100,7 @@ export function PresentationStudio({ username }: { username?: string }) {
               </div>
               {error ? <p className="ps-error" role="alert">{error}</p> : null}
               <p className="ps-hint">
-                Полная презентация из {count} слайдов стоит {count + PRESENTATION_COSTS.outline} кредитов: 1 за план и по 1 за каждый слайд. Переписать слайд — 1 кредит. Скачать PPTX и PDF — бесплатно.
+                Обычная презентация стоит 1 кредит. Сложная — инвесторская или на 12+ слайдов — 3 кредита. На бесплатном тарифе доступно 5 кредитов в день. Переписать готовый слайд — 1 кредит.
               </p>
 
               <div className="ps-section-label">
@@ -1198,8 +1204,8 @@ export function PresentationStudio({ username }: { username?: string }) {
           <div className="ps-outline-actions">
             <button type="button" className="ps-btn" onClick={() => setStage("start")}><ChevronLeft size={16} /> Назад</button>
             <span className="ps-spacer" />
-            <span className="ps-cost">{outline.items.length} слайдов · {slideCost} кредитов · осталось {creditsLabel(quota)}</span>
-            <button type="button" className="ps-btn ps-btn--primary" onClick={() => void buildDeck()} disabled={Boolean(quota && !quota.unlimited && quota.remaining < slideCost)}>
+            <span className="ps-cost">{outline.items.length} слайдов · сборка уже включена в цену · осталось {creditsLabel(quota)}</span>
+            <button type="button" className="ps-btn ps-btn--primary" onClick={() => void buildDeck()}>
               <Wand2 size={16} /> Создать презентацию
             </button>
           </div>
@@ -1342,7 +1348,7 @@ export function PresentationStudio({ username }: { username?: string }) {
                         <small>
                           Этот слайд не получился — кредит за него не списан.{" "}
                           <button type="button" className="ps-btn ps-btn--small" style={{ marginTop: 12 }} onClick={() => void retrySlide(current)} disabled={generating}>
-                            <RefreshCw size={14} /> Написать ещё раз · 1 кр.
+                            <RefreshCw size={14} /> Написать ещё раз · бесплатно
                           </button>
                         </small>
                       ) : <small>Пишу этот слайд…</small>}
@@ -1420,7 +1426,7 @@ export function PresentationStudio({ username }: { username?: string }) {
                     ))}
                   </select>
                   <button type="submit" className="ps-btn ps-btn--small ps-btn--primary" disabled={newSlideText.trim().length < 3 || generating}>
-                    <Wand2 size={14} /> Добавить · {PRESENTATION_COSTS.slide} кр.
+                    <Wand2 size={14} /> Добавить · бесплатно
                   </button>
                 </form>
               ) : null}
