@@ -56,6 +56,12 @@ function toneOf(value: unknown): DeckTone {
   return TONES.includes(value as DeckTone) ? value as DeckTone : "confident"
 }
 
+function presentationGenerationCost(topic: string, count: number) {
+  return isInvestorDeckRequest(topic) || count >= 12
+    ? PRESENTATION_COSTS.complex
+    : PRESENTATION_COSTS.standard
+}
+
 /**
  * The studio's single server entry point.
  *
@@ -63,8 +69,8 @@ function toneOf(value: unknown): DeckTone {
  * POST → one of three jobs, each paid for in credits that are reserved before
  *        the model is called and refunded for anything that does not arrive:
  *
- *   { action: "outline", topic, count, language?, tone? }          costs 1
- *   { action: "slides",  topic, outline, startIndex, count, … }    costs 1 per slide delivered
+ *   { action: "outline", topic, count, language?, tone? }          costs 1 normal / 3 complex
+ *   { action: "slides",  topic, outline, startIndex, count, … }    included in the deck price
  *   { action: "rewrite", deckTitle, slide, layout?, instruction? } costs 1
  *
  * Deliberately not wrapped in Malik Compute: credits are the meter here, and
@@ -114,9 +120,10 @@ export async function POST(request: Request) {
       const count = Math.min(clampSlideCount(body.count), quotaBefore.maxSlides)
       if (isInvestorDeckRequest(topic) && count < 10) return json({ ok: false, code: "INVESTOR_DECK_TOO_SHORT", error: "Для полного инвестиционного питч-дека выберите минимум 10 слайдов. Кредиты не списаны." }, 400)
 
-      const reservation = await reservePresentationCredits(userId, plan, authenticated, PRESENTATION_COSTS.outline)
+      const generationCost = presentationGenerationCost(topic, count)
+      const reservation = await reservePresentationCredits(userId, plan, authenticated, generationCost)
       if (!reservation.ok) return json({ ok: false, code: reservation.code, error: reservation.error, quota: reservation.quota }, reservation.status)
-      reserved = PRESENTATION_COSTS.outline
+      reserved = generationCost
       refund = (amount) => refundPresentationCredits(userId, plan, authenticated, amount)
 
       const outline = await generateOutline({
@@ -141,9 +148,12 @@ export async function POST(request: Request) {
       const count = Math.max(1, Math.min(SLIDE_BATCH_SIZE, Math.floor(Number(body.count) || SLIDE_BATCH_SIZE), outline.items.length - startIndex))
       if (startIndex >= outline.items.length || count < 1) return json({ ok: false, error: "В плане нет таких слайдов." }, 400)
 
-      const reservation = await reservePresentationCredits(userId, plan, authenticated, count * PRESENTATION_COSTS.slide)
+      // The full deck was paid for when its outline was created. Slide batches
+      // are part of that single 1/3-credit product price, so they do not spend
+      // additional credits while the deck is assembled.
+      const reservation = await reservePresentationCredits(userId, plan, authenticated, 0)
       if (!reservation.ok) return json({ ok: false, code: reservation.code, error: reservation.error, quota: reservation.quota }, reservation.status)
-      reserved = count * PRESENTATION_COSTS.slide
+      reserved = 0
       refund = (amount) => refundPresentationCredits(userId, plan, authenticated, amount)
 
       const result = await generateSlides({
@@ -158,7 +168,7 @@ export async function POST(request: Request) {
 
       // Paid only for what arrived.
       let quota = reservation.quota
-      const undelivered = result.missing.length * PRESENTATION_COSTS.slide
+      const undelivered = 0
       if (undelivered) quota = (await refund(undelivered)) || quota
       reserved = 0
 
