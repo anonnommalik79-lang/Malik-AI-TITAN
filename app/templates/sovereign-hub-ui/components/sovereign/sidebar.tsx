@@ -385,7 +385,7 @@ function SidebarInner({
       >
         <Icon className="h-[16px] w-[16px]" />
         <span>{action.label}</span>
-        {action.badge ? <em className="malik-shorts-beta" data-preserve-brand-color="true">{action.badge}</em> : null}
+        {action.badge ? <em className={cn("malik-shorts-beta", action.badge === "PRO" && "is-pro")} data-preserve-brand-color="true">{action.badge}</em> : null}
       </button>
     )
   }
@@ -579,6 +579,7 @@ function SidebarStyles() {
       .malik-sidebar-primary.is-active { background:#19172d !important; color:#fff !important; font-weight:520; }
       .malik-sidebar-primary.is-active svg { color:#d9d5ff !important; }
       .malik-shorts-beta { margin-left:auto; flex-shrink:0; border-radius:999px; padding:2px 6px; background:linear-gradient(135deg,#7d5cff,#536dff); color:#fff; font-size:8px; font-style:normal; font-weight:800; line-height:1.2; letter-spacing:.055em; box-shadow:0 0 10px rgba(112,89,255,.42); }
+      .malik-shorts-beta.is-pro { border:1px solid #3b3b40; background:#121214; color:#f4f4f5; box-shadow:none; }
       .malik-sidebar-history { min-height:112px; border-top:1px solid #1a1a1d; padding:6px 7px 5px; scrollbar-width:thin; scrollbar-color:transparent transparent; }
       .malik-sidebar-history:hover { scrollbar-color:#2b2b30 transparent; }
       .malik-sidebar-history-title { margin:0 5px 6px; color:#626269; font-size:9.5px; font-weight:500; line-height:1.2; }
