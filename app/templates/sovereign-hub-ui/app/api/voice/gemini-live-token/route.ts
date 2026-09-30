@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
 export async function GET(request: Request) {
   const entitlement = await resolveRequestEntitlement(request)
   const unlimited = entitlement.plan === "owner"
-  const quota = getVoiceUsage(entitlement.userId, unlimited)
+  const quota = await getVoiceUsage(entitlement.userId, unlimited)
   if (!unlimited && quota.remainingSeconds <= 0) {
     return NextResponse.json(
       { ok: false, error: "voice_daily_limit_reached", displayMessage: "Лимит Voice на сегодня использован. Доступ восстановится завтра.", quota },
