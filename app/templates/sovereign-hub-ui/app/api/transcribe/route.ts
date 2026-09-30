@@ -11,7 +11,7 @@ const MAX_BYTES = 25 * 1024 * 1024
 export async function GET(request: Request) {
   const entitlement = await resolveRequestEntitlement(request)
   const ownerMode = entitlement.plan === "owner"
-  const quota = getVoiceUsage(entitlement.userId, ownerMode)
+  const quota = await getVoiceUsage(entitlement.userId, ownerMode)
   return Response.json({ ok: true, configured: isVoiceTranscribeConfigured(), quota })
 }
 
@@ -24,7 +24,7 @@ async function handlePOST(request: Request) {
 
   const entitlement = await resolveRequestEntitlement(request)
   const ownerMode = entitlement.plan === "owner"
-  const before = getVoiceUsage(entitlement.userId, ownerMode)
+  const before = await getVoiceUsage(entitlement.userId, ownerMode)
   if (!ownerMode && before.remainingSeconds <= 0) {
     return Response.json({ ok: false, error: "Лимит Voice на сегодня использован. Доступ восстановится завтра.", quota: before }, { status: 429 })
   }
@@ -58,7 +58,7 @@ async function handlePOST(request: Request) {
   }
 
   const measuredDuration = Math.max(1, Math.min(120, claimedDuration || result.durationSec || 10))
-  const quota = consumeVoiceUsage(entitlement.userId, measuredDuration, ownerMode)
+  const quota = await consumeVoiceUsage(entitlement.userId, measuredDuration, ownerMode)
   if (!quota.ok) {
     return Response.json({ ok: false, error: "Лимит Voice на сегодня использован. Доступ восстановится завтра.", quota }, { status: 429 })
   }
