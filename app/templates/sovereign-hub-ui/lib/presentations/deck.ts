@@ -42,7 +42,7 @@ export const PRESENTATION_COSTS = {
   standard: 1,
   /** Investor / large presentation with the heaviest generation path. */
   complex: 3,
-  /** Editing or regenerating one slide after the deck exists. */
+  /** Rewriting one finished slide with AI after the deck exists. */
   slide: 1,
 } as const
 
