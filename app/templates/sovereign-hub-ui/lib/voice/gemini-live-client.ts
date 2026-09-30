@@ -39,6 +39,8 @@ type LiveCallbacks = {
   /** Retrying has been going on long enough that the person should be told. */
   onStruggling?: (attempt: number) => void
   onClosed?: () => void
+  /** Daily microphone allowance reached. */
+  onQuotaExceeded?: () => void
   onError?: () => void
 }
 
@@ -47,6 +49,8 @@ type TokenPayload = {
   accessToken?: string
   model?: string
   websocketUrl?: string
+  unlimited?: boolean
+  remainingSeconds?: number | null
 }
 
 type VoiceWindow = typeof globalThis & { webkitAudioContext?: typeof AudioContext }
@@ -204,6 +208,15 @@ export class GeminiLiveSession {
   private watchdog = 0
   private inputSampleQueue: number[] = []
 
+  /** Daily Voice allowance. Metered only while microphone capture is active. */
+  private quotaUnlimited = false
+  private quotaRemainingSeconds: number | null = null
+  private usageMeterActive = false
+  private usageSliceStartedAt = 0
+  private usageHeartbeat = 0
+  private usageDeadline = 0
+  private usageFlushing = false
+
   private nearFieldNoiseFloor = 0.0035
   private nearFieldOpen = false
   private nearFieldCandidateFrames = 0
@@ -351,6 +364,8 @@ export class GeminiLiveSession {
     if (this.disposed || generation !== this.generation) return false
 
     this.model = token.model || this.model
+    this.quotaUnlimited = token.unlimited === true
+    this.quotaRemainingSeconds = this.quotaUnlimited ? null : Math.max(0, Number(token.remainingSeconds) || 0)
     const base = token.websocketUrl || DEFAULT_WS
 
     let socket: WebSocket
@@ -875,6 +890,7 @@ export class GeminiLiveSession {
       this.lastFrameAt = Date.now()
       this.watchTrack(stream)
       this.startWatchdog()
+      this.startUsageMeter()
       console.info("[VOICE_GEMINI_LIVE_CAPTURE_READY]", `${rate}Hz`, native ? "native" : "resampled")
       return true
     } catch (error) {
@@ -916,7 +932,94 @@ export class GeminiLiveSession {
     this.watchdog = 0
   }
 
+  private clearUsageTimers() {
+    if (this.usageHeartbeat) window.clearInterval(this.usageHeartbeat)
+    if (this.usageDeadline) window.clearTimeout(this.usageDeadline)
+    this.usageHeartbeat = 0
+    this.usageDeadline = 0
+  }
+
+  private armUsageDeadline() {
+    if (!this.usageMeterActive || this.quotaUnlimited || this.quotaRemainingSeconds === null) return
+    if (this.usageDeadline) window.clearTimeout(this.usageDeadline)
+    this.usageDeadline = window.setTimeout(() => {
+      this.usageDeadline = 0
+      void this.flushUsage(true)
+    }, Math.max(250, this.quotaRemainingSeconds * 1000))
+  }
+
+  private startUsageMeter() {
+    if (this.quotaUnlimited || this.quotaRemainingSeconds === null) return
+    if (this.quotaRemainingSeconds <= 0) {
+      this.finishVoiceQuota()
+      return
+    }
+    this.stopUsageMeter(false)
+    this.usageMeterActive = true
+    this.usageSliceStartedAt = Date.now()
+    this.usageHeartbeat = window.setInterval(() => void this.flushUsage(false), 5_000)
+    this.armUsageDeadline()
+  }
+
+  private stopUsageMeter(flush = true) {
+    const hadActiveMeter = this.usageMeterActive
+    this.usageMeterActive = false
+    this.clearUsageTimers()
+    if (flush && hadActiveMeter && this.usageSliceStartedAt) void this.flushUsage(false)
+    else if (!hadActiveMeter) this.usageSliceStartedAt = 0
+  }
+
+  private async flushUsage(forceLimitCheck: boolean) {
+    if (this.quotaUnlimited || this.usageFlushing || !this.usageSliceStartedAt) return
+    const now = Date.now()
+    const seconds = Math.max(0, Math.min(15, (now - this.usageSliceStartedAt) / 1000))
+    if (seconds < .2 && !forceLimitCheck) return
+    this.usageSliceStartedAt = now
+    this.usageFlushing = true
+    try {
+      const response = await fetch("/api/voice/usage", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ seconds }),
+      })
+      const data = await response.json().catch(() => ({})) as { quota?: { unlimited?: boolean; remainingSeconds?: number } }
+      if (data.quota?.unlimited) {
+        this.quotaUnlimited = true
+        this.quotaRemainingSeconds = null
+        this.stopUsageMeter(false)
+        return
+      }
+      if (typeof data.quota?.remainingSeconds === "number") this.quotaRemainingSeconds = Math.max(0, data.quota.remainingSeconds)
+      if (!response.ok || this.quotaRemainingSeconds !== null && this.quotaRemainingSeconds <= 0) {
+        this.finishVoiceQuota()
+        return
+      }
+    } catch {
+      // A transient quota heartbeat failure must not kill an otherwise healthy
+      // conversation. The next heartbeat retries and the local deadline still
+      // bounds the normal UI session.
+    } finally {
+      this.usageFlushing = false
+      if (this.usageMeterActive) this.armUsageDeadline()
+    }
+  }
+
+  private finishVoiceQuota() {
+    if (this.quotaUnlimited) return
+    this.quotaRemainingSeconds = 0
+    this.stopUsageMeter(false)
+    this.wantsMic = false
+    this.stopWatchdog()
+    this.stopCapture()
+    this.stopOutput()
+    this.dropSocket()
+    this.callbacks.onQuotaExceeded?.()
+  }
+
   private stopCapture() {
+    this.stopUsageMeter(true)
     if (this.inputProcessor) this.inputProcessor.onaudioprocess = null
     try { this.inputSource?.disconnect() } catch {}
     for (const filter of this.inputFilters) { try { filter.disconnect() } catch {} }
