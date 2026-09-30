@@ -46,9 +46,24 @@ export type GeminiEvent =
   | { type: "reset"; reason: string }
   | { type: "sources"; items: GeminiSource[] }
 
+export type ThinkingLevel = "low" | "medium" | "high"
+
+export type GeminiTiming = {
+  /** Asking Google which models each key can see (cached after the first call). */
+  discoveryMs: number
+  /** First thought summary, if the model sent any. */
+  firstThoughtMs?: number
+  /** First word of the answer - what the person waits for. */
+  firstTextMs?: number
+  totalMs: number
+}
+
 export type GeminiResult = {
   content: string
   model: string
+  /** The thinking level that was actually sent; undefined when Google refused it. */
+  thinkingLevel?: ThinkingLevel
+  timing: GeminiTiming
   modelVersion?: string
   keySource: string
   usage?: GeminiUsage
@@ -169,7 +184,7 @@ type DiscoveryEntry = { at: number; models: Set<string> | null }
 type EngineGlobal = typeof globalThis & {
   __malikGeminiDiscovery?: Map<string, DiscoveryEntry>
   __malikGeminiCooldown?: Map<string, { until: number; code: GeminiErrorCode }>
-  __malikGeminiFeatures?: Map<string, { thinking?: boolean; search?: boolean }>
+  __malikGeminiFeatures?: Map<string, { thinking?: boolean; level?: boolean; search?: boolean }>
   __malikGeminiWorking?: { model: string; at: number }
 }
 
@@ -191,14 +206,22 @@ async function listModels(base: string, key: GeminiKey, fetchImpl: typeof fetch,
   const cached = discovery.get(key.source)
   if (cached && Date.now() - cached.at < DISCOVERY_TTL_MS) return cached.models
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 8_000)
+  const timer = setTimeout(() => controller.abort(), 5_000)
   const onAbort = () => controller.abort()
   signal?.addEventListener("abort", onAbort, { once: true })
   try {
-    const response = await fetchImpl(`${base}/v1beta/models?pageSize=1000`, {
-      headers: { "x-goog-api-key": key.key },
-      signal: controller.signal,
-    })
+    // Raced against the timer as well: a fetch that ignores its abort signal
+    // must not hold every agent hostage.
+    const response = await Promise.race([
+      fetchImpl(`${base}/v1beta/models?pageSize=1000`, {
+        headers: { "x-goog-api-key": key.key },
+        signal: controller.signal,
+      }),
+      new Promise<never>((_, reject) => {
+        if (controller.signal.aborted) reject(new Error("list timeout"))
+        controller.signal.addEventListener("abort", () => reject(new Error("list timeout")), { once: true })
+      }),
+    ])
     if (!response.ok) {
       // A key that cannot even list models will not generate either; the
       // generate call reports why. Remember "unknown", not "empty".
@@ -216,6 +239,9 @@ async function listModels(base: string, key: GeminiKey, fetchImpl: typeof fetch,
     discovery.set(key.source, entry)
     return entry.models
   } catch {
+    // A key whose list hangs would otherwise make every agent wait for the
+    // timeout again. Remember "unknown" for five minutes.
+    if (!signal?.aborted) discovery.set(key.source, { at: Date.now() - DISCOVERY_TTL_MS + 5 * 60_000, models: null })
     return null
   } finally {
     clearTimeout(timer)
@@ -250,7 +276,7 @@ export function chainForKey(configured: string[], visible: Set<string> | null, p
 
 /* ------------------------------------------------------------- errors */
 
-type Classified = { code: GeminiErrorCode; status?: number; retryAfterMs?: number; detail: string; feature?: "thinking" | "search" }
+type Classified = { code: GeminiErrorCode; status?: number; retryAfterMs?: number; detail: string; feature?: "thinking" | "level" | "search" }
 
 function retryDelayFrom(payload: any, header: string | null): number | undefined {
   const details = Array.isArray(payload?.error?.details) ? payload.error.details : []
@@ -270,7 +296,7 @@ function safeDetail(message: string) {
   return message.replace(/AIza[0-9A-Za-z_\-]{10,}/g, "[key]").replace(/key=[^&\s]+/g, "key=[key]").slice(0, 300)
 }
 
-export function classifyGeminiFailure(status: number, payload: any, header: string | null, sent: { thinking: boolean; search: boolean }): Classified {
+export function classifyGeminiFailure(status: number, payload: any, header: string | null, sent: { thinking: boolean; search: boolean; level?: boolean }): Classified {
   const message = String(payload?.error?.message || payload?.message || "")
   const reason = String(payload?.error?.status || "")
   const detail = safeDetail(message || `HTTP ${status}`)
@@ -279,8 +305,11 @@ export function classifyGeminiFailure(status: number, payload: any, header: stri
   if (sent.search && /google_search|googlesearch|grounding|search tool|tool.*not (?:supported|enabled|allowed)/.test(text)) {
     return { code: "BAD_REQUEST", status, detail, feature: "search" }
   }
+  // A refused thinking setting is peeled off one layer at a time: the level
+  // first (the newest field, the likeliest to be unknown), then the whole
+  // thinking config. Each is retried at once on the same model.
   if (sent.thinking && status === 400 && /thinking|thought/.test(text)) {
-    return { code: "BAD_REQUEST", status, detail, feature: "thinking" }
+    return { code: "BAD_REQUEST", status, detail, feature: sent.level ? "level" : "thinking" }
   }
   if (status === 429 || reason === "RESOURCE_EXHAUSTED") {
     return { code: "QUOTA", status, detail, retryAfterMs: retryDelayFrom(payload, header) }
@@ -431,17 +460,29 @@ export type GeminiRunInput = {
   /** Hard stop for the whole call, all attempts included. */
   deadlineMs?: number
   stallMs?: { firstMs: number; nextMs: number }
+  /**
+   * How long Gemini may think before answering. Undefined reads
+   * BUSINESS_GEMINI_THINKING ("low" when unset); "default" leaves it to the
+   * model. Thinking is most of Gemini 3.x Flash's wait, and in a live demo
+   * the wait is the product.
+   */
+  thinkingLevel?: ThinkingLevel | "default"
 }
 
-function requestBody(input: GeminiRunInput, maxOutputTokens: number, thinking: boolean, search: boolean) {
+export function resolveThinkingLevel(value: string | undefined, env: Env = process.env): ThinkingLevel | undefined {
+  const raw = String(value || envValue(env, "BUSINESS_GEMINI_THINKING") || "low").trim().toLowerCase()
+  return raw === "low" || raw === "medium" || raw === "high" ? raw : undefined
+}
+
+function requestBody(input: GeminiRunInput, maxOutputTokens: number, thinking: boolean, search: boolean, level?: ThinkingLevel) {
   return {
     systemInstruction: { parts: [{ text: input.system }] },
     contents: [{ role: "user", parts: [{ text: input.prompt }] }],
     generationConfig: {
       maxOutputTokens,
       // Thought summaries stream while the model is still thinking, so the
-      // card is alive from the first second. The level is left to the model.
-      ...(thinking ? { thinkingConfig: { includeThoughts: true } } : {}),
+      // card is alive from the first second.
+      ...(thinking ? { thinkingConfig: { includeThoughts: true, ...(level ? { thinkingLevel: level } : {}) } } : {}),
     },
     ...(search ? { tools: [{ google_search: {} }] } : {}),
   }
@@ -473,6 +514,10 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
     chain: chainForKey(configured, await listModels(base, key, fetchImpl, input.signal), input.preferredModel),
   })))
   const models = [...new Set(chains.flatMap((item) => item.chain))]
+  const discoveryMs = Date.now() - started
+  const wantedLevel = input.thinkingLevel === "default" ? undefined : resolveThinkingLevel(input.thinkingLevel, env)
+  let firstThoughtAt = 0
+  let firstTextAt = 0
 
   // A lane that was overloaded a moment ago is skipped first. If every lane
   // was skipped that way, they are tried anyway: "overloaded 10 seconds ago"
@@ -499,13 +544,14 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
         const featureKey = cooldownKey(key, model)
         const known = features.get(featureKey) || {}
         let thinking = known.thinking !== false
+        let level = wantedLevel && known.level !== false ? wantedLevel : undefined
         let search = Boolean(input.search) && known.search !== false && features.get(`${key.source}::search`)?.search !== false
         let budget = Math.max(512, Math.min(65_536, Math.round(input.maxOutputTokens)))
         let grownOnce = false
 
-        // Up to three tries on one key+model: without a refused feature, and
+        // A few tries on one key+model: each refused setting peeled off, and
         // once more with room when thinking ate the whole budget.
-        for (let local = 0; local < 3; local += 1) {
+        for (let local = 0; local < 5; local += 1) {
           attempts += 1
           input.onEvent?.({ type: "attempt", model, attempt: attempts })
           const controller = new AbortController()
@@ -524,13 +570,13 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
                 accept: "text/event-stream",
                 "x-goog-api-key": key.key,
               },
-              body: JSON.stringify(requestBody(input, budget, thinking, search)),
+              body: JSON.stringify(requestBody(input, budget, thinking, search, level)),
               signal: controller.signal,
             })
 
             if (!response.ok) {
               const payload = await response.json().catch(() => ({}))
-              classified = classifyGeminiFailure(response.status, payload, response.headers.get("retry-after"), { thinking, search })
+              classified = classifyGeminiFailure(response.status, payload, response.headers.get("retry-after"), { thinking, search, level: Boolean(level) })
             } else {
               await readSse(response, (chunk) => {
                 const candidate = chunk?.candidates?.[0]
@@ -539,9 +585,11 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
                   const text = typeof part?.text === "string" ? part.text : ""
                   if (!text) continue
                   if (part.thought) {
+                    if (!firstThoughtAt) firstThoughtAt = Date.now()
                     outcome.thoughts += 1
                     input.onEvent?.({ type: "thought", text })
                   } else {
+                    if (!firstTextAt) firstTextAt = Date.now()
                     outcome.text += text
                     emitted = true
                     input.onEvent?.({ type: "delta", text })
@@ -581,9 +629,19 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
             } else {
               store.__malikGeminiWorking = { model, at: Date.now() }
               if (outcome.sources.length) input.onEvent?.({ type: "sources", items: outcome.sources })
+              const finished = Date.now()
+              const timing: GeminiTiming = {
+                discoveryMs,
+                firstThoughtMs: firstThoughtAt ? firstThoughtAt - started : undefined,
+                firstTextMs: firstTextAt ? firstTextAt - started : undefined,
+                totalMs: finished - started,
+              }
+              console.info("[BUSINESS_GEMINI_TIMING]", JSON.stringify({ model, key: key.source, level: level || "default", attempts, ...timing, thoughtTokens: outcome.usage?.thoughtTokens, outputTokens: outcome.usage?.outputTokens }))
               return {
                 content,
                 model,
+                thinkingLevel: level,
+                timing,
                 modelVersion: outcome.modelVersion,
                 keySource: key.source,
                 usage: outcome.usage,
@@ -599,6 +657,11 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
           trail.push({ model, key: key.source, code: classified.code, status: classified.status })
           console.warn("[BUSINESS_GEMINI]", JSON.stringify({ model, key: key.source, code: classified.code, status: classified.status, detail: classified.detail }))
 
+          if (classified.feature === "level") {
+            level = undefined
+            features.set(featureKey, { ...features.get(featureKey), level: false })
+            continue
+          }
           if (classified.feature === "thinking") {
             thinking = false
             features.set(featureKey, { ...features.get(featureKey), thinking: false })
@@ -612,6 +675,7 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
 
           if (emitted) {
             emitted = false
+            firstTextAt = 0
             input.onEvent?.({ type: "reset", reason: classified.code })
           }
 

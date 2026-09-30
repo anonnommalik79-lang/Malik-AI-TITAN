@@ -32,7 +32,22 @@ export const maxDuration = 60
  */
 
 type KeyReport = { source: string; listed: boolean; models: string[]; status?: number; detail?: string }
-type LiveReport = { ok: boolean; model?: string; label?: string; ms?: number; reply?: string; error?: string; code?: string; trail?: string[] }
+type LiveReport = {
+  ok: boolean
+  model?: string
+  label?: string
+  ms?: number
+  /** Where the time went: model discovery, first thought, first word. */
+  firstTextMs?: number
+  discoveryMs?: number
+  thoughtTokens?: number
+  thinkingLevel?: string
+  attempts?: number
+  reply?: string
+  error?: string
+  code?: string
+  trail?: string[]
+}
 
 type CheckGlobal = typeof globalThis & { __malikBusinessGeminiLive?: { at: number; result: LiveReport } }
 
@@ -85,7 +100,18 @@ async function liveCheck(): Promise<LiveReport> {
       deadlineMs: 45_000,
       stallMs: { firstMs: 30_000, nextMs: 20_000 },
     })
-    result = { ok: true, model: answer.model, label: geminiLabel(answer.model), ms: Date.now() - started, reply: answer.content.slice(0, 60) }
+    result = {
+      ok: true,
+      model: answer.model,
+      label: geminiLabel(answer.model),
+      ms: Date.now() - started,
+      firstTextMs: answer.timing.firstTextMs,
+      discoveryMs: answer.timing.discoveryMs,
+      thoughtTokens: answer.usage?.thoughtTokens,
+      thinkingLevel: answer.thinkingLevel || "default",
+      attempts: answer.attempts,
+      reply: answer.content.slice(0, 60),
+    }
   } catch (error) {
     const failure = error instanceof GeminiEngineError ? error : null
     result = {
@@ -138,7 +164,7 @@ export async function GET(request: Request) {
     label: geminiLabel(model),
     models: best?.models || configuredGeminiModels(),
     summary,
-    ...(live ? { live: owner ? live : { ok: live.ok, label: live.label, ms: live.ms } } : {}),
+    ...(live ? { live: owner ? live : { ok: live.ok, label: live.label, ms: live.ms, firstTextMs: live.firstTextMs, discoveryMs: live.discoveryMs, thoughtTokens: live.thoughtTokens, thinkingLevel: live.thinkingLevel, attempts: live.attempts } } : {}),
     ...(owner ? { keys: reports } : { keys: reports.length }),
   }, { headers: { "cache-control": "no-store" } })
 }

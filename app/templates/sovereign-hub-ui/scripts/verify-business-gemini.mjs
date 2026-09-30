@@ -131,6 +131,10 @@ await check("an answer streams: thoughts first, then text, with usage and the mo
   assert.equal(request.systemInstruction.parts[0].text, "system")
   assert.equal(request.contents[0].role, "user")
   assert.equal(request.generationConfig.thinkingConfig.includeThoughts, true)
+  assert.equal(request.generationConfig.thinkingConfig.thinkingLevel, "low", "short thinking by default: the wait is the demo")
+  assert.equal(result.thinkingLevel, "low")
+  assert.ok(result.timing.totalMs >= 0 && result.timing.firstTextMs >= 0 && result.timing.discoveryMs >= 0)
+  assert.ok(result.timing.firstThoughtMs <= result.timing.firstTextMs, "thoughts arrive before the answer")
   assert.equal(request.generationConfig.maxOutputTokens, 4_000)
   assert.equal(request.generationConfig.temperature, undefined, "temperature is deprecated for Gemini 3.x and not sent")
   assert.equal(request.tools, undefined, "no search unless asked")
@@ -183,7 +187,7 @@ await check("a retired model is skipped for the next one", async () => {
   assert.equal(result.model, "gemini-3.7-flash")
 })
 
-await check("a refused thinking setting is dropped and the same model answers", async () => {
+await check("a refused thinking setting is peeled off layer by layer and the same model answers", async () => {
   const { fetchImpl, calls } = google({
     answer: (model, key, body) => body.generationConfig.thinkingConfig
       ? googleError(400, "Invalid JSON payload received. Unknown name \"thinkingConfig\"", "INVALID_ARGUMENT")
@@ -191,7 +195,50 @@ await check("a refused thinking setting is dropped and the same model answers", 
   })
   const result = await engine.runGemini({ ...base, fetchImpl })
   assert.equal(result.model, "gemini-3.8-flash")
-  assert.equal(calls.filter((call) => call.kind === "generate").length, 2)
+  const sent = calls.filter((call) => call.kind === "generate").map((call) => call.body.generationConfig.thinkingConfig)
+  assert.deepEqual(sent, [{ includeThoughts: true, thinkingLevel: "low" }, { includeThoughts: true }, undefined])
+  assert.equal(result.thinkingLevel, undefined)
+})
+
+await check("an unknown thinking level is dropped but the live thoughts stay", async () => {
+  const { fetchImpl, calls } = google({
+    answer: (model, key, body) => body.generationConfig.thinkingConfig?.thinkingLevel
+      ? googleError(400, "Invalid value at 'generation_config.thinking_config.thinking_level'", "INVALID_ARGUMENT")
+      : sse([thought("**Думаю**"), text("Ответ"), finish()]),
+  })
+  const events = []
+  const result = await engine.runGemini({ ...base, fetchImpl, onEvent: (event) => events.push(event.type) })
+  assert.equal(result.content, "Ответ")
+  assert.ok(events.includes("thought"))
+  // Remembered: the next call does not send the level again.
+  await engine.runGemini({ ...base, fetchImpl })
+  const last = calls.filter((call) => call.kind === "generate").at(-1).body.generationConfig.thinkingConfig
+  assert.deepEqual(last, { includeThoughts: true })
+})
+
+await check("the thinking level can be raised or left to the model from the environment", async () => {
+  assert.equal(engine.resolveThinkingLevel(undefined, {}), "low")
+  assert.equal(engine.resolveThinkingLevel(undefined, { BUSINESS_GEMINI_THINKING: "HIGH" }), "high")
+  assert.equal(engine.resolveThinkingLevel(undefined, { BUSINESS_GEMINI_THINKING: "default" }), undefined)
+  const { fetchImpl, calls } = google({ answer: () => sse([text("ok"), finish()]) })
+  await engine.runGemini({ ...base, fetchImpl, env: { ...ENV, BUSINESS_GEMINI_THINKING: "default" } })
+  assert.deepEqual(calls.find((call) => call.kind === "generate").body.generationConfig.thinkingConfig, { includeThoughts: true })
+})
+
+await check("a key whose model list hangs slows the first call only", async () => {
+  let lists = 0
+  const { fetchImpl } = google({
+    visible: (key) => {
+      lists += 1
+      return key === KEY_A ? new Promise(() => {}) : models("gemini-3.8-flash")
+    },
+    answer: () => sse([text("ok"), finish()]),
+  })
+  const first = await engine.runGemini({ ...base, fetchImpl })
+  assert.ok(first.timing.discoveryMs >= 4_500, `first ${first.timing.discoveryMs}`)
+  const second = await engine.runGemini({ ...base, fetchImpl })
+  assert.ok(second.timing.discoveryMs < 500, `second ${second.timing.discoveryMs}`)
+  assert.equal(lists, 2)
 })
 
 await check("Research searches Google, shows the links, and does without search when refused", async () => {

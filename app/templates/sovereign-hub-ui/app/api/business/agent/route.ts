@@ -278,7 +278,8 @@ export async function POST(request: Request) {
           usage: result.usage,
           sources: result.sources,
           searched: result.searched,
-          ...(owner ? { key: result.keySource, attempts: result.attempts } : {}),
+          thinkingLevel: result.thinkingLevel || "default",
+          ...(owner ? { key: result.keySource, attempts: result.attempts, timing: result.timing } : {}),
         })
       } catch (error) {
         const failure = error instanceof GeminiEngineError
