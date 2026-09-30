@@ -1,5 +1,6 @@
 import { resolveMediaUser } from "@/lib/media/request"
 import { analyzeMusicPrompt } from "@/lib/media/music-intent"
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
 import { musicModel, musicProviderConfigured, musicProviderName, submitDeapiMusic } from "@/lib/server/deapi-music"
 import { generateMusicLyrics, resolveMusicLyricsLanguage } from "@/lib/server/music-lyrics"
 import { recordMusicJobOwner } from "@/lib/server/music-job-ownership"
@@ -73,6 +74,15 @@ export async function POST(request: Request) {
       code: "AUTH_REQUIRED",
       error: "Войдите в аккаунт, чтобы создавать музыку.",
     }, { status: 401 })
+  }
+
+  if (!hasMalikProAccess(user.plan)) {
+    return Response.json({
+      ok: false,
+      code: "MUSIC_PRO_REQUIRED",
+      error: "Создание треков доступно в MalikAI Plus.",
+      action: "upgrade",
+    }, { status: 402, headers: { "Cache-Control": "no-store" } })
   }
 
   const quota = await getMusicQuota(user.userId, user.plan)
