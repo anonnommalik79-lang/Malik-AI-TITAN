@@ -380,7 +380,7 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
     await geminiLiveRef.current.setStyle(styleRef.current)
     const ready = await geminiLiveRef.current.connect()
     geminiLiveReadyRef.current = ready
-    if (!ready && mountedRef.current && !closingRef.current) {
+    if (!ready && mountedRef.current && !closingRef.current && !geminiLiveRef.current?.isQuotaExhausted()) {
       setLiveError("Голосовой режим сейчас недоступен.")
     }
     return ready
