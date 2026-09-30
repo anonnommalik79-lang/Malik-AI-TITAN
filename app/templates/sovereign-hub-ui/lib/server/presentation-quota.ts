@@ -8,10 +8,10 @@ import { PRESENTATION_COSTS } from "@/lib/presentations/deck"
 /**
  * Presentation credits.
  *
- * One credit is one piece of model work: the outline costs one, every slide
- * written costs one, rewriting a slide costs one. A ten-slide deck is eleven.
- * That is the unit people can reason about — "a deck is about ten credits" —
- * and it is also honest about cost, because a slide is roughly one model call.
+ * A normal finished presentation costs 1 credit. The heaviest presentation
+ * path (large/investor deck) costs 3 credits. Rewriting or adding one slide
+ * afterwards costs 1 credit. The backend may use several model calls, but the
+ * user sees one predictable product-level price.
  *
  * Credits are **reserved before** the model is called and **refunded if it
  * fails**. Charging afterwards, the way a simple counter would, lets three
@@ -23,7 +23,7 @@ import { PRESENTATION_COSTS } from "@/lib/presentations/deck"
  * without a deploy:
  *
  *   PRESENTATION_GUEST_DAILY_CREDITS   0     (sign-in required)
- *   PRESENTATION_FREE_DAILY_CREDITS    24    (two full decks and a few rewrites)
+ *   PRESENTATION_FREE_DAILY_CREDITS    5     (five normal decks, or one complex + two normal)
  *   PRESENTATION_PRO_DAILY_CREDITS     240
  *   PRESENTATION_ULTRA_DAILY_CREDITS   800
  *   owner                               unlimited
@@ -92,7 +92,7 @@ export function presentationPlanLimits(tier: PresentationTier) {
     case "pro":
       return { unlimited: false, dailyCredits: readCount("PRESENTATION_PRO_DAILY_CREDITS", 240), maxSlides: readCount("PRESENTATION_PRO_MAX_SLIDES", 20) }
     case "free":
-      return { unlimited: false, dailyCredits: readCount("PRESENTATION_FREE_DAILY_CREDITS", 24), maxSlides: readCount("PRESENTATION_FREE_MAX_SLIDES", 12) }
+      return { unlimited: false, dailyCredits: readCount("PRESENTATION_FREE_DAILY_CREDITS", 5), maxSlides: readCount("PRESENTATION_FREE_MAX_SLIDES", 12) }
     case "guest":
       return { unlimited: false, dailyCredits: readCount("PRESENTATION_GUEST_DAILY_CREDITS", 0), maxSlides: readCount("PRESENTATION_FREE_MAX_SLIDES", 12) }
   }
