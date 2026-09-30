@@ -166,14 +166,11 @@ export async function POST(request: Request) {
         tone: toneOf(body.tone),
       })
 
-      // Paid only for what arrived.
-      let quota = reservation.quota
-      const undelivered = 0
-      if (undelivered) quota = (await refund(undelivered)) || quota
+      const quota = reservation.quota
       reserved = 0
 
       if (!result.slides.length) {
-        return json({ ok: false, code: "SLIDES_FAILED", error: "Модель не вернула слайды. Кредиты не списаны — попробуйте ещё раз.", quota }, 502)
+        return json({ ok: false, code: "SLIDES_FAILED", error: "Модель не вернула слайды. Дополнительные кредиты не списаны — попробуйте ещё раз.", quota }, 502)
       }
       return json({ ok: true, slides: result.slides, missing: result.missing, quota })
     }
