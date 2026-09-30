@@ -36,7 +36,10 @@ function nextResetAt() {
 
 function limitSeconds() {
   const configured = Number(process.env.VOICE_DAILY_LIMIT_SECONDS || 120)
-  return Number.isFinite(configured) && configured > 0 ? configured : 120
+  const requested = Number.isFinite(configured) && configured > 0 ? configured : 120
+  // Free/regular Voice is a product rule: never let a stale environment value
+  // silently raise it above two minutes. Operators may still lower the cap.
+  return Math.min(120, requested)
 }
 
 function accountHash(userId: string) {
