@@ -20,8 +20,9 @@ import { PRESENTATION_COSTS } from "@/lib/presentations/deck"
  * 36. Reserving first closes that; refunding on failure means nobody pays for
  * a slide they did not get.
  *
- * Every limit is an environment variable, so pricing can change on Render
- * without a deploy:
+ * Paid-tier limits remain environment-configurable. Free presentation credits
+ * are hard-capped at 5/day so an old deployment variable cannot silently
+ * restore the previous larger allowance:
  *
  *   PRESENTATION_GUEST_DAILY_CREDITS   0     (sign-in required)
  *   PRESENTATION_FREE_DAILY_CREDITS    5     (five normal decks, or one complex + two normal)
@@ -93,7 +94,7 @@ export function presentationPlanLimits(tier: PresentationTier) {
     case "pro":
       return { unlimited: false, dailyCredits: readCount("PRESENTATION_PRO_DAILY_CREDITS", 240), maxSlides: readCount("PRESENTATION_PRO_MAX_SLIDES", 20) }
     case "free":
-      return { unlimited: false, dailyCredits: readCount("PRESENTATION_FREE_DAILY_CREDITS", 5), maxSlides: readCount("PRESENTATION_FREE_MAX_SLIDES", 12) }
+      return { unlimited: false, dailyCredits: Math.min(5, readCount("PRESENTATION_FREE_DAILY_CREDITS", 5)), maxSlides: readCount("PRESENTATION_FREE_MAX_SLIDES", 12) }
     case "guest":
       return { unlimited: false, dailyCredits: readCount("PRESENTATION_GUEST_DAILY_CREDITS", 0), maxSlides: readCount("PRESENTATION_FREE_MAX_SLIDES", 12) }
   }
