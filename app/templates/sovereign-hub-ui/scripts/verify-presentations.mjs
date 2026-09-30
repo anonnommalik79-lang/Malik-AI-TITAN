@@ -340,9 +340,9 @@ check("a stored deck with a bad theme or broken slides still opens", () => {
   assert.equal(back.slides.length, 1)
 })
 
-check("prices a deck as one credit per slide plus the plan", () => {
-  assert.equal(deck.deckCost(10), 11)
-  assert.equal(deck.deckCost(4), 5)
+check("prices normal decks at one credit and the largest deck at three", () => {
+  assert.equal(deck.deckCost(10), 1)
+  assert.equal(deck.deckCost(12), 3)
 })
 
 check("every theme defines every token both renderers read", () => {
@@ -378,7 +378,7 @@ check("maps plans to tiers, with guests separate from free accounts", () => {
 })
 
 check("gives each tier its documented daily credits", () => {
-  assert.equal(quota.presentationPlanLimits("free").dailyCredits, 24)
+  assert.equal(quota.presentationPlanLimits("free").dailyCredits, 5)
   assert.equal(quota.presentationPlanLimits("pro").dailyCredits, 240)
   assert.equal(quota.presentationPlanLimits("ultra").dailyCredits, 800)
   assert.equal(quota.presentationPlanLimits("guest").dailyCredits, 0)
@@ -394,20 +394,20 @@ check("lets pricing change from the environment without a deploy", () => withEnv
 
 check("reserves credits and reports what is left", async () => {
   const user = uid()
-  const result = await quota.reservePresentationCredits(user, "free", true, 11)
+  const result = await quota.reservePresentationCredits(user, "free", true, 3)
   assert.equal(result.ok, true)
-  assert.equal(result.quota.used, 11)
-  assert.equal(result.quota.remaining, 13)
+  assert.equal(result.quota.used, 3)
+  assert.equal(result.quota.remaining, 2)
 })
 
 check("refuses a reservation larger than what is left, and says how much is left", async () => {
   const user = uid()
-  await quota.reservePresentationCredits(user, "free", true, 20)
-  const result = await quota.reservePresentationCredits(user, "free", true, 11)
+  await quota.reservePresentationCredits(user, "free", true, 3)
+  const result = await quota.reservePresentationCredits(user, "free", true, 3)
   assert.equal(result.ok, false)
   assert.equal(result.status, 429)
   assert.equal(result.code, "PRESENTATION_CREDITS_EXHAUSTED")
-  assert.match(result.error, /нужно 11, осталось 4/)
+  assert.match(result.error, /нужно 3, осталось 2/)
 })
 
 check("asks a guest to sign in rather than showing zero credits", async () => {
@@ -419,10 +419,10 @@ check("asks a guest to sign in rather than showing zero credits", async () => {
 
 check("refunds what was reserved and not delivered", async () => {
   const user = uid()
-  await quota.reservePresentationCredits(user, "free", true, 8)
+  await quota.reservePresentationCredits(user, "free", true, 5)
   const after = await quota.refundPresentationCredits(user, "free", true, 3)
-  assert.equal(after.used, 5)
-  assert.equal(after.remaining, 19)
+  assert.equal(after.used, 2)
+  assert.equal(after.remaining, 3)
 })
 
 check("a refund can never take the balance below zero", async () => {
@@ -433,11 +433,11 @@ check("a refund can never take the balance below zero", async () => {
 
 check("parallel batches cannot overspend a balance between them", async () => {
   const user = uid()
-  // 24 credits, ten batches of four fired at once: exactly six can be paid for.
-  const results = await Promise.all(Array.from({ length: 10 }, () => quota.reservePresentationCredits(user, "free", true, 4)))
-  assert.equal(results.filter((r) => r.ok).length, 6)
+  // Five daily credits: ten one-credit reservations fired at once still stop at five.
+  const results = await Promise.all(Array.from({ length: 10 }, () => quota.reservePresentationCredits(user, "free", true, 1)))
+  assert.equal(results.filter((r) => r.ok).length, 5)
   const now = await quota.getPresentationQuota(user, "free", true)
-  assert.equal(now.used, 24)
+  assert.equal(now.used, 5)
   assert.equal(now.remaining, 0)
 })
 
