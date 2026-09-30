@@ -171,6 +171,6 @@ assert.deepEqual(unsupportedInvestorFigures({ id: "slide-2026", title: "Выру
 assert.deepEqual(unsupportedInvestorFigures({ title: "Выручка 1 200 ₸" }, "Выручка 1200 ₸"), [])
 assert.deepEqual(unsupportedInvestorFigures({ layout: "chart", data: [{ label: "Клиенты", value: 42 }] }, "Питч-дек для инвесторов"), ["42"])
 const presentationRoute = fs.readFileSync("app/api/presentations/route.ts", "utf8")
-assert.ok(presentationRoute.indexOf("INVESTOR_DECK_TOO_SHORT") < presentationRoute.indexOf("reservePresentationCredits(userId, plan, authenticated, PRESENTATION_COSTS.outline)"))
+assert.ok(presentationRoute.indexOf("INVESTOR_DECK_TOO_SHORT") < presentationRoute.indexOf("const generationCost = presentationGenerationCost"))
 assert.match(fs.readFileSync("components/sovereign/presentations/PresentationStudio.tsx", "utf8"), /Для инвестора<\/button>/)
 console.log("creation engine: evidence-bound investor outline and no-credit short-deck guard passed")
