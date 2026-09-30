@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const entitlement = await resolveRequestEntitlement(request)
   const unlimited = entitlement.plan === "owner"
-  const before = getVoiceUsage(entitlement.userId, unlimited)
+  const before = await getVoiceUsage(entitlement.userId, unlimited)
 
   if (!unlimited && before.remainingSeconds <= 0) {
     return response({ ok: false, code: "VOICE_DAILY_LIMIT_REACHED", error: "Лимит Voice на сегодня использован. Доступ восстановится завтра.", quota: before }, 429)
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   const seconds = Math.max(0, Math.min(15, Number(body.seconds) || 0))
   if (!seconds) return response({ ok: true, quota: before })
 
-  const quota = consumeVoiceUsage(entitlement.userId, seconds, unlimited)
+  const quota = await consumeVoiceUsage(entitlement.userId, seconds, unlimited)
   if (!quota.ok) {
     return response({ ok: false, code: "VOICE_DAILY_LIMIT_REACHED", error: "Лимит Voice на сегодня использован. Доступ восстановится завтра.", quota }, 429)
   }
