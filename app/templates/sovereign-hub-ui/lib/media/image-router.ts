@@ -155,7 +155,7 @@ export async function routeImageGeneration(
       "Return only the edited image result, never an explanation and never an unrelated regeneration.",
       `User edit instruction: ${input.prompt}`,
     ].join("\n")
-    if (!preparedCloudflareImageConfigured()) return { ok: false, provider: "cloudflare", imageUrl: "", remainingDailyImages: 0, error: "Редактирование фото пока не подключено. Настройте Cloudflare Workers AI." }
+    if (!preparedCloudflareImageConfigured() && !tertiaryCloudflareImageConfigured()) return { ok: false, provider: "cloudflare", imageUrl: "", remainingDailyImages: 0, error: "Редактирование фото пока не подключено. Настройте Cloudflare Workers AI." }
     try {
       // Both Cloudflare quality accounts share ONE budget. A dead first account
       // must not turn one image edit into several minutes of hanging requests.
