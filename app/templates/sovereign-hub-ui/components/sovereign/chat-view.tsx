@@ -74,6 +74,8 @@ import { ChatLibraryPicker } from "./ChatLibraryPicker"
 import { ChatToolWorkspace, type ChatToolWorkspaceMode } from "./ChatToolWorkspace"
 import { PREFILL_EVENT, takePrefillPrompt } from "@/lib/malik-context"
 import { AnswerSheet } from "./answer-sheet/AnswerSheet"
+import { ChatExecution } from "./ChatExecution"
+import type { ExecutionTrace } from "@/lib/ai/chat-execution"
 import { isSheetRequest, isSheetWorthy } from "@/lib/ai/answer-sheet"
 
 export type { ChatSendOptions }
@@ -134,6 +136,7 @@ interface Message {
   attachments?: ChatAttachment[]
   /** Latest server status while the answer is being prepared. */
   liveStatus?: string
+  execution?: ExecutionTrace
   /** A Superflow started by this turn. */
   superflow?: SuperflowRef
   /** How long the turn took before its first word, with the reported steps. */
@@ -1750,7 +1753,8 @@ function MessageBubble({
             </div>
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
-          {!isUser && !streaming && message.thought && !olderVersion && !message.generatedMedia && !message.superflow ? (
+          {!isUser && message.execution && !olderVersion ? <ChatExecution trace={message.execution} live={streaming} /> : null}
+          {!isUser && !message.execution && !streaming && message.thought && !olderVersion && !message.generatedMedia && !message.superflow ? (
             <ThoughtTrace thought={message.thought} sources={message.research?.usedWeb ? message.research.sources.length : 0} />
           ) : null}
           {isUser && message.attachments?.length ? <UserAttachmentGallery items={message.attachments} /> : null}
@@ -1847,7 +1851,7 @@ function MessageBubble({
                 )
             )
             : (streaming
-              ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} liveStatus={message.liveStatus} />
+              ? message.execution ? null : <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} liveStatus={message.liveStatus} />
               : "")}
           {/* An explicit request for reference photos gets real, attributed thumbnails. */}
           {!isUser && !streaming && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && displayContent.trim() && !/^\s*!\[/m.test(displayContent) ? (

@@ -1,6 +1,7 @@
 import "server-only"
 
 import { runMalikPlugin, type MalikPluginExecution, type MalikPluginSource } from "@/lib/server/plugin-runtime"
+import type { ExecutionReporter } from "@/lib/ai/chat-execution"
 
 type FusionSource = MalikPluginSource
 
@@ -58,7 +59,7 @@ export function requestedFusionConnectors(promptValue: string) {
     .slice(0, 4)
 }
 
-export async function collectMalikConnectedContext(promptValue: string) {
+export async function collectMalikConnectedContext(promptValue: string, activity?: ExecutionReporter) {
   const prompt = cleanPrompt(promptValue)
   const connectorIds = requestedFusionConnectors(prompt)
   if (!connectorIds.length) {
@@ -72,7 +73,9 @@ export async function collectMalikConnectedContext(promptValue: string) {
   }
 
   const executions = await Promise.all(
-    connectorIds.map((id) => runMalikPlugin(id, prompt).catch((error): MalikPluginExecution => ({
+    connectorIds.map(async (id) => {
+      const call = activity?.start(`Получение данных · ${id}`, "plugin", id, { query: prompt })
+      const result = await runMalikPlugin(id, prompt).catch((error): MalikPluginExecution => ({
       content: "### " + id + "\nConnected source failed: " + (error instanceof Error ? error.message : String(error)),
       provider: "plugin:" + id,
       model: "malik-plugin-runtime-v1.1",
@@ -81,7 +84,11 @@ export async function collectMalikConnectedContext(promptValue: string) {
       attempts: [{ provider: id, model: "live-api", ok: false, error: error instanceof Error ? error.message : String(error) }],
       pluginId: id,
       pluginName: id,
-    }))),
+      }))
+      const ok = result.connected === true && result.attempts.some((attempt) => attempt.ok)
+      activity?.finish(call, result.content, ok ? "completed" : "failed", ok ? undefined : result.attempts.find((attempt) => attempt.error)?.error || "Нет доступа к подключённым данным")
+      return result
+    }),
   )
 
   const usable = executions.filter((item) => item.connected === true && item.attempts.some((attempt) => attempt.ok) && item.content.trim())

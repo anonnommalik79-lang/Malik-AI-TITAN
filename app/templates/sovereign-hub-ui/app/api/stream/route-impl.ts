@@ -29,6 +29,7 @@ import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/
 import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers } from "@/lib/ai/superpowers"
 import { detectScheduleIntent } from "@/lib/ai/schedule-intent"
 import { createScheduledTask, scheduledTasksStatus } from "@/lib/server/scheduled-tasks"
+import { createExecutionReporter, type ExecutionReporter } from "@/lib/ai/chat-execution"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
@@ -402,13 +403,14 @@ async function runSelectedAnswer(
   onProgress?: (progress: any) => void,
   maxOutputTokens?: number,
   onToken?: (chunk: string) => void,
+  activity?: ExecutionReporter,
 ) {
   const pluginCommand = parsePluginCommand(coderPrompt(body))
   if (pluginCommand) {
     const result = await runPluginModelAnswer(pluginCommand, body, {
       modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
       allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
-    }, onProgress, onToken)
+    }, onProgress, onToken, activity)
     return { ...result.answer, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID }
   }
 
@@ -425,6 +427,9 @@ async function runSelectedAnswer(
   )
 
   if (requestAttachments.length) {
+    const fileCall = activity?.start("Анализ загруженных материалов", "file", hasVideoAttachment ? "vision.video" : "attachments.read", {
+      files: requestAttachments.map((item: any) => ({ name: item.name, kind: item.kind, mime: item.mime, size: item.size })),
+    })
     onProgress?.({
       phase: hasVideoAttachment ? "video-analysis" : "multimodal",
       text: hasVideoAttachment
@@ -455,7 +460,8 @@ async function runSelectedAnswer(
         superpowerPrompt,
         buildChatArtifactSkillPrompt(coderPrompt(body)),
       ].filter(Boolean).join("\n"),
-    })
+    }).catch((error) => { activity?.finish(fileCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
+    activity?.finish(fileCall, { route: attachmentRoute.kind, files: requestAttachments.length })
 
     if (attachmentRoute.kind === "answer") {
       return {
@@ -528,6 +534,8 @@ async function runSelectedAnswer(
       },
       onProgress,
       onToken,
+      undefined,
+      activity,
     )
     return agentRuntime ? { ...answer, agentRuntime } : answer
   }
@@ -542,6 +550,7 @@ async function runSelectedAnswer(
     requestedDepth: executionBody?.responseDepth || executionBody?.metadata?.responseDepth,
   })
   const artifactSkillPrompt = buildChatArtifactSkillPrompt(coderInput)
+  const codeCall = activity?.start("Написание кода моделью", "code", "MalikCoder 1.0", { historyMessages: coderHistoryItems.length })
   const result = await runMalikCoderOrchestrator({
     prompt: coderInput,
     history: coderHistoryItems,
@@ -557,7 +566,8 @@ async function runSelectedAnswer(
       artifactSkillPrompt,
     ].filter(Boolean).join("\n"),
     maxTokens: maxOutputTokens || brain.outputTokenTarget,
-  })
+  }).catch((error) => { activity?.finish(codeCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
+  activity?.finish(codeCall, { characters: result.content.length, stages: result.usage.stages.map((stage) => ({ ok: stage.ok })) })
   onProgress?.({ phase: "finalizing", text: "Malik AI проверяет и завершает результат" })
 
   return {
@@ -717,6 +727,9 @@ function liveSseResponse(
         controller.close()
       }
 
+      const activity = createExecutionReporter((step) => send("activity", { type: "activity", step, traceId: activity.snapshot().id, startedAt }), selection?.modelId || DEFAULT_MALIK_MODEL_ID)
+      const responseCall = activity.start(isProjectBuildRequest(body) ? "Сборка проекта" : "Обработка запроса", isProjectBuildRequest(body) ? "code" : "status", "malik.chat", { attachments: Array.isArray(body.attachments) ? body.attachments.length : 0 })
+
       send("status", { type: "status", text: isProjectBuildRequest(body) ? "Malik AI начинает сборку проекта" : "Malik AI принял запрос" })
       if (!isProjectBuildRequest(body)) {
         send("progress", { type: "progress", phase: "thinking", text: "Думает…" })
@@ -728,17 +741,17 @@ function liveSseResponse(
           text: isProjectBuildRequest(body)
             ? "Malik AI продолжает собирать и проверять проект…"
             : streamedAny
-              ? "Malik AI продолжает писать полный ответ…"
-              : "Подключаю самую сильную свободную модель…",
+              ? "Ответ продолжает поступать…"
+              : "Ожидаю ответ сервиса…",
         })
       }, 15_000)
 
       const answerPromise = isProjectBuildRequest(body)
-        ? runProjectAnswer(body, selection, entitlement.userId, (text) => send("status", { type: "status", text }))
+        ? runProjectAnswer(body, selection, entitlement.userId, (text) => { activity.status(text, "code"); send("status", { type: "status", text }) })
         : runSelectedAnswer(
             body,
             selection,
-            (progress) => send("progress", { type: "progress", ...progress }),
+            (progress) => { if (!progress.kind && progress.phase !== "generating") activity.status(progress.text); send("progress", { type: "progress", ...progress }) },
             maxOutputTokens,
             (chunk) => {
               if (!chunk || cancelled) return
@@ -746,10 +759,12 @@ function liveSseResponse(
               if (!writingStatusSent) {
                 writingStatusSent = true
                 send("progress", { type: "progress", phase: "writing", text: "Пишет ответ…" })
+                activity.status("Ответ поступает в чат")
               }
               const safeChunk = protectStreamChunk(chunk)
               if (safeChunk) send("content", { type: "content", content: safeChunk })
             },
+            activity,
           )
 
       void answerPromise.then(async (answer) => {
@@ -781,6 +796,7 @@ function liveSseResponse(
         })
         await persistFounderChatTurn(body, entitlement, answer)
         stopHeartbeat()
+        activity.finish(responseCall, { characters: content.length, sources: answer.sources.length, artifact: "projectArtifact" in answer ? answer.projectArtifact : undefined })
         send("done", {
           type: "done",
           provider: answer.provider,
@@ -796,14 +812,17 @@ function liveSseResponse(
           tookMs: Date.now() - startedAt,
           agentRuntime: "agentRuntime" in answer ? answer.agentRuntime : undefined,
           projectArtifact: "projectArtifact" in answer ? answer.projectArtifact : undefined,
+          execution: activity.settle("completed"),
         })
         close()
       }).catch((error) => {
         stopHeartbeat()
         const payload = malikModelErrorPayload(error)
+        activity.finish(responseCall, undefined, "failed", payload.message || payload.error)
         send("error", {
           type: "error",
           message: payload.message || payload.error || "Malik AI temporarily unavailable.",
+          execution: activity.settle("failed"),
         })
         close()
       })

@@ -10,6 +10,7 @@ import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/
 import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers, superpowerOutputBudget } from "@/lib/ai/superpowers"
 import { collectMalikConnectedContext, requestedFusionConnectors } from "@/lib/server/context-fusion"
 import { collectMalikScienceContext } from "@/lib/server/science-context"
+import type { ExecutionReporter } from "@/lib/ai/chat-execution"
 
 type ProviderAttempt = {
   provider: string
@@ -654,7 +655,7 @@ function rankSourcesForPrompt(prompt: string, sources: SourceItem[]) {
   return scored.filter((item) => item.relevant).map((item) => item.source)
 }
 
-async function gatherSources(prompt: string, emit?: ResearchEmitter): Promise<SourceItem[]> {
+async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: ExecutionReporter): Promise<SourceItem[]> {
   const queries = buildQueries(prompt)
   const perQuery = Number(process.env.MALIK_GOD_SEARCH_PER_QUERY || 6)
 
@@ -665,6 +666,7 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter): Promise<So
 
   const batches = await Promise.allSettled(
     queries.map(async (query) => {
+      const call = activity?.start("Поиск в открытом интернете", "search", "web.search", { query })
       emit?.({ kind: "search", text: `Ищу через Google News и открытый веб · ${query}` })
       const settled = await Promise.allSettled([
         searchSerper(query, perQuery),
@@ -676,7 +678,9 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter): Promise<So
         searchWikipedia(query, perQuery),
         searchGdelt(query, perQuery),
       ])
-      return settled.flatMap((item) => item.status === "fulfilled" ? item.value : [])
+      const results = settled.flatMap((item) => item.status === "fulfilled" ? item.value : [])
+      activity?.finish(call, { found: results.length, sources: results.slice(0, 5).map((item) => ({ title: item.title, url: item.url })) }, results.length ? "completed" : "failed", results.length ? undefined : "Поисковые сервисы не вернули результатов")
+      return results
     })
   )
 
@@ -695,13 +699,16 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter): Promise<So
   )
 
   if (unique.length < 3) {
+    const call = activity?.start("Дополнительный поиск", "search", "web.scout", { query: prompt })
     emit?.({ kind: "search", text: "Расширяю поиск через Malik Web Scout · Groq Browser Search" })
     try {
       unique = diverseSources(
         rankSourcesForPrompt(prompt, uniqueSources([...unique, ...(await searchGroqBrowser(prompt, perQuery))], Math.max(maxSearchResults * 3, 48))),
         maxSearchResults,
       )
+      activity?.finish(call, { sources: unique.length })
     } catch {
+      activity?.finish(call, undefined, "failed", "Дополнительный поиск недоступен; использую доступные источники")
       // Other providers may still have returned usable evidence.
     }
   }
@@ -721,6 +728,7 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter): Promise<So
   const maxSources = Number(process.env.MALIK_GOD_MAX_SOURCES || 8)
   const preferred = unique.slice(0, Math.min(maxSources, 6))
   const read = await Promise.allSettled(preferred.map(async (source) => {
+    const call = activity?.start(`Чтение · ${source.domain}`, "read", "web.read", { url: source.url }, source.url)
     emit?.({
       kind: "reading",
       text: `Читаю · ${source.domain}`,
@@ -731,6 +739,7 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter): Promise<So
       source,
     })
     const page = await fetchPageText(source)
+    activity?.finish(call, page ? { title: page.title, characters: page.text.length, excerpt: page.text.slice(0, 1200) } : { title: source.title, snippet: source.snippet, limitation: "Полная страница недоступна; доступен только поисковый фрагмент" }, page ? "completed" : "failed", page ? undefined : "Не удалось прочитать полную страницу")
     return page
       ? { ...source, title: page.title || source.title, snippet: page.text.slice(0, 2200) }
       : source
@@ -969,6 +978,7 @@ export async function malikGodAnswer(
   emitResearch?: ResearchEmitter,
   emitToken?: (chunk: string) => void,
   serverConnected?: { context: string; sources: SourceItem[] },
+  activity?: ExecutionReporter,
 ): Promise<GodAnswer> {
   const prompt = extractPrompt(body)
   const activeSuperpowers = detectMalikSuperpowers(
@@ -994,6 +1004,7 @@ export async function malikGodAnswer(
   // product behavior and should be instant regardless of the selected model.
   const local = localSmart(prompt)
   if (local && !fusionActive) {
+    activity?.status("Мгновенный ответ без внешних инструментов")
     return {
       content: local,
       provider: "local-smart",
@@ -1006,7 +1017,7 @@ export async function malikGodAnswer(
   }
 
   const requestedConnected = !serverConnected && connectorIds.length
-    ? await collectMalikConnectedContext(prompt)
+    ? await collectMalikConnectedContext(prompt, activity)
     : null
   if (requestedConnected?.requested && !requestedConnected.context) {
     return {
@@ -1042,10 +1053,10 @@ export async function malikGodAnswer(
     }))
     const usedWeb = powerForcesWeb || shouldUseWeb(prompt, body)
     const [webSources, connected, science] = await Promise.all([
-      usedWeb ? gatherSources(prompt, emitResearch) : Promise.resolve([] as SourceItem[]),
+      usedWeb ? gatherSources(prompt, emitResearch, activity) : Promise.resolve([] as SourceItem[]),
       serverConnected
         ? Promise.resolve({ ...serverConnected, requested: true, connectorIds: [] as string[], executions: [] as any[] })
-        : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(prompt) : Promise.resolve({ requested: false, connectorIds: [] as string[], context: "", sources: [] as any[], executions: [] as any[] }),
+        : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(prompt, activity) : Promise.resolve({ requested: false, connectorIds: [] as string[], context: "", sources: [] as any[], executions: [] as any[] }),
       scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
     ])
     const sources: SourceItem[] = [...webSources, ...(connected.sources as SourceItem[]), ...(science.sources as SourceItem[])].slice(0, 32)
@@ -1056,6 +1067,7 @@ export async function malikGodAnswer(
       connected.context,
       science.context,
     ].filter(Boolean).join("\n\n")
+    const modelCall = activity?.start("Подготовка ответа моделью", "model", selection.modelId, { sources: sources.length, attachments: attachments.length })
     const result = await runStrictMalikModel({
       modelId: selection.modelId,
       prompt: strictPrompt,
@@ -1067,8 +1079,9 @@ export async function malikGodAnswer(
       reasoningEffort: brain.depth === "instant" ? "low" : brain.depth === "balanced" ? "medium" : "high",
       allowCatalog: selection.allowCatalog === true,
       onToken: emitToken,
-    })
+    }).catch((error) => { activity?.finish(modelCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
     const content = cleanText(result.content)
+    activity?.finish(modelCall, { characters: content.length, model: result.selectedModelId, sources: sources.length })
     return {
       content,
       provider: result.provider,
@@ -1110,16 +1123,18 @@ export async function malikGodAnswer(
   }
 
   const [webSources, connected, science] = await Promise.all([
-    usedWeb ? gatherSources(prompt, emitResearch) : Promise.resolve([] as SourceItem[]),
+    usedWeb ? gatherSources(prompt, emitResearch, activity) : Promise.resolve([] as SourceItem[]),
     serverConnected
       ? Promise.resolve(serverConnected)
-      : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(prompt) : Promise.resolve({ context: "", sources: [] as SourceItem[] }),
+      : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(prompt, activity) : Promise.resolve({ context: "", sources: [] as SourceItem[] }),
     scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
   ])
   const sources: SourceItem[] = [...webSources, ...connected.sources, ...(science.sources as SourceItem[])].slice(0, 32)
   const usedEvidence = usedWeb || Boolean(connected.context) || science.sources.length > 0
   const providerPrompt = [prompt, connected.context, science.context].filter(Boolean).join("\n\n")
+  const modelCall = activity?.start("Подготовка ответа моделью", "model", "model.generate", { sources: sources.length })
   const result = await callProviderChain(providerPrompt, usedEvidence, sources, maxTokens, Boolean(connected.context))
+  activity?.finish(modelCall, { characters: result.content.length }, result.content ? "completed" : "failed", result.content ? undefined : "Модель не вернула ответа")
 
   let answer: GodAnswer
   if (result.content) {

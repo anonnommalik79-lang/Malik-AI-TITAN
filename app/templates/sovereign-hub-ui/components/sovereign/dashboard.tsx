@@ -134,6 +134,7 @@ import { AutonomousCompany } from "./business/AutonomousCompany"
 import { NewsroomStudio } from "./media/NewsroomStudio"
 import { GenerationAnimation } from "./generation-animation"
 import type { GenerationStatusType } from "./generation-status"
+import { createExecutionReporter, normalizeExecutionTrace, settleExecution, upsertExecutionStep, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import { AI_MODES } from "./power-registry"
 import type { AiModeId, PowerAction } from "./power-registry"
 import type { Capability } from "@/lib/ai/capabilities/types"
@@ -271,6 +272,7 @@ interface Message {
   attachments?: ChatAttachment[]
   /** Short server status ("Думает…", "Пишет ответ…") shown while the turn streams. */
   liveStatus?: string
+  execution?: ExecutionTrace
   /** A Superflow started by this turn: a small reference, the flow lives on the server. */
   superflow?: SuperflowRef
   /** How long Malik worked before the first word, and the steps it reported. */
@@ -1519,6 +1521,7 @@ function reviveMessage(message: any): Message {
     attachments,
     superflow: reviveSuperflowRef(message?.superflow),
     thought: reviveThought(message?.thought),
+    execution: normalizeExecutionTrace(message?.execution, true),
     versions: Array.isArray(message?.versions)
       ? message.versions
           .filter((item: any) => item && typeof item.content === "string" && item.content.trim())
@@ -6369,6 +6372,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return { ms, steps: thoughtState.trail.slice(-8) }
   }
 
+  let finalExecution: ExecutionTrace | undefined
+  const applyExecution = (trace: ExecutionTrace) => {
+    finalExecution = trace
+    setMessages((current) => current.map((message) => message.id === assistantMessage.id ? { ...message, execution: trace } : message))
+  }
+
   const finalizeAssistant = (finalText: string, finalCode?: string, finalResearch?: MalikMessageResearch, failed = false) => {
     const thought = failed ? undefined : thoughtOf()
     const hasProjectCode = Boolean(finalCode && finalCode.trim().split("\n").length >= 25)
@@ -6396,6 +6405,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
               research: finalResearch || m.research,
               actionPlan: finalActionPlan || m.actionPlan,
               thought,
+              execution: finalExecution,
             }
           : m
       )
@@ -6420,6 +6430,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       research: finalResearch || assistantMessage.research,
       actionPlan: finalActionPlan || assistantMessage.actionPlan,
       thought,
+      execution: finalExecution,
     }
     setChats(prev =>
       prev.map(c => {
@@ -6448,6 +6459,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       ...assistantMessage,
       content: buildInlineMediaAssistantText(media),
       generatedMedia: media,
+      execution: finalExecution,
       isStreaming: false,
       intentType: "chat" as const,
     }
@@ -6559,6 +6571,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }
 
   if (inlineMediaKind && assistantMessage.generatedMedia) {
+    const mediaActivity = createExecutionReporter(() => applyExecution(mediaActivity.snapshot()), getMalikModel(selectedModelId).label)
+    const mediaCall = mediaActivity.start(inlineMediaKind === "video" ? "Генерация видео" : editingImage ? "Редактирование загруженного изображения" : "Генерация изображения", "media", inlineMediaKind === "video" ? "video.generate" : "image.generate", { prompt: inlineMediaPrompt, editing: Boolean(editingImage) })
     try {
       setIsGeneratingTerminal(false)
       patchInlineMedia({ status: "thinking", progress: 14 })
@@ -6660,6 +6674,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         (isProcessingStatus(finalPayload?.status) || statusUrl || jobId)
 
       if (shouldPersistImageJob) {
+        mediaActivity.finish(mediaCall, { jobId, status: "queued", note: "Задача принята сервисом; изображение ещё не готово" })
+        applyExecution(mediaActivity.settle("completed"))
         finalizeInlineMedia({
           ...assistantMessage.generatedMedia,
           status: "generating",
@@ -6789,6 +6805,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       if (inlineMediaKind === "image" && readyMedia.status === "ready" && typeof window !== "undefined") {
         window.dispatchEvent(new Event("malik-image-credits-changed"))
       }
+      mediaActivity.finish(mediaCall, { status: readyMedia.status, jobId: readyMedia.jobId, ready: readyMedia.status === "ready" })
+      applyExecution(mediaActivity.settle("completed"))
       finalizeInlineMedia(readyMedia)
     } catch (error) {
       const failedMedia: InlineMediaGeneration = {
@@ -6798,6 +6816,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         error: error instanceof Error ? error.message : "Unknown media generation error",
       }
       setErrorNotification(buildInlineMediaAssistantText(failedMedia))
+      mediaActivity.finish(mediaCall, undefined, "failed", failedMedia.error)
+      applyExecution(mediaActivity.settle("failed"))
       finalizeInlineMedia(failedMedia)
     } finally {
       setIsLoading(false)
@@ -6816,6 +6836,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   activeStreamAbortRef.current?.abort()
   activeStreamAbortRef.current = streamController
   setStreamAbortable(true)
+  applyExecution({ version: 1, id: assistantMessage.id, startedAt: Date.now(), state: "running", model: getMalikModel(selectedModelId).label,
+    steps: [{ id: `${assistantMessage.id}:request`, title: "Отправка запроса", kind: "status", state: "running", startedAt: Date.now() }] })
 
   try {
     dashboardEventBus.emit({
@@ -7018,6 +7040,19 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         let payload: any
         try { payload = JSON.parse(rawData) } catch { return }
 
+        if (eventName === "activity" || payload?.type === "activity") {
+          const trace = finalExecution && finalExecution.id === payload.traceId ? finalExecution : {
+            version: 1 as const, id: String(payload.traceId || assistantMessage.id), startedAt: Number(payload.startedAt) || Date.now(),
+            state: "running" as const, model: getMalikModel(selectedModelId).label, steps: [],
+          }
+          applyExecution(upsertExecutionStep(trace, payload.step))
+          return
+        }
+        if (eventName === "status" || payload?.type === "status") {
+          applyLiveStatus(payload?.text)
+          return
+        }
+
         if (eventName === "progress" || payload?.type === "progress") {
           if (RESEARCH_PROGRESS_KINDS.has(String(payload?.kind || ""))) {
             applyResearchProgress(payload as MalikResearchProgress)
@@ -7038,6 +7073,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         }
         if (eventName === "done" || payload?.type === "done") {
           sawDone = true
+          const trace = normalizeExecutionTrace(payload?.execution)
+          if (trace) applyExecution({ ...trace, model: getMalikModel(selectedModelId).label })
+          else if (finalExecution) applyExecution(settleExecution(finalExecution, "completed"))
           const sources = Array.isArray(payload?.sources)
             ? payload.sources.map(reviveWebSource).filter(Boolean).slice(0, 12) as MalikWebSource[]
             : finalResearch?.sources || []
@@ -7062,6 +7100,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           return
         }
         if (eventName === "error" || payload?.type === "error") {
+          const trace = normalizeExecutionTrace(payload?.execution)
+          if (trace) applyExecution({ ...trace, model: getMalikModel(selectedModelId).label })
           throw new Error(payload?.message || payload?.error || "Malik AI временно недоступна.")
         }
       }
@@ -7089,6 +7129,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     // The Stop button closes the stream itself (after its own marker), which
     // is not a broken connection.
     const stoppedByUser = /Остановлено пользователем\.?\s*$/u.test(fullText)
+    if (finalExecution?.state === "running") applyExecution(settleExecution(finalExecution, stoppedByUser ? "cancelled" : connectionCut ? "interrupted" : "completed"))
     if (connectionCut && fullText && !stoppedByUser && !isProjReq) {
       fullText = `${fullText}\n\n_Соединение прервалось — ответ может быть неполным. Нажмите «Перегенерировать», чтобы повторить._`
     }
@@ -7159,6 +7200,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   } catch (error) {
     stopLive()
     if (streamController.signal.aborted) {
+      if (finalExecution) applyExecution(settleExecution(finalExecution, "cancelled"))
       const partial = cleanDashboardAIText(liveShownText || fullText)
       finalizeAssistant(
         partial ? `${partial}\n\n_Остановлено пользователем._` : "_Остановлено пользователем._",
@@ -7189,6 +7231,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         ? error.message
         : `${getMalikModel(selectedModelId).label} временно недоступна. Попробуйте ещё раз или выберите другую модель.`
     setErrorNotification(errorMessage)
+    if (finalExecution) applyExecution(settleExecution(upsertExecutionStep(finalExecution, { id: `${assistantMessage.id}:error`, title: connectionDropped ? "Соединение прервано" : "Запрос не завершён", kind: "status", state: "failed", startedAt: Date.now(), endedAt: Date.now(), error: errorMessage }), connectionDropped ? "interrupted" : "failed"))
 
     const elapsed = Date.now() - startTime
     if (isProjReq && elapsed < MIN_TERMINAL_TIME) {

@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, type ReactNode } from "react"
 import { requestPersistentGeneratedImageStorage, setGeneratedImageAccountScope } from "@/lib/media/client-generated-image-store"
+import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-execution"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const ACCOUNT_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
@@ -33,6 +34,7 @@ type BackgroundTurnResult = {
   provider?: string
   model?: string
   completedAt?: string
+  execution?: ExecutionTrace
 }
 
 type BackgroundRuntime = {
@@ -240,6 +242,7 @@ function patchRecoveredTurn(
           content,
           isStreaming: false,
           backgroundRecovered: true,
+          execution: normalizeExecutionTrace(result.execution, true) || message.execution,
           ...(result.model ? { modelId: result.model } : {}),
         }
       : message

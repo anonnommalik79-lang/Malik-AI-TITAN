@@ -2,6 +2,7 @@ import "server-only"
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto"
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-execution"
 
 export type BackgroundChatTurn = {
   turnId: string
@@ -13,6 +14,7 @@ export type BackgroundChatTurn = {
   createdAt: string
   completedAt?: string
   expiresAt: string
+  execution?: ExecutionTrace
 }
 
 type StoredEnvelope = {
@@ -185,6 +187,7 @@ export async function completeBackgroundChatTurn(turnId: string, input: {
   content: string
   provider?: string
   model?: string
+  execution?: ExecutionTrace
 }) {
   const normalized = normalizeBackgroundTurnId(turnId)
   if (!normalized) return null
@@ -196,13 +199,14 @@ export async function completeBackgroundChatTurn(turnId: string, input: {
     content: String(input.content || "").slice(0, MAX_RESULT_CHARS),
     provider: String(input.provider || "").slice(0, 160) || undefined,
     model: String(input.model || "").slice(0, 200) || undefined,
+    execution: normalizeExecutionTrace(input.execution, true),
     createdAt: current?.createdAt || new Date(now).toISOString(),
     completedAt: new Date(now).toISOString(),
     expiresAt: current?.expiresAt || new Date(now + TTL_MS).toISOString(),
   })
 }
 
-export async function failBackgroundChatTurn(turnId: string, error: unknown) {
+export async function failBackgroundChatTurn(turnId: string, error: unknown, execution?: ExecutionTrace) {
   const normalized = normalizeBackgroundTurnId(turnId)
   if (!normalized) return null
   const current = await readBackgroundChatTurn(normalized)
@@ -211,6 +215,7 @@ export async function failBackgroundChatTurn(turnId: string, error: unknown) {
     turnId: normalized,
     status: "failed",
     error: (error instanceof Error ? error.message : String(error || "Background chat failed")).slice(0, 4000),
+    execution: normalizeExecutionTrace(execution, true),
     createdAt: current?.createdAt || new Date(now).toISOString(),
     completedAt: new Date(now).toISOString(),
     expiresAt: current?.expiresAt || new Date(now + TTL_MS).toISOString(),

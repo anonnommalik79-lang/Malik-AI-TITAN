@@ -1,5 +1,6 @@
 import { after } from "next/server"
 import { POST as streamPOST } from "../route"
+import { normalizeExecutionTrace, upsertExecutionStep, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import {
   completeBackgroundChatTurn,
   failBackgroundChatTurn,
@@ -19,13 +20,17 @@ function cloneResponse(response: Response, body: BodyInit | null) {
   })
 }
 
-function parseSseFrame(frame: string, state: { content: string; error: string; provider: string; model: string }) {
+function parseSseFrame(frame: string, state: { content: string; error: string; provider: string; model: string; execution?: ExecutionTrace }) {
   for (const line of frame.split(/\r?\n/)) {
     if (!line.startsWith("data:")) continue
     const raw = line.slice(5).trim()
     if (!raw || raw === "[DONE]") continue
     try {
       const payload = JSON.parse(raw)
+      if (payload?.type === "activity" && payload.traceId) {
+        state.execution = upsertExecutionStep(state.execution || { version: 1, id: payload.traceId, startedAt: Number(payload.startedAt) || Date.now(), state: "running", steps: [] }, payload.step)
+      }
+      if (payload.execution) state.execution = normalizeExecutionTrace(payload.execution) || state.execution
       if (payload?.type === "content" && typeof payload.content === "string") state.content += payload.content
       if (payload?.type === "error") state.error = String(payload.message || payload.error || "Background chat failed")
       if (payload?.type === "done") {
@@ -58,7 +63,7 @@ async function persistStreamResult(turnId: string, response: Response) {
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    const state = { content: "", error: "", provider: "", model: "" }
+    const state: { content: string; error: string; provider: string; model: string; execution?: ExecutionTrace } = { content: "", error: "", provider: "", model: "" }
     let buffer = ""
 
     while (true) {
@@ -78,7 +83,7 @@ async function persistStreamResult(turnId: string, response: Response) {
     if (buffer.trim()) parseSseFrame(buffer, state)
 
     if (state.error) {
-      await failBackgroundChatTurn(turnId, state.error)
+      await failBackgroundChatTurn(turnId, state.error, state.execution)
       return
     }
     if (!response.ok || !state.content.trim()) {
@@ -89,6 +94,7 @@ async function persistStreamResult(turnId: string, response: Response) {
       content: state.content,
       provider: state.provider,
       model: state.model,
+      execution: state.execution,
     })
   } catch (error) {
     await failBackgroundChatTurn(turnId, error)

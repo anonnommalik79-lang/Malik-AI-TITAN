@@ -31,6 +31,7 @@ export async function GET(_request: Request, context: RouteContext) {
       error: turn.status === "failed" ? turn.error || "Background chat failed" : undefined,
       provider: turn.provider,
       model: turn.model,
+      execution: turn.execution,
       completedAt: turn.completedAt,
       expiresAt: turn.expiresAt,
     },
