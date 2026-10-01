@@ -576,7 +576,7 @@ async function persistChatAttachmentsForHistory(items: ChatAttachment[]) {
     // these URLs before localStorage and account sync.
     const sessionUrl = (item.kind === "image" || item.kind === "video")
       && typeof item.url === "string"
-      && /^(?:blob:|data:(?:image|video)\\/)/i.test(item.url) ? item.url : ""
+      && /^(?:blob:|data:(?:image|video)\/)/i.test(item.url) ? item.url : ""
     const visible = sessionUrl && !lightweight.url ? { ...lightweight, url: sessionUrl } : lightweight
 
     if (item.kind === "video") {
