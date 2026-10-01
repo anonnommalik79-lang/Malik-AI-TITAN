@@ -162,6 +162,7 @@ assert.ok(dashboard.includes('chat-upload-${item.id}'), "Images need a browser-s
 assert.ok(dashboard.includes('chat-video-poster-${item.id}'), "Video history must cache only its first frame")
 assert.ok(dashboard.includes('url: durableUrl || fallbackUrl'), "Cloud upload failure must retain the preview")
 assert.ok(dashboard.includes('posterUrl,'), "History serializer must retain lightweight video poster references")
+assert.ok(dashboard.includes('posterUrl: historyUrl(rawPosterUrl)'), "History rehydration must restore the saved video poster after reload")
 assert.ok(finalChatCss.includes('.malik-dashboard-shell .malik-ai-chat-bg .malik-dual-grid'), "Mobile swipe gutter must be OLED black")
 
 console.log("Full ChatGPT-style tools menu, uploads, library, research, drawing, plugins, desktop/mobile layout, and multimodal transport verified.")
