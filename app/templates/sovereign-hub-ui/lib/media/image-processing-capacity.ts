@@ -1,5 +1,6 @@
 import "server-only"
 import * as os from "node:os"
+import { readFileSync } from "node:fs"
 
 /**
  * Full-quality image generation is intentionally expensive: the default master
@@ -28,7 +29,16 @@ const HOST_CPUS = (() => {
 })()
 
 const HOST_MEMORY_BYTES = (() => {
-  try { return Math.max(256 * 1024 * 1024, os.totalmem()) } catch { return 2 * 1024 * 1024 * 1024 }
+  let detected = 2 * 1024 * 1024 * 1024
+  try { detected = os.totalmem() } catch {}
+  // The host can have 64GB while a Render container is limited to 512MB.
+  for (const file of ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]) {
+    try {
+      const limit = Number(readFileSync(file, "utf8").trim())
+      if (Number.isSafeInteger(limit) && limit >= 128 * 1024 * 1024) detected = Math.min(detected, limit)
+    } catch {}
+  }
+  return detected
 })()
 
 const HOST_MEMORY_GIB = HOST_MEMORY_BYTES / (1024 ** 3)
