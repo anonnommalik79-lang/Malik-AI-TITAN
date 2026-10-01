@@ -73,8 +73,10 @@ function shouldRetryStartFailure(response: Response, payload: any) {
   if (![429, 502, 503, 504].includes(response.status)) return false
   const code = String(payload?.code || payload?.error || "").toUpperCase()
   if (/CREDIT|DAILY_LIMIT|REQUIRES_PLUS|COMPUTE_LIMIT|ALREADY_RUNNING|RATE_LIMIT_REACHED/.test(code)) return false
-  if (payload?.retryable === false) return false
-  return response.status !== 429 || payload?.retryable === true || code === "IMAGE_PROVIDERS_BUSY"
+  // Only replay a request when the server explicitly declared it retryable.
+  // A proxy 502 with no job receipt could hide a completed generation; sending
+  // another edit blindly can double-charge the same person.
+  return payload?.retryable === true
 }
 
 function retryDelay(payload: any) {
@@ -176,6 +178,15 @@ export function ImageJobRuntime() {
           initial = await startedResponse.clone().json().catch(() => null)
         }
 
+        if (!initial && !startedResponse.ok) {
+          return jsonResponse({
+            ok: false,
+            status: "failed",
+            error: "IMAGE_GATEWAY_UNAVAILABLE",
+            publicError: "Сервер генерации оборвал соединение до получения готового изображения. Исходное фото сохранено — повторите запрос.",
+            retryable: false,
+          }, startedResponse.status)
+        }
         if (!initial || !startedResponse.ok) return startedResponse
 
         const immediateUrl = imageUrlFrom(initial)
