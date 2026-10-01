@@ -180,7 +180,7 @@ import {
   ShieldCheck
 } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
-import { isExplicitImageGenerationRequest, isExplicitImageEditRequest } from "@/lib/ai/image-intent"
+import { isExplicitImageGenerationRequest, isExplicitImageEditRequest, isReferenceImageRequest } from "@/lib/ai/image-intent"
 import {
   DEFAULT_MALIK_MODEL_ID,
   canUseMalikModel,
