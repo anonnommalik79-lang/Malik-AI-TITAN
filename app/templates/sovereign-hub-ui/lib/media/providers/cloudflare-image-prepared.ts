@@ -103,7 +103,7 @@ function envNumber(name: string, fallback: number, min: number, max: number) {
   return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 }
 
-async function runAccount(current: Account, model: string, init: RequestInit, signal?: AbortSignal) {
+async function runAccount(current: Account, model: string, init: RequestInit, signal?: AbortSignal, editing = false) {
   const controller = new AbortController()
   // The route deadline is authoritative. Never start another account after it aborts.
   const followParent = Boolean(signal)
@@ -114,7 +114,9 @@ async function runAccount(current: Account, model: string, init: RequestInit, si
   }
   const headers = new Headers(init.headers)
   headers.set("authorization", `Bearer ${current.token}`)
-  const timeout = Math.min(imageProviderTimeoutMs(), envNumber("IMAGE_CLOUDFLARE_ACCOUNT_TIMEOUT_MS", 38_000, 12_000, 50_000))
+  const timeout = Math.min(imageProviderTimeoutMs(), editing
+    ? envNumber("IMAGE_CLOUDFLARE_EDIT_ACCOUNT_TIMEOUT_MS", 26_000, 12_000, 40_000)
+    : envNumber("IMAGE_CLOUDFLARE_ACCOUNT_TIMEOUT_MS", 38_000, 12_000, 50_000))
   const timer = setTimeout(() => controller.abort(new Error("CLOUDFLARE_ACCOUNT_TIMEOUT")), timeout)
   try {
     return await fetch(`https://api.cloudflare.com/client/v4/accounts/${current.accountId}/ai/run/${model}`, {
@@ -138,15 +140,19 @@ async function failure(response: Response) {
   return { failed: !response.ok || payload?.success === false, message: String(message) }
 }
 
-async function runQuality(model: string, init: RequestInit, signal?: AbortSignal) {
+async function runQuality(model: string, init: RequestInit, signal?: AbortSignal, editing = false) {
+  // Tertiary also supports image-to-image for FLUX Klein. Keep it isolated for
+  // text-to-image, but rescue an uploaded photo if both quality accounts fail.
+  const tertiary = editing ? account("tertiary") : null
+  const pool = [...qualityAccounts(), ...(tertiary ? [tertiary] : [])]
   let lastResponse: Response | undefined
   let lastSlot: Slot = "primary"
   let lastError: unknown
-  for (const current of qualityAccounts()) {
+  for (const current of pool) {
     if (signal?.aborted) throw signal.reason || new Error("IMAGE_PROVIDER_ATTEMPT_TIMEOUT")
     if (cooling(current.slot)) continue
     try {
-      const response = await runAccount(current, model, init, signal)
+      const response = await runAccount(current, model, init, signal, editing)
       const state = await failure(response)
       if (!state.failed) return { response, slot: current.slot }
       lastResponse = response
@@ -250,7 +256,7 @@ export async function generatePreparedCloudflareImage({ strictPrompt, negativePr
       form.append("steps", String(tuning?.steps ?? envNumber("MALIK_IMAGE_DEV_STEPS", 16, 1, 50)))
       form.append("guidance", String(tuning?.guidance ?? envNumber("MALIK_IMAGE_DEV_GUIDANCE", 7, 0, 10)))
     }
-    call = await runQuality(model.providerModel, { method: "POST", body: form }, signal)
+    call = await runQuality(model.providerModel, { method: "POST", body: form }, signal, Boolean(editSource))
   } else {
     call = await runQuality(model.providerModel, {
       method: "POST",
