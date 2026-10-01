@@ -117,7 +117,7 @@ assert.match(importUrl, /MAX_REMOTE_BYTES = 10 \* 1024 \* 1024/, "Remote media i
 assert.match(manifest, /share_target/, "Installed Malik AI must register as an OS share target")
 assert.match(shareTarget, /form\.getAll\("files"\)/, "PWA share target must accept shared files")
 
-const userMessageBlock = extractBlock(dashboard, "const userMessage: Message = {", "  const assistantMessage: Message = {")
+const userMessageBlock = extractBlock(dashboard, "const userMessage: Message = regenTarget ? regenTarget.user : {", "  const assistantMessage: Message = {")
 assert.match(userMessageBlock, /attachments:\s*historyAttachments/, "User messages must use the lightweight persisted attachment list")
 assert.match(dashboard, /function lightweightHistoryAttachment\([\s\S]*toStorableAttachment\(item\)/, "Chat history attachments must be stripped to storable metadata")
 assert.match(dashboard, /persistChatAttachmentsForHistory\(attachments\)/, "User attachments must be normalized before entering chat history")
