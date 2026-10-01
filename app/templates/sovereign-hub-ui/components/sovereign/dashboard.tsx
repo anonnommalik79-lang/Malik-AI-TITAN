@@ -299,6 +299,7 @@ interface ChatAttachment {
   base64?: string
   text?: string
   url?: string
+  posterUrl?: string
   durationSeconds?: number
   analysisFrames?: Array<{
     name: string
