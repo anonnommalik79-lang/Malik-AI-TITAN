@@ -263,6 +263,9 @@ function importantForDual(
   const images = imageAttachmentCount(userRow)
   const complexImage = complexImageTurn(userRow, request, responseText, markdown)
 
+  // Creative photo transformations should not present two near-identical text cards.
+  if (images > 0 && /(преобраз|измен|отредакт|редактир|сделай|сгенер|создай|нарис|transform|edit|generate|create|draw|өңде|өзгерт|жаса)/iu.test(request)) return false
+
   // Images get stricter treatment: a normal photo/question stays one answer.
   // Dual mode only appears when the visual task itself is genuinely dense.
   if (images > 0) {
