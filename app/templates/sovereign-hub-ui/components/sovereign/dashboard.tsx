@@ -572,14 +572,43 @@ function lightweightHistoryAttachment(item: ChatAttachment): ChatAttachment {
 async function persistChatAttachmentsForHistory(items: ChatAttachment[]) {
   return Promise.all(items.map(async (item) => {
     const lightweight = lightweightHistoryAttachment(item)
-    // A blob URL stays usable in this browser session, even if cloud storage is
-    // unavailable. The serializer strips it before writing localStorage/account
-    // history; only a genuinely durable URL survives a page reload.
+    // Retain ephemeral blob previews for this session. The serializer removes
+    // these URLs before localStorage and account sync.
     const sessionUrl = (item.kind === "image" || item.kind === "video")
       && typeof item.url === "string"
-      && /^(?:blob:|data:(?:image|video)\/)/i.test(item.url) ? item.url : ""
+      && /^(?:blob:|data:(?:image|video)\\/)/i.test(item.url) ? item.url : ""
     const visible = sessionUrl && !lightweight.url ? { ...lightweight, url: sessionUrl } : lightweight
+
+    if (item.kind === "video") {
+      // Never duplicate 150MB videos in chat state. Cache only the extracted
+      // first frame: after a reload the square thumbnail still renders.
+      const frame = item.analysisFrames?.[0]
+      let posterUrl = lightweight.posterUrl
+      if (frame?.base64) {
+        try {
+          const cached = await persistGeneratedImageUrl(
+            `chat-video-poster-${item.id}`,
+            `data:${frame.mime};base64,${frame.base64}`,
+          )
+          if (isStoredGeneratedImageUrl(cached)) posterUrl = cached
+        } catch { /* keep the live session preview */ }
+      }
+      return { ...visible, posterUrl }
+    }
+
     if (item.kind !== "image" || !item.base64) return visible
+
+    // Cloud storage may be unavailable on the free host. The browser cache
+    // stores normalized JPEG bytes under a tiny account-scoped IDB key.
+    let fallbackUrl = visible.url
+    try {
+      const cached = await persistGeneratedImageUrl(
+        `chat-upload-${item.id}`,
+        `data:${item.mime || "image/jpeg"};base64,${item.base64}`,
+      )
+      if (isStoredGeneratedImageUrl(cached)) fallbackUrl = cached
+    } catch { /* keep the live blob when browser storage is disabled */ }
+
     if (typeof item.url === "string" && (/^https:\/\//i.test(item.url) || item.url.startsWith("/"))) return lightweight
 
     try {
@@ -596,14 +625,13 @@ async function persistChatAttachmentsForHistory(items: ChatAttachment[]) {
         }),
       }, 25_000)
       const payload = await response.json().catch(() => ({}))
-      const durableUrl = typeof payload?.url === "string" ? payload.url : ""
-      return durableUrl ? { ...lightweight, url: durableUrl } : visible
+      const durableUrl = response.ok && typeof payload?.url === "string" ? payload.url : ""
+      return { ...visible, url: durableUrl || fallbackUrl }
     } catch {
-      return visible
+      return { ...visible, url: fallbackUrl }
     }
   }))
 }
-
 // Mirrors the watchdog inside the chat card. Photo generation is synchronous and
 // capped at two minutes client-side, so three minutes means it is gone. Video is
 // a genuine long-running job, so it keeps a far more generous ceiling.
@@ -1339,7 +1367,9 @@ function stripInlineMediaBytes(media: InlineMediaGeneration): InlineMediaGenerat
 }
 
 function toStorableAttachment(item: ChatAttachment): ChatAttachment {
-  const durableUrl = typeof item.url === "string" && !item.url.startsWith("blob:") ? item.url : undefined
+  // Chat/account state never duplicates binary bytes or ephemeral object URLs.
+  const durableUrl = typeof item.url === "string" && !/^(?:blob:|data:)/i.test(item.url) ? item.url : undefined
+  const posterUrl = typeof item.posterUrl === "string" && !/^(?:blob:|data:)/i.test(item.posterUrl) ? item.posterUrl : undefined
   const keepText = item.kind === "code" || item.kind === "file" || item.kind === "url"
   return {
     id: item.id,
@@ -1348,6 +1378,7 @@ function toStorableAttachment(item: ChatAttachment): ChatAttachment {
     size: item.size,
     kind: item.kind,
     url: durableUrl,
+    posterUrl,
     text: keepText && typeof item.text === "string" ? item.text.slice(0, 180_000) : undefined,
     durationSeconds: item.durationSeconds,
   }
