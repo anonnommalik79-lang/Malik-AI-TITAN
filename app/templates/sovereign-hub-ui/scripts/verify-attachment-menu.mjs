@@ -137,4 +137,20 @@ assert.match(hiddenGemini, /GEMINI_FALLBACK_MODEL/, "Hidden multimodal engine mu
 assert.match(hiddenGemini, /application\/pdf/, "Hidden multimodal engine must accept PDF documents")
 assert.equal(models.includes("gemini-3.5-flash-lite"), false, "Gemini must stay hidden from the model selector")
 
+
+// Uploaded images must not become file pills when Render/cloud upload is
+// unavailable. Metadata stays tiny; image and video poster bytes live in IDB.
+assert.match(chat, /useStoredAttachmentUrl\(item\.url\)/, "Sent images must resolve persisted browser media keys")
+assert.match(chat, /useStoredAttachmentUrl\(item\.posterUrl\)/, "Videos must resolve their cached first-frame preview")
+assert.match(chat, /if \(item\.kind === "image"\) \{[\s\S]*malik-user-attachment--image/, "Images must always occupy a square, including unavailable older previews")
+assert.match(chat, /if \(item\.kind === "video"\) \{[\s\S]*malik-user-attachment--video/, "Videos must always occupy a square, including poster-only history")
+assert.match(dashboard, /chat-upload-\$\{item\.id\}/, "Image uploads must use the browser-scoped image cache when needed")
+assert.match(dashboard, /chat-video-poster-\$\{item\.id\}/, "Video uploads must cache only a small first frame")
+assert.match(dashboard, /url: durableUrl \|\| fallbackUrl/, "Cloud upload failure must not discard the live image preview")
+assert.match(dashboard, /!\s*\/\^\(\?:blob:\|data:\)\/i\.test\(item\.url\)/, "History must not serialize large blob/data URLs")
+assert.match(dashboard, /posterUrl,/, "Tiny poster references must survive the history snapshot")
+const finalChatCss = fs.readFileSync("app/chat-monochrome-final.css", "utf8")
+assert.match(finalChatCss, /malik-dashboard-shell \.malik-ai-chat-bg \.malik-dual-grid/, "Mobile answer carousel background must be solid OLED black")
+assert.match(finalChatCss, /malik-dashboard-shell \.malik-ai-chat-bg \.malik-user-attachment--video/, "Sent video tiles must be square and black")
+
 console.log("Full ChatGPT-style tools menu, uploads, library, research, drawing, plugins, desktop/mobile layout, and multimodal transport verified.")
