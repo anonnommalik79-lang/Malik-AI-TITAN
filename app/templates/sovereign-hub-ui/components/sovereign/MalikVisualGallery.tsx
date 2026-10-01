@@ -81,7 +81,7 @@ export function MalikVisualGallery({ images, title }: { images: MalikVisualImage
   return (
     <section className="my-4 w-full min-w-0 max-w-[760px]" aria-label={title || "Изображения в ответе"}>
       {title ? <h3 className="mb-2.5 text-sm font-semibold text-white">{title}</h3> : null}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2">
         {visible.map((image, index) => <ReferenceCard key={image.url + index} image={image} />)}
       </div>
     </section>
