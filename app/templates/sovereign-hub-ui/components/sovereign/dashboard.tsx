@@ -710,6 +710,8 @@ function detectInlineMediaGenerationRequest(
 ): "image" | "video" | null {
   const command = parseMediaCommand(prompt)
   if (command) return command.kind
+  // Looking up existing photos stays chat even if the sentence says "добавь описание".
+  if (isReferenceImageRequest(prompt) && !attachments.some((item) => item.kind === "image" || item.mime?.startsWith("image/"))) return null
   if (isExplicitImageEditRequest(prompt, attachments.some((item) => item.kind === "image"))) return "image"
 
   // Natural-language photo requests are accepted only when the request is an
