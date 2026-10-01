@@ -20,10 +20,38 @@ function firstMatch(value: string, pattern: RegExp) {
   return match ? { index: match.index, text: match[0] } : null
 }
 
+/**
+ * Seeing existing public photos is a chat/reference lookup, NEVER image generation.
+ * The explicit visual wording also covers short natural place queries such as
+ * "покажи мне Медеу Алматы", without turning "покажи код/решение" into photo search.
+ * Shared by chat routing and the rendered gallery to prevent split-brain intent.
+ */
+export function isReferenceImageRequest(input: string): boolean {
+  const text = String(input || "").trim()
+  if (!text || text.length > 2500) return false
+  if (/^\s*\/(?:image|img|photo|foto|фото|картинка|video|veo|видео)(?![\p{L}\p{N}_])/iu.test(text)) return false
+  if (isExplicitImageGenerationRequest(text)) return false
+
+  const request = /^(?:покажи(?:те)?|көрсет(?:ші|іңіз)?|show(?:\s+me)?|find(?:\s+me)?)(?:\s+мне)?\s+(.+)$/iu.exec(text)
+  // "Покажи мне как изменить фото" is a tutorial, not a photo request.
+  if (request && /^(?:как|почему|зачем|что|код|пример\s+кода|текст|решени[ея]|инструкци[юя]|список|таблиц[уая]|формул[уая]|ошибк[уиа]|настройк[уиа]|how|why|what|code|steps?|list|table|solution|instructions?)(?=\s|[?!.]|$)/iu.test(request[1].trim())) return false
+  const show = /(?:\bshow\b|\bfind\b|\bsee\b|покаж[иьте]+|найд[иьте]+|подбер[иьте]+|көрсет|көрсөт|көрсетші|суреттерін?\s+көрсет)/iu
+  const visual = /(?:фото(?:графи[\p{L}]*)?|фотк[\p{L}]*|снимк[\p{L}]*|картинк[\p{L}]*|изображени[\p{L}]*|иллюстраци[\p{L}]*|референс[\p{L}]*|сурет[\p{L}]*|photograph[\p{L}]*|photos?|pictures?|images?|visual[\p{L}]*|references?)/iu
+  if (visual.test(text) && (show.test(text) || /(?:\bwith\b|с)\s+(?:фото|картинк|изображен|сурет|images?|photos?|pictures?)/iu.test(text))) return true
+  if (/^(?:как\s+выглядит|what\s+does\s+.+\s+look\s+like|қандай\s+көрінеді)/iu.test(text)) return true
+
+  if (!request) return false
+  const subject = request[1].trim()
+  if (subject.length < 3 || subject.length > 150) return false
+  // Teaching, code and document requests should stay ordinary text answers.
+  return !/^(?:как|почему|зачем|что|код|пример\s+кода|текст|решени[ея]|инструкци[юя]|список|таблиц[уая]|формул[уая]|ошибк[уиа]|настройк[уиа]|how|why|what|code|steps?|list|table|solution|instructions?)(?=\s|[?!.]|$)/iu.test(subject)
+}
+
 /** Uploaded pixels are required for edits; image analysis remains a chat turn. */
 export function isExplicitImageEditRequest(input: string, hasImage = false): boolean {
   const text = String(input || "").replace(IMAGE_COMMAND_PATTERN, "").trim()
   if (!text || VIDEO_COMMAND_PATTERN.test(text) || EXPLANATION_START_PATTERN.test(text)) return false
+  if (!hasImage && isReferenceImageRequest(input)) return false
 
   // A text-to-image request may legitimately contain edit-like words such as
   // "надпись", "снизу", "добавь" or "сделай фон". Without uploaded pixels it

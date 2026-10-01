@@ -22,16 +22,30 @@ type CommonsPage = {
 }
 
 function searchTopic(input: string): string {
+  // Search the subject, not the full instruction: "Добавь описание..." should
+  // never become a search term or turn a photo lookup into image editing.
   return input
+    .split(/[.!?\n]/u, 1)[0]
     .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(/^\s*(?:покажи(?:те)?|найди(?:те)?|подбери(?:те)?|show(?:\s+me)?|find(?:\s+me)?|көрсет(?:ші)?)(?:\s+мне)?\s*/iu, "")
-    .replace(/^\s*(?:(?:три|несколько|\d+)\s+)?(?:фото(?:графии)?|фотки|картинки|изображения|визуальные\s+референсы|референсы|images?|photos?|pictures?)\s*/iu, "")
+    .replace(/^\s*(?:покажи(?:те)?|найди(?:те)?|подбери(?:те)?|show(?:\s+me)?|find(?:\s+me)?|көрсет(?:ші|іңіз)?)(?:\s+мне)?\s*/iu, "")
+    .replace(/^\s*(?:(?:три|несколько|\d+)\s+)?(?:фото(?:графи[\p{L}]*)?|фотк[\p{L}]*|картинк[\p{L}]*|изображени[\p{L}]*|визуальн[\p{L}]*\s+референс[\p{L}]*|референс[\p{L}]*|images?|photos?|pictures?)\s*/iu, "")
     .replace(/^\s*(?:расскажи(?:те)?(?:\s+мне)?(?:\s+(?:о|об|про))?|tell\s+me\s+about|как\s+выглядит)\s*/iu, "")
     .replace(/^\s*(?:of|про|о|об)\s+/iu, "")
-    .replace(/(?:^|\s)(?:с\s+(?:картинками|фотографиями|фото)|with\s+(?:images|photos|pictures))(?=\s|$)/giu, " ")
+    .replace(/(?:\s+с\s+(?:визуальн[\p{L}]*\s+)?референс[\p{L}]*|\s+с\s+(?:картинк[\p{L}]*|фото(?:графи[\p{L}]*)?)|\s+with\s+(?:images|photos|pictures))\s*$/giu, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 110)
+}
+
+/** Common place names have different spellings in Russian and photo catalogues. */
+function englishSearchTopic(topic: string): string {
+  return topic
+    .replace(/медеу/giu, "Medeu")
+    .replace(/алмат[\p{L}]*/giu, "Almaty")
+    .replace(/астан[\p{L}]*/giu, "Astana")
+    .replace(/архитектур[\p{L}]*/giu, "architecture")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function cleanLabel(value: string): string {
@@ -80,7 +94,7 @@ async function unsplash(topic: string): Promise<Reference[]> {
 async function commons(topic: string): Promise<Reference[]> {
   const params = new URLSearchParams({
     action: "query", format: "json", formatversion: "2", generator: "search",
-    gsrsearch: topic + " filetype:bitmap", gsrnamespace: "6", gsrlimit: "12",
+    gsrsearch: topic, gsrnamespace: "6", gsrlimit: "18",
     prop: "imageinfo", iiprop: "url|mime|extmetadata", iiurlwidth: "680",
   })
   const response = await fetch("https://commons.wikimedia.org/w/api.php?" + params, {
@@ -111,10 +125,14 @@ export async function GET(request: Request) {
   }
   const topic = searchTopic(raw)
   if (topic.length < 2) return NextResponse.json({ images: [] })
+  const alternative = englishSearchTopic(topic)
   let images: Reference[] = []
-  try { images = await unsplash(topic) } catch { /* Optional provider unavailable. */ }
+  try { images = await unsplash(alternative || topic) } catch { /* Optional provider unavailable. */ }
   if (!images.length) {
-    try { images = await commons(topic) } catch { /* Leave a text-only answer rather than inventing a picture. */ }
+    try { images = await commons(topic) } catch { /* Do not invent a picture. */ }
+  }
+  if (!images.length && alternative && alternative.toLowerCase() !== topic.toLowerCase()) {
+    try { images = await commons(alternative) } catch { /* A missing catalogue must never fail the chat answer. */ }
   }
   return NextResponse.json({ images }, { headers: { "Cache-Control": "private, max-age=600" } })
 }

@@ -36,11 +36,11 @@ check("Markdown image rows render as galleries alongside existing code and table
   assert.match(markdown, /<CodeBlock key=\{key\}/)
 })
 check("Chat looks up references only for completed explicit photo requests", () => {
-  assert.match(gallery, /isExplicitImageGenerationRequest\(text\)/)
+  assert.match(gallery, /return isReferenceImageRequest\(question\)/)
   assert.match(gallery, /export function wantsReferenceImages/)
   assert.match(chat, /!streaming && !olderVersion/)
   assert.match(chat, /<MalikReferenceImages question=\{question\}/)
   assert.match(gallery, /controller\.abort\(\)/)
-  assert.match(gallery, /images\.length \? <MalikVisualGallery/)
+  assert.match(gallery, /if \(images\.length\) return <MalikVisualGallery/)
 })
 console.log("Rich visual answer integration verified.")

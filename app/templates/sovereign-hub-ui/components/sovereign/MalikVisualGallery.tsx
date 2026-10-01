@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { ExternalLink, ImageOff } from "lucide-react"
-import { isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
+import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 
 /** Actual reference images, not media-generation jobs or invented image links. */
 export type MalikVisualImage = {
@@ -90,24 +90,22 @@ export function MalikVisualGallery({ images, title }: { images: MalikVisualImage
 
 /** Lookup only for explicit requests to SEE photos, never for media generation. */
 export function wantsReferenceImages(question: string): boolean {
-  const text = String(question || "").trim()
-  if (!text || text.length > 2500 || isExplicitImageGenerationRequest(text)) return false
-  if (/^\s*\/(?:image|img|photo|video|veo)\b/i.test(text)) return false
-  const visual = /(?:фото|фотк|картин|изображен|иллюстрац|референс|визуальн|сурет|photograph|photos?|pictures?|images?|visuals?|references?)/iu.test(text)
-  const request = /(?:покаж|найд|подбер|подборк|с\s+(?:фото|картин|изображен|иллюстрац)|қөрсет|көрсет|суреттер|show|find|with\s+(?:images|photos|pictures)|visual\s+reference)/iu.test(text)
-  return (visual && request) || /(?:как\s+выглядит|what\s+does.+look\s+like|қандай\s+көрінеді)/iu.test(text)
+  return isReferenceImageRequest(question)
 }
 
 /** Searches public photo catalogues; no base64 and no generation credits. */
 export function MalikReferenceImages({ question }: { question: string }) {
   const [images, setImages] = useState<MalikVisualImage[]>([])
+  const [status, setStatus] = useState<"idle" | "loading" | "done">("idle")
   useEffect(() => {
     if (!wantsReferenceImages(question)) {
       setImages([])
+      setStatus("idle")
       return
     }
     const controller = new AbortController()
     setImages([])
+    setStatus("loading")
     void fetch("/api/chat/reference-images?q=" + encodeURIComponent(question.slice(0, 240)), {
       signal: controller.signal,
       credentials: "same-origin",
@@ -121,7 +119,12 @@ export function MalikReferenceImages({ question }: { question: string }) {
           : [])
       })
       .catch(() => { if (!controller.signal.aborted) setImages([]) })
+      .finally(() => { if (!controller.signal.aborted) setStatus("done") })
     return () => controller.abort()
   }, [question])
-  return images.length ? <MalikVisualGallery title="Визуальные референсы" images={images} /> : null
+  if (!wantsReferenceImages(question)) return null
+  if (images.length) return <MalikVisualGallery title="Фотографии по запросу" images={images} />
+  if (status === "loading") return <p className="my-3 text-xs text-zinc-400" role="status">Ищу настоящие фотографии…</p>
+  if (status === "done") return <p className="my-3 text-xs text-zinc-500" role="status">Не удалось найти доступные фотографии по этому запросу. Попробуйте уточнить место или тему.</p>
+  return null
 }
