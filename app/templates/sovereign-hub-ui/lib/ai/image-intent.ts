@@ -32,12 +32,14 @@ export function isReferenceImageRequest(input: string): boolean {
   if (/^\s*\/(?:image|img|photo|foto|фото|картинка|video|veo|видео)(?![\p{L}\p{N}_])/iu.test(text)) return false
   if (isExplicitImageGenerationRequest(text)) return false
 
+  const request = /^(?:покажи(?:те)?|көрсет(?:ші|іңіз)?|show(?:\s+me)?|find(?:\s+me)?)(?:\s+мне)?\s+(.+)$/iu.exec(text)
+  // "Покажи мне как изменить фото" is a tutorial, not a photo request.
+  if (request && /^(?:как|почему|зачем|что|код|пример\s+кода|текст|решени[ея]|инструкци[юя]|список|таблиц[уая]|формул[уая]|ошибк[уиа]|настройк[уиа]|how|why|what|code|steps?|list|table|solution|instructions?)(?=\s|[?!.]|$)/iu.test(request[1].trim())) return false
   const show = /(?:\bshow\b|\bfind\b|\bsee\b|покаж[иьте]+|найд[иьте]+|подбер[иьте]+|көрсет|көрсөт|көрсетші|суреттерін?\s+көрсет)/iu
   const visual = /(?:фото(?:графи[\p{L}]*)?|фотк[\p{L}]*|снимк[\p{L}]*|картинк[\p{L}]*|изображени[\p{L}]*|иллюстраци[\p{L}]*|референс[\p{L}]*|сурет[\p{L}]*|photograph[\p{L}]*|photos?|pictures?|images?|visual[\p{L}]*|references?)/iu
   if (visual.test(text) && (show.test(text) || /(?:\bwith\b|с)\s+(?:фото|картинк|изображен|сурет|images?|photos?|pictures?)/iu.test(text))) return true
   if (/^(?:как\s+выглядит|what\s+does\s+.+\s+look\s+like|қандай\s+көрінеді)/iu.test(text)) return true
 
-  const request = /^(?:покажи(?:те)?|көрсет(?:ші|іңіз)?|show(?:\s+me)?|find(?:\s+me)?)(?:\s+мне)?\s+(.+)$/iu.exec(text)
   if (!request) return false
   const subject = request[1].trim()
   if (subject.length < 3 || subject.length > 150) return false
