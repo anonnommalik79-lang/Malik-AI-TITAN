@@ -91,7 +91,8 @@ assert.match(toolWorkspace, /onConnect\?\.\(mode\)/, "GitHub/Gmail workspace mus
 assert.match(imageCreator, /<ImageStudio \{\.\.\.props\} \/>/, "Image creator must delegate to the active image studio")
 assert.match(imageStudio, /return createPortal\(studio, document\.body\)/, "Image creator must render above the whole app")
 assert.match(imageStudioCss, /\.mis\s*\{[\s\S]*position:\s*fixed;[\s\S]*top:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*left:\s*0;/, "Image studio must cover the whole viewport")
-assert.match(imageCreator, /aspect-square/, "Image style templates must be square")
+assert.match(imageStudio, /className="mis-grid"/, "Image studio must render its full-size template gallery")
+assert.match(imageStudio, /className="mis-card-img"/, "Image studio template tiles must display image covers")
 
 assert.match(libraryPicker, /\/api\/media\/library\?limit=120/, "Library picker must load the authenticated Malik media library")
 assert.match(libraryPicker, /onSelect\(item\.src/, "Library picker must return the selected saved asset")
