@@ -408,6 +408,7 @@ function parseBlocks(source: string): Block[] {
       && lines[index].trim()
       && !/^\s*(#{1,6}\s|[-*•+]\s|\d+[.)]\s|>|```|\$\$|\\\[)/.test(lines[index])
       && !isTableStart(lines, index)
+      && !parseImageLine(lines[index])
     ) {
       paragraph.push(lines[index])
       index += 1
