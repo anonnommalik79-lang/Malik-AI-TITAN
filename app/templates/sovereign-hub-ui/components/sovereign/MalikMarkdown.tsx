@@ -5,6 +5,7 @@ import { Archive, Check, Copy, Download, ExternalLink, Eye, RefreshCw } from "lu
 import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
 import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
+import { MalikVisualGallery, isSafeVisualUrl, type MalikVisualImage } from "./MalikVisualGallery"
 
 /**
  * Renders an assistant answer as structured text.
@@ -113,6 +114,7 @@ type Block =
   | { kind: "math"; tex: string }
   | { kind: "code"; language: string; filename: string; lines: string[] }
   | { kind: "table"; headers: string[]; rows: string[][] }
+  | { kind: "images"; images: MalikVisualImage[] }
   | { kind: "quote"; lines: string[] }
   | { kind: "hr" }
 
@@ -279,6 +281,13 @@ function normalizeCodeFilenames(blocks: Block[]) {
   })
 }
 
+/** A verified photo line becomes a gallery tile, never raw model-supplied HTML. */
+function parseImageLine(line: string): MalikVisualImage | null {
+  const match = /^\s*!\[([^\]\n]{0,140})\]\((https:\/\/[^\s)]+)(?:\s+"([^"\n]{0,100})")?\)\s*$/.exec(line)
+  if (!match || !isSafeVisualUrl(match[2])) return null
+  return { alt: match[1].trim() || "Изображение", url: match[2], credit: match[3]?.trim() }
+}
+
 function parseBlocks(source: string): Block[] {
   const lines = String(source || "").replace(/\r\n?/g, "\n").split("\n")
   const blocks: Block[] = []
@@ -341,6 +350,20 @@ function parseBlocks(source: string): Block[] {
       continue
     }
 
+    const firstImage = parseImageLine(line)
+    if (firstImage) {
+      const images: MalikVisualImage[] = [firstImage]
+      index += 1
+      while (index < lines.length) {
+        const next = parseImageLine(lines[index])
+        if (!next) break
+        images.push(next)
+        index += 1
+      }
+      blocks.push({ kind: "images", images })
+      continue
+    }
+
     if (isTableStart(lines, index)) {
       const headers = tableCells(lines[index])
       const rows: string[][] = []
@@ -385,6 +408,7 @@ function parseBlocks(source: string): Block[] {
       && lines[index].trim()
       && !/^\s*(#{1,6}\s|[-*•+]\s|\d+[.)]\s|>|```|\$\$|\\\[)/.test(lines[index])
       && !isTableStart(lines, index)
+      && !parseImageLine(lines[index])
     ) {
       paragraph.push(lines[index])
       index += 1
@@ -641,6 +665,8 @@ export function MalikMarkdown({ text, className }: Props) {
       ) : null}
       {blocks.map((block, position) => {
         const key = `b${position}`
+
+        if (block.kind === "images") return <MalikVisualGallery key={key} images={block.images} />
 
         if (block.kind === "code") {
           return <CodeBlock key={key} language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} />

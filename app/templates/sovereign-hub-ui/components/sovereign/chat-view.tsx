@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
+import { MalikReferenceImages } from "./MalikVisualGallery"
 import type { SuperflowRef } from "./os/os-client"
 import { FollowUpChips, ReadAloudButton, ThoughtTrace, UserMessageActions, VersionPager, useChatShortcuts } from "./chat-extras"
 import "./chat-live.css"
@@ -1848,6 +1849,10 @@ function MessageBubble({
             : (streaming
               ? <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} liveStatus={message.liveStatus} />
               : "")}
+          {/* An explicit request for reference photos gets real, attributed thumbnails. */}
+          {!isUser && !streaming && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && displayContent.trim() && !/^\s*!\[/m.test(displayContent) ? (
+            <MalikReferenceImages question={question} />
+          ) : null}
           {/* The verdict on the text above comes before the reading list it was
               written from. */}
           {!isUser && !streaming && message.research?.factAudit ? (

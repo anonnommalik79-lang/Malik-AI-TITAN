@@ -148,7 +148,8 @@ check("a style can be handed to the site generator", () => {
   assert.match(prompt, /Не копируй чужие логотипы/, "the direction, not a copy of the brand")
   // The panel offers it from inside the opened template, not from the card -
   // see "opening a template from the Library never navigates away" below.
-  assert.match(panel, /onUseStyle\?\.\(libraryPrompt\(t\), t\)/)
+  assert.match(panel, /onUseStyle\?\.\(libraryPrompt\(template\), template\)/, "the gated template action must pass the chosen direction to the generator")
+  assert.match(panel, /const useTemplate = \(template\) => \{[\s\S]{0,180}requireTemplateAccess\(template\)/, "using a style must check plan access")
   const dashboard = codeOf("components/sovereign/dashboard.tsx")
   assert.match(dashboard, /<SiteLibraryPanel/)
   assert.match(dashboard, /safeOpenView\("website-generation", "template"\)/, "the hand-off must reach the generator")
@@ -261,8 +262,8 @@ check("opening a template from the Library never navigates away", () => {
   assert.match(card, /setSelected\(template\)/, "a card opens the template, it does not leave")
   // Using a style stays available - in the detail panel and the opened viewer,
   // deliberately, where the person has already chosen a template.
-  assert.match(panel, /libViewerActions[\s\S]{0,600}onUseStyle/)
-  assert.match(panel, /libDetailRow[\s\S]{0,600}onUseStyle/)
+  assert.match(panel, /libViewerActions[\s\S]{0,600}useTemplate\(t\)/, "the opened viewer offers the gated template action")
+  assert.match(panel, /libDetailRow[\s\S]{0,600}useTemplate\(t\)/, "the detail panel offers the gated template action")
 })
 
 check("no page title is inside a scrolling box", () => {
