@@ -227,3 +227,38 @@
   background: #000 !important;
   background-image: none !important;
 }
+
+/* Keep the compare header, swipe gutter and cards completely black on phones.
+   Higher specificity wins over legacy dashboard/mobile surfaces. */
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-answer,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-intro,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-grid,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-card,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-card__header,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-card__content {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-intro {
+  border: 0 !important;
+}
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-intro::before,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-intro::after,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-grid::before,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-grid::after {
+  content: none !important;
+  display: none !important;
+}
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-dual-card[data-selected="1"] {
+  background: #000 !important;
+  border-color: rgba(255,255,255,.6) !important;
+}
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-user-attachment--image,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-user-attachment--video,
+#malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-user-attachment--unavailable {
+  aspect-ratio: 1 / 1 !important;
+  background: #000 !important;
+  background-image: none !important;
+}
