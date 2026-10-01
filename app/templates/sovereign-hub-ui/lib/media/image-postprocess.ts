@@ -5,6 +5,7 @@ import "server-only"
 // below would silently swallow that and fall back to a 2GB guess on a machine
 // with 8. It was doing exactly that under the verification harness.
 import * as os from "node:os"
+import { readFileSync } from "node:fs"
 
 import { decodeDataUrl } from "./asset-store"
 import type { MalikImageDeliveryResolution, MalikImageQuality } from "./image-quality-presets"
@@ -15,8 +16,21 @@ import { createMalikImageWatermarkSvg } from "./malik-watermark"
 const MAX_SOURCE_BYTES = 24 * 1024 * 1024
 const REMOTE_IMAGE_TIMEOUT_MS = 20_000
 
+// os.totalmem() can expose the underlying host's RAM rather than the much
+// smaller memory limit of a Render/Docker container. Use the cgroup ceiling
+// so an automatic 8K upscale cannot OOM-kill the entire Next.js process.
 const HOST_MEMORY_BYTES = (() => {
-  try { return os.totalmem() } catch { return 2 * 1024 * 1024 * 1024 }
+  let detected = 2 * 1024 * 1024 * 1024
+  try { detected = os.totalmem() } catch {}
+  for (const file of ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]) {
+    try {
+      const limit = Number(readFileSync(file, "utf8").trim())
+      if (Number.isSafeInteger(limit) && limit >= 128 * 1024 * 1024) {
+        detected = Math.min(detected, limit)
+      }
+    } catch {}
+  }
+  return detected
 })()
 
 const HOST_CPUS = (() => {
@@ -42,11 +56,15 @@ const HOST_CPUS = (() => {
  * IMAGE_MAX_MEGAPIXELS overrides it in both directions for a host that knows
  * better than this arithmetic does.
  */
-const MEMORY_MEGAPIXEL_CEILING = Math.max(4, Math.floor((HOST_MEMORY_BYTES * 0.25) / 10 / 1_000_000))
-const MAX_OUTPUT_MEGAPIXELS = Math.max(
-  4,
-  Number(process.env.IMAGE_MAX_MEGAPIXELS || 0) || Math.min(140, MEMORY_MEGAPIXEL_CEILING),
-)
+// Sharp needs simultaneous decoder, working and encoder buffers. Reserve
+// enough RAM for Next.js, request payloads and the in-chat preview too.
+const MEMORY_MEGAPIXEL_CEILING = Math.max(3, Math.floor((HOST_MEMORY_BYTES * 0.08) / 10 / 1_000_000))
+const configuredMegapixels = Number(process.env.IMAGE_MAX_MEGAPIXELS || 0)
+const MAX_OUTPUT_MEGAPIXELS = Math.max(3, Math.min(
+  140,
+  MEMORY_MEGAPIXEL_CEILING,
+  Number.isFinite(configuredMegapixels) && configuredMegapixels > 0 ? configuredMegapixels : 140,
+))
 
 /**
  * Above this, the output is JPEG rather than WebP.
@@ -115,7 +133,9 @@ function applyConcurrency(sharp: typeof import("sharp")) {
   concurrencyApplied = true
   try {
     const requested = Number(process.env.SHARP_CONCURRENCY || 0)
-    const threads = requested > 0 ? Math.min(requested, HOST_CPUS) : HOST_CPUS
+    const threads = HOST_MEMORY_BYTES < 1024 ** 3
+      ? 1
+      : Math.max(1, requested > 0 ? Math.min(Math.floor(requested), HOST_CPUS) : HOST_CPUS)
     if (sharp.concurrency() !== threads) sharp.concurrency(threads)
   } catch {
     // A host that refuses the setting still works, just at the default.
@@ -203,7 +223,8 @@ export async function postProcessGeneratedImage(input: {
 
     // Metadata is read from the header, without decoding a single pixel, so the
     // target size is decided before any work is done.
-    const probe = sharp(bytes.buffer, { animated: false, failOn: "none", limitInputPixels: false })
+    const inputPixelLimit = Math.max(16_000_000, MAX_OUTPUT_MEGAPIXELS * 2_000_000)
+    const probe = sharp(bytes.buffer, { animated: false, failOn: "none", limitInputPixels: inputPixelLimit })
     const metadata = await probe.metadata()
 
     // Orientations 5-8 are the quarter turns: after .rotate() bakes them in, the
@@ -227,7 +248,7 @@ export async function postProcessGeneratedImage(input: {
 
     // One pipeline, one decode, one encode. Everything below is a description of
     // the work; libvips streams it in a single pass when toBuffer is awaited.
-    let pipeline = sharp(bytes.buffer, { animated: false, failOn: "none", limitInputPixels: false }).rotate()
+    let pipeline = sharp(bytes.buffer, { animated: false, failOn: "none", limitInputPixels: inputPixelLimit }).rotate()
 
     if (upscaling) {
       pipeline = pipeline.resize({
