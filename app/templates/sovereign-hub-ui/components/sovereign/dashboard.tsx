@@ -1457,13 +1457,16 @@ function reviveMessage(message: any): Message {
           ? item.kind as ChatAttachment["kind"]
           : "file"
         const rawUrl = typeof item.url === "string" ? item.url.trim() : ""
+        const rawPosterUrl = typeof item.posterUrl === "string" ? item.posterUrl.trim() : ""
+        const historyUrl = (value: string) => value && !/^(?:blob:|data:)/i.test(value) ? value : undefined
         return {
           id: String(item.id || crypto.randomUUID()),
           name: String(item.name || "attachment").slice(0, 240),
           mime: String(item.mime || "application/octet-stream").slice(0, 160),
           size: Math.max(0, Number(item.size) || 0),
           kind,
-          url: rawUrl && !rawUrl.startsWith("blob:") ? rawUrl : undefined,
+          url: historyUrl(rawUrl),
+          posterUrl: historyUrl(rawPosterUrl),
           text: typeof item.text === "string" ? item.text.slice(0, 180_000) : undefined,
           durationSeconds: Number.isFinite(Number(item.durationSeconds)) ? Number(item.durationSeconds) : undefined,
         }
