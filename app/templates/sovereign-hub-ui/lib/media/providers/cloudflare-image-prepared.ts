@@ -103,14 +103,10 @@ function envNumber(name: string, fallback: number, min: number, max: number) {
   return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 }
 
-function parentAttemptTimedOut(signal?: AbortSignal) {
-  const reason = signal?.reason instanceof Error ? signal.reason.message : String(signal?.reason || "")
-  return Boolean(signal?.aborted && /IMAGE_PROVIDER_ATTEMPT_TIMEOUT/i.test(reason))
-}
-
 async function runAccount(current: Account, model: string, init: RequestInit, signal?: AbortSignal) {
   const controller = new AbortController()
-  const followParent = Boolean(signal && !parentAttemptTimedOut(signal))
+  // The route deadline is authoritative. Never start another account after it aborts.
+  const followParent = Boolean(signal)
   const abort = () => controller.abort(signal?.reason)
   if (followParent && signal) {
     if (signal.aborted) abort()
@@ -118,7 +114,7 @@ async function runAccount(current: Account, model: string, init: RequestInit, si
   }
   const headers = new Headers(init.headers)
   headers.set("authorization", `Bearer ${current.token}`)
-  const timeout = Math.min(imageProviderTimeoutMs(), 60_000)
+  const timeout = Math.min(imageProviderTimeoutMs(), envNumber("IMAGE_CLOUDFLARE_ACCOUNT_TIMEOUT_MS", 38_000, 12_000, 50_000))
   const timer = setTimeout(() => controller.abort(new Error("CLOUDFLARE_ACCOUNT_TIMEOUT")), timeout)
   try {
     return await fetch(`https://api.cloudflare.com/client/v4/accounts/${current.accountId}/ai/run/${model}`, {
@@ -144,23 +140,27 @@ async function failure(response: Response) {
 
 async function runQuality(model: string, init: RequestInit, signal?: AbortSignal) {
   let lastResponse: Response | undefined
+  let lastSlot: Slot = "primary"
   let lastError: unknown
   for (const current of qualityAccounts()) {
+    if (signal?.aborted) throw signal.reason || new Error("IMAGE_PROVIDER_ATTEMPT_TIMEOUT")
     if (cooling(current.slot)) continue
     try {
       const response = await runAccount(current, model, init, signal)
       const state = await failure(response)
       if (!state.failed) return { response, slot: current.slot }
       lastResponse = response
+      lastSlot = current.slot
       coolFailedAccount(current, response, state.message)
       console.warn("[malik-image][quality-failover]", { slot: current.slot, model, status: response.status })
     } catch (error) {
       lastError = error
-      if (signal?.aborted && !parentAttemptTimedOut(signal)) throw error
+      if (signal?.aborted) throw error
+      cooldownUntil.set(current.slot, Date.now() + SERVER_ERROR_COOLDOWN_MS)
       console.warn("[malik-image][quality-failover]", { slot: current.slot, model, status: 0 })
     }
   }
-  if (lastResponse) return { response: lastResponse, slot: "secondary" as Slot }
+  if (lastResponse) return { response: lastResponse, slot: lastSlot }
   if (lastError) throw lastError
   throw new Error("Cloudflare quality pool unavailable")
 }
