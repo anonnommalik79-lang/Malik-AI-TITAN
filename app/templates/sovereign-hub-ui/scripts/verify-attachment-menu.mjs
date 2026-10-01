@@ -153,4 +153,16 @@ const finalChatCss = fs.readFileSync("app/chat-monochrome-final.css", "utf8")
 assert.match(finalChatCss, /malik-dashboard-shell \.malik-ai-chat-bg \.malik-dual-grid/, "Mobile answer carousel background must be solid OLED black")
 assert.match(finalChatCss, /malik-dashboard-shell \.malik-ai-chat-bg \.malik-user-attachment--video/, "Sent video tiles must be square and black")
 
+
+assert.match(chat, /useStoredAttachmentUrl\\(item\\.url\\)/, "Photo/video history must resolve cached media references")
+assert.match(chat, /useStoredAttachmentUrl\\(item\\.posterUrl\\)/, "Video cards must resolve their saved first frame")
+assert.match(chat, /if \\(isImage\\) \\{[\\s\\S]*malik-user-attachment--image/, "Photo uploads must always occupy a square")
+assert.match(chat, /if \\(isVideo\\) \\{[\\s\\S]*malik-user-attachment--video/, "Video uploads must always occupy a square")
+assert.match(dashboard, /chat-upload-\\$\\{item\\.id\\}/, "Images need a browser-scoped cache fallback")
+assert.match(dashboard, /chat-video-poster-\\$\\{item\\.id\\}/, "Video history must cache the first frame, not a full movie")
+assert.match(dashboard, /url: durableUrl \\|\\| fallbackUrl/, "Cloud upload failure must retain image preview")
+assert.match(dashboard, /posterUrl,/, "History serializer must retain lightweight video poster references")
+const finalChatCss = fs.readFileSync("app/chat-monochrome-final.css", "utf8")
+assert.match(finalChatCss, /malik-dashboard-shell \\.malik-ai-chat-bg \\.malik-dual-grid/, "Mobile swipe gutter must be OLED black")
+
 console.log("Full ChatGPT-style tools menu, uploads, library, research, drawing, plugins, desktop/mobile layout, and multimodal transport verified.")
