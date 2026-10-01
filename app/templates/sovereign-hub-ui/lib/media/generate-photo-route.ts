@@ -36,7 +36,7 @@ import type { ImageAspectRatio, ImageGenerateResult, ImageMode } from "./types"
 const ASPECTS = new Set<ImageAspectRatio>(["1:1", "16:9", "9:16", "4:5", "4:3"])
 const MODES = new Set<ImageMode>(["cinematic", "realistic", "product", "design"])
 const IMAGE_COMMAND = /^\s*\/(?:image|img|photo|foto|фото|картинка)(?![\p{L}\p{N}_])\s*:?\s*/iu
-const IMAGE_GENERATION_LOCK_TTL_MS = 3 * 60 * 1000
+const IMAGE_GENERATION_LOCK_TTL_MS = 5 * 60 * 1000
 const MASTER_FRAGMENT = "#malik-master="
 
 type ActiveImageGeneration = { token: string; startedAt: number }
@@ -104,7 +104,7 @@ function displayImageReference(previewUrl: string | undefined, masterUrl: string
 
 function transientImageFailure(value: unknown) {
   const message = String(value || "")
-  return /\b(?:408|425|429|500|502|503|504|520|521|522|523|524)\b|rate limit|quota|busy|overload|temporar|timeout|fetch failed|network|socket|econnreset|eai_again|upstream/i.test(message)
+  return /\b(?:408|425|429|500|502|503|504|520|521|522|523|524)\b|rate limit|quota|busy|overload|temporar|timeout|fetch failed|network|socket|econnreset|eai_again|upstream|IMAGE_EDIT_PROVIDER_UNAVAILABLE|unavailable/i.test(message)
 }
 
 function ephemeralDirectImageDeliveryEnabled() {
@@ -322,8 +322,12 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
         status: "failed",
         error: transient ? "IMAGE_PROVIDERS_BUSY" : "IMAGE_GENERATION_FAILED",
         publicError: transient
-          ? "Сервисы генерации временно перегружены. Malik AI уже переключился по резервным пулам; запрос будет повторён автоматически."
-          : "Не удалось сгенерировать изображение. Попробуйте ещё раз.",
+          ? editing
+            ? "Редактирование временно недоступно: провайдер не вернул готовое фото. Malik AI попробует ещё раз; исходное изображение не потеряно."
+            : "Сервисы генерации временно перегружены. Malik AI переключился по резервным пулам; запрос можно повторить."
+          : editing
+            ? "Не удалось отредактировать исходное фото. Оригинал сохранён — проверьте настройки модели и повторите запрос."
+            : "Не удалось сгенерировать изображение. Попробуйте ещё раз.",
         retryable: transient,
         retryAfterMs: transient ? 1800 : undefined,
         modelId: result.modelId || requestedModelId,
