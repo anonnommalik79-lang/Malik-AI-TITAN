@@ -62,7 +62,7 @@ import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 import { isExplicitImageEditRequest, isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
 import { isDataSvgUrl, isImageLikeUrl, isRealVideoUrl } from "@/lib/media/media-url"
 import { normalizeClientImage } from "@/lib/media/client-image-normalize"
-import { resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
+import { isStoredGeneratedImageUrl, resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 import { queueMalikImageLineage } from "@/lib/media/image-history"
 import { MALIK_IMAGE_EDITOR_REQUEST_EVENT, type MalikImageEditorRequest } from "@/lib/media/image-editor-events"
 import { ImageGenerationMotion } from "./image-generation-motion"
@@ -182,6 +182,8 @@ export interface ChatAttachment {
   base64?: string
   text?: string
   url?: string
+  /** Cached first frame for an uploaded video; not the full video bytes. */
+  posterUrl?: string
   durationSeconds?: number
   analysisFrames?: Array<{
     name: string
@@ -548,9 +550,39 @@ function AttachmentPill({ item, onRemove }: { item: ChatAttachment; onRemove: ()
   )
 }
 
+// Resolve short account-scoped browser media keys in the mounted card only.
+// Revoke temporary object URLs when the card unmounts or changes reference.
+function useStoredAttachmentUrl(reference?: string) {
+  const [resolved, setResolved] = useState<{ key: string; url: string }>({ key: "", url: "" })
+  useEffect(() => {
+    if (!reference || !isStoredGeneratedImageUrl(reference)) return
+    let active = true
+    let objectUrl = ""
+    void resolveGeneratedImageUrl(reference).then((url) => {
+      if (!active) {
+        if (url.startsWith("blob:")) URL.revokeObjectURL(url)
+        return
+      }
+      objectUrl = url
+      setResolved({ key: reference, url })
+    }).catch(() => {
+      if (active) setResolved({ key: reference, url: "" })
+    })
+    return () => {
+      active = false
+      if (objectUrl.startsWith("blob:")) URL.revokeObjectURL(objectUrl)
+    }
+  }, [reference])
+  return isStoredGeneratedImageUrl(reference)
+    ? (resolved.key === reference ? resolved.url : "")
+    : reference || ""
+}
+
 function UserAttachmentPreview({ item }: { item: ChatAttachment }) {
   const [previewFailed, setPreviewFailed] = useState(false)
-  const src = attachmentPreviewSrc(item)
+  const resolvedSource = useStoredAttachmentUrl(item.url)
+  const posterSrc = useStoredAttachmentUrl(item.posterUrl)
+  const src = isStoredGeneratedImageUrl(item.url) ? resolvedSource : attachmentPreviewSrc(item)
   const isImage = item.kind === "image" || item.mime?.startsWith("image/")
   const isVideo = item.kind === "video" || item.mime?.startsWith("video/")
   useEffect(() => { setPreviewFailed(false) }, [src])
@@ -560,42 +592,32 @@ function UserAttachmentPreview({ item }: { item: ChatAttachment }) {
     return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`
   }
 
-  if (isImage && src && !previewFailed) {
+  // Old missing URLs never convert a photo/video into a document pill.
+  if (isImage) {
     return (
-      <figure title={item.name} className="malik-user-attachment malik-user-attachment--image h-[152px] w-[152px] shrink-0 overflow-hidden rounded-[18px] border border-white/10 bg-black/30 sm:h-[168px] sm:w-[168px]">
-        <img
-          src={src}
-          alt={item.name || "Прикреплённое изображение"}
-          className="block h-full w-full object-cover"
-          loading="eager"
-          onError={() => setPreviewFailed(true)}
-        />
+      <figure title={item.name} className="malik-user-attachment malik-user-attachment--image h-[152px] w-[152px] shrink-0 overflow-hidden rounded-[18px] border border-white/10 bg-black sm:h-[168px] sm:w-[168px]">
+        {src && !previewFailed ? (
+          <img src={src} alt={item.name || "Прикреплённое изображение"} className="block h-full w-full object-cover" loading="eager" onError={() => setPreviewFailed(true)} />
+        ) : (
+          <span className="grid h-full w-full place-items-center text-white/60" role="img" aria-label="Превью изображения недоступно"><ImageIcon className="h-7 w-7" /></span>
+        )}
       </figure>
     )
   }
 
-  if (isVideo && src && !previewFailed) {
+  if (isVideo) {
     return (
-      <figure title={item.name} className="malik-user-attachment malik-user-attachment--video h-[152px] w-[152px] shrink-0 overflow-hidden rounded-[18px] border border-white/10 bg-black/40 sm:h-[168px] sm:w-[168px]">
-        <video
-          src={src}
-          className="block h-full w-full bg-black object-cover"
-          controls
-          playsInline
-          preload="metadata"
-          onError={() => setPreviewFailed(true)}
-        />
-      </figure>
-    )
-  }
-
-  if (isImage || isVideo) {
-    const Icon = isImage ? ImageIcon : Video
-    return (
-      <figure title={item.name} role="img" aria-label={`${isImage ? "Фото" : "Видео"}: предпросмотр недоступен`}
-        className="malik-user-attachment malik-user-attachment--unavailable grid h-[152px] w-[152px] shrink-0 place-content-center justify-items-center gap-2 overflow-hidden rounded-[18px] border border-white/15 bg-black text-white/65 sm:h-[168px] sm:w-[168px]">
-        <Icon className="h-7 w-7" aria-hidden="true" />
-        <figcaption className="px-2 text-center text-[10px] leading-4">Превью недоступно</figcaption>
+      <figure title={item.name} className="malik-user-attachment malik-user-attachment--video relative h-[152px] w-[152px] shrink-0 overflow-hidden rounded-[18px] border border-white/10 bg-black sm:h-[168px] sm:w-[168px]">
+        {src && !previewFailed ? (
+          <video src={src} poster={posterSrc || undefined} className="block h-full w-full bg-black object-cover" controls playsInline preload="metadata" onError={() => setPreviewFailed(true)} />
+        ) : posterSrc ? (
+          <>
+            <img src={posterSrc} alt="Кадр прикреплённого видео" className="block h-full w-full object-cover" />
+            <span className="pointer-events-none absolute inset-0 grid place-items-center text-white" aria-label="Превью видео"><span className="grid h-10 w-10 place-items-center rounded-full border border-white/50 bg-black/70"><Video className="h-5 w-5" /></span></span>
+          </>
+        ) : (
+          <span className="grid h-full w-full place-items-center text-white/60" role="img" aria-label="Превью видео недоступно"><Video className="h-7 w-7" /></span>
+        )}
       </figure>
     )
   }

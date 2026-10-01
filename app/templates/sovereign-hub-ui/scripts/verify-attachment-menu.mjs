@@ -18,6 +18,8 @@ const drawingPad = fs.readFileSync("components/sovereign/ChatDrawingPad.tsx", "u
 const libraryPicker = fs.readFileSync("components/sovereign/ChatLibraryPicker.tsx", "utf8")
 const pluginRegistry = fs.readFileSync("components/sovereign/features/plugin-registry.ts", "utf8")
 const imageCreator = fs.readFileSync("components/sovereign/ChatImageCreator.tsx", "utf8")
+const imageStudio = fs.readFileSync("components/sovereign/image-studio/ImageStudio.tsx", "utf8")
+const imageStudioCss = fs.readFileSync("components/sovereign/image-studio/image-studio.css", "utf8")
 const toolWorkspace = fs.readFileSync("components/sovereign/ChatToolWorkspace.tsx", "utf8")
 
 const requestedLabels = [
@@ -60,7 +62,7 @@ assert.match(chatMenu, /description: "Загрузить с компьютера
 assert.match(home, /ref={allInputRef}[\s\S]*accept={`image\/\*,video\/\*,\$\{HOME_FILE_ACCEPT\}`}/, "Home unified picker must accept images, videos and documents")
 assert.match(home, /homeFileToAttachment/, "Home files must be converted into chat attachments")
 assert.match(home, /URL\.createObjectURL\(file\)/, "Home media must receive a lightweight visual preview URL")
-assert.match(home, /MAX_HOME_ATTACHMENTS = 8/, "Home upload count must align with the chat/router maximum")
+assert.match(home, /MAX_HOME_ATTACHMENTS = 12/, "Home upload count must align with the chat/router maximum")
 assert.match(home, /Максимум 10 MB/, "Home binary payload must stay below the JSON/base64 request safety ceiling")
 
 assert.match(chat, /ref={imageInputRef} type="file" accept="image\/\*"/, "Chat image creator must keep its image picker")
@@ -86,9 +88,11 @@ assert.equal(home.includes("https://platform.openai.com/"), false, "OpenAI Platf
 assert.match(toolWorkspace, /fixed inset-0[\s\S]*bg-black text-white/, "Tool workspaces must use the full-screen black/white UI")
 assert.match(toolWorkspace, /mode === "web" \|\| mode === "deep"/, "Research workspace must distinguish web and deep research")
 assert.match(toolWorkspace, /onConnect\?\.\(mode\)/, "GitHub/Gmail workspace must invoke the real connector action")
-assert.match(imageCreator, /createPortal\(/, "Image creator must render above the whole app")
-assert.match(imageCreator, /className="fixed inset-0/, "Image creator must cover the full viewport")
-assert.match(imageCreator, /aspect-square/, "Image style templates must be square")
+assert.match(imageCreator, /<ImageStudio \{\.\.\.props\} \/>/, "Image creator must delegate to the active image studio")
+assert.match(imageStudio, /return createPortal\(studio, document\.body\)/, "Image creator must render above the whole app")
+assert.match(imageStudioCss, /\.mis\s*\{[\s\S]*position:\s*fixed;[\s\S]*top:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*left:\s*0;/, "Image studio must cover the whole viewport")
+assert.match(imageStudio, /className="mis-grid"/, "Image studio must render its full-size template gallery")
+assert.match(imageStudio, /className="mis-card-img"/, "Image studio template tiles must display image covers")
 
 assert.match(libraryPicker, /\/api\/media\/library\?limit=120/, "Library picker must load the authenticated Malik media library")
 assert.match(libraryPicker, /onSelect\(item\.src/, "Library picker must return the selected saved asset")
@@ -113,7 +117,7 @@ assert.match(importUrl, /MAX_REMOTE_BYTES = 10 \* 1024 \* 1024/, "Remote media i
 assert.match(manifest, /share_target/, "Installed Malik AI must register as an OS share target")
 assert.match(shareTarget, /form\.getAll\("files"\)/, "PWA share target must accept shared files")
 
-const userMessageBlock = extractBlock(dashboard, "const userMessage: Message = {", "  const assistantMessage: Message = {")
+const userMessageBlock = extractBlock(dashboard, "const userMessage: Message = regenTarget ? regenTarget.user : {", "  const assistantMessage: Message = {")
 assert.match(userMessageBlock, /attachments:\s*historyAttachments/, "User messages must use the lightweight persisted attachment list")
 assert.match(dashboard, /function lightweightHistoryAttachment\([\s\S]*toStorableAttachment\(item\)/, "Chat history attachments must be stripped to storable metadata")
 assert.match(dashboard, /persistChatAttachmentsForHistory\(attachments\)/, "User attachments must be normalized before entering chat history")
@@ -136,5 +140,33 @@ assert.match(hiddenGemini, /gemini-3\.5-flash-lite/, "Hidden multimodal engine m
 assert.match(hiddenGemini, /GEMINI_FALLBACK_MODEL/, "Hidden multimodal engine must support the configured Gemini fallback")
 assert.match(hiddenGemini, /application\/pdf/, "Hidden multimodal engine must accept PDF documents")
 assert.equal(models.includes("gemini-3.5-flash-lite"), false, "Gemini must stay hidden from the model selector")
+
+
+// Uploaded images must not become file pills when Render/cloud upload is
+// unavailable. Metadata stays tiny; image and video poster bytes live in IDB.
+assert.match(chat, /useStoredAttachmentUrl\(item\.url\)/, "Sent images must resolve persisted browser media keys")
+assert.match(chat, /useStoredAttachmentUrl\(item\.posterUrl\)/, "Videos must resolve their cached first-frame preview")
+assert.match(chat, /if \(isImage\) \{[\s\S]*malik-user-attachment--image/, "Images must always occupy a square, including unavailable older previews")
+assert.match(chat, /if \(isVideo\) \{[\s\S]*malik-user-attachment--video/, "Videos must always occupy a square, including poster-only history")
+assert.match(dashboard, /chat-upload-\$\{item\.id\}/, "Image uploads must use the browser-scoped image cache when needed")
+assert.match(dashboard, /chat-video-poster-\$\{item\.id\}/, "Video uploads must cache only a small first frame")
+assert.match(dashboard, /url: durableUrl \|\| fallbackUrl/, "Cloud upload failure must not discard the live image preview")
+assert.match(dashboard, /!\s*\/\^\(\?:blob:\|data:\)\/i\.test\(item\.url\)/, "History must not serialize large blob/data URLs")
+assert.match(dashboard, /posterUrl,/, "Tiny poster references must survive the history snapshot")
+const finalChatCss = fs.readFileSync("app/chat-monochrome-final.css", "utf8")
+assert.match(finalChatCss, /malik-dashboard-shell \.malik-ai-chat-bg \.malik-dual-grid/, "Mobile answer carousel background must be solid OLED black")
+assert.match(finalChatCss, /malik-dashboard-shell \.malik-ai-chat-bg \.malik-user-attachment--video/, "Sent video tiles must be square and black")
+
+
+assert.ok(chat.includes("useStoredAttachmentUrl(item.url)"), "Photo/video history must resolve cached media references")
+assert.ok(chat.includes("useStoredAttachmentUrl(item.posterUrl)"), "Video must resolve its saved first-frame thumbnail")
+assert.ok(chat.includes('if (isImage) {'), "Photo uploads must render in a square even without a source")
+assert.ok(chat.includes('if (isVideo) {'), "Video uploads must render in a square even without a source")
+assert.ok(dashboard.includes('chat-upload-${item.id}'), "Images need a browser-scoped cache fallback")
+assert.ok(dashboard.includes('chat-video-poster-${item.id}'), "Video history must cache only its first frame")
+assert.ok(dashboard.includes('url: durableUrl || fallbackUrl'), "Cloud upload failure must retain the preview")
+assert.ok(dashboard.includes('posterUrl,'), "History serializer must retain lightweight video poster references")
+assert.ok(dashboard.includes('posterUrl: historyUrl(rawPosterUrl)'), "History rehydration must restore the saved video poster after reload")
+assert.ok(finalChatCss.includes('.malik-dashboard-shell .malik-ai-chat-bg .malik-dual-grid'), "Mobile swipe gutter must be OLED black")
 
 console.log("Full ChatGPT-style tools menu, uploads, library, research, drawing, plugins, desktop/mobile layout, and multimodal transport verified.")
