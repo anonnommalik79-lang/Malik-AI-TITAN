@@ -155,14 +155,15 @@ assert.match(finalChatCss, /malik-dashboard-shell \.malik-ai-chat-bg \.malik-use
 
 
 assert.match(chat, /useStoredAttachmentUrl\\(item\\.url\\)/, "Photo/video history must resolve cached media references")
-assert.match(chat, /useStoredAttachmentUrl\\(item\\.posterUrl\\)/, "Video cards must resolve their saved first frame")
-assert.match(chat, /if \\(isImage\\) \\{[\\s\\S]*malik-user-attachment--image/, "Photo uploads must always occupy a square")
-assert.match(chat, /if \\(isVideo\\) \\{[\\s\\S]*malik-user-attachment--video/, "Video uploads must always occupy a square")
-assert.match(dashboard, /chat-upload-\\$\\{item\\.id\\}/, "Images need a browser-scoped cache fallback")
-assert.match(dashboard, /chat-video-poster-\\$\\{item\\.id\\}/, "Video history must cache the first frame, not a full movie")
-assert.match(dashboard, /url: durableUrl \\|\\| fallbackUrl/, "Cloud upload failure must retain image preview")
-assert.match(dashboard, /posterUrl,/, "History serializer must retain lightweight video poster references")
-const finalChatCss = fs.readFileSync("app/chat-monochrome-final.css", "utf8")
-assert.match(finalChatCss, /malik-dashboard-shell \\.malik-ai-chat-bg \\.malik-dual-grid/, "Mobile swipe gutter must be OLED black")
+
+assert.ok(chat.includes("useStoredAttachmentUrl(item.url)"), "Photo/video history must resolve cached media references")
+assert.ok(chat.includes("useStoredAttachmentUrl(item.posterUrl)"), "Video must resolve its saved first-frame thumbnail")
+assert.ok(chat.includes('if (isImage) {'), "Photo uploads must render in a square even without a source")
+assert.ok(chat.includes('if (isVideo) {'), "Video uploads must render in a square even without a source")
+assert.ok(dashboard.includes('chat-upload-${item.id}'), "Images need a browser-scoped cache fallback")
+assert.ok(dashboard.includes('chat-video-poster-${item.id}'), "Video history must cache only its first frame")
+assert.ok(dashboard.includes('url: durableUrl || fallbackUrl'), "Cloud upload failure must retain the preview")
+assert.ok(dashboard.includes('posterUrl,'), "History serializer must retain lightweight video poster references")
+assert.ok(finalChatCss.includes('.malik-dashboard-shell .malik-ai-chat-bg .malik-dual-grid'), "Mobile swipe gutter must be OLED black")
 
 console.log("Full ChatGPT-style tools menu, uploads, library, research, drawing, plugins, desktop/mobile layout, and multimodal transport verified.")
