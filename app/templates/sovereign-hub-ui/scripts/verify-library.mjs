@@ -149,7 +149,7 @@ check("a style can be handed to the site generator", () => {
   // The panel offers it from inside the opened template, not from the card -
   // see "opening a template from the Library never navigates away" below.
   assert.match(panel, /onUseStyle\?\.\(libraryPrompt\(template\), template\)/, "the gated template action must pass the chosen direction to the generator")
-  assert.match(panel, /const useTemplate = \(template\) => \{[\s\S]{0,180}requireTemplateAccess\(template\)/, "using a style must check plan access")
+  assert.match(panel, /const useTemplate = \(template(?::\s*LibraryTemplate)?\) => \{[\s\S]{0,180}requireTemplateAccess\(template\)/, "using a style must check plan access")
   const dashboard = codeOf("components/sovereign/dashboard.tsx")
   assert.match(dashboard, /<SiteLibraryPanel/)
   assert.match(dashboard, /safeOpenView\("website-generation", "template"\)/, "the hand-off must reach the generator")
