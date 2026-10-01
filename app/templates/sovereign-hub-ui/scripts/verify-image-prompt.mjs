@@ -233,7 +233,10 @@ assert.match(photoRoute, /negativePrompt: visual\.negativePrompt/, "Agnes primar
 assert.doesNotMatch(photoRoute, /generateWithAgnesImage\(\{\s*prompt,\s*size:/s, "Raw chat prompt нельзя отправлять напрямую в Agnes")
 
 const agnesProvider = codeOf("lib/media/providers/agnes-image.ts")
-assert.match(agnesProvider, /negative_prompt/, "Agnes должна передавать negative prompt провайдеру")
+// Agnes's text-to-image queue answers HTTP 400 to a negative_prompt field
+// (a43088b6), so the prohibitions stay in the route's own metadata and the
+// field is not sent: sending it would fail every Agnes picture.
+assert.doesNotMatch(agnesProvider, /negative_prompt\s*:/, "Agnes отвечает 400 на negative_prompt — поле не отправляется")
 
 const router = codeOf("lib/media/image-router.ts")
 assert.match(router, /buildVisualPrompt/, "Роутер должен строить промпт через новый пайплайн")

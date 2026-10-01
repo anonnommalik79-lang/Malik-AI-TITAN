@@ -302,7 +302,9 @@ export function SiteLibraryPanel({ onUseStyle, onEditSavedSite, plan, onOpenBill
   const accentOf = (template: LibraryTemplate) => LIBRARY_STYLES[template.category].accent
 
   return (
-    <main className="malikLibrary">
+    // A <div>, not a nested <main>: on a phone the dashboard gives every child
+    // of a <main> the full height, and the search bar ate the whole screen.
+    <div className="malikLibrary">
       <header className="libBar">
         <div className="libBarTitle"><Folder aria-hidden="true" /> Библиотека</div>
         <label className="libBarSearch">
@@ -526,7 +528,7 @@ export function SiteLibraryPanel({ onUseStyle, onEditSavedSite, plan, onOpenBill
       </div></div></OverlayPortal>}
 
       <LibraryCss />
-    </main>
+    </div>
   )
 }
 

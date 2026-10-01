@@ -78,6 +78,9 @@ const router = load("lib/ai/router.ts", {
   "./fallback": {}, "./providers": {}, "@/lib/limits/rate-limit": {}, "./usage": {},
   "./identity": { MALIK_STRICT_SYSTEM_PROMPT: "Default identity" },
   "@/lib/auth/admin-policy": { isOwnerEmail: () => false },
+  // The router learned "superpowers" after this test was written; none apply
+  // to a short greeting, which is what it measures.
+  "./superpowers": { detectMalikSuperpowers: () => [], buildMalikSuperpowerSystemPrompt: () => "", superpowerOutputBudget: () => 0 },
 }, "\nexport { normalize };", { CHAT_HISTORY_WINDOW: "12" })
 const system = "LANGUAGE: answer only in Kazakh. Understand калайсын as қалайсың."
 const history = Array.from({ length: 20 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: `turn ${i}` }))

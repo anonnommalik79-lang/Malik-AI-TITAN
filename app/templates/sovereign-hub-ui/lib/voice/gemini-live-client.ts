@@ -1077,13 +1077,16 @@ export class GeminiLiveSession {
 
   /** The person switched the microphone off. This one is deliberate. */
   detachMicrophone() {
-    this.wantsMic = false
     for (const track of this.micStream?.getAudioTracks() || []) {
       track.onended = null
       track.onmute = null
     }
     this.stopWatchdog()
+    // Tell Gemini the stream ended while the microphone still counts as
+    // wanted: endUtterance() ignores a microphone that is already off, so
+    // clearing the flag first meant the last words were never answered.
     if (this.isReady()) this.endUtterance()
+    this.wantsMic = false
     this.stopCapture()
     this.micStream = null
     this.hostContext = null

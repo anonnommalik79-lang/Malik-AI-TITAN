@@ -65,14 +65,21 @@ process.env.IMAGE_MAX_MEGAPIXELS = "140"
 
 // The real presets, not a copy of them: a test that asserts 16K is 15360px is
 // worthless if it asserts it against a number written in the test file.
+// The real effect profiles and the real watermark, loaded the same way: the
+// postprocess module grew both imports, and a stub here would only test a copy.
+const effects = load("lib/media/image-effects.ts")
+const watermark = load("lib/media/malik-watermark.ts", { "server-only": "{}" })
+
 const post = load(
   "lib/media/image-postprocess.ts",
   {
     "server-only": "{}",
     "./asset-store": "{ decodeDataUrl: () => null }",
     "./image-quality-presets": "__presets",
+    "./image-effects": "__effects",
+    "./malik-watermark": "__watermark",
   },
-  { __presets: presets },
+  { __presets: presets, __effects: effects, __watermark: watermark },
 )
 
 const intent = load("lib/media/image-resolution-intent.ts", {
@@ -181,9 +188,11 @@ check("orientation is baked in before the frame is measured", () => {
 console.log("\nnot taking the server down to do it")
 
 check("an oversized request is clamped instead of refused", () => {
-  const { clampToMegapixels } = post
-  // 16:9 at 15360 is about 133 MP: inside the default budget.
-  assert.equal(clampToMegapixels(15360, 16 / 9, true), 15360)
+  const { clampToMegapixels, outputMegapixelBudget } = post
+  // The budget is the smaller of 140 MP and what this machine's memory allows
+  // (217f0199), so the edge that still fits is computed from the real budget.
+  const fits = Math.min(15360, Math.floor(Math.sqrt(outputMegapixelBudget() * 1_000_000 * 16 / 9)) - 1)
+  assert.equal(clampToMegapixels(fits, 16 / 9, true), fits)
   // A square 16K is 236 MP and must come back smaller rather than as an error.
   const square = clampToMegapixels(15360, 1, true)
   assert.ok(square > 0 && square < 15360, `a square 16K must be clamped, got ${square}`)

@@ -132,6 +132,41 @@ const RESEARCH_PATTERNS: RegExp[] = [
   /\bsources\b/i,
 ]
 
+// Asking to make media, as opposed to talking about it. "Сравни API
+// видеогенерации" names video but asks for research; "Сделай видео" asks for
+// a video.
+const MEDIA_CREATION_PATTERNS: RegExp[] = [
+  /сдела/i,
+  /созда/i,
+  /сгенер/i,
+  /генерир/i,
+  /сними/i,
+  /нарисуй/i,
+  /смонтир/i,
+  /оживи/i,
+  /анимируй/i,
+  /\bmake\b/i,
+  /\bcreate\b/i,
+  /\bgenerate\b/i,
+  /\brender\b/i,
+  /\bproduce\b/i,
+  /\bdraw\b/i,
+]
+
+const MEDIA_DISCUSSION_PATTERNS: RegExp[] = [
+  ...RESEARCH_PATTERNS,
+  /что происходит/i,
+  /проанализ/i,
+  /опиши/i,
+  /провер/i,
+  /актуальн/i,
+  /обзор/i,
+  /\banaly[sz]e/i,
+  /\bdescribe\b/i,
+  /\breview\b/i,
+  /\bwhat\b/i,
+]
+
 const NEGATIVE_PROJECT_FOR_COMPONENT: RegExp[] = [
   /прост(ой|ую|ая)/i,
   /один\s+компонент/i,
@@ -191,9 +226,18 @@ export function detectTask(prompt: string, attachments: AIFileAttachment[] = [])
     projectScore = Math.max(0, projectScore - 60)
   }
 
+  // Talking about video or pictures - comparing tools, asking what is in a
+  // clip someone attached - is research or analysis, not a generation job.
+  const talksAboutMedia = !hasAny(lower, MEDIA_CREATION_PATTERNS)
+    && (hasAny(lower, MEDIA_DISCUSSION_PATTERNS) || attachments.length > 0)
+  if (talksAboutMedia) {
+    videoScore = 0
+    imageScore = 0
+  }
+
   // Direct media tasks should win over generic words.
-  if (explicitVideo) videoScore += 35
-  if (explicitImage && !explicitVideo) imageScore += 35
+  if (explicitVideo && !talksAboutMedia) videoScore += 35
+  if (explicitImage && !explicitVideo && !talksAboutMedia) imageScore += 35
 
   // Landing page/site/project must use Project Builder.
   if (explicitProject && !explicitComponent) {

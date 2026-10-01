@@ -53,8 +53,9 @@ const HOST_CPUS = (() => {
  * without starving every other request on the box, so a 2GB instance tops out
  * around 50 megapixels and clamps 16K down to roughly 9600px - which it then
  * reports as 8K rather than claiming a size the file does not have.
- * IMAGE_MAX_MEGAPIXELS overrides it in both directions for a host that knows
- * better than this arithmetic does.
+ * IMAGE_MAX_MEGAPIXELS can lower it further; it never raises it past what
+ * the container's memory allows, because that is the limit that takes the
+ * server down.
  */
 // Sharp needs simultaneous decoder, working and encoder buffers. Reserve
 // enough RAM for Next.js, request payloads and the in-chat preview too.

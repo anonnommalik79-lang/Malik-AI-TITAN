@@ -621,7 +621,12 @@ check("the quiet tail of a sentence still counts as speech", () => {
 check("the microphone is opened at the rate the recognizer wants", () => {
   const client = codeOf("components/voice/VoiceMode.tsx")
   assert.match(client, /channelCount: 1/, "mono: the recognizer discards the second channel anyway")
-  assert.match(client, /sampleRate: 16000/)
+  // Gemini Live takes 16 kHz PCM. The browser opens the microphone at its
+  // native rate and the Live client downsamples every frame to that rate,
+  // which is more reliable than asking getUserMedia for a rate it may ignore.
+  const live = codeOf("lib/voice/gemini-live-client.ts")
+  assert.match(live, /function downsample\(input: Float32Array, inputRate: number, outputRate = INPUT_RATE\)/)
+  assert.match(live, /audio\/pcm;rate=\$\{INPUT_RATE\}/)
 })
 
 check("the client speaks pieces instead of waiting for the whole answer", () => {
@@ -640,7 +645,7 @@ check("the recognizer is no longer forced into the picker's language", () => {
 
 check("Charon is the Russian voice, and Puck is not offered", () => {
   const settings = codeOf("components/voice/VoiceSettings.tsx")
-  assert.match(settings, /language === "ru" \? "Charon"/, "Charon is the default")
+  assert.match(settings, /language === "ru"(?: \|\| language === "auto")? \? "Charon"/, "Charon is the default, for Russian and for any-language mode")
   assert.ok(!/name: "Puck"/.test(settings), "Puck must not be in the picker")
   const tts = codeOf("app/api/voice/tts/route.ts")
   assert.match(tts, /body\?\.voice \|\| "Charon"/, "and the server default follows it")

@@ -30,7 +30,7 @@ const [home, chat, dashboard, sidebar, mode, dock, orb, settings, sound, tts, tu
 
 const checks = [
   ["01 empty home composer shows Voice and content shows Send", () => { assert.match(home, /hasSendableContent && "is-hidden"/); assert.match(home, /!hasSendableContent && "is-hidden"/) }],
-  ["02 active chat has the same Voice\/Send switch", () => { assert.match(chat, /malik-voice-entry[\s\S]*prompt\.trim\(\) && "is-hidden"/); assert.match(chat, /malik-inline-send[\s\S]*!prompt\.trim\(\) && "is-hidden"/) }],
+  ["02 active chat has the same Voice\/Send switch", () => { assert.match(chat, /malik-voice-entry[\s\S]*prompt\.trim\(\) && "is-hidden"/); assert.match(chat, /malik-inline-send[\s\S]*!prompt\.trim\(\)(?: && attachments\.length === 0)? && "is-hidden"/) }],
   ["03 switch is smooth and does not resize", () => { assert.match(homeCss, /thome-action-swap[\s\S]*48px[\s\S]*160ms/); assert.match(chatCss, /malik-inline-action-swap[\s\S]*48px[\s\S]*160ms/) }],
   ["04 Enter sends and Shift+Enter stays multiline", () => { assert.match(home, /event\.key === "Enter" && !event\.shiftKey/); assert.match(chat, /event\.key === "Enter" && !event\.shiftKey/); assert.match(dock, /event\.key === "Enter" && !event\.shiftKey/) }],
   ["05 Voice Mode opens in app state from all entry points", () => { assert.match(dashboard, /voiceModeOpen/); assert.match(sidebar, /onOpenVoice\?\.\(\)/); assert.doesNotMatch(mode, /iframe|location\.href|router\.push/) }],

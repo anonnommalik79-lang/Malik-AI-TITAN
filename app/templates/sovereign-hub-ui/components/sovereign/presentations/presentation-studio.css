@@ -145,6 +145,13 @@
 .ps-btn:hover:not(:disabled) { border-color: var(--ps-line-strong); background: rgba(255, 255, 255, 0.04); }
 .ps-btn:disabled { opacity: .45; cursor: not-allowed; }
 .ps-btn--primary { background: #fff; color: #000 !important; border-color: #fff; }
+/* «Войти, чтобы создавать» is a link, and the app-wide link reset
+   (#malik-root a:any-link { color: inherit !important }) outranks the rule
+   above, so on the phone's white button the label came out white. The wide
+   screen paints this button with its own gradient and white text. */
+@media (max-width: 900px) {
+  #malik-root .ps-root a.ps-btn--primary:any-link { color: #000 !important; }
+}
 .ps-btn--primary:hover:not(:disabled) { background: #e5e5e5; border-color: #e5e5e5; }
 .ps-btn--ghost { border-color: transparent; }
 .ps-btn--small { min-height: 32px; padding: 0 11px; border-radius: 10px; font-size: 12.5px; }

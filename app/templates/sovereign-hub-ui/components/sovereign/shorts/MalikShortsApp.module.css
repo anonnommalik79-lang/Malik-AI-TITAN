@@ -355,7 +355,9 @@
 .secondaryButton { border: 1px solid var(--ms-border); background: #111; color: #fff; }
 .pillRow { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
 .pill { border: 1px solid var(--ms-border); border-radius: 999px; padding: 7px 9px; background: #0d0d0d; font-size: 10px; color: rgba(255,255,255,.72); cursor: pointer; }
-.pillActive { background: #fff; color: #000; }
+/* Two classes: `.root button { color: inherit }` outranks a single one, and
+   the selected language came out white on its white pill. */
+.pill.pillActive { background: #fff; color: #000; }
 
 .loading,
 .empty {

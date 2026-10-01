@@ -158,3 +158,22 @@
     display: none !important;
   }
 }
+
+/* On laptop screens the centred tabs ran under the search field: they are
+   centred on the whole bar, and the search, bell and avatar on the right need
+   more than half of what is left. Below 1680px the tabs sit in the free space
+   between the left edge and the right-hand controls instead, and scroll
+   sideways rather than overlap if even that is too narrow. */
+@media (min-width: 768px) and (max-width: 1679px) {
+  body:has(#malik-root .thome) #malik-root .malik-dashboard-shell .titan-tabs {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    transform: none !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin: 0 auto !important;
+    overflow-x: auto !important;
+  }
+}
