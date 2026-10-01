@@ -263,6 +263,10 @@ function importantForDual(
   const images = imageAttachmentCount(userRow)
   const complexImage = complexImageTurn(userRow, request, responseText, markdown)
 
+  // Editing / transforming an uploaded photo is one creative request, not an
+  // A/B reasoning question. Two copies of a refusal/prompt only clutter media chat.
+  if (images > 0 && /(преобраз|измен|отредакт|редактир|сделай|сгенер|создай|нарис|transform|edit|generate|create|draw|өңде|өзгерт|жаса)/iu.test(request)) return false
+
   // Images get stricter treatment: a normal photo/question stays one answer.
   // Dual mode only appears when the visual task itself is genuinely dense.
   if (images > 0) {
