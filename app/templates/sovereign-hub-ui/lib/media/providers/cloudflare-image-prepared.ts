@@ -204,7 +204,7 @@ async function decode(response: Response, label: string) {
   const payload = await response.json().catch(() => ({}))
   if (!response.ok || payload?.success === false) {
     const message = payload?.errors?.[0]?.message || payload?.error?.message || payload?.message
-    throw new Error(message || `Cloudflare Workers AI returned ${response.status}`)
+    throw new Error(`Cloudflare Workers AI HTTP ${response.status}: ${String(message || "provider unavailable").slice(0, 180)}`)
   }
   const imageUrl = extractImage(payload)
   if (!imageUrl) throw new Error(`${label} returned no image payload`)
