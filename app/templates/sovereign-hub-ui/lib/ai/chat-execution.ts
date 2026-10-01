@@ -33,7 +33,7 @@ export function publicExecutionText(value: unknown, limit = 6000): string {
     /^(authorization|cookie|.*token|.*secret|.*password|.*api[_-]?key|base64|media_b64|systemPrompt|reasoning|thoughts)$/i.test(key) ? "[скрыто]" : item, 2) || "" }
   catch { text = "[Данные недоступны]" }
   text = text.replace(/\b(?:sk-(?:proj-)?[\w-]{12,}|gh[pousr]_[\w]{20,})\b/gi, "[скрыто]")
-    .replace(/(Bearer\s+)[\w.~+\/-]+/gi, "$1[скрыто]")
+    .replace(/(Bearer\s+)[\w.~+/-]+/gi, "$1[скрыто]")
     .replace(/((?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|token|secret|password|authorization|cookie)\s*["']?\s*[:=]\s*["']?)[^\s,;"'}]+/gi, "$1[скрыто]")
     .replace(/data:[^\s"']+;base64,[a-z0-9+/=]+/gi, "[медиаданные скрыты]")
     .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[скрыто]@")
