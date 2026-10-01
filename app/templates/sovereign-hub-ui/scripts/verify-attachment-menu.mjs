@@ -154,8 +154,6 @@ assert.match(finalChatCss, /malik-dashboard-shell \.malik-ai-chat-bg \.malik-dua
 assert.match(finalChatCss, /malik-dashboard-shell \.malik-ai-chat-bg \.malik-user-attachment--video/, "Sent video tiles must be square and black")
 
 
-assert.match(chat, /useStoredAttachmentUrl\\(item\\.url\\)/, "Photo/video history must resolve cached media references")
-
 assert.ok(chat.includes("useStoredAttachmentUrl(item.url)"), "Photo/video history must resolve cached media references")
 assert.ok(chat.includes("useStoredAttachmentUrl(item.posterUrl)"), "Video must resolve its saved first-frame thumbnail")
 assert.ok(chat.includes('if (isImage) {'), "Photo uploads must render in a square even without a source")
