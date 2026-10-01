@@ -18,6 +18,8 @@ const drawingPad = fs.readFileSync("components/sovereign/ChatDrawingPad.tsx", "u
 const libraryPicker = fs.readFileSync("components/sovereign/ChatLibraryPicker.tsx", "utf8")
 const pluginRegistry = fs.readFileSync("components/sovereign/features/plugin-registry.ts", "utf8")
 const imageCreator = fs.readFileSync("components/sovereign/ChatImageCreator.tsx", "utf8")
+const imageStudio = fs.readFileSync("components/sovereign/image-studio/ImageStudio.tsx", "utf8")
+const imageStudioCss = fs.readFileSync("components/sovereign/image-studio/image-studio.css", "utf8")
 const toolWorkspace = fs.readFileSync("components/sovereign/ChatToolWorkspace.tsx", "utf8")
 
 const requestedLabels = [
@@ -86,8 +88,9 @@ assert.equal(home.includes("https://platform.openai.com/"), false, "OpenAI Platf
 assert.match(toolWorkspace, /fixed inset-0[\s\S]*bg-black text-white/, "Tool workspaces must use the full-screen black/white UI")
 assert.match(toolWorkspace, /mode === "web" \|\| mode === "deep"/, "Research workspace must distinguish web and deep research")
 assert.match(toolWorkspace, /onConnect\?\.\(mode\)/, "GitHub/Gmail workspace must invoke the real connector action")
-assert.match(imageCreator, /createPortal\(/, "Image creator must render above the whole app")
-assert.match(imageCreator, /className="fixed inset-0/, "Image creator must cover the full viewport")
+assert.match(imageCreator, /<ImageStudio \{\.\.\.props\} \/>/, "Image creator must delegate to the active image studio")
+assert.match(imageStudio, /return createPortal\(studio, document\.body\)/, "Image creator must render above the whole app")
+assert.match(imageStudioCss, /\.mis\s*\{[\s\S]*position:\s*fixed;[\s\S]*top:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*left:\s*0;/, "Image studio must cover the whole viewport")
 assert.match(imageCreator, /aspect-square/, "Image style templates must be square")
 
 assert.match(libraryPicker, /\/api\/media\/library\?limit=120/, "Library picker must load the authenticated Malik media library")
