@@ -125,7 +125,7 @@ assert.match(motion, /malik-image-loading-mobile-final\.gif/, "mobile waiting sc
 assert.match(motion, /malik-image-loading-pc-final\.gif/, "desktop waiting scene must use the approved Malik GIF")
 assert.match(motion, /<source media="\(max-width: 640px\)"/, "waiting scene must switch between mobile and desktop GIFs")
 assert.equal(/<canvas|requestAnimationFrame|ResizeObserver/.test(motion), false, "GIF waiting scene must stay browser-native and avoid canvas animation work")
-assert.match(motion, /loadImage\(resolvedResultUrl\)[\s\S]*setImageLoaded\(true\)/, "final display image should decode once and hand off immediately")
+assert.match(motion, /loadImage\(resolvedResultUrl,\s*ephemeral \? 5 \* 60_000 : 45_000\)[\s\S]*setImageLoaded\(true\)/, "final display image should decode with explicit per-source timeouts and hand off immediately")
 assert.equal(/finalImage|lastFinalUrl|finalUrlRef/.test(motion), false, "finished image must not be redrawn through the canvas reveal")
 assert.match(motion, /data-malik-image-ready=\{imageLoaded \? "1" : "0"\}/, "ready state must remain compatible with result tools")
 
