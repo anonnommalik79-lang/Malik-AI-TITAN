@@ -549,7 +549,7 @@ check("the model is told never to invent statistics", async () => {
   modelScript = [JSON.stringify({ slides: [{ n: 1, ...SAMPLES.title }] })]
   modelCalls.length = 0
   await engine.generateSlides({ topic: "кофейня", outline, startIndex: 0, count: 1, language: "ru", tone: "confident" })
-  assert.match(modelCalls[0].systemPrompt, /NEVER invent precise statistics/)
+  assert.match(modelCalls[0].systemPrompt, /NEVER invent statistics, traction, revenue, market size/, "the model must reject fabricated business figures")
   assert.match(modelCalls[0].systemPrompt, /CLAIM/)
 })
 
@@ -616,7 +616,7 @@ check("the wide start screen lives in desktop media queries only; the phone layo
   assert.doesNotMatch(phone, /#[0-9a-f]{3,6}\b/i, "no colour reaches the phone")
   const studio = read("components/sovereign/presentations/PresentationStudio.tsx")
   assert.match(studio, /\{desktop \? <PresentationShowcase \/> : null\}/, "the preview is not even mounted on a phone")
-  assert.match(studio, /<span className="ps-mob-only">\{busy === "outline" \? "Составляю план…" : `Составить план/, "the phone keeps its button")
+  assert.match(studio, /<span className="ps-mob-only">\{busy === "outline" \? "Составляю план…" : `Создать · \$\{generationCost\} кр\.`/, "the phone keeps its button and displays its credit cost")
 })
 
 check("the sample deck on the start screen is drawn by the real renderer and marked as an example", () => {
@@ -802,8 +802,9 @@ check("credits are reserved before the model runs and refunded when it fails", (
   const outlineBlock = route.slice(route.indexOf('if (action === "outline")'), route.indexOf('if (action === "slides")'))
   assert.ok(outlineBlock.indexOf("reservePresentationCredits") < outlineBlock.indexOf("generateOutline("), "reserve must come first")
   assert.match(route, /const quota = reserved \? await refund\(reserved\)/, "the catch must refund")
-  assert.match(route, /Paid only for what arrived/)
-  assert.match(route, /result\.missing\.length \* PRESENTATION_COSTS\.slide/)
+  assert.match(route, /The full deck was paid for when its outline was created/, "slide batches must use the already-paid deck credit")
+  assert.match(route, /const reservation = await reservePresentationCredits\(userId, plan, authenticated, 0\)/, "generating slide batches must not charge twice")
+  assert.match(route, /return json\(\{ ok: true, slides: result\.slides, missing: result\.missing, quota \}\)/, "partial results must report missing slides")
 })
 
 check("presentations are metered by credits, not by the chat's token budget", () => {
