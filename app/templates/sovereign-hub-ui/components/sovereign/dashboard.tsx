@@ -572,8 +572,41 @@ function lightweightHistoryAttachment(item: ChatAttachment): ChatAttachment {
 async function persistChatAttachmentsForHistory(items: ChatAttachment[]) {
   return Promise.all(items.map(async (item) => {
     const lightweight = lightweightHistoryAttachment(item)
+
+    if (item.kind === "video") {
+      // Full videos can be 150 MB: do not duplicate them in browser history.
+      // Keep the live blob for the current chat and cache one small extracted frame
+      // so a reload still shows a square video thumbnail rather than a file pill.
+      const frame = item.analysisFrames?.[0]
+      let posterUrl = lightweight.posterUrl
+      if (frame?.base64) {
+        try {
+          const cached = await persistGeneratedImageUrl(
+            `chat-video-poster-${item.id}`,
+            `data:${frame.mime};base64,${frame.base64}`,
+          )
+          if (isStoredGeneratedImageUrl(cached)) posterUrl = cached
+        } catch { /* an unsupported local cache must not block video uploads */ }
+      }
+      return { ...lightweight, url: item.url || lightweight.url, posterUrl }
+    }
+
     if (item.kind !== "image" || !item.base64) return lightweight
-    if (typeof item.url === "string" && (/^https:\/\//i.test(item.url) || item.url.startsWith("/"))) return lightweight
+
+    // Cloud upload may be unconfigured or fail on a free host. Preserve a compact
+    // browser-scoped IndexedDB reference instead of losing the image preview.
+    let fallbackUrl = item.url || lightweight.url
+    try {
+      const cached = await persistGeneratedImageUrl(
+        `chat-upload-${item.id}`,
+        `data:${item.mime || "image/jpeg"};base64,${item.base64}`,
+      )
+      if (isStoredGeneratedImageUrl(cached)) fallbackUrl = cached
+    } catch { /* live blob preview remains available for this session */ }
+
+    if (typeof item.url === "string" && (/^https:\/\//i.test(item.url) || item.url.startsWith("/"))) {
+      return { ...lightweight, url: item.url }
+    }
 
     try {
       const response = await clientFetchWithTimeout("/api/chat/attachment", {
@@ -589,10 +622,10 @@ async function persistChatAttachmentsForHistory(items: ChatAttachment[]) {
         }),
       }, 25_000)
       const payload = await response.json().catch(() => ({}))
-      const durableUrl = typeof payload?.url === "string" ? payload.url : ""
-      return durableUrl ? { ...lightweight, url: durableUrl } : lightweight
+      const durableUrl = response.ok && typeof payload?.url === "string" ? payload.url : ""
+      return { ...lightweight, url: durableUrl || fallbackUrl }
     } catch {
-      return lightweight
+      return { ...lightweight, url: fallbackUrl }
     }
   }))
 }
@@ -1332,7 +1365,9 @@ function stripInlineMediaBytes(media: InlineMediaGeneration): InlineMediaGenerat
 }
 
 function toStorableAttachment(item: ChatAttachment): ChatAttachment {
-  const durableUrl = typeof item.url === "string" && !item.url.startsWith("blob:") ? item.url : undefined
+  // Never serialize temporary blob URLs or multi-megabyte data URIs into chat history.
+  const durableUrl = typeof item.url === "string" && !/^(?:blob:|data:)/i.test(item.url) ? item.url : undefined
+  const posterUrl = typeof item.posterUrl === "string" && !/^(?:blob:|data:)/i.test(item.posterUrl) ? item.posterUrl : undefined
   const keepText = item.kind === "code" || item.kind === "file" || item.kind === "url"
   return {
     id: item.id,
@@ -1341,6 +1376,7 @@ function toStorableAttachment(item: ChatAttachment): ChatAttachment {
     size: item.size,
     kind: item.kind,
     url: durableUrl,
+    posterUrl,
     text: keepText && typeof item.text === "string" ? item.text.slice(0, 180_000) : undefined,
     durationSeconds: item.durationSeconds,
   }
