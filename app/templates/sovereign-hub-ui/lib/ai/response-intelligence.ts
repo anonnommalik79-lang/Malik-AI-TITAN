@@ -1,5 +1,6 @@
 export type ResponseLanguage = "ru" | "kk" | "en" | "auto"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
+import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 
 export type ResponseComplexity = "simple" | "standard" | "complex"
 
@@ -328,6 +329,9 @@ export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?
     "MALIK RESPONSE CORE:",
     `- ${MALIK_RESPONSE_CORE_PROMPT}`,
     webContract,
+    ...(isReferenceImageRequest(input.prompt) ? [
+      "VISUAL REFERENCE CONTRACT: The Malik AI chat UI independently searches real public photo catalogues and may display sourced photograph cards after this answer. Explain the requested place or subject directly. Do not claim you cannot display or send pictures, do not invent photo links, and do not pretend any specific pictures have been found before lookup completes.",
+    ] : []),
     ...(codeContract ? [codeContract] : []),
     ...(artifactContract ? [artifactContract] : []),
     "ACTIVE MALIK ANSWER DNA MODULES:",
