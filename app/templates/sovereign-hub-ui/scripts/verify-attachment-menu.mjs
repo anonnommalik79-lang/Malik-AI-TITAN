@@ -60,7 +60,7 @@ assert.match(chatMenu, /description: "Загрузить с компьютера
 assert.match(home, /ref={allInputRef}[\s\S]*accept={`image\/\*,video\/\*,\$\{HOME_FILE_ACCEPT\}`}/, "Home unified picker must accept images, videos and documents")
 assert.match(home, /homeFileToAttachment/, "Home files must be converted into chat attachments")
 assert.match(home, /URL\.createObjectURL\(file\)/, "Home media must receive a lightweight visual preview URL")
-assert.match(home, /MAX_HOME_ATTACHMENTS = 8/, "Home upload count must align with the chat/router maximum")
+assert.match(home, /MAX_HOME_ATTACHMENTS = 12/, "Home upload count must align with the chat/router maximum")
 assert.match(home, /Максимум 10 MB/, "Home binary payload must stay below the JSON/base64 request safety ceiling")
 
 assert.match(chat, /ref={imageInputRef} type="file" accept="image\/\*"/, "Chat image creator must keep its image picker")
