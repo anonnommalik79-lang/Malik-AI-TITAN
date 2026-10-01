@@ -157,17 +157,26 @@ export async function routeImageGeneration(
     ].join("\n")
     if (!preparedCloudflareImageConfigured()) return { ok: false, provider: "cloudflare", imageUrl: "", remainingDailyImages: 0, error: "Редактирование фото пока не подключено. Настройте Cloudflare Workers AI." }
     try {
-      const result = await withAttemptSignal(options?.signal, 90_000, (signal) => generatePreparedCloudflareImage({
-        strictPrompt: instruction, negativePrompt: "", modelId: editModelId,
-        editSource: input.editSource, signal,
-      }))
+      // Both Cloudflare quality accounts share ONE budget. A dead first account
+      // must not turn one image edit into several minutes of hanging requests.
+      const result = await withAttemptSignal(options?.signal,
+        timeoutFromEnv("IMAGE_EDIT_PROVIDER_TIMEOUT_MS", 82_000, 25_000, 95_000),
+        (signal) => generatePreparedCloudflareImage({
+          strictPrompt: instruction, negativePrompt: "", modelId: editModelId,
+          editSource: input.editSource, signal,
+        }))
       return { ...result, ok: true, provider: "cloudflare", remainingDailyImages: 0, quality,
         understood: `Редактирую загруженное фото: ${input.prompt}`, enhancedPrompt: instruction,
         width: input.editSource.width, height: input.editSource.height, routeReason: "uploaded-image-edit" }
-    } catch {
-      // Never drop the original and fail over to a text-only image model.
+    } catch (error) {
+      // An edit may ONLY use an image-to-image model. Never replace a person's
+      // upload with a plausible but unrelated text-to-image generation.
+      const reason = error instanceof Error ? error.message : String(error || "IMAGE_EDIT_FAILED")
+      console.warn("[image-edit] image-to-image provider failed", reason.slice(0, 200))
+      const retryable = /\\b(?:408|425|429|500|502|503|504|520|521|522|523|524)\\b|timeout|timed out|abort|overload|temporar|network|fetch failed|unavailable|quota|daily allocation/i.test(reason)
       return { ok: false, provider: "cloudflare", imageUrl: "", remainingDailyImages: 0,
-        error: "Не удалось отредактировать исходное фото. Попробуйте ещё раз; оригинал не изменён." }
+        error: retryable ? `IMAGE_EDIT_PROVIDER_UNAVAILABLE: ${reason.slice(0, 180)}`
+          : `IMAGE_EDIT_PROVIDER_FAILED: ${reason.slice(0, 180)}` }
     }
   }
   const decision = chooseMalikImageModel({
