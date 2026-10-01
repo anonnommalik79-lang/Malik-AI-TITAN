@@ -572,7 +572,14 @@ function lightweightHistoryAttachment(item: ChatAttachment): ChatAttachment {
 async function persistChatAttachmentsForHistory(items: ChatAttachment[]) {
   return Promise.all(items.map(async (item) => {
     const lightweight = lightweightHistoryAttachment(item)
-    if (item.kind !== "image" || !item.base64) return lightweight
+    // A blob URL stays usable in this browser session, even if cloud storage is
+    // unavailable. The serializer strips it before writing localStorage/account
+    // history; only a genuinely durable URL survives a page reload.
+    const sessionUrl = (item.kind === "image" || item.kind === "video")
+      && typeof item.url === "string"
+      && /^(?:blob:|data:(?:image|video)\/)/i.test(item.url) ? item.url : ""
+    const visible = sessionUrl && !lightweight.url ? { ...lightweight, url: sessionUrl } : lightweight
+    if (item.kind !== "image" || !item.base64) return visible
     if (typeof item.url === "string" && (/^https:\/\//i.test(item.url) || item.url.startsWith("/"))) return lightweight
 
     try {
@@ -590,9 +597,9 @@ async function persistChatAttachmentsForHistory(items: ChatAttachment[]) {
       }, 25_000)
       const payload = await response.json().catch(() => ({}))
       const durableUrl = typeof payload?.url === "string" ? payload.url : ""
-      return durableUrl ? { ...lightweight, url: durableUrl } : lightweight
+      return durableUrl ? { ...lightweight, url: durableUrl } : visible
     } catch {
-      return lightweight
+      return visible
     }
   }))
 }

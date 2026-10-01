@@ -162,3 +162,35 @@
   background: #000 !important;
   color: rgba(255,255,255,.30) !important;
 }
+
+/* Sent attachments and A/B answers: black canvas all the way through the
+   mobile carousel. The gap between answers must never expose a grey panel. */
+#malik-root .malik-ai-chat-bg .malik-dual-answer,
+#malik-root .malik-ai-chat-bg .malik-dual-intro,
+#malik-root .malik-ai-chat-bg .malik-dual-grid,
+#malik-root .malik-ai-chat-bg .malik-dual-card,
+#malik-root .malik-ai-chat-bg .malik-dual-card__header,
+#malik-root .malik-ai-chat-bg .malik-dual-card__content {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+#malik-root .malik-ai-chat-bg .malik-dual-card {
+  border-color: rgba(255,255,255,.16) !important;
+}
+#malik-root .malik-ai-chat-bg .malik-dual-card__header {
+  border-bottom-color: rgba(255,255,255,.12) !important;
+}
+#malik-root .malik-ai-chat-bg .malik-dual-intro {
+  border: 0 !important;
+}
+#malik-root .malik-ai-chat-bg .malik-dual-card[data-selected="1"] {
+  border-color: rgba(255,255,255,.55) !important;
+}
+#malik-root .malik-ai-chat-bg .malik-user-attachment--image,
+#malik-root .malik-ai-chat-bg .malik-user-attachment--video,
+#malik-root .malik-ai-chat-bg .malik-user-attachment--unavailable {
+  aspect-ratio: 1 / 1;
+  background: #000 !important;
+}

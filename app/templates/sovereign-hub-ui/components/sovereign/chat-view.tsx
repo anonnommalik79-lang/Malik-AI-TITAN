@@ -503,7 +503,7 @@ function detectGenerationStatusType(text: string): GenerationStatusType {
 }
 
 function attachmentPreviewSrc(item: ChatAttachment) {
-  if (typeof item.url === "string" && /^(?:blob:|data:|https?:)/i.test(item.url)) return item.url
+  if (typeof item.url === "string" && /^(?:blob:|data:(?:image|video)\/|https?:\/\/|\/(?!\/))/i.test(item.url)) return item.url
   if (item.base64 && (item.kind === "image" || item.kind === "video")) {
     return `data:${item.mime || (item.kind === "image" ? "image/jpeg" : "video/mp4")};base64,${item.base64}`
   }
@@ -512,13 +512,17 @@ function attachmentPreviewSrc(item: ChatAttachment) {
 
 function AttachmentPill({ item, onRemove }: { item: ChatAttachment; onRemove: () => void }) {
   const preview = attachmentPreviewSrc(item)
-  if ((item.kind === "image" || item.kind === "video") && preview) {
+  if (item.kind === "image" || item.kind === "video") {
     return (
       <div className="malik-composer-attachment-preview group relative h-[76px] w-[76px] shrink-0 overflow-hidden rounded-[16px] border border-white/10 bg-black">
-        {item.kind === "image" ? (
+        {preview ? (item.kind === "image" ? (
           <img src={preview} alt={item.name || "Изображение"} className="h-full w-full object-cover" />
         ) : (
           <video src={preview} className="h-full w-full object-cover" muted playsInline preload="metadata" />
+        )) : (
+          <span className="grid h-full w-full place-items-center text-white/65" title={item.name}>
+            {item.kind === "image" ? <ImageIcon className="h-6 w-6" /> : <Video className="h-6 w-6" />}
+          </span>
         )}
         <button
           type="button"
@@ -547,13 +551,16 @@ function AttachmentPill({ item, onRemove }: { item: ChatAttachment; onRemove: ()
 function UserAttachmentPreview({ item }: { item: ChatAttachment }) {
   const [previewFailed, setPreviewFailed] = useState(false)
   const src = attachmentPreviewSrc(item)
+  const isImage = item.kind === "image" || item.mime?.startsWith("image/")
+  const isVideo = item.kind === "video" || item.mime?.startsWith("video/")
+  useEffect(() => { setPreviewFailed(false) }, [src])
   const formatBytes = (bytes: number) => {
     if (!Number.isFinite(bytes) || bytes <= 0) return ""
     if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
     return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`
   }
 
-  if (item.kind === "image" && src && !previewFailed) {
+  if (isImage && src && !previewFailed) {
     return (
       <figure title={item.name} className="malik-user-attachment malik-user-attachment--image h-[152px] w-[152px] shrink-0 overflow-hidden rounded-[18px] border border-white/10 bg-black/30 sm:h-[168px] sm:w-[168px]">
         <img
@@ -567,7 +574,7 @@ function UserAttachmentPreview({ item }: { item: ChatAttachment }) {
     )
   }
 
-  if (item.kind === "video" && src && !previewFailed) {
+  if (isVideo && src && !previewFailed) {
     return (
       <figure title={item.name} className="malik-user-attachment malik-user-attachment--video h-[152px] w-[152px] shrink-0 overflow-hidden rounded-[18px] border border-white/10 bg-black/40 sm:h-[168px] sm:w-[168px]">
         <video
@@ -578,6 +585,17 @@ function UserAttachmentPreview({ item }: { item: ChatAttachment }) {
           preload="metadata"
           onError={() => setPreviewFailed(true)}
         />
+      </figure>
+    )
+  }
+
+  if (isImage || isVideo) {
+    const Icon = isImage ? ImageIcon : Video
+    return (
+      <figure title={item.name} role="img" aria-label={`${isImage ? "Фото" : "Видео"}: предпросмотр недоступен`}
+        className="malik-user-attachment malik-user-attachment--unavailable grid h-[152px] w-[152px] shrink-0 place-content-center justify-items-center gap-2 overflow-hidden rounded-[18px] border border-white/15 bg-black text-white/65 sm:h-[168px] sm:w-[168px]">
+        <Icon className="h-7 w-7" aria-hidden="true" />
+        <figcaption className="px-2 text-center text-[10px] leading-4">Превью недоступно</figcaption>
       </figure>
     )
   }
