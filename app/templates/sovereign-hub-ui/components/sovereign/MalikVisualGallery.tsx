@@ -84,6 +84,40 @@ export function MalikVisualGallery({ images, title, portrait = false }: { images
   )
 }
 
+
+/** A real, accessible visual fallback for the commonly requested iOS guide.
+ * This is a schematic, never misrepresented as a screenshot or an image search hit.
+ */
+function IosHapticsGuide() {
+  const panels = [
+    { title: "Вибрация при звонке", path: ["Настройки", "Звуки, тактильные сигналы", "Тактильные сигналы"], selected: "Воспроизводить всегда" },
+    { title: "Рисунок вибрации", path: ["Настройки", "Звуки, тактильные сигналы", "Рингтон", "Тактильные сигналы"], selected: "Акцент" },
+  ]
+  return (
+    <section aria-label="Схема настройки вибрации iPhone" className="my-4 w-full max-w-[650px] min-w-0">
+      <h3 className="mb-2 text-base font-semibold text-white">Настройка вибрации iPhone</h3>
+      <p className="mb-3 text-xs leading-5 text-zinc-400">Схема меню, не скриншот. Названия могут отличаться в зависимости от версии iOS.</p>
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        {panels.map((panel, index) => (
+          <div key={panel.title} className="min-w-0 overflow-hidden rounded-2xl border border-white/15 bg-zinc-950 p-2.5 sm:p-4">
+            <p className="mb-3 text-xs font-semibold text-white">{index + 1}. {panel.title}</p>
+            <div className="rounded-xl bg-zinc-900 p-2 sm:p-3">
+              {panel.path.map((step, position) => (
+                <div key={step + position} className="flex items-center gap-1 border-b border-white/10 py-2 text-[11px] leading-4 text-zinc-200 sm:text-xs">
+                  <span className="min-w-0 flex-1 break-words">{step}</span><span aria-hidden="true" className="shrink-0 text-zinc-500">›</span>
+                </div>
+              ))}
+              <div className="mt-2 flex items-start gap-1 rounded-lg bg-white p-2 text-[11px] font-semibold leading-4 text-black sm:text-xs">
+                <span aria-hidden="true">✓</span><span className="min-w-0 break-words">{panel.selected}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 /** Existing callers can still test explicit reference intent. */
 export function wantsReferenceImages(question: string): boolean {
   return isReferenceImageRequest(question)
@@ -115,6 +149,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   const images = result?.key === key ? result.images : null
   return (
     <div ref={container} className="min-w-0" data-malik-reference-topic={plan.topic}>
+      {plan.guideId === "ios-haptics" ? <IosHapticsGuide /> : null}
       {images?.length ? <>
         <MalikVisualGallery title={plan.kind === "tutorial" ? "Примеры экранов · " + plan.topic : plan.topic} images={plan.kind === "tutorial" ? images.slice(0, 2) : images} portrait={plan.layout === "portrait"} />
         {plan.kind === "tutorial" ? <p className="mb-4 text-xs leading-5 text-zinc-400">Иллюстрации из открытых источников. Названия пунктов и вид меню могут отличаться в вашей версии приложения.</p> : null}
