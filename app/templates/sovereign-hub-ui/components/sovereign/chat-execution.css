@@ -58,3 +58,8 @@
 @keyframes malik-receipt-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .malik-execution .is-spinning { animation: none; } }
 @media (max-width: 600px) { .malik-execution { font-size: 13px; } .malik-receipt__heading { min-height: 44px; } .malik-execution__toolbar button, .malik-execution__toolbar select, .malik-execution__export summary { min-height: 36px; } .malik-receipt__payload pre { font-size: 11px; padding: 12px; } }
+
+/* Work counts actual receipts; an unknown task total must not be shown as a percentage. */
+.malik-execution__work-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 7px 0 9px; color: #a1a1aa; font-size: 11px; }
+.malik-execution__work-summary > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.malik-execution__work-summary > span:first-child { color: #e4e4e7; }

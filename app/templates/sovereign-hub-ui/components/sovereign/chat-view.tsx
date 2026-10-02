@@ -1644,6 +1644,7 @@ function MalikActionPlanCard({ plan, onOpenTarget }: { plan: MalikActionPlan; on
 
 function MessageBubble({
   message,
+  workspaceMode = "chat",
   onCopy,
   copied,
   generationType = "text",
@@ -1667,6 +1668,7 @@ function MessageBubble({
   freshTurn = false,
 }: {
   message: Message
+  workspaceMode?: WorkspaceMode
   onCopy: (id: string, text: string) => void
   /** Open this answer on its own page (the answer sheet). */
   onOpenSheet?: (id: string) => void
@@ -1763,7 +1765,7 @@ function MessageBubble({
             </div>
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
-          {!isUser && message.execution && !olderVersion ? <ChatExecution trace={message.execution} live={streaming} sources={message.research?.sources} /> : null}
+          {!isUser && message.execution && !olderVersion ? <ChatExecution trace={message.execution} live={streaming} sources={message.research?.sources} workMode={workspaceMode === "work"} /> : null}
           {!isUser && !message.execution && !streaming && message.thought && !olderVersion && !message.generatedMedia && !message.superflow ? (
             <ThoughtTrace thought={message.thought} sources={message.research?.usedWeb ? message.research.sources.length : 0} />
           ) : null}
@@ -2948,6 +2950,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
                 <MemoMessageBubble
                   key={message.id}
                   message={message}
+                  workspaceMode={workspaceMode}
                   isLatest={index === messages.length - 1}
                   freshTurn={liveTurn && index >= messages.length - 2}
                   // The question this answer replies to. A re-check searches
