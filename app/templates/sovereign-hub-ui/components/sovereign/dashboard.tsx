@@ -8173,6 +8173,7 @@ const shouldShowMobilePreviewButton =
           onViewChange={(view) => safeOpenView(view, "topbar")}
           onOpenSearch={() => setCommandPaletteOpen(true)}
           onMenuClick={() => setMobileMenuOpen(true)}
+          onNewChat={handleNewChat}
           onLogout={handleLogout}
           currentMode={activeAiMode}
           onModeChange={setActiveAiMode}

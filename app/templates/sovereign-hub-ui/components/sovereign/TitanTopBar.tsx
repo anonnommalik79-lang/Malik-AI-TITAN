@@ -8,14 +8,22 @@ import {
   FolderKanban,
   Languages,
   LibraryBig,
+  LogIn,
   LogOut,
   Menu,
   MessageSquare,
+  MoreHorizontal,
   Plug,
   Search,
   Settings,
+  SquarePen,
   Zap,
 } from "lucide-react"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuPortal, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator,
+  DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import type { AiModeId } from "./power-registry"
 import { AI_MODES } from "./power-registry"
 import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/auth/client-session"
@@ -53,6 +61,7 @@ interface TitanTopBarProps {
   onViewChange: (view: string) => void
   onOpenSearch: () => void
   onMenuClick: () => void
+  onNewChat?: () => void
   onLogout?: () => void
   currentMode?: AiModeId
   onModeChange?: (mode: AiModeId) => void
@@ -88,6 +97,7 @@ function TitanTopBarInner({
   onViewChange,
   onOpenSearch,
   onMenuClick,
+  onNewChat,
   onLogout,
   currentMode = "auto",
   onModeChange,
@@ -96,6 +106,7 @@ function TitanTopBarInner({
   const [modesOpen, setModesOpen] = useState(false)
   const [signalsOpen, setSignalsOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
+  const [actionsOpen, setActionsOpen] = useState(false)
   const [signals, setSignals] = useState<RuntimeSignal[] | null>(null)
 
   const modesRef = useDismissable(modesOpen, useCallback(() => setModesOpen(false), []))
@@ -156,6 +167,7 @@ function TitanTopBarInner({
     setModesOpen(false)
     setSignalsOpen(false)
     setUserOpen(false)
+    setActionsOpen(false)
   }
 
   const go = (tab: Tab) => {
@@ -183,7 +195,7 @@ function TitanTopBarInner({
   return (
     <header className="titan-topbar" data-workspace-switcher={Boolean(onWorkspaceModeChange) || undefined}>
       <button type="button" onClick={onMenuClick} aria-label="Меню" className="titan-icon-btn lg:hidden">
-        <Menu className="h-[18px] w-[18px]" />
+        <Menu className="h-6 w-6" />
       </button>
 
       <span className="titan-mobile-brand" aria-hidden="true">Malik AI</span>
@@ -217,6 +229,49 @@ function TitanTopBarInner({
       </nav>
 
       <div className="titan-topbar-right">
+        {onWorkspaceModeChange ? <>
+          {onNewChat ? <button type="button" onClick={() => { closeAll(); onNewChat() }} aria-label="Новый чат" title="Новый чат" className="titan-icon-btn titan-workspace-action">
+            <SquarePen className="h-[22px] w-[22px]" />
+          </button> : null}
+          <DropdownMenu open={actionsOpen} onOpenChange={setActionsOpen}>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label="Действия чата" title="Действия чата" className="titan-icon-btn titan-workspace-action">
+                <MoreHorizontal className="h-6 w-6" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={6} collisionPadding={12} className="malik-workspace-menu">
+              <DropdownMenuItem onSelect={onOpenSearch}><Search />Поиск по чатам</DropdownMenuItem>
+              {onModeChange ? <DropdownMenuSub>
+                <DropdownMenuSubTrigger><Zap />Режим ответа</DropdownMenuSubTrigger>
+                <DropdownMenuPortal><DropdownMenuSubContent collisionPadding={12} className="malik-workspace-menu">
+                  <DropdownMenuRadioGroup value={currentMode} onValueChange={(value) => {
+                    const mode = QUICK_MODE_IDS.find((id) => id === value)
+                    if (mode) onModeChange(mode)
+                  }}>
+                    {QUICK_MODE_IDS.map((id) => <DropdownMenuRadioItem key={id} value={id}>{AI_MODES.find((mode) => mode.id === id)?.label}</DropdownMenuRadioItem>)}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent></DropdownMenuPortal>
+              </DropdownMenuSub> : null}
+              <DropdownMenuSub onOpenChange={setSignalsOpen}>
+                <DropdownMenuSubTrigger><Bell />Состояние среды</DropdownMenuSubTrigger>
+                <DropdownMenuPortal><DropdownMenuSubContent collisionPadding={12} className="malik-workspace-menu">
+                  <DropdownMenuLabel>Состояние среды</DropdownMenuLabel>
+                  {signals ? signals.map((signal) => <div key={signal.label} className="titan-signal-row">
+                    <span className={cn("titan-signal-dot", signal.ok ? "is-ok" : "is-bad")} />
+                    <span className="flex-1">{signal.label}</span><span className="titan-signal-value">{signal.value}</span>
+                  </div>) : <p className="titan-popover-empty">Проверяю…</p>}
+                </DropdownMenuSubContent></DropdownMenuPortal>
+              </DropdownMenuSub>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => goView("settings")}><Settings />Настройки</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => goView("billing")}><CreditCard />Подписка</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {guestMode ? <DropdownMenuItem asChild>
+                <a href="/sign-in" data-testid="mobile-guest-signin"><LogIn />Войти в Malik AI</a>
+              </DropdownMenuItem> : <DropdownMenuItem onSelect={() => { void handleLogout() }}><LogOut />Выйти</DropdownMenuItem>}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </> : <>
         <button type="button" onClick={onOpenSearch} className="titan-search">
           <Search className="h-4 w-4" />
           <span>Поиск...</span>
@@ -339,6 +394,7 @@ function TitanTopBarInner({
             Вход
           </a>
         ) : null}
+        </>}
       </div>
 
       <style jsx global>{`

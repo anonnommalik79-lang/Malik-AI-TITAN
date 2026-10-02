@@ -1,87 +1,182 @@
-/* The real mode control must also win over the phone home artwork's hit areas. */
-html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] {
+/* One compact toolbar above the home artwork and every workspace view. */
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] {
+  --workspace-safe-top: 0px;
   position: relative !important;
   inset: auto !important;
   transform: none !important;
+  display: flex !important;
   width: 100% !important;
-  height: 68px !important;
-  min-height: 68px !important;
-  flex: 0 0 68px !important;
-  padding: 0 16px !important;
+  min-width: 0 !important;
+  height: 56px !important;
+  min-height: 56px !important;
+  flex: 0 0 56px !important;
+  padding: 0 12px !important;
   background: #000 !important;
   border: 0 !important;
   box-shadow: none !important;
+  overflow: visible !important;
   pointer-events: auto !important;
   z-index: 80 !important;
 }
-html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-tabs,
-html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-mobile-brand {
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] > .titan-icon-btn:first-child {
   display: none !important;
 }
-html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] > .malik-workspace-switch {
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] > .titan-icon-btn:first-child svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-tabs,
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-mobile-brand {
+  display: none !important;
+}
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] > .malik-workspace-switch {
   position: absolute !important;
   inset: auto !important;
-  top: 50% !important;
+  top: calc(28px + var(--workspace-safe-top)) !important;
   left: 50% !important;
   transform: translate(-50%, -50%) !important;
   display: flex !important;
   align-items: center !important;
-  gap: 4px !important;
-  width: 260px !important;
-  max-width: calc(100% - 136px) !important;
-  height: 46px !important;
+  gap: 2px !important;
+  width: 168px !important;
+  max-width: calc(100% - 208px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)) !important;
+  height: 36px !important;
   margin: 0 !important;
-  padding: 4px !important;
+  padding: 3px !important;
   border: 0 !important;
-  border-radius: 14px !important;
+  border-radius: 12px !important;
   background: #1c1c1e !important;
   visibility: visible !important;
   pointer-events: auto !important;
   overflow: visible !important;
 }
-html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .malik-workspace-switch > button {
-  display: block !important;
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .malik-workspace-switch > button {
+  display: flex !important;
   flex: 1 1 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
   min-width: 0 !important;
   width: auto !important;
-  height: 38px !important;
-  padding: 0 12px !important;
+  height: 30px !important;
+  padding: 0 4px !important;
   border: 0 !important;
-  border-radius: 10px !important;
+  border-radius: 9px !important;
   background: transparent !important;
   box-shadow: none !important;
-  color: #fff !important;
-  font-size: 17px !important;
-  font-weight: 650 !important;
-  line-height: 38px !important;
+  color: #f5f5f5 !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
   text-align: center !important;
   visibility: visible !important;
   pointer-events: auto !important;
   cursor: pointer;
   transition: background-color .15s ease;
 }
-html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .malik-workspace-switch > button.is-active {
-  background: #59595d !important;
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .malik-workspace-switch > button.is-active {
+  background: #363638 !important;
 }
-html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .malik-workspace-switch > button:focus-visible {
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .malik-workspace-switch > button:focus-visible,
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-icon-btn:focus-visible {
   outline: 2px solid #fff !important;
   outline-offset: 2px;
 }
-html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] > .titan-topbar-right {
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] > .titan-topbar-right {
   position: absolute !important;
   inset: auto !important;
-  top: 50% !important;
-  right: 16px !important;
+  top: calc(28px + var(--workspace-safe-top)) !important;
+  right: max(12px, env(safe-area-inset-right, 0px)) !important;
   transform: translateY(-50%) !important;
   display: flex !important;
+  align-items: center !important;
   width: auto !important;
-  height: auto !important;
-  gap: 8px !important;
+  height: 44px !important;
+  gap: 0 !important;
   overflow: visible !important;
   visibility: visible !important;
   pointer-events: auto !important;
+  z-index: auto !important;
 }
-html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-search { display: none !important; }
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-topbar-right > .titan-workspace-action {
+  position: static !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  flex: 0 0 44px !important;
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 44px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #f5f5f5 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transform: none !important;
+}
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-workspace-action:hover,
+html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-workspace-action[data-state="open"] {
+  background: #1c1c1e !important;
+}
+.malik-workspace-menu {
+  z-index: 200 !important;
+  width: 240px;
+  max-width: calc(100vw - 24px);
+  border: 1px solid #303030 !important;
+  border-radius: 14px !important;
+  padding: 6px !important;
+  background: #161616 !important;
+  color: #f5f5f5 !important;
+  box-shadow: 0 8px 32px #0008;
+}
+.malik-workspace-menu [role="menuitem"],
+.malik-workspace-menu [role="menuitemradio"] {
+  min-height: 40px;
+  border-radius: 8px;
+  color: #f5f5f5 !important;
+  font-size: 14px;
+}
+.malik-workspace-menu [data-highlighted],
+.malik-workspace-menu [role="menuitem"][data-state="open"] {
+  background: #303030 !important;
+  color: #fff !important;
+}
+.malik-workspace-menu svg { color: inherit !important; }
+.malik-workspace-menu [role="separator"] { background: #303030 !important; }
+@media (max-width: 1023px) {
+  html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] > .titan-icon-btn:first-child {
+    position: absolute !important;
+    inset: auto !important;
+    top: calc(6px + var(--workspace-safe-top)) !important;
+    left: max(12px, env(safe-area-inset-left, 0px)) !important;
+    display: grid !important;
+    width: 44px !important;
+    height: 44px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    color: #f5f5f5 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+}
+@media (max-width: 767px) {
+  html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] {
+    --workspace-safe-top: env(safe-area-inset-top, 0px);
+    height: calc(56px + var(--workspace-safe-top)) !important;
+    min-height: calc(56px + var(--workspace-safe-top)) !important;
+    flex-basis: calc(56px + var(--workspace-safe-top)) !important;
+  }
+  html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] > .malik-workspace-switch { width: 160px !important; }
+}
+@media (max-width: 359px) {
+  html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .malik-workspace-switch > button { font-size: 13px !important; }
+}
 .malik-work-tools {
   display: flex;
   flex: 0 0 auto;
@@ -120,47 +215,6 @@ html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switch
 .malik-work-start__tasks small { display: block; margin-top: 5px; color: #8e8e95; font-size: 11px; line-height: 1.4; }
 .malik-work-start__hint { margin: 22px auto 0; max-width: 500px; color: #74747c; font-size: 12px; line-height: 1.7; }
 @media (max-width: 767px) {
-  html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] {
-    height: calc(64px + env(safe-area-inset-top, 0px)) !important;
-    min-height: calc(64px + env(safe-area-inset-top, 0px)) !important;
-    flex-basis: calc(64px + env(safe-area-inset-top, 0px)) !important;
-  }
-  html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] > .malik-workspace-switch {
-    top: calc(32px + env(safe-area-inset-top, 0px)) !important;
-    width: 240px !important;
-  }
-  html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] > .titan-icon-btn:first-child {
-    position: absolute !important;
-    inset: auto !important;
-    top: calc(14px + env(safe-area-inset-top, 0px)) !important;
-    left: 10px !important;
-    display: grid !important;
-    width: 36px !important;
-    height: 36px !important;
-    padding: 0 !important;
-    background: transparent !important;
-    color: #fff !important;
-    visibility: visible !important;
-    pointer-events: auto !important;
-  }
-  html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] > .titan-topbar-right {
-    top: calc(32px + env(safe-area-inset-top, 0px)) !important;
-    right: 10px !important;
-  }
-  html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-topbar-right > * { display: none !important; }
-  html body #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-topbar-right > .titan-mobile-signin {
-    position: static !important;
-    display: inline-flex !important;
-    width: auto !important;
-    height: 32px !important;
-    padding: 0 8px !important;
-    background: transparent !important;
-    color: #fff !important;
-    font-size: 12px !important;
-    align-items: center !important;
-    visibility: visible !important;
-    pointer-events: auto !important;
-  }
   .malik-work-tools { justify-content: flex-start; padding: 4px 12px 8px; }
   .malik-work-start { padding-top: 24px; }
   .malik-work-start__tasks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 22px; }
