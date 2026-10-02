@@ -103,5 +103,32 @@ check("the fact panel itself is written without a single colour", () => {
   )
 })
 
+
+check("tap navigator has black surfaces and white outlines, including its current step", () => {
+  const guide = fs.readFileSync("components/sovereign/MalikTapGuide.tsx", "utf8")
+  assert.match(guide, /data-malik-tap-guide className="[^"]*border-white bg-black/)
+  assert.match(guide, /border-2 border-white bg-black/)
+  assert.match(guide, /border-white bg-black p-3/)
+  assert.doesNotMatch(guide, /bg-zinc-|bg-gray-|bg-white\/\[|bg-\[#0a0a0a\]/)
+})
+
+check("workspace mode has a black track and visible white active choice", () => {
+  const work = fs.readFileSync("app/workspace-mode.css", "utf8")
+  const track = work.slice(work.indexOf("> .malik-workspace-switch {"))
+  assert.match(track.slice(0, 950), /border: 1px solid #fff !important;[\s\S]*background: #000 !important;/)
+  const active = work.slice(work.indexOf(".malik-workspace-switch > button.is-active {"))
+  assert.match(active.slice(0, 120), /background: #fff !important;[\s\S]*color: #000 !important;/)
+})
+
+check("chat input and its three controls no longer use grey fills", () => {
+  const block = css.slice(css.indexOf("Chat chrome only: a black canvas"))
+  for (const cls of ["malik-inline-composer", "malik-model-selector__trigger", "malik-voice-entry", "malik-inline-action", "malik-inline-send"]) {
+    assert.ok(block.includes(cls), `not covered: ${cls}`)
+  }
+  assert.match(block, /malik-inline-composer \{[\s\S]*?background: #000 !important;/)
+  assert.match(block, /malik-inline-send \{[\s\S]*?background: #fff !important;/)
+  assert.doesNotMatch(block, /filter: grayscale/)
+})
+
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nchat monochrome: all checks passed\n")
 process.exit(failures ? 1 : 0)

@@ -43,9 +43,9 @@ html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data
   height: 36px !important;
   margin: 0 !important;
   padding: 3px !important;
-  border: 0 !important;
+  border: 1px solid #fff !important;
   border-radius: 12px !important;
-  background: #1c1c1e !important;
+  background: #000 !important;
   visibility: visible !important;
   pointer-events: auto !important;
   overflow: visible !important;
@@ -72,10 +72,11 @@ html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data
   visibility: visible !important;
   pointer-events: auto !important;
   cursor: pointer;
-  transition: background-color .15s ease;
+  transition: background-color .15s ease, color .15s ease;
 }
 html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .malik-workspace-switch > button.is-active {
-  background: #363638 !important;
+  background: #fff !important;
+  color: #000 !important;
 }
 html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .malik-workspace-switch > button:focus-visible,
 html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] .titan-icon-btn:focus-visible {
