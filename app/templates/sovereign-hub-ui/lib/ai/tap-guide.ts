@@ -5,7 +5,7 @@
 export type TapGuideStep = { label: string; instruction: string }
 export type TapGuidePlan = { context: string; steps: TapGuideStep[] }
 const OPT_OUT = /(?:без\s+(?:фото|картинок|изображений|иллюстраций|схем)|только\s+текст|не\s+(?:показывай|добавляй)\s+(?:фото|картинки|схемы)|text\s+only|no\s+(?:images?|visuals?|diagrams?)|суретсіз)/iu
-const HOW_TO = /^(?:(?:как|где|куда|покажи|подскажи|помоги|инструкция|пошагово|настрой|включи|выключи|отключи|how|where|show\s+me|help\s+me|set\s+up|enable|disable|turn\s+on|turn\s+off|қалай|көрсет)(?![\p{L}\p{N}_]))/iu
+const HOW_TO = /^(?:(?:как|где|куда|подскажи|помоги|инструкция|пошагово|настрой|включи|выключи|отключи|how|where|help\s+me|set\s+up|enable|disable|turn\s+on|turn\s+off|қалай)(?![\p{L}\p{N}_])|(?:покажи(?:\s+мне)?\s+(?:как|где|куда)|show\s+me\s+(?:how|where))(?=\s|[?!.]|$))/iu
 const CONTEXT = /(?:iphone|айфон|ipad|ios|android|андроид|samsung|windows|виндовс|mac(?:book|os)?\b|telegram|телеграм|whatsapp|ватсап|instagram|инстаграм|tiktok|тикток|youtube|ютуб|github|gitlab|vercel|render\b|supabase|google|gmail|icloud|apple|браузер|browser|настройк|setting|приложени|application|сайт|website|кабинет|панел|меню|экран|кнопк|button|ссылк|опци[яию]|вкладк|раздел|профил|account|регистраци|подключи|создай\s+аккаунт)/iu
 const ACTION = /(?:нажм|нажать|кликн|тапн|открой|открыть|перейди|выбер|выбери|включи|отключи|введи|ввести|сохран|прокрут|щ[её]лкн|tap\b|click\b|open\b|select\b|choose\b|press\b|go\s+to|navigate\b|enable\b|disable\b|turn\s+on|turn\s+off|enter\b|save\b|scroll\b|басыңыз|таңдаңыз)/iu
 const STEP = /^\s*(?:(\d{1,2})[.)]\s+|(?:шаг|step|қадам)\s+(\d{1,2})[.):]\s+)(.+)$/iu
