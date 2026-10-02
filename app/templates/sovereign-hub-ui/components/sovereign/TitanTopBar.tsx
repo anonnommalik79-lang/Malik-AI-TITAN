@@ -20,6 +20,7 @@ import type { AiModeId } from "./power-registry"
 import { AI_MODES } from "./power-registry"
 import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/auth/client-session"
 import { clientFetchWithTimeout } from "@/lib/api-client"
+import type { WorkspaceMode } from "@/lib/ai/work-mode"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
@@ -46,6 +47,8 @@ type RuntimeSignal = { label: string; value: string; ok: boolean }
 
 interface TitanTopBarProps {
   activeView: string
+  workspaceMode?: WorkspaceMode
+  onWorkspaceModeChange?: (mode: WorkspaceMode) => void
   guestMode?: boolean
   onViewChange: (view: string) => void
   onOpenSearch: () => void
@@ -79,6 +82,8 @@ function useDismissable(open: boolean, close: () => void) {
 
 function TitanTopBarInner({
   activeView,
+  workspaceMode = "chat",
+  onWorkspaceModeChange,
   guestMode = false,
   onViewChange,
   onOpenSearch,
@@ -176,13 +181,23 @@ function TitanTopBarInner({
   const failing = signals?.filter((signal) => !signal.ok).length ?? 0
 
   return (
-    <header className="titan-topbar">
+    <header className="titan-topbar" data-workspace-switcher={Boolean(onWorkspaceModeChange) || undefined}>
       <button type="button" onClick={onMenuClick} aria-label="Меню" className="titan-icon-btn lg:hidden">
         <Menu className="h-[18px] w-[18px]" />
       </button>
 
       <span className="titan-mobile-brand" aria-hidden="true">Malik AI</span>
-      <nav aria-label="Разделы" className="titan-tabs">
+      {onWorkspaceModeChange ? <div className="malik-workspace-switch" role="group" aria-label="Режим Malik AI">
+        {(["chat", "work"] as const).map((mode) => <button
+          key={mode}
+          type="button"
+          aria-pressed={workspaceMode === mode}
+          data-workspace-mode={mode}
+          onClick={() => { closeAll(); onWorkspaceModeChange(mode) }}
+          className={workspaceMode === mode ? "is-active" : undefined}
+        >{mode === "chat" ? "Чат" : "Работа"}</button>)}
+      </div> : null}
+      <nav aria-label="Разделы" className="titan-tabs" data-workspace-nav={Boolean(onWorkspaceModeChange) || undefined}>
         {TABS.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id

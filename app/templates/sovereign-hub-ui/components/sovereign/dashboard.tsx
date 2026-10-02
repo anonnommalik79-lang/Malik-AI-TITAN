@@ -16,6 +16,7 @@ import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
+import { resolveWorkspaceMode, WORKSPACE_MODE_KEY, type WorkspaceMode } from "@/lib/ai/work-mode"
 import { hasMalikProAccess } from "@/lib/ai/malik-models"
 import { FeatureCenter } from "./features/FeatureCenter"
 import { CapabilitiesPanel } from "./capabilities"
@@ -5086,6 +5087,10 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState<string>(initialView)
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("chat")
+  useEffect(() => {
+    try { setWorkspaceMode(resolveWorkspaceMode(window.localStorage.getItem(WORKSPACE_MODE_KEY))) } catch {}
+  }, [])
   const [previousView, setPreviousView] = useState("home")
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false)
   const [codexOpen, setCodexOpen] = useState(false)
@@ -6010,6 +6015,7 @@ async function revealAssistantTextQuickly(text: string, onFrame: (visible: strin
 }
 
 const handleSendMessage = useCallback(async (content: string, attachments: ChatAttachment[] = [], options?: ChatSendOptions) => {
+  const turnWorkspaceMode = options?.workspaceMode ?? workspaceMode
   const cleanContent = (content || "").trim()
   if (!cleanContent) return
 
@@ -6101,7 +6107,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // chat reply: the topic is handed across and the studio starts the plan
   // itself. Questions *about* presentations stay in the chat — see
   // isPresentationCreationRequest for where that line is drawn.
-  if (!attachments.length && isPresentationCreationRequest(cleanContent)) {
+  if (turnWorkspaceMode !== "work" && !attachments.length && isPresentationCreationRequest(cleanContent)) {
     try {
       window.sessionStorage.setItem("malik.presentation.handoff", JSON.stringify({
         topic: presentationTopic(cleanContent),
@@ -6137,7 +6143,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   })
 
   const userPlan = currentPlan
-  const responseDepth = resolveResponseDepth(options?.responseDepth ?? loadResponseDepth(userPlan), userPlan)
+  const wantedDepth = options?.responseDepth ?? loadResponseDepth(userPlan)
+  const responseDepth = resolveResponseDepth(turnWorkspaceMode === "work" && wantedDepth === "fast" ? "deep" : wantedDepth, userPlan)
   const depthLimits = responseDepthLimits(responseDepth)
 
   const routeDecision = detectIntentAndRoute(cleanContent, requestAttachments, activeAiMode)
@@ -6945,6 +6952,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           expectedOutput: isProjReq ? "single-large-code-block" : isCodeReq ? "code-and-explanation" : "helpful-chat-answer",
         },
         responseDepth,
+        workspaceMode: turnWorkspaceMode,
         research: options?.research ?? readWebSearchEnabled(),
         stream: true,
         // Full source bundles and slide decks must not inherit Fast mode's
@@ -7251,7 +7259,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setIsLoading(false)
     setStreamingText("")
   }
-}, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email, safeOpenView])
+}, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email, safeOpenView, workspaceMode])
 
   const handleStopGeneration = useCallback(() => {
     activeStreamAbortRef.current?.abort("user")
@@ -7524,7 +7532,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }, [canAccessAdmin, safeOpenCanvas, safeOpenView])
 
   const hasStartedChat = messages.length > 0
-  const shouldRenderEmptyHome = activeView === "home" && !hasStartedChat
+  const shouldRenderEmptyHome = activeView === "home" && !hasStartedChat && workspaceMode !== "work"
   const hasMessages = hasStartedChat
 
   // Явно определяем, должны ли мы показывать правую панель (Проект)
@@ -7724,6 +7732,7 @@ const shouldShowMobilePreviewButton =
             <div className="malik-premium-chat-host malik-ai-chat-bg relative h-full min-h-0 overflow-hidden bg-black">
               <ChatView
                 messages={messages}
+                workspaceMode={workspaceMode}
                 onSendMessage={handleSendMessage}
                 onImageConfirmation={handleImageConfirmation}
                 isLoading={isLoading}
@@ -7738,6 +7747,7 @@ const shouldShowMobilePreviewButton =
                 onModelChange={handleModelChange}
                 onOpenBilling={() => safeOpenView("billing", "manual")}
                 onOpenPlugins={() => safeOpenView("plugins", "manual")}
+                onOpenProjects={() => safeOpenView("projects", "manual")}
                 onOpenCodex={() => setCodexOpen(true)}
                 onForceCanvas={() => safeOpenCanvas(undefined, "project-chat")}
                 onOpenVoice={openVoiceMode}
@@ -7765,6 +7775,7 @@ const shouldShowMobilePreviewButton =
               <ChatInvestorBackground />
 <ChatView
               messages={messages}
+              workspaceMode={workspaceMode}
               onSendMessage={handleSendMessage}
               onImageConfirmation={handleImageConfirmation}
               isLoading={isLoading}
@@ -7779,6 +7790,8 @@ const shouldShowMobilePreviewButton =
               onModelChange={handleModelChange}
               onOpenBilling={() => safeOpenView("billing", "manual")}
               onOpenPlugins={() => safeOpenView("plugins", "manual")}
+              onOpenProjects={() => safeOpenView("projects", "manual")}
+              onNewTask={handleNewChat}
               onOpenCodex={() => setCodexOpen(true)}
               onForceCanvas={() => safeOpenCanvas(undefined, "chat-force")}
               onOpenVoice={openVoiceMode}
@@ -8150,6 +8163,12 @@ const shouldShowMobilePreviewButton =
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <TitanTopBar
           activeView={activeView}
+          workspaceMode={workspaceMode}
+          onWorkspaceModeChange={(mode) => {
+            setWorkspaceMode(mode)
+            try { window.localStorage.setItem(WORKSPACE_MODE_KEY, mode) } catch {}
+            safeOpenView("home", "topbar")
+          }}
           guestMode={guestMode}
           onViewChange={(view) => safeOpenView(view, "topbar")}
           onOpenSearch={() => setCommandPaletteOpen(true)}
@@ -8160,21 +8179,6 @@ const shouldShowMobilePreviewButton =
         />
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
        <main className={cn("flex min-h-0 min-w-0 flex-1 overflow-hidden")}>
-  {false && activeView === "templates" && (
-    <button
-      type="button"
-      aria-label="На главную"
-      onClick={() => safeOpenView("home", "mobile")}
-      className="lg:hidden fixed top-[max(env(safe-area-inset-top),12px)] left-3 z-[70] p-2 rounded-xl bg-black/70 border border-[#2A2A2A] text-white backdrop-blur"
-    >
-      {/* Home icon */}
-      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M3 11l9-8 9 8" />
-        <path d="M5 10v10h14V10" />
-      </svg>
-    </button>
-  )}
-
   {shouldShowMobilePreviewButton && (
     <button
       type="button"
@@ -10090,4 +10094,3 @@ function ChatsListView({
 // merge-map-344: ai-generator bridge preserved; runtime cost: zero; fallback: photo-generation; canvas handoff: safeOpenCanvas.
 
 export default Dashboard
-

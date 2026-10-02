@@ -25,6 +25,7 @@ import {
 import { getDailyTextTokenQuota } from "@/lib/server/daily-text-token-quota"
 import { isExplicitImageEditRequest } from "@/lib/ai/image-intent"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
+import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
 import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers } from "@/lib/ai/superpowers"
 import { detectScheduleIntent } from "@/lib/ai/schedule-intent"
@@ -459,6 +460,7 @@ async function runSelectedAnswer(
         "Answer in the user's language unless explicitly asked otherwise.",
         superpowerPrompt,
         buildChatArtifactSkillPrompt(coderPrompt(body)),
+        workModeInstruction(coderPrompt(body), resolveWorkspaceMode(body?.workspaceMode)),
       ].filter(Boolean).join("\n"),
     }).catch((error) => { activity?.finish(fileCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
     activity?.finish(fileCall, { route: attachmentRoute.kind, files: requestAttachments.length })
@@ -564,6 +566,7 @@ async function runSelectedAnswer(
       "Treat MALIK_MEDIA_ACTION_FACT / MALIK_MEDIA_ACTION_HISTORY entries in history as factual completed actions and describe them accurately when asked.",
       "Answer in the user's language unless explicitly asked otherwise.",
       artifactSkillPrompt,
+      workModeInstruction(coderInput, resolveWorkspaceMode(executionBody?.workspaceMode)),
     ].filter(Boolean).join("\n"),
     maxTokens: maxOutputTokens || brain.outputTokenTarget,
   }).catch((error) => { activity?.finish(codeCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })

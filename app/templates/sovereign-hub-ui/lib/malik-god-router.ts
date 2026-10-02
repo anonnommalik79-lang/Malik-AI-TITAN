@@ -1,4 +1,5 @@
 import type { MalikModelId } from "@/lib/ai/malik-models"
+import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
 import { answerBudget } from "@/lib/ai/answer-budget"
 import type { MalikResearchProgress, MalikWebSource } from "@/lib/ai/web-research-types"
 import { auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit } from "@/lib/ai/fact-audit"
@@ -1071,7 +1072,7 @@ export async function malikGodAnswer(
     const result = await runStrictMalikModel({
       modelId: selection.modelId,
       prompt: strictPrompt,
-      systemPrompt: systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context)),
+      systemPrompt: [systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context)), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode))].filter(Boolean).join("\n\n"),
       history,
       attachments,
       maxTokens: answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)),

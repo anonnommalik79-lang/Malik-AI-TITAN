@@ -77,6 +77,9 @@ import { AnswerSheet } from "./answer-sheet/AnswerSheet"
 import { ChatExecution } from "./ChatExecution"
 import type { ExecutionTrace } from "@/lib/ai/chat-execution"
 import { isSheetRequest, isSheetWorthy } from "@/lib/ai/answer-sheet"
+import type { WorkspaceMode } from "@/lib/ai/work-mode"
+import { openOs } from "./os/os-client"
+import { WorkStartPanel } from "./WorkStartPanel"
 
 export type { ChatSendOptions }
 
@@ -221,6 +224,7 @@ export type InlineMediaGeneration = {
 }
 
 interface ChatViewProps {
+  workspaceMode?: WorkspaceMode
   messages: Message[]
   onSendMessage: (message: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => void
   onImageConfirmation?: (messageId: string, prompt: string, action: "confirm" | "cancel" | "generate", imageSize?: ImageResolution) => void
@@ -235,6 +239,8 @@ interface ChatViewProps {
   onModelChange?: (modelId: MalikModelId) => void
   onOpenBilling?: () => void
   onOpenPlugins?: () => void
+  onOpenProjects?: () => void
+  onNewTask?: () => void
   onOpenCodex?: () => void
   onForceCanvas?: () => void
   onOpenVoice?: () => void
@@ -1916,7 +1922,7 @@ const FOLLOW_EPSILON_PX = 6
 /** Scrolled further up than this, the round "to the newest" button appears. */
 const JUMP_BUTTON_THRESHOLD_PX = 200
 
-export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoading, canStopGeneration = false, onStopGeneration, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenCodex, onForceCanvas, onOpenVoice, onOpenActionTarget, projectName, projectDescription }: ChatViewProps) {
+export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onImageConfirmation, isLoading, canStopGeneration = false, onStopGeneration, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenProjects, onNewTask, onOpenCodex, onForceCanvas, onOpenVoice, onOpenActionTarget, projectName, projectDescription }: ChatViewProps) {
   // One short pulse after the complete answer lands. Passing a number (rather
   // than a pattern) deliberately keeps this to a single haptic event.
   const wasLoading = useRef(false)
@@ -2542,6 +2548,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
       ? `/image ${outgoing}`
       : outgoing
     const sendOptions: ChatSendOptions = {
+      workspaceMode,
       responseDepth: researchMode === "deep" ? "deep" : responseDepth,
       research: researchMode !== "off" ? true : undefined,
       branchFromMessageId: editSourceId || undefined,
@@ -2768,6 +2775,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
     setLastSubmittedPrompt(clean)
     try { window.localStorage.setItem("malik_last_user_prompt", clean) } catch {}
     onSendMessage(clean, [], {
+      workspaceMode,
       research: true,
       responseDepth: mode === "deep" ? "deep" : responseDepth,
     })
@@ -2845,7 +2853,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
   ]
 
   return (
-    <div data-malik-chat-fullwidth="1" className="malik-chat-fullwidth relative z-[2] flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-transparent text-white">
+    <div data-malik-chat-fullwidth="1" data-workspace-mode={workspaceMode} className="malik-chat-fullwidth relative z-[2] flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-transparent text-white">
       <style>{`
         @media (min-width: 1024px) {
           .malik-dashboard-shell main > section {
@@ -2882,10 +2890,24 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
         onConnect={connectAccountTool}
       />
 
+      {workspaceMode === "work" ? <nav className="malik-work-tools" aria-label="Инструменты работы">
+        {onNewTask ? <button type="button" onClick={onNewTask} disabled={Boolean(isLoading)}><Plus size={15} />Новая задача</button> : null}
+        <button type="button" onClick={() => openOs("tasks")}><Check size={15} />Задачи</button>
+        <button type="button" onClick={() => openOs("library")}><BookOpen size={15} />Результаты</button>
+        <button type="button" onClick={() => setLibraryOpen(true)}><FileSearch size={15} />Мои файлы</button>
+        {onOpenProjects ? <button type="button" onClick={onOpenProjects}><FolderTree size={15} />Проекты</button> : null}
+        <button type="button" onClick={() => openOs("plugins")}><Layers size={15} />Плагины</button>
+        <button type="button" onClick={() => setToolWorkspace("deep")}><Globe size={15} />Исследование</button>
+      </nav> : null}
+
       <div ref={threadRef} data-message-list className="malik-chat-scroll relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-44 pt-6 md:px-8 md:pb-48 lg:px-10">
         <div className="malik-message-list mx-auto flex w-full max-w-[768px] flex-col gap-8 sm:gap-10">
           {messages.length === 0 ? (
-            projectName ? (
+            workspaceMode === "work" ? <WorkStartPanel onChoose={(value, research) => {
+              setPrompt(value)
+              if (research) setResearchMode("deep")
+              textareaRef.current?.focus()
+            }} /> : projectName ? (
               <div className="mx-auto mt-12 w-full max-w-2xl px-2 text-center sm:mt-20">
                 <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-amber-300/20 bg-amber-300/[0.08] text-amber-200 shadow-[inset_0_1px_0_rgba(255,255,255,.08)]">
                   <FolderTree className="h-6 w-6" />
@@ -3020,7 +3042,7 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
                   handleGuardedSubmit()
                 }
               }}
-              placeholder="Чем я могу помочь сегодня?"
+              placeholder={workspaceMode === "work" ? "Опиши задачу и нужный результат…" : "Чем я могу помочь сегодня?"}
               className="malik-composer-textarea"
             />
             <div className="malik-inline-composer__right">
@@ -3208,4 +3230,3 @@ export function ChatView({ messages, onSendMessage, onImageConfirmation, isLoadi
 }
 
 export default ChatView
-

@@ -1,8 +1,10 @@
 import type { AIPlan } from "./types"
+import type { WorkspaceMode } from "./work-mode"
 
 export type ResponseDepth = "fast" | "deep" | "ultra"
 
 export type ChatSendOptions = {
+  workspaceMode?: WorkspaceMode
   responseDepth?: ResponseDepth
   research?: boolean
   imageSize?: "1K" | "2K" | "4K"
