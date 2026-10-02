@@ -40,11 +40,13 @@ check("Markdown image rows render as galleries alongside existing code and table
   assert.match(chat, /allowImages=\{false\}/)
   assert.match(markdown, /<CodeBlock key=\{key\}/)
 })
-check("Chat loads relevant references directly alongside streamed text and keeps history lazy", () => {
+check("Chat anchors references inside completed answers and keeps history lazy", () => {
   assert.match(gallery, /return isReferenceImageRequest\(question\)/)
   assert.match(gallery, /export function wantsReferenceImages/)
-  assert.match(chat, /!isUser && !olderVersion && !message\.generatedMedia/)
-  assert.match(chat, /<MalikReferenceImages question=\{question\}/)
+  assert.match(chat, /!olderVersion && !message\.generatedMedia/)
+  assert.match(markdown, /planAnswerVisualSlots\(question/)
+  assert.match(chat, /visualContext=/)
+  assert.match(markdown, /<MalikReferenceImages/)
   assert.match(cache, /current\.controller\.abort\(\)/)
   assert.match(gallery, /IntersectionObserver/)
   assert.doesNotMatch(gallery, /fetch\("\/api\/chat\/reference-images/)

@@ -3,7 +3,7 @@ import type { ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 export type MalikVisualImage = { url: string; alt: string; sourceUrl?: string; credit?: string; license?: string }
 export const REFERENCE_METADATA_LIMIT = 48 * 1024
 export const REFERENCE_RESULT_LIMIT = 8 * 1024
-const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org", "images.unsplash.com", "images.pexels.com", "cdn.pixabay.com", "i.imgur.com"])
+const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org", "images.unsplash.com", "images.pexels.com", "cdn.pixabay.com", "i.imgur.com", "ipcdn-web.apple.com"])
 
 export function isSafeVisualUrl(value: string): boolean {
   try {
@@ -54,7 +54,7 @@ export function sanitizeReferenceImages(value: unknown): MalikVisualImage[] {
     try {
       const source = new URL(item.sourceUrl)
       if (source.protocol === "https:" && !source.username && !source.password && source.href.length < 1500
-        && ["commons.wikimedia.org", "unsplash.com"].includes(source.hostname)) sourceUrl = source.href
+        && ["commons.wikimedia.org", "unsplash.com", "support.apple.com", "en.wikipedia.org", "ru.wikipedia.org", "kk.wikipedia.org"].includes(source.hostname)) sourceUrl = source.href
     } catch { /* Attribution can be absent on model-authored Markdown. */ }
     const image = { url: url.href, alt: cleanReferenceLabel(item.alt), sourceUrl,
       credit: cleanReferenceLabel(item.credit || ""), license: cleanReferenceLabel(item.license || "") }
@@ -68,8 +68,45 @@ export function sanitizeReferenceImages(value: unknown): MalikVisualImage[] {
 
 type CommonsPage = { title?: string; index?: number; imageinfo?: Array<{ mime?: string; thumburl?: string; descriptionurl?: string; extmetadata?: Record<string, { value?: string }> }> }
 
+/** Verified official screen examples. URLs only; no screenshots stored on Render. */
+function officialScreen(plan: ReferenceVisualPlan): MalikVisualImage[] {
+  if (plan.kind !== "tutorial" || !plan.visualDevice?.some((term) => ["iphone", "ios", "ipad"].includes(term))) return []
+  const screens = [
+    { terms: ["haptic", "vibrat", "вибрац", "тактил", "ringtone"], id: "f56abde2-8ea5-4060-a1eb-ea260b86ce19", alt: "iPhone · Звуки и тактильные сигналы" },
+    { terms: ["privacy", "приватност"], id: "d6aea7a7-a42a-456a-9826-c34ecb72b8c6", alt: "iPhone · Конфиденциальность и безопасность" },
+  ]
+  const screen = screens.find((entry) => entry.terms.some((term) => plan.visualTerms?.includes(term)))
+  return screen ? [{ url: "https://ipcdn-web.apple.com/assets/v2/web/" + screen.id, alt: screen.alt,
+    sourceUrl: "https://support.apple.com/guide/iphone/make-your-iphone-your-own-iphefb3daa42/ios", credit: "Apple Support" }] : []
+}
+
+async function lookupArticleImages(plan: ReferenceVisualPlan, signal: AbortSignal): Promise<MalikVisualImage[]> {
+  // Article thumbnails improve coverage for RU/KZ questions and abstract concepts.
+  // An article photo is never passed off as a settings screenshot.
+  if (plan.kind === "tutorial") return []
+  for (const topic of plan.queries.slice(0, 2)) {
+    if (signal.aborted) break
+    const language = /[әғқңөұүһі]/iu.test(topic) ? "kk" : /[а-яё]/iu.test(topic) ? "ru" : "en"
+    const params = new URLSearchParams({ action: "query", format: "json", formatversion: "2", origin: "*", generator: "search", gsrsearch: topic,
+      gsrnamespace: "0", gsrlimit: "3", prop: "pageimages|info", inprop: "url", piprop: "thumbnail", pithumbsize: "480", pilicense: "free" })
+    try {
+      const response = await fetch("https://" + language + ".wikipedia.org/w/api.php?" + params, {
+        headers: { Accept: "application/json" }, credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.any([signal, AbortSignal.timeout(4000)]),
+      })
+      const data = await readReferenceJson(response) as { query?: { pages?: Array<{ title?: string; index?: number; fullurl?: string; thumbnail?: { source?: string } }> } } | null
+      const images = sanitizeReferenceImages((data?.query?.pages || []).sort((a, b) => (a.index || 0) - (b.index || 0)).flatMap((page) => page.thumbnail?.source && page.fullurl
+        ? [{ url: page.thumbnail.source, alt: page.title || plan.topic, sourceUrl: page.fullurl, credit: "Wikipedia · Wikimedia Commons" }] : []))
+      if (images.length) return images
+    } catch { /* Keep the text answer usable. */ }
+  }
+  return []
+}
+
 /** Runs in the browser for chat: neither metadata nor image bytes touch Render. */
 export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: AbortSignal): Promise<MalikVisualImage[]> {
+  if (signal?.aborted) return []
+  const official = officialScreen(plan)
+  if (official.length) return sanitizeReferenceImages(official)
   const totalSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(14000)])
   for (const topic of plan.queries.slice(0, 2)) {
     if (totalSignal.aborted) break
@@ -99,5 +136,5 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
       if (images.length) return images
     } catch { /* A catalogue outage must not interrupt the answer. */ }
   }
-  return []
+  return lookupArticleImages(plan, totalSignal)
 }

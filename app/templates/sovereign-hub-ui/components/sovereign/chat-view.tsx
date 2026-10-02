@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
-import { MalikReferenceImages } from "./MalikVisualGallery"
 import { MalikTapGuide } from "./MalikTapGuide"
 import type { SuperflowRef } from "./os/os-client"
 import { FollowUpChips, ReadAloudButton, ThoughtTrace, UserMessageActions, VersionPager, useChatShortcuts } from "./chat-extras"
@@ -1858,7 +1857,9 @@ function MessageBubble({
                     {/* While streaming, `malik-streaming` gives the growing
                         answer its caret and lets only newly added blocks
                         fade in (chat-live.css). It is dropped when done. */}
-                    <MalikMarkdown text={displayContent} allowImages={false} className={writingLive ? "malik-streaming" : undefined} />
+                    <MalikMarkdown text={displayContent} allowImages={false} className={writingLive ? "malik-streaming" : undefined}
+                      visualContext={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
+                        ? { question, previousQuestion, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
                     {streaming && videoAnalysis ? <VideoAnalysisPulse compact /> : null}
                   </>
                 )
@@ -1869,11 +1870,6 @@ function MessageBubble({
           {/* Grounded UI how-to: interactive arrow navigator only after the answer is complete. */}
           {!isUser && !streaming && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && Boolean(displayContent) ? (
             <MalikTapGuide question={question} answer={displayContent} />
-          ) : null}
-          {/* Render useful context images beside the explanation, never above an empty thinking bubble.
-              Requests still start in parallel with streamed text; images load directly in the browser. */}
-          {!isUser && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && Boolean(displayContent) ? (
-            <MalikReferenceImages question={question} previousQuestion={previousQuestion} hasAttachment={questionHasAttachment} isLatest={isLatest} />
           ) : null}
           {/* The verdict on the text above comes before the reading list it was
               written from. */}

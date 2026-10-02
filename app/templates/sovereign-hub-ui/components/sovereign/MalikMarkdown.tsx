@@ -1,12 +1,13 @@
 "use client"
 
-import { Fragment, useState, type ReactNode } from "react"
+import { Fragment, useMemo, useState, type ReactNode } from "react"
 import { Archive, Check, Copy, Download, ExternalLink, Eye, RefreshCw } from "lucide-react"
 import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
 import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
-import { MalikVisualGallery, isSafeVisualUrl, type MalikVisualImage } from "./MalikVisualGallery"
+import { MalikReferenceImages, MalikVisualGallery, isSafeVisualUrl, type MalikVisualImage } from "./MalikVisualGallery"
 import { parseAnswerEntity } from "@/lib/ai/answer-entities"
+import { planAnswerVisualSlots, type AnswerVisualSegment, type AnswerVisualSlot } from "@/lib/ai/reference-visual-policy"
 
 /**
  * Renders an assistant answer as structured text.
@@ -15,7 +16,7 @@ import { parseAnswerEntity } from "@/lib/ai/answer-entities"
  * model output is parsed into React elements and never injected as HTML.
  */
 
-type Props = { text: string; className?: string; allowImages?: boolean }
+type Props = { text: string; className?: string; allowImages?: boolean; visualContext?: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
 
 function isProjectArtifactHref(href: string) {
   return /^\/api\/ai\/project\/artifacts\/[^/]+\/download(?:\?|$)/.test(href)
@@ -626,13 +627,13 @@ function CodeBlock({ language, filename, code, previewFiles }: { language: strin
   )
 }
 
-function MarkdownList({ list, keyPrefix }: { list: ListBlock; keyPrefix: string }) {
+function MarkdownList({ list, keyPrefix, visualSlots, isLatest = false }: { list: ListBlock; keyPrefix: string; visualSlots?: Map<string, AnswerVisualSlot>; isLatest?: boolean }) {
   const items = list.items.map((item, itemIndex) => {
     const key = `${keyPrefix}-${itemIndex}`
     return (
       <li key={key} className={item.checked === null ? undefined : "malik-md-task"}>
         {item.checked === null ? null : <span className={`malik-md-check${item.checked ? " is-checked" : ""}`} aria-label={item.checked ? "выполнено" : "не выполнено"} role="img">{item.checked ? "✓" : ""}</span>}
-        {inline(item.text, key)}
+        {visualSlots?.has(key) ? <MalikReferenceImages question="" planOverride={visualSlots.get(key)!.plan} row isLatest={isLatest}>{inline(item.text, key)}</MalikReferenceImages> : inline(item.text, key)}
         {item.children.map((child, childIndex) => <MarkdownList key={`${key}-c${childIndex}`} list={child} keyPrefix={`${key}-c${childIndex}`} />)}
       </li>
     )
@@ -657,8 +658,23 @@ function AnswerEntityCard({ text, description = "" }: { text: string; descriptio
   </div>
 }
 
-export function MalikMarkdown({ text, className, allowImages = true }: Props) {
-  const blocks = parseBlocks(text)
+export function MalikMarkdown({ text, className, allowImages = true, visualContext }: Props) {
+  const blocks = useMemo(() => parseBlocks(text), [text])
+  const question = visualContext?.question || ""
+  const previousQuestion = visualContext?.previousQuestion || ""
+  const hasAttachment = Boolean(visualContext?.hasAttachment)
+  const streaming = Boolean(visualContext?.streaming)
+  const visualSlots = useMemo(() => {
+    if (!question || streaming) return new Map<string, AnswerVisualSlot>()
+    const segments: AnswerVisualSegment[] = []
+    blocks.forEach((block, position) => {
+      const key = `b${position}`
+      if (block.kind === "h") segments.push({ key, text: block.text, kind: "heading" })
+      if (block.kind === "p") segments.push({ key, text: block.lines.join(" "), kind: "paragraph" })
+      if (block.kind === "list") block.list.items.forEach((item, index) => segments.push({ key: `${key}-${index}`, text: item.text, kind: "item" }))
+    })
+    return new Map(planAnswerVisualSlots(question, segments, previousQuestion, hasAttachment).map((slot) => [slot.key, slot]))
+  }, [blocks, question, previousQuestion, hasAttachment, streaming])
   const codeFiles = codeFilesFrom(blocks)
 
   const downloadAll = () => {
@@ -683,6 +699,9 @@ export function MalikMarkdown({ text, className, allowImages = true }: Props) {
         const key = `b${position}`
         const previous = blocks[position - 1]
         const next = blocks[position + 1]
+        const slot = visualSlots.get(key)
+        // A photographed heading owns its immediately following description.
+        if (block.kind === "p" && previous?.kind === "h" && visualSlots.get(`b${position - 1}`)?.row) return null
         // Compact entity rows retain the model's own description, not canned copy.
         if (block.kind === "p" && previous?.kind === "h" && parseAnswerEntity(previous.text)) {
           // The heading row already includes this paragraph.
@@ -721,10 +740,13 @@ export function MalikMarkdown({ text, className, allowImages = true }: Props) {
         if (block.kind === "h") {
           const level = Math.min(block.level + 1, 6)
           const Tag = `h${level}` as "h2" | "h3" | "h4" | "h5" | "h6"
-          return <Tag key={key} className={`malik-md-h malik-md-h${block.level}`}>{inline(block.text, key)}</Tag>
+          const heading = <Tag className={`malik-md-h malik-md-h${block.level}`}>{inline(block.text, key)}</Tag>
+          return slot ? <MalikReferenceImages key={key} question={question} planOverride={slot.plan} row={slot.row} isLatest={visualContext?.isLatest}>
+            {heading}{next?.kind === "p" ? <p className="malik-md-p">{inline(next.lines.join(" "), key + "-description")}</p> : null}
+          </MalikReferenceImages> : <Fragment key={key}>{heading}</Fragment>
         }
 
-        if (block.kind === "list") return <MarkdownList key={key} list={block.list} keyPrefix={key} />
+        if (block.kind === "list") return <MarkdownList key={key} list={block.list} keyPrefix={key} visualSlots={visualSlots} isLatest={visualContext?.isLatest} />
 
         if (block.kind === "math") return <TexMath key={key} tex={block.tex} display />
 
@@ -734,8 +756,8 @@ export function MalikMarkdown({ text, className, allowImages = true }: Props) {
 
         if (block.kind === "hr") return <hr key={key} className="malik-md-hr" />
 
-        return (
-          <p key={key} className="malik-md-p">
+        const paragraph = (
+          <p className="malik-md-p">
             {block.lines.map((line, lineIndex) => (
               <Fragment key={`${key}-${lineIndex}`}>
                 {lineIndex > 0 ? <br /> : null}
@@ -744,6 +766,7 @@ export function MalikMarkdown({ text, className, allowImages = true }: Props) {
             ))}
           </p>
         )
+        return slot ? <MalikReferenceImages key={key} question={question} planOverride={slot.plan} row={slot.row} isLatest={visualContext?.isLatest}>{paragraph}</MalikReferenceImages> : <Fragment key={key}>{paragraph}</Fragment>
       })}
     </div>
   )
