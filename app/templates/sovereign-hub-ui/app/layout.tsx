@@ -99,10 +99,10 @@ import "./business-model-reference-final.css"
 import "./mobile-drawer-final.css"
 // Final MalikVideo refinement must load before the product-wide monochrome pass.
 import "./video-mobile-refinement.css"
+import "./workspace-mode.css"
 // Truly last: loading, analysis, sources and status surfaces in black and
 // white only. It has to follow every accent rule above to strip their gold.
 import "./chat-monochrome-final.css"
-import "./workspace-mode.css"
 
 // Let Next emit one viewport tag. Read the visible area separately on iOS,
 // where the keyboard does not resize dvh. Keep deliberate pinch zoom available.

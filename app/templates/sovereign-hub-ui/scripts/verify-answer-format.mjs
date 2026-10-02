@@ -44,12 +44,24 @@ new Function("require", "module", "exports", "React", ts.transpileModule(fs.read
 )
 
 const box = { exports: {} }
+function loadPure(file) {
+  const module = { exports: {} }
+  const javascript = ts.transpileModule(fs.readFileSync(file, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  new Function("module", "exports", javascript)(module, module.exports)
+  return module.exports
+}
+const catalog = loadPure("lib/media/reference-catalog.ts")
+const entities = loadPure("lib/ai/answer-entities.ts")
 new Function("require", "module", "exports", "React", js.replace(/require\("react"\)/g, "React"))(
   (name) => {
     if (name === "lucide-react") return lucide
     if (name === "@/lib/business/project-zip") return { downloadProjectZip() {} }
     if (name === "@/lib/canvas-preview") return { buildCanvasSrcDoc: (code) => code, buildCanvasProjectSrcDoc: (files, filename) => files.find((file) => file.name === filename)?.content || "", createCanvasBlobUrl: () => "blob:test" }
     if (name === "./malik-tex") return texBox.exports
+    if (name === "./MalikVisualGallery") return { isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }) }
+    if (name === "@/lib/ai/answer-entities") return entities
     throw new Error(`unexpected require(${name})`)
   }, box, box.exports, React,
 )
@@ -72,6 +84,17 @@ console.log("\nan answer arrives as structure, not as a wall of text")
 check("paragraphs separated by a blank line become separate paragraphs", () => {
   const html = render("Первый абзац.\n\nВторой абзац.")
   assert.equal((html.match(/<p /g) || []).length, 2)
+})
+check("entity rows preserve real descriptions once, including the final paragraph", () => {
+  const html = render("## Metricool\n\nПланирование публикаций.\n\n## Canva\n\nСоздание графики.")
+  assert.equal((html.match(/data-malik-answer-entity/g) || []).length, 2)
+  assert.equal((html.match(/Планирование публикаций/g) || []).length, 1)
+  assert.equal((html.match(/Создание графики/g) || []).length, 1)
+})
+check("chat can forbid model-invented image links while keeping text", () => {
+  const html = renderToStaticMarkup(React.createElement(MalikMarkdown, { text: "Описание.\n\n![Фото](https://thumb.wikimedia.org/example.jpg)", allowImages: false }))
+  assert.ok(html.includes("Описание."))
+  assert.ok(!html.includes("data-test-gallery"))
 })
 
 check("bullets become a list", () => {

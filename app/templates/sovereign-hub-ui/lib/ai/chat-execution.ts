@@ -23,9 +23,52 @@ export type ExecutionTrace = {
   model?: string
   steps: ExecutionStep[]
 }
+export type ExecutionSource = { url: string; title?: string; domain?: string }
 export const MAX_EXECUTION_STEPS = 80
+export const MAX_EXECUTION_BYTES = 64 * 1024
 const KINDS = new Set<ExecutionKind>(["status", "search", "read", "plugin", "file", "model", "code", "media"])
 const STATES = new Set<ExecutionState>(["running", "completed", "failed", "cancelled", "interrupted"])
+
+function boundExecutionSteps(steps: ExecutionStep[]): ExecutionStep[] {
+  const encoder = new TextEncoder()
+  const records = steps.slice(-MAX_EXECUTION_STEPS).map((step) => {
+    const compact = { ...step, input: undefined, output: undefined, error: step.error ? publicExecutionText(step.error, 160) : undefined }
+    return { step, compact, size: encoder.encode(JSON.stringify(compact)).byteLength + 1 }
+  })
+  let baseline = records.reduce((sum, record) => sum + record.size, 2)
+  while (baseline > MAX_EXECUTION_BYTES && records.length) baseline -= records.shift()!.size
+  let remaining = MAX_EXECUTION_BYTES - baseline
+  return records.reverse().map(({ step, compact, size }) => {
+    const extra = encoder.encode(JSON.stringify(step)).byteLength + 1 - size
+    if (extra > remaining) return compact
+    remaining -= extra
+    return step
+  }).reverse()
+}
+
+/** Only URLs present in real tool receipts or supplied verified sources. */
+export function executionSources(trace: ExecutionTrace, supplied: ExecutionSource[] = []): ExecutionSource[] {
+  const candidates: ExecutionSource[] = [...supplied]
+  for (const step of trace.steps) {
+    if (step.kind === "read" && step.url) candidates.push({ url: step.url, title: step.title })
+    if (!step.output || step.kind !== "search") continue
+    try {
+      const data = JSON.parse(step.output) as { sources?: unknown }
+      if (!Array.isArray(data.sources)) continue
+      for (const item of data.sources.slice(0, 24)) {
+        if (item && typeof item === "object" && typeof item.url === "string") candidates.push({ url: item.url, title: typeof item.title === "string" ? item.title : undefined })
+      }
+    } catch { /* Plain-text output remains in the expandable receipt. */ }
+  }
+  const unique = new Map<string, ExecutionSource>()
+  for (const source of candidates) {
+    const url = executionUrl(source.url)
+    if (!url || !/^https?:\/\//i.test(source.url)) continue
+    unique.set(url, { url, title: source.title ? publicExecutionText(source.title, 180) : undefined, domain: new URL(url).hostname.replace(/^www\./, "") })
+    if (unique.size === 24) break
+  }
+  return [...unique.values()]
+}
 
 export function publicExecutionText(value: unknown, limit = 6000): string {
   let text: string
@@ -76,12 +119,12 @@ export function upsertExecutionStep(trace: ExecutionTrace, value: unknown): Exec
   const previous = trace.steps.find((item) => item.id === step.id)
   if (previous && previous.state !== "running" && step.state === "running") return trace
   const steps = previous ? trace.steps.map((item) => item.id === step.id ? { ...item, ...step } : item) : [...trace.steps, step].slice(-MAX_EXECUTION_STEPS)
-  return { ...trace, steps }
+  return { ...trace, steps: boundExecutionSteps(steps) }
 }
 
 export function settleExecution(trace: ExecutionTrace, state: ExecutionState, at = Date.now()): ExecutionTrace {
-  return { ...trace, state, endedAt: at, steps: trace.steps.map((step) => step.state === "running"
-    ? { ...step, state: state === "completed" ? "interrupted" : state, endedAt: at } : step) }
+  return { ...trace, state, endedAt: at, steps: boundExecutionSteps(trace.steps.map((step) => step.state === "running"
+    ? { ...step, state: state === "completed" ? "interrupted" : state, endedAt: at } : step)) }
 }
 
 export function normalizeExecutionTrace(value: unknown, recovered = false): ExecutionTrace | undefined {
@@ -93,7 +136,7 @@ export function normalizeExecutionTrace(value: unknown, recovered = false): Exec
     endedAt: Number.isFinite(Number(item.endedAt)) ? Number(item.endedAt) : undefined,
     state: STATES.has(item.state as ExecutionState) ? item.state as ExecutionState : "interrupted",
     model: item.model ? publicExecutionText(item.model, 120) : undefined,
-    steps: item.steps.map(normalizeExecutionStep).filter((step): step is ExecutionStep => Boolean(step)).slice(-MAX_EXECUTION_STEPS),
+    steps: boundExecutionSteps(item.steps.map(normalizeExecutionStep).filter((step): step is ExecutionStep => Boolean(step))),
   }
   return recovered && trace.state === "running" ? settleExecution(trace, "interrupted", trace.steps.at(-1)?.endedAt || trace.steps.at(-1)?.startedAt || trace.startedAt) : trace
 }
