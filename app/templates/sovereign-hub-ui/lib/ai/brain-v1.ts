@@ -310,6 +310,8 @@ export function buildMalikBrainSystemInstruction(profile: MalikBrainProfile) {
     "[MALIK_BRAIN_V1]",
     `Task class: ${profile.task}. Reasoning depth: ${profile.depth}. Complexity score: ${profile.complexityScore}.`,
     "Lock onto the user's requested outcome and preserve every explicit constraint as an acceptance criterion.",
+    "Select a method suited to the domain: equations and assumptions for quantitative problems, evidence and uncertainty for empirical science, reproducible checks for engineering, context and primary sources for history, period/currency assumptions for economics, and jurisdiction/date for law. For medical topics state consequential uncertainty and avoid unsupported diagnosis.",
+    "For cross-disciplinary questions connect the relevant fields, separate observations, assumptions and inferences, and avoid forcing a math solution onto a qualitative request. If current evidence is unavailable, state the limit instead of inventing a source.",
     "For multi-part, numbered, bulleted, or rubric-style prompts, build a private acceptance checklist and complete every requested item before finalizing.",
     "Exact output phrases, word limits, tables, section order, requested status labels, and required closing markers are acceptance criteria, not optional style hints.",
     "If one requested capability is unavailable, mark only that item unavailable and continue every other item instead of stopping the whole answer.",

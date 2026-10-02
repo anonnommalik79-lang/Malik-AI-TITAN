@@ -86,6 +86,8 @@ const chatOnly = analyzeMalikBrainV1({ prompt: "Привет! Как настр�
 assert.notEqual(chatOnly.task, "quantitative")
 const unrelated = analyzeMalikBrainV1({ prompt: "Расскажи про релиз Next.js 16 и новые API" })
 assert.notEqual(unrelated.task, "quantitative")
+assert.match(buildMalikBrainSystemInstruction(chatOnly), /cross-disciplinary questions/)
+assert.match(buildMalikBrainSystemInstruction(chatOnly), /jurisdiction\/date/)
 const symbolic = analyzeMalikBrainV1({ prompt: "x² - 5x + 6 = 0" })
 assert.equal(symbolic.task, "quantitative")
 assert.equal(symbolic.quantitative?.domain, "algebra")
