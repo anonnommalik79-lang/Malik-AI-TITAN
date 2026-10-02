@@ -37,7 +37,7 @@
     "test:video-speed": "node scripts/verify-video-speed.mjs",
     "test:coding-models": "node scripts/verify-coding-models.mjs",
     "test:answer-format": "node scripts/verify-answer-format.mjs",
-    "test:rich-answers": "node scripts/verify-rich-answers.mjs",
+    "test:rich-answers": "node scripts/verify-rich-answers.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-tap-guide.mjs",
     "test:reference-intent": "node scripts/verify-reference-intent.mjs",
     "test:chat-execution": "node --experimental-strip-types --no-warnings scripts/verify-chat-execution.mjs",
     "test:work-mode": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-work-mode.mjs",

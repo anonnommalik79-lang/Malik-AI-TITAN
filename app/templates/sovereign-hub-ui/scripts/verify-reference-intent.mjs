@@ -39,7 +39,6 @@ for (const prompt of ["Покажи мне код функции", "Покажи
 const iosGuide = policy.planReferenceVisuals("Как сделать чтобы играла вибрация в звонке айфон")
 assert.equal(iosGuide?.kind, "tutorial")
 assert.equal(iosGuide?.layout, "portrait")
-assert.equal(iosGuide?.guideId, "ios-haptics")
 assert.match(iosGuide.queries[0], /iPhone.*Haptics/)
 assert.deepEqual(iosGuide.visualDevice, ["iphone", "ios", "ipad"])
 assert.equal(policy.planReferenceVisuals("How to enable notifications on Android")?.kind, "tutorial")

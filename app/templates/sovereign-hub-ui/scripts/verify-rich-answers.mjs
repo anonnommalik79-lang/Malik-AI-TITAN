@@ -8,6 +8,8 @@ const catalog = read("lib/media/reference-catalog.ts")
 const cache = read("lib/media/client-reference-cache.ts")
 const markdown = read("components/sovereign/MalikMarkdown.tsx")
 const chat = read("components/sovereign/chat-view.tsx")
+const tapGuide = read("components/sovereign/MalikTapGuide.tsx")
+const tapPolicy = read("lib/ai/tap-guide.ts")
 
 function check(title, action) {
   action()
@@ -49,5 +51,14 @@ check("Chat loads relevant references directly alongside streamed text and keeps
   assert.match(gallery, /plan\.kind === "tutorial"/)
   assert.match(chat, /Boolean\(displayContent\)/)
   assert.match(gallery, /<MalikVisualGallery title=/)
+})
+check("Completed UI instructions show accurate, clickable arrow schemes without invented screenshot positions", () => {
+  assert.match(chat, /<MalikTapGuide question=\{question\} answer=\{displayContent\}/)
+  assert.match(chat, /!isUser && !streaming && !olderVersion/)
+  assert.match(tapGuide, /data-malik-highlighted-target/)
+  assert.match(tapGuide, /aria-label="Следующий шаг"/)
+  assert.match(tapGuide, /onClick=\{\(\) => setActive\(stepIndex\)\}/)
+  assert.match(tapPolicy, /function numberedSteps\(/)
+  assert.doesNotMatch(tapGuide, /\/api\/ai\/image|fetch\(|canvas\.getContext/)
 })
 console.log("Rich visual answer integration verified.")

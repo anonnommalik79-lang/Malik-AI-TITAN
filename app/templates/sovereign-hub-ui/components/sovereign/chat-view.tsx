@@ -5,6 +5,7 @@ import dynamic from "next/dynamic"
 import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
 import { MalikReferenceImages } from "./MalikVisualGallery"
+import { MalikTapGuide } from "./MalikTapGuide"
 import type { SuperflowRef } from "./os/os-client"
 import { FollowUpChips, ReadAloudButton, ThoughtTrace, UserMessageActions, VersionPager, useChatShortcuts } from "./chat-extras"
 import "./chat-live.css"
@@ -1865,6 +1866,10 @@ function MessageBubble({
             : (streaming
               ? message.execution ? null : <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} liveStatus={message.liveStatus} />
               : "")}
+          {/* Grounded UI how-to: interactive arrow navigator only after the answer is complete. */}
+          {!isUser && !streaming && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && Boolean(displayContent) ? (
+            <MalikTapGuide question={question} answer={displayContent} />
+          ) : null}
           {/* Render useful context images beside the explanation, never above an empty thinking bubble.
               Requests still start in parallel with streamed text; images load directly in the browser. */}
           {!isUser && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && Boolean(displayContent) ? (

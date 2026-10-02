@@ -9,7 +9,6 @@ export type ReferenceVisualPlan = {
   /** Screenshot matches must include a specific UI feature AND app/device. */
   visualTerms?: string[]
   visualDevice?: string[]
-  guideId?: "ios-haptics"
 }
 
 const NO_VISUAL = /(?:без\s+(?:фото|картинок|изображений)|не\s+(?:показывай|добавляй|нужны)\s+(?:фото|картинки|изображения)|только\s+текст|no\s+(?:photos?|images?|pictures?)|text\s+only|суретсіз)/iu
@@ -54,7 +53,6 @@ function planTutorialVisuals(text: string): ReferenceVisualPlan | null {
     queries: [device.query + " " + feature.query + " settings screenshot", device.query + " " + feature.alternate + " screenshot"],
     explicit: false, layout: "portrait", kind: "tutorial",
     visualTerms: feature.terms, visualDevice: device.terms,
-    guideId: device.label === "iPhone" && feature.label === "Настройки вибрации" ? "ios-haptics" : undefined,
   }
 }
 

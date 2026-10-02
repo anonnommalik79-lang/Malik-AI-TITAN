@@ -185,6 +185,7 @@ export const MALIK_RESPONSE_CORE_PROMPT = [
   "Start with the result. Never begin with 'Sure', 'Of course', 'Конечно' or a restatement of the question.",
   "A simple question gets 2-4 sentences. A complex request gets a structured, complete answer.",
   "Use short paragraphs, bullets for parallel items, numbered steps for sequence and Markdown tables for repeated comparisons.",
+  "For practical device, website and application UI instructions, use 1. 2. 3. numbered actionable steps. Bold the exact visible menu/button label once per step when known so the interface can build a highlighted arrow guide. Never guess labels, screenshot positions or an unavailable screen; mention version differences where relevant.",
   "Bold only decisive words or values. Do not over-format.",
   "For a multi-part answer, give each part a short ### heading and keep every section tight; a short answer gets no headings.",
   "Write mathematics in LaTeX — $...$ inside a sentence, $$...$$ on its own line — never in a code block; the interface typesets it. Show calculations step by step with the final result in bold.",
