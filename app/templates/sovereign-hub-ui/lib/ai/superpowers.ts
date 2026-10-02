@@ -1,4 +1,5 @@
 import type { AIFileAttachment, AITaskType } from "./types"
+import { detectQuantitativeReasoning } from "./quantitative-reasoning"
 
 export type MalikSuperpowerExecution = "native" | "studio" | "connector" | "workflow" | "scheduler"
 
@@ -7,6 +8,7 @@ export type MalikSuperpowerId =
   | "writing"
   | "multilingual"
   | "reasoning"
+  | "quantitative-reasoning"
   | "web-search"
   | "deep-research"
   | "vision"
@@ -143,6 +145,18 @@ export const MALIK_SUPERPOWERS: readonly MalikSuperpower[] = [
     94,
     [/глубок|подробн.*анализ|вычисл|рассчитай|докаж|логик|архитект|стратег|сложн.*задач|reason|deep think|analy[sz]e|calculate|prove|architecture|trade.?off/iu],
     "Solve difficult tasks in multiple internal passes. Track constraints, verify arithmetic and assumptions, consider failure modes, then give the user a concise answer with the necessary derivation or checks without exposing private chain-of-thought.",
+  ),
+  P(
+    "quantitative-reasoning",
+    "Malik Quantitative Reasoning",
+    "Intelligence",
+    "Works through arithmetic, algebra, geometry, physics, logic and quantitative questions with domain-appropriate verification.",
+    ["Algebra and equations", "Physics with unit checks", "Proofs and counterexamples", "Statistics and probability", "Checked numeric solutions"],
+    "native",
+    "chat",
+    101,
+    [],
+    "Solve the user's actual formal problem. Show a comprehensible solution and the answer, preserve all constraints, check roots against the original equation, use unit/dimension checks in physics and verify logical deductions. Prefer exact values when appropriate; avoid false precision. Do not claim a calculator, script, web search or experiment ran unless a real tool receipt confirms it. Keep tiny arithmetic concise.",
   ),
   P(
     "web-search",
@@ -763,9 +777,11 @@ export function detectMalikSuperpowers(
   if (explicit) return [explicit]
 
   const attachmentIds = attachmentPowers(attachments)
+  const quantitative = detectQuantitativeReasoning(prompt)
   const scored = MALIK_SUPERPOWERS.flatMap((power) => {
     if (power.id === "chat-core") return []
     let score = attachmentIds.has(power.id) ? power.priority + 30 : 0
+    if (power.id === "quantitative-reasoning" && quantitative) score += power.priority * (quantitative.complex ? 2 : 1)
     for (const signal of power.signals) {
       signal.lastIndex = 0
       if (signal.test(prompt)) score += power.priority
@@ -796,12 +812,13 @@ export function detectMalikSuperpowers(
     || ids.has("programming")
     || ids.has("data-analysis")
     || ids.has("science")
+    || (ids.has("quantitative-reasoning") && Boolean(quantitative?.complex))
     || ids.has("presentations")
     || ids.has("office")
   ) addCompanion("self-check")
 
   if (ids.has("long-workflows") || ids.has("work-agent") || ids.has("cloud-jobs")) addCompanion("recovery")
-  if (ids.has("reasoning") || ids.has("deep-research") || ids.has("long-workflows") || ids.has("science")) addCompanion("adaptive-effort")
+  if (ids.has("reasoning") || (ids.has("quantitative-reasoning") && Boolean(quantitative?.complex)) || ids.has("deep-research") || ids.has("long-workflows") || ids.has("science")) addCompanion("adaptive-effort")
   if (ids.has("long-context")) addCompanion("large-output")
   if (ids.has("data-analysis") || ids.has("science")) addCompanion("code-execution")
 

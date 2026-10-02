@@ -65,4 +65,23 @@ assert.match(prompt, /MALIK_SUPERPOWER_OS/)
 assert.match(prompt, /Never claim .* external action succeeded/i)
 assert.doesNotMatch(prompt, /Codex/i)
 
+ 
+const quantitativeCases = [
+  ["Реши квадратное уравнение x² - 5x + 6 = 0", true],
+  ["2 + 2", true],
+  ["Физика: найди ускорение тела", true],
+  ["Логическая задача: все A являются B, верно ли обратное?", true],
+  ["Как найти дисперсию выборки?", true],
+  ["Explain the Pythagorean theorem", true],
+  ["Привет", false],
+  ["Сгенерируй фото кота", false],
+  ["Что нового в Next.js 16?", false],
+]
+for (const [query, expected] of quantitativeCases) {
+  assert.equal(ids(query).has("quantitative-reasoning"), expected, `Quantitative route: ${query}`)
+}
+assert(ids("Реши квадратное уравнение x² - 5x + 6 = 0").has("self-check"))
+assert(ids("x² - 5x + 6 = 0").has("quantitative-reasoning"))
+assert(!ids("2 + 2").has("adaptive-effort"), "A tiny sum needs no expensive adaptive workflow")
+assert(ids("Реши квадратное уравнение x² - 5x + 6 = 0").has("adaptive-effort"))
 console.log(`MALIK Superpower OS verification passed · ${MALIK_SUPERPOWERS.length} powers · Codex excluded`)

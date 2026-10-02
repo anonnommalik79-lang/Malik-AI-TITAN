@@ -1,8 +1,9 @@
 import { detectTask } from "./detect-task"
+import { detectQuantitativeReasoning, quantitativeSystemInstruction } from "./quantitative-reasoning"
 import type { AIFileAttachment, AITaskType } from "./types"
 
 export type MalikBrainDepth = "instant" | "balanced" | "deep" | "ultra"
-export type MalikBrainTask = AITaskType | "casual" | "vision"
+export type MalikBrainTask = AITaskType | "casual" | "vision" | "quantitative"
 
 export type MalikBrainProfile = {
   version: 1
@@ -15,6 +16,7 @@ export type MalikBrainProfile = {
   outputTokenTarget: number
   temperature: number
   preferredModels: readonly string[]
+  quantitative?: ReturnType<typeof detectQuantitativeReasoning>
   reasons: readonly string[]
 }
 
@@ -27,6 +29,7 @@ type AnalyzeBrainInput = {
 
 const CASUAL_RE = /^(?:привет|салам|сәлем|hi|hello|hey|йо|ку|здарова|как дела|қалайсың|ты тут|алло)[\s.!?]*$/iu
 const DEEP_RE = /(глубок|подробн|проанализ|исслед|архитект|стратег|докаж|рассчитай|сравн|пошаг|по шагам|deep dive|research|analy[sz]e|architecture|benchmark|step by step)/iu
+const EVIDENCE_REQUEST_RE = /найди.*(?:источник|стать|исследован|публикац|интернет|сеть)|сравни.*(?:источник|исследован|литератур)|(?:научн|свеж|актуальн).*стать|research paper|literature review|sources?|online|browse|latest/iu
 const CURRENT_RE = /(сегодня|сейчас|последн|актуальн|новост|цена|курс|latest|current|today|recent|live)/iu
 const MULTI_STEP_RE = /(сначала|затем|потом|после этого|и ещё|и еще|под ключ|от начала до конца|step 1|then|after that|end[- ]to[- ]end)/iu
 const VERIFY_RE = /(проверь|убедись|тест|тестир|валид|собер|build|verify|test|qa|production|продакшн)/iu
@@ -73,6 +76,13 @@ const MODEL_ORDERS: Record<string, readonly string[]> = {
     "malik-qwen-397b",
     "malik-flash-53",
     "malik-glm-47-flash",
+    "malik-nemotron-3-120b",
+    "malik-fast-120b",
+  ],
+  quantitative: [
+    "malik-reason-753b",
+    "malik-qwen-397b",
+    "malik-bonsai-27b",
     "malik-nemotron-3-120b",
     "malik-fast-120b",
   ],
@@ -136,7 +146,7 @@ function requestedDepth(value: unknown): MalikBrainDepth | null {
 function modelsFor(task: MalikBrainTask, depth: MalikBrainDepth) {
   if (task === "casual") return MODEL_ORDERS.casual
   if (task === "vision") return MODEL_ORDERS.vision
-  if (task === "code" || task === "debug" || task === "project" || task === "research" || task === "file_analysis") {
+  if (task === "code" || task === "debug" || task === "project" || task === "research" || task === "file_analysis" || task === "quantitative") {
     return MODEL_ORDERS[task]
   }
   if (depth === "deep" || depth === "ultra") return MODEL_ORDERS.research
@@ -148,6 +158,11 @@ function tokenTarget(task: MalikBrainTask, depth: MalikBrainDepth) {
   if (task === "code" || task === "debug" || task === "project") {
     if (depth === "ultra") return 16_000
     return depth === "deep" ? 12_000 : 8_000
+  }
+  if (task === "quantitative") {
+    if (depth === "ultra") return 12_000
+    if (depth === "deep") return 8_000
+    return depth === "instant" ? 1_500 : 4_000
   }
   if (task === "research") {
     if (depth === "ultra") return 14_000
@@ -163,7 +178,7 @@ function tokenTarget(task: MalikBrainTask, depth: MalikBrainDepth) {
 }
 
 function temperatureFor(task: MalikBrainTask, depth: MalikBrainDepth) {
-  if (task === "code" || task === "debug") return 0.15
+  if (task === "code" || task === "debug" || task === "quantitative") return 0.12
   if (task === "research" || task === "file_analysis" || task === "vision") return depth === "ultra" ? 0.15 : 0.2
   if (depth === "ultra") return 0.18
   if (depth === "deep") return 0.25
@@ -179,10 +194,13 @@ export function analyzeMalikBrainV1(input: AnalyzeBrainInput): MalikBrainProfile
   const detected = detectTask(prompt, attachments)
   const casual = !attachments.length && prompt.length <= 80 && CASUAL_RE.test(prompt)
   const hasVision = attachments.some(attachmentIsVision)
+  const quantitative = detectQuantitativeReasoning(prompt)
 
   let task: MalikBrainTask = casual ? "casual" : detected.task
   if (hasVision && (detected.task === "chat" || detected.task === "file_analysis" || detected.task === "general")) {
     task = "vision"
+  } else if (!attachments.length && quantitative && (detected.task === "chat" || detected.task === "general" || (detected.task === "research" && !EVIDENCE_REQUEST_RE.test(prompt) && !CURRENT_RE.test(prompt)))) {
+    task = "quantitative"
   }
 
   let complexityScore = 0
@@ -232,6 +250,10 @@ export function analyzeMalikBrainV1(input: AnalyzeBrainInput): MalikBrainProfile
     complexityScore += 2
     reasons.push(`task:${task}`)
   }
+  if (task === "quantitative") {
+    complexityScore += quantitative?.complex ? 5 : 1
+    reasons.push(quantitative?.complex ? "multi-step-quantitative" : "quantitative")
+  }
   if (DEEP_RE.test(prompt)) {
     complexityScore += 2
     reasons.push("explicit-deep-work")
@@ -253,11 +275,12 @@ export function analyzeMalikBrainV1(input: AnalyzeBrainInput): MalikBrainProfile
     // A long/structured prompt gets enough reasoning even when the UI default
     // still says fast.
     if (complexityScore >= 10 || structure.requirements >= 10 || prompt.length >= 18_000) depth = "ultra"
-    else if (complexityScore >= 6 || structure.requirements >= 5 || prompt.length >= 4_000) depth = "deep"
+    else if (complexityScore >= 6 || structure.requirements >= 5 || prompt.length >= 4_000 || (task === "quantitative" && quantitative?.complex)) depth = "deep"
   }
 
   const needsFreshEvidence = task === "research" || CURRENT_RE.test(prompt)
-  const needsVerification = task === "code"
+  const needsVerification = task === "quantitative"
+    || task === "code"
     || task === "debug"
     || task === "project"
     || task === "research"
@@ -277,6 +300,7 @@ export function analyzeMalikBrainV1(input: AnalyzeBrainInput): MalikBrainProfile
     outputTokenTarget: tokenTarget(task, depth),
     temperature: temperatureFor(task, depth),
     preferredModels: modelsFor(task, depth),
+    quantitative: task === "quantitative" ? quantitative : null,
     reasons,
   }
 }
@@ -286,6 +310,8 @@ export function buildMalikBrainSystemInstruction(profile: MalikBrainProfile) {
     "[MALIK_BRAIN_V1]",
     `Task class: ${profile.task}. Reasoning depth: ${profile.depth}. Complexity score: ${profile.complexityScore}.`,
     "Lock onto the user's requested outcome and preserve every explicit constraint as an acceptance criterion.",
+    "Select a method suited to the domain: equations and assumptions for quantitative problems, evidence and uncertainty for empirical science, reproducible checks for engineering, context and primary sources for history, period/currency assumptions for economics, and jurisdiction/date for law. For medical topics state consequential uncertainty and avoid unsupported diagnosis.",
+    "For cross-disciplinary questions connect the relevant fields, separate observations, assumptions and inferences, and avoid forcing a math solution onto a qualitative request. If current evidence is unavailable, state the limit instead of inventing a source.",
     "For multi-part, numbered, bulleted, or rubric-style prompts, build a private acceptance checklist and complete every requested item before finalizing.",
     "Exact output phrases, word limits, tables, section order, requested status labels, and required closing markers are acceptance criteria, not optional style hints.",
     "If one requested capability is unavailable, mark only that item unavailable and continue every other item instead of stopping the whole answer.",
@@ -300,6 +326,10 @@ export function buildMalikBrainSystemInstruction(profile: MalikBrainProfile) {
   ]
 
   const taskInstructions: Record<string, string[]> = {
+    quantitative: [
+      "Use explicit givens and a short derivation, respect problem assumptions and show the final answer clearly.",
+      "Check the result by substitution, a dimensional test, an independent estimate or a counterexample as appropriate. Never state external verification occurred without a tool receipt.",
+    ],
     casual: [
       "Answer immediately and naturally. Do not over-plan a tiny conversational turn.",
     ],
@@ -343,7 +373,7 @@ export function buildMalikBrainSystemInstruction(profile: MalikBrainProfile) {
       ]
     : []
 
-  return [...common, ...(taskInstructions[profile.task] || []), ...verification].join("\n")
+  return [...common, ...(taskInstructions[profile.task] || []), profile.quantitative ? quantitativeSystemInstruction(profile.quantitative) : "", ...verification].filter(Boolean).join("\n")
 }
 
 export function preferredMalikMaxModels(input: AnalyzeBrainInput) {
