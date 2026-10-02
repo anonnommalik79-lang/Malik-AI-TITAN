@@ -16,6 +16,7 @@ const DOMAINS: readonly [QuantitativeDomain, RegExp][] = [
   ["logic", /логическ.*(?:задач|вывод|ошибк|парадокс)|реши.*(?:головоломк|парадокс)|силлогизм|контрпример|формальн.*логик|булев.*алгебр|logic puzzle|logical deduction|syllogism|counterexample|truth table|логикалық.*есеп/iu],
   ["arithmetic", /математик|арифметик|посчитай|вычисли|сколько\s+будет|реши\s+(?:пример|задач)|найди\s+(?:значени|сумму|разност|произведени)|math(?:ematics)?|calculate|compute|evaluate\s+(?:the\s+)?(?:expression|\d)|solve\s+(?:this\s+)?(?:math|problem)|есепте|математика/iu],
 ]
+const SYMBOLIC_EQUATION = /(?:^|\s)(?:[xyz]\s*(?:\^\s*[23]|[²³])|(?:\d+\s*)?[xyz]\s*[+\-])[\s\dxyz+*/^²³.−-]{0,60}=\s*[-+]?\d/iu
 const EXPRESSION = /^\s*(?:сколько\s+будет\s*|what\s+is\s*|есепте\s*)?[−+\-]?(?:\d+(?:[.,]\d+)?|\(\s*\d+\s*\))\s*(?:[+\-−*/×÷^]|%\s*(?:от|of))\s*[−+\-]?\d+(?:[.,]\d+)?(?:\s*(?:[+\-−*/×÷^]|=)\s*\d+(?:[.,]\d+)?)?\s*[?!.]?\s*$/iu
 const ADVANCED = /доказ|теорем|интеграл|производн|предел\s+функц|дифференциал|матрич|вектор|оптимизац|систем.*уравнен|неравенств|квадратн.*уравнен|вероятност|дисперси|стехиометр|формальн.*логик|парадокс|(?:нескольк|двух|трех|трёх).*этап|олимпиад|выведи\s+формул|prove|theorem|integral|derivative|limit\s+of|matrix|optimization|quadratic|system of equations|probability|stoichiometr|multi.step|deduction|дәлелде/iu
 
@@ -23,9 +24,9 @@ export function detectQuantitativeReasoning(value: unknown): QuantitativeIntent 
   const prompt = String(value || "").replace(/\s+/g, " ").trim()
   if (!prompt) return null
   const domain = DOMAINS.find(([, pattern]) => pattern.test(prompt))?.[0]
-  if (!domain && !EXPRESSION.test(prompt)) return null
-  const selected = domain || "arithmetic"
-  const complex = ADVANCED.test(prompt) || prompt.length >= 250 || /(?:^|[;:])\s*(?:\d+[.)]|[а-яa-z]+\s*=)/iu.test(prompt)
+  if (!domain && !EXPRESSION.test(prompt) && !SYMBOLIC_EQUATION.test(prompt)) return null
+  const selected = domain || (SYMBOLIC_EQUATION.test(prompt) ? "algebra" : "arithmetic")
+  const complex = ADVANCED.test(prompt) || SYMBOLIC_EQUATION.test(prompt) || prompt.length >= 250 || /(?:^|[;:])\s*(?:\d+[.)]|[а-яa-z]+\s*=)/iu.test(prompt)
   return { domain: selected, complex }
 }
 

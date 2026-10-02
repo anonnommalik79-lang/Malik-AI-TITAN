@@ -812,13 +812,13 @@ export function detectMalikSuperpowers(
     || ids.has("programming")
     || ids.has("data-analysis")
     || ids.has("science")
-    || ids.has("quantitative-reasoning")
+    || (ids.has("quantitative-reasoning") && Boolean(quantitative?.complex))
     || ids.has("presentations")
     || ids.has("office")
   ) addCompanion("self-check")
 
   if (ids.has("long-workflows") || ids.has("work-agent") || ids.has("cloud-jobs")) addCompanion("recovery")
-  if (ids.has("reasoning") || ids.has("quantitative-reasoning") && Boolean(quantitative?.complex) || ids.has("deep-research") || ids.has("long-workflows") || ids.has("science")) addCompanion("adaptive-effort")
+  if (ids.has("reasoning") || (ids.has("quantitative-reasoning") && Boolean(quantitative?.complex)) || ids.has("deep-research") || ids.has("long-workflows") || ids.has("science")) addCompanion("adaptive-effort")
   if (ids.has("long-context")) addCompanion("large-output")
   if (ids.has("data-analysis") || ids.has("science")) addCompanion("code-execution")
 
@@ -864,7 +864,6 @@ export function superpowerOutputBudget(powers: readonly MalikSuperpower[]) {
 
   if (
     ids.has("reasoning")
-    || ids.has("quantitative-reasoning")
     || ids.has("files")
     || ids.has("vision")
     || ids.has("programming")

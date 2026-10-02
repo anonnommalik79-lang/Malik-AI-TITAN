@@ -64,8 +64,7 @@ assert.match(instruction, /acceptance checklist/i)
 assert.match(instruction, /completion marker/i)
 assert.match(instruction, /verify|verification/i)
 
-console.log("MALIK Brain V1 verification passed")
-
+ 
 const arithmetic = analyzeMalikBrainV1({ prompt: "2 + 2" })
 assert.equal(arithmetic.task, "quantitative")
 assert.equal(arithmetic.needsFreshEvidence, false)
@@ -87,3 +86,9 @@ const chatOnly = analyzeMalikBrainV1({ prompt: "Привет! Как настр�
 assert.notEqual(chatOnly.task, "quantitative")
 const unrelated = analyzeMalikBrainV1({ prompt: "Расскажи про релиз Next.js 16 и новые API" })
 assert.notEqual(unrelated.task, "quantitative")
+const symbolic = analyzeMalikBrainV1({ prompt: "x² - 5x + 6 = 0" })
+assert.equal(symbolic.task, "quantitative")
+assert.equal(symbolic.quantitative?.domain, "algebra")
+const physicalFind = analyzeMalikBrainV1({ prompt: "Физика: найди ускорение, если скорость выросла на 10 м/с за 5 секунд" })
+assert.equal(physicalFind.task, "quantitative", "Find a physics unknown must not request irrelevant web research")
+console.log("MALIK Brain V1 verification passed")

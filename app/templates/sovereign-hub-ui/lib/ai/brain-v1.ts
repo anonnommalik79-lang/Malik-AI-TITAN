@@ -29,6 +29,7 @@ type AnalyzeBrainInput = {
 
 const CASUAL_RE = /^(?:привет|салам|сәлем|hi|hello|hey|йо|ку|здарова|как дела|қалайсың|ты тут|алло)[\s.!?]*$/iu
 const DEEP_RE = /(глубок|подробн|проанализ|исслед|архитект|стратег|докаж|рассчитай|сравн|пошаг|по шагам|deep dive|research|analy[sz]e|architecture|benchmark|step by step)/iu
+const EVIDENCE_REQUEST_RE = /найди.*(?:источник|стать|исследован|публикац|интернет|сеть)|сравни.*(?:источник|исследован|литератур)|(?:научн|свеж|актуальн).*стать|research paper|literature review|sources?|online|browse|latest/iu
 const CURRENT_RE = /(сегодня|сейчас|последн|актуальн|новост|цена|курс|latest|current|today|recent|live)/iu
 const MULTI_STEP_RE = /(сначала|затем|потом|после этого|и ещё|и еще|под ключ|от начала до конца|step 1|then|after that|end[- ]to[- ]end)/iu
 const VERIFY_RE = /(проверь|убедись|тест|тестир|валид|собер|build|verify|test|qa|production|продакшн)/iu
@@ -198,7 +199,7 @@ export function analyzeMalikBrainV1(input: AnalyzeBrainInput): MalikBrainProfile
   let task: MalikBrainTask = casual ? "casual" : detected.task
   if (hasVision && (detected.task === "chat" || detected.task === "file_analysis" || detected.task === "general")) {
     task = "vision"
-  } else if (!attachments.length && quantitative && (detected.task === "chat" || detected.task === "general")) {
+  } else if (!attachments.length && quantitative && (detected.task === "chat" || detected.task === "general" || (detected.task === "research" && !EVIDENCE_REQUEST_RE.test(prompt) && !CURRENT_RE.test(prompt)))) {
     task = "quantitative"
   }
 
