@@ -53,7 +53,7 @@ function Receipt({ step, expanded, now }: { step: ExecutionStep; expanded?: bool
   </li>
 }
 
-export function ChatExecution({ trace, live = false, sources = [] }: { trace: ExecutionTrace; live?: boolean; sources?: ExecutionSource[] }) {
+export function ChatExecution({ trace, live = false, sources = [], workMode = false }: { trace: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean }) {
   const [open, setOpen] = useState(false)
   const [expand, setExpand] = useState<boolean | undefined>()
   const [allSources, setAllSources] = useState(false)
@@ -66,6 +66,8 @@ export function ChatExecution({ trace, live = false, sources = [] }: { trace: Ex
   const now = trace.endedAt || clock
   const tools = trace.steps.filter((step) => step.kind !== "status" && step.kind !== "model")
   const running = trace.steps.filter((step) => step.state === "running")
+  const completedTools = tools.filter((step) => step.state === "completed").length
+  const failedTools = tools.filter((step) => step.state === "failed").length
   const rows = open ? trace.steps : tools
   const verified = executionSources(trace, sources)
   const visibleSources = allSources ? verified : verified.slice(0, 6)
@@ -79,6 +81,11 @@ export function ChatExecution({ trace, live = false, sources = [] }: { trace: Ex
       <div className="malik-execution__source-chips">{visibleSources.map((source) => <a key={source.url} href={source.url} title={source.title || source.domain} target="_blank" rel="noopener noreferrer"><Globe size={16} aria-hidden="true" /><span>{source.domain}</span></a>)}
         {verified.length > 6 ? <button type="button" aria-expanded={allSources} onClick={() => setAllSources(!allSources)}>{allSources ? "Свернуть" : `Ещё ${verified.length - 6}`}</button> : null}
       </div>
+    </div> : null}
+    {workMode && tools.length > 0 ? <div className="malik-execution__work-summary" aria-label="Фактический ход работы">
+      <span><Check size={13} aria-hidden="true" />{completedTools} завершено</span>
+      {active && running.length > 0 ? <span><Loader2 size={13} className="is-spinning" aria-hidden="true" />{running.length} в процессе</span> : null}
+      {failedTools > 0 ? <span><AlertCircle size={13} aria-hidden="true" />{failedTools} с ошибкой</span> : null}
     </div> : null}
     <button type="button" className="malik-execution__summary" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={id}>
       {active ? <Loader2 size={16} className="is-spinning" /> : <BrainCircuit size={16} />}

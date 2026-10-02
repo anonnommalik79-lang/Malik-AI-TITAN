@@ -111,6 +111,11 @@ export function malikIdentityAnswer(body: any, ownerMode: boolean): string {
   if (asksCreator(prompt)) return ownerMode ? ownerCreatorAnswer(language) : publicCreatorAnswer(language)
   if (asksCompany(prompt)) return companyAnswer(language, ownerMode)
   if (asksAssistantIdentity(prompt)) {
+    if (body?.workspaceMode === "work") {
+      if (language === "en") return "I am Malik Work — the task-execution mode of Malik AI. I help complete tasks, prepare deliverables and report what was actually verified."
+      if (language === "kk") return "Мен — Malik Work, Malik AI-дың жұмыс режимімін. Тапсырмаларды орындауға, нәтижелер дайындауға және нақты тексерілген қадамдарды көрсетуге көмектесемін."
+      return "Я — Malik Work, рабочий режим Malik AI. Помогаю выполнять задачи, готовить результаты и показываю только реально выполненные и проверенные действия."
+    }
     if (language === "en") return "I am MALIK AI V6.5 TITAN, an AI platform created by Abdumalik, the elite vibe coder and solo founder of Sovereign Hub."
     if (language === "kk") return "Мен — MALIK AI V6.5 TITAN. Мені Sovereign Hub solo founder-і, элиталық vibe coder Абдумалик құрған."
     return ownerMode
