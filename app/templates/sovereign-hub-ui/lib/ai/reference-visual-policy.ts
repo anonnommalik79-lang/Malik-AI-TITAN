@@ -20,7 +20,7 @@ const FOLLOW_UP = /^(?:(?:а\s+)?(?:теперь\s+)?(?:покажи|добав�
  * arbitrary questions, and no screenshots pretending to be generated answers.
  * The catalogue only returns files whose titles match BOTH the product and UI.
  */
-const TUTORIAL_START = /^(?:как\b|где\b|куда\b|помоги\s+(?:мне\s+)?(?:включить|отключить|настроить)|инструкция\b|пошагово\b|настрой\b|включи\b|отключи\b|how\b|where\b|enable\b|disable\b|set\s+up\b|turn\s+on\b|turn\s+off\b|қалай\b)/iu
+const TUTORIAL_START = /^(?:(?:как|где|куда|инструкция|пошагово|настрой|включи|отключи|how|where|enable|disable|set\s+up|turn\s+on|turn\s+off|қалай)(?![\p{L}\p{N}_])|помоги\s+(?:мне\s+)?(?:включить|отключить|настроить))/iu
 const DEVICES = [
   { match: /(?:iphone|айфон|айфоне|ios|ipad|айпад)/iu, label: "iPhone", query: "iPhone iOS", terms: ["iphone", "ios", "ipad"] },
   { match: /(?:android|андроид|samsung|самсунг)/iu, label: "Android", query: "Android", terms: ["android", "samsung"] },
