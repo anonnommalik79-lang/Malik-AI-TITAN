@@ -30,7 +30,7 @@ for (const prompt of ["Покажи мне горы Алматы", "Покажи
   assert.equal(intent.isExplicitImageGenerationRequest(prompt), false, prompt)
   assert.equal(intent.isExplicitImageEditRequest(prompt, false), false, prompt)
 }
-for (const prompt of ["Покажи мне код функции", "Покажи мне список моделей", "Покажи мне как исправить изображение", "Объясни как найти фото", "Покажи доказательство теоремы", "Покажи логи", "Покажи возможности Malik AI", "Покажи таймер", "Напиши код с фото", "Напиши текст для фотографии", "Объясни как сгенерировать фото", "Расскажи про Алматы", "Реши 2+2", "Покажи горы Алматы без фото", "Show me Almaty, text only", "сгенерируй фото кота", "/image futuristic building", "убери человека на фото"]) {
+for (const prompt of ["Покажи мне код функции", "Покажи мне список моделей", "Покажи мне как исправить изображение", "Объясни как найти фото", "Покажи доказательство теоремы", "Покажи логи", "Покажи возможности Malik AI", "Покажи таймер", "Напиши код с фото", "Напиши текст для фотографии", "Объясни как сгенерировать фото", "Реши 2+2", "Покажи горы Алматы без фото", "Show me Almaty, text only", "сгенерируй фото кота", "/image futuristic building", "убери человека на фото"]) {
   assert.equal(policy.planReferenceVisuals(prompt), null, "no catalogue lookup: " + prompt)
 }
 
@@ -62,7 +62,35 @@ assert.equal(policy.planReferenceVisuals("Покажи фотографии ар
 assert.equal(entities.parseAnswerEntity("**Metricool** — Планирование публикаций.").description, "Планирование публикаций.")
 assert.equal(entities.parseAnswerEntity("Canva\nСоздание графики.").name, "Canva")
 assert.equal(entities.parseAnswerEntity("Напиши код интеграции Canva"), null)
-console.log("PASS selective visual policy, screenshot queries, follow-up context and generation/edit routing")
+for (const question of ["Расскажи про Алматы", "Какие горы есть в Казахстане?", "Что такое вулкан", "Объясни историю Рима", "Қазақстанның таулары", "Explain a black hole", "Как зайти на выставку AI Digital Bridge?", "Как приготовить плов?"]) {
+  assert.ok(policy.planReferenceVisuals(question), "automatic visual: " + question)
+}
+assert.equal(policy.planReferenceVisuals("Какие горы есть в Казахстане?").queries[0], "mountains Kazakhstan")
+assert.equal(policy.planReferenceVisuals("привет"), null)
+const subjects = policy.planAnswerVisualSlots("Расскажи про горы Казахстана", [
+  { key: "b0", kind: "paragraph", text: "Главные горные системы страны:" },
+  { key: "b1", kind: "heading", text: "Тянь-Шань" },
+  { key: "b2", kind: "paragraph", text: "Высокие горы на юго-востоке." },
+  { key: "b3", kind: "heading", text: "Алтай" },
+  { key: "b4", kind: "heading", text: "Заилийский Алатау" },
+  { key: "b5", kind: "heading", text: "Сарыарка" },
+])
+assert.deepEqual(subjects.map(x => x.key), ["b1", "b3", "b4"])
+assert.deepEqual(subjects.map(x => x.plan.queries[0]), ["Tian Shan", "Altai", "Trans-Ili Alatau"])
+assert.equal(policy.planAnswerVisualSlots("Какие горы есть в Казахстане?", [{ key: "b0", kind: "paragraph", text: "Горы страны" }])[0].row, false)
+assert.equal(policy.planAnswerVisualSlots("Как включить вибрацию iPhone", [
+  { key: "b0-0", kind: "item", text: "Открой Настройки" },
+  { key: "b0-1", kind: "item", text: "Выбери **Звуки и тактильные сигналы**" },
+])[0].key, "b0-1")
+assert.deepEqual(policy.planAnswerVisualSlots("Горы Казахстана без фото", [{ key: "b0", kind: "paragraph", text: "Горы" }]), [])
+const entryGuide = policy.planAnswerVisualSlots("Как зайти на выставку AI Digital Bridge?", [
+  { key: "b0-0", kind: "item", text: "Открой **приложение Astana Hub**. Введи код билета." },
+  { key: "b0-1", kind: "item", text: "Покажи **QR-билет** на входе." },
+  { key: "b1", kind: "heading", text: "МВЦ EXPO" },
+])
+assert.equal(entryGuide.length, 3)
+assert.equal(entryGuide[0].plan.topic, "Astana Hub")
+console.log("PASS automatic multilingual visuals, inline subject/step anchors, lookup budget and generation/edit routing")
 
 for (const url of ["https://thumb.wikimedia.org/a.jpg", "https://upload.wikimedia.org/a.jpg"]) assert.ok(catalog.isSafeVisualUrl(url))
 for (const url of ["http://thumb.wikimedia.org/a.jpg", "https://thumb.wikimedia.org.attacker.test/a.jpg", "https://user:pass@thumb.wikimedia.org/a.jpg", "data:image/png;base64,abc", "http://127.0.0.1/a.jpg"]) assert.equal(catalog.isSafeVisualUrl(url), false)
@@ -125,7 +153,8 @@ try {
   ] } })
   const relevantScreen = await catalog.lookupReferenceImages(iosGuide)
   assert.equal(relevantScreen.length, 1)
-  assert.match(relevantScreen[0].alt, /Haptics/)
+  assert.match(relevantScreen[0].url, /ipcdn-web\.apple\.com/)
+  assert.equal(relevantScreen[0].credit, "Apple Support")
   globalThis.fetch = async () => Response.json({ query: { pages: [{ title: "File:Original only.jpg", imageinfo: [{ mime: "image/jpeg", url: "https://upload.wikimedia.org/huge.jpg" }] }] } })
   assert.deepEqual(await catalog.lookupReferenceImages(plan), [], "never download original images to replace missing thumbnails")
   globalThis.fetch = async () => { throw new Error("Provider unavailable") }

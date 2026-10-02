@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { ExternalLink, ImageOff, X } from "lucide-react"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 
-import { planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
+import { planReferenceVisuals, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
 import { referenceCacheKey, subscribeReferenceImages } from "@/lib/media/client-reference-cache"
 export { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
@@ -36,7 +36,7 @@ function ReferenceCard({ image, portrait, onOpen }: { image: MalikVisualImage; p
             loading="lazy"
             decoding="async"
             referrerPolicy="no-referrer"
-            className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.03]"
+            className={"h-full w-full transition-transform duration-300 hover:scale-[1.03] " + (portrait ? "object-contain" : "object-cover")}
             onError={() => setFailed(true)}
           />
         )}
@@ -91,11 +91,15 @@ export function wantsReferenceImages(question: string): boolean {
 }
 
 /** Direct browser catalogue requests: no image proxy, no generation credits. */
-export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean }) {
-  const plan = useMemo(() => planReferenceVisuals(question, previousQuestion, hasAttachment), [question, previousQuestion, hasAttachment])
+export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; children?: ReactNode }) {
+  const candidate = useMemo(() => planOverride || planReferenceVisuals(question, previousQuestion, hasAttachment), [planOverride, question, previousQuestion, hasAttachment])
+  // The answer grows while streaming. Keep subscriptions stable for identical queries.
+  const serializedPlan = candidate ? JSON.stringify(candidate) : ""
+  const plan = useMemo<ReferenceVisualPlan | null>(() => serializedPlan ? JSON.parse(serializedPlan) : null, [serializedPlan])
   const container = useRef<HTMLDivElement>(null)
   const [nearViewport, setNearViewport] = useState(false)
   const [result, setResult] = useState<{ key: string; images: MalikVisualImage[] } | null>(null)
+  const [selected, setSelected] = useState<MalikVisualImage | null>(null)
   const key = plan ? referenceCacheKey(plan) : ""
   const active = isLatest || nearViewport
   useEffect(() => {
@@ -112,10 +116,30 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
     if (!plan || !active) return
     return subscribeReferenceImages(plan, (images) => setResult({ key: referenceCacheKey(plan), images }))
   }, [plan, active])
-  if (!plan) return null
+  if (!plan) return children || null
   const images = result?.key === key ? result.images : null
+  if (row) return (
+    <div ref={container} className="my-4 min-w-0" data-malik-reference-topic={plan.topic} data-malik-inline-visual>
+      <div className={images?.length ? "flex items-start gap-3 sm:gap-5" : ""}>
+        {images?.[0] ? <figure className={"w-[88px] shrink-0 overflow-hidden rounded-xl border border-white/15 sm:w-[128px] " + (plan.kind === "tutorial" ? "bg-white" : "bg-black")}>
+          <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + images[0].alt} className="block w-full focus-visible:outline focus-visible:outline-white">
+            <img src={images[0].url} alt={images[0].alt} loading="lazy" decoding="async" referrerPolicy="no-referrer"
+              className={"w-full " + (plan.kind === "tutorial" ? "max-h-[240px] object-contain" : "aspect-square object-cover")}
+              onError={(event) => { event.currentTarget.closest("figure")?.setAttribute("hidden", "") }} />
+          </button>
+          <figcaption className="bg-black px-1.5 py-1 text-[10px] leading-4 text-zinc-400">
+            <a href={safeSourceUrl(images[0].sourceUrl) || images[0].url} target="_blank" rel="noopener noreferrer" className="block truncate underline-offset-2 hover:underline" title={[images[0].credit, images[0].license].filter(Boolean).join(" · ")}>{images[0].credit || "Источник фото"}</a>
+          </figcaption>
+        </figure> : null}
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
+      {images?.length && plan.kind === "tutorial" ? <p className="mt-2 text-xs leading-5 text-zinc-400">Пример экрана из источника. Вид меню зависит от версии приложения.</p> : null}
+      {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}
+    </div>
+  )
   return (
     <div ref={container} className="min-w-0" data-malik-reference-topic={plan.topic}>
+      {children}
       {images?.length ? <>
         <MalikVisualGallery title={plan.kind === "tutorial" ? "Примеры экранов · " + plan.topic : plan.topic} images={plan.kind === "tutorial" ? images.slice(0, 2) : images} portrait={plan.layout === "portrait"} />
         {plan.kind === "tutorial" ? <p className="mb-4 text-xs leading-5 text-zinc-400">Иллюстрации из открытых источников. Названия пунктов и вид меню могут отличаться в вашей версии приложения.</p> : null}

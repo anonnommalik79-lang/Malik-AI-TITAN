@@ -4,14 +4,14 @@ import { lookupReferenceImages, sanitizeReferenceImages, type MalikVisualImage }
 type CacheEntry = { images: MalikVisualImage[]; expires: number }
 type Listener = (images: MalikVisualImage[]) => void
 type Job = { controller: AbortController; listeners: Set<Listener> }
-const STORAGE_KEY = "malik-reference-catalog-v2"
+const STORAGE_KEY = "malik-reference-catalog-v3"
 const MAX_ENTRIES = 60
 const cache = new Map<string, CacheEntry>()
 const pending = new Map<string, Job>()
 let hydrated = false
 
 export function referenceCacheKey(plan: ReferenceVisualPlan): string {
-  return plan.queries.join("|").toLocaleLowerCase().slice(0, 240)
+  return [plan.kind || "reference", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", ...plan.queries].join("|").toLocaleLowerCase().slice(0, 240)
 }
 
 function hydrateCache() {
