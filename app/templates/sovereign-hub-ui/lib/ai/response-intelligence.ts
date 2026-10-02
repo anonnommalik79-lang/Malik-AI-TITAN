@@ -1,6 +1,7 @@
 export type ResponseLanguage = "ru" | "kk" | "en" | "auto"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
+import { planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
 
 export type ResponseComplexity = "simple" | "standard" | "complex"
 
@@ -329,8 +330,8 @@ export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?
     "MALIK RESPONSE CORE:",
     `- ${MALIK_RESPONSE_CORE_PROMPT}`,
     webContract,
-    ...(isReferenceImageRequest(input.prompt) ? [
-      "VISUAL REFERENCE CONTRACT: The Malik AI chat UI independently searches real public photo catalogues and may display sourced photograph cards after this answer. Explain the requested place or subject directly. Do not claim you cannot display or send pictures, do not invent photo links, and do not pretend any specific pictures have been found before lookup completes.",
+    ...(planReferenceVisuals(input.prompt) || isReferenceImageRequest(input.prompt) ? [
+      "VISUAL REFERENCE CONTRACT: The Malik AI chat UI independently searches real public photo catalogues in the browser and displays sourced photograph cards alongside this answer. Explain the requested place or subject directly, with useful short details. Do not tell the user to search for photos elsewhere; do not claim you cannot display pictures; do not invent image links or describe specific retrieved photographs because their metadata is not supplied to you. If the user asks for an itinerary, focus on concrete places. Avoid decorative galleries for code, maths or ordinary text. These are existing public photos, not generated media and not paid generation jobs.",
     ] : []),
     ...(codeContract ? [codeContract] : []),
     ...(artifactContract ? [artifactContract] : []),

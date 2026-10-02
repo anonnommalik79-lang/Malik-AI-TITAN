@@ -1657,6 +1657,8 @@ function MessageBubble({
   onOpenActionTarget,
   videoAnalysis = false,
   question = "",
+  previousQuestion = "",
+  questionHasAttachment = false,
   onEditPrompt,
   onFollowUp,
   showFollowUps = false,
@@ -1671,6 +1673,8 @@ function MessageBubble({
   copied: boolean
   /** The user turn this answer replies to — what a re-check searches for. */
   question?: string
+  previousQuestion?: string
+  questionHasAttachment?: boolean
   generationType?: GenerationStatusType
 
   thinkingQuery?: string
@@ -1759,11 +1763,15 @@ function MessageBubble({
             </div>
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
-          {!isUser && message.execution && !olderVersion ? <ChatExecution trace={message.execution} live={streaming} /> : null}
+          {!isUser && message.execution && !olderVersion ? <ChatExecution trace={message.execution} live={streaming} sources={message.research?.sources} /> : null}
           {!isUser && !message.execution && !streaming && message.thought && !olderVersion && !message.generatedMedia && !message.superflow ? (
             <ThoughtTrace thought={message.thought} sources={message.research?.usedWeb ? message.research.sources.length : 0} />
           ) : null}
           {isUser && message.attachments?.length ? <UserAttachmentGallery items={message.attachments} /> : null}
+          {/* Fetch in parallel with streaming; photo bytes and catalogue metadata go straight to the browser. */}
+          {!isUser && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow ? (
+            <MalikReferenceImages question={question} previousQuestion={previousQuestion} hasAttachment={questionHasAttachment} isLatest={isLatest} />
+          ) : null}
           {!isUser && message.superflow ? (
             <SuperflowBlock messageId={message.id} reference={message.superflow} />
           ) : message.generatedMedia ? (
@@ -1851,7 +1859,7 @@ function MessageBubble({
                     {/* While streaming, `malik-streaming` gives the growing
                         answer its caret and lets only newly added blocks
                         fade in (chat-live.css). It is dropped when done. */}
-                    <MalikMarkdown text={displayContent} className={writingLive ? "malik-streaming" : undefined} />
+                    <MalikMarkdown text={displayContent} allowImages={false} className={writingLive ? "malik-streaming" : undefined} />
                     {streaming && videoAnalysis ? <VideoAnalysisPulse compact /> : null}
                   </>
                 )
@@ -1859,10 +1867,6 @@ function MessageBubble({
             : (streaming
               ? message.execution ? null : <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} liveStatus={message.liveStatus} />
               : "")}
-          {/* An explicit request for reference photos gets real, attributed thumbnails. */}
-          {!isUser && !streaming && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && displayContent.trim() && !/^\s*!\[/m.test(displayContent) ? (
-            <MalikReferenceImages question={question} />
-          ) : null}
           {/* The verdict on the text above comes before the reading list it was
               written from. */}
           {!isUser && !streaming && message.research?.factAudit ? (
@@ -2954,6 +2958,8 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
                       ? messages.slice(0, index).reverse().find((item) => item.role === "user")?.content || ""
                       : ""
                   }
+                  previousQuestion={message.role === "assistant" ? messages.slice(0, index).filter((item) => item.role === "user").at(-2)?.content || "" : ""}
+                  questionHasAttachment={message.role === "assistant" && Boolean(messages.slice(0, index).reverse().find((item) => item.role === "user")?.attachments?.length)}
                   onCopy={handleCopy}
                   copied={copiedId === message.id}
                   generationType={activeGenerationType}

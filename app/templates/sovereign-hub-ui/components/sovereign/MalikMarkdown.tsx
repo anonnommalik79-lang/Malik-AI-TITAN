@@ -6,6 +6,7 @@ import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-
 import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
 import { MalikVisualGallery, isSafeVisualUrl, type MalikVisualImage } from "./MalikVisualGallery"
+import { parseAnswerEntity } from "@/lib/ai/answer-entities"
 
 /**
  * Renders an assistant answer as structured text.
@@ -14,7 +15,7 @@ import { MalikVisualGallery, isSafeVisualUrl, type MalikVisualImage } from "./Ma
  * model output is parsed into React elements and never injected as HTML.
  */
 
-type Props = { text: string; className?: string }
+type Props = { text: string; className?: string; allowImages?: boolean }
 
 function isProjectArtifactHref(href: string) {
   return /^\/api\/ai\/project\/artifacts\/[^/]+\/download(?:\?|$)/.test(href)
@@ -46,7 +47,7 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
       out.push(<TexMath key={`${keyPrefix}-${partIndex}-m${piece++}`} tex={tex} display={match[1] !== undefined} />)
       last = match.index + match[0].length
     }
-    if (last < part.length) out.push(...inlineBase(part.slice(last), `${keyPrefix}-${partIndex}-${piece++}`))
+    if (last < part.length) out.push(...inlineBase(part.slice(last), `${keyPrefix}-${partIndex}-${piece}`))
   })
   return out.length ? out : [text]
 }
@@ -641,7 +642,22 @@ function MarkdownList({ list, keyPrefix }: { list: ListBlock; keyPrefix: string 
     : <ul className="malik-md-ul">{items}</ul>
 }
 
-export function MalikMarkdown({ text, className }: Props) {
+function AnswerEntityCard({ text, description = "" }: { text: string; description?: string }) {
+  const entity = parseAnswerEntity(text)
+  const [failed, setFailed] = useState(false)
+  if (!entity) return null
+  const details = [entity.description, description].filter(Boolean).join(" ")
+  return <div data-malik-answer-entity className="my-5 flex items-start gap-4">
+    <a href={entity.href} target="_blank" rel="noopener noreferrer" aria-label={"Официальный сайт " + entity.name} className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl bg-white sm:h-20 sm:w-20">
+      {failed ? <span className="text-2xl font-semibold text-black">{entity.name[0]}</span> : <img src={entity.icon} alt={entity.name} loading="lazy" decoding="async" referrerPolicy="no-referrer" className="h-12 w-12 object-contain sm:h-14 sm:w-14" onError={() => setFailed(true)} />}
+    </a>
+    <div className="min-w-0"><a href={entity.href} target="_blank" rel="noopener noreferrer" className="text-lg font-semibold text-white">{entity.name}</a>
+      {details ? <p className="mt-1 text-base leading-7 text-zinc-100">{inline(details, "entity-" + entity.name)}</p> : null}
+    </div>
+  </div>
+}
+
+export function MalikMarkdown({ text, className, allowImages = true }: Props) {
   const blocks = parseBlocks(text)
   const codeFiles = codeFilesFrom(blocks)
 
@@ -665,8 +681,19 @@ export function MalikMarkdown({ text, className }: Props) {
       ) : null}
       {blocks.map((block, position) => {
         const key = `b${position}`
+        const previous = blocks[position - 1]
+        const next = blocks[position + 1]
+        // Compact entity rows retain the model's own description, not canned copy.
+        if (block.kind === "p" && previous?.kind === "h" && parseAnswerEntity(previous.text)) {
+          // The heading row already includes this paragraph.
+          return null
+        }
+        if (block.kind === "h" && parseAnswerEntity(block.text)) {
+          return <AnswerEntityCard key={key} text={block.text} description={next?.kind === "p" ? next.lines.join(" ") : ""} />
+        }
+        if (block.kind === "p" && parseAnswerEntity(block.lines.join("\n"))) return <AnswerEntityCard key={key} text={block.lines.join("\n")} />
 
-        if (block.kind === "images") return <MalikVisualGallery key={key} images={block.images} />
+        if (block.kind === "images") return allowImages ? <MalikVisualGallery key={key} images={block.images} /> : null
 
         if (block.kind === "code") {
           return <CodeBlock key={key} language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} />

@@ -1,12 +1,12 @@
 "use client"
 
 import { useEffect, useId, useState } from "react"
-import { Check, ChevronDown, Copy, Download, FileText, Globe, Image, Loader2, Plug, Search, SquareTerminal, X, AlertCircle, CircleStop, ExternalLink } from "lucide-react"
-import { executionMarkdown, type ExecutionStep, type ExecutionTrace } from "@/lib/ai/chat-execution"
+import { Check, ChevronDown, Copy, Download, FileText, Globe, Image, Loader2, Plug, Search, SquareTerminal, AlertCircle, CircleStop, ExternalLink, BrainCircuit, Github } from "lucide-react"
+import { executionMarkdown, executionSources, type ExecutionSource, type ExecutionStep, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import "./chat-execution.css"
 
 const labels = { running: "Выполняется", completed: "Готово", failed: "Ошибка", cancelled: "Остановлено", interrupted: "Прервано" }
-const icons = { status: Loader2, search: Search, read: Globe, plugin: Plug, file: FileText, model: SquareTerminal, code: SquareTerminal, media: Image }
+const icons = { status: BrainCircuit, search: Search, read: Globe, plugin: Plug, file: FileText, model: BrainCircuit, code: SquareTerminal, media: Image }
 function duration(ms: number) { return ms < 1000 ? `${Math.max(0, Math.round(ms))} мс` : `${(ms / 1000).toFixed(1)} с` }
 
 export function downloadChatFile(name: string, content: string, mime = "text/plain;charset=utf-8") {
@@ -22,7 +22,7 @@ function Receipt({ step, expanded, now }: { step: ExecutionStep; expanded?: bool
   const [copyError, setCopyError] = useState("")
   const id = useId()
   const open = expanded ?? localOpen
-  const Icon = icons[step.kind]
+  const Icon = /github/i.test(step.tool || "") || /^https?:\/\/(?:api\.)?github\.com\//i.test(step.url || "") ? Github : icons[step.kind]
   const StateIcon = step.state === "running" ? Loader2 : step.state === "completed" ? Check : step.state === "failed" ? AlertCircle : CircleStop
   const detailed = Boolean(step.input || step.output || step.error || step.url)
   const copy = async () => {
@@ -53,11 +53,10 @@ function Receipt({ step, expanded, now }: { step: ExecutionStep; expanded?: bool
   </li>
 }
 
-export function ChatExecution({ trace, live = false }: { trace: ExecutionTrace; live?: boolean }) {
-  const [open, setOpen] = useState(true)
+export function ChatExecution({ trace, live = false, sources = [] }: { trace: ExecutionTrace; live?: boolean; sources?: ExecutionSource[] }) {
+  const [open, setOpen] = useState(false)
   const [expand, setExpand] = useState<boolean | undefined>()
-  const [filter, setFilter] = useState("all")
-  const [query, setQuery] = useState("")
+  const [allSources, setAllSources] = useState(false)
   const [clock, setClock] = useState(() => Date.now())
   useEffect(() => {
     if (!live || trace.state !== "running") return
@@ -65,31 +64,31 @@ export function ChatExecution({ trace, live = false }: { trace: ExecutionTrace; 
     return () => window.clearInterval(timer)
   }, [live, trace.state])
   const now = trace.endedAt || clock
-  const failures = trace.steps.filter((step) => step.state === "failed").length
-  const tools = trace.steps.filter((step) => step.kind !== "status" && step.kind !== "model").length
+  const tools = trace.steps.filter((step) => step.kind !== "status" && step.kind !== "model")
   const running = trace.steps.filter((step) => step.state === "running")
-  const rows = trace.steps.filter((step) => (filter === "all" || (filter === "errors" ? step.state === "failed" : step.kind !== "status" && step.kind !== "model"))
-    && (!query || `${step.title} ${step.tool || ""} ${step.input || ""} ${step.output || ""} ${step.error || ""}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())))
+  const rows = open ? trace.steps : tools
+  const verified = executionSources(trace, sources)
+  const visibleSources = allSources ? verified : verified.slice(0, 6)
+  const active = live && trace.state === "running"
   const id = useId()
-  return <section className="malik-execution" aria-label="Ход выполнения запроса" data-state={trace.state}>
-    <button type="button" className="malik-execution__summary" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={id}>
-      {live && trace.state === "running" ? <Loader2 size={18} className="is-spinning" /> : <SquareTerminal size={18} />}
-      <span>{trace.state === "running" && live ? "Ход выполнения" : "Отчёт выполнения"}<small>{tools} действий · {duration(now - trace.startedAt)}{failures ? ` · ошибок: ${failures}` : ""}</small></span>
-      <ChevronDown size={17} className={open ? "is-open" : ""} />
-    </button>
-    <p className="malik-execution__live" role="status" aria-live="polite">{live && running.length ? running.at(-1)?.title : labels[trace.state]}</p>
-    {open ? <div id={id}>
-      <div className="malik-execution__toolbar">
-        <label><span className="sr-only">Фильтр действий</span><select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">Все действия</option><option value="tools">Инструменты</option><option value="errors">Ошибки ({failures})</option></select></label>
-        <button type="button" onClick={() => setExpand((value) => value === true ? undefined : true)} aria-pressed={expand === true}>{expand === true ? "По отдельности" : "Раскрыть все"}</button>
-        <button type="button" onClick={() => setExpand((value) => value === false ? undefined : false)} aria-pressed={expand === false}>{expand === false ? "По отдельности" : "Свернуть все"}</button>
-        <details className="malik-execution__export"><summary><Download size={14} />Отчёт</summary><div><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.md`, executionMarkdown(trace))}>Markdown</button><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.json`, JSON.stringify(trace, null, 2), "application/json")}>JSON</button></div></details>
+  const summary = active ? running.at(-1)?.title || "Обрабатываю запрос…" : `${labels[trace.state]} · ${duration(Math.max(0, now - trace.startedAt))}`
+  return <section className="malik-execution malik-execution--inline" aria-label="Ход выполнения запроса" data-state={trace.state}>
+    <ol className="malik-execution__steps" id={id}>{rows.map((step) => <Receipt key={step.id} step={step} now={now} expanded={expand} />)}</ol>
+    {verified.length ? <div className="malik-execution__sources" aria-label="Источники поиска">
+      <p className="malik-execution__sources-title"><Search size={16} aria-hidden="true" />Поиск · {verified.length} источников</p>
+      <div className="malik-execution__source-chips">{visibleSources.map((source) => <a key={source.url} href={source.url} title={source.title || source.domain} target="_blank" rel="noopener noreferrer"><Globe size={16} aria-hidden="true" /><span>{source.domain}</span></a>)}
+        {verified.length > 6 ? <button type="button" aria-expanded={allSources} onClick={() => setAllSources(!allSources)}>{allSources ? "Свернуть" : `Ещё ${verified.length - 6}`}</button> : null}
       </div>
-      {trace.steps.length > 4 ? <label className="malik-execution__search"><Search size={14} /><span className="sr-only">Поиск в отчёте</span><input placeholder="Найти действие или результат…" value={query} onChange={(event) => setQuery(event.target.value)} />{query ? <button type="button" onClick={() => setQuery("")} aria-label="Очистить поиск"><X size={13} /></button> : null}</label> : null}
-      <ol className="malik-execution__steps">{rows.map((step) => <Receipt key={step.id} step={step} now={now} expanded={expand} />)}</ol>
-      {!rows.length ? <p className="malik-execution__empty">Нет подходящих действий.</p> : null}
-      <div className="malik-execution__footer"><span>{trace.model || "Malik AI"}</span><span title={trace.id}>Запрос {trace.id.slice(0, 8)}</span></div>
-      <p className="malik-execution__note">Фактические действия и результаты системы, не внутренние рассуждения модели.</p>
+    </div> : null}
+    <button type="button" className="malik-execution__summary" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={id}>
+      {active ? <Loader2 size={16} className="is-spinning" /> : <BrainCircuit size={16} />}
+      <span role="status" aria-live="polite">{summary}</span>
+      <ChevronDown size={15} className={open ? "is-open" : ""} />
+    </button>
+    {open ? <div className="malik-execution__toolbar">
+      <button type="button" onClick={() => setExpand((value) => value === true ? undefined : true)} aria-pressed={expand === true}>{expand === true ? "По отдельности" : "Раскрыть детали"}</button>
+      <button type="button" onClick={() => setExpand((value) => value === false ? undefined : false)} aria-pressed={expand === false}>{expand === false ? "По отдельности" : "Свернуть детали"}</button>
+      <details className="malik-execution__export"><summary><Download size={14} />Скачать отчёт</summary><div><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.md`, executionMarkdown(trace))}>Markdown</button><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.json`, JSON.stringify(trace, null, 2), "application/json")}>JSON</button></div></details>
     </div> : null}
   </section>
 }

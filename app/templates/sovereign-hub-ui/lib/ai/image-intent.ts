@@ -29,14 +29,22 @@ function firstMatch(value: string, pattern: RegExp) {
 export function isReferenceImageRequest(input: string): boolean {
   const text = String(input || "").trim()
   if (!text || text.length > 2500) return false
+  if (/(?:без\s+(?:фото|картинок|изображений)|не\s+(?:показывай|добавляй|нужны)\s+(?:фото|картинки|изображения)|только\s+текст|no\s+(?:photos?|images?|pictures?)|text\s+only|суретсіз)/iu.test(text)) return false
   if (/^\s*\/(?:image|img|photo|foto|фото|картинка|video|veo|видео)(?![\p{L}\p{N}_])/iu.test(text)) return false
   if (isExplicitImageGenerationRequest(text)) return false
+  if (/^(?:напиши|создай|write|create)\s+(?:код|функци[\p{L}]*|скрипт|code|function|script)(?=\s|$)/iu.test(text)) return false
+  if (/^(?:добавь|дай)(?:\s+мне)?\s+(?:их\s+)?(?:фото(?:графии)?|картинки|изображения)[.!?\s]*$/iu.test(text)) return true
 
   const request = /^(?:покажи(?:те)?|көрсет(?:ші|іңіз)?|show(?:\s+me)?|find(?:\s+me)?)(?:\s+мне)?\s+(.+)$/iu.exec(text)
   // "Покажи мне как изменить фото" is a tutorial, not a photo request.
-  if (request && /^(?:как|почему|зачем|что|код|пример\s+кода|текст|решени[ея]|инструкци[юя]|список|таблиц[уая]|формул[уая]|ошибк[уиа]|настройк[уиа]|how|why|what|code|steps?|list|table|solution|instructions?)(?=\s|[?!.]|$)/iu.test(request[1].trim())) return false
-  const show = /(?:\bshow\b|\bfind\b|\bsee\b|покаж[иьте]+|найд[иьте]+|подбер[иьте]+|көрсет|көрсөт|көрсетші|суреттерін?\s+көрсет)/iu
+  const nonVisual = /^(?:как|почему|зачем|что|код|пример\s+кода|текст|решени[ея]|инструкци[юя]|список|таблиц[уая]|формул[уая]|ошибк[уиа]|настройк[уиа]|доказательств[\p{L}]*|лог[иов]*|результат[\p{L}]*|ответ[\p{L}]*|истори[\p{L}]*|расч[её]т[\p{L}]*|how|why|what|code|steps?|list|table|solution|instructions?|proof|logs?|results?|answer|history|calculation)(?=\s|[?!.]|$)/iu
+  if (request && /^(?:как\s+выглядит|how\s+.+\s+looks?)(?=\s|$)/iu.test(request[1].trim())) return true
+  if (request && nonVisual.test(request[1].trim())) return false
+  if (request && /^(?:возможност[\p{L}]*|стоимост[\p{L}]*|цен[\p{L}]*|тариф[\p{L}]*|рецепт[\p{L}]*|переписк[\p{L}]*|задач[\p{L}]*|чат[\p{L}]*|features?|pricing|prices?|recipes?|tasks?|chats?)(?=\s|$)/iu.test(request[1].trim())) return false
+  const show = /(?:\bshow\b|\bfind\b|\bsee\b|покаж[иьте]+|найд[иьте]+|подбер[иьте]+|дай|скинь|көрсет|көрсөт|көрсетші|суреттерін?\s+көрсет)/iu
   const visual = /(?:фото(?:графи[\p{L}]*)?|фотк[\p{L}]*|снимк[\p{L}]*|картинк[\p{L}]*|изображени[\p{L}]*|иллюстраци[\p{L}]*|референс[\p{L}]*|сурет[\p{L}]*|photograph[\p{L}]*|photos?|pictures?|images?|visual[\p{L}]*|references?)/iu
+  if (EXPLANATION_START_PATTERN.test(text) && !/^(?:как\s+выглядит|what\s+does\s+.+\s+look\s+like|қандай\s+көрінеді)/iu.test(text)
+    && !/(?:с|with)\s+(?:фото|картинк|изображен|сурет|images?|photos?|pictures?)/iu.test(text)) return false
   if (visual.test(text) && (show.test(text) || /(?:\bwith\b|с)\s+(?:фото|картинк|изображен|сурет|images?|photos?|pictures?)/iu.test(text))) return true
   if (/^(?:как\s+выглядит|what\s+does\s+.+\s+look\s+like|қандай\s+көрінеді)/iu.test(text)) return true
 
@@ -44,7 +52,8 @@ export function isReferenceImageRequest(input: string): boolean {
   const subject = request[1].trim()
   if (subject.length < 3 || subject.length > 150) return false
   // Teaching, code and document requests should stay ordinary text answers.
-  return !/^(?:как|почему|зачем|что|код|пример\s+кода|текст|решени[ея]|инструкци[юя]|список|таблиц[уая]|формул[уая]|ошибк[уиа]|настройк[уиа]|how|why|what|code|steps?|list|table|solution|instructions?)(?=\s|[?!.]|$)/iu.test(subject)
+  const physicalSubject = /(?:медеу|шымбулак|алмат[\p{L}]*|астан[\p{L}]*|архитектур|гор(?:ы|а|ные)|тау|озер|озёр|каньон|здани|пейзаж|автомоб|машин|кот(?:а|ы|ик)?(?![\p{L}])|собак|цвет(?:ок|ы)|птиц|дом(?:а|ов)?(?![\p{L}])|интерьер|одежд|mountains?|lake|architecture|landmarks?|landscape|cars?|cats?|dogs?|sunset|interior|flowers?|Medeu|Almaty|Astana)/iu
+  return !nonVisual.test(subject) && (physicalSubject.test(subject) || /\p{Lu}\p{L}{2,}/u.test(subject))
 }
 
 /** Uploaded pixels are required for edits; image analysis remains a chat turn. */
