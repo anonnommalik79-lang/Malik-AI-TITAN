@@ -22,6 +22,11 @@ for (const [prompt, lang] of [["Кто ты?", "ru"], ["Who are you?", "en"], ["
   const normal = malikIdentityAnswer({ originalQuestion: prompt, workspaceMode: "chat" }, false)
   assert(normal.includes("MALIK AI V6.5 TITAN"), `Chat identity changed: ${lang}`)
 }
+for (const prompt of ["Ты кто?", "Как тебя зовут?"]) {
+  assert(malikIdentityAnswer({ originalQuestion: prompt, workspaceMode: "work" }, false).includes("Malik Work"))
+  assert(malikIdentityAnswer({ originalQuestion: prompt, workspaceMode: "chat" }, false).includes("MALIK AI V6.5 TITAN"))
+}
+assert(instructions.includes("precise checkpoint"), "Interrupted work needs a recoverable checkpoint")
 assert.equal(malikIdentityAnswer({ originalQuestion: "Кто я?", workspaceMode: "work" }, false), "")
 assert(malikIdentityAnswer({ originalQuestion: "Кто создал Malik AI?", workspaceMode: "work" }, false).includes("Абдумалик"))
 console.log("PASS: Work mode, task guidance and deterministic identity in RU/EN/KK")

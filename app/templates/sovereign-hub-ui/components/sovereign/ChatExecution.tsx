@@ -68,14 +68,14 @@ export function ChatExecution({ trace, live = false, sources = [], workMode = fa
   const running = trace.steps.filter((step) => step.state === "running")
   const completedTools = tools.filter((step) => step.state === "completed").length
   const failedTools = tools.filter((step) => step.state === "failed").length
-  const rows = open ? trace.steps : tools
+  // Work starts compact; regular chat retains its existing inline tool list.
+  const rows = workMode ? (open ? trace.steps : []) : (open ? trace.steps : tools)
   const verified = executionSources(trace, sources)
   const visibleSources = allSources ? verified : verified.slice(0, 6)
   const active = live && trace.state === "running"
   const id = useId()
   const summary = active ? running.at(-1)?.title || "Обрабатываю запрос…" : `${labels[trace.state]} · ${duration(Math.max(0, now - trace.startedAt))}`
   return <section className="malik-execution malik-execution--inline" aria-label="Ход выполнения запроса" data-state={trace.state}>
-    <ol className="malik-execution__steps" id={id}>{rows.map((step) => <Receipt key={step.id} step={step} now={now} expanded={expand} />)}</ol>
     {verified.length ? <div className="malik-execution__sources" aria-label="Источники поиска">
       <p className="malik-execution__sources-title"><Search size={16} aria-hidden="true" />Поиск · {verified.length} источников</p>
       <div className="malik-execution__source-chips">{visibleSources.map((source) => <a key={source.url} href={source.url} title={source.title || source.domain} target="_blank" rel="noopener noreferrer"><Globe size={16} aria-hidden="true" /><span>{source.domain}</span></a>)}
@@ -92,6 +92,8 @@ export function ChatExecution({ trace, live = false, sources = [], workMode = fa
       <span role="status" aria-live="polite">{summary}</span>
       <ChevronDown size={15} className={open ? "is-open" : ""} />
     </button>
+    {workMode && active ? <div className="malik-execution__activity" role="progressbar" aria-label="Выполняется работа" aria-valuetext="В процессе: точный процент неизвестен"><span /></div> : null}
+    <ol className="malik-execution__steps" id={id}>{rows.map((step) => <Receipt key={step.id} step={step} now={now} expanded={expand} />)}</ol>
     {open ? <div className="malik-execution__toolbar">
       <button type="button" onClick={() => setExpand((value) => value === true ? undefined : true)} aria-pressed={expand === true}>{expand === true ? "По отдельности" : "Раскрыть детали"}</button>
       <button type="button" onClick={() => setExpand((value) => value === false ? undefined : false)} aria-pressed={expand === false}>{expand === false ? "По отдельности" : "Свернуть детали"}</button>

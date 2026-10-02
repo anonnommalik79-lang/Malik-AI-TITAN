@@ -1,6 +1,6 @@
 "use client"
 
-import { Code2, FileText, Globe, Layout, Presentation, Table2 } from "lucide-react"
+import { Code2, FileCheck2, FileSearch, FileText, FolderGit2, Globe, Layout, Presentation, Table2 } from "lucide-react"
 
 const TASKS = [
   { title: "Документ", description: "Текст и редактура", icon: FileText, prompt: "Подготовь готовый документ: раскрой тему, составь структуру и напиши финальный текст. Тема: " },
@@ -9,6 +9,9 @@ const TASKS = [
   { title: "Исследование", description: "Факты и источники", icon: Globe, prompt: "Проведи исследование: проверь найденные источники, отдели факты от предположений и подготовь итоговый отчёт. Тема: " },
   { title: "Сайт", description: "Код и инструкция запуска", icon: Layout, prompt: "Создай рабочую реализацию сайта с необходимыми файлами, инструкцией запуска и честным отчётом о проверке. Задача: " },
   { title: "Код", description: "Реализация и проверки", icon: Code2, prompt: "Выполни инженерную задачу: дай реализацию, перечисли изменённые файлы, учти крайние случаи и сообщи, какие проверки действительно запускались. Задача: " },
+  { title: "GitHub", description: "Репозиторий, PR и проверки", icon: FolderGit2, prompt: "Работа с GitHub: прочитай доступный репозиторий, выполни разрешённые изменения и проверь результат. Не заявляй о коммите или push без подтверждённого результата. Задача: " },
+  { title: "Анализ файла", description: "Разбор и итог по материалам", icon: FileSearch, prompt: "Проанализируй приложенный файл, выдели значимое и подготовь результат на основе его реального содержимого. Задача: " },
+  { title: "Проверка", description: "Ревью и критерии готовности", icon: FileCheck2, prompt: "Проверь результат на соответствие требованиям, найди реальные ошибки и отдели выполненные проверки от предложенных. Материал или задача: " },
 ] as const
 
 export function WorkStartPanel({ onChoose }: { onChoose: (prompt: string, research?: boolean) => void }) {

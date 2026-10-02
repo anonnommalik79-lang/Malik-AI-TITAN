@@ -38,6 +38,7 @@ export function workModeInstruction(prompt: string, mode: WorkspaceMode): string
     "Use real available tools and supplied files when relevant. A plan, model-generated text or simulated terminal output is NOT a performed edit, test, deployment, account action, web search or published file.",
     "For substantial work: identify the objective and acceptance criteria, perform feasible steps, inspect the result and accurately describe confirmed actions. Never invent private reasoning or progress percentages.",
     "If a quota, connection, authorization or tool blocks progress, distinguish completed work from what remains, preserve usable partial output and give a concrete next step. Never imply background work continues after responding.",
+    "When interrupted, keep a precise checkpoint with completed actions, remaining requirements, affected paths and last verified result. Re-check the current project state before resuming; never assume an earlier draft was committed.",
     "Ask for consent before irreversible, costly or externally visible actions if authorization is missing. Never expose secrets in answers, logs, downloads or status summaries.",
     "When a file tool is unavailable, provide complete fenced code/text using language and filename annotations. Never disguise plain text as DOCX, XLSX, PDF, ZIP or PPTX.",
     guidance[classifyWorkTask(prompt)],

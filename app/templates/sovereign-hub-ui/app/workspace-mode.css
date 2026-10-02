@@ -220,3 +220,10 @@ html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data
   .malik-work-start__tasks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 22px; }
   .malik-work-start__tasks button { padding: 14px 10px; gap: 9px; }
 }
+
+/* Work templates stay legible from narrow phones to desktop. */
+@media (min-width: 768px) { .malik-work-start__tasks { max-width: 760px; } }
+@media (max-width: 380px) { .malik-work-start__tasks { grid-template-columns: 1fr; } }
+.malik-work-start__tasks button { min-width: 0; transition: border-color .16s ease, background-color .16s ease; }
+.malik-work-start__tasks button > span { min-width: 0; }
+@media (prefers-reduced-motion: reduce) { .malik-work-start__tasks button { transition: none; } }
