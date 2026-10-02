@@ -1,3 +1,5 @@
+import { MALIK_ANSWER_VISUAL_CONTRACT } from "@/lib/ai/answer-visuals"
+
 export type ResponseLanguage = "ru" | "kk" | "en" | "auto"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
@@ -182,6 +184,7 @@ export const MALIK_RESPONSE_FEATURES: readonly MalikResponseFeature[] = [
 ] as const
 
 export const MALIK_RESPONSE_CORE_PROMPT = [
+  MALIK_ANSWER_VISUAL_CONTRACT,
   "Start with the result. Never begin with 'Sure', 'Of course', 'Конечно' or a restatement of the question.",
   "A simple question gets 2-4 sentences. A complex request gets a structured, complete answer.",
   "Use short paragraphs, bullets for parallel items, numbered steps for sequence and Markdown tables for repeated comparisons.",
