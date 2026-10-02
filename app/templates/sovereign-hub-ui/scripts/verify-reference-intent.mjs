@@ -39,6 +39,7 @@ for (const prompt of ["Покажи мне код функции", "Покажи
 const iosGuide = policy.planReferenceVisuals("Как сделать чтобы играла вибрация в звонке айфон")
 assert.equal(iosGuide?.kind, "tutorial")
 assert.equal(iosGuide?.layout, "portrait")
+assert.equal(iosGuide?.guideId, "ios-haptics")
 assert.match(iosGuide.queries[0], /iPhone.*Haptics/)
 assert.deepEqual(iosGuide.visualDevice, ["iphone", "ios", "ipad"])
 assert.equal(policy.planReferenceVisuals("How to enable notifications on Android")?.kind, "tutorial")
@@ -117,6 +118,15 @@ try {
   stop()
   await new Promise((resolve) => cache.subscribeReferenceImages(strictPlan, resolve))
   assert.equal(calls.length, 2)
+  // A similarly named but unrelated image is not a valid screenshot.
+  globalThis.fetch = async () => Response.json({ query: { pages: [
+    { ...media(1), title: "File:Android Bluetooth settings.jpg" },
+    { ...media(2), title: "File:iPhone Sounds and Haptics vibration settings.jpg" },
+    { ...media(3), title: "File:iPhone wallpaper.jpg" },
+  ] } })
+  const relevantScreen = await catalog.lookupReferenceImages(iosGuide)
+  assert.equal(relevantScreen.length, 1)
+  assert.match(relevantScreen[0].alt, /Haptics/)
   globalThis.fetch = async () => Response.json({ query: { pages: [{ title: "File:Original only.jpg", imageinfo: [{ mime: "image/jpeg", url: "https://upload.wikimedia.org/huge.jpg" }] }] } })
   assert.deepEqual(await catalog.lookupReferenceImages(plan), [], "never download original images to replace missing thumbnails")
   globalThis.fetch = async () => { throw new Error("Provider unavailable") }
