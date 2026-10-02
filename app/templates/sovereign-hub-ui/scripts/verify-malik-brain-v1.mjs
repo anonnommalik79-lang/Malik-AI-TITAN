@@ -65,3 +65,25 @@ assert.match(instruction, /completion marker/i)
 assert.match(instruction, /verify|verification/i)
 
 console.log("MALIK Brain V1 verification passed")
+
+const arithmetic = analyzeMalikBrainV1({ prompt: "2 + 2" })
+assert.equal(arithmetic.task, "quantitative")
+assert.equal(arithmetic.needsFreshEvidence, false)
+assert.equal(arithmetic.needsVerification, true)
+assert.notEqual(arithmetic.depth, "ultra", "Tiny arithmetic must not trigger ultra reasoning")
+
+const equation = analyzeMalikBrainV1({ prompt: "Реши квадратное уравнение x² - 5x + 6 = 0", requestedDepth: "fast" })
+assert.equal(equation.task, "quantitative")
+assert.equal(equation.depth, "deep", "Multistep math must not be silently downgraded by Fast mode")
+assert.equal(equation.preferredModels[0], "malik-reason-753b")
+assert.match(buildMalikBrainSystemInstruction(equation), /ORIGINAL equation/)
+assert.match(buildMalikBrainSystemInstruction(equation), /exact/i)
+
+const physics = analyzeMalikBrainV1({ prompt: "Физика: вычисли ускорение тела, если скорость изменилась на 20 м/с за 4 секунды" })
+assert.equal(physics.task, "quantitative")
+assert.match(buildMalikBrainSystemInstruction(physics), /dimensional consistency/)
+
+const chatOnly = analyzeMalikBrainV1({ prompt: "Привет! Как настроение?" })
+assert.notEqual(chatOnly.task, "quantitative")
+const unrelated = analyzeMalikBrainV1({ prompt: "Расскажи про релиз Next.js 16 и новые API" })
+assert.notEqual(unrelated.task, "quantitative")
