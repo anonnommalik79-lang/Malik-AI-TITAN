@@ -63,3 +63,9 @@
 .malik-execution__work-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 7px 0 9px; color: #a1a1aa; font-size: 11px; }
 .malik-execution__work-summary > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .malik-execution__work-summary > span:first-child { color: #e4e4e7; }
+
+/* Work's activity bar never implies a fictitious percentage. */
+.malik-execution__activity { height: 2px; width: 100%; background: #272727; overflow: hidden; margin: 9px 0; border-radius: 2px; }
+.malik-execution__activity span { display: block; width: 35%; height: 100%; background: #ededed; animation: malik-work-activity 1.6s ease-in-out infinite alternate; }
+@keyframes malik-work-activity { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+@media (prefers-reduced-motion: reduce) { .malik-execution__activity span { animation: none; width: 100%; opacity: .6; } }

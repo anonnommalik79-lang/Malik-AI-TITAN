@@ -54,6 +54,8 @@ function asksCompany(prompt: string) {
 function asksAssistantIdentity(prompt: string) {
   const value = prompt.toLowerCase().trim()
   return /^(?:а\s+)?(?:кто|что)\s+ты[?.!\s]*$/iu.test(value)
+    || /^(?:а\s+)?ты\s+(?:кто|что)[?.!\s]*$/iu.test(value)
+    || /^как\s+тебя\s+зовут[?.!\s]*$/iu.test(value)
     || /^(?:who|what)\s+are\s+you[?.!\s]*$/iu.test(value)
     || /^(?:сен\s+кімсің|сен\s+кім)[?.!\s]*$/iu.test(value)
 }
