@@ -6,6 +6,8 @@ import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-
 import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
 import { MalikReferenceImages, MalikVisualGallery, isSafeVisualUrl, type MalikVisualImage } from "./MalikVisualGallery"
+import { MalikAnswerVisual } from "./MalikAnswerVisual"
+import { parseAnswerVisual, inferTableVisual, inferListVisual, wantsAnswerVisuals, type AnswerVisual } from "@/lib/ai/answer-visuals"
 import { parseAnswerEntity } from "@/lib/ai/answer-entities"
 import { planAnswerVisualSlots, type AnswerVisualSegment, type AnswerVisualSlot } from "@/lib/ai/reference-visual-policy"
 
@@ -114,6 +116,7 @@ type Block =
   | { kind: "h"; level: number; text: string }
   | { kind: "list"; list: ListBlock }
   | { kind: "math"; tex: string }
+  | { kind: "visual"; visual: AnswerVisual | null; pending: boolean }
   | { kind: "code"; language: string; filename: string; lines: string[] }
   | { kind: "table"; headers: string[]; rows: string[][] }
   | { kind: "images"; images: MalikVisualImage[] }
@@ -306,7 +309,13 @@ function parseBlocks(source: string): Block[] {
         body.push(lines[index])
         index += 1
       }
+      const closed = index < lines.length
       index += 1
+      if (fence.language === "malik-visual") {
+        blocks.push({ kind: "visual", visual: closed ? parseAnswerVisual(body.join("\n")) : null, pending: !closed })
+        pendingFilename = ""
+        continue
+      }
       blocks.push({ kind: "code", language: fence.language || languageFromFilename(fence.filename), filename: fence.filename || pendingFilename, lines: body })
       pendingFilename = ""
       continue
@@ -675,6 +684,23 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
     })
     return new Map(planAnswerVisualSlots(question, segments, previousQuestion, hasAttachment).map((slot) => [slot.key, slot]))
   }, [blocks, question, previousQuestion, hasAttachment, streaming])
+  const dataVisuals = useMemo(() => {
+    const visuals = new Map<number, AnswerVisual>()
+    if (!wantsAnswerVisuals(question)) return visuals
+    blocks.forEach((block, position) => {
+      if (block.kind === "visual" && block.visual && visuals.size < 2) visuals.set(position, block.visual)
+    })
+    if (visuals.size || streaming) return visuals
+    let title = ""
+    blocks.forEach((block, position) => {
+      if (block.kind === "h") title = block.text
+      if (visuals.size >= 2) return
+      const visual = block.kind === "table" ? inferTableVisual(block.headers, block.rows, question, title)
+        : block.kind === "list" ? inferListVisual(block.list.items.map((item) => item.text), question, title) : null
+      if (visual) visuals.set(position, visual)
+    })
+    return visuals
+  }, [blocks, question, streaming])
   const codeFiles = codeFilesFrom(blocks)
 
   const downloadAll = () => {
@@ -700,6 +726,12 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
         const previous = blocks[position - 1]
         const next = blocks[position + 1]
         const slot = visualSlots.get(key)
+        const dataVisual = dataVisuals.get(position)
+        if (block.kind === "visual") {
+          if (dataVisual) return <MalikAnswerVisual key={key} visual={dataVisual} />
+          if (block.pending && streaming && wantsAnswerVisuals(question)) return <p key={key} className="malik-md-p" role="status">Подготавливаю визуальный блок…</p>
+          return null
+        }
         // A photographed heading owns its immediately following description.
         if (block.kind === "p" && previous?.kind === "h" && visualSlots.get(`b${position - 1}`)?.row) return null
         // Compact entity rows retain the model's own description, not canned copy.
@@ -720,7 +752,9 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
 
         if (block.kind === "table") {
           return (
-            <div key={key} className="malik-md-table-wrap">
+            <Fragment key={key}>
+              {dataVisual ? <MalikAnswerVisual visual={dataVisual} /> : null}
+            <div className="malik-md-table-wrap">
               <table className="malik-md-table">
                 <thead>
                   <tr>{block.headers.map((header, cellIndex) => <th key={`${key}-h${cellIndex}`}>{inline(header, `${key}-h${cellIndex}`)}</th>)}</tr>
@@ -734,6 +768,7 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
                 </tbody>
               </table>
             </div>
+            </Fragment>
           )
         }
 
@@ -746,7 +781,7 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
           </MalikReferenceImages> : <Fragment key={key}>{heading}</Fragment>
         }
 
-        if (block.kind === "list") return <MarkdownList key={key} list={block.list} keyPrefix={key} visualSlots={visualSlots} isLatest={visualContext?.isLatest} />
+        if (block.kind === "list") return <Fragment key={key}>{dataVisual ? <MalikAnswerVisual visual={dataVisual} /> : null}<MarkdownList list={block.list} keyPrefix={key} visualSlots={visualSlots} isLatest={visualContext?.isLatest} /></Fragment>
 
         if (block.kind === "math") return <TexMath key={key} tex={block.tex} display />
 

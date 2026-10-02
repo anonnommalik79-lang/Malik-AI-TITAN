@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import fs from "node:fs"
+import path from "node:path"
 import ts from "typescript"
 import { createRequire } from "node:module"
 
@@ -47,9 +48,15 @@ const box = { exports: {} }
 function loadPure(file) {
   const module = { exports: {} }
   const javascript = ts.transpileModule(fs.readFileSync(file, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React },
   }).outputText
-  new Function("module", "exports", javascript)(module, module.exports)
+  new Function("require", "module", "exports", "React", javascript)((name) => {
+    if (name === "react") return React
+    const base = name.startsWith("@/") ? name.slice(2) : path.join(path.dirname(file), name)
+    const resolved = [base + ".ts", base + ".tsx"].find((candidate) => fs.existsSync(candidate))
+    if (resolved) return loadPure(resolved)
+    throw new Error(`unexpected pure require(${name})`)
+  }, module, module.exports, React)
   return module.exports
 }
 const catalog = loadPure("lib/media/reference-catalog.ts")
@@ -62,6 +69,9 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "./malik-tex") return texBox.exports
     if (name === "./MalikVisualGallery") return { isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }) }
     if (name === "@/lib/ai/answer-entities") return entities
+    if (name === "@/lib/ai/reference-visual-policy") return loadPure("lib/ai/reference-visual-policy.ts")
+    if (name === "@/lib/ai/answer-visuals") return loadPure("lib/ai/answer-visuals.ts")
+    if (name === "./MalikAnswerVisual") return loadPure("components/sovereign/MalikAnswerVisual.tsx")
     throw new Error(`unexpected require(${name})`)
   }, box, box.exports, React,
 )
@@ -158,6 +168,50 @@ check("a plain one-line answer stays one plain paragraph", () => {
   const html = render("Да, работает.")
   assert.equal((html.match(/<p /g) || []).length, 1)
   assert.ok(!html.includes("<ul"))
+})
+
+const visualTools = loadPure("lib/ai/answer-visuals.ts")
+const team = { version: 1, type: "composition", title: "Планируемая команда", unit: "человек", items: [{ label: "Разработка", value: 5 }, { label: "AI-видео", value: 5 }, { label: "Продвижение", value: 4 }] }
+const fence = (value) => "```malik-visual\n" + JSON.stringify(value) + "\n```"
+check("team card computes 14 and keeps roles table", () => {
+  const html = render(fence(team) + "\n\n| Роль | Задача |\n| --- | --- |\n| Lead | Архитектура |")
+  assert.match(html, /data-malik-answer-visual="composition"/)
+  assert.match(html, /data-malik-visual-total[^>]*>14/)
+  assert.match(html, /<table/)
+  assert.doesNotMatch(html, /malik-md-codebar|&quot;version&quot;/)
+})
+check("numeric table gets a local visual without dropping evidence", () => {
+  const html = renderToStaticMarkup(React.createElement(MalikMarkdown, { text: "| Отдел | Человек |\n| --- | --- |\n| Разработка | 5 |\n| Видео | 5 |\n| Продвижение | 4 |\n| Итого | 14 |", visualContext: { question: "Состав команды" } }))
+  assert.match(html, /data-malik-visual-total[^>]*>14/)
+  assert.match(html, /<table/)
+})
+check("streamed JSON remains hidden until complete", () => {
+  const html = renderToStaticMarkup(React.createElement(MalikMarkdown, { text: "Ответ.\n\n```malik-visual\n{\"type\":", visualContext: { question: "Команда", streaming: true } }))
+  assert.match(html, /Подготавливаю/)
+  assert.doesNotMatch(html, /&quot;type&quot;|<figure/)
+})
+check("plain text preference and two card limit are respected", () => {
+  const text = [fence(team), fence(team), fence(team)].join("\n\n")
+  assert.equal((render(text).match(/data-malik-answer-visual=/g) || []).length, 2)
+  const html = renderToStaticMarkup(React.createElement(MalikMarkdown, { text, visualContext: { question: "Только текст" } }))
+  assert.doesNotMatch(html, /<figure|malik-visual/)
+})
+check("invalid totals, percentages, duplicate labels and oversized data are rejected", () => {
+  assert.equal(visualTools.parseAnswerVisual(JSON.stringify({ ...team, total: 15 })), null)
+  assert.equal(visualTools.parseAnswerVisual(JSON.stringify({ ...team, unit: "%" })), null)
+  assert.equal(visualTools.parseAnswerVisual(JSON.stringify({ ...team, items: [team.items[0], team.items[0]] })), null)
+  assert.equal(visualTools.parseAnswerVisual(" ".repeat(13000)), null)
+  assert.equal(visualTools.inferListVisual(["Открой настройки", "Нажми кнопку"], "Инструкция"), null)
+  assert.equal(visualTools.inferListVisual(["3-4 разработчика", "5 дизайнеров"], "Команда"), null)
+})
+check("all visual types render safe text and exact numeric values", () => {
+  for (const type of ["bars", "metrics"]) {
+    const html = render(fence({ ...team, type, title: "<img onerror=alert(1)>", items: [{ label: "A", value: -3 }, { label: "B", value: 0 }] }))
+    assert.match(html, new RegExp(`data-malik-answer-visual="${type}"`))
+    assert.doesNotMatch(html, /<img/)
+    assert.match(html, /-3/)
+  }
+  assert.match(render(fence({ type: "timeline", title: "План", steps: [{ label: "Исследование", date: "Неделя 1" }, { label: "Запуск" }] })), /data-malik-answer-visual="timeline"/)
 })
 
 console.log("\nwiring")
