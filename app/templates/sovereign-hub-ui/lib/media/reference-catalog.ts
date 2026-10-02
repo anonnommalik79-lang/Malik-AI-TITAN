@@ -85,6 +85,11 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
       const pages = Array.isArray(data?.query?.pages) ? data.query.pages : []
       const images = sanitizeReferenceImages(pages.sort((a, b) => (a.index || 0) - (b.index || 0)).flatMap((page) => {
         const media = page.imageinfo?.[0]
+        // For interface tutorials, reject random product photos and screenshots
+        // of unrelated settings (even if Commons ranked them highly).
+        const fileTitle = String(page.title || "").toLocaleLowerCase()
+        if (plan.kind === "tutorial" && (!plan.visualDevice?.some((term) => fileTitle.includes(term))
+          || !plan.visualTerms?.some((term) => fileTitle.includes(term)))) return []
         // Never fall back to the multi-megabyte original when a thumbnail is missing.
         if (!media?.thumburl || !/^image\/(?:jpeg|png|webp)$/i.test(media.mime || "") || !media.descriptionurl) return []
         return [{ url: media.thumburl, sourceUrl: media.descriptionurl,

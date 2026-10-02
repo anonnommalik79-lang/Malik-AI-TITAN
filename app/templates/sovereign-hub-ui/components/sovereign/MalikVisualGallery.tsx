@@ -115,8 +115,11 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   const images = result?.key === key ? result.images : null
   return (
     <div ref={container} className="min-w-0" data-malik-reference-topic={plan.topic}>
-      {images?.length ? <MalikVisualGallery title={plan.topic} images={images} portrait={plan.layout === "portrait"} />
-        : images === null ? <div role="status" className="my-4 flex items-center gap-2 text-sm text-zinc-400"><span className="h-2 w-2 animate-pulse rounded-full bg-zinc-500" />{active ? "Ищу фотографии…" : "Фотографии"}</div>
+      {images?.length ? <>
+        <MalikVisualGallery title={plan.kind === "tutorial" ? "Примеры экранов · " + plan.topic : plan.topic} images={plan.kind === "tutorial" ? images.slice(0, 2) : images} portrait={plan.layout === "portrait"} />
+        {plan.kind === "tutorial" ? <p className="mb-4 text-xs leading-5 text-zinc-400">Иллюстрации из открытых источников. Названия пунктов и вид меню могут отличаться в вашей версии приложения.</p> : null}
+      </>
+        : images === null ? plan.explicit ? <div role="status" className="my-4 flex items-center gap-2 text-sm text-zinc-400"><span className="h-2 w-2 animate-pulse rounded-full bg-zinc-500" />{active ? "Ищу фотографии…" : "Фотографии"}</div> : null
           : plan.explicit ? <p className="my-3 text-sm text-zinc-400">Фотографии сейчас недоступны. <a href={"https://commons.wikimedia.org/w/index.php?search=" + encodeURIComponent(plan.queries[0]) + "&title=Special:MediaSearch&type=image"} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Открыть поиск фото</a></p> : null}
     </div>
   )

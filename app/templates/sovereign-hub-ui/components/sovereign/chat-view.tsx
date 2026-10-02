@@ -1770,10 +1770,6 @@ function MessageBubble({
             <ThoughtTrace thought={message.thought} sources={message.research?.usedWeb ? message.research.sources.length : 0} />
           ) : null}
           {isUser && message.attachments?.length ? <UserAttachmentGallery items={message.attachments} /> : null}
-          {/* Fetch in parallel with streaming; photo bytes and catalogue metadata go straight to the browser. */}
-          {!isUser && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow ? (
-            <MalikReferenceImages question={question} previousQuestion={previousQuestion} hasAttachment={questionHasAttachment} isLatest={isLatest} />
-          ) : null}
           {!isUser && message.superflow ? (
             <SuperflowBlock messageId={message.id} reference={message.superflow} />
           ) : message.generatedMedia ? (
@@ -1869,6 +1865,11 @@ function MessageBubble({
             : (streaming
               ? message.execution ? null : <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} liveStatus={message.liveStatus} />
               : "")}
+          {/* Render useful context images beside the explanation, never above an empty thinking bubble.
+              Requests still start in parallel with streamed text; images load directly in the browser. */}
+          {!isUser && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && Boolean(displayContent) ? (
+            <MalikReferenceImages question={question} previousQuestion={previousQuestion} hasAttachment={questionHasAttachment} isLatest={isLatest} />
+          ) : null}
           {/* The verdict on the text above comes before the reading list it was
               written from. */}
           {!isUser && !streaming && message.research?.factAudit ? (

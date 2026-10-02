@@ -33,6 +33,21 @@ for (const prompt of ["Покажи мне горы Алматы", "Покажи
 for (const prompt of ["Покажи мне код функции", "Покажи мне список моделей", "Покажи мне как исправить изображение", "Объясни как найти фото", "Покажи доказательство теоремы", "Покажи логи", "Покажи возможности Malik AI", "Покажи таймер", "Напиши код с фото", "Напиши текст для фотографии", "Объясни как сгенерировать фото", "Расскажи про Алматы", "Реши 2+2", "Покажи горы Алматы без фото", "Show me Almaty, text only", "сгенерируй фото кота", "/image futuristic building", "убери человека на фото"]) {
   assert.equal(policy.planReferenceVisuals(prompt), null, "no catalogue lookup: " + prompt)
 }
+
+// Helpful, opt-out contextual visuals for real interface guides and science diagrams.
+// Never invent a screenshot or spend generation credits on a reference request.
+const iosGuide = policy.planReferenceVisuals("Как сделать чтобы играла вибрация в звонке айфон")
+assert.equal(iosGuide?.kind, "tutorial")
+assert.equal(iosGuide?.layout, "portrait")
+assert.match(iosGuide.queries[0], /iPhone.*Haptics/)
+assert.deepEqual(iosGuide.visualDevice, ["iphone", "ios", "ipad"])
+assert.equal(policy.planReferenceVisuals("How to enable notifications on Android")?.kind, "tutorial")
+assert.equal(policy.planReferenceVisuals("Как включить Wi-Fi в Windows")?.kind, "tutorial")
+assert.equal(policy.planReferenceVisuals("Объясни строение клетки")?.queries[0], "cell anatomy diagram")
+for (const question of ["Реши квадратное уравнение", "Напиши код iPhone приложения", "Как настроить вибрацию iPhone без фото", "Почему не работает телефон?", "Объясни как найти фото"]) {
+  assert.equal(policy.planReferenceVisuals(question), null, question)
+}
+
 assert.equal(intent.isExplicitImageGenerationRequest("сгенерируй фото кота"), true)
 assert.equal(intent.isExplicitImageEditRequest("убери человека на фото", true), true)
 assert.equal(intent.isExplicitImageEditRequest("добавь кота", true), true)
