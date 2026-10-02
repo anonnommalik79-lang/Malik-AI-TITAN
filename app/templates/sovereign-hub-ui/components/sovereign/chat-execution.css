@@ -4,7 +4,7 @@
 .malik-execution button:disabled { cursor: default; opacity: 1; }
 .malik-execution button:focus-visible, .malik-execution select:focus-visible, .malik-execution input:focus-visible, .malik-execution summary:focus-visible, .malik-receipt pre:focus-visible { outline: 2px solid #aaa; outline-offset: 3px; }
 .malik-execution__summary { display: flex; align-items: center; gap: 10px; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; }
-.malik-execution__summary > span { flex: 1; font-size: 15px; font-weight: 550; }
+.malik-execution__summary > span { flex: 1; min-width: 0; font-size: 15px; font-weight: 550; }
 .malik-execution__summary small { display: block; color: #8f8f8f; font-size: 11px; font-weight: 400; margin-top: 3px; }
 .malik-execution__summary svg, .malik-receipt__heading > svg { flex-shrink: 0; }
 .malik-execution .is-open { transform: rotate(180deg); }
@@ -58,3 +58,12 @@
 @keyframes malik-receipt-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .malik-execution .is-spinning { animation: none; } }
 @media (max-width: 600px) { .malik-execution { font-size: 13px; } .malik-receipt__heading { min-height: 44px; } .malik-execution__toolbar button, .malik-execution__toolbar select, .malik-execution__export summary { min-height: 36px; } .malik-receipt__payload pre { font-size: 11px; padding: 12px; } }
+
+/* Work: concise, truthful receipts. A running bar is intentionally indeterminate. */
+.malik-execution__details { margin-top: 12px; border-top: 1px solid #242424; padding-top: 9px; }
+.malik-execution__activity { height: 2px; width: 100%; background: #272727; overflow: hidden; margin: 11px 0 3px; border-radius: 2px; }
+.malik-execution__activity span { display: block; width: 35%; height: 100%; background: #ededed; animation: malik-work-activity 1.6s ease-in-out infinite alternate; }
+.malik-execution--inline .malik-execution__summary { padding: 5px 0; }
+.malik-execution--inline .malik-execution__summary small { overflow-wrap: anywhere; }
+@keyframes malik-work-activity { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+@media (prefers-reduced-motion: reduce) { .malik-execution__activity span { animation: none; width: 100%; opacity: .6; } }

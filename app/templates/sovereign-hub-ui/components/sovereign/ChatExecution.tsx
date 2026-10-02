@@ -64,31 +64,38 @@ export function ChatExecution({ trace, live = false, sources = [] }: { trace: Ex
     return () => window.clearInterval(timer)
   }, [live, trace.state])
   const now = trace.endedAt || clock
-  const tools = trace.steps.filter((step) => step.kind !== "status" && step.kind !== "model")
+  const actualTools = trace.steps.filter((step) => step.kind !== "status" && step.kind !== "model")
+  const completed = actualTools.filter((step) => step.state === "completed").length
+  const failed = actualTools.filter((step) => step.state === "failed").length
   const running = trace.steps.filter((step) => step.state === "running")
-  const rows = open ? trace.steps : tools
   const verified = executionSources(trace, sources)
   const visibleSources = allSources ? verified : verified.slice(0, 6)
   const active = live && trace.state === "running"
   const id = useId()
-  const summary = active ? running.at(-1)?.title || "Обрабатываю запрос…" : `${labels[trace.state]} · ${duration(Math.max(0, now - trace.startedAt))}`
+  const summary = active ? "Malik Work · выполняет задачу" : `${labels[trace.state]} · ${duration(Math.max(0, now - trace.startedAt))}`
   return <section className="malik-execution malik-execution--inline" aria-label="Ход выполнения запроса" data-state={trace.state}>
-    <ol className="malik-execution__steps" id={id}>{rows.map((step) => <Receipt key={step.id} step={step} now={now} expanded={expand} />)}</ol>
+    <button type="button" className="malik-execution__summary" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={id}>
+      {active ? <Loader2 size={16} className="is-spinning" /> : trace.state === "completed" ? <Check size={16} /> : <BrainCircuit size={16} />}
+      <span>
+        <span role="status" aria-live="polite">{summary}</span>
+        <small>{active ? running.at(-1)?.title || "Ожидаю результат…" : `${actualTools.length} действий · ${completed} завершено${failed ? ` · ${failed} с ошибкой` : ""}`}</small>
+      </span>
+      <ChevronDown size={15} className={open ? "is-open" : ""} />
+    </button>
+    {active ? <div className="malik-execution__activity" role="progressbar" aria-label="Работа выполняется" aria-valuetext="Продолжается; точный процент неизвестен"><span /></div> : null}
     {verified.length ? <div className="malik-execution__sources" aria-label="Источники поиска">
       <p className="malik-execution__sources-title"><Search size={16} aria-hidden="true" />Поиск · {verified.length} источников</p>
       <div className="malik-execution__source-chips">{visibleSources.map((source) => <a key={source.url} href={source.url} title={source.title || source.domain} target="_blank" rel="noopener noreferrer"><Globe size={16} aria-hidden="true" /><span>{source.domain}</span></a>)}
         {verified.length > 6 ? <button type="button" aria-expanded={allSources} onClick={() => setAllSources(!allSources)}>{allSources ? "Свернуть" : `Ещё ${verified.length - 6}`}</button> : null}
       </div>
     </div> : null}
-    <button type="button" className="malik-execution__summary" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={id}>
-      {active ? <Loader2 size={16} className="is-spinning" /> : <BrainCircuit size={16} />}
-      <span role="status" aria-live="polite">{summary}</span>
-      <ChevronDown size={15} className={open ? "is-open" : ""} />
-    </button>
-    {open ? <div className="malik-execution__toolbar">
-      <button type="button" onClick={() => setExpand((value) => value === true ? undefined : true)} aria-pressed={expand === true}>{expand === true ? "По отдельности" : "Раскрыть детали"}</button>
-      <button type="button" onClick={() => setExpand((value) => value === false ? undefined : false)} aria-pressed={expand === false}>{expand === false ? "По отдельности" : "Свернуть детали"}</button>
-      <details className="malik-execution__export"><summary><Download size={14} />Скачать отчёт</summary><div><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.md`, executionMarkdown(trace))}>Markdown</button><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.json`, JSON.stringify(trace, null, 2), "application/json")}>JSON</button></div></details>
+    {open ? <div id={id} className="malik-execution__details">
+      {trace.steps.length ? <ol className="malik-execution__steps">{trace.steps.map((step) => <Receipt key={step.id} step={step} now={now} expanded={expand} />)}</ol> : <p className="malik-execution__empty">Подтверждённых действий пока нет.</p>}
+      <div className="malik-execution__toolbar">
+        <button type="button" onClick={() => setExpand((value) => value === true ? undefined : true)} aria-pressed={expand === true}>{expand === true ? "По отдельности" : "Раскрыть детали"}</button>
+        <button type="button" onClick={() => setExpand((value) => value === false ? undefined : false)} aria-pressed={expand === false}>{expand === false ? "По отдельности" : "Свернуть детали"}</button>
+        <details className="malik-execution__export"><summary><Download size={14} />Скачать отчёт</summary><div><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.md`, executionMarkdown(trace))}>Markdown</button><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.json`, JSON.stringify(trace, null, 2), "application/json")}>JSON</button></div></details>
+      </div>
     </div> : null}
   </section>
 }

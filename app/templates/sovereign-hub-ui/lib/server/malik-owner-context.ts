@@ -54,6 +54,8 @@ function asksCompany(prompt: string) {
 function asksAssistantIdentity(prompt: string) {
   const value = prompt.toLowerCase().trim()
   return /^(?:а\s+)?(?:кто|что)\s+ты[?.!\s]*$/iu.test(value)
+    || /^(?:а\s+)?ты\s+(?:кто|что)[?.!\s]*$/iu.test(value)
+    || /^как\s+тебя\s+зовут[?.!\s]*$/iu.test(value)
     || /^(?:who|what)\s+are\s+you[?.!\s]*$/iu.test(value)
     || /^(?:сен\s+кімсің|сен\s+кім)[?.!\s]*$/iu.test(value)
 }
@@ -111,6 +113,13 @@ export function malikIdentityAnswer(body: any, ownerMode: boolean): string {
   if (asksCreator(prompt)) return ownerMode ? ownerCreatorAnswer(language) : publicCreatorAnswer(language)
   if (asksCompany(prompt)) return companyAnswer(language, ownerMode)
   if (asksAssistantIdentity(prompt)) {
+    // A workspace identity is a product contract, not a model-dependent guess.
+    // Only an explicit Work-mode request switches the assistant's name.
+    if (body?.workspaceMode === "work") {
+      if (language === "en") return "I am Malik Work — the task and project workspace within MALIK AI. I help prepare deliverables, work with available tools and show what was actually completed."
+      if (language === "kk") return "Мен — Malik Work, MALIK AI жүйесіндегі жұмыс пен жобаларға арналған көмекшімін. Тапсырмаларды орындауға, нәтижелер дайындауға және нақты жасалған әрекеттерді көрсетуге көмектесемін."
+      return "Я — Malik Work, рабочий режим MALIK AI. Помогаю выполнять задачи, готовить файлы и проекты, проверять результаты и показывать только реально выполненные действия."
+    }
     if (language === "en") return "I am MALIK AI V6.5 TITAN, an AI platform created by Abdumalik, the elite vibe coder and solo founder of Sovereign Hub."
     if (language === "kk") return "Мен — MALIK AI V6.5 TITAN. Мені Sovereign Hub solo founder-і, элиталық vibe coder Абдумалик құрған."
     return ownerMode
