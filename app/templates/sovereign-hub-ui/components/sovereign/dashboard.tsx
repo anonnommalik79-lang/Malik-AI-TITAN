@@ -13,6 +13,7 @@ import { PreviewPanel } from "./preview-panel"
 import { clearStoredAuthSnapshot, storeWorkOSProfile } from "@/lib/auth/client-session"
 import { MALIK_OWNER_EMAIL, isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
+import { chatHttpErrorMessage } from "@/lib/ai/errors"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
@@ -6975,12 +6976,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
     if (!response.ok) {
       const rawError = await response.text()
-      let message = rawError
-      try {
-        const payload = JSON.parse(rawError)
-        message = payload?.message || payload?.error || rawError
-      } catch {}
-      throw new Error(message || `${getMalikModel(selectedModelId).label} временно недоступна.`)
+      throw new Error(chatHttpErrorMessage(response.status, rawError, response.headers.get("content-type") || ""))
     }
 
     fullText = ""

@@ -62,6 +62,13 @@ function loadPure(file) {
   return module.exports
 }
 const catalog = loadPure("lib/media/reference-catalog.ts")
+const { chatHttpErrorMessage } = loadPure("lib/ai/errors.ts")
+assert.match(chatHttpErrorMessage(403, "<!doctype html><title>Blocked</title><style>huge embedded font</style>"), /Защита сайта/)
+assert(!chatHttpErrorMessage(502, "<html>proxy failure</html>", "text/html").includes("<html>"))
+assert.equal(chatHttpErrorMessage(429, JSON.stringify({ error: { message: "Лимит запросов" } })), "Лимит запросов")
+assert.equal(chatHttpErrorMessage(400, JSON.stringify({ message: "Укажите запрос" })), "Укажите запрос")
+assert(chatHttpErrorMessage(503, "x".repeat(70_000)).length < 100)
+assert(!chatHttpErrorMessage(403, JSON.stringify({ error: "<html>blocked</html>" })).includes("<html>"))
 const entities = loadPure("lib/ai/answer-entities.ts")
 new Function("require", "module", "exports", "React", js.replace(/require\("react"\)/g, "React"))(
   (name) => {
@@ -79,7 +86,7 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
   }, box, box.exports, React,
 )
 const { MalikMarkdown } = box.exports
-const render = (text) => renderToStaticMarkup(React.createElement(MalikMarkdown, { text }))
+const render = (text, props = {}) => renderToStaticMarkup(React.createElement(MalikMarkdown, { text, ...props }))
 
 let failures = 0
 function check(name, fn) {
@@ -233,6 +240,27 @@ check("ordinary Markdown tasks get a checklist without losing descriptions", () 
   assert.match(html, /История и streaming/)
   assert.match(html, /aria-valuenow="1"/)
   assert.doesNotMatch(html, /\*\*Проверить/)
+})
+check("a requested checklist also works when the model sends ordinary numbered items", () => {
+  const html = render("## Запуск проекта\n\n1. **Проверить чат** — История и отправка\n2. Настроить доступ: Вход и выход", { visualContext: { question: "Составь чек-лист запуска", messageId: "qa-checklist" } })
+  assert.equal((html.match(/type="checkbox"/g) || []).length, 2)
+  assert.match(html, /0\/2/)
+  assert.match(html, /История и отправка/)
+  assert.match(html, /Вход и выход/)
+  assert.equal((html.match(/Запуск проекта/g) || []).length, 1, "reuse the heading once")
+  assert.doesNotMatch(render("1. Один\n2. Два", { visualContext: { question: "Составь чек-лист, только текст" } }), /type="checkbox"/)
+})
+check("empty image placeholders disappear while the explanation and code stay intact", () => {
+  const html = render("## Медеу\n\nВысокогорный каток.\n![Медеу]()\n\nСледующий абзац.", { allowImages: false })
+  assert.doesNotMatch(html, /!\[Медеу\]/)
+  assert.match(html, /Высокогорный каток/)
+  assert.match(html, /Следующий абзац/)
+  assert.match(render("```markdown\n![Медеу]()\n```"), /Медеу/, "code examples must not be removed")
+})
+check("a requested identity card has a fallback while feature comparisons keep their table", () => {
+  const source = "| Слева | Справа |\n| --- | --- |\n| MALIK AI | Команда |\n| Основатель | Разработчики |"
+  assert.match(render(source, { visualContext: { question: "Покажи карточку в две колонки" } }), /data-malik-answer-visual="comparison"/)
+  assert.match(render(source, { visualContext: { question: "Сравни в таблице" } }), /<table/)
 })
 check("comparison cards keep both identities and escape untrusted content", () => {
   const html = render(fence({ type: "comparison", title: "Подписи", columns: [{ label: "Слева — ты", title: "MALIK AI", subtitle: "FOUNDER & CEO", detail: "Building the Future." }, { label: "Справа", title: "<img onerror=alert(1)>", detail: "Уточнить должность" }] }))

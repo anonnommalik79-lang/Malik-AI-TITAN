@@ -111,12 +111,14 @@ export function referenceSearchTopic(topic: string): string {
 
 const TEXT_TASK = /^(?:напиши|перепиши|исправь|улучши|переведи|сократи|сочини|реши|вычисли|посчитай|write|rewrite|translate|calculate|solve|аудар|есепте)(?![\p{L}\p{N}_])/iu
 const NON_VISUAL = /^(?:привет|салам|сәлем|спасибо|рахмет|ок|okay|hi|hello|ты\s+кто|кто\s+ты|да|нет|yes|no)[!?\s.]*$/iu
+const STRUCTURED_TASK = /(?:чек[ -]?лист|checklist|таблиц|spreadsheet|\btable\b|дв[еу]\s+колонк|two\s+columns|\b(?:python|javascript|typescript|sql)\b|\bкод\b|\bcode\b)/iu
 
 /** Evaluate every explanatory answer; never require the user to ask for photos. */
 export function planReferenceVisuals(question: string, previousQuestion = "", hasAttachment = false): ReferenceVisualPlan | null {
   const text = String(question || "").trim()
   if (!text || text.length > 2500 || hasAttachment || NO_VISUAL.test(text)) return null
   if (/^\//u.test(text) || isExplicitImageGenerationRequest(text) || NON_VISUAL.test(text) || TEXT_TASK.test(text)) return null
+  if (STRUCTURED_TASK.test(text) && !/(?:фото(?:граф|к)?|картинк|изображени|\bphotos?\b|\bimages?\b|\bpictures?\b|сурет)/iu.test(text)) return null
   const tutorial = planTutorialVisuals(text)
   if (tutorial) return tutorial
   let explicit = isReferenceImageRequest(text)

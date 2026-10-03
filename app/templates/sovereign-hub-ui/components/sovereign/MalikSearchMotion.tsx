@@ -39,13 +39,10 @@ export function MalikSearchMotion() {
     [data-malik-message='assistant'] section[aria-label='План Malik Action OS'] { display:none!important; }
     .malik-message-card:has(.malik-md) > .malik-think-v8 { display:none!important; }
     .malik-think-v8 { min-width:0; }
-    .malik-think-v8__actions { display:grid; gap:7px; margin:0 0 14px 47px; padding:0; list-style:none; color:#a3a3a3; font-size:14px; line-height:1.5; }
   `}</style>
   if (!motion.target || !motion.active) return style
-  const status = motion.status || motion.actions.at(-1) || (motion.web ? "Обрабатываю запрос с поиском…" : "Обрабатываю запрос…")
   return <>{style}{createPortal(<div className="malik-think-v8">
-    <MalikLiveActivity detail={status} />
-    {motion.actions.length > 1 ? <ul className="malik-think-v8__actions">{motion.actions.slice(0, -1).map((action) => <li key={action}>{action}</li>)}</ul> : null}
+    <MalikLiveActivity />
   </div>, motion.target)}</>
 }
 

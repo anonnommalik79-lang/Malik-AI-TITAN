@@ -47,6 +47,10 @@ assert.equal(policy.planReferenceVisuals("Объясни строение кле
 for (const question of ["Реши квадратное уравнение", "Напиши код iPhone приложения", "Как настроить вибрацию iPhone без фото", "Почему не работает телефон?", "Объясни как найти фото"]) {
   assert.equal(policy.planReferenceVisuals(question), null, question)
 }
+for (const question of ["Сравни Python и JavaScript в таблице", "Составь чек-лист запуска Malik AI из 7 пунктов", "Покажи карточку в две колонки: слева Malik AI, справа команда"]) {
+  assert.equal(policy.planReferenceVisuals(question), null, "structured answers should not request decorative photos: " + question)
+}
+assert.ok(policy.planReferenceVisuals("Сравни горы Казахстана в таблице с фото"), "explicit photos remain available in structured answers")
 
 assert.equal(intent.isExplicitImageGenerationRequest("сгенерируй фото кота"), true)
 assert.equal(intent.isExplicitImageEditRequest("убери человека на фото", true), true)
@@ -159,6 +163,16 @@ try {
   assert.deepEqual(await catalog.lookupReferenceImages(plan), [], "never download original images to replace missing thumbnails")
   globalThis.fetch = async () => { throw new Error("Provider unavailable") }
   assert.deepEqual(await catalog.lookupReferenceImages(plan), [], "outage must not fail chat")
+  const fallbackCalls = []
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input))
+    fallbackCalls.push(url.hostname)
+    if (url.hostname === "commons.wikimedia.org") return Response.json({ query: { pages: [] } })
+    return Response.json({ query: { pages: [{ index: 1, title: "Медеу", fullurl: "https://ru.wikipedia.org/wiki/Медеу", thumbnail: { source: "https://upload.wikimedia.org/medeuthumb.jpg" } }] } })
+  }
+  const articleFallback = await catalog.lookupReferenceImages(plan)
+  assert.equal(articleFallback[0]?.alt, "Медеу")
+  assert.ok(fallbackCalls.some((host) => host.endsWith(".wikipedia.org")), "a missed Commons search must still reach article thumbnails")
   const route = load("app/api/chat/reference-images/route.ts")
   let requests = 0
   globalThis.fetch = async () => { requests++; return Response.json({ query: { pages: [media(1)] } }) }

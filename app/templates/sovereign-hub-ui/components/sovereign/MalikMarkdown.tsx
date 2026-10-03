@@ -8,7 +8,7 @@ import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
 import { MalikReferenceImages, MalikVisualGallery, isSafeVisualUrl, type MalikVisualImage } from "./MalikVisualGallery"
 import { MalikAnswerVisual } from "./MalikAnswerVisual"
 import { MalikAnswerChecklist } from "./MalikAnswerChecklist"
-import { parseAnswerVisual, inferTableVisual, inferListVisual, wantsAnswerVisuals, type AnswerVisual } from "@/lib/ai/answer-visuals"
+import { parseAnswerVisual, inferTableVisual, inferListVisual, inferComparisonTable, wantsAnswerVisuals, wantsAnswerChecklist, type AnswerVisual } from "@/lib/ai/answer-visuals"
 import { parseAnswerEntity } from "@/lib/ai/answer-entities"
 import { planAnswerVisualSlots, type AnswerVisualSegment, type AnswerVisualSlot } from "@/lib/ai/reference-visual-policy"
 
@@ -294,6 +294,8 @@ function parseImageLine(line: string): MalikVisualImage | null {
   return { alt: match[1].trim() || "Изображение", url: match[2], credit: match[3]?.trim() }
 }
 
+const EMPTY_IMAGE_LINE = /^\s*!\[[^\]\n]*\]\(\s*\)\s*$/u
+
 function parseBlocks(source: string): Block[] {
   const lines = String(source || "").replace(/\r\n?/g, "\n").split("\n")
   const blocks: Block[] = []
@@ -326,6 +328,8 @@ function parseBlocks(source: string): Block[] {
       index += 1
       continue
     }
+
+    if (EMPTY_IMAGE_LINE.test(line)) { index += 1; continue }
 
     if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) {
       blocks.push({ kind: "hr" })
@@ -421,6 +425,7 @@ function parseBlocks(source: string): Block[] {
       && !/^\s*(#{1,6}\s|[-*•+]\s|\d+[.)]\s|>|```|\$\$|\\\[)/.test(lines[index])
       && !isTableStart(lines, index)
       && !parseImageLine(lines[index])
+      && !EMPTY_IMAGE_LINE.test(lines[index])
     ) {
       paragraph.push(lines[index])
       index += 1
@@ -674,6 +679,15 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
   const previousQuestion = visualContext?.previousQuestion || ""
   const hasAttachment = Boolean(visualContext?.hasAttachment)
   const streaming = Boolean(visualContext?.streaming)
+  const checklistPosition = useMemo(() => {
+    if (!wantsAnswerChecklist(question) || blocks.some((block) => block.kind === "visual" && block.visual?.type === "checklist")) return -1
+    let selected = -1
+    blocks.forEach((block, index) => {
+      if (block.kind === "list" && block.list.items.length <= 20 && block.list.items.every((item) => !item.children.length)
+        && (selected < 0 || block.list.items.length > (blocks[selected] as Extract<Block, { kind: "list" }>).list.items.length)) selected = index
+    })
+    return selected
+  }, [blocks, question])
   const visualSlots = useMemo(() => {
     if (!question) return new Map<string, AnswerVisualSlot>()
     const segments: AnswerVisualSegment[] = []
@@ -754,6 +768,8 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
         }
 
         if (block.kind === "table") {
+          const comparison = inferComparisonTable(block.headers, block.rows, question, previous?.kind === "h" ? previous.text : "")
+          if (comparison) return <MalikAnswerVisual key={key} visual={comparison} />
           return (
             <Fragment key={key}>
               {dataVisual ? <MalikAnswerVisual visual={dataVisual} /> : null}
@@ -776,6 +792,8 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
         }
 
         if (block.kind === "h") {
+          // The checklist carries this exact heading inside its own header.
+          if (next?.kind === "list" && checklistPosition === position + 1) return null
           const level = Math.min(block.level + 1, 6)
           const Tag = `h${level}` as "h2" | "h3" | "h4" | "h5" | "h6"
           const heading = <Tag className={`malik-md-h malik-md-h${block.level}`}>{inline(block.text, key)}</Tag>
@@ -785,12 +803,13 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
         }
 
         if (block.kind === "list") {
-          if (wantsAnswerVisuals(question) && block.list.items.length <= 20 && block.list.items.every((item) => item.checked !== null && !item.children.length)) {
+          if (wantsAnswerVisuals(question) && block.list.items.length <= 20 && (checklistPosition === position || block.list.items.every((item) => item.checked !== null && !item.children.length))) {
             const items = block.list.items.map((item) => {
               const heading = /^\*\*([^*]+)\*\*\s*[:—–-]?\s*([\s\S]*)$/u.exec(item.text)
+                || /^([^:—–\n]{3,100})\s*[:—–]\s+([\s\S]+)$/u.exec(item.text)
               return { label: heading ? heading[1] : item.text, detail: heading?.[2] || undefined, checked: item.checked === true }
             })
-            return <MalikAnswerChecklist key={key} title={previous?.kind === "h" && /чек|checklist|тізім/iu.test(previous.text) ? previous.text : "Чек-лист"} items={items} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} renderLabel={(label, index) => inline(label, `${key}-task-${index}`)} />
+            return <MalikAnswerChecklist key={key} title={previous?.kind === "h" && (checklistPosition === position || /чек|checklist|тізім/iu.test(previous.text)) ? previous.text : "Чек-лист"} items={items} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} renderLabel={(label, index) => inline(label, `${key}-task-${index}`)} />
           }
           return <Fragment key={key}>{dataVisual ? <MalikAnswerVisual visual={dataVisual} /> : null}<MarkdownList list={block.list} keyPrefix={key} visualSlots={visualSlots} isLatest={visualContext?.isLatest} /></Fragment>
         }

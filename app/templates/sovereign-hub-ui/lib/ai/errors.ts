@@ -1,4 +1,4 @@
-﻿import type { AIProviderId, ProviderError, ProviderErrorCode } from "./types"
+﻿import type { AIProviderId, ProviderError } from "./types"
 
 export function normalizeProviderError(provider: AIProviderId, error: unknown): ProviderError {
   const raw = error instanceof Error ? error.message : String(error || "")
@@ -43,3 +43,23 @@ export function safeErrorMessage(error: ProviderError) {
   }
 }
 
+/** Proxy error pages are documents, not chat replies. */
+export function chatHttpErrorMessage(status: number, body: string, contentType = ""): string {
+  const fallback = status === 403
+    ? "Защита сайта заблокировала запрос. Попробуйте отправить его позже."
+    : status === 401
+      ? "Сессия истекла. Войдите снова, чтобы продолжить."
+      : status === 429
+        ? "Слишком много запросов. Подождите немного и повторите."
+        : "Не удалось получить ответ. Попробуйте отправить запрос снова."
+  if (!body.trim() || body.length > 64_000 || /text\/html/i.test(contentType)) return fallback
+  let candidate: unknown = body
+  try {
+    const payload = JSON.parse(body)
+    candidate = typeof payload === "string" ? payload : payload?.message || payload?.error
+    if (typeof candidate === "object" && candidate) candidate = (candidate as { message?: unknown }).message
+  } catch {}
+  if (typeof candidate !== "string" || /<\/?[a-z!][^>]*>/i.test(candidate)) return fallback
+  const message = candidate.trim()
+  return message && message.length <= 600 ? message : fallback
+}

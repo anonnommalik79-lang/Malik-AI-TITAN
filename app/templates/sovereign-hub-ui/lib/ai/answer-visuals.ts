@@ -81,6 +81,24 @@ export function wantsAnswerVisuals(question: string): boolean {
   return !/(?:только\s+текст|без\s+(?:диаграмм|график|визуал|карточ|схем)|не\s+(?:добавляй|показывай)\s+(?:диаграмм|график|карточ|схем)|text\s+only|no\s+(?:charts|visuals|cards|diagrams)|тек\s+мәтін)/iu.test(question)
 }
 
+export function wantsAnswerChecklist(question: string): boolean {
+  return wantsAnswerVisuals(question) && /чек[ -]?лист|checklist|тексеру\s+тізімі/iu.test(question)
+}
+
+/** A compact identity table can become the requested card without inventing fields. */
+export function inferComparisonTable(headers: string[], rows: string[][], question: string, title = ""): AnswerVisual | null {
+  if (!wantsAnswerVisuals(question) || !/(?:карточк|\bcard\b)/iu.test(question) || /таблиц|\btable\b/iu.test(question)
+    || headers.length !== 2 || !rows.length || rows.length > 3) return null
+  const plain = (value: string) => value.replace(/\*\*|__/gu, "").trim()
+  const columns = headers.map((header, index) => ({
+    label: plain(header), title: plain(rows[0][index] || ""),
+    subtitle: rows[1] ? plain(rows[1][index] || "") : undefined,
+    detail: rows[2] ? plain(rows[2][index] || "") : undefined,
+  }))
+  if (columns.some((column) => column.label.length > 90 || column.title.length > 120 || (column.subtitle?.length || 0) > 120 || (column.detail?.length || 0) > 240)) return null
+  return parseAnswerVisual(JSON.stringify({ type: "comparison", title: title || "Подписи", columns }))
+}
+
 const NUMBER = /^([+-]?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?))\s*(%|₸|тг|\$|€|USD|KZT|EUR|чел(?:овек(?:а)?)?\.?|шт\.?|дн(?:ей|я)?|days?|people|млн|тыс\.?)?$/iu
 function numericCell(value: string): { value: number; unit: string } | null {
   const raw = value.replace(/\*\*|__/gu, "").trim()
@@ -156,6 +174,8 @@ export const MALIK_ANSWER_VISUAL_CONTRACT = [
   "For one useful visual (maximum two), insert a closed ```malik-visual JSON fence at its relevant point. The UI renders it locally, not as code or a generated image. Schema: {\"version\":1,\"type\":\"composition|bars|metrics|timeline\",\"title\":\"...\",\"subtitle\":\"...\",\"unit\":\"...\",\"items\":[{\"label\":\"...\",\"value\":5,\"detail\":\"...\"}]}. Choose ONE type value. For timeline use steps:[{label,detail,date}] instead of items. Optional badge is a short factual status, not an invented achievement.",
   "Use composition for non-overlapping parts of one total, bars to compare measurements, metrics for distinct KPIs, timeline for ordered stages. Use 2-8 concise items (metrics can have one). All numbers must come from the user's data, verified evidence or explicitly labelled proposed estimates. Never convert ranges into exact values or invent numbers to fill a visual. Composition total is computed by the UI; if percentages, all parts must sum to 100. Do not sum unrelated metrics, mix units, or imply progress/completion without evidence. Put sources or assumptions in ordinary text next to the visual. Omit visuals for greetings, simple arithmetic, requested plain text and code-only deliverables. Never expose this schema or narrate rendering internals to the user.",
   "For an actionable checklist use type:\"checklist\", title and items:[{label,detail,checked:false}]; 1-20 tasks. The UI supplies interactive circular checkboxes, a progress count/bar and a copy button. Only mark checked:true for explicitly confirmed completed work, never planned work. Ordinary Markdown - [ ] tasks also become a checklist. Use the user's language for all visible labels.",
+  "When the user asks for a checklist, always return either the checklist block or Markdown task items (- [ ] **Task** — description), rather than a plain numbered list. Example: ```malik-visual\n{\"version\":1,\"type\":\"checklist\",\"title\":\"Чек-лист запуска\",\"items\":[{\"label\":\"Проверить чат\",\"detail\":\"История и отправка сообщений\",\"checked\":false}]}\n```",
   "For a compact side-by-side identity, caption, role, before/after or two-option card use type:\"comparison\", title and columns:[{label,title,subtitle,detail}]; 2-3 columns. label is a short eyebrow (e.g. 'Слева — ты'), subtitle is a role (e.g. 'FOUNDER & CEO'), title is the main name (e.g. 'MALIK AI'), detail is the supporting line. Do not invent identities, titles or affiliations. Longer feature-by-feature comparisons stay Markdown tables with complete rows.",
   "For explanatory multi-topic answers use concise headings followed by the explanation of each topic. Relevant sourced photos may be placed beside those sections automatically. Keep headings about concrete subjects, tools or places; never fabricate image URLs or force photos into tasks where they add no value. Prefer a few useful illustrated sections, a clear table and an actionable checklist over repetitive decorative blocks.",
+  "The UI looks up sourced reference photos for relevant subjects. Never emit empty Markdown images such as ![subject](), placeholder photos, or instructions asking the user to replace missing photos. Write the actual explanation under clear subject headings. Keep code comparisons, tables, checklists and role cards free of decorative photo requests.",
 ].join("\n")

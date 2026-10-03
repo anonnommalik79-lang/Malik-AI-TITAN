@@ -91,7 +91,7 @@ async function lookupArticleImages(plan: ReferenceVisualPlan, signal: AbortSigna
       gsrnamespace: "0", gsrlimit: "3", prop: "pageimages|info", inprop: "url", piprop: "thumbnail", pithumbsize: "480", pilicense: "free" })
     try {
       const response = await fetch("https://" + language + ".wikipedia.org/w/api.php?" + params, {
-        headers: { Accept: "application/json" }, credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.any([signal, AbortSignal.timeout(4000)]),
+        headers: { Accept: "application/json" }, credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.any([signal, AbortSignal.timeout(3000)]),
       })
       const data = await readReferenceJson(response) as { query?: { pages?: Array<{ title?: string; index?: number; fullurl?: string; thumbnail?: { source?: string } }> } } | null
       const images = sanitizeReferenceImages((data?.query?.pages || []).sort((a, b) => (a.index || 0) - (b.index || 0)).flatMap((page) => page.thumbnail?.source && page.fullurl
@@ -116,7 +116,8 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
     try {
       const response = await fetch("https://commons.wikimedia.org/w/api.php?" + params, {
         headers: { Accept: "application/json" }, credentials: "omit", referrerPolicy: "no-referrer",
-        signal: AbortSignal.any([totalSignal, AbortSignal.timeout(7000)]),
+        // Reserve time for article thumbnails even when both Commons queries stall.
+        signal: AbortSignal.any([totalSignal, AbortSignal.timeout(3000)]),
       })
       const data = await readReferenceJson(response) as { query?: { pages?: CommonsPage[] } } | null
       const pages = Array.isArray(data?.query?.pages) ? data.query.pages : []
