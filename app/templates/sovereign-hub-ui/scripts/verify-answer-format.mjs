@@ -76,7 +76,7 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "@/lib/business/project-zip") return { downloadProjectZip() {} }
     if (name === "@/lib/canvas-preview") return { buildCanvasSrcDoc: (code) => code, buildCanvasProjectSrcDoc: (files, filename) => files.find((file) => file.name === filename)?.content || "", createCanvasBlobUrl: () => "blob:test" }
     if (name === "./malik-tex") return texBox.exports
-    if (name === "./MalikVisualGallery") return { isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }), MalikReferenceImages: ({ children, planOverride }) => React.createElement("div", { "data-test-photo-topic": planOverride?.topic }, children) }
+    if (name === "./MalikVisualGallery") return { isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }), MalikReferenceImages: ({ children, planOverride, row, hero }) => React.createElement("div", { "data-test-photo-topic": planOverride?.topic, "data-test-row": row ? "true" : "false", "data-test-hero": hero ? "true" : "false" }, children) }
     if (name === "@/lib/ai/answer-entities") return entities
     if (name === "@/lib/ai/reference-visual-policy") return loadPure("lib/ai/reference-visual-policy.ts")
     if (name === "@/lib/ai/answer-visuals") return loadPure("lib/ai/answer-visuals.ts")
@@ -290,6 +290,26 @@ check("a requested identity card has a fallback while feature comparisons keep t
   const source = "| Слева | Справа |\n| --- | --- |\n| MALIK AI | Команда |\n| Основатель | Разработчики |"
   assert.match(render(source, { visualContext: { question: "Покажи карточку в две колонки" } }), /data-malik-answer-visual="comparison"/)
   assert.match(render(source, { visualContext: { question: "Сравни в таблице" } }), /<table/)
+})
+check("one named subject gets a large photograph directly with its description", () => {
+  const source = '## Альберт Эйнштейн\n\nФизик-теоретик.\n\n' +
+    '　'.replace('　', '') + '```malik-photos\n{"version":1,"subjects":[{"name":"Альберт Эйнштейн","query":"Albert Einstein","kind":"person","layout":"portrait"}]}\n```'
+  const html = render(source, { visualContext: { question: "Кто такой Альберт Эйнштейн" } })
+  assert.match(html, /data-test-photo-topic="Альберт Эйнштейн"[^>]*data-test-hero="true"/)
+  assert.equal((html.match(/Физик-теоретик/g) || []).length, 1, "description must not be duplicated")
+  assert.doesNotMatch(html, /data-malik-photo-hints/, "anchored images must not be repeated after the answer")
+})
+check("multiple named list items each own their matching inline image, not a bottom gallery", () => {
+  const source = '- **Багдат Мусин** — описание первого.\n- **Jeff Dean** — описание второго.\n\n' +
+    '```malik-photos\n{"version":1,"subjects":[{"name":"Багдат Мусин","query":"Bagdat Mussin","kind":"person","layout":"portrait"},{"name":"Jeff Dean","query":"Jeff Dean","kind":"person","layout":"portrait"}]}\n```'
+  const html = render(source, { visualContext: { question: "Назови нескольких спикеров" } })
+  assert.match(html, /<li[^>]*><div data-test-photo-topic="Багдат Мусин"[^>]*data-test-row="true"/)
+  assert.match(html, /<li[^>]*><div data-test-photo-topic="Jeff Dean"[^>]*data-test-row="true"/)
+  assert.doesNotMatch(html, /data-malik-photo-hints/)
+})
+check("unverified event names do not gain fallback portraits", () => {
+  const html = render("## Эмма Уотсон\n\nЕё выступление не подтверждено.", { visualContext: { question: "Кто спикеры AI Digital Bridge?" } })
+  assert.doesNotMatch(html, /data-test-photo-topic=/)
 })
 check("comparison cards keep both identities and escape untrusted content", () => {
   const html = render(fence({ type: "comparison", title: "Подписи", columns: [{ label: "Слева — ты", title: "MALIK AI", subtitle: "FOUNDER & CEO", detail: "Building the Future." }, { label: "Справа", title: "<img onerror=alert(1)>", detail: "Уточнить должность" }] }))
