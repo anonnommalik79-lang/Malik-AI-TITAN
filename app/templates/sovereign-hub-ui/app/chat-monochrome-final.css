@@ -47,21 +47,84 @@
 #malik-root .malik-video-analysis-pulse,
 #malik-root .malik-photo-final-pulse,
 
-/* --- the live research / analysis trail --------------------------------- */
+/* --- research chrome stays monochrome; publisher favicons keep their colours --- */
 
+/* Never grayscale a source container: CSS filters flatten the entire subtree,
+   so filter:none on a child cannot restore the original publisher logo. */
 #malik-root .malik-activity,
-#malik-root .malik-activity-row,
-#malik-root .malik-activity-icon,
-#malik-root .malik-live-source-icons,
 #malik-root .malik-research,
+#malik-root .malik-live-source-icons,
+#malik-root .malik-source-inline {
+  color: #d4d4d8;
+}
 
-/* --- the sources an answer was written from ----------------------------- */
+#malik-root .malik-activity-text,
+#malik-root .malik-live-source-icons > span:last-child {
+  color: #a1a1aa;
+}
 
-#malik-root .malik-source-inline,
-#malik-root .malik-source-pill,
-#malik-root .malik-source-chip,
+#malik-root .malik-activity-icon {
+  color: #a1a1aa;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #171717;
+}
+
+/* Real site favicons are content, not interface accent colours. */
 #malik-root .malik-source-icon,
-#malik-root .malik-source-top,
+#malik-root .malik-source-icon img {
+  filter: none !important;
+  -webkit-filter: none !important;
+}
+#malik-root .malik-source-icon {
+  background: #fff;
+}
+
+/* A small source trigger, not a big preview tile. Keep the existing drawer. */
+#malik-root .malik-ai-chat-bg .malik-source-pill,
+#malik-root .malik-source-pill {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  width: fit-content !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  aspect-ratio: auto !important;
+  flex: 0 0 auto !important;
+  align-self: flex-start !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  margin-top: 10px !important;
+  padding: 0 12px 0 7px !important;
+  border-radius: 999px !important;
+  white-space: nowrap !important;
+}
+#malik-root .malik-source-pill__icons {
+  display: inline-flex !important;
+  height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+}
+#malik-root .malik-source-pill__icons .malik-source-icon {
+  box-sizing: border-box;
+  width: 23px !important;
+  height: 23px !important;
+  min-width: 23px;
+  min-height: 23px;
+  max-width: 23px;
+  max-height: 23px;
+  flex: 0 0 23px;
+  border-radius: 50%;
+  background: #fff !important;
+}
+#malik-root .malik-source-pill__icons .malik-source-icon img {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
 
 /* --- progress bars and generation status -------------------------------- */
 
@@ -126,12 +189,8 @@
   box-shadow: 0 0 18px rgba(255, 255, 255, 0.22) !important;
 }
 
-/* Source favicons sit inside the surfaces above and are greyed with them —
-   deliberately. A row of coloured site logos is the loudest colour left on an
-   otherwise black and white answer.
-
-   The generated image itself is never touched: it lives in
-   .malik-generated / the media cards, none of which appear above. */
+/* Generated images and original publisher favicons keep their own colour;
+   only application chrome, progress glyphs and verification verdicts are neutral. */
 
 
 /* --- image credit confirmation: absolute monochrome --------------------- */
