@@ -28,8 +28,15 @@
 .malik-answer-comparison__detail { display: block; margin-top: 14px; color: #a3a3a3; font-size: 15px; line-height: 1.5; }
 .malik-answer-comparison__column > span, .malik-answer-comparison__column > strong { overflow-wrap: anywhere; }
 .malik-answer-visual-enter { animation: malik-answer-block-in .32s ease-out both; }
-.malik-answer-photo-row { margin: 24px 0; padding-bottom: 24px; border-bottom: 1px solid #262626; }
-.malik-answer-photo-row__image { width: 27%; max-width: 180px; animation: malik-answer-block-in .32s ease-out both; }
+.malik-answer-photo-row { margin: 20px 0; min-width: 0; }
+.malik-answer-photo-row__image { width: clamp(112px, 32%, 190px); max-width: 190px; animation: malik-answer-block-in .32s ease-out both; }
+.malik-answer-photo-row__image figcaption { overflow-wrap: anywhere; }
+.malik-answer-photo-hero { margin: 22px 0 28px; max-width: 680px; }
+.malik-answer-photo-hero__figure { max-width: 620px; margin: 0 0 14px; animation: malik-answer-block-in .32s ease-out both; }
+.malik-answer-photo-hero__figure img { max-height: min(520px, 65vh); }
+.malik-answer-photo-hero .malik-md-h { margin-top: 0; }
+.malik-md .malik-answer-photo-row .malik-md-p { margin-top: 0; }
+
 .malik-answer-photo-row .malik-md-h, #malik-root .malik-md .malik-answer-photo-row .malik-md-h { margin-top: 0; }
 .malik-md .malik-md-table-wrap { max-width: 100%; margin: 22px 0; border: 0; border-radius: 0; background: transparent; overflow-x: auto; }
 .malik-md .malik-md-table { width: 100%; border-collapse: collapse; background: transparent; font-size: 15px; line-height: 1.5; }
@@ -46,6 +53,8 @@
   .malik-answer-comparison__columns { gap: 18px; padding: 18px; }
   .malik-answer-comparison__columns.is-three { grid-template-columns: 1fr; }
   .malik-answer-comparison__subtitle { font-size: 15px; }
+  .malik-answer-photo-row__image { width: min(38%, 142px); }
+  .malik-answer-photo-hero__figure img { max-height: 440px; }
 }
 @media (max-width: 340px) { .malik-answer-comparison__columns { grid-template-columns: 1fr; } }
-@media (prefers-reduced-motion: reduce) { .malik-answer-checklist__progress > span, .malik-answer-checklist__check { transition: none; } .malik-answer-visual-enter, .malik-answer-photo-row__image { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .malik-answer-checklist__progress > span, .malik-answer-checklist__check { transition: none; } .malik-answer-visual-enter, .malik-answer-photo-row__image, .malik-answer-photo-hero__figure { animation: none; } }
