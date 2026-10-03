@@ -682,10 +682,26 @@ function AnswerEntityCard({ text, description = "" }: { text: string; descriptio
 
 /** Match full subject names, not substrings (iPhone 16 must not match iPhone 16 Pro). */
 function hasVisualSubject(content: string, topic: string): boolean {
-  const normalized = (value: string) => value.normalize("NFKC").toLocaleLowerCase().replace(/[`*_]/gu, "").replace(/\\s+/gu, " ").trim()
-  const needle = normalized(topic)
+  const normalize = (value: string) => value.normalize("NFKC").toLocaleLowerCase().replace(/[\u0060*_]/gu, "").replace(/\s+/gu, " ").trim()
+  const haystack = normalize(content)
+  const needle = normalize(topic)
   if (!needle) return false
-  const escaped = needle.replace(/[.*+?^${}()|[\\]\\\\]/gu, "\\\\export function MalikMarkdown({ text, className, allowImages = true, visualContext }: Props) {")
+  let offset = haystack.indexOf(needle)
+  while (offset >= 0) {
+    const before = haystack[offset - 1] || ""
+    const after = haystack[offset + needle.length] || ""
+    if (!/[\p{L}\p{N}]/u.test(before) && !/[\p{L}\p{N}]/u.test(after)) return true
+    offset = haystack.indexOf(needle, offset + 1)
+  }
+  return false
+}
+
+/** A single-person/product request gets the hero. Collections stay compact rows. */
+function isMultiSubjectVisualQuestion(question: string): boolean {
+  return /(?:список|перечисли|все(?:х|ми)?\b|нескольк|сравни|сравнение|участник[ио]|спикер[ыо]|кто\s+(?:будет|был|приехал|выступал)|какие\s+(?:люди|модели|виды)|\b(?:list|all|compare|versus|speakers|participants|attendees|several|multiple|top\s+\d+)\b)/iu.test(question)
+}
+
+export function MalikMarkdown({ text, className, allowImages = true, visualContext }: Props) {")
   return new RegExp("(?<![\\\\p{L}\\\\p{N}])" + escaped + "(?![\\\\p{L}\\\\p{N}])", "u").test(normalized(content))
 }
 
