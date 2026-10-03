@@ -39,18 +39,12 @@ check("the monochrome pass is the last stylesheet in the chain", () => {
   assert.equal(imports.at(-1), "chat-monochrome-final.css", `last was ${imports.at(-1)}`)
 })
 
-check("every loading, analysis, source and status surface is desaturated", () => {
+check("loading, progress and status chrome stays monochrome", () => {
   for (const surface of [
     ".malik-thinking-line",
     ".malik-thinking-dots",
     ".malik-thinking-card",
     ".malik-ai-avatar.is-working",
-    ".malik-activity",
-    ".malik-activity-icon",
-    ".malik-live-source-icons",
-    ".malik-source-inline",
-    ".malik-source-pill",
-    ".malik-source-icon",
     ".malik-canvas-progress",
     ".malik-art-progress",
     ".malik-image-loading-pc-final",
@@ -63,7 +57,17 @@ check("every loading, analysis, source and status surface is desaturated", () =>
   ]) {
     assert.ok(css.includes(`#malik-root ${surface}`), `not covered: ${surface}`)
   }
-  assert.equal((css.match(/filter: grayscale\(1\) !important/g) || []).length >= 4, true)
+  assert.equal((css.match(/filter: grayscale\\(1\\) !important/g) || []).length >= 4, true)
+})
+
+check("source favicon colours survive monochrome chrome", () => {
+  const chrome = css.slice(css.indexOf("/* --- while the answer is being produced"), css.indexOf("/* --- progress bars and generation status"))
+  assert.doesNotMatch(chrome, /(?:malik-activity|malik-live-source-icons|malik-research|malik-source-inline|malik-source-pill|malik-source-icon)[\\s\\S]*?\\{[^}]*filter:\\s*grayscale\\(1\\)/)
+  assert.match(chrome, /#malik-root \\.malik-source-icon img \\{[^}]*filter: none !important;/)
+  assert.match(chrome, /#malik-root \\.malik-source-pill \\{[^}]*height: 36px !important;/)
+  assert.match(chrome, /#malik-root \\.malik-source-pill \\{[^}]*width: fit-content !important;/)
+  assert.match(view, /className="malik-source-pill"/)
+  assert.match(view, /onClick=\\{\\(\\) => setDrawerOpen\\(true\\)\\}/)
 })
 
 check("the composer loses its gold without being filtered", () => {
