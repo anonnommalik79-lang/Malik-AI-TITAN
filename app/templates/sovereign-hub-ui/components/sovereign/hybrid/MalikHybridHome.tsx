@@ -416,7 +416,7 @@ function HomeComposer({
   attachments: ChatAttachment[]
   attachmentError: string
   onPromptChange: (value: string) => void
-  onSubmit: () => void
+  onSubmit: (nativeDraft?: string) => void
   onToggleWeb: () => void
   onToggleMemory: () => void
   onStartWeb: () => void
@@ -658,7 +658,7 @@ function HomeComposer({
             if (event.key === "Enter" && !event.shiftKey) {
               if (event.nativeEvent.isComposing) return
               event.preventDefault()
-              onSubmit()
+              onSubmit(event.currentTarget.value)
             }
           }}
           rows={1}
@@ -689,7 +689,7 @@ function HomeComposer({
             </button>
             <button
               type="button"
-              onClick={onSubmit}
+              onClick={() => onSubmit(textareaRef.current?.value)}
               disabled={!hasSendableContent || isLoading}
               className={cn("thome-submit", !hasSendableContent && "is-hidden")}
               aria-label={isLoading ? "Malik AI отвечает" : "Отправить запрос"}
@@ -894,11 +894,10 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     setAttachmentError("")
   }
 
-  const submit = () => {
-    // Read the visible native draft if iOS dictation/autofill has not committed
-    // the matching React state yet.
-    const field = document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")
-    const text = (field?.value || prompt).trim()
+  const submit = (nativeDraft?: string) => {
+    // Two HomeComposer instances exist (desktop + mobile). Use the field that
+    // actually submitted, never the hidden desktop textarea selected globally.
+    const text = (nativeDraft || prompt).trim()
     if ((!text && !attachments.length) || props.isLoading) return
 
     const attachmentPrompt = attachments.some((item) => item.kind === "video")
