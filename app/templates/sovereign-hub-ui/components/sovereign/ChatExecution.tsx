@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react"
 import { Check, ChevronDown, Copy, Download, FileText, Globe, Image, Loader2, Plug, Search, SquareTerminal, AlertCircle, CircleStop, ExternalLink, BrainCircuit, Github } from "lucide-react"
 import { executionMarkdown, executionSources, type ExecutionSource, type ExecutionStep, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import "./chat-execution.css"
+import { MalikLiveActivity } from "./MalikLiveActivity"
 
 const labels = { running: "Выполняется", completed: "Готово", failed: "Ошибка", cancelled: "Остановлено", interrupted: "Прервано" }
 const icons = { status: BrainCircuit, search: Search, read: Globe, plugin: Plug, file: FileText, model: BrainCircuit, code: SquareTerminal, media: Image }
@@ -53,7 +54,7 @@ function Receipt({ step, expanded, now }: { step: ExecutionStep; expanded?: bool
   </li>
 }
 
-export function ChatExecution({ trace, live = false, sources = [], workMode = false }: { trace: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean }) {
+export function ChatExecution({ trace, live = false, sources = [], workMode = false, writing = false, liveStatus = "" }: { trace: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; liveStatus?: string }) {
   const [open, setOpen] = useState(false)
   const [expand, setExpand] = useState<boolean | undefined>()
   const [allSources, setAllSources] = useState(false)
@@ -75,6 +76,7 @@ export function ChatExecution({ trace, live = false, sources = [], workMode = fa
   const id = useId()
   const summary = active ? running.at(-1)?.title || "Обрабатываю запрос…" : `${labels[trace.state]} · ${duration(Math.max(0, now - trace.startedAt))}`
   return <section className="malik-execution malik-execution--inline" aria-label="Ход выполнения запроса" data-state={trace.state}>
+    {active ? <MalikLiveActivity label={writing ? "Пишу ответ" : workMode ? "Malik Work работает" : "Думаю"} detail={writing ? "Ответ появляется по мере готовности…" : liveStatus || running.at(-1)?.title || "Обрабатываю запрос…"} writing={writing} /> : null}
     <ol className="malik-execution__steps" id={id}>{rows.map((step) => <Receipt key={step.id} step={step} now={now} expanded={expand} />)}</ol>
     {verified.length ? <div className="malik-execution__sources" aria-label="Источники поиска">
       <p className="malik-execution__sources-title"><Search size={16} aria-hidden="true" />Поиск · {verified.length} источников</p>
@@ -88,8 +90,8 @@ export function ChatExecution({ trace, live = false, sources = [], workMode = fa
       {failedTools > 0 ? <span><AlertCircle size={13} aria-hidden="true" />{failedTools} с ошибкой</span> : null}
     </div> : null}
     <button type="button" className="malik-execution__summary" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={id}>
-      {active ? <Loader2 size={16} className="is-spinning" /> : <BrainCircuit size={16} />}
-      <span role="status" aria-live="polite">{summary}</span>
+      <BrainCircuit size={16} aria-hidden="true" />
+      <span role={active ? undefined : "status"} aria-live={active ? undefined : "polite"}>{active ? "Ход выполнения" : summary}</span>
       <ChevronDown size={15} className={open ? "is-open" : ""} />
     </button>
     {open ? <div className="malik-execution__toolbar">

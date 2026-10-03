@@ -7,6 +7,7 @@ import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 import { planReferenceVisuals, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
 import { referenceCacheKey, subscribeReferenceImages } from "@/lib/media/client-reference-cache"
+import "./answer-blocks.css"
 export { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
 
 function safeSourceUrl(value?: string): string {
@@ -119,15 +120,15 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   if (!plan) return children || null
   const images = result?.key === key ? result.images : null
   if (row) return (
-    <div ref={container} className="my-4 min-w-0" data-malik-reference-topic={plan.topic} data-malik-inline-visual>
+    <div ref={container} className="malik-answer-photo-row min-w-0" data-malik-reference-topic={plan.topic} data-malik-inline-visual>
       <div className={images?.length ? "flex items-start gap-3 sm:gap-5" : ""}>
-        {images?.[0] ? <figure className={"w-[88px] shrink-0 overflow-hidden rounded-xl border border-white/15 sm:w-[128px] " + (plan.kind === "tutorial" ? "bg-white" : "bg-black")}>
+        {images?.[0] ? <figure className={"malik-answer-photo-row__image shrink-0 overflow-hidden rounded-xl " + (plan.kind === "tutorial" ? "bg-white" : "bg-black")}>
           <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + images[0].alt} className="block w-full focus-visible:outline focus-visible:outline-white">
             <img src={images[0].url} alt={images[0].alt} loading="lazy" decoding="async" referrerPolicy="no-referrer"
-              className={"w-full " + (plan.kind === "tutorial" ? "max-h-[240px] object-contain" : "aspect-square object-cover")}
+              className={"w-full " + (plan.kind === "tutorial" ? "max-h-[280px] object-contain" : "aspect-[3/4] object-cover")}
               onError={(event) => { event.currentTarget.closest("figure")?.setAttribute("hidden", "") }} />
           </button>
-          <figcaption className="bg-black px-1.5 py-1 text-[10px] leading-4 text-zinc-400">
+          <figcaption className="bg-black px-1.5 py-1 text-xs leading-4 text-zinc-400">
             <a href={safeSourceUrl(images[0].sourceUrl) || images[0].url} target="_blank" rel="noopener noreferrer" className="block truncate underline-offset-2 hover:underline" title={[images[0].credit, images[0].license].filter(Boolean).join(" · ")}>{images[0].credit || "Источник фото"}</a>
           </figcaption>
         </figure> : null}

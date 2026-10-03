@@ -1,6 +1,8 @@
 "use client"
 
 import { answerVisualTotal, type AnswerVisual, type AnswerVisualItem } from "@/lib/ai/answer-visuals"
+import { MalikAnswerChecklist } from "./MalikAnswerChecklist"
+import "./answer-blocks.css"
 
 const SHADES = ["#f5f5f5", "#a3a3a3", "#737373", "#d4d4d4", "#525252", "#e5e5e5", "#bdbdbd", "#8a8a8a"]
 const format = (value: number) => new Intl.NumberFormat("ru-RU", { maximumSignificantDigits: 15 }).format(value)
@@ -15,10 +17,22 @@ function ItemLabel({ item }: { item: AnswerVisualItem }) {
 }
 
 /** CSS/semantic HTML only: no canvas snapshots, chart dependency or network calls. */
-export function MalikAnswerVisual({ visual }: { visual: AnswerVisual }) {
+export function MalikAnswerVisual({ visual, stateKey }: { visual: AnswerVisual; stateKey?: string }) {
+  if (visual.type === "checklist") return <MalikAnswerChecklist title={visual.title} items={visual.items} stateKey={stateKey} />
+  if (visual.type === "comparison") return <figure className="malik-answer-comparison malik-answer-visual-enter" data-malik-answer-visual="comparison" aria-label={visual.title}>
+    <figcaption>{visual.title}</figcaption>
+    <div className={`malik-answer-comparison__columns${visual.columns.length === 3 ? " is-three" : ""}`}>
+      {visual.columns.map((column, index) => <div key={index} className="malik-answer-comparison__column">
+        <span className="malik-answer-comparison__label">{column.label}</span>
+        {column.subtitle ? <strong className="malik-answer-comparison__subtitle">{column.subtitle}</strong> : null}
+        <strong className="malik-answer-comparison__title">{column.title}</strong>
+        {column.detail ? <span className="malik-answer-comparison__detail">{column.detail}</span> : null}
+      </div>)}
+    </div>
+  </figure>
   const total = answerVisualTotal(visual)
   const maxValue = visual.type === "bars" ? Math.max(...visual.items.map((item) => Math.abs(item.value))) || 1 : 1
-  return <figure data-malik-answer-visual={visual.type} aria-label={visual.title} className="my-5 w-full min-w-0 overflow-hidden rounded-2xl border border-white/15 bg-black px-4 py-5 text-white sm:px-6">
+  return <figure data-malik-answer-visual={visual.type} aria-label={visual.title} className="malik-answer-visual-enter my-5 w-full min-w-0 overflow-hidden rounded-2xl border border-white/15 bg-black px-4 py-5 text-white sm:px-6">
     <figcaption className="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0 flex-1"><span className="block break-words text-sm font-medium leading-6 text-zinc-400">{visual.title}</span>
         {visual.subtitle ? <span className="mt-1 block break-words text-xs leading-5 text-zinc-400">{visual.subtitle}</span> : null}

@@ -52,6 +52,8 @@ function loadPure(file) {
   }).outputText
   new Function("require", "module", "exports", "React", javascript)((name) => {
     if (name === "react") return React
+    if (name === "lucide-react") return lucide
+    if (name.endsWith(".css")) return {}
     const base = name.startsWith("@/") ? name.slice(2) : path.join(path.dirname(file), name)
     const resolved = [base + ".ts", base + ".tsx"].find((candidate) => fs.existsSync(candidate))
     if (resolved) return loadPure(resolved)
@@ -67,11 +69,12 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "@/lib/business/project-zip") return { downloadProjectZip() {} }
     if (name === "@/lib/canvas-preview") return { buildCanvasSrcDoc: (code) => code, buildCanvasProjectSrcDoc: (files, filename) => files.find((file) => file.name === filename)?.content || "", createCanvasBlobUrl: () => "blob:test" }
     if (name === "./malik-tex") return texBox.exports
-    if (name === "./MalikVisualGallery") return { isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }) }
+    if (name === "./MalikVisualGallery") return { isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }), MalikReferenceImages: ({ children }) => React.createElement("div", null, children) }
     if (name === "@/lib/ai/answer-entities") return entities
     if (name === "@/lib/ai/reference-visual-policy") return loadPure("lib/ai/reference-visual-policy.ts")
     if (name === "@/lib/ai/answer-visuals") return loadPure("lib/ai/answer-visuals.ts")
     if (name === "./MalikAnswerVisual") return loadPure("components/sovereign/MalikAnswerVisual.tsx")
+    if (name === "./MalikAnswerChecklist") return loadPure("components/sovereign/MalikAnswerChecklist.tsx")
     throw new Error(`unexpected require(${name})`)
   }, box, box.exports, React,
 )
@@ -214,6 +217,38 @@ check("all visual types render safe text and exact numeric values", () => {
   assert.match(render(fence({ type: "timeline", title: "План", steps: [{ label: "Исследование", date: "Неделя 1" }, { label: "Запуск" }] })), /data-malik-answer-visual="timeline"/)
 })
 
+check("checklists preserve confirmed states and expose accessible progress", () => {
+  const html = render(fence({ type: "checklist", title: "План на сегодня", items: [{ label: "Проверить чат", detail: "История и ошибки", checked: true }, { label: "Проверить мобильную версию" }] }))
+  assert.match(html, /data-malik-answer-visual="checklist"/)
+  assert.equal((html.match(/type="checkbox"/g) || []).length, 2)
+  assert.equal((html.match(/checked=""/g) || []).length, 1)
+  assert.match(html, /aria-valuenow="1"/)
+  assert.match(html, /1\/2/)
+  assert.match(html, /Копировать чек-лист/)
+  assert.match(html, /История и ошибки/)
+})
+check("ordinary Markdown tasks get a checklist without losing descriptions", () => {
+  const html = render("- [ ] **Проверить чат** История и streaming\n- [x] **Добавить карточки** Две колонки")
+  assert.match(html, /data-malik-answer-visual="checklist"/)
+  assert.match(html, /История и streaming/)
+  assert.match(html, /aria-valuenow="1"/)
+  assert.doesNotMatch(html, /\*\*Проверить/)
+})
+check("comparison cards keep both identities and escape untrusted content", () => {
+  const html = render(fence({ type: "comparison", title: "Подписи", columns: [{ label: "Слева — ты", title: "MALIK AI", subtitle: "FOUNDER & CEO", detail: "Building the Future." }, { label: "Справа", title: "<img onerror=alert(1)>", detail: "Уточнить должность" }] }))
+  assert.match(html, /data-malik-answer-visual="comparison"/)
+  assert.match(html, /MALIK AI/)
+  assert.match(html, /FOUNDER &amp; CEO/)
+  assert.match(html, /Уточнить должность/)
+  assert.doesNotMatch(html, /<img/)
+})
+check("malformed or oversized interactive blocks cannot claim completion", () => {
+  assert.equal(visualTools.parseAnswerVisual(JSON.stringify({ type: "checklist", title: "План", items: [{ label: "Задача", checked: "true" }] })), null)
+  assert.equal(visualTools.parseAnswerVisual(JSON.stringify({ type: "checklist", title: "План", items: Array.from({ length: 21 }, () => ({ label: "Задача" })) })), null)
+  assert.equal(visualTools.parseAnswerVisual(JSON.stringify({ type: "comparison", title: "Сравнение", columns: [{ label: "Один", title: "A" }] })), null)
+  assert.equal(visualTools.parseAnswerVisual(JSON.stringify({ type: "comparison", title: "Сравнение", columns: [{ label: "Один", title: "A" }, { label: "Два" }] })), null)
+})
+
 console.log("\nwiring")
 
 check("the chat renders the assistant reply through it", () => {
@@ -297,8 +332,9 @@ check("a numbered list split by blank lines keeps counting", () => {
 
 check("task lists show checked and open boxes", () => {
   const html = render("- [x] Сделано\n- [ ] Осталось")
-  assert.match(html, /malik-md-check is-checked/)
-  assert.equal((html.match(/malik-md-task/g) || []).length, 2)
+  assert.match(html, /type="checkbox" checked=""/)
+  assert.equal((html.match(/type="checkbox"/g) || []).length, 2)
+  assert.match(html, /Выполнено 1 из 2/)
 })
 
 check("any mix of lines finishes rendering (no endless loop)", () => {

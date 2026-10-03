@@ -1,0 +1,51 @@
+.malik-answer-checklist { margin: 24px 0; padding: 20px; min-width: 0; border: 1px solid #262626; border-radius: 18px; background: #000; color: #fff; }
+.malik-answer-checklist__header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.malik-answer-checklist__header h3 { margin: 0; font-size: 20px; line-height: 1.4; font-weight: 700; letter-spacing: -.015em; overflow-wrap: anywhere; }
+.malik-answer-checklist__header > span { color: #a3a3a3; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.malik-answer-checklist__progress { height: 6px; margin: 18px 0 22px; overflow: hidden; border-radius: 99px; background: #262626; }
+.malik-answer-checklist__progress > span { display: block; height: 100%; border-radius: inherit; background: #fff; transition: width .3s ease; }
+.malik-md .malik-answer-checklist__items, .malik-answer-checklist__items { list-style: none; margin: 0; padding: 0; display: grid; gap: 22px; }
+.malik-md .malik-answer-checklist__items li, .malik-answer-checklist__items li { margin: 0; padding: 0; list-style: none; }
+.malik-answer-checklist__items label { display: flex; position: relative; align-items: flex-start; gap: 14px; min-height: 44px; cursor: pointer; }
+.malik-answer-checklist__items input { position: absolute; width: 28px; height: 28px; margin: 0; opacity: 0; }
+.malik-answer-checklist__check { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px; margin-top: 1px; border: 1.5px solid #484848; border-radius: 50%; color: #000; transition: background .18s, border-color .18s; }
+.malik-answer-checklist__items input:checked + .malik-answer-checklist__check { background: #fff; border-color: #fff; }
+.malik-answer-checklist__items input:focus-visible + .malik-answer-checklist__check { outline: 2px solid #fff; outline-offset: 4px; }
+.malik-answer-checklist__text { min-width: 0; flex: 1; }
+.malik-answer-checklist__text > strong { display: block; font-size: 18px; font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; }
+.malik-answer-checklist__text > span { display: block; margin-top: 5px; color: #a3a3a3; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.malik-answer-checklist__copy { display: flex; justify-content: center; align-items: center; gap: 10px; width: 100%; min-height: 44px; margin-top: 22px; padding: 10px 14px; border: 1px solid #484848; border-radius: 99px; background: #000; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+.malik-answer-checklist__copy:hover { border-color: #a3a3a3; }
+.malik-answer-checklist__copy:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.malik-answer-comparison { margin: 24px 0; min-width: 0; color: #fff; }
+.malik-answer-comparison > figcaption { margin-bottom: 12px; font-size: 18px; line-height: 1.5; font-weight: 650; }
+.malik-answer-comparison__columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 22px; border-radius: 16px; background: #222; }
+.malik-answer-comparison__columns.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.malik-answer-comparison__column { min-width: 0; }
+.malik-answer-comparison__label { display: block; color: #a3a3a3; font-size: 14px; font-weight: 650; letter-spacing: .035em; line-height: 1.5; text-transform: uppercase; }
+.malik-answer-comparison__subtitle { display: block; margin-top: 15px; font-size: 17px; font-weight: 700; line-height: 1.4; }
+.malik-answer-comparison__title { display: block; margin-top: 12px; font-size: clamp(20px, 3vw, 27px); font-weight: 750; line-height: 1.2; letter-spacing: -.025em; }
+.malik-answer-comparison__detail { display: block; margin-top: 14px; color: #a3a3a3; font-size: 15px; line-height: 1.5; }
+.malik-answer-comparison__column > span, .malik-answer-comparison__column > strong { overflow-wrap: anywhere; }
+.malik-answer-visual-enter { animation: malik-answer-block-in .32s ease-out both; }
+.malik-answer-photo-row { margin: 24px 0; padding-bottom: 24px; border-bottom: 1px solid #262626; }
+.malik-answer-photo-row__image { width: 27%; max-width: 180px; animation: malik-answer-block-in .32s ease-out both; }
+.malik-answer-photo-row .malik-md-h, #malik-root .malik-md .malik-answer-photo-row .malik-md-h { margin-top: 0; }
+.malik-md .malik-md-table-wrap { max-width: 100%; margin: 22px 0; border: 0; border-radius: 0; background: transparent; overflow-x: auto; }
+.malik-md .malik-md-table { width: 100%; border-collapse: collapse; background: transparent; font-size: 15px; line-height: 1.5; }
+.malik-md .malik-md-table th, .malik-md .malik-md-table td { padding: 12px 14px 12px 0; border-bottom: 1px solid #262626; background: transparent; text-align: left; vertical-align: top; }
+.malik-md .malik-md-table th { font-weight: 700; color: #fff; }
+.malik-md .malik-md-table td { color: #f5f5f5; }
+.malik-md .malik-md-table th:last-child, .malik-md .malik-md-table td:last-child { padding-right: 0; }
+@keyframes malik-answer-block-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@media (max-width: 480px) {
+  .malik-answer-checklist { padding: 16px; }
+  .malik-answer-checklist__header h3 { font-size: 19px; }
+  .malik-answer-checklist__text > strong { font-size: 17px; }
+  .malik-answer-checklist__items label { gap: 11px; }
+  .malik-answer-comparison__columns { gap: 18px; padding: 18px; }
+  .malik-answer-comparison__columns.is-three { grid-template-columns: 1fr; }
+  .malik-answer-comparison__subtitle { font-size: 15px; }
+}
+@media (max-width: 340px) { .malik-answer-comparison__columns { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .malik-answer-checklist__progress > span, .malik-answer-checklist__check { transition: none; } .malik-answer-visual-enter, .malik-answer-photo-row__image { animation: none; } }
