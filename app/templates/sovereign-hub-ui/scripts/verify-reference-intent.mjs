@@ -43,6 +43,15 @@ assert.deepEqual(photoHints.groundedAnswerPhotoPlans(hints([subject]), "Кто �
 assert.deepEqual(photoHints.groundedAnswerPhotoPlans(hints([subject]), "Напиши код", "Альберт Эйнштейн"), [])
 assert.deepEqual(photoHints.groundedAnswerPhotoPlans(hints([{ name: "iPhone 16", query: "iPhone 16 Pro" }]), "Сравни телефоны", "iPhone 16"), [])
 assert.deepEqual(hints([{ name: "iPhone 16 Pro", query: "iPhone 17 Pro" }]), [])
+assert.deepEqual(photoHints.groundedAnswerPhotoPlans(
+  hints([{ name: "Эмма Уотсон", query: "Emma Watson", kind: "person", layout: "portrait" }]),
+  "Кто спикеры AI Digital Bridge?", "Эмма Уотсон — не указана среди подтверждённых спикеров.",
+), [], "an unconfirmed participant must not get a speaker photo card")
+assert.equal(photoHints.groundedAnswerPhotoPlans(
+  hints([{ name: "Багдат Мусин", query: "Bagdat Mussin", kind: "person", layout: "portrait" }]),
+  "Покажи спикера форума", "Багдат Мусин — спикер согласно официальной программе.",
+).length, 1, "explicitly stated participant names can still have a sourced portrait")
+
 assert.deepEqual(hints([{ name: "Фото", query: "https://evil.example/secret" }]).map((item) => item.query), ["Фото"])
 assert.deepEqual(photoHints.parseAnswerPhotoHints("x".repeat(8193)), [])
 assert.deepEqual(hints(Array.from({ length: 13 }, () => subject)), [])
