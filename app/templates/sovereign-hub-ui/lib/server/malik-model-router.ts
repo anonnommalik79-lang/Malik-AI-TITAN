@@ -113,7 +113,7 @@ export function isFastChatRequest(prompt: string, attachments?: MalikAttachment[
 
   // Short everyday questions should not pay the latency/cost of deep reasoning.
   // Explicit analysis/research/planning/math-heavy instructions keep the full path.
-  if (/(подробн|глубок|проанализ|анализир|исслед|сравн|стратег|архитект|пошаг|по шагам|докаж|рассчитай|вычисли|формул|research|deep dive|analy[sz]e|compare|step by step|architecture|debug|benchmark)/i.test(value)) return false
+  if (/(подробн|глубок|проанализ|анализир|исслед|стратег|архитект|докаж|формул|research|deep dive|analy[sz]e|architecture|debug|benchmark)/i.test(value)) return false
   return true
 }
 

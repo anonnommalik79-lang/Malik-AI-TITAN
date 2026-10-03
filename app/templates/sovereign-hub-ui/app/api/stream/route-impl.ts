@@ -503,7 +503,7 @@ async function runSelectedAnswer(
   } | null = null
 
   try {
-    const runtimeResult = await prepareMalikAgentRuntime(executionBody)
+    const runtimeResult = body?.chatRecovery ? null : await prepareMalikAgentRuntime(executionBody)
     if (runtimeResult) {
       executionBody = runtimeResult.augmentedBody
       agentRuntime = {
@@ -820,6 +820,7 @@ function liveSseResponse(
           usedWeb: answer.usedWeb,
           sources: answer.sources,
           webSourceCount: answer.sources.length,
+          textOnly: body?.chatRecovery === true,
           // The answer's own figures, checked against the pages it was written
           // from. This rides on `done` rather than an event of its own so the
           // durable-turn tee and every existing reader carry it unchanged.

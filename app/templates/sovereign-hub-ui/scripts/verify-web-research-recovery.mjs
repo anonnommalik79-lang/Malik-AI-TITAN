@@ -132,5 +132,82 @@ try {
     assert.equal(modelSignal.aborted, true)
     await Promise.resolve()
   })
+  const { fetchRecoverableChat, canRetryChat } = load("lib/ai/chat-stream-recovery.ts")
+  const event = (type, rest = {}) => `event: ${type}\ndata: ${JSON.stringify({ type, ...rest })}\n\n`
+  const sse = (text, headers = {}) => new Response(text, { headers: { "content-type": "text/event-stream", ...headers } })
+  const request = { method: "POST", body: JSON.stringify({ originalQuestion: "Сравни два телефона", workspaceMode: "chat" }) }
+  const recoveryOptions = { pollMs: 1, recoveryMs: 100, firstTextMs: 80, idleMs: 80 }
+  await check("a cut before text automatically retries once and completes without photo dependencies", async () => {
+    const calls = []
+    const response = await fetchRecoverableChat("/api/stream", request, { ...recoveryOptions, fetcher: async (_url, init) => {
+      calls.push(JSON.parse(init.body))
+      return calls.length === 1 ? sse(event("progress", { text: "Думает…" })) : sse(event("content", { content: "Полный ответ" }) + event("done", { sources: [] }))
+    } })
+    const text = await response.text()
+    assert.equal(calls.length, 2)
+    assert.equal(calls[1].chatRecovery, true)
+    assert.match(text, /Полный ответ/)
+    assert.match(text, /"textOnly":true/)
+    assert.match(text, /event: done/)
+    assert.doesNotMatch(text, /event: error/)
+  })
+  await check("saved server content is recovered with citations, without replaying the question", async () => {
+    let posts = 0, polls = 0
+    const sources = [{ title: "Verified page", url: "https://example.test/evidence", domain: "example.test" }]
+    const response = await fetchRecoverableChat("/api/stream", request, { ...recoveryOptions, fetcher: async (url) => {
+      if (url === "/api/stream") { posts++; return sse(event("content", { content: "Часть" }), { "x-malik-background-turn-id": "saved-turn" }) }
+      polls++
+      return Response.json({ turn: { status: "complete", content: "Часть и продолжение [1]", sources, usedWeb: true } })
+    } })
+    const text = await response.text()
+    assert.equal(posts, 1); assert.equal(polls, 1)
+    assert.match(text, /Часть и продолжение/)
+    assert.match(text, /example.test\/evidence/)
+    assert.match(text, /"usedWeb":true/)
+    assert.doesNotMatch(text, /event: error/)
+  })
+  await check("permission, quota and action requests are never replayed", async () => {
+    for (const status of [401, 403, 429]) {
+      let calls = 0
+      const response = await fetchRecoverableChat("/api/stream", request, { fetcher: async () => { calls++; return new Response("Denied", { status }) } })
+      assert.equal(response.status, status); assert.equal(calls, 1)
+    }
+    for (const prompt of ["/malik", "Отправь сообщение", "Опубликуй сайт", "Удали файл"]) assert.equal(canRetryChat({ originalQuestion: prompt }), false)
+    assert.equal(canRetryChat({ originalQuestion: "Собери проект", isProjectRequest: true }), false)
+    assert.equal(canRetryChat({ originalQuestion: "Объясни", workspaceMode: "work" }), false)
+  })
+  await check("a silent stream is bounded and falls back to a working answer", async () => {
+    let calls = 0
+    const response = await fetchRecoverableChat("/api/stream", request, { ...recoveryOptions, firstTextMs: 25, fetcher: async () => {
+      calls++
+      return calls === 1 ? new Response(new ReadableStream({}), { headers: { "content-type": "text/event-stream" } }) : sse(event("content", { content: "Recovered" }) + event("done"))
+    } })
+    assert.match(await response.text(), /Recovered/)
+    assert.equal(calls, 2)
+  })
+  await check("all failed attempts retain a truthful error instead of a manufactured answer", async () => {
+    let calls = 0
+    const response = await fetchRecoverableChat("/api/stream", request, { ...recoveryOptions, fetcher: async () => { calls++; return sse(event("error", { message: "Unavailable" })) } })
+    const text = await response.text()
+    assert.equal(calls, 2)
+    assert.match(text, /event: error/)
+    assert.doesNotMatch(text, /event: done|Соединение прервалось до ответа/)
+  })
+  await check("a partly written answer is retained and never restarted from scratch", async () => {
+    let calls = 0
+    const response = await fetchRecoverableChat("/api/stream", request, { ...recoveryOptions, fetcher: async () => { calls++; return sse(event("content", { content: "Useful partial answer" })) } })
+    const text = await response.text()
+    assert.equal(calls, 1)
+    assert.match(text, /Useful partial answer/)
+    assert.match(text, /event: error/)
+  })
+  await check("explicit cancellation never restarts generation", async () => {
+    const abort = new AbortController()
+    let calls = 0
+    const response = await fetchRecoverableChat("/api/stream", { ...request, signal: abort.signal }, { ...recoveryOptions, fetcher: async () => { calls++; return new Response(new ReadableStream({}), { headers: { "content-type": "text/event-stream" } }) } })
+    abort.abort()
+    await assert.rejects(response.text(), (error) => error.name === "AbortError")
+    assert.equal(calls, 1)
+  })
   console.log(`\n${checks}/${checks} web recovery checks passed`)
 } finally { clearInterval(keepAlive); globalThis.fetch = originalFetch }

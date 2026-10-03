@@ -14,6 +14,7 @@ import { clearStoredAuthSnapshot, storeWorkOSProfile } from "@/lib/auth/client-s
 import { MALIK_OWNER_EMAIL, isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import { chatHttpErrorMessage } from "@/lib/ai/errors"
+import { fetchRecoverableChat } from "@/lib/ai/chat-stream-recovery"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
@@ -275,6 +276,7 @@ interface Message {
   /** Short server status ("Думает…", "Пишет ответ…") shown while the turn streams. */
   liveStatus?: string
   execution?: ExecutionTrace
+  textOnly?: boolean
   /** A Superflow started by this turn: a small reference, the flow lives on the server. */
   superflow?: SuperflowRef
   /** How long Malik worked before the first word, and the steps it reported. */
@@ -1524,6 +1526,7 @@ function reviveMessage(message: any): Message {
     superflow: reviveSuperflowRef(message?.superflow),
     thought: reviveThought(message?.thought),
     execution: normalizeExecutionTrace(message?.execution, true),
+    textOnly: message?.textOnly === true,
     versions: Array.isArray(message?.versions)
       ? message.versions
           .filter((item: any) => item && typeof item.content === "string" && item.content.trim())
@@ -6381,6 +6384,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }
 
   let finalExecution: ExecutionTrace | undefined
+  let textOnlyAnswer = false
   const applyExecution = (trace: ExecutionTrace) => {
     finalExecution = trace
     setMessages((current) => current.map((message) => message.id === assistantMessage.id ? { ...message, execution: trace } : message))
@@ -6414,6 +6418,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
               actionPlan: finalActionPlan || m.actionPlan,
               thought,
               execution: finalExecution,
+              textOnly: textOnlyAnswer,
             }
           : m
       )
@@ -6439,6 +6444,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       actionPlan: finalActionPlan || assistantMessage.actionPlan,
       thought,
       execution: finalExecution,
+      textOnly: textOnlyAnswer,
     }
     setChats(prev =>
       prev.map(c => {
@@ -6911,7 +6917,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       ))
     }
 
-    const response = await fetch('/api/stream', {
+    const response = await fetchRecoverableChat('/api/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
@@ -7058,6 +7064,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         }
 
         if (eventName === "progress" || payload?.type === "progress") {
+          if (payload?.textOnly === true) {
+            textOnlyAnswer = true
+            setMessages((current) => current.map((message) => message.id === assistantMessage.id ? { ...message, textOnly: true } : message))
+          }
           if (RESEARCH_PROGRESS_KINDS.has(String(payload?.kind || ""))) {
             applyResearchProgress(payload as MalikResearchProgress)
           } else if (!fullText) {
@@ -7077,6 +7087,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         }
         if (eventName === "done" || payload?.type === "done") {
           sawDone = true
+          textOnlyAnswer = payload?.textOnly === true
           const trace = normalizeExecutionTrace(payload?.execution)
           if (trace) applyExecution({ ...trace, model: getMalikModel(selectedModelId).label })
           else if (finalExecution) applyExecution(settleExecution(finalExecution, "completed"))

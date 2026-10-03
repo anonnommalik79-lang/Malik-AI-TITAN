@@ -141,6 +141,7 @@ interface Message {
   /** Latest server status while the answer is being prepared. */
   liveStatus?: string
   execution?: ExecutionTrace
+  textOnly?: boolean
   /** A Superflow started by this turn. */
   superflow?: SuperflowRef
   /** How long the turn took before its first word, with the reported steps. */
@@ -1862,7 +1863,7 @@ function MessageBubble({
                         answer its caret and lets only newly added blocks
                         fade in (chat-live.css). It is dropped when done. */}
                     <MalikMarkdown text={displayContent} allowImages={false} className={writingLive ? "malik-streaming" : undefined}
-                      visualContext={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
+                      visualContext={!olderVersion && !message.textOnly && !message.generatedMedia && !message.imageConfirmation && !message.superflow
                         && !["failed", "interrupted", "cancelled"].includes(message.execution?.state || "")
                         ? { question, messageId: message.id, previousQuestion, previousAnswer, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
                     {streaming && videoAnalysis ? <VideoAnalysisPulse compact /> : null}

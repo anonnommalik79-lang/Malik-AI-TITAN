@@ -20,7 +20,7 @@ function cloneResponse(response: Response, body: BodyInit | null) {
   })
 }
 
-function parseSseFrame(frame: string, state: { content: string; error: string; provider: string; model: string; execution?: ExecutionTrace }) {
+function parseSseFrame(frame: string, state: { content: string; error: string; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> }) {
   for (const line of frame.split(/\r?\n/)) {
     if (!line.startsWith("data:")) continue
     const raw = line.slice(5).trim()
@@ -36,6 +36,13 @@ function parseSseFrame(frame: string, state: { content: string; error: string; p
       if (payload?.type === "done") {
         state.provider = String(payload.provider || state.provider || "")
         state.model = String(payload.model || payload.selectedModelId || state.model || "")
+        state.responseMetadata = {
+          usedWeb: payload.usedWeb === true,
+          sources: Array.isArray(payload.sources) ? payload.sources.slice(0, 32) : [],
+          textOnly: payload.textOnly === true,
+          factAudit: payload.factAudit ?? null,
+          selectedModelId: typeof payload.selectedModelId === "string" ? payload.selectedModelId : undefined,
+        }
       }
     } catch {
       // Non-JSON SSE metadata is not part of the final answer.
@@ -63,7 +70,7 @@ async function persistStreamResult(turnId: string, response: Response) {
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    const state: { content: string; error: string; provider: string; model: string; execution?: ExecutionTrace } = { content: "", error: "", provider: "", model: "" }
+    const state: { content: string; error: string; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> } = { content: "", error: "", provider: "", model: "" }
     let buffer = ""
 
     while (true) {
@@ -95,6 +102,7 @@ async function persistStreamResult(turnId: string, response: Response) {
       provider: state.provider,
       model: state.model,
       execution: state.execution,
+      responseMetadata: state.responseMetadata,
     })
   } catch (error) {
     await failBackgroundChatTurn(turnId, error)

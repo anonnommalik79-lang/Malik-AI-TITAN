@@ -351,5 +351,13 @@ await check("retrieved programming excerpts do not turn an event question into a
   assert.match(JSON.stringify(log[0].body.messages), /Python JavaScript/)
 })
 
+await check("short comparisons and how-to questions use responsive chat lanes", async () => {
+  for (const prompt of ["Сравни iPhone 16 Pro Max и Samsung S24 Ultra", "Как включить вибрацию на iPhone? Объясни пошагово"]) {
+    const log = []
+    await engine.runMalikMax({ prompt, systemPrompt: "Answer directly.", maxTokens: 4000 }, { lanes: [lane("fast-guide")], fetcher: makeFetcher(log) })
+    assert.equal(log[0].body.max_tokens, 1500)
+  }
+})
+
 console.log(`\n${count - failures}/${count} checks passed`)
 if (failures) process.exit(1)

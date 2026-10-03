@@ -35,6 +35,7 @@ type BackgroundTurnResult = {
   model?: string
   completedAt?: string
   execution?: ExecutionTrace
+  textOnly?: boolean
 }
 
 type BackgroundRuntime = {
@@ -242,6 +243,7 @@ function patchRecoveredTurn(
           content,
           isStreaming: false,
           backgroundRecovered: true,
+          textOnly: result.textOnly === true,
           execution: normalizeExecutionTrace(result.execution, true) || message.execution,
           ...(result.model ? { modelId: result.model } : {}),
         }

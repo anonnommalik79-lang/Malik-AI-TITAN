@@ -26,6 +26,7 @@ export async function GET(_request: Request, context: RouteContext) {
   return Response.json({
     ok: true,
     turn: {
+      ...turn.responseMetadata,
       status: turn.status,
       content: turn.status === "complete" ? turn.content || "" : undefined,
       error: turn.status === "failed" ? turn.error || "Background chat failed" : undefined,

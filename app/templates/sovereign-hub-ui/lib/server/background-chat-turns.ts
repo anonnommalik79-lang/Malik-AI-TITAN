@@ -15,6 +15,7 @@ export type BackgroundChatTurn = {
   completedAt?: string
   expiresAt: string
   execution?: ExecutionTrace
+  responseMetadata?: Record<string, unknown>
 }
 
 type StoredEnvelope = {
@@ -144,7 +145,7 @@ async function writeCloud(turn: BackgroundChatTurn) {
       ContentType: "application/json; charset=utf-8",
       CacheControl: "no-store",
       Metadata: { kind: "background-chat", version: "1" },
-    }))
+    }), { abortSignal: AbortSignal.timeout(2500) })
     return true
   } catch {
     return false
@@ -158,7 +159,7 @@ async function readCloud(turnId: string) {
     const result = await storage.s3.send(new GetObjectCommand({
       Bucket: storage.cfg.bucket,
       Key: objectKey(turnId),
-    }))
+    }), { abortSignal: AbortSignal.timeout(2500) })
     return decryptTurn(await bodyToString(result.Body), storage.cfg.encryptionSecret)
   } catch {
     return null
@@ -188,6 +189,7 @@ export async function completeBackgroundChatTurn(turnId: string, input: {
   provider?: string
   model?: string
   execution?: ExecutionTrace
+  responseMetadata?: Record<string, unknown>
 }) {
   const normalized = normalizeBackgroundTurnId(turnId)
   if (!normalized) return null
@@ -200,6 +202,7 @@ export async function completeBackgroundChatTurn(turnId: string, input: {
     provider: String(input.provider || "").slice(0, 160) || undefined,
     model: String(input.model || "").slice(0, 200) || undefined,
     execution: normalizeExecutionTrace(input.execution, true),
+    responseMetadata: input.responseMetadata,
     createdAt: current?.createdAt || new Date(now).toISOString(),
     completedAt: new Date(now).toISOString(),
     expiresAt: current?.expiresAt || new Date(now + TTL_MS).toISOString(),
