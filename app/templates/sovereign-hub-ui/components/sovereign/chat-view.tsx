@@ -76,7 +76,7 @@ import { PREFILL_EVENT, takePrefillPrompt } from "@/lib/malik-context"
 import { AnswerSheet } from "./answer-sheet/AnswerSheet"
 import { ChatExecution } from "./ChatExecution"
 import type { ExecutionTrace } from "@/lib/ai/chat-execution"
-import { isSheetRequest, isSheetWorthy } from "@/lib/ai/answer-sheet"
+import { isSheetRequest } from "@/lib/ai/answer-sheet"
 import type { WorkspaceMode } from "@/lib/ai/work-mode"
 import { openOs } from "./os/os-client"
 import { WorkStartPanel } from "./WorkStartPanel"
@@ -1904,15 +1904,15 @@ function MessageBubble({
             <button type="button" title="Полезно" aria-pressed={feedback === "up"} onClick={() => onFeedback?.(message.id, "up")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "is-active")}><ThumbsUp className="h-4 w-4" /></button>
             <button type="button" title="Не полезно" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>
             <button type="button" title="Поделиться" onClick={() => onShare?.(displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
-            {onOpenSheet && (isSheetWorthy(displayContent) || isSheetRequest(question)) ? (
-              <button type="button" title="Открыть на листе" aria-label="Открыть на листе" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
+            {onOpenSheet && displayContent.trim() ? (
+              <button type="button" title="Открыть ответ на листе: доступен экспорт PDF" aria-label="Открыть ответ на листе" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
                 <FileText className="h-4 w-4" />
-                <span>Лист</span>
+                <span>Лист / PDF</span>
               </button>
             ) : null}
           </div>
         )}
-        {!isUser && showFollowUps && onFollowUp ? <FollowUpChips onSend={onFollowUp} question={question} answer={displayContent} /> : null}
+        {!isUser && showFollowUps && onFollowUp ? <FollowUpChips onSend={onFollowUp} question={question} answer={displayContent} hasAttachment={questionHasAttachment} /> : null}
         {isUser && message.content ? <UserMessageActions id={message.id} text={message.content} onEdit={onEditPrompt} /> : null}
       </div>
       {/* No initials disc beside the user's own turn either — the bubble and
