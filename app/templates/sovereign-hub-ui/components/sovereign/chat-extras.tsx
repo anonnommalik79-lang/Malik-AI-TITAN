@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Check, Copy, Pencil, Square, Volume2 } from "lucide-react"
+import { Check, Copy, Download, Pencil, Square, Volume2 } from "lucide-react"
+import { buildContextualFollowUps, type FollowUpSendOptions } from "@/lib/ai/chat-followups"
+export type { FollowUpSendOptions } from "@/lib/ai/chat-followups"
 
 /**
  * Small things that make the chat feel like a mature assistant, all real
@@ -163,21 +165,43 @@ export function UserMessageActions({ id, text, onEdit }: { id: string; text: str
 
 /* ------------------------------------------------------------ follow-ups */
 
-const FOLLOW_UPS = [
-  { label: "Подробнее", text: "Объясни подробнее, с деталями и примерами." },
-  { label: "Короче", text: "Сократи ответ до самого главного — 3–5 пунктов." },
-  { label: "Пример", text: "Приведи конкретный практический пример." },
-  { label: "Таблицей", text: "Оформи этот ответ в виде таблицы." },
-]
-
-export function FollowUpChips({ onSend, disabled }: { onSend: (text: string) => void; disabled?: boolean }) {
+export function FollowUpChips({ onSend, question = "", answer = "", hasAttachment = false, disabled }: {
+  onSend: (text: string, options?: FollowUpSendOptions) => void
+  question?: string
+  answer?: string
+  hasAttachment?: boolean
+  disabled?: boolean
+}) {
+  const actions = buildContextualFollowUps(question, answer, { hasAttachment })
   return (
     <div className="malik-follow-ups" role="group" aria-label="Продолжить разговор">
-      {FOLLOW_UPS.map((item) => (
-        <button key={item.label} type="button" disabled={disabled} onClick={() => onSend(item.text)}>{item.label}</button>
+      {actions.map((item) => (
+        <button key={item.label} type="button" disabled={disabled}
+          title={item.research ? item.label : item.text}
+          onClick={() => onSend(item.text, { research: item.research })}>{item.label}</button>
       ))}
     </div>
   )
+}
+
+/** A real, offline Markdown export. No server request or phantom PDF action. */
+export function AnswerDownloadButton({ text }: { text: string }) {
+  const download = () => {
+    if (!text.trim()) return
+    const date = new Date()
+    const stamp = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-")
+    const blob = new Blob([text.trim() + "\n"], { type: "text/markdown;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `malik-ai-answer-${stamp}.md`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+  return <button type="button" onClick={download} title="Скачать ответ (.md)" aria-label="Скачать ответ в Markdown"
+    className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Download className="h-4 w-4" /></button>
 }
 
 /* -------------------------------------------------------------- shortcuts */

@@ -6,7 +6,7 @@ import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
 import { MalikTapGuide } from "./MalikTapGuide"
 import type { SuperflowRef } from "./os/os-client"
-import { FollowUpChips, ReadAloudButton, ThoughtTrace, UserMessageActions, VersionPager, useChatShortcuts } from "./chat-extras"
+import { AnswerDownloadButton, FollowUpChips, ReadAloudButton, ThoughtTrace, UserMessageActions, VersionPager, useChatShortcuts, type FollowUpSendOptions } from "./chat-extras"
 import "./chat-live.css"
 
 // The live Superflow block loads only when a conversation has one.
@@ -76,7 +76,7 @@ import { PREFILL_EVENT, takePrefillPrompt } from "@/lib/malik-context"
 import { AnswerSheet } from "./answer-sheet/AnswerSheet"
 import { ChatExecution } from "./ChatExecution"
 import type { ExecutionTrace } from "@/lib/ai/chat-execution"
-import { isSheetRequest, isSheetWorthy } from "@/lib/ai/answer-sheet"
+import { isSheetRequest } from "@/lib/ai/answer-sheet"
 import type { WorkspaceMode } from "@/lib/ai/work-mode"
 import { openOs } from "./os/os-client"
 import { WorkStartPanel } from "./WorkStartPanel"
@@ -1686,7 +1686,7 @@ function MessageBubble({
   /** Puts a message back in the composer to edit and send again. */
   onEditPrompt?: (id: string, text: string) => void
   /** Sends a follow-up ("Подробнее", "Короче" …). */
-  onFollowUp?: (text: string) => void
+  onFollowUp?: (text: string, options?: FollowUpSendOptions) => void
   /** Only under the newest finished answer. */
   showFollowUps?: boolean
   feedback?: "up" | "down" | null
@@ -1886,7 +1886,7 @@ function MessageBubble({
           ) : null}
         </div>
         {!isUser && message.content && !streaming && !message.imageConfirmation && (
-          <div className={cn("malik-message-actions mt-2 flex items-center gap-2 text-zinc-500", Boolean(message.research?.sources.length) && "is-research", isLatest && "is-latest")}>
+          <div className={cn("malik-message-actions mt-2 flex min-w-0 flex-wrap items-center gap-2 text-zinc-500", Boolean(message.research?.sources.length) && "is-research", isLatest && "is-latest")}>
             <button
               type="button"
               title={copied ? "Скопировано" : "Копировать"}
@@ -1899,19 +1899,20 @@ function MessageBubble({
             </button>
             <VersionPager index={shownVersion} total={versionTotal} onChange={setVersionIndex} />
             <ReadAloudButton id={message.id} text={displayContent} />
+            <AnswerDownloadButton text={displayContent} />
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
             <button type="button" title="Полезно" aria-pressed={feedback === "up"} onClick={() => onFeedback?.(message.id, "up")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "is-active")}><ThumbsUp className="h-4 w-4" /></button>
             <button type="button" title="Не полезно" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>
             <button type="button" title="Поделиться" onClick={() => onShare?.(displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
-            {onOpenSheet && (isSheetWorthy(displayContent) || isSheetRequest(question)) ? (
-              <button type="button" title="Открыть на листе" aria-label="Открыть на листе" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
+            {onOpenSheet && displayContent.trim() ? (
+              <button type="button" title="Открыть на листе" aria-label="Открыть ответ на листе с экспортом PDF" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
                 <FileText className="h-4 w-4" />
-                <span>Лист</span>
+                <span>Лист / PDF</span>
               </button>
             ) : null}
           </div>
         )}
-        {!isUser && showFollowUps && onFollowUp ? <FollowUpChips onSend={onFollowUp} /> : null}
+        {!isUser && showFollowUps && onFollowUp ? <FollowUpChips onSend={onFollowUp} question={question} answer={displayContent} hasAttachment={questionHasAttachment} /> : null}
         {isUser && message.content ? <UserMessageActions id={message.id} text={message.content} onEdit={onEditPrompt} /> : null}
       </div>
       {/* No initials disc beside the user's own turn either — the bubble and
@@ -2661,9 +2662,9 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     }, 0)
   }, [])
 
-  const handleFollowUp = useCallback((text: string) => {
+  const handleFollowUp = useCallback((text: string, options?: FollowUpSendOptions) => {
     const { onSendMessage: send, responseDepth: depth } = regenerateContextRef.current
-    send(text, [], { responseDepth: depth })
+    send(text, [], { responseDepth: depth, research: options?.research === true ? true : undefined })
   }, [])
 
   const promptValueRef = useRef("")

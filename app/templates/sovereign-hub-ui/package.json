@@ -9,8 +9,8 @@
     "test:youtube": "node --experimental-transform-types --no-warnings --import ./scripts/youtube-test-loader.mjs --test scripts/verify-youtube.mjs",
     "dev": "next dev --webpack",
     "dev:turbo": "next dev",
-    "build": "npm run test:work-mode && npm run test:superpowers && npm run test:brain && npm run test:claude-class && next build",
-    "build:render": "npm run test:work-mode && npm run test:superpowers && npm run test:brain && npm run test:claude-class && next build",
+    "build": "npm run test:chat-v7 && npm run test:work-mode && npm run test:superpowers && npm run test:brain && npm run test:claude-class && next build",
+    "build:render": "npm run test:chat-v7 && npm run test:work-mode && npm run test:superpowers && npm run test:brain && npm run test:claude-class && next build",
     "start": "next start",
     "launch": "npm run build && npm run start",
     "lint": "eslint .",
@@ -74,7 +74,8 @@
     "test:business-gemini": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-business-gemini.mjs",
     "test:business-section": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-business-section.mjs",
     "test:creation-engine": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-creation-engine.mjs",
-    "test:music-intent": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-music-prompt-intent.mjs"
+    "test:music-intent": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-music-prompt-intent.mjs",
+    "test:chat-v7": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-chat-v7.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",
