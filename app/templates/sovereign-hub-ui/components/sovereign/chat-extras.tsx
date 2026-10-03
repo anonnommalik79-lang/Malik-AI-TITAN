@@ -165,18 +165,19 @@ export function UserMessageActions({ id, text, onEdit }: { id: string; text: str
 
 /* ------------------------------------------------------------ follow-ups */
 
-export function FollowUpChips({ onSend, question = "", answer = "", disabled }: {
+export function FollowUpChips({ onSend, question = "", answer = "", hasAttachment = false, disabled }: {
   onSend: (text: string, options?: FollowUpSendOptions) => void
   question?: string
   answer?: string
+  hasAttachment?: boolean
   disabled?: boolean
 }) {
-  const actions = buildContextualFollowUps(question, answer)
+  const actions = buildContextualFollowUps(question, answer, { hasAttachment })
   return (
     <div className="malik-follow-ups" role="group" aria-label="Продолжить разговор">
       {actions.map((item) => (
         <button key={item.label} type="button" disabled={disabled}
-          title={item.research ? "Запустить проверку по доступным источникам" : undefined}
+          title={item.research ? item.label : item.text}
           onClick={() => onSend(item.text, { research: item.research })}>{item.label}</button>
       ))}
     </div>
