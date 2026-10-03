@@ -5,7 +5,7 @@ export type FollowUpSendOptions = { research?: boolean }
 
 type FollowUpLocale = "ru" | "kk" | "en"
 function followUpLocale(question: string): FollowUpLocale {
-  if (/[әіңғүұқөһі]/iu.test(question)) return "kk"
+  if (/[әіңғүұқөһі]/iu.test(question) || /(?:файлды|салыстыр|жауап|есепті|қара|баптау|қалай)/iu.test(question)) return "kk"
   if (/[а-яё]/iu.test(question)) return "ru"
   return "en"
 }
