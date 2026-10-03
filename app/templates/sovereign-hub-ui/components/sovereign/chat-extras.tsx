@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Check, Copy, Pencil, Square, Volume2 } from "lucide-react"
+import { Check, Copy, Download, Pencil, Square, Volume2 } from "lucide-react"
 
 /**
  * Small things that make the chat feel like a mature assistant, all real
@@ -163,21 +163,99 @@ export function UserMessageActions({ id, text, onEdit }: { id: string; text: str
 
 /* ------------------------------------------------------------ follow-ups */
 
-const FOLLOW_UPS = [
-  { label: "Подробнее", text: "Объясни подробнее, с деталями и примерами." },
-  { label: "Короче", text: "Сократи ответ до самого главного — 3–5 пунктов." },
-  { label: "Пример", text: "Приведи конкретный практический пример." },
-  { label: "Таблицей", text: "Оформи этот ответ в виде таблицы." },
-]
+type FollowUp = { label: string; text: string; research?: boolean }
+export type FollowUpSendOptions = { research?: boolean }
 
-export function FollowUpChips({ onSend, disabled }: { onSend: (text: string) => void; disabled?: boolean }) {
+type FollowUpLocale = "ru" | "kk" | "en"
+function followUpLocale(question: string): FollowUpLocale {
+  if (/[әіңғүұқөһ]/iu.test(question)) return "kk"
+  if (/[а-яё]/iu.test(question)) return "ru"
+  return "en"
+}
+
+/** Action chips are contextual, translated, and never pretend an action ran.
+ * Research is explicitly forwarded to the existing server-side search path. */
+export function buildContextualFollowUps(question: string, answer: string): FollowUp[] {
+  const locale = followUpLocale(question || answer)
+  const copy: Record<FollowUpLocale, Record<string, FollowUp>> = {
+    ru: {
+      more: { label: "Подробнее", text: "Объясни свой предыдущий ответ подробнее, с конкретными деталями." },
+      short: { label: "Короче", text: "Сократи предыдущий ответ до 3–5 главных пунктов без потери смысла." },
+      simple: { label: "Проще", text: "Объясни предыдущий ответ простыми словами, без лишнего жаргона." },
+      example: { label: "Пример", text: "Покажи конкретный практический пример по предыдущему ответу." },
+      steps: { label: "Пошагово", text: "Преврати предыдущий ответ в проверяемую пошаговую инструкцию. Не придумывай расположение элементов интерфейса." },
+      code: { label: "Проверь код", text: "Проверь код из предыдущего ответа на ошибки и безопасность; предложи исправленный вариант и объясни изменения." },
+      math: { label: "Проверь расчёт", text: "Независимо перепроверь все вычисления предыдущего ответа с подстановкой и единицами измерения." },
+      table: { label: "Таблицей", text: "Структурируй предыдущий ответ в понятную сравнительную таблицу, сохранив факты и ограничения." },
+      fact: { label: "Проверить факты", text: "Проверь ключевые проверяемые факты из предыдущего ответа по доступным актуальным источникам, укажи ссылки и что не удалось подтвердить.", research: true },
+    },
+    kk: {
+      more: { label: "Толығырақ", text: "Алдыңғы жауабыңды нақты мәліметтермен кеңірек түсіндір." },
+      short: { label: "Қысқаша", text: "Алдыңғы жауапты мағынасын жоғалтпай 3–5 негізгі тармаққа қысқарт." },
+      simple: { label: "Оңайлат", text: "Алдыңғы жауапты күрделі терминдерсіз қарапайым тілмен түсіндір." },
+      example: { label: "Мысал", text: "Алдыңғы жауапқа қатысты нақты практикалық мысал келтір." },
+      steps: { label: "Қадамдар", text: "Алдыңғы жауапты тексеруге болатын қадамдық нұсқаулыққа айналдыр. Интерфейс элементтерінің орнын ойдан шығарма." },
+      code: { label: "Кодты тексер", text: "Алдыңғы жауаптағы кодты қате мен қауіпсіздік тұрғысынан тексер, түзетілген нұсқа мен түсіндірме бер." },
+      math: { label: "Есепті тексер", text: "Алдыңғы есептеулерді мәндерді қойып, өлшем бірліктерімен қайта тексер." },
+      table: { label: "Кесте", text: "Алдыңғы жауапты фактілері мен шектеулерін сақтап, түсінікті кестеге айналдыр." },
+      fact: { label: "Деректі тексер", text: "Алдыңғы жауаптағы негізгі деректерді қолжетімді өзекті дереккөздерден тексер, сілтемелер мен расталмаған тұстарын көрсет.", research: true },
+    },
+    en: {
+      more: { label: "More detail", text: "Expand on your previous answer with concrete details." },
+      short: { label: "Shorter", text: "Condense your previous answer to 3–5 essential points without losing nuance." },
+      simple: { label: "Simplify", text: "Explain your previous answer in plain language with minimal jargon." },
+      example: { label: "Example", text: "Give one concrete, practical example of your previous answer." },
+      steps: { label: "Steps", text: "Turn your previous answer into verifiable steps. Do not invent UI positions." },
+      code: { label: "Review code", text: "Check the code from your previous answer for bugs and security issues. Provide corrected code and explain each change." },
+      math: { label: "Check math", text: "Independently verify all calculations in your previous answer, including substituted values and units." },
+      table: { label: "As a table", text: "Turn your previous answer into a clear comparison table, preserving facts and caveats." },
+      fact: { label: "Verify facts", text: "Check key verifiable claims in your previous answer against available current sources. Cite them and flag what could not be confirmed.", research: true },
+    },
+  }
+  const items = copy[locale]
+  const isCode = /```|\b(code|coding|python|javascript|typescript|програм|код|функци|бағдарлама|кодты)\b/iu.test(question + "\n" + answer.slice(0, 300))
+  const isMath = /(?:[=+×÷∑√]|\b(?:математ|алгебр|уравнен|расч[её]т|есеп|теңдеу|equation|calculate|integral)\b)/iu.test(question)
+  const isProcedure = /(?:\b(?:как|как сделать|настрой|установ|пошаг|how to|steps|setup|install|қалай|орнат|баптау)\b)/iu.test(question)
+  const special = isCode ? items.code : isMath ? items.math : isProcedure ? items.steps : items.table
+  return [items.more, items.short, items.simple, items.example, special, ...(isCode || isMath ? [] : [items.fact])]
+}
+
+export function FollowUpChips({ onSend, question = "", answer = "", disabled }: {
+  onSend: (text: string, options?: FollowUpSendOptions) => void
+  question?: string
+  answer?: string
+  disabled?: boolean
+}) {
+  const actions = buildContextualFollowUps(question, answer)
   return (
     <div className="malik-follow-ups" role="group" aria-label="Продолжить разговор">
-      {FOLLOW_UPS.map((item) => (
-        <button key={item.label} type="button" disabled={disabled} onClick={() => onSend(item.text)}>{item.label}</button>
+      {actions.map((item) => (
+        <button key={item.label} type="button" disabled={disabled}
+          title={item.research ? "Запустить проверку по доступным источникам" : undefined}
+          onClick={() => onSend(item.text, { research: item.research })}>{item.label}</button>
       ))}
     </div>
   )
+}
+
+/** A real, offline Markdown export. No server request or phantom PDF action. */
+export function AnswerDownloadButton({ text }: { text: string }) {
+  const download = () => {
+    if (!text.trim()) return
+    const date = new Date()
+    const stamp = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-")
+    const blob = new Blob([text.trim() + "\n"], { type: "text/markdown;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `malik-ai-answer-${stamp}.md`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+  return <button type="button" onClick={download} title="Скачать ответ (.md)" aria-label="Скачать ответ в Markdown"
+    className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Download className="h-4 w-4" /></button>
 }
 
 /* -------------------------------------------------------------- shortcuts */
