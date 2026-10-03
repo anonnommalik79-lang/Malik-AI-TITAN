@@ -53,11 +53,11 @@ export function buildContextualFollowUps(question: string, answer: string, conte
     },
   }
   const items = copy[locale]
-  const isCode = /(?:```|\b(?:code|coding|python|javascript|typescript)\b|код|програм|функци|бағдарлама)/iu.test(question + "\n" + answer.slice(0, 300))
+  const isCode = /(?:```|\b(?:code|coding|python|javascript|typescript)\b|код|программирован|программист|функци)/iu.test(question + "\n" + answer.slice(0, 300))
+    || /(?:напиши|создай|write|build|жаз)\s+(?:a\s+)?(?:программ|program|бағдарлама)/iu.test(question)
   const isMath = /(?:[=+×÷∑√]|математ|алгебр|уравнен|расч[её]т|есеп|теңдеу|\b(?:equation|calculate|integral)\b)/iu.test(question)
   const isProcedure = /(?:как|настрой|установ|пошаг|қалай|орнат|баптау|\b(?:how to|steps|setup|install)\b)/iu.test(question)
   const special = context.hasAttachment ? items.attachment : isCode ? items.code : isMath ? items.math : isProcedure ? items.steps : items.table
   // Avoid fact-checking labels for programming or calculations: use their dedicated verification action.
   return [items.more, items.short, items.simple, items.example, special, ...(isCode || isMath || context.hasAttachment ? [] : [items.fact])]
 }
-

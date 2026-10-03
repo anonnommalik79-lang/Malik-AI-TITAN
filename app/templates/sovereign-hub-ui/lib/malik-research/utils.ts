@@ -1,3 +1,5 @@
+import { fetchResearchResponse } from "./bounded-fetch";
+
 export function domainOf(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -44,13 +46,8 @@ export function clampText(input: string, max = 18000) {
 }
 
 export async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 12000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(url, {
+  return fetchResearchResponse(url, {
       ...init,
-      signal: controller.signal,
       headers: {
         "user-agent":
           "Mozilla/5.0 MALIK-AI-ResearchBot/5.0 OpenSourceResearch",
@@ -59,10 +56,7 @@ export async function fetchWithTimeout(url: string, init: RequestInit = {}, time
         ...(init.headers || {}),
       },
       cache: "no-store",
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+  }, timeoutMs);
 }
 
 export function escapeMd(input: string) {

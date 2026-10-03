@@ -22,6 +22,11 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}): bo
 
   if (options.forceResearch) return true
 
+  // Event programmes and participant lists need a live check even without
+  // "search", "today" or a question mark in a conversational request.
+  if (/(?:спикер[\p{L}]*|участник[\p{L}]*|хедлайнер[\p{L}]*|программ[\p{L}]*|speakers?|participants?|line[ -]?up|programme?|спикерлер|қатысушылар)/iu.test(text)
+    && /(?:форум|фестиваль|конференц|выставк|мероприяти|саммит|digital\s+bridge|conference|summit|festival|expo|forum|event)/iu.test(text)) return true
+
   if (/(?:найди|найти|ищи|ищем|источники|ссылки\s+на|проведи\s+(?:глубокое\s+)?исследование|\b(?:search|sources|research)\b)/i.test(text)) return true
   if (/(?:что\s+такое|кто\s+так(?:ой|ая|ие)|\bwhat (?:is|are)\b|\bwho is\b|деген\s+не)/i.test(text)) return true
 

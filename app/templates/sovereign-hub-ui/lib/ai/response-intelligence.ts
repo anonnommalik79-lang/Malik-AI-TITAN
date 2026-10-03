@@ -306,12 +306,14 @@ export function selectedResponseFeatures(profile: MalikResponseProfile, limit = 
     .slice(0, Math.max(1, limit))
 }
 
-export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?: boolean; currentDate?: string }) {
+export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?: boolean; hasWebEvidence?: boolean; currentDate?: string }) {
   const profile = analyzeResponseRequest(input.prompt, Boolean(input.usedWeb))
   const modules = selectedResponseFeatures(profile)
   const artifactContract = buildChatArtifactSkillPrompt(input.prompt)
-  const webContract = input.usedWeb
-    ? "Verified web excerpts are supplied below. Cite supported factual claims inline as [n]. Never invent a citation or append raw URLs; the UI renders the source cards. If excerpts conflict or do not confirm a detail, say so."
+  const webContract = input.usedWeb && input.hasWebEvidence !== false
+    ? "Verified web excerpts are supplied below. Answer the user's request using the actual evidence; do not send them to perform the search themselves. For a requested list, return the confirmed names and label it partial unless the source establishes completeness. Cite supported factual claims inline as [n]. Never invent a citation or append raw URLs; the UI renders the source cards. Missing details in these excerpts do not prove that no public information exists. If excerpts conflict or do not confirm a detail, say so."
+    : input.usedWeb
+    ? "A live web check returned no usable evidence in this attempt. Say that you could not verify the current facts, not that no public information exists. Do not invent participant lists, citations or claims of having read a source. Give any stable supported information that still helps."
     : "No verified live-web evidence is supplied. Do not invent citations. For unstable current facts, say that a live check is required."
   const codeContract = profile.signals.includes("code")
     ? [
@@ -335,7 +337,7 @@ export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?
     `- ${MALIK_RESPONSE_CORE_PROMPT}`,
     webContract,
     ...(planReferenceVisuals(input.prompt) || isReferenceImageRequest(input.prompt) ? [
-      "VISUAL REFERENCE CONTRACT: The chat automatically retrieves sourced photos for the subjects in your answer, independently of the text model. Never say that you cannot show/insert photos or send the user to search for them instead. For a photo follow-up such as 'покажи их всех', resolve 'them' from the conversation and list the exact names of those people/products/places with concise descriptions. Use clear concrete subject headings, not generic era/category headings, and exact product model names. For how-to answers use numbered steps with exact menu names. Answer directly without asking for another photo request. Never invent image URLs, source claims, screenshot contents or highlight coordinates: retrieved image metadata is not supplied to you. Reference images are existing public media, not generated or charged jobs; the UI reports any retrieval failure itself.",
+      "VISUAL REFERENCE CONTRACT: The chat automatically retrieves sourced photos for the subjects in your answer, independently of the text model. Never say that you cannot show/insert photos or send the user to search for them instead. For a photo follow-up such as 'покажи их всех', resolve 'them' from the conversation and list the exact names of those people/products/places with concise descriptions. Use clear concrete subject headings, not generic era/category headings, and exact product model names. For how-to answers use numbered steps with exact menu names. Answer directly without asking for another photo request. Never invent image URLs, source claims, screenshot contents or highlight coordinates: retrieved image metadata is not supplied to you. Reference images are existing public media, not generated or charged jobs; the UI retrieves them independently.",
     ] : []),
     ...(codeContract ? [codeContract] : []),
     ...(artifactContract ? [artifactContract] : []),

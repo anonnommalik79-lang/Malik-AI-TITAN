@@ -826,6 +826,8 @@ export function longOutputContinuationPrompt(originalPrompt: string, content: st
 export async function runStrictMalikModel(input: {
   modelId: MalikModelId
   prompt: string
+  /** The user's request before retrieved excerpts are appended. */
+  taskPrompt?: string
   systemPrompt: string
   history?: HistoryMessage[]
   attachments?: MalikAttachment[]
@@ -858,6 +860,7 @@ export async function runStrictMalikModel(input: {
     const engine = await import("./malik-max-engine")
     const engineInput = {
       prompt: input.prompt,
+      taskPrompt: input.taskPrompt,
       systemPrompt: input.systemPrompt,
       history: input.history,
       attachments: input.attachments,

@@ -22,6 +22,7 @@
     "test:auth-audio": "node scripts/verify-auth-audio.mjs",
     "test:voice:live": "node scripts/verify-voice-live.mjs",
     "test:account": "node scripts/verify-account-and-search.mjs",
+    "test:web-recovery": "node scripts/verify-web-research-recovery.mjs",
     "test:compute": "node scripts/verify-malik-compute.mjs && node scripts/verify-malik-compute-live.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run build",

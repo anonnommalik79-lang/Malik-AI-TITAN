@@ -338,5 +338,18 @@ await check("a cancelled request stops every lane and blames none", async () => 
   assert.equal(log.length, 0)
 })
 
+await check("retrieved programming excerpts do not turn an event question into a coding job", async () => {
+  const log = []
+  const result = await engine.runMalikMax({
+    prompt: "Question: Дай спикеров Digital Bridge\nWeb sources:\n" + "Python JavaScript code examples. ".repeat(200),
+    taskPrompt: "Дай спикеров Digital Bridge",
+    systemPrompt: "Use the sources.",
+    maxTokens: 8_000,
+  }, { lanes: [lane("fast-event")], fetcher: makeFetcher(log) })
+  assert.match(result.content, /Fast lane wins/)
+  assert.equal(log[0].body.max_tokens, 1_500)
+  assert.match(JSON.stringify(log[0].body.messages), /Python JavaScript/)
+})
+
 console.log(`\n${count - failures}/${count} checks passed`)
 if (failures) process.exit(1)

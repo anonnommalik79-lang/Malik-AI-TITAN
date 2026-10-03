@@ -1863,6 +1863,7 @@ function MessageBubble({
                         fade in (chat-live.css). It is dropped when done. */}
                     <MalikMarkdown text={displayContent} allowImages={false} className={writingLive ? "malik-streaming" : undefined}
                       visualContext={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
+                        && !["failed", "interrupted", "cancelled"].includes(message.execution?.state || "")
                         ? { question, messageId: message.id, previousQuestion, previousAnswer, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
                     {streaming && videoAnalysis ? <VideoAnalysisPulse compact /> : null}
                   </>

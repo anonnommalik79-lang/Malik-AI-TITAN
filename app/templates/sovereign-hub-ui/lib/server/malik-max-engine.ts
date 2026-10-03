@@ -1105,6 +1105,7 @@ export type MaxInput = {
   publicLabel?: string
   allowCatalog?: boolean
   prompt: string
+  taskPrompt?: string
   systemPrompt: string
   history?: HistoryMessage[]
   attachments?: MalikAttachment[]
@@ -1118,8 +1119,9 @@ export type MaxInput = {
 
 export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetch; lanes?: MaxLane[] } = {}): Promise<StrictMalikResult> {
   const started = Date.now()
-  const codeMode = isCodeRequest(input.prompt)
-  const fastMode = !codeMode && isFastChatRequest(input.prompt, input.attachments)
+  const taskPrompt = input.taskPrompt || input.prompt
+  const codeMode = isCodeRequest(taskPrompt)
+  const fastMode = !codeMode && isFastChatRequest(taskPrompt, input.attachments)
   const needsVision = (input.attachments || []).some((item) => item?.kind === "image" || String(item?.mime || "").startsWith("image/"))
   const lanes = deps.lanes || await buildMaxLanes({ prompt: input.prompt, attachments: input.attachments, codeMode, fastMode, needsVision })
   if (!lanes.length) {

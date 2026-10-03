@@ -15,9 +15,9 @@ function safeSourceUrl(result: SearchResult) {
   return assertPublicHttpUrl(String(result.url || "")).toString();
 }
 
-async function fetchDirect(result: SearchResult): Promise<FetchedSource | null> {
+async function fetchDirect(result: SearchResult, signal?: AbortSignal): Promise<FetchedSource | null> {
   const target = safeSourceUrl(result);
-  const res = await fetchWithTimeout(target, {}, 10000);
+  const res = await fetchWithTimeout(target, { signal }, 6000);
   if (!res.ok) return null;
 
   const contentType = res.headers.get("content-type") || "";
@@ -55,7 +55,7 @@ function parseJinaTitle(markdown: string, fallback: string) {
   );
 }
 
-async function fetchViaJina(result: SearchResult): Promise<FetchedSource | null> {
+async function fetchViaJina(result: SearchResult, signal?: AbortSignal): Promise<FetchedSource | null> {
   if (process.env.JINA_READER_DISABLED === "true") return null;
 
   const target = safeSourceUrl(result);
@@ -65,6 +65,7 @@ async function fetchViaJina(result: SearchResult): Promise<FetchedSource | null>
     const res = await fetchWithTimeout(
       readerUrl,
       {
+        signal,
         headers: {
           accept: "text/plain, text/markdown, */*",
         },
@@ -92,7 +93,8 @@ async function fetchViaJina(result: SearchResult): Promise<FetchedSource | null>
   }
 }
 
-export async function fetchPageText(result: SearchResult): Promise<FetchedSource | null> {
+export async function fetchPageText(result: SearchResult, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<FetchedSource | null> {
+  const signal = AbortSignal.any([AbortSignal.timeout(options.timeoutMs || 9000), ...(options.signal ? [options.signal] : [])]);
   try {
     // Validate before either the direct reader or the third-party reader sees it.
     safeSourceUrl(result);
@@ -101,11 +103,11 @@ export async function fetchPageText(result: SearchResult): Promise<FetchedSource
   }
 
   try {
-    const direct = await fetchDirect(result);
+    const direct = await fetchDirect(result, signal);
     if (direct) return direct;
   } catch {
     // fallback to reader
   }
 
-  return fetchViaJina(result);
+  return signal.aborted ? null : fetchViaJina(result, signal);
 }

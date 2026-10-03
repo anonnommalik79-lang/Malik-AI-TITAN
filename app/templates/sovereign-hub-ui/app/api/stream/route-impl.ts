@@ -1,4 +1,5 @@
 import { asPlainText, malikGodAnswer } from "@/lib/malik-god-router"
+import { after } from "next/server"
 import { parsePluginCommand } from "@/lib/server/plugin-runtime"
 import { runPluginModelAnswer } from "@/lib/server/plugin-model-answer"
 import { generateProjectWithBrain } from "@/lib/ai/project-builder"
@@ -405,6 +406,7 @@ async function runSelectedAnswer(
   maxOutputTokens?: number,
   onToken?: (chunk: string) => void,
   activity?: ExecutionReporter,
+  signal?: AbortSignal,
 ) {
   const pluginCommand = parsePluginCommand(coderPrompt(body))
   if (pluginCommand) {
@@ -538,6 +540,7 @@ async function runSelectedAnswer(
       onToken,
       undefined,
       activity,
+      signal,
     )
     return agentRuntime ? { ...answer, agentRuntime } : answer
   }
@@ -709,6 +712,9 @@ function liveSseResponse(
   let heartbeat: ReturnType<typeof setInterval> | null = null
   let streamedAny = false
   let writingStatusSent = false
+  const generation = new AbortController()
+  let savedTurn: Promise<unknown> | null = null
+  after(async () => { if (savedTurn) await savedTurn })
   const protectStreamChunk = createStreamingFenceProtector()
 
   const stopHeartbeat = () => {
@@ -721,7 +727,8 @@ function liveSseResponse(
       let closed = false
       const send = (event: string, data: Record<string, unknown>) => {
         if (closed || cancelled) return
-        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify({ ...data, at: Date.now() })}\n\n`))
+        try { controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify({ ...data, at: Date.now() })}\n\n`)) }
+        catch { cancelled = true; generation.abort(); stopHeartbeat() }
       }
       const close = () => {
         if (closed || cancelled) return
@@ -768,6 +775,7 @@ function liveSseResponse(
               if (safeChunk) send("content", { type: "content", content: safeChunk })
             },
             activity,
+            generation.signal,
           )
 
       void answerPromise.then(async (answer) => {
@@ -794,10 +802,14 @@ function liveSseResponse(
             content: protectChatCodeFences(content),
           })
         }
-        await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0).catch((error) => {
-          console.warn("[MALIK_CHAT_USAGE]", error instanceof Error ? error.message : String(error))
-        })
-        await persistFounderChatTurn(body, entitlement, answer)
+        // Start accounting now; neither remote storage nor chat logging delays
+        // the completed response. Next keeps their work alive after delivery.
+        savedTurn = Promise.all([
+          recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0).catch((error) => {
+            console.warn("[MALIK_CHAT_USAGE]", error instanceof Error ? error.message : String(error))
+          }),
+          persistFounderChatTurn(body, entitlement, answer),
+        ])
         stopHeartbeat()
         activity.finish(responseCall, { characters: content.length, sources: answer.sources.length, artifact: "projectArtifact" in answer ? answer.projectArtifact : undefined })
         send("done", {
@@ -832,6 +844,7 @@ function liveSseResponse(
     },
     cancel() {
       cancelled = true
+      generation.abort()
       stopHeartbeat()
     },
   })
