@@ -1,10 +1,14 @@
 /** Compact answer data, rendered locally. No HTML, executable code or remote assets. */
 export type AnswerVisualItem = { label: string; value: number; detail?: string }
 export type AnswerVisualStep = { label: string; detail?: string; date?: string }
+export type AnswerChecklistItem = { label: string; detail?: string; checked: boolean }
+export type AnswerComparisonColumn = { label: string; title: string; subtitle?: string; detail?: string }
 type VisualBase = { title: string; subtitle?: string; badge?: string }
 export type AnswerVisual =
   | (VisualBase & { type: "composition" | "bars" | "metrics"; unit?: string; items: AnswerVisualItem[] })
   | (VisualBase & { type: "timeline"; steps: AnswerVisualStep[] })
+  | (VisualBase & { type: "checklist"; items: AnswerChecklistItem[] })
+  | (VisualBase & { type: "comparison"; columns: AnswerComparisonColumn[] })
 
 export const ANSWER_VISUAL_MAX_BYTES = 12 * 1024
 const MAX_ITEMS = 8
@@ -22,6 +26,24 @@ export function parseAnswerVisual(source: string): AnswerVisual | null {
   try { data = JSON.parse(source) } catch { return null }
   if (!record(data) || !text(data.title) || data.version !== undefined && data.version !== 1) return null
   const base = { title: text(data.title), subtitle: text(data.subtitle, 180) || undefined, badge: text(data.badge, 45) || undefined }
+  if (data.type === "checklist") {
+    if (!Array.isArray(data.items) || !data.items.length || data.items.length > 20) return null
+    const items: AnswerChecklistItem[] = []
+    for (const entry of data.items) {
+      if (!record(entry) || !text(entry.label, 180) || entry.checked !== undefined && typeof entry.checked !== "boolean") return null
+      items.push({ label: text(entry.label, 180), detail: text(entry.detail, 300) || undefined, checked: entry.checked === true })
+    }
+    return { ...base, type: "checklist", items }
+  }
+  if (data.type === "comparison") {
+    if (!Array.isArray(data.columns) || data.columns.length < 2 || data.columns.length > 3) return null
+    const columns: AnswerComparisonColumn[] = []
+    for (const entry of data.columns) {
+      if (!record(entry) || !text(entry.label) || !text(entry.title, 120)) return null
+      columns.push({ label: text(entry.label), title: text(entry.title, 120), subtitle: text(entry.subtitle, 120) || undefined, detail: text(entry.detail, 240) || undefined })
+    }
+    return { ...base, type: "comparison", columns }
+  }
   if (data.type === "timeline") {
     if (!Array.isArray(data.steps) || data.steps.length < 2 || data.steps.length > MAX_ITEMS) return null
     const steps: AnswerVisualStep[] = []
@@ -133,4 +155,7 @@ export const MALIK_ANSWER_VISUAL_CONTRACT = [
   "Choose the answer format from the task: Markdown tables for roles/comparisons, a compact visual for useful quantities, composition, KPIs or a multi-stage plan. Do this automatically; don't make the user request a chart separately. Keep the complete explanation.",
   "For one useful visual (maximum two), insert a closed ```malik-visual JSON fence at its relevant point. The UI renders it locally, not as code or a generated image. Schema: {\"version\":1,\"type\":\"composition|bars|metrics|timeline\",\"title\":\"...\",\"subtitle\":\"...\",\"unit\":\"...\",\"items\":[{\"label\":\"...\",\"value\":5,\"detail\":\"...\"}]}. Choose ONE type value. For timeline use steps:[{label,detail,date}] instead of items. Optional badge is a short factual status, not an invented achievement.",
   "Use composition for non-overlapping parts of one total, bars to compare measurements, metrics for distinct KPIs, timeline for ordered stages. Use 2-8 concise items (metrics can have one). All numbers must come from the user's data, verified evidence or explicitly labelled proposed estimates. Never convert ranges into exact values or invent numbers to fill a visual. Composition total is computed by the UI; if percentages, all parts must sum to 100. Do not sum unrelated metrics, mix units, or imply progress/completion without evidence. Put sources or assumptions in ordinary text next to the visual. Omit visuals for greetings, simple arithmetic, requested plain text and code-only deliverables. Never expose this schema or narrate rendering internals to the user.",
+  "For an actionable checklist use type:\"checklist\", title and items:[{label,detail,checked:false}]; 1-20 tasks. The UI supplies interactive circular checkboxes, a progress count/bar and a copy button. Only mark checked:true for explicitly confirmed completed work, never planned work. Ordinary Markdown - [ ] tasks also become a checklist. Use the user's language for all visible labels.",
+  "For a compact side-by-side identity, caption, role, before/after or two-option card use type:\"comparison\", title and columns:[{label,title,subtitle,detail}]; 2-3 columns. label is a short eyebrow (e.g. 'Слева — ты'), subtitle is a role (e.g. 'FOUNDER & CEO'), title is the main name (e.g. 'MALIK AI'), detail is the supporting line. Do not invent identities, titles or affiliations. Longer feature-by-feature comparisons stay Markdown tables with complete rows.",
+  "For explanatory multi-topic answers use concise headings followed by the explanation of each topic. Relevant sourced photos may be placed beside those sections automatically. Keep headings about concrete subjects, tools or places; never fabricate image URLs or force photos into tasks where they add no value. Prefer a few useful illustrated sections, a clear table and an actionable checklist over repetitive decorative blocks.",
 ].join("\n")

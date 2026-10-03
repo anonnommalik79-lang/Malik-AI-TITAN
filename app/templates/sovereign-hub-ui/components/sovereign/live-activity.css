@@ -1,0 +1,19 @@
+.malik-live-activity { display: flex; align-items: center; gap: 13px; min-height: 54px; margin: 8px 0 16px; color: #fff; animation: malik-activity-enter .25s ease-out both; }
+.malik-live-activity__orb { display: block; position: relative; width: 34px; height: 34px; flex: 0 0 34px; }
+.malik-live-activity__orb > i, .malik-live-activity__orb > b, .malik-live-activity__orb > span { position: absolute; inset: 3px; display: block; border: 1.5px solid transparent; border-top-color: #fff; border-bottom-color: #737373; border-radius: 50%; }
+.malik-live-activity__orb > i { animation: malik-orbit-one 2.2s linear infinite; }
+.malik-live-activity__orb > b { inset: 7px; border-right-color: #d4d4d4; border-top-color: transparent; animation: malik-orbit-two 1.7s linear infinite; }
+.malik-live-activity__orb > span { inset: 12px; border: 0; background: #fff; animation: malik-orbit-core 1.8s ease-in-out infinite; }
+.malik-live-activity__body { min-width: 0; display: grid; gap: 5px; }
+.malik-live-activity__label { width: fit-content; font-size: 16px; line-height: 1.35; font-weight: 600; color: #d4d4d4; background: linear-gradient(100deg, #737373 20%, #fff 48%, #737373 75%); background-size: 240% 100%; background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: malik-activity-shimmer 2.1s linear infinite; }
+.malik-live-activity__detail { display: block; font-size: 14px; line-height: 1.45; color: #a3a3a3; overflow-wrap: anywhere; animation: malik-activity-enter .25s ease-out both; }
+.malik-live-activity.is-writing .malik-live-activity__orb > i { animation-duration: 3s; }
+@keyframes malik-orbit-one { from { transform: rotate(0deg) scaleX(.72); } to { transform: rotate(360deg) scaleX(.72); } }
+@keyframes malik-orbit-two { from { transform: rotate(360deg) scaleX(.85); } to { transform: rotate(0deg) scaleX(.85); } }
+@keyframes malik-orbit-core { 0%, 100% { opacity: .45; transform: scale(.7); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes malik-activity-shimmer { from { background-position: 160% 50%; } to { background-position: -140% 50%; } }
+@keyframes malik-activity-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .malik-live-activity, .malik-live-activity__orb > i, .malik-live-activity__orb > b, .malik-live-activity__orb > span, .malik-live-activity__label, .malik-live-activity__detail { animation: none; }
+  .malik-live-activity__label { background: none; color: #fff; -webkit-text-fill-color: currentColor; }
+}

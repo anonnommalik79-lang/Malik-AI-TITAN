@@ -7,6 +7,7 @@ import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from
 import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
 import { MalikReferenceImages, MalikVisualGallery, isSafeVisualUrl, type MalikVisualImage } from "./MalikVisualGallery"
 import { MalikAnswerVisual } from "./MalikAnswerVisual"
+import { MalikAnswerChecklist } from "./MalikAnswerChecklist"
 import { parseAnswerVisual, inferTableVisual, inferListVisual, wantsAnswerVisuals, type AnswerVisual } from "@/lib/ai/answer-visuals"
 import { parseAnswerEntity } from "@/lib/ai/answer-entities"
 import { planAnswerVisualSlots, type AnswerVisualSegment, type AnswerVisualSlot } from "@/lib/ai/reference-visual-policy"
@@ -18,7 +19,7 @@ import { planAnswerVisualSlots, type AnswerVisualSegment, type AnswerVisualSlot 
  * model output is parsed into React elements and never injected as HTML.
  */
 
-type Props = { text: string; className?: string; allowImages?: boolean; visualContext?: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
+type Props = { text: string; className?: string; allowImages?: boolean; visualContext?: { question: string; messageId?: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
 
 function isProjectArtifactHref(href: string) {
   return /^\/api\/ai\/project\/artifacts\/[^/]+\/download(?:\?|$)/.test(href)
@@ -674,9 +675,11 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
   const hasAttachment = Boolean(visualContext?.hasAttachment)
   const streaming = Boolean(visualContext?.streaming)
   const visualSlots = useMemo(() => {
-    if (!question || streaming) return new Map<string, AnswerVisualSlot>()
+    if (!question) return new Map<string, AnswerVisualSlot>()
     const segments: AnswerVisualSegment[] = []
     blocks.forEach((block, position) => {
+      // The last streamed block can still change its subject; anchor only settled blocks.
+      if (streaming && position === blocks.length - 1) return
       const key = `b${position}`
       if (block.kind === "h") segments.push({ key, text: block.text, kind: "heading" })
       if (block.kind === "p") segments.push({ key, text: block.lines.join(" "), kind: "paragraph" })
@@ -728,7 +731,7 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
         const slot = visualSlots.get(key)
         const dataVisual = dataVisuals.get(position)
         if (block.kind === "visual") {
-          if (dataVisual) return <MalikAnswerVisual key={key} visual={dataVisual} />
+          if (dataVisual) return <MalikAnswerVisual key={key} visual={dataVisual} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} />
           if (block.pending && streaming && wantsAnswerVisuals(question)) return <p key={key} className="malik-md-p" role="status">Подготавливаю визуальный блок…</p>
           return null
         }
@@ -781,7 +784,16 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
           </MalikReferenceImages> : <Fragment key={key}>{heading}</Fragment>
         }
 
-        if (block.kind === "list") return <Fragment key={key}>{dataVisual ? <MalikAnswerVisual visual={dataVisual} /> : null}<MarkdownList list={block.list} keyPrefix={key} visualSlots={visualSlots} isLatest={visualContext?.isLatest} /></Fragment>
+        if (block.kind === "list") {
+          if (wantsAnswerVisuals(question) && block.list.items.length <= 20 && block.list.items.every((item) => item.checked !== null && !item.children.length)) {
+            const items = block.list.items.map((item) => {
+              const heading = /^\*\*([^*]+)\*\*\s*[:—–-]?\s*([\s\S]*)$/u.exec(item.text)
+              return { label: heading ? heading[1] : item.text, detail: heading?.[2] || undefined, checked: item.checked === true }
+            })
+            return <MalikAnswerChecklist key={key} title={previous?.kind === "h" && /чек|checklist|тізім/iu.test(previous.text) ? previous.text : "Чек-лист"} items={items} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} renderLabel={(label, index) => inline(label, `${key}-task-${index}`)} />
+          }
+          return <Fragment key={key}>{dataVisual ? <MalikAnswerVisual visual={dataVisual} /> : null}<MarkdownList list={block.list} keyPrefix={key} visualSlots={visualSlots} isLatest={visualContext?.isLatest} /></Fragment>
+        }
 
         if (block.kind === "math") return <TexMath key={key} tex={block.tex} display />
 

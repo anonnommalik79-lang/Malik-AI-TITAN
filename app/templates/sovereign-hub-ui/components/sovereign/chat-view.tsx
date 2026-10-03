@@ -1765,7 +1765,7 @@ function MessageBubble({
             </div>
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
-          {!isUser && message.execution && !olderVersion ? <ChatExecution trace={message.execution} live={streaming} sources={message.research?.sources} workMode={workspaceMode === "work"} /> : null}
+          {!isUser && message.execution && !olderVersion ? <ChatExecution trace={message.execution} live={streaming} sources={message.research?.sources} workMode={workspaceMode === "work"} writing={Boolean(displayContent)} liveStatus={message.liveStatus} /> : null}
           {!isUser && !message.execution && !streaming && message.thought && !olderVersion && !message.generatedMedia && !message.superflow ? (
             <ThoughtTrace thought={message.thought} sources={message.research?.usedWeb ? message.research.sources.length : 0} />
           ) : null}
@@ -1859,7 +1859,7 @@ function MessageBubble({
                         fade in (chat-live.css). It is dropped when done. */}
                     <MalikMarkdown text={displayContent} allowImages={false} className={writingLive ? "malik-streaming" : undefined}
                       visualContext={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
-                        ? { question, previousQuestion, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
+                        ? { question, messageId: message.id, previousQuestion, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
                     {streaming && videoAnalysis ? <VideoAnalysisPulse compact /> : null}
                   </>
                 )
