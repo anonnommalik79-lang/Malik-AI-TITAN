@@ -6,7 +6,7 @@ import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
 import { MalikTapGuide } from "./MalikTapGuide"
 import type { SuperflowRef } from "./os/os-client"
-import { FollowUpChips, ReadAloudButton, ThoughtTrace, UserMessageActions, VersionPager, useChatShortcuts } from "./chat-extras"
+import { AnswerDownloadButton, FollowUpChips, ReadAloudButton, ThoughtTrace, UserMessageActions, VersionPager, useChatShortcuts, type FollowUpSendOptions } from "./chat-extras"
 import "./chat-live.css"
 
 // The live Superflow block loads only when a conversation has one.
@@ -1686,7 +1686,7 @@ function MessageBubble({
   /** Puts a message back in the composer to edit and send again. */
   onEditPrompt?: (id: string, text: string) => void
   /** Sends a follow-up ("Подробнее", "Короче" …). */
-  onFollowUp?: (text: string) => void
+  onFollowUp?: (text: string, options?: FollowUpSendOptions) => void
   /** Only under the newest finished answer. */
   showFollowUps?: boolean
   feedback?: "up" | "down" | null
@@ -1899,6 +1899,7 @@ function MessageBubble({
             </button>
             <VersionPager index={shownVersion} total={versionTotal} onChange={setVersionIndex} />
             <ReadAloudButton id={message.id} text={displayContent} />
+            <AnswerDownloadButton text={displayContent} />
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
             <button type="button" title="Полезно" aria-pressed={feedback === "up"} onClick={() => onFeedback?.(message.id, "up")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "is-active")}><ThumbsUp className="h-4 w-4" /></button>
             <button type="button" title="Не полезно" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>
@@ -1911,7 +1912,7 @@ function MessageBubble({
             ) : null}
           </div>
         )}
-        {!isUser && showFollowUps && onFollowUp ? <FollowUpChips onSend={onFollowUp} /> : null}
+        {!isUser && showFollowUps && onFollowUp ? <FollowUpChips onSend={onFollowUp} question={question} answer={displayContent} /> : null}
         {isUser && message.content ? <UserMessageActions id={message.id} text={message.content} onEdit={onEditPrompt} /> : null}
       </div>
       {/* No initials disc beside the user's own turn either — the bubble and
@@ -2661,9 +2662,9 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     }, 0)
   }, [])
 
-  const handleFollowUp = useCallback((text: string) => {
+  const handleFollowUp = useCallback((text: string, options?: FollowUpSendOptions) => {
     const { onSendMessage: send, responseDepth: depth } = regenerateContextRef.current
-    send(text, [], { responseDepth: depth })
+    send(text, [], { responseDepth: depth, research: options?.research === true ? true : undefined })
   }, [])
 
   const promptValueRef = useRef("")
