@@ -57,13 +57,16 @@ function nativeTextareaSetter(field: HTMLTextAreaElement, value: string) {
 
 function composerFieldForButton(button: Element | null): HTMLTextAreaElement | null {
   if (!button) return null
+  // Home mounts separate desktop and mobile composers simultaneously. A global
+  // query always selects the hidden desktop textarea on phones. Read the one
+  // belonging to the tapped button, including when it contains an SVG child.
+  const composer = button.closest(".thome-composer, .malik-inline-composer")
+  const localField = composer?.querySelector<HTMLTextAreaElement>("textarea")
+  if (localField) return localField
   if (button.classList.contains("malik-inline-send")) {
-    return document.querySelector<HTMLTextAreaElement>(".malik-composer-textarea")
+    return button.closest("[data-composer]")?.querySelector<HTMLTextAreaElement>(".malik-composer-textarea") || null
   }
-  if (button.classList.contains("thome-submit")) {
-    return document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")
-  }
-  return document.querySelector<HTMLTextAreaElement>(COMPOSER_FIELD_SELECTOR)
+  return null
 }
 
 function imageModePinned() {
