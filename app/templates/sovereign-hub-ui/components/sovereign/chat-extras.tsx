@@ -168,7 +168,7 @@ export type FollowUpSendOptions = { research?: boolean }
 
 type FollowUpLocale = "ru" | "kk" | "en"
 function followUpLocale(question: string): FollowUpLocale {
-  if (/[әіңғүұқөһ]/iu.test(question)) return "kk"
+  if (/[әіңғүұқөһі]/iu.test(question)) return "kk"
   if (/[а-яё]/iu.test(question)) return "ru"
   return "en"
 }
@@ -213,9 +213,9 @@ export function buildContextualFollowUps(question: string, answer: string): Foll
     },
   }
   const items = copy[locale]
-  const isCode = /```|\b(code|coding|python|javascript|typescript|програм|код|функци|бағдарлама|кодты)\b/iu.test(question + "\n" + answer.slice(0, 300))
-  const isMath = /(?:[=+×÷∑√]|\b(?:математ|алгебр|уравнен|расч[её]т|есеп|теңдеу|equation|calculate|integral)\b)/iu.test(question)
-  const isProcedure = /(?:\b(?:как|как сделать|настрой|установ|пошаг|how to|steps|setup|install|қалай|орнат|баптау)\b)/iu.test(question)
+  const isCode = /(?:```|\b(?:code|coding|python|javascript|typescript)\b|код|програм|функци|бағдарлама)/iu.test(question + "\n" + answer.slice(0, 300))
+  const isMath = /(?:[=+×÷∑√]|математ|алгебр|уравнен|расч[её]т|есеп|теңдеу|\b(?:equation|calculate|integral)\b)/iu.test(question)
+  const isProcedure = /(?:как|настрой|установ|пошаг|қалай|орнат|баптау|\b(?:how to|steps|setup|install)\b)/iu.test(question)
   const special = isCode ? items.code : isMath ? items.math : isProcedure ? items.steps : items.table
   return [items.more, items.short, items.simple, items.example, special, ...(isCode || isMath ? [] : [items.fact])]
 }
