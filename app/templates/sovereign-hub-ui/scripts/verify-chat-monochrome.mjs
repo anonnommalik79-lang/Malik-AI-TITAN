@@ -130,5 +130,29 @@ check("chat input and its three controls no longer use grey fills", () => {
   assert.doesNotMatch(block, /filter: grayscale/)
 })
 
+check("image generator has no grey header, footer or metadata strip", () => {
+  const motion = fs.readFileSync("components/sovereign/image-generation-motion.tsx", "utf8")
+  const legacy = fs.readFileSync("app/image-ultra-stack.css", "utf8")
+  assert.doesNotMatch(motion, /className="malik-art-report"/, "metadata strip must be removed from DOM")
+  assert.doesNotMatch(legacy, /\.malik-photo-motion\[data-malik-image-ready="1"\] \.malik-art-report\s*\{/, "legacy CSS must not resurrect the metadata")
+  assert.match(motion, /malik-photo-final__gif/, "preserve the loading animation")
+  assert.match(motion, /malik-photo-final__result/, "preserve the finished photo")
+  for (const surface of [
+    ".malik-photo-final__heading",
+    ".malik-photo-final__title-row",
+    ".malik-photo-final__steps",
+    ".malik-photo-final__timer",
+    ".malik-photo-final__progress",
+    ".malik-photo-final__status",
+    ".malik-photo-final__failure",
+  ]) assert.ok(css.includes(`#malik-root ${surface}`), `missing OLED override: ${surface}`)
+  const block = css.slice(css.indexOf("Image chat: one genuine #000 canvas"))
+  assert.ok(block.length > 1500, "image cleanup is the final override")
+  assert.match(block, /background: #000 !important;/, "surfaces must match the black chat")
+  assert.match(block, /\.malik-photo-final__track > span\s*\{[\s\S]*?background: #fff !important;/, "white progress remains visible")
+  assert.match(block, /\.malik-photo-final \.malik-art-report\s*\{\s*display: none !important;/, "receipt never reappears")
+  assert.match(block, /\.malik-photo-final__frame\s*\{\s*border: 0 !important;/, "frame loses fake outline")
+})
+
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nchat monochrome: all checks passed\n")
 process.exit(failures ? 1 : 0)
