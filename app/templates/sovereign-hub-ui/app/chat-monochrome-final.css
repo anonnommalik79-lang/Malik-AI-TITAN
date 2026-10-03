@@ -321,3 +321,58 @@
   background: #fff !important;
   color: #000 !important;
 }
+
+/* Image chat: one genuine #000 canvas. The animated GIF and finished image
+   remain visible; no grey headers, fake stacked cards or metadata strips. */
+#malik-root .malik-message-row-assistant:has([data-malik-image-motion="1"]) .malik-message-card-assistant,
+#malik-root .malik-message-row-assistant .malik-photo-final,
+#malik-root .malik-photo-final__heading,
+#malik-root .malik-photo-final__title-row,
+#malik-root .malik-photo-final__steps,
+#malik-root .malik-photo-final__step,
+#malik-root .malik-photo-final__timer,
+#malik-root .malik-photo-final__progress,
+#malik-root .malik-photo-final__status,
+#malik-root .malik-photo-final__failure {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  outline: none !important;
+}
+#malik-root .malik-photo-final__heading::before,
+#malik-root .malik-photo-final__heading::after,
+#malik-root .malik-photo-final__title-row::before,
+#malik-root .malik-photo-final__title-row::after,
+#malik-root .malik-photo-final__progress::before,
+#malik-root .malik-photo-final__progress::after,
+#malik-root .malik-photo-final__status::before,
+#malik-root .malik-photo-final__status::after {
+  content: none !important;
+  display: none !important;
+}
+#malik-root .malik-photo-final .malik-art-report {
+  display: none !important;
+}
+#malik-root .malik-photo-final__frame,
+#malik-root .malik-photo-final__gif-picture,
+#malik-root .malik-photo-final__result {
+  background: #000 !important;
+  background-color: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+#malik-root .malik-photo-final__frame {
+  border: 0 !important;
+}
+#malik-root .malik-photo-final__track {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  height: 2px !important;
+}
+#malik-root .malik-photo-final__track > span {
+  background: #fff !important;
+}
