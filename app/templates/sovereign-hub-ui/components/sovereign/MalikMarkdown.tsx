@@ -10,7 +10,7 @@ import { MalikAnswerVisual } from "./MalikAnswerVisual"
 import { MalikAnswerChecklist } from "./MalikAnswerChecklist"
 import { parseAnswerVisual, inferTableVisual, inferListVisual, inferComparisonTable, wantsAnswerVisuals, wantsAnswerChecklist, type AnswerVisual } from "@/lib/ai/answer-visuals"
 import { parseAnswerEntity } from "@/lib/ai/answer-entities"
-import { planAnswerVisualSlots, visualSegmentLabel, type AnswerVisualSegment, type AnswerVisualSlot } from "@/lib/ai/reference-visual-policy"
+import { planAnswerVisualSlots, visualSegmentLabel, type AnswerVisualSegment, type AnswerVisualSlot, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { groundedAnswerPhotoPlans, parseAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 
 /**
@@ -680,6 +680,20 @@ function AnswerEntityCard({ text, description = "" }: { text: string; descriptio
   </div>
 }
 
+/** Match full subject names, not substrings (iPhone 16 must not match iPhone 16 Pro). */
+function hasVisualSubject(content: string, topic: string): boolean {
+  const normalized = (value: string) => value.normalize("NFKC").toLocaleLowerCase().replace(/[`*_]/gu, "").replace(/\\s+/gu, " ").trim()
+  const needle = normalized(topic)
+  if (!needle) return false
+  const escaped = needle.replace(/[.*+?^${}()|[\\]\\\\]/gu, "\\\\export function MalikMarkdown({ text, className, allowImages = true, visualContext }: Props) {")
+  return new RegExp("(?<![\\\\p{L}\\\\p{N}])" + escaped + "(?![\\\\p{L}\\\\p{N}])", "u").test(normalized(content))
+}
+
+/** A single-person/product request gets the hero. Collections stay compact rows. */
+function isMultiSubjectVisualQuestion(question: string): boolean {
+  return /(?:список|перечисли|все(?:х|ми)?\\b|нескольк|сравни|сравнение|участник[ио]|спикер[ыо]|кто\\s+(?:будет|был|приехал|выступал)|какие\\s+(?:люди|модели|виды)|\\b(?:list|all|compare|versus|speakers|participants|attendees|several|multiple|top\\s+\\d+)\\b)/iu.test(question)
+}
+
 export function MalikMarkdown({ text, className, allowImages = true, visualContext }: Props) {
   const blocks = useMemo(() => parseBlocks(text), [text])
   const question = visualContext?.question || ""
@@ -727,20 +741,47 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
     return plans
   }, [blocks, fallbackVisualSlots, question, text, hasAttachment])
   const hintedAnchors = useMemo(() => {
-    const slots = new Map<string, AnswerVisualSlot>(), consumed = new Set<number>()
+    const slots = new Map<string, AnswerVisualSlot>()
+    const consumed = new Set<number>()
+    const unanchored = new Map<number, ReferenceVisualPlan[]>()
+    const occupied = new Set<string>()
     photoPlans.forEach((plans, position) => {
-      if (plans.length !== 1) return
-      const headingPosition = blocks[position - 1]?.kind === "p" ? position - 2 : position - 1
-      const heading = blocks[headingPosition]
-      if (heading?.kind !== "h" || parseAnswerEntity(heading.text)
-        || visualSegmentLabel(heading.text).toLowerCase() !== plans[0].topic.toLowerCase()) return
-      const key = `b${headingPosition}`
-      slots.set(key, { key, plan: plans[0], row: true })
-      consumed.add(position)
+      const remaining: ReferenceVisualPlan[] = []
+      for (const plan of plans) {
+        const candidates: Array<{ key: string; position: number; priority: number }> = []
+        // A fence belongs to its nearby item/heading, never an arbitrary earlier mention.
+        for (let index = position - 1; index >= Math.max(0, position - 4); index--) {
+          const block = blocks[index]
+          if (block.kind === "photos" || block.kind === "visual" || block.kind === "hr") break
+          if (block.kind === "h" && hasVisualSubject(block.text, plan.topic) && !parseAnswerEntity(block.text)) {
+            candidates.push({ key: `b${index}`, position: index, priority: 0 })
+          }
+          if (block.kind === "list") block.list.items.forEach((item, itemIndex) => {
+            if (hasVisualSubject(item.text, plan.topic) && !item.children.length) {
+              candidates.push({ key: `b${index}-${itemIndex}`, position: index, priority: 1 })
+            }
+          })
+          if (block.kind === "p" && hasVisualSubject(block.lines.join(" "), plan.topic)) {
+            candidates.push({ key: `b${index}`, position: index, priority: 2 })
+          }
+        }
+        // Headings own their descriptions; list items own their own photos.
+        candidates.sort((a, b) => a.priority - b.priority || b.position - a.position)
+        const target = candidates.find((candidate) => !occupied.has(candidate.key))
+        if (!target) { remaining.push(plan); continue }
+        occupied.add(target.key)
+        slots.set(target.key, { key: target.key, plan, row: true })
+      }
+      if (remaining.length) unanchored.set(position, remaining)
+      else consumed.add(position)
     })
-    return { slots, consumed }
+    return { slots, consumed, unanchored }
   }, [blocks, photoPlans])
   const visualSlots = photoPlans.size ? hintedAnchors.slots : fallbackVisualSlots
+  const photoCount = photoPlans.size
+    ? [...photoPlans.values()].reduce((total, plans) => total + plans.length, 0)
+    : [...fallbackVisualSlots.values()].reduce((total, slot) => total + (slot.plan.subjects?.length || 1), 0)
+  const singleVisualSubject = photoCount === 1 && !isMultiSubjectVisualQuestion(question)
   const dataVisuals = useMemo(() => {
     const visuals = new Map<number, AnswerVisual>()
     if (!wantsAnswerVisuals(question)) return visuals
@@ -786,10 +827,11 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
         const dataVisual = dataVisuals.get(position)
         if (block.kind === "photos") {
           if (hintedAnchors.consumed.has(position)) return null
-          const plans = photoPlans.get(position)
+          const plans = hintedAnchors.unanchored.get(position)
           if (!plans?.length) return null
-          return <section key={key} data-malik-photo-hints className={plans.length > 1 ? "my-5 grid grid-cols-2 gap-3 sm:grid-cols-3" : "my-5"} aria-label="Фотографии по теме ответа">
-            {plans.map((plan) => <MalikReferenceImages key={plan.topic} question="" planOverride={plan} compact={plans.length > 1} isLatest={visualContext?.isLatest} />)}
+          // Even an unanchored model hint is a captioned subject row, never a bottom photo grid.
+          return <section key={key} data-malik-photo-hints className="my-5 space-y-4" aria-label="Фотографии по теме ответа">
+            {plans.map((plan) => <MalikReferenceImages key={plan.topic} question="" planOverride={plan} row={!singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest} />)}
           </section>
         }
         if (block.kind === "visual") {
@@ -845,7 +887,7 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
           const level = Math.min(block.level + 1, 6)
           const Tag = `h${level}` as "h2" | "h3" | "h4" | "h5" | "h6"
           const heading = <Tag className={`malik-md-h malik-md-h${block.level}`}>{inline(block.text, key)}</Tag>
-          return slot ? <MalikReferenceImages key={key} question={question} planOverride={slot.plan} row={slot.row} isLatest={visualContext?.isLatest}>
+          return slot ? <MalikReferenceImages key={key} question={question} planOverride={slot.plan} row={slot.row || !singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest}>
             {heading}{next?.kind === "p" ? <p className="malik-md-p">{inline(next.lines.join(" "), key + "-description")}</p> : null}
           </MalikReferenceImages> : <Fragment key={key}>{heading}</Fragment>
         }
@@ -880,7 +922,7 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
             ))}
           </p>
         )
-        return slot ? <MalikReferenceImages key={key} question={question} planOverride={slot.plan} row={slot.row} isLatest={visualContext?.isLatest}>{paragraph}</MalikReferenceImages> : <Fragment key={key}>{paragraph}</Fragment>
+        return slot ? <MalikReferenceImages key={key} question={question} planOverride={slot.plan} row={slot.row || !singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest}>{paragraph}</MalikReferenceImages> : <Fragment key={key}>{paragraph}</Fragment>
       })}
     </div>
   )
