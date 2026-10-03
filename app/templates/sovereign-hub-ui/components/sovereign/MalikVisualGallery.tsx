@@ -20,7 +20,7 @@ function safeSourceUrl(value?: string): string {
   }
 }
 
-function ReferenceCard({ image, portrait, onOpen, onFailure }: { image: MalikVisualImage; portrait: boolean; onOpen: () => void; onFailure?: (url: string) => void }) {
+function ReferenceCard({ image, portrait, label, onOpen, onFailure }: { image: MalikVisualImage; portrait: boolean; label?: string; onOpen: () => void; onFailure?: (url: string) => void }) {
   const [failed, setFailed] = useState(false)
   const source = safeSourceUrl(image.sourceUrl) || image.url
   return (
@@ -43,7 +43,7 @@ function ReferenceCard({ image, portrait, onOpen, onFailure }: { image: MalikVis
         )}
       </button>
       <figcaption className="min-w-0 border-t border-white/10 px-2.5 py-2">
-        <span className="block truncate text-sm font-medium text-zinc-100" title={image.alt}>{image.alt || "Изображение"}</span>
+        <span className="block text-sm font-semibold leading-5 text-zinc-100" title={label || image.alt}>{label || image.alt || "Изображение"}</span>
         <a href={source} target="_blank" rel="noopener noreferrer" className="mt-1 flex min-w-0 items-center gap-1 text-xs text-zinc-400 hover:text-white" aria-label={"Источник изображения: " + (image.credit || image.alt)}>
           <span className="truncate">{[image.credit, image.license].filter(Boolean).join(" · ") || "Источник фото"}</span>
           <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
@@ -77,7 +77,7 @@ export function MalikVisualGallery({ images, title, portrait = false, onFailure 
   return (
     <section data-malik-reference-gallery className="my-5 w-full min-w-0 max-w-[760px]" aria-label={title || "Изображения в ответе"}>
       {title ? <h3 className="mb-3 text-base font-semibold text-white">{title}</h3> : null}
-      <div className={"grid gap-2 sm:gap-3 " + (visible.length === 1 ? "max-w-[360px] grid-cols-1" : visible.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
+      <div className={"grid gap-2 sm:gap-3 " + (visible.length === 1 ? "max-w-[620px] grid-cols-1" : visible.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
         {visible.map((image) => <ReferenceCard key={image.url} image={image} portrait={portrait} onOpen={() => setSelected(image)} onFailure={(url) => { setSelected(null); onFailure?.(url) }} />)}
       </div>
       {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}
@@ -92,7 +92,7 @@ export function wantsReferenceImages(question: string): boolean {
 }
 
 /** Direct browser catalogue requests: no image proxy, no generation credits. */
-export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, compact = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; compact?: boolean; children?: ReactNode }) {
+export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, compact = false, hero = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; compact?: boolean; hero?: boolean; children?: ReactNode }) {
   const candidate = useMemo(() => planOverride || planReferenceVisuals(question, previousQuestion, hasAttachment), [planOverride, question, previousQuestion, hasAttachment])
   // The answer grows while streaming. Keep subscriptions stable for identical queries.
   const serializedPlan = candidate ? JSON.stringify(candidate) : ""
@@ -138,16 +138,40 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
     : null
   if (collection) return <div className="min-w-0" data-malik-reference-topic={plan.topic}>
     {children}
-    <section className="my-5 grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label={"Фотографии · " + plan.topic} data-malik-reference-collection>
-      {plan.subjects!.slice(0, 60).map((subject, index) => <MalikReferenceImages key={subject} question="" compact isLatest={isLatest && index < 6}
-        planOverride={{ topic: subject, queries: [...new Set([referenceSearchTopic(subject), subject])], explicit: true, entity: true, kind: "reference", layout: "portrait" }} />)}
+    <section className="my-5 space-y-4" aria-label={"Фотографии · " + plan.topic} data-malik-reference-collection>
+      {plan.subjects!.slice(0, 60).map((subject, index) => <MalikReferenceImages key={subject} question="" row isLatest={isLatest && index < 6}
+        planOverride={{ topic: subject, queries: [...new Set([referenceSearchTopic(subject), subject])], explicit: true, entity: true, kind: "reference", layout: "portrait" }}>
+        <p className="text-sm font-medium text-zinc-100">{subject}</p>
+      </MalikReferenceImages>)}
     </section>
   </div>
   if (compact) return <div ref={container} className="min-w-0" hidden={images !== null && !images.length} data-malik-reference-topic={plan.topic}>
-    {images?.[0] ? <ReferenceCard key={images[0].url} image={images[0]} portrait={plan.layout === "portrait"} onOpen={() => setSelected(images[0])} onFailure={failed} />
+    {images?.[0] ? <ReferenceCard key={images[0].url} image={images[0]} portrait={plan.layout === "portrait"} label={plan.topic} onOpen={() => setSelected(images[0])} onFailure={failed} />
       : <div className="flex aspect-[3/4] flex-col justify-center rounded-2xl border border-white/15 px-3 text-center"><span className="text-sm font-medium text-white">{plan.topic}</span>{status}</div>}
     {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}
   </div>
+  // One concrete subject deserves a generous, readable photograph and its own caption.
+  if (hero && plan.kind !== "tutorial") return (
+    <section ref={container} className="malik-answer-photo-hero min-w-0" data-malik-reference-topic={plan.topic} data-malik-hero-visual>
+      {images?.[0] ? <figure className="malik-answer-photo-hero__figure">
+        <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + plan.topic}
+          className="block w-full overflow-hidden rounded-xl bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+          <img src={images[0].url} alt={plan.topic} loading="lazy" decoding="async" referrerPolicy="no-referrer"
+            className="mx-auto block max-h-[520px] w-full object-contain" onError={() => failed(images[0].url)} />
+        </button>
+        <figcaption className="mt-2 flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
+          <strong className="font-semibold text-white">{plan.topic}</strong>
+          <a href={safeSourceUrl(images[0].sourceUrl) || images[0].url} target="_blank" rel="noopener noreferrer"
+            className="inline-flex min-w-0 items-center gap-1 text-xs text-zinc-400 hover:text-white">
+            <span className="truncate">{images[0].credit || "Источник фото"}</span><ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+          </a>
+        </figcaption>
+      </figure> : null}
+      {children ? <div className="min-w-0">{children}</div> : null}
+      {!images?.length && active ? status : null}
+      {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}
+    </section>
+  )
   if (row) return (
     <div ref={container} className="malik-answer-photo-row min-w-0" data-malik-reference-topic={plan.topic} data-malik-inline-visual>
       <div className={images?.length ? "flex items-start gap-3 sm:gap-5" : ""}>
@@ -158,6 +182,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
               onError={() => failed(images[0].url)} />
           </button>
           <figcaption className="bg-black px-1.5 py-1 text-xs leading-4 text-zinc-400">
+            <strong className="mb-1 block break-words font-semibold text-zinc-100">{plan.topic}</strong>
             <a href={safeSourceUrl(images[0].sourceUrl) || images[0].url} target="_blank" rel="noopener noreferrer" className="block truncate underline-offset-2 hover:underline" title={[images[0].credit, images[0].license].filter(Boolean).join(" · ")}>{images[0].credit || "Источник фото"}</a>
           </figcaption>
         </figure> : null}
