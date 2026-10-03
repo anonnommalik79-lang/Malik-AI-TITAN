@@ -53,11 +53,21 @@ export function groundedAnswerPhotoPlans(subjects: PhotoSubject[], question: str
   const visible = normalize(stripAnswerPhotoHints(answer).replace(/```[\s\S]*?(?:```|$)/gu, ""))
   const seen = new Set<string>()
   const personQuestion = Boolean(planReferenceVisuals(question)?.person)
+  const eventParticipationQuestion = /(?:спикер|выступ(?:а|и|ил|ят)|участни[кц]|приехал|присутств|кто\s+будет|speaker|attend|participat|lineup|guest\s+list|қатысуш|спикер)/iu.test(question)
+  const uncertainEventClaim = /(?:не\s+(?:подтвержд|значит|указан|включ[её]н|найден|объявлен)|нет\s+(?:данных|подтвержден|сведен)|неизвестно|не\s+числит|not\s+(?:listed|confirmed|announced)|no\s+(?:evidence|confirmation)|unconfirmed)/iu
+
   return subjects.flatMap((subject) => {
     const name = normalize(subject.name)
     // Require the complete named subject in visible prose, with word boundaries.
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")
-    if (seen.has(name) || !new RegExp("(?<![\\p{L}\\p{N}])" + escaped + "(?![\\p{L}\\p{N}])", "u").test(visible)) return []
+    const namePattern = new RegExp("(?<![\\p{L}\\p{N}])" + escaped + "(?![\\p{L}\\p{N}])", "u")
+    if (seen.has(name) || !namePattern.test(visible)) return []
+    // A portrait from Wikipedia establishes identity, never participation in an event.
+    if (eventParticipationQuestion) {
+      const nameOffset = visible.search(namePattern)
+      const mention = nameOffset >= 0 ? visible.slice(Math.max(0, nameOffset - 85), nameOffset + name.length + 110) : ""
+      if (uncertainEventClaim.test(mention)) return []
+    }
     seen.add(name)
     return [{ topic: subject.name, queries: [...new Set([referenceSearchTopic(subject.query), referenceSearchTopic(subject.name)])],
       explicit: true, entity: subject.kind !== "topic" || personQuestion, person: subject.kind === "person" || personQuestion, kind: "reference" as const, layout: subject.layout }]
