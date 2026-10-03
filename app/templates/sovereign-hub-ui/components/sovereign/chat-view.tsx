@@ -1886,7 +1886,7 @@ function MessageBubble({
           ) : null}
         </div>
         {!isUser && message.content && !streaming && !message.imageConfirmation && (
-          <div className={cn("malik-message-actions mt-2 flex items-center gap-2 text-zinc-500", Boolean(message.research?.sources.length) && "is-research", isLatest && "is-latest")}>
+          <div className={cn("malik-message-actions mt-2 flex min-w-0 flex-wrap items-center gap-2 text-zinc-500", Boolean(message.research?.sources.length) && "is-research", isLatest && "is-latest")}>
             <button
               type="button"
               title={copied ? "Скопировано" : "Копировать"}
