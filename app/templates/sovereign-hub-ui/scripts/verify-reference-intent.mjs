@@ -25,6 +25,28 @@ const catalog = load("lib/media/reference-catalog.ts")
 const cache = load("lib/media/client-reference-cache.ts")
 const entities = load("lib/ai/answer-entities.ts")
 const products = load("lib/media/official-product-photos.ts")
+const photoHints = load("lib/ai/answer-photo-hints.ts")
+const hints = (subjects) => photoHints.parseAnswerPhotoHints(JSON.stringify({ version: 1, subjects }))
+const subject = { name: "Альберт Эйнштейн", query: "Albert Einstein", layout: "portrait" }
+assert.equal(photoHints.groundedAnswerPhotoPlans(hints([subject]), "Кто такой Эйнштейн", "Альберт Эйнштейн — физик.")[0].queries[0], "Albert Einstein")
+assert.deepEqual(photoHints.groundedAnswerPhotoPlans(hints([subject]), "Кто такой Эйнштейн", "Имя не названо."), [])
+assert.deepEqual(photoHints.groundedAnswerPhotoPlans(hints([subject]), "Кто такой Эйнштейн без фото", "Альберт Эйнштейн — физик."), [])
+assert.deepEqual(photoHints.groundedAnswerPhotoPlans(hints([subject]), "Напиши код", "Альберт Эйнштейн"), [])
+assert.deepEqual(photoHints.groundedAnswerPhotoPlans(hints([{ name: "iPhone 16", query: "iPhone 16 Pro" }]), "Сравни телефоны", "iPhone 16"), [])
+assert.deepEqual(hints([{ name: "iPhone 16 Pro", query: "iPhone 17 Pro" }]), [])
+assert.deepEqual(hints([{ name: "Фото", query: "https://evil.example/secret" }]).map((item) => item.query), ["Фото"])
+assert.deepEqual(photoHints.parseAnswerPhotoHints("x".repeat(8193)), [])
+assert.deepEqual(hints(Array.from({ length: 13 }, () => subject)), [])
+assert.deepEqual(photoHints.groundedAnswerPhotoPlans(hints([{ name: "iPhone 4", query: "iPhone 4" }]), "Телефоны", "iPhone 40"), [])
+assert.deepEqual(photoHints.groundedAnswerPhotoPlans(hints([subject]), "Люди", "```text\nАльберт Эйнштейн\n```"), [])
+const hidden = 'Текст.\n\n```malik-photos\n{"version":1}\n```\n\nКонец.'
+assert.equal(photoHints.stripAnswerPhotoHints(hidden), "Текст.\n\n\nКонец.")
+assert.equal(photoHints.stripAnswerPhotoHints("Ответ.\n```malik-photos\n{partial"), "Ответ.")
+assert.equal(photoHints.stripAnswerPhotoHints("```js\nconst x = 'malik-photos'\n```"), "```js\nconst x = 'malik-photos'\n```")
+assert.ok(policy.planReferenceVisuals("Теперь покажи их фото", "Расскажи про Медеу без фото") || policy.planReferenceVisuals("Покажи их фото", "Расскажи про Медеу без фото"))
+assert.equal(catalog.referenceTopicMatches("Medeu", "Almaty city centre"), false)
+assert.equal(catalog.referenceTopicMatches("Medeu", "File:DSC123.jpg A view of the Medeu skating rink"), true)
+assert.equal(catalog.referenceTitleScore("Samsung Galaxy S24", "Samsung Galaxy S24 Ultra"), 0)
 const iphoneList = "2007: iPhone (первое поколение / 2G)\n2008: iPhone 3G\n2009: iPhone 3GS\n2016: iPhone SE (1-е поколение), iPhone 7, iPhone 7 Plus\n2020: iPhone SE (2-е поколение), iPhone 12 Pro Max\n2025: iPhone 17, iPhone 17 Air"
 const allPhones = policy.planReferenceVisuals("Покажи все модели айфона")
 assert.equal(allPhones.queries[0], "iPhone")
@@ -137,7 +159,7 @@ const savedFetch = globalThis.fetch
 const savedStorage = globalThis.localStorage
 const savedKey = process.env.UNSPLASH_ACCESS_KEY
 const stored = new Map()
-globalThis.localStorage = { getItem: (key) => stored.get(key) || null, setItem: (key, value) => stored.set(key, value) }
+globalThis.localStorage = { getItem: (key) => stored.get(key) || null, setItem: (key, value) => stored.set(key, value), removeItem: (key) => stored.delete(key) }
 delete process.env.UNSPLASH_ACCESS_KEY
 const calls = []
 const media = (index) => ({ index, title: "File:Almaty mountains " + index + ".jpg", imageinfo: [{ mime: "image/jpeg", thumburl: "https://thumb.wikimedia.org/mountains" + index + ".jpg?utm_source=commons", url: "https://upload.wikimedia.org/massive-original.jpg", descriptionurl: "https://commons.wikimedia.org/wiki/File:Almaty_mountains.jpg", extmetadata: { Artist: { value: "<b>Photographer</b>" }, LicenseShortName: { value: "CC BY-SA 4.0" } } }] })
@@ -150,7 +172,7 @@ try {
     assert.equal(url.searchParams.get("iiurlwidth"), "480")
     assert.equal(url.searchParams.get("gsrlimit"), "6")
     calls.push(url.searchParams.get("gsrsearch"))
-    return Response.json({ query: { pages: [media(3), media(1), media(2), media(4)] } })
+    return Response.json({ query: { pages: [3, 1, 2, 4].map((index) => ({ ...media(index), title: "File:" + url.searchParams.get("gsrsearch") + " " + index + ".jpg" })) } })
   }
   const plan = policy.planReferenceVisuals("Покажи горы Алматы")
   const images = await catalog.lookupReferenceImages(plan)
@@ -172,12 +194,18 @@ try {
   assert.equal(calls.length, 1, "remounted messages use cache")
   assert.ok([...stored.values()].every((value) => value.length <= 128 * 1024))
   assert.ok([...stored.values()].every((value) => !value.includes("massive-original")))
+  assert.equal(cache.reportReferenceImageFailure(plan, images[0].url), true)
+  assert.equal(cache.reportReferenceImageFailure(plan, images[0].url), false, "a failed URL cannot create an infinite retry loop")
+  const replacement = await new Promise((resolve) => cache.subscribeReferenceImages(plan, resolve))
+  assert.equal(replacement.length, 3)
+  assert(replacement.every((image) => image.url !== images[0].url), "exclude failed thumbnails even when upstream adds tracking parameters")
+  assert.equal(replacement[0].url.endsWith("mountains2.jpg"), true)
   // React StrictMode cleanup/re-subscribe must not trigger duplicate lookups.
   const strictPlan = policy.planReferenceVisuals("Покажи горы Астаны")
   const stop = cache.subscribeReferenceImages(strictPlan, () => {})
   stop()
   await new Promise((resolve) => cache.subscribeReferenceImages(strictPlan, resolve))
-  assert.equal(calls.length, 2)
+  assert.equal(calls.length, 3)
   // A similarly named but unrelated image is not a valid screenshot.
   globalThis.fetch = async () => Response.json({ query: { pages: [
     { ...media(1), title: "File:Android Bluetooth settings.jpg" },
@@ -229,9 +257,37 @@ try {
     if (url.hostname === "commons.wikimedia.org") return Response.json({ query: { pages: [] } })
     return Response.json({ query: { pages: [{ index: 1, title: "Медеу", fullurl: "https://ru.wikipedia.org/wiki/Медеу", thumbnail: { source: "https://upload.wikimedia.org/medeuthumb.jpg" } }] } })
   }
-  const articleFallback = await catalog.lookupReferenceImages(plan)
+  const articleFallback = await catalog.lookupReferenceImages({ topic: "Медеу", queries: ["Медеу"], explicit: true, layout: "landscape" })
   assert.equal(articleFallback[0]?.alt, "Медеу")
   assert.ok(fallbackCalls.some((host) => host.endsWith(".wikipedia.org")), "a missed Commons search must still reach article thumbnails")
+  globalThis.fetch = async () => Response.json({ query: { pages: [
+    { ...media(1), title: "File:Almaty city centre.jpg" },
+    { ...media(2), title: "File:DSC123.jpg", imageinfo: [{ ...media(2).imageinfo[0], extmetadata: { ImageDescription: { value: "<p>The Medeu skating rink near Almaty.</p>" } } }] },
+  ] } })
+  const exactPlace = await catalog.lookupReferenceImages({ topic: "Medeu", queries: ["Medeu"], explicit: true, layout: "landscape" })
+  assert.deepEqual(exactPlace.map((image) => image.url), ["https://thumb.wikimedia.org/mountains2.jpg"], "generic ranking must not replace the requested place with its surrounding city")
+  let simultaneous = 0, maximum = 0, delivered = 0
+  const gates = []
+  globalThis.fetch = async (input) => {
+    simultaneous++; maximum = Math.max(maximum, simultaneous)
+    await new Promise((resolve) => gates.push(resolve))
+    simultaneous--; delivered++
+    const topic = new URL(String(input)).searchParams.get("gsrsearch")
+    return Response.json({ query: { pages: [{ ...media(1), title: "File:" + topic + ".jpg" }] } })
+  }
+  const queued = Array.from({ length: 6 }, (_, index) => new Promise((resolve) => cache.subscribeReferenceImages({ topic: "Subject" + index, queries: ["Subject" + index], explicit: true, layout: "landscape" }, resolve)))
+  const cancelQueued = cache.subscribeReferenceImages({ topic: "Cancelled subject", queries: ["Cancelled subject"], explicit: true, layout: "landscape" }, () => assert.fail("unmounted queued lookup must not deliver"))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(gates.length, 3, "at most three catalogue lookups start together")
+  cancelQueued()
+  gates.splice(0).forEach((release) => release())
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(gates.length, 3)
+  gates.splice(0).forEach((release) => release())
+  const queuedResults = await Promise.all(queued)
+  assert.equal(queuedResults.length, 6)
+  assert.equal(delivered, 6)
+  assert.equal(maximum, 3)
   const route = load("app/api/chat/reference-images/route.ts")
   let requests = 0
   globalThis.fetch = async () => { requests++; return Response.json({ query: { pages: [media(1)] } }) }

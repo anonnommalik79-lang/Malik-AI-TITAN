@@ -10,7 +10,8 @@ import { MalikAnswerVisual } from "./MalikAnswerVisual"
 import { MalikAnswerChecklist } from "./MalikAnswerChecklist"
 import { parseAnswerVisual, inferTableVisual, inferListVisual, inferComparisonTable, wantsAnswerVisuals, wantsAnswerChecklist, type AnswerVisual } from "@/lib/ai/answer-visuals"
 import { parseAnswerEntity } from "@/lib/ai/answer-entities"
-import { planAnswerVisualSlots, type AnswerVisualSegment, type AnswerVisualSlot } from "@/lib/ai/reference-visual-policy"
+import { planAnswerVisualSlots, visualSegmentLabel, type AnswerVisualSegment, type AnswerVisualSlot } from "@/lib/ai/reference-visual-policy"
+import { groundedAnswerPhotoPlans, parseAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 
 /**
  * Renders an assistant answer as structured text.
@@ -118,6 +119,7 @@ type Block =
   | { kind: "list"; list: ListBlock }
   | { kind: "math"; tex: string }
   | { kind: "visual"; visual: AnswerVisual | null; pending: boolean }
+  | { kind: "photos"; subjects: ReturnType<typeof parseAnswerPhotoHints> }
   | { kind: "code"; language: string; filename: string; lines: string[] }
   | { kind: "table"; headers: string[]; rows: string[][] }
   | { kind: "images"; images: MalikVisualImage[] }
@@ -316,6 +318,11 @@ function parseBlocks(source: string): Block[] {
       index += 1
       if (fence.language === "malik-visual") {
         blocks.push({ kind: "visual", visual: closed ? parseAnswerVisual(body.join("\n")) : null, pending: !closed })
+        pendingFilename = ""
+        continue
+      }
+      if (fence.language === "malik-photos") {
+        blocks.push({ kind: "photos", subjects: closed ? parseAnswerPhotoHints(body.join("\n")) : [] })
         pendingFilename = ""
         continue
       }
@@ -689,7 +696,7 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
     })
     return selected
   }, [blocks, question])
-  const visualSlots = useMemo(() => {
+  const fallbackVisualSlots = useMemo(() => {
     if (!question) return new Map<string, AnswerVisualSlot>()
     const segments: AnswerVisualSegment[] = []
     blocks.forEach((block, position) => {
@@ -702,6 +709,38 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
     })
     return new Map(planAnswerVisualSlots(question, segments, previousQuestion, hasAttachment, previousAnswer).map((slot) => [slot.key, slot]))
   }, [blocks, question, previousQuestion, previousAnswer, hasAttachment, streaming])
+  const photoPlans = useMemo(() => {
+    const plans = new Map<number, ReturnType<typeof groundedAnswerPhotoPlans>>()
+    // A verified full product collection keeps every exact model, including >12 items.
+    if ([...fallbackVisualSlots.values()].some((slot) => slot.plan.subjects?.length)) return plans
+    const seen = new Set<string>()
+    blocks.forEach((block, position) => {
+      if (block.kind !== "photos") return
+      const grounded = groundedAnswerPhotoPlans(block.subjects, question, text, hasAttachment).filter((plan) => {
+        const name = plan.topic.toLowerCase()
+        if (seen.has(name) || seen.size >= 12) return false
+        seen.add(name)
+        return true
+      })
+      if (grounded.length) plans.set(position, grounded)
+    })
+    return plans
+  }, [blocks, fallbackVisualSlots, question, text, hasAttachment])
+  const hintedAnchors = useMemo(() => {
+    const slots = new Map<string, AnswerVisualSlot>(), consumed = new Set<number>()
+    photoPlans.forEach((plans, position) => {
+      if (plans.length !== 1) return
+      const headingPosition = blocks[position - 1]?.kind === "p" ? position - 2 : position - 1
+      const heading = blocks[headingPosition]
+      if (heading?.kind !== "h" || parseAnswerEntity(heading.text)
+        || visualSegmentLabel(heading.text).toLowerCase() !== plans[0].topic.toLowerCase()) return
+      const key = `b${headingPosition}`
+      slots.set(key, { key, plan: plans[0], row: true })
+      consumed.add(position)
+    })
+    return { slots, consumed }
+  }, [blocks, photoPlans])
+  const visualSlots = photoPlans.size ? hintedAnchors.slots : fallbackVisualSlots
   const dataVisuals = useMemo(() => {
     const visuals = new Map<number, AnswerVisual>()
     if (!wantsAnswerVisuals(question)) return visuals
@@ -745,6 +784,14 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
         const next = blocks[position + 1]
         const slot = visualSlots.get(key)
         const dataVisual = dataVisuals.get(position)
+        if (block.kind === "photos") {
+          if (hintedAnchors.consumed.has(position)) return null
+          const plans = photoPlans.get(position)
+          if (!plans?.length) return null
+          return <section key={key} data-malik-photo-hints className={plans.length > 1 ? "my-5 grid grid-cols-2 gap-3 sm:grid-cols-3" : "my-5"} aria-label="Фотографии по теме ответа">
+            {plans.map((plan) => <MalikReferenceImages key={plan.topic} question="" planOverride={plan} compact={plans.length > 1} isLatest={visualContext?.isLatest} />)}
+          </section>
+        }
         if (block.kind === "visual") {
           if (dataVisual) return <MalikAnswerVisual key={key} visual={dataVisual} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} />
           if (block.pending && streaming && wantsAnswerVisuals(question)) return <p key={key} className="malik-md-p" role="status">Подготавливаю визуальный блок…</p>

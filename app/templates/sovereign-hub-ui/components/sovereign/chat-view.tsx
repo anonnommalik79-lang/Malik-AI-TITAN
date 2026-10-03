@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
+import { stripAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 import { MalikTapGuide } from "./MalikTapGuide"
 import type { SuperflowRef } from "./os/os-client"
 import { AnswerDownloadButton, FollowUpChips, ReadAloudButton, ThoughtTrace, UserMessageActions, VersionPager, useChatShortcuts, type FollowUpSendOptions } from "./chat-extras"
@@ -1721,6 +1722,7 @@ function MessageBubble({
       ? olderVersion.content
       : cleanResearchDisplayText(message.content, message.research)
   const responseModel = !isUser && message.modelId ? getMalikModel(message.modelId) : null
+  const actionContent = isUser ? displayContent : stripAnswerPhotoHints(displayContent)
   if (!isUser && message.isStreaming && !streaming && !displayContent && !message.generatedMedia && !message.imageConfirmation) {
     return null
   }
@@ -1893,19 +1895,19 @@ function MessageBubble({
               type="button"
               title={copied ? "Скопировано" : "Копировать"}
               aria-label={copied ? "Скопировано" : "Копировать ответ"}
-              onClick={() => onCopy(message.id, displayContent)}
+              onClick={() => onCopy(message.id, actionContent)}
               className={cn("malik-copy-action inline-flex items-center gap-1.5 rounded-md p-1 hover:bg-white/10 hover:text-white", copied && "is-copied")}
             >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? <span className="malik-copy-action__label" role="status">Скопировано</span> : null}
             </button>
             <VersionPager index={shownVersion} total={versionTotal} onChange={setVersionIndex} />
-            <ReadAloudButton id={message.id} text={displayContent} />
-            <AnswerDownloadButton text={displayContent} />
+            <ReadAloudButton id={message.id} text={actionContent} />
+            <AnswerDownloadButton text={actionContent} />
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
             <button type="button" title="Полезно" aria-pressed={feedback === "up"} onClick={() => onFeedback?.(message.id, "up")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "is-active")}><ThumbsUp className="h-4 w-4" /></button>
             <button type="button" title="Не полезно" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>
-            <button type="button" title="Поделиться" onClick={() => onShare?.(displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
+            <button type="button" title="Поделиться" onClick={() => onShare?.(actionContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
             {onOpenSheet && displayContent.trim() ? (
               <button type="button" title="Открыть на листе" aria-label="Открыть ответ на листе с экспортом PDF" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
                 <FileText className="h-4 w-4" />
@@ -3245,7 +3247,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
       {sheet && sheetMessage ? (
         <AnswerSheet
           key={sheet.id}
-          content={cleanResearchDisplayText(sheetMessage.content, sheetMessage.research)}
+          content={stripAnswerPhotoHints(cleanResearchDisplayText(sheetMessage.content, sheetMessage.research))}
           streaming={Boolean(sheetMessage.isStreaming)}
           request={sheetRequest}
           auto={sheet.auto}

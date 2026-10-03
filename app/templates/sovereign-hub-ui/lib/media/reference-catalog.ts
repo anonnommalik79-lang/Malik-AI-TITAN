@@ -89,15 +89,38 @@ function catalogueHeaders(): Record<string, string> {
 export function referenceTitleScore(query: string, title: string): number {
   const wanted = titleWords(query), actual = titleWords(title)
   if (!wanted.length || !actual.length) return 0
+  if (/(?:iphone|galaxy|pixel)/iu.test(query)) {
+    const variants = ["pro", "max", "plus", "ultra", "mini", "air", "fold", "flip"]
+    if (variants.some((word) => wanted.includes(word) !== actual.includes(word))) return 0
+  }
   const matched = wanted.filter((word) => actual.includes(word)).length
   return matched === wanted.length ? matched / actual.length : 0
 }
 
-/** Require subject words in a file title, not merely the catalogue ranking. */
+/** Search rank alone is insufficient: every subject word must occur in metadata. */
 export function referenceTitleCoverage(query: string, title: string): number {
   const wanted = [...new Set(titleWords(query))]
   const actual = new Set(titleWords(title))
   return wanted.length ? wanted.filter((word) => actual.has(word)).length / wanted.length : 0
+}
+
+export function referenceTopicMatches(query: string, metadata: string): boolean {
+  const descriptors = new Set(["photo", "photos", "image", "images", "picture", "pictures", "diagram", "illustration", "фото", "фотографии", "схема"])
+  const wanted = titleWords(query).filter((word) => !descriptors.has(word))
+  const actual = titleWords(metadata.replace(/<[^>]*>/gu, " ").slice(0, 4096))
+  return Boolean(wanted.length && wanted.every((word) => actual.includes(word)
+    || (word.length > 4 && actual.some((term) => term === word.replace(/s$/u, "") || term.replace(/s$/u, "") === word))))
+}
+
+type LookupOptions = { excludedUrls?: string[]; skipOfficial?: boolean }
+
+function wasExcluded(url: string, options: LookupOptions): boolean {
+  if (!options.excludedUrls?.length) return false
+  try {
+    const normalized = new URL(url)
+    for (const key of [...normalized.searchParams.keys()]) if (key.startsWith("utm_")) normalized.searchParams.delete(key)
+    return options.excludedUrls.includes(normalized.href)
+  } catch { return true }
 }
 
 /** Verified official screen examples. URLs only; no screenshots stored on Render. */
@@ -112,7 +135,7 @@ function officialScreen(plan: ReferenceVisualPlan): MalikVisualImage[] {
     sourceUrl: "https://support.apple.com/guide/iphone/make-your-iphone-your-own-iphefb3daa42/ios", credit: "Apple Support" }] : []
 }
 
-async function lookupArticleImages(plan: ReferenceVisualPlan, signal: AbortSignal): Promise<MalikVisualImage[]> {
+async function lookupArticleImages(plan: ReferenceVisualPlan, signal: AbortSignal, options: LookupOptions): Promise<MalikVisualImage[]> {
   // Article thumbnails improve coverage for RU/KZ questions and abstract concepts.
   // An article photo is never passed off as a settings screenshot.
   if (plan.kind === "tutorial") return []
@@ -135,8 +158,8 @@ async function lookupArticleImages(plan: ReferenceVisualPlan, signal: AbortSigna
       const pages = (data?.query?.pages || []).sort((a, b) => plan.entity
         ? referenceTitleScore(topic, b.title || "") - referenceTitleScore(topic, a.title || "") || (a.index || 0) - (b.index || 0)
         : (a.index || 0) - (b.index || 0))
-      const images = sanitizeReferenceImages(pages.filter((page) => !plan.entity || (referenceTitleScore(topic, page.title || "") >= 0.65
-        && !unrelatedNamesake(topic, page.title || ""))).flatMap((page) => page.thumbnail?.source && page.fullurl
+      const images = sanitizeReferenceImages(pages.filter((page) => (plan.entity ? (referenceTitleScore(topic, page.title || "") >= 0.65 && !unrelatedNamesake(topic, page.title || "")) : referenceTopicMatches(topic, page.title || ""))
+        && !wasExcluded(page.thumbnail?.source || "", options)).flatMap((page) => page.thumbnail?.source && page.fullurl
         ? [{ url: page.thumbnail.source, alt: page.title || plan.topic, sourceUrl: page.fullurl, credit: "Wikipedia · Wikimedia Commons" }] : []))
       if (images.length) return plan.entity ? images.slice(0, 1) : images
     } catch { /* Keep the text answer usable. */ }
@@ -145,24 +168,22 @@ async function lookupArticleImages(plan: ReferenceVisualPlan, signal: AbortSigna
 }
 
 /** Runs in the browser for chat: neither metadata nor image bytes touch Render. */
-export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: AbortSignal): Promise<MalikVisualImage[]> {
+export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: AbortSignal, options: LookupOptions = {}): Promise<MalikVisualImage[]> {
   if (signal?.aborted) return []
   const official = officialScreen(plan)
-  if (official.length) return sanitizeReferenceImages(official)
-  const product = officialIPhonePhoto(plan.topic)
-  if (product) return sanitizeReferenceImages([{ url: product.url, alt: product.title, sourceUrl: "https://support.apple.com/en-us/108044", credit: "Apple Support" }])
+  if (official.length && !options.skipOfficial && !options.excludedUrls?.includes(official[0].url)) return sanitizeReferenceImages(official)
+  const product = officialIPhonePhoto(plan.topic) || plan.queries.map(officialIPhonePhoto).find(Boolean)
+  if (product && !options.skipOfficial && !options.excludedUrls?.includes(product.url)) return sanitizeReferenceImages([{ url: product.url, alt: product.title, sourceUrl: "https://support.apple.com/en-us/108044", credit: "Apple Support" }])
   const totalSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(20000)])
   if (plan.entity) {
-    const article = await lookupArticleImages(plan, totalSignal)
-    // People get one primary image from the exact encyclopaedia article.
-    // A Commons title match alone could be an airport, map or document.
+    const article = await lookupArticleImages(plan, totalSignal, options)
     if (article.length || totalSignal.aborted || plan.person) return plan.person ? article.slice(0, 1) : article
   }
   for (const topic of plan.queries.slice(0, 2)) {
     if (totalSignal.aborted) break
     const params = new URLSearchParams({ action: "query", format: "json", formatversion: "2", origin: "*", generator: "search",
       gsrsearch: topic, gsrnamespace: "6", gsrlimit: "6", prop: "imageinfo", iiprop: "url|mime|extmetadata",
-      iiextmetadatafilter: "Artist|LicenseShortName", iiurlwidth: "480" })
+      iiextmetadatafilter: "Artist|LicenseShortName|ImageDescription", iiurlwidth: "480" })
     try {
       const response = await fetch("https://commons.wikimedia.org/w/api.php?" + params, {
         headers: catalogueHeaders(), credentials: "omit", referrerPolicy: "no-referrer",
@@ -176,12 +197,12 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
         // For interface tutorials, reject random product photos and screenshots
         // of unrelated settings (even if Commons ranked them highly).
         const fileTitle = String(page.title || "").toLocaleLowerCase()
-        if (plan.entity && (unrelatedNamesake(topic, fileTitle) || !titleWords(topic).every((word) => titleWords(fileTitle).includes(word)))) return []
-        if (!plan.entity && plan.kind !== "tutorial" && referenceTitleCoverage(topic, fileTitle) < 0.65) return []
+        if (plan.entity && (unrelatedNamesake(topic, fileTitle) || referenceTitleScore(topic, fileTitle) === 0)) return []
+        if (!plan.entity && plan.kind !== "tutorial" && !referenceTopicMatches(topic, fileTitle + " " + (media?.extmetadata?.ImageDescription?.value || ""))) return []
         if (plan.kind === "tutorial" && (!plan.visualDevice?.some((term) => fileTitle.includes(term))
           || !plan.visualTerms?.some((term) => fileTitle.includes(term)))) return []
         // Never fall back to the multi-megabyte original when a thumbnail is missing.
-        if (!media?.thumburl || !/^image\/(?:jpeg|png|webp)$/i.test(media.mime || "") || !media.descriptionurl) return []
+        if (!media?.thumburl || wasExcluded(media.thumburl, options) || !/^image\/(?:jpeg|png|webp)$/i.test(media.mime || "") || !media.descriptionurl) return []
         return [{ url: media.thumburl, sourceUrl: media.descriptionurl,
           alt: (page.title || plan.topic).replace(/^File:/i, "").replace(/\.[a-z\d]+$/i, "").replace(/_/g, " "),
           credit: media.extmetadata?.Artist?.value || "Wikimedia Commons", license: media.extmetadata?.LicenseShortName?.value || "" }]
@@ -189,5 +210,5 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
       if (images.length) return images
     } catch { /* A catalogue outage must not interrupt the answer. */ }
   }
-  return plan.entity ? [] : lookupArticleImages(plan, totalSignal)
+  return plan.entity ? [] : lookupArticleImages(plan, totalSignal, options)
 }

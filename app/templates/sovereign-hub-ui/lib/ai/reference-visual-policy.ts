@@ -120,6 +120,15 @@ const TEXT_TASK = /^(?:напиши|перепиши|исправь|улучши
 const NON_VISUAL = /^(?:привет|салам|сәлем|спасибо|рахмет|ок|okay|hi|hello|ты\s+кто|кто\s+ты|да|нет|yes|no)[!?\s.]*$/iu
 const STRUCTURED_TASK = /(?:чек[ -]?лист|checklist|таблиц|spreadsheet|\btable\b|дв[еу]\s+колонк|two\s+columns|\b(?:python|javascript|typescript|sql)\b|\bкод\b|\bcode\b)/iu
 
+/** A model may name concrete objects in comparisons, but must respect text-only requests. */
+export function allowsAnswerPhotoHints(question: string, hasAttachment = false): boolean {
+  const text = question.trim()
+  return Boolean(text && text.length <= 2500 && !hasAttachment && !NO_VISUAL.test(text) && !NON_VISUAL.test(text)
+    && !TEXT_TASK.test(text) && !/^\//u.test(text) && !isExplicitImageGenerationRequest(text)
+    && !isExplicitImageEditRequest(text, false) && !planTutorialVisuals(text)
+    && !/(?:\b(?:python|javascript|typescript|sql|code)\b|(?<!\p{L})код(?!\p{L})|чек[ -]?лист|checklist)/iu.test(text))
+}
+
 /** Evaluate every explanatory answer; never require the user to ask for photos. */
 export function planReferenceVisuals(question: string, previousQuestion = "", hasAttachment = false, previousAnswer = ""): ReferenceVisualPlan | null {
   const text = String(question || "").trim()
@@ -132,8 +141,8 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   let subject = text
   const followUp = isReferencePhotoFollowUp(text)
   if (followUp) {
-    if (!previousQuestion || NO_VISUAL.test(previousQuestion)) return null
-    subject = previousQuestion
+    if (!previousQuestion) return null
+    subject = previousQuestion.replace(NO_VISUAL, "").trim()
     explicit = true
   } else if (isExplicitImageEditRequest(text, false)) return null
   if (!explicit) {

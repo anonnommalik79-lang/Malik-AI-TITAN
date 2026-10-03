@@ -4,11 +4,34 @@ import { lookupReferenceImages, readReferenceJson, sanitizeReferenceImages, type
 type CacheEntry = { images: MalikVisualImage[]; expires: number }
 type Listener = (images: MalikVisualImage[]) => void
 type Job = { controller: AbortController; listeners: Set<Listener> }
-const STORAGE_KEY = "malik-reference-catalog-v5"
+const STORAGE_KEY = "malik-reference-catalog-v6"
 const MAX_ENTRIES = 60
 const cache = new Map<string, CacheEntry>()
 const pending = new Map<string, Job>()
+const failedImages = new Map<string, Set<string>>()
+let activeLookups = 0
+const waitingLookups: Array<() => void> = []
 let hydrated = false
+
+/** Large comparisons must not flood public catalogues with simultaneous searches. */
+function acquireLookup(signal: AbortSignal): Promise<(() => void) | null> {
+  if (signal.aborted) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const cancel = () => {
+      const index = waitingLookups.indexOf(grant)
+      if (index >= 0) waitingLookups.splice(index, 1)
+      resolve(null)
+    }
+    const grant = () => {
+      signal.removeEventListener("abort", cancel)
+      if (signal.aborted) { resolve(null); waitingLookups.shift()?.(); return }
+      activeLookups += 1
+      resolve(() => { activeLookups -= 1; waitingLookups.shift()?.() })
+    }
+    if (activeLookups < 3) grant()
+    else { waitingLookups.push(grant); signal.addEventListener("abort", cancel, { once: true }) }
+  })
+}
 
 export function referenceCacheKey(plan: ReferenceVisualPlan): string {
   return [plan.kind || "reference", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", ...plan.queries].join("|").toLocaleLowerCase().slice(0, 240)
@@ -48,16 +71,34 @@ export function invalidateReferenceImages(plan: ReferenceVisualPlan) {
   cache.delete(referenceCacheKey(plan))
 }
 
+/** A failed image must not be served repeatedly from a successful metadata cache. */
+export function reportReferenceImageFailure(plan: ReferenceVisualPlan, url: string): boolean {
+  const key = referenceCacheKey(plan)
+  const failed = failedImages.get(key) || new Set<string>()
+  if (failed.has(url) || failed.size >= 3) return false
+  failed.add(url)
+  failedImages.delete(key)
+  failedImages.set(key, failed)
+  while (failedImages.size > MAX_ENTRIES) failedImages.delete(failedImages.keys().next().value!)
+  invalidateReferenceImages(plan)
+  try { localStorage.removeItem(STORAGE_KEY) } catch {}
+  return true
+}
+
 async function lookupWithFallback(plan: ReferenceVisualPlan, signal: AbortSignal): Promise<MalikVisualImage[]> {
   let direct: MalikVisualImage[] = []
-  try { direct = await lookupReferenceImages(plan, AbortSignal.any([signal, AbortSignal.timeout(9000)])) } catch {}
+  const excludedUrls = [...(failedImages.get(referenceCacheKey(plan)) || [])]
+  try { direct = await lookupReferenceImages(plan, AbortSignal.any([signal, AbortSignal.timeout(9000)]), { excludedUrls }) } catch {}
   if (direct.length || signal.aborted || plan.kind === "tutorial") return direct
   // Only small JSON metadata uses Render; image bytes always load from the publisher.
   const params = new URLSearchParams({ q: "Покажи фото " + plan.topic, entity: plan.entity ? "1" : "0", person: plan.person ? "1" : "0" })
+  // Preserve the canonical alias from the answer on the same-origin fallback.
+  if (plan.queries[0]) params.set("topic", plan.queries[0])
+  if (excludedUrls.length) params.set("skipOfficial", "1")
   try {
     const response = await fetch("/api/chat/reference-images?" + params, { headers: { Accept: "application/json" }, signal: AbortSignal.any([signal, AbortSignal.timeout(24000)]) })
     const data = await readReferenceJson(response) as { images?: unknown } | null
-    return sanitizeReferenceImages(data?.images)
+    return sanitizeReferenceImages(data?.images).filter((image) => !excludedUrls.includes(image.url))
   } catch { return [] }
 }
 
@@ -72,13 +113,20 @@ export function subscribeReferenceImages(plan: ReferenceVisualPlan, listener: Li
     job = { controller: new AbortController(), listeners: new Set() }
     pending.set(key, job)
     const current = job
-    void Promise.resolve().then(() => lookupWithFallback(plan, current.controller.signal))
+    void Promise.resolve().then(async () => {
+      const release = await acquireLookup(current.controller.signal)
+      if (!release) return []
+      try { return await lookupWithFallback(plan, current.controller.signal) } finally { release() }
+    })
       .then((images) => {
         if (current.controller.signal.aborted) return
+        // A reader may retry synchronously on delivery; it needs a fresh job.
+        if (pending.get(key) === current) pending.delete(key)
         saveCache(key, images)
         for (const subscriber of current.listeners) subscriber(images)
       }).catch(() => {
         if (current.controller.signal.aborted) return
+        if (pending.get(key) === current) pending.delete(key)
         saveCache(key, [])
         for (const subscriber of current.listeners) subscriber([])
       }).finally(() => { if (pending.get(key) === current) pending.delete(key) })

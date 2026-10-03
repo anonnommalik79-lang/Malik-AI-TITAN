@@ -6,7 +6,7 @@ import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 
 import { planReferenceVisuals, referenceSearchTopic, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
-import { invalidateReferenceImages, referenceCacheKey, subscribeReferenceImages } from "@/lib/media/client-reference-cache"
+import { invalidateReferenceImages, referenceCacheKey, reportReferenceImageFailure, subscribeReferenceImages } from "@/lib/media/client-reference-cache"
 import "./answer-blocks.css"
 export { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
 
@@ -20,7 +20,7 @@ function safeSourceUrl(value?: string): string {
   }
 }
 
-function ReferenceCard({ image, portrait, onOpen }: { image: MalikVisualImage; portrait: boolean; onOpen: () => void }) {
+function ReferenceCard({ image, portrait, onOpen, onFailure }: { image: MalikVisualImage; portrait: boolean; onOpen: () => void; onFailure?: (url: string) => void }) {
   const [failed, setFailed] = useState(false)
   const source = safeSourceUrl(image.sourceUrl) || image.url
   return (
@@ -38,7 +38,7 @@ function ReferenceCard({ image, portrait, onOpen }: { image: MalikVisualImage; p
             decoding="async"
             referrerPolicy="no-referrer"
             className={"h-full w-full transition-transform duration-300 hover:scale-[1.03] " + (portrait ? "object-contain" : "object-cover")}
-            onError={() => setFailed(true)}
+            onError={() => { setFailed(true); onFailure?.(image.url) }}
           />
         )}
       </button>
@@ -70,7 +70,7 @@ function ReferenceLightbox({ image, onClose }: { image: MalikVisualImage; onClos
   )
 }
 
-export function MalikVisualGallery({ images, title, portrait = false }: { images: MalikVisualImage[]; title?: string; portrait?: boolean }) {
+export function MalikVisualGallery({ images, title, portrait = false, onFailure }: { images: MalikVisualImage[]; title?: string; portrait?: boolean; onFailure?: (url: string) => void }) {
   const [selected, setSelected] = useState<MalikVisualImage | null>(null)
   const visible = images.filter((image) => isSafeVisualUrl(image.url)).slice(0, 3)
   if (!visible.length) return null
@@ -78,7 +78,7 @@ export function MalikVisualGallery({ images, title, portrait = false }: { images
     <section data-malik-reference-gallery className="my-5 w-full min-w-0 max-w-[760px]" aria-label={title || "Изображения в ответе"}>
       {title ? <h3 className="mb-3 text-base font-semibold text-white">{title}</h3> : null}
       <div className={"grid gap-2 sm:gap-3 " + (visible.length === 1 ? "max-w-[360px] grid-cols-1" : visible.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
-        {visible.map((image) => <ReferenceCard key={image.url} image={image} portrait={portrait} onOpen={() => setSelected(image)} />)}
+        {visible.map((image) => <ReferenceCard key={image.url} image={image} portrait={portrait} onOpen={() => setSelected(image)} onFailure={(url) => { setSelected(null); onFailure?.(url) }} />)}
       </div>
       {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}
     </section>
@@ -122,6 +122,11 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   if (!plan) return children || null
   const images = result?.key === key ? result.images : null
   const retry = () => { invalidateReferenceImages(plan); setResult(null); setAttempt((value) => value + 1) }
+  const failed = (url: string) => {
+    setSelected(null)
+    if (reportReferenceImageFailure(plan, url)) retry()
+    else setResult((current) => current?.key === key ? { key, images: current.images.filter((image) => image.url !== url) } : current)
+  }
   const status = images === null
     ? <p role="status" className="my-3 text-sm text-zinc-400">{active ? "Ищу фото по теме…" : plan.topic}</p>
     : <p className="my-3 text-sm text-zinc-400">Подходящее фото не загрузилось. <button type="button" onClick={retry} className="underline underline-offset-4">Повторить поиск</button></p>
@@ -133,7 +138,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
     </section>
   </div>
   if (compact) return <div ref={container} className="min-w-0" data-malik-reference-topic={plan.topic}>
-    {images?.[0] ? <ReferenceCard image={images[0]} portrait onOpen={() => setSelected(images[0])} />
+    {images?.[0] ? <ReferenceCard key={images[0].url} image={images[0]} portrait={plan.layout === "portrait"} onOpen={() => setSelected(images[0])} onFailure={failed} />
       : <div className="flex aspect-[3/4] flex-col justify-center rounded-2xl border border-white/15 px-3 text-center"><span className="text-sm font-medium text-white">{plan.topic}</span>{status}</div>}
     {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}
   </div>
@@ -144,7 +149,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
           <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + images[0].alt} className="block w-full focus-visible:outline focus-visible:outline-white">
             <img src={images[0].url} alt={images[0].alt} loading="lazy" decoding="async" referrerPolicy="no-referrer"
               className={"w-full " + (plan.kind === "tutorial" ? "max-h-[280px] object-contain" : "aspect-[3/4] object-cover")}
-              onError={(event) => { event.currentTarget.closest("figure")?.setAttribute("hidden", "") }} />
+              onError={() => failed(images[0].url)} />
           </button>
           <figcaption className="bg-black px-1.5 py-1 text-xs leading-4 text-zinc-400">
             <a href={safeSourceUrl(images[0].sourceUrl) || images[0].url} target="_blank" rel="noopener noreferrer" className="block truncate underline-offset-2 hover:underline" title={[images[0].credit, images[0].license].filter(Boolean).join(" · ")}>{images[0].credit || "Источник фото"}</a>
@@ -161,7 +166,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
     <div ref={container} className="min-w-0" data-malik-reference-topic={plan.topic}>
       {children}
       {images?.length ? <>
-        <MalikVisualGallery title={plan.kind === "tutorial" ? "Примеры экранов · " + plan.topic : plan.topic} images={plan.kind === "tutorial" ? images.slice(0, 2) : images} portrait={plan.layout === "portrait"} />
+        <MalikVisualGallery title={plan.kind === "tutorial" ? "Примеры экранов · " + plan.topic : plan.topic} images={plan.kind === "tutorial" ? images.slice(0, 2) : images} portrait={plan.layout === "portrait"} onFailure={failed} />
         {plan.kind === "tutorial" ? <p className="mb-4 text-xs leading-5 text-zinc-400">Иллюстрации из открытых источников. Названия пунктов и вид меню могут отличаться в вашей версии приложения.</p> : null}
       </>
         : active || plan.explicit ? status : null}

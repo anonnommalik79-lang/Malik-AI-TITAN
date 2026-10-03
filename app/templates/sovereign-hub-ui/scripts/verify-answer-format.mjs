@@ -76,10 +76,11 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "@/lib/business/project-zip") return { downloadProjectZip() {} }
     if (name === "@/lib/canvas-preview") return { buildCanvasSrcDoc: (code) => code, buildCanvasProjectSrcDoc: (files, filename) => files.find((file) => file.name === filename)?.content || "", createCanvasBlobUrl: () => "blob:test" }
     if (name === "./malik-tex") return texBox.exports
-    if (name === "./MalikVisualGallery") return { isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }), MalikReferenceImages: ({ children }) => React.createElement("div", null, children) }
+    if (name === "./MalikVisualGallery") return { isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }), MalikReferenceImages: ({ children, planOverride }) => React.createElement("div", { "data-test-photo-topic": planOverride?.topic }, children) }
     if (name === "@/lib/ai/answer-entities") return entities
     if (name === "@/lib/ai/reference-visual-policy") return loadPure("lib/ai/reference-visual-policy.ts")
     if (name === "@/lib/ai/answer-visuals") return loadPure("lib/ai/answer-visuals.ts")
+    if (name === "@/lib/ai/answer-photo-hints") return loadPure("lib/ai/answer-photo-hints.ts")
     if (name === "./MalikAnswerVisual") return loadPure("components/sovereign/MalikAnswerVisual.tsx")
     if (name === "./MalikAnswerChecklist") return loadPure("components/sovereign/MalikAnswerChecklist.tsx")
     throw new Error(`unexpected require(${name})`)
@@ -100,6 +101,34 @@ function check(name, fn) {
 }
 
 console.log("\nan answer arrives as structure, not as a wall of text")
+
+check("closed grounded photo hints render topics without leaking metadata or duplicating heuristics", () => {
+  const text = 'Нурсултан Назарбаев — политик.\n\n```malik-photos\n{"version":1,"subjects":[{"name":"Нурсултан Назарбаев","query":"Nursultan Nazarbayev","layout":"portrait"}]}\n```'
+  const html = render(text, { visualContext: { question: "Кто такой Назарбаев" } })
+  assert.equal((html.match(/data-test-photo-topic/g) || []).length, 1)
+  assert(html.includes('data-test-photo-topic="Нурсултан Назарбаев"'))
+  assert(!html.includes("malik-photos") && !html.includes("Nursultan Nazarbayev") && !html.includes("&quot;version&quot;"))
+})
+check("partial, malformed and ungrounded photo hints remain invisible", () => {
+  for (const body of ['{"version":1', '{invalid}', '{"version":1,"subjects":[{"name":"Other person","query":"Other person"}]}']) {
+    const html = render("Ответ.\n\n```malik-photos\n" + body, { visualContext: { question: "Привет", streaming: true } })
+    assert(!html.includes("malik-photos") && !html.includes("version") && !html.includes("Other person"))
+  }
+})
+check("a named-place photo sits beside its description without duplicating text", () => {
+  const html = render('## Медеу\n\nВысокогорный каток.\n\n```malik-photos\n{"version":1,"subjects":[{"name":"Медеу","query":"Medeu"}]}\n```', { visualContext: { question: "Расскажи про достопримечательности Алматы" } })
+  assert.equal((html.match(/data-test-photo-topic/g) || []).length, 1)
+  assert.equal((html.match(/Высокогорный каток/g) || []).length, 1)
+  assert(!html.includes("data-malik-photo-hints"))
+})
+check("photo hints respect opt-outs and keep exact verified product collections", () => {
+  const answer = 'iPhone 16 Pro.\n\n```malik-photos\n{"version":1,"subjects":[{"name":"iPhone 16 Pro","query":"iPhone 16 Pro"}]}\n```'
+  const plain = render(answer, { visualContext: { question: "Расскажи про iPhone без фото" } })
+  assert(!plain.includes("data-test-photo-topic"))
+  const all = render(answer, { visualContext: { question: "Покажи все модели айфона" } })
+  assert(!all.includes("data-malik-photo-hints"))
+  assert.equal((all.match(/data-test-photo-topic/g) || []).length, 1)
+})
 
 check("paragraphs separated by a blank line become separate paragraphs", () => {
   const html = render("Первый абзац.\n\nВторой абзац.")

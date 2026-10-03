@@ -21,7 +21,8 @@ check("Gallery only displays approved HTTPS image hosts and refuses data/unsafe 
   assert.match(catalog, /IMAGE_HOSTS\.has\(url\.hostname\.toLowerCase\(\)\)/)
   assert.match(catalog, /!url\.username && !url\.password/)
   assert.match(gallery, /loading="lazy"/)
-  assert.match(gallery, /onError=\{\(\) => setFailed\(true\)\}/)
+  assert.match(gallery, /onFailure/)
+  assert.match(gallery, /reportReferenceImageFailure/)
 })
 check("Images are real catalog results with attribution, not invented or charged generation", () => {
   assert.match(route, /api\.unsplash\.com\/search\/photos/)

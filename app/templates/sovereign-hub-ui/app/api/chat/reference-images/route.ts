@@ -42,16 +42,21 @@ export async function GET(request: Request) {
   if (!raw.trim() || raw.length > 250 || /[\r\n]/.test(raw)) return NextResponse.json({ images: [] }, { status: 400 })
   const plan = planReferenceVisuals(raw)
   if (!plan) return NextResponse.json({ images: [] })
-  plan.person = plan.person || new URL(request.url).searchParams.get("person") === "1"
-  plan.entity = plan.entity || plan.person || new URL(request.url).searchParams.get("entity") === "1"
-  const key = [plan.entity ? "entity" : "", plan.person ? "person" : "", ...plan.queries].join("|").toLowerCase()
+  const params = new URL(request.url).searchParams
+  plan.person = plan.person || params.get("person") === "1"
+  plan.entity = plan.entity || plan.person || params.get("entity") === "1"
+  const topic = params.get("topic") || ""
+  if (topic.length > 120 || /[\r\n<>]|https?:|www\./iu.test(topic)) return NextResponse.json({ images: [] }, { status: 400 })
+  if (topic) plan.queries = [...new Set([topic, ...plan.queries])].slice(0, 2)
+  const skipOfficial = params.get("skipOfficial") === "1"
+  const key = [skipOfficial ? "retry" : "", plan.entity ? "entity" : "", plan.person ? "person" : "", ...plan.queries].join("|").toLowerCase()
   let entry = cache.get(key)
   if (!entry || entry.expires <= Date.now()) {
     // Eviction bounds RAM. Concurrent identical lookups share one promise.
     for (const [oldKey, value] of cache) if (value.expires <= Date.now()) cache.delete(oldKey)
     while (cache.size >= 60) cache.delete(cache.keys().next().value!)
     const promise = (async () => {
-      let images = await lookupReferenceImages(plan)
+      let images = await lookupReferenceImages(plan, undefined, { skipOfficial })
       if (!images.length && !plan.entity) {
         try { images = sanitizeReferenceImages(await unsplash(plan.queries[0])) } catch { /* Optional provider. */ }
       }
