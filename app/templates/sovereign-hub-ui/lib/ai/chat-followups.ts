@@ -1,5 +1,6 @@
 /** Pure, testable contextual quick actions for the Malik AI chat. */
-type FollowUp = { label: string; text: string; research?: boolean }
+export type FollowUp = { label: string; text: string; research?: boolean }
+export type FollowUpContext = { hasAttachment?: boolean }
 export type FollowUpSendOptions = { research?: boolean }
 
 type FollowUpLocale = "ru" | "kk" | "en"
@@ -11,7 +12,7 @@ function followUpLocale(question: string): FollowUpLocale {
 
 /** Action chips are contextual, translated, and never pretend an action ran.
  * Research is explicitly forwarded to the existing server-side search path. */
-export function buildContextualFollowUps(question: string, answer: string): FollowUp[] {
+export function buildContextualFollowUps(question: string, answer: string, context: FollowUpContext = {}): FollowUp[] {
   const locale = followUpLocale(question || answer)
   const copy: Record<FollowUpLocale, Record<string, FollowUp>> = {
     ru: {
@@ -24,6 +25,7 @@ export function buildContextualFollowUps(question: string, answer: string): Foll
       math: { label: "Проверь расчёт", text: "Независимо перепроверь все вычисления предыдущего ответа с подстановкой и единицами измерения." },
       table: { label: "Таблицей", text: "Структурируй предыдущий ответ в понятную сравнительную таблицу, сохранив факты и ограничения." },
       fact: { label: "Проверить факты", text: "Проверь ключевые проверяемые факты из предыдущего ответа по доступным актуальным источникам, укажи ссылки и что не удалось подтвердить.", research: true },
+      attachment: { label: "Разобрать файл", text: "Вернись к вложению из предыдущего запроса. Разбери его содержание подробно, с привязкой к видимым деталям. Если файл больше недоступен, честно попроси приложить его снова." },
     },
     kk: {
       more: { label: "Толығырақ", text: "Алдыңғы жауабыңды нақты мәліметтермен кеңірек түсіндір." },
@@ -35,6 +37,7 @@ export function buildContextualFollowUps(question: string, answer: string): Foll
       math: { label: "Есепті тексер", text: "Алдыңғы есептеулерді мәндерді қойып, өлшем бірліктерімен қайта тексер." },
       table: { label: "Кесте", text: "Алдыңғы жауапты фактілері мен шектеулерін сақтап, түсінікті кестеге айналдыр." },
       fact: { label: "Деректі тексер", text: "Алдыңғы жауаптағы негізгі деректерді қолжетімді өзекті дереккөздерден тексер, сілтемелер мен расталмаған тұстарын көрсет.", research: true },
+      attachment: { label: "Файлды талдау", text: "Алдыңғы сұраудағы тіркемені қайта қарап, көрінетін нақты деректерге сүйеніп толық талда. Файл қолжетімсіз болса, оны қайта тіркеуді сұра." },
     },
     en: {
       more: { label: "More detail", text: "Expand on your previous answer with concrete details." },
@@ -46,13 +49,15 @@ export function buildContextualFollowUps(question: string, answer: string): Foll
       math: { label: "Check math", text: "Independently verify all calculations in your previous answer, including substituted values and units." },
       table: { label: "As a table", text: "Turn your previous answer into a clear comparison table, preserving facts and caveats." },
       fact: { label: "Verify facts", text: "Check key verifiable claims in your previous answer against available current sources. Cite them and flag what could not be confirmed.", research: true },
+      attachment: { label: "Analyze file", text: "Revisit the attachment from the previous request and analyze its observable details. If the file is no longer available, ask for it again instead of inventing its contents." },
     },
   }
   const items = copy[locale]
   const isCode = /(?:```|\b(?:code|coding|python|javascript|typescript)\b|код|програм|функци|бағдарлама)/iu.test(question + "\n" + answer.slice(0, 300))
   const isMath = /(?:[=+×÷∑√]|математ|алгебр|уравнен|расч[её]т|есеп|теңдеу|\b(?:equation|calculate|integral)\b)/iu.test(question)
   const isProcedure = /(?:как|настрой|установ|пошаг|қалай|орнат|баптау|\b(?:how to|steps|setup|install)\b)/iu.test(question)
-  const special = isCode ? items.code : isMath ? items.math : isProcedure ? items.steps : items.table
-  return [items.more, items.short, items.simple, items.example, special, ...(isCode || isMath ? [] : [items.fact])]
+  const special = context.hasAttachment ? items.attachment : isCode ? items.code : isMath ? items.math : isProcedure ? items.steps : items.table
+  // Avoid fact-checking labels for programming or calculations: use their dedicated verification action.
+  return [items.more, items.short, items.simple, items.example, special, ...(isCode || isMath || context.hasAttachment ? [] : [items.fact])]
 }
 
