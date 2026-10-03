@@ -4,14 +4,14 @@ import { lookupReferenceImages, readReferenceJson, sanitizeReferenceImages, type
 type CacheEntry = { images: MalikVisualImage[]; expires: number }
 type Listener = (images: MalikVisualImage[]) => void
 type Job = { controller: AbortController; listeners: Set<Listener> }
-const STORAGE_KEY = "malik-reference-catalog-v4"
+const STORAGE_KEY = "malik-reference-catalog-v5"
 const MAX_ENTRIES = 60
 const cache = new Map<string, CacheEntry>()
 const pending = new Map<string, Job>()
 let hydrated = false
 
 export function referenceCacheKey(plan: ReferenceVisualPlan): string {
-  return [plan.kind || "reference", plan.entity ? "entity" : "", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", ...plan.queries].join("|").toLocaleLowerCase().slice(0, 240)
+  return [plan.kind || "reference", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", ...plan.queries].join("|").toLocaleLowerCase().slice(0, 240)
 }
 
 function hydrateCache() {
@@ -53,7 +53,7 @@ async function lookupWithFallback(plan: ReferenceVisualPlan, signal: AbortSignal
   try { direct = await lookupReferenceImages(plan, AbortSignal.any([signal, AbortSignal.timeout(9000)])) } catch {}
   if (direct.length || signal.aborted || plan.kind === "tutorial") return direct
   // Only small JSON metadata uses Render; image bytes always load from the publisher.
-  const params = new URLSearchParams({ q: "Покажи фото " + plan.topic, entity: plan.entity ? "1" : "0" })
+  const params = new URLSearchParams({ q: "Покажи фото " + plan.topic, entity: plan.entity ? "1" : "0", person: plan.person ? "1" : "0" })
   try {
     const response = await fetch("/api/chat/reference-images?" + params, { headers: { Accept: "application/json" }, signal: AbortSignal.any([signal, AbortSignal.timeout(24000)]) })
     const data = await readReferenceJson(response) as { images?: unknown } | null

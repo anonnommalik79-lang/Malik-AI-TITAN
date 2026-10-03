@@ -42,8 +42,9 @@ export async function GET(request: Request) {
   if (!raw.trim() || raw.length > 250 || /[\r\n]/.test(raw)) return NextResponse.json({ images: [] }, { status: 400 })
   const plan = planReferenceVisuals(raw)
   if (!plan) return NextResponse.json({ images: [] })
-  plan.entity = plan.entity || new URL(request.url).searchParams.get("entity") === "1"
-  const key = [plan.entity ? "entity" : "", ...plan.queries].join("|").toLowerCase()
+  plan.person = plan.person || new URL(request.url).searchParams.get("person") === "1"
+  plan.entity = plan.entity || plan.person || new URL(request.url).searchParams.get("entity") === "1"
+  const key = [plan.entity ? "entity" : "", plan.person ? "person" : "", ...plan.queries].join("|").toLowerCase()
   let entry = cache.get(key)
   if (!entry || entry.expires <= Date.now()) {
     // Eviction bounds RAM. Concurrent identical lookups share one promise.

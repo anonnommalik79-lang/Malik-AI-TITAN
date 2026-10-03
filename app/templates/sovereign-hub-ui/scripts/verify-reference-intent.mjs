@@ -38,6 +38,13 @@ for (const prompt of ["По фотки покажи их всех", "Покаж�
   assert(follow.subjects.includes("iPhone Air"))
 }
 assert.equal(policy.planReferenceVisuals("Кто такое призедент назарбаев").queries[0], "Nursultan Nazarbayev")
+assert.equal(policy.planReferenceVisuals("Кто такой Назарбаев").person, true)
+assert.equal(policy.planReferenceVisuals("Кто такой Назарбаев").layout, "portrait")
+const inferredPortrait = policy.planAnswerVisualSlots("Расскажи про Илона Маска", [
+  { key: "intro", kind: "paragraph", text: "Илон Маск — предприниматель." },
+])
+assert.equal(inferredPortrait[0].plan.person, true)
+assert.deepEqual(inferredPortrait[0].plan.queries, ["Илон Маск"])
 assert.deepEqual(policy.planReferenceVisuals("Покажи их фото", "Расскажи про достопримечательности Алматы", false, "## Медеу\nКаток.\n## Кок-Тобе\nГора.\n## История\nТекст.").subjects, ["Медеу", "Кок-Тобе"], "photo follow-ups work for named places too")
 assert.deepEqual(policy.planAnswerVisualSlots("Кто такой Назарбаев", [
   { key: "p0", kind: "paragraph", text: "Нурсултан Назарбаев — первый президент Казахстана." },
@@ -200,7 +207,10 @@ try {
   globalThis.fetch = async (input) => String(input).includes("commons.wikimedia.org")
     ? Response.json({ query: { pages: [{ ...media(1), title: "File:Nursultan Nazarbayev International Airport.jpg" }, { ...media(2), title: "File:Nursultan Nazarbayev portrait.jpg" }] } })
     : Response.json({ query: { pages: [] } })
-  assert.deepEqual((await catalog.lookupReferenceImages(policy.planReferenceVisuals("Кто такой Назарбаев"))).map((image) => image.alt), ["Nursultan Nazarbayev portrait"], "Commons fallback also rejects namesakes")
+  assert.deepEqual(await catalog.lookupReferenceImages(policy.planReferenceVisuals("Кто такой Назарбаев")), [],
+    "when the canonical portrait is missing, never substitute a namesake from Commons")
+  assert.equal(catalog.referenceTitleCoverage("mountains Almaty", "File:Random airport.jpg"), 0)
+  assert.equal(catalog.referenceTitleCoverage("mountains Almaty", "File:Almaty mountains.jpg"), 1)
   const fallbackPlan = policy.planReferenceVisuals("Покажи горы Казахстана")
   let sameOriginCalls = 0
   globalThis.fetch = async (input) => {

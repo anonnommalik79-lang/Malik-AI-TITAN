@@ -93,6 +93,13 @@ export function referenceTitleScore(query: string, title: string): number {
   return matched === wanted.length ? matched / actual.length : 0
 }
 
+/** Require subject words in a file title, not merely the catalogue ranking. */
+export function referenceTitleCoverage(query: string, title: string): number {
+  const wanted = [...new Set(titleWords(query))]
+  const actual = new Set(titleWords(title))
+  return wanted.length ? wanted.filter((word) => actual.has(word)).length / wanted.length : 0
+}
+
 /** Verified official screen examples. URLs only; no screenshots stored on Render. */
 function officialScreen(plan: ReferenceVisualPlan): MalikVisualImage[] {
   if (plan.kind !== "tutorial" || !plan.visualDevice?.some((term) => ["iphone", "ios", "ipad"].includes(term))) return []
@@ -128,7 +135,8 @@ async function lookupArticleImages(plan: ReferenceVisualPlan, signal: AbortSigna
       const pages = (data?.query?.pages || []).sort((a, b) => plan.entity
         ? referenceTitleScore(topic, b.title || "") - referenceTitleScore(topic, a.title || "") || (a.index || 0) - (b.index || 0)
         : (a.index || 0) - (b.index || 0))
-      const images = sanitizeReferenceImages(pages.filter((page) => !plan.entity || referenceTitleScore(topic, page.title || "") >= 0.65).flatMap((page) => page.thumbnail?.source && page.fullurl
+      const images = sanitizeReferenceImages(pages.filter((page) => !plan.entity || (referenceTitleScore(topic, page.title || "") >= 0.65
+        && !unrelatedNamesake(topic, page.title || ""))).flatMap((page) => page.thumbnail?.source && page.fullurl
         ? [{ url: page.thumbnail.source, alt: page.title || plan.topic, sourceUrl: page.fullurl, credit: "Wikipedia · Wikimedia Commons" }] : []))
       if (images.length) return plan.entity ? images.slice(0, 1) : images
     } catch { /* Keep the text answer usable. */ }
@@ -146,7 +154,9 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
   const totalSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(20000)])
   if (plan.entity) {
     const article = await lookupArticleImages(plan, totalSignal)
-    if (article.length || totalSignal.aborted) return article
+    // People get one primary image from the exact encyclopaedia article.
+    // A Commons title match alone could be an airport, map or document.
+    if (article.length || totalSignal.aborted || plan.person) return plan.person ? article.slice(0, 1) : article
   }
   for (const topic of plan.queries.slice(0, 2)) {
     if (totalSignal.aborted) break
@@ -167,6 +177,7 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
         // of unrelated settings (even if Commons ranked them highly).
         const fileTitle = String(page.title || "").toLocaleLowerCase()
         if (plan.entity && (unrelatedNamesake(topic, fileTitle) || !titleWords(topic).every((word) => titleWords(fileTitle).includes(word)))) return []
+        if (!plan.entity && plan.kind !== "tutorial" && referenceTitleCoverage(topic, fileTitle) < 0.65) return []
         if (plan.kind === "tutorial" && (!plan.visualDevice?.some((term) => fileTitle.includes(term))
           || !plan.visualTerms?.some((term) => fileTitle.includes(term)))) return []
         // Never fall back to the multi-megabyte original when a thumbnail is missing.

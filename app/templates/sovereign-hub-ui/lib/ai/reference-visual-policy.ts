@@ -12,6 +12,8 @@ export type ReferenceVisualPlan = {
   visualDevice?: string[]
   subjects?: string[]
   entity?: boolean
+  /** People require a canonical article portrait, never namesake results. */
+  person?: boolean
 }
 
 const NO_VISUAL = /(?:без\s+(?:фото|картинок|изображений)|не\s+(?:показывай|добавляй|нужны)\s+(?:фото|картинки|изображения)|только\s+текст|no\s+(?:photos?|images?|pictures?)|text\s+only|суретсіз)/iu
@@ -151,7 +153,9 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   const listed = followUp ? namedReferenceSubjects(previousAnswer) : []
   const allIPhones = /(?:все|всех|all|every).{0,25}(?:модел|поколен|models?|generations?).{0,15}(?:iphone|айфон)/iu.test(subject)
   const subjects = listed.length ? listed : allIPhones ? Object.keys(APPLE_IPHONE_PHOTOS).reverse() : undefined
-  return { topic, queries, explicit, subjects, entity: /^(?:кто|who)/iu.test(subject) || /(?:iphone|айфон|назарбаев)/iu.test(subject), layout: /^(?:кто|who)/iu.test(subject) || /референс|вдохнов|бренд|постер|reference|inspiration|poster|brand/iu.test(text) ? "portrait" : "landscape" }
+  const person = /^(?:кто(?:\s+(?:такой|такая|такое|это))?|who(?:\s+is)?|кім)(?:\s|$)/iu.test(subject)
+    || /(?:назарбаев|портрет|portrait|биографи)/iu.test(subject)
+  return { topic, queries, explicit, subjects, person, entity: person || /(?:iphone|айфон)/iu.test(subject), layout: person || /референс|вдохнов|бренд|постер|reference|inspiration|poster|brand/iu.test(text) ? "portrait" : "landscape" }
 }
 
 export type AnswerVisualSegment = { key: string; text: string; kind: "heading" | "item" | "paragraph" }
@@ -185,6 +189,16 @@ export function planAnswerVisualSlots(question: string, segments: AnswerVisualSe
   if (base.subjects?.length || models.length > 1) {
     const anchor = segments.find((segment) => segment.kind === "paragraph") || segments[0]
     return anchor ? [{ key: anchor.key, row: false, plan: { ...base, subjects: base.subjects || models } }] : []
+  }
+  // A name in the opening sentence resolves inflected or surname-only questions.
+  // Only treat two or more capitalized name parts as a person, not a place title.
+  const intro = segments.find((segment) => segment.kind === "paragraph") || segments[0]
+  const introName = intro?.kind === "paragraph" && /\s[—–]\s/u.test(intro.text) ? visualSegmentLabel(intro.text) : ""
+  const fullName = /^[\p{Lu}][\p{L}'-]+(?:\s+[\p{Lu}][\p{L}'-]+){1,3}$/u.test(introName)
+  if (intro && !base.person && fullName && /^(?:кто|who|расскажи|tell\s+me\s+about|биографи|покажи(?:те)?(?:\s+мне)?\s+(?:фото|портрет))/iu.test(question)) {
+    return [{ key: intro.key, row: false, plan: { ...base, topic: introName,
+      queries: [...new Set([referenceSearchTopic(introName), introName])].slice(0, 2),
+      person: true, entity: true, layout: "portrait" } }]
   }
   if (base.entity) {
     const anchor = segments.find((segment) => segment.kind === "paragraph") || segments[0]
