@@ -648,12 +648,15 @@ function HomeComposer({
           value={prompt}
           onFocus={prefetchChatShell}
           onChange={(event) => {
-            if (event.target.value.trim()) prefetchChatShell()
-            onPromptChange(event.target.value)
+            if (event.currentTarget.value.trim()) prefetchChatShell()
+            onPromptChange(event.currentTarget.value)
           }}
+          onInput={(event) => onPromptChange(event.currentTarget.value)}
+          onCompositionEnd={(event) => onPromptChange(event.currentTarget.value)}
           onPaste={handlePaste}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
+              if (event.nativeEvent.isComposing) return
               event.preventDefault()
               onSubmit()
             }
@@ -892,7 +895,10 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   }
 
   const submit = () => {
-    const text = prompt.trim()
+    // Read the visible native draft if iOS dictation/autofill has not committed
+    // the matching React state yet.
+    const field = document.querySelector<HTMLTextAreaElement>(".thome-composer textarea")
+    const text = (field?.value || prompt).trim()
     if ((!text && !attachments.length) || props.isLoading) return
 
     const attachmentPrompt = attachments.some((item) => item.kind === "video")
@@ -901,10 +907,16 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
         ? "Проанализируй прикреплённое изображение и подробно ответь по его содержанию."
         : "Прочитай прикреплённые файлы и подробно ответь по их содержанию."
 
-    props.onSubmit(text || attachmentPrompt, attachments, {
-      research: webOn,
-      responseDepth: deepResearch ? "deep" : undefined,
-    })
+    try {
+      props.onSubmit(text || attachmentPrompt, attachments, {
+        research: webOn,
+        responseDepth: deepResearch ? "deep" : undefined,
+      })
+    } catch (error) {
+      setPrompt(text)
+      setAttachmentError(error instanceof Error ? error.message : "Не удалось отправить сообщение.")
+      return
+    }
     setPrompt("")
     setAttachments([])
     setAttachmentError("")
