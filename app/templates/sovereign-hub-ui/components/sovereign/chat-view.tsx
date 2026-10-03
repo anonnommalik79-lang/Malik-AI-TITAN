@@ -2539,7 +2539,9 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   }
 
   const handleGuardedSubmit = () => {
-    const rawText = prompt.trim()
+    // iOS may update the native textarea after dictation/autofill before React
+    // commits onChange. Never make the visible draft silently unsendable.
+    const rawText = (textareaRef.current?.value || prompt).trim()
     if (!rawText && attachments.length === 0) return
 
     // The message is sent exactly as the user wrote it. Media generation is gated
@@ -2580,7 +2582,14 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
         options: { ...sendOptions, queueDispatch: true },
       })
     } else {
-      onSendMessage(routedOutgoing, attachments, sendOptions)
+      try {
+        // Keep the draft visible when a synchronous handoff fails.
+        onSendMessage(routedOutgoing, attachments, sendOptions)
+      } catch (error) {
+        setPrompt(rawText)
+        setLocalError(error instanceof Error ? error.message : "Не удалось отправить. Попробуйте снова.")
+        return
+      }
     }
 
     setPrompt("")
@@ -3046,11 +3055,14 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
             <textarea
               ref={textareaRef}
               value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
+              onChange={(event) => setPrompt(event.currentTarget.value)}
+              onInput={(event) => setPrompt(event.currentTarget.value)}
+              onCompositionEnd={(event) => setPrompt(event.currentTarget.value)}
               onPaste={handleComposerPaste}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault()
+                  if (event.nativeEvent.isComposing) return
                   handleGuardedSubmit()
                 }
               }}

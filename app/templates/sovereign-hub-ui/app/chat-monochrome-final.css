@@ -376,3 +376,25 @@
 #malik-root .malik-photo-final__track > span {
   background: #fff !important;
 }
+
+/* iPhone send/voice actions must receive taps above the model selector and
+   cosmetic layers. Hidden actions never intercept the visible button. */
+@media (max-width: 768px) {
+  #malik-root .malik-dashboard-shell .thome-action-swap,
+  #malik-root .malik-dashboard-shell [data-composer] .malik-inline-action-swap {
+    isolation: isolate !important;
+    z-index: 30 !important;
+    pointer-events: auto !important;
+  }
+  #malik-root .malik-dashboard-shell .thome-action-swap > button:not(.is-hidden):not(:disabled),
+  #malik-root .malik-dashboard-shell [data-composer] .malik-inline-action-swap > button:not(.is-hidden):not(:disabled) {
+    z-index: 31 !important;
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+  #malik-root .malik-dashboard-shell .thome-action-swap > button.is-hidden,
+  #malik-root .malik-dashboard-shell [data-composer] .malik-inline-action-swap > button.is-hidden {
+    pointer-events: none !important;
+  }
+}

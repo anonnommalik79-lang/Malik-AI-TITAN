@@ -416,7 +416,7 @@ function HomeComposer({
   attachments: ChatAttachment[]
   attachmentError: string
   onPromptChange: (value: string) => void
-  onSubmit: () => void
+  onSubmit: (nativeDraft?: string) => void
   onToggleWeb: () => void
   onToggleMemory: () => void
   onStartWeb: () => void
@@ -648,14 +648,17 @@ function HomeComposer({
           value={prompt}
           onFocus={prefetchChatShell}
           onChange={(event) => {
-            if (event.target.value.trim()) prefetchChatShell()
-            onPromptChange(event.target.value)
+            if (event.currentTarget.value.trim()) prefetchChatShell()
+            onPromptChange(event.currentTarget.value)
           }}
+          onInput={(event) => onPromptChange(event.currentTarget.value)}
+          onCompositionEnd={(event) => onPromptChange(event.currentTarget.value)}
           onPaste={handlePaste}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
+              if (event.nativeEvent.isComposing) return
               event.preventDefault()
-              onSubmit()
+              onSubmit(event.currentTarget.value)
             }
           }}
           rows={1}
@@ -686,7 +689,7 @@ function HomeComposer({
             </button>
             <button
               type="button"
-              onClick={onSubmit}
+              onClick={() => onSubmit(textareaRef.current?.value)}
               disabled={!hasSendableContent || isLoading}
               className={cn("thome-submit", !hasSendableContent && "is-hidden")}
               aria-label={isLoading ? "Malik AI отвечает" : "Отправить запрос"}
@@ -891,8 +894,10 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     setAttachmentError("")
   }
 
-  const submit = () => {
-    const text = prompt.trim()
+  const submit = (nativeDraft?: string) => {
+    // Two HomeComposer instances exist (desktop + mobile). Use the field that
+    // actually submitted, never the hidden desktop textarea selected globally.
+    const text = (nativeDraft || prompt).trim()
     if ((!text && !attachments.length) || props.isLoading) return
 
     const attachmentPrompt = attachments.some((item) => item.kind === "video")
@@ -901,10 +906,16 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
         ? "Проанализируй прикреплённое изображение и подробно ответь по его содержанию."
         : "Прочитай прикреплённые файлы и подробно ответь по их содержанию."
 
-    props.onSubmit(text || attachmentPrompt, attachments, {
-      research: webOn,
-      responseDepth: deepResearch ? "deep" : undefined,
-    })
+    try {
+      props.onSubmit(text || attachmentPrompt, attachments, {
+        research: webOn,
+        responseDepth: deepResearch ? "deep" : undefined,
+      })
+    } catch (error) {
+      setPrompt(text)
+      setAttachmentError(error instanceof Error ? error.message : "Не удалось отправить сообщение.")
+      return
+    }
     setPrompt("")
     setAttachments([])
     setAttachmentError("")
