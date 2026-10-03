@@ -571,6 +571,40 @@
   transition: opacity 0.15s ease;
 }
 
+/* The sheet action is the only action with a visible text label. Generic
+   34/38px icon-button rules must not let that label overflow its hitbox. */
+#malik-root .malik-message-actions button.malik-open-sheet {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: auto !important;
+  min-width: 38px !important;
+  height: 38px !important;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+#malik-root .malik-message-actions button.malik-open-sheet svg {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  /* Match the other icon actions on phones; title and aria-label remain. */
+  #malik-root .malik-message-actions button.malik-open-sheet {
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 !important;
+  }
+
+  #malik-root .malik-message-actions button.malik-open-sheet span {
+    display: none;
+  }
+}
+
 #malik-root .malik-message-row-assistant:hover .malik-message-actions,
 #malik-root .malik-message-actions:focus-within,
 #malik-root .malik-message-actions.is-research {
