@@ -63,3 +63,72 @@
 .malik-execution__work-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 7px 0 9px; color: #a1a1aa; font-size: 11px; }
 .malik-execution__work-summary > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .malik-execution__work-summary > span:first-child { color: #e4e4e7; }
+
+/* Keep the existing thinking label anchored to the left edge of the real
+   tool receipts on phone and desktop. No replacement loading widget. */
+#malik-root .malik-execution--inline > .malik-live-activity,
+#malik-root .malik-think-v8 > .malik-live-activity {
+  display: block;
+  position: relative;
+  left: auto;
+  transform: none;
+  width: max-content;
+  max-width: 100%;
+  margin: 4px 0 12px !important;
+  padding: 0;
+  text-align: left !important;
+  align-self: flex-start;
+  justify-self: start;
+}
+
+/* Animate the icons and copy already present in the real search/read
+   receipts. A finished action keeps its checkmark; only running icons spin. */
+#malik-root .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__heading > svg:first-child {
+  transform-origin: 50% 50%;
+  animation: malik-receipt-active-icon 1.35s linear infinite;
+}
+#malik-root .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__title {
+  animation: malik-receipt-active-label 1.3s ease-in-out infinite;
+}
+#malik-root .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__heading > .is-spinning {
+  animation-duration: .95s;
+}
+#malik-root .malik-execution--inline[data-state="running"] .malik-receipt.is-completed .malik-receipt__heading > svg:nth-of-type(2) {
+  animation: malik-receipt-finished-glow 2.1s ease-in-out infinite;
+}
+#malik-root .malik-execution--inline[data-state="running"] .malik-receipt:nth-child(even).is-completed .malik-receipt__heading > svg:nth-of-type(2) {
+  animation-delay: -.7s;
+}
+#malik-root .malik-execution--inline[data-state="running"] .malik-execution__sources-title > svg,
+#malik-root .malik-execution--inline[data-state="running"] .malik-execution__source-chips a > svg {
+  transform-origin: center;
+  animation: malik-receipt-source-motion 2.4s ease-in-out infinite;
+}
+#malik-root .malik-execution--inline[data-state="running"] .malik-execution__source-chips a:nth-child(even) > svg {
+  animation-delay: -.8s;
+}
+@keyframes malik-receipt-active-icon {
+  to { transform: rotate(360deg); }
+}
+@keyframes malik-receipt-active-label {
+  0%, 100% { opacity: .65; }
+  50% { opacity: 1; }
+}
+@keyframes malik-receipt-finished-glow {
+  0%, 100% { opacity: .62; }
+  50% { opacity: 1; }
+}
+@keyframes malik-receipt-source-motion {
+  0%, 100% { transform: rotate(-8deg); opacity: .7; }
+  50% { transform: rotate(8deg); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #malik-root .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__heading > svg:first-child,
+  #malik-root .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__title,
+  #malik-root .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__heading > .is-spinning,
+  #malik-root .malik-execution--inline[data-state="running"] .malik-receipt.is-completed .malik-receipt__heading > svg:nth-of-type(2),
+  #malik-root .malik-execution--inline[data-state="running"] .malik-execution__sources-title > svg,
+  #malik-root .malik-execution--inline[data-state="running"] .malik-execution__source-chips a > svg {
+    animation: none !important;
+  }
+}
