@@ -1,9 +1,10 @@
 import type { ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
+import { officialIPhonePhoto } from "./official-product-photos"
 
 export type MalikVisualImage = { url: string; alt: string; sourceUrl?: string; credit?: string; license?: string }
 export const REFERENCE_METADATA_LIMIT = 48 * 1024
 export const REFERENCE_RESULT_LIMIT = 8 * 1024
-const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org", "images.unsplash.com", "images.pexels.com", "cdn.pixabay.com", "i.imgur.com", "ipcdn-web.apple.com"])
+const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org", "images.unsplash.com", "images.pexels.com", "cdn.pixabay.com", "i.imgur.com", "ipcdn-web.apple.com", "cdsassets.apple.com"])
 
 export function isSafeVisualUrl(value: string): boolean {
   try {
@@ -68,6 +69,30 @@ export function sanitizeReferenceImages(value: unknown): MalikVisualImage[] {
 
 type CommonsPage = { title?: string; index?: number; imageinfo?: Array<{ mime?: string; thumburl?: string; descriptionurl?: string; extmetadata?: Record<string, { value?: string }> }> }
 
+function titleWords(text: string): string[] {
+  return text.normalize("NFKD").toLowerCase().replace(/\p{M}/gu, "").replace(/^file:/u, "").split(/[^\p{L}\p{N}]+/u).filter((word) => (word.length > 1 || /^\d+$/u.test(word)) && !["the", "of", "in", "and"].includes(word))
+}
+
+function unrelatedNamesake(query: string, title: string): boolean {
+  const namesakes = /(?:airport|university|station|statue|museum|autograph|signature|аэропорт|университет|памятник|станци[яи]|автограф|подпись|мұражай|әуежай)/giu
+  const words = title.toLowerCase().match(namesakes) || []
+  return words.some((word) => !query.toLowerCase().includes(word))
+}
+
+function catalogueHeaders(): Record<string, string> {
+  return typeof window === "undefined"
+    ? { Accept: "application/json", "User-Agent": "MalikAI/1.0 (https://malikaiworld.world)" }
+    : { Accept: "application/json" }
+}
+
+/** Identity/model searches must not return an airport, namesake or another model. */
+export function referenceTitleScore(query: string, title: string): number {
+  const wanted = titleWords(query), actual = titleWords(title)
+  if (!wanted.length || !actual.length) return 0
+  const matched = wanted.filter((word) => actual.includes(word)).length
+  return matched === wanted.length ? matched / actual.length : 0
+}
+
 /** Verified official screen examples. URLs only; no screenshots stored on Render. */
 function officialScreen(plan: ReferenceVisualPlan): MalikVisualImage[] {
   if (plan.kind !== "tutorial" || !plan.visualDevice?.some((term) => ["iphone", "ios", "ipad"].includes(term))) return []
@@ -89,14 +114,23 @@ async function lookupArticleImages(plan: ReferenceVisualPlan, signal: AbortSigna
     const language = /[әғқңөұүһі]/iu.test(topic) ? "kk" : /[а-яё]/iu.test(topic) ? "ru" : "en"
     const params = new URLSearchParams({ action: "query", format: "json", formatversion: "2", origin: "*", generator: "search", gsrsearch: topic,
       gsrnamespace: "0", gsrlimit: "3", prop: "pageimages|info", inprop: "url", piprop: "thumbnail", pithumbsize: "480", pilicense: "free" })
+    if (plan.entity) {
+      // Canonical article/redirect lookup avoids searching for similarly named places.
+      for (const field of ["generator", "gsrsearch", "gsrnamespace", "gsrlimit"]) params.delete(field)
+      params.set("titles", topic)
+      params.set("redirects", "1")
+    }
     try {
       const response = await fetch("https://" + language + ".wikipedia.org/w/api.php?" + params, {
-        headers: { Accept: "application/json" }, credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.any([signal, AbortSignal.timeout(3000)]),
+        headers: catalogueHeaders(), credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.any([signal, AbortSignal.timeout(7000)]),
       })
       const data = await readReferenceJson(response) as { query?: { pages?: Array<{ title?: string; index?: number; fullurl?: string; thumbnail?: { source?: string } }> } } | null
-      const images = sanitizeReferenceImages((data?.query?.pages || []).sort((a, b) => (a.index || 0) - (b.index || 0)).flatMap((page) => page.thumbnail?.source && page.fullurl
+      const pages = (data?.query?.pages || []).sort((a, b) => plan.entity
+        ? referenceTitleScore(topic, b.title || "") - referenceTitleScore(topic, a.title || "") || (a.index || 0) - (b.index || 0)
+        : (a.index || 0) - (b.index || 0))
+      const images = sanitizeReferenceImages(pages.filter((page) => !plan.entity || referenceTitleScore(topic, page.title || "") >= 0.65).flatMap((page) => page.thumbnail?.source && page.fullurl
         ? [{ url: page.thumbnail.source, alt: page.title || plan.topic, sourceUrl: page.fullurl, credit: "Wikipedia · Wikimedia Commons" }] : []))
-      if (images.length) return images
+      if (images.length) return plan.entity ? images.slice(0, 1) : images
     } catch { /* Keep the text answer usable. */ }
   }
   return []
@@ -107,7 +141,13 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
   if (signal?.aborted) return []
   const official = officialScreen(plan)
   if (official.length) return sanitizeReferenceImages(official)
-  const totalSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(14000)])
+  const product = officialIPhonePhoto(plan.topic)
+  if (product) return sanitizeReferenceImages([{ url: product.url, alt: product.title, sourceUrl: "https://support.apple.com/en-us/108044", credit: "Apple Support" }])
+  const totalSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(20000)])
+  if (plan.entity) {
+    const article = await lookupArticleImages(plan, totalSignal)
+    if (article.length || totalSignal.aborted) return article
+  }
   for (const topic of plan.queries.slice(0, 2)) {
     if (totalSignal.aborted) break
     const params = new URLSearchParams({ action: "query", format: "json", formatversion: "2", origin: "*", generator: "search",
@@ -115,9 +155,9 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
       iiextmetadatafilter: "Artist|LicenseShortName", iiurlwidth: "480" })
     try {
       const response = await fetch("https://commons.wikimedia.org/w/api.php?" + params, {
-        headers: { Accept: "application/json" }, credentials: "omit", referrerPolicy: "no-referrer",
+        headers: catalogueHeaders(), credentials: "omit", referrerPolicy: "no-referrer",
         // Reserve time for article thumbnails even when both Commons queries stall.
-        signal: AbortSignal.any([totalSignal, AbortSignal.timeout(3000)]),
+        signal: AbortSignal.any([totalSignal, AbortSignal.timeout(6000)]),
       })
       const data = await readReferenceJson(response) as { query?: { pages?: CommonsPage[] } } | null
       const pages = Array.isArray(data?.query?.pages) ? data.query.pages : []
@@ -126,6 +166,7 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
         // For interface tutorials, reject random product photos and screenshots
         // of unrelated settings (even if Commons ranked them highly).
         const fileTitle = String(page.title || "").toLocaleLowerCase()
+        if (plan.entity && (unrelatedNamesake(topic, fileTitle) || !titleWords(topic).every((word) => titleWords(fileTitle).includes(word)))) return []
         if (plan.kind === "tutorial" && (!plan.visualDevice?.some((term) => fileTitle.includes(term))
           || !plan.visualTerms?.some((term) => fileTitle.includes(term)))) return []
         // Never fall back to the multi-megabyte original when a thumbnail is missing.
@@ -137,5 +178,5 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
       if (images.length) return images
     } catch { /* A catalogue outage must not interrupt the answer. */ }
   }
-  return lookupArticleImages(plan, totalSignal)
+  return plan.entity ? [] : lookupArticleImages(plan, totalSignal)
 }

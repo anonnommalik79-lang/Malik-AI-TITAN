@@ -26,12 +26,20 @@ function firstMatch(value: string, pattern: RegExp) {
  * "покажи мне Медеу Алматы", without turning "покажи код/решение" into photo search.
  * Shared by chat routing and the rendered gallery to prevent split-brain intent.
  */
+export function isReferencePhotoFollowUp(input: string): boolean {
+  const text = input.toLowerCase().trim()
+  if (!/(?:фото|фотк|картин|изображен|сурет|photos?|pictures?|images?|покажи\s+их|show\s+them)/iu.test(text)) return false
+  const rest = text.replace(/(?<![\p{L}\p{N}_])(?:фото(?:графи[\p{L}]*)?|фотк[\p{L}]*|картинк[\p{L}]*|изображени[\p{L}]*|сурет[\p{L}]*|photos?|pictures?|images?|покажи|покажите|добавь|дай|скинь|көрсет(?:ші|іңіз)?|show|add|give|please|пожалуйста|теперь|всех|все|каждого|их|этих|эти|мне|нам|по|на|the|them|all|each|of|me|а)(?![\p{L}\p{N}_])/giu, "").replace(/[\s,.!?…:;-]/gu, "")
+  return !rest
+}
+
 export function isReferenceImageRequest(input: string): boolean {
   const text = String(input || "").trim()
   if (!text || text.length > 2500) return false
   if (/(?:без\s+(?:фото|картинок|изображений)|не\s+(?:показывай|добавляй|нужны)\s+(?:фото|картинки|изображения)|только\s+текст|no\s+(?:photos?|images?|pictures?)|text\s+only|суретсіз)/iu.test(text)) return false
   if (/^\s*\/(?:image|img|photo|foto|фото|картинка|video|veo|видео)(?![\p{L}\p{N}_])/iu.test(text)) return false
   if (isExplicitImageGenerationRequest(text)) return false
+  if (isReferencePhotoFollowUp(text)) return true
   if (/^(?:напиши|создай|write|create)\s+(?:код|функци[\p{L}]*|скрипт|code|function|script)(?=\s|$)/iu.test(text)) return false
   if (/^(?:добавь|дай)(?:\s+мне)?\s+(?:их\s+)?(?:фото(?:графии)?|картинки|изображения)[.!?\s]*$/iu.test(text)) return true
 
@@ -52,7 +60,7 @@ export function isReferenceImageRequest(input: string): boolean {
   const subject = request[1].trim()
   if (subject.length < 3 || subject.length > 150) return false
   // Teaching, code and document requests should stay ordinary text answers.
-  const physicalSubject = /(?:медеу|шымбулак|алмат[\p{L}]*|астан[\p{L}]*|архитектур|гор(?:ы|а|ные)|тау|озер|озёр|каньон|здани|пейзаж|автомоб|машин|кот(?:а|ы|ик)?(?![\p{L}])|собак|цвет(?:ок|ы)|птиц|дом(?:а|ов)?(?![\p{L}])|интерьер|одежд|mountains?|lake|architecture|landmarks?|landscape|cars?|cats?|dogs?|sunset|interior|flowers?|Medeu|Almaty|Astana)/iu
+  const physicalSubject = /(?:iphone|айфон|samsung|самсунг|galaxy|телефон|медеу|шымбулак|алмат[\p{L}]*|астан[\p{L}]*|архитектур|гор(?:ы|а|ные)|тау|озер|озёр|каньон|здани|пейзаж|автомоб|машин|кот(?:а|ы|ик)?(?![\p{L}])|собак|цвет(?:ок|ы)|птиц|дом(?:а|ов)?(?![\p{L}])|интерьер|одежд|mountains?|lake|architecture|landmarks?|landscape|cars?|cats?|dogs?|sunset|interior|flowers?|Medeu|Almaty|Astana)/iu
   return !nonVisual.test(subject) && (physicalSubject.test(subject) || /\p{Lu}\p{L}{2,}/u.test(subject))
 }
 

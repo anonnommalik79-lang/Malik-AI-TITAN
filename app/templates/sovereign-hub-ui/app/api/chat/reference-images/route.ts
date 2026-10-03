@@ -36,26 +36,30 @@ async function unsplash(topic: string): Promise<MalikVisualImage[]> {
   }).slice(0, 3)
 }
 
-/** Compatibility endpoint: bounded metadata only; the chat uses browser-direct lookup. */
+/** Browser fallback: bounded metadata only, never image bytes or arbitrary URLs. */
 export async function GET(request: Request) {
   const raw = new URL(request.url).searchParams.get("q") || ""
   if (!raw.trim() || raw.length > 250 || /[\r\n]/.test(raw)) return NextResponse.json({ images: [] }, { status: 400 })
   const plan = planReferenceVisuals(raw)
   if (!plan) return NextResponse.json({ images: [] })
-  const key = plan.queries.join("|").toLowerCase()
+  plan.entity = plan.entity || new URL(request.url).searchParams.get("entity") === "1"
+  const key = [plan.entity ? "entity" : "", ...plan.queries].join("|").toLowerCase()
   let entry = cache.get(key)
   if (!entry || entry.expires <= Date.now()) {
     // Eviction bounds RAM. Concurrent identical lookups share one promise.
     for (const [oldKey, value] of cache) if (value.expires <= Date.now()) cache.delete(oldKey)
     while (cache.size >= 60) cache.delete(cache.keys().next().value!)
     const promise = (async () => {
-      let images: MalikVisualImage[] = []
-      try { images = sanitizeReferenceImages(await unsplash(plan.queries[0])) } catch { /* Optional provider. */ }
-      return images.length ? images : lookupReferenceImages(plan)
+      let images = await lookupReferenceImages(plan)
+      if (!images.length && !plan.entity) {
+        try { images = sanitizeReferenceImages(await unsplash(plan.queries[0])) } catch { /* Optional provider. */ }
+      }
+      return images
     })()
     entry = { expires: Date.now() + 600000, promise }
     cache.set(key, entry)
   }
   const images = await entry.promise
-  return NextResponse.json({ images }, { headers: { "Cache-Control": "private, max-age=600" } })
+  if (!images.length) cache.delete(key)
+  return NextResponse.json({ images }, { headers: { "Cache-Control": images.length ? "private, max-age=600" : "no-store" } })
 }

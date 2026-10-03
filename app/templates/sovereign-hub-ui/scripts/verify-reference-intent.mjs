@@ -24,6 +24,28 @@ const policy = load("lib/ai/reference-visual-policy.ts")
 const catalog = load("lib/media/reference-catalog.ts")
 const cache = load("lib/media/client-reference-cache.ts")
 const entities = load("lib/ai/answer-entities.ts")
+const products = load("lib/media/official-product-photos.ts")
+const iphoneList = "2007: iPhone (первое поколение / 2G)\n2008: iPhone 3G\n2009: iPhone 3GS\n2016: iPhone SE (1-е поколение), iPhone 7, iPhone 7 Plus\n2020: iPhone SE (2-е поколение), iPhone 12 Pro Max\n2025: iPhone 17, iPhone 17 Air"
+const allPhones = policy.planReferenceVisuals("Покажи все модели айфона")
+assert.equal(allPhones.queries[0], "iPhone")
+assert.equal(allPhones.subjects.length, Object.keys(products.APPLE_IPHONE_PHOTOS).length)
+for (const prompt of ["По фотки покажи их всех", "Покажи их фото", "Show photos of them all"]) {
+  assert.equal(intent.isReferenceImageRequest(prompt), true, prompt)
+  const follow = policy.planReferenceVisuals(prompt, "Покажи все модели айфона", false, iphoneList)
+  assert.deepEqual(follow.subjects, products.namedIPhoneSubjects(iphoneList), "use exactly the previously listed models")
+  assert(follow.subjects.includes("iPhone SE (1st generation)"))
+  assert(follow.subjects.includes("iPhone SE (2nd generation)"))
+  assert(follow.subjects.includes("iPhone Air"))
+}
+assert.equal(policy.planReferenceVisuals("Кто такое призедент назарбаев").queries[0], "Nursultan Nazarbayev")
+assert.deepEqual(policy.planReferenceVisuals("Покажи их фото", "Расскажи про достопримечательности Алматы", false, "## Медеу\nКаток.\n## Кок-Тобе\nГора.\n## История\nТекст.").subjects, ["Медеу", "Кок-Тобе"], "photo follow-ups work for named places too")
+assert.deepEqual(policy.planAnswerVisualSlots("Кто такой Назарбаев", [
+  { key: "p0", kind: "paragraph", text: "Нурсултан Назарбаев — первый президент Казахстана." },
+  { key: "h1", kind: "heading", text: "Политическая карьера" },
+]).map((slot) => slot.plan.queries[0]), ["Nursultan Nazarbayev"], "biography subheadings must not replace the person's identity")
+assert.equal(products.officialIPhonePhoto("айфон 16 про"), null, "do not substitute a vaguely named model")
+assert.equal(catalog.referenceTitleScore("iPhone 4", "iPhone 5"), 0, "model digits are part of identity")
+assert.equal(catalog.referenceTitleScore("Nursultan Nazarbayev", "Nursultan Nazarbayev International Airport"), 0.5)
 for (const prompt of ["Покажи мне горы Алматы", "Покажи три фотографии архитектуры Астаны с визуальными референсами. Добавь описание каждой фотографии.", "покажи мне медеу алматы", "Show me Medeu Almaty", "Найди фотографии Алматы", "Расскажи про Медеу с фото", "как выглядит Эйфелева башня", "дай фото гор Алматы"]) {
   assert.equal(intent.isReferenceImageRequest(prompt), true, prompt)
   assert.ok(policy.planReferenceVisuals(prompt), prompt)
@@ -163,6 +185,33 @@ try {
   assert.deepEqual(await catalog.lookupReferenceImages(plan), [], "never download original images to replace missing thumbnails")
   globalThis.fetch = async () => { throw new Error("Provider unavailable") }
   assert.deepEqual(await catalog.lookupReferenceImages(plan), [], "outage must not fail chat")
+  let officialCalls = 0
+  globalThis.fetch = async () => { officialCalls++; throw new Error("External catalogue unavailable") }
+  const phonePhoto = await catalog.lookupReferenceImages(policy.planReferenceVisuals("Покажи iPhone 16 Pro"))
+  assert.equal(phonePhoto[0].alt, "iPhone 16 Pro")
+  assert.match(phonePhoto[0].url, /^https:\/\/cdsassets\.apple\.com\//)
+  assert.equal(officialCalls, 0, "verified product photos do not depend on search availability")
+  globalThis.fetch = async () => Response.json({ query: { pages: [
+    { index: 1, title: "Nursultan Nazarbayev International Airport", fullurl: "https://en.wikipedia.org/wiki/Airport", thumbnail: { source: "https://upload.wikimedia.org/airport.jpg" } },
+    { index: 2, title: "Nursultan Nazarbayev", fullurl: "https://en.wikipedia.org/wiki/Nursultan_Nazarbayev", thumbnail: { source: "https://upload.wikimedia.org/nazarbayev.jpg" } },
+  ] } })
+  const portrait = await catalog.lookupReferenceImages(policy.planReferenceVisuals("Кто такое призедент назарбаев"))
+  assert.deepEqual(portrait.map((image) => image.alt), ["Nursultan Nazarbayev"], "do not show an airport for a person")
+  globalThis.fetch = async (input) => String(input).includes("commons.wikimedia.org")
+    ? Response.json({ query: { pages: [{ ...media(1), title: "File:Nursultan Nazarbayev International Airport.jpg" }, { ...media(2), title: "File:Nursultan Nazarbayev portrait.jpg" }] } })
+    : Response.json({ query: { pages: [] } })
+  assert.deepEqual((await catalog.lookupReferenceImages(policy.planReferenceVisuals("Кто такой Назарбаев"))).map((image) => image.alt), ["Nursultan Nazarbayev portrait"], "Commons fallback also rejects namesakes")
+  const fallbackPlan = policy.planReferenceVisuals("Покажи горы Казахстана")
+  let sameOriginCalls = 0
+  globalThis.fetch = async (input) => {
+    if (String(input).startsWith("/api/chat/reference-images?")) {
+      sameOriginCalls++
+      return Response.json({ images: [{ url: "https://upload.wikimedia.org/fallback.jpg", alt: "Горы Казахстана" }] })
+    }
+    throw new Error("Browser catalogue blocked")
+  }
+  await new Promise((resolve) => cache.subscribeReferenceImages(fallbackPlan, (images) => { assert.equal(images[0]?.alt, "Горы Казахстана"); resolve() }))
+  assert.equal(sameOriginCalls, 1, "browser failures have a bounded same-origin metadata fallback")
   const fallbackCalls = []
   globalThis.fetch = async (input) => {
     const url = new URL(String(input))

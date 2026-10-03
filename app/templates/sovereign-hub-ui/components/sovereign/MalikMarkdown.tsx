@@ -19,7 +19,7 @@ import { planAnswerVisualSlots, type AnswerVisualSegment, type AnswerVisualSlot 
  * model output is parsed into React elements and never injected as HTML.
  */
 
-type Props = { text: string; className?: string; allowImages?: boolean; visualContext?: { question: string; messageId?: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
+type Props = { text: string; className?: string; allowImages?: boolean; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
 
 function isProjectArtifactHref(href: string) {
   return /^\/api\/ai\/project\/artifacts\/[^/]+\/download(?:\?|$)/.test(href)
@@ -677,6 +677,7 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
   const blocks = useMemo(() => parseBlocks(text), [text])
   const question = visualContext?.question || ""
   const previousQuestion = visualContext?.previousQuestion || ""
+  const previousAnswer = visualContext?.previousAnswer || ""
   const hasAttachment = Boolean(visualContext?.hasAttachment)
   const streaming = Boolean(visualContext?.streaming)
   const checklistPosition = useMemo(() => {
@@ -699,8 +700,8 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
       if (block.kind === "p") segments.push({ key, text: block.lines.join(" "), kind: "paragraph" })
       if (block.kind === "list") block.list.items.forEach((item, index) => segments.push({ key: `${key}-${index}`, text: item.text, kind: "item" }))
     })
-    return new Map(planAnswerVisualSlots(question, segments, previousQuestion, hasAttachment).map((slot) => [slot.key, slot]))
-  }, [blocks, question, previousQuestion, hasAttachment, streaming])
+    return new Map(planAnswerVisualSlots(question, segments, previousQuestion, hasAttachment, previousAnswer).map((slot) => [slot.key, slot]))
+  }, [blocks, question, previousQuestion, previousAnswer, hasAttachment, streaming])
   const dataVisuals = useMemo(() => {
     const visuals = new Map<number, AnswerVisual>()
     if (!wantsAnswerVisuals(question)) return visuals

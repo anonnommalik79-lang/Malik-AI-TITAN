@@ -1659,6 +1659,7 @@ function MessageBubble({
   videoAnalysis = false,
   question = "",
   previousQuestion = "",
+  previousAnswer = "",
   questionHasAttachment = false,
   onEditPrompt,
   onFollowUp,
@@ -1676,6 +1677,7 @@ function MessageBubble({
   /** The user turn this answer replies to — what a re-check searches for. */
   question?: string
   previousQuestion?: string
+  previousAnswer?: string
   questionHasAttachment?: boolean
   generationType?: GenerationStatusType
 
@@ -1859,7 +1861,7 @@ function MessageBubble({
                         fade in (chat-live.css). It is dropped when done. */}
                     <MalikMarkdown text={displayContent} allowImages={false} className={writingLive ? "malik-streaming" : undefined}
                       visualContext={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
-                        ? { question, messageId: message.id, previousQuestion, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
+                        ? { question, messageId: message.id, previousQuestion, previousAnswer, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
                     {streaming && videoAnalysis ? <VideoAnalysisPulse compact /> : null}
                   </>
                 )
@@ -2974,6 +2976,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
                       : ""
                   }
                   previousQuestion={message.role === "assistant" ? messages.slice(0, index).filter((item) => item.role === "user").at(-2)?.content || "" : ""}
+                  previousAnswer={message.role === "assistant" ? messages.slice(0, index).filter((item) => item.role === "assistant").at(-1)?.content || "" : ""}
                   questionHasAttachment={message.role === "assistant" && Boolean(messages.slice(0, index).reverse().find((item) => item.role === "user")?.attachments?.length)}
                   onCopy={handleCopy}
                   copied={copiedId === message.id}

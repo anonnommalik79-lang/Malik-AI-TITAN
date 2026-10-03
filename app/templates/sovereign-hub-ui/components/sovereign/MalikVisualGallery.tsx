@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { ExternalLink, ImageOff, X } from "lucide-react"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 
-import { planReferenceVisuals, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
+import { planReferenceVisuals, referenceSearchTopic, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
-import { referenceCacheKey, subscribeReferenceImages } from "@/lib/media/client-reference-cache"
+import { invalidateReferenceImages, referenceCacheKey, subscribeReferenceImages } from "@/lib/media/client-reference-cache"
 import "./answer-blocks.css"
 export { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
 
@@ -92,7 +92,7 @@ export function wantsReferenceImages(question: string): boolean {
 }
 
 /** Direct browser catalogue requests: no image proxy, no generation credits. */
-export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; children?: ReactNode }) {
+export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, compact = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; compact?: boolean; children?: ReactNode }) {
   const candidate = useMemo(() => planOverride || planReferenceVisuals(question, previousQuestion, hasAttachment), [planOverride, question, previousQuestion, hasAttachment])
   // The answer grows while streaming. Keep subscriptions stable for identical queries.
   const serializedPlan = candidate ? JSON.stringify(candidate) : ""
@@ -101,24 +101,42 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   const [nearViewport, setNearViewport] = useState(false)
   const [result, setResult] = useState<{ key: string; images: MalikVisualImage[] } | null>(null)
   const [selected, setSelected] = useState<MalikVisualImage | null>(null)
+  const [attempt, setAttempt] = useState(0)
   const key = plan ? referenceCacheKey(plan) : ""
   const active = isLatest || nearViewport
+  const collection = Boolean(plan?.subjects?.length)
   useEffect(() => {
     const node = container.current
-    if (!plan || !node || active) return
+    if (!plan || !node || active || collection) return
     if (typeof IntersectionObserver === "undefined") { queueMicrotask(() => setNearViewport(true)); return }
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) { setNearViewport(true); observer.disconnect() }
     }, { rootMargin: "160px" })
     observer.observe(node)
     return () => observer.disconnect()
-  }, [plan, active])
+  }, [plan, active, collection])
   useEffect(() => {
-    if (!plan || !active) return
+    if (!plan || !active || collection) return
     return subscribeReferenceImages(plan, (images) => setResult({ key: referenceCacheKey(plan), images }))
-  }, [plan, active])
+  }, [plan, active, collection, attempt])
   if (!plan) return children || null
   const images = result?.key === key ? result.images : null
+  const retry = () => { invalidateReferenceImages(plan); setResult(null); setAttempt((value) => value + 1) }
+  const status = images === null
+    ? <p role="status" className="my-3 text-sm text-zinc-400">{active ? "Ищу фото по теме…" : plan.topic}</p>
+    : <p className="my-3 text-sm text-zinc-400">Подходящее фото не загрузилось. <button type="button" onClick={retry} className="underline underline-offset-4">Повторить поиск</button></p>
+  if (collection) return <div className="min-w-0" data-malik-reference-topic={plan.topic}>
+    {children}
+    <section className="my-5 grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label={"Фотографии · " + plan.topic} data-malik-reference-collection>
+      {plan.subjects!.slice(0, 60).map((subject, index) => <MalikReferenceImages key={subject} question="" compact isLatest={isLatest && index < 6}
+        planOverride={{ topic: subject, queries: [...new Set([referenceSearchTopic(subject), subject])], explicit: true, entity: true, kind: "reference", layout: "portrait" }} />)}
+    </section>
+  </div>
+  if (compact) return <div ref={container} className="min-w-0" data-malik-reference-topic={plan.topic}>
+    {images?.[0] ? <ReferenceCard image={images[0]} portrait onOpen={() => setSelected(images[0])} />
+      : <div className="flex aspect-[3/4] flex-col justify-center rounded-2xl border border-white/15 px-3 text-center"><span className="text-sm font-medium text-white">{plan.topic}</span>{status}</div>}
+    {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}
+  </div>
   if (row) return (
     <div ref={container} className="malik-answer-photo-row min-w-0" data-malik-reference-topic={plan.topic} data-malik-inline-visual>
       <div className={images?.length ? "flex items-start gap-3 sm:gap-5" : ""}>
@@ -135,6 +153,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
         <div className="min-w-0 flex-1">{children}</div>
       </div>
       {images?.length && plan.kind === "tutorial" ? <p className="mt-2 text-xs leading-5 text-zinc-400">Пример экрана из источника. Вид меню зависит от версии приложения.</p> : null}
+      {!images?.length && active ? status : null}
       {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}
     </div>
   )
@@ -145,8 +164,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
         <MalikVisualGallery title={plan.kind === "tutorial" ? "Примеры экранов · " + plan.topic : plan.topic} images={plan.kind === "tutorial" ? images.slice(0, 2) : images} portrait={plan.layout === "portrait"} />
         {plan.kind === "tutorial" ? <p className="mb-4 text-xs leading-5 text-zinc-400">Иллюстрации из открытых источников. Названия пунктов и вид меню могут отличаться в вашей версии приложения.</p> : null}
       </>
-        : images === null ? plan.explicit ? <div role="status" className="my-4 flex items-center gap-2 text-sm text-zinc-400"><span className="h-2 w-2 animate-pulse rounded-full bg-zinc-500" />{active ? "Ищу фотографии…" : "Фотографии"}</div> : null
-          : plan.explicit ? <p className="my-3 text-sm text-zinc-400">Фотографии сейчас недоступны. <a href={"https://commons.wikimedia.org/w/index.php?search=" + encodeURIComponent(plan.queries[0]) + "&title=Special:MediaSearch&type=image"} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Открыть поиск фото</a></p> : null}
+        : active || plan.explicit ? status : null}
     </div>
   )
 }

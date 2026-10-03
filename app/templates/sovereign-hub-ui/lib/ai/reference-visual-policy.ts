@@ -1,4 +1,5 @@
-import { isExplicitImageEditRequest, isExplicitImageGenerationRequest, isReferenceImageRequest } from "./image-intent"
+import { isExplicitImageEditRequest, isExplicitImageGenerationRequest, isReferenceImageRequest, isReferencePhotoFollowUp } from "./image-intent"
+import { APPLE_IPHONE_PHOTOS, namedIPhoneSubjects, normalizeIPhoneSubject } from "../media/official-product-photos"
 
 export type ReferenceVisualPlan = {
   topic: string
@@ -9,10 +10,11 @@ export type ReferenceVisualPlan = {
   /** Screenshot matches must include a specific UI feature AND app/device. */
   visualTerms?: string[]
   visualDevice?: string[]
+  subjects?: string[]
+  entity?: boolean
 }
 
 const NO_VISUAL = /(?:без\s+(?:фото|картинок|изображений)|не\s+(?:показывай|добавляй|нужны)\s+(?:фото|картинки|изображения)|только\s+текст|no\s+(?:photos?|images?|pictures?)|text\s+only|суретсіз)/iu
-const FOLLOW_UP = /^(?:(?:а\s+)?(?:теперь\s+)?(?:покажи|добавь|дай)(?:\s+мне)?\s+(?:их\s+)?(?:фото(?:графии)?|картинки|изображения)|(?:show|add)(?:\s+me)?\s+(?:the\s+)?(?:photos?|images?|pictures?)|суреттерін?\s+көрсет)[.!?\s]*$/iu
 
 
 /** Screenshots must match both the product and requested interface feature. */
@@ -82,7 +84,9 @@ export function referenceTopic(input: string): string {
     .replace(/^\s*(?:покажи(?:те)?|найди(?:те)?|подбери(?:те)?|дай|скинь|show(?:\s+me)?|find(?:\s+me)?|көрсет(?:ші|іңіз)?)(?:\s+мне)?\s*/iu, "")
     .replace(/^\s*(?:(?:три|несколько|\d+)\s+)?(?:фото(?:графи[\p{L}]*)?|фотк[\p{L}]*|картинк[\p{L}]*|изображени[\p{L}]*|визуальн[\p{L}]*\s+референс[\p{L}]*|референс[\p{L}]*|images?|photos?|pictures?)\s*/iu, "")
     .replace(/^\s*(?:расскажи(?:те)?(?:\s+мне)?(?:\s+(?:о|об|про))?|tell\s+me\s+about|как\s+выглядит|what\s+does)\s*/iu, "")
-    .replace(/^\s*(?:объясни(?:те)?|опиши(?:те)?|что\s+такое|какие|какой|какая|какое|что|кто\s+такой|explain|describe|what\s+(?:is|are)|who\s+is|түсіндір|қандай)\s*/iu, "")
+    .replace(/^\s*(?:объясни(?:те)?|опиши(?:те)?|что\s+такое|какие|какой|какая|какое|что|кто\s+(?:такой|такая|такое)|кто|explain|describe|what\s+(?:is|are)|who\s+is|түсіндір|қандай)\s*/iu, "")
+    .replace(/^\s*(?:(?:все|всех|весь|all|every)\s+)?(?:модели?|поколения|models?|generations?)\s+/iu, "")
+    .replace(/^\s*(?:пр[еи]з[еи]дент|президент|president)\s+/iu, "")
     .replace(/^\s*(?:как|где|куда|how\s+to|where\s+to|қалай)\s+(?:(?:мне|можно|нужно|лучше|do\s+i|can\s+i)\s+)?(?:(?:зайти|войти|попасть|сходить|поехать|сделать|готовить|приготовить|собрать|настроить|выбрать|добраться|посетить|enter|visit|make|cook|build|choose|get\s+to)\s+)?(?:на\s+|в\s+|to\s+|the\s+)?/iu, "")
     .replace(/^\s*(?:приложение|приложении|app|application)\s+/iu, "")
     .replace(/^\s*(?:of|про|о|об)\s+/iu, "")
@@ -92,7 +96,8 @@ export function referenceTopic(input: string): string {
 
 /** Common RU/KZ subjects are translated without another paid model call. */
 export function referenceSearchTopic(topic: string): string {
-  return topic
+  return normalizeIPhoneSubject(topic)
+    .replace(/(?:нурсултан[\p{L}]*\s+(?:[\p{L}]+\s+){0,2})?назарбаев[\p{L}]*/giu, "Nursultan Nazarbayev")
     .replace(/больш[\p{L}]*\s+алматинск[\p{L}]*\s+озер[\p{L}]*/giu, "Big Almaty Lake")
     .replace(/заилийск[\p{L}]*\s+алатау/giu, "Trans-Ili Alatau")
     .replace(/медеу/giu, "Medeu").replace(/шымбулак|чимбулак/giu, "Shymbulak")
@@ -114,7 +119,7 @@ const NON_VISUAL = /^(?:привет|салам|сәлем|спасибо|рах
 const STRUCTURED_TASK = /(?:чек[ -]?лист|checklist|таблиц|spreadsheet|\btable\b|дв[еу]\s+колонк|two\s+columns|\b(?:python|javascript|typescript|sql)\b|\bкод\b|\bcode\b)/iu
 
 /** Evaluate every explanatory answer; never require the user to ask for photos. */
-export function planReferenceVisuals(question: string, previousQuestion = "", hasAttachment = false): ReferenceVisualPlan | null {
+export function planReferenceVisuals(question: string, previousQuestion = "", hasAttachment = false, previousAnswer = ""): ReferenceVisualPlan | null {
   const text = String(question || "").trim()
   if (!text || text.length > 2500 || hasAttachment || NO_VISUAL.test(text)) return null
   if (/^\//u.test(text) || isExplicitImageGenerationRequest(text) || NON_VISUAL.test(text) || TEXT_TASK.test(text)) return null
@@ -123,7 +128,8 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   if (tutorial) return tutorial
   let explicit = isReferenceImageRequest(text)
   let subject = text
-  if (FOLLOW_UP.test(text)) {
+  const followUp = isReferencePhotoFollowUp(text)
+  if (followUp) {
     if (!previousQuestion || NO_VISUAL.test(previousQuestion)) return null
     subject = previousQuestion
     explicit = true
@@ -134,14 +140,18 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
     // Questions about places, people, objects and concepts get references by default.
     const places = /^(?:что\s+посмотреть\s+в|куда\s+сходить\s+в|достопримечательности|what\s+to\s+see\s+in|places\s+to\s+visit\s+in)\s+(.+)$/iu.exec(text)
     subject = places ? places[1] : text
-    if (/^(?:покажи|show|объясни\s+как|почему\s+не\s+работает)/iu.test(text) && !/(?:гор[а-я]*|тау|озер|город|страна|здани|животн|растени|mountain|lake|city|building)/iu.test(text)) return null
+    if (/^(?:объясни\s+как|почему\s+не\s+работает)/iu.test(text)) return null
+    if (/^(?:покажи|show|объясни\s+как|почему\s+не\s+работает)/iu.test(text) && !/(?:iphone|айфон|samsung|самсунг|телефон|гор[а-я]*|тау|озер|город|страна|здани|животн|растени|mountain|lake|city|building)/iu.test(text)) return null
   }
   const topic = referenceTopic(subject)
   if (topic.length < 3 || /^(?:фото|картинки|изображения|photos?|images?|pictures?|код|code|формул[\p{L}]*|решени[\p{L}]*|текст|text|как|how|доказательств[\p{L}]*|логи|ошибк[\p{L}]*|расч[её]т[\p{L}]*)(?=\s|$)/iu.test(topic)) return null
   const translated = referenceSearchTopic(topic)
   const search = translated.replace(/(?<!\p{L})(?:есть|бывают|находятся|расположены|в|на|из|про|о|об|of|in|the|are)(?!\p{L})/giu, " ").replace(/\s+/gu, " ").trim()
   const queries = [...new Set([search || translated, topic])].filter(Boolean).slice(0, 2)
-  return { topic, queries, explicit, layout: /референс|вдохнов|бренд|постер|reference|inspiration|poster|brand/iu.test(text) ? "portrait" : "landscape" }
+  const listed = followUp ? namedReferenceSubjects(previousAnswer) : []
+  const allIPhones = /(?:все|всех|all|every).{0,25}(?:модел|поколен|models?|generations?).{0,15}(?:iphone|айфон)/iu.test(subject)
+  const subjects = listed.length ? listed : allIPhones ? Object.keys(APPLE_IPHONE_PHOTOS).reverse() : undefined
+  return { topic, queries, explicit, subjects, entity: /^(?:кто|who)/iu.test(subject) || /(?:iphone|айфон|назарбаев)/iu.test(subject), layout: /^(?:кто|who)/iu.test(subject) || /референс|вдохнов|бренд|постер|reference|inspiration|poster|brand/iu.test(text) ? "portrait" : "landscape" }
 }
 
 export type AnswerVisualSegment = { key: string; text: string; kind: "heading" | "item" | "paragraph" }
@@ -151,10 +161,37 @@ export function visualSegmentLabel(text: string): string {
   return (bold || text.split(/\s+[—–]\s+|[.!?\n]/u, 1)[0]).replace(/(?:\*\*|__|[`*_])/gu, "").replace(/^\d+[.)]\s*/u, "").trim().slice(0, 100)
 }
 
+/** Resolve a photo follow-up from named subjects already present in the answer. */
+export function namedReferenceSubjects(answer: string): string[] {
+  const text = answer.replace(/```[\s\S]*?(?:```|$)/gu, "")
+  const phones = namedIPhoneSubjects(text)
+  if (phones.length) return phones
+  const names = text.split("\n").flatMap((line) => {
+    const match = /^\s*(?:#{1,3}\s+|\d+[.)]\s+|[-*+]\s+)(.+)$/u.exec(line)
+    if (!match) return []
+    const label = visualSegmentLabel(match[1])
+    if (label.length < 3 || label.length > 80 || label.split(/\s+/u).length > 7
+      || /^(?:истори[яи]|биографи[яи]|особенности|классическ|эпоха|итог|вывод|совет|важно|заключение|summary|conclusion|tips?|открой|нажми|выбери|проверь|добавь|улучши|создай|сделай|запусти|перейди|введи|как|что|click|tap|open|select|enter|check|create|add|https?:)/iu.test(label)) return []
+    return [label]
+  })
+  return [...new Set(names)].slice(0, 60)
+}
+
 /** At most three grounded lookups per answer; anchor them in the actual Markdown. */
-export function planAnswerVisualSlots(question: string, segments: AnswerVisualSegment[], previousQuestion = "", hasAttachment = false): AnswerVisualSlot[] {
-  const base = planReferenceVisuals(question, previousQuestion, hasAttachment)
+export function planAnswerVisualSlots(question: string, segments: AnswerVisualSegment[], previousQuestion = "", hasAttachment = false, previousAnswer = ""): AnswerVisualSlot[] {
+  const base = planReferenceVisuals(question, previousQuestion, hasAttachment, previousAnswer)
   if (!base) return []
+  const models = namedIPhoneSubjects(segments.map((segment) => segment.text).join("\n"))
+  if (base.subjects?.length || models.length > 1) {
+    const anchor = segments.find((segment) => segment.kind === "paragraph") || segments[0]
+    return anchor ? [{ key: anchor.key, row: false, plan: { ...base, subjects: base.subjects || models } }] : []
+  }
+  if (base.entity) {
+    const anchor = segments.find((segment) => segment.kind === "paragraph") || segments[0]
+    const named = anchor?.kind === "paragraph" ? visualSegmentLabel(anchor.text) : ""
+    const name = named && named.length <= 80 && /\s[—–]\s/u.test(anchor?.text || "") ? named : ""
+    return anchor ? [{ key: anchor.key, row: false, plan: name ? { ...base, topic: name, queries: [...new Set([referenceSearchTopic(name), ...base.queries])].slice(0, 2) } : base }] : []
+  }
   const candidates = segments.filter((segment) => segment.kind !== "paragraph" && !/^(?:итог|вывод|совет|важно|заключение|summary|conclusion|tips?|что\s+делать|как\s+зайти|куда\s+ехать|если\s+)/iu.test(visualSegmentLabel(segment.text)))
   if (base.kind === "tutorial") {
     // One matched screenshot beside its relevant step, not the same image on every step.
@@ -163,7 +200,7 @@ export function planAnswerVisualSlots(question: string, segments: AnswerVisualSe
   }
   const useful = candidates.filter((segment) => {
     const label = visualSegmentLabel(segment.text)
-    return label.length > 3 && label.split(/\s+/u).length <= 10 && !/^(?:открой|нажми|выбери|перейди|введи|вернись|click|tap|open|select|enter)/iu.test(label)
+    return label.length > 3 && label.split(/\s+/u).length <= 10 && !/^\d{4}$/u.test(label) && !/^(?:истори[яи]|биографи[яи]|особенности|классическ|эпоха|открой|нажми|выбери|перейди|введи|вернись|click|tap|open|select|enter)/iu.test(label)
   }).slice(0, 3)
   if (useful.length) return useful.map((segment) => {
     const label = visualSegmentLabel(segment.text)

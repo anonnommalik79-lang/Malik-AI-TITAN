@@ -1,17 +1,17 @@
 import type { ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
-import { lookupReferenceImages, sanitizeReferenceImages, type MalikVisualImage } from "./reference-catalog"
+import { lookupReferenceImages, readReferenceJson, sanitizeReferenceImages, type MalikVisualImage } from "./reference-catalog"
 
 type CacheEntry = { images: MalikVisualImage[]; expires: number }
 type Listener = (images: MalikVisualImage[]) => void
 type Job = { controller: AbortController; listeners: Set<Listener> }
-const STORAGE_KEY = "malik-reference-catalog-v3"
+const STORAGE_KEY = "malik-reference-catalog-v4"
 const MAX_ENTRIES = 60
 const cache = new Map<string, CacheEntry>()
 const pending = new Map<string, Job>()
 let hydrated = false
 
 export function referenceCacheKey(plan: ReferenceVisualPlan): string {
-  return [plan.kind || "reference", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", ...plan.queries].join("|").toLocaleLowerCase().slice(0, 240)
+  return [plan.kind || "reference", plan.entity ? "entity" : "", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", ...plan.queries].join("|").toLocaleLowerCase().slice(0, 240)
 }
 
 function hydrateCache() {
@@ -33,15 +33,32 @@ function hydrateCache() {
 
 function saveCache(key: string, images: MalikVisualImage[]) {
   cache.delete(key)
-  cache.set(key, { images, expires: Date.now() + (images.length ? 86400000 : 120000) })
+  cache.set(key, { images, expires: Date.now() + (images.length ? 86400000 : 10000) })
   for (const [oldKey, entry] of cache) if (entry.expires <= Date.now()) cache.delete(oldKey)
   while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value!)
   try {
-    const records = [...cache.entries()]
+    const records = [...cache.entries()].filter(([, entry]) => entry.images.length)
     let text = JSON.stringify(records)
     while (text.length > 128 * 1024 && records.length) { records.shift(); text = JSON.stringify(records) }
     localStorage.setItem(STORAGE_KEY, text)
   } catch { /* Keep the bounded memory cache. */ }
+}
+
+export function invalidateReferenceImages(plan: ReferenceVisualPlan) {
+  cache.delete(referenceCacheKey(plan))
+}
+
+async function lookupWithFallback(plan: ReferenceVisualPlan, signal: AbortSignal): Promise<MalikVisualImage[]> {
+  let direct: MalikVisualImage[] = []
+  try { direct = await lookupReferenceImages(plan, AbortSignal.any([signal, AbortSignal.timeout(9000)])) } catch {}
+  if (direct.length || signal.aborted || plan.kind === "tutorial") return direct
+  // Only small JSON metadata uses Render; image bytes always load from the publisher.
+  const params = new URLSearchParams({ q: "Покажи фото " + plan.topic, entity: plan.entity ? "1" : "0" })
+  try {
+    const response = await fetch("/api/chat/reference-images?" + params, { headers: { Accept: "application/json" }, signal: AbortSignal.any([signal, AbortSignal.timeout(24000)]) })
+    const data = await readReferenceJson(response) as { images?: unknown } | null
+    return sanitizeReferenceImages(data?.images)
+  } catch { return [] }
 }
 
 /** Deduplicate across messages/remounts; abort when the last reader leaves. */
@@ -55,7 +72,7 @@ export function subscribeReferenceImages(plan: ReferenceVisualPlan, listener: Li
     job = { controller: new AbortController(), listeners: new Set() }
     pending.set(key, job)
     const current = job
-    void Promise.resolve().then(() => lookupReferenceImages(plan, current.controller.signal))
+    void Promise.resolve().then(() => lookupWithFallback(plan, current.controller.signal))
       .then((images) => {
         if (current.controller.signal.aborted) return
         saveCache(key, images)
