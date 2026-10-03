@@ -4,7 +4,7 @@ import { lookupReferenceImages, readReferenceJson, sanitizeReferenceImages, type
 type CacheEntry = { images: MalikVisualImage[]; expires: number }
 type Listener = (images: MalikVisualImage[]) => void
 type Job = { controller: AbortController; listeners: Set<Listener> }
-const STORAGE_KEY = "malik-reference-catalog-v6"
+const STORAGE_KEY = "malik-reference-catalog-v7"
 const MAX_ENTRIES = 60
 const cache = new Map<string, CacheEntry>()
 const pending = new Map<string, Job>()
@@ -102,12 +102,32 @@ async function lookupWithFallback(plan: ReferenceVisualPlan, signal: AbortSignal
   } catch { return [] }
 }
 
+function recoveryPause(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => { clearTimeout(timer); signal.removeEventListener("abort", done); resolve() }
+    const timer = setTimeout(done, 1200)
+    signal.addEventListener("abort", done, { once: true })
+    if (signal.aborted) done()
+  })
+}
+
+/** One automatic recovery pass; bounded time and abortable when the message leaves. */
+async function lookupWithRecovery(plan: ReferenceVisualPlan, signal: AbortSignal): Promise<MalikVisualImage[]> {
+  const budget = AbortSignal.any([signal, AbortSignal.timeout(45000)])
+  for (let pass = 0; pass < 2 && !budget.aborted; pass++) {
+    const images = await lookupWithFallback(plan, budget)
+    if (images.length) return images
+    if (pass === 0 && !budget.aborted) await recoveryPause(budget)
+  }
+  return []
+}
+
 /** Deduplicate across messages/remounts; abort when the last reader leaves. */
 export function subscribeReferenceImages(plan: ReferenceVisualPlan, listener: Listener): () => void {
   hydrateCache()
   const key = referenceCacheKey(plan)
   const existing = cache.get(key)
-  if (existing && existing.expires > Date.now()) { listener(existing.images); return () => {} }
+  if (existing?.images.length && existing.expires > Date.now()) { listener(existing.images); return () => {} }
   let job = pending.get(key)
   if (!job || job.controller.signal.aborted) {
     job = { controller: new AbortController(), listeners: new Set() }
@@ -116,7 +136,7 @@ export function subscribeReferenceImages(plan: ReferenceVisualPlan, listener: Li
     void Promise.resolve().then(async () => {
       const release = await acquireLookup(current.controller.signal)
       if (!release) return []
-      try { return await lookupWithFallback(plan, current.controller.signal) } finally { release() }
+      try { return await lookupWithRecovery(plan, current.controller.signal) } finally { release() }
     })
       .then((images) => {
         if (current.controller.signal.aborted) return

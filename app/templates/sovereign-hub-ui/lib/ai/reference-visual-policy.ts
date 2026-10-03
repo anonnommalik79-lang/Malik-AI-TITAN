@@ -1,5 +1,6 @@
 import { isExplicitImageEditRequest, isExplicitImageGenerationRequest, isReferenceImageRequest, isReferencePhotoFollowUp } from "./image-intent"
 import { APPLE_IPHONE_PHOTOS, namedIPhoneSubjects, normalizeIPhoneSubject } from "../media/official-product-photos"
+import { canonicalPortraitTopic } from "../media/verified-portraits"
 
 export type ReferenceVisualPlan = {
   topic: string
@@ -68,7 +69,7 @@ function planTutorialVisuals(text: string): ReferenceVisualPlan | null {
 const SCIENCE_TOPICS = [
   { match: /(?:солнечн[а-я]*\s+систем|solar\s+system|күн\s+жүйесі)/iu, label: "Солнечная система", query: "solar system diagram" },
   { match: /(?:строени[а-я]*\s+клетк|жасуша(?:ның)?\s+құрылысы|cell\s+structure)/iu, label: "Строение клетки", query: "cell anatomy diagram" },
-  { match: /(?:строени[а-я]*\s+сердц|heart\s+anatomy)/iu, label: "Строение сердца", query: "human heart anatomy diagram" },
+  { match: /(?:строени[а-я]*\s+сердц|heart\s+anatomy)/iu, label: "Строение сердца", query: "heart diagram" },
   { match: /(?:днк|dna\s+structure|структур[а-я]*\s+dna)/iu, label: "Строение ДНК", query: "DNA double helix diagram" },
   { match: /(?:круговорот[а-я]*\s+вод|water\s+cycle)/iu, label: "Круговорот воды", query: "water cycle diagram" },
   { match: /(?:фотосинтез|photosynthesis)/iu, label: "Фотосинтез", query: "photosynthesis diagram" },
@@ -98,7 +99,7 @@ export function referenceTopic(input: string): string {
 
 /** Common RU/KZ subjects are translated without another paid model call. */
 export function referenceSearchTopic(topic: string): string {
-  return normalizeIPhoneSubject(topic)
+  return normalizeIPhoneSubject(canonicalPortraitTopic(topic))
     .replace(/(?:нурсултан[\p{L}]*\s+(?:[\p{L}]+\s+){0,2})?назарбаев[\p{L}]*/giu, "Nursultan Nazarbayev")
     .replace(/больш[\p{L}]*\s+алматинск[\p{L}]*\s+озер[\p{L}]*/giu, "Big Almaty Lake")
     .replace(/заилийск[\p{L}]*\s+алатау/giu, "Trans-Ili Alatau")

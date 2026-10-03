@@ -119,6 +119,12 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
     if (!plan || !active || collection) return
     return subscribeReferenceImages(plan, (images) => setResult({ key: referenceCacheKey(plan), images }))
   }, [plan, active, collection, attempt])
+  useEffect(() => {
+    if (typeof window === "undefined" || !plan || !active || collection || result?.key !== key || result.images.length) return
+    const recover = () => { invalidateReferenceImages(plan); setResult(null); setAttempt((value) => value + 1) }
+    window.addEventListener("online", recover)
+    return () => window.removeEventListener("online", recover)
+  }, [plan, active, collection, result, key])
   if (!plan) return children || null
   const images = result?.key === key ? result.images : null
   const retry = () => { invalidateReferenceImages(plan); setResult(null); setAttempt((value) => value + 1) }
@@ -129,7 +135,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   }
   const status = images === null
     ? <p role="status" className="my-3 text-sm text-zinc-400">{active ? "Ищу фото по теме…" : plan.topic}</p>
-    : <p className="my-3 text-sm text-zinc-400">Подходящее фото не загрузилось. <button type="button" onClick={retry} className="underline underline-offset-4">Повторить поиск</button></p>
+    : null
   if (collection) return <div className="min-w-0" data-malik-reference-topic={plan.topic}>
     {children}
     <section className="my-5 grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label={"Фотографии · " + plan.topic} data-malik-reference-collection>
@@ -137,7 +143,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
         planOverride={{ topic: subject, queries: [...new Set([referenceSearchTopic(subject), subject])], explicit: true, entity: true, kind: "reference", layout: "portrait" }} />)}
     </section>
   </div>
-  if (compact) return <div ref={container} className="min-w-0" data-malik-reference-topic={plan.topic}>
+  if (compact) return <div ref={container} className="min-w-0" hidden={images !== null && !images.length} data-malik-reference-topic={plan.topic}>
     {images?.[0] ? <ReferenceCard key={images[0].url} image={images[0]} portrait={plan.layout === "portrait"} onOpen={() => setSelected(images[0])} onFailure={failed} />
       : <div className="flex aspect-[3/4] flex-col justify-center rounded-2xl border border-white/15 px-3 text-center"><span className="text-sm font-medium text-white">{plan.topic}</span>{status}</div>}
     {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}

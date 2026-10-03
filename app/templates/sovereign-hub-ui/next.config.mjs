@@ -20,6 +20,9 @@ const nextConfig = {
   },
   async headers() {
     return [{
+      source: "/reference-photos/:path*",
+      headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+    }, {
       source: "/images/malik-mobile-cinematic-v2.webp",
       headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
     }];

@@ -26,6 +26,15 @@ const cache = load("lib/media/client-reference-cache.ts")
 const entities = load("lib/ai/answer-entities.ts")
 const products = load("lib/media/official-product-photos.ts")
 const photoHints = load("lib/ai/answer-photo-hints.ts")
+const portraits = load("lib/media/verified-portraits.ts")
+for (const alias of ["Илон Маск", "Илона Маска", "Илон Рив Маск", "Elon Reeve Musk", "Elon Musk"]) {
+  assert.equal(policy.referenceSearchTopic(alias), "Elon Musk")
+  assert.equal(portraits.verifiedPortrait(alias)?.alt, "Elon Musk")
+}
+assert.equal(portraits.verifiedPortrait("Elon Musk statue"), null)
+assert(fs.statSync("public/reference-photos/elon-musk.jpg").size < 100000, "same-origin reserve stays tiny")
+assert.equal(catalog.isSafeVisualUrl("/reference-photos/elon-musk.jpg"), true)
+assert.equal(catalog.isSafeVisualUrl("/reference-photos/../secret.jpg"), false)
 const hints = (subjects) => photoHints.parseAnswerPhotoHints(JSON.stringify({ version: 1, subjects }))
 const subject = { name: "Альберт Эйнштейн", query: "Albert Einstein", layout: "portrait" }
 assert.equal(photoHints.groundedAnswerPhotoPlans(hints([subject]), "Кто такой Эйнштейн", "Альберт Эйнштейн — физик.")[0].queries[0], "Albert Einstein")
@@ -66,7 +75,7 @@ const inferredPortrait = policy.planAnswerVisualSlots("Расскажи про �
   { key: "intro", kind: "paragraph", text: "Илон Маск — предприниматель." },
 ])
 assert.equal(inferredPortrait[0].plan.person, true)
-assert.deepEqual(inferredPortrait[0].plan.queries, ["Илон Маск"])
+assert.deepEqual(inferredPortrait[0].plan.queries, ["Elon Musk", "Илон Маск"])
 assert.deepEqual(policy.planReferenceVisuals("Покажи их фото", "Расскажи про достопримечательности Алматы", false, "## Медеу\nКаток.\n## Кок-Тобе\nГора.\n## История\nТекст.").subjects, ["Медеу", "Кок-Тобе"], "photo follow-ups work for named places too")
 assert.deepEqual(policy.planAnswerVisualSlots("Кто такой Назарбаев", [
   { key: "p0", kind: "paragraph", text: "Нурсултан Назарбаев — первый президент Казахстана." },
@@ -216,16 +225,54 @@ try {
   assert.equal(relevantScreen.length, 1)
   assert.match(relevantScreen[0].url, /ipcdn-web\.apple\.com/)
   assert.equal(relevantScreen[0].credit, "Apple Support")
+  const sciencePlan = policy.planReferenceVisuals("Объясни строение сердца")
+  globalThis.fetch = async () => Response.json({ query: { pages: [
+    { title: "File:Heart diagram-en.svg", imageinfo: [{ mime: "image/svg+xml", thumburl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Heart.svg/500px-Heart.svg.png", url: "https://upload.wikimedia.org/massive-original.svg", descriptionurl: "https://commons.wikimedia.org/wiki/File:Heart.svg" }] },
+  ] } })
+  const diagram = await catalog.lookupReferenceImages(sciencePlan)
+  assert.equal(diagram.length, 1, "science illustrations work too, not just portraits/products")
+  assert(diagram[0].url.endsWith(".png"), "use the small raster preview of a scientific SVG")
+  const alternateDiagram = await catalog.lookupReferenceImages(sciencePlan, undefined, { excludedUrls: [diagram[0].url] })
+  assert.match(alternateDiagram[0].url, /^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/thumb\//)
+  assert(!alternateDiagram[0].url.includes("massive-original"), "CDN recovery preserves the exact illustration without downloading originals")
   globalThis.fetch = async () => Response.json({ query: { pages: [{ title: "File:Original only.jpg", imageinfo: [{ mime: "image/jpeg", url: "https://upload.wikimedia.org/huge.jpg" }] }] } })
   assert.deepEqual(await catalog.lookupReferenceImages(plan), [], "never download original images to replace missing thumbnails")
   globalThis.fetch = async () => { throw new Error("Provider unavailable") }
   assert.deepEqual(await catalog.lookupReferenceImages(plan), [], "outage must not fail chat")
   let officialCalls = 0
   globalThis.fetch = async () => { officialCalls++; throw new Error("External catalogue unavailable") }
+  const muskPlan = policy.planAnswerVisualSlots("Расскажи про Илона Маска", [{ key: "intro", kind: "paragraph", text: "Илон Рив Маск — предприниматель." }])[0].plan
+  const muskPhoto = await catalog.lookupReferenceImages(muskPlan)
+  assert.equal(muskPhoto[0].alt, "Elon Musk")
+  const reservedMusk = await catalog.lookupReferenceImages(muskPlan, undefined, { excludedUrls: [muskPhoto[0].url] })
+  assert.equal(reservedMusk[0].url, "/reference-photos/elon-musk.jpg", "external image failure uses a verified same-origin reserve")
+  assert.equal(officialCalls, 0, "Musk full-name request works even during catalogue outage")
   const phonePhoto = await catalog.lookupReferenceImages(policy.planReferenceVisuals("Покажи iPhone 16 Pro"))
   assert.equal(phonePhoto[0].alt, "iPhone 16 Pro")
   assert.match(phonePhoto[0].url, /^https:\/\/cdsassets\.apple\.com\//)
   assert.equal(officialCalls, 0, "verified product photos do not depend on search availability")
+  const namePlan = { topic: "John Michael Doe", queries: ["John Michael Doe"], person: true, entity: true, explicit: true, layout: "portrait" }
+  globalThis.fetch = async () => Response.json({ query: { redirects: [{ from: "John Michael Doe", to: "John Doe" }], pages: [{ title: "John Doe", fullurl: "https://en.wikipedia.org/wiki/John_Doe", thumbnail: { source: "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Doe.jpg/500px-Doe.jpg" } }] } })
+  const redirected = await catalog.lookupReferenceImages(namePlan)
+  assert.equal(redirected[0]?.alt, "John Doe", "canonical redirects may legitimately omit the middle name")
+  const samePortrait = await catalog.lookupReferenceImages(namePlan, undefined, { excludedUrls: [redirected[0].url] })
+  assert.match(samePortrait[0]?.url, /^https:\/\/upload\.wikimedia\.org\//)
+  assert.equal(samePortrait[0]?.alt, "John Doe", "alternate CDN keeps the same person's same photograph")
+  globalThis.fetch = async () => Response.json({ query: { pages: [{ title: "John Michael Doe", pageprops: { disambiguation: "" }, fullurl: "https://en.wikipedia.org/wiki/John_Doe", thumbnail: { source: "https://upload.wikimedia.org/map.jpg" } }] } })
+  assert.deepEqual(await catalog.lookupReferenceImages(namePlan), [], "a disambiguation page is not a portrait")
+  globalThis.fetch = async (input) => {
+    const params = new URL(String(input)).searchParams
+    if (params.get("list") === "search") return Response.json({ query: { search: [
+      { title: "John Doe airport", snippet: "John Michael Doe" },
+      { title: "John Doe", snippet: "John <span>Michael</span> Doe is a person." },
+    ] } })
+    return Response.json({ query: { pages: params.get("titles") === "John Doe" ? [{ title: "John Doe", fullurl: "https://en.wikipedia.org/wiki/John_Doe", thumbnail: { source: "https://upload.wikimedia.org/doe.jpg" } }] : [] } })
+  }
+  assert.equal((await catalog.lookupReferenceImages(namePlan))[0]?.alt, "John Doe", "full name search verifies the source text before retrieving the canonical portrait")
+  globalThis.fetch = async (input) => new URL(String(input)).hostname === "ru.wikipedia.org"
+    ? Response.json({ query: { pages: [{ title: "Иван Доу", fullurl: "https://ru.wikipedia.org/wiki/Иван_Доу", langlinks: [{ lang: "en", title: "Ivan Doe" }] }] } })
+    : Response.json({ query: { pages: [{ title: "Ivan Doe", fullurl: "https://en.wikipedia.org/wiki/Ivan_Doe", thumbnail: { source: "https://upload.wikimedia.org/ivan.jpg" } }] } })
+  assert.equal((await catalog.lookupReferenceImages({ ...namePlan, topic: "Иван Доу", queries: ["Иван Доу"] }))[0]?.alt, "Ivan Doe", "missing local photo uses that person's linked English article")
   globalThis.fetch = async () => Response.json({ query: { pages: [
     { index: 1, title: "Nursultan Nazarbayev International Airport", fullurl: "https://en.wikipedia.org/wiki/Airport", thumbnail: { source: "https://upload.wikimedia.org/airport.jpg" } },
     { index: 2, title: "Nursultan Nazarbayev", fullurl: "https://en.wikipedia.org/wiki/Nursultan_Nazarbayev", thumbnail: { source: "https://upload.wikimedia.org/nazarbayev.jpg" } },
