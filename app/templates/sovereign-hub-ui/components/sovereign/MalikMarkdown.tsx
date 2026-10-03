@@ -727,7 +727,8 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
     return selected
   }, [blocks, question])
   const fallbackVisualSlots = useMemo(() => {
-    if (!question) return new Map<string, AnswerVisualSlot>()
+    // Event lineups need explicit subject metadata: a guessed portrait is not attendance evidence.
+    if (!question || /(?:спикер|выступ|участни|приехал|присутств|speaker|attend|participant|lineup)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
     const segments: AnswerVisualSegment[] = []
     blocks.forEach((block, position) => {
       // The last streamed block can still change its subject; anchor only settled blocks.
