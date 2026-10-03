@@ -701,15 +701,6 @@ function isMultiSubjectVisualQuestion(question: string): boolean {
   return /(?:список|перечисли|все(?:х|ми)?\b|нескольк|сравни|сравнение|участник[ио]|спикер[ыо]|кто\s+(?:будет|был|приехал|выступал)|какие\s+(?:люди|модели|виды)|\b(?:list|all|compare|versus|speakers|participants|attendees|several|multiple|top\s+\d+)\b)/iu.test(question)
 }
 
-export function MalikMarkdown({ text, className, allowImages = true, visualContext }: Props) {")
-  return new RegExp("(?<![\\\\p{L}\\\\p{N}])" + escaped + "(?![\\\\p{L}\\\\p{N}])", "u").test(normalized(content))
-}
-
-/** A single-person/product request gets the hero. Collections stay compact rows. */
-function isMultiSubjectVisualQuestion(question: string): boolean {
-  return /(?:список|перечисли|все(?:х|ми)?\\b|нескольк|сравни|сравнение|участник[ио]|спикер[ыо]|кто\\s+(?:будет|был|приехал|выступал)|какие\\s+(?:люди|модели|виды)|\\b(?:list|all|compare|versus|speakers|participants|attendees|several|multiple|top\\s+\\d+)\\b)/iu.test(question)
-}
-
 export function MalikMarkdown({ text, className, allowImages = true, visualContext }: Props) {
   const blocks = useMemo(() => parseBlocks(text), [text])
   const question = visualContext?.question || ""
