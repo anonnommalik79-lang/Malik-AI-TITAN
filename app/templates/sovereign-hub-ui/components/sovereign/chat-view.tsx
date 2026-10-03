@@ -1905,7 +1905,7 @@ function MessageBubble({
             <button type="button" title="Не полезно" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>
             <button type="button" title="Поделиться" onClick={() => onShare?.(displayContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
             {onOpenSheet && displayContent.trim() ? (
-              <button type="button" title="Открыть ответ на листе: доступен экспорт PDF" aria-label="Открыть ответ на листе" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
+              <button type="button" title="Открыть на листе" aria-label="Открыть ответ на листе с экспортом PDF" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
                 <FileText className="h-4 w-4" />
                 <span>Лист / PDF</span>
               </button>
