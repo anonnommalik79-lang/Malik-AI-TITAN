@@ -63,3 +63,28 @@
     will-change: opacity;
   }
 }
+
+/* Hydrated phone label: a light wave travels through individual glyphs.
+   There is no moving background, layout shift, whole-label pulse or timer.
+   The native animations are scoped to the live status and cannot be stopped
+   by blanket CSS animation:none performance rules. Desktop keeps its shimmer. */
+html body #malik-root .malik-dashboard-shell .malik-live-activity[data-malik-live-activity="thinking"][data-malik-thinking-motion="wave"] {
+  animation: none !important;
+  opacity: 1 !important;
+  will-change: auto;
+}
+html body #malik-root .malik-dashboard-shell .malik-live-activity[data-malik-thinking-motion="wave"] .malik-live-activity__label {
+  animation: none !important;
+  background: none !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  opacity: 1 !important;
+  will-change: auto;
+}
+html body #malik-root .malik-dashboard-shell .malik-live-activity[data-malik-thinking-motion="wave"] .malik-live-activity__letter {
+  display: inline-block;
+  white-space: pre;
+  background: none;
+  color: inherit;
+  -webkit-text-fill-color: inherit;
+}
