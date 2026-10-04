@@ -6076,7 +6076,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // turns and a stop button that stayed alive beside an already-finished reply.
   // This synchronous gate closes that race at the single dashboard entry point.
   const submissionNow = Date.now()
-  const submissionSignature = `${cleanContent}\u0000${attachments.map((item) => `${item.id}:${item.kind}:${item.size}`).join("|")}`
+  const submissionSignature = `${turnWorkspaceMode}:${cleanContent}\u0000${attachments.map((item) => `${item.id}:${item.kind}:${item.size}`).join("|")}`
   const previousSubmission = sendGateRef.current
   const duplicateBurst = previousSubmission.signature === submissionSignature
     && submissionNow - previousSubmission.at < 2500
@@ -6119,6 +6119,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
             messages: [...conversationBase, userTurn, flowTurn],
             selectedModelId,
             kind: "project",
+            workspaceMode: turnWorkspaceMode,
             projectDescription: sourceChat.projectDescription || cleanContent.slice(0, 240),
           }
         : {
@@ -6128,9 +6129,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
             messages: [...conversationBase, userTurn, flowTurn],
             selectedModelId,
             kind: "project",
+            workspaceMode: turnWorkspaceMode,
             projectDescription: cleanContent.slice(0, 240),
           }
-      setChats((previous) => [branchChat, ...previous])
+      setChats((previous) => [{ ...branchChat, workspaceMode: turnWorkspaceMode }, ...previous])
       setActiveChatId(flowChatId)
       setMessages([...conversationBase, userTurn, flowTurn])
     } else {
@@ -6142,6 +6144,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           messages: [],
           selectedModelId,
           kind: "project",
+          workspaceMode: turnWorkspaceMode,
           projectDescription: cleanContent.slice(0, 240),
         }
         setChats((previous) => [newChat, ...previous])
@@ -6185,6 +6188,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // only a couple of seconds. ChatView samples up to six JPEG timeline frames
   // locally; only those compact frames plus lightweight video metadata travel
   // to the server.
+  // A previous surface must never submit an async-hydrated prompt in the newly selected mode.
+  if (workspaceModeRef.current !== turnWorkspaceMode) return
   const apiRequestAttachments = expandVideoAnalysisAttachments(requestAttachments)
 
   const memoryIntent = detectMalikMemoryIntent(cleanContent)
@@ -6274,8 +6279,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           status: runtimePlan.status,
           techStack: runtimePlan.techStack,
           kind: isProjReq ? "project" : "chat",
+        workspaceMode: turnWorkspaceMode,
         }
-    setChats((previous) => [branchChat, ...previous])
+    setChats((previous) => [{ ...branchChat, workspaceMode: turnWorkspaceMode }, ...previous])
     setActiveChatId(chatId)
   } else if (!activeChatId) {
     const newChat: Chat = {
@@ -6287,6 +6293,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       status: runtimePlan.status,
       techStack: runtimePlan.techStack,
       kind: isProjReq ? "project" : "chat",
+    workspaceMode: turnWorkspaceMode,
     }
     setChats(prev => [newChat, ...prev])
     setActiveChatId(chatId)
@@ -6372,7 +6379,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   setErrorNotification(null)
   if (isProjReq) {
     setIsGeneratingTerminal(true)
-    if (typeof window !== "undefined" && window.innerWidth < 1024) setMobilePreviewOpen(true)
+    // The finished preview opens inline on mobile, never as a forced full-screen overlay.
   }
 
   const startTime = Date.now()
@@ -6451,9 +6458,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       hasArtifact: openPreview,
     })
     const safeContent = openPreview
-      ? "✨ Генерация проекта завершена. Результат открыт справа."
+      ? "✨ Генерация проекта завершена. Предпросмотр открыт ниже."
       : finalText || buildLocalChatAnswer(cleanContent, mode)
 
+    if (workspaceModeRef.current === turnWorkspaceMode) {
     setMessages(prev =>
       prev.map(m =>
         m.id === assistantMessage.id
@@ -6481,6 +6489,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       setCurrentVersion(prev => prev + 1)
     } else if (!isProjReq) {
       setIsGeneratingTerminal(false)
+    }
+
     }
 
     const finalAssistant: Message = {
