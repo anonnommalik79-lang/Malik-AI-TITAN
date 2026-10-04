@@ -241,6 +241,18 @@ html[data-malik-work-home="1"] .malik-chat-fullwidth[data-work-home] .malik-chat
   /* Where the composer floats over the thread (phones), keep room under it. */
   padding-bottom: calc(var(--malik-dock-overlap, 0px) + 12px) !important;
 }
+/* Desktop Work: hide only the chat thread's visible scrollbar. Scrolling stays enabled. */
+@media (min-width: 1024px) {
+  html body #malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-chat-fullwidth[data-workspace-mode="work"] > .malik-chat-scroll {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  html body #malik-root .malik-dashboard-shell .malik-ai-chat-bg .malik-chat-fullwidth[data-workspace-mode="work"] > .malik-chat-scroll::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+}
 html[data-malik-work-home="1"] .malik-chat-fullwidth[data-work-home] .malik-message-list {
   max-width: 880px !important;
   margin-block: auto !important;
