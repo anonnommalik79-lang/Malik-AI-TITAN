@@ -37,11 +37,11 @@ async function motion(page, selector, pseudo) {
   return page.locator(selector).first().evaluate((el, pseudo) => {
     const s = getComputedStyle(el, pseudo)
     return { name: s.animationName, duration: parseFloat(s.animationDuration), loops: s.animationIterationCount,
-      transform: s.transform, position: s.backgroundPosition, fill: s.webkitTextFillColor }
+      transform: s.transform, position: s.backgroundPosition, fill: s.webkitTextFillColor, opacity: s.opacity }
   }, pseudo)
 }
 try {
-  for (const test of [{ width: 320 }, { width: 390 }, { width: 430 }, { width: 768 }, { width: 1440 }, { width: 390, reduce: true }]) {
+  for (const test of [320, 390, 430, 768, 1440].flatMap(width => [{ width }, { width, reduce: true }])) {
     const page = await browser.newPage({ viewport: { width: test.width, height: 844 }, reducedMotion: test.reduce ? "reduce" : "no-preference" })
     await page.setContent(`<style>${sheets.join("\n")}</style><div id="malik-root"><div class="malik-dashboard-shell"><div class="malik-chat-fullwidth"><div class="malik-message-row-assistant"><div class="malik-ai-avatar is-working"></div><div class="malik-message-card-assistant" id="receipt">${render(trace)}</div></div></div></div></div>`)
     const label = ".malik-live-activity__label"
@@ -60,10 +60,28 @@ try {
       assert.equal((await motion(page, ".malik-receipt.is-running .is-spinning")).duration, .95)
       assert.equal((await motion(page, ".malik-execution__source-chips svg")).duration, 2.4)
       if (test.width <= 1180) {
+        const cue = await motion(page, ".malik-live-activity")
+        assert.equal(cue.name, "malik-activity-soft-pulse"); assert.equal(cue.duration, 2.4)
+        await page.waitForTimeout(230)
+        assert.notEqual((await motion(page, ".malik-live-activity")).opacity, cue.opacity, "Mobile cue must not depend only on gradient repaint")
         await page.evaluate(() => document.documentElement.classList.add("malik-low-motion-runtime"))
         assert.equal((await motion(page, label)).duration, 1)
         assert.equal((await motion(page, icon)).duration, 1.35)
+        assert.equal((await motion(page, ".malik-live-activity")).duration, 2.4)
       }
+    } else if (test.width <= 1180) {
+      assert.equal(first.name, "malik-activity-soft-pulse"); assert.equal(first.duration, 2.4); assert.equal(first.loops, "infinite")
+      assert.notEqual(first.fill, "rgba(0, 0, 0, 0)", "Reduced-motion status must remain readable")
+      assert.equal((await motion(page, ".malik-ai-avatar.is-working")).name, "none")
+      assert.equal((await motion(page, ".malik-ai-avatar.is-working")).transform, "none")
+      assert.equal((await motion(page, ".malik-ai-avatar.is-working", "::after")).name, "none")
+      assert.equal((await motion(page, icon)).name, "none", "Reduced motion must not restore spinning tools")
+      await page.waitForTimeout(600)
+      const next = await motion(page, label)
+      assert.notEqual(next.opacity, first.opacity, "Reduced-motion request must have live brightness feedback")
+      assert(Number(next.opacity) >= .72, "Status must never disappear or flash")
+      await page.evaluate(() => document.documentElement.classList.add("malik-low-motion-runtime"))
+      assert.equal((await motion(page, label)).duration, 2.4, "Low-FPS guard must not freeze request feedback")
     } else {
       assert(first.name === "none" || first.duration < .002)
       assert.notEqual(first.fill, "rgba(0, 0, 0, 0)", "Reduced-motion status must remain readable")

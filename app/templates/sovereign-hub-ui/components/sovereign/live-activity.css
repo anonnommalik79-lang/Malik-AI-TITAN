@@ -19,6 +19,12 @@
    only the small, transient request indicators, not decorative backgrounds.
    Keep the desktop timings and honour the user's reduced-motion setting. */
 @media (max-width: 1180px) and (prefers-reduced-motion: no-preference) {
+  /* A separate opacity cue keeps feedback visible independently of text
+     gradient repainting. It is confined to this one transient phone label. */
+  html body #malik-root .malik-dashboard-shell .malik-live-activity[data-malik-live-activity="thinking"] {
+    animation: malik-activity-soft-pulse 2.4s ease-in-out infinite !important;
+    will-change: opacity;
+  }
   html body #malik-root .malik-dashboard-shell .malik-live-activity .malik-live-activity__label {
     animation: malik-activity-shimmer 1s linear infinite !important;
   }
@@ -40,5 +46,20 @@
 @media (prefers-reduced-motion: reduce) {
   .malik-live-activity__label, #malik-root .malik-live-activity__label {
     animation: none; background: none; color: #fff; -webkit-text-fill-color: currentColor;
+  }
+}
+
+/* Reduced motion is not a frozen request. On phones use a slow brightness
+   cue instead of translation, scaling or a travelling ring. Keep the words
+   readable throughout, and leave desktop/reduced-motion behaviour unchanged. */
+@keyframes malik-activity-soft-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .72; }
+}
+@media (max-width: 1180px) and (prefers-reduced-motion: reduce) {
+  html body #malik-root .malik-dashboard-shell .malik-live-activity .malik-live-activity__label {
+    animation: malik-activity-soft-pulse 2.4s ease-in-out infinite !important;
+    transform: none !important;
+    will-change: opacity;
   }
 }
