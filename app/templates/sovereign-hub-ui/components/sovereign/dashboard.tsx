@@ -684,6 +684,7 @@ interface Chat {
   projectInstructions?: string
   projectColor?: MalikProjectColor
   kind?: "chat" | "project"
+  workspaceMode?: WorkspaceMode
 }
 
 
@@ -1607,6 +1608,7 @@ function reviveChat(chat: StoredChat): Chat {
     projectInstructions: typeof chat?.projectInstructions === "string" ? chat.projectInstructions.slice(0, 3000) : undefined,
     projectColor: ["gold", "blue", "violet", "emerald", "rose"].includes(String(chat?.projectColor)) ? chat.projectColor : undefined,
     kind: chat?.kind === "project" ? "project" : chat?.kind === "chat" ? "chat" : undefined,
+    workspaceMode: resolveWorkspaceMode(chat?.workspaceMode),
   }
 }
 
@@ -5093,8 +5095,14 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState<string>(initialView)
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("chat")
+  const workspaceModeRef = useRef<WorkspaceMode>("chat")
+  const modeActiveChatIdsRef = useRef<Record<WorkspaceMode, string | null>>({ chat: null, work: null })
   useEffect(() => {
-    try { setWorkspaceMode(resolveWorkspaceMode(window.localStorage.getItem(WORKSPACE_MODE_KEY))) } catch {}
+    try {
+      const restored = resolveWorkspaceMode(window.localStorage.getItem(WORKSPACE_MODE_KEY))
+      workspaceModeRef.current = restored
+      setWorkspaceMode(restored)
+    } catch {}
   }, [])
   const [previousView, setPreviousView] = useState("home")
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false)
@@ -5503,7 +5511,9 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
       status: "draft",
       techStack: ["React", "Tailwind"],
       kind: "chat",
+      workspaceMode,
     }
+    modeActiveChatIdsRef.current[workspaceMode] = newChat.id
     setChats(prev => [newChat, ...prev])
     setActiveChatId(newChat.id)
     setActiveProjectWorkspaceId(null)
@@ -5511,7 +5521,7 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     setGeneratedCode("")
     setCurrentVersion(1)
     setTotalVersions(1)
-  }, [selectedModelId])
+  }, [selectedModelId, workspaceMode])
 
   const handleCreateProject = useCallback((draft: MalikProjectDraft) => {
     const newProject: Chat = {
@@ -5526,7 +5536,9 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
       projectInstructions: draft.instructions,
       projectColor: draft.color,
       kind: "project",
+      workspaceMode,
     }
+    modeActiveChatIdsRef.current[workspaceMode] = newProject.id
     setChats((previous) => [newProject, ...previous])
     setActiveChatId(newProject.id)
     setActiveProjectWorkspaceId(newProject.id)
@@ -5537,7 +5549,7 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     setSelectedModelId(draft.selectedModelId)
     saveMalikModelSelection(draft.selectedModelId)
     safeOpenView("projects", "manual")
-  }, [])
+  }, [workspaceMode, safeOpenView])
 
   const launchTemplate = useCallback((template: MalikTemplate) => {
     const targetView = targetViewForTemplate(template)
@@ -5554,7 +5566,8 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
 
   const handleSelectChat = useCallback((chatId: string) => {
     const chat = chats.find(c => c.id === chatId)
-    if (chat) {
+    if (chat && resolveWorkspaceMode(chat.workspaceMode) === workspaceMode) {
+      modeActiveChatIdsRef.current[workspaceMode] = chatId
       const chatModel = chat.selectedModelId && canUseMalikModel(chat.selectedModelId, currentPlan)
         ? chat.selectedModelId
         : DEFAULT_MALIK_MODEL_ID
@@ -5574,11 +5587,12 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
       setIsGeneratingTerminal(false)
       setStreamingText("")
     }
-  }, [chats, currentPlan])
+  }, [chats, currentPlan, workspaceMode])
 
   const handleSelectProject = useCallback((projectId: string) => {
     const project = chats.find((chat) => chat.id === projectId)
-    if (!project) return
+    if (!project || resolveWorkspaceMode(project.workspaceMode) !== workspaceMode) return
+    modeActiveChatIdsRef.current[workspaceMode] = projectId
 
     const projectModel = project.selectedModelId && canUseMalikModel(project.selectedModelId, currentPlan)
       ? project.selectedModelId
@@ -5593,7 +5607,39 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     setIsGeneratingTerminal(false)
     setStreamingText("")
     safeOpenView("projects", "history")
-  }, [chats, currentPlan])
+  }, [chats, currentPlan, workspaceMode])
+
+  const handleWorkspaceModeChange = useCallback((nextMode: WorkspaceMode) => {
+    safeOpenView("home", "topbar")
+    if (nextMode === workspaceMode) return
+    modeActiveChatIdsRef.current[workspaceMode] = activeChatId
+    workspaceModeRef.current = nextMode
+    activeStreamAbortRef.current?.abort("workspace-switch")
+    sendGateRef.current = { signature: "", at: 0 }
+    const savedId = modeActiveChatIdsRef.current[nextMode]
+    const nextChat = chatsRef.current.find((chat) => chat.id === savedId && resolveWorkspaceMode(chat.workspaceMode) === nextMode)
+      || chatsRef.current.find((chat) => resolveWorkspaceMode(chat.workspaceMode) === nextMode && chat.kind !== "project")
+    modeActiveChatIdsRef.current[nextMode] = nextChat?.id || null
+    setWorkspaceMode(nextMode)
+    try { window.localStorage.setItem(WORKSPACE_MODE_KEY, nextMode) } catch {}
+    setActiveChatId(nextChat?.id || null)
+    setActiveProjectWorkspaceId(null)
+    setMessages(nextChat?.messages || [])
+    const lastArtifact = [...(nextChat?.messages || [])].reverse().find((message) => message.role === "assistant" && message.generatedCode)
+    setGeneratedCode(lastArtifact?.generatedCode || "")
+    setMobilePreviewOpen(false)
+    setIsGeneratingTerminal(false)
+    setStreamingText("")
+    setErrorNotification(null)
+    setMobileMenuOpen(false)
+    if (nextChat?.selectedModelId && canUseMalikModel(nextChat.selectedModelId, currentPlan)) {
+      setSelectedModelId(nextChat.selectedModelId)
+      saveMalikModelSelection(nextChat.selectedModelId)
+    } else {
+      setSelectedModelId(DEFAULT_MALIK_MODEL_ID)
+      saveMalikModelSelection(DEFAULT_MALIK_MODEL_ID)
+    }
+  }, [workspaceMode, activeChatId, safeOpenView, currentPlan])
 
   const handleCloseProject = useCallback(() => {
     setActiveProjectWorkspaceId(null)
@@ -5606,11 +5652,12 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     setChats(prev => prev.filter(c => c.id !== chatId))
     if (activeProjectWorkspaceId === chatId) setActiveProjectWorkspaceId(null)
     if (activeChatId === chatId) {
+      modeActiveChatIdsRef.current[workspaceMode] = null
       setActiveChatId(null)
       setMessages([])
       setGeneratedCode("")
     }
-  }, [activeChatId, activeProjectWorkspaceId])
+  }, [activeChatId, activeProjectWorkspaceId, workspaceMode])
 
   const handleRenameChat = useCallback((chatId: string, nextTitle: string) => {
     const title = nextTitle.trim().slice(0, 90)
@@ -6029,7 +6076,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // turns and a stop button that stayed alive beside an already-finished reply.
   // This synchronous gate closes that race at the single dashboard entry point.
   const submissionNow = Date.now()
-  const submissionSignature = `${cleanContent}\u0000${attachments.map((item) => `${item.id}:${item.kind}:${item.size}`).join("|")}`
+  const submissionSignature = `${turnWorkspaceMode}:${cleanContent}\u0000${attachments.map((item) => `${item.id}:${item.kind}:${item.size}`).join("|")}`
   const previousSubmission = sendGateRef.current
   const duplicateBurst = previousSubmission.signature === submissionSignature
     && submissionNow - previousSubmission.at < 2500
@@ -6072,6 +6119,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
             messages: [...conversationBase, userTurn, flowTurn],
             selectedModelId,
             kind: "project",
+            workspaceMode: turnWorkspaceMode,
             projectDescription: sourceChat.projectDescription || cleanContent.slice(0, 240),
           }
         : {
@@ -6081,9 +6129,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
             messages: [...conversationBase, userTurn, flowTurn],
             selectedModelId,
             kind: "project",
+            workspaceMode: turnWorkspaceMode,
             projectDescription: cleanContent.slice(0, 240),
           }
-      setChats((previous) => [branchChat, ...previous])
+      setChats((previous) => [{ ...branchChat, workspaceMode: turnWorkspaceMode }, ...previous])
       setActiveChatId(flowChatId)
       setMessages([...conversationBase, userTurn, flowTurn])
     } else {
@@ -6095,6 +6144,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           messages: [],
           selectedModelId,
           kind: "project",
+          workspaceMode: turnWorkspaceMode,
           projectDescription: cleanContent.slice(0, 240),
         }
         setChats((previous) => [newChat, ...previous])
@@ -6138,6 +6188,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // only a couple of seconds. ChatView samples up to six JPEG timeline frames
   // locally; only those compact frames plus lightweight video metadata travel
   // to the server.
+  // A previous surface must never submit an async-hydrated prompt in the newly selected mode.
+  if (workspaceModeRef.current !== turnWorkspaceMode) return
   const apiRequestAttachments = expandVideoAnalysisAttachments(requestAttachments)
 
   const memoryIntent = detectMalikMemoryIntent(cleanContent)
@@ -6227,8 +6279,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           status: runtimePlan.status,
           techStack: runtimePlan.techStack,
           kind: isProjReq ? "project" : "chat",
+        workspaceMode: turnWorkspaceMode,
         }
-    setChats((previous) => [branchChat, ...previous])
+    setChats((previous) => [{ ...branchChat, workspaceMode: turnWorkspaceMode }, ...previous])
     setActiveChatId(chatId)
   } else if (!activeChatId) {
     const newChat: Chat = {
@@ -6240,6 +6293,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       status: runtimePlan.status,
       techStack: runtimePlan.techStack,
       kind: isProjReq ? "project" : "chat",
+    workspaceMode: turnWorkspaceMode,
     }
     setChats(prev => [newChat, ...prev])
     setActiveChatId(chatId)
@@ -6325,7 +6379,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   setErrorNotification(null)
   if (isProjReq) {
     setIsGeneratingTerminal(true)
-    if (typeof window !== "undefined" && window.innerWidth < 1024) setMobilePreviewOpen(true)
+    // The finished preview opens inline on mobile, never as a forced full-screen overlay.
   }
 
   const startTime = Date.now()
@@ -6404,9 +6458,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       hasArtifact: openPreview,
     })
     const safeContent = openPreview
-      ? "✨ Генерация проекта завершена. Результат открыт справа."
+      ? "✨ Генерация проекта завершена. Предпросмотр открыт ниже."
       : finalText || buildLocalChatAnswer(cleanContent, mode)
 
+    if (workspaceModeRef.current === turnWorkspaceMode) {
     setMessages(prev =>
       prev.map(m =>
         m.id === assistantMessage.id
@@ -6434,6 +6489,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       setCurrentVersion(prev => prev + 1)
     } else if (!isProjReq) {
       setIsGeneratingTerminal(false)
+    }
+
     }
 
     const finalAssistant: Message = {
@@ -7430,13 +7487,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
   // Sidebar «Malik Work»: Work mode on a fresh task (an empty one is reused).
   useEffect(() => {
-    const open = () => {
-      setWorkspaceMode("work")
-      try { window.localStorage.setItem(WORKSPACE_MODE_KEY, "work") } catch {}
-      setMobileMenuOpen(false)
-      if (messages.length) handleNewChat()
-      else safeOpenView("home", "manual")
-    }
+    const open = () => handleWorkspaceModeChange("work")
     const closeMenu = () => setMobileMenuOpen(false)
     window.addEventListener(MALIK_OPEN_WORK_EVENT, open)
     window.addEventListener(MALIK_CLOSE_MOBILE_MENU_EVENT, closeMenu)
@@ -7444,7 +7495,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       window.removeEventListener(MALIK_OPEN_WORK_EVENT, open)
       window.removeEventListener(MALIK_CLOSE_MOBILE_MENU_EVENT, closeMenu)
     }
-  }, [handleNewChat, messages.length, safeOpenView])
+  }, [handleWorkspaceModeChange])
 
   // The image studio's "Видео" and "Аудио" tabs open the matching studios;
   // a deck made by a Superflow opens in the presentation studio.
@@ -7562,20 +7613,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const hasStartedChat = messages.length > 0
   const shouldRenderEmptyHome = activeView === "home" && !hasStartedChat && workspaceMode !== "work"
   const hasMessages = hasStartedChat
+  const modeChats = chats.filter((chat) => resolveWorkspaceMode(chat.workspaceMode) === workspaceMode)
 
   // Явно определяем, должны ли мы показывать правую панель (Проект)
   // Показываем если: есть код, РЛР мы сейчас генерируем терминалом, РЛР интент был project
   const latestAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant")
-  const shouldShowPreviewPanel =
-    activeView === "home" &&
-    (
-      isGeneratingTerminal ||
-      (
-        Boolean(generatedCode) &&
-        latestAssistantMessage?.intentType === "project" &&
-        Boolean(latestAssistantMessage?.generatedCode)
-      )
-    )
+  // The completed artifact belongs below the answer, not in a duplicate right-side iframe.
+  const shouldShowPreviewPanel = activeView === "home" && isGeneratingTerminal
 
 const shouldShowMobilePreviewButton =
   !!generatedCode || isGeneratingTerminal
@@ -7700,7 +7744,7 @@ const shouldShowMobilePreviewButton =
         <DigitalBridgeSectionExperience
           activeView={activeView}
           username={username}
-          chats={chats}
+          chats={modeChats}
           onViewChange={(view) => safeOpenView(view, "manual")}
           onOpenCodex={() => setCodexOpen(true)}
           onOpenCanvas={(code) => safeOpenCanvas(code, "canvas")}
@@ -7736,7 +7780,7 @@ const shouldShowMobilePreviewButton =
       if (!hasMalikProAccess(currentPlan)) {
         return <SovereignBillingPanel plan={currentPlan} authenticated={!guestMode && Boolean(workOSUser)} onClose={closeAccountPanel} />
       }
-      const projectChats = chats.filter((chat) =>
+      const projectChats = modeChats.filter((chat) =>
         chat.kind === "project"
         || Boolean(chat.projectDescription || chat.projectInstructions)
         || chat.messages.some((message) => message.intentType === "project" || Boolean(message.generatedCode)),
@@ -7759,6 +7803,7 @@ const shouldShowMobilePreviewButton =
           renderProjectChat={() => (
             <div className="malik-premium-chat-host malik-ai-chat-bg relative h-full min-h-0 overflow-hidden bg-black">
               <ChatView
+                key={`${workspaceMode}:${activeProjectWorkspaceId || "project"}`}
                 messages={messages}
                 workspaceMode={workspaceMode}
                 onSendMessage={handleSendMessage}
@@ -7789,7 +7834,7 @@ const shouldShowMobilePreviewButton =
       );
     }
     if (activeView === "chats") {
-      return <ChatsListView chats={chats} onSelectChat={handleSelectChat} onNewChat={handleNewChat} />;
+      return <ChatsListView chats={modeChats} onSelectChat={handleSelectChat} onNewChat={handleNewChat} />;
     }
     return (
       <>
@@ -7802,6 +7847,7 @@ const shouldShowMobilePreviewButton =
             <div className="malik-premium-chat-host malik-ai-chat-bg relative min-h-0 flex-1 overflow-hidden">
               <ChatInvestorBackground />
 <ChatView
+              key={`${workspaceMode}:${activeChatId || "new"}`}
               messages={messages}
               workspaceMode={workspaceMode}
               onSendMessage={handleSendMessage}
@@ -8160,7 +8206,7 @@ const shouldShowMobilePreviewButton =
           activeChatId={activeChatId}
           activeView={activeView}
           onViewChange={(view) => safeOpenView(view, "manual")}
-          chats={chats}
+          chats={modeChats}
           onLogout={handleLogout}
           onOpenCodex={() => { setCodexOpen(true); setMobileMenuOpen(false) }}
           onOpenSearch={() => setCommandPaletteOpen(true)}
@@ -8181,7 +8227,7 @@ const shouldShowMobilePreviewButton =
           activeChatId={activeChatId}
           activeView={activeView}
           onViewChange={(view) => safeOpenView(view, "sidebar")}
-          chats={chats}
+          chats={modeChats}
           onLogout={handleLogout}
           onOpenCodex={() => { setCodexOpen(true); setMobileMenuOpen(false) }}
           onOpenSearch={() => { setCommandPaletteOpen(true); setMobileMenuOpen(false) }}
@@ -8192,11 +8238,7 @@ const shouldShowMobilePreviewButton =
         <TitanTopBar
           activeView={activeView}
           workspaceMode={workspaceMode}
-          onWorkspaceModeChange={(mode) => {
-            setWorkspaceMode(mode)
-            try { window.localStorage.setItem(WORKSPACE_MODE_KEY, mode) } catch {}
-            safeOpenView("home", "topbar")
-          }}
+          onWorkspaceModeChange={handleWorkspaceModeChange}
           guestMode={guestMode}
           onViewChange={(view) => safeOpenView(view, "topbar")}
           onOpenSearch={() => setCommandPaletteOpen(true)}

@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
+import { buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
+import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { stripAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 import { MalikTapGuide } from "./MalikTapGuide"
 import type { SuperflowRef } from "./os/os-client"
@@ -127,6 +129,7 @@ function cleanChatViewText(value: string) {
 
 
 interface Message {
+  generatedCode?: string
   id: string
   role: "user" | "assistant"
   content: string
@@ -1650,6 +1653,30 @@ function MalikActionPlanCard({ plan, onOpenTarget }: { plan: MalikActionPlan; on
   )
 }
 
+function InlineGeneratedPreview({ code }: { code: string }) {
+  const [revision, setRevision] = useState(0)
+  const previewable = /<!doctype html|<html[\s>]|<(?:main|section|div|body)[\s>]|export\s+default\s+(?:function|class)|\breturn\s*\(\s*</i.test(code)
+  const srcDoc = useMemo(() => previewable ? buildCanvasSrcDoc(code) : "", [code, previewable])
+  if (!srcDoc) return null
+  const openTab = () => {
+    const url = createCanvasBlobUrl(srcDoc)
+    window.open(url, "_blank", "noopener,noreferrer")
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+  return (
+    <section className="mt-5 w-full min-w-0 overflow-hidden rounded-2xl border border-white/15 bg-black" aria-label="Автоматический предпросмотр проекта">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-2.5 text-xs text-white/80 sm:px-4">
+        <span className="font-semibold">Готовый проект · Live Preview</span>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => setRevision((value) => value + 1)} aria-label="Обновить предпросмотр" className="text-white/70 hover:text-white">Обновить</button>
+          <button type="button" onClick={openTab} className="text-white/70 hover:text-white">Открыть ↗</button>
+        </div>
+      </div>
+      <iframe key={revision} title="Результат Malik AI" srcDoc={srcDoc} sandbox="allow-scripts allow-forms" loading="eager" className="block h-[430px] w-full border-0 bg-white sm:h-[520px]" />
+    </section>
+  )
+}
+
 function MessageBubble({
   message,
   workspaceMode = "chat",
@@ -1868,10 +1895,11 @@ function MessageBubble({
                     {/* While streaming, `malik-streaming` gives the growing
                         answer its caret and lets only newly added blocks
                         fade in (chat-live.css). It is dropped when done. */}
-                    <MalikMarkdown text={displayContent} allowImages={false} className={writingLive ? "malik-streaming" : undefined} citations={message.research?.sources}
+                    <MalikMarkdown text={displayContent} allowImages={false} autoPreview={!streaming && !olderVersion && isChatArtifactCreationRequest(question)} className={writingLive ? "malik-streaming" : undefined} citations={message.research?.sources}
                       visualContext={!olderVersion && !message.textOnly && !message.generatedMedia && !message.imageConfirmation && !message.superflow
                         && !["failed", "interrupted", "cancelled"].includes(message.execution?.state || "")
                         ? { question, messageId: message.id, previousQuestion, previousAnswer, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
+                    {!streaming && !olderVersion && message.generatedCode ? <InlineGeneratedPreview code={message.generatedCode} /> : null}
                     {streaming && videoAnalysis ? <VideoAnalysisPulse compact /> : null}
                   </>
                 )
@@ -2143,7 +2171,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
           const prompt = `${detail.prompt.trim()}${selectedRegionInstruction}`
           queueMalikImageLineage(detail.sourceSrc, detail.mode)
           setLastSubmittedPrompt(prompt)
-          try { window.localStorage.setItem("malik_last_user_prompt", prompt) } catch {}
+          try { window.localStorage.setItem(`malik_${workspaceMode}_last_user_prompt`, prompt) } catch {}
 
           onSendMessage(`/image ${prompt}`, [sourceAttachment], {
             responseDepth,
@@ -2593,7 +2621,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     }
 
     setLocalError(null)
-    try { window.localStorage.setItem("malik_last_user_prompt", outgoing) } catch {}
+    try { window.localStorage.setItem(`malik_${workspaceMode}_last_user_prompt`, outgoing) } catch {}
     setLastSubmittedPrompt(outgoing)
 
     if (isLoading) {
@@ -2818,7 +2846,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     }
     setLocalError(null)
     setLastSubmittedPrompt(clean)
-    try { window.localStorage.setItem("malik_last_user_prompt", clean) } catch {}
+    try { window.localStorage.setItem(`malik_${workspaceMode}_last_user_prompt`, clean) } catch {}
     onSendMessage(clean, [], {
       workspaceMode,
       research: true,

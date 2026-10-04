@@ -60,7 +60,9 @@ check("the sidebar has «Задачи» and «Malik Work», and both do somethin
   assert.match(sidebar, /openOs\("tasks"\)/)
   const dashboard = read("components/sovereign/dashboard.tsx")
   assert.match(dashboard, /window\.addEventListener\(MALIK_OPEN_WORK_EVENT, open\)/)
-  assert.match(dashboard, /setWorkspaceMode\("work"\)/)
+  assert.match(dashboard, /const open = \(\) => handleWorkspaceModeChange\("work"\)/)
+  assert.match(dashboard, /const modeChats = chats\.filter/)
+  assert.match(dashboard, /modeActiveChatIdsRef\.current\[nextMode\]/)
   assert.match(dashboard, /className="malik-main-column /)
 })
 

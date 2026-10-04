@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, Fragment, useContext, useMemo, useState, type ReactNode } from "react"
+import { createContext, Fragment, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import { Archive, Check, Copy, Download, ExternalLink, Eye, RefreshCw } from "lucide-react"
 import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
 import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
@@ -22,7 +22,7 @@ import { groundedAnswerPhotoPlans, isPhotoLineup, parseAnswerPhotoHints } from "
 
 export type MalikCitation = { url: string; title?: string; domain?: string }
 
-type Props = { text: string; className?: string; allowImages?: boolean; citations?: MalikCitation[]; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
+type Props = { text: string; className?: string; allowImages?: boolean; autoPreview?: boolean; citations?: MalikCitation[]; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
 
 function isProjectArtifactHref(href: string) {
   return /^\/api\/ai\/project\/artifacts\/[^/]+\/download(?:\?|$)/.test(href)
@@ -605,7 +605,7 @@ function isPreviewableCode(language: string, code: string) {
   return /<!doctype html|<(?:html|body|main|section|div|svg|canvas)[\s>]|export\s+default\s+(?:function|class)|\breturn\s*\(\s*</i.test(code)
 }
 
-function CodeBlock({ language, filename, code, previewFiles }: { language: string; filename: string; code: string; previewFiles: ProjectZipFile[] }) {
+function CodeBlock({ language, filename, code, previewFiles, autoPreview = false }: { language: string; filename: string; code: string; previewFiles: ProjectZipFile[]; autoPreview?: boolean }) {
   const [copied, setCopied] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewKey, setPreviewKey] = useState(0)
@@ -615,6 +615,9 @@ function CodeBlock({ language, filename, code, previewFiles }: { language: strin
       ? buildCanvasProjectSrcDoc(previewFiles, filename)
       : buildCanvasSrcDoc(code)
     : ""
+  useEffect(() => {
+    if (autoPreview && previewable && previewSrcDoc) setPreviewOpen(true)
+  }, [autoPreview, previewable, previewSrcDoc])
   const lineCount = Math.max(1, code.split("\n").length)
 
   const copy = async () => {
@@ -757,7 +760,7 @@ function isMultiSubjectVisualQuestion(question: string): boolean {
   return /(?:список|перечисли|все(?:х|ми)?\b|нескольк|сравни|сравнение|участник[ио]|спикер[ыо]|кто\s+(?:будет|был|приехал|выступал)|какие\s+(?:люди|модели|виды)|\b(?:list|all|compare|versus|speakers|participants|attendees|several|multiple|top\s+\d+)\b)/iu.test(question)
 }
 
-export function MalikMarkdown({ text, className, allowImages = true, citations, visualContext }: Props) {
+export function MalikMarkdown({ text, className, allowImages = true, autoPreview = false, citations, visualContext }: Props) {
   const blocks = useMemo(() => parseBlocks(text), [text])
   const question = visualContext?.question || ""
   const previousQuestion = visualContext?.previousQuestion || ""
@@ -867,6 +870,8 @@ export function MalikMarkdown({ text, className, allowImages = true, citations, 
     return visuals
   }, [blocks, question, streaming])
   const codeFiles = codeFilesFrom(blocks)
+  const primaryPreviewFilename = codeFiles.find((file) => /\.html?$/i.test(file.name))?.name
+    || codeFiles.find((file) => isPreviewableCode(languageFromFilename(file.name), file.content))?.name
 
   const downloadAll = () => {
     if (codeFiles.length === 1) {
@@ -927,7 +932,7 @@ export function MalikMarkdown({ text, className, allowImages = true, citations, 
         if (block.kind === "images") return allowImages ? <MalikVisualGallery key={key} images={block.images} /> : null
 
         if (block.kind === "code") {
-          return <CodeBlock key={key} language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} />
+          return <CodeBlock key={key} language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} autoPreview={autoPreview && block.filename === primaryPreviewFilename} />
         }
 
         if (block.kind === "table") {
