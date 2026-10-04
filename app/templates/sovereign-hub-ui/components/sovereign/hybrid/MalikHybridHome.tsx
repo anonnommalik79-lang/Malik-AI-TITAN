@@ -5,6 +5,7 @@ import {
   ArrowUp,
   BookOpen,
   Brain,
+  Code2,
   Film,
   FileSearch,
   FolderOpen,
@@ -12,7 +13,10 @@ import {
   Globe,
   GraduationCap,
   Image as ImageIcon,
+  Lightbulb,
   Mail,
+  MoreHorizontal,
+  Music2,
   Paperclip,
   Pencil,
   Plus,
@@ -369,6 +373,7 @@ export interface MalikHybridHomeProps {
   onOpenTemplates?: () => void
   onOpenPhoto?: () => void
   onOpenVideo?: () => void
+  onOpenMusic?: () => void
   onOpenWebsite?: () => void
   onOpenCode?: () => void
   onOpenBilling?: () => void
@@ -396,6 +401,12 @@ function HomeComposer({
   onSubmit,
   onToggleWeb,
   onToggleMemory,
+  deepOn = false,
+  onToggleDeep,
+  onOpenCode,
+  onOpenVideo,
+  onOpenMusic,
+  onSourcePlugin,
   onStartWeb,
   onStartDeepResearch,
   onCreateImage,
@@ -419,6 +430,14 @@ function HomeComposer({
   onSubmit: (nativeDraft?: string) => void
   onToggleWeb: () => void
   onToggleMemory: () => void
+  /** «Глубокий анализ»: the next answer is a deep, sourced one. */
+  deepOn?: boolean
+  onToggleDeep?: () => void
+  onOpenCode?: () => void
+  onOpenVideo?: () => void
+  onOpenMusic?: () => void
+  /** GitHub / Wikipedia / arXiv: search a particular source for the next question. */
+  onSourcePlugin?: (prompt: string) => void
   onStartWeb: () => void
   onStartDeepResearch: () => void
   onCreateImage?: () => void
@@ -433,6 +452,17 @@ function HomeComposer({
   imageCredits?: { remaining: number; daily: number } | null
 }) {
   const [toolsOpen, setToolsOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
+  // The desktop design asks for a fuller prompt line than the phone one.
+  const [wide, setWide] = useState(false)
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 768px)")
+    const sync = () => setWide(query.matches)
+    sync()
+    query.addEventListener?.("change", sync)
+    return () => query.removeEventListener?.("change", sync)
+  }, [])
   const [dragActive, setDragActive] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [drawingOpen, setDrawingOpen] = useState(false)
@@ -467,6 +497,25 @@ function HomeComposer({
   const openAndClose = (action?: () => void) => {
     action?.()
     setToolsOpen(false)
+  }
+
+  useEffect(() => {
+    if (!moreOpen) return
+    const close = (event: PointerEvent) => {
+      if (!moreRef.current?.contains(event.target as Node)) setMoreOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setMoreOpen(false) }
+    document.addEventListener("pointerdown", close)
+    document.addEventListener("keydown", escape)
+    return () => {
+      document.removeEventListener("pointerdown", close)
+      document.removeEventListener("keydown", escape)
+    }
+  }, [moreOpen])
+
+  const fromMore = (action?: () => void) => {
+    action?.()
+    setMoreOpen(false)
   }
 
   const importRemoteAsFile = async (rawUrl: string) => {
@@ -663,7 +712,7 @@ function HomeComposer({
           }}
           rows={1}
           aria-label="Спросите Malik AI"
-          placeholder="Чем я могу помочь сегодня?"
+          placeholder={wide ? "Напишите сообщение или задайте вопрос…" : "Чем я могу помочь сегодня?"}
         />
 
         <div className="thome-composer-right">
@@ -733,20 +782,49 @@ function HomeComposer({
         </div>
       ) : null}
 
-      <div className="thome-composer-meta" aria-label="Активные возможности">
-        <button type="button" onClick={onToggleWeb} className={cn("thome-meta-chip", webOn && "is-active")}>
-          <Globe aria-hidden="true" />
-          {webOn ? "Веб-поиск: авто" : "Веб-поиск выключен"}
+      {/* Modes and studios, as on the design: two toggles for the next answer
+          and studio shortcuts; GitHub, Wikipedia, arXiv and memory sit under «…». */}
+      <div className="thome-chips" role="toolbar" aria-label="Режимы и инструменты">
+        <button type="button" aria-pressed={webOn} onClick={onToggleWeb} className={cn("thome-chip", webOn && "is-active")} title={webOn ? "Веб-поиск включён: ответ сам найдёт и покажет источники" : "Веб-поиск выключен"}>
+          <Globe aria-hidden="true" />Веб-поиск
         </button>
-        <button type="button" onClick={onToggleMemory} className={cn("thome-meta-chip", memoryOn && "is-active")}>
-          <Brain aria-hidden="true" />
-          Память {memoryOn ? "включена" : "выключена"}
-        </button>
-        <span className="thome-meta-chip" title="Ежедневные кредиты генерации изображений">
-          <ImageIcon aria-hidden="true" />
-          Фото {imageCredits ? (imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining) : "…"} кр.
-        </span>
-        <span className="thome-meta-note">Покажу прочитанные источники</span>
+        {onToggleDeep ? (
+          <button type="button" aria-pressed={deepOn} onClick={onToggleDeep} className={cn("thome-chip", deepOn && "is-active")} title="Глубокий анализ с источниками для следующего вопроса">
+            <Lightbulb aria-hidden="true" />Глубокий анализ
+          </button>
+        ) : null}
+        {onOpenCode ? <button type="button" onClick={onOpenCode} className="thome-chip"><Code2 aria-hidden="true" />Код</button> : null}
+        {onCreateImage ? (
+          <button type="button" onClick={onCreateImage} className="thome-chip" title={imageCredits ? `Фото: ${imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining} кр. сегодня` : undefined}>
+            <ImageIcon aria-hidden="true" />Изображение
+          </button>
+        ) : null}
+        {onOpenVideo ? <button type="button" onClick={onOpenVideo} className="thome-chip"><Film aria-hidden="true" />Видео</button> : null}
+        {onOpenMusic ? <button type="button" onClick={onOpenMusic} className="thome-chip"><Music2 aria-hidden="true" />Музыка</button> : null}
+        <div className="thome-chip-more" ref={moreRef}>
+          <button type="button" onClick={() => setMoreOpen((open) => !open)} className={cn("thome-chip is-icon", moreOpen && "is-active")} aria-label="Ещё инструменты" aria-haspopup="menu" aria-expanded={moreOpen}>
+            <MoreHorizontal aria-hidden="true" />
+          </button>
+          {moreOpen ? (
+            <div className="thome-more-menu" role="menu" aria-label="Ещё инструменты">
+              {SOURCE_PLUGINS.filter((plugin) => plugin.id !== "web").map((plugin) => {
+                const Icon = plugin.icon
+                return (
+                  <button key={plugin.id} type="button" role="menuitem" onClick={() => fromMore(() => onSourcePlugin?.(plugin.prompt))}>
+                    <Icon aria-hidden="true" /><span>Искать в {plugin.label}</span>
+                  </button>
+                )
+              })}
+              <span className="thome-more-menu__rule" role="separator" />
+              <button type="button" role="menuitemcheckbox" aria-checked={memoryOn} onClick={() => fromMore(onToggleMemory)}>
+                <Brain aria-hidden="true" /><span>Память {memoryOn ? "включена" : "выключена"}</span>
+              </button>
+              <span className="thome-more-menu__note">
+                <ImageIcon aria-hidden="true" />Фото: {imageCredits ? (imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining) : "…"} кр. сегодня
+              </span>
+            </div>
+          ) : null}
+        </div>
       </div>
     </section>
   )
@@ -768,6 +846,14 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [webOn, setWebOn] = useWebSearchEnabled()
   const [memoryOn, setMemoryOn] = useContextEnabled()
   const [deepResearch, setDeepResearch] = useState(false)
+
+  // The home artwork fills the whole main column, behind the Чат/Работа switch
+  // too (malik-cosmos-home.css), so its flag lives on <html>.
+  useEffect(() => {
+    const root = document.documentElement
+    root.dataset.malikChatHome = "1"
+    return () => { delete root.dataset.malikChatHome }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -939,6 +1025,13 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     focusPrompt(pluginPrompt)
   }
 
+  // Deep analysis needs the web: turning it on turns search on too.
+  const toggleDeepResearch = () => {
+    const next = !deepResearch
+    setDeepResearch(next)
+    if (next) setWebOn(true)
+  }
+
   const startWebSearch = () => {
     setToolWorkspace("web")
   }
@@ -1005,23 +1098,22 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
         <section className="thome-launcher" aria-label="Malik AI">
           <div className="thome-welcome">
             <span className="thome-welcome-logo" aria-hidden="true">
-              <svg viewBox="0 0 44 44">
+              <svg viewBox="8.5 14.5 30 15">
                 <path d="M9 29 L22 15 L22 29 Z" fill="currentColor" />
                 <path d="M24 15 H38 L24 29 Z" fill="currentColor" />
               </svg>
             </span>
-            <h1 aria-label="Добро пожаловать в Malik AI">
-              <span className="thome-word is-1">Добро</span>{" "}
-              <span className="thome-word is-2">пожаловать</span>{" "}
-              <span className="thome-word is-3">в</span>{" "}
+            <h1 aria-label="Malik AI">
               <strong>
-                <span className="thome-word is-4">Malik</span>{" "}
-                <span className="thome-word is-5">AI</span>
+                <span className="thome-word is-1">Malik</span>{" "}
+                <span className="thome-word is-2">AI</span>
               </strong>
             </h1>
+            <p className="thome-welcome-tagline">Ваш универсальный ИИ-ассистент</p>
             <p className="thome-welcome-subtitle">
-              От простого вопроса до глубокого исследования — Malik AI ищет по открытому вебу, читает страницы и показывает источники.
+              Задавайте любые вопросы, получайте идеи, тексты, изображения, анализ, решения и многое другое.
             </p>
+            <p className="thome-welcome-motto"><span>More than AI</span><span>A brighter tomorrow</span></p>
 
             <HomeComposer
               prompt={prompt}
@@ -1034,6 +1126,12 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               onSubmit={submit}
               onToggleWeb={() => { setWebOn(!webOn); if (webOn) setDeepResearch(false) }}
               onToggleMemory={() => setMemoryOn(!memoryOn)}
+              deepOn={deepResearch}
+              onToggleDeep={toggleDeepResearch}
+              onOpenCode={props.onOpenCode}
+              onOpenVideo={props.onOpenVideo}
+              onOpenMusic={props.onOpenMusic}
+              onSourcePlugin={openSourcePlugin}
               onStartWeb={startWebSearch}
               onStartDeepResearch={startDeepResearch}
               onCreateImage={() => setImageCreatorOpen(true)}
@@ -1109,6 +1207,12 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                   onSubmit={submit}
                   onToggleWeb={() => { setWebOn(!webOn); if (webOn) setDeepResearch(false) }}
                   onToggleMemory={() => setMemoryOn(!memoryOn)}
+                  deepOn={deepResearch}
+                  onToggleDeep={toggleDeepResearch}
+                  onOpenCode={props.onOpenCode}
+                  onOpenVideo={props.onOpenVideo}
+                  onOpenMusic={props.onOpenMusic}
+                  onSourcePlugin={openSourcePlugin}
                   onStartWeb={startWebSearch}
                   onStartDeepResearch={startDeepResearch}
                   onCreateImage={() => setImageCreatorOpen(true)}

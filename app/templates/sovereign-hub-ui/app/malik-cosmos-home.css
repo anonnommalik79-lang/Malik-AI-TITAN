@@ -1,0 +1,268 @@
+/* ---------------------------------------------------------------------------
+   Chat home on the cosmos artwork (the design in the owner's reference).
+   The artwork fills the whole main column - behind the Чат/Работа switch too -
+   and the mark, «Malik AI», the tagline and a glass composer with mode chips
+   sit on it. MalikHybridHome sets html[data-malik-chat-home] while it is on
+   screen; the older home layers (a picture with the text baked in, invisible
+   hotspots over it, the black home surfaces) are switched off only then.
+   Every selector starts with html[data-malik-chat-home] body:has(#malik-root)
+   #malik-root: two ids, so it outranks the earlier home sheets (several use
+   body:has(#malik-root …)) while the flag is set, and nothing otherwise.
+   --------------------------------------------------------------------------- */
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .malik-main-column {
+  background-color: #000 !important;
+  background-image:
+    linear-gradient(180deg, rgba(0, 0, 0, .35) 0, rgba(0, 0, 0, 0) 110px, rgba(0, 0, 0, 0) 62%, rgba(0, 0, 0, .55) 100%),
+    radial-gradient(ellipse 34% 30% at 50% 44%, rgba(0, 0, 0, .45), rgba(0, 0, 0, 0) 100%),
+    url("/backgrounds/malik-chat-desktop.webp") !important;
+  background-position: center, center, center 42% !important;
+  background-size: 100% 100%, 100% 100%, cover !important;
+  background-repeat: no-repeat !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .malik-main-column > div,
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .malik-main-column :is(main, main > section, .malik-mobile-home, .malik-premium-chat-host, .malik-ai-chat-bg, .malik-chat-legend-bg, .thome, .thome-inner, .thome-launcher, .thome-welcome) {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] {
+  background: transparent !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell :is(.thome, .thome-welcome, .thome-inner, .thome-launcher)::before,
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell :is(.thome, .thome-welcome, .thome-inner, .thome-launcher)::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+}
+/* Hotspots over the old picture's painted buttons, and the source row the
+   «…» menu now holds. */
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell :is(.thome-mobile-story-actions, .thome-mobile-quick-actions, [aria-label="Бесплатные плагины источников"]) {
+  display: none !important;
+}
+
+/* The words. */
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome-logo {
+  display: block !important;
+  width: auto !important;
+  height: clamp(48px, 8.4vh, 78px) !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #fff !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 6px 26px rgba(0, 0, 0, .6)) !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome-logo svg {
+  display: block !important;
+  width: auto !important;
+  height: 100% !important;
+  color: #fff !important;
+  fill: #fff !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > h1 {
+  display: block !important;
+  margin: clamp(10px, 2vh, 20px) 0 0 !important;
+  padding: 0 !important;
+  color: #fff !important;
+  font-size: clamp(48px, 7.6vh, 74px) !important;
+  font-weight: 700 !important;
+  letter-spacing: -.045em !important;
+  line-height: 1.04 !important;
+  text-align: center !important;
+  text-shadow: 0 4px 26px rgba(0, 0, 0, .65) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: none !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > h1 :is(strong, .thome-word) {
+  color: inherit !important;
+  font: inherit !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: none !important;
+  filter: none !important;
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+  animation: none !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome-tagline {
+  display: block !important;
+  margin: clamp(6px, 1.2vh, 12px) 0 0 !important;
+  color: #fff !important;
+  font-size: clamp(19px, 2.6vh, 25px) !important;
+  font-weight: 500 !important;
+  letter-spacing: -.01em !important;
+  line-height: 1.3 !important;
+  text-align: center !important;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, .85) !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome-subtitle {
+  display: block !important;
+  max-width: 470px !important;
+  margin: clamp(10px, 1.8vh, 18px) auto 0 !important;
+  color: #e4e4e7 !important;
+  font-size: 15px !important;
+  line-height: 1.55 !important;
+  text-align: center !important;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, .9) !important;
+  opacity: 1 !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome-motto { display: none !important; }
+
+/* Desktop: the words in the middle, the composer at the bottom. */
+@media (min-width: 768px) {
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 100% !important;
+    height: 100% !important;
+    padding: 0 24px clamp(150px, 20vh, 200px) !important;
+    text-align: center !important;
+  }
+  /* One composer on desktop; the phone layer is not used here. */
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-mobile-exact-layer { display: none !important; }
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > .thome-composer {
+    position: absolute !important;
+    top: auto !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: clamp(28px, 4.6vh, 48px) !important;
+    width: min(780px, calc(100% - 48px)) !important;
+    max-width: none !important;
+    margin: 0 !important;
+    transform: translateX(-50%) !important;
+    border: 1px solid rgba(255, 255, 255, .3) !important;
+    border-radius: 22px !important;
+    background: rgba(6, 6, 8, .62) !important;
+    background-image: none !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .55) !important;
+  }
+}
+
+/* Mode chips inside the composer. */
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-chips {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 2px 14px 12px !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  height: 31px !important;
+  padding: 0 11px !important;
+  border: 1px solid rgba(255, 255, 255, .22) !important;
+  border-radius: 999px !important;
+  background: rgba(0, 0, 0, .35) !important;
+  color: #e4e4e7 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease, color .15s ease;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-chip:hover { border-color: rgba(255, 255, 255, .55) !important; color: #fff !important; }
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-chip.is-active { border-color: rgba(255, 255, 255, .78) !important; background: rgba(255, 255, 255, .1) !important; color: #fff !important; }
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-chip:focus-visible { outline: 2px solid #fff !important; outline-offset: 2px !important; }
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-chip svg { width: 14px !important; height: 14px !important; flex-shrink: 0 !important; color: currentColor !important; }
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-chip.is-icon { width: 42px !important; justify-content: center !important; padding: 0 !important; }
+/* The «+» is a ring, as on the design. */
+@media (min-width: 768px) {
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > .thome-composer .thome-plus-button {
+    width: 40px !important;
+    height: 40px !important;
+    border: 1px solid rgba(255, 255, 255, .4) !important;
+    border-radius: 50% !important;
+    background: rgba(0, 0, 0, .3) !important;
+    color: #fff !important;
+  }
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-chip-more { position: relative !important; }
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-more-menu {
+  position: absolute !important;
+  right: 0 !important;
+  bottom: calc(100% + 8px) !important;
+  z-index: 60 !important;
+  display: grid !important;
+  min-width: 240px !important;
+  padding: 6px !important;
+  border: 1px solid #303030 !important;
+  border-radius: 14px !important;
+  background: #161616 !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .6) !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-more-menu > button {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-height: 40px !important;
+  padding: 0 10px !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: #f4f4f5 !important;
+  font-size: 14px !important;
+  text-align: left !important;
+}
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-more-menu > button:hover,
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-more-menu > button:focus-visible { background: #2a2a2a !important; outline: none !important; }
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-more-menu svg { width: 16px !important; height: 16px !important; color: #a1a1aa !important; }
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-more-menu__rule { display: block !important; height: 1px !important; margin: 4px 6px !important; background: #303030 !important; }
+html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-more-menu__note { display: flex !important; align-items: center !important; gap: 10px !important; min-height: 36px !important; padding: 0 10px !important; color: #a1a1aa !important; font-size: 12.5px !important; }
+
+/* Phone: the portrait artwork, the mark and the name high up, the motto, the
+   composer at the bottom - no chips, as on the design. */
+@media (max-width: 767px) {
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .malik-main-column {
+    background-image:
+      linear-gradient(180deg, rgba(0, 0, 0, .3) 0, rgba(0, 0, 0, 0) 90px, rgba(0, 0, 0, 0) 66%, rgba(0, 0, 0, .55) 100%),
+      radial-gradient(ellipse 62% 18% at 50% 33%, rgba(0, 0, 0, .45), rgba(0, 0, 0, 0) 100%),
+      url("/backgrounds/malik-chat-mobile.webp") !important;
+    background-position: center, center, center top !important;
+  }
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    min-height: 100% !important;
+    padding-top: clamp(120px, 24vh, 210px) !important;
+  }
+  /* The composer stays at the bottom of the screen, under the words. */
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > .thome-composer {
+    margin-top: auto !important;
+    margin-bottom: max(10px, env(safe-area-inset-bottom, 0px)) !important;
+  }
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome-logo { height: 44px !important; }
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > h1 { margin-top: 10px !important; font-size: 46px !important; }
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell :is(.thome-welcome-tagline, .thome-welcome-subtitle, .thome-chips) { display: none !important; }
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome-motto {
+    display: grid !important;
+    gap: 7px !important;
+    margin: 12px 0 0 !important;
+    color: #f4f4f5 !important;
+    font-size: 10.5px !important;
+    font-weight: 600 !important;
+    letter-spacing: .34em !important;
+    line-height: 1 !important;
+    text-align: center !important;
+    text-transform: uppercase !important;
+    text-shadow: 0 1px 10px rgba(0, 0, 0, .9) !important;
+  }
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > .thome-composer {
+    border: 1px solid rgba(255, 255, 255, .22) !important;
+    background: rgba(10, 10, 12, .62) !important;
+    background-image: none !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-chip { transition: none; }
+}

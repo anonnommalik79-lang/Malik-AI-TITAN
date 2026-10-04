@@ -7882,6 +7882,7 @@ const shouldShowMobilePreviewButton =
               onOpenTemplates={() => safeOpenView("templates", "welcome")}
               onOpenPhoto={() => safeOpenView("photo-generation", "welcome")}
               onOpenVideo={() => safeOpenView("video-generation", "welcome")}
+              onOpenMusic={() => safeOpenView(currentPlan === "pro" || currentPlan === "ultra" || currentPlan === "owner" ? "music-generation" : "billing", "welcome")}
               onOpenWebsite={() => safeOpenView("website-generation", "welcome")}
               onOpenCode={() => safeOpenView("code-generation", "welcome")}
               onOpenBilling={() => safeOpenView("billing", "welcome")}

@@ -100,6 +100,9 @@ import "./mobile-drawer-final.css"
 // Final MalikVideo refinement must load before the product-wide monochrome pass.
 import "./video-mobile-refinement.css"
 import "./workspace-mode.css"
+// The cosmos chat home: after every earlier home sheet (its selectors carry
+// html[data-malik-chat-home], so they win only while the home is on screen).
+import "./malik-cosmos-home.css"
 // Truly last: loading, analysis, sources and status surfaces in black and
 // white only. It has to follow every accent rule above to strip their gold.
 import "./chat-monochrome-final.css"
