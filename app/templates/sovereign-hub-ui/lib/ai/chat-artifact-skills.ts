@@ -26,7 +26,7 @@ export const CHAT_ARTIFACT_SKILLS: readonly ChatArtifactSkill[] = [
     name: "Software Builder",
     priority: 115,
     patterns: [/\b(?:html|css|javascript|typescript|python|react|next\.?js|node\.?js|java|kotlin|swift|golang|rust|php|c\+\+|c#)\b|код|сайт|приложен|компонент|репозитор|frontend|backend|source\s+code/iu],
-    instruction: "Write the actual runnable software requested. Respect the requested stack and architecture. If none is specified, choose the smallest suitable implementation instead of forcing React, Next.js, Tailwind or any house style. Include every file and integration required for the requested behavior; no generic starter, TODO, placeholder, mock or shortened sample.",
+    instruction: "Write the actual runnable software requested. Respect the requested stack and architecture. If none is specified, choose the smallest suitable implementation instead of forcing React, Next.js, Tailwind or any house style. For requested sites and visual apps, deliver a polished responsive interface with coherent typography, spacing, navigation, realistic content, accessible controls, and fully functioning requested interactions. Honor the user's actual style and content instead of repeating a fixed template. When no framework is requested, prefer a complete self-contained index.html with CSS and JavaScript included so preview runs immediately. Use genuine supplied/appropriately sourced images when the request calls for product photography instead of relying on emoji placeholders. Include every file and integration required for the requested behavior; no generic starter, TODO, placeholder, mock or shortened sample.",
   },
   {
     id: "document",
