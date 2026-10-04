@@ -1,4 +1,5 @@
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { layoutFixedChatBody } from "@/lib/ai/keyboard-layout"
 import { GET as originalGET, POST as originalPOST } from "./route-impl"
 
 export const runtime = "nodejs"
@@ -195,13 +196,33 @@ function sseResponse(content: string) {
   })
 }
 
-export async function POST(request: Request) {
+/**
+ * «chfdyb ;tcnrjv ehjdyt xfnugn b rkjl» is Russian typed on an English
+ * layout. The model receives the Russian reading everywhere the prompt
+ * appears - the visible bubble keeps what the person typed - so the answer is
+ * about what they meant, in their language, instead of about gibberish.
+ */
+function withLayoutFixed(request: Request, body: any): { request: Request; body: any } {
+  const next = layoutFixedChatBody(body, extractPrompt(body))
+  if (!next) return { request, body }
+  const headers = new Headers(request.headers)
+  headers.delete("content-length")
+  return {
+    request: new Request(request.url, { method: request.method, headers, body: JSON.stringify(next), signal: request.signal }),
+    body: next,
+  }
+}
+
+export async function POST(incoming: Request) {
   let body: any
   try {
-    body = await request.clone().json()
+    body = await incoming.clone().json()
   } catch {
-    return originalPOST(request)
+    return originalPOST(incoming)
   }
+  const fixed = withLayoutFixed(incoming, body)
+  const request = fixed.request
+  body = fixed.body
 
   if (extractPrompt(body).trim().toLowerCase() !== MALIK_ADMIN_COMMAND) {
     return originalPOST(request)

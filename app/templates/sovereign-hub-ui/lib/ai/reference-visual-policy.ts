@@ -15,6 +15,8 @@ export type ReferenceVisualPlan = {
   entity?: boolean
   /** People require a canonical article portrait, never namesake results. */
   person?: boolean
+  /** A short line under the photo in a comparison lineup. */
+  caption?: string
 }
 
 const NO_VISUAL = /(?:без\s+(?:фото|картинок|изображений)|не\s+(?:показывай|добавляй|нужны)\s+(?:фото|картинки|изображения)|только\s+текст|no\s+(?:photos?|images?|pictures?)|text\s+only|суретсіз)/iu

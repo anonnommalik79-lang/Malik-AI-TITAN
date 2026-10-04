@@ -15,6 +15,7 @@ import { MALIK_OWNER_EMAIL, isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import { chatHttpErrorMessage } from "@/lib/ai/errors"
 import { fetchRecoverableChat } from "@/lib/ai/chat-stream-recovery"
+import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
@@ -6201,7 +6202,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     : `${inlineMediaKind === "video" ? "/video" : "/image"} ${cleanContent}`
   setActiveGenerationKind(needsImageConfirmation ? "text" : inlineMediaKind || detectDashboardGenerationKind(cleanContent, requestAttachments, activeAiMode))
   const chatId = branchChatId || activeChatId || crypto.randomUUID()
-  const title = cleanContent.slice(0, 34) + (cleanContent.length > 34 ? "..." : "")
+  // A wrong-layout message gets a readable title in the chat list.
+  const titleSource = fixWrongKeyboardLayout(cleanContent)?.text || cleanContent
+  const title = titleSource.slice(0, 34) + (titleSource.length > 34 ? "..." : "")
 
   if (branching) {
     const branchChat: Chat = sourceChat

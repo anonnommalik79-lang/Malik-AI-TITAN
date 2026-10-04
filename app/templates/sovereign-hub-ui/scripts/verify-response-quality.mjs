@@ -245,7 +245,83 @@ check("cleanup removes hidden thought without flattening Markdown", () => {
   assert.match(clean, /```ts\n  const value = 1\n```/)
 })
 
+console.log("\nanswers shaped like the question, not like a word count")
+
+check("a question about a whole subject is an overview, not a two-sentence lookup", () => {
+  for (const prompt of ["скажи про второго президента", "скажи про второго призедента", "кто такой Илон Маск", "tell me about Almaty", "история Казахстана"]) {
+    const profile = analyzeResponseRequest(prompt)
+    assert.notEqual(profile.complexity, "simple", prompt)
+    assert.ok(profile.signals.includes("overview"), prompt)
+    assert.doesNotMatch(profile.targetLength, /2-4/, prompt)
+  }
+  const prompt = buildMalikResponseSystemPrompt({ prompt: "скажи про второго президента", currentDate: "2026-10-04" })
+  assert.match(prompt, /OVERVIEW CONTRACT/)
+  assert.match(prompt, /malik-photos/)
+  assert.match(prompt, /Актуально на 2026-10-04/)
+})
+
+check("a definition, a greeting and «кратко» stay short", () => {
+  for (const prompt of ["Что такое рендер?", "привет", "кратко расскажи про Абая", "расскажи о себе"]) {
+    const profile = analyzeResponseRequest(prompt)
+    assert.equal(profile.complexity, "simple", prompt)
+    assert.ok(!profile.signals.includes("overview") && !profile.signals.includes("headtohead"), prompt)
+  }
+  assert.doesNotMatch(buildMalikResponseSystemPrompt({ prompt: "Что такое рендер?" }), /OVERVIEW CONTRACT|HEAD-TO-HEAD CONTRACT/)
+})
+
+check("named contenders get a real head-to-head with a photo lineup", () => {
+  for (const prompt of ["сравни жестком уровне чатгпт и клод", "что лучше iphone или samsung", "ChatGPT vs Claude", "в чем разница между react и vue"]) {
+    const profile = analyzeResponseRequest(prompt)
+    assert.ok(profile.signals.includes("headtohead"), prompt)
+    assert.notEqual(profile.complexity, "simple", prompt)
+  }
+  assert.equal(analyzeResponseRequest("сравни жестком уровне чатгпт и клод").complexity, "complex")
+  const prompt = buildMalikResponseSystemPrompt({ prompt: "сравни чатгпт и клод", currentDate: "2026-10-04" })
+  assert.match(prompt, /HEAD-TO-HEAD CONTRACT/)
+  assert.match(prompt, /"layout":"lineup"/)
+  assert.match(prompt, /Never invent benchmarks/)
+  assert.match(prompt, /Comparison Matrix/)
+  // Advice between two actions is not a match between contenders.
+  assert.ok(!analyzeResponseRequest("как лучше позвонить или написать").signals.includes("headtohead"))
+})
+
+const { fixWrongKeyboardLayout, layoutFixedChatBody } = loadTypeScriptModule("lib/ai/keyboard-layout.ts")
+
+check("text typed on the wrong keyboard layout is read as the Russian it was meant to be", () => {
+  const cases = {
+    "chfdyb ;tcnrjv ehjdyt xfnugn b rkjl": "сравни жестком уровне чатгпт и клод",
+    "ghbdtn rfr ltkf": "привет как дела",
+    "crf;b ghj dnjhjuj ghbptltynf": "скажи про второго призедента",
+    "yfgbib rjl yf python": "напиши код на python",
+  }
+  for (const [typed, meant] of Object.entries(cases)) assert.equal(fixWrongKeyboardLayout(typed)?.text, meant, typed)
+})
+
+check("the chat request carries the Russian reading in every field the model reads", () => {
+  const typed = "chfdyb ;tcnrjv ehjdyt xfnugn b rkjl"
+  const meant = "сравни жестком уровне чатгпт и клод"
+  const body = layoutFixedChatBody({ originalQuestion: typed, question: `${typed}\n\nОтвечай по делу`, messages: [{ role: "user", content: "привет" }, { role: "assistant", content: "Здравствуйте" }, { role: "user", content: typed }] }, typed)
+  assert.equal(body.originalQuestion, meant)
+  assert.equal(body.question, `${meant}\n\nОтвечай по делу`)
+  assert.equal(body.messages[2].content, meant)
+  assert.equal(body.messages[0].content, "привет")
+  assert.equal(body.layoutCorrectedFrom, typed)
+  assert.equal(layoutFixedChatBody({ originalQuestion: "what is the best model" }, "what is the best model"), null)
+})
+
+check("real English, code and links are never converted", () => {
+  for (const text of ["what is the best model", "kubernetes deployment rollback", "iphone 17 pro max", "fix the bug in my react component", "hello", "https://ghbdtn.com", "```ghbdtn```", "привет как дела", "ok"]) {
+    assert.equal(fixWrongKeyboardLayout(text), null, text)
+  }
+})
+
 console.log("\nwiring")
+
+check("the chat route reads wrong-layout prompts before anything else sees them", () => {
+  const route = fs.readFileSync("app/api/stream/route.ts", "utf8")
+  assert.match(route, /layoutFixedChatBody\(body, extractPrompt\(body\)\)/)
+  assert.match(route, /const fixed = withLayoutFixed\(incoming, body\)/)
+})
 
 check("the primary router uses the adaptive response contract", () => {
   const router = fs.readFileSync("lib/malik-god-router.ts", "utf8")

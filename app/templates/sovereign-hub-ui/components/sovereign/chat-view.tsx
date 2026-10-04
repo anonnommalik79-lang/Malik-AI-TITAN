@@ -55,6 +55,7 @@ import {
 import type { GenerationStatusType } from "./generation-status"
 import type { AIPlan } from "@/lib/ai/types"
 import type { MalikMessageResearch, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
+import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import type { MalikFactAudit, MalikFactClaim } from "@/lib/ai/fact-audit"
 import { DEFAULT_MALIK_MODEL_ID, getMalikModel, type MalikModelId } from "@/lib/ai/malik-models"
 import { clientFetchWithTimeout } from "@/lib/api-client"
@@ -970,6 +971,11 @@ function sourceDisplayName(source: MalikWebSource) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
+/** «chfdyb ...» typed on the wrong layout is read as the Russian it was meant to be. */
+function readableQuestion(text: string) {
+  return fixWrongKeyboardLayout(text)?.text || text
+}
+
 function cleanResearchDisplayText(value: string, research?: MalikMessageResearch) {
   const text = cleanChatViewText(value)
   if (!research?.sources.length || !text) return text
@@ -1862,7 +1868,7 @@ function MessageBubble({
                     {/* While streaming, `malik-streaming` gives the growing
                         answer its caret and lets only newly added blocks
                         fade in (chat-live.css). It is dropped when done. */}
-                    <MalikMarkdown text={displayContent} allowImages={false} className={writingLive ? "malik-streaming" : undefined}
+                    <MalikMarkdown text={displayContent} allowImages={false} className={writingLive ? "malik-streaming" : undefined} citations={message.research?.sources}
                       visualContext={!olderVersion && !message.textOnly && !message.generatedMedia && !message.imageConfirmation && !message.superflow
                         && !["failed", "interrupted", "cancelled"].includes(message.execution?.state || "")
                         ? { question, messageId: message.id, previousQuestion, previousAnswer, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
@@ -2976,10 +2982,10 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
                   // own — "200 тысяч" alone returns a dictionary.
                   question={
                     message.role === "assistant"
-                      ? messages.slice(0, index).reverse().find((item) => item.role === "user")?.content || ""
+                      ? readableQuestion(messages.slice(0, index).reverse().find((item) => item.role === "user")?.content || "")
                       : ""
                   }
-                  previousQuestion={message.role === "assistant" ? messages.slice(0, index).filter((item) => item.role === "user").at(-2)?.content || "" : ""}
+                  previousQuestion={message.role === "assistant" ? readableQuestion(messages.slice(0, index).filter((item) => item.role === "user").at(-2)?.content || "") : ""}
                   previousAnswer={message.role === "assistant" ? messages.slice(0, index).filter((item) => item.role === "assistant").at(-1)?.content || "" : ""}
                   questionHasAttachment={message.role === "assistant" && Boolean(messages.slice(0, index).reverse().find((item) => item.role === "user")?.attachments?.length)}
                   onCopy={handleCopy}

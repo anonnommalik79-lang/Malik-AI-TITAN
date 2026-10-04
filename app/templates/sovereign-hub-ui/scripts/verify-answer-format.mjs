@@ -76,7 +76,7 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "@/lib/business/project-zip") return { downloadProjectZip() {} }
     if (name === "@/lib/canvas-preview") return { buildCanvasSrcDoc: (code) => code, buildCanvasProjectSrcDoc: (files, filename) => files.find((file) => file.name === filename)?.content || "", createCanvasBlobUrl: () => "blob:test" }
     if (name === "./malik-tex") return texBox.exports
-    if (name === "./MalikVisualGallery") return { isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }), MalikReferenceImages: ({ children, planOverride, row, hero }) => React.createElement("div", { "data-test-photo-topic": planOverride?.topic, "data-test-row": row ? "true" : "false", "data-test-hero": hero ? "true" : "false" }, children) }
+    if (name === "./MalikVisualGallery") return { isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }), MalikReferenceImages: ({ children, planOverride, row, hero, lineup }) => React.createElement("div", { "data-test-photo-topic": planOverride?.topic, "data-test-row": row ? "true" : "false", "data-test-hero": hero ? "true" : "false", "data-test-lineup": lineup ? "true" : undefined, "data-test-caption": planOverride?.caption }, children) }
     if (name === "@/lib/ai/answer-entities") return entities
     if (name === "@/lib/ai/reference-visual-policy") return loadPure("lib/ai/reference-visual-policy.ts")
     if (name === "@/lib/ai/answer-visuals") return loadPure("lib/ai/answer-visuals.ts")
@@ -108,6 +108,47 @@ check("closed grounded photo hints render topics without leaking metadata or dup
   assert.equal((html.match(/data-test-photo-topic/g) || []).length, 1)
   assert(html.includes('data-test-photo-topic="Нурсултан Назарбаев"'))
   assert(!html.includes("malik-photos") && !html.includes("Nursultan Nazarbayev") && !html.includes("&quot;version&quot;"))
+})
+check("a head-to-head lineup shows every contender side by side with its caption", () => {
+  const text = 'Claude сильнее в длинном коде, ChatGPT — в мультимодальности.\n\n```malik-photos\n{"version":1,"layout":"lineup","subjects":[{"name":"ChatGPT","query":"ChatGPT","caption":"OpenAI · GPT-5"},{"name":"Claude","query":"Claude (language model)","caption":"Anthropic · Opus"}]}\n```\n\n### 1. Что это\n\nТекст.'
+  const html = render(text, { visualContext: { question: "сравни чатгпт и клод" } })
+  assert(html.includes("data-malik-photo-lineup"))
+  assert(html.includes("malik-answer-lineup is-2"))
+  assert.equal((html.match(/data-test-lineup="true"/g) || []).length, 2)
+  assert(html.includes('data-test-caption="OpenAI · GPT-5"') && html.includes('data-test-caption="Anthropic · Opus"'))
+  assert(!html.includes("&quot;layout&quot;") && !html.includes("malik-photos"))
+  // The lineup stands where the model put it - before the first section.
+  assert(html.indexOf("data-malik-photo-lineup") < html.indexOf("Что это"))
+})
+check("an ordinary multi-subject fence is never turned into a lineup", () => {
+  const html = render('ChatGPT и Claude.\n\n```malik-photos\n{"version":1,"subjects":[{"name":"ChatGPT","query":"ChatGPT"},{"name":"Claude","query":"Claude"}]}\n```', { visualContext: { question: "сравни чатгпт и клод" } })
+  assert(!html.includes("data-malik-photo-lineup"))
+})
+check("[n] markers become source chips named after the site, never raw brackets", () => {
+  const citations = [
+    { url: "https://www.anthropic.com/news/claude", domain: "anthropic.com", title: "Claude" },
+    { url: "https://openai.com/index/gpt-5", domain: "openai.com", title: "GPT-5" },
+    { url: "https://platform.openai.com/docs", domain: "platform.openai.com", title: "API" },
+  ]
+  const html = render("Claude держит длинный контекст [1]. GPT-5 вышел в 2025 году [2][3].", { citations })
+  assert(!/\[\d\]/.test(html), html)
+  assert(html.includes('class="malik-md-cite"'))
+  assert(html.includes(">Anthropic</a>"))
+  assert(html.includes(">OpenAI +1</a>"))
+  assert(html.includes('href="https://openai.com/index/gpt-5"'))
+})
+check("a marker without a matching source disappears; without sources text stays as written", () => {
+  const html = render("Факт [7].", { citations: [{ url: "https://example.com/a", domain: "example.com" }] })
+  assert(!html.includes("[7]") && !html.includes("malik-md-cite"))
+  const plain = render("Список [1] остаётся.")
+  assert(plain.includes("[1]"))
+  // A Markdown link is still a link, not a citation.
+  const link = render("[1](https://example.com/x)", { citations: [{ url: "https://example.com/a" }] })
+  assert(link.includes('class="malik-md-link"') && !link.includes("malik-md-cite"))
+})
+check("a citation pointing at a non-web URL is never linked", () => {
+  const html = render("Факт [1].", { citations: [{ url: "javascript:alert(1)", domain: "x" }] })
+  assert(!html.includes("javascript:") && !html.includes("malik-md-cite"))
 })
 check("partial, malformed and ungrounded photo hints remain invisible", () => {
   for (const body of ['{"version":1', '{invalid}', '{"version":1,"subjects":[{"name":"Other person","query":"Other person"}]}']) {

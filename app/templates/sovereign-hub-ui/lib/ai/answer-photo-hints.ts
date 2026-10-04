@@ -1,6 +1,13 @@
 import { allowsAnswerPhotoHints, planReferenceVisuals, referenceSearchTopic, type ReferenceVisualPlan } from "./reference-visual-policy"
 
-type PhotoSubject = { name: string; query: string; kind: "person" | "entity" | "topic"; layout: "portrait" | "landscape" }
+type PhotoSubject = {
+  name: string
+  query: string
+  kind: "person" | "entity" | "topic"
+  layout: "portrait" | "landscape"
+  /** One line under the photo in a lineup: what it is, what it includes. */
+  caption?: string
+}
 
 function label(value: unknown): string {
   return typeof value === "string" && value.length <= 120 && !/[<>\n\r{}]|https?:|www\./iu.test(value)
@@ -26,10 +33,26 @@ export function parseAnswerPhotoHints(json: string): PhotoSubject[] {
           .match(/(?<!\p{L})(?:pro|max|plus|mini|ultra|air|fold|flip)(?!\p{L})/gu) || []).sort().join(",")
         if (variants(name) !== variants(query)) return []
       }
+      const caption = typeof record.caption === "string" && record.caption.length <= 160 && !/[<>{}]|https?:|www\./iu.test(record.caption)
+        ? record.caption.replace(/\s+/gu, " ").trim() : ""
       return [{ name, query, kind: record.kind === "person" ? "person" as const : record.kind === "topic" ? "topic" as const : "entity" as const,
-        layout: record.layout === "portrait" ? "portrait" as const : "landscape" as const }]
+        layout: record.layout === "portrait" ? "portrait" as const : "landscape" as const, ...(caption ? { caption } : {}) }]
     })
   } catch { return [] }
+}
+
+/**
+ * A head-to-head lineup: 2-4 contenders shown side by side under the opening
+ * lines («Главные соперники»), the way ChatGPT opens a comparison. Only an
+ * explicit layout:"lineup" fence is one - every other fence keeps its
+ * subject-by-subject placement.
+ */
+export function isPhotoLineup(json: string): boolean {
+  if (json.length > 8192) return false
+  try {
+    const data = JSON.parse(json)
+    return data?.version === 1 && data.layout === "lineup" && Array.isArray(data.subjects) && data.subjects.length >= 2 && data.subjects.length <= 4
+  } catch { return false }
 }
 
 /** Keep internal photo metadata out of copying, speech, downloads and sharing. */
@@ -70,6 +93,7 @@ export function groundedAnswerPhotoPlans(subjects: PhotoSubject[], question: str
     }
     seen.add(name)
     return [{ topic: subject.name, queries: [...new Set([referenceSearchTopic(subject.query), referenceSearchTopic(subject.name)])],
-      explicit: true, entity: subject.kind !== "topic" || personQuestion, person: subject.kind === "person" || personQuestion, kind: "reference" as const, layout: subject.layout }]
+      explicit: true, entity: subject.kind !== "topic" || personQuestion, person: subject.kind === "person" || personQuestion, kind: "reference" as const, layout: subject.layout,
+      ...(subject.caption ? { caption: subject.caption } : {}) }]
   })
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useMemo, useState, type ReactNode } from "react"
+import { createContext, Fragment, useContext, useMemo, useState, type ReactNode } from "react"
 import { Archive, Check, Copy, Download, ExternalLink, Eye, RefreshCw } from "lucide-react"
 import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
 import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
@@ -11,7 +11,7 @@ import { MalikAnswerChecklist } from "./MalikAnswerChecklist"
 import { parseAnswerVisual, inferTableVisual, inferListVisual, inferComparisonTable, wantsAnswerVisuals, wantsAnswerChecklist, type AnswerVisual } from "@/lib/ai/answer-visuals"
 import { parseAnswerEntity } from "@/lib/ai/answer-entities"
 import { planAnswerVisualSlots, visualSegmentLabel, type AnswerVisualSegment, type AnswerVisualSlot, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
-import { groundedAnswerPhotoPlans, parseAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
+import { groundedAnswerPhotoPlans, isPhotoLineup, parseAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 
 /**
  * Renders an assistant answer as structured text.
@@ -20,7 +20,9 @@ import { groundedAnswerPhotoPlans, parseAnswerPhotoHints } from "@/lib/ai/answer
  * model output is parsed into React elements and never injected as HTML.
  */
 
-type Props = { text: string; className?: string; allowImages?: boolean; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
+export type MalikCitation = { url: string; title?: string; domain?: string }
+
+type Props = { text: string; className?: string; allowImages?: boolean; citations?: MalikCitation[]; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
 
 function isProjectArtifactHref(href: string) {
   return /^\/api\/ai\/project\/artifacts\/[^/]+\/download(?:\?|$)/.test(href)
@@ -31,6 +33,58 @@ function isProjectArtifactHref(href: string) {
  * else through the ordinary inline rules. Code spans are left alone, so a
  * `$HOME` in backticks stays code.
  */
+/**
+ * Web sources for [n] markers, read by the chip itself so inline() keeps its
+ * simple signature everywhere it is used.
+ */
+const CitationContext = createContext<MalikCitation[] | null>(null)
+
+const KNOWN_SOURCE_NAMES: Record<string, string> = {
+  "wikipedia.org": "Wikipedia", "britannica.com": "Britannica", "github.com": "GitHub", "youtube.com": "YouTube",
+  "openai.com": "OpenAI", "anthropic.com": "Anthropic", "google.com": "Google", "gov.kz": "gov.kz", "akorda.kz": "Akorda",
+  "tengrinews.kz": "Tengrinews", "kapital.kz": "Kapital.kz", "forbes.kz": "Forbes.kz", "reuters.com": "Reuters", "bbc.com": "BBC",
+}
+
+function citationName(source: MalikCitation) {
+  let host = String(source.domain || "")
+  if (!host) { try { host = new URL(source.url).hostname } catch { host = "" } }
+  host = host.replace(/^www\./, "").toLowerCase()
+  const parts = host.split(".").filter(Boolean)
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const tail = parts.slice(index).join(".")
+    if (KNOWN_SOURCE_NAMES[tail]) return KNOWN_SOURCE_NAMES[tail]
+  }
+  const root = parts.length > 1 ? parts[parts.length - 2] : parts[0] || "Источник"
+  return root.charAt(0).toUpperCase() + root.slice(1)
+}
+
+function safeHttps(url: string) {
+  try { const parsed = new URL(url); return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : "" } catch { return "" }
+}
+
+/**
+ * «[2][3]» after a claim becomes a small source chip - «Anthropic +1» - that
+ * opens the first source, the way ChatGPT shows evidence in the text. A
+ * number with no matching source is dropped rather than printed raw.
+ */
+function CitationChip({ numbers, raw }: { numbers: number[]; raw: string }) {
+  const sources = useContext(CitationContext)
+  if (!sources) return <>{raw}</>
+  const found = numbers.map((number) => sources[number - 1]).filter((source): source is MalikCitation => Boolean(source && safeHttps(source.url)))
+  if (!found.length) return null
+  const first = found[0]
+  const label = citationName(first) + (found.length > 1 ? ` +${found.length - 1}` : "")
+  return (
+    <a href={safeHttps(first.url)} target="_blank" rel="noreferrer noopener" className="malik-md-cite" title={found.map((source) => source.title || citationName(source)).join("\n")}>
+      {label}
+    </a>
+  )
+}
+
+function citationNumbers(token: string) {
+  return [...new Set((token.match(/\d{1,2}/g) || []).map(Number).filter((number) => number > 0))]
+}
+
 function inline(text: string, keyPrefix: string): ReactNode[] {
   if (!/[$\\]/.test(text)) return inlineBase(text, keyPrefix)
   const out: ReactNode[] = []
@@ -60,7 +114,7 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
 /** `**bold**`, `*italic*`, `code`, and safe http(s)/same-origin API links. */
 function inlineBase(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = []
-  const pattern = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\(((?:https?:\/\/|\/api\/)[^\s)]+)\))/g
+  const pattern = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\(((?:https?:\/\/|\/api\/)[^\s)]+)\))|((?:\s?\[\d{1,2}(?:\s*[,;]\s*\d{1,2})*\])+(?!\())/g
 
   let last = 0
   let match: RegExpExecArray | null
@@ -71,7 +125,9 @@ function inlineBase(text: string, keyPrefix: string): ReactNode[] {
     const token = match[0]
     const key = `${keyPrefix}-i${index++}`
 
-    if (token.startsWith("`")) {
+    if (match[7]) {
+      nodes.push(<CitationChip key={key} numbers={citationNumbers(token)} raw={token} />)
+    } else if (token.startsWith("`")) {
       nodes.push(<code key={key} className="malik-md-code">{token.slice(1, -1)}</code>)
     } else if (token.startsWith("**") || token.startsWith("__")) {
       nodes.push(<strong key={key} className="malik-md-strong">{token.slice(2, -2)}</strong>)
@@ -119,7 +175,7 @@ type Block =
   | { kind: "list"; list: ListBlock }
   | { kind: "math"; tex: string }
   | { kind: "visual"; visual: AnswerVisual | null; pending: boolean }
-  | { kind: "photos"; subjects: ReturnType<typeof parseAnswerPhotoHints> }
+  | { kind: "photos"; subjects: ReturnType<typeof parseAnswerPhotoHints>; lineup: boolean }
   | { kind: "code"; language: string; filename: string; lines: string[] }
   | { kind: "table"; headers: string[]; rows: string[][] }
   | { kind: "images"; images: MalikVisualImage[] }
@@ -322,7 +378,7 @@ function parseBlocks(source: string): Block[] {
         continue
       }
       if (fence.language === "malik-photos") {
-        blocks.push({ kind: "photos", subjects: closed ? parseAnswerPhotoHints(body.join("\n")) : [] })
+        blocks.push({ kind: "photos", subjects: closed ? parseAnswerPhotoHints(body.join("\n")) : [], lineup: closed && isPhotoLineup(body.join("\n")) })
         pendingFilename = ""
         continue
       }
@@ -701,7 +757,7 @@ function isMultiSubjectVisualQuestion(question: string): boolean {
   return /(?:список|перечисли|все(?:х|ми)?\b|нескольк|сравни|сравнение|участник[ио]|спикер[ыо]|кто\s+(?:будет|был|приехал|выступал)|какие\s+(?:люди|модели|виды)|\b(?:list|all|compare|versus|speakers|participants|attendees|several|multiple|top\s+\d+)\b)/iu.test(question)
 }
 
-export function MalikMarkdown({ text, className, allowImages = true, visualContext }: Props) {
+export function MalikMarkdown({ text, className, allowImages = true, citations, visualContext }: Props) {
   const blocks = useMemo(() => parseBlocks(text), [text])
   const question = visualContext?.question || ""
   const previousQuestion = visualContext?.previousQuestion || ""
@@ -754,6 +810,9 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
     const unanchored = new Map<number, ReferenceVisualPlan[]>()
     const occupied = new Set<string>()
     photoPlans.forEach((plans, position) => {
+      // A lineup is shown together, side by side, where the model put it.
+      const block = blocks[position]
+      if (block?.kind === "photos" && block.lineup) { unanchored.set(position, plans); return }
       const remaining: ReferenceVisualPlan[] = []
       for (const plan of plans) {
         const candidates: Array<{ key: string; position: number; priority: number }> = []
@@ -818,6 +877,7 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
   }
 
   return (
+    <CitationContext.Provider value={citations?.length ? citations : null}>
     <div className={className ? `malik-md ${className}` : "malik-md"}>
       {codeFiles.length > 1 ? (
         <div className="malik-md-artifact-toolbar" role="group" aria-label="Файлы ответа">
@@ -837,6 +897,11 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
           if (hintedAnchors.consumed.has(position)) return null
           const plans = hintedAnchors.unanchored.get(position)
           if (!plans?.length) return null
+          if (block.lineup && plans.length >= 2) {
+            return <section key={key} data-malik-photo-lineup className={`malik-answer-lineup is-${Math.min(plans.length, 4)}`} aria-label="Сравниваемые варианты">
+              {plans.slice(0, 4).map((plan) => <MalikReferenceImages key={plan.topic} question="" planOverride={plan} compact lineup isLatest={visualContext?.isLatest} />)}
+            </section>
+          }
           // Even an unanchored model hint is a captioned subject row, never a bottom photo grid.
           return <section key={key} data-malik-photo-hints className="my-5 space-y-4" aria-label="Фотографии по теме ответа">
             {plans.map((plan) => <MalikReferenceImages key={plan.topic} question="" planOverride={plan} row={!singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest} />)}
@@ -933,5 +998,6 @@ export function MalikMarkdown({ text, className, allowImages = true, visualConte
         return slot ? <MalikReferenceImages key={key} question={question} planOverride={slot.plan} row={slot.row || !singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest}>{paragraph}</MalikReferenceImages> : <Fragment key={key}>{paragraph}</Fragment>
       })}
     </div>
+    </CitationContext.Provider>
   )
 }

@@ -20,7 +20,7 @@ function safeSourceUrl(value?: string): string {
   }
 }
 
-function ReferenceCard({ image, portrait, label, onOpen, onFailure }: { image: MalikVisualImage; portrait: boolean; label?: string; onOpen: () => void; onFailure?: (url: string) => void }) {
+function ReferenceCard({ image, portrait, label, caption, contain = false, onOpen, onFailure }: { image: MalikVisualImage; portrait: boolean; label?: string; caption?: string; contain?: boolean; onOpen: () => void; onFailure?: (url: string) => void }) {
   const [failed, setFailed] = useState(false)
   const source = safeSourceUrl(image.sourceUrl) || image.url
   return (
@@ -37,13 +37,14 @@ function ReferenceCard({ image, portrait, label, onOpen, onFailure }: { image: M
             loading="lazy"
             decoding="async"
             referrerPolicy="no-referrer"
-            className={"h-full w-full transition-transform duration-300 hover:scale-[1.03] " + (portrait ? "object-contain" : "object-cover")}
+            className={"h-full w-full transition-transform duration-300 hover:scale-[1.03] " + (portrait || contain ? "object-contain" : "object-cover")}
             onError={() => { setFailed(true); onFailure?.(image.url) }}
           />
         )}
       </button>
       <figcaption className="min-w-0 border-t border-white/10 px-2.5 py-2">
         <span className="block text-sm font-semibold leading-5 text-zinc-100" title={label || image.alt}>{label || image.alt || "Изображение"}</span>
+        {caption ? <span className="mt-0.5 block text-xs leading-4 text-zinc-300" data-malik-photo-caption>{caption}</span> : null}
         <a href={source} target="_blank" rel="noopener noreferrer" className="mt-1 flex min-w-0 items-center gap-1 text-xs text-zinc-400 hover:text-white" aria-label={"Источник изображения: " + (image.credit || image.alt)}>
           <span className="truncate">{[image.credit, image.license].filter(Boolean).join(" · ") || "Источник фото"}</span>
           <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
@@ -92,7 +93,7 @@ export function wantsReferenceImages(question: string): boolean {
 }
 
 /** Direct browser catalogue requests: no image proxy, no generation credits. */
-export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, compact = false, hero = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; compact?: boolean; hero?: boolean; children?: ReactNode }) {
+export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, compact = false, hero = false, lineup = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; compact?: boolean; hero?: boolean; lineup?: boolean; children?: ReactNode }) {
   const candidate = useMemo(() => planOverride || planReferenceVisuals(question, previousQuestion, hasAttachment), [planOverride, question, previousQuestion, hasAttachment])
   // The answer grows while streaming. Keep subscriptions stable for identical queries.
   const serializedPlan = candidate ? JSON.stringify(candidate) : ""
@@ -145,9 +146,11 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
       </MalikReferenceImages>)}
     </section>
   </div>
-  if (compact) return <div ref={container} className="min-w-0" hidden={images !== null && !images.length} data-malik-reference-topic={plan.topic}>
-    {images?.[0] ? <ReferenceCard key={images[0].url} image={images[0]} portrait={plan.layout === "portrait"} label={plan.topic} onOpen={() => setSelected(images[0])} onFailure={failed} />
-      : <div className="flex aspect-[3/4] flex-col justify-center rounded-2xl border border-white/15 px-3 text-center"><span className="text-sm font-medium text-white">{plan.topic}</span>{status}</div>}
+  // A comparison lineup keeps every contender in place: with no photo the
+  // card still names it and says what it is, so the row never loses a member.
+  if (compact) return <div ref={container} className="min-w-0" hidden={!lineup && images !== null && !images.length} data-malik-reference-topic={plan.topic}>
+    {images?.[0] ? <ReferenceCard key={images[0].url} image={images[0]} portrait={!lineup && plan.layout === "portrait"} contain={lineup} label={plan.topic} caption={plan.caption} onOpen={() => setSelected(images[0])} onFailure={failed} />
+      : <div className={"flex flex-col justify-center rounded-2xl border border-white/15 px-3 text-center " + (lineup ? "aspect-[4/3]" : "aspect-[3/4]")}><span className="text-sm font-medium text-white">{plan.topic}</span>{lineup && plan.caption ? <span className="mt-1 text-xs leading-4 text-zinc-300">{plan.caption}</span> : null}{status}</div>}
     {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}
   </div>
   // One concrete subject deserves a generous, readable photograph and its own caption.

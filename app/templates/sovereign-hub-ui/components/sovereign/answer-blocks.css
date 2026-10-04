@@ -58,3 +58,26 @@
 }
 @media (max-width: 340px) { .malik-answer-comparison__columns { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .malik-answer-checklist__progress > span, .malik-answer-checklist__check { transition: none; } .malik-answer-visual-enter, .malik-answer-photo-row__image, .malik-answer-photo-hero__figure { animation: none; } }
+
+/* Inline evidence: «[2][3]» after a claim becomes «Anthropic +1». */
+.malik-md a.malik-md-cite, a.malik-md-cite { display: inline-flex; align-items: center; max-width: 16ch; height: 20px; margin: 0 1px 0 5px; padding: 0 8px; overflow: hidden; border-radius: 99px; background: #262626; color: #d4d4d4; font-size: 12px; font-weight: 550; line-height: 20px; white-space: nowrap; text-overflow: ellipsis; text-decoration: none; vertical-align: 1px; transition: background .15s, color .15s; }
+.malik-md a.malik-md-cite:hover, a.malik-md-cite:hover { background: #404040; color: #fff; }
+.malik-md a.malik-md-cite:focus-visible, a.malik-md-cite:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* Side-by-side contenders at the top of a comparison. */
+.malik-answer-lineup { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: 100%; max-width: 760px; margin: 20px 0 24px; }
+.malik-answer-lineup.is-2 { max-width: 620px; }
+/* Cards in one row share one height, whatever their captions. */
+.malik-answer-lineup > div:not([hidden]) { display: flex; }
+.malik-answer-lineup > div > figure, .malik-answer-lineup > div > div { flex: 1; }
+.malik-answer-lineup figure { display: flex; flex-direction: column; }
+.malik-answer-lineup figcaption { display: flex; flex: 1; flex-direction: column; }
+.malik-answer-lineup figcaption > a { margin-top: auto; padding-top: 4px; }
+.malik-answer-lineup.is-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.malik-answer-lineup.is-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 640px) {
+  .malik-answer-lineup { gap: 8px; }
+  .malik-answer-lineup.is-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .malik-answer-lineup.is-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .malik-answer-lineup figcaption { padding: 6px 8px; }
+}

@@ -39,6 +39,10 @@ export type ResponseSignal =
   | "correction"
   | "expert"
   | "local"
+  // The shape of the answer, decided from the question: a portrait of one
+  // subject, or two to four contenders measured against each other.
+  | "overview"
+  | "headtohead"
 
 export type MalikResponseFeature = {
   id: string
@@ -186,7 +190,8 @@ export const MALIK_RESPONSE_FEATURES: readonly MalikResponseFeature[] = [
 export const MALIK_RESPONSE_CORE_PROMPT = [
   MALIK_ANSWER_VISUAL_CONTRACT,
   "Start with the result. Never begin with 'Sure', 'Of course', 'Конечно' or a restatement of the question.",
-  "A simple question gets 2-4 sentences. A complex request gets a structured, complete answer.",
+  "A simple factual lookup or a definition gets 2-4 sentences. A question about a person, place, company, product, event or era is an overview, not a lookup, and gets the depth a strong encyclopedia gives it. A comparison of named options gets a real head-to-head. A complex request gets a structured, complete answer.",
+  "Read the person's intent through typos, missing letters, transliteration (privet → привет) and slang; answer what they meant without remarking on the spelling.",
   "Use short paragraphs, bullets for parallel items, numbered steps for sequence and Markdown tables for repeated comparisons.",
   "For practical device, website and application UI instructions, use 1. 2. 3. numbered actionable steps. Bold the exact visible menu/button label once per step when known so the interface can build a highlighted arrow guide. Never guess labels, screenshot positions or an unavailable screen; mention version differences where relevant.",
   "Bold only decisive words or values. Do not over-format.",
@@ -222,18 +227,32 @@ export function analyzeResponseRequest(promptValue: string, usedWeb = false): Ma
 
   const signals = new Set<ResponseSignal>(["signature"])
   const isExplicitlyShort = matches(lower, /\b(short|brief|concise)\b|кратко|коротко|в двух словах|қысқа/u)
-  const isExplicitlyDeep = matches(lower, /подробн|детальн|глубок|полный разбор|пошаг|in depth|detailed|толық/u)
+  const isExplicitlyDeep = matches(lower, /подробн|детальн|глубок|полный разбор|пошаг|in depth|detailed|толық|ж[её]стк\p{L}*\s+(?:уровн|разбор|сравн|анализ)|по[- ]ж[её]стк|по полной|на максимум|hardcore/u)
+  // «скажи про второго президента», «кто такой Илон Маск», «tell me about
+  // Kazakhstan». Not «что такое рендер» - a definition stays a definition -
+  // and not «расскажи о себе», which is about Malik AI.
+  const asksOverview = !matches(lower, /(?:про|о|обо)\s+(?:себя|себе|тебя|тебе|вас|вам)(?:[\s,.!?]|$)|about (?:you|yourself)/u) && matches(lower,
+    /(?:^|[\s,.!?])(?:расскажи|скажи|напиши|поведай|опиши|дай\s+(?:инфу|информацию|справку))\s+(?:мне\s+|нам\s+|пожалуйста\s+)?(?:про|о|об|обо)\s+\p{L}|(?:^|\s)кто\s+(?:такой|такая|такие|был|была|были|является)(?:[\s,.!?]|$)|биограф|(?:^|\s)истори[яюи]\s+(?!болезн|браузер|чата|сообщен|переписк|заказ|изменен)\p{L}|(?:^|\s)обзор|tell me about|who (?:is|was|are|were)\s|overview of|history of|biography|туралы|кім\s+болған/u)
+  const comparesOptions = matches(lower, /сравн|разниц|лучше|versus|\bvs\b|compare|отлич|против|круче|сильнее/u)
+  const namesContenders = matches(lower, /\svs\.?\s|\sversus\s|\sпротив\s|сравн\p{L}*\s+.+\s(?:и|с|со|and|with)\s+\S|разниц\p{L}*\s+между|compare\s+.+\s(?:and|with|to)\s+\S|\S\s+или\s+\S|\S\s+or\s+\S/u)
+  // «как лучше: позвонить или написать» is advice, not a match between contenders.
+  const headToHead = comparesOptions && namesContenders && !matches(lower, /^(?:как|когда|где)\s+лучше|how (?:should|to|do) /u)
   const compoundCount = (prompt.match(/\?|\n|;|\bи\b|\band\b/giu) || []).length
   const complexity: ResponseComplexity = isExplicitlyShort
     ? "simple"
     : isExplicitlyDeep || prompt.length > 320 || compoundCount >= 4
       ? "complex"
-      : prompt.length < 105 && compoundCount <= 1
-        ? "simple"
-        : "standard"
+      // A short question about a whole subject is not a short question.
+      : asksOverview || headToHead
+        ? "standard"
+        : prompt.length < 105 && compoundCount <= 1
+          ? "simple"
+          : "standard"
 
   signals.add(complexity === "complex" ? "complex" : complexity === "simple" ? "simple" : "explain")
   if (usedWeb) signals.add("web")
+  if (asksOverview && !isExplicitlyShort) signals.add("overview")
+  if (headToHead && !isExplicitlyShort) { signals.add("headtohead"); signals.add("compare"); signals.add("decision") }
   if (matches(lower, /сейчас|сегодня|последн|актуальн|новост|current|latest|today|price|цена|погода|курс/u)) signals.add("current")
   if (matches(lower, /сравн|разниц|лучше|versus|\bvs\b|compare|отлич/u)) signals.add("compare")
   if (matches(lower, /код|ошибк|typescript|javascript|python|react|next\.?js|node\.?js|api|sql|css|html|function|коммит|github|сайт|приложен|бот|компонент|скрипт|репозитор|backend|frontend|component|script|build|repository/u)) { signals.add("code"); signals.add("technical") }
@@ -286,6 +305,10 @@ export function analyzeResponseRequest(promptValue: string, usedWeb = false): Ma
 
   const targetLength = complexity === "simple"
     ? "2-4 sentences unless the user explicitly asks for a list, code or steps"
+    : signals.has("headtohead")
+      ? "a full head-to-head: verdict first, the contenders side by side, measured differences, who wins where and a recommendation"
+    : signals.has("overview")
+      ? "a rich overview: a direct opening, key facts, three to five short sections and what matters now - never a single paragraph"
     : complexity === "complex"
       ? "a complete layered answer: result first, then only the sections needed to execute or decide"
       : "one to five short paragraphs, or a compact list when it scans better"
@@ -315,6 +338,30 @@ export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?
     : input.usedWeb
     ? "A live web check returned no usable evidence in this attempt. Say that you could not verify the current facts, not that no public information exists. Do not invent participant lists, citations or claims of having read a source. Give any stable supported information that still helps."
     : "No verified live-web evidence is supplied. Do not invent citations. For unstable current facts, say that a live check is required."
+  const today = input.currentDate || new Date().toISOString().slice(0, 10)
+  const shapeContract = profile.signals.includes("headtohead")
+    ? [
+        "HEAD-TO-HEAD CONTRACT (the user compares named options; answer like the best analyst would, not with a paragraph):",
+        "- First line: a short title naming the contenders. Second line: «Актуально на <date>» (in the user's language) when the facts can change - models, prices, products, rankings - using the current date.",
+        "- Then 1-2 sentences with the verdict and the decisive criterion: who is stronger for what. No warm-up.",
+        "- Right after the verdict, ONE closed ```malik-photos fence with \"layout\":\"lineup\" listing the 2-4 contenders in the order discussed, each with a one-line \"caption\" saying what it is (e.g. \"OpenAI · ChatGPT, GPT-5\"). The UI shows them side by side as cards. Use kind entity, layout landscape; kind person and layout portrait for people. Only for concrete products, companies, models, people, places or things that have a recognisable photo or logo - skip the fence for abstract options such as two strategies.",
+        "- Numbered ### sections: what each one is now; the measured differences as a Markdown table (criterion | A | B | who leads); quality by task type; speed, limits and price; ecosystem and integrations; weaknesses of each.",
+        "- When a key metric has real numbers from evidence, add ONE ```malik-visual bars chart for that metric only. Never invent benchmarks, scores, prices or release dates; if a number is not in the evidence, write that it is not confirmed instead of estimating.",
+        "- Finish with a «кто где выигрывает» table (task | winner | why) and a concrete recommendation for the user's own case. If the user mentions their own product, say what it should take from each contender.",
+        "- Cite web-supported claims inline as [n] right after the claim.",
+      ].join("\n")
+    : profile.signals.includes("overview")
+    ? [
+        "OVERVIEW CONTRACT (the user asks about a whole subject - a person, place, company, product, event or era):",
+        "- The first sentence answers directly: who or what it is and why it matters, with the exact name in bold. Resolve ordinal and role questions («второй президент», «first CEO») to the exact person before writing.",
+        "- Immediately after the opening paragraph, ONE closed ```malik-photos fence for the subject (kind person + layout portrait for people, kind entity + layout landscape for places, buildings and products).",
+        "- Then a compact two-column Markdown table of key facts you are sure of (dates, roles, location, numbers). Leave out anything you are not sure of rather than guessing.",
+        "- Then 3-5 short ### sections in the order that tells the story (e.g. early life, career, main decisions, legacy, today). Two or three sentences each, with specific names, dates and numbers.",
+        "- For a career, history or sequence of events add ONE ```malik-visual timeline with real dates only.",
+        `- For anything that can change (offices, status, prices, rankings) say how current it is: «Актуально на ${today}» or the date of the evidence. Cite web-supported claims inline as [n].`,
+        "- No padding, no generic praise, no repeated summary at the end.",
+      ].join("\n")
+    : ""
   const codeContract = profile.signals.includes("code")
     ? [
         "CODING CONTRACT:",
@@ -331,7 +378,7 @@ export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?
   return [
     "You are MALIK AI V6.5 TITAN. Never identify as an underlying provider or expose internal routing.",
     "CANONICAL MALIK IDENTITY: MALIK AI was founded, created and developed by one solo founder — Abdumalik, an elite vibe coder. Abdumalik is the sole founder/creator of MALIK AI. The company behind MALIK AI is Sovereign Hub. Never claim that a team of developers created or founded MALIK AI. If asked who created/founded MALIK AI or which company is behind it, state these facts directly.",
-    `Current date: ${input.currentDate || new Date().toISOString().slice(0, 10)}.`,
+    `Current date: ${today}.`,
     `Response language: ${profile.language}. Response complexity: ${profile.complexity}. Target length: ${profile.targetLength}.`,
     "MALIK RESPONSE CORE:",
     `- ${MALIK_RESPONSE_CORE_PROMPT}`,
@@ -339,6 +386,7 @@ export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?
     ...(planReferenceVisuals(input.prompt) || isReferenceImageRequest(input.prompt) ? [
       "VISUAL REFERENCE CONTRACT: The chat automatically retrieves sourced photos for the subjects in your answer, independently of the text model. Never say that you cannot show/insert photos or send the user to search for them instead. For a photo follow-up such as 'покажи их всех', resolve 'them' from the conversation and list the exact names of those people/products/places with concise descriptions. Use clear concrete subject headings, not generic era/category headings, and exact product model names. For how-to answers use numbered steps with exact menu names. Answer directly without asking for another photo request. Never invent image URLs, source claims, screenshot contents or highlight coordinates: retrieved image metadata is not supplied to you. Reference images are existing public media, not generated or charged jobs; the UI retrieves them independently.",
     ] : []),
+    ...(shapeContract ? [shapeContract] : []),
     ...(codeContract ? [codeContract] : []),
     ...(artifactContract ? [artifactContract] : []),
     "ACTIVE MALIK ANSWER DNA MODULES:",
