@@ -122,6 +122,33 @@
   0%, 100% { transform: rotate(-8deg); opacity: .7; }
   50% { transform: rotate(8deg); opacity: 1; }
 }
+/* Functional progress must remain visible on phones even when the legacy
+   performance guard disables decorative animation. Use the desktop motions
+   only while this request is running; no history or idle loops are added. */
+@media (max-width: 1180px) and (prefers-reduced-motion: no-preference) {
+  html body #malik-root .malik-dashboard-shell .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__heading > svg:first-child {
+    animation: malik-receipt-active-icon 1.35s linear infinite !important;
+  }
+  html body #malik-root .malik-dashboard-shell .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__title {
+    animation: malik-receipt-active-label 1.3s ease-in-out infinite !important;
+  }
+  html body #malik-root .malik-dashboard-shell .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__heading > .is-spinning {
+    animation: malik-receipt-spin .95s linear infinite !important;
+  }
+  html body #malik-root .malik-dashboard-shell .malik-execution--inline[data-state="running"] .malik-receipt.is-completed .malik-receipt__heading > svg:nth-of-type(2) {
+    animation: malik-receipt-finished-glow 2.1s ease-in-out infinite !important;
+  }
+  html body #malik-root .malik-dashboard-shell .malik-execution--inline[data-state="running"] .malik-receipt:nth-child(even).is-completed .malik-receipt__heading > svg:nth-of-type(2) {
+    animation-delay: -.7s !important;
+  }
+  html body #malik-root .malik-dashboard-shell .malik-execution--inline[data-state="running"] .malik-execution__sources-title > svg,
+  html body #malik-root .malik-dashboard-shell .malik-execution--inline[data-state="running"] .malik-execution__source-chips a > svg {
+    animation: malik-receipt-source-motion 2.4s ease-in-out infinite !important;
+  }
+  html body #malik-root .malik-dashboard-shell .malik-execution--inline[data-state="running"] .malik-execution__source-chips a:nth-child(even) > svg {
+    animation-delay: -.8s !important;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   #malik-root .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__heading > svg:first-child,
   #malik-root .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__title,

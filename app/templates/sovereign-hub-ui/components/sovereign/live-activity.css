@@ -15,6 +15,28 @@
   from { background-position: 160% 50%; }
   to { background-position: -140% 50%; }
 }
+/* The legacy phone/low-FPS performance pass stops every animation. Restore
+   only the small, transient request indicators, not decorative backgrounds.
+   Keep the desktop timings and honour the user's reduced-motion setting. */
+@media (max-width: 1180px) and (prefers-reduced-motion: no-preference) {
+  html body #malik-root .malik-dashboard-shell .malik-live-activity .malik-live-activity__label {
+    animation: malik-activity-shimmer 1s linear infinite !important;
+  }
+  html body #malik-root .malik-dashboard-shell .malik-ai-avatar.is-working {
+    animation: malikMarkBreathe 1.6s ease-in-out infinite !important;
+  }
+  html body #malik-root .malik-dashboard-shell .malik-ai-avatar.is-working::after {
+    animation: malikMarkSpin .9s linear infinite !important;
+  }
+}
+@media (max-width: 1180px) {
+  /* A legacy centered paragraph rule otherwise moves this label as receipts
+     arrive. Keep it aligned with the model and the actual tool steps. */
+  html body #malik-root .malik-dashboard-shell .malik-live-activity {
+    margin-inline: 0 !important;
+    text-align: left !important;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .malik-live-activity__label, #malik-root .malik-live-activity__label {
     animation: none; background: none; color: #fff; -webkit-text-fill-color: currentColor;
