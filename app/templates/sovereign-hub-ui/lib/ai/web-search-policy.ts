@@ -1,3 +1,4 @@
+import { asksHeadToHead, asksPurchaseAdvice, asksSubjectOverview } from "@/lib/ai/question-shape"
 export type WebSearchOptions = {
   research?: boolean
   disableResearch?: boolean
@@ -29,6 +30,10 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}): bo
 
   if (/(?:найди|найти|ищи|ищем|источники|ссылки\s+на|проведи\s+(?:глубокое\s+)?исследование|\b(?:search|sources|research)\b)/i.test(text)) return true
   if (/(?:что\s+такое|кто\s+так(?:ой|ая|ие)|\bwhat (?:is|are)\b|\bwho is\b|деген\s+не)/i.test(text)) return true
+  // A whole subject, named contenders or a purchase: ChatGPT looks these up,
+  // because roles, versions, prices and rankings change after any model's
+  // training data.
+  if (asksSubjectOverview(text) || asksHeadToHead(text) || asksPurchaseAdvice(text)) return true
 
   const changingFact = /(?:погод[ауы]|прогноз\s+погоды|курс\s+(?:валют|доллар|евро|тенге)|цен[ауы]\s+на|сколько\s+стоит|расписани[ея]|последни[ея]\s+(?:новости|версии)|свежие\s+новости|\b(?:weather|exchange rate|stock price|latest news|release date)\b)/i.test(text)
   const currentQuestion = /(?:кто|како[йеяг]|какие|когда|где|сколько|\b(?:who|what|when|where|how much)\b)/i.test(text)

@@ -33,22 +33,35 @@ function languageOf(prompt: string): "ru" | "kk" | "en" {
   return "en"
 }
 
+/**
+ * The question is about Malik AI itself - «кто тебя создал», «кто создал Malik
+ * AI» - and not about someone else's company or invention. «Кто создал Tesla?»
+ * and «что за компания Kaspi» are ordinary questions and go to the model;
+ * answering them with Malik AI's founder was the most visible way the chat
+ * ignored what was asked.
+ */
+const SELF = "(?:тебя|вас|malik(?:\\s+ai)?|малик\\p{L}*|этот\\s+(?:ии|ai|бот|чат|ассистент|сайт|сервис))"
+const MADE = "(?:создал\\p{L}*|создан\\p{L}*|основал\\p{L}*|разработал\\p{L}*|сделал\\p{L}*|придумал\\p{L}*)"
+const CREATOR_RU = new RegExp(`(?:кто|кем)\\s+(?:же\\s+)?(?:${SELF}\\s+${MADE}|${MADE}\\s+${SELF}(?![\\p{L}])|(?:ты|вы)\\s+(?:был[аи]?\\s+)?(?:создан|сделан|разработан|придуман)\\p{L}*)`, "iu")
+
 function asksCreator(prompt: string) {
-  const value = prompt.toLowerCase()
-  return /(?:кто|кем).{0,28}(?:создал|создатель|основал|основатель|разработал|сделал)/iu.test(value)
-    || /(?:создатель|основатель).{0,22}(?:malik|твой|тебя|ваш|вас)/iu.test(value)
-    || /who.{0,24}(?:created|founded|built|made|developed).{0,20}(?:you|malik)/iu.test(value)
+  const value = prompt.toLowerCase().trim()
+  // «Кто создатель?» on its own, in this chat, means Malik AI's creator.
+  if (/^(?:а\s+)?(?:кто|кем)\s+(?:твой\s+|ваш\s+)?(?:создатель|основатель|разработчик)[?.!\s]*$/iu.test(value)) return true
+  return CREATOR_RU.test(value)
+    || /(?:создатель|основатель|разработчик)\p{L}*\s+(?:malik|малик\p{L}*|этого\s+(?:ии|бота|чата|сайта))|(?:тво[йяе]|ваш[аеи]?)\s+(?:создатель|основатель|разработчик)/iu.test(value)
+    || /who.{0,24}(?:created|founded|built|made|developed)\s+(?:you|malik)(?![\p{L}])/iu.test(value)
     || /(?:who is|who's).{0,20}(?:your creator|your founder)/iu.test(value)
     || /(?:сені|malik).{0,24}(?:кім құрды|кім жасады|негізін кім қалады)/iu.test(value)
 }
 
 function asksCompany(prompt: string) {
   const value = prompt.toLowerCase()
-  return /(?:какая|что за|чья|к какой).{0,28}компан/iu.test(value)
-    || /компан.{0,28}(?:тебя|твой|malik|создала|основала|принадлеж)/iu.test(value)
-    || /(?:what|which).{0,20}company.{0,24}(?:you|malik|behind|own)/iu.test(value)
+  return /(?:какая|что за|чья|к какой).{0,28}компан\p{L}*\s+(?:тебя|вас|malik|малик\p{L}*|за\s+(?:тобой|вами|malik|малик\p{L}*))(?![\p{L}])/iu.test(value)
+    || /(?:тво[яей]|ваш[аейу]?)\s+компани|компани\p{L}*\s+(?:malik|малик\p{L}*)(?![\p{L}])|чья\s+(?:ты|вы)(?![\p{L}])|(?:ты|вы)\s+(?:от|из)\s+какой\s+компании/iu.test(value)
+    || /(?:what|which).{0,20}company.{0,24}(?:behind\s+)?(?:you|your|malik)(?![\p{L}])/iu.test(value)
     || /who owns.{0,20}malik/iu.test(value)
-    || /(?:қай|қандай).{0,20}компания/iu.test(value)
+    || /(?:сен|сені|сенің|malik).{0,24}(?:қай|қандай).{0,20}компания|(?:қай|қандай).{0,20}компания.{0,24}(?:сені|сенің|malik)/iu.test(value)
 }
 
 function asksAssistantIdentity(prompt: string) {

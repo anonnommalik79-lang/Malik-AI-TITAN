@@ -4,6 +4,7 @@ export type ResponseLanguage = "ru" | "kk" | "en" | "auto"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 import { planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
+import { asksHeadToHead, asksSubjectOverview } from "@/lib/ai/question-shape"
 
 export type ResponseComplexity = "simple" | "standard" | "complex"
 
@@ -190,6 +191,7 @@ export const MALIK_RESPONSE_FEATURES: readonly MalikResponseFeature[] = [
 export const MALIK_RESPONSE_CORE_PROMPT = [
   MALIK_ANSWER_VISUAL_CONTRACT,
   "Start with the result. Never begin with 'Sure', 'Of course', 'Конечно' or a restatement of the question.",
+  "Answer the latest message exactly: its subject, its scope and its language. Never switch to a different subject, never re-answer earlier turns and never add neighbouring topics nobody asked about. A follow-up («а третий?», «почему?», «а он?») continues the subject of the conversation.",
   "A simple factual lookup or a definition gets 2-4 sentences. A question about a person, place, company, product, event or era is an overview, not a lookup, and gets the depth a strong encyclopedia gives it. A comparison of named options gets a real head-to-head. A complex request gets a structured, complete answer.",
   "Read the person's intent through typos, missing letters, transliteration (privet → привет) and slang; answer what they meant without remarking on the spelling.",
   "Use short paragraphs, bullets for parallel items, numbered steps for sequence and Markdown tables for repeated comparisons.",
@@ -228,15 +230,8 @@ export function analyzeResponseRequest(promptValue: string, usedWeb = false): Ma
   const signals = new Set<ResponseSignal>(["signature"])
   const isExplicitlyShort = matches(lower, /\b(short|brief|concise)\b|кратко|коротко|в двух словах|қысқа/u)
   const isExplicitlyDeep = matches(lower, /подробн|детальн|глубок|полный разбор|пошаг|in depth|detailed|толық|ж[её]стк\p{L}*\s+(?:уровн|разбор|сравн|анализ)|по[- ]ж[её]стк|по полной|на максимум|hardcore/u)
-  // «скажи про второго президента», «кто такой Илон Маск», «tell me about
-  // Kazakhstan». Not «что такое рендер» - a definition stays a definition -
-  // and not «расскажи о себе», which is about Malik AI.
-  const asksOverview = !matches(lower, /(?:про|о|обо)\s+(?:себя|себе|тебя|тебе|вас|вам)(?:[\s,.!?]|$)|about (?:you|yourself)/u) && matches(lower,
-    /(?:^|[\s,.!?])(?:расскажи|скажи|напиши|поведай|опиши|дай\s+(?:инфу|информацию|справку))\s+(?:мне\s+|нам\s+|пожалуйста\s+)?(?:про|о|об|обо)\s+\p{L}|(?:^|\s)кто\s+(?:такой|такая|такие|был|была|были|является)(?:[\s,.!?]|$)|биограф|(?:^|\s)истори[яюи]\s+(?!болезн|браузер|чата|сообщен|переписк|заказ|изменен)\p{L}|(?:^|\s)обзор|tell me about|who (?:is|was|are|were)\s|overview of|history of|biography|туралы|кім\s+болған/u)
-  const comparesOptions = matches(lower, /сравн|разниц|лучше|versus|\bvs\b|compare|отлич|против|круче|сильнее/u)
-  const namesContenders = matches(lower, /\svs\.?\s|\sversus\s|\sпротив\s|сравн\p{L}*\s+.+\s(?:и|с|со|and|with)\s+\S|разниц\p{L}*\s+между|compare\s+.+\s(?:and|with|to)\s+\S|\S\s+или\s+\S|\S\s+or\s+\S/u)
-  // «как лучше: позвонить или написать» is advice, not a match between contenders.
-  const headToHead = comparesOptions && namesContenders && !matches(lower, /^(?:как|когда|где)\s+лучше|how (?:should|to|do) /u)
+  const asksOverview = asksSubjectOverview(prompt)
+  const headToHead = asksHeadToHead(prompt)
   const compoundCount = (prompt.match(/\?|\n|;|\bи\b|\band\b/giu) || []).length
   const complexity: ResponseComplexity = isExplicitlyShort
     ? "simple"
@@ -255,7 +250,8 @@ export function analyzeResponseRequest(promptValue: string, usedWeb = false): Ma
   if (headToHead && !isExplicitlyShort) { signals.add("headtohead"); signals.add("compare"); signals.add("decision") }
   if (matches(lower, /сейчас|сегодня|последн|актуальн|новост|current|latest|today|price|цена|погода|курс/u)) signals.add("current")
   if (matches(lower, /сравн|разниц|лучше|versus|\bvs\b|compare|отлич/u)) signals.add("compare")
-  if (matches(lower, /код|ошибк|typescript|javascript|python|react|next\.?js|node\.?js|api|sql|css|html|function|коммит|github|сайт|приложен|бот|компонент|скрипт|репозитор|backend|frontend|component|script|build|repository/u)) { signals.add("code"); signals.add("technical") }
+  // Whole words only: «разработал» is not «бот», «capital» is not «api».
+  if (matches(lower, /(?<![\p{L}\p{N}_])(?:код(?:а|у|ом|е|ы|ов|ами|ах|ик|инг)?|ошибк\p{L}*\s+(?:в\s+)?(?:код|консол|сборк|компил|typescript|javascript|python|react)\p{L}*|typescript|javascript|python|react(?:js)?|next\.?js|node\.?js|api|sql|css|html|functions?|коммит\p{L}*|github|сайт\p{L}*|приложени[ея]\s+(?:на|для)\s+\p{L}+|веб[- ]?приложени\p{L}*|бот(?:а|у|ом|е|ы|ов|ами|ах)?|компонент\p{L}*|скрипт\p{L}*|репозитор\p{L}*|backend|frontend|components?|scripts?|build|repository)(?![\p{L}\p{N}_])/u)) { signals.add("code"); signals.add("technical") }
   if (matches(lower, /как сделать|пошаг|инструкц|настрой|установ|how to|steps|guide/u)) signals.add("procedure")
   if (matches(lower, /выбрать|стоит ли|рекоменду|лучше|решени|choose|recommend|should i/u)) signals.add("decision")
   if (matches(lower, /не работает|ошибк|сломал|проблем|почему|исправ|debug|fix|issue|failed/u)) signals.add("troubleshoot")
@@ -329,8 +325,17 @@ export function selectedResponseFeatures(profile: MalikResponseProfile, limit = 
     .slice(0, Math.max(1, limit))
 }
 
-export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?: boolean; hasWebEvidence?: boolean; currentDate?: string }) {
-  const profile = analyzeResponseRequest(input.prompt, Boolean(input.usedWeb))
+export function buildMalikResponseSystemPrompt(input: {
+  prompt: string
+  usedWeb?: boolean
+  hasWebEvidence?: boolean
+  currentDate?: string
+  /** A follow-up read together with the question it continues (conversation-focus). */
+  shapePrompt?: string
+  /** CONVERSATION FOCUS block for a follow-up. */
+  focusInstruction?: string
+}) {
+  const profile = analyzeResponseRequest(input.shapePrompt || input.prompt, Boolean(input.usedWeb))
   const modules = selectedResponseFeatures(profile)
   const artifactContract = buildChatArtifactSkillPrompt(input.prompt)
   const webContract = input.usedWeb && input.hasWebEvidence !== false
@@ -353,7 +358,7 @@ export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?
     : profile.signals.includes("overview")
     ? [
         "OVERVIEW CONTRACT (the user asks about a whole subject - a person, place, company, product, event or era):",
-        "- The first sentence answers directly: who or what it is and why it matters, with the exact name in bold. Resolve ordinal and role questions («второй президент», «first CEO») to the exact person before writing.",
+        "- The first sentence answers directly: who or what it is and why it matters, with the exact name in bold. Resolve ordinal and role questions («второй президент», «first CEO») to the exact person before writing. A role with no country, asked in Russian or Kazakh, means Kazakhstan unless the conversation says otherwise: say so in a few words and name the other likely reading in one line.",
         "- Immediately after the opening paragraph, ONE closed ```malik-photos fence for the subject (kind person + layout portrait for people, kind entity + layout landscape for places, buildings and products).",
         "- Then a compact two-column Markdown table of key facts you are sure of (dates, roles, location, numbers). Leave out anything you are not sure of rather than guessing.",
         "- Then 3-5 short ### sections in the order that tells the story (e.g. early life, career, main decisions, legacy, today). Two or three sentences each, with specific names, dates and numbers.",
@@ -382,8 +387,10 @@ export function buildMalikResponseSystemPrompt(input: { prompt: string; usedWeb?
     `Response language: ${profile.language}. Response complexity: ${profile.complexity}. Target length: ${profile.targetLength}.`,
     "MALIK RESPONSE CORE:",
     `- ${MALIK_RESPONSE_CORE_PROMPT}`,
+    ...(input.focusInstruction ? [input.focusInstruction] : []),
     webContract,
-    ...(planReferenceVisuals(input.prompt) || isReferenceImageRequest(input.prompt) ? [
+    // Photos belong to answers about subjects, not to «как дела» or «спасибо».
+    ...(isReferenceImageRequest(input.prompt) || (!profile.signals.includes("conversation") && planReferenceVisuals(input.shapePrompt || input.prompt)) ? [
       "VISUAL REFERENCE CONTRACT: The chat automatically retrieves sourced photos for the subjects in your answer, independently of the text model. Never say that you cannot show/insert photos or send the user to search for them instead. For a photo follow-up such as 'покажи их всех', resolve 'them' from the conversation and list the exact names of those people/products/places with concise descriptions. Use clear concrete subject headings, not generic era/category headings, and exact product model names. For how-to answers use numbered steps with exact menu names. Answer directly without asking for another photo request. Never invent image URLs, source claims, screenshot contents or highlight coordinates: retrieved image metadata is not supplied to you. Reference images are existing public media, not generated or charged jobs; the UI retrieves them independently.",
     ] : []),
     ...(shapeContract ? [shapeContract] : []),

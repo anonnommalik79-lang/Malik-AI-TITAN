@@ -359,5 +359,17 @@ await check("short comparisons and how-to questions use responsive chat lanes", 
   }
 })
 
+await check("a fast comparison stays responsive but is not told to be brief", async () => {
+  const log = []
+  await engine.runMalikMax({ prompt: "Сравни iPhone 16 Pro Max и Samsung S24 Ultra", systemPrompt: "Answer directly.", maxTokens: 4000 }, { lanes: [lane("fast-shape")], fetcher: makeFetcher(log) })
+  const system = JSON.stringify(log[0].body.messages?.[0] ?? log[0].body.system ?? "")
+  assert.match(system, /FAST CHAT MODE/)
+  assert.match(system, /HEAD-TO-HEAD contract above in full/)
+  assert.doesNotMatch(system, /Keep the final answer concise/)
+  const small = []
+  await engine.runMalikMax({ prompt: "привет, как дела?", systemPrompt: "Answer directly.", maxTokens: 4000 }, { lanes: [lane("fast-small")], fetcher: makeFetcher(small) })
+  assert.match(JSON.stringify(small[0].body.messages?.[0] ?? small[0].body.system ?? ""), /Keep the final answer concise/)
+})
+
 console.log(`\n${count - failures}/${count} checks passed`)
 if (failures) process.exit(1)

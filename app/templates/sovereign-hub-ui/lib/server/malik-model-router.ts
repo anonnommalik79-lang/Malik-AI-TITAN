@@ -1,3 +1,4 @@
+import { isCodeRequest, isFastChatRequest, wantsFullShape } from "@/lib/ai/request-kind"
 import {
   canUseMalikModel,
   getMalikModel,
@@ -100,22 +101,9 @@ function env(name: string) {
   return typeof value === "string" ? value.trim() : ""
 }
 
-export function isCodeRequest(prompt: string) {
-  const value = String(prompt || "")
-  return /(код|code|html|css|javascript|typescript|python|react|next\.?js|node\.?js|sql|api|index\.html|component|компонент|функц|скрипт|сайт|приложен|программ|алгоритм|бот|презентац|слайд|presentation|slides?|csv|openapi|mermaid|debug|баг|ошибк|fix|build|repository|репозитор|class\s|function\s|const\s|let\s|import\s|```)/i.test(value)
-}
-
-
-export function isFastChatRequest(prompt: string, attachments?: MalikAttachment[]) {
-  const value = String(prompt || "").trim()
-  if (!value || attachments?.length || isCodeRequest(value)) return false
-  if (value.length > 320 || value.split(/\r?\n/).length > 4) return false
-
-  // Short everyday questions should not pay the latency/cost of deep reasoning.
-  // Explicit analysis/research/planning/math-heavy instructions keep the full path.
-  if (/(подробн|глубок|проанализ|анализир|исслед|стратег|архитект|докаж|формул|research|deep dive|analy[sz]e|architecture|debug|benchmark)/i.test(value)) return false
-  return true
-}
+// Pure request classification lives in lib/ai/request-kind so it can be
+// tested without the server runtime; the router keeps exporting it.
+export { isCodeRequest, isFastChatRequest } from "@/lib/ai/request-kind"
 
 function imageUrl(attachment: MalikAttachment) {
   if (attachment.url?.startsWith("http") || attachment.url?.startsWith("data:image/")) return attachment.url
@@ -149,6 +137,8 @@ export function buildMessages(input: {
   attachments?: MalikAttachment[]
   publicModelLabel?: string
   fastMode?: boolean
+  /** The user's request before retrieved excerpts were appended. */
+  taskPrompt?: string
 }): ProviderMessage[] {
   const normalizedHistory = (input.history || [])
     .filter((message) => (message?.role === "user" || message?.role === "assistant") && typeof message.content === "string")
@@ -190,12 +180,18 @@ export function buildMessages(input: {
   const content: ProviderMessage["content"] = images.length
     ? [{ type: "text", text: userPrompt }, ...images.map((url) => ({ type: "image_url" as const, image_url: { url } }))]
     : userPrompt
+  // Fast lanes answer quickly; they do not decide how much the answer says. A
+  // short question about a whole subject or between named options («скажи
+  // про второго президента», «сравни чатгпт и клод») keeps its full shape.
+  const fullShape = input.fastMode && wantsFullShape(input.taskPrompt || input.prompt)
   const fastInstruction = input.fastMode
     ? [
         "FAST CHAT MODE:",
-        "This is a short everyday request. Answer immediately and directly.",
+        "Answer immediately and directly.",
         "Do not spend response budget on planning, hidden analysis, or long preambles.",
-        "Keep the final answer concise unless the user explicitly asks for detail.",
+        fullShape
+          ? "This short question still asks for a complete answer: follow the OVERVIEW or HEAD-TO-HEAD contract above in full - sections, tables and photos included."
+          : "Keep the final answer concise unless the user explicitly asks for detail.",
       ].join("\n")
     : ""
   const basePrompt = [input.systemPrompt, fastInstruction].filter(Boolean).join("\n\n")

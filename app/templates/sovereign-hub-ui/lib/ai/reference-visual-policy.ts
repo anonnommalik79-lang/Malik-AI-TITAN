@@ -1,4 +1,5 @@
 import { isExplicitImageEditRequest, isExplicitImageGenerationRequest, isReferenceImageRequest, isReferencePhotoFollowUp } from "./image-intent"
+import { isContextDependent } from "./conversation-focus"
 import { APPLE_IPHONE_PHOTOS, namedIPhoneSubjects, normalizeIPhoneSubject } from "../media/official-product-photos"
 import { canonicalPortraitTopic } from "../media/verified-portraits"
 
@@ -120,7 +121,7 @@ export function referenceSearchTopic(topic: string): string {
 }
 
 const TEXT_TASK = /^(?:напиши|перепиши|исправь|улучши|переведи|сократи|сочини|реши|вычисли|посчитай|write|rewrite|translate|calculate|solve|аудар|есепте)(?![\p{L}\p{N}_])/iu
-const NON_VISUAL = /^(?:привет|салам|сәлем|спасибо|рахмет|ок|okay|hi|hello|ты\s+кто|кто\s+ты|да|нет|yes|no)[!?\s.]*$/iu
+const NON_VISUAL = /^(?:привет|салам|сәлем|спасибо|рахмет|ок|окей|okay|ok|hi|hello|ты\s+кто|кто\s+ты|да|нет|yes|no|как\s+(?:дела|ты|сам|поживаешь)|қалайсың|how\s+are\s+you|понятно|ясно|хорошо|отлично|круто|класс|супер)[!?\s.)]*$/iu
 const STRUCTURED_TASK = /(?:чек[ -]?лист|checklist|таблиц|spreadsheet|\btable\b|дв[еу]\s+колонк|two\s+columns|\b(?:python|javascript|typescript|sql)\b|\bкод\b|\bcode\b)/iu
 
 /** A model may name concrete objects in comparisons, but must respect text-only requests. */
@@ -158,6 +159,10 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
     if (/^(?:покажи|show|объясни\s+как|почему\s+не\s+работает)/iu.test(text) && !/(?:iphone|айфон|samsung|самсунг|телефон|гор[а-я]*|тау|озер|город|страна|здани|животн|растени|mountain|lake|city|building)/iu.test(text)) return null
   }
   const topic = referenceTopic(subject)
+  // «а третий?», «почему?», «2+2?», «а ты?» name no subject to photograph; the
+  // answer's own photo hints show the subject it resolves them to.
+  if (!followUp && isContextDependent(text)) return null
+  if (!/\p{L}{3,}/u.test(topic)) return null
   if (topic.length < 3 || /^(?:фото|картинки|изображения|photos?|images?|pictures?|код|code|формул[\p{L}]*|решени[\p{L}]*|текст|text|как|how|доказательств[\p{L}]*|логи|ошибк[\p{L}]*|расч[её]т[\p{L}]*)(?=\s|$)/iu.test(topic)) return null
   const translated = referenceSearchTopic(topic)
   const search = translated.replace(/(?<!\p{L})(?:есть|бывают|находятся|расположены|в|на|из|про|о|об|of|in|the|are)(?!\p{L})/giu, " ").replace(/\s+/gu, " ").trim()

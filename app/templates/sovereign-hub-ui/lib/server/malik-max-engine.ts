@@ -670,6 +670,8 @@ type CallInput = {
   reasoningEffort?: "low" | "medium" | "high"
   codeMode: boolean
   fastMode: boolean
+  /** The user's request without retrieved excerpts: decides the answer's shape. */
+  taskPrompt?: string
   /** The model name the answer may give when asked which model it is. */
   publicLabel?: string
 }
@@ -700,6 +702,7 @@ function laneRequest(lane: MaxLane, call: CallInput): { url: string; headers: Re
     attachments: call.attachments,
     publicModelLabel: call.publicLabel || "MalikLLM MAX",
     fastMode: call.fastMode,
+    taskPrompt: call.taskPrompt,
   })
   const temperature = typeof call.temperature === "number" ? call.temperature : 0.4
 
@@ -1161,6 +1164,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     reasoningEffort: input.reasoningEffort,
     codeMode,
     fastMode,
+    taskPrompt,
     publicLabel: input.publicLabel,
   }
 
