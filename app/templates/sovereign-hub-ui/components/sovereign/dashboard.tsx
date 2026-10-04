@@ -684,7 +684,8 @@ interface Chat {
   projectInstructions?: string
   projectColor?: MalikProjectColor
   kind?: "chat" | "project"
-}
+  workspaceMode?: WorkspaceMode
+
 
 
 /**
@@ -1607,6 +1608,7 @@ function reviveChat(chat: StoredChat): Chat {
     projectInstructions: typeof chat?.projectInstructions === "string" ? chat.projectInstructions.slice(0, 3000) : undefined,
     projectColor: ["gold", "blue", "violet", "emerald", "rose"].includes(String(chat?.projectColor)) ? chat.projectColor : undefined,
     kind: chat?.kind === "project" ? "project" : chat?.kind === "chat" ? "chat" : undefined,
+    workspaceMode: resolveWorkspaceMode(chat?.workspaceMode),
   }
 }
 
@@ -5093,8 +5095,14 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState<string>(initialView)
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("chat")
+  const workspaceModeRef = useRef<WorkspaceMode>("chat")
+  const modeActiveChatIdsRef = useRef<Record<WorkspaceMode, string | null>>({ chat: null, work: null })
   useEffect(() => {
-    try { setWorkspaceMode(resolveWorkspaceMode(window.localStorage.getItem(WORKSPACE_MODE_KEY))) } catch {}
+    try {
+      const restored = resolveWorkspaceMode(window.localStorage.getItem(WORKSPACE_MODE_KEY))
+      workspaceModeRef.current = restored
+      setWorkspaceMode(restored)
+    } catch {}
   }, [])
   const [previousView, setPreviousView] = useState("home")
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false)
@@ -5503,7 +5511,9 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
       status: "draft",
       techStack: ["React", "Tailwind"],
       kind: "chat",
+      workspaceMode,
     }
+    modeActiveChatIdsRef.current[workspaceMode] = newChat.id
     setChats(prev => [newChat, ...prev])
     setActiveChatId(newChat.id)
     setActiveProjectWorkspaceId(null)
@@ -5511,7 +5521,7 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     setGeneratedCode("")
     setCurrentVersion(1)
     setTotalVersions(1)
-  }, [selectedModelId])
+  }, [selectedModelId, workspaceMode])
 
   const handleCreateProject = useCallback((draft: MalikProjectDraft) => {
     const newProject: Chat = {
@@ -5526,7 +5536,9 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
       projectInstructions: draft.instructions,
       projectColor: draft.color,
       kind: "project",
+      workspaceMode,
     }
+    modeActiveChatIdsRef.current[workspaceMode] = newProject.id
     setChats((previous) => [newProject, ...previous])
     setActiveChatId(newProject.id)
     setActiveProjectWorkspaceId(newProject.id)
@@ -5537,7 +5549,7 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     setSelectedModelId(draft.selectedModelId)
     saveMalikModelSelection(draft.selectedModelId)
     safeOpenView("projects", "manual")
-  }, [])
+  }, [workspaceMode, safeOpenView])
 
   const launchTemplate = useCallback((template: MalikTemplate) => {
     const targetView = targetViewForTemplate(template)
@@ -5554,7 +5566,8 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
 
   const handleSelectChat = useCallback((chatId: string) => {
     const chat = chats.find(c => c.id === chatId)
-    if (chat) {
+    if (chat && resolveWorkspaceMode(chat.workspaceMode) === workspaceMode) {
+      modeActiveChatIdsRef.current[workspaceMode] = chatId
       const chatModel = chat.selectedModelId && canUseMalikModel(chat.selectedModelId, currentPlan)
         ? chat.selectedModelId
         : DEFAULT_MALIK_MODEL_ID
@@ -5574,11 +5587,12 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
       setIsGeneratingTerminal(false)
       setStreamingText("")
     }
-  }, [chats, currentPlan])
+  }, [chats, currentPlan, workspaceMode])
 
   const handleSelectProject = useCallback((projectId: string) => {
     const project = chats.find((chat) => chat.id === projectId)
-    if (!project) return
+    if (!project || resolveWorkspaceMode(project.workspaceMode) !== workspaceMode) return
+    modeActiveChatIdsRef.current[workspaceMode] = projectId
 
     const projectModel = project.selectedModelId && canUseMalikModel(project.selectedModelId, currentPlan)
       ? project.selectedModelId
@@ -5593,7 +5607,39 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     setIsGeneratingTerminal(false)
     setStreamingText("")
     safeOpenView("projects", "history")
-  }, [chats, currentPlan])
+  }, [chats, currentPlan, workspaceMode])
+
+  const handleWorkspaceModeChange = useCallback((nextMode: WorkspaceMode) => {
+    safeOpenView("home", "topbar")
+    if (nextMode === workspaceMode) return
+    modeActiveChatIdsRef.current[workspaceMode] = activeChatId
+    workspaceModeRef.current = nextMode
+    activeStreamAbortRef.current?.abort("workspace-switch")
+    sendGateRef.current = { signature: "", at: 0 }
+    const savedId = modeActiveChatIdsRef.current[nextMode]
+    const nextChat = chatsRef.current.find((chat) => chat.id === savedId && resolveWorkspaceMode(chat.workspaceMode) === nextMode)
+      || chatsRef.current.find((chat) => resolveWorkspaceMode(chat.workspaceMode) === nextMode && chat.kind !== "project")
+    modeActiveChatIdsRef.current[nextMode] = nextChat?.id || null
+    setWorkspaceMode(nextMode)
+    try { window.localStorage.setItem(WORKSPACE_MODE_KEY, nextMode) } catch {}
+    setActiveChatId(nextChat?.id || null)
+    setActiveProjectWorkspaceId(null)
+    setMessages(nextChat?.messages || [])
+    const lastArtifact = [...(nextChat?.messages || [])].reverse().find((message) => message.role === "assistant" && message.generatedCode)
+    setGeneratedCode(lastArtifact?.generatedCode || "")
+    setMobilePreviewOpen(false)
+    setIsGeneratingTerminal(false)
+    setStreamingText("")
+    setErrorNotification(null)
+    setMobileMenuOpen(false)
+    if (nextChat?.selectedModelId && canUseMalikModel(nextChat.selectedModelId, currentPlan)) {
+      setSelectedModelId(nextChat.selectedModelId)
+      saveMalikModelSelection(nextChat.selectedModelId)
+    } else {
+      setSelectedModelId(DEFAULT_MALIK_MODEL_ID)
+      saveMalikModelSelection(DEFAULT_MALIK_MODEL_ID)
+    }
+  }, [workspaceMode, activeChatId, safeOpenView, currentPlan])
 
   const handleCloseProject = useCallback(() => {
     setActiveProjectWorkspaceId(null)
@@ -5606,11 +5652,12 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
     setChats(prev => prev.filter(c => c.id !== chatId))
     if (activeProjectWorkspaceId === chatId) setActiveProjectWorkspaceId(null)
     if (activeChatId === chatId) {
+      modeActiveChatIdsRef.current[workspaceMode] = null
       setActiveChatId(null)
       setMessages([])
       setGeneratedCode("")
     }
-  }, [activeChatId, activeProjectWorkspaceId])
+  }, [activeChatId, activeProjectWorkspaceId, workspaceMode]
 
   const handleRenameChat = useCallback((chatId: string, nextTitle: string) => {
     const title = nextTitle.trim().slice(0, 90)
