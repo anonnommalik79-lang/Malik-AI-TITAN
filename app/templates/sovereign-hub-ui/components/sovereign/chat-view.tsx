@@ -129,6 +129,7 @@ function cleanChatViewText(value: string) {
 
 
 interface Message {
+  generatedCode?: string
   id: string
   role: "user" | "assistant"
   content: string
@@ -1654,7 +1655,7 @@ function MalikActionPlanCard({ plan, onOpenTarget }: { plan: MalikActionPlan; on
 
 function InlineGeneratedPreview({ code }: { code: string }) {
   const [revision, setRevision] = useState(0)
-  const previewable = /<!doctype html|<html[\\s>]|<(?:main|section|div|body)[\\s>]|export\\s+default\\s+(?:function|class)|\\breturn\\s*\\(\\s*</i.test(code)
+  const previewable = /<!doctype html|<html[\s>]|<(?:main|section|div|body)[\s>]|export\s+default\s+(?:function|class)|\breturn\s*\(\s*</i.test(code)
   const srcDoc = useMemo(() => previewable ? buildCanvasSrcDoc(code) : "", [code, previewable])
   if (!srcDoc) return null
   const openTab = () => {
