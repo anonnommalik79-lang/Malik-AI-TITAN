@@ -18,6 +18,7 @@ import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers, superpowerOut
 import { collectMalikConnectedContext, requestedFusionConnectors } from "@/lib/server/context-fusion"
 import { collectMalikScienceContext } from "@/lib/server/science-context"
 import type { ExecutionReporter } from "@/lib/ai/chat-execution"
+import { computeMathForMessage, describeTask, mathEngineInstruction, mathReceiptText } from "@/lib/work/math/skill"
 
 type ProviderAttempt = {
   provider: string
@@ -1050,6 +1051,13 @@ export async function malikGodAnswer(
       connected.context,
       science.context,
     ].filter(Boolean).join("\n\n")
+    // Math skill: an explicit computation is done by the engine first, and
+    // the model explains that result instead of doing the arithmetic itself.
+    const math = attachments.length ? null : computeMathForMessage(prompt)
+    if (math) {
+      const step = activity?.start("Вычисление в математическом движке", "code", math.outcome.engine, describeTask(math.intent.task))
+      activity?.finish(step, mathReceiptText(math), math.outcome.ok ? "completed" : "failed", math.outcome.ok ? undefined : math.outcome.error)
+    }
     const modelCall = activity?.start("Подготовка ответа моделью", "model", selection.modelId, { sources: sources.length, attachments: attachments.length })
     const result = await runStrictMalikModel({
       modelId: selection.modelId,
@@ -1057,7 +1065,7 @@ export async function malikGodAnswer(
       // Speed and code lanes follow what is really being asked: «а третий?»
       // after an overview question is another overview, not small talk.
       taskPrompt: focus.shapeText,
-      systemPrompt: [systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body)].filter(Boolean).join("\n\n"),
+      systemPrompt: [systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body)].filter(Boolean).join("\n\n"),
       history,
       attachments,
       maxTokens: answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)),
