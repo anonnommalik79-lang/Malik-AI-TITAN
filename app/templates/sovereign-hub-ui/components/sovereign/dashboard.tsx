@@ -685,7 +685,7 @@ interface Chat {
   projectColor?: MalikProjectColor
   kind?: "chat" | "project"
   workspaceMode?: WorkspaceMode
-
+}
 
 
 /**
@@ -5657,7 +5657,7 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
       setMessages([])
       setGeneratedCode("")
     }
-  }, [activeChatId, activeProjectWorkspaceId, workspaceMode]
+  }, [activeChatId, activeProjectWorkspaceId, workspaceMode])
 
   const handleRenameChat = useCallback((chatId: string, nextTitle: string) => {
     const title = nextTitle.trim().slice(0, 90)
