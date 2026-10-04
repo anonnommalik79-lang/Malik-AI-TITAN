@@ -242,7 +242,22 @@ html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboar
     margin-bottom: max(10px, env(safe-area-inset-bottom, 0px)) !important;
   }
   html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome-logo { height: 44px !important; }
-  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > h1 { margin-top: 10px !important; font-size: 46px !important; }
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > h1 {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-top: 10px !important;
+    font-size: 46px !important;
+    white-space: nowrap !important;
+  }
+  /* Keep the live Malik AI wordmark side by side even on narrow phones. */
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > h1 > strong {
+    display: inline-block !important;
+    white-space: nowrap !important;
+  }
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > h1 .thome-word {
+    display: inline !important;
+    white-space: inherit !important;
+  }
   html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell :is(.thome-welcome-tagline, .thome-welcome-subtitle, .thome-chips) { display: none !important; }
   html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome-motto {
     display: grid !important;
