@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react"
 import {
   BarChart3,
   Briefcase,
@@ -14,6 +14,7 @@ import {
   Languages,
   LayoutTemplate,
   LifeBuoy,
+  ListChecks,
   LogOut,
   MessageSquare,
   MessageSquarePlus,
@@ -37,6 +38,7 @@ import {
 } from "lucide-react"
 import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/auth/client-session"
 import { prefillPrompt } from "@/lib/malik-context"
+import { openOs } from "./os/os-client"
 import type { AIPlan } from "@/lib/ai/types"
 import { publicPlanTitle } from "@/lib/billing/plans"
 
@@ -78,9 +80,9 @@ interface SidebarProps {
 type SidebarAction = {
   id: string
   label: string
-  icon: typeof LayoutTemplate
+  icon: ComponentType<{ className?: string }>
   view?: string
-  action?: "new" | "voice" | "translate" | "data"
+  action?: "new" | "voice" | "translate" | "data" | "tasks" | "work"
   href?: string
   badge?: string
   requiresPro?: boolean
@@ -90,15 +92,32 @@ const GENERIC_CHAT_TITLE = /^(?:новый\s+(?:проект|чат)|new\s+(?:pr
 const TITLE_LIMIT = 58
 const TITLE_WORD_LIMIT = 8
 
+/** The Malik mark as a sidebar icon (square box, same paths as the app icon). */
+function MalikWorkIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="7.5 6 32 32" aria-hidden="true" focusable="false">
+      <path d="M9 29 L22 15 L22 29 Z" fill="currentColor" />
+      <path d="M24 15 H38 L24 29 Z" fill="currentColor" />
+    </svg>
+  )
+}
+
+/** Opens Malik Work on a fresh task; dashboard.tsx owns the workspace mode. */
+export const MALIK_OPEN_WORK_EVENT = "malik-open-work"
+/** An action that opens a panel over the app also closes the phone drawer. */
+export const MALIK_CLOSE_MOBILE_MENU_EVENT = "malik-close-mobile-menu"
+
 const MAIN_ACTIONS: SidebarAction[] = [
   { id: "new", label: "Новый чат", icon: MessageSquarePlus, action: "new" },
   { id: "voice", label: "Голосовой режим", icon: Mic, action: "voice" },
   { id: "library", label: "Библиотека", icon: LayoutTemplate, view: "templates", badge: "PRO" },
   { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects", badge: "PRO", requiresPro: true },
+  { id: "tasks", label: "Задачи", icon: ListChecks, action: "tasks" },
 ]
 
 const CREATE_ACTIONS: SidebarAction[] = [
   { id: "business-autonomous", label: "Бизнес под ключ", icon: Briefcase, view: "business-command-center" },
+  { id: "work", label: "Malik Work", icon: MalikWorkIcon, action: "work", badge: "NEW" },
   { id: "shorts", label: "Malik Shorts", icon: Clapperboard, href: "/shorts", badge: "BETA" },
   { id: "websites", label: "Сайты", icon: LayoutTemplate, view: "website-generation" },
   { id: "video-generation", label: "Генерация видео", icon: Video, view: "video-generation" },
@@ -304,6 +323,15 @@ function SidebarInner({
     }
     if (action.action === "new") return onNewChat?.()
     if (action.action === "voice") return onOpenVoice?.()
+    if (action.action === "tasks") {
+      window.dispatchEvent(new CustomEvent(MALIK_CLOSE_MOBILE_MENU_EVENT))
+      openOs("tasks")
+      return
+    }
+    if (action.action === "work") {
+      window.dispatchEvent(new CustomEvent(MALIK_OPEN_WORK_EVENT))
+      return
+    }
     if (action.href) {
       window.location.assign(action.href)
       return

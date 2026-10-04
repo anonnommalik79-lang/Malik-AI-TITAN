@@ -2173,6 +2173,18 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   // it only swallows the legacy "jump to scrollHeight on every token" shape.
   const threadRef = useRef<HTMLDivElement>(null)
   const followRef = useRef(true)
+  // The Work start screen: an empty task in Work mode.
+  const workHome = workspaceMode === "work" && messages.length === 0
+  const workHomeRef = useRef(workHome)
+  workHomeRef.current = workHome
+  // The artwork belongs to the whole main column - behind the Чат/Работа
+  // switch too - which lives outside this view, so the flag is set on <html>.
+  useEffect(() => {
+    const root = document.documentElement
+    if (workHome) root.dataset.malikWorkHome = "1"
+    else delete root.dataset.malikWorkHome
+    return () => { delete root.dataset.malikWorkHome }
+  }, [workHome])
   // Until this moment (performance.now) following glides instead of jumping:
   // the short window right after a send, while the new rows settle.
   const smoothFollowUntilRef = useRef(0)
@@ -2184,6 +2196,9 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   const scrollThreadToBottom = useCallback((behavior: ScrollBehavior) => {
     const thread = threadRef.current
     if (!thread) return
+    // The empty Work screen is read from the top (its title used to slide
+    // under the toolbar), never a thread to follow.
+    if (workHomeRef.current) return
     const top = Math.max(0, thread.scrollHeight - thread.clientHeight)
     if (Math.abs(thread.scrollTop - top) < 1) return
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
@@ -2883,7 +2898,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   ]
 
   return (
-    <div data-malik-chat-fullwidth="1" data-workspace-mode={workspaceMode} className="malik-chat-fullwidth relative z-[2] flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-transparent text-white">
+    <div data-malik-chat-fullwidth="1" data-workspace-mode={workspaceMode} data-work-home={workHome ? "1" : undefined} className="malik-chat-fullwidth relative z-[2] flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-transparent text-white">
       <style>{`
         @media (min-width: 1024px) {
           .malik-dashboard-shell main > section {
@@ -3148,7 +3163,9 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
               <Globe className="h-3.5 w-3.5" /> {researchMode === "deep" ? "Глубокое исследование" : researchMode === "web" ? "Веб-поиск включён" : "Веб и источники"}
             </button>
             <span>
-              Фото · {imageCredits ? (imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining) : "…"} кр. · Enter — отправить · Shift + Enter — новая строка
+              {workspaceMode === "work"
+                ? "Фото · Видео · Файл · Документ · Сайт · Код · Анализ · Презентация"
+                : <>Фото · {imageCredits ? (imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining) : "…"} кр. · Enter — отправить · Shift + Enter — новая строка</>}
             </span>
           </div>
           {showAttachMenu && attachMenuPosition && typeof document !== "undefined" ? createPortal(

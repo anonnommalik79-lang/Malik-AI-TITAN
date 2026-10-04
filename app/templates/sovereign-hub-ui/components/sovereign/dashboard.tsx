@@ -2,7 +2,7 @@
 import dynamic from "next/dynamic"
 import { useAuth } from "@workos-inc/authkit-nextjs/components"
 import { Component, useState, useCallback, useEffect, useRef } from "react"
-import { Sidebar } from "./sidebar"
+import { MALIK_CLOSE_MOBILE_MENU_EVENT, MALIK_OPEN_WORK_EVENT, Sidebar } from "./sidebar"
 import { MobileViewport } from "./MobileViewport"
 const ComputePanel = dynamic(() => import("./compute/ComputePanel"))
 import { WelcomeScreen } from "./welcome-screen"
@@ -7428,6 +7428,24 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return () => window.removeEventListener(SUPERFLOW_UPDATE_EVENT, onUpdate)
   }, [])
 
+  // Sidebar «Malik Work»: Work mode on a fresh task (an empty one is reused).
+  useEffect(() => {
+    const open = () => {
+      setWorkspaceMode("work")
+      try { window.localStorage.setItem(WORKSPACE_MODE_KEY, "work") } catch {}
+      setMobileMenuOpen(false)
+      if (messages.length) handleNewChat()
+      else safeOpenView("home", "manual")
+    }
+    const closeMenu = () => setMobileMenuOpen(false)
+    window.addEventListener(MALIK_OPEN_WORK_EVENT, open)
+    window.addEventListener(MALIK_CLOSE_MOBILE_MENU_EVENT, closeMenu)
+    return () => {
+      window.removeEventListener(MALIK_OPEN_WORK_EVENT, open)
+      window.removeEventListener(MALIK_CLOSE_MOBILE_MENU_EVENT, closeMenu)
+    }
+  }, [handleNewChat, messages.length, safeOpenView])
+
   // The image studio's "Видео" and "Аудио" tabs open the matching studios;
   // a deck made by a Superflow opens in the presentation studio.
   useEffect(() => {
@@ -8170,7 +8188,7 @@ const shouldShowMobilePreviewButton =
           onOpenVoice={() => { openVoiceMode(); setMobileMenuOpen(false) }}
         />
       </div>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="malik-main-column flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <TitanTopBar
           activeView={activeView}
           workspaceMode={workspaceMode}

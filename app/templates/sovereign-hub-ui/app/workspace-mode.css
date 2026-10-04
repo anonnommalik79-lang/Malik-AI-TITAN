@@ -204,20 +204,172 @@ html body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data
 .malik-work-tools button:hover { background: #161616; color: #fff; }
 .malik-work-tools button:disabled { opacity: .4; cursor: default; }
 .malik-work-tools button:focus-visible, .malik-work-start button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.malik-work-start { padding: 44px 8px 30px; text-align: center; }
-.malik-work-start__eyebrow { color: #a1a1aa; font-size: 12px; }
-.malik-work-start h1 { margin: 14px 0; color: #fff; font-size: clamp(26px, 4vw, 38px); font-weight: 600; letter-spacing: -.035em; }
-.malik-work-start__description { max-width: 510px; margin: 0 auto; color: #9b9ba2; font-size: 14px; line-height: 1.7; }
-.malik-work-start__tasks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 30px auto 0; max-width: 630px; }
-.malik-work-start__tasks button { display: flex; align-items: center; gap: 12px; padding: 18px 14px; border: 1px solid #292929; border-radius: 14px; background: #000; color: #ddd; text-align: left; }
-.malik-work-start__tasks button:hover { border-color: #777; background: #101010; }
-.malik-work-start__tasks button > svg { flex-shrink: 0; }
-.malik-work-start__tasks strong { display: block; color: #fff; font-size: 13px; font-weight: 600; }
-.malik-work-start__tasks small { display: block; margin-top: 5px; color: #8e8e95; font-size: 11px; line-height: 1.4; }
-.malik-work-start__hint { margin: 22px auto 0; max-width: 500px; color: #74747c; font-size: 12px; line-height: 1.7; }
+/* ---------------------------------------------------------------------------
+   Malik Work start screen
+   The monochrome artwork fills the main column (behind the Чат/Работа switch
+   and the tools row); the mark, the name, the question, six glass task cards
+   and a glass composer sit on it. Set by ChatView through
+   html[data-malik-work-home]; any message in the task returns the plain black
+   thread, so answers are always read on black.
+   --------------------------------------------------------------------------- */
+html[data-malik-work-home="1"] body #malik-root .malik-dashboard-shell .malik-main-column {
+  background-color: #000 !important;
+  background-image:
+    linear-gradient(180deg, rgba(0, 0, 0, .42) 0, rgba(0, 0, 0, 0) 120px, rgba(0, 0, 0, 0) 64%, rgba(0, 0, 0, .58) 100%),
+    radial-gradient(ellipse 46% 40% at 50% 47%, rgba(0, 0, 0, .52), rgba(0, 0, 0, 0) 100%),
+    url("/backgrounds/malik-work-desktop.webp") !important;
+  background-position: center, center, center 42% !important;
+  background-size: 100% 100%, 100% 100%, cover !important;
+  background-repeat: no-repeat !important;
+}
+html[data-malik-work-home="1"] body #malik-root .malik-dashboard-shell .malik-main-column :is(main, main > section, .malik-premium-chat-host, .malik-ai-chat-bg, .malik-chat-legend-bg, .malik-chat-fullwidth, .malik-chat-scroll, .malik-composer-dock, .malik-work-tools),
+html[data-malik-work-home="1"] body #malik-root .malik-dashboard-shell .malik-main-column > div {
+  background: transparent !important;
+  background-image: none !important;
+}
+html[data-malik-work-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .titan-topbar[data-workspace-switcher] {
+  background: transparent !important;
+}
+html[data-malik-work-home="1"] .malik-work-tools button { color: #e4e4e7; text-shadow: 0 1px 8px rgba(0, 0, 0, .8); }
+html[data-malik-work-home="1"] .malik-work-tools button:hover { background: rgba(255, 255, 255, .1); color: #fff; }
+
+/* The empty task fills the space between the tools row and the composer. */
+html[data-malik-work-home="1"] .malik-chat-fullwidth[data-work-home] .malik-chat-scroll {
+  display: flex;
+  flex-direction: column;
+  padding-top: 8px !important;
+  /* Where the composer floats over the thread (phones), keep room under it. */
+  padding-bottom: calc(var(--malik-dock-overlap, 0px) + 12px) !important;
+}
+html[data-malik-work-home="1"] .malik-chat-fullwidth[data-work-home] .malik-message-list {
+  max-width: 880px !important;
+  margin-block: auto !important;
+}
+
+/* A smoked-glass composer on the artwork. No filters here: a filter on the
+   composer would re-anchor its fixed popovers (chat-monochrome-final.css). */
+html[data-malik-work-home="1"] body #malik-root .malik-dashboard-shell .malik-ai-chat-bg [data-composer] > .malik-composer-panel.chat-composer {
+  background: rgba(0, 0, 0, .55) !important;
+  border-color: rgba(255, 255, 255, .7) !important;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .55) !important;
+}
+html[data-malik-work-home="1"] body #malik-root .malik-dashboard-shell .malik-ai-chat-bg [data-composer] > .malik-composer-panel.chat-composer > .malik-inline-composer {
+  background: rgba(0, 0, 0, .5) !important;
+  background-color: rgba(0, 0, 0, .5) !important;
+}
+
+.malik-work-start {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: clamp(8px, 2.4vh, 28px) 4px clamp(8px, 2vh, 24px);
+  text-align: center;
+}
+.malik-work-start__mark {
+  display: block;
+  width: auto;
+  height: clamp(44px, 8vh, 76px);
+  color: #fff;
+  filter: drop-shadow(0 6px 26px rgba(0, 0, 0, .65)) drop-shadow(0 0 22px rgba(255, 255, 255, .12));
+}
+.malik-work-start__title {
+  margin: clamp(10px, 2.2vh, 22px) 0 0;
+  background: linear-gradient(180deg, #fff 0%, #fff 46%, #c9c9cf 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: clamp(44px, 7.6vh, 76px);
+  font-weight: 700;
+  letter-spacing: -.045em;
+  line-height: 1.02;
+  filter: drop-shadow(0 4px 22px rgba(0, 0, 0, .7));
+}
+.malik-work-start__question {
+  margin: clamp(8px, 1.6vh, 16px) 0 0;
+  color: #fff;
+  font-size: clamp(24px, 3.7vh, 35px);
+  font-weight: 500;
+  letter-spacing: -.025em;
+  line-height: 1.15;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, .8);
+}
+.malik-work-start__description {
+  max-width: 600px;
+  margin: clamp(10px, 1.8vh, 18px) auto 0;
+  color: #d9d9de;
+  font-size: 15.5px;
+  line-height: 1.6;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, .9);
+}
+.malik-work-start__tasks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: 800px;
+  margin: clamp(18px, 3.2vh, 32px) auto 0;
+}
+.malik-work-start__tasks button {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: clamp(70px, 8.8vh, 84px);
+  padding: 14px 18px;
+  border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, .46);
+  -webkit-backdrop-filter: blur(14px) saturate(115%);
+  backdrop-filter: blur(14px) saturate(115%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), 0 10px 30px rgba(0, 0, 0, .35);
+  color: #fff;
+  text-align: left;
+  transition: border-color .18s ease, background-color .18s ease, transform .18s ease;
+}
+.malik-work-start__tasks button:hover { border-color: rgba(255, 255, 255, .55); background: rgba(16, 16, 18, .62); transform: translateY(-1px); }
+.malik-work-start__tasks button:active { transform: translateY(0); }
+.malik-work-start__tasks button > svg { flex-shrink: 0; color: #fff; }
+.malik-work-start__tasks strong { display: block; color: #fff; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.malik-work-start__tasks small { display: block; margin-top: 4px; color: #c4c4ca; font-size: 13px; line-height: 1.35; }
+.malik-work-start__hint { margin: 22px auto 0; max-width: 520px; color: #b4b4ba; font-size: 12.5px; line-height: 1.6; text-shadow: 0 1px 10px rgba(0, 0, 0, .9); }
+@media (min-width: 1024px) {
+  /* The desktop screen ends with the cards; the composer follows. */
+  .malik-work-start__hint { display: none; }
+}
+/* Laptops (768-860px tall): the whole screen still fits above the composer. */
+@media (min-width: 768px) and (max-height: 860px) {
+  .malik-work-start { padding-top: 4px; padding-bottom: 4px; }
+  .malik-work-start__mark { height: 44px; }
+  .malik-work-start__title { margin-top: 10px; font-size: 50px; }
+  .malik-work-start__question { margin-top: 6px; font-size: 26px; }
+  .malik-work-start__description { max-width: 660px; margin-top: 10px; font-size: 14.5px; line-height: 1.5; }
+  .malik-work-start__tasks { margin-top: 16px; gap: 8px; }
+  .malik-work-start__tasks button { min-height: 62px; padding: 10px 16px; gap: 14px; }
+  .malik-work-start__tasks button > svg { width: 24px; height: 24px; }
+  .malik-work-start__tasks strong { font-size: 15px; }
+  .malik-work-start__tasks small { margin-top: 2px; font-size: 12.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .malik-work-start__tasks button { transition: none; }
+  .malik-work-start__tasks button:hover { transform: none; }
+}
 @media (max-width: 767px) {
+  html[data-malik-work-home="1"] body #malik-root .malik-dashboard-shell .malik-main-column {
+    background-image:
+      linear-gradient(180deg, rgba(0, 0, 0, .38) 0, rgba(0, 0, 0, 0) 110px, rgba(0, 0, 0, 0) 58%, rgba(0, 0, 0, .62) 100%),
+      radial-gradient(ellipse 70% 34% at 50% 40%, rgba(0, 0, 0, .5), rgba(0, 0, 0, 0) 100%),
+      url("/backgrounds/malik-work-mobile.webp") !important;
+    background-position: center, center, center top !important;
+  }
   .malik-work-tools { justify-content: flex-start; padding: 4px 12px 8px; }
-  .malik-work-start { padding-top: 24px; }
-  .malik-work-start__tasks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 22px; }
-  .malik-work-start__tasks button { padding: 14px 10px; gap: 9px; }
+  .malik-work-start { padding-top: 14px; }
+  .malik-work-start__mark { height: 40px; }
+  .malik-work-start__title { margin-top: 12px; font-size: 40px; }
+  .malik-work-start__question { margin-top: 8px; font-size: 34px; font-weight: 700; letter-spacing: -.035em; line-height: 1.08; }
+  .malik-work-start__description { margin-top: 12px; font-size: 15px; }
+  .malik-work-start__tasks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 20px; }
+  .malik-work-start__tasks button { gap: 10px; min-height: 60px; padding: 10px 11px; }
+  .malik-work-start__tasks button > svg { width: 22px; height: 22px; }
+  .malik-work-start__tasks strong { font-size: 15px; }
+  .malik-work-start__tasks small { margin-top: 2px; font-size: 12px; }
+  .malik-work-start__hint { margin-top: 18px; font-size: 12.5px; }
 }
