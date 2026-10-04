@@ -1,8 +1,9 @@
 import type { ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { officialIPhonePhoto } from "./official-product-photos"
 import { verifiedPortrait } from "./verified-portraits"
+import { referenceBrandAsset } from "./reference-brand-assets"
 
-export type MalikVisualImage = { url: string; alt: string; sourceUrl?: string; credit?: string; license?: string }
+export type MalikVisualImage = { url: string; alt: string; sourceUrl?: string; credit?: string; license?: string; role?: "logo" }
 export const REFERENCE_METADATA_LIMIT = 48 * 1024
 export const REFERENCE_RESULT_LIMIT = 8 * 1024
 const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org", "images.unsplash.com", "images.pexels.com", "cdn.pixabay.com", "i.imgur.com", "ipcdn-web.apple.com", "cdsassets.apple.com"])
@@ -61,7 +62,7 @@ export function sanitizeReferenceImages(value: unknown): MalikVisualImage[] {
     } catch { /* Attribution can be absent on model-authored Markdown. */ }
     const safeUrl = item.url.startsWith("/") ? url.pathname : url.href
     const image = { url: safeUrl, alt: cleanReferenceLabel(item.alt), sourceUrl,
-      credit: cleanReferenceLabel(item.credit || ""), license: cleanReferenceLabel(item.license || "") }
+      credit: cleanReferenceLabel(item.credit || ""), license: cleanReferenceLabel(item.license || ""), ...(item.role === "logo" ? { role: "logo" as const } : {}) }
     if (new TextEncoder().encode(JSON.stringify([...images, image])).byteLength > REFERENCE_RESULT_LIMIT) break
     images.push(image)
     seen.add(url.href)
@@ -115,7 +116,7 @@ export function referenceTopicMatches(query: string, metadata: string): boolean 
     || (word.length > 4 && actual.some((term) => term === word.replace(/s$/u, "") || term.replace(/s$/u, "") === word))))
 }
 
-type LookupOptions = { excludedUrls?: string[]; skipOfficial?: boolean }
+type LookupOptions = { excludedUrls?: string[]; skipOfficial?: boolean; fast?: boolean }
 
 function wasExcluded(url: string, options: LookupOptions): boolean {
   if (!options.excludedUrls?.length) return false
@@ -240,8 +241,64 @@ async function lookupPersonSearchImages(plan: ReferenceVisualPlan, signal: Abort
   return []
 }
 
-/** Runs in the browser for chat: neither metadata nor image bytes touch Render. */
+/** Company logos are searched as logos, never replaced by an office/photo. */
+async function lookupLogoImages(plan: ReferenceVisualPlan, signal: AbortSignal, options: LookupOptions): Promise<MalikVisualImage[]> {
+  for (const topic of plan.queries.slice(0, 2)) {
+    if (signal.aborted) break
+    const params = new URLSearchParams({ action: "query", format: "json", formatversion: "2", origin: "*", generator: "search",
+      gsrsearch: topic + " logo", gsrnamespace: "6", gsrlimit: "5", prop: "imageinfo", iiprop: "mime|url|extmetadata",
+      iiurlwidth: "250", iiextmetadatafilter: "Artist|LicenseShortName" })
+    try {
+      const response = await fetch("https://commons.wikimedia.org/w/api.php?" + params, { headers: catalogueHeaders(),
+        credentials: "omit", referrerPolicy: "no-referrer", signal })
+      const data = await readReferenceJson(response) as { query?: { pages?: CommonsPage[] } } | null
+      const images = sanitizeReferenceImages((data?.query?.pages || []).sort((a, b) => (a.index || 0) - (b.index || 0)).flatMap((page) => {
+        const title = page.title || "", media = page.imageinfo?.[0]
+        if (!/logo|symbol|wordmark|logotype|логотип/iu.test(title) || !referenceTopicMatches(topic, title) || unrelatedNamesake(topic, title)) return []
+        if (!media?.thumburl || !media.descriptionurl || !hasRasterThumbnail(media.mime || "", media.thumburl)) return []
+        const url = referenceThumbnailVariants(media.thumburl).find((candidate) => !wasExcluded(candidate, options))
+        return url ? [{ url, sourceUrl: media.descriptionurl, alt: plan.topic + " · логотип", role: "logo",
+          credit: media.extmetadata?.Artist?.value || "Wikimedia Commons", license: media.extmetadata?.LicenseShortName?.value || "" }] : []
+      }))
+      if (images.length) return images.slice(0, 1)
+    } catch { /* Keep the name/description instead of substituting a stock photo. */ }
+  }
+  return []
+}
+
+/** Browser-first metadata lookup; the server uses this same bounded catalogue. */
 export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: AbortSignal, options: LookupOptions = {}): Promise<MalikVisualImage[]> {
+  if (signal?.aborted) return []
+  const brand = referenceBrandAsset(plan.topic) || plan.queries.map(referenceBrandAsset).find(Boolean)
+  if (brand && !options.skipOfficial && plan.kind !== "tutorial" && !plan.person) {
+    const url = referenceThumbnailVariants(brand.url).find((candidate) => !wasExcluded(candidate, options))
+    if (url) return sanitizeReferenceImages([{ ...brand, url }])
+  }
+  if (plan.logo && !plan.person && plan.kind !== "tutorial") return lookupLogoImages(plan,
+    signal || AbortSignal.timeout(7500), options)
+  // Broad photos have two independent catalogues. Start article thumbnails
+  // early if Commons is slow; exact identities still use the canonical path.
+  if (options.fast && !plan.entity && plan.kind !== "tutorial") {
+    const controller = new AbortController()
+    const budget = AbortSignal.any([...(signal ? [signal] : []), controller.signal, AbortSignal.timeout(7500)])
+    return new Promise((resolve) => {
+      let settled = false, completed = 0
+      const finish = (images: MalikVisualImage[]) => {
+        if (settled) return
+        if (!images.length && ++completed < 2 && !budget.aborted) return
+        settled = true
+        clearTimeout(timer)
+        budget.removeEventListener("abort", aborted)
+        controller.abort()
+        resolve(images)
+      }
+      const aborted = () => finish([])
+      const timer = setTimeout(() => { void lookupArticleImages(plan, budget, options).catch(() => []).then(finish) }, 180)
+      budget.addEventListener("abort", aborted, { once: true })
+      if (budget.aborted) { finish([]); return }
+      void lookupReferenceImages(plan, budget, { ...options, fast: false }).catch(() => []).then(finish)
+    })
+  }
   if (signal?.aborted) return []
   const portrait = verifiedPortrait(plan.topic) || plan.queries.map(verifiedPortrait).find(Boolean)
   if (portrait && !options.skipOfficial && !unrelatedNamesake("Elon Musk", plan.topic)) {

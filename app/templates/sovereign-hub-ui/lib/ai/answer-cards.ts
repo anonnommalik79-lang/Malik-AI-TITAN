@@ -11,14 +11,18 @@
  * evidence does not.
  */
 
+import { answerVisualsToText } from "./answer-visuals"
+
 export type CardLink = { label: string; url: string }
 export type CardFact = { label: string; value: string }
+export type CardOffer = { label: string; value: string; note?: string }
 
 export type AnswerCard = {
   title: string
   url?: string
   /** A source number whose page picture to show, or a well-known name to look up. */
   image?: number | string
+  imageRole?: "logo"
   badge?: string
   meta?: string
   value?: string
@@ -29,12 +33,14 @@ export type AnswerCard = {
   links?: CardLink[]
   action?: CardLink
   sources?: number[]
+  offers?: CardOffer[]
 }
 
 export type AnswerCardsBlock =
   | { type: "cards"; title?: string; items: AnswerCard[] }
   | { type: "hero"; item: AnswerCard }
   | { type: "options"; title?: string; items: AnswerCard[] }
+  | { type: "pricing"; title?: string; items: AnswerCard[] }
   | { type: "dates"; title?: string; items: CardFact[] }
   | { type: "actions"; items: Array<CardLink & { primary?: boolean }> }
 
@@ -43,7 +49,7 @@ const CITATION = /\s*\[(\d{1,2}(?:\s*[,;]\s*\d{1,2})*)\]/g
 
 function text(value: unknown, limit: number): string {
   if (typeof value !== "string" && typeof value !== "number") return ""
-  return String(value).replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().slice(0, limit)
+  return String(value).replace(/\p{Cc}+/gu, " ").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().slice(0, limit)
 }
 
 function numbers(value: unknown): number[] {
@@ -108,8 +114,17 @@ function card(value: unknown): AnswerCard | null {
   const cardLinks = (Array.isArray(record.links) ? record.links : []).map(link).filter((entry): entry is CardLink => Boolean(entry)).slice(0, 3)
   if (cardLinks.length) result.links = cardLinks
   const action = link(record.action)
+  if (record.imageRole === "logo") result.imageRole = "logo"
   if (action) result.action = action
   if (sources.size) result.sources = [...sources].slice(0, 6)
+  if (Array.isArray(record.offers)) {
+    const offers = record.offers.flatMap((offer) => {
+      if (!offer || typeof offer !== "object") return []
+      const label = text(offer.label, 60), value = text(offer.value, 60), note = text(offer.note, 160)
+      return label && value ? [{ label, value, ...(note ? { note } : {}) }] : []
+    }).slice(0, 3)
+    if (offers.length) result.offers = offers
+  }
   return result
 }
 
@@ -120,7 +135,7 @@ export function parseAnswerCards(json: string): AnswerCardsBlock | null {
   try { data = JSON.parse(json) } catch { return null }
   if (!data || typeof data !== "object" || data.version !== 1) return null
   const title = text(data.title, 120) || undefined
-  if (data.type === "cards" || data.type === "options") {
+  if (data.type === "cards" || data.type === "options" || data.type === "pricing") {
     const items = (Array.isArray(data.items) ? data.items : []).map(card).filter((entry): entry is AnswerCard => Boolean(entry)).slice(0, MAX_ITEMS)
     return items.length ? { type: data.type, ...(title ? { title } : {}), items } : null
   }
@@ -156,6 +171,7 @@ function cardText(item: AnswerCard): string {
     item.text ? `${item.text}${cite(item.sources)}` : item.sources?.length ? cite(item.sources).trim() : "",
     item.note || "",
     ...(item.facts || []).map((fact) => `${fact.label}: ${fact.value}`),
+    ...(item.offers || []).map((offer) => `${offer.label}: ${offer.value}${offer.note ? ` — ${offer.note}` : ""}`),
     ...(item.links || []).map((entry) => `${entry.label}: ${entry.url}`),
     item.action ? `${item.action.label}: ${item.action.url}` : "",
   ].filter(Boolean).join("\n")
@@ -167,17 +183,20 @@ function cardText(item: AnswerCard): string {
  * markers against the sources.
  */
 export function answerCardsToText(answer: string): string {
-  return String(answer || "").replace(FENCE, (whole, body: string) => {
+  return answerVisualsToText(String(answer || "").replace(FENCE, (whole, body: string) => {
     const block = parseAnswerCards(body)
     if (!block) return ""
     if (block.type === "hero") return cardText(block.item)
     if (block.type === "dates") return [block.title ? `**${block.title}**` : "", ...block.items.map((item) => `${item.label}: ${item.value}`)].filter(Boolean).join("\n")
     if (block.type === "actions") return block.items.map((item) => `${item.label}: ${item.url}`).join("\n")
     return [block.title ? `**${block.title}**` : "", ...block.items.map(cardText)].filter(Boolean).join("\n\n")
-  })
+  }))
 }
 
 export const MALIK_ANSWER_CARDS_CONTRACT = [
+  "PLACEMENT AND IMAGES: put compact company/tool logo rows immediately after the section that introduces those companies, a wide sourced screenshot/photo immediately below the heading of that product section, and pricing immediately after the pricing heading. Never repeat those images below every feature or bullet. For card image use a source number with an actual page picture when available; otherwise use only the exact canonical entity name, not a sentence, generic marketing concept or invented image URL. Omit image when no meaningful real subject exists. A picture/brand logo is illustration, not proof of a capability. Surround blocks with the model's own task-specific explanation; don't write a canned article. Tables retain all requested rows and source markers.",
+  "LOGO ROWS: for a company, software tool or service set imageRole:\"logo\" and image:\"exact canonical brand name\". The UI looks up a real matching logo rather than the article's office/building picture. When a source explicitly supplies the logo use its source number instead. Never set imageRole:logo for a person's portrait, venue, physical product or large interface screenshot. If no exact logo is available, preserve the name and explanation without substituting an unrelated photo.",
+  "PRICING BLOCK: {\"version\":1,\"type\":\"pricing\",\"title\":\"...\",\"items\":[{\"title\":\"Product\",\"offers\":[{\"label\":\"Standard\",\"value\":\"verified price\",\"note\":\"currency, billing period and conditions\"},{\"label\":\"Premium\",\"value\":\"verified price\",\"note\":\"...\"}],\"text\":\"billing/seat caveat\",\"sources\":[1]}]}. The UI shows product rows separated by a hairline, 2-3 price columns, a note under each price and source chips. Only verified/user-supplied values; no default prices, fabricated tiers or estimates presented as current tariffs. If unavailable use a prose caveat instead. Explain subscription vs API pricing separately when relevant.",
   "ANSWER CARDS: when the answer names concrete things the user can open, attend, apply to, buy, contact or visit - events, funds, programmes, competitions, companies, products, places, courses - show them as cards in a closed ```malik-cards JSON fence, the way ChatGPT does, and keep the reasoning, comparison and caveats in ordinary Markdown around them. One fence per block; several blocks per answer are fine.",
   "Card fields: title (exact name), url (its official page), image, badge (a short factual status: «Приём заявок открыт», «Ближайшее в Казахстане»; «Мой первый приоритет» only for your own recommendation), meta («23 октября 2026 · Астана»), value (one key figure: «$30 млн», «7–8 июня 2027»), valueNote (what the figure means), text (1-2 sentences), note (a caveat), facts [{label,value}] («Последний день подачи» → «2 ноября 2026»), links [{label,url}], action {label,url} (the next step), sources [n].",
   "Block types: {\"version\":1,\"type\":\"cards\",\"title\":\"...\",\"items\":[card,...]} a list of 2-6 items, each with a picture; {\"version\":1,\"type\":\"hero\",\"item\":card} the single main recommendation with a large picture; {\"version\":1,\"type\":\"options\",\"title\":\"...\",\"items\":[card with action,...]} where to apply, buy or invest, each with its button; {\"version\":1,\"type\":\"dates\",\"title\":\"...\",\"items\":[{\"label\":\"Дедлайн\",\"value\":\"1 мая 2027\"},...]} 2-4 key dates; {\"version\":1,\"type\":\"actions\",\"items\":[{\"label\":\"Заявка\",\"url\":\"...\",\"primary\":true},{\"label\":\"Сайт форума\",\"url\":\"...\"}]} 1-3 buttons.",

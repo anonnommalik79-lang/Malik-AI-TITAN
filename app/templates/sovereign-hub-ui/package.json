@@ -40,6 +40,7 @@
     "test:answer-format": "node scripts/verify-answer-format.mjs",
     "test:rich-answers": "node scripts/verify-rich-answers.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-tap-guide.mjs",
     "test:reference-intent": "node scripts/verify-reference-intent.mjs",
+    "test:illustrated-answers": "node scripts/verify-illustrated-answers.mjs",
     "test:chat-execution": "node --experimental-strip-types --no-warnings scripts/verify-chat-execution.mjs",
     "test:mobile-thinking": "node scripts/verify-mobile-thinking.mjs",
     "test:work-mode": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-work-mode.mjs",

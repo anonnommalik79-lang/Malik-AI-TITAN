@@ -1,4 +1,4 @@
-import { allowsAnswerPhotoHints, planReferenceVisuals, referenceSearchTopic, type ReferenceVisualPlan } from "./reference-visual-policy"
+import { allowsAnswerPhotoHints, isAbstractPhotoSubject, planReferenceVisuals, referenceSearchTopic, type ReferenceVisualPlan } from "./reference-visual-policy"
 
 type PhotoSubject = {
   name: string
@@ -80,6 +80,9 @@ export function groundedAnswerPhotoPlans(subjects: PhotoSubject[], question: str
   const uncertainEventClaim = /(?:не\s+(?:подтвержд|значит|указан|включ[её]н|найден|объявлен)|нет\s+(?:данных|подтвержден|сведен)|неизвестно|не\s+числит|not\s+(?:listed|confirmed|announced)|no\s+(?:evidence|confirmation)|unconfirmed)/iu
 
   return subjects.flatMap((subject) => {
+    // Models may still suggest a stock illustration for an abstract process.
+    // Keep those out even when a complete metadata fence made it through.
+    if (isAbstractPhotoSubject(subject.name) || isAbstractPhotoSubject(subject.query)) return []
     const name = normalize(subject.name)
     // Require the complete named subject in visible prose, with word boundaries.
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")

@@ -25,7 +25,7 @@ function ReferenceCard({ image, portrait, label, caption, contain = false, onOpe
   const source = safeSourceUrl(image.sourceUrl) || image.url
   return (
     <figure className="min-w-0 overflow-hidden rounded-2xl border border-white/15 bg-black">
-      <button type="button" onClick={onOpen} aria-label={"Увеличить изображение: " + image.alt} className={"block w-full overflow-hidden bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-white " + (portrait ? "aspect-[3/4]" : "aspect-[4/3]")}>
+      <button type="button" onClick={onOpen} aria-label={"Увеличить изображение: " + image.alt} className={"block w-full overflow-hidden " + (image.role === "logo" ? "bg-white " : "bg-black ") + "focus-visible:outline focus-visible:outline-2 focus-visible:outline-white " + (portrait ? "aspect-[3/4]" : "aspect-[4/3]")}>
         {failed ? (
           <span className="flex h-full flex-col items-center justify-center gap-2 px-2 text-center text-sm text-zinc-400">
             <ImageOff className="h-6 w-6" aria-hidden="true" />Превью недоступно
@@ -37,7 +37,7 @@ function ReferenceCard({ image, portrait, label, caption, contain = false, onOpe
             loading="lazy"
             decoding="async"
             referrerPolicy="no-referrer"
-            className={"h-full w-full transition-transform duration-300 hover:scale-[1.03] " + (portrait || contain ? "object-contain" : "object-cover")}
+            className={"h-full w-full transition-transform duration-300 hover:scale-[1.03] " + (image.role === "logo" ? "object-contain p-4" : portrait || contain ? "object-contain" : "object-cover")}
             onError={() => { setFailed(true); onFailure?.(image.url) }}
           />
         )}
@@ -64,7 +64,7 @@ function ReferenceLightbox({ image, onClose }: { image: MalikVisualImage; onClos
   return (
     <dialog ref={dialog} onCancel={onClose} onClick={(event) => { if (event.target === event.currentTarget) onClose() }} aria-label={image.alt} className="fixed inset-0 m-auto w-[94vw] max-w-[960px] rounded-2xl border border-white/20 bg-black p-4 text-white backdrop:bg-black/90">
       <button type="button" onClick={onClose} aria-label="Закрыть изображение" autoFocus className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-black"><X className="h-5 w-5" /></button>
-      <img src={image.url} alt={image.alt} decoding="async" referrerPolicy="no-referrer" className="mx-auto max-h-[75dvh] w-full object-contain" />
+      <img src={image.url} alt={image.alt} decoding="async" referrerPolicy="no-referrer" className={"mx-auto max-h-[75dvh] w-full object-contain " + (image.role === "logo" ? "bg-white p-6" : "")} />
       <p className="mt-3 text-sm">{image.alt}</p>
       <a href={safeSourceUrl(image.sourceUrl) || image.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white">Источник · {image.credit || "Фото"}<ExternalLink className="h-3 w-3" /></a>
     </dialog>
@@ -135,8 +135,8 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
     else setResult((current) => current?.key === key ? { key, images: current.images.filter((image) => image.url !== url) } : current)
   }
   const status = images === null
-    ? <p role="status" className="my-3 text-sm text-zinc-400">{active ? "Ищу фото по теме…" : plan.topic}</p>
-    : null
+    ? active ? <div className="malik-reference-loading" role="status" aria-label={"Загрузка изображения: " + plan.topic}><span /><span /><span /></div> : null
+    : !images.length && plan.explicit ? <button type="button" className="malik-reference-retry" onClick={retry}>Изображение недоступно · Повторить поиск</button> : null
   if (collection) return <div className="min-w-0" data-malik-reference-topic={plan.topic}>
     {children}
     <section className="my-5 space-y-4" aria-label={"Фотографии · " + plan.topic} data-malik-reference-collection>
@@ -158,9 +158,9 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
     <section ref={container} className="malik-answer-photo-hero min-w-0" data-malik-reference-topic={plan.topic} data-malik-hero-visual>
       {images?.[0] ? <figure className="malik-answer-photo-hero__figure">
         <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + plan.topic}
-          className="block w-full overflow-hidden rounded-xl bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+          className={"block w-full overflow-hidden rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-white " + (images[0].role === "logo" ? "bg-white" : "bg-black")}>
           <img src={images[0].url} alt={plan.topic} loading="lazy" decoding="async" referrerPolicy="no-referrer"
-            className="mx-auto block max-h-[520px] w-full object-contain" onError={() => failed(images[0].url)} />
+            className={"mx-auto block max-h-[520px] w-full object-contain " + (images[0].role === "logo" ? "max-w-[250px] p-6" : "")} onError={() => failed(images[0].url)} />
         </button>
         <figcaption className="mt-2 flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
           <strong className="font-semibold text-white">{plan.topic}</strong>
@@ -178,10 +178,10 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   if (row) return (
     <div ref={container} className="malik-answer-photo-row min-w-0" data-malik-reference-topic={plan.topic} data-malik-inline-visual>
       <div className={images?.length ? "flex items-start gap-3 sm:gap-5" : ""}>
-        {images?.[0] ? <figure className={"malik-answer-photo-row__image shrink-0 overflow-hidden rounded-xl " + (plan.kind === "tutorial" ? "bg-white" : "bg-black")}>
+        {images?.[0] ? <figure className={"malik-answer-photo-row__image shrink-0 overflow-hidden rounded-xl " + (plan.kind === "tutorial" || images[0].role === "logo" ? "bg-white" : "bg-black")}>
           <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + images[0].alt} className="block w-full focus-visible:outline focus-visible:outline-white">
             <img src={images[0].url} alt={images[0].alt} loading="lazy" decoding="async" referrerPolicy="no-referrer"
-              className={"w-full " + (plan.kind === "tutorial" ? "max-h-[280px] object-contain" : "aspect-[3/4] object-cover")}
+              className={"w-full " + (images[0].role === "logo" ? "aspect-square object-contain p-3" : plan.kind === "tutorial" ? "max-h-[280px] object-contain" : "aspect-[3/4] object-cover")}
               onError={() => failed(images[0].url)} />
           </button>
           <figcaption className="bg-black px-1.5 py-1 text-xs leading-4 text-zinc-400">

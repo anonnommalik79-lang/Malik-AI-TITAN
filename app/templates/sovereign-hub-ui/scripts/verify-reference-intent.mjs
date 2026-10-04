@@ -355,6 +355,80 @@ try {
   const rejected = await route.GET(new Request("https://malik.test/api/chat/reference-images?q=" + encodeURIComponent("Покажи горы Алматы без фото")))
   assert.deepEqual(await rejected.json(), { images: [] })
   assert.equal(requests, 1, "irrelevant request must never hit the catalogue")
+  const businessSlots = policy.planAnswerVisualSlots("Бизнес под ключ с помощью ИИ", [
+    { key: "p0", kind: "paragraph", text: "Работа делится на несколько этапов." },
+    { key: "i0", kind: "item", text: "**Анализ рынка и продуктовая матрица**: стратегия." },
+    { key: "i1", kind: "item", text: "**Регламенты и регламентация (SOP)**: инструкции." },
+    { key: "i2", kind: "item", text: "**Контент-маркетинг**: публикации." },
+  ])
+  assert.deepEqual(businessSlots, [], "abstract business bullets must not generate the three useless photo searches from the reported screenshot")
+  const brand = load("lib/media/reference-brand-assets.ts")
+  assert.equal(brand.referenceBrandAsset("Claude Monet"), null, "an artist must never get an AI logo")
+  requests = 0
+  globalThis.fetch = async () => { requests++; throw new Error("Should not search for a known logo") }
+  for (const name of ["ChatGPT", "Claude", "GitHub"]) {
+    const logos = await catalog.lookupReferenceImages({ topic: name, queries: [name], entity: true, explicit: true, layout: "landscape" })
+    assert.equal(logos[0].role, "logo")
+    assert.match(logos[0].alt, /логотип/)
+  }
+  assert.equal(requests, 0, "exact brand logos have no metadata round trip")
+  globalThis.fetch = async () => Response.json({ query: { pages: [
+    { title: "File:Acme office.jpg", imageinfo: [{ mime: "image/jpeg", thumburl: "https://upload.wikimedia.org/acme-office.jpg", descriptionurl: "https://commons.wikimedia.org/wiki/File:Acme_office.jpg" }] },
+    { title: "File:Other logo.svg", imageinfo: [{ mime: "image/svg+xml", thumburl: "https://upload.wikimedia.org/other-logo.svg.png", descriptionurl: "https://commons.wikimedia.org/wiki/File:Other_logo.svg" }] },
+    { title: "File:Acme logo.svg", imageinfo: [{ mime: "image/svg+xml", thumburl: "https://upload.wikimedia.org/acme-logo.svg.png", descriptionurl: "https://commons.wikimedia.org/wiki/File:Acme_logo.svg" }] },
+  ] } })
+  const genericLogo = await catalog.lookupReferenceImages({ topic: "Acme", queries: ["Acme"], logo: true, entity: true, explicit: true, layout: "landscape" })
+  assert.equal(genericLogo.length, 1)
+  assert.equal(genericLogo[0].role, "logo")
+  assert.match(genericLogo[0].url, /acme-logo/)
+  const officeOnly = { topic: "Acme office", queries: ["Acme office"], logo: true, entity: true, explicit: true, layout: "landscape" }
+  assert.deepEqual(await catalog.lookupReferenceImages(officeOnly), [], "missing logo must never fall back to an office or another brand")
+  assert.notEqual(cache.referenceCacheKey(officeOnly), cache.referenceCacheKey({ ...officeOnly, logo: false }), "photo and logo caches are distinct")
+  let abortedLookups = 0, hedgeCalls = 0
+  globalThis.fetch = async (input, options) => {
+    if (String(input).startsWith("/api/chat/reference-images?")) {
+      hedgeCalls++
+      return Response.json({ images: [{ url: "https://upload.wikimedia.org/hedge.jpg", alt: "Hedge subject" }] })
+    }
+    return new Promise((resolve, reject) => options.signal.addEventListener("abort", () => { abortedLookups++; reject(new Error("aborted")) }, { once: true }))
+  }
+  const hedgePlan = { topic: "Hedge subject", queries: ["Hedge subject"], entity: true, explicit: true, layout: "landscape" }
+  const started = performance.now()
+  const hedged = await new Promise((resolve) => cache.subscribeReferenceImages(hedgePlan, resolve))
+  assert.equal(hedged[0].alt, "Hedge subject")
+  assert(performance.now() - started < 1200, "server fallback starts early, not after the old 9-second direct timeout")
+  assert.equal(hedgeCalls, 1)
+  assert(abortedLookups > 0, "a successful hedge cancels the stuck catalogue")
+  let outageCalls = 0
+  globalThis.fetch = async () => { outageCalls++; throw new Error("Offline") }
+  const outagePlan = { topic: "Negative cache test", queries: ["Negative cache test"], entity: true, explicit: true, layout: "landscape" }
+  assert.deepEqual(await new Promise((resolve) => cache.subscribeReferenceImages(outagePlan, resolve)), [])
+  const callsAfterFailure = outageCalls
+  assert.deepEqual(await new Promise((resolve) => cache.subscribeReferenceImages(outagePlan, resolve)), [])
+  assert.equal(outageCalls, callsAfterFailure, "a remount honours the negative cache instead of restarting another 45-second retry cycle")
+  assert.equal(cache.REFERENCE_LOOKUP_BUDGET_MS, 8000)
+  let deadlineAborts = 0
+  globalThis.fetch = async (_input, options) => new Promise((resolve, reject) => options.signal.addEventListener("abort", () => { deadlineAborts++; reject(new Error("deadline")) }, { once: true }))
+  const deadlineStarted = performance.now()
+  let watchdog
+  const deadlineResult = await Promise.race([
+    new Promise((resolve) => cache.subscribeReferenceImages({ topic: "Deadline test", queries: ["Deadline test"], entity: true, explicit: true, layout: "landscape" }, resolve)),
+    new Promise((_resolve, reject) => { watchdog = setTimeout(() => reject(new Error("Photo lookup exceeded its entire-turn budget")), 9500) }),
+  ]).finally(() => clearTimeout(watchdog))
+  assert.deepEqual(deadlineResult, [])
+  assert(performance.now() - deadlineStarted < 9500)
+  assert(deadlineAborts >= 2, "both stuck catalogue paths must be aborted at the deadline")
+  let slowCommonsAborted = false
+  globalThis.fetch = async (input, options) => {
+    if (String(input).includes("commons.wikimedia.org")) return new Promise((resolve, reject) => options.signal.addEventListener("abort", () => { slowCommonsAborted = true; reject(new Error("cancelled")) }, { once: true }))
+    return Response.json({ query: { pages: [{ title: "Mount Example", fullurl: "https://en.wikipedia.org/wiki/Mount_Example", thumbnail: { source: "https://upload.wikimedia.org/mount-example.jpg" } }] } })
+  }
+  const fastStarted = performance.now()
+  const fast = await catalog.lookupReferenceImages({ topic: "Mount Example", queries: ["Mount Example"], explicit: true, layout: "landscape" }, undefined, { fast: true })
+  assert.equal(fast[0].alt, "Mount Example")
+  assert(performance.now() - fastStarted < 800, "article thumbnails don't wait for stalled Commons queries")
+  assert.equal(slowCommonsAborted, true)
+  console.log("PASS exact zero-search logos, abstract-photo suppression, early fallback, cancelled losers, real 8-second outage deadline and negative caching")
   console.log("PASS browser-direct metadata, thumbnails, attribution, caching, deduplication and outage fallback")
 } finally {
   globalThis.fetch = savedFetch

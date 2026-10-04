@@ -4,7 +4,8 @@ import { lookupReferenceImages, readReferenceJson, sanitizeReferenceImages, type
 type CacheEntry = { images: MalikVisualImage[]; expires: number }
 type Listener = (images: MalikVisualImage[]) => void
 type Job = { controller: AbortController; listeners: Set<Listener> }
-const STORAGE_KEY = "malik-reference-catalog-v7"
+const STORAGE_KEY = "malik-reference-catalog-v8"
+export const REFERENCE_LOOKUP_BUDGET_MS = 8000
 const MAX_ENTRIES = 60
 const cache = new Map<string, CacheEntry>()
 const pending = new Map<string, Job>()
@@ -34,7 +35,7 @@ function acquireLookup(signal: AbortSignal): Promise<(() => void) | null> {
 }
 
 export function referenceCacheKey(plan: ReferenceVisualPlan): string {
-  return [plan.kind || "reference", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", ...plan.queries].join("|").toLocaleLowerCase().slice(0, 240)
+  return [plan.kind || "reference", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.logo ? "logo" : "", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", ...plan.queries].join("|").toLocaleLowerCase().slice(0, 240)
 }
 
 function hydrateCache() {
@@ -86,40 +87,55 @@ export function reportReferenceImageFailure(plan: ReferenceVisualPlan, url: stri
 }
 
 async function lookupWithFallback(plan: ReferenceVisualPlan, signal: AbortSignal): Promise<MalikVisualImage[]> {
-  let direct: MalikVisualImage[] = []
   const excludedUrls = [...(failedImages.get(referenceCacheKey(plan)) || [])]
-  try { direct = await lookupReferenceImages(plan, AbortSignal.any([signal, AbortSignal.timeout(9000)]), { excludedUrls }) } catch {}
-  if (direct.length || signal.aborted || plan.kind === "tutorial") return direct
-  // Only small JSON metadata uses Render; image bytes always load from the publisher.
-  const params = new URLSearchParams({ q: "Покажи фото " + plan.topic, entity: plan.entity ? "1" : "0", person: plan.person ? "1" : "0" })
-  // Preserve the canonical alias from the answer on the same-origin fallback.
-  if (plan.queries[0]) params.set("topic", plan.queries[0])
-  if (excludedUrls.length) params.set("skipOfficial", "1")
-  try {
-    const response = await fetch("/api/chat/reference-images?" + params, { headers: { Accept: "application/json" }, signal: AbortSignal.any([signal, AbortSignal.timeout(24000)]) })
-    const data = await readReferenceJson(response) as { images?: unknown } | null
-    return sanitizeReferenceImages(data?.images).filter((image) => !excludedUrls.includes(image.url))
-  } catch { return [] }
-}
-
-function recoveryPause(signal: AbortSignal): Promise<void> {
+  // A hedged metadata read: give the direct catalogue a head start, but don't
+  // wait 9 + 24 seconds before trying a server where CORS/ISP blocks differ.
+  // The first relevant result wins, cancels its competitor and never waits
+  // for image bytes. Tutorials retain their exact device/feature policy.
+  const controller = new AbortController()
+  const budget = AbortSignal.any([signal, controller.signal])
   return new Promise((resolve) => {
-    const done = () => { clearTimeout(timer); signal.removeEventListener("abort", done); resolve() }
-    const timer = setTimeout(done, 1200)
-    signal.addEventListener("abort", done, { once: true })
-    if (signal.aborted) done()
+    let settled = false, directDone = false, fallbackDone = plan.kind === "tutorial", fallbackStarted = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const finish = (images: MalikVisualImage[]) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      budget.removeEventListener("abort", aborted)
+      controller.abort()
+      resolve(images)
+    }
+    const aborted = () => finish([])
+    const deliver = (images: MalikVisualImage[]) => {
+      if (images.length) finish(images)
+      else if (directDone && fallbackDone) finish([])
+    }
+    const fallback = async () => {
+      if (fallbackStarted || settled || plan.kind === "tutorial") return
+      fallbackStarted = true
+      clearTimeout(timer)
+      const params = new URLSearchParams({ q: "Покажи фото " + plan.topic, entity: plan.entity ? "1" : "0", person: plan.person ? "1" : "0" })
+      if (plan.queries[0]) params.set("topic", plan.queries[0])
+      if (plan.logo) params.set("logo", "1")
+      if (excludedUrls.length) params.set("skipOfficial", "1")
+      let images: MalikVisualImage[] = []
+      try {
+        const response = await fetch("/api/chat/reference-images?" + params, { headers: { Accept: "application/json" }, signal: budget })
+        const data = await readReferenceJson(response) as { images?: unknown } | null
+        images = sanitizeReferenceImages(data?.images).filter((image) => !excludedUrls.includes(image.url))
+      } catch { /* The direct catalogue may still succeed. */ }
+      fallbackDone = true
+      deliver(images)
+    }
+    budget.addEventListener("abort", aborted, { once: true })
+    if (budget.aborted) { finish([]); return }
+    if (plan.kind !== "tutorial") timer = setTimeout(() => { void fallback() }, 350)
+    void lookupReferenceImages(plan, budget, { excludedUrls, fast: true }).catch(() => []).then((images) => {
+      directDone = true
+      deliver(images)
+      if (!settled) void fallback()
+    })
   })
-}
-
-/** One automatic recovery pass; bounded time and abortable when the message leaves. */
-async function lookupWithRecovery(plan: ReferenceVisualPlan, signal: AbortSignal): Promise<MalikVisualImage[]> {
-  const budget = AbortSignal.any([signal, AbortSignal.timeout(45000)])
-  for (let pass = 0; pass < 2 && !budget.aborted; pass++) {
-    const images = await lookupWithFallback(plan, budget)
-    if (images.length) return images
-    if (pass === 0 && !budget.aborted) await recoveryPause(budget)
-  }
-  return []
 }
 
 /** Deduplicate across messages/remounts; abort when the last reader leaves. */
@@ -127,16 +143,18 @@ export function subscribeReferenceImages(plan: ReferenceVisualPlan, listener: Li
   hydrateCache()
   const key = referenceCacheKey(plan)
   const existing = cache.get(key)
-  if (existing?.images.length && existing.expires > Date.now()) { listener(existing.images); return () => {} }
+  if (existing && existing.expires > Date.now()) { listener(existing.images); return () => {} }
   let job = pending.get(key)
   if (!job || job.controller.signal.aborted) {
     job = { controller: new AbortController(), listeners: new Set() }
     pending.set(key, job)
     const current = job
     void Promise.resolve().then(async () => {
-      const release = await acquireLookup(current.controller.signal)
+      // Budget includes queueing: a long answer cannot hold later slots hostage.
+      const signal = AbortSignal.any([current.controller.signal, AbortSignal.timeout(REFERENCE_LOOKUP_BUDGET_MS)])
+      const release = await acquireLookup(signal)
       if (!release) return []
-      try { return await lookupWithRecovery(plan, current.controller.signal) } finally { release() }
+      try { return await lookupWithFallback(plan, signal) } finally { release() }
     })
       .then((images) => {
         if (current.controller.signal.aborted) return

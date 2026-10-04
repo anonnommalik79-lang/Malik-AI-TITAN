@@ -518,5 +518,48 @@ check("any mix of lines finishes rendering (no endless loop)", () => {
   }
 })
 
+check("task-specific flow renders arrows and parallel tools as semantic HTML without a photo request", () => {
+  const flow = { version: 1, type: "flow", title: "Архитектура", subtitle: "Предлагаемая схема", stages: [
+    { label: "Пользователь", detail: "Задача" }, { label: "Оркестратор", detail: "План" },
+    { label: "Инструменты", nodes: [{ label: "Research", detail: "Проверка источников" }, { label: "Code", detail: "Разработка и тесты" }, { label: "Documents", detail: "Файлы" }, { label: "Browser", detail: "Сайты" }] },
+    { label: "Проверка и согласование" }, { label: "Результат" },
+  ] }
+  const html = render("## Как это работает\n\n```malik-visual\n" + JSON.stringify(flow) + "\n```\n\nНе утверждение о внутренних системах компании.", { visualContext: { question: "Объясни архитектуру бизнес-системы", isLatest: true } })
+  assert(html.includes('data-malik-answer-visual="flow"'))
+  assert.equal((html.match(/class="malik-answer-flow__arrow"/g) || []).length, 4)
+  assert(html.includes("Проверка источников") && html.includes("Не утверждение"))
+  assert(!html.includes("malik-visual") && !html.includes("data-test-photo-topic"))
+  const parser = loadPure("lib/ai/answer-visuals.ts")
+  assert.equal(parser.parseAnswerVisual(JSON.stringify({ ...flow, stages: [{ label: "one" }] })), null)
+  assert.equal(parser.parseAnswerVisual(JSON.stringify({ ...flow, stages: [{ label: "one", nodes: [{ label: "" }] }, { label: "two" }] })), null)
+  const exported = loadPure("lib/ai/answer-cards.ts").answerCardsToText("До.\n\n```malik-visual\n" + JSON.stringify(flow) + "\n```\n\nПосле.")
+  assert(exported.includes("Предлагаемая схема") && exported.includes("Research — Проверка источников") && exported.includes("5. Результат"))
+  assert(!/malik-visual|"stages"|"version"/.test(exported))
+  assert(exported.startsWith("До.") && exported.endsWith("После."))
+})
+check("pricing columns preserve exact values/conditions and source chips without decorative photos", () => {
+  const pricing = { version: 1, type: "pricing", items: [{ title: "Test product", offers: [{ label: "Standard", value: "$12", note: "за месяц · тестовые данные" }, { label: "Premium", value: "$34", note: "за месяц · тестовые данные" }], text: "Условия тарифа [1]" }] }
+  const html = render("## Стоимость\n\n```malik-cards\n" + JSON.stringify(pricing) + "\n```", { citations: [{ url: "https://example.com/pricing", domain: "example.com" }], visualContext: { question: "Сравни тарифы продуктов" } })
+  assert(html.includes("malik-card-offers is-2"))
+  assert(html.includes("$12") && html.includes("$34") && html.includes("тестовые данные"))
+  assert(html.includes("malik-md-cite"))
+  assert(!html.includes("data-test-photo-topic"))
+  const exported = loadPure("lib/ai/answer-cards.ts").answerCardsToText("```malik-cards\n" + JSON.stringify(pricing) + "\n```")
+  assert(exported.includes("Standard: $12") && exported.includes("Premium: $34"))
+})
+check("software cards show exact logos in their own section at first render without waiting for an effect", () => {
+  const text = '## Экосистемы\n\n```malik-cards\n{"version":1,"type":"cards","items":[{"title":"ChatGPT","image":"ChatGPT","text":"OpenAI · модельный ответ"},{"title":"Claude","image":"Claude","text":"Anthropic · модельный ответ"}]}\n```\n\n## Следующий раздел\n\nТекст без повторных фотографий.'
+  const html = render(text, { visualContext: { question: "Сравни ChatGPT и Claude для бизнеса" } })
+  assert(html.includes("OpenAI_logo_2025") && html.includes("Claude_AI_symbol"))
+  assert.equal((html.match(/is-logo/g) || []).length, 2)
+  assert(!html.includes("data-test-photo-topic"))
+  assert(html.indexOf("Claude_AI_symbol") < html.indexOf("Следующий раздел"))
+  assert(html.includes("Текст без повторных фотографий"))
+})
+check("even a model-authored photo fence cannot turn an abstract business process into a stock-photo search", () => {
+  const html = render('## Контент-маркетинг\n\nМатериалы для клиентов.\n\n```malik-photos\n{"version":1,"subjects":[{"name":"Контент-маркетинг","query":"Content marketing","kind":"topic","layout":"landscape"}]}\n```', { visualContext: { question: "План бизнес-процессов", isLatest: true } })
+  assert(!html.includes("data-test-photo-topic"))
+  assert(html.includes("Материалы для клиентов"))
+})
 console.log(failures ? `\n${failures} failing\n` : "\nall answer format checks passed\n")
 process.exit(failures ? 1 : 0)

@@ -8,13 +8,13 @@ import { cleanReferenceLabel, isSafeVisualUrl, lookupReferenceImages, readRefere
 
 const cache = new Map<string, { expires: number; promise: Promise<MalikVisualImage[]> }>()
 
-async function unsplash(topic: string): Promise<MalikVisualImage[]> {
+async function unsplash(topic: string, signal: AbortSignal): Promise<MalikVisualImage[]> {
   const key = process.env.UNSPLASH_ACCESS_KEY?.trim()
   if (!key) return []
   const params = new URLSearchParams({ query: topic, per_page: "3", content_filter: "high", orientation: "landscape" })
   const response = await fetch("https://api.unsplash.com/search/photos?" + params, {
     headers: { Authorization: "Client-ID " + key, Accept: "application/json" },
-    signal: AbortSignal.timeout(5500),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(3500)]),
     next: { revalidate: 3600 },
   })
   if (!response.ok) return []
@@ -45,27 +45,32 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams
   plan.person = plan.person || params.get("person") === "1"
   plan.entity = plan.entity || plan.person || params.get("entity") === "1"
+  plan.logo = params.get("logo") === "1" && !plan.person
   const topic = params.get("topic") || ""
   if (topic.length > 120 || /[\r\n<>]|https?:|www\./iu.test(topic)) return NextResponse.json({ images: [] }, { status: 400 })
   if (topic) plan.queries = [...new Set([topic, ...plan.queries])].slice(0, 2)
   const skipOfficial = params.get("skipOfficial") === "1"
-  const key = [skipOfficial ? "retry" : "", plan.entity ? "entity" : "", plan.person ? "person" : "", ...plan.queries].join("|").toLowerCase()
+  const key = [skipOfficial ? "retry" : "", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.logo ? "logo" : "", ...plan.queries].join("|").toLowerCase()
   let entry = cache.get(key)
   if (!entry || entry.expires <= Date.now()) {
     // Eviction bounds RAM. Concurrent identical lookups share one promise.
     for (const [oldKey, value] of cache) if (value.expires <= Date.now()) cache.delete(oldKey)
     while (cache.size >= 60) cache.delete(cache.keys().next().value!)
     const promise = (async () => {
-      let images = await lookupReferenceImages(plan, undefined, { skipOfficial })
-      if (!images.length && !plan.entity) {
-        try { images = sanitizeReferenceImages(await unsplash(plan.queries[0])) } catch { /* Optional provider. */ }
+      const started = Date.now()
+      const signal = AbortSignal.timeout(7500)
+      let images = await lookupReferenceImages(plan, signal, { skipOfficial, fast: true })
+      if (!images.length && !plan.entity && !plan.logo && !signal.aborted) {
+        try { images = sanitizeReferenceImages(await unsplash(plan.queries[0], signal)) } catch { /* Optional provider. */ }
       }
+      // Timings/counts only: never log the user's prompt, identity or keys.
+      if (!images.length || Date.now() - started > 1500) console.info("[reference-images]", { durationMs: Date.now() - started, count: images.length, timedOut: signal.aborted })
       return images
     })()
     entry = { expires: Date.now() + 600000, promise }
     cache.set(key, entry)
   }
   const images = await entry.promise
-  if (!images.length) cache.delete(key)
+  if (!images.length) entry.expires = Math.min(entry.expires, Date.now() + 10000)
   return NextResponse.json({ images }, { headers: { "Cache-Control": images.length ? "private, max-age=600" : "no-store" } })
 }

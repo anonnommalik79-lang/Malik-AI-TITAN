@@ -6,6 +6,8 @@ import type { AnswerCard, AnswerCardsBlock, CardLink } from "@/lib/ai/answer-car
 import { citationName, hostOf, safeHttps, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
 import { referenceSearchTopic } from "@/lib/ai/reference-visual-policy"
 import { subscribeReferenceImages } from "@/lib/media/client-reference-cache"
+import { referenceBrandAsset } from "@/lib/media/reference-brand-assets"
+import { referenceThumbnailVariants } from "@/lib/media/reference-catalog"
 import "./answer-cards.css"
 
 type Sources = readonly MalikCitation[] | null | undefined
@@ -44,32 +46,37 @@ function Button({ link, sources, primary }: { link: CardLink; sources: Sources; 
 }
 
 /** The page's own picture (from a cited source) or a looked-up reference photo. */
-function useCardImage(image: AnswerCard["image"], sources: Sources): { url: string; label: string } | null {
+function useCardImage(image: AnswerCard["image"], sources: Sources, title: string, hero: boolean, imageRole?: AnswerCard["imageRole"]): { url: string; label: string; logo?: boolean } | null {
   const fromSource = typeof image === "number" ? sources?.[image - 1] : undefined
   const sourceImage = fromSource?.image && /^https:\/\//i.test(fromSource.image) ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url) } : null
   const lookup = typeof image === "string" && image.trim().length >= 2 ? image.trim() : ""
-  const [found, setFound] = useState<{ key: string; url: string; label: string } | null>(null)
+  const brand = !hero ? referenceBrandAsset(lookup || title) : null
+  const hasBrand = Boolean(brand), sourceUrl = sourceImage?.url
+  const lookupKey = (imageRole === "logo" ? "logo:" : "photo:") + lookup
+  const [found, setFound] = useState<{ key: string; url: string; label: string; logo?: boolean } | null>(null)
   useEffect(() => {
-    if (!lookup) return
+    if (!lookup || hasBrand || sourceUrl) return
     return subscribeReferenceImages(
-      { topic: lookup, queries: [...new Set([referenceSearchTopic(lookup), lookup])], explicit: true, entity: true, kind: "reference", layout: "landscape" },
-      (images) => { if (images[0]) setFound({ key: lookup, url: images[0].url, label: images[0].credit || "Wikimedia" }) },
+      { topic: lookup, queries: [...new Set([referenceSearchTopic(lookup), lookup])], explicit: true, entity: true, logo: imageRole === "logo", kind: "reference", layout: "landscape" },
+      (images) => { if (images[0]) setFound({ key: lookupKey, url: images[0].url, label: images[0].credit || "Wikimedia", logo: images[0].role === "logo" }) },
     )
-  }, [lookup])
-  if (sourceImage) return sourceImage
-  return found && found.key === lookup ? { url: found.url, label: found.label } : null
+  }, [lookup, lookupKey, hasBrand, sourceUrl, imageRole])
+  if (brand) return { url: brand.url, label: brand.credit, logo: true }
+  if (sourceImage) return { ...sourceImage, logo: imageRole === "logo" }
+  return found && found.key === lookupKey ? { url: found.url, label: found.label, logo: found.logo } : null
 }
 
 function Picture({ card, sources, hero = false }: { card: AnswerCard; sources: Sources; hero?: boolean }) {
-  const image = useCardImage(card.image, sources)
-  const [failed, setFailed] = useState<string | null>(null)
-  if (!image || failed === image.url) {
+  const image = useCardImage(card.image, sources, card.title, hero, card.imageRole)
+  const [failed, setFailed] = useState<string[]>([])
+  const url = image ? referenceThumbnailVariants(image.url).find((candidate) => !failed.includes(candidate)) : undefined
+  if (!image || !url) {
     if (hero) return null
     return <span className="malik-card__thumb is-empty" aria-hidden="true">{card.title.trim().charAt(0).toUpperCase()}</span>
   }
   return (
-    <span className={hero ? "malik-card__hero-image" : "malik-card__thumb"}>
-      <img src={image.url} alt={card.title} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(image.url)} />
+    <span className={hero ? "malik-card__hero-image" : "malik-card__thumb" + (image.logo ? " is-logo" : "")}>
+      <img src={url} alt={image.logo ? card.title + " · логотип" : card.title} loading={image.logo ? "eager" : "lazy"} decoding="async" referrerPolicy="no-referrer" onError={() => setFailed((current) => [...current, url].slice(-6))} />
       {hero && image.label ? <span className="malik-card__credit">{image.label}</span> : null}
     </span>
   )
@@ -126,6 +133,17 @@ function OptionCard({ card, sources, primary }: { card: AnswerCard; sources: Sou
   )
 }
 
+function PricingCard({ card, sources }: { card: AnswerCard; sources: Sources }) {
+  return <article className="malik-card-option">
+    <div className="malik-card-option__head"><Title card={card} sources={sources} /><Badge>{card.badge}</Badge></div>
+    {card.offers?.length ? <dl className={`malik-card-offers is-${card.offers.length}`}>{card.offers.map((offer, index) => <div key={index}>
+      <dt>{offer.label}</dt><dd>{offer.value}</dd>{offer.note ? <p>{offer.note}</p> : null}
+    </div>)}</dl> : null}
+    <Body card={card} sources={sources} />
+    {card.action ? <div className="malik-card__actions"><Button link={card.action} sources={sources} /></div> : null}
+  </article>
+}
+
 function Section({ title, label, children, className }: { title?: string; label: string; children: ReactNode; className: string }) {
   return (
     <section className={className} aria-label={title || label} data-malik-cards>
@@ -142,6 +160,9 @@ function Section({ title, label, children, className }: { title?: string; label:
  * initial instead of a broken image.
  */
 export function MalikAnswerCards({ block, sources }: { block: AnswerCardsBlock; sources?: readonly MalikCitation[] | null }) {
+  if (block.type === "pricing") {
+    return <Section title={block.title} label="Тарифы" className="malik-cards is-options is-pricing">{block.items.map((card, index) => <PricingCard key={`${card.title}-${index}`} card={card} sources={sources} />)}</Section>
+  }
   if (block.type === "cards") {
     return <Section title={block.title} label="Подборка" className="malik-cards is-list">{block.items.map((card, index) => <ListCard key={`${card.title}-${index}`} card={card} sources={sources} />)}</Section>
   }

@@ -12,7 +12,7 @@ import { parseAnswerCards, type AnswerCardsBlock } from "@/lib/ai/answer-cards"
 import { MalikAnswerChecklist } from "./MalikAnswerChecklist"
 import { parseAnswerVisual, inferTableVisual, inferListVisual, inferComparisonTable, wantsAnswerVisuals, wantsAnswerChecklist, type AnswerVisual } from "@/lib/ai/answer-visuals"
 import { parseAnswerEntity } from "@/lib/ai/answer-entities"
-import { planAnswerVisualSlots, visualSegmentLabel, type AnswerVisualSegment, type AnswerVisualSlot, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
+import { planAnswerVisualSlots, type AnswerVisualSegment, type AnswerVisualSlot, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { groundedAnswerPhotoPlans, isPhotoLineup, parseAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 
 /**
@@ -778,7 +778,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
   }, [blocks, question])
   const fallbackVisualSlots = useMemo(() => {
     // Event lineups need explicit subject metadata: a guessed portrait is not attendance evidence.
-    if (!question || /(?:спикер|выступ|участни|приехал|присутств|speaker|attend|participant|lineup)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
+    if (!question || blocks.some((block) => block.kind === "cards" || block.kind === "visual") || /(?:спикер|выступ|участни|приехал|присутств|speaker|attend|participant|lineup)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
     const segments: AnswerVisualSegment[] = []
     blocks.forEach((block, position) => {
       // The last streamed block can still change its subject; anchor only settled blocks.

@@ -16,6 +16,8 @@ export type ReferenceVisualPlan = {
   entity?: boolean
   /** People require a canonical article portrait, never namesake results. */
   person?: boolean
+  /** Company/tool identities request logos, not article photos of offices. */
+  logo?: boolean
   /** A short line under the photo in a comparison lineup. */
   caption?: string
 }
@@ -182,6 +184,11 @@ export function visualSegmentLabel(text: string): string {
   return (bold || text.split(/\s+[—–]\s+|[.!?\n]/u, 1)[0]).replace(/(?:\*\*|__|[`*_])/gu, "").replace(/^\d+[.)]\s*/u, "").trim().slice(0, 100)
 }
 
+/** A business/process label isn't an object one can truthfully photograph. */
+export function isAbstractPhotoSubject(label: string): boolean {
+  return /(?:анализ\s+(?:рынка|данных|продаж)|архитектура\s+(?:процессов|систем)|регламент|\bSOP\b|контент[- ]маркетинг|маркетинговая\s+стратегия|(?:финансов|бизнес)[\p{L}]*\s+модел|бизнес[- ]процесс|рабочий\s+процесс|план\s+бизнес|техническая\s+реализация|автоматизац|юнит[- ]экономик|сила\s+(?:claude|chatgpt)|как\s+(?:работает|работают|построить)|market\s+analysis|business\s+(?:model|process)|content\s+marketing|process\s+architecture|workflow|standard\s+operating\s+procedure|проверка\s+и\s+согласование)/iu.test(label)
+}
+
 /** Resolve a photo follow-up from named subjects already present in the answer. */
 export function namedReferenceSubjects(answer: string): string[] {
   const text = answer.replace(/```[\s\S]*?(?:```|$)/gu, "")
@@ -231,7 +238,7 @@ export function planAnswerVisualSlots(question: string, segments: AnswerVisualSe
   }
   const useful = candidates.filter((segment) => {
     const label = visualSegmentLabel(segment.text)
-    return label.length > 3 && label.split(/\s+/u).length <= 10 && !/^\d{4}$/u.test(label) && !/^(?:истори[яи]|биографи[яи]|особенности|классическ|эпоха|открой|нажми|выбери|перейди|введи|вернись|click|tap|open|select|enter)/iu.test(label)
+    return label.length > 3 && label.split(/\s+/u).length <= 10 && !isAbstractPhotoSubject(label) && !/^\d{4}$/u.test(label) && !/^(?:истори[яи]|биографи[яи]|особенности|классическ|эпоха|открой|нажми|выбери|перейди|введи|вернись|click|tap|open|select|enter)/iu.test(label)
   }).slice(0, 3)
   if (useful.length) return useful.map((segment) => {
     const label = visualSegmentLabel(segment.text)
@@ -239,5 +246,6 @@ export function planAnswerVisualSlots(question: string, segments: AnswerVisualSe
     return { key: segment.key, row: true, plan: { topic, queries: [...new Set([referenceSearchTopic(topic), topic])], explicit: false, layout: "landscape", kind: "reference" } }
   })
   const anchor = segments.find((segment) => segment.kind === "paragraph") || segments[0]
+  if (isAbstractPhotoSubject(base.topic) || !base.explicit && /бизнес\s+под\s+ключ|возможност|capabilit/iu.test(base.topic)) return []
   return anchor ? [{ key: anchor.key, plan: base, row: false }] : []
 }

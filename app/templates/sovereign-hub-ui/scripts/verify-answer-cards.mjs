@@ -27,7 +27,7 @@ check("a card block is validated field by field; [n] in text become its sources"
   const block = parseAnswerCards(JSON.stringify({ version: 1, type: "cards", items: [
     { title: "Grand Final alem.ai Battle", url: "https://astanahub.com/x", image: 1, badge: "Ближайшее", meta: "23 октября 2026 · Астана", text: "Финал [1][2].", sources: [1], links: [{ label: "Регистрация", url: "javascript:alert(1)" }] },
     { title: "" },
-    { title: "<b>Expand</b> North Star", image: "Dubai World Trade Centre" },
+    { title: "<b>Expand</b> North Star", image: "Dubai World Trade Centre", imageRole: "logo" },
   ] }))
   assert.equal(block.type, "cards")
   assert.equal(block.items.length, 2)
@@ -36,6 +36,7 @@ check("a card block is validated field by field; [n] in text become its sources"
   assert.equal(block.items[0].links, undefined, "a javascript: link is dropped")
   assert.equal(block.items[1].title, "Expand North Star")
   assert.equal(block.items[1].image, "Dubai World Trade Centre")
+  assert.equal(block.items[1].imageRole, "logo")
 })
 
 check("malformed, partial, unknown or oversized blocks render nothing", () => {

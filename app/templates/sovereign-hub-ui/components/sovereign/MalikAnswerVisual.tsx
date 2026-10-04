@@ -19,6 +19,16 @@ function ItemLabel({ item }: { item: AnswerVisualItem }) {
 /** CSS/semantic HTML only: no canvas snapshots, chart dependency or network calls. */
 export function MalikAnswerVisual({ visual, stateKey }: { visual: AnswerVisual; stateKey?: string }) {
   if (visual.type === "checklist") return <MalikAnswerChecklist title={visual.title} items={visual.items} stateKey={stateKey} />
+  if (visual.type === "flow") return <figure className="malik-answer-flow" data-malik-answer-visual="flow" aria-label={visual.title}>
+    <figcaption><strong>{visual.title}</strong>{visual.subtitle ? <span>{visual.subtitle}</span> : null}</figcaption>
+    <ol>{visual.stages.map((stage, index) => <li key={index}>
+      {index > 0 ? <span className="malik-answer-flow__arrow" aria-hidden="true">↓</span> : null}
+      <div className={stage.nodes ? "malik-answer-flow__stage is-parallel" : "malik-answer-flow__stage"}>
+        <strong>{stage.label}</strong>{stage.detail ? <p>{stage.detail}</p> : null}
+        {stage.nodes ? <ul className="malik-answer-flow__nodes">{stage.nodes.map((node, nodeIndex) => <li key={nodeIndex}><strong>{node.label}</strong>{node.detail ? <p>{node.detail}</p> : null}</li>)}</ul> : null}
+      </div>
+    </li>)}</ol>
+  </figure>
   if (visual.type === "comparison") return <figure className="malik-answer-comparison malik-answer-visual-enter" data-malik-answer-visual="comparison" aria-label={visual.title}>
     <figcaption>{visual.title}</figcaption>
     <div className={`malik-answer-comparison__columns${visual.columns.length === 3 ? " is-three" : ""}`}>
