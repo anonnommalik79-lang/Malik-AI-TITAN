@@ -7,6 +7,8 @@ import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from
 import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
 import { MalikReferenceImages, MalikVisualGallery, isSafeVisualUrl, type MalikVisualImage } from "./MalikVisualGallery"
 import { MalikAnswerVisual } from "./MalikAnswerVisual"
+import { MalikAnswerCards } from "./MalikAnswerCards"
+import { parseAnswerCards, type AnswerCardsBlock } from "@/lib/ai/answer-cards"
 import { MalikAnswerChecklist } from "./MalikAnswerChecklist"
 import { parseAnswerVisual, inferTableVisual, inferListVisual, inferComparisonTable, wantsAnswerVisuals, wantsAnswerChecklist, type AnswerVisual } from "@/lib/ai/answer-visuals"
 import { parseAnswerEntity } from "@/lib/ai/answer-entities"
@@ -20,7 +22,8 @@ import { groundedAnswerPhotoPlans, isPhotoLineup, parseAnswerPhotoHints } from "
  * model output is parsed into React elements and never injected as HTML.
  */
 
-export type MalikCitation = { url: string; title?: string; domain?: string }
+import { citationName, safeHttps, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
+export type { MalikCitation } from "@/lib/ai/citation-names"
 
 type Props = { text: string; className?: string; allowImages?: boolean; autoPreview?: boolean; citations?: MalikCitation[]; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
 
@@ -39,29 +42,6 @@ function isProjectArtifactHref(href: string) {
  */
 const CitationContext = createContext<MalikCitation[] | null>(null)
 
-const KNOWN_SOURCE_NAMES: Record<string, string> = {
-  "wikipedia.org": "Wikipedia", "britannica.com": "Britannica", "github.com": "GitHub", "youtube.com": "YouTube",
-  "openai.com": "OpenAI", "anthropic.com": "Anthropic", "google.com": "Google", "gov.kz": "gov.kz", "akorda.kz": "Akorda",
-  "tengrinews.kz": "Tengrinews", "kapital.kz": "Kapital.kz", "forbes.kz": "Forbes.kz", "reuters.com": "Reuters", "bbc.com": "BBC",
-}
-
-function citationName(source: MalikCitation) {
-  let host = String(source.domain || "")
-  if (!host) { try { host = new URL(source.url).hostname } catch { host = "" } }
-  host = host.replace(/^www\./, "").toLowerCase()
-  const parts = host.split(".").filter(Boolean)
-  for (let index = 0; index < parts.length - 1; index += 1) {
-    const tail = parts.slice(index).join(".")
-    if (KNOWN_SOURCE_NAMES[tail]) return KNOWN_SOURCE_NAMES[tail]
-  }
-  const root = parts.length > 1 ? parts[parts.length - 2] : parts[0] || "Источник"
-  return root.charAt(0).toUpperCase() + root.slice(1)
-}
-
-function safeHttps(url: string) {
-  try { const parsed = new URL(url); return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : "" } catch { return "" }
-}
-
 /**
  * «[2][3]» after a claim becomes a small source chip - «Anthropic +1» - that
  * opens the first source, the way ChatGPT shows evidence in the text. A
@@ -77,6 +57,22 @@ function CitationChip({ numbers, raw }: { numbers: number[]; raw: string }) {
   return (
     <a href={safeHttps(first.url)} target="_blank" rel="noreferrer noopener" className="malik-md-cite" title={found.map((source) => source.title || citationName(source)).join("\n")}>
       {label}
+    </a>
+  )
+}
+
+/**
+ * A Markdown link. In a web answer it opens only pages on the sites its
+ * sources are on - an invented address stays plain text - and an outside
+ * page is marked with ↗ like ChatGPT's links.
+ */
+function MarkdownLink({ href, label }: { href: string; label: string }) {
+  const sources = useContext(CitationContext)
+  const external = /^https?:\/\//i.test(href)
+  if (external && sources?.length && !trustedLink(href, sources)) return <>{label}</>
+  return (
+    <a href={href} target="_blank" rel="noreferrer noopener" className={external ? "malik-md-link is-external" : "malik-md-link"}>
+      {label}{external ? <span className="malik-md-link__arrow" aria-hidden="true">↗</span> : null}
     </a>
   )
 }
@@ -151,9 +147,7 @@ function inlineBase(text: string, keyPrefix: string): ReactNode[] {
           </a>,
         )
       } else {
-        nodes.push(
-          <a key={key} href={href} target="_blank" rel="noreferrer noopener" className="malik-md-link">{label}</a>,
-        )
+        nodes.push(<MarkdownLink key={key} href={href} label={label} />)
       }
     } else {
       nodes.push(<em key={key} className="malik-md-em">{token.slice(1, -1)}</em>)
@@ -176,6 +170,7 @@ type Block =
   | { kind: "math"; tex: string }
   | { kind: "visual"; visual: AnswerVisual | null; pending: boolean }
   | { kind: "photos"; subjects: ReturnType<typeof parseAnswerPhotoHints>; lineup: boolean }
+  | { kind: "cards"; block: AnswerCardsBlock | null; pending: boolean }
   | { kind: "code"; language: string; filename: string; lines: string[] }
   | { kind: "table"; headers: string[]; rows: string[][] }
   | { kind: "images"; images: MalikVisualImage[] }
@@ -374,6 +369,11 @@ function parseBlocks(source: string): Block[] {
       index += 1
       if (fence.language === "malik-visual") {
         blocks.push({ kind: "visual", visual: closed ? parseAnswerVisual(body.join("\n")) : null, pending: !closed })
+        pendingFilename = ""
+        continue
+      }
+      if (fence.language === "malik-cards") {
+        blocks.push({ kind: "cards", block: closed ? parseAnswerCards(body.join("\n")) : null, pending: !closed })
         pendingFilename = ""
         continue
       }
@@ -911,6 +911,10 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
           return <section key={key} data-malik-photo-hints className="my-5 space-y-4" aria-label="Фотографии по теме ответа">
             {plans.map((plan) => <MalikReferenceImages key={plan.topic} question="" planOverride={plan} row={!singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest} />)}
           </section>
+        }
+        if (block.kind === "cards") {
+          if (block.block) return <MalikAnswerCards key={key} block={block.block} sources={citations} />
+          return block.pending && streaming ? <p key={key} className="malik-md-p malik-cards-pending" role="status">Собираю карточки…</p> : null
         }
         if (block.kind === "visual") {
           if (dataVisual) return <MalikAnswerVisual key={key} visual={dataVisual} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} />

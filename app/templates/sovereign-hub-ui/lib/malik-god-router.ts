@@ -1,5 +1,6 @@
 import type { MalikModelId } from "@/lib/ai/malik-models"
 import { instantReply } from "@/lib/ai/instant-replies"
+import { answerCardsToText } from "@/lib/ai/answer-cards"
 import { userContextBlocks } from "@/lib/ai/client-context"
 import { conversationFocus, conversationFocusInstruction, type ConversationFocus } from "@/lib/ai/conversation-focus"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
@@ -710,7 +711,7 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: 
     const page = await fetchPageText(source, { signal: budget, timeoutMs: 8000 })
     activity?.finish(call, page ? { title: page.title, characters: page.text.length, excerpt: page.text.slice(0, 1200) } : { title: source.title, snippet: source.snippet, limitation: "Полная страница недоступна; доступен только поисковый фрагмент" }, page ? "completed" : "failed", page ? undefined : "Не удалось прочитать полную страницу")
     return page
-      ? { ...source, title: page.title || source.title, snippet: page.text.slice(0, 2200) }
+      ? { ...source, title: page.title || source.title, snippet: page.text.slice(0, 2200), ...(page.image ? { image: page.image } : {}) }
       : source
   }))
 
@@ -729,7 +730,7 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: 
 function sourceContext(sources: SourceItem[]) {
   if (!sources.length) return ""
   return sources
-    .map((s, i) => `[${i + 1}] ${s.title}\nURL: ${s.url}\nDomain: ${s.domain}\nSnippet: ${s.snippet || ""}`)
+    .map((s, i) => `[${i + 1}] ${s.title}\nURL: ${s.url}\nDomain: ${s.domain}${s.image ? "\nPage picture: available (use \"image\": " + (i + 1) + " on its card)" : ""}\nSnippet: ${s.snippet || ""}`)
     .join("\n\n")
 }
 
@@ -1075,7 +1076,7 @@ export async function malikGodAnswer(
       selectedModelId: result.selectedModelId,
       usedWeb: usedEvidence,
       sources,
-      factAudit: auditGroundedAnswer(content, sources, prompt),
+      factAudit: auditGroundedAnswer(answerCardsToText(content), sources, prompt),
       attempts: [{
         provider: result.provider,
         model: result.model,
@@ -1133,7 +1134,7 @@ export async function malikGodAnswer(
       model: result.model,
       usedWeb: usedEvidence,
       sources,
-      factAudit: auditGroundedAnswer(result.content, sources, prompt),
+      factAudit: auditGroundedAnswer(answerCardsToText(result.content), sources, prompt),
       attempts: result.attempts,
     }
   } else {

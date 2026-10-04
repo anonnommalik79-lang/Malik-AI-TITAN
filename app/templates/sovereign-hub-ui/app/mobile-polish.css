@@ -1,3 +1,9 @@
+/* Positional section rules below style the legacy home screen. They must never
+   reach a chat answer: its cards, photo rows and visuals are sections too (the
+   5th one used to vanish on phones), and «section:first-of-type p» matched
+   every paragraph under the chat column. :not(:where(.malik-md *)) on the
+   section and on the styled element leaves answers alone without changing
+   any rule's specificity. */
 /* Malik AI legendary polish: Gemini-like bottom atmosphere, stronger desktop depth, safer mobile UI. */
 
 /* The page is black. It used to be a gold bottom glow over a navy gradient, and
@@ -41,27 +47,27 @@ body,
    per-page rule written to make that section black. */
 
 /* Home Earth photo must show through — no fake gradient panel on top */
-#malik-root:has(.malik-welcome-earth-shell) section:first-of-type,
+#malik-root:has(.malik-welcome-earth-shell) section:not(:where(.malik-md *)):first-of-type,
 #malik-root:has(.malik-welcome-earth-shell) .malik-dashboard-shell,
 #malik-root:has(.malik-welcome-earth-shell) .malik-dashboard-shell > main,
 #malik-root:has(.malik-welcome-earth-shell) .malik-main-scroll-host {
   background: transparent !important;
 }
 
-#malik-root section:first-of-type [class*="bg-white/[0.02]"],
-#malik-root section:first-of-type [class*="bg-white/[0.03]"],
-#malik-root section:first-of-type [class*="bg-white/[0.04]"],
-#malik-root section:first-of-type [class*="bg-black/20"],
-#malik-root section:first-of-type [class*="bg-black/30"],
-#malik-root section:first-of-type [class*="bg-black/45"] {
+#malik-root section:not(:where(.malik-md *)):first-of-type [class*="bg-white/[0.02]"]:not(:where(.malik-md *)),
+#malik-root section:not(:where(.malik-md *)):first-of-type [class*="bg-white/[0.03]"]:not(:where(.malik-md *)),
+#malik-root section:not(:where(.malik-md *)):first-of-type [class*="bg-white/[0.04]"]:not(:where(.malik-md *)),
+#malik-root section:not(:where(.malik-md *)):first-of-type [class*="bg-black/20"]:not(:where(.malik-md *)),
+#malik-root section:not(:where(.malik-md *)):first-of-type [class*="bg-black/30"]:not(:where(.malik-md *)),
+#malik-root section:not(:where(.malik-md *)):first-of-type [class*="bg-black/45"]:not(:where(.malik-md *)) {
   box-shadow:
     0 18px 64px rgba(2, 6, 23, 0.38),
     0 0 0 1px rgba(255, 255, 255, 0.045),
     inset 0 1px 0 rgba(255, 255, 255, 0.055) !important;
 }
 
-#malik-root section:first-of-type button,
-#malik-root section:first-of-type [role="button"] {
+#malik-root section:not(:where(.malik-md *)):first-of-type button:not(:where(.malik-md *)),
+#malik-root section:not(:where(.malik-md *)):first-of-type [role="button"]:not(:where(.malik-md *)) {
   box-shadow: none !important;
 }
 
@@ -145,12 +151,12 @@ body,
      `#malik-root .sma-hero` (1,1,0) written to make it black. No amount of
      !important beats a higher specificity. The layout rules stay; the paint
      goes, and each page paints its own background. */
-  #malik-root section:first-of-type {
+  #malik-root section:not(:where(.malik-md *)):first-of-type {
     padding-top: 0 !important;
     min-height: auto !important;
   }
 
-  #malik-root section:first-of-type h1 {
+  #malik-root section:not(:where(.malik-md *)):first-of-type h1:not(:where(.malik-md *)) {
     max-width: 100% !important;
     font-size: clamp(1.92rem, 9.2vw, 2.55rem) !important;
     line-height: 0.98 !important;
@@ -158,21 +164,21 @@ body,
     text-shadow: none !important;
   }
 
-  #malik-root section:first-of-type h1 span {
+  #malik-root section:not(:where(.malik-md *)):first-of-type h1 span:not(:where(.malik-md *)) {
     white-space: normal !important;
   }
 
-  #malik-root section:first-of-type p:not(.hidden) {
+  #malik-root section:not(:where(.malik-md *)):first-of-type p:not(.hidden):not(:where(.malik-md *)) {
     max-width: 21.5rem !important;
     margin-left: auto !important;
     margin-right: auto !important;
   }
 
-  #malik-root section:first-of-type [class*="h-[360px]"],
-  #malik-root section:first-of-type [class*="h-[420px]"],
-  #malik-root section:first-of-type [class*="h-[520px]"],
-  #malik-root section:first-of-type [class*="min-h-[280px]"],
-  #malik-root section:first-of-type [class*="min-h-[320px]"] {
+  #malik-root section:not(:where(.malik-md *)):first-of-type [class*="h-[360px]"]:not(:where(.malik-md *)),
+  #malik-root section:not(:where(.malik-md *)):first-of-type [class*="h-[420px]"]:not(:where(.malik-md *)),
+  #malik-root section:not(:where(.malik-md *)):first-of-type [class*="h-[520px]"]:not(:where(.malik-md *)),
+  #malik-root section:not(:where(.malik-md *)):first-of-type [class*="min-h-[280px]"]:not(:where(.malik-md *)),
+  #malik-root section:not(:where(.malik-md *)):first-of-type [class*="min-h-[320px]"]:not(:where(.malik-md *)) {
     max-height: 210px !important;
     min-height: 140px !important;
     overflow: hidden !important;
@@ -192,7 +198,7 @@ body,
   }
 
   /* The prompt composer must not look like a transparent blur block. */
-  #malik-root:not(:has(.malik-welcome-earth-shell)) section:nth-of-type(2) > div {
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:not(:where(.malik-md *)):nth-of-type(2) > div:not(:where(.malik-md *)) {
     background: linear-gradient(180deg, rgba(7, 12, 24, 0.94), rgba(2, 6, 23, 0.89)) !important;
     border-color: rgba(255, 255, 255, 0.12) !important;
     box-shadow:
@@ -201,22 +207,22 @@ body,
     backdrop-filter: none !important;
   }
 
-  #malik-root:not(:has(.malik-welcome-earth-shell)) section:nth-of-type(2) .flex.flex-wrap {
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:not(:where(.malik-md *)):nth-of-type(2) .flex.flex-wrap:not(:where(.malik-md *)) {
     max-height: none !important;
     overflow: visible !important;
   }
 
   /* Hide huge lower showcases on legacy layouts only; sovereign home shows all sections. */
-  #malik-root:not(:has(.creator-home-shell)) section:nth-of-type(n+5) {
+  #malik-root:not(:has(.creator-home-shell)) section:not(:where(.malik-md *)):nth-of-type(n+5) {
     display: none !important;
   }
 
-  #malik-root:not(:has(.malik-welcome-earth-shell)) section:nth-of-type(3) {
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:not(:where(.malik-md *)):nth-of-type(3) {
     grid-template-columns: 1fr 1fr !important;
     gap: 0.65rem !important;
   }
 
-  #malik-root:not(:has(.malik-welcome-earth-shell)) section:nth-of-type(3) button {
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:not(:where(.malik-md *)):nth-of-type(3) button:not(:where(.malik-md *)) {
     min-height: 88px !important;
     padding: 0.85rem !important;
     border-radius: 1.1rem !important;
@@ -268,11 +274,11 @@ body,
 }
 
 @media (max-width: 390px) {
-  #malik-root:not(:has(.malik-welcome-earth-shell)) section:first-of-type h1 {
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:not(:where(.malik-md *)):first-of-type h1:not(:where(.malik-md *)) {
     font-size: clamp(1.78rem, 8.9vw, 2.18rem) !important;
   }
 
-  #malik-root:not(:has(.malik-welcome-earth-shell)) section:nth-of-type(3) {
+  #malik-root:not(:has(.malik-welcome-earth-shell)) section:not(:where(.malik-md *)):nth-of-type(3) {
     grid-template-columns: 1fr !important;
   }
 }

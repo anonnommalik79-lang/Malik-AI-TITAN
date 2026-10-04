@@ -8,7 +8,7 @@ const require_ = createRequire(import.meta.url)
 const React = require_("react")
 const { renderToStaticMarkup } = require_("react-dom/server")
 const icon = (name) => function TestIcon() { return React.createElement("svg", { "data-icon": name }) }
-const lucide = { Archive: icon("archive"), Check: icon("check"), Copy: icon("copy"), Download: icon("download"), ExternalLink: icon("external"), Eye: icon("eye"), RefreshCw: icon("refresh") }
+const lucide = { ArrowUpRight: icon("arrow-up-right"), Archive: icon("archive"), Check: icon("check"), Copy: icon("copy"), Download: icon("download"), ExternalLink: icon("external"), Eye: icon("eye"), RefreshCw: icon("refresh") }
 
 /**
  * The chat printed the model's reply into a `whitespace-pre-wrap` div, so every
@@ -82,6 +82,9 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "@/lib/ai/answer-visuals") return loadPure("lib/ai/answer-visuals.ts")
     if (name === "@/lib/ai/answer-photo-hints") return loadPure("lib/ai/answer-photo-hints.ts")
     if (name === "./MalikAnswerVisual") return loadPure("components/sovereign/MalikAnswerVisual.tsx")
+    if (name === "./MalikAnswerCards") return loadPure("components/sovereign/MalikAnswerCards.tsx")
+    if (name === "@/lib/ai/answer-cards") return loadPure("lib/ai/answer-cards.ts")
+    if (name === "@/lib/ai/citation-names") return loadPure("lib/ai/citation-names.ts")
     if (name === "./MalikAnswerChecklist") return loadPure("components/sovereign/MalikAnswerChecklist.tsx")
     throw new Error(`unexpected require(${name})`)
   }, box, box.exports, React,
@@ -144,7 +147,57 @@ check("a marker without a matching source disappears; without sources text stays
   assert(plain.includes("[1]"))
   // A Markdown link is still a link, not a citation.
   const link = render("[1](https://example.com/x)", { citations: [{ url: "https://example.com/a" }] })
-  assert(link.includes('class="malik-md-link"') && !link.includes("malik-md-cite"))
+  assert(/class="malik-md-link[^"]*"/.test(link) && !link.includes("malik-md-cite"))
+})
+const CARD_SOURCES = [
+  { url: "https://astanahub.com/ru/event/alem-battle", domain: "astanahub.com", title: "Astana Hub", image: "https://astanahub.com/media/battle.jpg" },
+  { url: "https://www.gitex.com/kazakhstan", domain: "gitex.com", title: "GITEX", image: "https://www.gitex.com/og.jpg" },
+  { url: "https://activat.vc/apply", domain: "activat.vc", title: "Activat VC" },
+]
+const cardsFence = (json) => "Ответ.\n\n```malik-cards\n" + JSON.stringify(json) + "\n```\n\nДальше."
+check("event cards: picture from the source page, name links to the official page, badge, date and chips", () => {
+  const html = render(cardsFence({ version: 1, type: "cards", items: [
+    { title: "Grand Final alem.ai Battle", url: "https://astanahub.com/ru/event/alem-battle", image: 1, badge: "Ближайшее в Казахстане", meta: "23 октября 2026 · Астана", text: "Финал AI-соревнования [1].", note: "Статус подачи уточняется.", links: [{ label: "Программа и регистрация", url: "https://astanahub.com/ru/event/alem-battle#program" }], sources: [2] },
+    { title: "Expand North Star 2026", url: "https://invented-site.example/ens", meta: "8–10 декабря 2026 · Дубай" },
+  ] }), { citations: CARD_SOURCES })
+  assert(html.includes('class="malik-cards is-list"'))
+  assert(html.includes('src="https://astanahub.com/media/battle.jpg"') && html.includes('referrerPolicy="no-referrer"'))
+  assert(html.includes('href="https://astanahub.com/ru/event/alem-battle"'))
+  assert(html.includes(">Ближайшее в Казахстане<") && html.includes("23 октября 2026 · Астана"))
+  assert(html.includes("Программа и регистрация") && html.includes("malik-md-cite"))
+  // A link to a site none of the sources is on is never shown: the name stays plain text.
+  assert(!html.includes("invented-site.example") && html.includes("Expand North Star 2026"))
+  // No picture → a quiet initial, never a broken image.
+  assert(html.includes('malik-card__thumb is-empty'))
+  assert(!html.includes("&quot;version&quot;") && !html.includes("malik-cards\n"))
+})
+check("hero, options, dates and actions render as panels and buttons", () => {
+  const hero = render(cardsFence({ version: 1, type: "hero", item: { title: "GITEX AI KAZAKHSTAN 2027", url: "https://www.gitex.com/kazakhstan", image: 2, badge: "Приём заявок открыт", value: "7–8 июня 2027", meta: "Алматы, Казахстан", sources: [2] } }), { citations: CARD_SOURCES })
+  assert(hero.includes("malik-cards is-hero") && hero.includes("malik-card__hero-image") && hero.includes(">gitex.com<") && hero.includes("7–8 июня 2027"))
+  const options = render(cardsFence({ version: 1, type: "options", items: [
+    { title: "Activat VC", url: "https://activat.vc", value: "$30 млн", valueNote: "Активы под управлением", action: { label: "Подать заявку", url: "https://activat.vc/apply" }, sources: [3] },
+    { title: "Astana Hub Ventures", url: "https://astanahub.com/ventures", action: { label: "Перейти к подаче", url: "https://astanahub.com/ventures/pitch" }, facts: [{ label: "Последний день подачи", value: "2 ноября 2026" }] },
+  ] }), { citations: CARD_SOURCES })
+  assert(options.includes("malik-cards is-options"))
+  assert((options.match(/malik-card-button is-primary/g) || []).length === 1, "only the first option is the white button")
+  assert(options.includes("Последний день подачи") && options.includes("2 ноября 2026") && options.includes("$30 млн"))
+  const dates = render(cardsFence({ version: 1, type: "dates", title: "Supernova", items: [{ label: "Дедлайн", value: "1 мая 2027" }, { label: "Финал", value: "8 июня 2027" }] }))
+  assert(dates.includes("malik-card-dates is-2") && dates.includes("1 мая 2027"))
+  const actions = render(cardsFence({ version: 1, type: "actions", items: [{ label: "Заявка Supernova", url: "https://www.gitex.com/kazakhstan/supernova", primary: true }, { label: "Фейк", url: "https://evil.example/" }] }), { citations: CARD_SOURCES })
+  assert(actions.includes("Заявка Supernova") && actions.includes("is-primary is-inline") && !actions.includes("evil.example"))
+})
+check("without web sources a card keeps only front-page links", () => {
+  const html = render(cardsFence({ version: 1, type: "cards", items: [{ title: "Python", url: "https://www.python.org/" }, { title: "Deep page", url: "https://www.python.org/made/up/page" }] }))
+  assert(html.includes('href="https://www.python.org/"') && !html.includes("made/up/page"))
+})
+check("a half-written card fence shows a status while streaming and nothing raw", () => {
+  const html = render("Ответ.\n\n```malik-cards\n{\"version\":1,\"type\":\"cards\",\"items\":[{\"title\":\"Gr", { visualContext: { question: "события", streaming: true } })
+  assert(html.includes("Собираю карточки") && !html.includes("&quot;title&quot;"))
+})
+check("in a web answer an outside link gets ↗, an invented one stays plain text", () => {
+  const html = render("Сайт [Astana Hub](https://astanahub.com/ru/) и [выдуманный](https://fake.example/x).", { citations: CARD_SOURCES })
+  assert(html.includes('class="malik-md-link is-external"') && html.includes("↗"))
+  assert(!html.includes("fake.example") && html.includes("выдуманный"))
 })
 check("a citation pointing at a non-web URL is never linked", () => {
   const html = render("Факт [1].", { citations: [{ url: "javascript:alert(1)", domain: "x" }] })

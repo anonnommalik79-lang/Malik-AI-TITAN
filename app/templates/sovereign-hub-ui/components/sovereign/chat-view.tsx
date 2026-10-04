@@ -7,6 +7,7 @@ import { MalikMarkdown } from "./MalikMarkdown"
 import { buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { stripAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
+import { answerCardsToText } from "@/lib/ai/answer-cards"
 import { MalikTapGuide } from "./MalikTapGuide"
 import type { SuperflowRef } from "./os/os-client"
 import { AnswerDownloadButton, FollowUpChips, ReadAloudButton, ThoughtTrace, UserMessageActions, VersionPager, useChatShortcuts, type FollowUpSendOptions } from "./chat-extras"
@@ -1756,7 +1757,8 @@ function MessageBubble({
       ? olderVersion.content
       : cleanResearchDisplayText(message.content, message.research)
   const responseModel = !isUser && message.modelId ? getMalikModel(message.modelId) : null
-  const actionContent = isUser ? displayContent : stripAnswerPhotoHints(displayContent)
+  // Copy, speech and sharing get the cards as readable text, never as JSON.
+  const actionContent = isUser ? displayContent : stripAnswerPhotoHints(answerCardsToText(displayContent))
   if (!isUser && message.isStreaming && !streaming && !displayContent && !message.generatedMedia && !message.imageConfirmation) {
     return null
   }
@@ -3300,7 +3302,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
       {sheet && sheetMessage ? (
         <AnswerSheet
           key={sheet.id}
-          content={stripAnswerPhotoHints(cleanResearchDisplayText(sheetMessage.content, sheetMessage.research))}
+          content={stripAnswerPhotoHints(answerCardsToText(cleanResearchDisplayText(sheetMessage.content, sheetMessage.research)))}
           streaming={Boolean(sheetMessage.isStreaming)}
           request={sheetRequest}
           auto={sheet.auto}

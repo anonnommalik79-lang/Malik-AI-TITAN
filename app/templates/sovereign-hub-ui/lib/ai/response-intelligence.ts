@@ -4,7 +4,8 @@ export type ResponseLanguage = "ru" | "kk" | "en" | "auto"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 import { planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
-import { asksHeadToHead, asksSubjectOverview } from "@/lib/ai/question-shape"
+import { asksHeadToHead, asksPurchaseAdvice, asksSubjectOverview } from "@/lib/ai/question-shape"
+import { MALIK_ANSWER_CARDS_CONTRACT } from "@/lib/ai/answer-cards"
 
 export type ResponseComplexity = "simple" | "standard" | "complex"
 
@@ -344,6 +345,15 @@ export function buildMalikResponseSystemPrompt(input: {
     ? "A live web check returned no usable evidence in this attempt. Say that you could not verify the current facts, not that no public information exists. Do not invent participant lists, citations or claims of having read a source. Give any stable supported information that still helps."
     : "No verified live-web evidence is supplied. Do not invent citations. For unstable current facts, say that a live check is required."
   const today = input.currentDate || new Date().toISOString().slice(0, 10)
+  // Cards (pictures, official links, buttons) wherever the answer is about
+  // concrete things: every answer from web evidence, overviews, comparisons
+  // and purchases - never code or small talk.
+  const cardsContract = !profile.signals.includes("code") && !profile.signals.includes("conversation") && (
+    (input.usedWeb && input.hasWebEvidence !== false)
+    || profile.signals.includes("overview")
+    || profile.signals.includes("headtohead")
+    || asksPurchaseAdvice(input.shapePrompt || input.prompt)
+  ) ? MALIK_ANSWER_CARDS_CONTRACT : ""
   const shapeContract = profile.signals.includes("headtohead")
     ? [
         "HEAD-TO-HEAD CONTRACT (the user compares named options; answer like the best analyst would, not with a paragraph):",
@@ -388,6 +398,7 @@ export function buildMalikResponseSystemPrompt(input: {
     "MALIK RESPONSE CORE:",
     `- ${MALIK_RESPONSE_CORE_PROMPT}`,
     ...(input.focusInstruction ? [input.focusInstruction] : []),
+    ...(cardsContract ? [cardsContract] : []),
     webContract,
     // Photos belong to answers about subjects, not to «как дела» or «спасибо».
     ...(isReferenceImageRequest(input.prompt) || (!profile.signals.includes("conversation") && planReferenceVisuals(input.shapePrompt || input.prompt)) ? [

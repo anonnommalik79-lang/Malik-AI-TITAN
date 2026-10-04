@@ -388,8 +388,9 @@ const read = (file) => fs.readFileSync(file, "utf8")
 check("the router audits every answer written from open pages", () => {
   const router = read("lib/malik-god-router.ts")
   assert.match(router, /import \{ auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit \} from "@\/lib\/ai\/fact-audit"/)
-  assert.match(router, /factAudit: auditGroundedAnswer\(content, sources, prompt\)/)
-  assert.match(router, /factAudit: auditGroundedAnswer\(result\.content, sources, prompt\)/)
+  // Card blocks are audited as their text (lib/ai/answer-cards.ts), like any other sentence.
+  assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(content\), sources, prompt\)/)
+  assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(result\.content\), sources, prompt\)/)
   assert.match(router, /factAudit: answer\.factAudit \?\? null/)
 })
 

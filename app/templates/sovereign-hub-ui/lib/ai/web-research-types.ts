@@ -7,6 +7,8 @@ export type MalikWebSource = {
   snippet?: string
   provider?: string
   publishedAt?: string
+  /** The page's own preview picture (og:image), shown on answer cards with the page's domain. */
+  image?: string
 }
 
 export type MalikResearchStepKind = "plan" | "search" | "source" | "reading" | "done" | "error"

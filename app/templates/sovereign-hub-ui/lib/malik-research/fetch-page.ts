@@ -11,6 +11,35 @@ function extractTitle(html: string, fallback: string) {
   return cleanTitle(m?.[1] || fallback);
 }
 
+/**
+ * The picture a page chose to represent itself (og:image, twitter:image,
+ * image_src) - what ChatGPT shows next to an event or a fund. Only https, no
+ * data: or tracking-sized tricks, resolved against the page address.
+ */
+export function extractPageImage(html: string, pageUrl: string): string | undefined {
+  const head = html.slice(0, 200_000)
+  const patterns = [
+    /<meta[^>]+(?:property|name)=["']og:image(?::secure_url)?["'][^>]*content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["']og:image(?::secure_url)?["']/i,
+    /<meta[^>]+name=["']twitter:image(?::src)?["'][^>]*content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]*name=["']twitter:image(?::src)?["']/i,
+    /<link[^>]+rel=["']image_src["'][^>]*href=["']([^"']+)["']/i,
+  ]
+  for (const pattern of patterns) {
+    const raw = pattern.exec(head)?.[1]?.trim().replace(/&amp;/g, "&")
+    if (!raw) continue
+    try {
+      const url = new URL(raw, pageUrl)
+      if (url.protocol !== "https:" || url.username || url.password || url.href.length > 1200) continue
+      if (/(?:^|[/_.-])(?:1x1|pixel|spacer|blank)\.(?:gif|png)$/i.test(url.pathname)) continue
+      return url.href
+    } catch {
+      continue
+    }
+  }
+  return undefined
+}
+
 function safeSourceUrl(result: SearchResult) {
   return assertPublicHttpUrl(String(result.url || "")).toString();
 }
@@ -36,6 +65,7 @@ async function fetchDirect(result: SearchResult, signal?: AbortSignal): Promise<
 
   if (!text || text.length < 280) return null;
 
+  const image = extractPageImage(html, target);
   return {
     title: title || result.title,
     url: target,
@@ -44,6 +74,7 @@ async function fetchDirect(result: SearchResult, signal?: AbortSignal): Promise<
     snippet: result.snippet,
     publishedAt: result.publishedAt,
     provider: result.provider,
+    ...(image ? { image } : {}),
   };
 }
 

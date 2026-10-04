@@ -1313,6 +1313,7 @@ function reviveWebSource(value: any): MalikWebSource | null {
     snippet: typeof value?.snippet === "string" ? value.snippet.slice(0, 1200) : undefined,
     provider: typeof value?.provider === "string" ? value.provider.slice(0, 80) : undefined,
     publishedAt: typeof value?.publishedAt === "string" ? value.publishedAt : undefined,
+    image: typeof value?.image === "string" && /^https:\/\//i.test(value.image) && value.image.length <= 1200 ? value.image : undefined,
   }
 }
 

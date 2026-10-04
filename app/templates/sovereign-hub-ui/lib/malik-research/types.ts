@@ -16,6 +16,8 @@ export type FetchedSource = {
   snippet?: string;
   publishedAt?: string;
   provider?: string;
+  /** The page's own preview picture (og:image / twitter:image), https only. */
+  image?: string;
 };
 
 export type ResearchFinal = {
