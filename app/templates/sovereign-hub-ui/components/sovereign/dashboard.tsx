@@ -7487,13 +7487,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
   // Sidebar «Malik Work»: Work mode on a fresh task (an empty one is reused).
   useEffect(() => {
-    const open = () => {
-      setWorkspaceMode("work")
-      try { window.localStorage.setItem(WORKSPACE_MODE_KEY, "work") } catch {}
-      setMobileMenuOpen(false)
-      if (messages.length) handleNewChat()
-      else safeOpenView("home", "manual")
-    }
+    const open = () => handleWorkspaceModeChange("work")
     const closeMenu = () => setMobileMenuOpen(false)
     window.addEventListener(MALIK_OPEN_WORK_EVENT, open)
     window.addEventListener(MALIK_CLOSE_MOBILE_MENU_EVENT, closeMenu)
@@ -7501,7 +7495,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       window.removeEventListener(MALIK_OPEN_WORK_EVENT, open)
       window.removeEventListener(MALIK_CLOSE_MOBILE_MENU_EVENT, closeMenu)
     }
-  }, [handleNewChat, messages.length, safeOpenView])
+  }, [handleWorkspaceModeChange])
 
   // The image studio's "Видео" and "Аудио" tabs open the matching studios;
   // a deck made by a Superflow opens in the presentation studio.
@@ -7619,20 +7613,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const hasStartedChat = messages.length > 0
   const shouldRenderEmptyHome = activeView === "home" && !hasStartedChat && workspaceMode !== "work"
   const hasMessages = hasStartedChat
+  const modeChats = chats.filter((chat) => resolveWorkspaceMode(chat.workspaceMode) === workspaceMode)
 
   // Явно определяем, должны ли мы показывать правую панель (Проект)
   // Показываем если: есть код, РЛР мы сейчас генерируем терминалом, РЛР интент был project
   const latestAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant")
-  const shouldShowPreviewPanel =
-    activeView === "home" &&
-    (
-      isGeneratingTerminal ||
-      (
-        Boolean(generatedCode) &&
-        latestAssistantMessage?.intentType === "project" &&
-        Boolean(latestAssistantMessage?.generatedCode)
-      )
-    )
+  // The completed artifact belongs below the answer, not in a duplicate right-side iframe.
+  const shouldShowPreviewPanel = activeView === "home" && isGeneratingTerminal
 
 const shouldShowMobilePreviewButton =
   !!generatedCode || isGeneratingTerminal
@@ -7757,7 +7744,7 @@ const shouldShowMobilePreviewButton =
         <DigitalBridgeSectionExperience
           activeView={activeView}
           username={username}
-          chats={chats}
+          chats={modeChats}
           onViewChange={(view) => safeOpenView(view, "manual")}
           onOpenCodex={() => setCodexOpen(true)}
           onOpenCanvas={(code) => safeOpenCanvas(code, "canvas")}
@@ -7793,7 +7780,7 @@ const shouldShowMobilePreviewButton =
       if (!hasMalikProAccess(currentPlan)) {
         return <SovereignBillingPanel plan={currentPlan} authenticated={!guestMode && Boolean(workOSUser)} onClose={closeAccountPanel} />
       }
-      const projectChats = chats.filter((chat) =>
+      const projectChats = modeChats.filter((chat) =>
         chat.kind === "project"
         || Boolean(chat.projectDescription || chat.projectInstructions)
         || chat.messages.some((message) => message.intentType === "project" || Boolean(message.generatedCode)),
@@ -7816,6 +7803,7 @@ const shouldShowMobilePreviewButton =
           renderProjectChat={() => (
             <div className="malik-premium-chat-host malik-ai-chat-bg relative h-full min-h-0 overflow-hidden bg-black">
               <ChatView
+                key={`${workspaceMode}:${activeProjectWorkspaceId || "project"}`}
                 messages={messages}
                 workspaceMode={workspaceMode}
                 onSendMessage={handleSendMessage}
@@ -7846,7 +7834,7 @@ const shouldShowMobilePreviewButton =
       );
     }
     if (activeView === "chats") {
-      return <ChatsListView chats={chats} onSelectChat={handleSelectChat} onNewChat={handleNewChat} />;
+      return <ChatsListView chats={modeChats} onSelectChat={handleSelectChat} onNewChat={handleNewChat} />;
     }
     return (
       <>
@@ -7859,6 +7847,7 @@ const shouldShowMobilePreviewButton =
             <div className="malik-premium-chat-host malik-ai-chat-bg relative min-h-0 flex-1 overflow-hidden">
               <ChatInvestorBackground />
 <ChatView
+              key={`${workspaceMode}:${activeChatId || "new"}`}
               messages={messages}
               workspaceMode={workspaceMode}
               onSendMessage={handleSendMessage}
@@ -8217,7 +8206,7 @@ const shouldShowMobilePreviewButton =
           activeChatId={activeChatId}
           activeView={activeView}
           onViewChange={(view) => safeOpenView(view, "manual")}
-          chats={chats}
+          chats={modeChats}
           onLogout={handleLogout}
           onOpenCodex={() => { setCodexOpen(true); setMobileMenuOpen(false) }}
           onOpenSearch={() => setCommandPaletteOpen(true)}
@@ -8238,7 +8227,7 @@ const shouldShowMobilePreviewButton =
           activeChatId={activeChatId}
           activeView={activeView}
           onViewChange={(view) => safeOpenView(view, "sidebar")}
-          chats={chats}
+          chats={modeChats}
           onLogout={handleLogout}
           onOpenCodex={() => { setCodexOpen(true); setMobileMenuOpen(false) }}
           onOpenSearch={() => { setCommandPaletteOpen(true); setMobileMenuOpen(false) }}
@@ -8249,11 +8238,7 @@ const shouldShowMobilePreviewButton =
         <TitanTopBar
           activeView={activeView}
           workspaceMode={workspaceMode}
-          onWorkspaceModeChange={(mode) => {
-            setWorkspaceMode(mode)
-            try { window.localStorage.setItem(WORKSPACE_MODE_KEY, mode) } catch {}
-            safeOpenView("home", "topbar")
-          }}
+          onWorkspaceModeChange={handleWorkspaceModeChange}
           guestMode={guestMode}
           onViewChange={(view) => safeOpenView(view, "topbar")}
           onOpenSearch={() => setCommandPaletteOpen(true)}
