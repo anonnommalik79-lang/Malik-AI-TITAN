@@ -65,7 +65,7 @@
     "test:presentations": "node scripts/verify-presentations.mjs",
     "test:answer-sheet": "node --experimental-strip-types --no-warnings scripts/verify-answer-sheet.mjs",
     "test:max": "TS_RESOLVE_STUBS='{\"@/lib/server/request-entitlement\":\"./scripts/stubs/request-entitlement.mjs\"}' node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-malik-max.mjs",
-    "test:release-core": "npm run test:answer-format && npm run test:models && npm run test:long-code && npm run test:multimodal && npm run test:media && npm run test:image-edit && npm run test:image-memory && npm run test:image-credits && npm run test:video-speed && npm run test:responses && npm run test:on-topic && npm run test:answer-cards && npm run test:work-screen && npm run test:chat-home && npm run test:action-os && npm run test:generation-survives && npm run test:rich-answers && npm run test:reference-intent && npm run test:library && npm run test:core-hardening && npm run test:fact-audit && npm run test:chat-monochrome && npm run test:instagram && npm run test:presentations && npm run test:answer-sheet && npm run test:superpowers && npm run test:claude-class && npm run test:max",
+    "test:release-core": "npm run test:answer-format && npm run test:models && npm run test:long-code && npm run test:multimodal && npm run test:media && npm run test:image-edit && npm run test:image-memory && npm run test:image-credits && npm run test:video-speed && npm run test:responses && npm run test:on-topic && npm run test:answer-cards && npm run test:work-screen && npm run test:work-math && npm run test:work-docs && npm run test:chat-home && npm run test:action-os && npm run test:generation-survives && npm run test:rich-answers && npm run test:reference-intent && npm run test:library && npm run test:core-hardening && npm run test:fact-audit && npm run test:chat-monochrome && npm run test:instagram && npm run test:presentations && npm run test:answer-sheet && npm run test:superpowers && npm run test:claude-class && npm run test:max",
     "test:voice-live-session": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-session.mjs",
     "test:fact-audit": "node scripts/verify-fact-audit.mjs",
     "test:chat-monochrome": "node scripts/verify-chat-monochrome.mjs",
@@ -82,7 +82,9 @@
     "test:creation-engine": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-creation-engine.mjs",
     "test:music-intent": "node --experimental-transform-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-music-prompt-intent.mjs",
     "test:chat-v7": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-chat-v7.mjs",
-    "test:mobile-send": "node scripts/verify-mobile-send.mjs"
+    "test:mobile-send": "node scripts/verify-mobile-send.mjs",
+    "test:work-math": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-work-math.mjs",
+    "test:work-docs": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-work-documents.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1066.0",
@@ -131,6 +133,7 @@
     "embla-carousel-react": "8.6.0",
     "input-otp": "1.4.2",
     "lucide-react": "^0.564.0",
+    "mathjs": "^15.2.0",
     "next": "^16.2.7",
     "next-themes": "^0.4.6",
     "postcss": "^8.5.14",
