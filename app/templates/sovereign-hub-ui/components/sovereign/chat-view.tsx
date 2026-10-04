@@ -2170,7 +2170,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
           const prompt = `${detail.prompt.trim()}${selectedRegionInstruction}`
           queueMalikImageLineage(detail.sourceSrc, detail.mode)
           setLastSubmittedPrompt(prompt)
-          try { window.localStorage.setItem("malik_last_user_prompt", prompt) } catch {}
+          try { window.localStorage.setItem(`malik_${workspaceMode}_last_user_prompt`, prompt) } catch {}
 
           onSendMessage(`/image ${prompt}`, [sourceAttachment], {
             responseDepth,
@@ -2620,7 +2620,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     }
 
     setLocalError(null)
-    try { window.localStorage.setItem("malik_last_user_prompt", outgoing) } catch {}
+    try { window.localStorage.setItem(`malik_${workspaceMode}_last_user_prompt`, outgoing) } catch {}
     setLastSubmittedPrompt(outgoing)
 
     if (isLoading) {
@@ -2845,7 +2845,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     }
     setLocalError(null)
     setLastSubmittedPrompt(clean)
-    try { window.localStorage.setItem("malik_last_user_prompt", clean) } catch {}
+    try { window.localStorage.setItem(`malik_${workspaceMode}_last_user_prompt`, clean) } catch {}
     onSendMessage(clean, [], {
       workspaceMode,
       research: true,
