@@ -268,15 +268,15 @@ check("bold around inline maths never leaks literal markdown markers", () => {
 })
 
 check("completed prose hides orphan math punctuation and display delimiters", () => {
-  const html = render("Шекарасы: $x=0$ кірмейді $)$. Соңы$.")
+  const html = render("Шекарасы: $x=0$ кірмейді $)$. Соңы$$.")
   assert.ok(!html.includes("$)$"), "punctuation wrapper must not leak")
-  assert.ok(!html.includes("$"), "orphan display delimiter must not leak")
+  assert.ok(!html.includes("$$"), "orphan display delimiter must not leak")
   assert.match(html, /кірмейді \)/)
 })
 
 check("streaming keeps incomplete formatting untouched until the model closes it", () => {
-  const html = render("Жауап$", { visualContext: { question: "есеп", streaming: true } })
-  assert.ok(html.includes("$"))
+  const html = render("Жауап$$", { visualContext: { question: "есеп", streaming: true } })
+  assert.ok(html.includes("$$"))
 })
 
 check("a fenced block becomes a code block with its own scroll", () => {
