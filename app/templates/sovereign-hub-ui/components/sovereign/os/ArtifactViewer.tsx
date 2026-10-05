@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowUpRight, Download, GitCompare, History, Loader2, PencilLine, Sparkles, Wand2, X } from "lucide-react"
 
 import { MalikMarkdown } from "../MalikMarkdown"
+import { WorkDownloadMenu } from "../WorkDownloadMenu"
 import { OverlayPortal } from "../OverlayPortal"
 import type { Artifact, ArtifactKind, ArtifactSummary } from "@/lib/os/types"
 
@@ -297,7 +298,7 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
             {artifact?.fallback ? <span className="malik-os-badge">сохранённая копия от {new Date(artifact.fallback.originalCreatedAt).toLocaleDateString("ru-RU")}</span> : null}
             <div className="malik-os-sheet-actions">
               {html ? <button type="button" className="malik-os-button" onClick={openInNewTab} aria-label="Открыть в новой вкладке"><ArrowUpRight aria-hidden="true" /><span className="malik-os-hide-sm">Открыть</span></button> : null}
-              {artifact ? <button type="button" className="malik-os-button" onClick={download} aria-label="Скачать"><Download aria-hidden="true" /><span className="malik-os-hide-sm">Скачать</span></button> : null}
+              {artifact?.content ? <WorkDownloadMenu artifactId={artifact.id} kind={artifact.kind} title={artifact.title} markdown={artifact.content} /> : artifact?.url ? <button type="button" className="malik-os-button" onClick={download} aria-label="Скачать"><Download aria-hidden="true" /><span className="malik-os-hide-sm">Скачать</span></button> : null}
               {versions.length > 1 ? <button type="button" className="malik-os-button" onClick={() => setPanel(panel === "versions" ? "" : "versions")} aria-label="Версии"><History aria-hidden="true" /><span className="malik-os-hide-sm">Версии</span></button> : null}
               {editable ? <button type="button" className="malik-os-button" onClick={() => setPanel(panel === "edit" ? "" : "edit")} aria-label="Изменить"><PencilLine aria-hidden="true" /><span className="malik-os-hide-sm">Изменить</span></button> : null}
               {artifact?.kind === "business-plan" ? <button type="button" className="malik-os-button" onClick={() => setShowEconomics(!showEconomics)} aria-label="Рассчитать юнит-экономику">Юнит-экономика</button> : null}

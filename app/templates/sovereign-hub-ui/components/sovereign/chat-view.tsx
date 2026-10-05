@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { createPortal } from "react-dom"
 import { MalikMarkdown } from "./MalikMarkdown"
+import { WorkDownloadMenu } from "./WorkDownloadMenu"
 import { buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { stripAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
@@ -1941,7 +1942,7 @@ function MessageBubble({
             </button>
             <VersionPager index={shownVersion} total={versionTotal} onChange={setVersionIndex} />
             <ReadAloudButton id={message.id} text={actionContent} />
-            <AnswerDownloadButton text={actionContent} />
+            {workspaceMode === "work" ? <WorkDownloadMenu markdown={actionContent} /> : <AnswerDownloadButton text={actionContent} />}
             <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
             <button type="button" title="Полезно" aria-pressed={feedback === "up"} onClick={() => onFeedback?.(message.id, "up")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "is-active")}><ThumbsUp className="h-4 w-4" /></button>
             <button type="button" title="Не полезно" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>

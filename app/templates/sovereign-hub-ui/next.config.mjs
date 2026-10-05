@@ -13,6 +13,7 @@ const nextConfig = {
     root: projectRoot,
   },
   outputFileTracingRoot: projectRoot,
+  outputFileTracingIncludes: { "/api/work/*": ["./assets/fonts/*.ttf"], "/api/os/artifacts/*/export": ["./assets/fonts/*.ttf"] },
   // Optional local verification on disk-constrained worktrees; normal deploys keep caching.
   webpack(config) {
     if (process.env.MALIK_BUILD_NO_CACHE === "1") config.cache = false;

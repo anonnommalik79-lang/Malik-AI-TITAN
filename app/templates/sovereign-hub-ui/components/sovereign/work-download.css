@@ -1,0 +1,7 @@
+.malik-work-download{position:relative;font-size:12px;color:#ddd;max-width:100%}
+.malik-work-download summary{cursor:pointer;display:flex;align-items:center;gap:6px;padding:5px;list-style:none}
+.malik-work-download summary::-webkit-details-marker{display:none}
+.malik-work-download__formats{display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:#111;border:1px solid #444;border-radius:8px;max-width:300px}
+.malik-work-download__formats button{font:inherit;color:#fff;background:#181818;border:1px solid #555;padding:9px 12px;border-radius:5px;cursor:pointer;min-height:36px}
+.malik-work-download__formats button:disabled{opacity:.5;cursor:wait}
+.malik-work-download p{font-size:12px;line-height:1.5;max-width:280px;color:#ddd}
