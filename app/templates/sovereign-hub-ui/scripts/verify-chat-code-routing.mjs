@@ -8,6 +8,8 @@ for (const request of [
   "создай React компонент кнопки",
   "напиши Python код для распаковки zip",
   "объясни что такое архив",
+  "дай оценку моего проекта",
+  "дай отзыв на структуру проекта сайта",
 ]) {
   assert.equal(explicitlyRequestsPackagedProject(request), false, request)
 }

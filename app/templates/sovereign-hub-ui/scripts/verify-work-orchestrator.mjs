@@ -9,6 +9,9 @@ const cases = [
   ["Что такое бизнес-план?", "chat"], ["Как сделать сайт?", "chat"], ["Сделай документ?", "chat"], ["Расскажи про презентации", "chat"], ["How do I create a report?", "chat"], ["Can you make a PDF?", "chat"],
   ["Напиши код сортировки на Python", "chat"], ["Write a function to sort numbers", "chat"], ["Сделай HTML код простой страницы", "chat"], ["Объясни SQL запрос для таблицы", "chat"], ["Привет", "chat"], ["Посчитай 12 * 34", "chat"], ["Напиши письмо коллеге", "chat"], ["/create document for tomorrow", "chat"],
   ["Создай стартап и полный пакет для запуска", "flow"], ["Create a startup with research, website and business plan", "flow"],
+  // A brief answers as a whole: a file mentioned in item 3 is content, not an order.
+  ["Ответь на 4 пункта.\n1) Объясни, что такое юнит-экономика.\n2) Сравни Kaspi и Halyk.\n3) Подготовь отчёт по рынку кофе.\n4) Дай вывод.", "chat"],
+  ["Подготовь отчёт по продажам за квартал.\n1) выручка\n2) расходы\n3) прибыль", "flow"],
 ]
 let count = 0
 for (const [goal, expected] of cases) {

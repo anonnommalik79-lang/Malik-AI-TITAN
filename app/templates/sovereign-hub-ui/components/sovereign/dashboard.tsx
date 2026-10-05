@@ -201,7 +201,7 @@ import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, Ma
 import { normalizeFactAudit } from "@/lib/ai/fact-audit"
 import { extractSlideCount, isPresentationCreationRequest, presentationTopic } from "@/lib/presentations/deck"
 import { routeWorkRequest } from "@/lib/work/orchestrator"
-import { newRequestId, openOs, SUPERFLOW_UPDATE_EVENT, type SuperflowRef } from "./os/os-client"
+import { newRequestId, openOs, SUPERFLOW_CHAT_FALLBACK_EVENT, SUPERFLOW_UPDATE_EVENT, type SuperflowRef } from "./os/os-client"
 import {
   responseDepthInstruction,
   responseDepthLimits,
@@ -6100,12 +6100,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     : undefined
   const branchChatId = branching ? crypto.randomUUID() : null
 
-  // Auto mode: a goal that needs several tools ("создай стартап и подготовь
-  // его к презентации инвесторам") becomes a Superflow — a live block of real
-  // tasks in this chat — instead of one text answer. Questions and single
-  // deliverables keep their usual path. Signed-in accounts only: projects are
-  // stored per account.
-  if (!attachments.length && routeWorkRequest(cleanContent, { mode: turnWorkspaceMode, signedIn: !guestMode && Boolean(workOSUser?.email), attachmentKinds: attachments.map((item) => item.kind) }).route === "flow") {
+  // Superflow — a live block of real tasks in this chat — starts only on an
+  // explicit «создай бизнес / запусти стартап» (and, in Work mode, an
+  // explicit request for a file). Questions, single deliverables, long
+  // briefs and numbered task lists are answered by the model in the chat.
+  // Signed-in accounts only: projects are stored per account.
+  if (!attachments.length && !options?.skipSuperflow && routeWorkRequest(cleanContent, { mode: turnWorkspaceMode, signedIn: !guestMode && Boolean(workOSUser?.email), attachmentKinds: attachments.map((item) => item.kind) }).route === "flow") {
     const flowChatId = branchChatId || activeChatId || crypto.randomUUID()
     const reference: SuperflowRef = { clientRequestId: newRequestId("sf"), goal: cleanContent, workspaceMode: turnWorkspaceMode }
     const userTurn: Message = { id: crypto.randomUUID(), role: "user", content: cleanContent, timestamp: new Date() }
@@ -7485,6 +7485,33 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     window.addEventListener(SUPERFLOW_UPDATE_EVENT, onUpdate)
     return () => window.removeEventListener(SUPERFLOW_UPDATE_EVENT, onUpdate)
   }, [])
+
+  // A Superflow the server refused (daily limit, plan, a goal it would not
+  // run) must not leave the person without an answer: the empty flow block
+  // and its question are replaced by a normal chat answer to the same text.
+  useEffect(() => {
+    const onFallback = (event: Event) => {
+      const detail = (event as CustomEvent<{ messageId?: string; goal?: string }>).detail
+      const messageId = String(detail?.messageId || "")
+      const goal = String(detail?.goal || "").trim()
+      if (!messageId || !goal) return
+      const list = messagesRef.current
+      const index = list.findIndex((message) => message.id === messageId && message.superflow)
+      if (index < 0) return
+      const previous = list[index - 1]
+      const question = previous && previous.role === "user" && previous.content.trim() === goal ? previous : null
+      const drop = new Set([messageId, ...(question ? [question.id] : [])])
+      const remaining = list.filter((message) => !drop.has(message.id))
+      messagesRef.current = remaining
+      setMessages((current) => current.filter((message) => !drop.has(message.id)))
+      setChats((current) => current.map((chat) => (chat.messages.some((message) => drop.has(message.id))
+        ? { ...chat, messages: chat.messages.filter((message) => !drop.has(message.id)) }
+        : chat)))
+      void handleSendMessage(goal, [], { queueDispatch: true, skipSuperflow: true })
+    }
+    window.addEventListener(SUPERFLOW_CHAT_FALLBACK_EVENT, onFallback)
+    return () => window.removeEventListener(SUPERFLOW_CHAT_FALLBACK_EVENT, onFallback)
+  }, [handleSendMessage])
 
   // Sidebar «Malik Work»: Work mode on a fresh task (an empty one is reused).
   useEffect(() => {

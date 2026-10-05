@@ -144,27 +144,40 @@ function uniqueActions(actions: ActionDefinition[]) {
   return actions.filter((action, index, list) => list.findIndex((item) => item.kind === action.kind) === index)
 }
 
+// Kept free of imports (the test transpiles this file alone); mirrors
+// lib/ai/prompt-shape.ts: a long brief or a numbered task list is answered as
+// a whole, and only its opening instruction may ask for an agent run.
+function planScope(prompt: string) {
+  const lines = prompt.split(/\r?\n/)
+  const listLines = lines.filter((line) => /^\s*(?:\d{1,2}\s*[.)]|[-*•])\s*\S/u.test(line)).length
+  const inline = (prompt.match(/(?:^|[\s;,])\d{1,2}\)\s+\S/gu) || []).length
+  const brief = prompt.length >= 600 || Math.max(listLines, inline) >= 3
+  if (!brief) return prompt
+  const first = lines.map((line) => line.trim()).find(Boolean) || ""
+  const end = first.slice(12).search(/[.!?…](?:\s|$)/u)
+  return (end >= 0 ? first.slice(0, 12 + end + 1) : first).slice(0, 280)
+}
+
+const EXPLICIT_AGENT = /(?<![\p{L}\p{N}])(?:агент(?:а|у|ом|ы|ов)?|организуй(?:те)?|спланируй(?:те)?|под ключ|от начала до конца|сделай всё|выполни задачу|доведи до результата|agent|workflow|end[- ]to[- ]end)(?![\p{L}\p{N}])/iu
+
 /**
- * Build a visible execution contract only for genuinely multi-step work. A
- * normal question remains a normal chat answer instead of acquiring dashboard
- * chrome just because the product has an agent feature.
+ * Build a visible execution contract only when the person asks for an agent
+ * run — Agent mode, or «организуй / спланируй / под ключ / доведи до
+ * результата». A long prompt, a list of questions or two keywords that happen
+ * to match (a "перевод" and a "код" in the same message) is NOT a request to
+ * plan: it used to attach steps like «Подготовить маршрут Taxi» or «Создать
+ * изображение» to unrelated questions, and every plan made the server run
+ * extra sub-agents over the whole prompt before answering.
  */
 export function createMalikActionPlan(input: PlanInput): MalikActionPlan | null {
   const prompt = String(input.prompt || "").trim()
   if (!prompt || /^\s*\/(?:image|img|photo|foto|фото|video|veo|видео|memory|forget)(?![\p{L}\p{N}_])/iu.test(prompt)) return null
 
-  const explicitAgent = /агент|организуй|спланируй|под ключ|от начала до конца|сделай всё|выполни задачу|доведи до результата|agent|workflow|end[- ]to[- ]end/iu.test(prompt)
-  const connectorCount = (prompt.match(/(?:\sи\s|\sзатем\s|\sпотом\s|,|;|\n)/giu) || []).length
-  const matched = uniqueActions(ACTION_DEFINITIONS.filter((definition) => definition.match.test(prompt)))
-  const hasAttachments = Boolean(input.attachmentKinds?.length)
-  const shouldPlan = input.mode === "agent"
-    || explicitAgent
-    || matched.length >= 2
-    || (prompt.length >= 220 && connectorCount >= 2)
-    || (hasAttachments && matched.length >= 1 && connectorCount >= 1)
-
+  const scope = planScope(prompt)
+  const shouldPlan = input.mode === "agent" || EXPLICIT_AGENT.test(scope)
   if (!shouldPlan) return null
 
+  const matched = uniqueActions(ACTION_DEFINITIONS.filter((definition) => definition.match.test(scope)))
   const selected = matched.length
     ? matched
     : [ACTION_DEFINITIONS.find((action) => action.kind === "research")!]

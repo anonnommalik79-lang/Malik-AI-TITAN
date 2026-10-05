@@ -165,11 +165,22 @@ export function isMalikAgentRuntimeRequest(body: any) {
   return Boolean(executionContract(body))
 }
 
+/**
+ * Sub-agents each receive the whole prompt. For a long brief that multiplies
+ * the input several times over, adds minutes of latency and was the usual
+ * reason a big prompt timed out before the real answer started. Past this
+ * size the main model answers the brief directly — it already sees all of it.
+ */
+export function agentRuntimePromptLimit() {
+  return envInt("MALIK_AGENT_MAX_PROMPT_CHARS", 6000, 1000, 60_000)
+}
+
 export async function prepareMalikAgentRuntime(body: any): Promise<MalikAgentRuntimeResult | null> {
   const contract = executionContract(body)
   if (!contract) return null
   const prompt = preservePrompt(body?.originalQuestion || originalPrompt(body))
   if (!prompt) return null
+  if (prompt.length > agentRuntimePromptLimit()) return null
 
   const maxSubagents = envInt("MALIK_AGENT_MAX_SUBAGENTS", 3, 2, 4)
   const parsed = parseMissions(contract)

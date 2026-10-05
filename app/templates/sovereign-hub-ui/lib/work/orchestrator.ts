@@ -1,4 +1,5 @@
-import { decideSuperflow, detectCapabilities } from "@/lib/os/capabilities"
+import { routingScope } from "@/lib/ai/prompt-shape"
+import { decideSuperflow, detectCapabilities, SUPERFLOW_MAX_GOAL_CHARS } from "@/lib/os/capabilities"
 import type { Capability } from "@/lib/os/types"
 import type { WorkspaceMode } from "@/lib/ai/work-mode"
 
@@ -8,7 +9,13 @@ const fileResult = /документ|отч[её]т|презентац|слай�
 const code = /(?<![\p{L}\p{N}])(?:код|code|python|javascript|typescript|html|css|sql|react)(?![\p{L}\p{N}])|функци[юя]|function|алгоритм/iu
 const codePackage = /проект|репозитор|project|repository|(?<![\p{L}\p{N}])zip(?![\p{L}\p{N}])/iu
 
-/** Work extends auto-routing; chat's existing decision stays unchanged. */
+/**
+ * Chat: a Superflow starts only on an explicit «создай бизнес» (see
+ * decideSuperflow). Work: additionally, an explicit request for a file
+ * («создай документ / PDF / презентацию») becomes a file task. A long brief
+ * or a numbered task list is answered in the chat; only its opening
+ * instruction may ask for a file.
+ */
 export function routeWorkRequest(goal: string, options: { mode: WorkspaceMode; signedIn: boolean; attachmentKinds?: string[] }): { route: "chat" | "flow"; reason: string; capabilities: Capability[] } {
   const text = String(goal || "").trim()
   const legacy = decideSuperflow(text, options.attachmentKinds || [])
@@ -16,13 +23,15 @@ export function routeWorkRequest(goal: string, options: { mode: WorkspaceMode; s
   if (!options.signedIn) return chat("guest")
   if (options.mode !== "work") return { route: legacy.run ? "flow" : "chat", reason: legacy.reason, capabilities: legacy.capabilities }
   if (/^\s*\//.test(text)) return chat("command")
-  if (code.test(text) && !codePackage.test(text)) return chat("inline-code")
+  if (text.length > SUPERFLOW_MAX_GOAL_CHARS) return chat("too-long")
+  const scope = routingScope(text)
+  if (code.test(scope) && !codePackage.test(scope)) return chat("inline-code")
   if (legacy.run) return { route: "flow", reason: legacy.reason, capabilities: legacy.capabilities }
-  if (question.test(text)) return chat("question")
-  if (!imperative.test(text) || !fileResult.test(text)) return chat("no-file-instruction")
-  const capabilities = detectCapabilities(text, options.attachmentKinds || [])
-  if (/\bpptx\b/iu.test(text) && !capabilities.includes("presentation")) capabilities.push("presentation")
-  if (/\bzip\b/iu.test(text) && codePackage.test(text) && !capabilities.includes("code")) capabilities.push("code")
+  if (question.test(scope)) return chat("question")
+  if (!imperative.test(scope) || !fileResult.test(scope)) return chat(scope === text ? "no-file-instruction" : "brief")
+  const capabilities = detectCapabilities(scope, options.attachmentKinds || [])
+  if (/\bpptx\b/iu.test(scope) && !capabilities.includes("presentation")) capabilities.push("presentation")
+  if (/\bzip\b/iu.test(scope) && codePackage.test(scope) && !capabilities.includes("code")) capabilities.push("code")
   if (!capabilities.length) capabilities.push("document")
   return { route: "flow", reason: "work-file-result", capabilities }
 }

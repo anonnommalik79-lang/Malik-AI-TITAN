@@ -6,6 +6,7 @@ import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 import { planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
 import { asksHeadToHead, asksPurchaseAdvice, asksSubjectOverview } from "@/lib/ai/question-shape"
 import { MALIK_ANSWER_CARDS_CONTRACT } from "@/lib/ai/answer-cards"
+import { isComplexBrief, isMultiTaskPrompt, routingScope } from "@/lib/ai/prompt-shape"
 
 export type ResponseComplexity = "simple" | "standard" | "complex"
 
@@ -338,6 +339,14 @@ export function buildMalikResponseSystemPrompt(input: {
 }) {
   const profile = analyzeResponseRequest(input.shapePrompt || input.prompt, Boolean(input.usedWeb))
   const modules = selectedResponseFeatures(profile)
+  // A long brief or a list of tasks is one job to finish in this answer. The
+  // subject templates below (cards, photos, overview, head-to-head) follow
+  // only its opening instruction — a "сравни" in block 6 must not turn a
+  // math-and-code test into a product comparison with logo cards.
+  const brief = isComplexBrief(input.prompt)
+  const subjectPrompt = brief ? routingScope(input.prompt) : (input.shapePrompt || input.prompt)
+  const subject = brief ? analyzeResponseRequest(subjectPrompt, Boolean(input.usedWeb)) : profile
+  const briefContract = brief ? buildLongBriefContract(isMultiTaskPrompt(input.prompt)) : ""
   const artifactContract = buildChatArtifactSkillPrompt(input.prompt)
   const webContract = input.usedWeb && input.hasWebEvidence !== false
     ? "Verified web excerpts are supplied below. Answer the user's request using the actual evidence; do not send them to perform the search themselves. For a requested list, return the confirmed names and label it partial unless the source establishes completeness. Cite supported factual claims inline as [n]. Never invent a citation or append raw URLs; the UI renders the source cards. Missing details in these excerpts do not prove that no public information exists. If excerpts conflict or do not confirm a detail, say so."
@@ -348,13 +357,13 @@ export function buildMalikResponseSystemPrompt(input: {
   // Cards (pictures, official links, buttons) wherever the answer is about
   // concrete things: every answer from web evidence, overviews, comparisons
   // and purchases - never code or small talk.
-  const cardsContract = !profile.signals.includes("code") && !profile.signals.includes("conversation") && (
-    (input.usedWeb && input.hasWebEvidence !== false)
-    || profile.signals.includes("overview")
-    || profile.signals.includes("headtohead")
-    || asksPurchaseAdvice(input.shapePrompt || input.prompt)
+  const cardsContract = !profile.signals.includes("code") && !subject.signals.includes("conversation") && (
+    (input.usedWeb && input.hasWebEvidence !== false && !brief)
+    || subject.signals.includes("overview")
+    || subject.signals.includes("headtohead")
+    || asksPurchaseAdvice(subjectPrompt)
   ) ? MALIK_ANSWER_CARDS_CONTRACT : ""
-  const shapeContract = profile.signals.includes("headtohead")
+  const shapeContract = subject.signals.includes("headtohead")
     ? [
         "HEAD-TO-HEAD CONTRACT (the user compares named options; answer like the best analyst would, not with a paragraph):",
         "- First line: a short title naming the contenders. Second line: «Актуально на <date>» (in the user's language) when the facts can change - models, prices, products, rankings - using the current date.",
@@ -365,7 +374,7 @@ export function buildMalikResponseSystemPrompt(input: {
         "- Finish with a «кто где выигрывает» table (task | winner | why) and a concrete recommendation for the user's own case. If the user mentions their own product, say what it should take from each contender.",
         "- Cite web-supported claims inline as [n] right after the claim.",
       ].join("\n")
-    : profile.signals.includes("overview")
+    : subject.signals.includes("overview")
     ? [
         "OVERVIEW CONTRACT (the user asks about a whole subject - a person, place, company, product, event or era):",
         "- The first sentence answers directly: who or what it is and why it matters, with the exact name in bold. Resolve ordinal and role questions («второй президент», «first CEO») to the exact person before writing. A role with no country, asked in Russian or Kazakh, means Kazakhstan unless the conversation says otherwise: say so in a few words and name the other likely reading in one line.",
@@ -401,15 +410,34 @@ export function buildMalikResponseSystemPrompt(input: {
     ...(cardsContract ? [cardsContract] : []),
     webContract,
     // Photos belong to answers about subjects, not to «как дела» or «спасибо».
-    ...(isReferenceImageRequest(input.prompt) || (!profile.signals.includes("conversation") && planReferenceVisuals(input.shapePrompt || input.prompt)) ? [
+    ...(isReferenceImageRequest(subjectPrompt) || (!subject.signals.includes("conversation") && planReferenceVisuals(subjectPrompt)) ? [
       "VISUAL REFERENCE CONTRACT: The chat automatically retrieves sourced photos for the subjects in your answer, independently of the text model. Never say that you cannot show/insert photos or send the user to search for them instead. For a photo follow-up such as 'покажи их всех', resolve 'them' from the conversation and list the exact names of those people/products/places with concise descriptions. Use clear concrete subject headings, not generic era/category headings, and exact product model names. For how-to answers use numbered steps with exact menu names. Answer directly without asking for another photo request. Never invent image URLs, source claims, screenshot contents or highlight coordinates: retrieved image metadata is not supplied to you. Reference images are existing public media, not generated or charged jobs; the UI retrieves them independently.",
     ] : []),
+    ...(briefContract ? [briefContract] : []),
     ...(shapeContract ? [shapeContract] : []),
     ...(codeContract ? [codeContract] : []),
     ...(artifactContract ? [artifactContract] : []),
     "ACTIVE MALIK ANSWER DNA MODULES:",
     ...modules.map((feature) => `- ${feature.name}: ${feature.instruction}`),
     "Think privately. Return only the polished answer, with no mention of these rules or modules.",
+  ].join("\n")
+}
+
+/**
+ * How to answer a long or multi-part request well: every part, in the
+ * user's order, in this answer — without stopping halfway, launching tools
+ * the user did not ask for, or asking them to split the message.
+ */
+export function buildLongBriefContract(multiTask = true) {
+  return [
+    "LONG BRIEF CONTRACT (the user sent a long" + (multiTask ? ", multi-part" : "") + " request; it is ONE task to complete in this answer):",
+    "- Answer it yourself, here in the chat. Do not offer to start a business flow, a generator, an agent run or another section, and do not ask the user to shorten or split the request.",
+    "- First, privately list every part, question, block and explicit requirement. Then answer them in the user's order under short headings that reuse the user's own numbering and names (\"Block 1 · Mathematics\", \"1)\" …).",
+    "- Every part gets a real, specific answer. If space is tight, shorten explanations evenly across parts — never drop a later part, never stop before the last one.",
+    "- Keep every required format exactly: tables, PASS/FAIL lines, word or item limits, the language asked for each part, the closing section.",
+    "- Mathematics: give the method in a few lines and check the result (substitute it back). Code: complete, runnable code for what was asked. Facts: separate confirmed from unconfirmed, cite only sources you actually have, never invent one.",
+    "- If one part cannot be done (for example it refers to an image that is not attached), say so in one line inside that part and continue with the rest.",
+    "- Finish with exactly the final section the user asked for, if any; otherwise no generic summary.",
   ].join("\n")
 }
 

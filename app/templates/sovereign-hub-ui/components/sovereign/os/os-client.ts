@@ -104,6 +104,19 @@ export function updateSuperflowMessage(messageId: string, patch: Partial<Superfl
   window.dispatchEvent(new CustomEvent(SUPERFLOW_UPDATE_EVENT, { detail: { messageId, patch } }))
 }
 
+export const SUPERFLOW_CHAT_FALLBACK_EVENT = "malik-superflow-chat-fallback"
+
+/** Replace a Superflow that could not start with a normal chat answer. */
+export function answerSuperflowInChat(messageId: string, goal: string) {
+  if (!messageId || !goal) return
+  window.dispatchEvent(new CustomEvent(SUPERFLOW_CHAT_FALLBACK_EVENT, { detail: { messageId, goal } }))
+}
+
+/** Refusals where a chat answer is better than an error with a retry button. */
+export function superflowShouldFallBackToChat(code: string, action?: string) {
+  return action === "upgrade" || ["INVALID_REQUEST", "INVALID_INPUT", "DAILY_LIMIT", "PLAN_REQUIRED", "TOO_MANY_FLOWS"].includes(code)
+}
+
 const TERMINAL = new Set(["completed", "partial", "failed", "cancelled"])
 
 export function isFlowDone(flow: FlowView | null) {

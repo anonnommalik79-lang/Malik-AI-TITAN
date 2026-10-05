@@ -16,6 +16,7 @@ import {
   type SlideStat,
   type SlideStep,
 } from "@/lib/presentations/types"
+import { routingScope } from "@/lib/ai/prompt-shape"
 
 /**
  * Everything between "the model said something" and "this is a slide".
@@ -639,8 +640,12 @@ export function detectDeckLanguage(text: string): DeckLanguage {
  * characters and never forms a boundary beside a Cyrillic letter.
  */
 export function isPresentationCreationRequest(text: string): boolean {
-  const value = String(text || "").trim().toLowerCase()
-  if (!value || value.length > 1200) return false
+  const raw = String(text || "").trim()
+  if (!raw || raw.length > 1200) return false
+  // In a long brief or a list of tasks, a deck mentioned in item 3 is part
+  // of the question; only an opening «сделай презентацию …» opens the studio.
+  const value = routingScope(raw).toLowerCase()
+  if (!value) return false
 
   const noun = /презентаци|слайд|питч[- ]?дек|pitch[- ]?deck|slide[- ]?deck|\bdeck\b|\bpresentation\b|\bslides\b|таныстырылым/u
   if (!noun.test(value)) return false

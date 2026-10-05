@@ -14,6 +14,8 @@ export type ChatSendOptions = {
   branchFromMessageId?: string
   /** Client-only: this send came from the one-turn queue, so duplicate-burst protection must not swallow it. */
   queueDispatch?: boolean
+  /** Client-only: answer in the chat even if the text would start a Superflow (the flow was refused). */
+  skipSuperflow?: boolean
   /**
    * Regenerate this assistant answer in place: the previous text is kept as a
    * version the reader can page back to, and no second question is added.

@@ -4,7 +4,9 @@ export function explicitlyRequestsPackagedProject(prompt: string) {
   const asksForDelivery = /создай|сделай|собери|сгенерируй|подготовь|упакуй|выгрузи|дай|скачать|create|build|package|export|download/i.test(text)
   const namesProjectPayload = /проект|репозитор|исходник|все\s+файл|полный\s+код|сайт|приложен|project|repository|source\s+files?|all\s+files?|website|\bapp\b/i.test(text)
   const namesPackage = /\bzip\b|\.zip\b|архив|archive|bundle/i.test(text)
-  const directProjectDownload = /(?:скачать|дай|download|export).{0,45}(?:проект|репозитор|исходник|все\s+файл|project|repository|source\s+files?|all\s+files?)/i.test(text)
+  // "дай" alone is not a download: «дай оценку моего проекта» is a question
+  // and must not start the ZIP builder.
+  const directProjectDownload = /(?:скачать|выгрузи|download|export).{0,45}(?:проект|репозитор|исходник|все\s+файл|project|repository|source\s+files?|all\s+files?)/i.test(text)
     || /(?:проект|репозитор|исходник|все\s+файл|project|repository|source\s+files?|all\s+files?).{0,45}(?:скачать|download|export)/i.test(text)
 
   return directProjectDownload || (asksForDelivery && namesProjectPayload && namesPackage)

@@ -190,12 +190,69 @@ await check("questions, greetings and single deliverables stay normal chat", () 
   assert.equal(caps.qualityTier("Подробно объясни стратегию выхода на рынок Центральной Азии"), "deep")
 })
 
-await check("an explicit multi-deliverable request runs; data needs a file", () => {
-  const decision = caps.decideSuperflow("Сделай бренд, логотип и лендинг для моей кофейни в Астане")
+await check("an explicit business order runs with the full package; data needs a file", () => {
+  const decision = caps.decideSuperflow("Создай бизнес: кофейня в Астане")
   assert.equal(decision.run, true)
-  assert.ok(decision.capabilities.includes("website"))
+  for (const capability of ["research", "brand", "image", "website", "business-plan"]) {
+    assert.ok(decision.capabilities.includes(capability), capability)
+  }
   assert.equal(caps.detectCapabilities("проанализируй csv с продажами").includes("data"), false)
   assert.equal(caps.detectCapabilities("проанализируй csv с продажами", ["file"]).includes("data"), true)
+})
+
+await check("Superflow starts only on an explicit «create a business» in RU/KK/EN", () => {
+  for (const text of [
+    "Создай мне бизнес с нуля — доставка еды в Алматы",
+    "Запусти стартап по аренде самокатов",
+    "Открой свой бизнес — пекарня в Шымкенте",
+    "Можешь создать мне бизнес по доставке цветов?",
+    "Хочу создать компанию по производству мебели",
+    "Бизнес под ключ: кофейня",
+    "Маған Алматыда кофейня бизнесін ашып бер",
+    "Стартап жасап бер, білім беру саласында",
+    "Create a business for a coffee shop in Almaty",
+    "Can you build me a startup around AI tutoring?",
+    "Запусти superflow: кофейня в Астане",
+    "Создай бизнес: кофейня.\nНужны: 1) название 2) логотип 3) сайт 4) бизнес-план",
+  ]) {
+    assert.equal(caps.decideSuperflow(text).run, true, text)
+  }
+})
+
+await check("everything that is not a business order stays a chat answer", () => {
+  for (const text of [
+    "Как создать бизнес?",
+    "Сколько стоит открыть бизнес?",
+    "Напиши бизнес-план кофейни",
+    "Создай бизнес-план для пекарни",
+    "Придумай 10 бизнес идей",
+    "Сделай бренд, логотип и лендинг для моей кофейни в Астане",
+    "Создай сайт для кофейни",
+    "Сделай презентацию для инвесторов",
+    "Не создавай бизнес, просто расскажи про кофейни",
+    "Без superflow: распиши идею кофейни",
+    "How do I start a business?",
+    "Write a business plan for a bakery",
+  ]) {
+    assert.equal(caps.decideSuperflow(text).run, false, text)
+  }
+})
+
+await check("a long brief or a numbered task list never becomes a Superflow", () => {
+  const brief = [
+    "Сен Malik AI-сың. Төмендегі 6 блокты толық орында.",
+    "Block 1 Mathematics: x² − y² = 945 теңдеуінің барлық бүтін шешімдерін тап.",
+    "Block 2 Code: Python-да LRU cache класын жаз, тесттерімен.",
+    "Block 3 Business: Алматыдағы кофейня үшін бизнес ашып бер, юнит-экономика мен бизнес-план құрылымын бер.",
+    "Block 4 Kazakh: мәтінді әдеби қазақ тіліне аудар.",
+    "Block 5 Vision: суретте не бейнеленгенін сипатта.",
+    "Block 6 Research: 2026 жылғы AI нарығы туралы зерттеу жаса, әр фактке source бер.",
+  ].join("\n")
+  assert.equal(caps.decideSuperflow(brief).run, false)
+  const numbered = "Ответь подробно на 5 пунктов. 1) Объясни трансформер. 2) Напиши код на Python. 3) Сделай анализ рынка самокатов. 4) Придумай слоган и логотип. 5) Опиши визуал обложки для сайта."
+  assert.equal(caps.decideSuperflow(numbered).run, false)
+  // Longer than the server accepts: answered in the chat, never refused.
+  assert.equal(caps.decideSuperflow(`Создай бизнес: ${"очень подробное описание ".repeat(200)}`).run, false)
 })
 
 await check("capability routes use MAX with budgets that follow quality", () => {

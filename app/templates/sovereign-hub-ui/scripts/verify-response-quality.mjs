@@ -331,6 +331,30 @@ check("the primary router uses the adaptive response contract", () => {
   assert.ok(!/replace\(\/\\s\+\/g/.test(cleanTextBody), "main answer whitespace must not be flattened")
 })
 
+check("a long multi-part brief is answered part by part, without subject templates", () => {
+  const brief = [
+    "Сен Malik AI-сың. Төмендегі 6 блокты толық орында.",
+    "Block 1 Mathematics: x² − y² = 945 теңдеуінің барлық бүтін шешімдерін тап.",
+    "Block 2 Code: Python-да LRU cache класын жаз.",
+    "Block 3 Business: iPhone 17 мен Samsung S26 салыстыр.",
+    "Block 4 Kazakh: мәтінді аудар.",
+    "Block 5 Vision: суретті сипатта.",
+    "Block 6 Research: AI нарығы туралы source бер.",
+  ].join("\n")
+  const prompt = intelligence.buildMalikResponseSystemPrompt({ prompt: brief })
+  assert.match(prompt, /LONG BRIEF CONTRACT/)
+  assert.match(prompt, /never drop a later part/)
+  assert.doesNotMatch(prompt, /ANSWER CARDS|HEAD-TO-HEAD CONTRACT|OVERVIEW CONTRACT/)
+  // A short question keeps its usual shape and gets no brief contract.
+  const short = intelligence.buildMalikResponseSystemPrompt({ prompt: "сравни iphone 17 и samsung s25" })
+  assert.doesNotMatch(short, /LONG BRIEF CONTRACT/)
+  assert.match(short, /HEAD-TO-HEAD CONTRACT/)
+  // A numbered comparison still compares: its opening line asks for it.
+  const numbered = intelligence.buildMalikResponseSystemPrompt({ prompt: "Сравни iPhone 17 и Samsung S25 по пунктам:\n1) камера\n2) батарея\n3) цена" })
+  assert.match(numbered, /LONG BRIEF CONTRACT/)
+  assert.match(numbered, /HEAD-TO-HEAD CONTRACT/)
+})
+
 check("the UI supports tables, code copy and bounded word-safe reveal", () => {
   const markdown = fs.readFileSync("components/sovereign/MalikMarkdown.tsx", "utf8")
   const dashboard = fs.readFileSync("components/sovereign/dashboard.tsx", "utf8")

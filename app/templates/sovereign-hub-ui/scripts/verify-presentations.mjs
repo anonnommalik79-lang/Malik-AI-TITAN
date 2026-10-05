@@ -301,9 +301,11 @@ check("leaves questions about presentations in the chat", () => {
     "почему моя презентация скучная",
     "расскажи про Gamma",
     "",
+    "Ответь на вопросы:\n1) Что такое ROI?\n2) Объясни NPV.\n3) Сделай план презентации для инвесторов на 5 пунктов.\n4) Дай вывод.",
   ]) {
     assert.equal(deck.isPresentationCreationRequest(text), false, text)
   }
+  assert.ok(deck.isPresentationCreationRequest("Сделай презентацию про кофейню.\n1) рынок\n2) меню\n3) цены"))
 })
 
 check("pulls the topic out of the command around it", () => {

@@ -35,9 +35,9 @@ const entryPrefix = (value: string) => `private/founder/request-audit/v2/${owner
 const entryKey = (value: string, id: string) => `${entryPrefix(value)}${id}.enc.json`
 const cleanText = (value: unknown) => String(value ?? "").replace(/\u0000/g, "").trim().slice(0, MAX_TEXT_CHARS)
 
-function memory() {
+function memory(): Map<string, FounderMessageEntry[]> {
   const scope = globalThis as Memory
-  return scope.__malikFounderMessageMemory ||= new Map()
+  return scope.__malikFounderMessageMemory ||= new Map<string, FounderMessageEntry[]>()
 }
 function queues() {
   const scope = globalThis as Memory

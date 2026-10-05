@@ -24,11 +24,13 @@ import {
 import type { ArtifactSummary } from "@/lib/os/types"
 
 import {
+  answerSuperflowInChat,
   flowProgressOf,
   formatDuration,
   isFlowDone,
   openOs,
   osFetch,
+  superflowShouldFallBackToChat,
   updateSuperflowMessage,
   useLiveFlow,
   type FlowView,
@@ -131,12 +133,19 @@ export function SuperflowBlock({ messageId, reference, chatId }: { messageId: st
     })
     if (!result.ok) {
       setStartError({ message: result.message, action: result.action })
+      // A fresh turn the server refused (limit, plan, not a flow) is answered
+      // in the chat right away. An old refused block reopened later only
+      // offers the button, so opening a chat never sends anything by itself.
+      if (messageId && !reference.status && superflowShouldFallBackToChat(result.code, result.action)) {
+        answerSuperflowInChat(messageId, reference.goal)
+        return
+      }
       updateSuperflowMessage(messageId, { status: "not-started" })
       return
     }
     setFlowId(result.data.flow.id)
     updateSuperflowMessage(messageId, { flowId: result.data.flow.id, projectId: result.data.flow.projectId, status: result.data.flow.status })
-  }, [chatId, messageId, reference.clientRequestId, reference.goal, reference.workspaceMode])
+  }, [chatId, messageId, reference.clientRequestId, reference.goal, reference.status, reference.workspaceMode])
 
   useEffect(() => {
     if (flowId || startedRef.current) return
@@ -200,6 +209,9 @@ export function SuperflowBlock({ messageId, reference, chatId }: { messageId: st
           ) : startError.action === "upgrade" ? null : (
             <button type="button" className="malik-os-button" onClick={() => { startedRef.current = false; void start() }}>Повторить</button>
           )}
+          {messageId ? (
+            <button type="button" className="malik-os-button is-primary" onClick={() => answerSuperflowInChat(messageId, reference.goal)}>Ответить в чате</button>
+          ) : null}
         </div>
       </section>
     )

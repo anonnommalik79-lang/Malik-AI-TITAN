@@ -45,6 +45,27 @@ check("turns an end-to-end trip request into a cross-product plan", () => {
   assert.equal(plan.requiresConfirmation, true)
 })
 
+check("long prompts and keyword coincidences stay a normal answer, without a plan", () => {
+  assert.equal(createMalikActionPlan({ prompt: "Переведи этот код на Python и объясни, что он делает" }), null)
+  assert.equal(createMalikActionPlan({ prompt: "Какой адрес у вокзала и сколько стоит фото на паспорт?" }), null)
+  const brief = [
+    "Ответь подробно на все пункты:",
+    "1) Объясни, как работает трансформер и внимание.",
+    "2) Напиши код на Python для парсинга CSV.",
+    "3) Найди и сравни цены на ноутбуки в Алматы.",
+    "4) Переведи абзац на казахский язык.",
+    "5) Опиши, какое изображение подойдёт для обложки видео.",
+  ].join("\n")
+  assert.equal(createMalikActionPlan({ prompt: brief }), null)
+  assert.equal(createMalikActionPlan({ prompt: `Проанализируй текст, затем сделай вывод, потом дай советы. ${"Контекст задачи. ".repeat(40)}` }), null)
+})
+
+check("an explicit agent request or Agent mode still plans", () => {
+  assert.ok(createMalikActionPlan({ prompt: "Спланируй мой переезд в Астану: найди квартиры и сравни цены" }))
+  assert.ok(createMalikActionPlan({ prompt: "Что нового в ИИ?", mode: "agent" }))
+  assert.equal(createMalikActionPlan({ prompt: "Расскажи про рекламное агентство" }), null)
+})
+
 check("never wraps a paid slash generation command in a second plan", () => {
   assert.equal(createMalikActionPlan({ prompt: "/фото летящая лягушка и город" }), null)
   assert.equal(createMalikActionPlan({ prompt: "/video cinematic city" }), null)
