@@ -1,7 +1,11 @@
 import fs from "node:fs"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
+import { createRequire } from "node:module"
+import path from "node:path"
 
 const root = new URL("../", import.meta.url)
+// Isolated QA can use real installed packages without changing a shared node_modules.
+const qaRequire = process.env.MALIK_QA_DEPS ? createRequire(path.join(process.env.MALIK_QA_DEPS, "fixture.cjs")) : null
 
 // A verification script can swap a server module that needs the Next.js
 // runtime (auth, "server-only") for a small stand-in:
@@ -36,6 +40,9 @@ export async function resolve(specifier, context, next) {
   try {
     return await next(specifier, context)
   } catch (error) {
+    if (qaRequire && error?.code === "ERR_MODULE_NOT_FOUND" && /^[@a-z]/i.test(specifier) && !specifier.startsWith("@/")) {
+      try { return await next(pathToFileURL(qaRequire.resolve(specifier)).href, context) } catch {}
+    }
     // Packages such as "next/cache" are published without an exports map;
     // a bundler adds ".js", Node's ESM loader does not.
     if (error?.code === "ERR_MODULE_NOT_FOUND" && /^[@a-z]/i.test(specifier) && !/\.[a-z]+$/i.test(specifier)) {

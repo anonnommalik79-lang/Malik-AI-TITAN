@@ -34,6 +34,8 @@ const requestedLabels = [
 ]
 
 function extractBlock(source, startText, endText) {
+  // Git checkouts use CRLF on Windows; the same source boundary must be found.
+  source = source.replace(/\r\n/g, "\n")
   const start = source.indexOf(startText)
   const end = source.indexOf(endText, start)
   assert.ok(start >= 0 && end > start, `Missing block: ${startText}`)

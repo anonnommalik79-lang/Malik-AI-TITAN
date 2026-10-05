@@ -84,6 +84,26 @@ await check("ZIP rejects path traversal in stored model output", async () => {
   const item = await store.putArtifact(owner.userId, { projectId: "test-project", kind: "code", title: "Проверка", content: JSON.stringify({ files: [{ path: "../escape.txt", content: "unsafe" }] }), sourceTool: "code.project", metadata: {}, links: [] })
   assert.equal((await get(new Request(`https://test.invalid/api/os/artifacts/${item.id}/export?format=zip`), { params: Promise.resolve({ id: item.id }) })).status, 422)
 })
+await check("presentation route returns real PPTX without fetching supplied image URLs", async () => {
+  const content = JSON.stringify({ title: "План", theme: "obsidian", slides: [{ id: "slide-title", layout: "title", title: "План Алматы", subtitle: "Проверка", imageUrl: "https://untrusted.invalid/image.png" }, { id: "slide-body", layout: "bullets", title: "Действия", bullets: ["Запуск", "Проверка"] }] })
+  const item = await store.putArtifact(owner.userId, { projectId: "test-project", kind: "presentation", title: "План", content, sourceTool: "presentation.generate", metadata: {}, links: [] })
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => { throw Error("Export must never fetch a client image URL") }
+  try {
+    const response = await get(new Request(`https://test.invalid/api/os/artifacts/${item.id}/export?format=pptx`), { params: Promise.resolve({ id: item.id }) })
+    assert.equal(response.status, 200)
+    assert.match(decodeURIComponent(response.headers.get("content-disposition")), /без изображений/)
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    const { createRequire } = await import("node:module")
+    const req = createRequire(path.join(process.env.MALIK_QA_DEPS || process.cwd(), "fixture.cjs"))
+    const zip = await req("jszip").loadAsync(bytes)
+    const slides = Object.keys(zip.files).filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+    assert.equal(slides.length, 2)
+    const text = (await Promise.all(slides.map(name => zip.file(name).async("string")))).join("\n")
+    assert.match(text, /План Алматы/); assert.match(text, /без изображений/)
+    outputs.set("pptx", { bytes })
+  } finally { globalThis.fetch = originalFetch }
+})
 await check("unsupported glyphs do not crash PDF", async () => {
   assert.ok((await exportDocument({ format: "pdf", title: "Шрифт", markdown: "Кириллица 中文 🚀" })).bytes.length > 100)
 })

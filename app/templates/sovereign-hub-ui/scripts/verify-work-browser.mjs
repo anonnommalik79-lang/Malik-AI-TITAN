@@ -36,7 +36,7 @@ const server = http.createServer(async (req, res) => {
       const response = await post(new Request("http://qa.invalid/api/work/export", { method: "POST", headers: { "content-type": "application/json" }, body: Buffer.concat(chunks) }))
       res.writeHead(response.status, Object.fromEntries(response.headers)); res.end(Buffer.from(await response.arrayBuffer())); return
     }
-    res.setHeader("content-type", "text/html"); res.end(`<html lang="ru"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#000;color:#eee;font:16px Arial;margin:24px}main{max-width:800px;margin:auto}button,summary{color:inherit}${css}</style><main><p>QA: меню реального компонента; тестовый ответ</p><h1>Отчёт</h1><p>Кириллица: Алматы.</p><div id="root"></div></main><script>${bootstrap}</script></html>`)
+    res.setHeader("content-type", "text/html; charset=utf-8"); res.end(`<html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#000;color:#eee;font:16px Arial;margin:24px}main{max-width:800px;margin:auto}button,summary{color:inherit}${css}</style><main><p>QA: меню реального компонента; тестовый ответ</p><h1>Отчёт</h1><p>Кириллица: Алматы.</p><div id="root"></div></main><script>${bootstrap}</script></html>`)
   } catch (error) { res.writeHead(500); res.end(error.message) }
 })
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve))
@@ -49,9 +49,11 @@ try {
     await page.locator(".malik-work-download summary").click()
     await page.locator(".malik-work-journal summary").click()
     assert.equal(await page.locator(".malik-work-journal li").count(), 2)
+    assert.match(await page.locator("body").innerText(), /Отчёт[\s\S]*Кириллица: Алматы[\s\S]*Скачать[\s\S]*Журнал выполнения/)
     if (reducedMotion === "reduce") assert.equal(await page.locator(".malik-work-journal li").first().evaluate(el => getComputedStyle(el).animationName), "none")
     assert.equal(await page.locator("button").count(), 5)
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+    await page.waitForFunction(() => [...document.querySelectorAll(".malik-work-journal li")].every(el => Number(getComputedStyle(el).opacity) >= .99))
     if (process.env.MALIK_QA_OUTPUT) { fs.mkdirSync(process.env.MALIK_QA_OUTPUT, { recursive: true }); await page.screenshot({ path: path.join(process.env.MALIK_QA_OUTPUT, `work-export-${width}-${reducedMotion}.png`) }) }
     const download = page.waitForEvent("download"); await page.getByRole("button", { name: "DOCX", exact: true }).click()
     const file = await download; assert.match(file.suggestedFilename(), /\.docx$/); assert.equal(await file.failure(), null)

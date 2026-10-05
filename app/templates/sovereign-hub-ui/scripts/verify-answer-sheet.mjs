@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url"
 
 const root = fileURLToPath(new URL("..", import.meta.url))
 const read = (file) => readFileSync(`${root}${file}`, "utf8")
-const sheet = await import(`${root}lib/ai/answer-sheet.ts`)
+const sheet = await import(new URL("../lib/ai/answer-sheet.ts", import.meta.url).href)
 
 let failures = 0
 let count = 0

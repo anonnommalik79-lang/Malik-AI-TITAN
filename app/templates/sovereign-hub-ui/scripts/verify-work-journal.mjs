@@ -46,6 +46,28 @@ await check("SSE reconnect snapshot contains saved events; foreign owner cannot 
   }
   owner = { ...owner, userId: "qa-journal-stranger" }; assert.equal((await request()).status, 404); owner = { ...owner, userId: "qa-journal-owner" }
 })
+await check("reload during execution restores persisted journal and reconnects before cancellation", async () => {
+  hold = true
+  const { flow } = await start()
+  try {
+    const deadline = Date.now() + 3000
+    let saved
+    do { saved = await store.getFlow(owner.userId, flow.id); if (saved?.events.some(event => event.type === "tool.started")) break; if (Date.now() > deadline) throw Error("Tool never started"); await new Promise(resolve => setTimeout(resolve, 5)) } while (true)
+    for (let reconnect = 0; reconnect < 2; reconnect++) {
+      store.configureOsBackend(backend)
+      const response = await stream(new Request(`http://qa.invalid/api/os/flows/${flow.id}/events`), { params: Promise.resolve({ id: flow.id }) })
+      assert.equal(response.status, 200)
+      const reader = response.body.getReader()
+      try {
+        const first = await reader.read(), body = new TextDecoder().decode(first.value)
+        const snapshot = JSON.parse(body.match(/event: snapshot\ndata: (.*)\n/)[1])
+        assert.equal(snapshot.flow.status, "running")
+        assert.deepEqual(snapshot.flow.events, JSON.parse(JSON.stringify(saved.events)))
+        assert.ok(!snapshot.flow.events.some(event => event.type === "task.completed"))
+      } finally { await reader.cancel() }
+    }
+  } finally { await executor.cancelFlow(owner.userId, flow.id); await done(flow.id); hold = false }
+})
 await check("journal is bounded at 200 events with unique IDs", async () => {
   const { flow } = await start(55), result = await done(flow.id)
   assert.equal(result.events.length, 200); assert.equal(new Set(result.events.map(e => e.id)).size, 200); assert.equal(result.events.at(-1).type, "task.completed")
