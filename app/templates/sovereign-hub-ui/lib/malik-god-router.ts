@@ -19,6 +19,7 @@ import { collectMalikConnectedContext, requestedFusionConnectors } from "@/lib/s
 import { collectMalikScienceContext } from "@/lib/server/science-context"
 import type { ExecutionReporter } from "@/lib/ai/chat-execution"
 import { computeMathForMessage, describeTask, mathEngineInstruction, mathReceiptText } from "@/lib/work/math/skill"
+import { mathPlanningInstruction, plannedMathInstruction, plannedMathReceiptText, planWorkMath } from "@/lib/work/math/model-plan"
 
 type ProviderAttempt = {
   provider: string
@@ -1058,6 +1059,18 @@ export async function malikGodAnswer(
       const step = activity?.start("Вычисление в математическом движке", "code", math.outcome.engine, describeTask(math.intent.task))
       activity?.finish(step, mathReceiptText(math), math.outcome.ok ? "completed" : "failed", math.outcome.ok ? undefined : math.outcome.error)
     }
+    const plannedMath = await planWorkMath({ prompt, mode: resolveWorkspaceMode(body?.workspaceMode), explicitMath: Boolean(math), attachments: attachments.length, signal }, async (planningSignal) => {
+      const step = activity?.start("Составление формул для расчёта", "model", selection.modelId, { maxTasks: 6, timeoutMs: 6000 })
+      try {
+        const plan = await runStrictMalikModel({ modelId: selection.modelId, prompt, taskPrompt: prompt, systemPrompt: mathPlanningInstruction, maxTokens: 1400, temperature: 0.1, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: planningSignal })
+        activity?.finish(step, { characters: plan.content.length, format: "JSON-план; требует проверки движком" })
+        return plan.content
+      } catch (error) { activity?.finish(step, undefined, "failed", "Не удалось составить план расчёта. Отвечаю обычным способом."); throw error }
+    })
+    for (const receipt of plannedMath?.receipts || []) {
+      const step = activity?.start("Расчёт формулы модели движком", "code", receipt.outcome.engine, describeTask(receipt.task))
+      activity?.finish(step, plannedMathReceiptText(receipt.task, receipt.outcome))
+    }
     const modelCall = activity?.start("Подготовка ответа моделью", "model", selection.modelId, { sources: sources.length, attachments: attachments.length })
     const result = await runStrictMalikModel({
       modelId: selection.modelId,
@@ -1065,7 +1078,7 @@ export async function malikGodAnswer(
       // Speed and code lanes follow what is really being asked: «а третий?»
       // after an overview question is another overview, not small talk.
       taskPrompt: focus.shapeText,
-      systemPrompt: [systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body)].filter(Boolean).join("\n\n"),
+      systemPrompt: [systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), plannedMathInstruction(plannedMath), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body)].filter(Boolean).join("\n\n"),
       history,
       attachments,
       maxTokens: answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)),
