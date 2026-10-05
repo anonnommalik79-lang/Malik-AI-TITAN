@@ -1,4 +1,5 @@
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { withFounderRequestAudit } from "@/lib/server/founder-request-audit"
 import { layoutFixedChatBody } from "@/lib/ai/keyboard-layout"
 import { GET as originalGET, POST as originalPOST } from "./route-impl"
 
@@ -213,7 +214,7 @@ function withLayoutFixed(request: Request, body: any): { request: Request; body:
   }
 }
 
-export async function POST(incoming: Request) {
+async function handlePOST(incoming: Request) {
   let body: any
   try {
     body = await incoming.clone().json()
@@ -243,6 +244,8 @@ export async function POST(incoming: Request) {
     })
   }
 }
+
+export const POST = withFounderRequestAudit(handlePOST, "chat")
 
 export async function GET() {
   return originalGET()
