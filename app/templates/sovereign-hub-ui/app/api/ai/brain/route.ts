@@ -1,7 +1,7 @@
 import { runMalikBrain } from "@/lib/ai/brain"
 import type { AIFileAttachment, AITaskType } from "@/lib/ai/types"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
-import { appendFounderMessage } from "@/lib/server/founder-message-log"
+import { withFounderRequestAudit } from "@/lib/server/founder-request-audit"
 
 export const runtime = "nodejs"
 
@@ -18,7 +18,9 @@ function outputText(value: unknown) {
   try { return JSON.stringify(value) } catch { return String(value) }
 }
 
-export async function POST(request: Request) {
+export const POST = withFounderRequestAudit(handlePOST, "chat")
+
+async function handlePOST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as BrainBody
   const prompt = String(body.prompt || "").trim()
   if (!prompt) return Response.json({ ok: false, error: "prompt required" }, { status: 400 })
@@ -32,19 +34,6 @@ export async function POST(request: Request) {
     userEmail: entitlement.userId,
     plan: entitlement.plan,
   })
-
-  if (entitlement.authenticated) {
-    await appendFounderMessage({
-      userId: entitlement.userId,
-      source: "chat",
-      userText: prompt,
-      assistantText: outputText(result.output),
-      provider: String(result.provider || ""),
-      model: String(result.model || ""),
-    }).catch((error) => {
-      console.warn("[FOUNDER MESSAGE LOG] chat write skipped", error instanceof Error ? error.message : error)
-    })
-  }
 
   return Response.json({
     ok: result.success,
