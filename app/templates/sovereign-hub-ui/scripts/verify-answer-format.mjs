@@ -260,6 +260,25 @@ check("bold, italic and inline code are rendered, not printed as symbols", () =>
   assert.ok(!html.includes("**"), "no stray asterisks may survive")
 })
 
+check("bold around inline maths never leaks literal markdown markers", () => {
+  const html = render("1. **$x < -\\sqrt{3}$**: мысалы, -2\n2. **$1 < x < \\sqrt{3}$**: мысалы, 1.2")
+  assert.match(html, /class="malik-md-strong"/)
+  assert.match(html, /class="mtx/)
+  assert.ok(!html.includes("**"), "bold markers around formula must be consumed")
+})
+
+check("completed prose hides orphan math punctuation and display delimiters", () => {
+  const html = render("Шекарасы: $x=0$ кірмейді $)$. Соңы$.")
+  assert.ok(!html.includes("$)$"), "punctuation wrapper must not leak")
+  assert.ok(!html.includes("$"), "orphan display delimiter must not leak")
+  assert.match(html, /кірмейді \)/)
+})
+
+check("streaming keeps incomplete formatting untouched until the model closes it", () => {
+  const html = render("Жауап$", { visualContext: { question: "есеп", streaming: true } })
+  assert.ok(html.includes("$"))
+})
+
 check("a fenced block becomes a code block with its own scroll", () => {
   const html = render("Команда:\n\n```bash\nnpm run build\n```")
   assert.match(html, /<pre[^>]*class="malik-md-pre"/)
