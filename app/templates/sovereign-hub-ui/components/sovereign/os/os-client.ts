@@ -13,6 +13,7 @@ import type { ArtifactSummary, OsError, TaskStatus } from "@/lib/os/types"
  */
 
 export type SuperflowRef = {
+  workspaceMode?: "chat" | "work"
   clientRequestId: string
   goal: string
   flowId?: string

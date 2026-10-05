@@ -1,4 +1,5 @@
-import { decideSuperflow } from "@/lib/os/capabilities"
+import { z } from "zod"
+import { routeWorkRequest } from "@/lib/work/orchestrator"
 import { startFlow } from "@/lib/os/executor"
 import { OsToolError } from "@/lib/os/failures"
 import { cleanRequestId, flowView, isOwnerPlan, osError, osJson, osOwner, requireSignedIn, returnDailyFlow, takeDailyFlow } from "@/lib/os/http"
@@ -8,6 +9,7 @@ import { readJsonBodyLimited } from "@/lib/server/request-safety"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+const flowRequest = z.object({ goal: z.string().min(12).max(4000), clientRequestId: z.string().min(1).max(120), chatId: z.string().regex(/^[\w:.-]{1,120}$/).optional(), projectId: z.string().regex(/^[\w-]{1,120}$/).optional(), workspaceMode: z.enum(["chat", "work"]).default("chat"), force: z.boolean().optional(), demo: z.boolean().optional() }).strict()
 
 /** Mission control: this account's flows, newest first. */
 export async function GET(request: Request) {
@@ -32,7 +34,9 @@ export async function POST(request: Request) {
   try {
     const owner = await osOwner(request)
     requireSignedIn(owner)
-    const body = await readJsonBodyLimited<Record<string, unknown>>(request, 32 * 1024)
+    const parsed = flowRequest.safeParse(await readJsonBodyLimited<unknown>(request, 32 * 1024))
+    if (!parsed.success) throw new OsToolError("INVALID_REQUEST", "Проверьте цель и параметры задачи.", { retryable: false })
+    const body = parsed.data
     const goal = String(body.goal || "").replace(/\s+/g, " ").trim().slice(0, 4_000)
     const clientRequestId = cleanRequestId(body.clientRequestId)
     if (goal.length < 12) throw new OsToolError("INVALID_REQUEST", "Опишите цель подробнее.", { retryable: false })
@@ -42,9 +46,9 @@ export async function POST(request: Request) {
     if (existing) return osJson({ ok: true, created: false, flow: flowView(existing) })
 
     // The browser asked because auto mode said so; the server checks again.
-    const decision = decideSuperflow(goal)
+    const decision = routeWorkRequest(goal, { mode: body.workspaceMode, signedIn: owner.authenticated })
     const forced = body.force === true
-    if (!decision.run && !forced) {
+    if (decision.route !== "flow" && !forced) {
       throw new OsToolError("INVALID_REQUEST", "Эта задача не требует нескольких инструментов — отвечу в обычном чате.", { retryable: false })
     }
     const chatId = typeof body.chatId === "string" && /^[\w:.-]{1,120}$/.test(body.chatId) ? body.chatId : undefined

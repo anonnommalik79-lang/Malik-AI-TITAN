@@ -125,7 +125,7 @@ export function SuperflowBlock({ messageId, reference, chatId }: { messageId: st
     setStartError(null)
     const result = await osFetch<{ flow: FlowView }>("/api/os/flows", {
       method: "POST",
-      json: { goal: reference.goal, clientRequestId: reference.clientRequestId, chatId },
+      json: { goal: reference.goal, clientRequestId: reference.clientRequestId, chatId, workspaceMode: reference.workspaceMode || "chat" },
       timeoutMs: 45_000,
     })
     if (!result.ok) {
@@ -135,7 +135,7 @@ export function SuperflowBlock({ messageId, reference, chatId }: { messageId: st
     }
     setFlowId(result.data.flow.id)
     updateSuperflowMessage(messageId, { flowId: result.data.flow.id, projectId: result.data.flow.projectId, status: result.data.flow.status })
-  }, [chatId, messageId, reference.clientRequestId, reference.goal])
+  }, [chatId, messageId, reference.clientRequestId, reference.goal, reference.workspaceMode])
 
   useEffect(() => {
     if (flowId || startedRef.current) return

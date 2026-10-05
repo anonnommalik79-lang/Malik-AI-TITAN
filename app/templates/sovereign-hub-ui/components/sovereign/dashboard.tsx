@@ -200,7 +200,7 @@ import { isStoredGeneratedImageUrl, persistGeneratedImageReference, persistGener
 import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import { normalizeFactAudit } from "@/lib/ai/fact-audit"
 import { extractSlideCount, isPresentationCreationRequest, presentationTopic } from "@/lib/presentations/deck"
-import { decideSuperflow } from "@/lib/os/capabilities"
+import { routeWorkRequest } from "@/lib/work/orchestrator"
 import { newRequestId, openOs, SUPERFLOW_UPDATE_EVENT, type SuperflowRef } from "./os/os-client"
 import {
   responseDepthInstruction,
@@ -6105,9 +6105,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // tasks in this chat — instead of one text answer. Questions and single
   // deliverables keep their usual path. Signed-in accounts only: projects are
   // stored per account.
-  if (!attachments.length && !guestMode && workOSUser?.email && decideSuperflow(cleanContent).run) {
+  if (!attachments.length && routeWorkRequest(cleanContent, { mode: turnWorkspaceMode, signedIn: !guestMode && Boolean(workOSUser?.email), attachmentKinds: attachments.map((item) => item.kind) }).route === "flow") {
     const flowChatId = branchChatId || activeChatId || crypto.randomUUID()
-    const reference: SuperflowRef = { clientRequestId: newRequestId("sf"), goal: cleanContent }
+    const reference: SuperflowRef = { clientRequestId: newRequestId("sf"), goal: cleanContent, workspaceMode: turnWorkspaceMode }
     const userTurn: Message = { id: crypto.randomUUID(), role: "user", content: cleanContent, timestamp: new Date() }
     const flowTurn: Message = { id: crypto.randomUUID(), role: "assistant", content: "", timestamp: new Date(), superflow: reference }
     if (branching) {
