@@ -144,7 +144,11 @@ export async function GET(request: Request) {
 
   // Founder asked for the complete timeline. Do not cut the response to the
   // old 120/300-row window; sorting is the only transformation here.
-  const items = filtered.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+  const items = filtered.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)).map(row => ({
+    ...row,
+    status: row.status === "pending" && Date.now() - dateMs(row.createdAt) > 10 * 60_000 ? "interrupted" : row.status || "success",
+    errorCode: row.status === "pending" && Date.now() - dateMs(row.createdAt) > 10 * 60_000 ? "NO_COMPLETION_RECORDED" : row.errorCode,
+  }))
   const now = Date.now()
 
   return Response.json({
@@ -155,6 +159,13 @@ export async function GET(request: Request) {
     yesterday: rows.filter((row) => isAlmatyDay(dateMs(row.createdAt), 1, now)).length,
     accountsScanned: accounts.length,
     storage: founderMessageStorageMode(),
+    storageWarning: founderMessageStorageMode() === "runtime-memory" ? "История хранится только в RAM и исчезнет после перезапуска Render. Настройте FOUNDER_HISTORY_BUCKET и S3/R2 credentials." : null,
+    statusCounts: {
+      success: items.filter(row => row.status === "success").length,
+      failed: items.filter(row => row.status === "failed").length,
+      interrupted: items.filter(row => row.status === "interrupted").length,
+      pending: items.filter(row => row.status === "pending").length,
+    },
     warning: warning || null,
   }, {
     headers: { "Cache-Control": "private, no-store, max-age=0" },
