@@ -1,6 +1,6 @@
 import { asJson, extractPrompt, malikGodAnswer } from "@/lib/malik-god-router"
 import { DEFAULT_MALIK_MODEL_ID, hasMalikProAccess } from "@/lib/ai/malik-models"
-import { appendFounderMessage } from "@/lib/server/founder-message-log"
+import { withFounderRequestAudit } from "@/lib/server/founder-request-audit"
 import { parsePluginCommandFromBody } from "@/lib/server/plugin-runtime"
 import { runPluginModelAnswer } from "@/lib/server/plugin-model-answer"
 import {
@@ -17,7 +17,7 @@ import { chatComputeOperation } from "@/lib/malik-compute/policies"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export const POST = withCompute(handlePOST, async (request) => { const body = await request.clone().json().catch(() => ({})); return parsePluginCommandFromBody(body) ? "plugin" : chatComputeOperation(request) })
+export const POST = withFounderRequestAudit(withCompute(handlePOST, async (request) => { const body = await request.clone().json().catch(() => ({})); return parsePluginCommandFromBody(body) ? "plugin" : chatComputeOperation(request) }), "chat")
 
 async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
@@ -84,35 +84,6 @@ async function handlePOST(request: Request) {
       allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
     })
     const payload = asJson(answer)
-
-    /*
-     * The founder console reads this log; until now it had almost nothing to
-     * read.
-     *
-     * /api/ai/brain and /api/voice/turn wrote to it, but the dashboard, the
-     * command center, the generator studio and Shorts all talk to THIS route -
-     * so the one endpoint the product actually runs on was the one endpoint
-     * that logged nothing, and the history screen looked broken when it was
-     * simply empty.
-     *
-     * The prompt is taken with the router's own extractPrompt, not re-derived
-     * here, so what is stored is exactly the text the model was given rather
-     * than a second guess at which body field held it. Writing is awaited
-     * intentionally: appendFounderMessage serialises per user, and a detached
-     * promise on a serverless runtime can be killed with the response.
-     */
-    if (entitlement.authenticated) {
-      await appendFounderMessage({
-        userId: entitlement.userId,
-        source: "chat",
-        userText: extractPrompt(body),
-        assistantText: String(payload.content || ""),
-        provider: String(payload.provider || ""),
-        model: String(payload.model || ""),
-      }).catch((error) => {
-        console.warn("[FOUNDER MESSAGE LOG] chat write skipped", error instanceof Error ? error.message : error)
-      })
-    }
 
     return Response.json(payload, {
       headers: {
