@@ -1,7 +1,7 @@
 import "server-only"
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto"
-import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
 
 export type FounderMessageSource = "chat" | "voice"
 export type FounderMessageStatus = "pending" | "success" | "failed" | "interrupted"
@@ -157,7 +157,11 @@ export async function readFounderMessageLog(userId: string) {
   const cloud = await readCloud(id)
   const local = memory().get(id) || []
   const merged = new Map<string, FounderMessageEntry>()
-  for (const item of [...(cloud || []), ...local]) merged.set(item.id, item)
+  for (const item of [...local, ...(cloud || [])]) {
+    const previous = merged.get(item.id)
+    if (previous?.status !== "pending" && item.status === "pending") continue
+    merged.set(item.id, item)
+  }
   return [...merged.values()].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
 }
 export async function appendFounderMessage(input: {
@@ -188,4 +192,29 @@ export async function appendFounderMessage(input: {
 }
 export function founderMessageStorageMode() {
   return config() ? "encrypted-object-storage" : "runtime-memory"
+}
+
+/** Owner-only diagnostic endpoint calls this on demand, not on every request. */
+export async function founderMessageStorageCheck(): Promise<{ durable: boolean; reason: string }> {
+  const cfg = config()
+  if (!cfg) return { durable: false, reason: "NOT_CONFIGURED" }
+  const s3 = client(cfg), key = `private/founder/health/${randomUUID()}.enc.json`
+  const sample: FounderMessageEntry = {
+    id: randomUUID(), source: "chat", userText: "audit storage health check",
+    assistantText: "read-back verified", createdAt: new Date().toISOString(), status: "success",
+  }
+  try {
+    await s3.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: encrypt([sample], cfg.encryptionSecret), ContentType: "application/json", CacheControl: "private, no-store" }))
+    const got = await s3.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }))
+    const entries = decrypt(await bodyText(got.Body), cfg.encryptionSecret)
+    return entries.length === 1 && entries[0].id === sample.id && entries[0].assistantText === sample.assistantText
+      ? { durable: true, reason: "WRITE_READ_DECRYPT_OK" }
+      : { durable: false, reason: "READ_BACK_MISMATCH" }
+  } catch (error) {
+    console.error("[FOUNDER AUDIT] storage health failed", error instanceof Error ? error.message : "unknown")
+    return { durable: false, reason: "STORAGE_CHECK_FAILED" }
+  } finally {
+    try { await s3.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key })) }
+    catch { console.warn("[FOUNDER AUDIT] health canary cleanup failed") }
+  }
 }
