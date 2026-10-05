@@ -13,7 +13,7 @@ import {
   tierFor,
 } from "@/lib/voice/conversation"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
-import { appendFounderMessage } from "@/lib/server/founder-message-log"
+import { withFounderRequestAudit } from "@/lib/server/founder-request-audit"
 import { withCompute } from "@/lib/malik-compute/runtime"
 
 export const runtime = "nodejs"
@@ -79,27 +79,6 @@ function voiceIdentity(user: Awaited<ReturnType<typeof getOptionalWorkOSAuth>>["
   if (!user?.email) return { authenticated: false, userId: "guest" }
   if (!user.emailVerified) return { authenticated: true, userId: `workos:${user.id}` }
   return { authenticated: true, userId: user.email.trim().toLowerCase() }
-}
-
-async function recordVoiceTurn(input: {
-  authenticated: boolean
-  userId: string
-  text: string
-  content: string
-  provider: string
-  model: string
-}) {
-  if (!input.authenticated) return
-  await appendFounderMessage({
-    userId: input.userId,
-    source: "voice",
-    userText: input.text,
-    assistantText: input.content,
-    provider: input.provider,
-    model: input.model,
-  }).catch((error) => {
-    console.warn("[FOUNDER MESSAGE LOG] voice write skipped", error instanceof Error ? error.message : error)
-  })
 }
 
 /**
@@ -226,8 +205,6 @@ function streamingResponse(input: {
         send("delta", { text: content })
       }
 
-      await recordVoiceTurn({ authenticated, userId, text, content, provider, model })
-
       send("done", {
         ok: true,
         content,
@@ -256,7 +233,7 @@ function streamingResponse(input: {
   })
 }
 
-export const POST = withCompute(handlePOST, "voice")
+export const POST = withFounderRequestAudit(withCompute(handlePOST, "voice"), "voice")
 
 async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
@@ -374,15 +351,6 @@ async function handlePOST(request: Request) {
 
     if (!content || !looksLikeLanguage(content, language.code)) content = fallbackReply(language.code)
 
-    await recordVoiceTurn({
-      authenticated: identity.authenticated,
-      userId: identity.userId,
-      text,
-      content,
-      provider: answer.provider,
-      model: answer.model,
-    })
-
     return Response.json({
       ok: true,
       content,
@@ -406,14 +374,6 @@ async function handlePOST(request: Request) {
   } catch (error) {
     console.error("[VOICE_TURN_ERROR]", error instanceof Error ? error.message : error)
     const content = fallbackReply(language.code)
-    await recordVoiceTurn({
-      authenticated: identity.authenticated,
-      userId: identity.userId,
-      text,
-      content,
-      provider: "voice-local-fallback",
-      model: "none",
-    })
     return Response.json({
       ok: true,
       content,
