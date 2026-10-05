@@ -81,7 +81,7 @@ function citationNumbers(token: string) {
   return [...new Set((token.match(/\d{1,2}/g) || []).map(Number).filter((number) => number > 0))]
 }
 
-function inline(text: string, keyPrefix: string): ReactNode[] {
+function inlineMath(text: string, keyPrefix: string): ReactNode[] {
   if (!/[$\\]/.test(text)) return inlineBase(text, keyPrefix)
   const out: ReactNode[] = []
   const parts = text.split(/(`[^`\n]+`)/)
@@ -104,6 +104,48 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
     }
     if (last < part.length) out.push(...inlineBase(part.slice(last), `${keyPrefix}-${partIndex}-${piece}`))
   })
+  return out.length ? out : [text]
+}
+
+/**
+ * Markdown emphasis may legitimately wrap a formula: **$x < 3$**.
+ * Parse that outer emphasis before splitting maths, otherwise the formula
+ * splitter leaves the two ** markers on opposite sides and they leak into UI.
+ */
+function inline(text: string, keyPrefix: string): ReactNode[] {
+  const out: ReactNode[] = []
+  const codeParts = text.split(/(`[^`\n]+`)/)
+
+  codeParts.forEach((part, partIndex) => {
+    if (!part) return
+    if (part.length > 1 && part.startsWith("`") && part.endsWith("`")) {
+      out.push(...inlineBase(part, `${keyPrefix}-code-${partIndex}`))
+      return
+    }
+
+    const emphasis = /(\*\*|__)([^\n]+?)\1/g
+    let last = 0
+    let strongIndex = 0
+    let match: RegExpExecArray | null
+
+    while ((match = emphasis.exec(part)) !== null) {
+      const inner = match[2]
+      // Plain bold is already handled by inlineBase. We only intercept the
+      // cases that would otherwise be split by the maths parser.
+      if (!/[$\\]/.test(inner)) continue
+      if (match.index > last) out.push(...inlineMath(part.slice(last, match.index), `${keyPrefix}-${partIndex}-pre-${strongIndex}`))
+      out.push(
+        <strong key={`${keyPrefix}-${partIndex}-strong-${strongIndex}`} className="malik-md-strong">
+          {inlineMath(inner, `${keyPrefix}-${partIndex}-strong-${strongIndex}`)}
+        </strong>,
+      )
+      strongIndex += 1
+      last = match.index + match[0].length
+    }
+
+    if (last < part.length) out.push(...inlineMath(part.slice(last), `${keyPrefix}-${partIndex}-tail`))
+  })
+
   return out.length ? out : [text]
 }
 
@@ -348,6 +390,33 @@ function parseImageLine(line: string): MalikVisualImage | null {
 }
 
 const EMPTY_IMAGE_LINE = /^\s*!\[[^\]\n]*\]\(\s*\)\s*$/u
+
+/**
+ * Providers occasionally finish an otherwise-correct answer with one orphan
+ * formatting delimiter (for example "$)$" or "answer$$."). Never mutate code
+ * fences and never touch a still-streaming answer; completed prose should not
+ * expose parser syntax to the user.
+ */
+function normalizeCompletedFormatting(source: string) {
+  let inFence = false
+  return String(source || "").replace(/\r\n?/g, "\n").split("\n").map((line) => {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence
+      return line
+    }
+    if (inFence) return line
+
+    let next = line.replace(/\$(?:\\)?([)\]}.,;:!?])\$/g, "$1")
+    const displayMarkers = Array.from(next.matchAll(/\$\$/g))
+    if (displayMarkers.length % 2 === 1 && !next.trimStart().startsWith("$$")) {
+      const lastMarker = displayMarkers[displayMarkers.length - 1]?.index ?? -1
+      if (lastMarker >= 0 && /^[\s.,;:!?)}\]]*$/.test(next.slice(lastMarker + 2))) {
+        next = next.slice(0, lastMarker) + next.slice(lastMarker + 2)
+      }
+    }
+    return next
+  }).join("\n")
+}
 
 function parseBlocks(source: string): Block[] {
   const lines = String(source || "").replace(/\r\n?/g, "\n").split("\n")
@@ -761,12 +830,13 @@ function isMultiSubjectVisualQuestion(question: string): boolean {
 }
 
 export function MalikMarkdown({ text, className, allowImages = true, autoPreview = false, citations, visualContext }: Props) {
-  const blocks = useMemo(() => parseBlocks(text), [text])
+  const streaming = Boolean(visualContext?.streaming)
+  const normalizedText = useMemo(() => streaming ? text : normalizeCompletedFormatting(text), [text, streaming])
+  const blocks = useMemo(() => parseBlocks(normalizedText), [normalizedText])
   const question = visualContext?.question || ""
   const previousQuestion = visualContext?.previousQuestion || ""
   const previousAnswer = visualContext?.previousAnswer || ""
   const hasAttachment = Boolean(visualContext?.hasAttachment)
-  const streaming = Boolean(visualContext?.streaming)
   const checklistPosition = useMemo(() => {
     if (!wantsAnswerChecklist(question) || blocks.some((block) => block.kind === "visual" && block.visual?.type === "checklist")) return -1
     let selected = -1
