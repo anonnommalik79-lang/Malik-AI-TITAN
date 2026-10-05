@@ -393,7 +393,7 @@ const EMPTY_IMAGE_LINE = /^\s*!\[[^\]\n]*\]\(\s*\)\s*$/u
 
 /**
  * Providers occasionally finish an otherwise-correct answer with one orphan
- * formatting delimiter (for example "$)$" or "answer$."). Never mutate code
+ * formatting delimiter (for example "$)$" or "answer$$."). Never mutate code
  * fences and never touch a still-streaming answer; completed prose should not
  * expose parser syntax to the user.
  */
@@ -408,7 +408,7 @@ function normalizeCompletedFormatting(source: string) {
 
     let next = line.replace(/\$(?:\\)?([)\]}.,;:!?])\$/g, "$1")
     const displayMarkers = Array.from(next.matchAll(/\$\$/g))
-    if (displayMarkers.length % 2 === 1 && !next.trimStart().startsWith("$")) {
+    if (displayMarkers.length % 2 === 1 && !next.trimStart().startsWith("$$")) {
       const lastMarker = displayMarkers[displayMarkers.length - 1]?.index ?? -1
       if (lastMarker >= 0 && /^[\s.,;:!?)}\]]*$/.test(next.slice(lastMarker + 2))) {
         next = next.slice(0, lastMarker) + next.slice(lastMarker + 2)
