@@ -44,6 +44,8 @@
     "test:chat-execution": "node --experimental-strip-types --no-warnings scripts/verify-chat-execution.mjs",
     "test:chat-execution-ui": "node --experimental-strip-types --no-warnings scripts/verify-chat-execution-browser.mjs",
     "test:mobile-thinking": "node scripts/verify-mobile-thinking.mjs",
+    "test:response-stages": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-response-stages.mjs",
+    "test:response-stages-ui": "node --experimental-strip-types --no-warnings scripts/verify-response-stages-browser.mjs",
     "test:work-mode": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-work-mode.mjs",
     "test:chat-artifacts": "node --experimental-strip-types --no-warnings scripts/verify-chat-code-routing.mjs && node --experimental-strip-types --no-warnings scripts/verify-chat-artifacts.mjs",
     "test:responses": "node scripts/verify-response-quality.mjs",

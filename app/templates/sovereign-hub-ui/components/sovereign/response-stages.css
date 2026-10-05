@@ -1,0 +1,182 @@
+/* Progress line under «Думаю…»: UI statuses only, never model reasoning.
+   One flat layer on the black chat — no card, no grey surface, no border.
+   Movement (halo, rail light, caret, row entry, fold) is driven by the Web
+   Animations API in MalikResponseStages.tsx, so the low-FPS guard that turns
+   off CSS keyframes on phones cannot freeze it. This sheet is layout and
+   colour only; every rule is scoped to the block. */
+
+.malik-stages,
+#malik-root .malik-stages {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  margin: -4px 0 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+  text-align: left;
+  font-family: inherit;
+  -webkit-font-smoothing: antialiased;
+}
+
+.malik-stages__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.malik-stages__body,
+#malik-root .malik-stages__body {
+  position: relative;
+  padding: 0;
+  margin: 0;
+}
+
+/* A hairline joins the marks; a soft light slides down it while working. */
+.malik-stages__rail,
+#malik-root .malik-stages__rail {
+  position: absolute;
+  top: 11px;
+  bottom: 11px;
+  left: 6px;
+  width: 1px;
+  overflow: hidden;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, .14) 22%, rgba(255, 255, 255, .14) 78%, rgba(255, 255, 255, 0));
+}
+.malik-stages__rail-light,
+#malik-root .malik-stages__rail-light {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, .9) 50%, rgba(255, 255, 255, 0));
+}
+.malik-stages[data-rows="1"] .malik-stages__rail,
+#malik-root .malik-stages[data-rows="1"] .malik-stages__rail { display: none; }
+
+#malik-root .malik-stages__list,
+.malik-stages__list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+/* With three rows the oldest one fades into the line above it, so the block
+   stays compact and reads as a continuation of «Думаю…». */
+.malik-stages[data-rows="3"] .malik-stages__list {
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .38), #000 48%);
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .38), #000 48%);
+}
+
+#malik-root .malik-stages__row,
+.malik-stages__row {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  min-height: 22px;
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none !important;
+  color: #7a7a7a;
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: .005em;
+  text-align: left !important;
+}
+#malik-root .malik-stages__row::before,
+#malik-root .malik-stages__row::marker,
+.malik-stages__row::marker { content: none !important; display: none !important; }
+
+.malik-stages__mark {
+  position: relative;
+  display: grid;
+  flex: 0 0 13px;
+  width: 13px;
+  height: 13px;
+  place-items: center;
+}
+.malik-stages__check {
+  width: 12px;
+  height: 12px;
+  color: #8a8a8a;
+}
+.malik-stages__dot {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, .7), 0 0 2px #fff;
+}
+.malik-stages__halo {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .5);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.malik-stages__text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+#malik-root .malik-stages__row.is-current,
+.malik-stages__row.is-current { color: #f3f0ea; }
+.malik-stages__row.is-current .malik-stages__text {
+  text-shadow: 0 0 14px rgba(255, 255, 255, .3);
+}
+.malik-stages__caret {
+  display: inline-block;
+  width: 1.5px;
+  height: 1em;
+  margin-left: 2px;
+  border-radius: 1px;
+  vertical-align: -.16em;
+  background: rgba(255, 255, 255, .85);
+}
+
+/* «Готово»: the last row lights up for a moment before the block folds. */
+.malik-stages[data-malik-response-stages="done"] .malik-stages__row:last-child,
+#malik-root .malik-stages[data-malik-response-stages="done"] .malik-stages__row:last-child { color: #ece8e0; }
+.malik-stages[data-malik-response-stages="done"] .malik-stages__row:last-child .malik-stages__check {
+  color: #fff;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, .65));
+}
+
+/* Phones: the same line, a touch smaller, aligned with the thinking label. */
+@media (max-width: 600px) {
+  #malik-root .malik-stages__row,
+  .malik-stages__row {
+    min-height: 21px;
+    font-size: 13px;
+  }
+  .malik-stages,
+  #malik-root .malik-stages { margin: -6px 0 10px; }
+}
+@media (max-width: 1180px) {
+  html body #malik-root .malik-dashboard-shell .malik-stages {
+    margin-inline: 0 !important;
+    text-align: left !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .malik-stages__caret,
+  .malik-stages__rail-light { display: none; }
+}

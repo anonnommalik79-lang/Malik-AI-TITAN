@@ -5,6 +5,7 @@ import { Check, ChevronDown, Copy, Download, FileText, Globe, Image, Loader2, Pl
 import { executionMarkdown, executionOverview, executionSources, publicExecutionText, type ExecutionSource, type ExecutionStep, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import "./chat-execution.css"
 import { MalikLiveActivity } from "./MalikLiveActivity"
+import { MalikResponseStages } from "./MalikResponseStages"
 
 const labels = { running: "Выполняется", completed: "Готово", failed: "Ошибка", cancelled: "Остановлено", interrupted: "Прервано" }
 const icons = { status: BrainCircuit, search: Search, read: Globe, plugin: Plug, file: FileText, model: BrainCircuit, code: SquareTerminal, media: Image }
@@ -54,8 +55,11 @@ function Receipt({ step, expanded, now }: { step: ExecutionStep; expanded?: bool
   </li>
 }
 
-export function ChatExecution({ trace, live = false, sources = [], workMode = false, writing = false, legacyThought, defaultOpen = false }: { trace?: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; legacyThought?: { ms: number; steps: string[] }; defaultOpen?: boolean }) {
+export function ChatExecution({ trace, live = false, sources = [], workMode = false, writing = false, legacyThought, defaultOpen = false, stages = false }: { trace?: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; legacyThought?: { ms: number; steps: string[] }; defaultOpen?: boolean; /** Show the UI progress line under «Думаю…» for a turn that started live. */ stages?: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
+  // Decided once, when this answer's row mounts: only a turn that is being
+  // answered right now gets the progress line, never a reopened history item.
+  const [stagesForTurn] = useState(() => Boolean(stages && live && !writing && (!trace || trace.state === "running")))
   const [expand, setExpand] = useState<boolean | undefined>(undefined)
   const [allSources, setAllSources] = useState(false)
   const [clock, setClock] = useState(() => Date.now())
@@ -79,6 +83,7 @@ export function ChatExecution({ trace, live = false, sources = [], workMode = fa
   const legacySteps = !trace ? legacyThought?.steps.slice(-8).map(step => publicExecutionText(step, 300)).filter(Boolean) || [] : []
   return <section className="malik-execution malik-execution--inline" aria-label="Ход выполнения запроса" data-state={trace?.state || (active ? "running" : "unrecorded")}>
     {active && !writing && trace ? <MalikLiveActivity /> : null}
+    {stagesForTurn ? <MalikResponseStages trace={trace} writing={writing} /> : null}
     <button type="button" className="malik-execution__summary" onClick={() => setOpen(value => !value)} aria-expanded={open} aria-controls={id}>
       <BrainCircuit size={16} aria-hidden="true" />
       <span className="malik-execution__summary-label">Ход работы</span>
