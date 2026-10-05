@@ -24,6 +24,35 @@ export type ExecutionTrace = {
   steps: ExecutionStep[]
 }
 export type ExecutionSource = { url: string; title?: string; domain?: string }
+/** Describe only observed operations, never reconstruct a model's private thoughts. */
+export function executionOverview(trace?: ExecutionTrace): string[] {
+  if (!trace?.steps.length) return []
+  const completed = trace.steps.filter(step => step.state === "completed")
+  const statements: string[] = []
+  const searches = completed.filter(step => step.kind === "search").length
+  const pages = completed.filter(step => step.kind === "read").length
+  const files = completed.filter(step => step.kind === "file").length
+  const plugins = completed.filter(step => step.kind === "plugin").length
+  const code = completed.filter(step => step.kind === "code").length
+  const media = completed.filter(step => step.kind === "media").length
+  if (searches) statements.push(`Завершено поисковых обращений: ${searches}.`)
+  if (pages) statements.push(`Завершено обращений к страницам: ${pages}. Источники и ограничения указаны в действиях ниже.`)
+  if (files) statements.push(`Завершено операций с загруженными материалами: ${files}.`)
+  if (plugins) statements.push(`Завершено обращений к подключённым сервисам: ${plugins}.`)
+  if (code) statements.push(`Завершено операций с кодом или расчётами: ${code}. Что именно выполнено, показано в квитанциях.`)
+  if (media) statements.push(`Завершено операций с изображениями или видео: ${media}. Результаты указаны в действиях ниже.`)
+  const models = completed.filter(step => step.kind === "model").length
+  if (models) statements.push(`Завершено обращений к модели: ${models}.`)
+  const failed = trace.steps.filter(step => step.state === "failed").length
+  if (failed) statements.push(`Действий с ошибкой: ${failed}. Их нельзя считать успешно выполненными.`)
+  const unfinished = trace.steps.filter(step => step.state === "cancelled" || step.state === "interrupted").length
+  if (unfinished) statements.push(`Остановленных или прерванных действий: ${unfinished}. Успешное завершение не подтверждено.`)
+  if (trace.state === "running") statements.push("Запрос ещё выполняется. Панель обновляется по событиям системы.")
+  if (!statements.length) statements.push(trace.steps.every(step => step.kind === "status")
+    ? "Сохранены только статусы обработки. Подтверждённых результатов внешних инструментов в журнале нет."
+    : "В журнале нет подтверждённых результатов инструментов. Подробности — в этапах ниже.")
+  return statements
+}
 export const MAX_EXECUTION_STEPS = 80
 export const MAX_EXECUTION_BYTES = 64 * 1024
 const KINDS = new Set<ExecutionKind>(["status", "search", "read", "plugin", "file", "model", "code", "media"])

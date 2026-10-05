@@ -42,6 +42,7 @@
     "test:reference-intent": "node scripts/verify-reference-intent.mjs",
     "test:illustrated-answers": "node scripts/verify-illustrated-answers.mjs",
     "test:chat-execution": "node --experimental-strip-types --no-warnings scripts/verify-chat-execution.mjs",
+    "test:chat-execution-ui": "node --experimental-strip-types --no-warnings scripts/verify-chat-execution-browser.mjs",
     "test:mobile-thinking": "node scripts/verify-mobile-thinking.mjs",
     "test:work-mode": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-work-mode.mjs",
     "test:chat-artifacts": "node --experimental-strip-types --no-warnings scripts/verify-chat-code-routing.mjs && node --experimental-strip-types --no-warnings scripts/verify-chat-artifacts.mjs",

@@ -31,7 +31,12 @@ const trace = { version: 1, id: "qa", startedAt, state: "running", steps: [
     output: JSON.stringify({ sources: [{ url: "https://example.com/qa", title: "Контрольный источник" }] }) },
   { id: "qa:file", title: "Анализ загруженных материалов", kind: "file", state: "running", startedAt, input: "Контрольный файл" },
 ] }
-const render = (trace, extra = {}) => renderToString(React.createElement(ChatExecution, { trace, live: true, workMode: true, ...extra }))
+// Receipts now live behind the per-answer disclosure. Keep the full-cascade
+// animation assertions on an explicitly open panel; also verify its closed state.
+const render = (trace, extra = {}) => renderToString(React.createElement(ChatExecution, { trace, live: true, workMode: true, defaultOpen: true, ...extra }))
+const closed = render(trace, { defaultOpen: false })
+assert(closed.includes("Ход работы") && closed.includes('aria-expanded="false"'))
+assert(!closed.includes('class="malik-receipt '), "Closed disclosure must not mount tool payloads")
 const nativeMotion = ts.transpileModule(readFileSync(path.join(project, "lib/ui/thinking-text-motion.ts"), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText
@@ -70,6 +75,7 @@ try {
   for (const test of [320, 390, 430, 768, 1440].flatMap(width => [{ width }, { width, reduce: true }])) {
     const page = await browser.newPage({ viewport: { width: test.width, height: 844 }, reducedMotion: test.reduce ? "reduce" : "no-preference" })
     await page.setContent(`<style>${sheets.join("\n")}</style><div id="malik-root"><div class="malik-dashboard-shell"><div class="malik-chat-fullwidth"><div class="malik-message-row-assistant"><div class="malik-ai-avatar is-working"></div><div class="malik-message-card-assistant" id="receipt">${render(trace)}</div></div></div></div></div>`)
+    await page.bringToFront()
     const label = ".malik-live-activity__label"
     const icon = ".malik-receipt.is-running .malik-receipt__heading > svg:first-child"
     const first = await motion(page, label)

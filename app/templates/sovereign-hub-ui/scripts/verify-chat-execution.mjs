@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { createExecutionReporter, executionMarkdown, executionSources, executionUrl, MAX_EXECUTION_BYTES, MAX_EXECUTION_STEPS, normalizeExecutionTrace, publicExecutionText, settleExecution, upsertExecutionStep } from "../lib/ai/chat-execution.ts"
+import { createExecutionReporter, executionMarkdown, executionOverview, executionSources, executionUrl, MAX_EXECUTION_BYTES, MAX_EXECUTION_STEPS, normalizeExecutionTrace, publicExecutionText, settleExecution, upsertExecutionStep } from "../lib/ai/chat-execution.ts"
 
 let at = 1000
 const events = []
@@ -52,4 +52,23 @@ const sourceTrace = createExecutionReporter(() => {}, undefined, () => at++)
 const call = sourceTrace.start("Search", "search", "web.search")
 sourceTrace.finish(call, { sources: [{ url: "https://developer.mozilla.org/docs", title: "Docs" }, { url: "javascript:alert(1)", title: "unsafe" }] })
 assert.deepEqual(executionSources(sourceTrace.snapshot(), [{ url: "https://developer.mozilla.org/docs", title: "Same source" }]).map((source) => source.domain), ["developer.mozilla.org"])
-console.log("PASS: execution lifecycle, upsert, cancellation, recovery, privacy, export and bounds")
+assert.deepEqual(executionOverview(), [])
+assert.deepEqual(executionOverview({ ...trace, steps: [] }), [])
+const overview = executionOverview(trace).join("\n")
+assert.match(overview, /поисковых обращений: 1/)
+assert.match(overview, /Действий с ошибкой: 1/)
+assert.match(overview, /прерванных действий: 1/)
+assert(!overview.includes("обращений к модели:"), "An unfinished model call must not count as successful")
+assert(!overview.includes("подключённым сервисам:"), "A failed plugin must not count as successful")
+const operations = createExecutionReporter(() => {}, "qa", () => at++)
+for (const kind of ["read", "file", "plugin", "code", "media", "model"]) {
+  const id = operations.start(`QA ${kind}`, kind, `qa.${kind}`)
+  operations.finish(id, { reasoning: "privateThought", result: "Observed result" })
+}
+const fullOverview = executionOverview(operations.settle("completed")).join("\n")
+for (const phrase of ["к страницам: 1", "материалами: 1", "сервисам: 1", "расчётами: 1", "видео: 1", "к модели: 1"]) assert(fullOverview.includes(phrase))
+assert(!fullOverview.includes("privateThought"))
+assert(executionOverview(sourceTrace.snapshot()).some(text => text.includes("ещё выполняется")))
+assert(executionOverview({ ...trace, state: "completed", steps: [{ ...events[1], kind: "status" }] }).some(text => text.includes("только статусы")))
+assert(executionOverview({ ...trace, state: "failed", steps: [trace.steps.find(step => step.id === plugin)] }).some(text => text.includes("ошибкой: 1")))
+console.log("PASS: execution lifecycle, upsert, cancellation, recovery, privacy, export, bounds and observed-only overview")

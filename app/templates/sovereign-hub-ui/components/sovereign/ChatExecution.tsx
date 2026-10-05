@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from "react"
 import { Check, ChevronDown, Copy, Download, FileText, Globe, Image, Loader2, Plug, Search, SquareTerminal, AlertCircle, CircleStop, ExternalLink, BrainCircuit, Github } from "lucide-react"
-import { executionMarkdown, executionSources, type ExecutionSource, type ExecutionStep, type ExecutionTrace } from "@/lib/ai/chat-execution"
+import { executionMarkdown, executionOverview, executionSources, publicExecutionText, type ExecutionSource, type ExecutionStep, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import "./chat-execution.css"
 import { MalikLiveActivity } from "./MalikLiveActivity"
 
@@ -18,7 +18,7 @@ export function downloadChatFile(name: string, content: string, mime = "text/pla
 }
 
 function Receipt({ step, expanded, now }: { step: ExecutionStep; expanded?: boolean; now: number }) {
-  const [localOpen, setLocalOpen] = useState(false)
+  const [localOpen, setLocalOpen] = useState(true)
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState("")
   const id = useId()
@@ -54,30 +54,41 @@ function Receipt({ step, expanded, now }: { step: ExecutionStep; expanded?: bool
   </li>
 }
 
-export function ChatExecution({ trace, live = false, sources = [], workMode = false, writing = false }: { trace: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean }) {
-  const [open, setOpen] = useState(false)
-  const [expand, setExpand] = useState<boolean | undefined>()
+export function ChatExecution({ trace, live = false, sources = [], workMode = false, writing = false, legacyThought, defaultOpen = false }: { trace?: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; legacyThought?: { ms: number; steps: string[] }; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const [expand, setExpand] = useState<boolean | undefined>(undefined)
   const [allSources, setAllSources] = useState(false)
   const [clock, setClock] = useState(() => Date.now())
   useEffect(() => {
-    if (!live || trace.state !== "running") return
+    if (!live || trace?.state !== "running") return
     const timer = window.setInterval(() => setClock(Date.now()), 1000)
     return () => window.clearInterval(timer)
-  }, [live, trace.state])
-  const now = trace.endedAt || clock
-  const tools = trace.steps.filter((step) => step.kind !== "status" && step.kind !== "model")
-  const running = trace.steps.filter((step) => step.state === "running")
+  }, [live, trace?.state])
+  const now = trace?.endedAt || clock
+  const tools = trace?.steps.filter((step) => step.kind !== "status" && step.kind !== "model") || []
+  const running = trace?.steps.filter((step) => step.state === "running") || []
   const completedTools = tools.filter((step) => step.state === "completed").length
   const failedTools = tools.filter((step) => step.state === "failed").length
-  const rows = open ? trace.steps : tools
-  const verified = executionSources(trace, sources)
+  const rows = trace?.steps || []
+  const verified = trace ? executionSources(trace, sources) : []
   const visibleSources = allSources ? verified : verified.slice(0, 6)
-  const active = live && trace.state === "running"
+  const active = live && (!trace || trace.state === "running")
   const id = useId()
-  const summary = active ? running.at(-1)?.title || "Обрабатываю запрос…" : `${labels[trace.state]} · ${duration(Math.max(0, now - trace.startedAt))}`
-  return <section className="malik-execution malik-execution--inline" aria-label="Ход выполнения запроса" data-state={trace.state}>
-    {active && !writing ? <MalikLiveActivity /> : null}
-    <ol className="malik-execution__steps" id={id}>{rows.map((step) => <Receipt key={step.id} step={step} now={now} expanded={expand} />)}</ol>
+  const summary = active ? writing ? "Пишу ответ…" : "Выполняется" : trace ? `${labels[trace.state]} · ${duration(Math.max(0, now - trace.startedAt))}` : "Журнал недоступен"
+  const overview = executionOverview(trace)
+  const legacySteps = !trace ? legacyThought?.steps.slice(-8).map(step => publicExecutionText(step, 300)).filter(Boolean) || [] : []
+  return <section className="malik-execution malik-execution--inline" aria-label="Ход выполнения запроса" data-state={trace?.state || (active ? "running" : "unrecorded")}>
+    {active && !writing && trace ? <MalikLiveActivity /> : null}
+    <button type="button" className="malik-execution__summary" onClick={() => setOpen(value => !value)} aria-expanded={open} aria-controls={id}>
+      <BrainCircuit size={16} aria-hidden="true" />
+      <span className="malik-execution__summary-label">Ход работы</span>
+      <span className="malik-execution__summary-status" role="status" aria-live="polite">{summary}</span>
+      <ChevronDown size={15} className={open ? "is-open" : ""} aria-hidden="true" />
+    </button>
+    {open ? <div id={id} className="malik-execution__panel">
+    <p className="malik-execution__explanation">Здесь реальные этапы и результаты инструментов, а не скрытые внутренние рассуждения модели.</p>
+    {overview.length ? <div className="malik-execution__overview" aria-label="Краткий отчёт"><h3>Как подготовлен ответ</h3><ul>{overview.map(text => <li key={text}>{text}</li>)}</ul></div> : null}
+    {rows.length ? <ol className="malik-execution__steps">{rows.map((step) => <Receipt key={step.id} step={step} now={now} expanded={expand} />)}</ol> : legacySteps.length ? <div className="malik-execution__legacy"><p>Сохранены только сообщения о статусе. Подробные квитанции этого ответа отсутствуют.</p><ol>{legacySteps.map((text, index) => <li key={index}>{text}</li>)}</ol></div> : <p className="malik-execution__empty">{active ? "Ожидаю событий выполнения от сервера. Ответ появится ниже автоматически." : "Для этого ответа этапы не были сохранены. Восстанавливать или придумывать их задним числом нельзя."}</p>}
     {verified.length ? <div className="malik-execution__sources" aria-label="Источники поиска">
       <p className="malik-execution__sources-title"><Search size={16} aria-hidden="true" />Поиск · {verified.length} источников</p>
       <div className="malik-execution__source-chips">{visibleSources.map((source) => <a key={source.url} href={source.url} title={source.title || source.domain} target="_blank" rel="noopener noreferrer"><Globe size={16} aria-hidden="true" /><span>{source.domain}</span></a>)}
@@ -89,15 +100,11 @@ export function ChatExecution({ trace, live = false, sources = [], workMode = fa
       {active && running.length > 0 ? <span><Loader2 size={13} className="is-spinning" aria-hidden="true" />{running.length} в процессе</span> : null}
       {failedTools > 0 ? <span><AlertCircle size={13} aria-hidden="true" />{failedTools} с ошибкой</span> : null}
     </div> : null}
-    {!active || tools.length > 0 ? <button type="button" className="malik-execution__summary" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={id}>
-      <BrainCircuit size={16} aria-hidden="true" />
-      <span role={active ? undefined : "status"} aria-live={active ? undefined : "polite"}>{active ? "Ход выполнения" : summary}</span>
-      <ChevronDown size={15} className={open ? "is-open" : ""} />
-    </button> : null}
-    {open ? <div className="malik-execution__toolbar">
+    {trace && rows.length ? <div className="malik-execution__toolbar">
       <button type="button" onClick={() => setExpand((value) => value === true ? undefined : true)} aria-pressed={expand === true}>{expand === true ? "По отдельности" : "Раскрыть детали"}</button>
       <button type="button" onClick={() => setExpand((value) => value === false ? undefined : false)} aria-pressed={expand === false}>{expand === false ? "По отдельности" : "Свернуть детали"}</button>
       <details className="malik-execution__export"><summary><Download size={14} />Скачать отчёт</summary><div><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.md`, executionMarkdown(trace))}>Markdown</button><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.json`, JSON.stringify(trace, null, 2), "application/json")}>JSON</button></div></details>
+    </div> : null}
     </div> : null}
   </section>
 }

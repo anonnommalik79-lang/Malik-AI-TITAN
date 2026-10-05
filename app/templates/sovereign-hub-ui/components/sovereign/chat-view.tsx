@@ -11,7 +11,7 @@ import { stripAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 import { answerCardsToText } from "@/lib/ai/answer-cards"
 import { MalikTapGuide } from "./MalikTapGuide"
 import type { SuperflowRef } from "./os/os-client"
-import { AnswerDownloadButton, FollowUpChips, ReadAloudButton, ThoughtTrace, UserMessageActions, VersionPager, useChatShortcuts, type FollowUpSendOptions } from "./chat-extras"
+import { AnswerDownloadButton, FollowUpChips, ReadAloudButton, UserMessageActions, VersionPager, useChatShortcuts, type FollowUpSendOptions } from "./chat-extras"
 import "./chat-live.css"
 
 // The live Superflow block loads only when a conversation has one.
@@ -1806,10 +1806,7 @@ function MessageBubble({
             </div>
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
-          {!isUser && message.execution && !olderVersion ? <ChatExecution trace={message.execution} live={streaming} sources={message.research?.sources} workMode={workspaceMode === "work"} writing={Boolean(displayContent)} /> : null}
-          {!isUser && !message.execution && !streaming && message.thought && !olderVersion && !message.generatedMedia && !message.superflow ? (
-            <ThoughtTrace thought={message.thought} sources={message.research?.usedWeb ? message.research.sources.length : 0} />
-          ) : null}
+          {!isUser ? <ChatExecution key={`${message.id}:${shownVersion}`} trace={olderVersion ? undefined : message.execution} legacyThought={olderVersion ? undefined : message.thought} live={streaming} sources={olderVersion ? [] : message.research?.sources} workMode={workspaceMode === "work"} writing={Boolean(displayContent)} /> : null}
           {isUser && message.attachments?.length ? <UserAttachmentGallery items={message.attachments} /> : null}
           {!isUser && message.superflow ? (
             <SuperflowBlock messageId={message.id} reference={message.superflow} />

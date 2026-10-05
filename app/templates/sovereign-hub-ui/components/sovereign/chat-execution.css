@@ -64,6 +64,22 @@
 .malik-execution__work-summary > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .malik-execution__work-summary > span:first-child { color: #e4e4e7; }
 
+/* One disclosure per answer. Closed panels do not render long tool payloads. */
+.malik-execution--inline .malik-execution__summary { margin: 0; min-height: 44px; gap: 8px; flex-wrap: wrap; }
+.malik-execution--inline .malik-execution__summary > .malik-execution__summary-label { flex: 0 1 auto; color: #e5e5e5; font-size: 14px; }
+.malik-execution--inline .malik-execution__summary > .malik-execution__summary-status { flex: 0 1 auto; color: #999; font-size: 12px; }
+.malik-execution__panel { min-width: 0; padding: 14px 16px; margin-top: 4px; border: 1px solid #303030; border-radius: 12px; background: #0b0b0b; animation: malik-execution-reveal .16s ease-out; }
+.malik-execution__explanation { margin: 0 0 14px; color: #929292; font-size: 12px; line-height: 1.6; }
+.malik-execution__overview { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #282828; }
+.malik-execution__overview h3 { font-size: 13px; color: #eee; margin: 0 0 8px; font-weight: 550; }
+.malik-execution__overview ul, .malik-execution__legacy ol { padding-left: 18px; margin: 0; color: #bbb; font-size: 12px; line-height: 1.7; }
+.malik-execution__overview li, .malik-execution__legacy li { overflow-wrap: anywhere; margin: 4px 0; }
+.malik-execution__legacy p { color: #999; font-size: 12px; }
+.malik-execution__panel .malik-execution__empty { margin: 0; }
+@keyframes malik-execution-reveal { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .malik-execution__panel { animation: none; } }
+@media (max-width: 600px) { .malik-execution__panel { padding: 12px; } .malik-execution__toolbar { gap: 6px; } }
+
 /* Keep the existing thinking label anchored to the left edge of the real
    tool receipts on phone and desktop. No replacement loading widget. */
 #malik-root .malik-execution--inline > .malik-live-activity,
