@@ -14,7 +14,6 @@ import { runMalikCoderOrchestrator } from "@/lib/server/malik-coder-orchestrator
 import { prepareMalikAgentRuntime } from "@/lib/server/malik-agent-runtime"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
-import { appendFounderMessage } from "@/lib/server/founder-message-log"
 import { putProjectArtifact } from "@/lib/server/project-artifact-store"
 import { isFeatureDisabled, readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
 import { estimateMultimodalTokens, hasMalikAttachments, routeMalikAttachments } from "@/lib/server/multimodal-router"
@@ -373,25 +372,6 @@ async function scheduledCommandAnswer(body: any, entitlement: RequestEntitlement
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return "Не удалось создать задачу: " + message.slice(0, 700)
-  }
-}
-
-async function persistFounderChatTurn(body: any, entitlement: RequestEntitlement, answer: any) {
-  if (!entitlement.authenticated || !entitlement.userId || entitlement.userId === "guest") return
-  const userText = coderPrompt(body)
-  if (!userText || userText.trim().toLowerCase() === MALIK_ADMIN_COMMAND) return
-
-  try {
-    await appendFounderMessage({
-      userId: entitlement.userId,
-      source: "chat",
-      userText,
-      assistantText: asPlainText(answer),
-      provider: String(answer?.provider || "") || undefined,
-      model: String(answer?.model || "") || undefined,
-    })
-  } catch (error) {
-    console.warn("[FOUNDER MESSAGE LOG] chat persistence failed", error instanceof Error ? error.message : String(error))
   }
 }
 
@@ -808,7 +788,6 @@ function liveSseResponse(
           recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0).catch((error) => {
             console.warn("[MALIK_CHAT_USAGE]", error instanceof Error ? error.message : String(error))
           }),
-          persistFounderChatTurn(body, entitlement, answer),
         ])
         stopHeartbeat()
         activity.finish(responseCall, { characters: content.length, sources: answer.sources.length, artifact: "projectArtifact" in answer ? answer.projectArtifact : undefined })
@@ -1001,7 +980,6 @@ async function handlePOST(request: Request) {
     }
     await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0)
     observeComputeResult(answer)
-    await persistFounderChatTurn(routedBody, entitlement, answer)
     const content = asPlainText(answer)
     return textResponse(content)
   } catch (error) {
