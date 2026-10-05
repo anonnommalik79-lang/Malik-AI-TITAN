@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { humanizeError } from "@/lib/os/failures"
-import type { ArtifactSummary, OsError, TaskStatus } from "@/lib/os/types"
+import type { ArtifactSummary, OsError, TaskStatus, WorkEvent } from "@/lib/os/types"
 
 /**
  * The browser side of Malik AI OS: typed calls to /api/os/*, a live flow
@@ -39,6 +39,7 @@ export type TaskView = {
 }
 
 export type FlowView = {
+  events?: WorkEvent[]
   id: string
   projectId: string
   goal: string
@@ -177,6 +178,12 @@ export function useLiveFlow(flowId: string | undefined) {
       source.addEventListener("artifact", (event) => {
         const data = JSON.parse((event as MessageEvent).data)
         if (data.artifact?.id) setArtifacts((previous) => ({ ...previous, [data.artifact.id]: data.artifact }))
+      })
+      source.addEventListener("work", (event) => {
+        const entry = JSON.parse((event as MessageEvent).data) as WorkEvent
+        const current = flowRef.current
+        if (!current || !entry.id || (current.events || []).some((item) => item.id === entry.id)) return
+        apply({ ...current, events: [...(current.events || []), entry].slice(-200) })
       })
       source.addEventListener("done", () => {
         source?.close()

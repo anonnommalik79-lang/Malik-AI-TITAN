@@ -1,4 +1,6 @@
 import { subscribe } from "@/lib/os/events"
+import { z } from "zod"
+import { takeRequestFrequency } from "@/lib/server/request-frequency"
 import { isFlowRunning, recoverInterrupted } from "@/lib/os/executor"
 import { flowView, osError, osOwner } from "@/lib/os/http"
 import { getArtifacts, getFlow, toSummary } from "@/lib/os/store"
@@ -20,8 +22,12 @@ const MAX_STREAM_MS = 12 * 60 * 1000
  */
 export async function GET(request: Request, context: RouteContext) {
   try {
-    const { id } = await context.params
+    const parsed = z.object({ id: z.string().regex(/^[\w-]{3,100}$/) }).safeParse(await context.params)
+    if (!parsed.success) throw new OsToolError("NOT_FOUND", "Задача не найдена.", { retryable: false })
+    const { id } = parsed.data
     const owner = await osOwner(request)
+    if (!owner.authenticated) throw new OsToolError("NOT_FOUND", "Задача не найдена.", { retryable: false })
+    if (!takeRequestFrequency("work-events", owner.userId, 60)) return Response.json({ error: "Слишком много подключений. Попробуйте через минуту." }, { status: 429, headers: { "cache-control": "private, no-store", "retry-after": "60" } })
     const found = await getFlow(owner.userId, id)
     if (!found) throw new OsToolError("NOT_FOUND", "Задача не найдена.", { retryable: false })
     const flow = await recoverInterrupted(owner.userId, found)
@@ -50,6 +56,7 @@ export async function GET(request: Request, context: RouteContext) {
         const unsubscribe = subscribe(flow.id, (event: OsEvent) => {
           if (event.type === "task") send("task", { flowId: event.flowId, task: flowView({ ...flow, tasks: [event.task] }).tasks[0], status: flow.status })
           else if (event.type === "artifact") send("artifact", event)
+          else if (event.type === "work") send("work", event.event)
           else if (event.type === "flow") send("snapshot", { flow: flowView(event.flow) })
           else if (event.type === "done") {
             send("done", event)

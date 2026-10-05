@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 
 import { detectCapabilities, qualityTier } from "./capabilities"
 import { publish } from "./events"
@@ -24,7 +24,7 @@ import {
 import { blockedTasks, flowStatusOf, isTerminal, readyTasks, transition } from "./task-graph"
 import type { DependencyOutput, OwnerContext, ToolContext, ToolDeps } from "./tools/contract"
 import { toolFor } from "./tools/registry"
-import type { Artifact, Capability, OsError, OsFlow, OsTask, ValidationReport } from "./types"
+import type { Artifact, Capability, OsError, OsFlow, OsTask, ValidationReport, WorkEvent } from "./types"
 import { validateArtifact } from "./validate"
 
 /**
@@ -53,6 +53,16 @@ type ExecutorGlobal = typeof globalThis & {
 }
 
 const scope = globalThis as ExecutorGlobal
+
+function appendWork(flow: OsFlow, type: WorkEvent["type"], at: number, data: Omit<WorkEvent, "id" | "type" | "at"> = {}) {
+  const event: WorkEvent = { id: randomUUID(), type, at, ...data }
+  flow.events = [...(flow.events || []), event].slice(-200)
+  return event
+}
+function publishWork(flow: OsFlow, event: WorkEvent) { publish(flow.id, { type: "work", flowId: flow.id, event }) }
+function taskEvent(task: OsTask, at: number) {
+  return { taskId: task.id, tool: task.type, label: task.label, attempt: task.retry.attempts, ...(task.startedAt !== undefined ? { durationMs: Math.max(0, (task.finishedAt || at) - task.startedAt) } : {}), ...(task.error ? { error: `Ошибка шага: ${task.error.code}` } : {}) }
+}
 
 function running() {
   if (!scope.__malikOsRunning) scope.__malikOsRunning = new Map()
@@ -135,6 +145,8 @@ async function createFlow(input: StartFlowInput): Promise<{ flow: OsFlow; create
     capabilities,
     demo: Boolean(input.demo),
   }
+  for (const task of tasks) appendWork(flow, "task.created", now, { taskId: task.id, tool: task.type, label: task.label })
+  appendWork(flow, "plan.ready", now, { label: `План готов: ${tasks.length} шагов` })
   await saveFlow(ownerId, flow)
   await updateProject(ownerId, project.id, (target) => {
     target.flowIds.push(flow.id)
@@ -163,8 +175,9 @@ export async function recoverInterrupted(ownerId: string, flow: OsFlow): Promise
   flow.tasks = flow.tasks.map((task) => {
     if (isTerminal(task.status)) return task
     const error: OsError = { code: "INTERRUPTED", message: "Сервер перезапустился во время работы. Нажмите «Продолжить».", retryable: true, action: "retry" }
-    if (task.status === "running" || task.status === "retrying") return { ...task, status: "failed", error, finishedAt: now, activity: undefined }
-    return { ...task, status: "cancelled", error, finishedAt: now }
+    const next: OsTask = { ...task, status: task.status === "running" || task.status === "retrying" ? "failed" : "cancelled", error, finishedAt: now, activity: undefined }
+    appendWork(flow, next.status === "failed" ? "task.failed" : "task.cancelled", now, taskEvent(next, now))
+    return next
   })
   flow.interrupted = true
   flow.status = flowStatusOf(flow.tasks)
@@ -190,7 +203,9 @@ export async function cancelFlow(ownerId: string, flowId: string) {
   flow.tasks = flow.tasks.map((task) => {
     if (isTerminal(task.status)) return task
     changed = true
-    return { ...task, status: "cancelled", finishedAt: now, activity: undefined }
+    const next: OsTask = { ...task, status: "cancelled", finishedAt: now, activity: undefined }
+    appendWork(flow, "task.cancelled", now, taskEvent(next, now))
+    return next
   })
   if (changed) {
     flow.status = flowStatusOf(flow.tasks)
@@ -270,8 +285,23 @@ export async function runFlow(ownerId: string, flowId: string, owner: OwnerConte
     }
 
     const setTask = async (next: OsTask) => {
+      const previous = flow.tasks.find((task) => task.id === next.id)
+      const changes: WorkEvent[] = []
+      if (previous?.status !== next.status) {
+        const at = deps.now(), data = taskEvent(next, at)
+        if (next.status === "running") {
+          if (!previous?.retry.attempts) changes.push(appendWork(flow, "skill.selected", at, data))
+          changes.push(appendWork(flow, "tool.started", at, { ...data, durationMs: undefined }))
+        } else if (next.status === "retrying") changes.push(appendWork(flow, "tool.retrying", at, data))
+        else if (next.status === "failed") {
+          changes.push(appendWork(flow, "tool.failed", at, data))
+          changes.push(appendWork(flow, "task.failed", at, data))
+        } else if (next.status === "completed") changes.push(appendWork(flow, "task.completed", at, data))
+        else if (next.status === "cancelled") changes.push(appendWork(flow, "task.cancelled", at, data))
+      }
       flow.tasks = flow.tasks.map((task) => (task.id === next.id ? next : task))
       await save()
+      changes.forEach((event) => publishWork(flow, event))
       publish(flow.id, { type: "task", flowId: flow.id, task: next })
     }
 
@@ -329,11 +359,11 @@ export async function runFlow(ownerId: string, flowId: string, owner: OwnerConte
     if (controller.signal.aborted) {
       await Promise.allSettled([...active.values()])
       const now = deps.now()
-      flow.tasks = flow.tasks.map((task) => (isTerminal(task.status) ? task : { ...task, status: "cancelled", finishedAt: now, activity: undefined }))
+      for (const task of flow.tasks) if (!isTerminal(task.status)) await setTask({ ...task, status: "cancelled", finishedAt: now, activity: undefined })
     } else {
       // Anything never able to start (a broken graph) is closed, not left spinning.
       const now = deps.now()
-      flow.tasks = flow.tasks.map((task) => (isTerminal(task.status) ? task : { ...task, status: "cancelled", finishedAt: now, error: task.error || { code: "NOT_STARTED", message: "Шаг не смог начаться.", retryable: true, action: "retry" } }))
+      for (const task of flow.tasks) if (!isTerminal(task.status)) await setTask({ ...task, status: "cancelled", finishedAt: now, error: task.error || { code: "NOT_STARTED", message: "Шаг не смог начаться.", retryable: true, action: "retry" } })
     }
     flow.finishedAt = deps.now()
     await save()
@@ -364,7 +394,7 @@ async function runTask(
   const invalid = tool.validate?.(initial.input)
   const attempt = initial.retry.attempts + 1
   let task = initial.status === "planned" || initial.status === "waiting" ? transition(initial, "queued", {}, deps.now()) : initial
-  task = transition(task, "running", { retry: { ...task.retry, attempts: attempt }, progress: 0.02, error: undefined, activity: undefined }, deps.now())
+  task = transition(task, "running", { retry: { ...task.retry, attempts: attempt }, progress: 0, error: undefined, activity: undefined }, deps.now())
   await setTask(task)
   if (invalid) {
     await setTask(transition(current(), "failed", { error: { code: "INVALID_INPUT", message: invalid, retryable: false, action: "none" } }, deps.now()))
@@ -439,11 +469,18 @@ async function runTask(
     }
     feedback().delete(task.id)
 
+    const completion = appendWork(flow, "tool.completed", deps.now(), { ...taskEvent(current(), deps.now()), durationMs: Math.max(0, deps.now() - started) })
+    await saveFlow(ownerId, flow)
+    publishWork(flow, completion)
+
     const stored: Artifact[] = []
     for (let index = 0; index < result.artifacts.length; index += 1) {
       const draft = result.artifacts[index]
       const artifact = await putArtifact(ownerId, { ...draft, validation: reports[index], version: draft.version || 1 }, deps.now())
       stored.push(artifact)
+      const ready = appendWork(flow, "artifact.ready", deps.now(), { taskId: task.id, tool: task.type, label: artifact.title, artifactId: artifact.id })
+      await saveFlow(ownerId, flow)
+      publishWork(flow, ready)
       publish(flow.id, { type: "artifact", flowId: flow.id, artifact: toSummary(artifact) })
     }
 
@@ -479,6 +516,9 @@ async function runTask(
     if (flow.demo) {
       const rescued = await demoFallback(ownerId, flow, latest, deps)
       if (rescued) {
+        const ready = appendWork(flow, "artifact.ready", deps.now(), { taskId: latest.id, tool: latest.type, artifactId: rescued.id, label: `${rescued.title} · сохранённая копия` })
+        await saveFlow(ownerId, flow)
+        publishWork(flow, ready)
         publish(flow.id, { type: "artifact", flowId: flow.id, artifact: toSummary(rescued) })
         await setTask(transition(latest, "completed", { artifactIds: [rescued.id], provider: "demo-cache", error: undefined }, deps.now()))
         return

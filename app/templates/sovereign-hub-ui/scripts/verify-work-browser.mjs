@@ -23,9 +23,10 @@ function bundle(file) {
   }); return file
 }
 const entry = bundle("components/sovereign/WorkDownloadMenu.tsx")
-const css = fs.readFileSync("components/sovereign/work-download.css", "utf8")
+const journal = bundle("components/sovereign/os/WorkJournal.tsx")
+const css = fs.readFileSync("components/sovereign/work-download.css", "utf8") + fs.readFileSync("components/sovereign/os/work-journal.css", "utf8")
 const markdown = "# Отчёт\n\nКириллица: Алматы.\n\n| Город | Число |\n|---|---|\n| Алматы | 12 |"
-const bootstrap = `const process={env:{NODE_ENV:'production'}},sources=${JSON.stringify(modules)},cache={};function require(id){if(id.endsWith('.css'))return {};if(cache[id])return cache[id].exports;const module=cache[id]={exports:{}};new Function('module','exports','require','process',sources[id])(module,module.exports,require,process);return module.exports}require('react-dom/client').createRoot(document.getElementById('root')).render(require('react').createElement(require(${JSON.stringify(entry)}).WorkDownloadMenu,{markdown:${JSON.stringify(markdown)}}));`
+const bootstrap = `const process={env:{NODE_ENV:'production'}},sources=${JSON.stringify(modules)},cache={};function require(id){if(id.endsWith('.css'))return {};if(cache[id])return cache[id].exports;const module=cache[id]={exports:{}};new Function('module','exports','require','process',sources[id])(module,module.exports,require,process);return module.exports}const React=require('react');require('react-dom/client').createRoot(document.getElementById('root')).render(React.createElement(React.Fragment,null,React.createElement(require(${JSON.stringify(entry)}).WorkDownloadMenu,{markdown:${JSON.stringify(markdown)}}),React.createElement(require(${JSON.stringify(journal)}).WorkJournal,{events:[{id:'qa-tool-start',at:Date.now(),type:'tool.started',label:'Тестовый документ',tool:'document.write',attempt:1},{id:'qa-tool-done',at:Date.now(),type:'tool.completed',label:'Тестовый документ',tool:'document.write',durationMs:1200}]})));`
 const load = workTestLoader({ "@/lib/server/request-entitlement": { resolveRequestEntitlement: async () => ({ authenticated: false, userId: "qa-browser-export", plan: "free" }) } })
 const post = load("app/api/work/export/route.ts").POST
 const server = http.createServer(async (req, res) => {
@@ -45,7 +46,10 @@ try {
   for (const [width, height, reducedMotion] of [[1440, 900, "no-preference"], [390, 844, "no-preference"], [390, 844, "reduce"]]) {
     const page = await browser.newPage({ viewport: { width, height }, reducedMotion, acceptDownloads: true }), errors = []
     page.on("pageerror", e => errors.push(e.message)); await page.goto(`http://127.0.0.1:${server.address().port}`)
-    await page.locator("summary").click()
+    await page.locator(".malik-work-download summary").click()
+    await page.locator(".malik-work-journal summary").click()
+    assert.equal(await page.locator(".malik-work-journal li").count(), 2)
+    if (reducedMotion === "reduce") assert.equal(await page.locator(".malik-work-journal li").first().evaluate(el => getComputedStyle(el).animationName), "none")
     assert.equal(await page.locator("button").count(), 5)
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
     if (process.env.MALIK_QA_OUTPUT) { fs.mkdirSync(process.env.MALIK_QA_OUTPUT, { recursive: true }); await page.screenshot({ path: path.join(process.env.MALIK_QA_OUTPUT, `work-export-${width}-${reducedMotion}.png`) }) }

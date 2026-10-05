@@ -36,6 +36,7 @@ import {
   type TaskView,
 } from "./os-client"
 import "./os.css"
+import { WorkJournal } from "./WorkJournal"
 
 const ArtifactViewer = dynamic(() => import("./ArtifactViewer").then((mod) => mod.ArtifactViewer), { ssr: false })
 
@@ -221,7 +222,7 @@ export function SuperflowBlock({ messageId, reference, chatId }: { messageId: st
         </div>
       </header>
       <div className="malik-os-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}>
-        <i style={{ width: `${Math.max(done ? 100 : 3, Math.round(progress * 100))}%` }} />
+        <i style={{ transform: `scaleX(${progress})` }} />
       </div>
       <div className="malik-os-goal" title={reference.goal}>{reference.goal}</div>
 
@@ -292,6 +293,7 @@ export function SuperflowBlock({ messageId, reference, chatId }: { messageId: st
         </div>
       ) : null}
 
+      <WorkJournal events={flow?.events || []} />
       <footer className="malik-os-foot">
         {error ? <span className="malik-os-note">{error}</span> : null}
         {startError && flow ? <span className="malik-os-note" role="alert">{startError.message}</span> : null}

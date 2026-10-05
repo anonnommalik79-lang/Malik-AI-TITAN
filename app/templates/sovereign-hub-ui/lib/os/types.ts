@@ -106,6 +106,7 @@ export type OsTask = {
 }
 
 export type OsFlow = {
+  events?: WorkEvent[]
   id: string
   projectId: string
   ownerId: string
@@ -194,10 +195,24 @@ export type OsProject = {
 }
 
 export type OsEvent =
+  | { type: "work"; flowId: string; event: WorkEvent }
   | { type: "flow"; flow: OsFlow }
   | { type: "task"; flowId: string; task: OsTask }
   | { type: "artifact"; flowId: string; artifact: ArtifactSummary }
   | { type: "done"; flowId: string; status: FlowStatus }
+
+export type WorkEvent = {
+  id: string
+  at: number
+  type: "task.created" | "plan.ready" | "skill.selected" | "tool.started" | "tool.retrying" | "tool.completed" | "tool.failed" | "artifact.ready" | "task.completed" | "task.failed" | "task.cancelled"
+  taskId?: string
+  tool?: string
+  label?: string
+  attempt?: number
+  durationMs?: number
+  artifactId?: string
+  error?: string
+}
 
 /** What the browser needs to show an artifact card, without its content. */
 export type ArtifactSummary = Pick<

@@ -91,6 +91,7 @@ export function flowView(flow: OsFlow) {
     capabilities: flow.capabilities,
     demo: flow.demo || undefined,
     interrupted: flow.interrupted || undefined,
+    events: (flow.events || []).slice(-200),
     tasks: flow.tasks.map((task) => ({
       id: task.id,
       type: task.type,
