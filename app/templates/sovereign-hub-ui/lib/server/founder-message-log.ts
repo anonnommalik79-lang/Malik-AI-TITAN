@@ -21,10 +21,6 @@ export type FounderMessageEntry = {
 }
 
 type Envelope = { v: 1; alg: "aes-256-gcm"; iv: string; tag: string; data: string }
-type Memory = typeof globalThis & {
-  __malikFounderMessageMemory?: Map<string, FounderMessageEntry[]>
-  __malikFounderMessageQueues?: Map<string, Promise<void>>
-}
 const MAX_TEXT_CHARS = 16_000
 const AAD = Buffer.from("malik-founder-message-log-v1", "utf8")
 const first = (...values: Array<string | undefined>) => values.map(v => String(v || "").trim()).find(Boolean) || ""
@@ -35,14 +31,6 @@ const entryPrefix = (value: string) => `private/founder/request-audit/v2/${owner
 const entryKey = (value: string, id: string) => `${entryPrefix(value)}${id}.enc.json`
 const cleanText = (value: unknown) => String(value ?? "").replace(/\u0000/g, "").trim().slice(0, MAX_TEXT_CHARS)
 
-function memory(): Map<string, FounderMessageEntry[]> {
-  const scope = globalThis as Memory
-  return scope.__malikFounderMessageMemory ||= new Map<string, FounderMessageEntry[]>()
-}
-function queues() {
-  const scope = globalThis as Memory
-  return scope.__malikFounderMessageQueues ||= new Map()
-}
 function config() {
   const bucket = first(process.env.FOUNDER_HISTORY_BUCKET, process.env.MEDIA_STORAGE_BUCKET, process.env.R2_BUCKET, process.env.CLOUDFLARE_R2_BUCKET, process.env.S3_BUCKET, process.env.STORAGE_BUCKET)
   const accessKeyId = first(process.env.FOUNDER_HISTORY_ACCESS_KEY_ID, process.env.MEDIA_STORAGE_ACCESS_KEY_ID, process.env.AWS_ACCESS_KEY_ID)
@@ -155,9 +143,9 @@ export async function readFounderMessageLog(userId: string) {
   const id = normalize(userId)
   if (!id || id === "guest") return []
   const cloud = await readCloud(id)
-  const local = memory().get(id) || []
+  if (!cloud) return []
   const merged = new Map<string, FounderMessageEntry>()
-  for (const item of [...local, ...(cloud || [])]) {
+  for (const item of cloud) {
     const previous = merged.get(item.id)
     if (previous?.status !== "pending" && item.status === "pending") continue
     merged.set(item.id, item)
@@ -173,22 +161,16 @@ export async function appendFounderMessage(input: {
   if (!userId || userId === "guest") return false
   const entry = cleanEntry({ ...input, id: input.id || randomUUID(), createdAt: input.createdAt || new Date().toISOString() })
   if (!entry) return false
-  const map = queues()
-  const prev = map.get(userId) || Promise.resolve()
-  let persisted = false
-  const next = prev.catch(() => {}).then(async () => {
-    const existing = memory().get(userId) || []
-    // Upsert the same request id when it changes from pending to success/error.
-    const updated = existing.filter(item => item.id !== entry.id)
-    updated.push(entry)
-    memory().set(userId, updated)
-    try { persisted = await writeCloud(userId, entry) }
-    catch (error) { console.error("[FOUNDER AUDIT] Cloud write failed", error instanceof Error ? error.message : "unknown") }
-  })
-  map.set(userId, next)
-  await next
-  if (map.get(userId) === next) map.delete(userId)
-  return persisted
+  if (!config()) {
+    console.error("[FOUNDER AUDIT] Durable storage is not configured; refusing runtime-memory fallback")
+    return false
+  }
+  try {
+    return await writeCloud(userId, entry)
+  } catch (error) {
+    console.error("[FOUNDER AUDIT] Durable write failed", error instanceof Error ? error.message : "unknown")
+    return false
+  }
 }
 export function founderMessageStorageMode() {
   return config() ? "encrypted-object-storage" : "runtime-memory"
