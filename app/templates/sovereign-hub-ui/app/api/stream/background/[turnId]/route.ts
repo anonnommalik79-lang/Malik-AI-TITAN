@@ -1,13 +1,17 @@
 import { normalizeBackgroundTurnId, readBackgroundChatTurn } from "@/lib/server/background-chat-turns"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { z } from "zod"
+import { takeRequestFrequency } from "@/lib/server/request-frequency"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 type RouteContext = { params: Promise<{ turnId: string }> }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const { turnId: rawTurnId } = await context.params
-  const turnId = normalizeBackgroundTurnId(rawTurnId)
+  const parsed = z.string().uuid().safeParse(rawTurnId)
+  const turnId = parsed.success ? normalizeBackgroundTurnId(parsed.data) : ""
   if (!turnId) {
     return Response.json({ ok: false, error: "INVALID_BACKGROUND_TURN_ID" }, {
       status: 400,
@@ -15,11 +19,14 @@ export async function GET(_request: Request, context: RouteContext) {
     })
   }
 
+  const entitlement = await resolveRequestEntitlement(request)
+  if (!takeRequestFrequency("background-read", entitlement.userId, 120)) return Response.json({ ok: false, error: "Слишком много запросов. Попробуйте через минуту." }, { status: 429, headers: { "cache-control": "private, no-store", "retry-after": "60" } })
   const turn = await readBackgroundChatTurn(turnId)
-  if (!turn) {
+  // Legacy unowned answers retain their original TTL; new records always have an owner.
+  if (!turn || (turn.ownerId && (!entitlement.authenticated || turn.ownerId !== entitlement.userId))) {
     return Response.json({ ok: false, error: "BACKGROUND_TURN_NOT_FOUND" }, {
       status: 404,
-      headers: { "cache-control": "no-store" },
+      headers: { "cache-control": "private, no-store" },
     })
   }
 
@@ -37,6 +44,6 @@ export async function GET(_request: Request, context: RouteContext) {
       expiresAt: turn.expiresAt,
     },
   }, {
-    headers: { "cache-control": "no-store" },
+    headers: { "cache-control": "private, no-store" },
   })
 }

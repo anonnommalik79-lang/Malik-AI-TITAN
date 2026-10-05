@@ -1,4 +1,6 @@
 import { after } from "next/server"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { z } from "zod"
 import { POST as streamPOST } from "../route"
 import { normalizeExecutionTrace, upsertExecutionStep, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import {
@@ -110,7 +112,8 @@ async function persistStreamResult(turnId: string, response: Response) {
 }
 
 export async function POST(request: Request) {
-  const turnId = normalizeBackgroundTurnId(request.headers.get("x-malik-background-turn-id"))
+  const parsed = z.string().uuid().safeParse(request.headers.get("x-malik-background-turn-id"))
+  const turnId = parsed.success ? normalizeBackgroundTurnId(parsed.data) : ""
   if (!turnId) {
     return Response.json({ ok: false, error: "INVALID_BACKGROUND_TURN_ID" }, {
       status: 400,
@@ -118,7 +121,9 @@ export async function POST(request: Request) {
     })
   }
 
-  await startBackgroundChatTurn(turnId)
+  const entitlement = await resolveRequestEntitlement(request)
+  const started = await startBackgroundChatTurn(turnId, entitlement.userId)
+  if (!started) return Response.json({ ok: false, error: "Этот запрос уже существует. Начните новый." }, { status: 409, headers: { "cache-control": "private, no-store" } })
 
   let response: Response
   try {

@@ -6,6 +6,8 @@ import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-exec
 
 export type BackgroundChatTurn = {
   turnId: string
+  /** Optional only for records written before owner isolation was introduced. */
+  ownerId?: string
   status: "pending" | "complete" | "failed"
   content?: string
   error?: string
@@ -172,16 +174,22 @@ async function save(turn: BackgroundChatTurn) {
   return turn
 }
 
-export async function startBackgroundChatTurn(turnId: string) {
+export async function startBackgroundChatTurn(turnId: string, ownerId: string) {
   const normalized = normalizeBackgroundTurnId(turnId)
-  if (!normalized) return null
+  if (!normalized || !ownerId?.trim() || ownerId.length > 320) return null
+  // A caller-chosen ID must never overwrite another account's saved answer.
+  if (await readBackgroundChatTurn(normalized)) return null
   const now = Date.now()
-  return save({
+  const turn: BackgroundChatTurn = {
     turnId: normalized,
+    ownerId,
     status: "pending",
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + TTL_MS).toISOString(),
-  })
+  }
+  // Claim synchronously before the first cloud write, including concurrent POSTs.
+  if (memoryStore().has(normalized)) return null
+  return save(turn)
 }
 
 export async function completeBackgroundChatTurn(turnId: string, input: {
@@ -194,9 +202,11 @@ export async function completeBackgroundChatTurn(turnId: string, input: {
   const normalized = normalizeBackgroundTurnId(turnId)
   if (!normalized) return null
   const current = await readBackgroundChatTurn(normalized)
+  if (!current) return null
   const now = Date.now()
   return save({
     turnId: normalized,
+    ownerId: current.ownerId,
     status: "complete",
     content: String(input.content || "").slice(0, MAX_RESULT_CHARS),
     provider: String(input.provider || "").slice(0, 160) || undefined,
@@ -213,9 +223,11 @@ export async function failBackgroundChatTurn(turnId: string, error: unknown, exe
   const normalized = normalizeBackgroundTurnId(turnId)
   if (!normalized) return null
   const current = await readBackgroundChatTurn(normalized)
+  if (!current) return null
   const now = Date.now()
   return save({
     turnId: normalized,
+    ownerId: current.ownerId,
     status: "failed",
     error: (error instanceof Error ? error.message : String(error || "Background chat failed")).slice(0, 4000),
     execution: normalizeExecutionTrace(execution, true),
@@ -231,7 +243,7 @@ export async function readBackgroundChatTurn(turnId: string) {
   const memory = memoryStore().get(normalized)
   const turn = memory || await readCloud(normalized)
   if (!turn) return null
-  if (Date.parse(turn.expiresAt) <= Date.now()) {
+  if (!Number.isFinite(Date.parse(turn.expiresAt)) || Date.parse(turn.expiresAt) <= Date.now()) {
     memoryStore().delete(normalized)
     return null
   }
