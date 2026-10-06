@@ -6,6 +6,7 @@ import { executionMarkdown, executionOverview, executionSources, publicExecution
 import "./chat-execution.css"
 import { MalikLiveActivity } from "./MalikLiveActivity"
 import { MalikResponseStages } from "./MalikResponseStages"
+import { MalikDigitalBrowser } from "./MalikDigitalBrowser"
 
 const labels = { running: "Выполняется", completed: "Готово", failed: "Ошибка", cancelled: "Остановлено", interrupted: "Прервано" }
 const icons = { status: BrainCircuit, search: Search, read: Globe, plugin: Plug, file: FileText, model: BrainCircuit, code: SquareTerminal, media: Image }
@@ -55,8 +56,8 @@ function Receipt({ step, expanded, now }: { step: ExecutionStep; expanded?: bool
   </li>
 }
 
-export function ChatExecution({ trace, live = false, sources = [], workMode = false, writing = false, legacyThought, defaultOpen = false, stages = false }: { trace?: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; legacyThought?: { ms: number; steps: string[] }; defaultOpen?: boolean; /** Show the UI progress line under «Думаю…» for a turn that started live. */ stages?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen)
+export function ChatExecution({ trace, live = false, sources = [], workMode = false, writing = false, legacyThought, defaultOpen = false, stages = false, browserTask = "", latest = false }: { trace?: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; legacyThought?: { ms: number; steps: string[] }; defaultOpen?: boolean; browserTask?: string; latest?: boolean; /** Show the UI progress line under «Думаю…» for a turn that started live. */ stages?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen || live)
   // Decided once, when this answer's row mounts: only a turn that is being
   // answered right now gets the progress line, never a reopened history item.
   const [stagesForTurn] = useState(() => Boolean(stages && live && !writing && (!trace || trace.state === "running")))
@@ -111,5 +112,6 @@ export function ChatExecution({ trace, live = false, sources = [], workMode = fa
       <details className="malik-execution__export"><summary><Download size={14} />Скачать отчёт</summary><div><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.md`, executionMarkdown(trace))}>Markdown</button><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.json`, JSON.stringify(trace, null, 2), "application/json")}>JSON</button></div></details>
     </div> : null}
     </div> : null}
+    {browserTask ? <MalikDigitalBrowser task={browserTask} latest={latest} workMode={workMode} /> : null}
   </section>
 }

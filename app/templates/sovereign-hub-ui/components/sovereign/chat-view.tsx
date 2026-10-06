@@ -1806,7 +1806,7 @@ function MessageBubble({
             </div>
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
-          {!isUser ? <ChatExecution key={`${message.id}:${shownVersion}`} trace={olderVersion ? undefined : message.execution} legacyThought={olderVersion ? undefined : message.thought} live={streaming} sources={olderVersion ? [] : message.research?.sources} workMode={workspaceMode === "work"} writing={Boolean(displayContent)} stages={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && !videoAnalysis} /> : null}
+          {!isUser ? <ChatExecution key={`${message.id}:${shownVersion}`} trace={olderVersion ? undefined : message.execution} legacyThought={olderVersion ? undefined : message.thought} live={streaming} sources={olderVersion ? [] : message.research?.sources} workMode={workspaceMode === "work"} writing={Boolean(displayContent)} browserTask={olderVersion ? "" : question} latest={isLatest} stages={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && !videoAnalysis} /> : null}
           {isUser && message.attachments?.length ? <UserAttachmentGallery items={message.attachments} /> : null}
           {!isUser && message.superflow ? (
             <SuperflowBlock messageId={message.id} reference={message.superflow} />

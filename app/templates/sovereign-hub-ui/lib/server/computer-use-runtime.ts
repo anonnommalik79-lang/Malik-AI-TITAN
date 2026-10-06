@@ -1,13 +1,8 @@
 import "server-only"
+import { createHmac } from "node:crypto"
+import { computerImageUrl, computerPageUrl, type ComputerReceipt } from "@/lib/ai/computer-use"
 
-export type MalikComputerReceipt = {
-  ok: boolean
-  sessionId?: string
-  status: string
-  summary: string
-  steps: Array<{ action: string; status: string; detail?: string }>
-  screenshots: Array<{ url: string; label?: string }>
-}
+export type MalikComputerReceipt = ComputerReceipt
 
 const MAX_TASK_CHARS = 8_000
 
@@ -24,9 +19,10 @@ function runnerUrl() {
 
 export function malikComputerUseStatus() {
   return {
-    configured: Boolean(runnerUrl()),
+    configured: Boolean(runnerUrl() && String(process.env.MALIK_COMPUTER_USE_TOKEN || "").length >= 32),
     remoteOnly: true,
     requiresConfirmation: true,
+    version: 2,
   }
 }
 
@@ -40,9 +36,9 @@ function safeScreenshots(value: unknown) {
     if (!item || typeof item !== "object") return []
     const raw = String((item as any).url || "").trim()
     try {
-      const parsed = new URL(raw)
-      if (parsed.protocol !== "https:") return []
-      return [{ url: parsed.toString(), label: clean((item as any).label, 120) || undefined }]
+      const url = computerImageUrl(raw)
+      if (!url) return []
+      return [{ url, label: clean((item as any).label, 120) || undefined }]
     } catch {
       return []
     }
@@ -51,13 +47,16 @@ function safeScreenshots(value: unknown) {
 
 export async function runMalikComputerTask(input: {
   task: string
+  userId: string
   sessionId?: string
   mode?: "browser" | "desktop"
+  operation?: "start" | "poll" | "approve" | "cancel"
+  approvalId?: string
 }) : Promise<MalikComputerReceipt> {
   const url = runnerUrl()
   if (!url) throw new Error("Computer-use runtime is not configured")
   const task = String(input.task || "").trim()
-  if (!task) throw new Error("Computer-use task is required")
+  if (!task && (!input.sessionId || !input.operation || input.operation === "start")) throw new Error("Computer-use task is required")
   if (task.length > MAX_TASK_CHARS) throw new Error("Computer-use task is too large")
 
   const controller = new AbortController()
@@ -65,6 +64,7 @@ export async function runMalikComputerTask(input: {
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const token = String(process.env.MALIK_COMPUTER_USE_TOKEN || "").trim()
+    if (!token) throw new Error("Computer-use token is not configured")
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -73,8 +73,11 @@ export async function runMalikComputerTask(input: {
         ...(token ? { authorization: token.startsWith("Bearer ") ? token : "Bearer " + token } : {}),
       },
       body: JSON.stringify({
-        version: 1,
+        version: 2,
         task,
+        ownerId: createHmac("sha256", token).update(input.userId).digest("hex"),
+        operation: input.operation || "start",
+        approvalId: input.approvalId,
         sessionId: String(input.sessionId || "").slice(0, 200) || undefined,
         mode: input.mode === "desktop" ? "desktop" : "browser",
         policy: {
@@ -100,10 +103,16 @@ export async function runMalikComputerTask(input: {
     return {
       ok: payload?.ok !== false,
       sessionId: clean(payload?.sessionId, 200) || undefined,
-      status: clean(payload?.status || (payload?.ok === false ? "failed" : "complete"), 80),
+      status: ["running", "awaiting-confirmation", "complete", "failed", "cancelled", "handoff"].includes(payload?.status) ? payload.status : "failed",
       summary: clean(payload?.summary || payload?.message || "", 4_000),
       steps,
       screenshots: safeScreenshots(payload?.screenshots),
+      pageUrl: computerPageUrl(payload?.pageUrl) || undefined,
+      pageTitle: clean(payload?.pageTitle, 180) || undefined,
+      approval: payload?.status === "awaiting-confirmation" && payload?.approval?.id ? {
+        id: clean(payload.approval.id, 200), title: clean(payload.approval.title, 180),
+        detail: String(payload.approval.detail || "").slice(0, 6000), pageUrl: computerPageUrl(payload.approval.pageUrl) || undefined,
+      } : undefined,
     }
   } finally {
     clearTimeout(timer)

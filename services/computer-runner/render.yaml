@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: malik-computer-runner
+    runtime: docker
+    plan: free
+    dockerfilePath: ./services/computer-runner/Dockerfile
+    dockerContext: ./services/computer-runner
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: MALIK_COMPUTER_USE_TOKEN
+        sync: false
+      - key: MALIK_COMPUTER_PLANNER_URL
+        value: https://malikaiworld.world/api/ai/computer/planner
+      - key: MALIK_BROWSER_CDP_URL
+        sync: false
+      - key: MALIK_COMPUTER_MAX_SESSIONS
+        value: "1"
