@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { isWorkOSConfigured } from "@/lib/auth/server"
 import { getPublicOrigin, getPublicUrl, getWorkOSRedirectUri } from "@/lib/public-origin"
 import { shortsPath } from "@/lib/youtube/contracts"
+import { selectSignInProvider } from "@/lib/auth/entry-target"
 
 export const dynamic = "force-dynamic"
 
@@ -25,8 +26,9 @@ export const GET = async (request: Request) => {
   const requested = requestUrl.searchParams.get("returnTo") || ""
   const returnTo = requested.startsWith("/shorts") ? shortsPath(requested) : "/dashboard"
 
-  redirect(await getSignInUrl({
+  const authorizationUrl = await getSignInUrl({
     returnTo,
     redirectUri: getWorkOSRedirectUri(),
-  }))
+  })
+  redirect(selectSignInProvider(authorizationUrl, requestUrl.searchParams.get("provider")))
 }

@@ -1,4 +1,4 @@
-/* Final mobile-auth color authority: registration lives on true black. */
+/* Final mobile-auth color authority: legacy black registration only. */
 /* Scoped to this screen: no gold overlays from shared workspace/hero styles. */
 main.sma-root[data-auth-surface="black"],
 main.sma-root[data-auth-surface="black"] .sma-hero,
@@ -32,25 +32,25 @@ main.sma-root[data-auth-surface="black"] .sma-typewriter::after {
 }
 
 @media (max-width: 767px), (max-height: 500px) and (pointer: coarse) {
-  .sma-root,
-  .sma-hero,
-  .sma-auth-panel {
+  main.sma-root[data-auth-surface="black"],
+  main.sma-root[data-auth-surface="black"] .sma-hero,
+  main.sma-root[data-auth-surface="black"] .sma-auth-panel {
     background: #000 !important;
     background-color: #000 !important;
     background-image: none !important;
   }
 
   /* One layer only: no hairline drawing a sheet under the buttons. */
-  .sma-auth-panel {
+  main.sma-root[data-auth-surface="black"] .sma-auth-panel {
     border: 0 !important;
     box-shadow: none !important;
   }
 }
 
 @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-  .sma-root,
-  .sma-hero,
-  .sma-auth-panel {
+  main.sma-root[data-auth-surface="black"],
+  main.sma-root[data-auth-surface="black"] .sma-hero,
+  main.sma-root[data-auth-surface="black"] .sma-auth-panel {
     background: #000 !important;
     background-image: none !important;
   }

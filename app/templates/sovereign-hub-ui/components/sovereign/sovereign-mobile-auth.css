@@ -1,368 +1,208 @@
-.sma-root {
-  display: none;
-}
+.sma-root { display: none; }
 
-@media (max-width: 767px), (max-height: 500px) and (pointer: coarse) {
-  .sva-desktop-only {
-    display: none !important;
+/* The auth scene is intentionally independent of the shared black dashboard.
+   The supplied photograph stays intact behind real, accessible controls. */
+@media (max-width: 980px), (max-height: 500px) and (pointer: coarse) {
+  .sva-desktop-only { display: none !important; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483000;
+    display: block !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    isolation: isolate;
+    background: #02070d !important;
+    color: #fff !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color-scheme: dark;
+    text-align: center;
   }
-
-  .sma-root {
-    --sma-sheet-h: 214px;
+  html body #malik-root main.sma-root[data-auth-surface="orbit"], html body #malik-root main.sma-root[data-auth-surface="orbit"] * { box-sizing: border-box; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-orbit-background {
     position: fixed;
     inset: 0;
-    z-index: 2147483000;
+    z-index: -2;
     display: block;
-    width: 100vw;
-    height: 100dvh;
-    min-height: 560px;
-    overflow: hidden;
-    background: #000;
-    color: #fff;
-    overscroll-behavior: none;
-    -webkit-tap-highlight-color: transparent;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Inter, "Segoe UI", sans-serif;
-  }
-
-  .sma-root::before,
-  .sma-root::after,
-  .sma-hero::before,
-  .sma-hero::after {
-    content: none !important;
-    display: none !important;
-    background: none !important;
-    background-image: none !important;
-    box-shadow: none !important;
-  }
-
-  .sma-close {
-    position: absolute;
-    top: calc(env(safe-area-inset-top, 0px) + 12px);
-    right: calc(env(safe-area-inset-right, 0px) + 16px);
-    z-index: 5;
-    display: grid;
-    place-items: center;
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: #242427;
-    color: #aaadb3;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
-    cursor: pointer;
-    touch-action: manipulation;
-    transition: transform 150ms ease, background 150ms ease, color 150ms ease;
-  }
-
-  .sma-close:active {
-    transform: scale(0.94);
-    background: #2b2b2f;
-    color: #fff;
-  }
-
-  .sma-close svg {
-    width: 15px;
-    height: 15px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.9;
-    stroke-linecap: round;
-  }
-
-  .sma-hero {
-    position: absolute;
-    inset: 0 0 calc(var(--sma-sheet-h) + env(safe-area-inset-bottom, 0px)) 0;
-    display: grid;
-    place-items: center;
-    min-height: 0;
-    padding:
-      calc(env(safe-area-inset-top, 0px) + 50px)
-      18px
-      18px;
-    background: #000;
-    background-image: none;
-  }
-
-  .sma-typewriter {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    max-width: min(92vw, 560px);
-    min-height: 1.1em;
-    color: #fff;
-    text-align: center;
-    transform: translateY(2px);
-  }
-
-  .sma-type-text {
-    display: inline;
-    color: #fff;
-    font-size: clamp(34px, 9.4vw, 54px);
-    font-weight: 800;
-    line-height: 0.98;
-    letter-spacing: -0.046em;
-    text-rendering: geometricPrecision;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    overflow-wrap: anywhere;
-  }
-
-  .sma-type-dot {
-    flex: 0 0 auto;
-    width: clamp(17px, 4.9vw, 22px);
-    height: clamp(17px, 4.9vw, 22px);
-    margin-left: clamp(10px, 2.7vw, 14px);
-    border-radius: 999px;
-    background: #fff;
-    box-shadow: 0 0 0 0.3px rgba(255, 255, 255, 0.7);
-    animation: sma-dot-breathe 620ms ease-in-out infinite alternate;
-    transform: translateY(2px);
-  }
-
-  @keyframes sma-dot-breathe {
-    from { opacity: 0.86; transform: translateY(2px) scale(0.94); }
-    to { opacity: 1; transform: translateY(2px) scale(1); }
-  }
-
-  .sma-auth-panel {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 4;
-    min-height: var(--sma-sheet-h);
-    padding:
-      14px
-      max(14px, calc(env(safe-area-inset-right, 0px) + 14px))
-      calc(13px + env(safe-area-inset-bottom, 0px))
-      max(14px, calc(env(safe-area-inset-left, 0px) + 14px));
-    border-radius: 25px 25px 0 0;
-    background: #000;
-    background-image: none;
-    box-shadow: none;
-  }
-
-  .sma-auth-button {
-    position: relative;
-    display: grid;
-    grid-template-columns: 28px 1fr 28px;
-    align-items: center;
     width: 100%;
-    height: 50px;
-    margin: 0 0 9px;
-    padding: 0 16px;
-    border-radius: 10px;
-    font: inherit;
-    font-size: 14px;
-    font-weight: 650;
-    letter-spacing: -0.012em;
+    height: 100dvh;
+    max-width: none;
+    object-fit: cover;
+    object-position: center top;
+    opacity: 1 !important;
+    filter: none !important;
+    pointer-events: none;
+  }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-orbit-shade {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(180deg, transparent 12%, rgba(0, 4, 10, .12) 30%, rgba(0, 3, 8, .56) 55%, rgba(0, 3, 8, .25));
+  }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-content {
+    position: relative;
+    width: min(100%, 520px);
+    margin: 0 auto;
+    padding: calc(clamp(86px, 17.5svh, 152px) + env(safe-area-inset-top, 0px)) 20px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-hero, html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-auth-panel {
+    position: static !important;
+    display: block !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    opacity: 1 !important;
+  }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-brand { margin: 0 auto 18px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-brand-mark {
+    display: block;
+    width: 82px;
+    height: 48px;
+    margin: 0 auto 10px;
+    filter: invert(1) !important;
+  }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-brand-name {
+    font-size: 21px;
+    font-weight: 760;
+    letter-spacing: .32em;
+    padding-left: .32em;
+    line-height: 1.4;
+    color: #fff !important;
+  }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-brand-name span { margin-left: 10px; font-weight: 300; color: #cbd4de !important; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-brand-tagline { margin-top: 2px; font-size: 7px; letter-spacing: .57em; padding-left: .57em; color: #c5cbd3 !important; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] h1.sma-typewriter {
+    display: block !important;
+    height: 108px;
+    margin: 0 0 12px !important;
+    padding: 0 !important;
+    font-size: clamp(39px, 9.5vw, 53px) !important;
+    font-weight: 800 !important;
+    line-height: .99 !important;
+    letter-spacing: -.035em !important;
+    text-align: center !important;
+    color: #fff !important;
+  }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-type-first, html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-type-second { display: block; min-height: 1.02em; white-space: nowrap; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-type-first { color: #fff !important; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-type-second {
+    color: #80baff !important;
+    background: linear-gradient(100deg, #c0edff 10%, #a0d7ff 40%, #5797ed 90%) !important;
+    background-clip: text !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+  }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-type-caret {
+    display: inline-block;
+    width: 2px;
+    height: .84em;
+    margin-left: 5px;
+    background: #91c5ff !important;
+    vertical-align: -.04em;
+    animation: sma-caret-blink .9s step-end infinite;
+  }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-description {
+    margin: 0 auto 14px;
+    max-width: 390px;
+    color: #d0d4dc !important;
+    font-size: 12.5px;
+    font-weight: 400;
+    line-height: 1.38;
+  }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-features { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin: 0 0 10px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-feature, html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-auth-button {
+    appearance: none;
+    -webkit-appearance: none;
+    color: #f6faff !important;
+    background: linear-gradient(140deg, rgba(101, 161, 220, .22), rgba(5, 12, 20, .87) 26%, rgba(8, 16, 24, .85) 78%, rgba(96, 158, 221, .2)) !important;
+    border: 1px solid rgba(182, 208, 233, .52) !important;
+    box-shadow: inset 0 1px 1px rgba(211, 236, 255, .24), 0 0 13px rgba(50, 130, 215, .08) !important;
     cursor: pointer;
+    font: inherit;
+    -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
-    transition:
-      transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
-      background 150ms ease,
-      border-color 150ms ease,
-      opacity 150ms ease;
+    transition: border-color .16s ease, transform .16s ease, background-color .16s ease;
   }
-
-  .sma-auth-button:last-child {
-    margin-bottom: 0;
-  }
-
-  .sma-auth-button:active {
-    transform: scale(0.985);
-  }
-
-  .sma-auth-button:disabled {
-    cursor: wait;
-    opacity: 0.72;
-  }
-
-  .sma-auth-button--apple {
-    border: 1px solid rgba(255, 255, 255, 0.95);
-    background: #fff;
-    color: #090909;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.8),
-      0 1px 2px rgba(0, 0, 0, 0.18);
-  }
-
-  .sma-auth-button--apple:active {
-    background: #f1f1f1;
-  }
-
-  .sma-auth-button--dark {
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: #2a2a2d;
-    color: #f7f7f8;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
-  }
-
-  .sma-auth-button--dark:active {
-    background: #303034;
-    border-color: rgba(255, 255, 255, 0.12);
-  }
-
-  .sma-auth-icon {
-    grid-column: 1;
-    display: grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    justify-self: start;
-  }
-
-  .sma-auth-icon svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  .sma-auth-button > span:nth-child(2) {
-    grid-column: 2;
-    justify-self: center;
-    white-space: nowrap;
-  }
-
-  @media (max-width: 360px) {
-    .sma-root {
-      --sma-sheet-h: 194px;
-    }
-
-    .sma-close {
-      top: calc(env(safe-area-inset-top, 0px) + 10px);
-      right: calc(env(safe-area-inset-right, 0px) + 13px);
-      width: 32px;
-      height: 32px;
-    }
-
-    .sma-hero {
-      padding-top: calc(env(safe-area-inset-top, 0px) + 43px);
-      padding-bottom: 10px;
-    }
-
-    .sma-type-text {
-      font-size: clamp(30px, 9.2vw, 38px);
-    }
-
-    .sma-auth-panel {
-      padding:
-        10px
-        max(10px, calc(env(safe-area-inset-right, 0px) + 10px))
-        calc(10px + env(safe-area-inset-bottom, 0px))
-        max(10px, calc(env(safe-area-inset-left, 0px) + 10px));
-    }
-
-    .sma-auth-button {
-      height: 46px;
-      margin-bottom: 8px;
-      font-size: 12.8px;
-      padding: 0 12px;
-    }
-  }
-
-  @media (min-width: 431px) {
-    .sma-root {
-      --sma-sheet-h: 222px;
-    }
-
-    .sma-auth-panel {
-      padding-top: 16px;
-      padding-left: max(18px, calc(env(safe-area-inset-left, 0px) + 16px));
-      padding-right: max(18px, calc(env(safe-area-inset-right, 0px) + 16px));
-    }
-
-    .sma-auth-button {
-      height: 51px;
-      font-size: 14.5px;
-    }
-  }
-
-  @media (max-height: 700px) {
-    .sma-root {
-      --sma-sheet-h: 190px;
-    }
-
-    .sma-hero {
-      padding-top: calc(env(safe-area-inset-top, 0px) + 40px);
-      padding-bottom: 8px;
-    }
-
-    .sma-type-text {
-      font-size: clamp(29px, 8.6vw, 43px);
-    }
-
-    .sma-auth-panel {
-      padding-top: 9px;
-    }
-
-    .sma-auth-button {
-      height: 44px;
-      margin-bottom: 7px;
-      font-size: 12.8px;
-    }
-  }
-
-  @media (min-height: 850px) {
-    .sma-root {
-      --sma-sheet-h: 224px;
-    }
-
-    .sma-hero {
-      padding-top: calc(env(safe-area-inset-top, 0px) + 56px);
-      padding-bottom: 22px;
-    }
-  }
-}
-
-@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-  .sma-root {
-    min-height: 0;
-  }
-
-  .sma-hero {
-    right: 46%;
-    bottom: 0;
-    padding:
-      calc(env(safe-area-inset-top, 0px) + 32px)
-      18px
-      calc(env(safe-area-inset-bottom, 0px) + 14px);
-  }
-
-  .sma-type-text {
-    font-size: clamp(27px, 5vw, 42px);
-  }
-
-  .sma-auth-panel {
-    left: 56%;
-    top: 0;
-    bottom: 0;
-    min-height: 0;
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-feature {
     display: flex;
     flex-direction: column;
+    align-items: center;
     justify-content: center;
-    border-radius: 24px 0 0 24px;
-    padding:
-      max(14px, env(safe-area-inset-top, 0px))
-      max(14px, calc(env(safe-area-inset-right, 0px) + 12px))
-      max(14px, env(safe-area-inset-bottom, 0px))
-      14px;
+    gap: 5px;
+    min-width: 0;
+    height: 78px;
+    padding: 8px 2px;
+    border-radius: 12px;
+    border-color: rgba(167, 191, 218, .34) !important;
   }
-
-  .sma-auth-button {
-    height: 44px;
-    margin-bottom: 8px;
-    font-size: 12.5px;
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-feature > svg { width: 24px; height: 24px; margin-bottom: 2px; stroke-width: 1.6; filter: drop-shadow(0 0 4px rgba(115, 193, 255, .7)) !important; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-feature-title { font-size: 9px; font-weight: 650; white-space: nowrap; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-feature-detail { font-size: 7px; color: #bbc5d2 !important; white-space: nowrap; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-auth-button {
+    position: relative;
+    display: grid;
+    grid-template-columns: 27px minmax(0, 1fr) 14px;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 45px;
+    margin: 0 0 7px;
+    padding: 10px 18px;
+    border-radius: 15px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
   }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-auth-icon { display: flex; align-items: center; justify-content: center; width: 27px; height: 25px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-auth-icon svg { width: 24px; height: 24px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-chevron { width: 14px; height: 17px; color: #e9f3ff !important; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-feature:active, html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-auth-button:active { transform: scale(.98); border-color: #b2ddff !important; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] button:focus-visible, html body #malik-root main.sma-root[data-auth-surface="orbit"] a:focus-visible { outline: 2px solid #93caff !important; outline-offset: 3px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] button:disabled { cursor: wait; opacity: .65; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-divider { display: flex; align-items: center; gap: 12px; margin: 10px 2px; color: #9ba6b5 !important; font-size: 10px; text-transform: uppercase; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-divider::before, html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-divider::after { content: ""; display: block; height: 1px; flex: 1; background: rgba(205, 222, 238, .4); }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-secondary-actions .sma-auth-button { grid-template-columns: 21px minmax(0, 1fr) 9px; gap: 7px; margin-bottom: 0; padding: 10px 10px; font-size: 11px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-secondary-actions .sma-auth-icon, html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-secondary-actions .sma-auth-icon svg { width: 21px; height: 21px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-secondary-actions .sma-chevron { width: 10px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-navigation-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-footer { margin: 17px 0 0; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-benefits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-benefits > div { display: flex; align-items: center; justify-content: center; gap: 7px; text-align: left; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-benefits > div + div { border-left: 1px solid rgba(198, 220, 241, .36); }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-benefits svg { width: 20px; height: 24px; flex-shrink: 0; filter: drop-shadow(0 0 5px rgba(108, 186, 255, .5)) !important; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-benefits p { margin: 0; font-size: 9px; line-height: 1.45; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-benefits strong { display: block; font-weight: 650; color: #f5f8ff !important; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-benefits span { display: block; font-size: 8px; color: #bfc9d7 !important; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-legal { margin: 18px 0 0; color: #aab6c7 !important; font-size: 9px; line-height: 1.55; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-legal a { color: #cbd7e6 !important; text-decoration: underline; text-underline-offset: 3px; }
 }
-
+@keyframes sma-caret-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@media (max-width: 360px) {
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-content { padding-left: 13px; padding-right: 13px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-features { gap: 5px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-feature-title { font-size: 8px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-feature-detail { font-size: 6px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-benefits > div { gap: 4px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-benefits svg { width: 16px; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-secondary-actions .sma-auth-button { font-size: 10px; }
+}
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-content { padding-top: calc(36px + env(safe-area-inset-top, 0px)); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .sma-close,
-  .sma-auth-button {
-    transition-duration: 0.01ms !important;
-  }
-
-  .sma-type-dot {
-    animation-duration: 1100ms;
-  }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] .sma-type-caret { animation: none; }
+  html body #malik-root main.sma-root[data-auth-surface="orbit"] button { transition: none; }
 }

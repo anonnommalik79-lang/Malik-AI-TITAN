@@ -5016,7 +5016,11 @@ function buildDashboardRuntimeDiagnostics() {
 
 
 
-export function Dashboard({ guestMode = false, initialView = "home" }: { guestMode?: boolean; initialView?: "home" | "compute" }) {
+export function Dashboard({ guestMode = false, initialView = "home", initialWorkspaceMode }: {
+  guestMode?: boolean
+  initialView?: "home" | "compute" | "photo-generation" | "video-generation" | "music-generation"
+  initialWorkspaceMode?: WorkspaceMode
+}) {
   const { user: workOSUser, loading: workOSLoading } = useAuth()
 // MALIK_LOGOUT_BRIDGE_V1
   useEffect(() => {
@@ -5095,16 +5099,17 @@ export function Dashboard({ guestMode = false, initialView = "home" }: { guestMo
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState<string>(initialView)
-  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("chat")
-  const workspaceModeRef = useRef<WorkspaceMode>("chat")
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(initialWorkspaceMode ?? "chat")
+  const workspaceModeRef = useRef<WorkspaceMode>(initialWorkspaceMode ?? "chat")
   const modeActiveChatIdsRef = useRef<Record<WorkspaceMode, string | null>>({ chat: null, work: null })
   useEffect(() => {
     try {
-      const restored = resolveWorkspaceMode(window.localStorage.getItem(WORKSPACE_MODE_KEY))
+      const restored = initialWorkspaceMode ?? resolveWorkspaceMode(window.localStorage.getItem(WORKSPACE_MODE_KEY))
       workspaceModeRef.current = restored
       setWorkspaceMode(restored)
+      if (initialWorkspaceMode) window.localStorage.setItem(WORKSPACE_MODE_KEY, initialWorkspaceMode)
     } catch {}
-  }, [])
+  }, [initialWorkspaceMode])
   const [previousView, setPreviousView] = useState("home")
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false)
   const [codexOpen, setCodexOpen] = useState(false)

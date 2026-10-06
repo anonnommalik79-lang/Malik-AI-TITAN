@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { ChevronRight, Code2, ImageIcon, LockKeyhole, Mail, MessageCircle, Music2, Play, UserRound, Users, Zap } from "lucide-react";
 import "./sovereign-mobile-auth.css";
 import "./sovereign-mobile-auth-black.css";
 
 const PHRASES = [
+  "Создавай быстрее",
   "Давайте изучать",
   "Находи главное",
   "Исследуй глубже",
-  "Создавай быстрее",
   "Делай невозможное",
   "Malik AI",
 ] as const;
@@ -17,6 +18,14 @@ const TYPE_MS = 42;
 const HOLD_MS = 420;
 const FINAL_HOLD_MS = 980;
 const GAP_MS = 105;
+
+const FEATURES = [
+  { id: "chat", title: "Чат", detail: "Топ-модели", icon: MessageCircle },
+  { id: "images", title: "Изображения", detail: "Высокое качество", icon: ImageIcon },
+  { id: "video", title: "Видео", detail: "Идеи в движении", icon: Play },
+  { id: "music", title: "Музыка", detail: "Треки и лирика", icon: Music2 },
+  { id: "work", title: "Malik Work", detail: "Код и проекты", icon: Code2 },
+] as const;
 
 function AppleIcon() {
   return (
@@ -54,6 +63,13 @@ function MicrosoftIcon() {
 export function SovereignMobileRegister() {
   const [typed, setTyped] = useState("");
   const [navigating, setNavigating] = useState(false);
+
+  useEffect(() => {
+    // Safari can restore this exact page from its back/forward cache.
+    const restore = () => setNavigating(false);
+    window.addEventListener("pageshow", restore);
+    return () => window.removeEventListener("pageshow", restore);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,57 +119,96 @@ export function SovereignMobileRegister() {
     window.location.assign(path);
   }, [navigating]);
 
-  const close = useCallback(() => {
-    if (window.history.length > 1) window.history.back();
-    else window.location.assign("/");
-  }, []);
+  const wordBreak = typed.indexOf(" ");
+  const firstLine = wordBreak < 0 ? typed : typed.slice(0, wordBreak);
+  const secondLine = wordBreak < 0 ? "" : typed.slice(wordBreak + 1);
 
   return (
-    <main className="sma-root" data-auth-surface="black" aria-label="Malik AI mobile authentication">
-      <button className="sma-close" type="button" aria-label="Закрыть" onClick={close}>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 7l10 10M17 7 7 17" />
-        </svg>
-      </button>
+    <main className="sma-root" data-auth-surface="orbit" data-preserve-brand-color="true" aria-label="Вход в Malik AI">
+      <img className="sma-orbit-background" src="/images/auth-mobile-orbit.jpg" alt="" fetchPriority="high" aria-hidden="true" />
+      <div className="sma-orbit-shade" aria-hidden="true" />
+      <div className="sma-content">
+        <section className="sma-hero">
+          <div className="sma-brand" aria-label="Malik AI — Sovereign AI Labs">
+            <img className="sma-brand-mark" src="/brand/malik-mark.svg" alt="" />
+            <div className="sma-brand-name">MALIK <span>AI</span></div>
+            <div className="sma-brand-tagline">SOVEREIGN AI LABS</div>
+          </div>
+          <h1 className="sma-typewriter" aria-label="Создавай быстрее с Malik AI">
+            <span className="sma-type-text" aria-hidden="true">
+              <span className="sma-type-first">{firstLine}</span>
+              <span className="sma-type-second">{secondLine}<span className="sma-type-caret" /></span>
+            </span>
+          </h1>
+          <p className="sma-description">Malik AI помогает создавать, анализировать<br className="sma-wide-break" /> и работать быстрее с помощью<br className="sma-wide-break" /> искусственного интеллекта.</p>
+        </section>
 
-      <section className="sma-hero" aria-live="polite">
-        <div className="sma-typewriter">
-          <span className="sma-type-text">{typed}</span>
-          <span className="sma-type-dot" aria-hidden="true" />
-        </div>
-      </section>
+        <nav className="sma-features" aria-label="Возможности Malik AI">
+          {FEATURES.map(({ id, title, detail, icon: Icon }) => (
+            <button key={id} className="sma-feature" type="button" disabled={navigating} onClick={() => go(`/guest?feature=${id}`)}>
+              <Icon aria-hidden="true" />
+              <span className="sma-feature-title">{title}</span>
+              <span className="sma-feature-detail">{detail}</span>
+            </button>
+          ))}
+        </nav>
 
-      <section className="sma-auth-panel" aria-label="Способы входа">
-        <button
-          className="sma-auth-button sma-auth-button--dark"
-          type="button"
-          disabled={navigating}
-          onClick={() => go("/sign-in")}
-        >
-          <span className="sma-auth-icon"><GoogleIcon /></span>
-          <span>{navigating ? "Открываю..." : "Продолжить с Google"}</span>
-        </button>
+        <section className="sma-auth-panel" aria-label="Способы входа" aria-busy={navigating}>
+          <button
+            className="sma-auth-button"
+            type="button"
+            disabled={navigating}
+            onClick={() => go("/sign-in?provider=google")}
+          >
+            <span className="sma-auth-icon"><GoogleIcon /></span>
+            <span>Продолжить с Google</span>
+            <ChevronRight className="sma-chevron" aria-hidden="true" />
+          </button>
 
-        <button
-          className="sma-auth-button sma-auth-button--apple"
-          type="button"
-          disabled={navigating}
-          onClick={() => go("/sign-in")}
-        >
-          <span className="sma-auth-icon"><AppleIcon /></span>
-          <span>{navigating ? "Открываю..." : "Продолжить с Apple"}</span>
-        </button>
+          <button
+            className="sma-auth-button"
+            type="button"
+            disabled={navigating}
+            onClick={() => go("/sign-in?provider=apple")}
+          >
+            <span className="sma-auth-icon"><AppleIcon /></span>
+            <span>Продолжить с Apple</span>
+            <ChevronRight className="sma-chevron" aria-hidden="true" />
+          </button>
 
-        <button
-          className="sma-auth-button sma-auth-button--dark"
-          type="button"
-          disabled={navigating}
-          onClick={() => go("/sign-in")}
-        >
-          <span className="sma-auth-icon"><MicrosoftIcon /></span>
-          <span>{navigating ? "Открываю..." : "Продолжить с Microsoft"}</span>
-        </button>
-      </section>
+          <button
+            className="sma-auth-button"
+            type="button"
+            disabled={navigating}
+            onClick={() => go("/sign-in?provider=microsoft")}
+          >
+            <span className="sma-auth-icon"><MicrosoftIcon /></span>
+            <span>Продолжить с Microsoft</span>
+            <ChevronRight className="sma-chevron" aria-hidden="true" />
+          </button>
+          <div className="sma-divider"><span>или</span></div>
+          <div className="sma-secondary-actions">
+            <button className="sma-auth-button" type="button" disabled={navigating} onClick={() => go("/sign-in?provider=email")}>
+              <span className="sma-auth-icon"><Mail aria-hidden="true" /></span>
+              <span>Войти по Email</span><ChevronRight className="sma-chevron" aria-hidden="true" />
+            </button>
+            <button className="sma-auth-button" type="button" disabled={navigating} onClick={() => go("/guest")}>
+              <span className="sma-auth-icon"><UserRound aria-hidden="true" /></span>
+              <span>Войти как гость</span><ChevronRight className="sma-chevron" aria-hidden="true" />
+            </button>
+          </div>
+          <p className="sma-navigation-status" role="status">{navigating ? "Открываю выбранный раздел…" : ""}</p>
+        </section>
+
+        <footer className="sma-footer">
+          <div className="sma-benefits">
+            <div><Users aria-hidden="true" /><p><strong>5 режимов</strong><span>для ваших идей</span></p></div>
+            <div><Zap aria-hidden="true" /><p><strong>Топ-модели</strong><span>в одном месте</span></p></div>
+            <div><LockKeyhole aria-hidden="true" /><p><strong>Защищённый</strong><span>вход в аккаунт</span></p></div>
+          </div>
+          <p className="sma-legal">Malik AI · Sovereign AI Labs<br /><a href="/security">Безопасность и конфиденциальность</a></p>
+        </footer>
+      </div>
     </main>
   );
 }
