@@ -428,6 +428,21 @@ try {
   assert.equal(fast[0].alt, "Mount Example")
   assert(performance.now() - fastStarted < 800, "article thumbnails don't wait for stalled Commons queries")
   assert.equal(slowCommonsAborted, true)
+  const tutorialRecovery = policy.planReferenceVisuals("Как включить Bluetooth в Windows")
+  let tutorialServerCalls = 0
+  globalThis.fetch = async (input) => {
+    if (!String(input).startsWith("/api/chat/reference-images?")) return Response.json({ query: { pages: [] } })
+    tutorialServerCalls++
+    const params = new URL(String(input), "https://malik.test").searchParams
+    const rebuilt = policy.planReferenceVisuals(params.get("q"))
+    assert.equal(rebuilt.kind, "tutorial", "server recovery preserves screenshot intent")
+    assert.deepEqual(rebuilt.visualDevice, tutorialRecovery.visualDevice)
+    assert.deepEqual(rebuilt.visualTerms, tutorialRecovery.visualTerms)
+    return Response.json({ images: [{ url: "https://upload.wikimedia.org/windows-bluetooth.png", alt: "Windows Bluetooth settings" }] })
+  }
+  const recoveredScreen = await new Promise((resolve) => cache.subscribeReferenceImages(tutorialRecovery, resolve))
+  assert.equal(recoveredScreen[0].alt, "Windows Bluetooth settings")
+  assert.equal(tutorialServerCalls, 1, "a tutorial also recovers when direct catalogue access fails")
   console.log("PASS exact zero-search logos, abstract-photo suppression, early fallback, cancelled losers, real 8-second outage deadline and negative caching")
   console.log("PASS browser-direct metadata, thumbnails, attribution, caching, deduplication and outage fallback")
 } finally {

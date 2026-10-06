@@ -3,8 +3,8 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { ArrowUpRight, ExternalLink } from "lucide-react"
 import type { AnswerCard, AnswerCardsBlock, CardLink } from "@/lib/ai/answer-cards"
-import { citationName, hostOf, safeHttps, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
-import { referenceSearchTopic } from "@/lib/ai/reference-visual-policy"
+import { citationName, hostOf, safeHttps, subjectCitationUrl, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
+import { isAbstractPhotoSubject, referenceSearchTopic, visualSegmentLabel } from "@/lib/ai/reference-visual-policy"
 import { subscribeReferenceImages } from "@/lib/media/client-reference-cache"
 import { referenceBrandAsset } from "@/lib/media/reference-brand-assets"
 import { referenceThumbnailVariants } from "@/lib/media/reference-catalog"
@@ -25,7 +25,7 @@ function SourceChip({ numbers, sources }: { numbers?: number[]; sources: Sources
 
 /** A name that opens its official page - only when that page is backed by the sources. */
 function Title({ card, sources, as: Tag = "h4" }: { card: AnswerCard; sources: Sources; as?: "h3" | "h4" }) {
-  const href = trustedLink(card.url, sources)
+  const href = trustedLink(card.url, sources) || subjectCitationUrl(visualSegmentLabel(card.title), sources)
   return <Tag className="malik-card__title">{href ? <a href={href} target="_blank" rel="noreferrer noopener">{card.title}</a> : card.title}</Tag>
 }
 
@@ -46,10 +46,13 @@ function Button({ link, sources, primary }: { link: CardLink; sources: Sources; 
 }
 
 /** The page's own picture (from a cited source) or a looked-up reference photo. */
-function useCardImage(image: AnswerCard["image"], sources: Sources, title: string, hero: boolean, imageRole?: AnswerCard["imageRole"]): { url: string; label: string; logo?: boolean } | null {
+function useCardImage(image: AnswerCard["image"], sources: Sources, title: string, hero: boolean, imageRole?: AnswerCard["imageRole"], autoPhotos = false): { url: string; label: string; logo?: boolean } | null {
   const fromSource = typeof image === "number" ? sources?.[image - 1] : undefined
   const sourceImage = fromSource?.image && /^https:\/\//i.test(fromSource.image) ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url) } : null
-  const lookup = typeof image === "string" && image.trim().length >= 2 ? image.trim() : ""
+  // A model may omit image metadata or cite a page without an OG picture.
+  // Retrieve the exact named subject instead of leaving a permanent initial.
+  const lookup = typeof image === "string" && image.trim().length >= 2 ? image.trim()
+    : autoPhotos && !sourceImage && !isAbstractPhotoSubject(title) ? visualSegmentLabel(title) : ""
   const brand = !hero ? referenceBrandAsset(lookup || title) : null
   const hasBrand = Boolean(brand), sourceUrl = sourceImage?.url
   const lookupKey = (imageRole === "logo" ? "logo:" : "photo:") + lookup
@@ -66,8 +69,8 @@ function useCardImage(image: AnswerCard["image"], sources: Sources, title: strin
   return found && found.key === lookupKey ? { url: found.url, label: found.label, logo: found.logo } : null
 }
 
-function Picture({ card, sources, hero = false }: { card: AnswerCard; sources: Sources; hero?: boolean }) {
-  const image = useCardImage(card.image, sources, card.title, hero, card.imageRole)
+function Picture({ card, sources, hero = false, autoPhotos = false }: { card: AnswerCard; sources: Sources; hero?: boolean; autoPhotos?: boolean }) {
+  const image = useCardImage(card.image, sources, card.title, hero, card.imageRole, autoPhotos)
   const [failed, setFailed] = useState<string[]>([])
   const url = image ? referenceThumbnailVariants(image.url).find((candidate) => !failed.includes(candidate)) : undefined
   if (!image || !url) {
@@ -104,10 +107,10 @@ function Facts({ card }: { card: AnswerCard }) {
   return <dl className="malik-card__facts">{card.facts.map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>
 }
 
-function ListCard({ card, sources }: { card: AnswerCard; sources: Sources }) {
+function ListCard({ card, sources, autoPhotos }: { card: AnswerCard; sources: Sources; autoPhotos?: boolean }) {
   return (
     <article className="malik-card-row">
-      <Picture card={card} sources={sources} />
+      <Picture card={card} sources={sources} autoPhotos={autoPhotos} />
       <div className="malik-card-row__body">
         <Badge>{card.badge}</Badge>
         <Title card={card} sources={sources} />
@@ -159,12 +162,12 @@ function Section({ title, label, children, className }: { title?: string; label:
  * reference catalogue, and a picture that fails to load gives way to a quiet
  * initial instead of a broken image.
  */
-export function MalikAnswerCards({ block, sources }: { block: AnswerCardsBlock; sources?: readonly MalikCitation[] | null }) {
+export function MalikAnswerCards({ block, sources, autoPhotos = false }: { block: AnswerCardsBlock; sources?: readonly MalikCitation[] | null; autoPhotos?: boolean }) {
   if (block.type === "pricing") {
     return <Section title={block.title} label="Тарифы" className="malik-cards is-options is-pricing">{block.items.map((card, index) => <PricingCard key={`${card.title}-${index}`} card={card} sources={sources} />)}</Section>
   }
   if (block.type === "cards") {
-    return <Section title={block.title} label="Подборка" className="malik-cards is-list">{block.items.map((card, index) => <ListCard key={`${card.title}-${index}`} card={card} sources={sources} />)}</Section>
+    return <Section title={block.title} label="Подборка" className="malik-cards is-list">{block.items.map((card, index) => <ListCard key={`${card.title}-${index}`} card={card} sources={sources} autoPhotos={autoPhotos} />)}</Section>
   }
   if (block.type === "options") {
     return <Section title={block.title} label="Варианты" className="malik-cards is-options">{block.items.map((card, index) => <OptionCard key={`${card.title}-${index}`} card={card} sources={sources} primary={index === 0} />)}</Section>
@@ -173,7 +176,7 @@ export function MalikAnswerCards({ block, sources }: { block: AnswerCardsBlock; 
     const card = block.item
     return (
       <Section label={card.title} className="malik-cards is-hero">
-        <Picture card={card} sources={sources} hero />
+        <Picture card={card} sources={sources} hero autoPhotos={autoPhotos} />
         <Title card={card} sources={sources} as="h3" />
         <Badge>{card.badge}</Badge>
         {card.value ? <p className="malik-card__value is-large">{card.value}</p> : null}

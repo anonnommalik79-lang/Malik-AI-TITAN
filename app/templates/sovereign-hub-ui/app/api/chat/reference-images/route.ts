@@ -50,7 +50,7 @@ export async function GET(request: Request) {
   if (topic.length > 120 || /[\r\n<>]|https?:|www\./iu.test(topic)) return NextResponse.json({ images: [] }, { status: 400 })
   if (topic) plan.queries = [...new Set([topic, ...plan.queries])].slice(0, 2)
   const skipOfficial = params.get("skipOfficial") === "1"
-  const key = [skipOfficial ? "retry" : "", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.logo ? "logo" : "", ...plan.queries].join("|").toLowerCase()
+  const key = [plan.kind || "reference", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", skipOfficial ? "retry" : "", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.logo ? "logo" : "", ...plan.queries].join("|").toLowerCase()
   let entry = cache.get(key)
   if (!entry || entry.expires <= Date.now()) {
     // Eviction bounds RAM. Concurrent identical lookups share one promise.
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
       const started = Date.now()
       const signal = AbortSignal.timeout(7500)
       let images = await lookupReferenceImages(plan, signal, { skipOfficial, fast: true })
-      if (!images.length && !plan.entity && !plan.logo && !signal.aborted) {
+      if (!images.length && plan.kind !== "tutorial" && !plan.entity && !plan.logo && !signal.aborted) {
         try { images = sanitizeReferenceImages(await unsplash(plan.queries[0], signal)) } catch { /* Optional provider. */ }
       }
       // Timings/counts only: never log the user's prompt, identity or keys.

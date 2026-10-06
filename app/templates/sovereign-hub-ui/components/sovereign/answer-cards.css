@@ -59,6 +59,9 @@
 .malik-card__thumb.is-logo { background: #fff; }
 .malik-card__thumb.is-logo img { box-sizing: border-box; padding: 9px; object-fit: contain; }
 .malik-card__thumb.is-empty { display: grid; place-items: center; color: #71717a; font-size: 30px; font-weight: 700; }
+/* Real photos follow the same image-left/text-right proportions as prose rows. */
+.malik-card-row:has(.malik-card__thumb img):not(:has(.malik-card__thumb.is-logo)) { grid-template-columns: minmax(76px, 27.5%) minmax(0, 1fr); }
+.malik-card-row .malik-card__thumb:has(img):not(.is-logo) { width: 100%; max-width: 190px; height: auto; aspect-ratio: 3 / 4; border: 0; background: #000; }
 
 /* Hero: one large picture with the page it came from. */
 .malik-cards.is-hero { display: grid; gap: 8px; }

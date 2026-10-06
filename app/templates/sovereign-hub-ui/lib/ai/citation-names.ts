@@ -65,3 +65,19 @@ export function trustedLink(url: unknown, sources: readonly MalikCitation[] | nu
   const path = new URL(safe).pathname
   return path === "/" || path === "" ? safe : ""
 }
+
+/** Link a section name only to evidence naming that complete subject. */
+export function subjectCitationUrl(subject: string, sources: readonly MalikCitation[] | null | undefined): string {
+  const words = (value: string) => value.normalize("NFKC").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+  const wanted = words(subject)
+  if (!wanted.length || wanted.length > 10) return ""
+  for (const source of sources || []) {
+    const url = safeHttps(source.url)
+    if (!url) continue
+    let path = new URL(url).pathname
+    try { path = decodeURIComponent(path) } catch {}
+    const actual = new Set(words((source.title || "") + " " + path))
+    if (wanted.every((word) => actual.has(word))) return url
+  }
+  return ""
+}

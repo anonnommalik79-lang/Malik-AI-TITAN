@@ -4,7 +4,7 @@ import { lookupReferenceImages, readReferenceJson, sanitizeReferenceImages, type
 type CacheEntry = { images: MalikVisualImage[]; expires: number }
 type Listener = (images: MalikVisualImage[]) => void
 type Job = { controller: AbortController; listeners: Set<Listener> }
-const STORAGE_KEY = "malik-reference-catalog-v8"
+const STORAGE_KEY = "malik-reference-catalog-v9"
 export const REFERENCE_LOOKUP_BUDGET_MS = 8000
 const MAX_ENTRIES = 60
 const cache = new Map<string, CacheEntry>()
@@ -95,7 +95,7 @@ async function lookupWithFallback(plan: ReferenceVisualPlan, signal: AbortSignal
   const controller = new AbortController()
   const budget = AbortSignal.any([signal, controller.signal])
   return new Promise((resolve) => {
-    let settled = false, directDone = false, fallbackDone = plan.kind === "tutorial", fallbackStarted = false
+    let settled = false, directDone = false, fallbackDone = false, fallbackStarted = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const finish = (images: MalikVisualImage[]) => {
       if (settled) return
@@ -111,10 +111,10 @@ async function lookupWithFallback(plan: ReferenceVisualPlan, signal: AbortSignal
       else if (directDone && fallbackDone) finish([])
     }
     const fallback = async () => {
-      if (fallbackStarted || settled || plan.kind === "tutorial") return
+      if (fallbackStarted || settled) return
       fallbackStarted = true
       clearTimeout(timer)
-      const params = new URLSearchParams({ q: "Покажи фото " + plan.topic, entity: plan.entity ? "1" : "0", person: plan.person ? "1" : "0" })
+      const params = new URLSearchParams({ q: (plan.kind === "tutorial" ? "Как настроить " : "Покажи фото ") + plan.topic, entity: plan.entity ? "1" : "0", person: plan.person ? "1" : "0" })
       if (plan.queries[0]) params.set("topic", plan.queries[0])
       if (plan.logo) params.set("logo", "1")
       if (excludedUrls.length) params.set("skipOfficial", "1")
@@ -129,7 +129,7 @@ async function lookupWithFallback(plan: ReferenceVisualPlan, signal: AbortSignal
     }
     budget.addEventListener("abort", aborted, { once: true })
     if (budget.aborted) { finish([]); return }
-    if (plan.kind !== "tutorial") timer = setTimeout(() => { void fallback() }, 350)
+    timer = setTimeout(() => { void fallback() }, 350)
     void lookupReferenceImages(plan, budget, { excludedUrls, fast: true }).catch(() => []).then((images) => {
       directDone = true
       deliver(images)
@@ -150,10 +150,11 @@ export function subscribeReferenceImages(plan: ReferenceVisualPlan, listener: Li
     pending.set(key, job)
     const current = job
     void Promise.resolve().then(async () => {
-      // Budget includes queueing: a long answer cannot hold later slots hostage.
-      const signal = AbortSignal.any([current.controller.signal, AbortSignal.timeout(REFERENCE_LOOKUP_BUDGET_MS)])
-      const release = await acquireLookup(signal)
+      // Waiting for an earlier photo must not consume this photo's network budget.
+      const queueSignal = AbortSignal.any([current.controller.signal, AbortSignal.timeout(30_000)])
+      const release = await acquireLookup(queueSignal)
       if (!release) return []
+      const signal = AbortSignal.any([current.controller.signal, AbortSignal.timeout(REFERENCE_LOOKUP_BUDGET_MS)])
       try { return await lookupWithFallback(plan, signal) } finally { release() }
     })
       .then((images) => {

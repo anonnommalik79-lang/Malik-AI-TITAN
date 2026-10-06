@@ -180,8 +180,9 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
 export type AnswerVisualSegment = { key: string; text: string; kind: "heading" | "item" | "paragraph" }
 export type AnswerVisualSlot = { key: string; plan: ReferenceVisualPlan; row: boolean }
 export function visualSegmentLabel(text: string): string {
-  const bold = /\*\*([^*]{3,100})\*\*/u.exec(text)?.[1]
-  return (bold || text.split(/\s+[—–]\s+|[.!?\n]/u, 1)[0]).replace(/(?:\*\*|__|[`*_])/gu, "").replace(/^\d+[.)]\s*/u, "").trim().slice(0, 100)
+  const plain = text.replace(/\[([^\]\n]+)\]\([^\s)]+\)/gu, "$1")
+  const bold = /\*\*([^*]{3,100})\*\*/u.exec(plain)?.[1]
+  return (bold || plain.split(/\s+[—–]\s+|[:.!?\n]/u, 1)[0]).replace(/(?:\*\*|__|[`*_])/gu, "").replace(/^\d+[.)]\s*/u, "").trim().slice(0, 100)
 }
 
 /** A business/process label isn't an object one can truthfully photograph. */
@@ -230,7 +231,7 @@ export function planAnswerVisualSlots(question: string, segments: AnswerVisualSe
     const name = named && named.length <= 80 && /\s[—–]\s/u.test(anchor?.text || "") ? named : ""
     return anchor ? [{ key: anchor.key, row: false, plan: name ? { ...base, topic: name, queries: [...new Set([referenceSearchTopic(name), ...base.queries])].slice(0, 2) } : base }] : []
   }
-  const candidates = segments.filter((segment) => segment.kind !== "paragraph" && !/^(?:итог|вывод|совет|важно|заключение|summary|conclusion|tips?|что\s+делать|как\s+зайти|куда\s+ехать|если\s+)/iu.test(visualSegmentLabel(segment.text)))
+  const candidates = segments.filter((segment) => segment.kind !== "paragraph" && !/^(?:итог|вывод|совет|важно|заключение|ключевые\s+факты|основные\s+(?:факты|характеристики)|summary|conclusion|key\s+facts|tips?|что\s+делать|как\s+зайти|куда\s+ехать|если\s+)/iu.test(visualSegmentLabel(segment.text)))
   if (base.kind === "tutorial") {
     // One matched screenshot beside its relevant step, not the same image on every step.
     const anchor = candidates.find((segment) => base.visualTerms?.some((term) => segment.text.toLowerCase().includes(term))) || segments.find((segment) => segment.kind === "paragraph") || candidates[0]
@@ -238,7 +239,8 @@ export function planAnswerVisualSlots(question: string, segments: AnswerVisualSe
   }
   const useful = candidates.filter((segment) => {
     const label = visualSegmentLabel(segment.text)
-    return label.length > 3 && label.split(/\s+/u).length <= 10 && !isAbstractPhotoSubject(label) && !/^\d{4}$/u.test(label) && !/^(?:истори[яи]|биографи[яи]|особенности|классическ|эпоха|открой|нажми|выбери|перейди|введи|вернись|click|tap|open|select|enter)/iu.test(label)
+    return label.length > 3 && label.split(/\s+/u).length <= 10 && !isAbstractPhotoSubject(label) && !/^\d{4}$/u.test(label)
+      && !/^(?:истори[яи]|биографи[яи]|особенности|классическ|эпоха|открой|нажми|выбери|перейди|введи|вернись|как\s|how\s|экосистемы\s+и\s+инструменты|сравнение\s+результатов|большое\s+изображение|условия\s+и\s+цены|логистика|маршрут|click|tap|open|select|enter)/iu.test(label)
   }).slice(0, 3)
   if (useful.length) return useful.map((segment) => {
     const label = visualSegmentLabel(segment.text)

@@ -12,7 +12,7 @@ import { parseAnswerCards, type AnswerCardsBlock } from "@/lib/ai/answer-cards"
 import { MalikAnswerChecklist } from "./MalikAnswerChecklist"
 import { parseAnswerVisual, inferTableVisual, inferListVisual, inferComparisonTable, wantsAnswerVisuals, wantsAnswerChecklist, type AnswerVisual } from "@/lib/ai/answer-visuals"
 import { parseAnswerEntity } from "@/lib/ai/answer-entities"
-import { planAnswerVisualSlots, type AnswerVisualSegment, type AnswerVisualSlot, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
+import { allowsAnswerPhotoHints, isAbstractPhotoSubject, planAnswerVisualSlots, referenceSearchTopic, visualSegmentLabel, type AnswerVisualSegment, type AnswerVisualSlot, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { groundedAnswerPhotoPlans, isPhotoLineup, parseAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 
 /**
@@ -22,7 +22,7 @@ import { groundedAnswerPhotoPlans, isPhotoLineup, parseAnswerPhotoHints } from "
  * model output is parsed into React elements and never injected as HTML.
  */
 
-import { citationName, safeHttps, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
+import { citationName, safeHttps, subjectCitationUrl, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
 export type { MalikCitation } from "@/lib/ai/citation-names"
 
 type Props = { text: string; className?: string; allowImages?: boolean; autoPreview?: boolean; citations?: MalikCitation[]; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
@@ -848,17 +848,27 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
   }, [blocks, question])
   const fallbackVisualSlots = useMemo(() => {
     // Event lineups need explicit subject metadata: a guessed portrait is not attendance evidence.
-    if (!question || blocks.some((block) => block.kind === "cards" || block.kind === "visual") || /(?:спикер|выступ|участни|приехал|присутств|speaker|attend|participant|lineup)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
+    if (!question || /(?:спикер|выступ|участни|приехал|присутств|speaker|attend|participant|lineup)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
+    // A chart or a dates/pricing card does not disable photos in other sections.
+    // Only subjects already illustrated by a card own their image slot.
+    const illustrated = blocks.flatMap((block) => {
+      if (block.kind !== "cards" || !block.block) return []
+      const cards = block.block.type === "hero" ? [block.block.item]
+        : ["cards", "options", "pricing"].includes(block.block.type) ? (block.block as Extract<AnswerCardsBlock, { type: "cards" | "options" | "pricing" }>).items : []
+      return cards.filter((card) => card.image !== undefined || allowsAnswerPhotoHints(question, hasAttachment) && !isAbstractPhotoSubject(card.title)).map((card) => card.title)
+    })
     const segments: AnswerVisualSegment[] = []
     blocks.forEach((block, position) => {
       // The last streamed block can still change its subject; anchor only settled blocks.
       if (streaming && position === blocks.length - 1) return
       const key = `b${position}`
-      if (block.kind === "h") segments.push({ key, text: block.text, kind: "heading" })
-      if (block.kind === "p") segments.push({ key, text: block.lines.join(" "), kind: "paragraph" })
+      if (block.kind === "h" && !parseAnswerEntity(block.text)) segments.push({ key, text: block.text, kind: "heading" })
+      if (block.kind === "p" && !parseAnswerEntity(block.lines.join(" "))) segments.push({ key, text: block.lines.join(" "), kind: "paragraph" })
       if (block.kind === "list") block.list.items.forEach((item, index) => segments.push({ key: `${key}-${index}`, text: item.text, kind: "item" }))
     })
-    return new Map(planAnswerVisualSlots(question, segments, previousQuestion, hasAttachment, previousAnswer).map((slot) => [slot.key, slot]))
+    return new Map(planAnswerVisualSlots(question, segments, previousQuestion, hasAttachment, previousAnswer)
+      .filter((slot) => !illustrated.some((name) => hasVisualSubject(slot.plan.topic, name) || hasVisualSubject(name, slot.plan.topic)))
+      .map((slot) => [slot.key, slot]))
   }, [blocks, question, previousQuestion, previousAnswer, hasAttachment, streaming])
   const photoPlans = useMemo(() => {
     const plans = new Map<number, ReturnType<typeof groundedAnswerPhotoPlans>>()
@@ -917,11 +927,37 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     })
     return { slots, consumed, unanchored }
   }, [blocks, photoPlans])
-  const visualSlots = photoPlans.size ? hintedAnchors.slots : fallbackVisualSlots
-  const photoCount = photoPlans.size
-    ? [...photoPlans.values()].reduce((total, plans) => total + plans.length, 0)
-    : [...fallbackVisualSlots.values()].reduce((total, slot) => total + (slot.plan.subjects?.length || 1), 0)
+  const visualSlots = useMemo(() => {
+    const slots = new Map(hintedAnchors.slots)
+    const hinted = [...photoPlans.values()].flat()
+    for (const [key, slot] of fallbackVisualSlots) {
+      if (slots.has(key) || hinted.some((plan) => plan.queries.some((query) => slot.plan.queries.includes(query))
+        || hasVisualSubject(slot.plan.topic, plan.topic) || hasVisualSubject(plan.topic, slot.plan.topic))) continue
+      slots.set(key, slot)
+    }
+    return slots
+  }, [hintedAnchors, photoPlans, fallbackVisualSlots])
+  const photoCount = [...visualSlots.values()].reduce((total, slot) => total + (slot.plan.subjects?.length || 1), 0)
+    + [...hintedAnchors.unanchored.values()].reduce((total, plans) => total + plans.length, 0)
   const singleVisualSubject = photoCount === 1 && !isMultiSubjectVisualQuestion(question)
+  const photoDescriptions = useMemo(() => {
+    const descriptions = new Map<number, Array<{ position: number; lines: string[] }>>()
+    const owned = new Set<number>()
+    blocks.forEach((block, position) => {
+      if (block.kind !== "h" || parseAnswerEntity(block.text) || !visualSlots.has(`b${position}`)) return
+      const paragraphs: Array<{ position: number; lines: string[] }> = []
+      for (let next = position + 1; next < blocks.length; next++) {
+        const candidate = blocks[next]
+        // The model can place its photo metadata before, between or after prose.
+        if (candidate.kind === "photos" && hintedAnchors.consumed.has(next)) continue
+        if (candidate.kind !== "p" || visualSlots.has(`b${next}`)) break
+        paragraphs.push({ position: next, lines: candidate.lines })
+        owned.add(next)
+      }
+      descriptions.set(position, paragraphs)
+    })
+    return { descriptions, owned }
+  }, [blocks, visualSlots, hintedAnchors])
   const dataVisuals = useMemo(() => {
     const visuals = new Map<number, AnswerVisual>()
     if (!wantsAnswerVisuals(question)) return visuals
@@ -983,7 +1019,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
           </section>
         }
         if (block.kind === "cards") {
-          if (block.block) return <MalikAnswerCards key={key} block={block.block} sources={citations} />
+          if (block.block) return <MalikAnswerCards key={key} block={block.block} sources={citations} autoPhotos={allowsAnswerPhotoHints(question, hasAttachment)} />
           return block.pending && streaming ? <p key={key} className="malik-md-p malik-cards-pending" role="status">Собираю карточки…</p> : null
         }
         if (block.kind === "visual") {
@@ -991,8 +1027,8 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
           if (block.pending && streaming && wantsAnswerVisuals(question)) return <p key={key} className="malik-md-p" role="status">Подготавливаю визуальный блок…</p>
           return null
         }
-        // A photographed heading owns its immediately following description.
-        if (block.kind === "p" && previous?.kind === "h" && visualSlots.get(`b${position - 1}`)?.row) return null
+        // The photo row already owns these paragraphs, including across metadata.
+        if (photoDescriptions.owned.has(position)) return null
         // Compact entity rows retain the model's own description, not canned copy.
         if (block.kind === "p" && previous?.kind === "h" && parseAnswerEntity(previous.text)) {
           // The heading row already includes this paragraph.
@@ -1038,9 +1074,14 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
           if (next?.kind === "list" && checklistPosition === position + 1) return null
           const level = Math.min(block.level + 1, 6)
           const Tag = `h${level}` as "h2" | "h3" | "h4" | "h5" | "h6"
-          const heading = <Tag className={`malik-md-h malik-md-h${block.level}`}>{inline(block.text, key)}</Tag>
+          const subject = visualSegmentLabel(block.text)
+          const href = !/\[[^\]]*\]/u.test(block.text)
+            ? subjectCitationUrl(subject, citations) || subjectCitationUrl(referenceSearchTopic(subject), citations) : ""
+          const heading = <Tag className={`malik-md-h malik-md-h${block.level}`}>{href
+            ? <a href={href} target="_blank" rel="noreferrer noopener" className="malik-md-link is-subject">{inline(block.text, key)}</a>
+            : inline(block.text, key)}</Tag>
           return slot ? <MalikReferenceImages key={key} question={question} planOverride={slot.plan} row={slot.row || !singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest}>
-            {heading}{next?.kind === "p" ? <p className="malik-md-p">{inline(next.lines.join(" "), key + "-description")}</p> : null}
+            {heading}{photoDescriptions.descriptions.get(position)?.map((paragraph) => <p key={paragraph.position} className="malik-md-p">{inline(paragraph.lines.join(" "), `b${paragraph.position}-description`)}</p>)}
           </MalikReferenceImages> : <Fragment key={key}>{heading}</Fragment>
         }
 
