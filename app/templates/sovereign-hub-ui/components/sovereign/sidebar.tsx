@@ -8,6 +8,7 @@ import {
   Clapperboard,
   Cpu,
   Crown,
+  Database,
   Eye,
   FolderKanban,
   Image as ImageIcon,
@@ -134,6 +135,7 @@ const TOOL_ACTIONS: SidebarAction[] = [
 ]
 
 const ALL_ACTIONS = [...MAIN_ACTIONS, ...CREATE_ACTIONS, ...TOOL_ACTIONS]
+const FOUNDER_ACTION: SidebarAction = { id: "founder-db", label: "Founder DB", icon: Database, href: "/founder/history" }
 
 function isGenericChatTitle(title?: string | null) {
   const clean = String(title || "").trim()
@@ -219,6 +221,7 @@ function SidebarInner({
   onOpenVoice,
 }: SidebarProps) {
   const [profile, setProfile] = useState<ReturnType<typeof getStoredAuthSnapshot>>(null)
+  const [founderAllowed, setFounderAllowed] = useState(false)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [chatMenuId, setChatMenuId] = useState<string | null>(null)
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
@@ -235,6 +238,24 @@ function SidebarInner({
     return () => {
       window.removeEventListener("malik-auth-updated", update)
       window.removeEventListener("storage", update)
+    }
+  }, [])
+
+  useEffect(() => {
+    let alive = true
+    const checkFounderAccess = async () => {
+      try {
+        const response = await fetch("/api/founder/access", { credentials: "same-origin", cache: "no-store" })
+        if (alive) setFounderAllowed(response.ok)
+      } catch {
+        if (alive) setFounderAllowed(false)
+      }
+    }
+    void checkFounderAccess()
+    window.addEventListener("malik-auth-updated", checkFounderAccess)
+    return () => {
+      alive = false
+      window.removeEventListener("malik-auth-updated", checkFounderAccess)
     }
   }, [])
 
@@ -304,6 +325,7 @@ function SidebarInner({
   const initials = displayName.trim().split(/\s+/).map((part) => part.charAt(0)).join("").slice(0, 2).toUpperCase() || "M"
   const isPro = plan === "pro" || plan === "ultra" || plan === "owner"
   const roleLabel = canAccessAdmin ? "Соло-фаундер" : publicPlanTitle(plan)
+  const visibleRailActions = founderAllowed ? [...ALL_ACTIONS, FOUNDER_ACTION] : ALL_ACTIONS
 
   const openView = useCallback((view: string) => {
     setProfileMenuOpen(false)
@@ -425,7 +447,7 @@ function SidebarInner({
           <button type="button" onClick={onToggle} aria-label="Развернуть панель" className="malik-sidebar-icon-btn"><PanelLeft className="h-[18px] w-[18px]" /></button>
         </div>
         <nav className="malik-sidebar-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-1" aria-label="Навигация">
-          {ALL_ACTIONS.map(renderRailButton)}
+          {visibleRailActions.map(renderRailButton)}
         </nav>
         <div className="flex shrink-0 flex-col items-center gap-1 border-t border-white/[.06] p-2">
           <button type="button" onClick={() => openView("settings")} className="malik-sidebar-icon-btn" aria-label="Настройки"><Settings className="h-[18px] w-[18px]" /></button>
@@ -519,6 +541,12 @@ function SidebarInner({
         {CREATE_ACTIONS.map(renderAction)}
         <p className="malik-sidebar-section-label">Инструменты</p>
         {TOOL_ACTIONS.map(renderAction)}
+        {founderAllowed ? (
+          <>
+            <p className="malik-sidebar-section-label">Founder</p>
+            {renderAction(FOUNDER_ACTION)}
+          </>
+        ) : null}
       </nav>
 
       <div className="malik-sidebar-history min-h-0 flex-1 overflow-y-auto">
@@ -653,6 +681,7 @@ function SidebarStyles() {
       .malik-sidebar-profile-menu p { margin:0; padding:6px 8px; overflow:hidden; color:#696971; font-size:9.5px; text-overflow:ellipsis; white-space:nowrap; }
       .malik-sidebar-menu-separator { height:1px; margin:4px; background:#26262a; }
       .malik-founder-nav { display:none !important; }
+      body > a[aria-label="Открыть Founder Database"] { display:none !important; }
       @media (max-height:780px) {
         .malik-sidebar-primary { height:28px !important; }
         .malik-sidebar-section-label { margin-top:5px; }
