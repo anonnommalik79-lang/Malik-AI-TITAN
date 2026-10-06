@@ -4,7 +4,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 import { planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
-import { cleanReferenceLabel, isSafeVisualUrl, lookupReferenceImages, readReferenceJson, sanitizeReferenceImages, type MalikVisualImage } from "@/lib/media/reference-catalog"
+import { cleanReferenceLabel, isSafeVisualUrl, lookupReferenceImages, readReferenceJson, referenceTopicMatches, sanitizeReferenceImages, type MalikVisualImage } from "@/lib/media/reference-catalog"
 
 const cache = new Map<string, { expires: number; promise: Promise<MalikVisualImage[]> }>()
 
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
       const signal = AbortSignal.timeout(7500)
       let images = await lookupReferenceImages(plan, signal, { skipOfficial, fast: true })
       if (!images.length && plan.kind !== "tutorial" && !plan.entity && !plan.logo && !signal.aborted) {
-        try { images = sanitizeReferenceImages(await unsplash(plan.queries[0], signal)) } catch { /* Optional provider. */ }
+        try { images = sanitizeReferenceImages(await unsplash(plan.queries[0], signal)).filter((image) => plan.queries.some((query) => referenceTopicMatches(query, image.alt))) } catch { /* Optional provider. */ }
       }
       // Timings/counts only: never log the user's prompt, identity or keys.
       if (!images.length || Date.now() - started > 1500) console.info("[reference-images]", { durationMs: Date.now() - started, count: images.length, timedOut: signal.aborted })

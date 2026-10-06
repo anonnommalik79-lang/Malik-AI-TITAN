@@ -76,9 +76,9 @@ export function MalikVisualGallery({ images, title, portrait = false, onFailure 
   const visible = images.filter((image) => isSafeVisualUrl(image.url)).slice(0, 3)
   if (!visible.length) return null
   return (
-    <section data-malik-reference-gallery className="my-5 w-full min-w-0 max-w-[760px]" aria-label={title || "Изображения в ответе"}>
+    <section data-malik-reference-gallery className="my-5 w-full min-w-0" aria-label={title || "Изображения в ответе"}>
       {title ? <h3 className="mb-3 text-base font-semibold text-white">{title}</h3> : null}
-      <div className={"grid gap-2 sm:gap-3 " + (visible.length === 1 ? "max-w-[620px] grid-cols-1" : visible.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
+      <div className="grid w-full grid-cols-1 gap-4">
         {visible.map((image) => <ReferenceCard key={image.url} image={image} portrait={portrait} onOpen={() => setSelected(image)} onFailure={(url) => { setSelected(null); onFailure?.(url) }} />)}
       </div>
       {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}
@@ -103,6 +103,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   const [result, setResult] = useState<{ key: string; images: MalikVisualImage[] } | null>(null)
   const [selected, setSelected] = useState<MalikVisualImage | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const [dimensions, setDimensions] = useState<{ url: string; width: number; height: number } | null>(null)
   const key = plan ? referenceCacheKey(plan) : ""
   const active = isLatest || nearViewport
   const collection = Boolean(plan?.subjects?.length)
@@ -128,6 +129,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   }, [plan, active, collection, result, key])
   if (!plan) return children || null
   const images = result?.key === key ? result.images : null
+  const imageSize = dimensions && dimensions.url === images?.[0]?.url ? `Превью ${dimensions.width} × ${dimensions.height} px` : ""
   const retry = () => { invalidateReferenceImages(plan); setResult(null); setAttempt((value) => value + 1) }
   const failed = (url: string) => {
     setSelected(null)
@@ -160,15 +162,18 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
         <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + plan.topic}
           className={"block w-full overflow-hidden rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-white " + (images[0].role === "logo" ? "bg-white" : "bg-black")}>
           <img src={images[0].url} alt={plan.topic} loading="lazy" decoding="async" referrerPolicy="no-referrer"
-            className={"mx-auto block max-h-[520px] w-full object-contain " + (images[0].role === "logo" ? "max-w-[250px] p-6" : "")} onError={() => failed(images[0].url)} />
+            className={"mx-auto block h-auto w-full object-contain " + (images[0].role === "logo" ? "max-w-[250px] p-6" : "")}
+            onLoad={(event) => setDimensions({ url: images[0].url, width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => failed(images[0].url)} />
         </button>
         <figcaption className="mt-2 flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
-          <strong className="font-semibold text-white">{plan.topic}</strong>
+          <strong className="font-bold text-white">{plan.topic}</strong>
           <a href={safeSourceUrl(images[0].sourceUrl) || images[0].url} target="_blank" rel="noopener noreferrer"
             className="inline-flex min-w-0 items-center gap-1 text-xs text-zinc-400 hover:text-white">
-            <span className="truncate">{images[0].credit || "Источник фото"}</span><ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="truncate">{[images[0].credit, images[0].license].filter(Boolean).join(" · ") || "Источник фото"}</span><ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
           </a>
         </figcaption>
+        {imageSize ? <span className="mt-1 block text-xs text-zinc-500">{imageSize}</span> : null}
+        {plan.caption ? <p className="mt-2 text-sm leading-6 text-zinc-300" data-malik-photo-caption>{plan.caption}</p> : null}
       </figure> : null}
       {children ? <div className="min-w-0">{children}</div> : null}
       {!images?.length && active ? status : null}
@@ -177,17 +182,20 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   )
   if (row) return (
     <div ref={container} className="malik-answer-photo-row min-w-0" data-malik-reference-topic={plan.topic} data-malik-inline-visual>
-      <div className={images?.length ? "flex items-start gap-3 sm:gap-5" : ""}>
+      <div className="malik-answer-photo-stack">
         {images?.[0] ? <figure className={"malik-answer-photo-row__image shrink-0 overflow-hidden rounded-xl " + (plan.kind === "tutorial" || images[0].role === "logo" ? "bg-white" : "bg-black")}>
           <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + images[0].alt} className="block w-full focus-visible:outline focus-visible:outline-white">
             <img src={images[0].url} alt={images[0].alt} loading="lazy" decoding="async" referrerPolicy="no-referrer"
-              className={"w-full " + (images[0].role === "logo" ? "aspect-square object-contain p-3" : plan.kind === "tutorial" ? "max-h-[280px] object-contain" : "aspect-[3/4] object-cover")}
+              className={"block h-auto w-full object-contain " + (images[0].role === "logo" ? "max-h-[250px] p-3" : "")}
+              onLoad={(event) => setDimensions({ url: images[0].url, width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
               onError={() => failed(images[0].url)} />
           </button>
           <figcaption className="bg-black px-1.5 py-1 text-xs leading-4 text-zinc-400">
-            <strong className="mb-1 block break-words font-semibold text-zinc-100">{plan.topic}</strong>
+            <strong className="mb-1 block break-words text-base font-bold text-zinc-100">{plan.topic}</strong>
+            {plan.caption ? <span className="mb-1 block text-sm leading-6 text-zinc-300" data-malik-photo-caption>{plan.caption}</span> : null}
             <a href={safeSourceUrl(images[0].sourceUrl) || images[0].url} target="_blank" rel="noopener noreferrer" className="block truncate underline-offset-2 hover:underline" title={[images[0].credit, images[0].license].filter(Boolean).join(" · ")}>{images[0].credit || "Источник фото"}</a>
           </figcaption>
+          {imageSize ? <span className="mt-1 block text-xs text-zinc-500">{imageSize}</span> : null}
         </figure> : null}
         <div className="min-w-0 flex-1">{children}</div>
       </div>

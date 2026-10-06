@@ -65,4 +65,25 @@ assert.equal(count(software, "data-malik-reference-topic="), 0, "structured soft
 assert.equal(subjectCitationUrl("Медеу", [{ title: "Другой объект", url: "https://example.com/other" }]), "")
 assert.equal(subjectCitationUrl("iPhone 16 Pro", [{ title: "iPhone 16", url: "https://example.com/phone" }]), "")
 assert.equal(subjectCitationUrl("Медеу", [{ title: "Медеу", url: "javascript:alert(1)" }]), "")
+const policy = load(path.join(root, "lib/ai/reference-visual-policy.ts"))
+const hints = load(path.join(root, "lib/ai/answer-photo-hints.ts"))
+const nvidiaQuestion = "Как зарегистрироваться в NVIDIA?"
+const nvidiaPlan = policy.planReferenceVisuals(nvidiaQuestion)
+assert.equal(nvidiaPlan.kind, "tutorial")
+assert.ok(nvidiaPlan.visualDevice.includes("nvidia"))
+assert.ok(nvidiaPlan.queries.every((q) => q.includes("NVIDIA")))
+const registration = render("### Как зарегистрироваться\n\n1. **Регистрация**: нажмите Sign Up.\n2. Подтвердите почту.", nvidiaQuestion)
+assert.doesNotMatch(registration, /data-malik-reference-topic="Регистрация"/)
+for (const generic of ["Регистрация", "Sign Up", "Настройки", "Итог"]) {
+  assert.equal(policy.isAbstractPhotoSubject(generic), true)
+  const subjects = hints.parseAnswerPhotoHints(JSON.stringify({ version: 1, subjects: [{ name: generic, query: generic, kind: "topic" }] }))
+  assert.equal(hints.groundedAnswerPhotoPlans(subjects, "Расскажи про NVIDIA", generic).length, 0)
+}
+const catalog = load(path.join(root, "lib/media/reference-catalog.ts"))
+const originalFetch = globalThis.fetch
+try {
+  globalThis.fetch = async () => Response.json({ query: { pages: [{ title: "File:Registration historical document.jpg", imageinfo: [{ mime: "image/jpeg", thumburl: "https://upload.wikimedia.org/register.jpg", descriptionurl: "https://commons.wikimedia.org/wiki/File:Registration.jpg" }] }] } })
+  assert.deepEqual(await catalog.lookupReferenceImages(nvidiaPlan), [], "a historical register is not an NVIDIA account screenshot")
+} finally { globalThis.fetch = originalFetch }
 console.log("PASS real answer renderer: full inline descriptions, metadata before/between prose, no duplicate hero, mixed chart/photo answers, partial hints, exact section links and opt-out")
+console.log("PASS NVIDIA registration context: generic action hints rejected, exact app/feature preserved, unrelated document rejected")

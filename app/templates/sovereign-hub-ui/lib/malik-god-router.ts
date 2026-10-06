@@ -10,6 +10,7 @@ import { auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit } from "
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
+import { currentModelQueries, currentModelSubjects, currentResearchDate, currentSourcePriority, mentionedCurrentModels, needsCurrentEvidence, officialProductQuery } from "@/lib/ai/current-evidence"
 import { normalizeWebSearchQuery, eventSearchTitle, localRoleQuery } from "@/lib/ai/web-search-query"
 import { fetchResearchResponse } from "@/lib/malik-research/bounded-fetch"
 import { buildMalikResponseSystemPrompt, cleanModelText } from "@/lib/ai/response-intelligence"
@@ -77,7 +78,7 @@ export async function gatherSourcesForPrompt(prompt: string, emit?: ResearchEmit
 }
 
 const CACHE = new Map<string, { expiresAt: number; value: GodAnswer }>()
-const SEARCH_CACHE_VERSION = "focused-bounded-v4"
+const SEARCH_CACHE_VERSION = "current-evidence-v5"
 
 function env(name: string) {
   const value = process.env[name]
@@ -127,6 +128,7 @@ function cacheKey(prompt: string) {
 }
 
 function getCache(prompt: string) {
+  if (needsCurrentEvidence(prompt)) return null
   const key = cacheKey(prompt)
   const item = CACHE.get(key)
   if (!item) return null
@@ -138,6 +140,7 @@ function getCache(prompt: string) {
 }
 
 function setCache(prompt: string, value: GodAnswer) {
+  if (needsCurrentEvidence(prompt)) return
   const ttl = Number(process.env.MALIK_GOD_CACHE_TTL_MS || process.env.RESEARCH_CACHE_TTL_MS || 1000 * 60 * 20)
   CACHE.set(cacheKey(prompt), { expiresAt: Date.now() + ttl, value })
 }
@@ -159,6 +162,7 @@ function normalizeSource(item: Partial<SourceItem>, provider: string): SourceIte
     url,
     domain: item.domain || getDomain(url),
     snippet: cleanInlineText(item.snippet || "").slice(0, 650),
+    ...(item.publishedAt ? { publishedAt: cleanInlineText(item.publishedAt).slice(0, 80) } : {}),
     provider,
   }
 }
@@ -218,7 +222,7 @@ async function searchSerper(query: string, limit: number, signal?: AbortSignal):
 
   return uniqueSources(
     organic
-      .map((x: any) => normalizeSource({ title: x.title, url: x.link, snippet: x.snippet }, "serper"))
+      .map((x: any) => normalizeSource({ title: x.title, url: x.link, snippet: x.snippet, publishedAt: x.date }, "serper"))
       .filter(Boolean) as SourceItem[],
     limit
   )
@@ -256,7 +260,7 @@ async function searchTavily(query: string, limit: number, signal?: AbortSignal):
 
   return uniqueSources(
     results
-      .map((x: any) => normalizeSource({ title: x.title, url: x.url, snippet: x.content }, "tavily"))
+      .map((x: any) => normalizeSource({ title: x.title, url: x.url, snippet: x.content, publishedAt: x.published_date }, "tavily"))
       .filter(Boolean) as SourceItem[],
     limit
   )
@@ -278,7 +282,7 @@ async function searchBrave(query: string, limit: number, signal?: AbortSignal): 
 
   return uniqueSources(
     results
-      .map((x: any) => normalizeSource({ title: x.title, url: x.url, snippet: x.description }, "brave"))
+      .map((x: any) => normalizeSource({ title: x.title, url: x.url, snippet: x.description, publishedAt: x.page_age || x.age }, "brave"))
       .filter(Boolean) as SourceItem[],
     limit
   )
@@ -316,6 +320,7 @@ async function searchBingRss(query: string, limit: number, signal?: AbortSignal)
       title: decodeSearchText(title),
       url: decodeSearchText(link),
       snippet: decodeSearchText(snippet),
+      publishedAt: decodeSearchText(block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)?.[1] || ""),
     }, "bing-rss")
   }).filter(Boolean) as SourceItem[], limit)
 }
@@ -343,6 +348,7 @@ async function searchGoogleNews(query: string, limit: number, signal?: AbortSign
       title,
       url: link,
       snippet: publisher ? `${publisher}. ${snippet}` : snippet,
+      publishedAt: decodeSearchText(block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)?.[1] || ""),
     }, "google-news")
   }).filter(Boolean) as SourceItem[], limit)
 }
@@ -521,6 +527,10 @@ function knownPersonSearchName(value: string) {
 function buildQueries(prompt: string) {
   const year = new Date().getFullYear()
   const q = normalizeWebSearchQuery(prompt)
+  const modelQueries = currentModelQueries(prompt)
+  if (modelQueries.length) return [q, ...modelQueries].slice(0, 3)
+  const officialQuery = officialProductQuery(q)
+  if (officialQuery) return [q, officialQuery, `${q} ${year}`]
   const eventTitle = eventSearchTitle(prompt)
   const local = eventTitle ? "" : localRoleQuery(q)
   const queries = eventTitle ? [q, `${eventTitle} ${year} speakers programme official`, `${eventTitle} ${year} спикеры программа`] : local ? [local, q] : [q]
@@ -609,6 +619,7 @@ function rankSourcesForPrompt(prompt: string, sources: SourceItem[]) {
       if (bodyHit) score += 3
       if (subjectTokens.includes(token) && (titleHit || bodyHit)) subjectMatched += 1
     }
+    if (score > 0) score += currentSourcePriority(prompt, source)
     if (score > 0 && (/\.(gov|gov\.[a-z]{2}|edu|ac\.[a-z]{2})$/i.test(source.domain) || /(?:wikipedia|britannica|reuters|apnews|bbc)\./i.test(source.domain))) score += 4
     if (!promptAsksForSoftware && softwareNoise.test(`${title} ${body}`)) score -= 40
 
@@ -729,10 +740,14 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: 
   return finalSources
 }
 
-function sourceContext(sources: SourceItem[]) {
+function sourceContext(sources: SourceItem[], prompt = "") {
   if (!sources.length) return ""
   return sources
-    .map((s, i) => `[${i + 1}] ${s.title}\nURL: ${s.url}\nDomain: ${s.domain}${s.image ? "\nPage picture: available (use \"image\": " + (i + 1) + " on its card)" : ""}\nSnippet: ${s.snippet || ""}`)
+    .map((s, i) => {
+      const names = mentionedCurrentModels(prompt, `${s.title} ${s.snippet || ""}`)
+      const scope = currentModelSubjects(prompt).length ? names.length ? `\nExact requested versions mentioned: ${names.join(", ")} (mention alone does not establish release/availability)` : "\nBackground source only: no exact requested version mentioned. Do not use this to establish non-existence or the latest version." : ""
+      return `[${i + 1}] ${s.title}\nURL: ${s.url}\nDomain: ${s.domain}\nRetrieved: ${currentResearchDate()}${s.publishedAt ? "\nPublished: " + s.publishedAt : "\nPublication date: not supplied"}${scope}${s.image ? "\nPage picture: available (use \"image\": " + (i + 1) + " on its card ONLY if it depicts this exact subject; a generic page image is not evidence of a model version)" : ""}\nSnippet: ${s.snippet || ""}`
+    })
     .join("\n\n")
 }
 
@@ -784,7 +799,7 @@ async function callOpenAICompatible(
     return { content: "", attempt: { ...attemptBase, error: "missing-key", latencyMs: 0 } }
   }
 
-  const userContent = usedWeb ? `Question:\n${prompt}\n\nWeb sources:\n${sourceContext(sources)}` : prompt
+  const userContent = usedWeb ? `Question:\n${prompt}\n\nWeb sources:\n${sourceContext(sources, prompt)}` : prompt
 
   try {
     const url = `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`
@@ -1048,7 +1063,7 @@ export async function malikGodAnswer(
     const usedEvidence = usedWeb || Boolean(connected.context) || science.sources.length > 0
     const strictPrompt = [
       `Question:\n${prompt}`,
-      usedWeb ? webSources.length ? `Web sources:\n${sourceContext(webSources)}` : "LIVE WEB CHECK: This attempt returned no usable evidence. Say you could not verify the requested current facts; do not claim that no public information exists. Never invent speaker or participant lists." : "",
+      usedWeb ? webSources.length ? `Web sources:\n${sourceContext(webSources, focus.searchText)}` : "LIVE WEB CHECK: This attempt returned no usable evidence. Say you could not verify the requested current facts; do not claim that no public information exists. Never invent speaker or participant lists." : "",
       connected.context,
       science.context,
     ].filter(Boolean).join("\n\n")
@@ -1116,7 +1131,7 @@ export async function malikGodAnswer(
     : powerOutputTokens
   // A shared prompt cache must never serve another user's connected data, and
   // a follow-up («а третий?») never shares an answer with another conversation.
-  const cacheable = usedWeb && !fusionActive && !legacyFocus.followUp
+  const cacheable = usedWeb && !fusionActive && !legacyFocus.followUp && !needsCurrentEvidence(legacyFocus.searchText)
   const cache = cacheable ? getCache(prompt) : null
   const cacheFitsBudget = !cache || !maxTokens || Math.ceil(String(cache.content || "").length / 3) <= maxTokens
   if (cache && cacheFitsBudget) {

@@ -46,27 +46,29 @@ function Button({ link, sources, primary }: { link: CardLink; sources: Sources; 
 }
 
 /** The page's own picture (from a cited source) or a looked-up reference photo. */
-function useCardImage(image: AnswerCard["image"], sources: Sources, title: string, hero: boolean, imageRole?: AnswerCard["imageRole"], autoPhotos = false): { url: string; label: string; logo?: boolean } | null {
+function useCardImage(image: AnswerCard["image"], sources: Sources, title: string, hero: boolean, imageRole?: AnswerCard["imageRole"], autoPhotos = false): { url: string; label: string; sourceUrl?: string; logo?: boolean } | null {
   const fromSource = typeof image === "number" ? sources?.[image - 1] : undefined
-  const sourceImage = fromSource?.image && /^https:\/\//i.test(fromSource.image) ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url) } : null
+  const subject = visualSegmentLabel(title)
+  const sourceMatches = !isAbstractPhotoSubject(subject) && Boolean(fromSource && subjectCitationUrl(subject, [fromSource]))
+  const sourceImage = sourceMatches && fromSource?.image && /^https:\/\//i.test(fromSource.image) ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url), sourceUrl: fromSource.url } : null
   // A model may omit image metadata or cite a page without an OG picture.
   // Retrieve the exact named subject instead of leaving a permanent initial.
-  const lookup = typeof image === "string" && image.trim().length >= 2 ? image.trim()
+  const lookup = typeof image === "string" && image.trim().length >= 2 && !isAbstractPhotoSubject(image) ? image.trim()
     : autoPhotos && !sourceImage && !isAbstractPhotoSubject(title) ? visualSegmentLabel(title) : ""
   const brand = !hero ? referenceBrandAsset(lookup || title) : null
   const hasBrand = Boolean(brand), sourceUrl = sourceImage?.url
   const lookupKey = (imageRole === "logo" ? "logo:" : "photo:") + lookup
-  const [found, setFound] = useState<{ key: string; url: string; label: string; logo?: boolean } | null>(null)
+  const [found, setFound] = useState<{ key: string; url: string; label: string; sourceUrl?: string; logo?: boolean } | null>(null)
   useEffect(() => {
     if (!lookup || hasBrand || sourceUrl) return
     return subscribeReferenceImages(
       { topic: lookup, queries: [...new Set([referenceSearchTopic(lookup), lookup])], explicit: true, entity: true, logo: imageRole === "logo", kind: "reference", layout: "landscape" },
-      (images) => { if (images[0]) setFound({ key: lookupKey, url: images[0].url, label: images[0].credit || "Wikimedia", logo: images[0].role === "logo" }) },
+      (images) => { if (images[0]) setFound({ key: lookupKey, url: images[0].url, label: images[0].credit || "Wikimedia", sourceUrl: images[0].sourceUrl, logo: images[0].role === "logo" }) },
     )
   }, [lookup, lookupKey, hasBrand, sourceUrl, imageRole])
-  if (brand) return { url: brand.url, label: brand.credit, logo: true }
+  if (brand) return { url: brand.url, label: brand.credit, sourceUrl: brand.sourceUrl, logo: true }
   if (sourceImage) return { ...sourceImage, logo: imageRole === "logo" }
-  return found && found.key === lookupKey ? { url: found.url, label: found.label, logo: found.logo } : null
+  return found && found.key === lookupKey ? { url: found.url, label: found.label, sourceUrl: found.sourceUrl, logo: found.logo } : null
 }
 
 function Picture({ card, sources, hero = false, autoPhotos = false }: { card: AnswerCard; sources: Sources; hero?: boolean; autoPhotos?: boolean }) {
@@ -78,9 +80,9 @@ function Picture({ card, sources, hero = false, autoPhotos = false }: { card: An
     return <span className="malik-card__thumb is-empty" aria-hidden="true">{card.title.trim().charAt(0).toUpperCase()}</span>
   }
   return (
-    <span className={hero ? "malik-card__hero-image" : "malik-card__thumb" + (image.logo ? " is-logo" : "")}>
+    <span className={hero ? "malik-card__hero-image" : "malik-card__thumb" + (image.logo ? " is-logo" : " is-photo")}>
       <img src={url} alt={image.logo ? card.title + " · логотип" : card.title} loading={image.logo ? "eager" : "lazy"} decoding="async" referrerPolicy="no-referrer" onError={() => setFailed((current) => [...current, url].slice(-6))} />
-      {hero && image.label ? <span className="malik-card__credit">{image.label}</span> : null}
+      {!image.logo && image.label ? <a className="malik-card__credit" href={safeHttps(image.sourceUrl || "") || url} target="_blank" rel="noopener noreferrer">{image.label}<ExternalLink aria-hidden="true" /></a> : null}
     </span>
   )
 }

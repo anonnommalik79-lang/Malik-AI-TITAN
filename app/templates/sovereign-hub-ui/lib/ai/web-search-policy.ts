@@ -1,4 +1,5 @@
 import { asksHeadToHead, asksPurchaseAdvice, asksSubjectOverview } from "@/lib/ai/question-shape"
+import { needsCurrentEvidence } from "./current-evidence"
 export type WebSearchOptions = {
   research?: boolean
   disableResearch?: boolean
@@ -13,6 +14,10 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}): bo
 
   // An explicit search request always wins.
   if (/(?:по[ий]щ[иь]|поиск\s+(?:в|по)|загугл|гугл[еи]|найди\s+(?:в\s+(?:сети|интернете)|через\s+веб)|проверь\s+(?:онлайн|в\s+сети)|\b(?:google|browse|search the web|look up|search online)\b)/i.test(text)) return true
+
+  // "Напиши последние новости" still needs live evidence. A generic writing
+  // or API keyword must not bypass checks of releases, prices and availability.
+  if (needsCurrentEvidence(text)) return true
 
   // Coding/writing/calculation requests must stay on the model path even when
   // the dashboard's generic "web & sources" toggle is enabled. This prevents

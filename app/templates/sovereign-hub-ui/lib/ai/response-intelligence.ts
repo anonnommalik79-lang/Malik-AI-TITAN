@@ -4,6 +4,7 @@ export type ResponseLanguage = "ru" | "kk" | "en" | "auto"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 import { planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
+import { currentEvidenceInstruction, currentResearchDate } from "@/lib/ai/current-evidence"
 import { asksHeadToHead, asksPurchaseAdvice, asksSubjectOverview } from "@/lib/ai/question-shape"
 import { MALIK_ANSWER_CARDS_CONTRACT } from "@/lib/ai/answer-cards"
 import { isComplexBrief, isMultiTaskPrompt, routingScope } from "@/lib/ai/prompt-shape"
@@ -353,7 +354,7 @@ export function buildMalikResponseSystemPrompt(input: {
     : input.usedWeb
     ? "A live web check returned no usable evidence in this attempt. Say that you could not verify the current facts, not that no public information exists. Do not invent participant lists, citations or claims of having read a source. Give any stable supported information that still helps."
     : "No verified live-web evidence is supplied. Do not invent citations. For unstable current facts, say that a live check is required."
-  const today = input.currentDate || new Date().toISOString().slice(0, 10)
+  const today = input.currentDate || currentResearchDate()
   // Cards (pictures, official links, buttons) wherever the answer is about
   // concrete things: every answer from web evidence, overviews, comparisons
   // and purchases - never code or small talk.
@@ -409,9 +410,10 @@ export function buildMalikResponseSystemPrompt(input: {
     ...(input.focusInstruction ? [input.focusInstruction] : []),
     ...(cardsContract ? [cardsContract] : []),
     webContract,
+    currentEvidenceInstruction(subjectPrompt, today),
     // Photos belong to answers about subjects, not to «как дела» or «спасибо».
     ...(isReferenceImageRequest(subjectPrompt) || (!subject.signals.includes("conversation") && planReferenceVisuals(subjectPrompt)) ? [
-      "VISUAL REFERENCE CONTRACT: The chat automatically retrieves sourced photos for the subjects in your answer, independently of the text model. Never say that you cannot show/insert photos or send the user to search for them instead. For a photo follow-up such as 'покажи их всех', resolve 'them' from the conversation and list the exact names of those people/products/places with concise descriptions. Use clear concrete subject headings, not generic era/category headings, and exact product model names. For how-to answers use numbered steps with exact menu names. Answer directly without asking for another photo request. Never invent image URLs, source claims, screenshot contents or highlight coordinates: retrieved image metadata is not supplied to you. Reference images are existing public media, not generated or charged jobs; the UI retrieves them independently.",
+      "VISUAL REFERENCE CONTRACT: The chat automatically retrieves real sourced photos for concrete subjects, independently of the text model. Photos occupy the full answer width, with a bold exact subject caption, source and description below. Keep each photo beside its own subject section; no unrelated stock decorations. Never turn generic action labels (Registration, Sign Up, Settings, Conclusion) into photo subjects. For tutorials keep the exact product/app and feature in the query; only a matching real screenshot is an instruction image. Never say that you cannot show/insert photos or send the user to search for them instead. For a photo follow-up resolve the exact people/products/places from the conversation. Use clear concrete headings and exact model names. Answer directly, use numbered tutorial steps, and never invent image URLs, screenshot contents, licenses, photo dimensions or highlight coordinates. Reference images are existing public media, not generated or charged jobs; their metadata is not supplied to you.",
     ] : []),
     ...(briefContract ? [briefContract] : []),
     ...(shapeContract ? [shapeContract] : []),

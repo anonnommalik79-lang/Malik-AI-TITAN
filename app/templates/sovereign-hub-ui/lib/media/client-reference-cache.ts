@@ -4,7 +4,7 @@ import { lookupReferenceImages, readReferenceJson, sanitizeReferenceImages, type
 type CacheEntry = { images: MalikVisualImage[]; expires: number }
 type Listener = (images: MalikVisualImage[]) => void
 type Job = { controller: AbortController; listeners: Set<Listener> }
-const STORAGE_KEY = "malik-reference-catalog-v9"
+const STORAGE_KEY = "malik-reference-catalog-v10"
 export const REFERENCE_LOOKUP_BUDGET_MS = 8000
 const MAX_ENTRIES = 60
 const cache = new Map<string, CacheEntry>()

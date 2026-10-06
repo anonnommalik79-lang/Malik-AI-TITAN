@@ -29,11 +29,12 @@
 .malik-answer-comparison__column > span, .malik-answer-comparison__column > strong { overflow-wrap: anywhere; }
 .malik-answer-visual-enter { animation: malik-answer-block-in .32s ease-out both; }
 .malik-answer-photo-row { margin: 20px 0; min-width: 0; }
-.malik-answer-photo-row__image { width: clamp(84px, 27.5%, 190px); max-width: 190px; animation: malik-answer-block-in .32s ease-out both; }
+.malik-answer-photo-row__image { width: 100%; max-width: none; margin: 0 0 16px; animation: malik-answer-block-in .32s ease-out both; }
+.malik-answer-photo-stack { display: block; width: 100%; }
 .malik-answer-photo-row__image figcaption { overflow-wrap: anywhere; }
-.malik-answer-photo-hero { margin: 22px 0 28px; max-width: 680px; }
-.malik-answer-photo-hero__figure { max-width: 620px; margin: 0 0 14px; animation: malik-answer-block-in .32s ease-out both; }
-.malik-answer-photo-hero__figure img { max-height: min(520px, 65vh); }
+.malik-answer-photo-hero { width: 100%; margin: 22px 0 28px; max-width: none; }
+.malik-answer-photo-hero__figure { width: 100%; max-width: none; margin: 0 0 14px; animation: malik-answer-block-in .32s ease-out both; }
+.malik-answer-photo-hero__figure img { width: 100%; height: auto; max-height: none; }
 .malik-answer-photo-hero .malik-md-h { margin-top: 0; }
 .malik-md .malik-answer-photo-row .malik-md-p { margin-top: 12px; }
 .malik-md .malik-answer-photo-row .malik-md-p:first-child { margin-top: 0; }
@@ -54,8 +55,7 @@
   .malik-answer-comparison__columns { gap: 18px; padding: 18px; }
   .malik-answer-comparison__columns.is-three { grid-template-columns: 1fr; }
   .malik-answer-comparison__subtitle { font-size: 15px; }
-  .malik-answer-photo-row__image { width: clamp(76px, 27.5%, 112px); }
-  .malik-answer-photo-hero__figure img { max-height: 440px; }
+  .malik-answer-photo-row__image { width: 100%; }
 }
 @media (max-width: 340px) { .malik-answer-comparison__columns { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .malik-answer-checklist__progress > span, .malik-answer-checklist__check { transition: none; } .malik-answer-visual-enter, .malik-answer-photo-row__image, .malik-answer-photo-hero__figure { animation: none; } }

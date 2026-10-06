@@ -28,6 +28,11 @@ const NO_VISUAL = /(?:без\s+(?:фото|картинок|изображени
 /** Screenshots must match both the product and requested interface feature. */
 const TUTORIAL_START = /^(?:(?:как|где|куда|инструкция|пошагово|настрой|включи|отключи|how|where|enable|disable|set\s+up|turn\s+on|turn\s+off|қалай)(?![\p{L}\p{N}_])|помоги\s+(?:мне\s+)?(?:включить|отключить|настроить))/iu
 const DEVICES = [
+  { match: /(?:nvidia|geforce|нвидиа|нвидия)/iu, label: "NVIDIA", query: "NVIDIA", terms: ["nvidia", "geforce"] },
+  { match: /chatgpt/iu, label: "ChatGPT", query: "ChatGPT", terms: ["chatgpt", "openai"] },
+  { match: /gemini/iu, label: "Gemini", query: "Google Gemini", terms: ["gemini"] },
+  { match: /claude/iu, label: "Claude", query: "Claude", terms: ["claude", "anthropic"] },
+  { match: /(?:steam|стим)/iu, label: "Steam", query: "Steam", terms: ["steam"] },
   { match: /(?:iphone|айфон|айфоне|ios|ipad|айпад)/iu, label: "iPhone", query: "iPhone iOS", terms: ["iphone", "ios", "ipad"] },
   { match: /(?:android|андроид|samsung|самсунг)/iu, label: "Android", query: "Android", terms: ["android", "samsung"] },
   { match: /(?:windows|виндовс|винда)/iu, label: "Windows", query: "Windows", terms: ["windows"] },
@@ -42,6 +47,7 @@ const DEVICES = [
   { match: /(?:google|гугл|gmail)/iu, label: "Google", query: "Google", terms: ["google", "gmail"] },
 ]
 const INTERFACE_TOPICS = [
+  { match: /(?:зарегистр|регистрац|созда[\p{L}]*\s+(?:аккаунт|уч[её]тн)|войти|вход|sign[ -]?up|sign[ -]?in|register|registration|login)/iu, label: "Регистрация и вход", query: "account registration sign up", alternate: "account login sign in", terms: ["registration", "register", "sign up", "signup", "sign in", "login", "account", "регистрац", "вход"] },
   { match: /(?:вибрац|вибрир|тактильн|vibrat|haptic)/iu, label: "Настройки вибрации", query: "Sounds Haptics vibration", alternate: "ringtone haptics", terms: ["vibrat", "haptic", "тактил", "вибрац"] },
   { match: /(?:уведомлен|оповещен|notification|хабарландыру)/iu, label: "Уведомления", query: "notification settings", alternate: "notifications screen", terms: ["notification", "уведомлен"] },
   { match: /(?:wi.?fi|вай.?фай|интернет|wifi)/iu, label: "Wi-Fi", query: "Wi-Fi settings", alternate: "wireless network settings", terms: ["wi-fi", "wifi", "wireless"] },
@@ -187,6 +193,9 @@ export function visualSegmentLabel(text: string): string {
 
 /** A business/process label isn't an object one can truthfully photograph. */
 export function isAbstractPhotoSubject(label: string): boolean {
+  // These are actions/categories, not the object the user asked to see.
+  // Searching "Регистрация" alone produced a historical register in an NVIDIA guide.
+  if (/^(?:регистрация|регистрации|вход|войти|аккаунт|подтверждение|настройки|пошагово|инструкция|сервисы|характеристики|преимущества|недостатки|итог|вывод|важно|registration|register|sign[ -]?up|sign[ -]?in|login|settings|confirmation|features|conclusion|summary)(?:\s|$|[:.!?])/iu.test(label.trim())) return true
   return /(?:анализ\s+(?:рынка|данных|продаж)|архитектура\s+(?:процессов|систем)|регламент|\bSOP\b|контент[- ]маркетинг|маркетинговая\s+стратегия|(?:финансов|бизнес)[\p{L}]*\s+модел|бизнес[- ]процесс|рабочий\s+процесс|план\s+бизнес|техническая\s+реализация|автоматизац|юнит[- ]экономик|сила\s+(?:claude|chatgpt)|как\s+(?:работает|работают|построить)|market\s+analysis|business\s+(?:model|process)|content\s+marketing|process\s+architecture|workflow|standard\s+operating\s+procedure|проверка\s+и\s+согласование)/iu.test(label)
 }
 

@@ -187,7 +187,7 @@ try {
     assert.equal(url.hostname, "commons.wikimedia.org", "chat must not contact Render or image hosts for metadata")
     assert.equal(options.credentials, "omit")
     assert.equal(url.searchParams.get("origin"), "*")
-    assert.equal(url.searchParams.get("iiurlwidth"), "480")
+    assert.equal(url.searchParams.get("iiurlwidth"), "1000")
     assert.equal(url.searchParams.get("gsrlimit"), "6")
     calls.push(url.searchParams.get("gsrsearch"))
     return Response.json({ query: { pages: [3, 1, 2, 4].map((index) => ({ ...media(index), title: "File:" + url.searchParams.get("gsrsearch") + " " + index + ".jpg" })) } })

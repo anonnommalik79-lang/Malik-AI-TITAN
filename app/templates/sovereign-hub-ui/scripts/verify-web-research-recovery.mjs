@@ -35,6 +35,7 @@ function functionsFrom(file, names, dependencies = {}) {
 const { fetchResearchResponse } = load("lib/malik-research/bounded-fetch.ts")
 const { shouldUseWeb } = load("lib/ai/web-search-policy.ts")
 const query = load("lib/ai/web-search-query.ts")
+const currentEvidence = load("lib/ai/current-evidence.ts")
 const { buildContextualFollowUps } = load("lib/ai/chat-followups.ts")
 const screenshotPrompt = "Знаеш про Ai Digital Bridge дай всех спикеров"
 const originalFetch = globalThis.fetch
@@ -54,12 +55,45 @@ try {
     assert.equal(query.eventSearchTitle(screenshotPrompt), "Ai Digital Bridge")
   })
   await check("search keeps the named event and rejects generic AI links", () => {
-    const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries", "SEARCH_STOP_WORDS", "searchTokens", "knownNameAliases", "identityTokensForNamedSubject", "rankSourcesForPrompt"], query)
+    const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries", "SEARCH_STOP_WORDS", "searchTokens", "knownNameAliases", "identityTokensForNamedSubject", "rankSourcesForPrompt"], { ...query, ...currentEvidence })
     assert.ok(router.buildQueries(screenshotPrompt).every((q) => /Ai Digital Bridge/i.test(q)))
     assert.ok(!router.buildQueries(screenshotPrompt).some((q) => /hackathon accelerator/i.test(q)))
     const event = { title: "AI Digital Bridge programme and speakers", url: "https://example.test/digital-bridge", domain: "example.test", snippet: "Confirmed programme" }
     const unrelated = { title: "AI founder interview", url: "https://example.test/ai", domain: "example.test", snippet: "Speaker discusses artificial intelligence" }
     assert.deepEqual(router.rankSourcesForPrompt(screenshotPrompt, [unrelated, event]), [event])
+  })
+  await check("new model comparisons check exact versions separately, not an older model", () => {
+    const prompt = "Сравни Gemini 4 pro и GPT 6.1S SOL"
+    assert.equal(shouldUseWeb(prompt), true)
+    assert.equal(shouldUseWeb("Напиши последние новости мира"), true)
+    assert.equal(shouldUseWeb("Напиши код на Python"), false)
+    assert.equal(shouldUseWeb(prompt, { research: false }), false)
+    assert.deepEqual(currentEvidence.currentModelSubjects(prompt), ["Gemini 4 pro", "GPT 6.1S SOL"])
+    const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries"], { ...query, ...currentEvidence })
+    const queries = router.buildQueries(prompt)
+    assert.equal(queries.length, 3)
+    assert.ok(queries.some((q) => q.includes('"Gemini 4 pro"') && q.includes("site:deepmind.google")))
+    assert.ok(queries.some((q) => q.includes('"GPT 6.1S SOL"') && q.includes("site:openai.com")))
+    assert.ok(queries.every((q) => !q.includes("Gemini 3.1")))
+    assert.deepEqual(currentEvidence.mentionedCurrentModels(prompt, "Gemini 3.1 Pro — latest model"), [])
+    assert.deepEqual(currentEvidence.mentionedCurrentModels(prompt, "GPT-6.1S SOL release"), ["GPT 6.1S SOL"])
+    const old = { domain: "deepmind.google", title: "Gemini 3.1 Pro", snippet: "Previous model" }
+    const exact = { domain: "deepmind.google", title: "Gemini 4 Pro", snippet: "Announcement" }
+    assert.ok(currentEvidence.currentSourcePriority(prompt, exact) > currentEvidence.currentSourcePriority(prompt, old))
+    assert.ok(router.buildQueries("Как зарегистрироваться в NVIDIA").some((q) => q.includes("site:nvidia.com")))
+    assert.ok(currentEvidence.currentSourcePriority("Как зарегистрироваться в NVIDIA", { domain: "accounts.nvidia.com" }) > currentEvidence.currentSourcePriority("Как зарегистрироваться в NVIDIA", { domain: "smsfast.test" }))
+    assert.equal(currentEvidence.currentResearchDate(new Date("2026-10-05T21:00:00Z")), "2026-10-06")
+    assert.ok(currentEvidence.currentSourcePriority(prompt, { domain: "openai.com" }) > currentEvidence.currentSourcePriority(prompt, { domain: "random.test" }))
+    const instruction = currentEvidence.currentEvidenceInstruction(prompt)
+    assert.match(instruction, /do NOT prove/)
+    assert.match(instruction, /not "it does not exist"/)
+    const cache = new Map()
+    const caching = functionsFrom("lib/malik-god-router.ts", ["cacheKey", "getCache", "setCache"], { CACHE: cache, SEARCH_CACHE_VERSION: "test", needsCurrentEvidence: currentEvidence.needsCurrentEvidence })
+    caching.setCache(prompt, { content: "outdated comparison" })
+    assert.equal(caching.getCache(prompt), null, "changing facts are rechecked, not restored from a stale answer")
+    assert.equal(cache.size, 0)
+    caching.setCache("Что такое Медеу", { content: "stable overview" })
+    assert.equal(caching.getCache("Что такое Медеу").content, "stable overview")
   })
   await check("programme answers offer fact checking instead of code review", () => {
     const chips = buildContextualFollowUps(screenshotPrompt, "Проверь раздел «Программа» на сайте мероприятия.")

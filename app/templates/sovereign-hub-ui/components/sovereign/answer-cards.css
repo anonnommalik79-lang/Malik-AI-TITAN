@@ -1,5 +1,5 @@
 /* Answer cards (MalikAnswerCards.tsx): monochrome, on the black thread. */
-.malik-cards { width: 100%; max-width: 760px; margin: 20px 0 24px; color: #f4f4f5; }
+.malik-cards { width: 100%; max-width: none; margin: 20px 0 24px; color: #f4f4f5; }
 .malik-cards__title { margin: 0 0 12px; color: #fff; font-size: 17px; font-weight: 650; line-height: 1.4; }
 
 .malik-card__title { margin: 0; color: #fff; font-size: 16px; font-weight: 650; line-height: 1.35; letter-spacing: -.005em; }
@@ -59,9 +59,11 @@
 .malik-card__thumb.is-logo { background: #fff; }
 .malik-card__thumb.is-logo img { box-sizing: border-box; padding: 9px; object-fit: contain; }
 .malik-card__thumb.is-empty { display: grid; place-items: center; color: #71717a; font-size: 30px; font-weight: 700; }
-/* Real photos follow the same image-left/text-right proportions as prose rows. */
-.malik-card-row:has(.malik-card__thumb img):not(:has(.malik-card__thumb.is-logo)) { grid-template-columns: minmax(76px, 27.5%) minmax(0, 1fr); }
-.malik-card-row .malik-card__thumb:has(img):not(.is-logo) { width: 100%; max-width: 190px; height: auto; aspect-ratio: 3 / 4; border: 0; background: #000; }
+/* Real photos span the answer; captions and details follow underneath. */
+.malik-card-row:has(.malik-card__thumb.is-photo) { display: block; }
+.malik-card-row .malik-card__thumb.is-photo { width: 100%; max-width: none; height: auto; margin-bottom: 14px; border: 0; background: #000; }
+.malik-card-row .malik-card__thumb.is-photo img { display: block; width: 100%; height: auto; object-fit: contain; }
+.malik-card-row:has(.malik-card__thumb.is-photo) .malik-card__title { font-size: 20px; font-weight: 750; }
 
 /* Hero: one large picture with the page it came from. */
 .malik-cards.is-hero { display: grid; gap: 8px; }
@@ -71,8 +73,9 @@
 .malik-card__hero-image img { width: 100%; height: 100%; object-fit: cover; }
 /* Keep complete screenshots readable: they aren't decorative cover crops. */
 .malik-cards.is-hero .malik-card__hero-image { aspect-ratio: auto; }
-.malik-cards.is-hero .malik-card__hero-image img { display: block; height: auto; max-height: 520px; object-fit: contain; }
-.malik-card__credit { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); padding: 3px 9px; border-radius: 99px; background: rgba(0, 0, 0, .7); color: #f4f4f5; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.malik-cards.is-hero .malik-card__hero-image img { display: block; width: 100%; height: auto; max-height: none; object-fit: contain; }
+.malik-card__credit { display: flex; align-items: center; gap: 5px; width: fit-content; max-width: 100%; margin: 8px 0 0; color: #a1a1aa; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.malik-card__credit svg { width: 12px; height: 12px; flex-shrink: 0; }
 
 /* Options: a framed panel, one option per row, each with its button. */
 .malik-cards.is-options { padding: 4px 20px; border: 1px solid #27272a; border-radius: 16px; background: #0a0a0a; }

@@ -179,7 +179,7 @@ async function lookupArticleImages(plan: ReferenceVisualPlan, signal: AbortSigna
     if (signal.aborted) break
     const language = /[әғқңөұүһі]/iu.test(topic) ? "kk" : /[а-яё]/iu.test(topic) ? "ru" : "en"
     const params = new URLSearchParams({ action: "query", format: "json", formatversion: "2", origin: "*", generator: "search", gsrsearch: topic,
-      gsrnamespace: "0", gsrlimit: "3", prop: "pageimages|info|pageprops|langlinks", inprop: "url", piprop: "thumbnail", pithumbsize: "480", pilicense: "free", lllang: "en", lllimit: "1" })
+      gsrnamespace: "0", gsrlimit: "3", prop: "pageimages|info|pageprops|langlinks", inprop: "url", piprop: "thumbnail", pithumbsize: "1000", pilicense: "free", lllang: "en", lllimit: "1" })
     if (plan.entity) {
       // Canonical article/redirect lookup avoids searching for similarly named places.
       for (const field of ["generator", "gsrsearch", "gsrnamespace", "gsrlimit"]) params.delete(field)
@@ -319,7 +319,7 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
     if (totalSignal.aborted) break
     const params = new URLSearchParams({ action: "query", format: "json", formatversion: "2", origin: "*", generator: "search",
       gsrsearch: topic, gsrnamespace: "6", gsrlimit: "6", prop: "imageinfo", iiprop: "url|mime|extmetadata",
-      iiextmetadatafilter: "Artist|LicenseShortName|ImageDescription", iiextmetadatalanguage: "en", iiurlwidth: "480" })
+      iiextmetadatafilter: "Artist|LicenseShortName|ImageDescription", iiextmetadatalanguage: "en", iiurlwidth: "1000" })
     try {
       const response = await fetch("https://commons.wikimedia.org/w/api.php?" + params, {
         headers: catalogueHeaders(), credentials: "omit", referrerPolicy: "no-referrer",
