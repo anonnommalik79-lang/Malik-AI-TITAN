@@ -71,7 +71,80 @@ export function sanitizeReferenceImages(value: unknown): MalikVisualImage[] {
   return images
 }
 
-type CommonsPage = { title?: string; index?: number; imageinfo?: Array<{ mime?: string; thumburl?: string; descriptionurl?: string; extmetadata?: Record<string, { value?: string }> }> }
+type CommonsPage = { title?: string; index?: number; imageinfo?: Array<{ mime?: string; thumburl?: string; descriptionurl?: string; width?: number; height?: number; extmetadata?: Record<string, { value?: string }> }> }
+
+/** Wikimedia renders SVG emblems, maps and icons as "…/x.svg/500px-x.svg.png". */
+export function isVectorThumbnail(url: string): boolean {
+  return /\.svg\/\d+px-[^/]*\.svg\.png(?:$|\?)/iu.test(String(url || ""))
+}
+
+const WEAK_PHOTO_TITLE = /(?:\bicon\b|\bpictogram\b|\bsymbol\b|\bemblem\b|\bcoat of arms\b|\bflag of\b|\blocator\b|\bmap\b|\bscreenshot\b|\bsignature\b|\bautograph\b|\bstamp\b|\bbanknote\b|\bcoin\b|\bqr\b|иконк|эмблем|герб|карта|подпись|марка)/iu
+
+/**
+ * How strong a catalogue picture is for a photo answer: a real, large photo
+ * whose title names the subject beats a small file, an icon, an emblem, a
+ * map or an odd panorama. Ties keep the catalogue's own search order.
+ */
+export function referencePhotoQuality(query: string, title: string, media?: { mime?: string; thumburl?: string; width?: number; height?: number }, wantsLogo = false): number {
+  let score = referenceTitleCoverage(query, title) * 4
+  const vector = /svg/iu.test(media?.mime || "") || isVectorThumbnail(media?.thumburl || "")
+  if (!wantsLogo && vector) score -= 3
+  if (!wantsLogo && WEAK_PHOTO_TITLE.test(title) && !WEAK_PHOTO_TITLE.test(query)) score -= 2
+  const width = Number(media?.width) || 0, height = Number(media?.height) || 0
+  if (width && height) {
+    const longest = Math.max(width, height), ratio = width / height
+    if (longest < 500) score -= 3
+    else if (longest < 900) score -= 1
+    else if (longest >= 1600) score += .5
+    if (ratio > 2.6 || ratio < .38) score -= 1.5
+  }
+  return score
+}
+
+/**
+ * Ask for several queries without waiting for each in turn: the first query
+ * starts at once, the next one only if the previous has not answered within
+ * `hedgeMs`. The earliest query (in order) that yields pictures wins.
+ */
+async function firstHedged<T>(items: string[], hedgeMs: number, signal: AbortSignal, run: (item: string) => Promise<T[]>): Promise<T[]> {
+  if (!items.length || signal.aborted) return []
+  return new Promise((resolve) => {
+    const results: Array<T[] | undefined> = Array.from({ length: items.length }, () => undefined)
+    let started = 0, settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const finish = (value: T[]) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      signal.removeEventListener("abort", aborted)
+      resolve(value)
+    }
+    const aborted = () => finish([])
+    const check = () => {
+      for (let index = 0; index < items.length; index++) {
+        const result = results[index]
+        // An earlier query is still running: its answer takes precedence.
+        if (result === undefined) return
+        if (result.length) { finish(result); return }
+      }
+      finish([])
+    }
+    const launch = () => {
+      if (settled || started >= items.length) return
+      const index = started++
+      void run(items[index]).catch(() => [] as T[]).then((value) => {
+        results[index] = value
+        // An empty answer starts the next query straight away.
+        if (!value.length) launch()
+        check()
+      })
+      clearTimeout(timer)
+      if (started < items.length) timer = setTimeout(launch, hedgeMs)
+    }
+    signal.addEventListener("abort", aborted, { once: true })
+    launch()
+  })
+}
 
 function titleWords(text: string): string[] {
   return text.normalize("NFKD").toLowerCase().replace(/\p{M}/gu, "").replace(/^file:/u, "").split(/[^\p{L}\p{N}]+/u).filter((word) => (word.length > 1 || /^\d+$/u.test(word)) && !["the", "of", "in", "and"].includes(word))
@@ -199,8 +272,10 @@ async function lookupArticleImages(plan: ReferenceVisualPlan, signal: AbortSigna
         ? (referenceTitleScore(canonical, page.title || "") >= 0.65 && !unrelatedNamesake(topic, page.title || "")) : referenceTopicMatches(topic, page.title || "")))
       const images = sanitizeReferenceImages(relevant.flatMap((page) => {
         if (!page.thumbnail?.source || !page.fullurl) return []
+        const vector = isVectorThumbnail(page.thumbnail.source)
+        if (vector && plan.person) return []
         const url = referenceThumbnailVariants(page.thumbnail.source).find((candidate) => !wasExcluded(candidate, options))
-        return url ? [{ url, alt: page.title || plan.topic, sourceUrl: page.fullurl, credit: "Wikipedia · Wikimedia Commons" }] : []
+        return url ? [{ url, alt: page.title || plan.topic, sourceUrl: page.fullurl, credit: "Wikipedia · Wikimedia Commons", ...(vector && plan.entity ? { role: "logo" } : {}) }] : []
       }))
       if (images.length) return plan.entity ? images.slice(0, 1) : images
       // The English article often has a free portrait when the local edition does not.
@@ -315,10 +390,9 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
     if (article.length || totalSignal.aborted) return plan.person ? article.slice(0, 1) : article
     if (plan.person) return lookupPersonSearchImages(plan, totalSignal, options)
   }
-  for (const topic of plan.queries.slice(0, 2)) {
-    if (totalSignal.aborted) break
+  const commons = await firstHedged(plan.queries.slice(0, 2), 900, totalSignal, async (topic) => {
     const params = new URLSearchParams({ action: "query", format: "json", formatversion: "2", origin: "*", generator: "search",
-      gsrsearch: topic, gsrnamespace: "6", gsrlimit: "6", prop: "imageinfo", iiprop: "url|mime|extmetadata",
+      gsrsearch: topic, gsrnamespace: "6", gsrlimit: "6", prop: "imageinfo", iiprop: "url|mime|size|extmetadata",
       iiextmetadatafilter: "Artist|LicenseShortName|ImageDescription", iiextmetadatalanguage: "en", iiurlwidth: "1000" })
     try {
       const response = await fetch("https://commons.wikimedia.org/w/api.php?" + params, {
@@ -328,7 +402,11 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
       })
       const data = await readReferenceJson(response) as { query?: { pages?: CommonsPage[] } } | null
       const pages = Array.isArray(data?.query?.pages) ? data.query.pages : []
-      const images = sanitizeReferenceImages(pages.sort((a, b) => (a.index || 0) - (b.index || 0)).flatMap((page) => {
+      // Strongest photo first; equal candidates keep the catalogue's rank.
+      const ranked = pages.map((page) => ({ page, quality: referencePhotoQuality(topic, String(page.title || ""), page.imageinfo?.[0], Boolean(plan.logo)) }))
+        .sort((a, b) => b.quality - a.quality || (a.page.index || 0) - (b.page.index || 0))
+        .map((entry) => entry.page)
+      const images = sanitizeReferenceImages(ranked.flatMap((page) => {
         const media = page.imageinfo?.[0]
         // For interface tutorials, reject random product photos and screenshots
         // of unrelated settings (even if Commons ranked them highly).
@@ -339,14 +417,18 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
           || !plan.visualTerms?.some((term) => fileTitle.includes(term)))) return []
         // Never fall back to the multi-megabyte original when a thumbnail is missing.
         if (!media?.thumburl || !hasRasterThumbnail(media.mime || "", media.thumburl) || !media.descriptionurl) return []
+        // A person's or a place's photo is never an emblem, icon or tiny file.
+        if (plan.entity && (isVectorThumbnail(media.thumburl) || /svg/iu.test(media.mime || ""))) return []
+        if ((Number(media.width) || 1000) < 320 && (Number(media.height) || 1000) < 320) return []
         const url = referenceThumbnailVariants(media.thumburl).find((candidate) => !wasExcluded(candidate, options))
         if (!url) return []
         return [{ url, sourceUrl: media.descriptionurl,
           alt: (page.title || plan.topic).replace(/^File:/i, "").replace(/\.[a-z\d]+$/i, "").replace(/_/g, " "),
           credit: media.extmetadata?.Artist?.value || "Wikimedia Commons", license: media.extmetadata?.LicenseShortName?.value || "" }]
       })).filter((image) => Boolean(image.sourceUrl))
-      if (images.length) return images
-    } catch { /* A catalogue outage must not interrupt the answer. */ }
-  }
+      return images
+    } catch { return [] /* A catalogue outage must not interrupt the answer. */ }
+  })
+  if (commons.length) return commons
   return plan.entity ? [] : lookupArticleImages(plan, totalSignal, options)
 }

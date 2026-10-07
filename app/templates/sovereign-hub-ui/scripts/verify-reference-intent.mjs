@@ -331,19 +331,19 @@ try {
     const topic = new URL(String(input)).searchParams.get("gsrsearch")
     return Response.json({ query: { pages: [{ ...media(1), title: "File:" + topic + ".jpg" }] } })
   }
-  const queued = Array.from({ length: 6 }, (_, index) => new Promise((resolve) => cache.subscribeReferenceImages({ topic: "Subject" + index, queries: ["Subject" + index], explicit: true, layout: "landscape" }, resolve)))
+  const queued = Array.from({ length: 12 }, (_, index) => new Promise((resolve) => cache.subscribeReferenceImages({ topic: "Subject" + index, queries: ["Subject" + index], explicit: true, layout: "landscape" }, resolve)))
   const cancelQueued = cache.subscribeReferenceImages({ topic: "Cancelled subject", queries: ["Cancelled subject"], explicit: true, layout: "landscape" }, () => assert.fail("unmounted queued lookup must not deliver"))
   await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.equal(gates.length, 3, "at most three catalogue lookups start together")
+  assert.equal(gates.length, 6, "at most six catalogue lookups start together")
   cancelQueued()
   gates.splice(0).forEach((release) => release())
   await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.equal(gates.length, 3)
+  assert.equal(gates.length, 6)
   gates.splice(0).forEach((release) => release())
   const queuedResults = await Promise.all(queued)
-  assert.equal(queuedResults.length, 6)
-  assert.equal(delivered, 6)
-  assert.equal(maximum, 3)
+  assert.equal(queuedResults.length, 12)
+  assert.equal(delivered, 12)
+  assert.equal(maximum, 6)
   const route = load("app/api/chat/reference-images/route.ts")
   let requests = 0
   globalThis.fetch = async () => { requests++; return Response.json({ query: { pages: [media(1)] } }) }
@@ -450,4 +450,22 @@ try {
   globalThis.localStorage = savedStorage
   if (savedKey === undefined) delete process.env.UNSPLASH_ACCESS_KEY
   else process.env.UNSPLASH_ACCESS_KEY = savedKey
+}
+
+// Strong photos, no empty frames, no giant emblems.
+{
+  assert.equal(catalog.isVectorThumbnail("https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Emblem.svg/500px-Emblem.svg.png"), true)
+  assert.equal(catalog.isVectorThumbnail("https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Photo.jpg/1000px-Photo.jpg"), false)
+  const photo = catalog.referencePhotoQuality("Scarlet Witch", "File:Scarlet Witch cosplay.jpg", { mime: "image/jpeg", width: 2400, height: 1600 })
+  const emblem = catalog.referencePhotoQuality("Scarlet Witch", "File:Scarlet Witch emblem.svg", { mime: "image/svg+xml", thumburl: "https://upload.wikimedia.org/x/a/ab/E.svg/500px-E.svg.png", width: 512, height: 512 })
+  const tiny = catalog.referencePhotoQuality("Scarlet Witch", "File:Scarlet Witch.jpg", { mime: "image/jpeg", width: 200, height: 260 })
+  assert(photo > emblem, "a large real photo outranks an emblem")
+  assert(photo > tiny, "a large photo outranks a tiny file")
+  assert(catalog.referencePhotoQuality("Apple logo", "File:Apple logo.svg", { mime: "image/svg+xml" }, true) > 0, "logos stay allowed when a logo is wanted")
+  const gallery = fs.readFileSync("components/sovereign/MalikVisualGallery.tsx", "utf8")
+  assert.doesNotMatch(gallery, /Изображение недоступно|Превью недоступно|Превью \$\{/, "no empty-frame or size lines in answers")
+  const blocks = fs.readFileSync("components/sovereign/answer-blocks.css", "utf8")
+  assert.match(blocks, /\.malik-answer-photo-hero__figure img \{[^}]*max-height: min\(460px, 62vh\)/, "hero photos have a height cap")
+  assert.match(blocks, /\.malik-answer-photo-row__image img \{[^}]*max-height:/, "row photos have a height cap")
+  console.log("PASS strong-photo ranking, vector emblems demoted, no empty frames, capped photo height")
 }

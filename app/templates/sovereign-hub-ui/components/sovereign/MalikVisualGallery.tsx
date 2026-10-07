@@ -1,7 +1,8 @@
 "use client"
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { ExternalLink, ImageOff, X } from "lucide-react"
+import { ExternalLink, X } from "lucide-react"
+import { preconnect } from "react-dom"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 
 import { planReferenceVisuals, referenceSearchTopic, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
@@ -27,24 +28,22 @@ function safeSourceUrl(value?: string): string {
 function ReferenceCard({ image, portrait, label, caption, contain = false, onOpen, onFailure }: { image: MalikVisualImage; portrait: boolean; label?: string; caption?: string; contain?: boolean; onOpen: () => void; onFailure?: (url: string) => void }) {
   const [failed, setFailed] = useState(false)
   const source = safeSourceUrl(image.sourceUrl) || image.url
+  // A picture that cannot load leaves no empty frame behind: the gallery
+  // asks for a replacement, and without one the slot simply disappears.
+  if (failed) return null
   return (
     <figure className="min-w-0 overflow-hidden rounded-2xl border border-white/15 bg-black">
       <button type="button" onClick={onOpen} aria-label={"Увеличить изображение: " + image.alt} className={"block w-full overflow-hidden " + (image.role === "logo" ? "bg-white " : "bg-black ") + "focus-visible:outline focus-visible:outline-2 focus-visible:outline-white " + (portrait ? "aspect-[3/4]" : "aspect-[4/3]")}>
-        {failed ? (
-          <span className="flex h-full flex-col items-center justify-center gap-2 px-2 text-center text-sm text-zinc-400">
-            <ImageOff className="h-6 w-6" aria-hidden="true" />Превью недоступно
-          </span>
-        ) : (
-          <img
-            src={image.url}
-            alt={image.alt || "Визуальный референс"}
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            className={"h-full w-full transition-transform duration-300 hover:scale-[1.03] " + (image.role === "logo" ? "object-contain p-4" : portrait || contain ? "object-contain" : "object-cover")}
-            onError={() => { setFailed(true); onFailure?.(image.url) }}
-          />
-        )}
+        <img
+          src={image.url}
+          alt={image.alt || "Визуальный референс"}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          className={"malik-ref-img h-full w-full transition-transform duration-300 hover:scale-[1.03] " + (image.role === "logo" ? "object-contain p-4" : portrait || contain ? "object-contain" : "object-cover")}
+          onLoad={(event) => event.currentTarget.setAttribute("data-loaded", "")}
+          onError={() => { setFailed(true); onFailure?.(image.url) }}
+        />
       </button>
       <figcaption className="min-w-0 border-t border-white/10 px-2.5 py-2">
         <span className="block text-sm font-semibold leading-5 text-zinc-100" title={label || image.alt}>{label || image.alt || "Изображение"}</span>
@@ -97,6 +96,16 @@ export function wantsReferenceImages(question: string): boolean {
   return isReferenceImageRequest(question)
 }
 
+/** Open the catalogue and image connections early: the first photo arrives sooner. */
+let warmed = false
+function warmReferenceHosts() {
+  if (warmed || typeof window === "undefined") return
+  warmed = true
+  for (const host of ["https://upload.wikimedia.org", "https://commons.wikimedia.org", "https://ru.wikipedia.org", "https://en.wikipedia.org"]) {
+    try { preconnect(host, { crossOrigin: "anonymous" }) } catch { /* Optional optimisation. */ }
+  }
+}
+
 /** Direct browser catalogue requests: no image proxy, no generation credits. */
 export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, compact = false, hero = false, lineup = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; compact?: boolean; hero?: boolean; lineup?: boolean; children?: ReactNode }) {
   const sources = useContext(ReferencePhotoSources)
@@ -110,7 +119,8 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   const [selected, setSelected] = useState<MalikVisualImage | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [failedSourceUrls, setFailedSourceUrls] = useState<string[]>([])
-  const [dimensions, setDimensions] = useState<{ url: string; width: number; height: number } | null>(null)
+  const [loadedUrl, setLoadedUrl] = useState("")
+  useEffect(() => { if (plan) warmReferenceHosts() }, [plan])
   const key = plan ? referenceCacheKey(plan) : ""
   const active = isLatest || nearViewport
   const collection = Boolean(plan?.subjects?.length)
@@ -138,7 +148,9 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   }, [plan, active, collection, result, key])
   if (!plan) return children || null
   const images = sourcePhoto ? [sourcePhoto] : result?.key === key ? result.images : null
-  const imageSize = dimensions && dimensions.url === images?.[0]?.url ? `Превью ${dimensions.width} × ${dimensions.height} px` : ""
+  const shown = (url?: string) => Boolean(url && loadedUrl === url)
+  // The newest answer's first photo is fetched at once, not when scrolled to.
+  const priority = isLatest ? { loading: "eager" as const, fetchPriority: "high" as const } : { loading: "lazy" as const }
   const retry = () => { invalidateReferenceImages(plan); setResult(null); setAttempt((value) => value + 1) }
   const failed = (url: string) => {
     setSelected(null)
@@ -148,11 +160,14 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   }
   const status = images === null
     ? active ? <div className="malik-reference-loading" role="status" aria-label={"Загрузка изображения: " + plan.topic}><span /><span /><span /></div> : null
-    : !images.length && plan.explicit ? <button type="button" className="malik-reference-retry" onClick={retry}>Изображение недоступно · Повторить поиск</button> : null
+    // Nothing relevant was found: show nothing rather than an empty frame or
+    // an error line. The answer stays complete without a picture; a network
+    // return still retries quietly (see the "online" listener above).
+    : null
   if (collection) return <div className="min-w-0" data-malik-reference-topic={plan.topic}>
     {children}
     <section className="my-5 space-y-4" aria-label={"Фотографии · " + plan.topic} data-malik-reference-collection>
-      {plan.subjects!.slice(0, 60).map((subject, index) => <MalikReferenceImages key={subject} question="" row isLatest={isLatest && index < 6}
+      {plan.subjects!.slice(0, 60).map((subject, index) => <MalikReferenceImages key={subject} question="" row isLatest={isLatest && index < 10}
         planOverride={{ topic: subject, queries: [...new Set([referenceSearchTopic(subject), subject])], explicit: true, entity: true, kind: "reference", layout: "portrait" }}>
         <p className="text-sm font-medium text-zinc-100">{subject}</p>
       </MalikReferenceImages>)}
@@ -171,9 +186,10 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
       {images?.[0] ? <figure className="malik-answer-photo-hero__figure">
         <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + plan.topic}
           className={"block w-full overflow-hidden rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-white " + (images[0].role === "logo" ? "bg-white" : "bg-black")}>
-          <img src={images[0].url} alt={plan.topic} loading="lazy" decoding="async" referrerPolicy="no-referrer"
-            className={"mx-auto block h-auto w-full object-contain " + (images[0].role === "logo" ? "max-w-[250px] p-6" : "")}
-            onLoad={(event) => setDimensions({ url: images[0].url, width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => failed(images[0].url)} />
+          <img src={images[0].url} alt={plan.topic} {...priority} decoding="async" referrerPolicy="no-referrer"
+            data-loaded={shown(images[0].url) ? "" : undefined}
+            className={"malik-ref-img mx-auto block h-auto w-full object-contain " + (images[0].role === "logo" ? "max-w-[250px] p-6" : "")}
+            onLoad={() => setLoadedUrl(images[0].url)} onError={() => failed(images[0].url)} />
         </button>
         <figcaption className="mt-2 flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
           <strong className="font-bold text-white">{plan.topic}</strong>
@@ -182,7 +198,6 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
             <span className="truncate">{[images[0].credit, images[0].license].filter(Boolean).join(" · ") || "Источник фото"}</span><ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
           </a>
         </figcaption>
-        {imageSize ? <span className="mt-1 block text-xs text-zinc-500">{imageSize}</span> : null}
         {plan.caption ? <p className="mt-2 text-sm leading-6 text-zinc-300" data-malik-photo-caption>{plan.caption}</p> : null}
       </figure> : null}
       {children ? <div className="min-w-0">{children}</div> : null}
@@ -195,9 +210,10 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
       <div className="malik-answer-photo-stack">
         {images?.[0] ? <figure className={"malik-answer-photo-row__image shrink-0 overflow-hidden rounded-xl " + (plan.kind === "tutorial" || images[0].role === "logo" ? "bg-white" : "bg-black")}>
           <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + images[0].alt} className="block w-full focus-visible:outline focus-visible:outline-white">
-            <img src={images[0].url} alt={images[0].alt} loading="lazy" decoding="async" referrerPolicy="no-referrer"
-              className={"block h-auto w-full object-contain " + (images[0].role === "logo" ? "max-h-[250px] p-3" : "")}
-              onLoad={(event) => setDimensions({ url: images[0].url, width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+            <img src={images[0].url} alt={images[0].alt} {...priority} decoding="async" referrerPolicy="no-referrer"
+              data-loaded={shown(images[0].url) ? "" : undefined}
+              className={"malik-ref-img block h-auto w-full object-contain " + (images[0].role === "logo" ? "max-h-[250px] p-3" : "")}
+              onLoad={() => setLoadedUrl(images[0].url)}
               onError={() => failed(images[0].url)} />
           </button>
           <figcaption className="bg-black px-1.5 py-1 text-xs leading-4 text-zinc-400">
@@ -205,7 +221,6 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
             {plan.caption ? <span className="mb-1 block text-sm leading-6 text-zinc-300" data-malik-photo-caption>{plan.caption}</span> : null}
             <a href={safeSourceUrl(images[0].sourceUrl) || images[0].url} target="_blank" rel="noopener noreferrer" className="block truncate underline-offset-2 hover:underline" title={[images[0].credit, images[0].license].filter(Boolean).join(" · ")}>{images[0].credit || "Источник фото"}</a>
           </figcaption>
-          {imageSize ? <span className="mt-1 block text-xs text-zinc-500">{imageSize}</span> : null}
         </figure> : null}
         <div className="min-w-0 flex-1">{children}</div>
       </div>

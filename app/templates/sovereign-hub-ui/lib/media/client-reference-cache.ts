@@ -29,7 +29,7 @@ function acquireLookup(signal: AbortSignal): Promise<(() => void) | null> {
       activeLookups += 1
       resolve(() => { activeLookups -= 1; waitingLookups.shift()?.() })
     }
-    if (activeLookups < 3) grant()
+    if (activeLookups < 6) grant()
     else { waitingLookups.push(grant); signal.addEventListener("abort", cancel, { once: true }) }
   })
 }
