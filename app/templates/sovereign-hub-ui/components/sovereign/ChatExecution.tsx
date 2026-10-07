@@ -57,7 +57,7 @@ function Receipt({ step, expanded, now }: { step: ExecutionStep; expanded?: bool
   </li>
 }
 
-export function ChatExecution({ trace, live = false, sources = [], workMode = false, writing = false, legacyThought, stages = false, browserTask = "", latest = false }: { trace?: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; legacyThought?: { ms: number; steps: string[] }; browserTask?: string; latest?: boolean; /** Show progress inside the user-opened activity panel for a turn that started live. */ stages?: boolean }) {
+export function ChatExecution({ trace, live = false, sources = [], workMode = false, writing = false, legacyThought, stages = false, browserTask = "", latest = false }: { trace?: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; legacyThought?: { ms: number; steps: string[] }; browserTask?: string; latest?: boolean; /** Show the progress line under «Думаю…» for a turn that started live (visible without opening the panel). */ stages?: boolean }) {
   const [open, setOpen] = useState(false)
   // Decided once, when this answer's row mounts: only a turn that is being
   // answered right now gets the progress line, never a reopened history item.
@@ -90,9 +90,12 @@ export function ChatExecution({ trace, live = false, sources = [], workMode = fa
       <span className="malik-execution__summary-status" role="status" aria-live="polite">{summary}</span>
       <ChevronDown size={15} className={open ? "is-open" : ""} aria-hidden="true" />
     </button>
-    {open ? <div id={id} className="malik-execution__panel">
+    {/* The waiting animation is visible without opening the panel: «Думаю…»
+        and the progress line sit right under the request until the first
+        characters arrive, then fold away. Receipts stay behind the toggle. */}
     {active && !writing && trace ? <MalikLiveActivity /> : null}
     {stagesForTurn ? <MalikResponseStages trace={trace} writing={writing} /> : null}
+    {open ? <div id={id} className="malik-execution__panel">
     <p className="malik-execution__explanation">Здесь реальные этапы и результаты инструментов, а не скрытые внутренние рассуждения модели.</p>
     {overview.length ? <div className="malik-execution__overview" aria-label="Краткий отчёт"><h3>Как подготовлен ответ</h3><ul>{overview.map(text => <li key={text}>{text}</li>)}</ul></div> : null}
     {rows.length ? <ol className="malik-execution__steps">{rows.map((step) => <Receipt key={step.id} step={step} now={now} expanded={expand} />)}</ol> : legacySteps.length ? <div className="malik-execution__legacy"><p>Сохранены только сообщения о статусе. Подробные квитанции этого ответа отсутствуют.</p><ol>{legacySteps.map((text, index) => <li key={index}>{text}</li>)}</ol></div> : <p className="malik-execution__empty">{active ? "Ожидаю событий выполнения от сервера. Ответ появится ниже автоматически." : "Для этого ответа этапы не были сохранены. Восстанавливать или придумывать их задним числом нельзя."}</p>}
