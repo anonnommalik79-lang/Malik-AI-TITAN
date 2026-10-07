@@ -802,6 +802,8 @@ function ProjectDetail({
           <div className="max-h-[min(48dvh,430px)] shrink-0 overflow-y-auto overscroll-contain border-b border-white/[0.07] bg-[#0b0b0c] xl:hidden">
             <ProjectControlPanel
               project={project}
+              threads={threads}
+              activeThreadId={activeThreadId}
               selectedModelId={selectedModelId}
               plan={plan}
               onSelectModel={onSelectModel}
@@ -809,6 +811,9 @@ function ProjectDetail({
               instructions={instructions}
               setInstructions={setInstructions}
               onUpdateProject={onUpdateProject}
+              onCreateThread={onCreateThread}
+              onOpenThread={onOpenThread}
+              onDeleteThread={onDeleteThread}
               onSendPrompt={(prompt) => {
                 setMobileControlsOpen(false)
                 onSendPrompt(prompt)
