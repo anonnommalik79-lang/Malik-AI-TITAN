@@ -22,9 +22,14 @@ const REMOTE_IMAGE_TIMEOUT_MS = 20_000
 const HOST_MEMORY_BYTES = (() => {
   let detected = 2 * 1024 * 1024 * 1024
   try { detected = os.totalmem() } catch {}
-  for (const file of ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]) {
+  // Literal paths keep Turbopack's file tracing scoped to the cgroup files.
+  const readLimits = [
+    () => readFileSync("/sys/fs/cgroup/memory.max", "utf8"),
+    () => readFileSync("/sys/fs/cgroup/memory/memory.limit_in_bytes", "utf8"),
+  ]
+  for (const readLimit of readLimits) {
     try {
-      const limit = Number(readFileSync(file, "utf8").trim())
+      const limit = Number(readLimit().trim())
       if (Number.isSafeInteger(limit) && limit >= 128 * 1024 * 1024) {
         detected = Math.min(detected, limit)
       }

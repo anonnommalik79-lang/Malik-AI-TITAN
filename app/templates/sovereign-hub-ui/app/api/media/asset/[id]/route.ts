@@ -41,12 +41,13 @@ async function assetInfo(id: string): Promise<AssetInfo | null> {
     const directory = mediaAssetDirectory()
     const file = path.join(directory, `${id}.bin`)
     const metadataFile = path.join(directory, `${id}.json`)
-    const fileStat = await stat(file)
+    // Generated assets exist only at runtime and must not enter the build trace.
+    const fileStat = await stat(/* turbopackIgnore: true */ file)
     if (!fileStat.isFile() || fileStat.size <= 0) return null
 
     let mime = "image/jpeg"
     try {
-      const metadata = JSON.parse(await readFile(metadataFile, "utf8"))
+      const metadata = JSON.parse(await readFile(/* turbopackIgnore: true */ metadataFile, "utf8"))
       mime = safeMime(metadata?.mime)
     } catch {
       // The bytes are authoritative; old assets may predate the metadata file.
@@ -71,7 +72,7 @@ export async function GET(_request: Request, context: RouteContext) {
   if (!asset) return missing()
   if (!renderResponseFitsBudget(asset.bytes)) return renderBandwidthBlocked("media-asset", asset.bytes)
 
-  const body = Readable.toWeb(createReadStream(asset.file)) as ReadableStream<Uint8Array>
+  const body = Readable.toWeb(createReadStream(/* turbopackIgnore: true */ asset.file)) as ReadableStream<Uint8Array>
   return new Response(body, {
     status: 200,
     headers: {

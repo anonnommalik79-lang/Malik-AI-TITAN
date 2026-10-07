@@ -968,7 +968,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           setNotice("Трек готов — аудиофайл проверен браузером.")
           void refreshConfig()
           queueNextVariant()
-        }
+        }}
         onError={() => {
           if (!trackUrl) return
           setNotice("Провайдер не вернул воспроизводимый аудиотрек. Генерация не засчитана как готовая.")
@@ -978,7 +978,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           setHistory((rows) => rows.map((item) => item.resultUrl === trackUrl ? { ...item, status: "failed", error: "Провайдер вернул невалидный аудиофайл." } : item))
           setTrackUrl("")
           queueNextVariant()
-        }
+        }}
         onEmptied={() => setAudioDuration(0)}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
         onPlay={() => setPlaying(true)}

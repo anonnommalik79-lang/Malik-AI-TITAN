@@ -32,9 +32,14 @@ const HOST_MEMORY_BYTES = (() => {
   let detected = 2 * 1024 * 1024 * 1024
   try { detected = os.totalmem() } catch {}
   // The host can have 64GB while a Render container is limited to 512MB.
-  for (const file of ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]) {
+  // Literal paths prevent build tracing from expanding to the whole project.
+  const readLimits = [
+    () => readFileSync("/sys/fs/cgroup/memory.max", "utf8"),
+    () => readFileSync("/sys/fs/cgroup/memory/memory.limit_in_bytes", "utf8"),
+  ]
+  for (const readLimit of readLimits) {
     try {
-      const limit = Number(readFileSync(file, "utf8").trim())
+      const limit = Number(readLimit().trim())
       if (Number.isSafeInteger(limit) && limit >= 128 * 1024 * 1024) detected = Math.min(detected, limit)
     } catch {}
   }
