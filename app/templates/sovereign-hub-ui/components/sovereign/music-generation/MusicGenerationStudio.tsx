@@ -235,7 +235,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const [genreId, setGenreId] = useState<GenreId>("other")
   const [prompt, setPrompt] = useState("")
   const [lyrics, setLyrics] = useState("")
-  const [lyricsEnabled, setLyricsEnabled] = useState(true)
+  const [lyricsEnabled, setLyricsEnabled] = useState(false)
   const [lyricsLanguage, setLyricsLanguage] = useState<LyricsLanguage>("ru")
   const [duration, setDuration] = useState<number>(30)
   const [mood, setMood] = useState<Mood>("Другое")
@@ -250,8 +250,6 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const [coverPreview, setCoverPreview] = useState("")
   const [quality, setQuality] = useState<Quality>("320 kbps")
   const [variants, setVariants] = useState<number>(1)
-  const [modelChoice, setModelChoice] = useState("")
-  const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [mastering, setMastering] = useState(true)
   const [phonkMode, setPhonkMode] = useState(false)
   const [toast, setToast] = useState("")
@@ -269,7 +267,6 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const [projectNotice, setProjectNotice] = useState("")
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const coverInputRef = useRef<HTMLInputElement | null>(null)
-  const modelBoxRef = useRef<HTMLDivElement | null>(null)
   const toastTimerRef = useRef<number | undefined>(undefined)
   /** How many more variants of the current request are still to be sent. */
   const pendingVariantsRef = useRef(0)
@@ -404,13 +401,14 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         }
 
         if ((data?.status === "ready" || data?.status === "done") && data?.resultUrl) {
+          const resultUrl = String(data.resultUrl)
           setHistory((rows) => rows.map((item) =>
             item.requestId === activeRequestId
               ? {
                   ...item,
-                  status: "ready",
-                  progress: 100,
-                  resultUrl: String(data.resultUrl),
+                  status: "processing",
+                  progress: 99,
+                  resultUrl,
                   downloadUrl: String(data.downloadUrl || ""),
                   error: undefined,
                 }
@@ -418,13 +416,11 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           ))
           const item = history.find((row) => row.requestId === activeRequestId)
           setTrackTitle(item?.title || trackTitle)
-          setTrackUrl(String(data.resultUrl))
+          setTrackUrl(resultUrl)
           setCurrentTime(0)
-          setGenerating(false)
-          setNotice("Трек готов.")
+          setGenerating(true)
+          setNotice("Провайдер вернул аудио. Проверяю, что это реальный воспроизводимый трек…")
           setActiveRequestId("")
-          refreshConfig()
-          queueNextVariant()
           return
         }
 
@@ -547,7 +543,6 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           // ignores the rest, so the player always reports the format that
           // actually came back rather than the one that was asked for.
           quality,
-          model: modelName,
           mastering,
         }),
       })
@@ -622,11 +617,9 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         }
       })
       setNotice(
-        data?.deferred
-          ? "Free.ai сейчас забит. Malik AI поставил трек в свою автоочередь и сам будет ловить свободный слот — нажимать заново не нужно."
-          : data?.lyricsGenerated
-            ? "Malik AI написал слова. request_id получен — AceStep создаёт музыку и вокал…"
-            : "request_id получен. Ожидаю очередь музыкального провайдера…",
+        data?.lyricsGenerated
+          ? "Malik AI написал слова. Реальный request_id получен — музыкальная модель создаёт трек…"
+          : "Реальный request_id получен. Музыкальный провайдер создаёт трек…",
       )
     } catch (error) {
       setGenerating(false)
@@ -728,28 +721,9 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     toastTimerRef.current = window.setTimeout(() => setToast(""), 1800)
   }
 
-  const modelOptions = useMemo(
-    () => ["Auto · Malik Router", config?.model || "AceStep 1.5 XL Turbo", "Malik Music v1"]
-      .filter((name, index, all) => all.indexOf(name) === index),
-    [config?.model],
-  )
-  const modelName = modelChoice || config?.model || "AceStep 1.5 XL Turbo"
-
-  const cycleModel = () => {
-    const index = Math.max(0, modelOptions.indexOf(modelName))
-    const next = modelOptions[(index + 1) % modelOptions.length]
-    setModelChoice(next)
-    flash("Модель: " + next)
-  }
-
-  useEffect(() => {
-    if (!modelMenuOpen) return
-    const close = (event: PointerEvent) => {
-      if (!modelBoxRef.current?.contains(event.target as Node)) setModelMenuOpen(false)
-    }
-    document.addEventListener("pointerdown", close)
-    return () => document.removeEventListener("pointerdown", close)
-  }, [modelMenuOpen])
+  // Show only the model/provider that the server really configured.
+  const modelName = config?.model || "ACE-Step"
+  const providerName = config?.provider || "Музыкальный провайдер"
 
   useEffect(() => () => {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
@@ -983,15 +957,28 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         preload="metadata"
         onLoadedMetadata={(event) => {
           const value = event.currentTarget.duration
-          setAudioDuration(Number.isFinite(value) && value > 0 ? value : 0)
-        }}
+          const valid = Number.isFinite(value) && value > 0
+          setAudioDuration(valid ? value : 0)
+          if (!valid || !trackUrl) return
+          setHistory((rows) => rows.map((item) => item.resultUrl === trackUrl
+            ? { ...item, status: "ready", progress: 100, error: undefined }
+            : item))
+          setGenerating(false)
+          setLastSubmitFailed(false)
+          setNotice("Трек готов — аудиофайл проверен браузером.")
+          void refreshConfig()
+          queueNextVariant()
+        }
         onError={() => {
           if (!trackUrl) return
-          setNotice("Трек создан, но аудиофайл не воспроизводится в этом браузере. Ссылка провайдера могла истечь.")
+          setNotice("Провайдер не вернул воспроизводимый аудиотрек. Генерация не засчитана как готовая.")
           setPlaying(false)
-          setHistory((rows) => rows.map((item) => item.resultUrl === trackUrl ? { ...item, status: "failed", error: "Аудиофайл не воспроизводится." } : item))
+          setGenerating(false)
+          setLastSubmitFailed(true)
+          setHistory((rows) => rows.map((item) => item.resultUrl === trackUrl ? { ...item, status: "failed", error: "Провайдер вернул невалидный аудиофайл." } : item))
           setTrackUrl("")
-        }}
+          queueNextVariant()
+        }
         onEmptied={() => setAudioDuration(0)}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
         onPlay={() => setPlaying(true)}
@@ -1076,25 +1063,11 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
                   <div className="mm-opts">{durationOptions}</div>
                 </div>
 
-                <div className="mm-control mm-model-select" ref={modelBoxRef}>
-                  <div className="mm-label">Модель</div>
-                  <button type="button" className="mm-model-trigger" onClick={() => setModelMenuOpen((value) => !value)} aria-expanded={modelMenuOpen}>
-                    <span>{modelName}</span><b>⌄</b>
-                  </button>
-                  {modelMenuOpen ? (
-                    <div className="mm-model-menu">
-                      {modelOptions.map((name) => (
-                        <button
-                          key={name}
-                          type="button"
-                          className={"mm-model-option" + (name === modelName ? " is-active" : "")}
-                          onClick={() => { setModelChoice(name); setModelMenuOpen(false); flash("Модель: " + name) }}
-                        >
-                          {name}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
+                <div className="mm-control mm-model-select" data-real-music-provider>
+                  <div className="mm-label">Реальная модель</div>
+                  <div className="mm-model-trigger" aria-label="Активная музыкальная модель">
+                    <span>{modelName}</span><b>{providerName}</b>
+                  </div>
                 </div>
 
                 <div className="mm-control">
@@ -1257,9 +1230,9 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           </div>
         </div>
 
-        <button type="button" className="mm-m-model" onClick={() => cycleModel()}>
-          <IconBox /><span>{modelName}</span><small>⌄</small>
-        </button>
+        <div className="mm-m-model" data-real-music-provider aria-label="Активная музыкальная модель">
+          <IconBox /><span>{modelName}</span><small>{providerName}</small>
+        </div>
 
         <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || (!musicUnlimited && config?.limits.remaining === 0)}>
           {generating ? <IconSpinner /> : <IconPlay />}

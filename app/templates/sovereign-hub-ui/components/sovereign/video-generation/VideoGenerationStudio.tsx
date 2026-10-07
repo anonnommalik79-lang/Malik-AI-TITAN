@@ -328,7 +328,6 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [thumbPage, setThumbPage] = useState(0)
   const [modelNotice, setModelNotice] = useState("")
   const [selectedModelId, setSelectedModelId] = useState<(typeof MOBILE_MODELS)[number]["id"]>("pixazo")
-  const [mobileModelOpen, setMobileModelOpen] = useState(false)
   const [modelAvailability, setModelAvailability] = useState<Partial<Record<VideoProviderId, boolean>>>({})
   const [mobilePanel, setMobilePanel] = useState<"text" | "image" | "video" | "style">("text")
   const busy = phase === "queued" || phase === "rendering"
@@ -396,7 +395,6 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   const changeMode = (nextMode: VideoMode) => {
     if (busy || nextMode === mode) return
-    setMobileModelOpen(false)
     setMode(nextMode)
     setSourceFile(null)
     setProjectImage(null)
@@ -951,48 +949,46 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           </div>
         </div>
 
-        <button
-          type="button"
-          className="mv2m__model-select"
-          onClick={() => setMobileModelOpen((open) => !open)}
-          disabled={busy}
-          aria-expanded={mobileModelOpen}
-          aria-controls="mv2-mobile-models"
-        >
-          <Box />
-          <span className="mv2m__model-select-copy"><small>Модель</small><strong>{selectedModel.name}</strong></span>
-          <span className="mv2m__model-chevron">{mobileModelOpen ? "⌃" : "⌄"}</span>
-        </button>
+        <div className="mv2m__model-head" aria-label="Текущая видеомодель">
+          <span><Box /> Модели видео</span>
+          <strong>{selectedModel.name}</strong>
+        </div>
+
+        <div id="mv2-mobile-models" className="mv2m__model-picker is-always-open" role="group" aria-label="Выбор видеомодели">
+          {MOBILE_MODELS.map((model) => {
+            const available = modelAvailability[model.id] !== false
+            const supported = supportsMode(model.id, mode) && (duration !== 10 || model.id === "magichour" || model.id === "runway")
+            const active = selectedModelId === model.id
+            return (
+              <button
+                key={model.id}
+                type="button"
+                className={active ? "is-active" : ""}
+                disabled={!available || !supported || busy}
+                onClick={() => selectVideoModel(model)}
+                aria-pressed={active}
+                data-provider={model.provider}
+              >
+                <span className="mv2m__model-title">{model.name}</span>
+                <small>
+                  {!available
+                    ? "Не подключена"
+                    : !supportsMode(model.id, mode)
+                      ? "Только Текст → Видео"
+                      : duration === 10 && model.id !== "magichour" && model.id !== "runway"
+                        ? "Только 5 сек"
+                        : `${model.tier} · ${model.subtitle}`}
+                </small>
+              </button>
+            )
+          })}
+        </div>
 
         <div className="mv2m__controls">
           <button type="button" onClick={cycleMobileDuration} disabled={busy || mode === "video"}><Clock3 /><span>{mode === "video" ? "до 10 сек" : `${duration} секунд`}</span></button>
           <button type="button" onClick={cycleMobileQuality} disabled={busy}><Monitor /><span>{QUALITY_RESOLUTION[quality]}</span></button>
           <button type="button" onClick={cycleMobileRatio} disabled={busy}><RectangleHorizontal /><span>{ratio}</span></button>
         </div>
-        {mobileModelOpen ? (
-          <div id="mv2-mobile-models" className="mv2m__model-picker" role="group" aria-label="Выбор видеомодели">
-            {MOBILE_MODELS.map((model) => {
-              const available = modelAvailability[model.id] !== false
-              const supported = supportsMode(model.id, mode) && (duration !== 10 || model.id === "magichour")
-              return (
-                <button
-                  key={model.id}
-                  type="button"
-                  className={selectedModelId === model.id ? "is-active" : ""}
-                  disabled={!available || !supported || busy}
-                  onClick={() => {
-                    selectVideoModel(model)
-                    setMobileModelOpen(false)
-                  }}
-                >
-                  <span>{model.name}</span>
-                  <small>{!available ? "Не подключена" : !supported ? "Только Текст → Видео" : duration === 10 && model.id !== "magichour" && model.id !== "runway" ? "Только 5 сек" : model.subtitle}</small>
-                </button>
-              )
-            })}
-          </div>
-        ) : null}
-
         <button
           type="button"
           className="mv2m__generate"
@@ -1300,6 +1296,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           .mv2m__prompt-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.mv2m__prompt-tools{display:flex;gap:7px}.mv2m__prompt-tools button{width:29px;height:29px;padding:0;border:1px solid #2c3037;border-radius:8px;background:#14171c;color:#c1c6ce;display:grid;place-items:center}.mv2m__prompt-tools button svg{width:14px;height:14px}
           .mv2m__counter{display:flex;align-items:center;gap:7px;color:#777e89;font-size:8px}.mv2m__counter button{width:20px;height:20px;padding:0;border:0;border-radius:50%;background:#343840;color:#aeb4bd;display:grid;place-items:center}.mv2m__counter button svg{width:11px;height:11px}
           .mv2m__model-select{width:100%;min-height:48px;margin-top:8px;padding:7px 10px;border:1px solid #343941;border-radius:12px;background:#12151a;color:#fff;display:grid;grid-template-columns:28px minmax(0,1fr) 22px;align-items:center;gap:8px;text-align:left}.mv2m__model-select>svg{width:18px;height:18px}.mv2m__model-select-copy{min-width:0;display:flex;flex-direction:column;gap:2px}.mv2m__model-select-copy small{font-size:8px;color:#7f8792}.mv2m__model-select-copy strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mv2m__model-chevron{text-align:right;color:#aeb5bf;font-size:13px}
+          .mv2m__model-head{width:100%;margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;color:#fff}.mv2m__model-head>span{display:flex;align-items:center;gap:6px;color:#b9c0ca;font-size:10px;font-weight:700}.mv2m__model-head>span svg{width:14px;height:14px}.mv2m__model-head>strong{min-width:0;max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;color:#fff}
+          .mv2m__model-picker.is-always-open{display:grid!important;visibility:visible!important;opacity:1!important;position:relative!important;z-index:2!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;max-height:238px!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+          .mv2m__model-picker .mv2m__model-title{padding-right:16px}
           .mv2m__controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}
           .mv2m__controls button{min-width:0;height:38px;padding:0 7px;border:1px solid #2b2e35;border-radius:10px;background:#111318;color:#bcc2cb;display:flex;align-items:center;justify-content:center;gap:5px;font-size:9px;white-space:nowrap}.mv2m__controls button svg{width:13px;height:13px;flex:0 0 13px}.mv2m__controls button span{overflow:hidden;text-overflow:ellipsis}.mv2m__controls button small{font-size:8px;color:#858c96}
           .mv2m__model-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px;padding:8px;border:1px solid #292d35;border-radius:12px;background:#0b0d11;max-height:260px;overflow-y:auto;-webkit-overflow-scrolling:touch}

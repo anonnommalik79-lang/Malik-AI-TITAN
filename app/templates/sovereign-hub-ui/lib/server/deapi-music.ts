@@ -650,13 +650,8 @@ export async function submitDeapiMusic(input: {
     const fallback = await submitDeapiFallback(input)
     if (fallback.ok) return fallback
 
-    // A saturated public queue is temporary, not a failed generation. Keep a
-    // Malik-owned deferred job and retry Free.ai from the normal status poll
-    // instead of forcing the user to repeatedly press Generate.
-    if (freeFailure && retryableFreeAiFailure(freeFailure.status, freeFailure.error)) {
-      return createDeferredMusicJob(input, `Free.ai: ${freeFailure.error}; deAPI fallback: ${fallback.error}`)
-    }
-
+    // No provider accepted the request: fail truthfully. Do not fabricate a
+    // local queued job that can sit on Render for hours without audio.
     return {
       ok: false as const,
       status: fallback.status || freeFailure?.status || 502,
@@ -667,9 +662,6 @@ export async function submitDeapiMusic(input: {
   }
 
   if (freeFailure) {
-    if (retryableFreeAiFailure(freeFailure.status, freeFailure.error)) {
-      return createDeferredMusicJob(input, freeFailure.error)
-    }
     return { ok: false as const, status: freeFailure.status, error: freeFailure.error }
   }
 
