@@ -1,206 +1,10 @@
-/** A curated catalogue of site directions and their standalone previews. */
-
-export type LibraryCategory =
-  | "Автомобили" | "Роскошь" | "Красота" | "Мода" | "Технологии"
-  | "Недвижимость" | "Рестораны" | "Путешествия" | "Бизнес" | "Спорт"
-
-export type LibraryTemplate = {
-  id: number
-  slug: string
-  name: string
-  category: LibraryCategory
-  subcategory: string
-  featured: boolean
-  popularity: number
-  preview: string
-}
-
-type CategoryStyle = { accent: string; headline: string; tagline: string }
-
-export const LIBRARY_STYLES: Record<LibraryCategory, CategoryStyle> = {
-  "Автомобили": { accent: "#ffc107", headline: "BEYOND LIMITS.", tagline: "Performance engineered for a world that refuses to stand still." },
-  "Роскошь": { accent: "#e8c274", headline: "TIMELESS BY DESIGN.", tagline: "Precision, character and craftsmanship made to outlive trends." },
-  "Красота": { accent: "#e8a8c9", headline: "A SIGNATURE IN THE AIR.", tagline: "A distinctive experience created with detail, depth and lasting presence." },
-  "Мода": { accent: "#f1c6d9", headline: "ICONIC STYLE.", tagline: "A modern collection built around form, confidence and unmistakable identity." },
-  "Технологии": { accent: "#7cc7ff", headline: "BUILT FOR TOMORROW.", tagline: "Intelligent technology, refined for the way the future should feel." },
-  "Недвижимость": { accent: "#d9ba7c", headline: "OWN THE HORIZON.", tagline: "Exceptional spaces, considered architecture and a new standard of living." },
-  "Рестораны": { accent: "#f0ad6a", headline: "TASTE, REIMAGINED.", tagline: "A cinematic dining experience where craft, atmosphere and flavour meet." },
-  "Путешествия": { accent: "#83d4ff", headline: "GO BEYOND.", tagline: "Extraordinary destinations designed around effortless, memorable travel." },
-  "Бизнес": { accent: "#9caeff", headline: "BUILD WHAT'S NEXT.", tagline: "Clear thinking, premium execution and systems designed to scale." },
-  "Спорт": { accent: "#b6ff4e", headline: "MOVE WITHOUT LIMITS.", tagline: "Performance, precision and energy engineered for the next move." },
-}
-
-export const LIBRARY_CATEGORIES = Object.keys(LIBRARY_STYLES) as LibraryCategory[]
-
-type Row = [number, string, string, string, boolean, number]
-
-const ROWS: Row[] = [
-  [1, "Velocis Black", "Автомобили", "Авто / Транспорт", true, 100],
-  [2, "Aurelius Chrono", "Роскошь", "Часы / Элитные товары", true, 99],
-  [3, "Noir 54 Parfum", "Красота", "Парфюмерия / Ароматы", true, 98],
-  [4, "Velora Atelier", "Мода", "Одежда / Аксессуары", true, 97],
-  [5, "Aure Studio", "Технологии", "Техника / Гаджеты", true, 96],
-  [6, "Northline Motors", "Автомобили", "Автомобили", true, 95],
-  [7, "Novus Tech", "Технологии", "Технологии", true, 94],
-  [8, "Altura Estate", "Недвижимость", "Недвижимость", true, 93],
-  [9, "Maison Noir", "Рестораны", "Рестораны", true, 92],
-  [10, "Ember House", "Путешествия", "Отели", true, 91],
-  [11, "Terravista Living", "Недвижимость", "Путешествия", true, 90],
-  [12, "Horizon Villas", "Недвижимость", "Виллы и дома", true, 89],
-  [13, "Aeron Run", "Путешествия", "Авиация", true, 88],
-  [14, "Volten Energy", "Технологии", "Экология", true, 87],
-  [15, "Anvil Studios", "Бизнес", "Креативные агентства", true, 86],
-  [16, "Maison Vanta", "Мода", "Мода", false, 85],
-  [17, "Noir Atelier", "Мода", "Мода", false, 84],
-  [18, "Élan 26", "Мода", "Мода", false, 83],
-  [19, "Velora Mode", "Мода", "Мода", false, 82],
-  [20, "Auré Studio", "Мода", "Мода", false, 81],
-  [21, "Monochrome House", "Мода", "Мода", false, 80],
-  [22, "Sable Maison", "Мода", "Мода", false, 79],
-  [23, "Lumière Mode", "Мода", "Мода", false, 78],
-  [24, "Étoile Noire", "Мода", "Мода", false, 77],
-  [25, "Aeterna Mobile", "Технологии", "Технологии", false, 76],
-  [26, "Orbit One", "Технологии", "Технологии", false, 75],
-  [27, "Vanta X", "Технологии", "Технологии", false, 74],
-  [28, "Lumen Device", "Технологии", "Технологии", false, 73],
-  [29, "Nexis One", "Технологии", "Технологии", false, 72],
-  [30, "Vertex Core", "Технологии", "Технологии", false, 71],
-  [31, "Axiom Systems", "Технологии", "Технологии", false, 70],
-  [32, "Nova Imaging", "Технологии", "Технологии", false, 69],
-  [33, "Redluxe", "Автомобили", "Автомобили", false, 68],
-  [34, "Aurex GT", "Автомобили", "Автомобили", false, 67],
-  [35, "Vanta Motors", "Автомобили", "Автомобили", false, 66],
-  [36, "Noir RS", "Автомобили", "Автомобили", false, 65],
-  [37, "Monaco Performance", "Автомобили", "Автомобили", false, 64],
-  [38, "Zenith Auto", "Автомобили", "Автомобили", false, 63],
-  [39, "Solaris GT", "Автомобили", "Автомобили", false, 62],
-  [40, "Obsidian Motors", "Автомобили", "Автомобили", false, 61],
-  [41, "Cinder GT", "Автомобили", "Автомобили", false, 60],
-  [42, "Vorlen Time", "Роскошь", "Роскошь", false, 59],
-  [43, "Monarch Horology", "Роскошь", "Роскошь", false, 58],
-  [44, "Crown & Co.", "Роскошь", "Роскошь", false, 57],
-  [45, "Sovereign Gems", "Роскошь", "Роскошь", false, 56],
-  [46, "Noir Bijoux", "Роскошь", "Роскошь", false, 55],
-  [47, "Maison Éclat", "Роскошь", "Роскошь", false, 54],
-  [48, "Aurelia Jewels", "Роскошь", "Роскошь", false, 53],
-  [49, "Obsidian Diamond", "Роскошь", "Роскошь", false, 52],
-  [50, "Arc Residence", "Недвижимость", "Недвижимость", false, 51],
-  [51, "Nordic House", "Недвижимость", "Недвижимость", false, 50],
-  [52, "Palm Estates", "Недвижимость", "Недвижимость", false, 49],
-  [53, "Skyline House", "Недвижимость", "Недвижимость", false, 48],
-  [54, "Urban Loft", "Недвижимость", "Недвижимость", false, 47],
-  [55, "Aurelia Living", "Недвижимость", "Недвижимость", false, 46],
-  [56, "Monaco Estate", "Недвижимость", "Недвижимость", false, 45],
-  [57, "Lumière Table", "Рестораны", "Рестораны", false, 44],
-  [58, "Omakai", "Рестораны", "Рестораны", false, 43],
-  [59, "Maison Rouge", "Рестораны", "Рестораны", false, 42],
-  [60, "Sora Dining", "Рестораны", "Рестораны", false, 41],
-  [61, "Auré Kitchen", "Рестораны", "Рестораны", false, 40],
-  [62, "Noir Table", "Рестораны", "Рестораны", false, 39],
-  [63, "Riviera Dining", "Рестораны", "Рестораны", false, 38],
-  [64, "Atelier Chef", "Рестораны", "Рестораны", false, 37],
-  [65, "Velá Bistro", "Рестораны", "Рестораны", false, 36],
-  [66, "Amber Reserve", "Красота", "Красота", false, 35],
-  [67, "Maison Sillage", "Красота", "Красота", false, 34],
-  [68, "Auré Parfum", "Красота", "Красота", false, 33],
-  [69, "Velvet Oud", "Красота", "Красота", false, 32],
-  [70, "Lumière Scent", "Красота", "Красота", false, 31],
-  [71, "Derma Atelier", "Красота", "Красота", false, 30],
-  [72, "Aurelia Skin", "Красота", "Красота", false, 29],
-  [73, "Serein Beauty", "Красота", "Красота", false, 28],
-  [74, "Maison Pure", "Красота", "Красота", false, 27],
-  [75, "Monaco Hotel", "Путешествия", "Путешествия", false, 26],
-  [76, "Aurelia Resort", "Путешествия", "Путешествия", false, 25],
-  [77, "Horizon Retreat", "Путешествия", "Путешествия", false, 24],
-  [78, "Sovereign Stay", "Путешествия", "Путешествия", false, 23],
-  [79, "Atlas Escape", "Путешествия", "Путешествия", false, 22],
-  [80, "Riviera Resort", "Путешествия", "Путешествия", false, 21],
-  [81, "Alpine Maison", "Путешествия", "Путешествия", false, 20],
-  [82, "Maison Voyage", "Путешествия", "Путешествия", false, 19],
-  [83, "Volten Athletics", "Спорт", "Спорт", false, 18],
-  [84, "Kinetiq", "Спорт", "Спорт", false, 17],
-  [85, "Rift Athletics", "Спорт", "Спорт", false, 16],
-  [86, "Nova Motion", "Спорт", "Спорт", false, 15],
-  [87, "Arcstride", "Спорт", "Спорт", false, 14],
-  [88, "Pulseform", "Спорт", "Спорт", false, 13],
-  [89, "Gravity Run", "Спорт", "Спорт", false, 12],
-  [90, "Terra Sport", "Спорт", "Спорт", false, 11],
-  [91, "Vanta Active", "Спорт", "Спорт", false, 10],
-  [92, "Sovereign Capital", "Бизнес", "Бизнес", false, 9],
-  [93, "Apex Advisory", "Бизнес", "Бизнес", false, 8],
-  [94, "Northstar Partners", "Бизнес", "Бизнес", false, 7],
-  [95, "Vault Finance", "Бизнес", "Бизнес", false, 6],
-  [96, "Quorum Studio", "Бизнес", "Бизнес", false, 5],
-  [97, "Crown Ventures", "Бизнес", "Бизнес", false, 4],
-  [98, "Blackstone Creative", "Бизнес", "Бизнес", false, 3],
-  [99, "Atlas Commerce", "Бизнес", "Бизнес", false, 2],
-  [100, "Vertex Labs", "Бизнес", "Бизнес", false, 1],]
-
-function slugify(value: string) {
-  return value.toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
-    .replace(/^-+|-+$/g, "")
-}
-
-export const LIBRARY_TEMPLATES: LibraryTemplate[] = ROWS.map(([id, name, category, subcategory, featured, popularity]) => ({
-  id,
-  slug: slugify(name),
-  name,
-  category: category as LibraryCategory,
-  subcategory,
-  featured,
-  popularity,
-  preview: `/library/gallery/${String(id).padStart(3, "0")}.webp`,
-}))
-
-export function libraryTemplateById(id: number) {
-  return LIBRARY_TEMPLATES.find((template) => template.id === id)
-}
-
+/** Shared standalone-site renderer used only by the separate «Сайты» studio. */
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&#039;")
 }
 
-/**
- * The template's own prompt, for handing a style to the site generator.
- *
- * It describes the direction rather than naming the brand, because the point of
- * "use this style" is a new site that looks like this one - not a copy of it
- * with someone else's name on the front.
- */
-export function libraryPrompt(template: LibraryTemplate) {
-  const style = LIBRARY_STYLES[template.category]
-  const composition = [
-    "асимметричный hero с крупным заголовком слева и визуальным продуктом справа",
-    "редакционная композиция с ритмом крупных изображений и узких текстовых колонок",
-    "иммерсивный полноэкранный hero с ясной типографикой и контрастными секциями",
-    "архитектурная сетка с акцентом на детали, воздух и последовательность истории",
-  ][template.id % 4]
-  return [
-    `Создай оригинальный production-ready сайт в направлении: ${template.category.toLowerCase()} / ${template.subcategory.toLowerCase()}.`,
-    `Настроение и подача: ${style.tagline}`,
-    `Композиция: ${composition}. Акцентный цвет ${style.accent} на глубоком чёрном фоне.`,
-    "Тонкая типографика с большим контрастом размеров, рабочее мобильное меню, секции продукта, полезной информации и CTA,",
-    "адаптивная сетка и цельная визуальная система.",
-    "Не выдумывай цены, отзывы, метрики, адреса или наличие товара: если данных нет, делай честный концепт с редактируемыми секциями.",
-    "Не копируй чужие логотипы, тексты или фирменные элементы буквально.",
-  ].join(" ")
-}
-
-/**
- * Rebuilds one of the hundred sites as a standalone HTML file.
- *
- * Asset paths are absolute so the result works in three places without editing:
- * an iframe preview, a new browser tab, and a file the person downloads and
- * opens from their disk while still online.
- */
-/**
- * What the builder needs to know. Deliberately not LibraryTemplate: the Сайты
- * gallery has its own thirty templates with their own categories, and they get
- * to be real working sites too rather than pictures of sites.
- */
 export type SiteDescriptor = {
   name: string
   category: string
@@ -242,20 +46,6 @@ function storyFor(category: string): SiteStory {
   return STORIES[category] || { eyebrow: "Создано с намерением", promise: "Ясная идея, выразительная форма и место для вашего продукта.", sections: ["Идея", "Возможности", "Следующий шаг"], questions: ["Что это за проект?", "Как он работает?", "Как связаться?"], action: "Исследовать" }
 }
 
-export function buildLibrarySite(template: LibraryTemplate, origin = "") {
-  const style = LIBRARY_STYLES[template.category]
-  return buildTemplateSite({
-    name: template.name,
-    category: template.category,
-    subcategory: template.subcategory,
-    preview: template.preview,
-    accent: style.accent,
-    headline: style.headline,
-    tagline: style.tagline,
-    number: String(template.id).padStart(3, "0"),
-  }, origin)
-}
-
 export function buildTemplateSite(template: SiteDescriptor, origin = "") {
   const style = { accent: template.accent, headline: template.headline, tagline: template.tagline }
   const story = storyFor(template.category)
@@ -265,10 +55,10 @@ export function buildTemplateSite(template: SiteDescriptor, origin = "") {
   const category = escapeHtml(template.category)
   const subcategory = escapeHtml(template.subcategory)
   const base = origin.replace(/\/+$/, "")
-  const previewPath = /^\/(?:library\/gallery\/\d{3}|sites\/gallery\/[a-z0-9-]+)\.webp$/.test(template.preview) ? template.preview : "/library/hero.webp"
+  const previewPath = /^\/sites\/gallery\/[a-z0-9-]+\.webp$/.test(template.preview) ? template.preview : "/sites/gallery/apple-experience.webp"
   const preview = `${base}${previewPath}`
   const features = story.sections.map((title, index) => `<article class="feature"><span>0${index + 1} / ${number}</span><h3>${escapeHtml(title)}</h3><p>${index === 0 ? `${name} — ${escapeHtml(story.promise)}` : index === 1 ? `В основе направления «${subcategory}» — ясная структура и внимание к каждому взаимодействию.` : `Продолжение истории ${name}: пространство для деталей, выбора и следующего шага.`}</p></article>`).join("")
-  const faq = story.questions.map((question, index) => `<details><summary>${escapeHtml(question)}</summary><p>${index === 0 ? `Это демонстрационный концепт ${name} для направления «${subcategory}». Содержание и предложения можно настроить под реальный проект.` : index === 1 ? "Да. Дальнейшие разделы, карточки и материалы можно адаптировать в редакторе Malik AI под ваши данные." : "Используйте «Использовать стиль» в библиотеке Malik AI, чтобы создать собственную версию с актуальной контактной информацией."}</p></details>`).join("")
+  const faq = story.questions.map((question, index) => `<details><summary>${escapeHtml(question)}</summary><p>${index === 0 ? `Это демонстрационный концепт ${name} для направления «${subcategory}». Содержание и предложения можно настроить под реальный проект.` : index === 1 ? "Да. Дальнейшие разделы, карточки и материалы можно адаптировать в редакторе Malik AI под ваши данные." : "Используйте шаблон в разделе «Сайты» Malik AI, чтобы создать собственную версию с актуальной контактной информацией."}</p></details>`).join("")
 
   return `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -298,7 +88,7 @@ h1{font-size:clamp(62px,7.7vw,132px);line-height:.86;letter-spacing:-.065em;marg
 </style></head>
 <body class="v${variant}">
 <section class="hero" id="home">
-  <img class="bg" src="${preview}" alt="" onerror="this.src='${base}/library/hero.webp'">
+  <img class="bg" src="${preview}" alt="" onerror="this.src='${base}/sites/gallery/apple-experience.webp'">
   <div class="shade"></div>
   <nav class="nav"><div class="brand">${name}</div>
     <button class="menu" id="menu" aria-label="Меню" aria-expanded="false" aria-controls="links">☰</button>

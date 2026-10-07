@@ -14,6 +14,7 @@ import {
   Image as ImageIcon,
   Languages,
   LayoutTemplate,
+  History,
   LifeBuoy,
   ListChecks,
   LogOut,
@@ -111,7 +112,7 @@ export const MALIK_CLOSE_MOBILE_MENU_EVENT = "malik-close-mobile-menu"
 const MAIN_ACTIONS: SidebarAction[] = [
   { id: "new", label: "Новый чат", icon: MessageSquarePlus, action: "new" },
   { id: "voice", label: "Голосовой режим", icon: Mic, action: "voice" },
-  { id: "library", label: "Библиотека", icon: LayoutTemplate, view: "templates", badge: "PRO" },
+  { id: "library", label: "Библиотека", icon: History, view: "templates" },
   { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects", badge: "PRO", requiresPro: true },
   { id: "tasks", label: "Задачи", icon: ListChecks, action: "tasks" },
 ]

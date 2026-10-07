@@ -120,12 +120,6 @@ const WebsiteGenerationStudio = dynamic(
   () => import("./website-generation/WebsiteGenerationStudio").then((mod) => mod.WebsiteGenerationStudio),
   { ssr: false },
 )
-// A hundred previews and a hundred rendered sites: loaded when the Library is
-// opened, not on every page view.
-const SiteLibraryPanel = dynamic(
-  () => import("./library/SiteLibraryPanel").then((mod) => mod.SiteLibraryPanel),
-  { ssr: false },
-)
 const DigitalBridgeSectionExperience = dynamic(
   () => import("./digital-bridge-sections").then((mod) => mod.DigitalBridgeSectionExperience),
   { ssr: false },
@@ -7792,22 +7786,10 @@ const shouldShowMobilePreviewButton =
       return <SovereignSettingsPanel username={userDisplayName || username} email={guestMode ? undefined : workOSUser?.email} plan={currentPlan} selectedModelId={selectedModelId} onModelChange={handleModelChange} onLogout={handleLogout} onClose={closeAccountPanel} onOpenBilling={() => safeOpenView("billing")} onExport={exportConversations} />;
     }
     if (activeView === "templates") {
-      // The Library hands a style straight to the site generator. Without that
-      // it is a hundred pictures nobody can do anything with.
-      return (
-        <SiteLibraryPanel
-          plan={currentPlan}
-          onOpenBilling={() => safeOpenView("billing")}
-          onEditSavedSite={(id) => {
-            try { window.sessionStorage.setItem("malik-site-open-id-v1", id) } catch {}
-            safeOpenView("website-generation", "template")
-          }}
-          onUseStyle={(prompt) => {
-            try { window.sessionStorage.setItem("malik-site-template-prompt-v1", prompt) } catch {}
-            safeOpenView("website-generation", "template")
-          }}
-        />
-      );
+      // Library is the user's existing conversation history. It deliberately
+      // reuses the chats already loaded by Dashboard: no second database,
+      // no media duplication, no extra Render-resident cache and no preview preload.
+      return <ChatsListView chats={chats} onSelectChat={handleSelectChat} onNewChat={handleNewChat} libraryMode />;
     }
     if (activeView === "projects") {
       if (!hasMalikProAccess(currentPlan)) {
@@ -9790,52 +9772,142 @@ function ChatsListView({
   chats,
   onSelectChat,
   onNewChat,
+  libraryMode = false,
 }: {
   chats: Chat[]
   onSelectChat: (id: string) => void
   onNewChat: () => void
+  libraryMode?: boolean
 }) {
   const [query, setQuery] = useState("")
-  const filtered = chats.filter((chat) => chat.title.toLowerCase().includes(query.toLowerCase()))
+  const [visibleCount, setVisibleCount] = useState(60)
+  const needle = query.trim().toLocaleLowerCase("ru-RU")
+
+  // Only shallow-copy the chat references for sorting. We never clone message
+  // arrays, attachments, generated images or video payloads for Library.
+  const ordered = [...chats].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  )
+  const filtered = needle
+    ? ordered.filter((chat) => {
+        if (String(chat.title || "").toLocaleLowerCase("ru-RU").includes(needle)) return true
+        // Search the existing strings in place instead of joining the whole
+        // account history into another giant temporary string.
+        return chat.messages.some((message) =>
+          String(message.content || "").toLocaleLowerCase("ru-RU").includes(needle),
+        )
+      })
+    : ordered
+  const visible = filtered.slice(0, visibleCount)
+
+  const previewOf = (chat: Chat) => {
+    for (let index = chat.messages.length - 1; index >= 0; index -= 1) {
+      const text = String(chat.messages[index]?.content || "").replace(/\s+/g, " ").trim()
+      if (text) return text.slice(0, 150)
+    }
+    return "Пустой чат"
+  }
+
+  const kindOf = (chat: Chat) => {
+    if (chat.kind === "project") return "Проект"
+    return resolveWorkspaceMode(chat.workspaceMode) === "work" ? "Работа" : "Чат"
+  }
 
   return (
-    <div className="flex-1 h-full overflow-y-auto bg-[#030303] p-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-8 flex items-end justify-between">
+    <div
+      data-malik-library-history={libraryMode ? "true" : undefined}
+      className="h-full min-h-0 flex-1 overflow-y-auto bg-black px-4 py-5 text-white sm:px-7 lg:px-10"
+    >
+      <div className="mx-auto w-full max-w-6xl">
+        <div className="mb-6 flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-5xl font-black text-white">Chats</h1>
-            <p className="mt-2 text-gray-500">Conversation history and generated projects.</p>
+            {libraryMode ? <p className="mb-1 text-xs font-medium uppercase tracking-[0.18em] text-white/35">Malik AI</p> : null}
+            <h1 className="text-3xl font-semibold tracking-[-0.035em] text-white sm:text-4xl">
+              {libraryMode ? "Библиотека" : "Chats"}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/45">
+              {libraryMode
+                ? "Вся история Chat и Malik Work. Изображения, файлы, код и ответы остаются внутри исходных разговоров — без дублирования."
+                : "Conversation history and generated projects."}
+            </p>
           </div>
-          <button onClick={onNewChat} className="rounded-2xl bg-white px-5 py-3 font-black text-black">
-            New Chat
+          <button
+            type="button"
+            onClick={onNewChat}
+            className="h-10 rounded-full bg-white px-5 text-sm font-semibold text-black transition hover:bg-white/90"
+          >
+            Новый чат
           </button>
         </div>
 
-        <div className="relative mb-6">
-          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+        <label className="relative mb-5 block">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search chats..."
-            className="w-full rounded-2xl border border-white/10 bg-black py-4 pl-11 pr-4 text-white outline-none focus:border-violet-500"
+            onChange={(event) => {
+              setQuery(event.target.value)
+              setVisibleCount(60)
+            }}
+            placeholder={libraryMode ? "Поиск по всей истории…" : "Search chats..."}
+            className="h-12 w-full rounded-2xl border border-white/10 bg-[#090909] pl-11 pr-4 text-sm text-white outline-none placeholder:text-white/30 focus:border-white/25"
           />
-        </div>
+        </label>
 
-        <div className="space-y-3">
-          {filtered.map((chat) => (
+        {libraryMode ? (
+          <div className="mb-3 flex items-center justify-between px-1 text-xs text-white/35">
+            <span>История</span>
+            <span>{filtered.length}</span>
+          </div>
+        ) : null}
+
+        {visible.length ? (
+          <div className="divide-y divide-white/[0.07] border-y border-white/[0.07]">
+            {visible.map((chat) => (
+              <button
+                key={chat.id}
+                type="button"
+                onClick={() => onSelectChat(chat.id)}
+                className="group flex w-full items-center gap-4 px-1 py-4 text-left transition hover:bg-white/[0.025] sm:px-3"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-[#0b0b0b]">
+                  <MessageSquare className="h-4 w-4 text-white/70" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <strong className="truncate text-[15px] font-medium text-white">{chat.title || "Новый чат"}</strong>
+                    {chat.isPinned ? <Star className="h-3.5 w-3.5 shrink-0 fill-white text-white" /> : null}
+                  </span>
+                  <span className="mt-1 block truncate text-[13px] text-white/38">{previewOf(chat)}</span>
+                </span>
+                <span className="hidden shrink-0 text-right sm:block">
+                  <span className="block text-xs text-white/45">{kindOf(chat)} · {chat.messages.length}</span>
+                  <span className="mt-1 block text-[11px] text-white/25">{formatDateTime(chat.timestamp)}</span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-white/20 transition group-hover:translate-x-0.5 group-hover:text-white/55" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-white/10 bg-[#050505] text-center">
+            <div>
+              <MessageSquare className="mx-auto h-7 w-7 text-white/25" />
+              <p className="mt-3 text-sm font-medium text-white/65">{query ? "Ничего не найдено" : "История пока пустая"}</p>
+              <p className="mt-1 text-xs text-white/30">{query ? "Попробуйте другой запрос." : "Новые разговоры появятся здесь автоматически."}</p>
+            </div>
+          </div>
+        )}
+
+        {visible.length < filtered.length ? (
+          <div className="flex justify-center py-5">
             <button
-              key={chat.id}
-              onClick={() => onSelectChat(chat.id)}
-              className="flex w-full items-center justify-between rounded-3xl border border-white/10 bg-white/[0.03] p-5 text-left transition hover:bg-white/[0.06]"
+              type="button"
+              onClick={() => setVisibleCount((current) => current + 60)}
+              className="rounded-full border border-white/10 px-5 py-2 text-sm text-white/65 transition hover:border-white/20 hover:text-white"
             >
-              <div>
-                <h3 className="text-lg font-black text-white">{chat.title}</h3>
-                <p className="mt-1 text-sm text-gray-500">{formatDateTime(chat.timestamp)}</p>
-              </div>
-              <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-gray-300">{chat.messages.length} messages</span>
+              Показать ещё
             </button>
-          ))}
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )

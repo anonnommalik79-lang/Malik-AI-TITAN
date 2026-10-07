@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import { ArrowLeft, Code2, Download, ExternalLink, Globe2, Loader2, Plus, RotateCcw, Search, Trash2, Upload } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
-import { buildTemplateSite } from "@/lib/library/site-library"
+import { buildTemplateSite } from "@/lib/website/site-template-builder"
 import { OverlayPortal } from "@/components/sovereign/OverlayPortal"
 
 export type WebsiteGenerationStudioProps = {
