@@ -1,5 +1,6 @@
 import { malikComputerUseStatus, runMalikComputerTask } from "@/lib/server/computer-use-runtime"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { shouldUseDigitalBrowser } from "@/lib/ai/computer-use"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -12,6 +13,7 @@ type Body = {
   confirm?: boolean
   operation?: "start" | "poll" | "approve" | "cancel"
   approvalId?: string
+  workspaceMode?: string
 }
 
 export async function GET(request: Request) {
@@ -31,6 +33,9 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as Body
   const operation = body.operation || "start"
   if (!["start", "poll", "approve", "cancel"].includes(operation)) return Response.json({ ok: false, error: "INVALID_OPERATION" }, { status: 400 })
+  if (body.workspaceMode !== "work" || operation === "start" && !shouldUseDigitalBrowser(String(body.task || ""), true)) {
+    return Response.json({ ok: false, error: "BROWSER_TASK_REQUIRED", message: "Браузер доступен только в Malik Work для явного запроса выполнить действие на сайте." }, { status: 400 })
+  }
   if (["start", "approve"].includes(operation) && body.confirm !== true) {
     return Response.json({
       ok: false,

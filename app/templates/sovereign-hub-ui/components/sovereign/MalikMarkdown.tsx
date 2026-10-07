@@ -5,7 +5,7 @@ import { Archive, Check, Copy, Download, ExternalLink, Eye, RefreshCw } from "lu
 import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
 import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
-import { MalikReferenceImages, MalikVisualGallery, isSafeVisualUrl, type MalikVisualImage } from "./MalikVisualGallery"
+import { MalikReferenceImages, MalikVisualGallery, ReferencePhotoSources, isSafeVisualUrl, type MalikVisualImage } from "./MalikVisualGallery"
 import { MalikAnswerVisual } from "./MalikAnswerVisual"
 import { MalikAnswerCards } from "./MalikAnswerCards"
 import { parseAnswerCards, type AnswerCardsBlock } from "@/lib/ai/answer-cards"
@@ -14,6 +14,7 @@ import { parseAnswerVisual, inferTableVisual, inferListVisual, inferComparisonTa
 import { parseAnswerEntity } from "@/lib/ai/answer-entities"
 import { allowsAnswerPhotoHints, isAbstractPhotoSubject, planAnswerVisualSlots, referenceSearchTopic, visualSegmentLabel, type AnswerVisualSegment, type AnswerVisualSlot, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { groundedAnswerPhotoPlans, isPhotoLineup, parseAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
+import { sourceReferencePhoto } from "@/lib/media/source-reference-photos"
 
 /**
  * Renders an assistant answer as structured text.
@@ -837,6 +838,26 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
   const previousQuestion = visualContext?.previousQuestion || ""
   const previousAnswer = visualContext?.previousAnswer || ""
   const hasAttachment = Boolean(visualContext?.hasAttachment)
+  const structuredPhotos = useMemo(() => {
+    const result = new Map<number, Array<{ plan: ReferenceVisualPlan; caption: string }>>()
+    if (!allowsAnswerPhotoHints(question, hasAttachment)) return result
+    blocks.forEach((block, position) => {
+      let subjects: Array<{ name: string; caption: string }> = []
+      if (block.kind === "table") {
+        const column = block.headers.findIndex((header) => /модел|ноутбук|товар|назван|product|model|name|device|телефон/iu.test(header))
+        if (column >= 0) subjects = block.rows.map((row) => ({ name: visualSegmentLabel(row[column] || ""), caption: row.map((cell, index) => index === column ? "" : `${block.headers[index]}: ${cell}`).filter(Boolean).join(" · ") }))
+      } else if (block.kind === "visual" && block.visual && (block.visual.type === "bars" || block.visual.type === "metrics")) {
+        const visual = block.visual
+        subjects = visual.items.map((item) => ({ name: visualSegmentLabel(item.label), caption: `${item.value.toLocaleString("ru-RU")} ${visual.unit || ""}${item.detail ? " · " + item.detail : ""}`.trim() }))
+      }
+      const photos = subjects.flatMap(({ name, caption }) => {
+        const plan: ReferenceVisualPlan = { topic: name, queries: [referenceSearchTopic(name)], explicit: true, entity: true, layout: "landscape" }
+        return name.length >= 3 && sourceReferencePhoto(plan, citations) ? [{ plan, caption }] : []
+      }).slice(0, 3)
+      if (photos.length) result.set(position, photos)
+    })
+    return result
+  }, [blocks, question, hasAttachment, citations])
   const checklistPosition = useMemo(() => {
     if (!wantsAnswerChecklist(question) || blocks.some((block) => block.kind === "visual" && block.visual?.type === "checklist")) return -1
     let selected = -1
@@ -989,6 +1010,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
 
   return (
     <CitationContext.Provider value={citations?.length ? citations : null}>
+    <ReferencePhotoSources.Provider value={citations || []}>
     <div className={className ? `malik-md ${className}` : "malik-md"}>
       {codeFiles.length > 1 ? (
         <div className="malik-md-artifact-toolbar" role="group" aria-label="Файлы ответа">
@@ -1004,6 +1026,12 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
         const next = blocks[position + 1]
         const slot = visualSlots.get(key)
         const dataVisual = dataVisuals.get(position)
+        const sourcedPhotos = structuredPhotos.get(position)?.filter(({ plan }) => ![...photoPlans.values()].flat().some((hint) => hint.topic === plan.topic)
+          && ![...visualSlots.values()].some((slot) => slot.plan.topic === plan.topic)).map(({ plan, caption }) => (
+          <MalikReferenceImages key={plan.topic} question={question} planOverride={plan} row isLatest={visualContext?.isLatest}>
+            <p className="malik-md-p">{inline(caption, `${key}-${plan.topic}-caption`)}</p>
+          </MalikReferenceImages>
+        ))
         if (block.kind === "photos") {
           if (hintedAnchors.consumed.has(position)) return null
           const plans = hintedAnchors.unanchored.get(position)
@@ -1020,11 +1048,10 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
         }
         if (block.kind === "cards") {
           if (block.block) return <MalikAnswerCards key={key} block={block.block} sources={citations} autoPhotos={allowsAnswerPhotoHints(question, hasAttachment)} />
-          return block.pending && streaming ? <p key={key} className="malik-md-p malik-cards-pending" role="status">Собираю карточки…</p> : null
+          return null
         }
         if (block.kind === "visual") {
-          if (dataVisual) return <MalikAnswerVisual key={key} visual={dataVisual} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} />
-          if (block.pending && streaming && wantsAnswerVisuals(question)) return <p key={key} className="malik-md-p" role="status">Подготавливаю визуальный блок…</p>
+          if (dataVisual) return <Fragment key={key}><MalikAnswerVisual visual={dataVisual} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} />{sourcedPhotos}</Fragment>
           return null
         }
         // The photo row already owns these paragraphs, including across metadata.
@@ -1047,7 +1074,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
 
         if (block.kind === "table") {
           const comparison = inferComparisonTable(block.headers, block.rows, question, previous?.kind === "h" ? previous.text : "")
-          if (comparison) return <MalikAnswerVisual key={key} visual={comparison} />
+          if (comparison) return <Fragment key={key}><MalikAnswerVisual visual={comparison} />{sourcedPhotos}</Fragment>
           return (
             <Fragment key={key}>
               {dataVisual ? <MalikAnswerVisual visual={dataVisual} /> : null}
@@ -1065,6 +1092,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
                 </tbody>
               </table>
             </div>
+            {sourcedPhotos}
             </Fragment>
           )
         }
@@ -1118,6 +1146,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
         return slot ? <MalikReferenceImages key={key} question={question} planOverride={slot.plan} row={slot.row || !singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest}>{paragraph}</MalikReferenceImages> : <Fragment key={key}>{paragraph}</Fragment>
       })}
     </div>
+    </ReferencePhotoSources.Provider>
     </CitationContext.Provider>
   )
 }

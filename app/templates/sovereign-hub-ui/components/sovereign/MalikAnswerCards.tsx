@@ -8,6 +8,7 @@ import { isAbstractPhotoSubject, referenceSearchTopic, visualSegmentLabel } from
 import { subscribeReferenceImages } from "@/lib/media/client-reference-cache"
 import { referenceBrandAsset } from "@/lib/media/reference-brand-assets"
 import { referenceThumbnailVariants } from "@/lib/media/reference-catalog"
+import { sourceReferencePhoto } from "@/lib/media/source-reference-photos"
 import "./answer-cards.css"
 
 type Sources = readonly MalikCitation[] | null | undefined
@@ -46,11 +47,13 @@ function Button({ link, sources, primary }: { link: CardLink; sources: Sources; 
 }
 
 /** The page's own picture (from a cited source) or a looked-up reference photo. */
-function useCardImage(image: AnswerCard["image"], sources: Sources, title: string, hero: boolean, imageRole?: AnswerCard["imageRole"], autoPhotos = false): { url: string; label: string; sourceUrl?: string; logo?: boolean } | null {
+function useCardImage(image: AnswerCard["image"], sources: Sources, title: string, hero: boolean, imageRole?: AnswerCard["imageRole"], autoPhotos = false, failed: readonly string[] = []): { url: string; label: string; sourceUrl?: string; logo?: boolean } | null {
   const fromSource = typeof image === "number" ? sources?.[image - 1] : undefined
   const subject = visualSegmentLabel(title)
   const sourceMatches = !isAbstractPhotoSubject(subject) && Boolean(fromSource && subjectCitationUrl(subject, [fromSource]))
-  const sourceImage = sourceMatches && fromSource?.image && /^https:\/\//i.test(fromSource.image) ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url), sourceUrl: fromSource.url } : null
+  const pagePhoto = (autoPhotos || typeof image === "number") && imageRole !== "logo" ? sourceReferencePhoto({ topic: subject, queries: [referenceSearchTopic(subject)], explicit: true, layout: "landscape" }, (fromSource ? [fromSource] : sources || []).filter((source) => !failed.includes(source.image || ""))) : null
+  const sourceImage = pagePhoto ? { url: pagePhoto.url, label: pagePhoto.credit || "Источник фото", sourceUrl: pagePhoto.sourceUrl }
+    : imageRole === "logo" && sourceMatches && fromSource?.image && /^https:\/\//i.test(fromSource.image) && !failed.includes(fromSource.image) ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url), sourceUrl: fromSource.url } : null
   // A model may omit image metadata or cite a page without an OG picture.
   // Retrieve the exact named subject instead of leaving a permanent initial.
   const lookup = typeof image === "string" && image.trim().length >= 2 && !isAbstractPhotoSubject(image) ? image.trim()
@@ -72,8 +75,8 @@ function useCardImage(image: AnswerCard["image"], sources: Sources, title: strin
 }
 
 function Picture({ card, sources, hero = false, autoPhotos = false }: { card: AnswerCard; sources: Sources; hero?: boolean; autoPhotos?: boolean }) {
-  const image = useCardImage(card.image, sources, card.title, hero, card.imageRole, autoPhotos)
   const [failed, setFailed] = useState<string[]>([])
+  const image = useCardImage(card.image, sources, card.title, hero, card.imageRole, autoPhotos, failed)
   const url = image ? referenceThumbnailVariants(image.url).find((candidate) => !failed.includes(candidate)) : undefined
   if (!image || !url) {
     if (hero) return null

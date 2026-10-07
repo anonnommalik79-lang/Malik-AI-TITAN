@@ -7,6 +7,7 @@ import "./chat-execution.css"
 import { MalikLiveActivity } from "./MalikLiveActivity"
 import { MalikResponseStages } from "./MalikResponseStages"
 import { MalikDigitalBrowser } from "./MalikDigitalBrowser"
+import { shouldUseDigitalBrowser } from "@/lib/ai/computer-use"
 
 const labels = { running: "Выполняется", completed: "Готово", failed: "Ошибка", cancelled: "Остановлено", interrupted: "Прервано" }
 const icons = { status: BrainCircuit, search: Search, read: Globe, plugin: Plug, file: FileText, model: BrainCircuit, code: SquareTerminal, media: Image }
@@ -56,8 +57,8 @@ function Receipt({ step, expanded, now }: { step: ExecutionStep; expanded?: bool
   </li>
 }
 
-export function ChatExecution({ trace, live = false, sources = [], workMode = false, writing = false, legacyThought, defaultOpen = false, stages = false, browserTask = "", latest = false }: { trace?: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; legacyThought?: { ms: number; steps: string[] }; defaultOpen?: boolean; browserTask?: string; latest?: boolean; /** Show the UI progress line under «Думаю…» for a turn that started live. */ stages?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen || live)
+export function ChatExecution({ trace, live = false, sources = [], workMode = false, writing = false, legacyThought, stages = false, browserTask = "", latest = false }: { trace?: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; legacyThought?: { ms: number; steps: string[] }; browserTask?: string; latest?: boolean; /** Show progress inside the user-opened activity panel for a turn that started live. */ stages?: boolean }) {
+  const [open, setOpen] = useState(false)
   // Decided once, when this answer's row mounts: only a turn that is being
   // answered right now gets the progress line, never a reopened history item.
   const [stagesForTurn] = useState(() => Boolean(stages && live && !writing && (!trace || trace.state === "running")))
@@ -83,15 +84,15 @@ export function ChatExecution({ trace, live = false, sources = [], workMode = fa
   const overview = executionOverview(trace)
   const legacySteps = !trace ? legacyThought?.steps.slice(-8).map(step => publicExecutionText(step, 300)).filter(Boolean) || [] : []
   return <section className="malik-execution malik-execution--inline" aria-label="Ход выполнения запроса" data-state={trace?.state || (active ? "running" : "unrecorded")}>
-    {active && !writing && trace ? <MalikLiveActivity /> : null}
-    {stagesForTurn ? <MalikResponseStages trace={trace} writing={writing} /> : null}
     <button type="button" className="malik-execution__summary" onClick={() => setOpen(value => !value)} aria-expanded={open} aria-controls={id}>
-      <BrainCircuit size={16} aria-hidden="true" />
+      {active ? <Loader2 size={16} className="is-spinning" aria-hidden="true" /> : <BrainCircuit size={16} aria-hidden="true" />}
       <span className="malik-execution__summary-label">Ход работы</span>
       <span className="malik-execution__summary-status" role="status" aria-live="polite">{summary}</span>
       <ChevronDown size={15} className={open ? "is-open" : ""} aria-hidden="true" />
     </button>
     {open ? <div id={id} className="malik-execution__panel">
+    {active && !writing && trace ? <MalikLiveActivity /> : null}
+    {stagesForTurn ? <MalikResponseStages trace={trace} writing={writing} /> : null}
     <p className="malik-execution__explanation">Здесь реальные этапы и результаты инструментов, а не скрытые внутренние рассуждения модели.</p>
     {overview.length ? <div className="malik-execution__overview" aria-label="Краткий отчёт"><h3>Как подготовлен ответ</h3><ul>{overview.map(text => <li key={text}>{text}</li>)}</ul></div> : null}
     {rows.length ? <ol className="malik-execution__steps">{rows.map((step) => <Receipt key={step.id} step={step} now={now} expanded={expand} />)}</ol> : legacySteps.length ? <div className="malik-execution__legacy"><p>Сохранены только сообщения о статусе. Подробные квитанции этого ответа отсутствуют.</p><ol>{legacySteps.map((text, index) => <li key={index}>{text}</li>)}</ol></div> : <p className="malik-execution__empty">{active ? "Ожидаю событий выполнения от сервера. Ответ появится ниже автоматически." : "Для этого ответа этапы не были сохранены. Восстанавливать или придумывать их задним числом нельзя."}</p>}
@@ -112,6 +113,6 @@ export function ChatExecution({ trace, live = false, sources = [], workMode = fa
       <details className="malik-execution__export"><summary><Download size={14} />Скачать отчёт</summary><div><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.md`, executionMarkdown(trace))}>Markdown</button><button type="button" onClick={() => downloadChatFile(`malik-${trace.id}.json`, JSON.stringify(trace, null, 2), "application/json")}>JSON</button></div></details>
     </div> : null}
     </div> : null}
-    {browserTask ? <MalikDigitalBrowser task={browserTask} latest={latest} workMode={workMode} /> : null}
+    {shouldUseDigitalBrowser(browserTask, workMode) ? <MalikDigitalBrowser task={browserTask} latest={latest} workMode={workMode} autoStart={live} /> : null}
   </section>
 }

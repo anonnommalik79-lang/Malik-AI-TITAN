@@ -149,6 +149,7 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   if (STRUCTURED_TASK.test(text) && !/(?:фото(?:граф|к)?|картинк|изображени|\bphotos?\b|\bimages?\b|\bpictures?\b|сурет)/iu.test(text)) return null
   const tutorial = planTutorialVisuals(text)
   if (tutorial) return tutorial
+  if (/^(?:покажи(?:те)?(?:\s+мне)?|show(?:\s+me)?)\s+(?:как\s|(?:код|code|логи|logs|таймер|timer|доказательств[\p{L}]*|возможност[\p{L}]*|capabilities)(?:\s|$)|список\s+моделей\s*$)/iu.test(text)) return null
   let explicit = isReferenceImageRequest(text)
   let subject = text
   const followUp = isReferencePhotoFollowUp(text)
@@ -164,7 +165,6 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
     const places = /^(?:что\s+посмотреть\s+в|куда\s+сходить\s+в|достопримечательности|what\s+to\s+see\s+in|places\s+to\s+visit\s+in)\s+(.+)$/iu.exec(text)
     subject = places ? places[1] : text
     if (/^(?:объясни\s+как|почему\s+не\s+работает)/iu.test(text)) return null
-    if (/^(?:покажи|show|объясни\s+как|почему\s+не\s+работает)/iu.test(text) && !/(?:iphone|айфон|samsung|самсунг|телефон|гор[а-я]*|тау|озер|город|страна|здани|животн|растени|mountain|lake|city|building)/iu.test(text)) return null
   }
   const topic = referenceTopic(subject)
   // «а третий?», «почему?», «2+2?», «а ты?» name no subject to photograph; the

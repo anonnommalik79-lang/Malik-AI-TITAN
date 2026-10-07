@@ -1,14 +1,18 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { ExternalLink, ImageOff, X } from "lucide-react"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 
 import { planReferenceVisuals, referenceSearchTopic, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
 import { invalidateReferenceImages, referenceCacheKey, reportReferenceImageFailure, subscribeReferenceImages } from "@/lib/media/client-reference-cache"
+import { sourceReferencePhoto } from "@/lib/media/source-reference-photos"
+import type { MalikCitation } from "@/lib/ai/citation-names"
 import "./answer-blocks.css"
 export { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
+const NO_SOURCES: readonly MalikCitation[] = []
+export const ReferencePhotoSources = createContext<readonly MalikCitation[]>(NO_SOURCES)
 
 function safeSourceUrl(value?: string): string {
   if (!value) return ""
@@ -72,8 +76,9 @@ function ReferenceLightbox({ image, onClose }: { image: MalikVisualImage; onClos
 }
 
 export function MalikVisualGallery({ images, title, portrait = false, onFailure }: { images: MalikVisualImage[]; title?: string; portrait?: boolean; onFailure?: (url: string) => void }) {
+  const sources = useContext(ReferencePhotoSources)
   const [selected, setSelected] = useState<MalikVisualImage | null>(null)
-  const visible = images.filter((image) => isSafeVisualUrl(image.url)).slice(0, 3)
+  const visible = images.filter((image) => isSafeVisualUrl(image.url) || sourceReferencePhoto({ topic: image.alt, queries: [], explicit: true, layout: "landscape" }, sources)?.url === image.url).slice(0, 3)
   if (!visible.length) return null
   return (
     <section data-malik-reference-gallery className="my-5 w-full min-w-0" aria-label={title || "Изображения в ответе"}>
@@ -94,6 +99,7 @@ export function wantsReferenceImages(question: string): boolean {
 
 /** Direct browser catalogue requests: no image proxy, no generation credits. */
 export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, compact = false, hero = false, lineup = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; compact?: boolean; hero?: boolean; lineup?: boolean; children?: ReactNode }) {
+  const sources = useContext(ReferencePhotoSources)
   const candidate = useMemo(() => planOverride || planReferenceVisuals(question, previousQuestion, hasAttachment), [planOverride, question, previousQuestion, hasAttachment])
   // The answer grows while streaming. Keep subscriptions stable for identical queries.
   const serializedPlan = candidate ? JSON.stringify(candidate) : ""
@@ -103,10 +109,13 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   const [result, setResult] = useState<{ key: string; images: MalikVisualImage[] } | null>(null)
   const [selected, setSelected] = useState<MalikVisualImage | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const [failedSourceUrls, setFailedSourceUrls] = useState<string[]>([])
   const [dimensions, setDimensions] = useState<{ url: string; width: number; height: number } | null>(null)
   const key = plan ? referenceCacheKey(plan) : ""
   const active = isLatest || nearViewport
   const collection = Boolean(plan?.subjects?.length)
+  const sourcePhoto = plan && !collection ? sourceReferencePhoto(plan, sources.filter((source) => !failedSourceUrls.includes(source.image || ""))) : null
+  const sourcePhotoUrl = sourcePhoto?.url || ""
   useEffect(() => {
     const node = container.current
     if (!plan || !node || active || collection) return
@@ -118,9 +127,9 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
     return () => observer.disconnect()
   }, [plan, active, collection])
   useEffect(() => {
-    if (!plan || !active || collection) return
+    if (!plan || !active || collection || sourcePhotoUrl) return
     return subscribeReferenceImages(plan, (images) => setResult({ key: referenceCacheKey(plan), images }))
-  }, [plan, active, collection, attempt])
+  }, [plan, active, collection, attempt, sourcePhotoUrl])
   useEffect(() => {
     if (typeof window === "undefined" || !plan || !active || collection || result?.key !== key || result.images.length) return
     const recover = () => { invalidateReferenceImages(plan); setResult(null); setAttempt((value) => value + 1) }
@@ -128,11 +137,12 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
     return () => window.removeEventListener("online", recover)
   }, [plan, active, collection, result, key])
   if (!plan) return children || null
-  const images = result?.key === key ? result.images : null
+  const images = sourcePhoto ? [sourcePhoto] : result?.key === key ? result.images : null
   const imageSize = dimensions && dimensions.url === images?.[0]?.url ? `Превью ${dimensions.width} × ${dimensions.height} px` : ""
   const retry = () => { invalidateReferenceImages(plan); setResult(null); setAttempt((value) => value + 1) }
   const failed = (url: string) => {
     setSelected(null)
+    if (sourcePhoto?.url === url) { setFailedSourceUrls((current) => [...new Set([...current, url])].slice(-12)); return }
     if (reportReferenceImageFailure(plan, url)) retry()
     else setResult((current) => current?.key === key ? { key, images: current.images.filter((image) => image.url !== url) } : current)
   }

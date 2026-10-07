@@ -1,14 +1,18 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Check, ChevronDown, ExternalLink, Globe, Loader2, Monitor, ShieldCheck, Square, X } from "lucide-react"
-import { computerImageUrl, computerPageUrl, isBrowserTask, type ComputerReceipt } from "@/lib/ai/computer-use"
+import { computerImageUrl, computerPageUrl, shouldUseDigitalBrowser, type ComputerReceipt } from "@/lib/ai/computer-use"
 import "./digital-browser.css"
 
 const labels = { running: "Работаю в браузере", "awaiting-confirmation": "Нужно ваше подтверждение", complete: "Готово", failed: "Не удалось выполнить", cancelled: "Остановлено", handoff: "Нужно ваше участие" }
 
-export function MalikDigitalBrowser({ task, latest = false, workMode = false }: { task: string; latest?: boolean; workMode?: boolean }) {
-  const [open, setOpen] = useState(() => latest && isBrowserTask(task))
+export function MalikDigitalBrowser({ task, latest = false, workMode = false, autoStart = false }: { task: string; latest?: boolean; workMode?: boolean; autoStart?: boolean }) {
+  const eligible = shouldUseDigitalBrowser(task, workMode)
+  // An explicit live Work request authorizes starting its browser session.
+  // Restored history and rerenders must never execute that request again.
+  const [launchForTurn] = useState(() => eligible && latest && autoStart)
+  const [open, setOpen] = useState(launchForTurn)
   const [available, setAvailable] = useState<boolean | null>(null)
   const [receipt, setReceipt] = useState<ComputerReceipt | null>(null)
   const [busy, setBusy] = useState(false)
@@ -16,25 +20,27 @@ export function MalikDigitalBrowser({ task, latest = false, workMode = false }: 
   const [fullscreen, setFullscreen] = useState(false)
   const inFlight = useRef(false)
   const mounted = useRef(true)
+  const started = useRef(false)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => {
-    if (!open || !latest) return
+    if (!eligible || !latest || (!open && !launchForTurn)) return
     const abort = new AbortController()
-    fetch("/api/ai/computer", { cache: "no-store", signal: abort.signal }).then(async response => {
+    fetch("/api/ai/computer", { cache: "no-store", signal: AbortSignal.any([abort.signal, AbortSignal.timeout(8000)]) }).then(async response => {
       const result = await response.json()
       if (!response.ok) throw new Error(response.status === 401 ? "Войдите в аккаунт для работы браузера." : "Не удалось проверить браузерный сервис.")
-      setAvailable(Boolean(result.configured))
+      if (!abort.signal.aborted) setAvailable(Boolean(result.configured))
     }).catch(reason => { if (!abort.signal.aborted) setError(reason.message) })
     return () => abort.abort()
-  }, [open, latest])
+  }, [open, latest, eligible, launchForTurn])
 
-  async function operate(operation: "start" | "poll" | "approve" | "cancel") {
-    if (inFlight.current) return
+  const sessionId = receipt?.sessionId, approvalId = receipt?.approval?.id
+  const operate = useCallback(async (operation: "start" | "poll" | "approve" | "cancel") => {
+    if (inFlight.current || !eligible) return
     inFlight.current = true; setBusy(true); setError("")
     try {
       const response = await fetch("/api/ai/computer", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
-        operation, task: operation === "start" ? task : undefined, sessionId: receipt?.sessionId,
-        approvalId: operation === "approve" ? receipt?.approval?.id : undefined,
+        operation, workspaceMode: "work", task: operation === "start" ? task : undefined, sessionId,
+        approvalId: operation === "approve" ? approvalId : undefined,
         confirm: operation === "start" || operation === "approve",
       }) })
       const result = await response.json()
@@ -42,13 +48,18 @@ export function MalikDigitalBrowser({ task, latest = false, workMode = false }: 
       if (mounted.current) setReceipt(result)
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : "Ошибка соединения") }
     finally { inFlight.current = false; if (mounted.current) setBusy(false) }
-  }
+  }, [eligible, task, sessionId, approvalId])
+  useEffect(() => {
+    if (!launchForTurn || !eligible || available !== true || started.current) return
+    started.current = true
+    void operate("start")
+  }, [launchForTurn, eligible, available, operate])
   // Only observe an already running task. Polling never starts or approves an action.
   useEffect(() => {
-    if (!receipt?.sessionId || receipt.status !== "running" || error) return
+    if (!eligible || !receipt?.sessionId || receipt.status !== "running" || error) return
     const timer = window.setTimeout(() => void operate("poll"), 1600)
     return () => window.clearTimeout(timer)
-  }, [receipt, error])
+  }, [receipt, error, eligible, operate])
 
   const screenshot = receipt?.screenshots.at(-1)
   const image = screenshot ? computerImageUrl(screenshot.url) : ""
@@ -56,6 +67,7 @@ export function MalikDigitalBrowser({ task, latest = false, workMode = false }: 
   const live = receipt?.status === "running"
   const approval = receipt?.status === "awaiting-confirmation" ? receipt.approval : undefined
   const title = receipt ? labels[receipt.status] : "Цифровой браузер"
+  if (!eligible) return null
   return <section className={`malik-digital-browser${fullscreen ? " is-fullscreen" : ""}`} data-state={receipt?.status || "idle"} aria-label={workMode ? "Браузер Malik Work" : "Браузер Malik AI"}>
     <button type="button" className="malik-digital-browser__heading" aria-expanded={open} onClick={() => setOpen(value => !value)}>
       {live ? <Loader2 className="is-spinning" size={18} /> : <Monitor size={18} />}<span>{title}</span><ChevronDown size={16} className={open ? "is-open" : ""} />
