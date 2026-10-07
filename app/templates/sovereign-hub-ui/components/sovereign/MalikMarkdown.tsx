@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, Fragment, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
+import { createContext, Fragment, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react"
 import { Archive, Check, Copy, Download, ExternalLink, Eye, RefreshCw } from "lucide-react"
 import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
 import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
@@ -27,6 +27,85 @@ import { citationName, safeHttps, subjectCitationUrl, trustedLink, type MalikCit
 export type { MalikCitation } from "@/lib/ai/citation-names"
 
 type Props = { text: string; className?: string; allowImages?: boolean; autoPreview?: boolean; citations?: MalikCitation[]; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
+
+function ScrollableMarkdownTable({ children, label }: { children: ReactNode; label: string }) {
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const viewportId = useId()
+  const [scroll, setScroll] = useState({ left: 0, maximum: 0 })
+  const overflowing = scroll.maximum > 2
+
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    let frame = 0
+    const measure = () => {
+      frame = 0
+      const maximum = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+      const left = Math.max(0, Math.min(maximum, viewport.scrollLeft))
+      setScroll((previous) => previous.left === left && previous.maximum === maximum
+        ? previous : { left, maximum })
+    }
+    const schedule = () => {
+      if (!frame) frame = window.requestAnimationFrame(measure)
+    }
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule)
+    observer?.observe(viewport)
+    if (viewport.firstElementChild) observer?.observe(viewport.firstElementChild)
+    viewport.addEventListener("scroll", schedule, { passive: true })
+    window.addEventListener("resize", schedule, { passive: true })
+    measure()
+    return () => {
+      observer?.disconnect()
+      viewport.removeEventListener("scroll", schedule)
+      window.removeEventListener("resize", schedule)
+      if (frame) window.cancelAnimationFrame(frame)
+    }
+  }, [])
+
+  const move = (direction: number) => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    viewport.scrollBy({
+      left: direction * Math.max(160, viewport.clientWidth * 0.8),
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    })
+  }
+
+  return (
+    <div className="malik-md-table-wrap malik-md-table-responsive">
+      <div
+        ref={viewportRef}
+        id={viewportId}
+        className="malik-md-table-scroll"
+        role="region"
+        aria-label={label}
+        tabIndex={overflowing ? 0 : undefined}
+      >
+        {children}
+      </div>
+      {overflowing ? (
+        <div className="malik-md-table-controls" role="group" aria-label="Прокрутка таблицы">
+          <button type="button" onClick={() => move(-1)} disabled={scroll.left <= 2} aria-label="Таблица: прокрутить влево" aria-controls={viewportId}>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg>
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(scroll.left / scroll.maximum * 100)}
+            aria-label="Положение прокрутки таблицы"
+            aria-controls={viewportId}
+            onChange={(event) => viewportRef.current?.scrollTo({ left: scroll.maximum * Number(event.currentTarget.value) / 100, behavior: "auto" })}
+          />
+          <button type="button" onClick={() => move(1)} disabled={scroll.maximum - scroll.left <= 2} aria-label="Таблица: прокрутить вправо" aria-controls={viewportId}>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 function isProjectArtifactHref(href: string) {
   return /^\/api\/ai\/project\/artifacts\/[^/]+\/download(?:\?|$)/.test(href)
@@ -1078,10 +1157,10 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
           return (
             <Fragment key={key}>
               {dataVisual ? <MalikAnswerVisual visual={dataVisual} /> : null}
-            <div className="malik-md-table-wrap">
+            <ScrollableMarkdownTable label={previous?.kind === "h" ? previous.text : "Таблица ответа"}>
               <table className="malik-md-table">
                 <thead>
-                  <tr>{block.headers.map((header, cellIndex) => <th key={`${key}-h${cellIndex}`}>{inline(header, `${key}-h${cellIndex}`)}</th>)}</tr>
+                  <tr>{block.headers.map((header, cellIndex) => <th scope="col" key={`${key}-h${cellIndex}`}>{inline(header, `${key}-h${cellIndex}`)}</th>)}</tr>
                 </thead>
                 <tbody>
                   {block.rows.map((row, rowIndex) => (
@@ -1091,7 +1170,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollableMarkdownTable>
             {sourcedPhotos}
             </Fragment>
           )

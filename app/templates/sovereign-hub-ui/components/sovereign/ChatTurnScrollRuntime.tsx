@@ -73,7 +73,7 @@ export function ChatTurnScrollRuntime() {
       if (!thread) return
       thread.style.setProperty("overflow-y", "auto", "important")
       thread.style.setProperty("overflow-x", "hidden", "important")
-      thread.style.setProperty("touch-action", "pan-y", "important")
+      thread.style.setProperty("touch-action", "auto", "important")
       thread.style.setProperty("overscroll-behavior-y", "contain", "important")
       thread.style.setProperty("scroll-behavior", "auto", "important")
       thread.style.setProperty("scroll-snap-type", "none", "important")
@@ -255,7 +255,7 @@ export function ChatTurnScrollRuntime() {
       .malik-chat-scroll[data-malik-free-scroll="1"] {
         overflow-y: auto !important;
         overflow-x: hidden !important;
-        touch-action: pan-y !important;
+        touch-action: auto !important;
         overscroll-behavior-y: contain !important;
         scroll-behavior: auto !important;
         scroll-snap-type: none !important;
