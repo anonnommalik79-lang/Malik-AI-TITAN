@@ -81,6 +81,7 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "@/lib/ai/reference-visual-policy") return loadPure("lib/ai/reference-visual-policy.ts")
     if (name === "@/lib/ai/answer-visuals") return loadPure("lib/ai/answer-visuals.ts")
     if (name === "@/lib/ai/answer-photo-hints") return loadPure("lib/ai/answer-photo-hints.ts")
+    if (name === "@/lib/media/source-reference-photos") return { sourceReferencePhoto: () => null }
     if (name === "./MalikAnswerVisual") return loadPure("components/sovereign/MalikAnswerVisual.tsx")
     if (name === "./MalikAnswerCards") return loadPure("components/sovereign/MalikAnswerCards.tsx")
     if (name === "@/lib/ai/answer-cards") return loadPure("lib/ai/answer-cards.ts")

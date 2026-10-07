@@ -56,6 +56,8 @@ interface Chat {
   title: string
   timestamp: Date
   isPinned?: boolean
+  kind?: "chat" | "project"
+  projectId?: string
   messages?: ChatMessagePreview[]
 }
 
@@ -298,7 +300,9 @@ function SidebarInner({
   }, [chats, onRenameChat])
 
   const orderedChats = useMemo(
-    () => [...chats].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    () => chats
+      .filter((chat) => chat.kind !== "project" && !chat.projectId)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
     [chats],
   )
 

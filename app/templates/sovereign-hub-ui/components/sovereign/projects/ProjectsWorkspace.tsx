@@ -12,6 +12,7 @@ import {
   FolderPlus,
   Hammer,
   MessageSquareText,
+  MessageSquarePlus,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -42,6 +43,8 @@ export type MalikProjectRecord = {
   projectInstructions?: string
   projectColor?: MalikProjectColor
   kind?: "chat" | "project"
+  /** Child conversations live inside a project container without copying project instructions. */
+  projectId?: string
 }
 
 export type MalikProjectDraft = {
@@ -56,13 +59,19 @@ export type MalikProjectPatch = Partial<Omit<MalikProjectRecord, "id" | "message
 
 type ProjectsWorkspaceProps = {
   projects: MalikProjectRecord[]
+  /** Existing chat records linked to a project. No second project-history store. */
+  threads: MalikProjectRecord[]
   activeProjectId: string | null
+  activeThreadId: string | null
   selectedModelId: MalikModelId
   plan: AIPlan
   onSelectModel: (modelId: MalikModelId) => void
   onOpenBilling: () => void
   onCreateProject: (draft: MalikProjectDraft) => void
   onOpenProject: (id: string) => void
+  onCreateThread: (projectId: string) => void
+  onOpenThread: (id: string) => void
+  onDeleteThread: (id: string) => void
   onCloseProject: () => void
   onUpdateProject: (id: string, patch: MalikProjectPatch) => void
   onDeleteProject: (id: string) => void
@@ -72,7 +81,7 @@ type ProjectsWorkspaceProps = {
 }
 
 const COLOR_STYLES: Record<MalikProjectColor, { icon: string; dot: string }> = {
-  gold: { icon: "border-amber-300/25 bg-amber-300/10 text-amber-200", dot: "bg-amber-300" },
+  gold: { icon: "border-amber-300/25 bg-amber-300/10 text-white/70", dot: "bg-amber-300" },
   blue: { icon: "border-sky-400/25 bg-sky-400/10 text-sky-200", dot: "bg-sky-400" },
   violet: { icon: "border-violet-400/25 bg-violet-400/10 text-violet-200", dot: "bg-violet-400" },
   emerald: { icon: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200", dot: "bg-emerald-400" },
@@ -99,8 +108,8 @@ const STATUS_META: Record<MalikProjectStatus, {
     label: "В работе",
     hint: "Проект активно развивается",
     icon: Hammer,
-    badge: "border-amber-300/15 bg-amber-300/[0.06] text-amber-200",
-    dot: "bg-amber-300",
+    badge: "border-sky-300/15 bg-sky-300/[0.06] text-sky-200",
+    dot: "bg-sky-300",
   },
   deployed: {
     label: "Готов",
@@ -236,7 +245,7 @@ function ProjectFormModal({
       >
         <header className="flex shrink-0 items-center justify-between border-b border-white/[0.07] px-4 py-4 sm:px-6 sm:py-5">
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200/80 sm:text-[11px] sm:tracking-[0.18em]">Malik AI Projects</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45 sm:text-[11px] sm:tracking-[0.18em]">Malik AI Projects</p>
             <h2 className="mt-1 truncate text-lg font-semibold text-white sm:text-xl">{title}</h2>
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-zinc-400 transition hover:bg-white/[0.07] hover:text-white" aria-label="Закрыть">
@@ -255,7 +264,7 @@ function ProjectFormModal({
                 onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
                 onKeyDown={(event) => { if (event.key === "Enter") submit() }}
                 placeholder="Например, Malik AI Mobile"
-                className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 text-[15px] text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-300/45 sm:px-4"
+                className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 text-[15px] text-white outline-none transition placeholder:text-zinc-600 focus:border-white/30 sm:px-4"
               />
             </label>
           </div>
@@ -286,7 +295,7 @@ function ProjectFormModal({
               value={draft.description}
               onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
               placeholder="Что вы создаёте в этом проекте?"
-              className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 text-[15px] text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-300/45 sm:px-4"
+              className="h-12 w-full rounded-xl border border-white/10 bg-black/40 px-3.5 text-[15px] text-white outline-none transition placeholder:text-zinc-600 focus:border-white/30 sm:px-4"
             />
           </label>
 
@@ -296,7 +305,7 @@ function ProjectFormModal({
               value={draft.instructions}
               onChange={(event) => setDraft((current) => ({ ...current, instructions: event.target.value }))}
               placeholder="Стиль ответов, технологии, правила проекта и важный контекст…"
-              className="min-h-28 w-full resize-none rounded-xl border border-white/10 bg-black/40 p-3.5 text-[14px] leading-6 text-white outline-none transition placeholder:text-zinc-600 focus:border-amber-300/45 sm:p-4"
+              className="min-h-28 w-full resize-none rounded-xl border border-white/10 bg-black/40 p-3.5 text-[14px] leading-6 text-white outline-none transition placeholder:text-zinc-600 focus:border-white/30 sm:p-4"
             />
           </label>
 
@@ -334,6 +343,7 @@ type ProjectFilter = "all" | "draft" | "building" | "deployed"
 
 function ProjectsIndex({
   projects,
+  threads,
   selectedModelId,
   plan,
   onOpenBilling,
@@ -342,7 +352,7 @@ function ProjectsIndex({
   onUpdateProject,
   onDeleteProject,
   onTogglePin,
-}: Omit<ProjectsWorkspaceProps, "activeProjectId" | "onSelectModel" | "onCloseProject" | "onSendPrompt" | "renderProjectChat">) {
+}: Omit<ProjectsWorkspaceProps, "activeProjectId" | "activeThreadId" | "onSelectModel" | "onCreateThread" | "onOpenThread" | "onDeleteThread" | "onCloseProject" | "onSendPrompt" | "renderProjectChat">) {
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<ProjectFilter>("all")
   const [createOpen, setCreateOpen] = useState(false)
@@ -358,11 +368,29 @@ function ProjectsIndex({
       .filter((project) => !normalized || `${project.title} ${project.projectDescription || ""} ${(project.techStack || []).join(" ")}`.toLowerCase().includes(normalized))
   }, [filter, projects, query])
 
+  const statsByProject = useMemo(() => {
+    const result = new Map<string, { chats: number; messages: number }>()
+    for (const project of projects) {
+      result.set(project.id, {
+        chats: project.messages.length ? 1 : 0,
+        messages: project.messages.length,
+      })
+    }
+    for (const thread of threads) {
+      if (!thread.projectId) continue
+      const current = result.get(thread.projectId) || { chats: 0, messages: 0 }
+      current.chats += 1
+      current.messages += thread.messages.length
+      result.set(thread.projectId, current)
+    }
+    return result
+  }, [projects, threads])
+
   const emptyDraft: MalikProjectDraft = {
     title: "",
     description: "",
     instructions: "",
-    color: "gold",
+    color: "blue",
     selectedModelId,
   }
 
@@ -375,7 +403,7 @@ function ProjectsIndex({
 
   return (
     <div className="malik-projects-index h-full min-h-0 flex-1 overflow-y-auto overscroll-contain bg-black font-sans text-white">
-      <div className="malik-projects-inner mx-auto w-full max-w-[920px] px-4 pb-10 pt-7 sm:px-8 sm:pt-16">
+      <div className="malik-projects-inner mx-auto w-full max-w-[1040px] px-4 pb-10 pt-7 sm:px-8 sm:pt-14">
         <div className="malik-projects-head border-b border-white/10">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
             <h1 className="text-[24px] font-semibold tracking-[-0.025em] text-white sm:text-[26px]">Проекты</h1>
@@ -427,9 +455,12 @@ function ProjectsIndex({
                       {project.isPinned ? <Pin className="h-3.5 w-3.5 shrink-0 text-zinc-300" /> : null}
                     </div>
                     <div className="mt-1 flex min-w-0 items-center gap-2">
-                      <p className="min-w-0 flex-1 truncate text-[12px] text-zinc-400">{project.projectDescription || relativeDate(project.timestamp)}</p>
+                      <p className="min-w-0 flex-1 truncate text-[12px] text-zinc-400">{project.projectDescription || "Рабочее пространство Malik AI"}</p>
                       <ProjectStatusBadge status={project.status} compact />
                     </div>
+                    <p className="mt-1.5 text-[10px] text-zinc-600">
+                      {(statsByProject.get(project.id)?.chats || 0)} чатов · {(statsByProject.get(project.id)?.messages || 0)} сообщений · {relativeDate(project.timestamp)}
+                    </p>
                   </div>
                 </button>
 
@@ -459,6 +490,11 @@ function ProjectsIndex({
               <Folder className="h-6 w-6" strokeWidth={1.8} />
             </span>
             <h2 className="mt-4 text-[15px] font-semibold text-white">{query ? "Проекты не найдены" : filter === "all" ? "Пока нет проектов" : "В этом статусе пока пусто"}</h2>
+            {!query && filter === "all" ? (
+              <button type="button" onClick={() => setCreateOpen(true)} className="mt-5 h-10 rounded-full bg-white px-5 text-[13px] font-semibold text-black hover:bg-zinc-200">
+                Создать первый проект
+              </button>
+            ) : null}
           </div>
         )}
       </div>
@@ -511,8 +547,17 @@ function ProjectsIndex({
   )
 }
 
+function projectThreadList(project: MalikProjectRecord, threads: MalikProjectRecord[]) {
+  const linked = threads
+    .filter((thread) => thread.projectId === project.id)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  return project.messages.length ? [project, ...linked] : linked
+}
+
 function ProjectControlPanel({
   project,
+  threads,
+  activeThreadId,
   selectedModelId,
   plan,
   onSelectModel,
@@ -520,10 +565,15 @@ function ProjectControlPanel({
   instructions,
   setInstructions,
   onUpdateProject,
+  onCreateThread,
+  onOpenThread,
+  onDeleteThread,
   onSendPrompt,
   compact = false,
 }: {
   project: MalikProjectRecord
+  threads: MalikProjectRecord[]
+  activeThreadId: string | null
   selectedModelId: MalikModelId
   plan: AIPlan
   onSelectModel: (modelId: MalikModelId) => void
@@ -531,16 +581,69 @@ function ProjectControlPanel({
   instructions: string
   setInstructions: (value: string) => void
   onUpdateProject: (id: string, patch: MalikProjectPatch) => void
+  onCreateThread: (projectId: string) => void
+  onOpenThread: (id: string) => void
+  onDeleteThread: (id: string) => void
   onSendPrompt: (prompt: string) => void
   compact?: boolean
 }) {
   const model = getMalikModel(selectedModelId)
   const dirty = instructions !== (project.projectInstructions || "")
+  const projectThreads = projectThreadList(project, threads)
+
   return (
     <div className={cn("space-y-5", compact ? "p-4" : "p-4")}>
       <section>
         <div className="mb-2.5 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-xs font-medium text-zinc-300"><CheckCircle2 className="h-3.5 w-3.5 text-amber-300" /> Статус</div>
+          <div className="flex items-center gap-2 text-xs font-medium text-zinc-300"><MessageSquareText className="h-3.5 w-3.5 text-white/55" /> Чаты проекта</div>
+          <button
+            type="button"
+            onClick={() => onCreateThread(project.id)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-medium text-zinc-400 transition hover:bg-white/[0.06] hover:text-white"
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5" /> Новый
+          </button>
+        </div>
+        <div className="max-h-48 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
+          {projectThreads.length ? projectThreads.map((thread) => {
+            const selected = thread.id === activeThreadId
+            const legacy = thread.id === project.id
+            return (
+              <div key={thread.id} className={cn("group/thread flex items-center rounded-lg", selected && "bg-white/[0.08]")}>
+                <button
+                  type="button"
+                  onClick={() => onOpenThread(thread.id)}
+                  className={cn(
+                    "min-w-0 flex-1 rounded-lg px-2.5 py-2 text-left transition",
+                    selected ? "text-white" : "text-zinc-500 hover:text-zinc-200",
+                  )}
+                >
+                  <span className="block truncate text-[11px] font-medium">{legacy ? "Основной чат" : thread.title || "Новый чат"}</span>
+                  <span className="mt-0.5 block text-[9px] text-zinc-700">{thread.messages.length} сообщений · {relativeDate(thread.timestamp)}</span>
+                </button>
+                {!legacy ? (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteThread(thread.id)}
+                    className="mr-1 grid h-7 w-7 shrink-0 place-items-center rounded-md text-zinc-700 opacity-0 transition hover:bg-rose-400/10 hover:text-rose-300 group-hover/thread:opacity-100 focus:opacity-100"
+                    aria-label="Удалить чат из проекта"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                ) : null}
+              </div>
+            )
+          }) : (
+            <button type="button" onClick={() => onCreateThread(project.id)} className="w-full rounded-xl border border-dashed border-white/10 px-3 py-4 text-left text-[11px] text-zinc-600 hover:border-white/20 hover:text-zinc-300">
+              Создать первый чат проекта
+            </button>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-2.5 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs font-medium text-zinc-300"><CheckCircle2 className="h-3.5 w-3.5 text-white/55" /> Статус</div>
           <ProjectStatusBadge status={project.status} compact />
         </div>
         <StatusPicker status={project.status} onChange={(status) => onUpdateProject(project.id, { status })} />
@@ -548,17 +651,17 @@ function ProjectControlPanel({
       </section>
 
       <section>
-        <div className="mb-2.5 flex items-center gap-2 text-xs font-medium text-zinc-300"><Bot className="h-3.5 w-3.5 text-amber-300" /> Модель проекта</div>
+        <div className="mb-2.5 flex items-center gap-2 text-xs font-medium text-zinc-300"><Bot className="h-3.5 w-3.5 text-white/55" /> Модель проекта</div>
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
           <MalikModelSelector selectedModelId={selectedModelId} plan={plan} onSelect={onSelectModel} onOpenBilling={onOpenBilling} placement="bottom" />
-          <p className="mt-2 truncate text-[10px] text-zinc-600">{model.label} · выбранная модель проекта</p>
+          <p className="mt-2 truncate text-[10px] text-zinc-600">{model.label} · используется во всех новых чатах проекта</p>
         </div>
       </section>
 
       <section>
         <div className="mb-2.5 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-xs font-medium text-zinc-300"><FileText className="h-3.5 w-3.5 text-amber-300" /> Инструкции</div>
-          {dirty ? <span className="text-[10px] text-amber-200">Не сохранено</span> : <span className="text-[10px] text-zinc-700">Сохранено</span>}
+          <div className="flex items-center gap-2 text-xs font-medium text-zinc-300"><FileText className="h-3.5 w-3.5 text-white/55" /> Инструкции проекта</div>
+          {dirty ? <span className="text-[10px] text-white/60">Не сохранено</span> : <span className="text-[10px] text-zinc-700">Сохранено</span>}
         </div>
         <textarea
           value={instructions}
@@ -567,13 +670,13 @@ function ProjectControlPanel({
             const next = instructions.trim().slice(0, 3000)
             if (next !== (project.projectInstructions || "")) onUpdateProject(project.id, { projectInstructions: next })
           }}
-          placeholder="Добавьте правила и контекст для AI…"
-          className="min-h-28 w-full resize-none rounded-xl border border-white/[0.08] bg-black/30 p-3 text-xs leading-5 text-zinc-300 outline-none placeholder:text-zinc-700 focus:border-amber-300/30"
+          placeholder="Правила, стек, стиль ответов и постоянный контекст для всех чатов проекта…"
+          className="min-h-28 w-full resize-none rounded-xl border border-white/[0.08] bg-black/30 p-3 text-xs leading-5 text-zinc-300 outline-none placeholder:text-zinc-700 focus:border-white/25"
         />
       </section>
 
       <section>
-        <div className="mb-2.5 flex items-center gap-2 text-xs font-medium text-zinc-300"><MessageSquareText className="h-3.5 w-3.5 text-amber-300" /> Быстрый старт</div>
+        <div className="mb-2.5 flex items-center gap-2 text-xs font-medium text-zinc-300"><MessageSquareText className="h-3.5 w-3.5 text-white/55" /> Быстрый старт</div>
         <div className="space-y-1.5">
           {QUICK_START.map(([label, prompt]) => (
             <button key={label} type="button" onClick={() => onSendPrompt(prompt)} className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[11px] text-zinc-500 transition hover:bg-white/[0.05] hover:text-zinc-200">
@@ -588,28 +691,41 @@ function ProjectControlPanel({
 
 function ProjectDetail({
   project,
+  threads,
+  activeThreadId,
   selectedModelId,
   plan,
   onSelectModel,
   onOpenBilling,
   onCloseProject,
   onUpdateProject,
+  onCreateThread,
+  onOpenThread,
+  onDeleteThread,
   onSendPrompt,
   renderProjectChat,
 }: {
   project: MalikProjectRecord
+  threads: MalikProjectRecord[]
+  activeThreadId: string | null
   selectedModelId: MalikModelId
   plan: AIPlan
   onSelectModel: (modelId: MalikModelId) => void
   onOpenBilling: () => void
   onCloseProject: () => void
   onUpdateProject: (id: string, patch: MalikProjectPatch) => void
+  onCreateThread: (projectId: string) => void
+  onOpenThread: (id: string) => void
+  onDeleteThread: (id: string) => void
   onSendPrompt: (prompt: string) => void
   renderProjectChat: () => ReactNode
 }) {
   const color = project.projectColor || "gold"
   const [instructions, setInstructions] = useState(project.projectInstructions || "")
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false)
+  const currentThreads = projectThreadList(project, threads)
+  const activeThread = currentThreads.find((thread) => thread.id === activeThreadId) || null
+  const totalMessages = currentThreads.reduce((sum, thread) => sum + thread.messages.length, 0)
 
   useEffect(() => {
     setInstructions(project.projectInstructions || "")
@@ -618,7 +734,7 @@ function ProjectDetail({
 
   return (
     <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-black font-sans text-white">
-      <aside className="hidden w-[278px] shrink-0 flex-col border-r border-white/[0.07] bg-[#0b0b0c] xl:flex">
+      <aside className="hidden w-[304px] shrink-0 flex-col border-r border-white/[0.07] bg-[#0b0b0c] xl:flex">
         <div className="border-b border-white/[0.07] p-4">
           <button type="button" onClick={onCloseProject} className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-xs text-zinc-400 transition hover:bg-white/[0.06] hover:text-white"><ArrowLeft className="h-4 w-4" /> Все проекты</button>
           <div className="mt-5 flex items-center gap-3 px-2">
@@ -633,6 +749,8 @@ function ProjectDetail({
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <ProjectControlPanel
             project={project}
+            threads={threads}
+            activeThreadId={activeThreadId}
             selectedModelId={selectedModelId}
             plan={plan}
             onSelectModel={onSelectModel}
@@ -640,12 +758,15 @@ function ProjectDetail({
             instructions={instructions}
             setInstructions={setInstructions}
             onUpdateProject={onUpdateProject}
+            onCreateThread={onCreateThread}
+            onOpenThread={onOpenThread}
+            onDeleteThread={onDeleteThread}
             onSendPrompt={onSendPrompt}
           />
         </div>
 
         <div className="border-t border-white/[0.07] p-4">
-          <div className="flex items-center justify-between text-[10px] text-zinc-600"><span>{project.messages.length} сообщений</span><span>{relativeDate(project.timestamp)}</span></div>
+          <div className="flex items-center justify-between text-[10px] text-zinc-600"><span>{currentThreads.length} чатов · {totalMessages} сообщений</span><span>{relativeDate(project.timestamp)}</span></div>
         </div>
       </aside>
 
@@ -656,7 +777,7 @@ function ProjectDetail({
             <ProjectMark color={color} size="small" />
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-[13px] font-semibold text-white sm:text-sm">{project.title}</h1>
-              <p className="mt-0.5 hidden truncate text-[10px] text-zinc-600 sm:block">{project.projectDescription || "Рабочее пространство Malik AI"}</p>
+              <p className="mt-0.5 hidden truncate text-[10px] text-zinc-600 sm:block">{activeThread ? (activeThread.id === project.id ? "Основной чат" : activeThread.title) : (project.projectDescription || "Рабочее пространство Malik AI")}</p>
             </div>
           </div>
 
@@ -698,7 +819,16 @@ function ProjectDetail({
         ) : null}
 
         <div className="min-h-0 flex-1 overflow-hidden">
-          {renderProjectChat()}
+          {activeThreadId ? renderProjectChat() : (
+            <div className="grid h-full place-items-center bg-black px-6 text-center">
+              <div>
+                <MessageSquareText className="mx-auto h-7 w-7 text-zinc-700" />
+                <h2 className="mt-4 text-sm font-medium text-white">Начните новый чат проекта</h2>
+                <p className="mt-2 text-xs text-zinc-600">Инструкции и модель проекта применятся автоматически.</p>
+                <button type="button" onClick={() => onCreateThread(project.id)} className="mt-5 h-10 rounded-full bg-white px-5 text-xs font-semibold text-black hover:bg-zinc-200">Новый чат</button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
     </div>
@@ -712,12 +842,17 @@ export function ProjectsWorkspace(props: ProjectsWorkspaceProps) {
     return (
       <ProjectDetail
         project={activeProject}
+        threads={props.threads}
+        activeThreadId={props.activeThreadId}
         selectedModelId={props.selectedModelId}
         plan={props.plan}
         onSelectModel={props.onSelectModel}
         onOpenBilling={props.onOpenBilling}
         onCloseProject={props.onCloseProject}
         onUpdateProject={props.onUpdateProject}
+        onCreateThread={props.onCreateThread}
+        onOpenThread={props.onOpenThread}
+        onDeleteThread={props.onDeleteThread}
         onSendPrompt={props.onSendPrompt}
         renderProjectChat={props.renderProjectChat}
       />
@@ -727,6 +862,7 @@ export function ProjectsWorkspace(props: ProjectsWorkspaceProps) {
   return (
     <ProjectsIndex
       projects={props.projects}
+      threads={props.threads}
       selectedModelId={props.selectedModelId}
       plan={props.plan}
       onOpenBilling={props.onOpenBilling}
