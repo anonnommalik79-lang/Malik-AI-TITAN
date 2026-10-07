@@ -183,7 +183,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   // One concrete subject deserves a generous, readable photograph and its own caption.
   if (hero && plan.kind !== "tutorial") return (
     <section ref={container} className="malik-answer-photo-hero min-w-0" data-malik-reference-topic={plan.topic} data-malik-hero-visual>
-      {images?.[0] ? <figure className="malik-answer-photo-hero__figure">
+      {images?.[0] ? <figure className="malik-answer-photo-hero__figure" data-malik-layout={plan.layout} data-malik-fit={images[0].role === "logo" ? "contain" : "cover"}>
         <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + plan.topic}
           className={"block w-full overflow-hidden rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-white " + (images[0].role === "logo" ? "bg-white" : "bg-black")}>
           <img src={images[0].url} alt={plan.topic} {...priority} decoding="async" referrerPolicy="no-referrer"
@@ -208,7 +208,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   if (row) return (
     <div ref={container} className="malik-answer-photo-row min-w-0" data-malik-reference-topic={plan.topic} data-malik-inline-visual>
       <div className="malik-answer-photo-stack">
-        {images?.[0] ? <figure className={"malik-answer-photo-row__image shrink-0 overflow-hidden rounded-xl " + (plan.kind === "tutorial" || images[0].role === "logo" ? "bg-white" : "bg-black")}>
+        {images?.[0] ? <figure className={"malik-answer-photo-row__image shrink-0 overflow-hidden rounded-xl " + (plan.kind === "tutorial" || images[0].role === "logo" ? "bg-white" : "bg-black")} data-malik-layout={plan.layout} data-malik-fit={plan.kind === "tutorial" || images[0].role === "logo" ? "contain" : "cover"}>
           <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + images[0].alt} className="block w-full focus-visible:outline focus-visible:outline-white">
             <img src={images[0].url} alt={images[0].alt} {...priority} decoding="async" referrerPolicy="no-referrer"
               data-loaded={shown(images[0].url) ? "" : undefined}
