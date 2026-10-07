@@ -9,6 +9,7 @@ import {
   runGemini,
 } from "@/lib/business/gemini-engine"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -129,6 +130,12 @@ async function liveCheck(): Promise<LiveReport> {
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const entitlement = await resolveRequestEntitlement(request)
+  if (!hasMalikProAccess(entitlement.plan)) {
+    return Response.json(
+      { ok: false, code: "MALIK_PRO_REQUIRED", configured: false, summary: "Бизнес под ключ доступен только в Malik PRO.", upgrade: "pro" },
+      { status: 402, headers: { "cache-control": "no-store" } },
+    )
+  }
   const owner = entitlement.plan === "owner"
   const keys = geminiKeys()
   const base = geminiBaseUrl()

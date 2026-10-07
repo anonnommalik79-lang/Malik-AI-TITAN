@@ -7862,6 +7862,8 @@ const shouldShowMobilePreviewButton =
       return (
         <AutonomousCompany
           username={username}
+          plan={currentPlan}
+          onOpenBilling={() => safeOpenView("billing", "manual")}
           onViewChange={(view) => safeOpenView(view, "sidebar")}
           onNewChat={handleNewChat}
         />

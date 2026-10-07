@@ -56,6 +56,8 @@ import {
   type TemplateCategory,
 } from "@/lib/business/autonomous"
 import { CompanyLaunchPad } from "./CompanyLaunchPad"
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
+import type { AIPlan } from "@/lib/ai/types"
 import styles from "./AutonomousCompany.module.css"
 
 /** "auto" lets the server pick the newest Gemini the key can see. */
@@ -250,11 +252,13 @@ function Rich({ text }: { text: string }) {
 
 export type AutonomousCompanyProps = {
   username?: string
+  plan: AIPlan
+  onOpenBilling: () => void
   onViewChange?: (view: string) => void
   onNewChat?: () => void
 }
 
-export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProps) {
+export function AutonomousCompany({ username, plan, onOpenBilling, onNewChat }: AutonomousCompanyProps) {
   const [stage, setStage] = useState<Stage>("intro")
   const [prompt, setPrompt] = useState(() => takePrefillPrompt())
   const [market, setMarket] = useState("")
@@ -278,6 +282,15 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   const [stressBusy, setStressBusy] = useState(false)
   const [stressError, setStressError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const proAccess = hasMalikProAccess(plan)
+
+  const requirePro = useCallback(() => {
+    if (proAccess) return true
+    setOpenMenu(null)
+    setUpgradeOpen(true)
+    return false
+  }, [proAccess])
 
   const abortRef = useRef<AbortController | null>(null)
   const runningRef = useRef(false)
@@ -289,13 +302,17 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   // Which Gemini this server can actually reach, asked once. It costs nothing:
   // the server only lists the models each key can see.
   useEffect(() => {
+    if (!proAccess) {
+      setGemini(null)
+      return
+    }
     let alive = true
     fetch("/api/business/gemini-check", { cache: "no-store" })
       .then((response) => response.json())
       .then((data: GeminiStatus) => { if (alive) setGemini(data) })
       .catch(() => { if (alive) setGemini({ ok: false, configured: false, summary: "Не удалось проверить Gemini." }) })
     return () => { alive = false }
-  }, [])
+  }, [proAccess])
 
   const modelLabel = modelId === AUTO_MODEL
     ? gemini?.label ? `${gemini.label}` : "Gemini"
@@ -339,6 +356,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
   }, [])
 
   const applyTemplate = useCallback((template: BusinessTemplate) => {
+    if (!requirePro()) return
     setActiveTemplate(template)
     setInstruction(templateInstruction(template))
     setInstructionOpen(true)
@@ -349,9 +367,10 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     if (template.requirements) setRequirements(template.requirements)
     textareaRef.current?.focus()
     textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-  }, [])
+  }, [requirePro])
 
   const startCustom = useCallback(() => {
+    if (!requirePro()) return
     setActiveTemplate(null)
     setInstruction("")
     setPrompt("")
@@ -361,7 +380,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     setRequirements("")
     textareaRef.current?.focus()
     textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-  }, [])
+  }, [requirePro])
 
   const patchStep = useCallback((id: string, patch: Partial<Step> | ((step: Step) => Partial<Step>)) => {
     setSteps((current) => current.map((step) => (step.agent.id === id
@@ -387,6 +406,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
    * and everything else a second run.
    */
   const run = useCallback(async (resume = false) => {
+    if (!requirePro()) return
     const brief = prompt.trim()
     if (!brief || runningRef.current) return
 
@@ -500,9 +520,10 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
 
     runningRef.current = false
     setRunning(false)
-  }, [companyBody, patchStep, prompt])
+  }, [companyBody, patchStep, prompt, requirePro])
 
   const runStressTest = useCallback(async () => {
+    if (!requirePro()) return
     const done = steps
       .filter((step) => step.state === "done" && step.content)
       .map((step) => ({ agentId: step.agent.id, content: step.content }))
@@ -525,7 +546,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
     } finally {
       setStressBusy(false)
     }
-  }, [companyBody, steps, stressBusy])
+  }, [companyBody, steps, stressBusy, requirePro])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -609,9 +630,18 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
           <p className={styles.heroLead}>Одна идея → исследование → продукт → клиенты → продажи.</p>
 
           <div className={styles.heroMeta}>
-            <span>{modelLabel}</span><i /><span>8 AI-агентов</span><i /><span>Google Gemini</span>
+            <span>{proAccess ? modelLabel : "Malik PRO"}</span><i /><span>8 AI-агентов</span><i /><span>Google Gemini</span>
           </div>
-          {gemini && (
+          {!proAccess && (
+            <button
+              type="button"
+              onClick={() => setUpgradeOpen(true)}
+              className="mt-3 inline-flex h-8 items-center rounded-full border border-white/15 bg-white/[0.04] px-3 text-[11px] font-semibold text-white/75 transition hover:border-white/30 hover:text-white"
+            >
+              Malik PRO · требуется для запуска
+            </button>
+          )}
+          {proAccess && gemini && (
             <div className={`${styles.engine} ${gemini.ok ? styles.engineOk : styles.engineOff}`} title={gemini.summary}>
               <span className={styles.engineDot} />
               {gemini.ok ? "Gemini подключён" : gemini.configured ? "Gemini: ключи не отвечают" : "Gemini не подключён"}
@@ -680,7 +710,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                     type="button"
                     className={styles.modelSelect}
                     data-business-model-icon="gemini"
-                    onClick={() => setOpenMenu(openMenu === "model" ? null : "model")}
+                    onClick={() => { if (!requirePro()) return; setOpenMenu(openMenu === "model" ? null : "model") }}
                     aria-haspopup="listbox"
                     aria-expanded={openMenu === "model"}
                   >
@@ -697,7 +727,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                         type="button"
                         role="option"
                         aria-selected={modelId === AUTO_MODEL}
-                        onClick={() => { setModelId(AUTO_MODEL); setOpenMenu(null) }}
+                        onClick={() => { if (!requirePro()) return; setModelId(AUTO_MODEL); setOpenMenu(null) }}
                       >
                         Gemini · Авто
                       </button>
@@ -707,7 +737,7 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                           type="button"
                           role="option"
                           aria-selected={id === modelId}
-                          onClick={() => { setModelId(id); setOpenMenu(null) }}
+                          onClick={() => { if (!requirePro()) return; setModelId(id); setOpenMenu(null) }}
                         >
                           {geminiName(id)}
                         </button>
@@ -716,10 +746,10 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
                   )}
                 </div>
 
-                <ControlMenu id="market" label="Рынок" value={market} icon={Globe} options={MARKETS} open={openMenu === "market"} onToggle={() => setOpenMenu(openMenu === "market" ? null : "market")} onPick={(value) => { setMarket(value); setOpenMenu(null) }} />
-                <ControlMenu id="country" label="Страна" value={country} icon={MapPin} options={COUNTRIES} open={openMenu === "country"} onToggle={() => setOpenMenu(openMenu === "country" ? null : "country")} onPick={(value) => { setCountry(value); setOpenMenu(null) }} />
-                <ControlMenu id="budget" label="Бюджет" value={budget} icon={DollarSign} options={BUDGETS} open={openMenu === "budget"} onToggle={() => setOpenMenu(openMenu === "budget" ? null : "budget")} onPick={(value) => { setBudget(value); setOpenMenu(null) }} />
-                <ControlMenu id="req" label="Особые требования" value={requirements} icon={SlidersHorizontal} freeform open={openMenu === "req"} onToggle={() => setOpenMenu(openMenu === "req" ? null : "req")} onPick={(value) => { setRequirements(value); setOpenMenu(null) }} />
+                <ControlMenu id="market" label="Рынок" value={market} icon={Globe} options={MARKETS} open={openMenu === "market"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "market" ? null : "market") }} onPick={(value) => { if (!requirePro()) return; setMarket(value); setOpenMenu(null) }} />
+                <ControlMenu id="country" label="Страна" value={country} icon={MapPin} options={COUNTRIES} open={openMenu === "country"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "country" ? null : "country") }} onPick={(value) => { if (!requirePro()) return; setCountry(value); setOpenMenu(null) }} />
+                <ControlMenu id="budget" label="Бюджет" value={budget} icon={DollarSign} options={BUDGETS} open={openMenu === "budget"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "budget" ? null : "budget") }} onPick={(value) => { if (!requirePro()) return; setBudget(value); setOpenMenu(null) }} />
+                <ControlMenu id="req" label="Особые требования" value={requirements} icon={SlidersHorizontal} freeform open={openMenu === "req"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "req" ? null : "req") }} onPick={(value) => { if (!requirePro()) return; setRequirements(value); setOpenMenu(null) }} />
 
                 <span className={styles.spacer} />
                 <button type="button" className={styles.send} onClick={() => void run()} disabled={!prompt.trim()} aria-label="Запустить Autonomous Company">
@@ -973,6 +1003,35 @@ export function AutonomousCompany({ username, onNewChat }: AutonomousCompanyProp
         )}
       </div>
       <span hidden>{username}</span>
+
+      {upgradeOpen && !proAccess ? (
+        <div
+          className="fixed inset-0 z-[180] grid place-items-center bg-black/80 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Malik PRO required"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setUpgradeOpen(false) }}
+        >
+          <section className="w-full max-w-[430px] rounded-[24px] border border-white/12 bg-[#111112] p-6 text-left shadow-[0_30px_100px_rgba(0,0,0,.75)]">
+            <div className="mb-5 grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-white/[0.05]">
+              <Briefcase className="h-5 w-5 text-white" />
+            </div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">Malik PRO</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-[-0.025em] text-white">«Бизнес под ключ» доступен в Malik PRO</h2>
+            <p className="mt-3 text-sm leading-6 text-white/50">
+              Ты можешь открыть раздел, посмотреть шаблоны и написать идею. Запуск 8 AI-агентов, выбор бизнес-настроек, шаблоны и создание результата требуют Malik PRO.
+            </p>
+            <div className="mt-6 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setUpgradeOpen(false)} className="h-11 rounded-xl border border-white/10 text-sm font-medium text-white/70 hover:bg-white/[0.05]">
+                Не сейчас
+              </button>
+              <button type="button" onClick={() => { setUpgradeOpen(false); onOpenBilling() }} className="h-11 rounded-xl bg-white text-sm font-semibold text-black hover:bg-zinc-200">
+                Приобрести Malik PRO
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   )
 }

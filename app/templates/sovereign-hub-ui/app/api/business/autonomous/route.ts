@@ -1,4 +1,4 @@
-import { getMalikModel, isMalikModelId, type MalikModelId } from "@/lib/ai/malik-models"
+import { getMalikModel, hasMalikProAccess, isMalikModelId, type MalikModelId } from "@/lib/ai/malik-models"
 import { checkPromptLength } from "@/lib/limits/rate-limit"
 import { resolveUserTier } from "@/lib/limits/user-plan"
 import { MalikModelRouteError, runStrictMalikModel } from "@/lib/server/malik-model-router"
@@ -67,6 +67,12 @@ export async function POST(request: Request) {
   const selectedModel = getMalikModel(selectedModelId)
 
   const entitlement = await resolveRequestEntitlement(request)
+  if (!hasMalikProAccess(entitlement.plan)) {
+    return Response.json(
+      { ok: false, error: "MALIK_PRO_REQUIRED", message: "Бизнес под ключ доступен только в Malik PRO.", upgrade: "pro" },
+      { status: 402, headers: { "cache-control": "no-store" } },
+    )
+  }
   const tier = resolveUserTier(entitlement.userId, entitlement.plan)
   const combined = [idea, market, country, budget, requirements].join("\n")
   const promptCheck = checkPromptLength(combined, tier)

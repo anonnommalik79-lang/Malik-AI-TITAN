@@ -32,6 +32,7 @@ import { incrementUsage } from "@/lib/ai/usage"
 import { checkPromptLength, checkUsageLimit } from "@/lib/limits/rate-limit"
 import { resolveUserTier } from "@/lib/limits/user-plan"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -137,6 +138,12 @@ export async function POST(request: Request) {
   }
 
   const entitlement = await resolveRequestEntitlement(request)
+  if (!hasMalikProAccess(entitlement.plan)) {
+    return Response.json(
+      { ok: false, code: "MALIK_PRO_REQUIRED", message: "Бизнес под ключ доступен только в Malik PRO.", upgrade: "pro" },
+      { status: 402, headers: { "cache-control": "no-store" } },
+    )
+  }
   const owner = entitlement.plan === "owner"
   const tier = resolveUserTier(entitlement.userId, entitlement.plan)
   const authored = [company.brief, company.instruction, company.requirements].join("\n")

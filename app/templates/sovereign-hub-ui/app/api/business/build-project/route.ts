@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -232,6 +234,13 @@ async function generateDynamicFiles(prompt: string, html: string, feedback = "")
 
 export async function POST(request: Request) {
   try {
+    const entitlement = await resolveRequestEntitlement(request)
+    if (!hasMalikProAccess(entitlement.plan)) {
+      return NextResponse.json(
+        { ok: false, code: "MALIK_PRO_REQUIRED", error: "Бизнес под ключ доступен только в Malik PRO.", upgrade: "pro" },
+        { status: 402, headers: { "cache-control": "no-store" } },
+      )
+    }
     const body = (await request.json()) as BuildBody
     const prompt = String(body?.prompt || "").trim()
     const html = String(body?.html || "").trim()

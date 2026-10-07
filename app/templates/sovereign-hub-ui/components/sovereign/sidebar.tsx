@@ -120,7 +120,7 @@ const MAIN_ACTIONS: SidebarAction[] = [
 ]
 
 const CREATE_ACTIONS: SidebarAction[] = [
-  { id: "business-autonomous", label: "Бизнес под ключ", icon: Briefcase, view: "business-command-center" },
+  { id: "business-autonomous", label: "Бизнес под ключ", icon: Briefcase, view: "business-command-center", badge: "PRO" },
   { id: "work", label: "Malik Work", icon: MalikWorkIcon, action: "work", badge: "NEW" },
   { id: "shorts", label: "Malik Shorts", icon: Clapperboard, href: "/shorts", badge: "BETA" },
   { id: "websites", label: "Сайты", icon: LayoutTemplate, view: "website-generation" },
