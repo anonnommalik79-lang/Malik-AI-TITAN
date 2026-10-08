@@ -397,6 +397,7 @@ function common(raw: Record<string, unknown>) {
   return {
     id: typeof raw.id === "string" && /^[\w-]{3,64}$/.test(raw.id) ? raw.id : slideId(),
     ...(notes ? { notes } : {}),
+    ...(fitMode ? { fitMode } : {}),
     ...(imagePrompt ? { imagePrompt } : {}),
     ...(imageUrl ? { imageUrl } : {}),
     ...(imageQuery ? { imageQuery } : {}),
