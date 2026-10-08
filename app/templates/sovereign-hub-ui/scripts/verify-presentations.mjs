@@ -76,7 +76,7 @@ function check(name, fn) {
       console.log(`  ok  ${name}`)
     } catch (error) {
       failures += 1
-      console.error(`  FAIL ${name}\n       ${String(error?.message || error).split("\n")[0]}`)
+      console.error(`  FAIL ${name}\n       ${String(error?.stack || error?.message || error).slice(0, 1200)}`)
     }
   }
   pending.push({ name, run })
@@ -640,11 +640,11 @@ check("smart density reaches preview, export and the real shadow-root slide with
   const renderer = read("components/sovereign/presentations/SlideRenderer.tsx")
   const css = read("components/sovereign/presentations/deck-css.ts")
   const pptxSource = read("lib/presentations/pptx.ts")
-  assert.match(renderer, /data-density=\\{slideDensity\\(slide\\)\\}/)
+  assert.match(renderer, /data-density=\{slideDensity\(slide\)\}/)
   assert.match(css, /ART DIRECTION V3/)
   for (const density of ["compact", "dense"]) assert.ok(css.includes(`[data-density="${density}"]`))
-  assert.match(css, /deck-bar-label[\\s\\S]*white-space: normal/)
-  assert.match(pptxSource, /headlineScale\\(slide\\)/)
+  assert.match(css, /deck-bar-label[\s\S]*white-space: normal/)
+  assert.match(pptxSource, /headlineScale\(slide\)/)
   assert.doesNotMatch(css.slice(css.indexOf("ART DIRECTION V3")), /line-clamp|text-overflow: ellipsis/)
 })
 
