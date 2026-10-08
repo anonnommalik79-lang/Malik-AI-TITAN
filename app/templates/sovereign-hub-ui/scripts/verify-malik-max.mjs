@@ -392,5 +392,19 @@ await check("a fast comparison stays responsive but is not told to be brief", as
   assert.match(JSON.stringify(small[0].body.messages?.[0] ?? small[0].body.system ?? ""), /Keep the final answer concise/)
 })
 
+await check("tiny finished fragments cannot win a deep multi-part answer", async () => {
+  const calls = []
+  const tiny = lane("tiny-fragment")
+  const backup = lane("valid-backup")
+  const fetcher = async (url, init) => {
+    calls.push(new URL(url).pathname)
+    if (url.includes("tiny-fragment")) return new Response(sse([openaiChunk("A"), openaiChunk("", "stop")], { delay: 1, signal: init.signal }), { headers: { "content-type": "text/event-stream" } })
+    return new Response(sse([openaiChunk("This is a complete and useful answer to a complicated question."), openaiChunk("", "stop")], { delay: 1, signal: init.signal }), { headers: { "content-type": "text/event-stream" } })
+  }
+  const output = await engine.raceLanes({ lanes: [tiny, backup], call, onToken: () => {}, minFlush: 24, fetcher, ...raceTiming })
+  assert.equal(output.lane.id, backup.id)
+  assert.equal(calls.length, 2)
+})
+
 console.log(`\n${count - failures}/${count} checks passed`)
 if (failures) process.exit(1)
