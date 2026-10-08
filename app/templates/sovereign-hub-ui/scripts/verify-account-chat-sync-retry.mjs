@@ -35,3 +35,12 @@ assert.match(api,/status: 503,[\s\S]*"Cache-Control": "private, no-store"/, "ser
 assert.match(stateServer,/throwOnReadError: true/, "account reads opt into strict error reporting")
 assert.match(privateStore,/if \(options\?\.throwOnReadError\) throw error/, "unavailable R2 object is not confused with missing")
 console.log("PASS cloud-chat GET: freshness preserved, recoverable offline state, strict durable read, bounded retries")
+
+
+assert.match(component,/data-malik-chat-sync-warning/, "visible cloud state warning exists")
+assert.match(component,/cloudSyncWarning === "not-configured"/, "unconfigured cloud state is explicit")
+assert.match(component,/retryCount >= 3/, "write failures show a warning after repeated attempts")
+assert.match(component,/hydrationFailures >= 3/, "read failures show a warning after repeated attempts")
+assert.match(component,/setCloudSyncWarning\(null\)/, "successful persisted write clears warning")
+assert.match(component,/cleanAccountId\(accountId\) !== "guest"/, "guest mode does not show cloud sync banner")
+console.log("PASS cloud-chat UX: no silent history loss and no guest warning")
