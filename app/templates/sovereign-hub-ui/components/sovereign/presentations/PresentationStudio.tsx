@@ -65,6 +65,8 @@ import { isInvestorDeckRequest } from "@/lib/presentations/prompts"
 import { applyPhoto, photoSlots, usedPhotoUrls, type PhotoSlot } from "@/lib/presentations/images"
 import { PresentationShowcase } from "./PresentationShowcase"
 import { inspectPresentation } from "@/lib/presentations/quality"
+import { slideDensity } from "@/lib/presentations/visual-fit"
+import type { VisualIssue } from "@/lib/presentations/visual-audit"
 import "./presentation-studio.css"
 import "./presentation-desktop.css"
 
@@ -413,6 +415,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   const [presenting, setPresenting] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   const [showQuality, setShowQuality] = useState(false)
+  const [visualAudit, setVisualAudit] = useState<{ slideId: string; issues: VisualIssue[] } | null>(null)
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const [printing, setPrinting] = useState(false)
   const [assembling, setAssembling] = useState(false)
@@ -1058,6 +1061,13 @@ export function PresentationStudio({ username }: { username?: string }) {
 
   const generating = busy === "slides"
   const active = entries[current]
+  const visualIssues = active?.slide && visualAudit?.slideId === active.slide.id &&
+    spotlight?.index !== current ? visualAudit.issues : []
+  const autoFit = () => {
+    if (!active?.slide) return
+    const density = slideDensity(active.slide)
+    patchSlide(current, { fitMode: density === "ultra" ? "auto" : density === "dense" ? "ultra" : "dense" })
+  }
   const lowCredits = Boolean(quota && !quota.unlimited && quota.remaining < generationCost)
   const quality = useMemo(() => inspectPresentation({
     outline: stage === "outline" ? outline : { title: deckTitle, items: entries.map((entry) => entry.outline) },
@@ -1458,6 +1468,11 @@ export function PresentationStudio({ username }: { username?: string }) {
                     build={spotlight?.index === current}
                     language={language}
                     onChange={(patch) => patchSlide(current, patch)}
+                    onVisualAudit={(report) => setVisualAudit((old) => {
+                      if (old?.slideId === report.slideId &&
+                        JSON.stringify(old.issues) === JSON.stringify(report.issues)) return old
+                      return report
+                    })}
                   />
                 ) : (
                   <div className="ps-pending" data-state={active.state}>
@@ -1475,6 +1490,23 @@ export function PresentationStudio({ username }: { username?: string }) {
                   </div>
                 )}
               </div>
+              {active.slide && !spotlight ? (
+                <div className="ps-visual-check" data-overflow={visualIssues.length > 0} role="status" aria-live="polite">
+                  <span className="ps-visual-icon">{visualIssues.length ? <ShieldCheck size={16} /> : <Check size={16} />}</span>
+                  <span className="ps-visual-message">
+                    <strong>{visualIssues.length ? `Layout Doctor · ${visualIssues.length} замечаний` : "Layout Doctor · геометрия слайда"}</strong>
+                    <small>{visualIssues.length
+                      ? `Проверьте текст: ${visualIssues.slice(0, 2).map((issue) => issue.label).join(" · ")}`
+                      : "Измеряет размещение текста на экране; факты и источники проверяются отдельно."}</small>
+                  </span>
+                  {visualIssues.length > 0 ? (
+                    <button type="button" className="ps-btn ps-btn--small" onClick={autoFit}
+                      disabled={active.slide.fitMode === "ultra"} title="Бесплатное компактное размещение без удаления текста">
+                      <Wand2 size={14} /> Уместить
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="ps-slide-tools">
                 <button type="button" className="ps-icon-btn" onClick={() => setCurrent((value) => Math.max(0, value - 1))} disabled={current === 0} aria-label="Предыдущий слайд"><ChevronLeft size={18} /></button>
@@ -1510,6 +1542,14 @@ export function PresentationStudio({ username }: { username?: string }) {
                       title="Сменить макет · 1 кредит"
                     >
                       {SLIDE_LAYOUTS.map((layout) => <option key={layout} value={layout}>{LAYOUT_LABELS[layout]}</option>)}
+                    </select>
+                    <select className="ps-select" value={active.slide.fitMode || "auto"}
+                      onChange={(event) => patchSlide(current, { fitMode: event.target.value })}
+                      aria-label="Плотность текста на слайде" title="Оптическое размещение без использования кредитов">
+                      <option value="auto">Вид: авто</option>
+                      <option value="compact">Вид: компактно</option>
+                      <option value="dense">Вид: плотнее</option>
+                      <option value="ultra">Вид: максимум</option>
                     </select>
                     <span className="ps-spacer" />
                     <button type="button" className="ps-icon-btn" onClick={() => move(current, -1)} disabled={generating || current === 0} aria-label="Переместить выше"><ArrowUp size={16} /></button>
