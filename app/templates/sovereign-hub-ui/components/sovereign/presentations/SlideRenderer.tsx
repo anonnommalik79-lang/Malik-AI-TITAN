@@ -8,6 +8,7 @@ import { formatCounted, splitNumber } from "@/lib/presentations/count-up"
 import { DECK_ICONS } from "@/lib/presentations/icon-components"
 import { DECK_CSS } from "./deck-css"
 import { slideDensity } from "@/lib/presentations/visual-fit"
+import { inspectVisualOverflow, type VisualIssue } from "@/lib/presentations/visual-audit"
 
 /**
  * One slide, drawn at 1280 × 720 and scaled as a whole to whatever box it is
@@ -677,6 +678,7 @@ export function SlideCanvas({
   total,
   editable = false,
   onChange,
+  onVisualAudit,
   language = "ru",
   build = false,
   pace = 1,
@@ -687,6 +689,8 @@ export function SlideCanvas({
   total: number
   editable?: boolean
   onChange?: (patch: SlidePatch) => void
+  /** Only pass this for the active editor slide: real DOM geometry audit. */
+  onVisualAudit?: (report: { slideId: string; issues: VisualIssue[] }) => void
   language?: string
   /** Assemble the slide on screen instead of showing it finished. */
   build?: boolean
@@ -694,6 +698,32 @@ export function SlideCanvas({
   pace?: number
 }) {
   const [hostRef, root] = useShadowRoot()
+  const auditRef = useRef(onVisualAudit)
+  auditRef.current = onVisualAudit
+  useEffect(() => {
+    if (!root || build || !auditRef.current) return
+    let cancelled = false
+    let frame = 0
+    const check = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        if (cancelled) return
+        const canvas = root.querySelector<HTMLElement>(".deck-slide")
+        if (canvas && auditRef.current) {
+          auditRef.current({ slideId: slide.id, issues: inspectVisualOverflow(canvas) })
+        }
+      })
+    }
+    check()
+    // Font arrival can change line wrapping after the first render.
+    void document.fonts?.ready.then(() => { if (!cancelled) check() })
+    window.addEventListener("resize", check, { passive: true })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(frame)
+      window.removeEventListener("resize", check)
+    }
+  }, [root, slide, theme, build])
   const typeMs = build ? slideBuildTiming(slide, pace).type : 0
   // --t is the headline's typing time before pace; the stylesheet applies --k.
   const style = {
