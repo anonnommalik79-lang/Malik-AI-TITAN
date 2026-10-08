@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
   // The search must never carry credentials or contact details supplied in
   // a spoken conversation to a third-party provider.
-  if (/(?:[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}|\\b(?:sk-|ghp_|AIza)[A-Za-z0-9_-]{12,})/i.test(query)) {
+  if (/(?:[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\b(?:sk-|ghp_|AIza)[A-Za-z0-9_-]{12,})/i.test(query)) {
     return NextResponse.json({ ok: false, error: "sensitive_query_not_searched", sources: [] })
   }
 
