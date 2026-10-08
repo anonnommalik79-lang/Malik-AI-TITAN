@@ -23,15 +23,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "request_too_large" }, { status: 413 })
   }
 
-  const body = await request.json().catch(() => null) as { query?: unknown } | null
+  const body = await request.json().catch(() => null) as { query?: unknown; utterance?: unknown } | null
   const query = typeof body?.query === "string" ? body.query.replace(/\s+/g, " ").trim() : ""
   if (query.length < 3 || query.length > 280) {
     return NextResponse.json({ ok: false, error: "invalid_query", sources: [] }, { status: 400 })
   }
   // Reject model-invented requests for unnecessary searches. A tool suggestion
   // is not itself permission to spend API credits for greetings or arithmetic.
-  if (voiceSearchReason(query) === "off") {
+  const utterance = typeof body?.utterance === "string" ? body.utterance.slice(0, 480) : ""
+  // The model may shorten an explicit spoken request ("поищи источники
+  // об этой компании") into just a proper noun. Preserve the original user
+  // intent for the decision without forwarding private transcript to search.
+  if (voiceSearchReason(query) === "off" && voiceSearchReason(utterance) === "off") {
     return NextResponse.json({ ok: false, error: "not_a_public_search_question", sources: [] })
+  }
+
+  // The search must never carry credentials or contact details supplied in
+  // a spoken conversation to a third-party provider.
+  if (/(?:[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}|\\b(?:sk-|ghp_|AIza)[A-Za-z0-9_-]{12,})/i.test(query)) {
+    return NextResponse.json({ ok: false, error: "sensitive_query_not_searched", sources: [] })
   }
 
   const entitlement = await resolveRequestEntitlement(request)
