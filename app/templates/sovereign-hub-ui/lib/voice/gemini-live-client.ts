@@ -26,7 +26,10 @@ const MEMORY_TURNS = 12
 function needsSpokenWebSearch(text: string) {
   const value = String(text || "").toLocaleLowerCase().trim()
   if (!value || /(?:не ищи|без интернета|don't search|without searching|іздеме)/i.test(value)) return false
-  return /(?:\b(?:новост[ьииейям]|новостями|погода|погоде|прогноз|курс(?:\s+валют)?|последние|актуальные)\b|по[ий]щи|загугли|найди(?:те)?\s+(?:новости|источники|информацию)|\b(?:latest news|breaking news|look up|search online|weather today|exchange rate)\b|жаңалық|интернеттен\s+тап|соңғы\s+жаңалық)/iu.test(value)
+  // JS \b only recognizes ASCII word characters; never use it for Cyrillic.
+  const explicit = /(?:по[ий]щи|загугли|найди(?:те)?\s+(?:\p{L}+\s+){0,4}(?:новост\p{L}*|источник\p{L}*|информац\p{L}*)|search online|look up|интернеттен\s+тап|ізде\p{L}*)/iu
+  const fresh = /(?:новост\p{L}*|погод\p{L}*|прогноз\s+погоды|курс\s+(?:валют|доллара|евро|тенге)|latest news|breaking news|weather today|exchange rate|жаңалық\p{L}*|соңғы\s+жаңалық)/iu
+  return explicit.test(value) || fresh.test(value)
 }
 
 export type VoiceWebSource = { title: string; url: string; snippet?: string; provider?: string }
