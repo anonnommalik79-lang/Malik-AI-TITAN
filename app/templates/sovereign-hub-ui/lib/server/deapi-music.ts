@@ -394,6 +394,15 @@ async function submitFreeAiMusic(input: {
       }
     }
 
+    const providerState = rawStatusOf(json)
+    if (["failed", "error", "failure", "cancelled", "canceled"].includes(providerState)) {
+      return {
+        ok: false as const,
+        status: 502,
+        error: providerError(json, "Free.ai rejected this music job."),
+      }
+    }
+
     const nativeId = requestIdOf(json)
     const resultUrl = resultUrlOf(json)
 
@@ -507,6 +516,18 @@ async function getFreeAiMusicJob(requestId: string) {
     const resultUrl = resultUrlOf(json)
     const progress = progressOf(json)
 
+    if (["error", "failed", "failure", "cancelled", "canceled"].includes(rawStatus)) {
+      return {
+        ok: false as const,
+        statusCode: 200,
+        status: "failed" as const,
+        error: providerError(json, "Music generation failed"),
+        progress,
+        provider: "Free.ai" as const,
+        model: "ACE-Step",
+      }
+    }
+
     if (["done", "completed", "complete", "ready", "succeeded", "success"].includes(rawStatus) || resultUrl) {
       if (!resultUrl) {
         return {
@@ -529,17 +550,7 @@ async function getFreeAiMusicJob(requestId: string) {
       }
     }
 
-    if (["error", "failed", "failure", "cancelled", "canceled"].includes(rawStatus)) {
-      return {
-        ok: false as const,
-        statusCode: 200,
-        status: "failed" as const,
-        error: providerError(json, "Music generation failed"),
-        progress,
-        provider: "Free.ai" as const,
-        model: "ACE-Step",
-      }
-    }
+
 
     if (["processing", "running", "generating", "in_progress", "in-progress"].includes(rawStatus)) {
       return {
@@ -720,10 +731,7 @@ async function getDeapiFallbackJob(requestId: string) {
       keys.set(requestId, source.label)
       trimMapToLimit(keys)
 
-      if (rawStatus === "done" && resultUrl) {
-        return { ok: true as const, statusCode: 200, status: "done" as const, resultUrl, progress: 100, provider: "deAPI" as const, model: musicModel(requestId) }
-      }
-      if (rawStatus === "error" || rawStatus === "failed" || rawStatus === "cancelled") {
+      if (["error", "failed", "failure", "cancelled", "canceled"].includes(rawStatus)) {
         return {
           ok: false as const,
           statusCode: 200,
@@ -733,6 +741,9 @@ async function getDeapiFallbackJob(requestId: string) {
           provider: "deAPI" as const,
           model: musicModel(requestId),
         }
+      }
+      if ((["done", "completed", "complete", "ready", "succeeded", "success"].includes(rawStatus) || resultUrl) && resultUrl) {
+        return { ok: true as const, statusCode: 200, status: "done" as const, resultUrl, progress: 100, provider: "deAPI" as const, model: musicModel(requestId) }
       }
       if (rawStatus === "processing" || rawStatus === "running" || rawStatus === "generating") {
         return { ok: true as const, statusCode: 200, status: "processing" as const, progress, provider: "deAPI" as const, model: musicModel(requestId) }
