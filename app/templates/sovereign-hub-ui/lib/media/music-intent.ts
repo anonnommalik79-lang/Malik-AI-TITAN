@@ -14,7 +14,7 @@ export type MusicPromptIntent = {
 }
 
 const NO_VOCALS_RE = /(?:без\s+(?:слов|текста|вокала|голоса|пения)|безвокал|минусовк\w*|инструментал(?:ьн\w*)?|только\s+(?:музык|мелоди|инструмент)|no\s+vocals?|without\s+vocals?|no\s+singing|instrumental|music\s+only|сөзсіз|вокалсыз|дауыссыз)/iu
-const VOCALS_RE = /(?:с\s+(?:вокалом|голосом|текстом)|со\s+словами|песн(?:я|ю|и)\b|спой|спеть|куплет\w*|припев\w*|вокал(?:ьн\w*)?|лирик\w*|lyrics?|vocals?|sing(?:ing|er)?|song|ән\b|әнші|қайырма|шумақ)/iu
+const VOCALS_RE = /(?:с\s+(?:вокалом|голосом|текстом)|со\s+словами|песн(?:я|ю|и)|спой|спеть|куплет\w*|припев\w*|вокал(?:ьн\w*)?|лирик\w*|lyrics?|vocals?|sing(?:ing|er)?|song|ән|әнші|қайырма|шумақ)/iu
 const BEAT_ONLY_RE = /(?:\bbeats?\b|\bbacking\s+track\b|бит\w*|минусовк\w*|фонограмм\w*)/iu
 const RAP_RE = /(?:\brap\b|рэп|реп\b)/iu
 

@@ -23,7 +23,7 @@ const explicitNoVocalsWins = analyzeMusicPrompt("песня без слов то
 assert.equal(explicitNoVocalsWins.instrumental, true)
 assert.deepEqual(explicitNoVocalsWins.instruments, ["piano"])
 
-console.log("music prompt intent checks passed")
+
 
 const rap = analyzeMusicPrompt("Напиши рэп трек с куплетами, припевом и мужским голосом, 95 BPM")
 assert.equal(rap.instrumental, false)
@@ -47,3 +47,7 @@ const plainTrack = analyzeMusicPrompt("Создай трек с атмосфер
 assert.equal(plainTrack.vocalDirective, undefined)
 const noVocalsSong = analyzeMusicPrompt("Песня без слов на пианино")
 assert.equal(noVocalsSong.vocalDirective, "instrumental")
+
+assert.equal(analyzeMusicPrompt("Сделай песню про Алматы").instrumental, false)
+assert.equal(analyzeMusicPrompt("Қазақша ән жазып бер").instrumental, false)
+console.log("music prompt intent checks passed")
