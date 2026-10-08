@@ -41,7 +41,7 @@ type LiveCallbacks = {
   onClosed?: () => void
   /** Daily microphone allowance reached. */
   onQuotaExceeded?: () => void
-  onError?: () => void
+  onError?: (message?: string) => void
 }
 
 type TokenPayload = {
@@ -51,6 +51,7 @@ type TokenPayload = {
   websocketUrl?: string
   unlimited?: boolean
   remainingSeconds?: number | null
+  error?: string
 }
 
 type VoiceWindow = typeof globalThis & { webkitAudioContext?: typeof AudioContext }
@@ -346,6 +347,7 @@ export class GeminiLiveSession {
   private async open(): Promise<boolean> {
     if (this.disposed) return false
     const generation = ++this.generation
+    const initialSetupTier = this.setupTier
 
     let token: TokenPayload
     try {
@@ -363,10 +365,17 @@ export class GeminiLiveSession {
           this.finishVoiceQuota()
           return false
         }
+        this.callbacks.onError?.(
+          response.status === 401 ? "Войди в аккаунт для голосового режима."
+            : token.error === "voice_live_not_configured" ? "Голосовой сервер не настроен. Попробуй позже."
+              : response.status === 503 ? "Голосовой сервис недоступен. Проверь подключение в настройках."
+                : "Не удалось подключить Voice. Попробуй ещё раз."
+        )
         console.error("[VOICE_GEMINI_LIVE_TOKEN_UNAVAILABLE]", response.status)
         return false
       }
     } catch (error) {
+      this.callbacks.onError?.("Не удалось связаться с голосовым сервером. Проверь интернет.")
       console.error("[VOICE_GEMINI_LIVE_TOKEN_FETCH]", error instanceof Error ? error.message : String(error))
       return false
     }
@@ -520,6 +529,9 @@ export class GeminiLiveSession {
         }
 
         finish(false)
+        if (!this.sawSetupComplete && this.setupTier >= 2) {
+          this.callbacks.onError?.("Голосовая модель отклонила соединение. Проверь модель и доступ к Live API.")
+        }
         // Deliberate hang-ups (close(), restart()) bump the generation first,
         // so anything arriving here is a drop the person did not ask for.
         if (this.wantsMic || wasReady) this.restartSoon()
@@ -530,6 +542,11 @@ export class GeminiLiveSession {
       if (this.socket === socket) {
         try { socket.close() } catch {}
         if (this.socket === socket) this.socket = null
+      }
+      // A rejected setup downgraded the tier in onclose; retry automatically
+      // rather than abandoning Voice after the first incompatible field.
+      if (!this.disposed && generation === this.generation && this.setupTier > initialSetupTier) {
+        return this.open()
       }
     }
     return opened
