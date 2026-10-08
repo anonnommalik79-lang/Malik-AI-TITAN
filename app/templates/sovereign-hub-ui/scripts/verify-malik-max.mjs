@@ -406,9 +406,6 @@ await check("tiny finished fragments cannot win a deep multi-part answer", async
   assert.equal(calls.length, 2)
 })
 
-console.log(`\n${count - failures}/${count} checks passed`)
-if (failures) process.exit(1)
-
 await check("billing-depleted Gemini keys rest for two hours instead of cycling 403 repeatedly", async () => {
   const exhausted = engine.classifyMaxProviderFailure(403, "Your prepayment credits are depleted. Please go to AI Studio.")
   assert.equal(exhausted.reason, "payment-required")
@@ -422,3 +419,7 @@ await check("MAX response uses finite wall times instead of hanging fourteen min
   assert.equal(engine.maxResponseWallMs(false, false, true), 160000)
   assert.ok(engine.maxResponseWallMs(false, false, false) < 180000)
 })
+
+console.log(`\n${count - failures}/${count} checks passed`)
+if (failures) process.exit(1)
+
