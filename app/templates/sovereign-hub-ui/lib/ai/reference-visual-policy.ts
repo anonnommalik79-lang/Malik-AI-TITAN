@@ -141,6 +141,16 @@ export function allowsAnswerPhotoHints(question: string, hasAttachment = false):
     && !/(?:\b(?:python|javascript|typescript|sql|code)\b|(?<!\p{L})код(?!\p{L})|чек[ -]?лист|checklist)/iu.test(text))
 }
 
+/** A short conversational prompt can still name an actual person, not a photo keyword.
+ * Keep this conservative: never turn "знаешь код?" into a portrait search. */
+function conversationalPersonSubject(input: string): string | null {
+  const text = input.trim().replace(/[?!.]+$/u, "").trim()
+  const name = String.raw`[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+){0,3}`
+  const before = new RegExp(String.raw`^(?:(?:[Тт]ы\s+)?[Зз]наеш[ь]?|[Dd]o\s+you\s+know)\s+(?:[Пп]ро\s+)?(${name})$`, "u")
+  const after = new RegExp(String.raw`^(${name})\s+(?:[Зз]наеш[ь]?|[Dd]o\s+you\s+know)$`, "u")
+  return before.exec(text)?.[1] || after.exec(text)?.[1] || null
+}
+
 /** Evaluate every explanatory answer; never require the user to ask for photos. */
 export function planReferenceVisuals(question: string, previousQuestion = "", hasAttachment = false, previousAnswer = ""): ReferenceVisualPlan | null {
   const raw = String(question || "").trim()
@@ -157,7 +167,8 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   if (tutorial) return tutorial
   if (/^(?:покажи(?:те)?(?:\s+мне)?|show(?:\s+me)?)\s+(?:как\s|(?:код|code|логи|logs|таймер|timer|доказательств[\p{L}]*|возможност[\p{L}]*|capabilities)(?:\s|$)|список\s+моделей\s*$)/iu.test(text)) return null
   let explicit = isReferenceImageRequest(text)
-  let subject = text
+  const conversationalPerson = conversationalPersonSubject(text)
+  let subject = conversationalPerson || text
   const followUp = isReferencePhotoFollowUp(text)
   if (followUp) {
     if (!previousQuestion) return null
@@ -169,7 +180,7 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
     if (educational) return educational
     // Questions about places, people, objects and concepts get references by default.
     const places = /^(?:что\s+посмотреть\s+в|куда\s+сходить\s+в|достопримечательности|what\s+to\s+see\s+in|places\s+to\s+visit\s+in)\s+(.+)$/iu.exec(text)
-    subject = places ? places[1] : text
+    subject = places ? places[1] : (conversationalPerson || text)
     if (/^(?:объясни\s+как|почему\s+не\s+работает)/iu.test(text)) return null
   }
   const topic = referenceTopic(subject)
@@ -184,7 +195,7 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   const listed = followUp ? namedReferenceSubjects(previousAnswer) : []
   const allIPhones = /(?:все|всех|all|every).{0,25}(?:модел|поколен|models?|generations?).{0,15}(?:iphone|айфон)/iu.test(subject)
   const subjects = listed.length ? listed : allIPhones ? Object.keys(APPLE_IPHONE_PHOTOS).reverse() : undefined
-  const person = /^(?:кто(?:\s+(?:такой|такая|такое|это))?|who(?:\s+is)?|кім)(?:\s|$)/iu.test(subject)
+  const person = Boolean(conversationalPerson) || /^(?:кто(?:\s+(?:такой|такая|такое|это))?|who(?:\s+is)?|кім)(?:\s|$)/iu.test(subject)
     || /(?:назарбаев|портрет|portrait|биографи)/iu.test(subject)
   return { topic, queries, explicit, subjects, person, entity: person || /(?:iphone|айфон)/iu.test(subject), layout: person || /референс|вдохнов|бренд|постер|reference|inspiration|poster|brand/iu.test(text) ? "portrait" : "landscape" }
 }
@@ -233,9 +244,13 @@ export function planAnswerVisualSlots(question: string, segments: AnswerVisualSe
   // A name in the opening sentence resolves inflected or surname-only questions.
   // Only treat two or more capitalized name parts as a person, not a place title.
   const intro = segments.find((segment) => segment.kind === "paragraph") || segments[0]
-  const introName = intro?.kind === "paragraph" && /\s[—–]\s/u.test(intro.text) ? visualSegmentLabel(intro.text) : ""
-  const fullName = /^[\p{Lu}][\p{L}'-]+(?:\s+[\p{Lu}][\p{L}'-]+){1,3}$/u.test(introName)
-  if (intro && !base.person && fullName && /^(?:кто|who|расскажи|tell\s+me\s+about|биографи|покажи(?:те)?(?:\s+мне)?\s+(?:фото|портрет))/iu.test(question)) {
+  // Strip lifespan dates and optional Markdown bold before identifying the real person.
+  // e.g. "Владимир Жириновский (1946–2022) — ..." must resolve to the exact name.
+  const introName = intro?.kind === "paragraph"
+    ? /^\s*(?:\*\*)?([\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+){1,3})(?:\*\*)?(?:\s*\(\d{4}\s*[–—-]\s*\d{4}\))?(?:\*\*)?\s+[—–]\s/u.exec(intro.text)?.[1] || ""
+    : ""
+  const fullName = /^[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+){1,3}$/u.test(introName)
+  if (intro && fullName && (base.person || /^(?:кто|who|расскажи|tell\s+me\s+about|биографи|покажи(?:те)?(?:\s+мне)?\s+(?:фото|портрет))/iu.test(question))) {
     return [{ key: intro.key, row: false, plan: { ...base, topic: introName,
       queries: [...new Set([referenceSearchTopic(introName), introName])].slice(0, 2),
       person: true, entity: true, layout: "portrait" } }]
