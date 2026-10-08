@@ -2666,11 +2666,34 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     if (!queuedTurn || queueDispatchRef.current) return
     queueDispatchRef.current = true
     const next = queuedTurn
-    setQueuedTurn(null)
-    window.setTimeout(() => {
-      onSendMessage(next.message, next.attachments, next.options)
-      queueDispatchRef.current = false
+    let dispatched = false
+    const timer = window.setTimeout(() => {
+      dispatched = true
+      try {
+        // A queued turn remains recoverable until the handoff succeeds.
+        // Clearing it before calling the dashboard silently lost a question
+        // whenever that handler threw synchronously.
+        onSendMessage(next.message, next.attachments, next.options)
+        setQueuedTurn((current) => current?.id === next.id ? null : current)
+      } catch (error) {
+        // Restore the failed question and files for an explicit retry. Never
+        // auto-loop a failed request or claim it was sent successfully.
+        setQueuedTurn((current) => current?.id === next.id ? null : current)
+        setPrompt((current) => current.trim() ? current : next.display)
+        setAttachments((current) => current.length ? current : next.attachments)
+        setEditSourceId(next.options.branchFromMessageId || null)
+        if (next.options.research) setResearchMode("web")
+        setLocalError(error instanceof Error ? error.message : "Не удалось отправить запрос из очереди. Он восстановлен в поле ввода.")
+      } finally {
+        queueDispatchRef.current = false
+      }
     }, 0)
+    // StrictMode, an unmount, or a changed queue must not dispatch a stale
+    // request after the person navigated away from this conversation.
+    return () => {
+      window.clearTimeout(timer)
+      if (!dispatched) queueDispatchRef.current = false
+    }
   }, [isLoading, onSendMessage, queuedTurn])
 
   // The row callbacks below are stable (useCallback + a ref to the latest
