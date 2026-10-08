@@ -15,6 +15,7 @@ import { MALIK_OWNER_EMAIL, isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import { chatHttpErrorMessage } from "@/lib/ai/errors"
 import { fetchRecoverableChat } from "@/lib/ai/chat-stream-recovery"
+import { mergeStreamingAssistantCheckpoints, restoreInterruptedAssistant } from "@/lib/ai/stream-checkpoint"
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
@@ -1428,6 +1429,8 @@ function persistDashboardState(key: string, state: {
 }): boolean {
   const messages = state.messages.map(toStorableMessage)
   let chats = state.chats.map((chat) => ({ ...chat, messages: chat.messages.map(toStorableMessage) }))
+  // Use the existing throttled snapshot to preserve a visible partial reply.
+  chats = mergeStreamingAssistantCheckpoints(chats, messages)
 
   // Account persistence receives the complete lightweight snapshot before the
   // browser's ~5MB localStorage fallback starts shedding old chats.
@@ -1505,7 +1508,10 @@ function reviveMessage(message: any): Message {
     id: String(message?.id || crypto.randomUUID()),
     role: message?.role === "assistant" ? "assistant" : "user",
     // A card that was settled above must not keep saying "запускаю генерацию".
-    content: generatedMedia ? buildInlineMediaAssistantText(generatedMedia) : String(message?.content || ""),
+    content: generatedMedia ? buildInlineMediaAssistantText(generatedMedia) : restoreInterruptedAssistant(
+      String(message?.content || ""),
+      message?.role === "assistant" && message?.isStreaming === true && !message?.imageConfirmation && !message?.superflow,
+    ),
     timestamp: message?.timestamp ? new Date(message.timestamp) : new Date(),
     generatedCode: typeof message?.generatedCode === "string" ? message.generatedCode : undefined,
     generatedMedia,
@@ -7428,7 +7434,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       view: activeViewRef.current,
       payload: { chatId, mode, hasCode: Boolean(code), textLength: (cleanText || fullText || "").length },
     })
-    finalizeAssistant(cleanDashboardAIText(cleanText || fullText), code, finalResearch)
+    finalizeAssistant(cleanDashboardAIText(cleanText || fullText), code, finalResearch, connectionCut && !stoppedByUser)
   } catch (error) {
     stopLive()
     if (streamController.signal.aborted) {
@@ -7456,7 +7462,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     const connectionDropped = error instanceof TypeError
       && /network|failed to fetch|load failed|fetch failed|terminated|connection|ERR_/i.test(error.message)
     const errorMessage = connectionDropped
-      ? (liveShownText
+      ? (liveShownText || fullText
           ? "Соединение прервалось — ответ может быть неполным. Нажмите «Перегенерировать», чтобы повторить."
           : "Соединение прервалось до ответа. Нажмите «Перегенерировать», чтобы повторить.")
       : error instanceof Error && error.message
@@ -7473,8 +7479,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setIsGeneratingTerminal(false)
 
     // Keep what the reader already watched arrive; the failure goes under it.
-    const failedText = liveShownText
-      ? `${liveShownText}\n\n> ${errorMessage.replace(/\s+/g, " ").trim()}`
+    const receivedBeforeDrop = cleanDashboardAIText(liveShownText || fullText)
+    const failedText = receivedBeforeDrop
+      ? `${receivedBeforeDrop}\n\n> ${errorMessage.replace(/\s+/g, " ").trim()}`
       : errorMessage
     finalizeAssistant(failedText, undefined, finalResearch ? { ...finalResearch, status: "error", tookMs: Date.now() - finalResearch.startedAt } : undefined, true)
   } finally {

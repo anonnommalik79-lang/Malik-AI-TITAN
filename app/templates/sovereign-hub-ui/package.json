@@ -99,7 +99,8 @@
     "test:chat-queue": "node scripts/verify-chat-queue.mjs",
     "test:home-actions": "node scripts/verify-home-actions.mjs",
     "test:large-prompts": "node --experimental-strip-types --no-warnings scripts/verify-large-prompts.mjs",
-    "test:public-answer-cache": "node --experimental-strip-types --no-warnings scripts/verify-public-answer-cache.mjs"
+    "test:public-answer-cache": "node --experimental-strip-types --no-warnings scripts/verify-public-answer-cache.mjs",
+    "test:never-lose-chat": "node --experimental-strip-types --no-warnings scripts/verify-stream-checkpoint.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "1.1.1",
