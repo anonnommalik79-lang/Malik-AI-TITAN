@@ -4,7 +4,7 @@ import { useLayoutEffect, useState, type ReactNode } from "react"
 import { requestPersistentGeneratedImageStorage, setGeneratedImageAccountScope } from "@/lib/media/client-generated-image-store"
 import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import { mergeAccountChatStates } from "@/lib/ai/account-chat-state-merge"
-import { accountChatRetryDelay, accountChatWriteConfirmed, shouldRetryAccountChatWrite } from "@/lib/ai/account-chat-sync-retry"
+import { accountChatRetryDelay, accountChatWriteConfirmed, claimAccountChatSyncNotice, shouldRetryAccountChatWrite, type AccountChatSyncNotice } from "@/lib/ai/account-chat-sync-retry"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const ACCOUNT_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
@@ -525,6 +525,21 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
     let hydrationFailures = 0
     let hydrationTimer = 0
     let inFlight = Promise.resolve()
+    let warningDismissTimer = 0
+    setCloudSyncWarning(null)
+
+    const showCloudSyncWarning = (kind: AccountChatSyncNotice) => {
+      if (disposed) return
+      let noticeStorage: Storage | null = null
+      try { noticeStorage = window.localStorage } catch {}
+      if (!claimAccountChatSyncNotice(noticeStorage, accountKey, kind)) return
+      if (warningDismissTimer) window.clearTimeout(warningDismissTimer)
+      setCloudSyncWarning(kind)
+      warningDismissTimer = window.setTimeout(() => {
+        warningDismissTimer = 0
+        if (!disposed) setCloudSyncWarning(null)
+      }, 10_000)
+    }
 
     const parseTime = (value: unknown) => {
       const parsed = Date.parse(String(value || ""))
@@ -566,7 +581,7 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
           const payload = response?.ok ? await response.json().catch(() => null) : null
           if (payload?.configured === false) {
             remoteConfigured = false
-            if (!disposed) setCloudSyncWarning("not-configured")
+            if (!disposed) showCloudSyncWarning("not-configured")
             return
           }
           if (!accountChatWriteConfirmed(payload)) {
@@ -574,12 +589,14 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
             // A newer snapshot already queued locally always wins.
             if (shouldRetryAccountChatWrite(sentRevision, writeRevision, disposed)) {
               retryCount += 1
-              if (retryCount >= 3 && !disposed) setCloudSyncWarning("unavailable")
+              if (retryCount >= 3 && !disposed) showCloudSyncWarning("unavailable")
               pushSnapshot(pendingRaw || nextRaw, accountChatRetryDelay(retryCount))
             }
             return
           }
           retryCount = 0
+          if (warningDismissTimer) window.clearTimeout(warningDismissTimer)
+          warningDismissTimer = 0
           if (!disposed) setCloudSyncWarning(null)
           if (typeof payload.savedAt === "string") {
             try { window.localStorage.setItem(savedAtKey, payload.savedAt) } catch {}
@@ -622,7 +639,7 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
         if (payload?.ok !== true) throw new Error("CHAT_HISTORY_CLOUD_READ_INVALID")
 
         remoteConfigured = payload?.configured !== false
-        if (!remoteConfigured && !disposed) setCloudSyncWarning("not-configured")
+        if (!remoteConfigured && !disposed) showCloudSyncWarning("not-configured")
         const remoteState = payload?.state && typeof payload.state === "object" ? payload.state : null
         const remoteSavedAt = parseTime(payload?.savedAt)
         const localSavedAt = parseTime(window.localStorage.getItem(savedAtKey))
@@ -662,7 +679,7 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
         // with a bounded delay and no recurring task when the component unmounts.
         if (!disposed) {
           hydrationFailures += 1
-          if (hydrationFailures >= 3) setCloudSyncWarning("unavailable")
+          if (hydrationFailures >= 3) showCloudSyncWarning("unavailable")
           hydrationTimer = window.setTimeout(() => {
             hydrationTimer = 0
             void hydrateCloud()
@@ -674,6 +691,7 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
 
     return () => {
       disposed = true
+      if (warningDismissTimer) window.clearTimeout(warningDismissTimer)
       if (timer) window.clearTimeout(timer)
       if (hydrationTimer) window.clearTimeout(hydrationTimer)
       window.removeEventListener(ACCOUNT_CHAT_STATE_EVENT, onFullSnapshot)
