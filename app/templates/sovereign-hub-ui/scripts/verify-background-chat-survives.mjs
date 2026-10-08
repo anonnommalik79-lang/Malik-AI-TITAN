@@ -57,4 +57,11 @@ check("durable storage is encrypted and has a process-memory fallback", () => {
   assert.match(store, /WORKOS_COOKIE_PASSWORD/)
 })
 
+check("expired cached turns are garbage-collected without dropping live work", () => {
+  assert.match(store, /__malikBackgroundChatTurnsSweepAt/, "sweep runs at bounded intervals")
+  assert.match(store, /expires <= now/, "only expired timestamps qualify")
+  assert.match(store, /store\.delete\(id\)/, "expired turn is released from memory")
+  assert.match(store, /now \+ 60_000/, "avoids an expensive scan on every request")
+})
+
 console.log(`\n${checks} background-chat survival checks passed.`)
