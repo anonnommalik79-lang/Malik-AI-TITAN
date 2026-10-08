@@ -135,7 +135,7 @@ const STRUCTURED_TASK = /(?:чек[ -]?лист|checklist|таблиц|spreadshe
 /** A model may name concrete objects in comparisons, but must respect text-only requests. */
 export function allowsAnswerPhotoHints(question: string, hasAttachment = false): boolean {
   const text = question.trim()
-  return Boolean(text && text.length <= 2500 && !hasAttachment && !NO_VISUAL.test(text) && !NON_VISUAL.test(text)
+  return Boolean(text && text.length <= 80_000 && !hasAttachment && !NO_VISUAL.test(text) && !NON_VISUAL.test(text)
     && !TEXT_TASK.test(text) && !/^\//u.test(text) && !isExplicitImageGenerationRequest(text)
     && !isExplicitImageEditRequest(text, false) && !planTutorialVisuals(text)
     && !/(?:\b(?:python|javascript|typescript|sql|code)\b|(?<!\p{L})код(?!\p{L})|чек[ -]?лист|checklist)/iu.test(text))
@@ -143,8 +143,14 @@ export function allowsAnswerPhotoHints(question: string, hasAttachment = false):
 
 /** Evaluate every explanatory answer; never require the user to ask for photos. */
 export function planReferenceVisuals(question: string, previousQuestion = "", hasAttachment = false, previousAnswer = ""): ReferenceVisualPlan | null {
-  const text = String(question || "").trim()
-  if (!text || text.length > 2500 || hasAttachment || NO_VISUAL.test(text)) return null
+  const raw = String(question || "").trim()
+  if (!raw || raw.length > 80_000 || hasAttachment || NO_VISUAL.test(raw)) return null
+  // Long briefs often include reference data after the actual question.
+  // Never feed thousands of pasted characters into a photo lookup query.
+  const text = raw.length > 2500
+    ? raw.split(/\r?\n/u, 1)[0].slice(0, 220).split(/(?<=[.!?])\s+/u, 1)[0].trim()
+    : raw
+  if (!text) return null
   if (/^\//u.test(text) || isExplicitImageGenerationRequest(text) || NON_VISUAL.test(text) || TEXT_TASK.test(text)) return null
   if (STRUCTURED_TASK.test(text) && !/(?:фото(?:граф|к)?|картинк|изображени|\bphotos?\b|\bimages?\b|\bpictures?\b|сурет)/iu.test(text)) return null
   const tutorial = planTutorialVisuals(text)
