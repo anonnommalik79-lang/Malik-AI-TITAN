@@ -169,19 +169,19 @@ const MODELS = [
     id: "novai",
     provider: "novai",
     name: "NovAI · CogVideoX Flash",
-    subtitle: "720p · основной бесплатный",
+    subtitle: "720p · 1 видео/день",
     tier: "Free",
     icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://aiapi-pro.com",
     featured: true,
     audio: false,
-    note: "CogVideoX Flash — основной бесплатный маршрут MalikVideo.",
+    note: "Бесплатная видеомодель. Доступ зависит от лимитов провайдера.",
   },
   {
     id: "magichour",
     provider: "magichour",
     name: "Magic Hour · LTX",
-    subtitle: "480p · free credits",
-    tier: "Free",
+    subtitle: "480p · Malik PRO",
+    tier: "Pro",
     icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://magichour.ai",
     featured: false,
     audio: true,
@@ -190,9 +190,9 @@ const MODELS = [
   {
     id: "pixazo",
     provider: "pixazo",
-    name: "Pixazo · LTX Free",
-    subtitle: "Free preview · без native audio",
-    tier: "Free",
+    name: "Pixazo · LTX",
+    subtitle: "Preview · Malik PRO",
+    tier: "Pro",
     icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://pixazo.ai",
     featured: false,
     audio: false,
@@ -202,8 +202,8 @@ const MODELS = [
     id: "cliptaps",
     provider: "cliptaps",
     name: "ClipTaps",
-    subtitle: "1 проект/день · до 3 сцен",
-    tier: "Free",
+    subtitle: "До 3 сцен · Malik PRO",
+    tier: "Pro",
     icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://cliptaps.com",
     featured: false,
     audio: true,
@@ -236,12 +236,12 @@ function catalogVideoIcon(entry: RouterCatalogEntry) {
 // provider accepted by /api/media/video.
 const MOBILE_MODELS = [
   ...MODELS,
-  { id: "h3", provider: "h3", name: "MalikVideo 1.0", subtitle: "Malik AI", tier: "Pro", icon: "", featured: false, audio: false, note: "MalikVideo 1.0" },
-  { id: "dashscope", provider: "dashscope", name: "Wan · DashScope", subtitle: "Alibaba Cloud", tier: "Pro", icon: "", featured: false, audio: false, note: "Wan через DashScope" },
-  { id: "pollo", provider: "pollo", name: "Pollo AI", subtitle: "Pollo Video", tier: "Pro", icon: "", featured: false, audio: false, note: "Pollo AI Video" },
-  { id: "fal", provider: "fal", name: "fal.ai", subtitle: "fal Video", tier: "Pro", icon: "", featured: false, audio: false, note: "fal.ai Video" },
-  { id: "luma", provider: "luma", name: "Luma", subtitle: "Luma Video", tier: "Pro", icon: "", featured: false, audio: false, note: "Luma Video" },
-  { id: "veo", provider: "veo", name: "Google Veo", subtitle: "Veo Video", tier: "Pro", icon: "", featured: false, audio: true, note: "Google Veo Video" },
+  { id: "h3", provider: "h3", name: "MalikVideo 1.0", subtitle: "Malik AI", tier: "Pro", icon: "/brand/malik-mark.svg", featured: false, audio: false, note: "MalikVideo 1.0" },
+  { id: "dashscope", provider: "dashscope", name: "Wan · DashScope", subtitle: "Alibaba Cloud", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://alibabacloud.com", featured: false, audio: false, note: "Wan через DashScope" },
+  { id: "pollo", provider: "pollo", name: "Pollo AI", subtitle: "Pollo Video", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://pollo.ai", featured: false, audio: false, note: "Pollo AI Video" },
+  { id: "fal", provider: "fal", name: "fal.ai", subtitle: "fal Video", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://fal.ai", featured: false, audio: false, note: "fal.ai Video" },
+  { id: "luma", provider: "luma", name: "Luma", subtitle: "Luma Video", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://lumalabs.ai", featured: false, audio: false, note: "Luma Video" },
+  { id: "veo", provider: "veo", name: "Google Veo", subtitle: "Veo Video", tier: "Pro", icon: "https://www.google.com/s2/favicons?sz=128&domain_url=https://deepmind.google", featured: false, audio: true, note: "Google Veo Video" },
 ] as const
 
 const CATEGORIES = ["Популярное", "Кинематографичные", "Анимация", "Реалистичные", "Природа", "Технологии", "Люди", "Продукты"] as const
@@ -327,7 +327,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("Популярное")
   const [thumbPage, setThumbPage] = useState(0)
   const [modelNotice, setModelNotice] = useState("")
-  const [selectedModelId, setSelectedModelId] = useState<(typeof MOBILE_MODELS)[number]["id"]>("pixazo")
+  const [selectedModelId, setSelectedModelId] = useState<(typeof MOBILE_MODELS)[number]["id"]>("novai")
+  const [videoAccess, setVideoAccess] = useState({ pro: false, owner: false })
   const [modelAvailability, setModelAvailability] = useState<Partial<Record<VideoProviderId, boolean>>>({})
   const [mobilePanel, setMobilePanel] = useState<"text" | "image" | "video" | "style">("text")
   const busy = phase === "queued" || phase === "rendering"
@@ -374,8 +375,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       .then((data) => {
         if (!active || !data?.models) return
         setModelAvailability(data.models)
-        setVideoExtendAvailable(data.capabilities?.videoExtend === true)
+        const isPro = data.access?.pro === true
+        setVideoAccess({ pro: isPro, owner: data.access?.owner === true })
+        setVideoExtendAvailable(data.capabilities?.videoExtend === true && isPro)
         setSelectedModelId((current) => {
+          if (!isPro) return "novai"
           if (current === "magichour" || data.models[current]) return current
           return MOBILE_MODELS.find((model) => data.models[model.id])?.id || current
         })
@@ -436,6 +440,10 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   const selectVideoModel = (model: (typeof MOBILE_MODELS)[number]) => {
     if (busy) return
+    if (model.tier === "Pro" && !videoAccess.pro) {
+      onViewChange("billing")
+      return
+    }
     if (extendTaskId && model.id !== "runway") {
       setModelNotice("Продление готового ролика доступно через Runway Seedance 2.5. Уберите исходник, чтобы выбрать другую модель.")
       return
@@ -602,6 +610,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const generate = async () => {
     const cleanPrompt = prompt.trim()
     if (!cleanPrompt || busy) return
+    if (!videoAccess.pro && (selectedModel.id !== "novai" || mode !== "text")) {
+      setPhase("failed")
+      setError("Для этой видеомодели или режима требуется Malik PRO.")
+      return
+    }
     if (mode !== "text" && !sourceFile && !projectImage && !extendTaskId) {
       setPhase("failed")
       setError(mode === "image" ? "Сначала загрузите фото." : "Сначала загрузите видео.")
@@ -964,25 +977,24 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                 key={model.id}
                 type="button"
                 className={active ? "is-active" : ""}
-                disabled={!available || !supported || busy}
+                disabled={busy || (videoAccess.pro || model.tier === "Free") && (!available || !supported)}
                 onClick={() => selectVideoModel(model)}
                 aria-pressed={active}
+                aria-label={`${model.name}, ${model.tier === "Pro" ? "Malik PRO" : "бесплатно"}`}
                 data-provider={model.provider}
+                data-tier={model.tier.toLowerCase()}
               >
+                <span className="mv2m__model-top">
+                  <span className="mv2m__model-icon">{model.icon ? <img src={model.icon} alt="" loading="lazy" /> : <Video aria-hidden="true" />}</span>
+                  <span className="mv2m__model-tier">{model.tier === "Pro" ? (videoAccess.pro ? "PRO" : "🔒 PRO") : "FREE"}</span>
+                </span>
                 <span className="mv2m__model-title">{model.name}</span>
-                <small>
-                  {!available
-                    ? "Не подключена"
-                    : !supportsMode(model.id, mode)
-                      ? "Только Текст → Видео"
-                      : duration === 10 && model.id !== "magichour" && model.id !== "runway"
-                        ? "Только 5 сек"
-                        : `${model.tier} · ${model.subtitle}`}
-                </small>
+                <small>{!available ? "Не подключена" : !supported ? "Недоступна в этом режиме" : model.subtitle}</small>
               </button>
             )
           })}
         </div>
+        {modelNotice ? <div className="mv2__model-notice" role="status">{modelNotice}</div> : null}
 
         <div className="mv2m__controls">
           <button type="button" onClick={cycleMobileDuration} disabled={busy || mode === "video"}><Clock3 /><span>{mode === "video" ? "до 10 сек" : `${duration} секунд`}</span></button>
@@ -1193,7 +1205,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           </div>
         ) : null}
 
-        <div className="mv2__daily-note">1 генерация видео в день на один аккаунт</div>
+        <div className="mv2__daily-note">1 видео в день · PRO открывает модели · владельцу без лимита Malik AI</div>
 
         <div className="mv2__section-title"><span>Модель</span><Info /><span className="mv2__selected-model">Выбрано: {selectedModel.name}</span></div>
         <div className="mv2__models">
@@ -1207,9 +1219,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                 data-model-id={model.id}
                 onClick={() => selectVideoModel(model)}
                 aria-pressed={active}
-                disabled={busy || modelAvailability[model.id] === false || !supportsMode(model.id, mode)}
+                disabled={busy || ((videoAccess.pro || model.tier === "Free") && (modelAvailability[model.id] === false || !supportsMode(model.id, mode)))}
                 title={modelAvailability[model.id] === false
                   ? "Модель сейчас не подключена к серверу"
+                  : model.tier === "Pro" && !videoAccess.pro
+                    ? "Оформите Malik PRO, чтобы использовать эту модель."
                   : !supportsMode(model.id, mode)
                     ? "Эта модель работает только в Текст → Видео. Для текущего режима доступны Magic Hour и Runway."
                     : duration === 10 && model.id !== "magichour" && model.id !== "runway"
@@ -1297,14 +1311,14 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           .mv2m__counter{display:flex;align-items:center;gap:7px;color:#777e89;font-size:8px}.mv2m__counter button{width:20px;height:20px;padding:0;border:0;border-radius:50%;background:#343840;color:#aeb4bd;display:grid;place-items:center}.mv2m__counter button svg{width:11px;height:11px}
           .mv2m__model-select{width:100%;min-height:48px;margin-top:8px;padding:7px 10px;border:1px solid #343941;border-radius:12px;background:#12151a;color:#fff;display:grid;grid-template-columns:28px minmax(0,1fr) 22px;align-items:center;gap:8px;text-align:left}.mv2m__model-select>svg{width:18px;height:18px}.mv2m__model-select-copy{min-width:0;display:flex;flex-direction:column;gap:2px}.mv2m__model-select-copy small{font-size:8px;color:#7f8792}.mv2m__model-select-copy strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mv2m__model-chevron{text-align:right;color:#aeb5bf;font-size:13px}
           .mv2m__model-head{width:100%;margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;color:#fff}.mv2m__model-head>span{display:flex;align-items:center;gap:6px;color:#b9c0ca;font-size:10px;font-weight:700}.mv2m__model-head>span svg{width:14px;height:14px}.mv2m__model-head>strong{min-width:0;max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;color:#fff}
-          .mv2m__model-picker.is-always-open{display:grid!important;visibility:visible!important;opacity:1!important;position:relative!important;z-index:2!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;max-height:238px!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+          .mv2m__model-picker.is-always-open{display:grid!important;visibility:visible!important;opacity:1!important;position:relative!important;z-index:2!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;max-height:none!important;overflow:visible!important}
           .mv2m__model-picker .mv2m__model-title{padding-right:16px}
           .mv2m__controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}
           .mv2m__controls button{min-width:0;height:38px;padding:0 7px;border:1px solid #2b2e35;border-radius:10px;background:#111318;color:#bcc2cb;display:flex;align-items:center;justify-content:center;gap:5px;font-size:9px;white-space:nowrap}.mv2m__controls button svg{width:13px;height:13px;flex:0 0 13px}.mv2m__controls button span{overflow:hidden;text-overflow:ellipsis}.mv2m__controls button small{font-size:8px;color:#858c96}
-          .mv2m__model-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px;padding:8px;border:1px solid #292d35;border-radius:12px;background:#0b0d11;max-height:260px;overflow-y:auto;-webkit-overflow-scrolling:touch}
-          .mv2m__model-picker button{position:relative;min-width:0;min-height:58px;padding:9px 10px;border:1px solid #292d35;border-radius:10px;background:#11141a;color:#fff;text-align:left;display:flex;flex-direction:column;justify-content:center;gap:4px}
-          .mv2m__model-picker button span{font-size:10px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}.mv2m__model-picker button small{font-size:8px;color:#858d99;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
-          .mv2m__model-picker button.is-active{border-color:#fff;background:#1c2129;box-shadow:inset 0 0 0 1px rgba(255,255,255,.7)}.mv2m__model-picker button.is-active:after{content:"✓";position:absolute;right:8px;top:7px;font-size:10px;color:#fff}.mv2m__model-picker button:disabled{opacity:.35;cursor:not-allowed}
+          .mv2m__model-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:9px;padding:0;border:0;background:transparent;max-height:none;overflow:visible}
+          .mv2m__model-picker button{position:relative;min-width:0;min-height:106px;padding:11px;border:1px solid #32353c;border-radius:14px;background:#121418;color:#fff;text-align:left;display:flex;flex-direction:column;justify-content:flex-start;gap:6px}
+          .mv2m__model-picker button .mv2m__model-title{font-size:11px;font-weight:790;line-height:1.3;white-space:normal;overflow:visible;overflow-wrap:anywhere;width:100%}.mv2m__model-picker button small{font-size:9px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}.mv2m__model-top{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px}.mv2m__model-picker button .mv2m__model-icon{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border-radius:9px;background:#fff;overflow:hidden}.mv2m__model-icon img{display:block;width:24px;height:24px;object-fit:contain}.mv2m__model-icon svg{color:#111;width:22px;height:22px}.mv2m__model-picker button .mv2m__model-tier{width:auto;font-size:9px;color:#ddd;font-weight:780;white-space:nowrap}.mv2m__model-picker button[data-tier="free"] .mv2m__model-tier{color:#fff}
+          .mv2m__model-picker button.is-active{border-color:#fff;background:#1c2129;box-shadow:inset 0 0 0 1px rgba(255,255,255,.7),0 0 0 1px #fff}.mv2m__model-picker button.is-active:after{content:"✓";position:absolute;right:10px;bottom:9px;font-size:12px;color:#fff}.mv2m__model-picker button:disabled{opacity:.45;cursor:not-allowed}.mv2m__model-picker button[data-tier="pro"]:not(.is-active){background:#101115}
           .mv2m__generate{width:100%;height:48px;margin-top:8px;border:0;border-radius:12px;background:#39f75a;color:#041107;font-weight:850;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 0 22px rgba(57,247,90,.16)}.mv2m__generate svg{width:15px;height:15px;fill:currentColor}.mv2m__generate:disabled{opacity:.48;cursor:not-allowed}
           .mv2m__brand{margin-top:13px;color:#9fa6b0;font-size:8px;display:flex;align-items:center;justify-content:center;gap:6px}.mv2m__brand svg{width:13px;height:13px;color:#39f75a}
           .mv2m__status{margin-top:8px;min-height:28px;padding:7px 9px;border:1px solid #26302a;border-radius:9px;background:#0c130e;color:#8ee89d;font-size:9px;display:flex;align-items:center;justify-content:space-between;gap:8px}.mv2m__status.is-error{border-color:#3c2828;background:#160d0d;color:#f0a0a0}.mv2m__status button{border:0;background:transparent;color:inherit;text-decoration:underline;font-size:9px}
