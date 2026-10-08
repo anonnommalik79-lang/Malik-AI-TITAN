@@ -33,3 +33,15 @@ assert.match(server,/mergeAccountChatStates\(current\.value\?\.state \?\? null,s
 assert.match(storage,/request\.headers\[previousEtag \? "if-match" : "if-none-match"\]/)
 assert.match(storage,/status===412 \|\| status===409/)
 console.log("PASS conflict-safe cloud history: device union, deletion markers, complete answers, guarded CAS and retries")
+
+const dashboard=fs.readFileSync("components/sovereign/dashboard.tsx","utf8")
+const client=fs.readFileSync("components/sovereign/AccountChatPersistence.tsx","utf8")
+assert.match(dashboard,/setDeletedChatIds\(prev => \[\.\.\.new Set\(\[\.\.\.prev, chatId\]\)\]\.slice\(-1000\)\)/,
+  "explicit user delete records account-scoped tombstone")
+assert.match(dashboard,/deletedChatIds,\s*\}\)/,"snapshot transmits deletion tombstones")
+assert.match(dashboard,/setDeletedChatIds\(parsed\.deletedChatIds/,"reload restores tombstones")
+assert.match(client,/mergeAccountChatStates\(remoteState, localState\)/,
+  "device hydration never simply discards remote or local chat history")
+assert.doesNotMatch(client,/window\.localStorage\.setItem\(savedAtKey, new Date\(\)\.toISOString\(\)\)/,
+  "unsaved local revisions are not falsely acknowledged as cloud-persisted")
+console.log("PASS client history convergence: merge on open, persisted tombstones, accurate cloud savedAt")

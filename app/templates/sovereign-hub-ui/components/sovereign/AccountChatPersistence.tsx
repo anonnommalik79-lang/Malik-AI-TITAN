@@ -3,6 +3,7 @@
 import { useLayoutEffect, type ReactNode } from "react"
 import { requestPersistentGeneratedImageStorage, setGeneratedImageAccountScope } from "@/lib/media/client-generated-image-store"
 import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-execution"
+import { mergeAccountChatStates } from "@/lib/ai/account-chat-state-merge"
 import { accountChatRetryDelay, accountChatWriteConfirmed, shouldRetryAccountChatWrite } from "@/lib/ai/account-chat-sync-retry"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
@@ -587,7 +588,8 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
       if (typeof raw !== "string" || !raw) return
       pendingRaw = raw
       if (!remoteReady) return
-      try { window.localStorage.setItem(savedAtKey, new Date().toISOString()) } catch {}
+      // savedAtKey is the last *confirmed cloud* revision, not a local edit.
+      // Setting it before R2 acknowledged storage hid newer device history.
       pushSnapshot(raw)
     }
 
@@ -618,22 +620,35 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
         const localSavedAt = parseTime(window.localStorage.getItem(savedAtKey))
         const localRaw = window.localStorage.getItem(DASHBOARD_STORAGE_KEY) || ""
         const remoteRaw = remoteState ? JSON.stringify(remoteState) : ""
+        const localState = (() => {
+          try { return JSON.parse(pendingRaw || localRaw) } catch { return null }
+        })()
+        // Never exchange one device's history for the other's. Merge both,
+        // including chat deletion tombstones, before refreshing the dashboard.
+        const mergedRaw = remoteState || localState
+          ? JSON.stringify(mergeAccountChatStates(remoteState, localState))
+          : ""
 
         hydrationFailures = 0
+        remoteReady = true
         if (remoteRaw && remoteSavedAt > localSavedAt) {
           try { window.localStorage.setItem(savedAtKey, String(payload.savedAt || new Date().toISOString())) } catch {}
-          pendingRaw = ""
-          remoteReady = true
-          if (remoteRaw !== localRaw && !disposed) {
-            window.localStorage.setItem(DASHBOARD_STORAGE_KEY, remoteRaw)
+          // Reload reads the merged snapshot, rather than losing local drafts.
+          // The next hydration will detect local/remote differences and upload.
+          if (mergedRaw && mergedRaw !== localRaw && !disposed) {
+            window.localStorage.setItem(DASHBOARD_STORAGE_KEY, mergedRaw)
+            pendingRaw = ""
             window.location.reload()
             return
           }
-        } else {
-          remoteReady = true
-          const candidate = pendingRaw || localRaw
-          if (candidate && (!remoteRaw || localSavedAt > remoteSavedAt)) pushSnapshot(candidate)
         }
+        if (mergedRaw && mergedRaw !== localRaw && !disposed) {
+          window.localStorage.setItem(DASHBOARD_STORAGE_KEY, mergedRaw)
+          window.location.reload()
+          return
+        }
+        const candidate = pendingRaw || mergedRaw || localRaw
+        if (candidate && candidate !== remoteRaw) pushSnapshot(candidate)
       } catch {
         // Keep local state intact while remote freshness is unknown. Retry
         // with a bounded delay and no recurring task when the component unmounts.

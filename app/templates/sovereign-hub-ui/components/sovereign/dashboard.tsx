@@ -1426,6 +1426,7 @@ function persistDashboardState(key: string, state: {
   generatedCode: string
   activeView: string
   selectedModelId: MalikModelId
+  deletedChatIds: string[]
 }): boolean {
   const messages = state.messages.map(toStorableMessage)
   let chats = state.chats.map((chat) => ({ ...chat, messages: chat.messages.map(toStorableMessage) }))
@@ -5131,6 +5132,8 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
   // Conversation history is restored from the user's persisted workspace below.
   // Keep a clean account empty instead of manufacturing demo conversations.
   const [chats, setChats] = useState<Chat[]>([])
+  // Persist explicit deletions so an offline device cannot resurrect a chat.
+  const [deletedChatIds, setDeletedChatIds] = useState<string[]>([])
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [activeProjectWorkspaceId, setActiveProjectWorkspaceId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -5269,6 +5272,7 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
       if (raw) {
         const parsed = JSON.parse(raw)
         const restoredChats = Array.isArray(parsed?.chats) ? parsed.chats.map(reviveChat) : []
+        if (Array.isArray(parsed?.deletedChatIds)) setDeletedChatIds(parsed.deletedChatIds.filter((id: unknown) => typeof id === "string").slice(-1000))
         if (restoredChats.length) setChats(restoredChats)
         // Reopening Malik starts on the welcome artwork, not inside the last
         // conversation. Restore the full history above without selecting it.
@@ -5310,6 +5314,7 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
           generatedCode,
           activeView,
           selectedModelId,
+          deletedChatIds,
         })
       } catch (err) {
         console.warn("[DASHBOARD SAVE ERROR]", err)
@@ -5330,7 +5335,7 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
     }
     const timer = window.setTimeout(save, wait)
     return () => window.clearTimeout(timer)
-  }, [storageRestored, chats, activeChatId, messages, generatedCode, activeView, selectedModelId])
+  }, [storageRestored, chats, activeChatId, messages, generatedCode, activeView, selectedModelId, deletedChatIds])
 
   // Image jobs live on the server and are keyed to the assistant card. This
   // poller is intentionally independent of the selected chat: navigating to a
@@ -5800,6 +5805,8 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
   }, [])
 
   const handleDeleteChat = useCallback((chatId: string) => {
+    // A tombstone wins over an older cloud or offline snapshot.
+    setDeletedChatIds(prev => [...new Set([...prev, chatId])].slice(-1000))
     setChats(prev => prev.filter(c => c.id !== chatId))
     if (activeProjectWorkspaceId === chatId) setActiveProjectWorkspaceId(null)
     if (activeChatId === chatId) {
