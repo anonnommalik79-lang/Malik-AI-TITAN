@@ -23,10 +23,20 @@ function uniqueMessages(remote: JsonRecord[], incoming: JsonRecord[]): JsonRecor
     if (!oldDone && nextDone && oldContent.length > nextContent.length) continue
     // A simultaneously regenerated final answer retains its prior completed
     // variant in versions, rather than silently discarding one device's text.
-    const revisions = [
+    // Stable, unique historical variants: repeated sync must not append the
+    // same old answer with a fresh timestamp and cause endless reload loops.
+    const sourceVariants = [
       ...rows(prior.versions), ...rows(item.versions),
-      ...(oldDone && nextDone && oldContent && oldContent !== nextContent ? [{ content: oldContent, at: Date.now() }] : []),
-    ].filter(v => typeof v.content === "string" && String(v.content).trim()).slice(-8)
+      ...(oldDone && nextDone && oldContent && oldContent !== nextContent
+        ? [{ content: oldContent, at: Number(new Date(String(prior.timestamp || 0))) || 0 }] : []),
+    ]
+    const seen = new Set<string>()
+    const revisions = sourceVariants.filter(variant => {
+      const value = typeof variant.content === "string" ? variant.content.trim() : ""
+      if (!value || value === nextContent.trim() || seen.has(value)) return false
+      seen.add(value)
+      return true
+    }).slice(-8)
     byId.set(id, { ...prior, ...item, ...(revisions.length ? { versions: revisions } : {}) })
   }
   return order.map(id => byId.get(id)!).filter(Boolean)

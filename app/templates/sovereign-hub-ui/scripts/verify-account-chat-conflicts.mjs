@@ -25,6 +25,13 @@ const alt=mergeAccountChatStates(
 )
 assert.equal(alt.chats[0].messages[0].content,"new answer")
 assert.equal(alt.chats[0].messages[0].versions.at(-1).content,"old answer")
+const repeated=mergeAccountChatStates(
+  {chats:[{id:"x",messages:[{id:"a",role:"assistant",content:"old answer",isStreaming:false}]}]},
+  alt
+)
+assert.deepEqual(repeated,alt,"syncing the same conflict twice is idempotent")
+const third=mergeAccountChatStates(alt,repeated)
+assert.deepEqual(third,repeated,"no extra versions or reload loop on third sync")
 const server=fs.readFileSync("lib/server/account-chat-state.ts","utf8")
 const storage=fs.readFileSync("lib/server/private-json-store.ts","utf8")
 assert.match(server,/writePrivateJsonConditional\(/)
