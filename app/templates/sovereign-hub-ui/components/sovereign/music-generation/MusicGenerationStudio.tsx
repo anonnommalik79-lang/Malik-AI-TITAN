@@ -580,10 +580,8 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       setMood(resolvedMood)
       setPhonkMode(resolvedGenreId === "phonk")
       setLyricsEnabled(!resolvedInstrumental)
-      if (!resolvedInstrumental && resolvedLyrics) {
-        setLyrics(resolvedLyrics)
-        setLyricsLanguage(resolvedLanguage)
-      }
+      // Generated lyrics belong to this job's history, not the next prompt.
+      // Keep the draft and automatic language preference unchanged.
 
       setLastSubmitFailed(false)
 
@@ -669,6 +667,22 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   }
 
   const currentReady = history.find((item) => item.resultUrl === trackUrl && item.status === "ready")
+  const finishedLyrics = currentReady && !currentReady.instrumental ? currentReady.lyrics : ""
+  const reuseFinishedLyrics = () => {
+    if (!currentReady?.lyrics) return
+    setLyrics(currentReady.lyrics)
+    setLyricsLanguage(currentReady.lyricsLanguage)
+    setInstrumental(false)
+    setLyricsEnabled(true)
+    setNotice("Слова перенесены в редактор. Измените текст перед генерацией.")
+  }
+  const lyricReview = finishedLyrics ? (
+    <details className="mm-lyrics-review">
+      <summary>Слова готовой песни</summary>
+      <pre>{finishedLyrics}</pre>
+      <button type="button" onClick={reuseFinishedLyrics}>Использовать эти слова снова</button>
+    </details>
+  ) : null
   const saveCurrentTrack = async () => {
     if (!currentReady?.requestId || !selectedProject || !projectStorageReady || savingProject) return
     setSavingProject(true)
@@ -1135,6 +1149,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
               </div>
 
               {notice ? <div className="mm-notice">{notice}</div> : null}
+              {lyricReview}
               {projectSaveControls}
               {historyPanel}
             </div>
@@ -1270,6 +1285,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         </section>
 
         {notice ? <div className="mm-notice">{notice}</div> : null}
+        {lyricReview}
         {projectSaveControls}
         {historyPanel}
       </div>
