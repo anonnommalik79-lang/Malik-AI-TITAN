@@ -12,6 +12,9 @@ export function canRetryChat(body: unknown): boolean {
   if (!body || typeof body !== "object") return false
   const request = body as Record<string, unknown>
   if (request.isProjectRequest || request.forceCanvas || request.workspaceMode === "work") return false
+  // Never launch duplicate provider work for attachments or real-world tools.
+  if (Array.isArray(request.attachments) && request.attachments.length) return false
+  if (request.actionPlan || request.toolCalls || request.superflow || request.isToolRequest) return false
   const prompt = String(request.originalQuestion || request.question || request.prompt || "")
   return Boolean(prompt.trim()) && !/^\s*\//u.test(prompt)
     && !/(?:отправь|опубликуй|удали|купи|оплати|забронируй|разверни|deploy|publish|delete|purchase|book\s|send\s)/iu.test(prompt)
@@ -80,7 +83,12 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
             let payload: Record<string, unknown>
             try { payload = JSON.parse(data) } catch { emit(encoder.encode(block + "\n\n")); return }
             if (payload.type === "error") { finalError = String(payload.message || payload.error || "Сервис ответа временно недоступен."); terminal = true; return }
-            if (payload.type === "content") content += String(payload.content || "")
+            if (payload.type === "content") {
+              const chunk = String(payload.content || "")
+              // Some providers send a growing snapshot, others send deltas.
+              // Keep the real prefix for background-turn recovery, never duplicate it.
+              content = chunk.startsWith(content) ? chunk : content + chunk
+            }
             if (payload.type === "done") {
               completed = true
               terminal = true
