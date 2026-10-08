@@ -1107,3 +1107,36 @@
   flex: 0 0 15px;
   margin-top: 1px;
 }
+
+/* Finished AI lyrics remain attached to the output, never silently reused. */
+#malik-root .malik-music .mm-lyrics-review {
+  border: 1px solid #262a30;
+  border-radius: 12px;
+  background: #090b0e;
+  padding: 10px 12px;
+  margin: 12px 0;
+}
+#malik-root .malik-music .mm-lyrics-review summary {
+  cursor: pointer;
+  color: #e5e7eb;
+  font-size: 13px;
+  font-weight: 600;
+}
+#malik-root .malik-music .mm-lyrics-review pre {
+  color: #c4c8d0;
+  font-family: inherit;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 10px 0;
+}
+#malik-root .malik-music .mm-lyrics-review button {
+  border: 1px solid #454a53;
+  color: #e5e7eb;
+  background: #15171b;
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 12px;
+}
