@@ -1,7 +1,8 @@
 import "server-only"
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto"
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3"
+import { sharedPrivateS3Client } from "./shared-private-s3-client"
 import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-execution"
 
 export type BackgroundChatTurn = {
@@ -91,15 +92,7 @@ function storageClient() {
   if (!cfg) return null
   return {
     cfg,
-    s3: new S3Client({
-      region: cfg.region,
-      endpoint: cfg.endpoint,
-      credentials: {
-        accessKeyId: cfg.accessKeyId,
-        secretAccessKey: cfg.secretAccessKey,
-        sessionToken: cfg.sessionToken,
-      },
-    }),
+    s3: sharedPrivateS3Client(cfg),
   }
 }
 
