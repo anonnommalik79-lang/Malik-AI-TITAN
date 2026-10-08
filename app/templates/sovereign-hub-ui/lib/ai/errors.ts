@@ -43,6 +43,42 @@ export function safeErrorMessage(error: ProviderError) {
   }
 }
 
+/**
+ * Public error messages are prose, never backend JSON, internal status codes or
+ * storage paths. A failed Compute admission is still a real failed request:
+ * this helper changes presentation only and never claims the operation worked.
+ */
+export function chatVisibleErrorMessage(value: unknown): string {
+  const raw = String(value ?? "").trim()
+  if (!raw) return "Не удалось получить ответ. Попробуйте отправить запрос снова."
+  if (/MALIK_COMPUTE_STORAGE_UNAVAILABLE/u.test(raw)) {
+    return "Сервис временно не может проверить лимит запросов. Попробуйте ещё раз немного позже."
+  }
+  if (/MALIK_COMPUTE_STORE_BUSY/u.test(raw)) {
+    return "Сервис проверяет лимит запросов. Повторите через несколько секунд."
+  }
+  if (/^\s*[{[]/u.test(raw)) {
+    try {
+      const payload = JSON.parse(raw) as unknown
+      const item = payload && typeof payload === "object" ? payload as Record<string, unknown> : {}
+      const candidate = typeof item.message === "string" ? item.message
+        : typeof item.error === "string" ? item.error
+        : typeof (item.error as { message?: unknown })?.message === "string"
+          ? String((item.error as { message: string }).message) : ""
+      if (!candidate || /MALIK_[A-Z_]+|\{\s*"ok"/u.test(candidate)) {
+        return "Не удалось получить ответ. Попробуйте отправить запрос снова."
+      }
+      return chatVisibleErrorMessage(candidate)
+    } catch {
+      return "Не удалось получить ответ. Попробуйте отправить запрос снова."
+    }
+  }
+  if (raw.length > 600 || /<\/?[a-z!][^>]*>/iu.test(raw)) {
+    return "Не удалось получить ответ. Попробуйте отправить запрос снова."
+  }
+  return raw
+}
+
 /** Proxy error pages are documents, not chat replies. */
 export function chatHttpErrorMessage(status: number, body: string, contentType = ""): string {
   const fallback = status === 403
@@ -56,10 +92,16 @@ export function chatHttpErrorMessage(status: number, body: string, contentType =
   let candidate: unknown = body
   try {
     const payload = JSON.parse(body)
+    // Error *codes* take priority over generic messages because the latter
+    // otherwise leak internal billing/storage diagnostics to end users.
+    if (payload && typeof payload === "object" &&
+      (payload.code === "MALIK_COMPUTE_STORAGE_UNAVAILABLE" || payload.code === "MALIK_COMPUTE_STORE_BUSY")) {
+      return chatVisibleErrorMessage(String(payload.code))
+    }
     candidate = typeof payload === "string" ? payload : payload?.message || payload?.error
     if (typeof candidate === "object" && candidate) candidate = (candidate as { message?: unknown }).message
   } catch {}
   if (typeof candidate !== "string" || /<\/?[a-z!][^>]*>/i.test(candidate)) return fallback
   const message = candidate.trim()
-  return message && message.length <= 600 ? message : fallback
+  return message && message.length <= 600 ? chatVisibleErrorMessage(message) : fallback
 }

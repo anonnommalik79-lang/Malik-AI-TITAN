@@ -133,6 +133,15 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
     if (error instanceof DeadlineError) throw new Error("Сервер не подтвердил запрос вовремя. Запрос не отправлен повторно; проверьте сохранённый ответ в истории.", { cause: error })
     throw error
   }
+  // A Compute admission failure is not a model/transport outage. Never replay
+  // it as a brand-new user request: the reservation may be partially recorded.
+  // Keep the original 503 JSON for the client to display a safe public message.
+  if (response.status === 503 && response.headers.get("content-type")?.includes("application/json")) {
+    const result = await response.clone().json().catch(() => null) as { code?: unknown } | null
+    if (result?.code === "MALIK_COMPUTE_STORAGE_UNAVAILABLE" || result?.code === "MALIK_COMPUTE_STORE_BUSY") {
+      return response
+    }
+  }
   // Permission and quota failures are terminal; never retry or disguise them.
   if (!response.ok && ![502, 503, 504].includes(response.status)) return response
   if (!response.headers.get("content-type")?.includes("text/event-stream") && response.ok) return response

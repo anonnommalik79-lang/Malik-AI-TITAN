@@ -62,7 +62,14 @@ function loadPure(file) {
   return module.exports
 }
 const catalog = loadPure("lib/media/reference-catalog.ts")
-const { chatHttpErrorMessage } = loadPure("lib/ai/errors.ts")
+const { chatHttpErrorMessage, chatVisibleErrorMessage } = loadPure("lib/ai/errors.ts")
+assert.equal(chatVisibleErrorMessage(JSON.stringify({ ok: false, code: "MALIK_COMPUTE_STORAGE_UNAVAILABLE", error: "raw storage error" })),
+  "Сервис временно не может проверить лимит запросов. Попробуйте ещё раз немного позже.")
+assert.equal(chatHttpErrorMessage(503, JSON.stringify({ code: "MALIK_COMPUTE_STORAGE_UNAVAILABLE", message: "Не удалось обработать баланс Compute." })),
+  "Сервис временно не может проверить лимит запросов. Попробуйте ещё раз немного позже.")
+assert(!chatVisibleErrorMessage("{bad json").includes("{bad json"))
+assert.equal(chatVisibleErrorMessage("Обычная ошибка"), "Обычная ошибка")
+
 assert.match(chatHttpErrorMessage(403, "<!doctype html><title>Blocked</title><style>huge embedded font</style>"), /Защита сайта/)
 assert(!chatHttpErrorMessage(502, "<html>proxy failure</html>", "text/html").includes("<html>"))
 assert.equal(chatHttpErrorMessage(429, JSON.stringify({ error: { message: "Лимит запросов" } })), "Лимит запросов")
