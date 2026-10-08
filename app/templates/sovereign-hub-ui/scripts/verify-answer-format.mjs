@@ -76,7 +76,7 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "@/lib/business/project-zip") return { downloadProjectZip() {} }
     if (name === "@/lib/canvas-preview") return { buildCanvasSrcDoc: (code) => code, buildCanvasProjectSrcDoc: (files, filename) => files.find((file) => file.name === filename)?.content || "", createCanvasBlobUrl: () => "blob:test" }
     if (name === "./malik-tex") return texBox.exports
-    if (name === "./MalikVisualGallery") return { isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }), MalikReferenceImages: ({ children, planOverride, row, hero, lineup }) => React.createElement("div", { "data-test-photo-topic": planOverride?.topic, "data-test-row": row ? "true" : "false", "data-test-hero": hero ? "true" : "false", "data-test-lineup": lineup ? "true" : undefined, "data-test-caption": planOverride?.caption }, children) }
+    if (name === "./MalikVisualGallery") return { ReferencePhotoSources: React.createContext([]), isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }), MalikReferenceImages: ({ children, planOverride, row, hero, lineup }) => React.createElement("div", { "data-test-photo-topic": planOverride?.topic, "data-test-row": row ? "true" : "false", "data-test-hero": hero ? "true" : "false", "data-test-lineup": lineup ? "true" : undefined, "data-test-caption": planOverride?.caption }, children) }
     if (name === "@/lib/ai/answer-entities") return entities
     if (name === "@/lib/ai/reference-visual-policy") return loadPure("lib/ai/reference-visual-policy.ts")
     if (name === "@/lib/ai/answer-visuals") return loadPure("lib/ai/answer-visuals.ts")
@@ -174,7 +174,7 @@ check("event cards: picture from the source page, name links to the official pag
 })
 check("hero, options, dates and actions render as panels and buttons", () => {
   const hero = render(cardsFence({ version: 1, type: "hero", item: { title: "GITEX AI KAZAKHSTAN 2027", url: "https://www.gitex.com/kazakhstan", image: 2, badge: "Приём заявок открыт", value: "7–8 июня 2027", meta: "Алматы, Казахстан", sources: [2] } }), { citations: CARD_SOURCES })
-  assert(hero.includes("malik-cards is-hero") && hero.includes("malik-card__hero-image") && hero.includes(">gitex.com<") && hero.includes("7–8 июня 2027"))
+  assert(hero.includes("malik-cards is-hero") && hero.includes("malik-card__hero-image") && hero.includes(">GITEX<") && hero.includes("7–8 июня 2027"))
   const options = render(cardsFence({ version: 1, type: "options", items: [
     { title: "Activat VC", url: "https://activat.vc", value: "$30 млн", valueNote: "Активы под управлением", action: { label: "Подать заявку", url: "https://activat.vc/apply" }, sources: [3] },
     { title: "Astana Hub Ventures", url: "https://astanahub.com/ventures", action: { label: "Перейти к подаче", url: "https://astanahub.com/ventures/pitch" }, facts: [{ label: "Последний день подачи", value: "2 ноября 2026" }] },

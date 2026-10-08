@@ -1188,7 +1188,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                       } else if (plugin.id === "arxiv") {
                         props.onOpenCapabilities?.()
                       }
-                    }
+                    }}
                     aria-label={mobileLayout ? MOBILE_SOURCE_ACTION_LABELS[plugin.id] : plugin.label}
                     className="group inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.018] px-3 text-[13px] font-medium text-zinc-400 transition duration-150 hover:border-white/[0.13] hover:bg-white/[0.045] hover:text-zinc-100 active:scale-[0.985]"
                   >

@@ -1,5 +1,6 @@
 import { asksHeadToHead, asksPurchaseAdvice, asksSubjectOverview } from "@/lib/ai/question-shape"
 import { needsCurrentEvidence } from "./current-evidence"
+import { truthNeedsLiveEvidence } from "./truth-engine"
 export type WebSearchOptions = {
   research?: boolean
   disableResearch?: boolean
@@ -18,6 +19,7 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}): bo
   // "Напиши последние новости" still needs live evidence. A generic writing
   // or API keyword must not bypass checks of releases, prices and availability.
   if (needsCurrentEvidence(text)) return true
+  if (truthNeedsLiveEvidence(text)) return true
 
   // Coding/writing/calculation requests must stay on the model path even when
   // the dashboard's generic "web & sources" toggle is enabled. This prevents
