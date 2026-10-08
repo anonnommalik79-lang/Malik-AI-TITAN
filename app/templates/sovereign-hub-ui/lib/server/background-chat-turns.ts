@@ -232,7 +232,7 @@ export async function completeBackgroundChatTurn(turnId: string, input: {
   })
 }
 
-export async function failBackgroundChatTurn(turnId: string, error: unknown, execution?: ExecutionTrace) {
+export async function failBackgroundChatTurn(turnId: string, error: unknown, execution?: ExecutionTrace, partialContent?: string) {
   const normalized = normalizeBackgroundTurnId(turnId)
   if (!normalized) return null
   const current = await readBackgroundChatTurn(normalized)
@@ -242,6 +242,8 @@ export async function failBackgroundChatTurn(turnId: string, error: unknown, exe
     turnId: normalized,
     ownerId: current.ownerId,
     status: "failed",
+    // Preserve a truncated stream for the user without ever marking it complete.
+    content: String(partialContent || "").slice(0, MAX_RESULT_CHARS) || undefined,
     error: (error instanceof Error ? error.message : String(error || "Background chat failed")).slice(0, 4000),
     execution: normalizeExecutionTrace(execution, true),
     createdAt: current?.createdAt || new Date(now).toISOString(),
