@@ -1,6 +1,15 @@
 /** Exact brand symbols, verified against Commons metadata on 2026-10-05.
  * No search, generated illustration, stock office or similarly named person.
  * Small raster thumbnails load directly; attribution stays with the answer. */
+/** Bundled official Malik AI symbol. Never replace it with a guessed search image. */
+export const MALIK_OFFICIAL_MARK = "/brand/malik-mark.svg"
+const MALIK_BRAND_NAMES = new Set([
+  "malik ai", "malikai", "malik ai sovereign", "malik ai sovereign hub",
+  "malik ai (sovereign hub)", "malik ai — sovereign hub",
+  "malikllm max", "malik llm max", "malik work",
+  "малик ии", "малик ai", "малик ай",
+])
+
 const BRANDS = [
   { names: ["chatgpt", "openai", "chatgpt — openai", "чатгпт", "чат гпт"], title: "ChatGPT · OpenAI",
     file: "6/66/OpenAI_logo_2025_%28symbol%29.svg/250px-OpenAI_logo_2025_%28symbol%29.svg.png", source: "OpenAI_logo_2025_(symbol).svg" },
@@ -12,6 +21,10 @@ const BRANDS = [
 
 export function referenceBrandAsset(topic: string) {
   const name = topic.normalize("NFKC").replace(/\s+/gu, " ").trim().toLowerCase()
+  if (MALIK_BRAND_NAMES.has(name)) {
+    return { url: MALIK_OFFICIAL_MARK, alt: "Malik AI · официальный логотип",
+      sourceUrl: "https://malikaiworld.world/", credit: "Malik AI · официальный бренд", role: "logo" as const }
+  }
   const brand = BRANDS.find((entry) => (entry.names as readonly string[]).includes(name))
   return brand ? { url: "https://thumb.wikimedia.org/wikipedia/commons/thumb/" + brand.file,
     alt: brand.title + " · логотип", sourceUrl: "https://commons.wikimedia.org/wiki/File:" + brand.source,
