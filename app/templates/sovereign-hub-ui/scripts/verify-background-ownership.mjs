@@ -94,4 +94,28 @@ await check("polling has an independent rate limit", async () => {
   for (let index = 0; index < 120; index++) assert.equal((await get(randomUUID())).status, 404)
   assert.equal((await get(randomUUID())).status, 429)
 })
+await check("large completed background turns cannot exhaust free Render RAM", async () => {
+  const pendingId = randomUUID()
+  assert.ok(await store.startBackgroundChatTurn(pendingId, "memory-test"))
+  const answer = "long answer ".repeat(25_000)
+  let firstId = ""
+  let latestId = ""
+  for (let index = 0; index < 145; index++) {
+    const turnId = randomUUID()
+    if (!firstId) firstId = turnId
+    latestId = turnId
+    assert.ok(await store.startBackgroundChatTurn(turnId, "memory-test"))
+    assert.ok(await store.completeBackgroundChatTurn(turnId, { content: answer }))
+  }
+  const entries = [...globalThis.__malikBackgroundChatTurnsV1.values()]
+  const finished = entries.filter((item) => item.status !== "pending")
+  const approxBytes = finished.reduce((sum, item) =>
+    sum + (String(item.content || "").length + String(item.error || "").length) * 2 + 8192, 0)
+  assert.ok(finished.length <= 128, "finished-response count is bounded")
+  assert.ok(approxBytes <= 32 * 1024 * 1024, "finished-response bytes stay bounded")
+  assert.equal(await store.readBackgroundChatTurn(firstId), null, "oldest terminal cache is released")
+  assert.equal((await store.readBackgroundChatTurn(latestId)).content, answer, "newest result survives")
+  assert.equal((await store.readBackgroundChatTurn(pendingId)).status, "pending", "active work is never evicted")
+})
+
 console.log(`${count}/${count} passed (real store/handler; auth stubbed)`)
