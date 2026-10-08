@@ -92,6 +92,12 @@ export function chatHttpErrorMessage(status: number, body: string, contentType =
   let candidate: unknown = body
   try {
     const payload = JSON.parse(body)
+    // Error *codes* take priority over generic messages because the latter
+    // otherwise leak internal billing/storage diagnostics to end users.
+    if (payload && typeof payload === "object" &&
+      (payload.code === "MALIK_COMPUTE_STORAGE_UNAVAILABLE" || payload.code === "MALIK_COMPUTE_STORE_BUSY")) {
+      return chatVisibleErrorMessage(String(payload.code))
+    }
     candidate = typeof payload === "string" ? payload : payload?.message || payload?.error
     if (typeof candidate === "object" && candidate) candidate = (candidate as { message?: unknown }).message
   } catch {}
