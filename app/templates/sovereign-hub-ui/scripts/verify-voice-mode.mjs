@@ -122,6 +122,35 @@ const checks = [
   ["25 voice orb has no outer grey halo, ring or glow", () => { assert.doesNotMatch(orb, /styles\.orbHalo|styles\.orbRing/); assert.doesNotMatch(css, /\.orbHalo|\.orbRing/); assert.match(css, /\.orbShell\s*\{[^}]*box-shadow:\s*none;/); assert.match(orb, /className=\{styles\.backgroundFog\}/); assert.match(orb, /className=\{styles\.orbCanvas\}/) }],
 ]
 
+
+// Full-screen Voice regression: the main dashboard CSS must not be able to
+// paint its Home title, composer or hero over the live conversation.
+const mobileTarget = await read("components/voice/VoiceMobileTarget.module.css")
+const startup = await read("instrumentation-client.ts")
+const liveClient = await read("lib/voice/gemini-live-client.ts")
+checks.push(
+  ["26 voice is portaled above dashboard on desktop and mobile", () => {
+    assert.match(mode, /createPortal\(/)
+    assert.match(mode, /document\.body/)
+    assert.match(css, /\.stage\s*\{[\s\S]*position:\s*fixed;/)
+    assert.match(mobileTarget, /:global\(body\)/)
+    assert.doesNotMatch(mobileTarget, /:global\(#malik-root\)/)
+  }],
+  ["27 transient initial Live setup incompatibility retries once per tier", () => {
+    assert.match(liveClient, /initialSetupTier/)
+    assert.match(liveClient, /this\.setupTier > initialSetupTier/)
+    assert.match(liveClient, /return this\.open\(\)/)
+    assert.match(mode, /reconnecting \? "Подключаю…"/)
+    assert.match(mode, /microphoneRef\.current/)
+  }],
+  ["28 desktop Voice shortcut and readable mobile failure UI", () => {
+    assert.match(startup, /Alt|altKey/)
+    assert.match(startup, /KeyV/)
+    assert.match(css, /\.retry > span\s*\{/)
+    assert.match(liveClient, /voice_live_not_configured/)
+  }],
+)
+
 // Every check runs, then the failures are reported together. Stopping at the
 // first one hides how many assertions have gone stale behind it, which turns one
 // afternoon of drift into a dozen separate runs to discover.
