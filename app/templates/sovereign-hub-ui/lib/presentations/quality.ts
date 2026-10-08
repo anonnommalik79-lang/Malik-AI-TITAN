@@ -7,7 +7,7 @@ import type { DeckOutline, Slide, SlideLayout } from "@/lib/presentations/types"
  */
 export type PresentationQualityIssue = {
   slideIndex: number
-  code: "duplicate" | "filler" | "repeated-layout" | "no-notes" | "unattributed-data" | "missing-photo" | "low-variety"
+  code: "duplicate" | "filler" | "repeated-layout" | "no-notes" | "unattributed-data" | "missing-photo" | "low-variety" | "crowded-slide"
   message: string
   recommendation: string
   weight: number
@@ -80,6 +80,24 @@ export function inspectPresentation(input: {
     }
 
     if (!slide) continue
+    // Words moved into speaker notes stay available to the presenter instead
+    // of being squeezed into a tiny projected slide. This is a heuristic:
+    // never claim to have measured text bounds or silently delete material.
+    const long = (value?: string) => (value || "").trim().length
+    const crowded =
+      (slide.layout === "bullets" && slide.points.length >= 5 &&
+        (slide.points.some((point) => long(point.body) > 125) ||
+          slide.points.reduce((sum, point) => sum + long(point.title) + long(point.body), 0) > 490)) ||
+      (slide.layout === "cards" && slide.cards.length >= 4 &&
+        slide.cards.some((card) => long(card.body) > 115)) ||
+      (slide.layout === "comparison" && slide.rows.length >= 6 &&
+        slide.rows.some((row) => row.values.some((value) => long(value) > 60))) ||
+      (slide.layout === "quote" && long(slide.quote) > 220) ||
+      (slide.layout === "image-text" && long(slide.body) > 300 && slide.points.length >= 3)
+    if (crowded) {
+      flag(i, "crowded-slide", "Слишком много текста для комфортного показа",
+        "Сократите подписи, не удаляя важные факты: перенесите детали в заметки докладчика.", 8)
+    }
     if ((!slide.notes || slide.notes.trim().length < 30) && slide.layout !== "section") {
       flag(i, "no-notes", "Нет содержательных заметок докладчика", "Добавьте аргумент, пояснение и переход к следующему слайду.", 3)
     }
