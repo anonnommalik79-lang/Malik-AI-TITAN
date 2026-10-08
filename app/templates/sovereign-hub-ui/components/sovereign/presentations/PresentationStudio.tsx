@@ -895,6 +895,12 @@ export function PresentationStudio({ username }: { username?: string }) {
 
   /* ----------------------------------------------------------------- export */
 
+  // Partial exports are useful for rescuing work, but must never be presented
+  // as the requested complete deck. Keep the status in every filename.
+  const exportSuffix = entries.length > 0 && readySlides.length < entries.length
+    ? `-partial-${readySlides.length}-of-${entries.length}` : ""
+  const exportStatus = exportSuffix ? ` · ${readySlides.length}/${entries.length}` : ""
+
   const exportPptx = async () => {
     setBusy("export")
     setError("")
@@ -912,7 +918,7 @@ export function PresentationStudio({ username }: { username?: string }) {
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `${(deckTitle || "presentation").replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || "presentation"}.pptx`
+      link.download = `${(deckTitle || "presentation").replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || "presentation"}${exportSuffix}.pptx`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -932,7 +938,7 @@ export function PresentationStudio({ username }: { username?: string }) {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = `${(deckTitle || "malik-presentation").replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || "malik-presentation"}.malik.json`
+    link.download = `${(deckTitle || "malik-presentation").replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || "malik-presentation"}${exportSuffix}.malik.json`
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -948,7 +954,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   useEffect(() => {
     if (!printing) return
     const previousTitle = document.title
-    document.title = deckTitle || "Презентация"
+    document.title = `${deckTitle || "Презентация"}${exportSuffix ? ` (частично: ${readySlides.length} из ${entries.length})` : ""}`
     const done = () => {
       document.title = previousTitle
       setPrinting(false)
@@ -976,7 +982,7 @@ export function PresentationStudio({ username }: { username?: string }) {
       window.cancelAnimationFrame(frame)
       window.removeEventListener("afterprint", done)
     }
-  }, [deckTitle, printing])
+  }, [deckTitle, entries.length, exportSuffix, printing, readySlides.length])
 
   /* ---------------------------------------------------------------- present */
 
@@ -1455,9 +1461,9 @@ export function PresentationStudio({ username }: { username?: string }) {
             </span>
             <button type="button" className="ps-btn ps-btn--small" onClick={() => startShow(current)} disabled={!presentable.length}><Play size={14} /> Показ</button>
             <button type="button" className="ps-btn ps-btn--small" onClick={() => void exportPptx()} disabled={!presentable.length || generating || busy === "export"}>
-              {busy === "export" ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} PPTX
+              {busy === "export" ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} PPTX{exportStatus}
             </button>
-            <button type="button" className="ps-btn ps-btn--small" onClick={exportPdf} disabled={!presentable.length || generating}><FileDown size={14} /> PDF</button>
+            <button type="button" className="ps-btn ps-btn--small" onClick={exportPdf} disabled={!presentable.length || generating}><FileDown size={14} /> PDF{exportStatus}</button>
             <button type="button" className="ps-btn ps-btn--small" onClick={exportBackup} disabled={!presentable.length} title="Скачать полную редактируемую резервную копию">
               <Download size={14} /> Malik Deck
             </button>
