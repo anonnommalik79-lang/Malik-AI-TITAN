@@ -14,7 +14,7 @@
     "start": "next start",
     "launch": "npm run build && npm run start",
     "lint": "eslint .",
-    "test:truth": "node --experimental-strip-types --no-warnings scripts/verify-truth-engine.mjs",
+    "test:truth": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-truth-engine.mjs",
     "test:models": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-malik-models.mjs",
     "test:brain": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-malik-brain-v1.mjs",
     "test:owner-unlimited": "node scripts/verify-owner-unlimited.mjs",

@@ -9,6 +9,7 @@ import { sharedAnswerCacheKey, mayShareAnswerCache, trimSharedAnswerCache } from
 import type { MalikResearchProgress, MalikWebSource } from "@/lib/ai/web-research-types"
 import { auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit } from "@/lib/ai/fact-audit"
 import { truthNeedsLiveEvidence, officialTruthQuery, truthSystemInstruction, finalizeTruthAnswer } from "@/lib/ai/truth-engine"
+import { shouldBufferNumericalAnswer } from "@/lib/ai/truth-engine-v2"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
@@ -1105,10 +1106,10 @@ export async function malikGodAnswer(
       temperature: typeof body?.temperature === "number" ? body.temperature : brain.temperature,
       reasoningEffort: brain.depth === "instant" ? "low" : brain.depth === "balanced" ? "medium" : "high",
       allowCatalog: selection.allowCatalog === true,
-      onToken: truthNeedsLiveEvidence(focus.searchText) ? undefined : emitToken,
+      onToken: (truthNeedsLiveEvidence(focus.searchText) || shouldBufferNumericalAnswer(focus.searchText)) ? undefined : emitToken,
       signal,
     }).catch((error) => { activity?.finish(modelCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
-    const content = finalizeTruthAnswer(cleanText(result.content), focus.searchText, sources.length)
+    const content = finalizeTruthAnswer(cleanText(result.content), focus.searchText, sources)
     activity?.finish(modelCall, { characters: content.length, model: result.selectedModelId, sources: sources.length })
     return {
       content,
@@ -1171,7 +1172,7 @@ export async function malikGodAnswer(
   let answer: GodAnswer
   if (result.content) {
     answer = {
-      content: finalizeTruthAnswer(result.content, legacyFocus.searchText, sources.length),
+      content: finalizeTruthAnswer(result.content, legacyFocus.searchText, sources),
       provider: result.provider,
       model: result.model,
       usedWeb: usedEvidence,
