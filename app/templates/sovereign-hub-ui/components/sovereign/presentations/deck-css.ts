@@ -754,6 +754,58 @@ export const DECK_CSS = `
   line-height: 1.18;
 }
 
+
+/* Last-resort visual fit is opt-in on the slide; it never removes source text.
+   Everything remains editable and the PDF prints the same 1280×720 layout. */
+.deck-slide[data-density="ultra"] .deck-head { min-height: 76px; margin-bottom: 10px; }
+.deck-slide[data-density="ultra"] .deck-head .deck-h { font-size: 32px; line-height: 1.09; }
+.deck-slide[data-density="ultra"] .deck-kicker { font-size: 12px; }
+.deck-slide[data-density="ultra"] .deck-intro { font-size: 15px; margin: 0 0 8px; line-height: 1.27; }
+.deck-slide[data-density="ultra"] .deck-title-slide .deck-h { font-size: 47px; line-height: 1.07; margin: 12px 0 15px; }
+.deck-slide[data-density="ultra"] .deck-title-slide[data-image="true"] .deck-h { font-size: 35px; }
+.deck-slide[data-density="ultra"] .deck-hero .deck-h { font-size: 44px; line-height: 1.08; }
+.deck-slide[data-density="ultra"] .deck-section-slide .deck-h { font-size: 42px; }
+.deck-slide[data-density="ultra"] .deck-quote-text { font-size: 28px; line-height: 1.26; }
+.deck-slide[data-density="ultra"] .deck-closing-slide .deck-h { font-size: 45px; }
+.deck-slide[data-density="ultra"] .deck-sub,
+.deck-slide[data-density="ultra"] .deck-hero .deck-sub { font-size: 17px; line-height: 1.33; }
+.deck-slide[data-density="ultra"] .deck-row { grid-template-columns: 32px 270px minmax(0, 1fr); gap: 13px; padding: 6px 0; }
+.deck-slide[data-density="ultra"] .deck-row strong { font-size: 19px; line-height: 1.2; }
+.deck-slide[data-density="ultra"] .deck-row p { font-size: 15px; line-height: 1.28; }
+.deck-slide[data-density="ultra"] .deck-col { padding: 18px 21px; }
+.deck-slide[data-density="ultra"] .deck-col h3 { font-size: 22px; margin-bottom: 13px; }
+.deck-slide[data-density="ultra"] .deck-col li { font-size: 15px; line-height: 1.3; }
+.deck-slide[data-density="ultra"] .deck-col ul { gap: 8px; }
+.deck-slide[data-density="ultra"] .deck-stat-label { font-size: 16px; }
+.deck-slide[data-density="ultra"] .deck-imgtext .deck-h { font-size: 32px; margin-bottom: 10px; }
+.deck-slide[data-density="ultra"] .deck-imgtext .deck-text { font-size: 16px; line-height: 1.32; margin-bottom: 12px; }
+.deck-slide[data-density="ultra"] .deck-imgtext li { font-size: 15px; line-height: 1.32; }
+.deck-slide[data-density="ultra"] .deck-imgtext ul { gap: 8px; }
+.deck-slide[data-density="ultra"] .deck-card { min-height: 205px; padding: 18px 18px; }
+.deck-slide[data-density="ultra"] .deck-card h3 { font-size: 20px; margin: 20px 0 9px; }
+.deck-slide[data-density="ultra"] .deck-card p { font-size: 15px; line-height: 1.3; }
+.deck-slide[data-density="ultra"] .deck-step h3 { font-size: 19px; margin-top: 20px; }
+.deck-slide[data-density="ultra"] .deck-step p { font-size: 14px; line-height: 1.3; }
+.deck-slide[data-density="ultra"] .deck-table { font-size: 15px; }
+.deck-slide[data-density="ultra"] .deck-table th,
+.deck-slide[data-density="ultra"] .deck-table td { padding: 7px 10px; line-height: 1.25; }
+.deck-slide[data-density="ultra"] .deck-table thead th { font-size: 12px; }
+.deck-slide[data-density="ultra"] .deck-verdict { margin-top: 11px; font-size: 16px; }
+.deck-slide[data-density="ultra"] .deck-feature { padding: 17px 17px; gap: 9px; min-height: 0; }
+.deck-slide[data-density="ultra"] .deck-feature h3 { font-size: 19px; }
+.deck-slide[data-density="ultra"] .deck-feature p { font-size: 14px; line-height: 1.3; }
+.deck-slide[data-density="ultra"] .deck-feature-icon { width: 41px; height: 41px; border-radius: 11px; }
+.deck-slide[data-density="ultra"] .deck-feature-icon svg { width: 22px; height: 22px; }
+.deck-slide[data-density="ultra"] .deck-process-arrow h3 { font-size: 16px; }
+.deck-slide[data-density="ultra"] .deck-process-step p { font-size: 13px; line-height: 1.3; }
+.deck-slide[data-density="ultra"] .deck-gallery-item figcaption { font-size: 15px; }
+.deck-slide[data-density="ultra"] .deck-chart { gap: 24px; grid-template-columns: minmax(0, 1fr) 235px; }
+.deck-slide[data-density="ultra"] .deck-chart[data-takeaway="false"] { grid-template-columns: minmax(0, 1fr); }
+.deck-slide[data-density="ultra"] .deck-takeaway { font-size: 20px; padding-left: 15px; }
+.deck-slide[data-density="ultra"] .deck-bars { gap: 8px; padding-bottom: 58px; }
+.deck-slide[data-density="ultra"] .deck-bar-label { bottom: -50px; font-size: 12px; white-space: normal; line-height: 1.18; overflow-wrap: anywhere; text-overflow: clip; }
+.deck-slide[data-density="ultra"] .deck-body--center { padding-bottom: 10px; }
+
 /* The app's own reduced-motion rule cannot reach into a shadow root. */
 @media (prefers-reduced-motion: reduce) {
   .deck-slide[data-build="true"] *,
