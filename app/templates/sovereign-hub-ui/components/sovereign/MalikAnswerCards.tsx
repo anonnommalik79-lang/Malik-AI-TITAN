@@ -63,7 +63,9 @@ function useCardImage(image: AnswerCard["image"], sources: Sources, title: strin
   // Retrieve the exact named subject instead of leaving a permanent initial.
   const lookup = typeof image === "string" && image.trim().length >= 2 && !isAbstractPhotoSubject(image) ? image.trim()
     : autoPhotos && !sourceImage && !isAbstractPhotoSubject(title) ? visualSegmentLabel(title) : ""
-  const brand = !hero ? referenceBrandAsset(lookup || title) : null
+  // The card title identifies the brand even when the model forgets image/imageRole,
+  // or mistakenly supplies a generic initial. Always prefer our shipped official mark.
+  const brand = referenceBrandAsset(title) || (!hero ? referenceBrandAsset(lookup) : null)
   const hasBrand = Boolean(brand), sourceUrl = sourceImage?.url
   const lookupKey = (imageRole === "logo" ? "logo:" : "photo:") + lookup
   const [found, setFound] = useState<{ key: string; url: string; label: string; sourceUrl?: string; logo?: boolean } | null>(null)
@@ -88,7 +90,7 @@ function Picture({ card, sources, hero = false, autoPhotos = false }: { card: An
     return <span className="malik-card__thumb is-empty" aria-hidden="true">{card.title.trim().charAt(0).toUpperCase()}</span>
   }
   return (
-    <span className={hero ? "malik-card__hero-image" : "malik-card__thumb" + (image.logo ? " is-logo" : " is-photo")}>
+    <span className={(hero ? "malik-card__hero-image" : "malik-card__thumb") + (image.logo ? " is-logo" : " is-photo")}>
       <img src={url} alt={image.logo ? card.title + " · логотип" : card.title} loading={image.logo ? "eager" : "lazy"} decoding="async" referrerPolicy="no-referrer" onError={() => setFailed((current) => [...current, url].slice(-6))} />
       {!image.logo && image.label ? <a className="malik-card__credit" href={safeHttps(image.sourceUrl || "") || url} target="_blank" rel="noopener noreferrer">{image.label}<ExternalLink aria-hidden="true" /></a> : null}
     </span>
