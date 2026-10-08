@@ -60,6 +60,36 @@ function directImageDelivery() {
   return /^(?:1|true|yes|on)$/i.test(String(process.env.MALIK_IMAGE_EPHEMERAL_DIRECT || "").trim())
 }
 
+async function persistBrandedWorkImage(input: {
+  imageUrl: string
+  provider: string
+  providerModel?: string
+  userId: string
+}): Promise<ImageResult> {
+  // Single Sharp pass at native size; source URL never goes straight to a Work
+  // result without the official mark burned into its saved bytes.
+  const [{ postProcessGeneratedImage }, { withMalikImageProcessingSlot }, { isCloudStorageConfigured, uploadMediaAsset }] = await Promise.all([
+    import("@/lib/media/image-postprocess"),
+    import("@/lib/media/image-processing-capacity"),
+    import("@/lib/storage/cloud-upload"),
+  ])
+  const branded = await withMalikImageProcessingSlot(() =>
+    postProcessGeneratedImage({ imageUrl: input.imageUrl, quality: "draft", effect: "off" }),
+  )
+  if (!branded.buffer?.length) throw new Error("MALIK_IMAGE_BRANDING_UNAVAILABLE")
+  if (!isCloudStorageConfigured()) throw new Error("MALIK_IMAGE_STORAGE_REQUIRED")
+  const mime = branded.mime || "image/webp"
+  const uploaded = await uploadMediaAsset({
+    userId: input.userId,
+    fileName: `work-branded-${Date.now()}.${mime.includes("jpeg") ? "jpg" : "webp"}`,
+    mime,
+    buffer: branded.buffer,
+    kind: "image",
+  })
+  if (!uploaded.stored) throw new Error(uploaded.reason || "MALIK_IMAGE_STORAGE_FAILED")
+  return { url: uploaded.publicUrl, provider: input.provider, providerModel: input.providerModel, ephemeral: false, durable: true }
+}
+
 async function generateImage(request: ImageRequest): Promise<ImageResult> {
   const [{ agnesImageConfigured, generateWithAgnesImage }, { pollinationsDirectUrl }, { routeImageGeneration }, { buildVisualPrompt }, { enhanceImagePrompt }] = await Promise.all([
     import("@/lib/media/providers/agnes-image"),
@@ -71,18 +101,26 @@ async function generateImage(request: ImageRequest): Promise<ImageResult> {
   const visual = await buildVisualPrompt(request.prompt, request.mode).catch(() => null)
   const prompt = enhanceImagePrompt(visual?.prompt || request.prompt, { mode: request.mode, quality: "balanced" })
 
-  // Same order as the image studio: the primary provider, then the
-  // provider-direct link (no bytes through Render), then the pools.
+  // The primary image, direct CDN pool and fallback models all pass through
+  // the exact same native-resolution, memory-bounded logo compositor.
   if (agnesImageConfigured()) {
     try {
       const agnes = await generateWithAgnesImage({ prompt, negativePrompt: visual?.negativePrompt, size: "1K", aspectRatio: request.aspectRatio })
-      if (/^https:\/\//i.test(agnes.imageUrl)) return { url: agnes.imageUrl, provider: "agnes", providerModel: agnes.providerModel, ephemeral: true, durable: false }
+      if (/^https:\/\//i.test(agnes.imageUrl)) {
+        return persistBrandedWorkImage({
+          imageUrl: agnes.imageUrl, provider: "agnes",
+          providerModel: agnes.providerModel, userId: request.owner.userId,
+        })
+      }
     } catch (error) {
       console.warn("[MALIK_OS] image primary unavailable", error instanceof Error ? error.message.slice(0, 160) : String(error))
     }
   }
   if (directImageDelivery()) {
-    return { url: pollinationsDirectUrl({ prompt, negativePrompt: visual?.negativePrompt, aspectRatio: request.aspectRatio }), provider: "pollinations", ephemeral: true, durable: false }
+    return persistBrandedWorkImage({
+      imageUrl: pollinationsDirectUrl({ prompt, negativePrompt: visual?.negativePrompt, aspectRatio: request.aspectRatio }),
+      provider: "pollinations", userId: request.owner.userId,
+    })
   }
   const result = await routeImageGeneration({
     prompt: request.prompt,
@@ -97,20 +135,12 @@ async function generateImage(request: ImageRequest): Promise<ImageResult> {
     ;(error as Error & { status?: number }).status = /429|busy|rate|quota|overload|temporar|timeout|503|502/i.test(String(result.error || "")) ? 503 : 502
     throw error
   }
-  if (/^https:\/\//i.test(result.imageUrl)) return { url: result.imageUrl, provider: result.provider, providerModel: result.providerModel, ephemeral: true, durable: false }
-
-  // Bytes (a data URL) go to object storage; the flow only keeps the URL.
-  const [{ isCloudStorageConfigured, uploadMediaAsset }, { sourceBytes }] = await Promise.all([
-    import("@/lib/storage/cloud-upload"),
-    import("@/lib/media/image-postprocess"),
-  ])
-  if (!isCloudStorageConfigured()) return { url: "", provider: result.provider, ephemeral: false, durable: false }
-  const bytes = await sourceBytes(result.imageUrl)
-  if (!bytes) throw new Error("IMAGE_BYTES_UNREADABLE")
-  const mime = bytes.mime || "image/png"
-  const uploaded = await uploadMediaAsset({ userId: request.owner.userId, fileName: `superflow-${Date.now()}.${mime.split("/")[1] || "png"}`, mime, buffer: bytes.buffer, kind: "image" })
-  if (!uploaded.stored) throw new Error(uploaded.reason || "IMAGE_UPLOAD_FAILED")
-  return { url: uploaded.publicUrl, provider: result.provider, providerModel: result.providerModel, ephemeral: false, durable: true }
+  return persistBrandedWorkImage({
+    imageUrl: result.imageUrl,
+    provider: result.provider,
+    providerModel: result.providerModel,
+    userId: request.owner.userId,
+  })
 }
 
 export function serverToolDeps(): ToolDeps {
