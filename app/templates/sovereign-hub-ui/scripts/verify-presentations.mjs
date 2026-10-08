@@ -619,6 +619,35 @@ check("editorial QA does not mistake review for verification of facts", () => {
   assert.ok(!report.issues.some((issue) => issue.code === "unattributed-data"))
 })
 
+check("visual art direction stays airy for short copy and compacts demanding layouts", () => {
+  const fit = load("lib/presentations/visual-fit.ts")
+  assert.equal(fit.slideDensity(deck.normalizeSlide(SAMPLES.title)), "balanced")
+  assert.equal(fit.slideDensity(deck.normalizeSlide({ ...SAMPLES.hero, title: "Заголовок ".repeat(10) })), "dense")
+  assert.equal(fit.slideDensity(deck.normalizeSlide({ ...SAMPLES.quote, quote: "Очень длинная цитата ".repeat(11) })), "dense")
+  assert.equal(fit.slideDensity(deck.normalizeSlide({ ...SAMPLES.bullets,
+    points: Array.from({ length: 5 }, (_, i) => ({ title: `Пункт ${i}`, body: "Подробные сведения ".repeat(6) })),
+  })), "dense")
+  assert.equal(fit.slideDensity(deck.normalizeSlide({ ...SAMPLES.cards,
+    cards: [{ title: "Первое", body: "Коротко" }, { title: "Второе", body: "Коротко" }],
+  })), "balanced")
+  assert.equal(fit.slideDensity(deck.normalizeSlide({ ...SAMPLES.comparison, rows: Array.from({ length: 6 }, (_, i) => ({ label: `Критерий ${i}`, values: ["A", "B"] })) })), "dense")
+  assert.equal(fit.slideDensity(deck.normalizeSlide({ ...SAMPLES.chart, data: Array.from({ length: 8 }, (_, i) => ({ label: `Год ${i}`, value: i + 1 })) })), "compact")
+  assert.equal(fit.headlineScale(deck.normalizeSlide(SAMPLES.title)), 1)
+  assert.ok(fit.headlineScale(deck.normalizeSlide({ ...SAMPLES.hero, title: "Очень длинный заголовок ".repeat(6) })) < 1)
+})
+
+check("smart density reaches preview, export and the real shadow-root slide without clipping", () => {
+  const renderer = read("components/sovereign/presentations/SlideRenderer.tsx")
+  const css = read("components/sovereign/presentations/deck-css.ts")
+  const pptxSource = read("lib/presentations/pptx.ts")
+  assert.match(renderer, /data-density=\\{slideDensity\\(slide\\)\\}/)
+  assert.match(css, /ART DIRECTION V3/)
+  for (const density of ["compact", "dense"]) assert.ok(css.includes(`[data-density="${density}"]`))
+  assert.match(css, /deck-bar-label[\\s\\S]*white-space: normal/)
+  assert.match(pptxSource, /headlineScale\\(slide\\)/)
+  assert.doesNotMatch(css.slice(css.indexOf("ART DIRECTION V3")), /line-clamp|text-overflow: ellipsis/)
+})
+
 /* ============================================================== assembly */
 
 check("a figure counts up with its sign, unit and separators kept", () => {
