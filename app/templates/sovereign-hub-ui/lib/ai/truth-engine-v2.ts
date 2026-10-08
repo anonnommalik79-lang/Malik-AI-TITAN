@@ -106,3 +106,10 @@ export function checkPrimaryEvidence(question: string, sources: readonly TruthSo
   if (sources.some((source) => primaryKzTaxSource(String(source.url || "")))) return []
   return [{ code: "source", message: "Нет подтверждённого официального источника законодательства Казахстана для этого налогового расчёта." }]
 }
+
+/** Buffer only numerical questions so verified text cannot be bypassed by SSE chunks. */
+export function shouldBufferNumericalAnswer(question: string) {
+  const input = String(question || "")
+  if (!/\d/u.test(input)) return false
+  return /(?:рассчитай|посчитай|вычисли|реши|сколько\s+будет|уравнени|процент|математ|calculate|compute|equation|solve|percentage|multiply|divide|subtract|addition)/iu.test(input)
+}
