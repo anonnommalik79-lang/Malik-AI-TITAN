@@ -659,7 +659,19 @@ export function PresentationStudio({ username }: { username?: string }) {
     assemblyRef.current = null
     setAssemblyAt(0)
     setAssembling(true)
-    await fillSlides(plan, plan.items.map((_, i) => i))
+    const expected = plan.items.map((_, i) => i)
+    const firstPass = await fillSlides(plan, expected)
+    // Repair only missing positions, one at a time: non-contiguous gaps must
+    // never be sent as a single range (that would overwrite other slides).
+    const missing = expected.filter((index) => !firstPass.has(index))
+    const unrecovered: number[] = []
+    for (const index of missing) {
+      const retried = await fillSlides(plan, [index])
+      if (!retried.has(index)) unrecovered.push(index)
+    }
+    setError(unrecovered.length
+      ? `Готово ${expected.length - unrecovered.length} из ${expected.length} слайдов. Не удалось создать: ${unrecovered.map((i) => i + 1).join(", ")}. Нажмите «Написать ещё раз» на нужном слайде.`
+      : "")
     setBusy(null)
   }, [fillSlides, outline])
 
@@ -1086,7 +1098,7 @@ export function PresentationStudio({ username }: { username?: string }) {
           {showQuality ? "Свернуть" : `Замечания · ${quality.issues.length}`}
         </button>
       </div>
-      <p className="ps-quality-caption">Проверяет структуру, повторы, заметки и наличие источников. Не подтверждает достоверность фактов.</p>
+      <p className="ps-quality-caption">{stage === "deck" ? `Создано ${quality.ready} из ${quality.inspected} слайдов. ` : "Проверка плана. "}Проверяет структуру, повторы, заметки и наличие источников. Не подтверждает достоверность фактов.</p>
       {showQuality ? (
         <div className="ps-quality-list">
           {quality.issues.length ? quality.issues.slice(0, 20).map((issue, index) => (
@@ -1393,7 +1405,7 @@ export function PresentationStudio({ username }: { username?: string }) {
             ))}
           </div>
           <div className="ps-build-caption">
-            {generating ? `Готово ${readyCount} из ${entries.length}` : "Все слайды написаны"} · {creditsLabel(quota)} кредитов
+            {generating ? `Готово ${readyCount} из ${entries.length}` : readyCount === entries.length ? "Все слайды написаны" : `Не все слайды готовы: ${readyCount} из ${entries.length}`} · {creditsLabel(quota)} кредитов
           </div>
         </div>
       </div>

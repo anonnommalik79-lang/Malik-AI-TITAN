@@ -36,6 +36,8 @@ const { fetchResearchResponse } = load("lib/malik-research/bounded-fetch.ts")
 const { shouldUseWeb } = load("lib/ai/web-search-policy.ts")
 const query = load("lib/ai/web-search-query.ts")
 const currentEvidence = load("lib/ai/current-evidence.ts")
+const truth = load("lib/ai/truth-engine.ts")
+const sharedCache = load("lib/server/public-answer-cache.ts")
 const { buildContextualFollowUps } = load("lib/ai/chat-followups.ts")
 const screenshotPrompt = "Знаеш про Ai Digital Bridge дай всех спикеров"
 const originalFetch = globalThis.fetch
@@ -55,7 +57,7 @@ try {
     assert.equal(query.eventSearchTitle(screenshotPrompt), "Ai Digital Bridge")
   })
   await check("search keeps the named event and rejects generic AI links", () => {
-    const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries", "SEARCH_STOP_WORDS", "searchTokens", "knownNameAliases", "identityTokensForNamedSubject", "rankSourcesForPrompt"], { ...query, ...currentEvidence })
+    const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries", "SEARCH_STOP_WORDS", "searchTokens", "knownNameAliases", "identityTokensForNamedSubject", "rankSourcesForPrompt"], { ...query, ...currentEvidence, ...truth })
     assert.ok(router.buildQueries(screenshotPrompt).every((q) => /Ai Digital Bridge/i.test(q)))
     assert.ok(!router.buildQueries(screenshotPrompt).some((q) => /hackathon accelerator/i.test(q)))
     const event = { title: "AI Digital Bridge programme and speakers", url: "https://example.test/digital-bridge", domain: "example.test", snippet: "Confirmed programme" }
@@ -69,7 +71,7 @@ try {
     assert.equal(shouldUseWeb("Напиши код на Python"), false)
     assert.equal(shouldUseWeb(prompt, { research: false }), false)
     assert.deepEqual(currentEvidence.currentModelSubjects(prompt), ["Gemini 4 pro", "GPT 6.1S SOL"])
-    const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries"], { ...query, ...currentEvidence })
+    const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries"], { ...query, ...currentEvidence, ...truth })
     const queries = router.buildQueries(prompt)
     assert.equal(queries.length, 3)
     assert.ok(queries.some((q) => q.includes('"Gemini 4 pro"') && q.includes("site:deepmind.google")))
@@ -88,7 +90,7 @@ try {
     assert.match(instruction, /do NOT prove/)
     assert.match(instruction, /not "it does not exist"/)
     const cache = new Map()
-    const caching = functionsFrom("lib/malik-god-router.ts", ["cacheKey", "getCache", "setCache"], { CACHE: cache, SEARCH_CACHE_VERSION: "test", needsCurrentEvidence: currentEvidence.needsCurrentEvidence })
+    const caching = functionsFrom("lib/malik-god-router.ts", ["cacheKey", "getCache", "setCache"], { CACHE: cache, SEARCH_CACHE_VERSION: "test", needsCurrentEvidence: currentEvidence.needsCurrentEvidence, ...sharedCache })
     caching.setCache(prompt, { content: "outdated comparison" })
     assert.equal(caching.getCache(prompt), null, "changing facts are rechecked, not restored from a stale answer")
     assert.equal(cache.size, 0)
@@ -184,6 +186,20 @@ try {
     assert.match(text, /"textOnly":true/)
     assert.match(text, /event: done/)
     assert.doesNotMatch(text, /event: error/)
+  })
+  await check("long multi-part brief retains its original depth after a safe retry", async () => {
+    const requests = []
+    const prompt = Array.from({ length: 40 }, (_, i) => `${i + 1}) Complete requirement ${i + 1}`).join("\n")
+    const original = { method: "POST", body: JSON.stringify({ originalQuestion: prompt, workspaceMode: "chat", responseDepth: "ultra" }) }
+    const response = await fetchRecoverableChat("/api/stream", original, { ...recoveryOptions, fetcher: async (_url, init) => {
+      requests.push(JSON.parse(init.body))
+      return requests.length === 1 ? sse(event("error", { message: "Upstream reset" })) : sse(event("content", { content: "All requirements handled." }) + event("done"))
+    } })
+    const streamText = await response.text()
+    assert.equal(requests.length, 2)
+    assert.equal(requests[1].responseDepth, "ultra")
+    assert.equal(requests[1].chatRecovery, true)
+    assert.match(streamText, /All requirements handled/)
   })
   await check("saved server content is recovered with citations, without replaying the question", async () => {
     let posts = 0, polls = 0
