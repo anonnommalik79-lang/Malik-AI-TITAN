@@ -89,7 +89,7 @@ async function handlePOST(request: Request) {
   const proAccess = hasMalikProAccess(user.plan)
   // One free video model. Premium provider selection is enforced server-side
   // and cannot be bypassed by changing the client JSON request.
-  if (!providerId) providerId = mode === "text" ? "novai" : "magichour"
+  if (!providerId && !proAccess) providerId = "novai"
   if (!proAccess && (providerId !== "novai" || mode !== "text")) {
     return Response.json({
       ok: false,
