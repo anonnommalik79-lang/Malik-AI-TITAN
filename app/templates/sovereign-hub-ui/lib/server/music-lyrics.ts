@@ -24,13 +24,18 @@ export function resolveMusicLyricsLanguage(prompt: string, requested?: unknown):
   if (/(?:қазақша|қазақ тілінде|казах(?:ском|ский|ша)|kazakh)/iu.test(text)) return "kk"
   if (/(?:на\s+русском|русск(?:ий|ая|ом)|russian)/iu.test(text)) return "ru"
   if (/(?:in\s+english|english|на\s+английском|английск(?:ий|ая|ом))/iu.test(text)) return "en"
+  // A selected language is an explicit UI instruction; script-based detection
+  // must only be used when the selector remains on automatic.
+  const selected = normalizeLanguage(requested)
+  if (selected) return selected
+
   if (/[әғқңөұүһі]/iu.test(text)) return "kk"
 
   const cyrillic = (text.match(/[а-яёәғқңөұүһі]/giu) || []).length
   const latin = (text.match(/[a-z]/giu) || []).length
   if (latin >= 12 && latin > cyrillic * 1.8) return "en"
 
-  return normalizeLanguage(requested) || "ru"
+  return "ru"
 }
 
 function desiredLineCount(duration: number) {
@@ -75,6 +80,9 @@ export async function generateMusicLyrics(input: {
     "Target music duration: " + Math.max(10, Math.floor(input.duration)) + " seconds.",
     "Length target: " + desiredLineCount(input.duration) + ".",
     "Use concise singable lines with natural rhythm and a memorable hook.",
+    "Keep all lyric lines in the requested language; do not randomly switch languages or add English translations.",
+    "Use natural local grammar and spelling, especially for Kazakh.",
+    "Preserve the user's requested subject, emotion, and point of view. Avoid unrelated clichés.",
     "Use ACE-Step friendly structure tags such as [Verse], [Chorus], [Bridge], [Outro] where useful.",
     "Do not explain anything. Return only the lyrics.",
     "Do not put the answer in a markdown code fence.",

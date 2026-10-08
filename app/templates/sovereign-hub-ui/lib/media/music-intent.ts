@@ -114,3 +114,68 @@ export function analyzeMusicPrompt(promptValue: unknown): MusicPromptIntent {
     explicit: Boolean(explicitlyNoVocals || explicitlyOnlyInstrument || explicitlyVocals || RAP_RE.test(prompt) || instruments.length || excludedInstruments.length || genre || mood || bpm),
   }
 }
+
+
+export type MusicBriefInput = {
+  prompt: string
+  lyrics?: string
+  requestedInstrumental?: boolean
+  genre?: string
+  mood?: string
+  lyricsLanguage?: "kk" | "ru" | "en" | "auto"
+}
+
+const MUSIC_LANGUAGE_NAMES = { kk: "Kazakh", ru: "Russian", en: "English" } as const
+
+/**
+ * One authoritative brief for every music provider and the UI readback.
+ * In particular, a vague word such as "track" must not force instrumental
+ * when the user explicitly requests lyrics or selected vocals.
+ */
+export function compileMusicBrief(input: MusicBriefInput) {
+  const original = String(input.prompt || "").trim().slice(0, 2000)
+  const intent = analyzeMusicPrompt(original)
+  const hasLyrics = Boolean(String(input.lyrics || "").trim())
+  const instrumental = intent.vocalDirective === "instrumental"
+    ? true
+    : intent.vocalDirective === "vocal"
+      ? false
+      : hasLyrics ? false : input.requestedInstrumental !== false
+
+  const selectedGenre = String(input.genre || "").trim().toLowerCase()
+  const genre: MusicGenreIntent = intent.genre ||
+    (["phonk", "trap", "hiphop", "lofi", "edm"].includes(selectedGenre)
+      ? selectedGenre as MusicGenreIntent : "other")
+  const selectedMood = String(input.mood || "").trim()
+  const mood: MusicMoodIntent = intent.mood ||
+    (["Агрессивный", "Спокойный", "Атмосферный", "Энергичный", "Грустный"].includes(selectedMood)
+      ? selectedMood as MusicMoodIntent : "Другое")
+
+  // The old backend sometimes passed BOTH "no vocals" and "sing the lyrics".
+  // Only include hints compatible with the FINAL vocal decision.
+  const cues = intent.providerHints.filter((hint) =>
+    !hint.startsWith("Instrumental only.") && !hint.startsWith("Vocal song.")
+  )
+  if (genre !== "other" && !intent.genre) cues.push("Genre: " + genre + ".")
+  if (mood !== "Другое" && !intent.mood) cues.push("Mood: " + mood + ".")
+  const chosenLanguage = input.lyricsLanguage
+  const lyricLanguage = chosenLanguage && chosenLanguage !== "auto"
+    ? MUSIC_LANGUAGE_NAMES[chosenLanguage] : undefined
+  cues.push(instrumental
+    ? "STRICT: instrumental composition only; no singing, spoken voice or lyrical vocals."
+    : "STRICT: vocal song; sing the supplied lyrics as written with clear, natural vocals.")
+  if (!instrumental && lyricLanguage) cues.push("Lyrics and vocals in " + lyricLanguage + ".")
+
+  // Keep both ends of very long descriptions: users often place an essential
+  // "without X" or a key constraint at the very end of a long prompt.
+  const guidance = cues.filter(Boolean).join(" ")
+  const control = "Production instructions: " + guidance
+  const allowance = Math.max(100, 2000 - control.length - 4)
+  const description = original.length <= allowance
+    ? original
+    : original.slice(0, Math.floor(allowance * .65)).trimEnd() +
+      " ... " + original.slice(-(allowance - Math.floor(allowance * .65) - 5)).trimStart()
+  const providerPrompt = (description + "\n" + control).slice(0, 2000)
+
+  return { providerPrompt, instrumental, genre, mood, intent }
+}

@@ -1,5 +1,5 @@
 import { resolveMediaUser } from "@/lib/media/request"
-import { analyzeMusicPrompt } from "@/lib/media/music-intent"
+import { compileMusicBrief } from "@/lib/media/music-intent"
 import { musicModel, musicProviderConfigured, musicProviderName, submitDeapiMusic } from "@/lib/server/deapi-music"
 import { generateMusicLyrics, resolveMusicLyricsLanguage } from "@/lib/server/music-lyrics"
 import { recordMusicJobOwner } from "@/lib/server/music-job-ownership"
@@ -47,20 +47,10 @@ export async function POST(request: Request) {
   const requestedInstrumental = body?.instrumental !== false
   const requestedGenre = String(body?.genre || "").trim()
   const requestedMood = String(body?.mood || "").trim()
-  const promptIntent = analyzeMusicPrompt(prompt)
-  // Natural language is authoritative when it explicitly says what to make.
-  // UI toggles/presets are fallbacks for prompts that do not specify it.
-  // Explicit spoken instructions win; otherwise a pasted lyric or the vocal
-  // switch must not be overridden by generic words such as "track" or "music".
-  const instrumental = promptIntent.vocalDirective === "instrumental"
-    ? true
-    : promptIntent.vocalDirective === "vocal"
-      ? false
-      : lyrics.length > 0 || !requestedInstrumental
-        ? false
-        : promptIntent.instrumental ?? requestedInstrumental
-  const genre = promptIntent.genre || requestedGenre
-  const mood = promptIntent.mood || requestedMood
+  const musicBrief = compileMusicBrief({
+    prompt, lyrics, requestedInstrumental, genre: requestedGenre, mood: requestedMood,
+  })
+  const { instrumental, genre, mood, intent: promptIntent } = musicBrief
   const requestedLyricsLanguage = body?.lyricsLanguage
   const requestedDuration = Number(body?.duration || 30)
 
@@ -147,13 +137,14 @@ export async function POST(request: Request) {
       }
     }
 
-    const styledPrompt = [
+    const styledPrompt = compileMusicBrief({
       prompt,
-      ...promptIntent.providerHints,
-      genre && !promptIntent.genre && genre !== "other" ? `Genre preset: ${genre}` : "",
-      mood && !promptIntent.mood && mood !== "Другое" ? `Mood preset: ${mood}` : "",
-      !instrumental ? `Vocal song. Lyrics language: ${resolvedLyricsLanguage}` : "Instrumental track. No vocals.",
-    ].filter(Boolean).join(". ")
+      lyrics: instrumental ? "" : resolvedLyrics,
+      requestedInstrumental,
+      genre,
+      mood,
+      lyricsLanguage: resolvedLyricsLanguage,
+    }).providerPrompt
 
     const result = await submitDeapiMusic({
       prompt: styledPrompt,
@@ -201,6 +192,7 @@ export async function POST(request: Request) {
       genre: promptIntent.genre || genre || "other",
       mood: promptIntent.mood || mood || "Другое",
       detectedIntent: {
+        vocalDirective: promptIntent.vocalDirective,
         instruments: promptIntent.instruments,
         excludedInstruments: promptIntent.excludedInstruments,
         bpm: promptIntent.bpm,

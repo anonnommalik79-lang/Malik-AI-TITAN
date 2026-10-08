@@ -1,12 +1,12 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react"
-import { analyzeMusicPrompt } from "@/lib/media/music-intent"
+import { analyzeMusicPrompt, compileMusicBrief } from "@/lib/media/music-intent"
 import "./music-generation.css"
 
 type GenreId = "phonk" | "trap" | "hiphop" | "lofi" | "edm" | "other"
 type Mood = "Агрессивный" | "Спокойный" | "Атмосферный" | "Энергичный" | "Грустный" | "Другое"
-type LyricsLanguage = "kk" | "ru" | "en"
+type LyricsLanguage = "auto" | "kk" | "ru" | "en"
 type JobStatus = "queued" | "processing" | "ready" | "failed"
 
 type Genre = {
@@ -102,7 +102,7 @@ const GENRES: Genre[] = [
 
 const DURATION_OPTIONS = [15, 30, 60, 120, 180] as const
 const MOODS: Mood[] = ["Агрессивный", "Спокойный", "Атмосферный", "Энергичный", "Грустный", "Другое"]
-const LANGUAGE_LABELS: Record<LyricsLanguage, string> = { kk: "Қазақша", ru: "Русский", en: "English" }
+const LANGUAGE_LABELS: Record<LyricsLanguage, string> = { auto: "Авто", kk: "Қазақша", ru: "Русский", en: "English" }
 const HISTORY_KEY = "malik-music-history-v2"
 const VARIANT_OPTIONS = [1, 2, 4] as const
 
@@ -234,7 +234,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const [prompt, setPrompt] = useState("")
   const [lyrics, setLyrics] = useState("")
   const [lyricsEnabled, setLyricsEnabled] = useState(false)
-  const [lyricsLanguage, setLyricsLanguage] = useState<LyricsLanguage>("ru")
+  const [lyricsLanguage, setLyricsLanguage] = useState<LyricsLanguage>("auto")
   const [duration, setDuration] = useState<number>(30)
   const [mood, setMood] = useState<Mood>("Другое")
   const [instrumental, setInstrumental] = useState(true)
@@ -288,6 +288,18 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     [config?.limits.maxDurationSeconds],
   )
   const activeHistoryItem = history.find((item) => item.requestId === activeRequestId)
+  const musicBriefPreview = useMemo(() => compileMusicBrief({
+    prompt, lyrics, requestedInstrumental: instrumental,
+    genre: genreId, mood, lyricsLanguage,
+  }), [prompt, lyrics, instrumental, genreId, mood, lyricsLanguage])
+  const interpretedMusic = [
+    musicBriefPreview.instrumental ? "инструментал" : "вокал",
+    musicBriefPreview.genre !== "other" ? musicBriefPreview.genre : "",
+    musicBriefPreview.intent.bpm ? musicBriefPreview.intent.bpm + " BPM" : "",
+    musicBriefPreview.intent.instruments.join(" + "),
+    musicBriefPreview.intent.excludedInstruments.length
+      ? "без " + musicBriefPreview.intent.excludedInstruments.join(", ") : "",
+  ].filter(Boolean).join(" · ")
   const wave = useMemo(
     () => Array.from({ length: 72 }, (_, index) => 8 + ((index * 13 + genreId.length * 7) % 29)),
     [genreId],
@@ -1011,6 +1023,9 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
                     <button type="button" className="mm-tool" onClick={() => { setPrompt(""); flash("Поле запроса очищено") }} title="Очистить"><IconClose /></button>
                   </div>
                 </div>
+                <div className="mm-intent-readback" aria-label="Распознавание музыкального запроса">
+                  <IconSparkles /> <span>Malik понял: {interpretedMusic}</span>
+                </div>
               </div>
 
               <div className="mm-card">
@@ -1169,6 +1184,9 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
               <span>{prompt.length}/2000</span>
               <button type="button" className="mm-m-clear" onClick={() => setPrompt("")} aria-label="Очистить"><IconClose /></button>
             </div>
+          </div>
+          <div className="mm-intent-readback" aria-label="Распознавание музыкального запроса">
+            <IconSparkles /> <span>Malik понял: {interpretedMusic}</span>
           </div>
         </section>
 

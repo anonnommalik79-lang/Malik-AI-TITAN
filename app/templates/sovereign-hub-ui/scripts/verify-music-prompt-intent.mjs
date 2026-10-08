@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { analyzeMusicPrompt } from "../lib/media/music-intent.ts"
+import { analyzeMusicPrompt, compileMusicBrief } from "../lib/media/music-intent.ts"
 
 const piano = analyzeMusicPrompt("сгенерируй музыку грустную из пианино")
 assert.equal(piano.instrumental, true)
@@ -51,3 +51,33 @@ assert.equal(noVocalsSong.vocalDirective, "instrumental")
 assert.equal(analyzeMusicPrompt("Сделай песню про Алматы").instrumental, false)
 assert.equal(analyzeMusicPrompt("Қазақша ән жазып бер").instrumental, false)
 console.log("music prompt intent checks passed")
+
+const vocalTrackBrief = compileMusicBrief({
+  prompt: "Лирический трек про Алматы", lyrics: "[Verse] Я верю в себя",
+  requestedInstrumental: true, lyricsLanguage: "ru", genre: "other", mood: "Спокойный",
+})
+assert.equal(vocalTrackBrief.instrumental, false)
+assert.match(vocalTrackBrief.providerPrompt, /STRICT: vocal song/)
+assert.doesNotMatch(vocalTrackBrief.providerPrompt, /STRICT: instrumental composition/)
+assert.match(vocalTrackBrief.providerPrompt, /Russian/)
+const instrumentalTrackBrief = compileMusicBrief({
+  prompt: "Инструментальная песня без слов, только гитара", lyrics: "ignore me",
+  requestedInstrumental: false, lyricsLanguage: "kk",
+})
+assert.equal(instrumentalTrackBrief.instrumental, true)
+assert.doesNotMatch(instrumentalTrackBrief.providerPrompt, /STRICT: vocal song/)
+assert.match(instrumentalTrackBrief.providerPrompt, /no singing/)
+const longPrompt = compileMusicBrief({
+  prompt: "intro " + "нежная музыка ".repeat(160) + "БЕЗ БАРАБАНОВ",
+  requestedInstrumental: true,
+})
+assert.ok(longPrompt.providerPrompt.length <= 2000)
+assert.match(longPrompt.providerPrompt, /БЕЗ БАРАБАНОВ/)
+assert.match(longPrompt.providerPrompt, /Do not include drums/)
+const vocalOverride = compileMusicBrief({
+  prompt: "Создай трек с вокалом, 105 BPM", requestedInstrumental: true,
+})
+assert.equal(vocalOverride.instrumental, false)
+assert.equal(vocalOverride.intent.bpm, 105)
+assert.doesNotMatch(vocalOverride.providerPrompt, /STRICT: instrumental composition/)
+console.log("advanced music brief checks passed")
