@@ -234,9 +234,12 @@ function patchRecoveredTurn(
     const raw = runtime.rawGetItem.call(window.localStorage, key)
     if (!raw) return false
     const state = JSON.parse(raw)
+    const partial = String(result.content || "").trim()
     const content = result.status === "complete"
-      ? String(result.content || "").trim()
-      : String(result.error || "Malik AI не смог завершить фоновый ответ.").trim()
+      ? partial
+      : partial
+        ? `${partial}\n\n> Ответ прервался и может быть неполным. ${String(result.error || "").trim()}`
+        : String(result.error || "Malik AI не смог завершить фоновый ответ.").trim()
     if (!content) return false
 
     const patchMessage = (message: any) => message?.id === mapped.assistantMessageId
