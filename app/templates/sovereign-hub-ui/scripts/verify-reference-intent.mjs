@@ -384,9 +384,28 @@ try {
   assert.deepEqual(businessSlots, [], "abstract business bullets must not generate the three useless photo searches from the reported screenshot")
   const brand = load("lib/media/reference-brand-assets.ts")
   assert.equal(brand.referenceBrandAsset("Claude Monet"), null, "an artist must never get an AI logo")
+  const mark = brand.referenceBrandAsset("Malik AI")
+  assert.equal(mark?.url, "/brand/malik-mark.svg", "Malik AI has a bundled official logo")
+  assert.equal(mark?.role, "logo")
+  assert.equal(mark?.sourceUrl, "https://malikaiworld.world/")
+  assert.match(fs.readFileSync(mark.url.slice(1).replace(/^/, "public/"), "utf8"), /M4 53 46 11v42H4Z/, "use the existing official mark geometry")
+  for (const name of ["Malik AI", "MALIK AI", "MalikAI", "Malik AI (Sovereign Hub)", "MalikLLM MAX", "Malik Work", "Малик ИИ"]) {
+    assert.equal(brand.referenceBrandAsset(name)?.url, mark.url, "same canonical brand mark for " + name)
+  }
+  for (const name of ["Malik", "Malik AI competitor", "Claude Monet", "Malik AI Review", "Malik AI fake"]) {
+    assert.equal(brand.referenceBrandAsset(name), null, "never borrow the Malik logo for another subject: " + name)
+  }
+  assert.equal(catalog.isSafeVisualUrl(mark.url), true, "bundled icon is an exact allowed same-origin path")
+  for (const unsafe of ["/brand/../secret", "/brand/malik-mark.svg?redirect=evil", "/brand/other.svg"]) {
+    assert.equal(catalog.isSafeVisualUrl(unsafe), false, "arbitrary local paths must stay blocked")
+  }
+  assert.equal(catalog.sanitizeReferenceImages([mark])[0]?.url, "/brand/malik-mark.svg", "verified first-party SVG survives image metadata validation")
+  const cardSource = fs.readFileSync("components/sovereign/MalikAnswerCards.tsx", "utf8")
+  assert.match(cardSource, /referenceBrandAsset\(title\)/, "brand is resolved from the card title, even without an image field")
+  assert.match(cardSource, /image\.logo \? " is-logo" : " is-photo"/, "official brand uses logo presentation")
   requests = 0
   globalThis.fetch = async () => { requests++; throw new Error("Should not search for a known logo") }
-  for (const name of ["ChatGPT", "Claude", "GitHub"]) {
+  for (const name of ["ChatGPT", "Claude", "GitHub", "Malik AI", "MalikLLM MAX"]) {
     const logos = await catalog.lookupReferenceImages({ topic: name, queries: [name], entity: true, explicit: true, layout: "landscape" })
     assert.equal(logos[0].role, "logo")
     assert.match(logos[0].alt, /логотип/)
