@@ -1,4 +1,4 @@
-import { auditExtendedArithmetic, auditHeadlineConsistency, checkPrimaryEvidence } from "../lib/ai/truth-engine-v2.ts"
+import { auditExtendedArithmetic, auditHeadlineConsistency, checkPrimaryEvidence, shouldBufferNumericalAnswer } from "../lib/ai/truth-engine-v2.ts"
 import assert from "node:assert/strict"
 import { truthNeedsLiveEvidence, officialTruthQuery, truthSystemInstruction, auditTruthArithmetic, finalizeTruthAnswer } from "../lib/ai/truth-engine.ts"
 
@@ -7,6 +7,9 @@ assert.equal(truthNeedsLiveEvidence(prompt), true)
 assert.match(officialTruthQuery(prompt), /2026/)
 assert.match(officialTruthQuery(prompt), /kgd\.gov\.kz/)
 assert.equal(truthNeedsLiveEvidence("Привет!"), false)
+assert.equal(shouldBufferNumericalAnswer("Сколько будет 4 × 5?"), true)
+assert.equal(shouldBufferNumericalAnswer("Привет!"), false)
+assert.equal(shouldBufferNumericalAnswer("Напиши стих о космосе"), false)
 assert.equal(truthNeedsLiveEvidence("Сделай красивую открытку"), false)
 assert.match(truthSystemInstruction(prompt, false), /No verified current official sources/)
 assert.deepEqual(auditTruthArithmetic("45 000 000 × 3% = 1 350 000 тенге"), [])
