@@ -1005,7 +1005,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
         if (tail) receive(tail, true)
         // A provider may close with one stray character. For deep/complex work,
         // do not crown that as a successful answer: let another lane try.
-        const enoughText = options.minFlush < 24 || attempt.buffer.replace(/\s+/g, "").length >= options.minFlush
+        const enoughText = options.minFlush < 24 || attempt.buffer.replace(/\s+/g, "").length >= Math.min(options.minFlush, 16)
         if (!winner && !settled && enoughText && visibleFinalText(attempt.buffer)) crown(attempt)
         if (winner === attempt) {
           attempt.done = true
