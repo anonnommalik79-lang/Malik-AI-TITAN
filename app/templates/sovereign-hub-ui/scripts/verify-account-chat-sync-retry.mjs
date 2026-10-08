@@ -36,32 +36,9 @@ assert.match(stateServer,/throwOnReadError: true/, "account reads opt into stric
 assert.match(privateStore,/if \(options\?\.throwOnReadError\) throw error/, "unavailable R2 object is not confused with missing")
 console.log("PASS cloud-chat GET: freshness preserved, recoverable offline state, strict durable read, bounded retries")
 
-
-assert.match(component,/data-malik-chat-sync-warning/, "visible cloud state warning exists")
-assert.match(component,/cloudSyncWarning === "not-configured"/, "unconfigured cloud state is explicit")
-assert.match(component,/retryCount >= 3/, "write failures show a warning after repeated attempts")
-assert.match(component,/hydrationFailures >= 3/, "read failures show a warning after repeated attempts")
-assert.match(component,/setCloudSyncWarning\(null\)/, "successful persisted write clears warning")
-assert.match(component,/cleanAccountId\(accountId\) !== "guest"/, "guest mode does not show cloud sync banner")
-console.log("PASS cloud-chat UX: no silent history loss and no guest warning")
-
-const { claimAccountChatSyncNotice } = await import("../lib/ai/account-chat-sync-retry.ts")
-const noticeStorageData = new Map()
-const noticeStorage = {
-  getItem: (key) => noticeStorageData.get(key) ?? null,
-  setItem: (key, value) => { noticeStorageData.set(key, value) },
-}
-assert.equal(claimAccountChatSyncNotice(noticeStorage, "account-one-time-1", "not-configured"), true, "first account warning is shown")
-assert.equal(claimAccountChatSyncNotice(noticeStorage, "account-one-time-1", "not-configured"), false, "repeated failure is suppressed")
-assert.equal(claimAccountChatSyncNotice(noticeStorage, "account-one-time-1", "unavailable"), true, "new warning type may show once")
-assert.equal(claimAccountChatSyncNotice(noticeStorage, "account-one-time-2", "not-configured"), true, "different account gets its own first warning")
-assert.equal(claimAccountChatSyncNotice(noticeStorage, "guest", "not-configured"), false, "guest is never warned")
-assert.equal(claimAccountChatSyncNotice(noticeStorage, "", "unavailable"), false, "empty identity is not a user")
-assert.equal(claimAccountChatSyncNotice({getItem: () => "1", setItem: () => { throw Error("should not write") }}, "account-seen-from-prior-page-1", "not-configured"), false, "notice remains hidden after page reload")
-assert.equal(claimAccountChatSyncNotice({getItem: () => { throw Error("disabled") }, setItem: () => { throw Error("disabled") }}, "account-no-storage-1", "unavailable"), true, "disabled local storage does not hide first warning")
-assert.equal(claimAccountChatSyncNotice(null, "account-no-storage-1", "unavailable"), false, "in-memory fallback does not repeat same warning")
-assert.match(component, /claimAccountChatSyncNotice\(noticeStorage, accountKey, kind\)/, "component persists once-only marker")
-assert.match(component, /warningDismissTimer = window\.setTimeout\(/, "warning expires automatically")
-assert.match(component, /window\.clearTimeout\(warningDismissTimer\)/, "warning timer is cleaned up on unmount")
-assert.doesNotMatch(component, /setCloudSyncWarning\("(not-configured|unavailable)"\)/, "all cloud failure paths use once-only notice")
-console.log("PASS cloud-chat notices: once per account and type, reload persistence, guest/privacy fallback, timed dismiss")
+assert.doesNotMatch(component, /data-malik-chat-sync-warning|cloudSyncWarning|showCloudSyncWarning|claimAccountChatSyncNotice/, "no on-screen cloud-sync notification")
+assert.doesNotMatch(component, /История пока хранится на этом устройстве|Облачная синхронизация истории временно недоступна/, "banner copy is removed")
+assert.match(component, /remoteConfigured = payload\?\.configured !== false/, "the real sync configuration check is preserved")
+assert.match(component, /pushSnapshot\(raw\)/, "cloud writes remain connected")
+assert.match(component, /void hydrateCloud\(\)/, "cloud reads remain connected")
+console.log("PASS cloud-chat UX: no sync banner; cloud transport, retries and local persistence remain")
