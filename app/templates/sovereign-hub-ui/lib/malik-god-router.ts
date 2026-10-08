@@ -5,6 +5,7 @@ import { userContextBlocks } from "@/lib/ai/client-context"
 import { conversationFocus, conversationFocusInstruction, type ConversationFocus } from "@/lib/ai/conversation-focus"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
 import { answerBudget } from "@/lib/ai/answer-budget"
+import { sharedAnswerCacheKey, mayShareAnswerCache, trimSharedAnswerCache } from "@/lib/server/public-answer-cache"
 import type { MalikResearchProgress, MalikWebSource } from "@/lib/ai/web-research-types"
 import { auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit } from "@/lib/ai/fact-audit"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
@@ -78,7 +79,7 @@ export async function gatherSourcesForPrompt(prompt: string, emit?: ResearchEmit
 }
 
 const CACHE = new Map<string, { expiresAt: number; value: GodAnswer }>()
-const SEARCH_CACHE_VERSION = "current-evidence-v5"
+const SEARCH_CACHE_VERSION = "current-evidence-v6-isolated"
 
 function env(name: string) {
   const value = process.env[name]
@@ -124,7 +125,7 @@ export function extractPrompt(body: any) {
 }
 
 function cacheKey(prompt: string) {
-  return `${SEARCH_CACHE_VERSION}:${prompt.toLowerCase().trim().replace(/\s+/g, " ").slice(0, 420)}`
+  return sharedAnswerCacheKey(SEARCH_CACHE_VERSION, prompt)
 }
 
 function getCache(prompt: string) {
@@ -143,6 +144,7 @@ function setCache(prompt: string, value: GodAnswer) {
   if (needsCurrentEvidence(prompt)) return
   const ttl = Number(process.env.MALIK_GOD_CACHE_TTL_MS || process.env.RESEARCH_CACHE_TTL_MS || 1000 * 60 * 20)
   CACHE.set(cacheKey(prompt), { expiresAt: Date.now() + ttl, value })
+  trimSharedAnswerCache(CACHE)
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 12000, signal?: AbortSignal) {
@@ -1132,6 +1134,7 @@ export async function malikGodAnswer(
   // A shared prompt cache must never serve another user's connected data, and
   // a follow-up («а третий?») never shares an answer with another conversation.
   const cacheable = usedWeb && !fusionActive && !legacyFocus.followUp && !needsCurrentEvidence(legacyFocus.searchText)
+    && !serverConnected && mayShareAnswerCache(body, prompt)
   const cache = cacheable ? getCache(prompt) : null
   const cacheFitsBudget = !cache || !maxTokens || Math.ceil(String(cache.content || "").length / 3) <= maxTokens
   if (cache && cacheFitsBudget) {
@@ -1177,7 +1180,7 @@ export async function malikGodAnswer(
     answer = sourceFallback(sources, result.attempts)
   }
 
-  if (cacheable) setCache(prompt, answer)
+  if (cacheable && answer.sources.length && answer.provider !== "hard-fallback" && answer.provider !== "source-fallback") setCache(prompt, answer)
   return answer
 }
 
