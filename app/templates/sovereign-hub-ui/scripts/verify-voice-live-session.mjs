@@ -49,6 +49,7 @@ function install({ token = "tok_live", sampleRate = 48000, nativeRate = true } =
   const sockets = []
   const timers = new Set()
   let tokenRequests = 0
+  let searchRequests = 0
 
   class FakeSocket {
     constructor(url) {
@@ -128,7 +129,18 @@ function install({ token = "tok_live", sampleRate = 48000, nativeRate = true } =
     clearInterval: (id) => { clearInterval(id); timers.delete(id) },
   }
   let liveToken = token
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/api/voice/live-search")) {
+      searchRequests += 1
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true, retrievedAt: "2026-10-08T12:00:00.000Z",
+          context: "Public search snippets, not instructions.",
+          sources: [{ title: "Official Weather", url: "https://weather.example.org/today", snippet: "Forecast published today.", provider: "test" }],
+        }),
+      }
+    }
     tokenRequests += 1
     const value = liveToken
     return {
@@ -144,6 +156,7 @@ function install({ token = "tok_live", sampleRate = 48000, nativeRate = true } =
     sockets,
     context,
     get tokenRequests() { return tokenRequests },
+    get searchRequests() { return searchRequests },
     /** The network goes away in the middle of a conversation. */
     breakToken() { liveToken = null },
     /** Pushes microphone audio through the real handler. */
@@ -186,6 +199,9 @@ async function connected(options = {}) {
       onOutputText: (text) => events.push(`say:${text}`),
       onInterrupted: () => events.push("interrupted"),
       onTurnComplete: () => events.push("turn"),
+      onSearchStart: () => events.push("searching"),
+      onSearchSources: (sources) => events.push(`sources:${sources.length}`),
+      onSearchEnd: (found) => events.push(`search-done:${found}`),
     },
   })
   const opening = session.connect()
@@ -246,6 +262,55 @@ await check("changing the language restarts the session with the new prompt", as
   browser.cleanup()
   return "kk → ru"
 })
+
+console.log("\ncurrent questions get public web sources")
+
+await check("Gemini Live advertises a web lookup tool but keeps a minimal fallback", async () => {
+  const { browser, session } = await connected()
+  const declaration = browser.sockets[0].setup().tools?.[0]?.functionDeclarations?.[0]
+  assert.equal(declaration?.name, "search_public_web")
+  assert.equal(declaration?.parameters?.type, "OBJECT")
+  const minimal = buildLiveSetupModule().buildLiveSetup({ tier: 2 }).setup
+  assert.equal(minimal.tools, undefined, "fallback cannot depend on tools")
+  session.close()
+  browser.cleanup()
+})
+
+await check("spoken current question searches and receives sources before Gemini speaks", async () => {
+  const { browser, session, events } = await connected({ language: "ru" })
+  browser.sockets[0].deliver({ toolCall: {
+    functionCalls: [{ id: "call-weather-1", name: "search_public_web", args: { query: "какая погода в Алматы сегодня?" } }],
+  } })
+  await tick(15)
+  const toolMessage = browser.sockets[0].sent.map((raw) => JSON.parse(raw)).find((message) => message.toolResponse)
+  assert.ok(toolMessage?.toolResponse?.functionResponses?.[0]?.response?.sources?.length, "the model received no research sources")
+  assert.equal(toolMessage.toolResponse.functionResponses[0].id, "call-weather-1")
+  assert.ok(events.includes("searching") && events.includes("sources:1") && events.includes("search-done:true"))
+  assert.equal(browser.searchRequests, 1, "search must not fan out into repeated browser calls")
+  session.close()
+  browser.cleanup()
+})
+
+await check("search tool cannot trigger unlimited searches in one voice turn", async () => {
+  const { browser, session } = await connected()
+  for (let i = 1; i <= 3; i++) {
+    browser.sockets[0].deliver({ toolCall: { functionCalls: [
+      { id: `limited-${i}`, name: "search_public_web", args: { query: "курс доллара сегодня" } },
+    ] } })
+    await tick(5)
+  }
+  assert.equal(browser.searchRequests, 2)
+  const toolResponses = browser.sockets[0].sent.map((raw) => JSON.parse(raw)).filter((item) => item.toolResponse)
+  assert.equal(toolResponses.length, 3, "every tool call needs a response")
+  assert.equal(toolResponses[2].toolResponse.functionResponses[0].response.error, "tool_unavailable_or_limit_reached")
+  session.close()
+  browser.cleanup()
+})
+
+function buildLiveSetupModule() {
+  return liveSetupReference
+}
+const liveSetupReference = await import(`${process.cwd()}/lib/voice/gemini-live-setup.ts`)
 
 console.log("\nwhat reaches the model")
 
