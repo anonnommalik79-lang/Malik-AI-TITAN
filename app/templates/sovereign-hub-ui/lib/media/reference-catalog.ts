@@ -9,7 +9,7 @@ export const REFERENCE_RESULT_LIMIT = 8 * 1024
 const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org", "images.unsplash.com", "images.pexels.com", "cdn.pixabay.com", "i.imgur.com", "ipcdn-web.apple.com", "cdsassets.apple.com"])
 
 export function isSafeVisualUrl(value: string): boolean {
-  if (value === "/reference-photos/elon-musk.jpg") return true
+  if (value === "/reference-photos/elon-musk.jpg" || value === "/brand/malik-mark.svg") return true
   try {
     if (!value || value.length > 1500) return false
     const url = new URL(value)
