@@ -420,15 +420,14 @@ await check("a setup the server refuses is retried smaller, not abandoned", asyn
   // Losing Voice entirely because a single option is unsupported would be the
   // worst possible trade.
   browser.sockets[0].drop(1007)
-  const first = await opening
-  assert.equal(first, false)
   const full = browser.sockets[0].setup()
   assert.ok(full.contextWindowCompression, "the first attempt should send everything")
 
-  const retry = session.connect()
+  // The recovery is automatic now: no extra click or second connect() call.
   await tick()
+  assert.equal(browser.sockets.length, 2, "the rejected setup must reopen automatically")
   await browser.sockets[1].accept()
-  assert.equal(await retry, true, "the smaller setup did not connect")
+  assert.equal(await opening, true, "the smaller setup did not connect")
   const reduced = browser.sockets[1].setup()
   assert.equal(reduced.contextWindowCompression, undefined, "the refused option was sent again")
   assert.ok(reduced.systemInstruction, "the language rule must survive the downgrade")
