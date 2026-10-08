@@ -869,3 +869,47 @@
 @media (prefers-reduced-motion: reduce) {
   .ps-quality-issue { transition: none; }
 }
+
+
+/* Layout Doctor: factual DOM geometry diagnostics; monochrome like the studio. */
+.ps-visual-check {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 12px;
+  background: rgba(255,255,255,.025);
+}
+.ps-visual-check[data-overflow="true"] {
+  border-color: rgba(255,255,255,.32);
+  background: rgba(255,255,255,.055);
+}
+.ps-visual-icon {
+  display: inline-flex;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 9px;
+  color: #fff;
+}
+.ps-visual-message { flex: 1 1 180px; min-width: 0; display: grid; gap: 2px; }
+.ps-visual-message strong { font-size: 12.5px; font-weight: 700; line-height: 1.4; }
+.ps-visual-message small {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #a3a3a3;
+  overflow-wrap: anywhere;
+}
+.ps-visual-check .ps-btn { flex: none; }
+@media (max-width: 650px) {
+  .ps-visual-check { padding: 10px; gap: 8px; }
+  .ps-visual-message { flex-basis: calc(100% - 40px); }
+  .ps-visual-check .ps-btn { margin-left: 36px; }
+}
