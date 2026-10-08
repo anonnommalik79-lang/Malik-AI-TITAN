@@ -1021,7 +1021,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   const importBackup = async (file?: File) => {
     if (!file) return
     try {
-      if (file.size > 5 * 1024 * 1024) throw new Error("Файл слишком большой (максимум 5 МБ).")
+      if (file.size > 64 * 1024 * 1024) throw new Error("Файл слишком большой (максимум 64 МБ).")
       const raw = JSON.parse(await file.text()) as { format?: string; deck?: unknown }
       if (raw?.format && raw.format !== "malik-deck-v1") throw new Error("Неизвестный формат файла Malik AI.")
       const deck = normalizeDeck(raw?.deck ?? raw)
@@ -1081,7 +1081,7 @@ export function PresentationStudio({ username }: { username?: string }) {
           {quality.issues.length ? quality.issues.slice(0, 20).map((issue, index) => (
             <button key={`${issue.slideIndex}-${issue.code}-${index}`} type="button" className="ps-quality-issue"
               disabled={stage !== "deck"}
-              onClick={() => { setCurrent(issue.slideIndex); setAssembling(false) }}>
+              onClick={() => { setCurrent(issue.slideIndex); setInstruction(issue.recommendation); setAssembling(false) }}>
               <b>Слайд {issue.slideIndex + 1}</b>
               <span><strong>{issue.message}</strong><small>{issue.recommendation}</small></span>
               {stage === "deck" ? <ArrowRight size={14} /> : null}
