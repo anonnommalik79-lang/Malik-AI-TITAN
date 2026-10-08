@@ -1,6 +1,7 @@
 import "server-only"
 
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3"
+import { sharedPrivateS3Client } from "./shared-private-s3-client"
 
 const MAX_PRIVATE_JSON_BYTES = 8 * 1024 * 1024
 
@@ -61,15 +62,7 @@ function storage() {
   if (!cfg) return null
   return {
     cfg,
-    client: new S3Client({
-      region: cfg.region,
-      endpoint: cfg.endpoint,
-      credentials: {
-        accessKeyId: cfg.accessKeyId,
-        secretAccessKey: cfg.secretAccessKey,
-        sessionToken: cfg.sessionToken,
-      },
-    }),
+    client: sharedPrivateS3Client(cfg),
   }
 }
 
@@ -103,7 +96,7 @@ export async function readPrivateJson<T>(keyValue: string, options?: { throwOnRe
     const result = await target.client.send(new GetObjectCommand({
       Bucket: target.cfg.bucket,
       Key: key,
-    }))
+    }), { abortSignal: AbortSignal.timeout(5000) })
 
     if (typeof result.ContentLength === "number" && result.ContentLength > MAX_PRIVATE_JSON_BYTES) {
       throw new Error("PRIVATE_STATE_TOO_LARGE")
@@ -138,7 +131,7 @@ export async function writePrivateJson(keyValue: string, value: unknown) {
       ContentType: "application/json; charset=utf-8",
       CacheControl: "private, no-store",
       Metadata: { kind: "malik-private-state" },
-    }))
+    }), { abortSignal: AbortSignal.timeout(5000) })
     return true
   } catch (error) {
     console.warn("[MALIK_PRIVATE_STATE] write failed", key, error instanceof Error ? error.message : String(error))
@@ -155,7 +148,7 @@ export async function deletePrivateJson(keyValue: string) {
     await target.client.send(new DeleteObjectCommand({
       Bucket: target.cfg.bucket,
       Key: key,
-    }))
+    }), { abortSignal: AbortSignal.timeout(5000) })
     return true
   } catch (error) {
     console.warn("[MALIK_PRIVATE_STATE] delete failed", key, error instanceof Error ? error.message : String(error))
@@ -172,7 +165,7 @@ export async function readPrivateJsonVersioned<T>(keyValue: string): Promise<{va
   try {
     const result = await target.client.send(new GetObjectCommand({
       Bucket: target.cfg.bucket, Key: key,
-    }))
+    }), { abortSignal: AbortSignal.timeout(5000) })
     if (typeof result.ContentLength === "number" && result.ContentLength > MAX_PRIVATE_JSON_BYTES) {
       throw new Error("PRIVATE_STATE_TOO_LARGE")
     }
@@ -217,7 +210,7 @@ export async function writePrivateJsonConditional(
     { step:"build",name:"malikPrivateStateConditionalPut" },
   )
   try {
-    await target.client.send(command)
+    await target.client.send(command, { abortSignal: AbortSignal.timeout(5000) })
     return {stored:true,conflict:false}
   } catch(error:any) {
     const code=String(error?.name || error?.Code || error?.code || "")
