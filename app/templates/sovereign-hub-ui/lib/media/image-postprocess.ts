@@ -286,16 +286,15 @@ export async function postProcessGeneratedImage(input: {
       pipeline = pipeline.sharpen(Math.max(0.35, sharpenSigma))
     }
 
-    // Brand every generated master with the Malik AI signature: translucent
-    // two-triangle mark with "Malik AI" directly underneath, bottom-right.
-    // This is composited into the real output bytes, so downloads retain it.
+    // Brand every processed master with the exact official small Malik AI icon.
+    // One Sharp pass; the mark is in the pixels and survives downloads.
     const finalWidth = landscape
       ? finalLong
       : Math.max(1, Math.round(finalLong * Math.max(0.01, aspect)))
     if (finalWidth > 0) {
       pipeline = pipeline.composite([{
         input: createMalikImageWatermarkSvg(finalWidth),
-        gravity: "southeast",
+        gravity: "southwest",
         blend: "over",
       }])
     }
