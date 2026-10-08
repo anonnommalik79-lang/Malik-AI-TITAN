@@ -236,6 +236,30 @@ console.log(`✅ Sites: планировщик без привязки к мод
   assert.match(studio, /document\.body\.style\.overflow = "hidden"/, "the page must not scroll behind it")
   console.log("photo lightbox -> PASS")
 
+  // The premium library: real, standalone websites, each with the shared
+  // runtime that makes its buttons, forms and dialogs work.
+  const premiumIds = [...studio.matchAll(/\{ id: "([a-z0-9-]+)", title: "[^"]+", subtitle:/g)].map((m) => m[1])
+  assert.ok(premiumIds.length >= 15, `premium library has only ${premiumIds.length} sites`)
+  assert.equal(new Set(premiumIds).size, premiumIds.length, "premium ids must be unique")
+  for (const id of premiumIds) {
+    const file = `public/sites/v2/${id}.html`
+    assert.ok(fsx.existsSync(file), `${id} has no site file`)
+    const page = fsx.readFileSync(file, "utf8")
+    assert.ok(page.length > 20_000 && page.length < 120_000, `${id} is ${page.length} bytes`)
+    assert.match(page, /^<!doctype html>/i, `${id} must be a full document`)
+    assert.match(page, /name="viewport"/, `${id} needs a mobile viewport`)
+    assert.match(page, /<script id="malik-runtime">/, `${id} lost its runtime`)
+    assert.match(page, /<style id="malik-base">/, `${id} lost its base styles`)
+    assert.match(page, /data-success=/, `${id} needs a working form`)
+    assert.doesNotMatch(page, /<!--(BASE|RUNTIME)-->|\{\{img:/, `${id} was not built`)
+    assert.doesNotMatch(page, /lorem ipsum/i, `${id} has placeholder text`)
+  }
+  assert.match(studio, /\/sites\/v2\/\$\{id\}\.html/)
+  assert.match(studio, /sandbox="allow-scripts allow-forms allow-modals/, "the opened site must run its forms and dialogs")
+  assert.match(studio, /async function openTemplate/, "a template must open in the builder")
+  assert.match(studio, /stripRuntime[\s\S]*restoreRuntime/, "revisions must keep the shared runtime")
+  console.log(`${premiumIds.length} premium sites -> PASS`)
+
   // The Sites entry disappeared from the phone drawer because a CSS rule hid
   // the fifth item by position, and the list had changed underneath it.
   const navPatch = fsx.readFileSync("app/mobile-reference-nav-patch.css", "utf8")

@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PULSE — креативное агентство</title>
+<meta name="description" content="PULSE — брендинг, digital и кампании, которые невозможно пролистать. 140 брендов, 32 награды.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style id="malik-base">*,*::before,*::after{box-sizing:border-box}html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}body{margin:0;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden}img{max-width:100%;display:block}button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}a{color:inherit;text-decoration:none}[hidden]{display:none!important}[id]{scroll-margin-top:88px}.js [data-reveal]{opacity:0;transform:translateY(24px);transition:opacity .9s cubic-bezier(.2,.7,.2,1) var(--d,0s),transform .9s cubic-bezier(.2,.7,.2,1) var(--d,0s)}.js [data-reveal].m-in{opacity:1;transform:none}.is-preview *,.is-preview *::before,.is-preview *::after{animation-delay:-60s!important;animation-play-state:paused!important;transition:none!important}.is-preview{scrollbar-width:none}.is-preview::-webkit-scrollbar{display:none}.m-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);opacity:0;z-index:9999;padding:13px 18px;border-radius:14px;background:#0d0d0f;color:#fff;font:500 14px/1.4 system-ui,sans-serif;box-shadow:0 18px 40px rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);transition:.35s cubic-bezier(.2,.7,.2,1);pointer-events:none;max-width:calc(100vw - 32px);text-align:center}.m-toast.show{opacity:1;transform:translate(-50%,0)}dialog{border:0;padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto}dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}.bump{animation:m-bump .4s}@keyframes m-bump{40%{transform:scale(1.4)}}:focus-visible{outline:2px solid currentColor;outline-offset:3px}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}</style>
+<style>
+:root{--bg:#0a0a0a;--fg:#f4f4f0;--mut:#8a8a85;--pink:#ff2e88;--line:#232323}
+body{background:var(--bg);color:var(--fg);font-family:Manrope,system-ui,sans-serif;line-height:1.55}
+.dg,h1,h2,h3{font-family:"Dela Gothic One",Manrope,sans-serif;font-weight:400;text-transform:uppercase}
+.wrap{width:min(1400px,calc(100% - 40px));margin:0 auto}
+.cursor{position:fixed;left:0;top:0;width:18px;height:18px;margin:-9px;border-radius:50%;background:var(--pink);pointer-events:none;z-index:200;mix-blend-mode:difference;transition:width .25s,height .25s,margin .25s;display:none}.cursor.big{width:80px;height:80px;margin:-40px}
+@media(hover:hover){.cursor{display:block}}
+header{position:fixed;inset:0 0 auto;z-index:50;transition:background .3s,backdrop-filter .3s}header.scrolled{background:rgba(10,10,10,.78);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+.nav{height:76px;display:flex;align-items:center;gap:30px}.logo{font-family:"Dela Gothic One";font-size:26px;letter-spacing:.02em}.logo b{color:var(--pink);font-weight:400}
+.links{display:flex;gap:28px;margin-left:auto;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+.nav .talk{border:2px solid var(--fg);height:44px;padding:0 20px;border-radius:999px;display:inline-flex;align-items:center;font-weight:800;font-size:13px;letter-spacing:.06em;text-transform:uppercase;background:none;color:var(--fg)}
+.burger{display:none;margin-left:auto;width:48px;height:48px;border-radius:50%;border:2px solid var(--fg);background:none}.burger span{display:block;width:18px;height:2px;background:var(--fg);margin:4px auto;transition:.3s}
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:flex-end;padding:120px 0 40px;position:relative;overflow:hidden}
+.orb{position:absolute;width:56vmax;height:56vmax;right:-14vmax;top:-18vmax;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ff7ab8,var(--pink) 35%,#7a1cff 70%,transparent 72%);filter:blur(10px);opacity:.85;animation:orb 14s ease-in-out infinite}@keyframes orb{50%{transform:translate(-6vmax,6vmax) scale(1.1)}}
+.hero h1{font-size:clamp(56px,12.5vw,230px);line-height:.86;margin:0;position:relative;letter-spacing:-.01em}.hero h1 .s{color:transparent;-webkit-text-stroke:2px var(--fg)}
+.hero-b{display:flex;justify-content:space-between;align-items:flex-end;gap:30px;margin-top:34px;flex-wrap:wrap;position:relative}.hero-b p{max-width:420px;font-size:19px;margin:0;color:#cfcfca}
+.round{width:150px;height:150px;border-radius:50%;background:var(--pink);color:#0a0a0a;display:grid;place-items:center;text-align:center;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:.04em;border:0;transition:.4s;line-height:1.2}.round:hover{transform:rotate(-12deg) scale(1.06);background:var(--fg)}
+.band{border-top:1px solid var(--line);border-bottom:1px solid var(--line);overflow:hidden;padding:26px 0}.band .tr{display:flex;width:max-content;animation:mq 26s linear infinite}.band span{font-family:"Dela Gothic One";font-size:clamp(34px,5vw,74px);text-transform:uppercase;padding-right:40px;white-space:nowrap}.band span:nth-child(even){color:var(--pink)}@keyframes mq{to{transform:translateX(-50%)}}
+section{padding:120px 0}.lbl{font-weight:800;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--pink)}h2{font-size:clamp(42px,7vw,120px);line-height:.88;margin:16px 0 0}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:50px}
+.cases{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}.case{position:relative;border-radius:28px;overflow:hidden;aspect-ratio:4/3;cursor:pointer;isolation:isolate;border:0;padding:0;text-align:left;color:inherit;background:#151515;width:100%}
+.case .art{position:absolute;inset:0;transition:transform 1s cubic-bezier(.2,.7,.2,1);z-index:-1}.case:hover .art{transform:scale(1.06)}
+.case .info{position:absolute;left:26px;right:26px;bottom:24px;display:flex;justify-content:space-between;align-items:flex-end;gap:16px}.case .h{display:block;font-family:"Dela Gothic One";text-transform:uppercase;font-size:clamp(24px,2.6vw,40px);margin:0;line-height:.95}.case small{display:block;font-weight:700;font-size:13px;opacity:.85;margin-top:8px;text-transform:uppercase;letter-spacing:.08em}
+.case .go{width:56px;height:56px;border-radius:50%;background:var(--fg);color:#0a0a0a;display:grid;place-items:center;font-size:22px;flex:none;transition:.4s}.case:hover .go{transform:rotate(-45deg);background:var(--pink)}
+.a1{background:radial-gradient(circle at 30% 40%,#ff2e88,transparent 45%),radial-gradient(circle at 70% 60%,#5b2eff,transparent 50%),#120818}
+.a1::after{content:"QAZ";position:absolute;inset:0;display:grid;place-items:center;font-family:"Dela Gothic One";font-size:clamp(80px,12vw,200px);color:rgba(255,255,255,.92);letter-spacing:-.02em}
+.a2{background:linear-gradient(135deg,#d4ff3a,#3affc3)}.a2::after{content:"";position:absolute;inset:18% 28%;border-radius:50%;background:#0a0a0a;box-shadow:0 0 0 30px rgba(10,10,10,.12),0 0 0 60px rgba(10,10,10,.08)}
+.a3{background:repeating-linear-gradient(90deg,#ff5a1f 0 40px,#ff8a3d 40px 80px)}.a3::after{content:"«»";position:absolute;inset:0;display:grid;place-items:center;font-family:"Dela Gothic One";font-size:clamp(90px,14vw,220px);color:#0a0a0a}
+.a4{background:conic-gradient(from 220deg,#0f3cff,#00d4ff,#ffffff,#0f3cff)}.a4::after{content:"";position:absolute;width:44%;aspect-ratio:1;left:28%;top:16%;background:#0a0a0a;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.svc{border-top:1px solid var(--line)}.svc-row{display:grid;grid-template-columns:90px 1fr auto;gap:20px;align-items:center;padding:30px 0;border-bottom:1px solid var(--line);position:relative;overflow:hidden;isolation:isolate;transition:color .4s}
+.svc-row::before{content:"";position:absolute;inset:0;background:var(--pink);transform:scaleY(0);transform-origin:bottom;transition:transform .5s cubic-bezier(.7,0,.2,1);z-index:-1}.svc-row:hover::before{transform:scaleY(1)}.svc-row:hover{color:#0a0a0a}.svc-row:hover small{color:#0a0a0a}
+.svc-row b{font-family:"Dela Gothic One";font-weight:400;font-size:16px}.svc-row h3{font-size:clamp(28px,4.4vw,70px);margin:0;line-height:1}.svc-row small{color:var(--mut);font-size:14px;max-width:260px;text-align:right;transition:.4s}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}.stat{border:1px solid var(--line);border-radius:24px;padding:30px}.stat b{display:block;font-family:"Dela Gothic One";font-weight:400;font-size:clamp(40px,4.6vw,72px);line-height:1}.stat span{color:var(--mut);font-weight:600}
+.team{display:grid;grid-template-columns:1.2fr .8fr;gap:40px;align-items:center}.team .pic{border-radius:28px;overflow:hidden;aspect-ratio:16/11}.team .pic img{width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.1)}.team p{font-size:20px;color:#cfcfca;margin:20px 0 0}
+.clients{display:grid;grid-template-columns:repeat(6,1fr);border-top:1px solid var(--line);border-left:1px solid var(--line);margin-top:50px}.clients span{border-right:1px solid var(--line);border-bottom:1px solid var(--line);height:120px;display:grid;place-items:center;font-family:"Dela Gothic One";font-size:17px;color:#5c5c58;transition:.3s;text-transform:uppercase}.clients span:hover{color:var(--fg);background:#121212}
+.brief{background:var(--fg);color:#0a0a0a;border-radius:40px;padding:70px}.brief h2{font-size:clamp(40px,6vw,96px)}.brief .lbl{color:#0a0a0a}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 26px}.chips button{height:48px;padding:0 20px;border-radius:999px;border:2px solid #0a0a0a;background:none;font-weight:700;font-size:15px;color:#0a0a0a}.chips button.active{background:#0a0a0a;color:var(--fg)}
+form.bf{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:40px}form.bf .full{grid-column:1/-1}form.bf label{font-weight:800;font-size:13px;letter-spacing:.08em;text-transform:uppercase}
+form.bf input,form.bf textarea{width:100%;height:60px;border:0;border-bottom:2px solid #0a0a0a;background:none;font-size:20px;font-weight:600;outline:none;font-family:inherit;margin-top:6px}form.bf textarea{height:100px;resize:vertical;padding-top:12px}
+.send{height:72px;padding:0 44px;border-radius:999px;border:0;background:#0a0a0a;color:var(--fg);font-family:"Dela Gothic One";font-size:20px;text-transform:uppercase;transition:.3s}.send:hover{background:var(--pink);color:#0a0a0a}
+footer{padding:80px 0 30px}.big{font-family:"Dela Gothic One";font-size:clamp(70px,18vw,320px);line-height:.8;text-transform:uppercase}.big b{color:var(--pink);font-weight:400}
+.fl{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-top:40px;color:var(--mut);font-weight:600;font-size:14px}.fl nav{display:flex;gap:24px;flex-wrap:wrap}.fl a:hover{color:var(--pink)}
+dialog{background:#121212;color:var(--fg);border-radius:28px;border:1px solid var(--line);width:min(760px,calc(100vw - 24px))}.dlg{position:relative}.dlg .art{position:relative;height:300px}.dlg .t{padding:34px}.dlg h3{font-size:clamp(30px,4vw,48px);margin:8px 0 14px;line-height:.95}.dlg p{color:#cfcfca;margin:0 0 22px}
+.res{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}.res div{background:#0a0a0a;border-radius:18px;padding:16px}.res b{display:block;font-family:"Dela Gothic One";font-weight:400;font-size:28px;color:var(--pink)}.res span{font-size:13px;color:var(--mut)}
+.x{position:absolute;right:16px;top:16px;z-index:2;width:44px;height:44px;border-radius:50%;border:0;background:var(--fg);color:#0a0a0a;font-size:22px}
+.pbtn{height:54px;padding:0 26px;border-radius:999px;border:0;background:var(--pink);color:#0a0a0a;font-weight:800;font-size:15px;text-transform:uppercase}
+@media(max-width:1000px){header{mix-blend-mode:normal;background:var(--bg)}.links,.nav .talk{display:none}.burger{display:block}.cases{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.team{grid-template-columns:1fr}.clients{grid-template-columns:repeat(3,1fr)}.brief{padding:44px 24px;border-radius:30px}
+body.menu-open .links{display:flex;position:fixed;inset:76px 0 auto;flex-direction:column;gap:0;margin:0;background:var(--bg);padding:10px 20px 26px;border-bottom:1px solid var(--line)}body.menu-open .links a{padding:14px 0;font-family:"Dela Gothic One";font-size:30px;border-bottom:1px solid var(--line)}
+body.menu-open .burger span:nth-child(1){transform:translateY(6px) rotate(45deg)}body.menu-open .burger span:nth-child(2){opacity:0}body.menu-open .burger span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}}
+@media(max-width:620px){.wrap{width:calc(100% - 32px)}section{padding:84px 0}.svc-row{grid-template-columns:44px 1fr}.svc-row small{display:none}.stats{grid-template-columns:1fr}form.bf{grid-template-columns:1fr}.res{grid-template-columns:1fr}.round{width:120px;height:120px;font-size:12px}.send{width:100%;font-size:17px}.dlg .art{height:200px}}
+</style>
+</head>
+<body>
+<div class="cursor" id="cur" aria-hidden="true"></div>
+<header data-header><div class="wrap nav"><a href="#" class="logo">PULSE<b>.</b></a>
+<nav class="links" data-menu><a href="#work">Работы</a><a href="#services">Услуги</a><a href="#studio">Студия</a><a href="#brief">Контакт</a></nav>
+<a href="#brief" class="talk">Обсудить проект</a><button class="burger" data-menu-toggle aria-label="Меню"><span></span><span></span><span></span></button></div></header>
+<main>
+<section class="hero"><div class="orb" aria-hidden="true"></div><div class="wrap">
+<h1 data-reveal>Делаем<br><span class="s">бренды</span>,<br>которые не<br>пролистать</h1>
+<div class="hero-b" data-reveal style="--d:.15s"><p>Брендинг, digital и рекламные кампании для компаний, которые хотят, чтобы о них говорили. С 2015 года — 140 брендов в 11 странах.</p><a href="#brief" class="round">Начать<br>проект →</a></div></div></section>
+<div class="band"><div class="tr" data-marquee><span>Брендинг</span><span>Сайты</span><span>Кампании</span><span>Моушн</span><span>Упаковка</span><span>Стратегия</span></div></div>
+
+<section id="work"><div class="wrap"><div class="top"><div><span class="lbl">Избранные работы</span><h2 data-reveal>Кейсы</h2></div><p style="color:var(--mut);max-width:320px;margin:0">Нажмите на кейс — покажем задачу и результат в цифрах.</p></div>
+<div class="cases">
+<button class="case" data-open="case" data-fill="QAZ Music — ребрендинг стримингового сервиса" data-reveal><span class="art a1"></span><span class="info"><span><span class="h">QAZ Music</span><small>Ребрендинг · 2025</small></span><span class="go">→</span></span></button>
+<button class="case" data-open="case" data-fill="Orbita — запуск финтех-приложения" data-reveal style="--d:.08s"><span class="art a2"></span><span class="info" style="color:#0a0a0a"><span><span class="h">Orbita</span><small>Digital · запуск</small></span><span class="go">→</span></span></button>
+<button class="case" data-open="case" data-fill="Сөз — кампания для книжного сервиса" data-reveal><span class="art a3"></span><span class="info" style="color:#0a0a0a"><span><span class="h">Сөз</span><small>Кампания · OOH</small></span><span class="go">→</span></span></button>
+<button class="case" data-open="case" data-fill="Peak Air — айдентика авиакомпании" data-reveal style="--d:.08s"><span class="art a4"></span><span class="info"><span><span class="h">Peak Air</span><small>Айдентика · моушн</small></span><span class="go">→</span></span></button>
+</div></div></section>
+
+<section id="services" style="padding-top:0"><div class="wrap"><span class="lbl">Что делаем</span><h2 data-reveal style="margin-bottom:40px">Услуги</h2>
+<div class="svc"><div class="svc-row" data-reveal><b>01</b><h3>Стратегия</h3><small>Позиционирование, исследования, архитектура бренда</small></div><div class="svc-row" data-reveal><b>02</b><h3>Айдентика</h3><small>Логотип, типографика, гайдлайны, моушн-система</small></div><div class="svc-row" data-reveal><b>03</b><h3>Digital</h3><small>Сайты, приложения, продуктовый дизайн</small></div><div class="svc-row" data-reveal><b>04</b><h3>Кампании</h3><small>Креатив, видео, наружная реклама, соцсети</small></div></div></div></section>
+
+<section style="padding-top:0"><div class="wrap stats"><div class="stat" data-reveal><b data-count="140" data-suffix="+">140+</b><span>брендов</span></div><div class="stat" data-reveal style="--d:.06s"><b data-count="32">32</b><span>награды</span></div><div class="stat" data-reveal style="--d:.12s"><b data-count="11">11</b><span>стран</span></div><div class="stat" data-reveal style="--d:.18s"><b data-count="9">9</b><span>лет в индустрии</span></div></div></section>
+
+<section id="studio" style="padding-top:0"><div class="wrap"><div class="team"><div class="pic" data-reveal><img src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&h=825&q=80" alt="Команда студии за работой" loading="lazy"></div><div data-reveal style="--d:.1s"><span class="lbl">Студия</span><h2 style="font-size:clamp(38px,5vw,80px)">42 человека. Ноль шаблонов</h2><p>Стратеги, дизайнеры, режиссёры и разработчики в одной комнате. Мы спорим, пока идея не станет неудобно смелой.</p><button class="pbtn" style="margin-top:26px" data-open="join">Хочу в команду</button></div></div>
+<div class="clients"><span>Kaspian</span><span>Altyn</span><span>Nomad</span><span>Orbita</span><span>QAZ</span><span>Steppe</span><span>Baiterek</span><span>Silkway</span><span>Peak Air</span><span>Arba</span><span>Сөз</span><span>Ozen</span></div></div></section>
+
+<section id="brief" style="padding-top:0"><div class="wrap"><div class="brief" data-reveal><span class="lbl">Бриф</span><h2>Расскажите<br>о проекте</h2>
+<form class="bf" data-form data-success="Бриф получен! Позвоним в течение дня — придумаем что-то громкое."><div class="full"><label>Что нужно сделать</label><div class="chips" data-options><button>Брендинг</button><button class="active">Сайт</button><button>Кампания</button><button>Всё сразу</button></div></div>
+<div class="full"><label>Бюджет · <span id="bud">3–10 млн ₸</span></label><div class="chips" data-options data-label="bud"><button>до 3 млн ₸</button><button class="active">3–10 млн ₸</button><button>10–30 млн ₸</button><button>30 млн ₸ +</button></div></div>
+<label>Имя<input required placeholder="Как вас зовут"></label><label>Email<input type="email" required placeholder="you@brand.kz"></label><label class="full">Пара слов о задаче<textarea placeholder="Чем занимаетесь и что хотите изменить"></textarea></label><div class="full"><button class="send" type="submit">Отправить бриф →</button></div></form></div></div></section>
+</main>
+<footer><div class="wrap"><div class="big">Pulse<b>.</b></div><div class="fl"><span>© <span data-year></span> PULSE Creative · Алматы</span><nav><a href="#work">Работы</a><a href="#services">Услуги</a><a href="#" data-copy="hello@pulse.kz" data-copied="Почта скопирована">hello@pulse.kz</a></nav><span>Сделано с Malik AI</span></div></div></footer>
+<dialog id="case"><div class="dlg"><button class="x" data-close aria-label="Закрыть">×</button><div class="art a1" id="caseArt"></div><div class="t"><span class="lbl">Кейс</span><h3 data-fill-target>Кейс</h3><p>Задача: выделиться в перегретой категории и вернуть интерес молодой аудитории. Мы пересобрали голос бренда, айдентику и запустили кампанию в соцсетях и на улицах города.</p><div class="res"><div><b>+184%</b><span>узнаваемость</span></div><div><b>3,2 млн</b><span>охват кампании</span></div><div><b>×2,4</b><span>рост продаж</span></div></div><button class="pbtn" data-close>Закрыть кейс</button></div></div></dialog>
+<dialog id="join"><div class="dlg"><button class="x" data-close aria-label="Закрыть">×</button><div class="t"><span class="lbl">Карьера</span><h3>Покажите лучшее</h3><p>Пришлите ссылку на портфолио — смотрим каждое.</p><form data-form data-success="Портфолио получено! Ответим за неделю." style="display:grid;gap:14px"><input type="url" required placeholder="https://behance.net/…" style="height:56px;border-radius:16px;border:1px solid var(--line);background:#0a0a0a;color:var(--fg);padding:0 16px;font-size:16px;outline:none"><button class="pbtn" type="submit">Отправить</button></form></div></div></dialog>
+<script id="malik-runtime">
+(function () {
+  var d = document, root = d.documentElement, body = d.body;
+  root.classList.add("js");
+  var preview = /[?&]preview=1/.test(location.search);
+  if (preview) root.classList.add("is-preview");
+  var $ = function (s, c) { return (c || d).querySelector(s) };
+  var $$ = function (s, c) { return Array.prototype.slice.call((c || d).querySelectorAll(s)) };
+
+  /* toast */
+  var toast = d.createElement("div");
+  toast.className = "m-toast"; toast.setAttribute("role", "status"); toast.setAttribute("aria-live", "polite");
+  body.appendChild(toast);
+  var toastTimer;
+  function say(text) {
+    toast.textContent = text; toast.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { toast.classList.remove("show") }, 2600);
+  }
+  window.mSay = say;
+
+  /* header + menu */
+  var header = $("[data-header]");
+  function onScroll() { if (header) header.classList.toggle("scrolled", scrollY > 12) }
+  addEventListener("scroll", onScroll, { passive: true }); onScroll();
+  $$("[data-menu-toggle]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var open = !body.classList.contains("menu-open");
+      body.classList.toggle("menu-open", open); b.setAttribute("aria-expanded", String(open));
+    });
+  });
+  $$("[data-menu] a").forEach(function (a) { a.addEventListener("click", function () { body.classList.remove("menu-open") }) });
+
+  /* anchors: smooth, also inside sandboxed previews */
+  d.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    var id = a.getAttribute("href").slice(1);
+    if (!id) { e.preventDefault(); scrollTo({ top: 0, behavior: "smooth" }); return }
+    var t = d.getElementById(id);
+    if (t) { e.preventDefault(); t.scrollIntoView({ behavior: "smooth", block: "start" }) }
+  });
+
+  /* reveal + counters */
+  var reveal = $$("[data-reveal]"), counters = $$("[data-count]");
+  function count(el) {
+    if (el.dataset.done) return; el.dataset.done = "1";
+    var to = parseFloat(el.dataset.count), dec = +(el.dataset.decimals || 0), pre = el.dataset.prefix || "", suf = el.dataset.suffix || "";
+    var fmt = function (v) { return pre + v.toLocaleString("ru-RU", { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suf };
+    if (preview || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = fmt(to); return }
+    var t0 = performance.now(), dur = 1400;
+    (function step(t) { var p = Math.min(1, (t - t0) / dur); el.textContent = fmt(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step) })(t0);
+  }
+  if ("IntersectionObserver" in window && !preview) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (en) { if (!en.isIntersecting) return; en.target.classList.add("m-in"); if (en.target.dataset.count) count(en.target); io.unobserve(en.target) });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: .08 });
+    reveal.concat(counters).forEach(function (el) { io.observe(el) });
+  } else { reveal.forEach(function (el) { el.classList.add("m-in") }); counters.forEach(count) }
+
+  /* tabs */
+  $$("[data-tabs]").forEach(function (box) {
+    var tabs = $$("[data-tab]", box), panels = $$("[data-panel]", box);
+    function show(name) {
+      tabs.forEach(function (t) { var on = t.dataset.tab === name; t.classList.toggle("active", on); t.setAttribute("aria-selected", String(on)) });
+      panels.forEach(function (p) { p.hidden = p.dataset.panel !== name });
+    }
+    tabs.forEach(function (t) { t.setAttribute("role", "tab"); t.addEventListener("click", function () { show(t.dataset.tab) }) });
+    if (tabs[0]) show((tabs.filter(function (t) { return t.classList.contains("active") })[0] || tabs[0]).dataset.tab);
+  });
+
+  /* accordion */
+  $$("[data-acc] .acc-q").forEach(function (q) {
+    q.setAttribute("aria-expanded", String(q.parentNode.classList.contains("open")));
+    q.addEventListener("click", function () {
+      var item = q.parentNode, open = !item.classList.contains("open");
+      if (item.parentNode.hasAttribute("data-single")) $$(".open", item.parentNode).forEach(function (o) { o.classList.remove("open"); $(".acc-q", o).setAttribute("aria-expanded", "false") });
+      item.classList.toggle("open", open); q.setAttribute("aria-expanded", String(open));
+    });
+  });
+
+  /* billing switch: [data-billing] buttons with data-period; prices carry data-m / data-y */
+  $$("[data-billing]").forEach(function (box) {
+    var btns = $$("[data-period]", box), scope = box.closest("section") || d;
+    function set(p) {
+      btns.forEach(function (b) { b.classList.toggle("active", b.dataset.period === p); b.setAttribute("aria-pressed", String(b.dataset.period === p)) });
+      $$("[data-m]", scope).forEach(function (el) { el.textContent = p === "y" ? el.dataset.y : el.dataset.m });
+      $$("[data-per]", scope).forEach(function (el) { el.textContent = p === "y" ? (el.dataset.perY || "/ мес при оплате за год") : (el.dataset.perM || "/ мес") });
+    }
+    btns.forEach(function (b) { b.addEventListener("click", function () { set(b.dataset.period) }) });
+  });
+
+  /* filters: [data-filters] buttons data-filter; items data-cat within the same section */
+  $$("[data-filters]").forEach(function (box) {
+    var scope = box.closest("section") || d, btns = $$("[data-filter]", box);
+    btns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var f = b.dataset.filter, shown = 0;
+        btns.forEach(function (x) { x.classList.toggle("active", x === b) });
+        $$("[data-cat]", scope).forEach(function (it) { var on = f === "all" || (" " + it.dataset.cat + " ").indexOf(" " + f + " ") > -1; it.hidden = !on; if (on) shown++ });
+        var empty = $("[data-empty]", scope); if (empty) empty.hidden = shown > 0;
+      });
+    });
+  });
+
+  /* dialogs */
+  d.addEventListener("click", function (e) {
+    var o = e.target.closest && e.target.closest("[data-open]");
+    if (o) {
+      var dlg = d.getElementById(o.dataset.open);
+      if (dlg) {
+        e.preventDefault();
+        if (o.dataset.fill) $$("[data-fill-target]", dlg).forEach(function (t) { t.textContent = o.dataset.fill });
+        if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+      }
+      return;
+    }
+    var c = e.target.closest && e.target.closest("[data-close]");
+    if (c) { var dl = c.closest("dialog"); if (dl) dl.close ? dl.close() : dl.removeAttribute("open") }
+  });
+  $$("dialog").forEach(function (dl) { dl.addEventListener("click", function (e) { if (e.target === dl) dl.close() }) });
+
+  /* forms: works without allow-forms too (sandboxed previews) */
+  function submitForm(f) {
+    if (f.reportValidity && !f.reportValidity()) return;
+    say(f.dataset.success || "Готово! Мы свяжемся с вами в ближайшее время.");
+    f.reset(); var dl = f.closest("dialog"); if (dl && dl.close) setTimeout(function () { dl.close() }, 400);
+    f.dispatchEvent(new CustomEvent("m-done"));
+  }
+  $$("form[data-form]").forEach(function (f) {
+    f.addEventListener("submit", function (e) { e.preventDefault(); submitForm(f) });
+    $$('[type="submit"]', f).forEach(function (b) { b.addEventListener("click", function (e) { e.preventDefault(); submitForm(f) }) });
+    f.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); submitForm(f) } });
+  });
+
+  /* cart / wishlist counters */
+  $$("[data-add]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var key = b.dataset.counter || "cart";
+      $$('[data-counter-of="' + key + '"]').forEach(function (c) { c.textContent = String((+c.textContent || 0) + 1); c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump") });
+      say(b.dataset.add);
+    });
+  });
+
+  /* option chips: [data-options] single choice */
+  $$("[data-options]").forEach(function (g) {
+    $$("button", g).forEach(function (b) { b.addEventListener("click", function () { $$("button", g).forEach(function (x) { x.classList.toggle("active", x === b); x.setAttribute("aria-pressed", String(x === b)) }); if (g.dataset.label) { var l = d.getElementById(g.dataset.label); if (l) l.textContent = b.dataset.value || b.textContent } }) });
+  });
+
+  /* quantity steppers + totals: [data-qty] contains [data-dec] [data-val] [data-inc]; data-price; [data-total] in section */
+  function totals(scope) {
+    var sum = 0, n = 0;
+    $$("[data-qty]", scope).forEach(function (q) { var v = +$("[data-val]", q).textContent; sum += v * +q.dataset.price; n += v });
+    $$("[data-total]", scope).forEach(function (t) { t.textContent = Math.round(sum * (1 - (+t.dataset.discount || 0))).toLocaleString("ru-RU") + (t.dataset.total || "") });
+    $$("[data-total-count]", scope).forEach(function (t) { t.textContent = String(n) });
+  }
+  $$("[data-qty]").forEach(function (q) {
+    var scope = q.closest("section") || d, val = $("[data-val]", q), max = +(q.dataset.max || 10);
+    $("[data-inc]", q).addEventListener("click", function () { val.textContent = String(Math.min(max, +val.textContent + 1)); totals(scope) });
+    $("[data-dec]", q).addEventListener("click", function () { val.textContent = String(Math.max(0, +val.textContent - 1)); totals(scope) });
+    totals(scope);
+  });
+
+  /* countdown */
+  $$("[data-countdown]").forEach(function (el) {
+    var end = new Date(el.dataset.countdown).getTime();
+    function tick() {
+      var s = Math.max(0, Math.floor((end - Date.now()) / 1000));
+      var parts = { d: Math.floor(s / 86400), h: Math.floor(s % 86400 / 3600), m: Math.floor(s % 3600 / 60), s: s % 60 };
+      Object.keys(parts).forEach(function (k) { var t = $('[data-cd="' + k + '"]', el); if (t) t.textContent = String(parts[k]).padStart(2, "0") });
+    }
+    tick(); if (!preview) setInterval(tick, 1000);
+  });
+
+  /* copy */
+  $$("[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var text = b.dataset.copy, done = function () { say(b.dataset.copied || "Скопировано") };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done); else done();
+    });
+  });
+
+  /* marquee: duplicate track once so the loop is seamless */
+  $$("[data-marquee]").forEach(function (m) { m.innerHTML += m.innerHTML; m.setAttribute("aria-hidden", "true") });
+
+  /* tilt on pointer */
+  if (!preview && matchMedia("(hover: hover)").matches) $$("[data-tilt]").forEach(function (el) {
+    el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5; el.style.transform = "perspective(900px) rotateY(" + x * 10 + "deg) rotateX(" + -y * 10 + "deg)" });
+    el.addEventListener("pointerleave", function () { el.style.transform = "" });
+  });
+
+  /* spotlight cards follow the pointer */
+  $$("[data-spot]").forEach(function (el) { el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(); el.style.setProperty("--x", e.clientX - r.left + "px"); el.style.setProperty("--y", e.clientY - r.top + "px") }) });
+
+  /* carousels: [data-scroll-target="id"] with data-dir="1|-1" */
+  $$("[data-scroll-target]").forEach(function (b) {
+    b.addEventListener("click", function () { var t = d.getElementById(b.dataset.scrollTarget); if (!t) return; var item = t.firstElementChild, step = item ? item.getBoundingClientRect().width + 16 : t.clientWidth * .8; t.scrollBy({ left: step * (+b.dataset.dir || 1), behavior: "smooth" }) });
+  });
+
+  $$("[data-year]").forEach(function (y) { y.textContent = String(new Date().getFullYear()) });
+  window.mQ = $; window.mQQ = $$;
+})();
+</script>
+<script>
+(function(){var c=document.getElementById("cur");if(c&&matchMedia("(hover:hover)").matches){addEventListener("pointermove",function(e){c.style.transform="translate("+e.clientX+"px,"+e.clientY+"px)"});document.addEventListener("pointerover",function(e){c.classList.toggle("big",!!(e.target.closest&&e.target.closest("a,button")))})}
+document.addEventListener("click",function(e){var b=e.target.closest&&e.target.closest(".case");if(b){var a=b.querySelector(".art");document.getElementById("caseArt").className="art "+a.className.split(" ").filter(function(x){return/^a\d$/.test(x)})[0]}})})();
+</script>
+</body>
+</html>

@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nova — ИИ-коллега, который доводит работу до конца</title>
+<meta name="description" content="Nova — платформа ИИ-агентов для команд: пишет, анализирует, автоматизирует и отчитывается.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geologica:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style id="malik-base">*,*::before,*::after{box-sizing:border-box}html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}body{margin:0;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden}img{max-width:100%;display:block}button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}a{color:inherit;text-decoration:none}[hidden]{display:none!important}[id]{scroll-margin-top:88px}.js [data-reveal]{opacity:0;transform:translateY(24px);transition:opacity .9s cubic-bezier(.2,.7,.2,1) var(--d,0s),transform .9s cubic-bezier(.2,.7,.2,1) var(--d,0s)}.js [data-reveal].m-in{opacity:1;transform:none}.is-preview *,.is-preview *::before,.is-preview *::after{animation-delay:-60s!important;animation-play-state:paused!important;transition:none!important}.is-preview{scrollbar-width:none}.is-preview::-webkit-scrollbar{display:none}.m-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);opacity:0;z-index:9999;padding:13px 18px;border-radius:14px;background:#0d0d0f;color:#fff;font:500 14px/1.4 system-ui,sans-serif;box-shadow:0 18px 40px rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);transition:.35s cubic-bezier(.2,.7,.2,1);pointer-events:none;max-width:calc(100vw - 32px);text-align:center}.m-toast.show{opacity:1;transform:translate(-50%,0)}dialog{border:0;padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto}dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}.bump{animation:m-bump .4s}@keyframes m-bump{40%{transform:scale(1.4)}}:focus-visible{outline:2px solid currentColor;outline-offset:3px}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}</style>
+<style>
+:root{--bg:#05060a;--fg:#eef0ff;--mut:#8b90a8;--line:rgba(255,255,255,.08);--card:rgba(255,255,255,.035);--a:#8b7bff;--b:#3ee6ff;--c:#ff6ad5}
+body{background:var(--bg);color:var(--fg);font-family:Geologica,system-ui,sans-serif;font-size:16px;line-height:1.6}
+.wrap{width:min(1200px,calc(100% - 40px));margin:0 auto}
+.grad{background:linear-gradient(100deg,#fff 10%,#c8c0ff 40%,var(--b) 70%,#fff 95%);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sheen 8s linear infinite}
+@keyframes sheen{to{background-position:-200% 0}}
+header{position:fixed;inset:0 0 auto;z-index:50;transition:.3s}header.scrolled{background:rgba(5,6,10,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.nav{height:72px;display:flex;align-items:center;gap:28px}.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:19px;letter-spacing:-.02em}
+.logo i{width:28px;height:28px;border-radius:9px;background:conic-gradient(from 200deg,var(--a),var(--b),var(--c),var(--a));box-shadow:0 0 24px rgba(139,123,255,.6)}
+.links{display:flex;gap:26px;margin-left:12px}.links a{color:var(--mut);font-size:14.5px;transition:.2s}.links a:hover{color:#fff}
+.nav-cta{margin-left:auto;display:flex;gap:10px;align-items:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 20px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:#fff;font-weight:500;font-size:14.5px;transition:.25s}
+.btn:hover{border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.07)}
+.btn.pri{border:0;background:#fff;color:#05060a;font-weight:600;box-shadow:0 0 0 1px rgba(255,255,255,.3),0 10px 40px -10px rgba(139,123,255,.8)}.btn.pri:hover{transform:translateY(-1px);box-shadow:0 0 0 1px #fff,0 16px 50px -10px rgba(62,230,255,.7)}
+.btn.lg{height:52px;padding:0 26px;font-size:15.5px;border-radius:14px}
+.burger{display:none;width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card)}.burger span{display:block;width:18px;height:1.6px;background:#fff;margin:4px auto;transition:.3s}
+.hero{position:relative;padding:170px 0 90px;text-align:center;overflow:hidden}
+.aurora{position:absolute;inset:-20% -10% auto;height:900px;z-index:-1;filter:blur(70px);opacity:.75}
+.aurora b{position:absolute;border-radius:50%;mix-blend-mode:screen;animation:float 18s ease-in-out infinite}
+.aurora b:nth-child(1){width:620px;height:420px;left:12%;top:4%;background:radial-gradient(closest-side,rgba(139,123,255,.9),transparent)}
+.aurora b:nth-child(2){width:560px;height:380px;right:10%;top:12%;background:radial-gradient(closest-side,rgba(62,230,255,.7),transparent);animation-delay:-6s}
+.aurora b:nth-child(3){width:520px;height:340px;left:38%;top:32%;background:radial-gradient(closest-side,rgba(255,106,213,.55),transparent);animation-delay:-12s}
+@keyframes float{50%{transform:translate(60px,40px) scale(1.12)}}
+.gridbg{position:absolute;inset:0;z-index:-1;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:64px 64px;-webkit-mask-image:radial-gradient(ellipse 70% 60% at 50% 30%,#000 30%,transparent 75%);mask-image:radial-gradient(ellipse 70% 60% at 50% 30%,#000 30%,transparent 75%)}
+.pill{display:inline-flex;align-items:center;gap:10px;padding:6px 8px 6px 6px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:13.5px;color:#cfd2e6}
+.pill b{padding:3px 10px;border-radius:999px;background:linear-gradient(90deg,var(--a),var(--b));color:#05060a;font-size:12px;font-weight:700}
+h1{font-size:clamp(42px,7.2vw,92px);line-height:1.02;letter-spacing:-.045em;font-weight:700;margin:26px auto 22px;max-width:15ch}
+.sub{max-width:640px;margin:0 auto;color:var(--mut);font-size:clamp(16px,1.6vw,19px)}
+.cta{display:flex;gap:12px;justify-content:center;margin-top:36px;flex-wrap:wrap}
+.prompt{margin:56px auto 0;max-width:760px;text-align:left;border-radius:20px;padding:1px;background:linear-gradient(140deg,rgba(139,123,255,.6),rgba(255,255,255,.06) 40%,rgba(62,230,255,.5))}
+.prompt-in{border-radius:19px;background:rgba(10,11,18,.92);padding:18px 18px 14px;backdrop-filter:blur(10px)}
+.typed{min-height:56px;font-size:17px;color:#e8e9f6}.typed::after{content:"";display:inline-block;width:2px;height:1.1em;background:var(--b);margin-left:3px;vertical-align:-3px;animation:blink 1s steps(1) infinite}@keyframes blink{50%{opacity:0}}
+.prompt-bar{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}.chip{font-size:12.5px;color:var(--mut);border:1px solid var(--line);border-radius:999px;padding:5px 11px}
+.send{margin-left:auto;width:40px;height:40px;border-radius:12px;border:0;background:linear-gradient(135deg,var(--a),var(--b));display:grid;place-items:center}
+.logos{margin-top:80px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 15%,#000 85%,transparent);mask-image:linear-gradient(90deg,transparent,#000 15%,#000 85%,transparent)}
+.logos p{color:var(--mut);font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 22px}
+.track{display:flex;gap:64px;width:max-content;animation:mq 36s linear infinite}.track span{font-size:22px;font-weight:600;color:#5d6178;letter-spacing:-.02em;white-space:nowrap}@keyframes mq{to{transform:translateX(-50%)}}
+section{padding:110px 0}.eyebrow{color:var(--b);font-size:13px;letter-spacing:.16em;text-transform:uppercase;font-weight:600}
+h2{font-size:clamp(32px,4.6vw,58px);line-height:1.05;letter-spacing:-.04em;margin:14px 0 18px;font-weight:700;max-width:18ch}.lead{color:var(--mut);max-width:560px;font-size:17px}
+.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;margin-top:56px}
+.card{position:relative;overflow:hidden;border-radius:22px;border:1px solid var(--line);background:var(--card);padding:28px;min-height:250px;isolation:isolate}
+.card::before{content:"";position:absolute;inset:0;z-index:-1;opacity:0;transition:.4s;background:radial-gradient(420px circle at var(--x,50%) var(--y,50%),rgba(139,123,255,.18),transparent 60%)}.card:hover::before{opacity:1}
+.card h3{margin:0 0 8px;font-size:21px;letter-spacing:-.02em;font-weight:600}.card p{margin:0;color:var(--mut);font-size:15px;max-width:40ch}
+.c1{grid-column:span 4}.c2{grid-column:span 2}.c3{grid-column:span 2}.c4{grid-column:span 2}.c5{grid-column:span 2}
+.agent{margin-top:24px;display:grid;gap:10px}.task{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--line);font-size:14px}
+.task i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;flex:none}.task .ok{background:rgba(62,230,255,.15);color:var(--b)}.task .run{border:2px solid var(--a);border-top-color:transparent;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.task em{margin-left:auto;font-style:normal;color:var(--mut);font-size:12.5px}
+.orbit{position:relative;height:150px;margin-top:22px}.orbit .core{position:absolute;inset:50% auto auto 50%;width:56px;height:56px;margin:-28px;border-radius:16px;background:conic-gradient(from 90deg,var(--a),var(--b),var(--c),var(--a));box-shadow:0 0 40px rgba(139,123,255,.6)}
+.ring{position:absolute;inset:50% auto auto 50%;border:1px dashed rgba(255,255,255,.14);border-radius:50%;animation:spin 22s linear infinite}.ring span{position:absolute;top:-15px;left:50%;margin-left:-15px;width:30px;height:30px;border-radius:9px;background:#111321;border:1px solid var(--line);font-size:13px;display:grid;place-items:center;font-weight:700}
+.big{font-size:64px;font-weight:700;letter-spacing:-.05em;line-height:1;margin-top:26px}.big small{font-size:18px;color:var(--mut);font-weight:500;letter-spacing:0}
+.bars{display:flex;align-items:flex-end;gap:8px;height:110px;margin-top:24px}.bars i{flex:1;border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,var(--b),rgba(139,123,255,.25));transform-origin:bottom;animation:grow 2.6s ease-in-out infinite alternate}
+@keyframes grow{from{transform:scaleY(.45)}}
+.shield{margin-top:26px;display:flex;gap:8px;flex-wrap:wrap}.shield span{font-size:12.5px;padding:6px 11px;border-radius:999px;border:1px solid var(--line);color:#cfd2e6}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:56px}.step{padding:30px;border-radius:22px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.04),transparent)}
+.step b{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:12px;background:rgba(139,123,255,.15);color:#c8c0ff;font-size:15px}.step h3{font-size:20px;margin:18px 0 8px;letter-spacing:-.02em}.step p{margin:0;color:var(--mut);font-size:15px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.stat{padding:44px 20px;text-align:center;border-right:1px solid var(--line)}.stat:last-child{border:0}
+.stat b{display:block;font-size:clamp(34px,4vw,52px);letter-spacing:-.04em;font-weight:700}.stat span{color:var(--mut);font-size:14px}
+.quotes{columns:3;column-gap:16px;margin-top:56px}.q{break-inside:avoid;margin:0 0 16px;padding:26px;border-radius:20px;border:1px solid var(--line);background:var(--card)}.q p{margin:0 0 18px;font-size:15.5px;color:#d7d9ea}
+.who{display:flex;align-items:center;gap:12px;font-size:14px}.who i{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--a),var(--c));font-style:normal;display:grid;place-items:center;font-weight:700}.who small{display:block;color:var(--mut);font-size:12.5px}
+.switch{display:inline-flex;padding:4px;border-radius:12px;border:1px solid var(--line);background:var(--card);margin-top:26px}.switch button{border:0;background:none;color:var(--mut);height:38px;padding:0 16px;border-radius:9px;font-size:14px}.switch button.active{background:#fff;color:#05060a;font-weight:600}.switch em{font-style:normal;color:var(--b);font-size:12px;margin-left:6px}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}.plan{padding:32px;border-radius:24px;border:1px solid var(--line);background:var(--card);display:flex;flex-direction:column}
+.plan.hot{background:linear-gradient(180deg,rgba(139,123,255,.16),rgba(255,255,255,.02));border-color:rgba(139,123,255,.45);box-shadow:0 30px 80px -40px rgba(139,123,255,.8)}
+.plan h3{margin:0;font-size:18px}.plan .tag{font-size:12px;color:#05060a;background:var(--b);padding:3px 9px;border-radius:999px;font-weight:700;margin-left:8px}
+.price{font-size:48px;font-weight:700;letter-spacing:-.04em;margin:18px 0 0}.per{color:var(--mut);font-size:14px}
+.plan ul{list-style:none;padding:0;margin:24px 0 28px;display:grid;gap:11px;font-size:14.5px;color:#cfd2e6}.plan li::before{content:"✓";color:var(--b);margin-right:10px}.plan .btn{margin-top:auto}
+.faq{max-width:820px;margin:48px auto 0}.acc{border-bottom:1px solid var(--line)}.acc-q{width:100%;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:24px 0;border:0;background:none;font-size:18px;text-align:left;font-weight:500}
+.acc-q::after{content:"+";font-size:26px;color:var(--mut);transition:.3s}.acc.open .acc-q::after{transform:rotate(45deg);color:#fff}
+.acc-a{display:grid;grid-template-rows:0fr;transition:.35s}.acc.open .acc-a{grid-template-rows:1fr}.acc-a>div{overflow:hidden;color:var(--mut)}.acc-a p{margin:0 0 24px}
+.final{position:relative;text-align:center;border-radius:32px;padding:90px 24px;overflow:hidden;border:1px solid var(--line);background:radial-gradient(ellipse at 50% 120%,rgba(139,123,255,.45),transparent 60%),#080912}
+.final h2{margin:0 auto 18px}.final form{display:flex;gap:10px;max-width:480px;margin:32px auto 0}.final input{flex:1;height:52px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.05);padding:0 16px;outline:none}.final input:focus{border-color:var(--a)}
+footer{padding:70px 0 40px;color:var(--mut);font-size:14px}.foot{display:grid;grid-template-columns:2fr repeat(3,1fr);gap:30px}.foot h4{color:#fff;margin:0 0 14px;font-size:14px;font-weight:600}.foot a{display:block;margin:8px 0}.foot a:hover{color:#fff}
+.copy{margin-top:50px;padding-top:24px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+dialog{background:#0b0c14;color:var(--fg);border:1px solid var(--line);border-radius:24px}.dlg{padding:32px}.dlg h3{margin:0 0 6px;font-size:24px;letter-spacing:-.02em}.dlg p{margin:0 0 22px;color:var(--mut)}
+.field{display:grid;gap:7px;margin-bottom:14px;font-size:13.5px;color:#cfd2e6}.field input{height:48px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);padding:0 14px;outline:none}.field input:focus{border-color:var(--a)}
+.x{position:absolute;right:16px;top:16px;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:none;font-size:18px}
+@media(max-width:980px){.links,.nav-cta .btn:not(.pri){display:none}.burger{display:block}.bento{grid-template-columns:1fr 1fr}.c1,.c2,.c3,.c4,.c5{grid-column:span 2}.steps,.plans{grid-template-columns:1fr}.quotes{columns:1}.stats{grid-template-columns:1fr 1fr}.stat:nth-child(2){border-right:0}.stat{border-bottom:1px solid var(--line)}.foot{grid-template-columns:1fr 1fr}
+body.menu-open .links{display:flex;position:fixed;inset:72px 0 auto;flex-direction:column;gap:0;margin:0;padding:12px 20px 24px;background:rgba(5,6,10,.97);border-bottom:1px solid var(--line)}body.menu-open .links a{padding:14px 0;font-size:18px;color:#fff;border-bottom:1px solid var(--line)}
+body.menu-open .burger span:nth-child(1){transform:translateY(5.6px) rotate(45deg)}body.menu-open .burger span:nth-child(2){opacity:0}body.menu-open .burger span:nth-child(3){transform:translateY(-5.6px) rotate(-45deg)}}
+@media(max-width:560px){.wrap{width:calc(100% - 32px)}.hero{padding:130px 0 60px}section{padding:76px 0}.bento{grid-template-columns:1fr}.c1,.c2,.c3,.c4,.c5{grid-column:auto}.final form{flex-direction:column}.nav-cta .btn.pri{display:none}.cta .btn{width:100%}.quotes{margin-top:36px}}
+</style>
+</head>
+<body>
+<header data-header><div class="wrap nav">
+<a href="#" class="logo"><i></i>Nova</a>
+<nav class="links" data-menu><a href="#features">Возможности</a><a href="#how">Как работает</a><a href="#pricing">Тарифы</a><a href="#faq">Вопросы</a></nav>
+<div class="nav-cta"><button class="btn" data-open="login">Войти</button><button class="btn pri" data-open="signup">Начать бесплатно</button><button class="burger" data-menu-toggle aria-label="Меню" aria-expanded="false"><span></span><span></span><span></span></button></div>
+</div></header>
+
+<main>
+<section class="hero" style="padding-bottom:70px">
+<div class="aurora"><b></b><b></b><b></b></div><div class="gridbg"></div>
+<div class="wrap">
+<a href="#features" class="pill" data-reveal><b>Новое</b>Nova 3 — агенты, которые работают часами →</a>
+<h1 data-reveal style="--d:.08s"><span class="grad">ИИ-коллега, который доводит работу до конца</span></h1>
+<p class="sub" data-reveal style="--d:.16s">Nova пишет, анализирует, собирает отчёты и автоматизирует процессы. Ставьте задачу словами — получайте готовый результат с проверкой и источниками.</p>
+<div class="cta" data-reveal style="--d:.24s"><button class="btn pri lg" data-open="signup">Попробовать бесплатно</button><a href="#how" class="btn lg">Смотреть, как работает</a></div>
+<div class="prompt" data-reveal style="--d:.32s"><div class="prompt-in">
+<div class="typed" id="typed">Собери отчёт по продажам за квартал и выдели три главных риска</div>
+<div class="prompt-bar"><span class="chip">📎 sales_q3.xlsx</span><span class="chip">🌐 Веб-поиск</span><span class="chip">⚡ Агент</span><button class="send" data-open="signup" aria-label="Отправить"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#05060a" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+</div></div>
+<div class="logos"><p>Нам доверяют команды</p><div class="track" data-marquee><span>Qazaq Retail</span><span>Steppe Labs</span><span>Altyn Group</span><span>Nomad Cloud</span><span>Orda Finance</span><span>Silk Logistic</span><span>Baiterek Media</span><span>Kaspian Tech</span></div></div>
+</div></section>
+
+<section id="features"><div class="wrap">
+<span class="eyebrow" data-reveal>Возможности</span>
+<h2 data-reveal>Не чат-бот. Рабочая сила.</h2>
+<p class="lead" data-reveal>Nova планирует, выполняет и проверяет — а вы видите каждый шаг и утверждаете важные действия.</p>
+<div class="bento">
+<div class="card c1" data-spot data-reveal><h3>Агенты, которые доводят до результата</h3><p>Разбивают задачу на шаги, ходят в ваши сервисы и возвращаются с готовым файлом, а не с советом.</p>
+<div class="agent"><div class="task"><i class="ok">✓</i>Выгрузить продажи из CRM<em>12 с</em></div><div class="task"><i class="ok">✓</i>Сверить с бюджетом Q3<em>31 с</em></div><div class="task"><i class="run"></i>Собрать презентацию для правления<em>в работе</em></div></div></div>
+<div class="card c2" data-spot data-reveal style="--d:.08s"><h3>Скорость</h3><p>Первый токен — быстрее, чем вы моргнёте.</p><div class="big"><span data-count="0.4" data-decimals="1">0,4</span><small> сек</small></div></div>
+<div class="card c3" data-spot data-reveal><h3>Интеграции</h3><p>200+ сервисов из коробки.</p><div class="orbit"><div class="ring" style="width:130px;height:130px;margin:-65px"><span>G</span></div><div class="ring" style="width:210px;height:210px;margin:-105px;animation-duration:34s;animation-direction:reverse"><span>S</span></div><div class="core"></div></div></div>
+<div class="card c4" data-spot data-reveal style="--d:.08s"><h3>Аналитика</h3><p>Графики и выводы по любым данным.</p><div class="bars"><i style="height:40%"></i><i style="height:70%;animation-delay:-.4s"></i><i style="height:55%;animation-delay:-.9s"></i><i style="height:90%;animation-delay:-1.3s"></i><i style="height:65%;animation-delay:-1.8s"></i><i style="height:100%;animation-delay:-2.2s"></i></div></div>
+<div class="card c5" data-spot data-reveal style="--d:.16s"><h3>Безопасность</h3><p>Ваши данные не используются для обучения.</p><div class="shield"><span>SOC 2</span><span>Шифрование</span><span>SSO</span><span>Аудит действий</span></div></div>
+</div></div></section>
+
+<section id="how" style="padding-top:20px"><div class="wrap">
+<span class="eyebrow" data-reveal>Как работает</span><h2 data-reveal>Три шага от задачи до результата</h2>
+<div class="steps">
+<div class="step" data-reveal><b>01</b><h3>Опишите задачу</h3><p>Словами, как коллеге. Прикрепите файлы или дайте доступ к сервисам.</p></div>
+<div class="step" data-reveal style="--d:.1s"><b>02</b><h3>Nova составит план</h3><p>Покажет шаги, оценит время и спросит разрешение на важные действия.</p></div>
+<div class="step" data-reveal style="--d:.2s"><b>03</b><h3>Получите результат</h3><p>Готовый документ, таблицу или презентацию — с источниками и журналом действий.</p></div>
+</div></div></section>
+
+<div class="wrap"><div class="stats">
+<div class="stat"><b data-count="12000" data-suffix="+">12 000+</b><span>команд используют Nova</span></div>
+<div class="stat"><b data-count="38" data-suffix=" ч">38 ч</b><span>экономии в месяц на сотрудника</span></div>
+<div class="stat"><b data-count="99.98" data-decimals="2" data-suffix="%">99,98%</b><span>доступность сервиса</span></div>
+<div class="stat"><b data-count="4.9" data-decimals="1">4,9</b><span>средняя оценка клиентов</span></div>
+</div></div>
+
+<section><div class="wrap">
+<span class="eyebrow" data-reveal>Отзывы</span><h2 data-reveal>Команды, которые уже работают быстрее</h2>
+<div class="quotes">
+<figure class="q" data-reveal><p>«Отчёт для совета директоров раньше занимал два дня. Теперь — сорок минут, и данные сверены лучше, чем у нас вручную».</p><div class="who"><i>А</i><div>Айгерим Садыкова<small>Финансовый директор, Altyn Group</small></div></div></figure>
+<figure class="q" data-reveal><p>«Агент разбирает входящие заявки, заводит задачи и отвечает клиентам. Поддержка наконец-то успевает».</p><div class="who"><i>Д</i><div>Данияр Ермеков<small>Head of Support, Nomad Cloud</small></div></div></figure>
+<figure class="q" data-reveal><p>«Лучшее — прозрачность. Видно каждый шаг, и ничего не уходит наружу без моего подтверждения».</p><div class="who"><i>М</i><div>Мария Ким<small>COO, Steppe Labs</small></div></div></figure>
+<figure class="q" data-reveal><p>«Подключили CRM и почту за десять минут. Через неделю Nova стала самым загруженным членом команды».</p><div class="who"><i>Т</i><div>Тимур Ахметов<small>Основатель, Kaspian Tech</small></div></div></figure>
+<figure class="q" data-reveal><p>«Маркетинг выпускает в три раза больше материалов, и качество не просело — Nova сама проверяет факты».</p><div class="who"><i>С</i><div>Сабина Нурланова<small>CMO, Baiterek Media</small></div></div></figure>
+<figure class="q" data-reveal><p>«Безопасники одобрили за день: SSO, аудит и данные не идут на обучение. Редкость для ИИ-сервисов».</p><div class="who"><i>Е</i><div>Ерлан Касымов<small>CISO, Orda Finance</small></div></div></figure>
+</div></div></section>
+
+<section id="pricing" style="text-align:center"><div class="wrap">
+<span class="eyebrow">Тарифы</span><h2 style="margin-inline:auto">Простые цены. Без сюрпризов.</h2>
+<div class="switch" data-billing><button data-period="m" class="active">Помесячно</button><button data-period="y">За год<em>−20%</em></button></div>
+<div class="plans" style="text-align:left">
+<div class="plan" data-reveal><h3>Старт</h3><div class="price">0 ₸</div><div class="per">навсегда</div><ul><li>100 задач в месяц</li><li>Базовые агенты</li><li>5 интеграций</li></ul><button class="btn" data-open="signup" data-fill="Старт">Начать бесплатно</button></div>
+<div class="plan hot" data-reveal style="--d:.08s"><h3>Про<span class="tag">Популярный</span></h3><div class="price" data-m="9 900 ₸" data-y="7 900 ₸">9 900 ₸</div><div class="per" data-per>/ мес</div><ul><li>Безлимитные задачи</li><li>Агенты на часы работы</li><li>200+ интеграций</li><li>Приоритетная скорость</li></ul><button class="btn pri" data-open="signup" data-fill="Про">Выбрать Про</button></div>
+<div class="plan" data-reveal style="--d:.16s"><h3>Команда</h3><div class="price" data-m="24 900 ₸" data-y="19 900 ₸">24 900 ₸</div><div class="per" data-per>/ мес за место</div><ul><li>Всё из Про</li><li>SSO и аудит действий</li><li>Общая память команды</li><li>Менеджер внедрения</li></ul><button class="btn" data-open="sales">Связаться с нами</button></div>
+</div></div></section>
+
+<section id="faq"><div class="wrap">
+<div style="text-align:center"><span class="eyebrow">Вопросы</span><h2 style="margin-inline:auto">Частые вопросы</h2></div>
+<div class="faq" data-acc data-single>
+<div class="acc open"><button class="acc-q">Чем Nova отличается от обычного чат-бота?</button><div class="acc-a"><div><p>Nova не просто отвечает, а выполняет работу: составляет план, работает с вашими сервисами и возвращает готовый результат с журналом действий.</p></div></div></div>
+<div class="acc"><button class="acc-q">Используются ли мои данные для обучения?</button><div class="acc-a"><div><p>Нет. Данные шифруются, хранятся изолированно и никогда не используются для обучения моделей.</p></div></div></div>
+<div class="acc"><button class="acc-q">Можно ли отменить подписку?</button><div class="acc-a"><div><p>Да, в любой момент в настройках. Доступ сохранится до конца оплаченного периода.</p></div></div></div>
+<div class="acc"><button class="acc-q">Какие сервисы можно подключить?</button><div class="acc-a"><div><p>Почту, календари, CRM, таблицы, мессенджеры, базы данных и ещё 200+ сервисов. Если нужного нет — подключим по API.</p></div></div></div>
+</div></div></section>
+
+<section style="padding-top:20px"><div class="wrap"><div class="final" data-reveal>
+<h2><span class="grad">Начните сегодня. Первые 100 задач — бесплатно.</span></h2>
+<p class="lead" style="margin:0 auto">Без карты. Настройка за 2 минуты.</p>
+<form data-form data-success="Готово! Ссылка для входа отправлена на почту."><input type="email" required placeholder="Рабочая почта" aria-label="Почта"><button class="btn pri lg" type="submit">Получить доступ</button></form>
+</div></div></section>
+</main>
+
+<footer><div class="wrap">
+<div class="foot"><div><a href="#" class="logo" style="color:#fff"><i></i>Nova</a><p style="max-width:280px;margin-top:14px">Платформа ИИ-агентов для команд, которые ценят своё время.</p></div>
+<div><h4>Продукт</h4><a href="#features">Возможности</a><a href="#pricing">Тарифы</a><a href="#how">Как работает</a></div>
+<div><h4>Компания</h4><a href="#" data-open="sales">О нас</a><a href="#" data-open="sales">Карьера</a><a href="#" data-open="sales">Контакты</a></div>
+<div><h4>Помощь</h4><a href="#faq">Вопросы</a><a href="#" data-copy="hello@nova.ai" data-copied="Почта скопирована: hello@nova.ai">hello@nova.ai</a></div></div>
+<div class="copy"><span>© <span data-year></span> Nova. Все права защищены.</span><span>Сделано с Malik AI</span></div>
+</div></footer>
+
+<dialog id="signup"><div class="dlg" style="position:relative"><button class="x" data-close aria-label="Закрыть">×</button><h3>Создать аккаунт</h3><p>Тариф: <b data-fill-target>Старт</b> · первые 100 задач бесплатно</p>
+<form data-form data-success="Аккаунт создан! Проверьте почту для подтверждения."><label class="field">Имя<input required placeholder="Как к вам обращаться"></label><label class="field">Почта<input type="email" required placeholder="you@company.kz"></label><button class="btn pri lg" type="submit" style="width:100%">Создать аккаунт</button></form></div></dialog>
+<dialog id="login"><div class="dlg" style="position:relative"><button class="x" data-close aria-label="Закрыть">×</button><h3>С возвращением</h3><p>Войдите, чтобы продолжить работу.</p>
+<form data-form data-success="Ссылка для входа отправлена на почту."><label class="field">Почта<input type="email" required placeholder="you@company.kz"></label><button class="btn pri lg" type="submit" style="width:100%">Получить ссылку для входа</button></form></div></dialog>
+<dialog id="sales"><div class="dlg" style="position:relative"><button class="x" data-close aria-label="Закрыть">×</button><h3>Поговорить с командой</h3><p>Ответим в течение рабочего дня.</p>
+<form data-form data-success="Заявка отправлена! Менеджер свяжется с вами сегодня."><label class="field">Компания<input required placeholder="Название"></label><label class="field">Телефон<input type="tel" required placeholder="+7 ___ ___ __ __"></label><button class="btn pri lg" type="submit" style="width:100%">Отправить заявку</button></form></div></dialog>
+<script id="malik-runtime">
+(function () {
+  var d = document, root = d.documentElement, body = d.body;
+  root.classList.add("js");
+  var preview = /[?&]preview=1/.test(location.search);
+  if (preview) root.classList.add("is-preview");
+  var $ = function (s, c) { return (c || d).querySelector(s) };
+  var $$ = function (s, c) { return Array.prototype.slice.call((c || d).querySelectorAll(s)) };
+
+  /* toast */
+  var toast = d.createElement("div");
+  toast.className = "m-toast"; toast.setAttribute("role", "status"); toast.setAttribute("aria-live", "polite");
+  body.appendChild(toast);
+  var toastTimer;
+  function say(text) {
+    toast.textContent = text; toast.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { toast.classList.remove("show") }, 2600);
+  }
+  window.mSay = say;
+
+  /* header + menu */
+  var header = $("[data-header]");
+  function onScroll() { if (header) header.classList.toggle("scrolled", scrollY > 12) }
+  addEventListener("scroll", onScroll, { passive: true }); onScroll();
+  $$("[data-menu-toggle]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var open = !body.classList.contains("menu-open");
+      body.classList.toggle("menu-open", open); b.setAttribute("aria-expanded", String(open));
+    });
+  });
+  $$("[data-menu] a").forEach(function (a) { a.addEventListener("click", function () { body.classList.remove("menu-open") }) });
+
+  /* anchors: smooth, also inside sandboxed previews */
+  d.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    var id = a.getAttribute("href").slice(1);
+    if (!id) { e.preventDefault(); scrollTo({ top: 0, behavior: "smooth" }); return }
+    var t = d.getElementById(id);
+    if (t) { e.preventDefault(); t.scrollIntoView({ behavior: "smooth", block: "start" }) }
+  });
+
+  /* reveal + counters */
+  var reveal = $$("[data-reveal]"), counters = $$("[data-count]");
+  function count(el) {
+    if (el.dataset.done) return; el.dataset.done = "1";
+    var to = parseFloat(el.dataset.count), dec = +(el.dataset.decimals || 0), pre = el.dataset.prefix || "", suf = el.dataset.suffix || "";
+    var fmt = function (v) { return pre + v.toLocaleString("ru-RU", { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suf };
+    if (preview || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = fmt(to); return }
+    var t0 = performance.now(), dur = 1400;
+    (function step(t) { var p = Math.min(1, (t - t0) / dur); el.textContent = fmt(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step) })(t0);
+  }
+  if ("IntersectionObserver" in window && !preview) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (en) { if (!en.isIntersecting) return; en.target.classList.add("m-in"); if (en.target.dataset.count) count(en.target); io.unobserve(en.target) });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: .08 });
+    reveal.concat(counters).forEach(function (el) { io.observe(el) });
+  } else { reveal.forEach(function (el) { el.classList.add("m-in") }); counters.forEach(count) }
+
+  /* tabs */
+  $$("[data-tabs]").forEach(function (box) {
+    var tabs = $$("[data-tab]", box), panels = $$("[data-panel]", box);
+    function show(name) {
+      tabs.forEach(function (t) { var on = t.dataset.tab === name; t.classList.toggle("active", on); t.setAttribute("aria-selected", String(on)) });
+      panels.forEach(function (p) { p.hidden = p.dataset.panel !== name });
+    }
+    tabs.forEach(function (t) { t.setAttribute("role", "tab"); t.addEventListener("click", function () { show(t.dataset.tab) }) });
+    if (tabs[0]) show((tabs.filter(function (t) { return t.classList.contains("active") })[0] || tabs[0]).dataset.tab);
+  });
+
+  /* accordion */
+  $$("[data-acc] .acc-q").forEach(function (q) {
+    q.setAttribute("aria-expanded", String(q.parentNode.classList.contains("open")));
+    q.addEventListener("click", function () {
+      var item = q.parentNode, open = !item.classList.contains("open");
+      if (item.parentNode.hasAttribute("data-single")) $$(".open", item.parentNode).forEach(function (o) { o.classList.remove("open"); $(".acc-q", o).setAttribute("aria-expanded", "false") });
+      item.classList.toggle("open", open); q.setAttribute("aria-expanded", String(open));
+    });
+  });
+
+  /* billing switch: [data-billing] buttons with data-period; prices carry data-m / data-y */
+  $$("[data-billing]").forEach(function (box) {
+    var btns = $$("[data-period]", box), scope = box.closest("section") || d;
+    function set(p) {
+      btns.forEach(function (b) { b.classList.toggle("active", b.dataset.period === p); b.setAttribute("aria-pressed", String(b.dataset.period === p)) });
+      $$("[data-m]", scope).forEach(function (el) { el.textContent = p === "y" ? el.dataset.y : el.dataset.m });
+      $$("[data-per]", scope).forEach(function (el) { el.textContent = p === "y" ? (el.dataset.perY || "/ мес при оплате за год") : (el.dataset.perM || "/ мес") });
+    }
+    btns.forEach(function (b) { b.addEventListener("click", function () { set(b.dataset.period) }) });
+  });
+
+  /* filters: [data-filters] buttons data-filter; items data-cat within the same section */
+  $$("[data-filters]").forEach(function (box) {
+    var scope = box.closest("section") || d, btns = $$("[data-filter]", box);
+    btns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var f = b.dataset.filter, shown = 0;
+        btns.forEach(function (x) { x.classList.toggle("active", x === b) });
+        $$("[data-cat]", scope).forEach(function (it) { var on = f === "all" || (" " + it.dataset.cat + " ").indexOf(" " + f + " ") > -1; it.hidden = !on; if (on) shown++ });
+        var empty = $("[data-empty]", scope); if (empty) empty.hidden = shown > 0;
+      });
+    });
+  });
+
+  /* dialogs */
+  d.addEventListener("click", function (e) {
+    var o = e.target.closest && e.target.closest("[data-open]");
+    if (o) {
+      var dlg = d.getElementById(o.dataset.open);
+      if (dlg) {
+        e.preventDefault();
+        if (o.dataset.fill) $$("[data-fill-target]", dlg).forEach(function (t) { t.textContent = o.dataset.fill });
+        if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+      }
+      return;
+    }
+    var c = e.target.closest && e.target.closest("[data-close]");
+    if (c) { var dl = c.closest("dialog"); if (dl) dl.close ? dl.close() : dl.removeAttribute("open") }
+  });
+  $$("dialog").forEach(function (dl) { dl.addEventListener("click", function (e) { if (e.target === dl) dl.close() }) });
+
+  /* forms: works without allow-forms too (sandboxed previews) */
+  function submitForm(f) {
+    if (f.reportValidity && !f.reportValidity()) return;
+    say(f.dataset.success || "Готово! Мы свяжемся с вами в ближайшее время.");
+    f.reset(); var dl = f.closest("dialog"); if (dl && dl.close) setTimeout(function () { dl.close() }, 400);
+    f.dispatchEvent(new CustomEvent("m-done"));
+  }
+  $$("form[data-form]").forEach(function (f) {
+    f.addEventListener("submit", function (e) { e.preventDefault(); submitForm(f) });
+    $$('[type="submit"]', f).forEach(function (b) { b.addEventListener("click", function (e) { e.preventDefault(); submitForm(f) }) });
+    f.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); submitForm(f) } });
+  });
+
+  /* cart / wishlist counters */
+  $$("[data-add]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var key = b.dataset.counter || "cart";
+      $$('[data-counter-of="' + key + '"]').forEach(function (c) { c.textContent = String((+c.textContent || 0) + 1); c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump") });
+      say(b.dataset.add);
+    });
+  });
+
+  /* option chips: [data-options] single choice */
+  $$("[data-options]").forEach(function (g) {
+    $$("button", g).forEach(function (b) { b.addEventListener("click", function () { $$("button", g).forEach(function (x) { x.classList.toggle("active", x === b); x.setAttribute("aria-pressed", String(x === b)) }); if (g.dataset.label) { var l = d.getElementById(g.dataset.label); if (l) l.textContent = b.dataset.value || b.textContent } }) });
+  });
+
+  /* quantity steppers + totals: [data-qty] contains [data-dec] [data-val] [data-inc]; data-price; [data-total] in section */
+  function totals(scope) {
+    var sum = 0, n = 0;
+    $$("[data-qty]", scope).forEach(function (q) { var v = +$("[data-val]", q).textContent; sum += v * +q.dataset.price; n += v });
+    $$("[data-total]", scope).forEach(function (t) { t.textContent = Math.round(sum * (1 - (+t.dataset.discount || 0))).toLocaleString("ru-RU") + (t.dataset.total || "") });
+    $$("[data-total-count]", scope).forEach(function (t) { t.textContent = String(n) });
+  }
+  $$("[data-qty]").forEach(function (q) {
+    var scope = q.closest("section") || d, val = $("[data-val]", q), max = +(q.dataset.max || 10);
+    $("[data-inc]", q).addEventListener("click", function () { val.textContent = String(Math.min(max, +val.textContent + 1)); totals(scope) });
+    $("[data-dec]", q).addEventListener("click", function () { val.textContent = String(Math.max(0, +val.textContent - 1)); totals(scope) });
+    totals(scope);
+  });
+
+  /* countdown */
+  $$("[data-countdown]").forEach(function (el) {
+    var end = new Date(el.dataset.countdown).getTime();
+    function tick() {
+      var s = Math.max(0, Math.floor((end - Date.now()) / 1000));
+      var parts = { d: Math.floor(s / 86400), h: Math.floor(s % 86400 / 3600), m: Math.floor(s % 3600 / 60), s: s % 60 };
+      Object.keys(parts).forEach(function (k) { var t = $('[data-cd="' + k + '"]', el); if (t) t.textContent = String(parts[k]).padStart(2, "0") });
+    }
+    tick(); if (!preview) setInterval(tick, 1000);
+  });
+
+  /* copy */
+  $$("[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var text = b.dataset.copy, done = function () { say(b.dataset.copied || "Скопировано") };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done); else done();
+    });
+  });
+
+  /* marquee: duplicate track once so the loop is seamless */
+  $$("[data-marquee]").forEach(function (m) { m.innerHTML += m.innerHTML; m.setAttribute("aria-hidden", "true") });
+
+  /* tilt on pointer */
+  if (!preview && matchMedia("(hover: hover)").matches) $$("[data-tilt]").forEach(function (el) {
+    el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5; el.style.transform = "perspective(900px) rotateY(" + x * 10 + "deg) rotateX(" + -y * 10 + "deg)" });
+    el.addEventListener("pointerleave", function () { el.style.transform = "" });
+  });
+
+  /* spotlight cards follow the pointer */
+  $$("[data-spot]").forEach(function (el) { el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(); el.style.setProperty("--x", e.clientX - r.left + "px"); el.style.setProperty("--y", e.clientY - r.top + "px") }) });
+
+  /* carousels: [data-scroll-target="id"] with data-dir="1|-1" */
+  $$("[data-scroll-target]").forEach(function (b) {
+    b.addEventListener("click", function () { var t = d.getElementById(b.dataset.scrollTarget); if (!t) return; var item = t.firstElementChild, step = item ? item.getBoundingClientRect().width + 16 : t.clientWidth * .8; t.scrollBy({ left: step * (+b.dataset.dir || 1), behavior: "smooth" }) });
+  });
+
+  $$("[data-year]").forEach(function (y) { y.textContent = String(new Date().getFullYear()) });
+  window.mQ = $; window.mQQ = $$;
+})();
+</script>
+<script>
+(function(){var el=document.getElementById("typed");if(!el||document.documentElement.classList.contains("is-preview"))return;var list=["Собери отчёт по продажам за квартал и выдели три главных риска","Ответь на 40 новых заявок в поддержке и заведи задачи в CRM","Найди 20 поставщиков упаковки в Алматы и сравни цены","Подготовь презентацию для инвесторов по нашим метрикам"],i=0,c=list[0].length,del=true;
+setInterval(function(){var t=list[i];if(del){c--;if(c<=0){del=false;i=(i+1)%list.length}}else{c++;if(c>=list[i].length+18)del=true}el.textContent=list[i].slice(0,Math.max(0,Math.min(c,list[i].length)))},45)})();
+</script>
+</body>
+</html>

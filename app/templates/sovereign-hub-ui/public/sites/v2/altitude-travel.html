@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Altitude — экспедиции в горы Центральной Азии</title>
+<meta name="description" content="Altitude: авторские экспедиции на Тянь-Шань, Памир и Алтай. Малые группы, сертифицированные гиды, всё снаряжение включено.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,600;0,800;0,900;1,900&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
+<style id="malik-base">*,*::before,*::after{box-sizing:border-box}html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}body{margin:0;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden}img{max-width:100%;display:block}button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}a{color:inherit;text-decoration:none}[hidden]{display:none!important}[id]{scroll-margin-top:88px}.js [data-reveal]{opacity:0;transform:translateY(24px);transition:opacity .9s cubic-bezier(.2,.7,.2,1) var(--d,0s),transform .9s cubic-bezier(.2,.7,.2,1) var(--d,0s)}.js [data-reveal].m-in{opacity:1;transform:none}.is-preview *,.is-preview *::before,.is-preview *::after{animation-delay:-60s!important;animation-play-state:paused!important;transition:none!important}.is-preview{scrollbar-width:none}.is-preview::-webkit-scrollbar{display:none}.m-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);opacity:0;z-index:9999;padding:13px 18px;border-radius:14px;background:#0d0d0f;color:#fff;font:500 14px/1.4 system-ui,sans-serif;box-shadow:0 18px 40px rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);transition:.35s cubic-bezier(.2,.7,.2,1);pointer-events:none;max-width:calc(100vw - 32px);text-align:center}.m-toast.show{opacity:1;transform:translate(-50%,0)}dialog{border:0;padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto}dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}.bump{animation:m-bump .4s}@keyframes m-bump{40%{transform:scale(1.4)}}:focus-visible{outline:2px solid currentColor;outline-offset:3px}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}</style>
+<style>
+:root{--bg:#0d1612;--bg2:#13201a;--fg:#eef1e8;--mut:#9aa89e;--or:#ff6b2c;--line:rgba(238,241,232,.13)}
+body{background:var(--bg);color:var(--fg);font-family:"Golos Text",system-ui,sans-serif;line-height:1.6}
+h1,h2,h3,.mt{font-family:Montserrat,sans-serif;font-weight:900;text-transform:uppercase;letter-spacing:-.02em}
+.wrap{width:min(1280px,calc(100% - 40px));margin:0 auto}
+header{position:fixed;inset:0 0 auto;z-index:50;transition:.3s}header.scrolled{background:rgba(13,22,18,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.nav{height:78px;display:flex;align-items:center;gap:30px}.logo{font-family:Montserrat;font-weight:900;font-size:22px;display:flex;align-items:center;gap:10px;letter-spacing:.02em}.logo svg{width:34px}
+.links{display:flex;gap:26px;margin-left:auto;font-weight:500;font-size:15px}.links a:hover{color:var(--or)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:54px;padding:0 28px;border-radius:6px;border:2px solid var(--or);background:var(--or);color:#140a04;font-family:Montserrat;font-weight:800;font-size:13.5px;letter-spacing:.06em;text-transform:uppercase;transition:.25s}.btn:hover{background:transparent;color:var(--or)}
+.btn.w{border-color:var(--fg);background:transparent;color:var(--fg)}.btn.w:hover{background:var(--fg);color:var(--bg)}
+.burger{display:none;margin-left:auto;width:46px;height:46px;border-radius:6px;border:1px solid var(--line);background:none}.burger span{display:block;width:20px;height:2px;background:var(--fg);margin:4px auto;transition:.3s}
+.hero{position:relative;min-height:100vh;display:flex;align-items:flex-end;padding:0 0 70px;overflow:hidden}
+.hero>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(13,22,18,.4),rgba(13,22,18,.15) 40%,rgba(13,22,18,.95))}
+.hero .wrap{position:relative;z-index:2}.eyebrow{display:inline-flex;align-items:center;gap:10px;font-weight:600;font-size:14px;color:var(--or);text-transform:uppercase;letter-spacing:.14em}.eyebrow::before{content:"";width:34px;height:2px;background:var(--or)}
+h1{font-size:clamp(64px,13vw,210px);line-height:.82;margin:18px 0 26px}h1 i{font-style:italic;color:transparent;-webkit-text-stroke:2px var(--fg)}
+.hero-row{display:flex;justify-content:space-between;align-items:flex-end;gap:30px;flex-wrap:wrap}.hero p{max-width:440px;font-size:18px;color:#d6ddd2;margin:0 0 26px}
+.cd{background:rgba(13,22,18,.7);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:12px;padding:20px 24px}.cd small{display:block;color:var(--mut);font-size:13px;margin-bottom:10px}
+.cd .t{display:flex;gap:18px}.cd .t div{text-align:center}.cd b{display:block;font-family:Montserrat;font-weight:900;font-size:38px;line-height:1}.cd span{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.1em}
+section{padding:120px 0}h2{font-size:clamp(40px,6.4vw,96px);line-height:.9;margin:16px 0 20px}h2 em{font-style:italic;color:var(--or)}.lead{color:var(--mut);font-size:18px;max-width:560px;margin:0}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:46px}
+.fil{display:flex;gap:8px;flex-wrap:wrap}.fil button{height:44px;padding:0 18px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);font-weight:600;font-size:14px;transition:.25s}.fil button.active{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.tours{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}.tour{position:relative;border-radius:14px;overflow:hidden;background:var(--bg2);min-height:520px;display:flex;flex-direction:column;justify-content:flex-end;isolation:isolate}
+.tour img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2;transition:1.2s}.tour:hover img{transform:scale(1.06)}.tour::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,transparent 30%,rgba(13,22,18,.96) 85%)}
+.tour .b{padding:26px}.tour .alt{position:absolute;right:16px;top:16px;background:var(--or);color:#140a04;font-family:Montserrat;font-weight:900;font-size:13px;padding:6px 10px;border-radius:4px}
+.tour h3{font-size:30px;line-height:.95;margin:0 0 10px}.tour .meta{display:flex;gap:16px;flex-wrap:wrap;color:#cdd5c8;font-size:14px;margin-bottom:18px}
+.lvl{display:inline-flex;gap:3px;vertical-align:middle;margin-left:6px}.lvl i{width:6px;height:14px;border-radius:2px;background:rgba(238,241,232,.25)}.lvl i.on{background:var(--or)}
+.tour .ft{display:flex;justify-content:space-between;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:16px}.tour .pr{font-family:Montserrat;font-weight:800;font-size:20px}
+.tour .ft button{height:44px;padding:0 16px;border-radius:6px;border:0;background:var(--fg);color:var(--bg);font-weight:600}
+.empty{color:var(--mut);padding:30px 0}
+.route{display:grid;grid-template-columns:.85fr 1.15fr;gap:60px;align-items:start}.route .pic{position:sticky;top:110px;border-radius:14px;overflow:hidden;aspect-ratio:4/5}.route .pic img{width:100%;height:100%;object-fit:cover}
+.alts{position:absolute;left:0;right:0;bottom:0;padding:20px;background:linear-gradient(transparent,rgba(13,22,18,.9))}.alts svg{width:100%;height:90px}
+.day{border-top:1px solid var(--line)}.day:last-child{border-bottom:1px solid var(--line)}.acc-q{width:100%;background:none;border:0;color:var(--fg);display:grid;grid-template-columns:80px 1fr auto;align-items:center;gap:14px;padding:22px 0;text-align:left}
+.acc-q b{font-family:Montserrat;font-weight:900;color:var(--or);font-size:15px}.acc-q span{font-weight:600;font-size:19px}.acc-q em{font-style:normal;color:var(--mut);font-size:14px}
+.acc-a{display:grid;grid-template-rows:0fr;transition:.35s}.acc.open .acc-a{grid-template-rows:1fr}.acc-a>div{overflow:hidden;color:var(--mut)}.acc-a p{margin:0 0 22px 94px}
+.guides{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:50px}.guide{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:26px}.guide .av{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--or),#ffb36b);display:grid;place-items:center;font-family:Montserrat;font-weight:900;font-size:22px;color:#140a04;margin-bottom:18px}
+.guide h3{font-size:19px;margin:0 0 4px;letter-spacing:0}.guide p{margin:0;color:var(--mut);font-size:14.5px}.guide .peaks{margin-top:14px;font-size:13px;color:var(--or);font-weight:600}
+.gear{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;background:var(--fg);color:var(--bg);border-radius:20px;padding:60px}.gear .lead{color:#4f5d54}
+.list{display:grid;gap:10px}.list label{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:10px;background:#fff;font-weight:600;cursor:pointer;transition:.2s}.list input{width:22px;height:22px;accent-color:var(--or)}.list label:has(input:checked){background:#ffe5d8;text-decoration:line-through;color:#6b6b6b}
+.bar{height:10px;border-radius:10px;background:#d8ddd2;margin:22px 0 8px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--or);transition:.4s}
+.revs{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:50px}.rev{border:1px solid var(--line);border-radius:14px;padding:28px}.rev p{font-size:17px;margin:0 0 18px}.rev b{display:block}.rev small{color:var(--mut)}
+.join{position:relative;border-radius:20px;overflow:hidden;padding:80px 60px;display:grid;grid-template-columns:1fr 1fr;gap:50px;align-items:center}.join>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}.join::before{content:"";position:absolute;inset:0;background:rgba(13,22,18,.78);z-index:-1}
+form.j{display:grid;gap:12px}.in{height:56px;border-radius:8px;border:1px solid var(--line);background:rgba(13,22,18,.6);color:var(--fg);padding:0 16px;font-size:16px;outline:none}.in:focus{border-color:var(--or)}select.in option{background:var(--bg)}
+footer{padding:70px 0 36px;color:var(--mut);font-size:14px;border-top:1px solid var(--line)}.fg{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap}.fg nav{display:flex;gap:24px;flex-wrap:wrap;font-weight:500}.fg nav a:hover{color:var(--or)}
+.huge{font-family:Montserrat;font-weight:900;font-size:clamp(60px,15vw,230px);line-height:.8;color:transparent;-webkit-text-stroke:1.5px rgba(238,241,232,.25);margin:50px 0 26px;text-transform:uppercase}
+dialog{background:var(--bg2);color:var(--fg);border:1px solid var(--line);border-radius:16px}.dlg{padding:36px;position:relative}.dlg h3{font-size:32px;margin:8px 0 10px}.dlg p{color:var(--mut);margin:0 0 20px}
+.x{position:absolute;right:16px;top:16px;width:40px;height:40px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);font-size:20px}
+@media(max-width:1020px){.links,.nav>.btn{display:none}.burger{display:block}.tours{grid-template-columns:1fr 1fr}.route,.gear,.join{grid-template-columns:1fr}.route .pic{position:relative;top:0;aspect-ratio:16/10}.guides{grid-template-columns:1fr 1fr}.revs{grid-template-columns:1fr}.gear,.join{padding:44px 26px}
+body.menu-open .links{display:flex;position:fixed;inset:78px 0 auto;flex-direction:column;gap:0;margin:0;background:var(--bg);padding:6px 20px 24px;border-bottom:1px solid var(--line)}body.menu-open .links a{padding:15px 0;font-family:Montserrat;font-weight:800;text-transform:uppercase;font-size:18px;border-bottom:1px solid var(--line)}
+body.menu-open .burger span:nth-child(1){transform:translateY(6px) rotate(45deg)}body.menu-open .burger span:nth-child(2){opacity:0}body.menu-open .burger span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}}
+@media(max-width:620px){.wrap{width:calc(100% - 32px)}section{padding:84px 0}.tours,.guides{grid-template-columns:1fr}.tour{min-height:460px}.acc-q{grid-template-columns:60px 1fr}.acc-q em{grid-column:2}.acc-a p{margin-left:74px}.cd b{font-size:30px}.hero-row .btn{width:100%}}
+</style>
+</head>
+<body>
+<header data-header><div class="wrap nav"><a href="#" class="logo"><svg viewBox="0 0 34 24" fill="none"><path d="M1 23 12 5l6 9 4-6 11 15H1Z" fill="#ff6b2c"/><path d="M12 5l3 4.5-3 2-3-2 3-4.5Z" fill="#eef1e8"/></svg>Altitude</a>
+<nav class="links" data-menu><a href="#tours">Экспедиции</a><a href="#route">Маршрут</a><a href="#guides">Гиды</a><a href="#gear">Снаряжение</a><a href="#join">Записаться</a></nav>
+<a href="#join" class="btn">Записаться</a><button class="burger" data-menu-toggle aria-label="Меню"><span></span><span></span><span></span></button></div></header>
+<main>
+<section class="hero"><img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=2200&q=80" alt="Горы над облаками на закате" fetchpriority="high">
+<div class="wrap"><span class="eyebrow" data-reveal>Тянь-Шань · Памир · Алтай</span><h1 data-reveal style="--d:.1s">Выше<br><i>облаков</i></h1>
+<div class="hero-row"><div data-reveal style="--d:.2s"><p>Авторские экспедиции малыми группами до 10 человек. Сертифицированные гиды, всё снаряжение и вертолётная поддержка — включены.</p><a href="#tours" class="btn">Выбрать экспедицию</a></div>
+<div class="cd" data-countdown="2026-11-14T06:00:00+06:00" data-reveal style="--d:.3s"><small>До старта «Хан-Тенгри: базовый лагерь»</small><div class="t"><div><b data-cd="d">00</b><span>дней</span></div><div><b data-cd="h">00</b><span>часов</span></div><div><b data-cd="m">00</b><span>минут</span></div><div><b data-cd="s">00</b><span>секунд</span></div></div></div></div></div></section>
+
+<section id="tours"><div class="wrap"><div class="top"><div><span class="eyebrow">Экспедиции 2026</span><h2 data-reveal>Куда <em>идём</em></h2></div>
+<div class="fil" data-filters><button data-filter="all" class="active">Все</button><button data-filter="easy">Лёгкие</button><button data-filter="mid">Средние</button><button data-filter="hard">Сложные</button></div></div>
+<div class="tours">
+<article class="tour" data-cat="easy" data-reveal><img src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&h=1000&q=80" alt="Зелёная долина в горах" loading="lazy"><span class="alt">3 200 м</span><div class="b"><h3>Кольсайские озёра</h3><div class="meta"><span>5 дней</span><span>Сложность<span class="lvl"><i class="on"></i><i></i><i></i></span></span></div><div class="ft"><span class="pr">290 000 ₸</span><button data-open="book" data-fill="Кольсайские озёра">Подробнее</button></div></div></article>
+<article class="tour" data-cat="mid" data-reveal style="--d:.08s"><img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&h=1000&q=80" alt="Альпийская долина" loading="lazy"><span class="alt">4 100 м</span><div class="b"><h3>Ала-Арча и пик Учитель</h3><div class="meta"><span>8 дней</span><span>Сложность<span class="lvl"><i class="on"></i><i class="on"></i><i></i></span></span></div><div class="ft"><span class="pr">540 000 ₸</span><button data-open="book" data-fill="Ала-Арча и пик Учитель">Подробнее</button></div></div></article>
+<article class="tour" data-cat="hard" data-reveal style="--d:.16s"><img src="https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&h=1000&q=80" alt="Звёздное небо над вершинами" loading="lazy"><span class="alt">7 010 м</span><div class="b"><h3>Хан-Тенгри: базовый лагерь</h3><div class="meta"><span>14 дней</span><span>Сложность<span class="lvl"><i class="on"></i><i class="on"></i><i class="on"></i></span></span></div><div class="ft"><span class="pr">1 280 000 ₸</span><button data-open="book" data-fill="Хан-Тенгри: базовый лагерь">Подробнее</button></div></div></article>
+<article class="tour" data-cat="easy" data-reveal><img src="https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=800&h=1000&q=80" alt="Озеро и лодка в горах" loading="lazy"><span class="alt">2 600 м</span><div class="b"><h3>Алтай: Рахмановские ключи</h3><div class="meta"><span>7 дней</span><span>Сложность<span class="lvl"><i class="on"></i><i></i><i></i></span></span></div><div class="ft"><span class="pr">420 000 ₸</span><button data-open="book" data-fill="Алтай: Рахмановские ключи">Подробнее</button></div></div></article>
+<article class="tour" data-cat="mid" data-reveal style="--d:.08s"><img src="https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=800&h=1000&q=80" alt="Туристы на горной тропе" loading="lazy"><span class="alt">4 650 м</span><div class="b"><h3>Памирский тракт</h3><div class="meta"><span>10 дней</span><span>Сложность<span class="lvl"><i class="on"></i><i class="on"></i><i></i></span></span></div><div class="ft"><span class="pr">760 000 ₸</span><button data-open="book" data-fill="Памирский тракт">Подробнее</button></div></div></article>
+<article class="tour" data-cat="hard" data-reveal style="--d:.16s"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&w=800&h=1000&q=80" alt="Вид из палатки на горы" loading="lazy"><span class="alt">7 134 м</span><div class="b"><h3>Пик Ленина</h3><div class="meta"><span>21 день</span><span>Сложность<span class="lvl"><i class="on"></i><i class="on"></i><i class="on"></i></span></span></div><div class="ft"><span class="pr">1 650 000 ₸</span><button data-open="book" data-fill="Пик Ленина">Подробнее</button></div></div></article>
+</div><p class="empty" data-empty hidden>В этой категории экспедиций пока нет.</p></div></section>
+
+<section id="route" style="padding-top:0"><div class="wrap route">
+<div class="pic" data-reveal><img src="https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=900&h=1125&q=80" alt="Ночные горы" loading="lazy"><div class="alts"><svg viewBox="0 0 400 90" preserveAspectRatio="none"><path d="M0 85 L40 70 L80 72 L120 52 L160 58 L200 34 L240 40 L280 18 L320 26 L360 6 L400 14" stroke="#ff6b2c" stroke-width="3" fill="none"/><path d="M0 85 L40 70 L80 72 L120 52 L160 58 L200 34 L240 40 L280 18 L320 26 L360 6 L400 14 V90 H0Z" fill="rgba(255,107,44,.18)"/></svg></div></div>
+<div><span class="eyebrow">Маршрут по дням</span><h2 data-reveal>Хан-<em>Тенгри</em></h2><p class="lead" data-reveal style="margin-bottom:30px">14 дней, акклиматизация по классической схеме и вертолётная заброска на ледник.</p>
+<div data-acc data-single>
+<div class="acc day open"><button class="acc-q"><b>День 1</b><span>Алматы — Каркара</span><em>2 000 м</em></button><div class="acc-a"><div><p>Встреча, проверка снаряжения, переезд на джипах в долину Каркара. Ночь в базовом лагере.</p></div></div></div>
+<div class="acc day"><button class="acc-q"><b>День 2–3</b><span>Вертолёт на ледник Иныльчек</span><em>4 000 м</em></button><div class="acc-a"><div><p>Заброска на вертолёте, обустройство лагеря и первые акклиматизационные выходы.</p></div></div></div>
+<div class="acc day"><button class="acc-q"><b>День 4–9</b><span>Акклиматизация</span><em>до 5 400 м</em></button><div class="acc-a"><div><p>Выходы с ночёвками в лагерях 1 и 2, обучение работе на перилах и с кошками.</p></div></div></div>
+<div class="acc day"><button class="acc-q"><b>День 10–12</b><span>Окно погоды</span><em>до 6 400 м</em></button><div class="acc-a"><div><p>При хорошей погоде — подъём к седловине и панорама на Победу и Хан-Тенгри.</p></div></div></div>
+<div class="acc day"><button class="acc-q"><b>День 13–14</b><span>Возвращение</span><em>800 м</em></button><div class="acc-a"><div><p>Вертолёт в Каркару, баня, ужин и трансфер в Алматы.</p></div></div></div>
+</div></div></div></section>
+
+<section id="guides" style="padding-top:0"><div class="wrap"><span class="eyebrow">Команда</span><h2 data-reveal>Ваши <em>гиды</em></h2>
+<div class="guides"><div class="guide" data-reveal><div class="av">ЕА</div><h3>Ерлан Ахметов</h3><p>Главный гид · 22 года в горах</p><div class="peaks">8 семитысячников</div></div><div class="guide" data-reveal style="--d:.06s"><div class="av">АК</div><h3>Асель Каримова</h3><p>Гид-врач · спасатель МЧС</p><div class="peaks">Хан-Тенгри ×4</div></div><div class="guide" data-reveal style="--d:.12s"><div class="av">ДН</div><h3>Данияр Нурланов</h3><p>Гид по Памиру</p><div class="peaks">Пик Ленина ×6</div></div><div class="guide" data-reveal style="--d:.18s"><div class="av">МС</div><h3>Мария Соколова</h3><p>Фотограф экспедиций</p><div class="peaks">40+ походов</div></div></div></div></section>
+
+<section id="gear" style="padding-top:0"><div class="wrap gear"><div data-reveal><span class="eyebrow">Снаряжение</span><h2 style="color:var(--bg)">Чек-лист <em>в рюкзак</em></h2><p class="lead">Отмечайте, что уже собрали. Палатки, кошки и обвязку выдаём бесплатно.</p>
+<div class="bar"><i id="gearbar"></i></div><b id="gearcount">0 из 6 собрано</b></div>
+<div class="list" id="gearlist" data-reveal style="--d:.1s"><label><input type="checkbox">Пуховка с капюшоном</label><label><input type="checkbox">Треккинговые ботинки</label><label><input type="checkbox">Термобельё, 2 комплекта</label><label><input type="checkbox">Солнцезащитные очки категории 4</label><label><input type="checkbox">Налобный фонарь</label><label><input type="checkbox">Спальник до −15 °C</label></div></div></section>
+
+<section style="padding-top:0"><div class="wrap"><span class="eyebrow">Отзывы</span><h2 data-reveal>После <em>гор</em></h2>
+<div class="revs"><div class="rev" data-reveal><p>«Первый раз в высокогорье — и ни разу не было страшно. Гиды знают каждый камень».</p><b>Алина, Астана</b><small>Кольсайские озёра</small></div><div class="rev" data-reveal style="--d:.08s"><p>«Организация уровня лучших европейских компаний. Еда в базовом лагере — отдельная любовь».</p><b>Томас, Мюнхен</b><small>Хан-Тенгри</small></div><div class="rev" data-reveal style="--d:.16s"><p>«Вернулся другим человеком. Уже записался на Памир в следующем году».</p><b>Руслан, Алматы</b><small>Пик Ленина</small></div></div></div></section>
+
+<section id="join" style="padding-top:0"><div class="wrap"><div class="join"><img src="https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&w=1800&q=80" alt="Группа в горах" loading="lazy">
+<div data-reveal><span class="eyebrow">Запись</span><h2>Ваше место <em>в группе</em></h2><p class="lead" style="color:#d6ddd2">Оставьте заявку — гид позвонит, расскажет о маршруте и поможет с подготовкой.</p></div>
+<form class="j" data-form data-success="Заявка принята! Гид позвонит вам сегодня." data-reveal style="--d:.1s"><input class="in" required placeholder="Имя" aria-label="Имя"><input class="in" type="tel" required placeholder="Телефон" aria-label="Телефон"><select class="in" required aria-label="Экспедиция"><option value="">Выберите экспедицию</option><option>Кольсайские озёра</option><option>Ала-Арча и пик Учитель</option><option>Хан-Тенгри: базовый лагерь</option><option>Памирский тракт</option><option>Пик Ленина</option></select><button class="btn" type="submit">Отправить заявку</button></form></div></div></section>
+</main>
+<footer><div class="wrap"><div class="fg"><a href="#" class="logo"><svg viewBox="0 0 34 24" fill="none"><path d="M1 23 12 5l6 9 4-6 11 15H1Z" fill="#ff6b2c"/></svg>Altitude</a><nav><a href="#tours">Экспедиции</a><a href="#guides">Гиды</a><a href="#gear">Снаряжение</a><a href="#" data-copy="go@altitude.kz" data-copied="Почта скопирована">go@altitude.kz</a></nav></div>
+<div class="huge">Altitude</div><div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap"><span>© <span data-year></span> Altitude Expeditions</span><span>Фото: Unsplash · Сделано с Malik AI</span></div></div></footer>
+<dialog id="book"><div class="dlg"><button class="x" data-close aria-label="Закрыть">×</button><span class="eyebrow">Экспедиция</span><h3 data-fill-target>Маршрут</h3><p>Ближайшие даты: 14 ноября, 6 декабря и 12 января. Предоплата 20%, остальное — за 30 дней до старта.</p><form class="j" data-form data-success="Место забронировано! Пришлём программу на почту."><input class="in" required placeholder="Имя" aria-label="Имя"><input class="in" type="email" required placeholder="Email" aria-label="Email"><select class="in" required aria-label="Дата"><option value="">Выберите дату</option><option>14 ноября</option><option>6 декабря</option><option>12 января</option></select><button class="btn" type="submit">Забронировать место</button></form></div></dialog>
+<script id="malik-runtime">
+(function () {
+  var d = document, root = d.documentElement, body = d.body;
+  root.classList.add("js");
+  var preview = /[?&]preview=1/.test(location.search);
+  if (preview) root.classList.add("is-preview");
+  var $ = function (s, c) { return (c || d).querySelector(s) };
+  var $$ = function (s, c) { return Array.prototype.slice.call((c || d).querySelectorAll(s)) };
+
+  /* toast */
+  var toast = d.createElement("div");
+  toast.className = "m-toast"; toast.setAttribute("role", "status"); toast.setAttribute("aria-live", "polite");
+  body.appendChild(toast);
+  var toastTimer;
+  function say(text) {
+    toast.textContent = text; toast.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { toast.classList.remove("show") }, 2600);
+  }
+  window.mSay = say;
+
+  /* header + menu */
+  var header = $("[data-header]");
+  function onScroll() { if (header) header.classList.toggle("scrolled", scrollY > 12) }
+  addEventListener("scroll", onScroll, { passive: true }); onScroll();
+  $$("[data-menu-toggle]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var open = !body.classList.contains("menu-open");
+      body.classList.toggle("menu-open", open); b.setAttribute("aria-expanded", String(open));
+    });
+  });
+  $$("[data-menu] a").forEach(function (a) { a.addEventListener("click", function () { body.classList.remove("menu-open") }) });
+
+  /* anchors: smooth, also inside sandboxed previews */
+  d.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    var id = a.getAttribute("href").slice(1);
+    if (!id) { e.preventDefault(); scrollTo({ top: 0, behavior: "smooth" }); return }
+    var t = d.getElementById(id);
+    if (t) { e.preventDefault(); t.scrollIntoView({ behavior: "smooth", block: "start" }) }
+  });
+
+  /* reveal + counters */
+  var reveal = $$("[data-reveal]"), counters = $$("[data-count]");
+  function count(el) {
+    if (el.dataset.done) return; el.dataset.done = "1";
+    var to = parseFloat(el.dataset.count), dec = +(el.dataset.decimals || 0), pre = el.dataset.prefix || "", suf = el.dataset.suffix || "";
+    var fmt = function (v) { return pre + v.toLocaleString("ru-RU", { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suf };
+    if (preview || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = fmt(to); return }
+    var t0 = performance.now(), dur = 1400;
+    (function step(t) { var p = Math.min(1, (t - t0) / dur); el.textContent = fmt(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step) })(t0);
+  }
+  if ("IntersectionObserver" in window && !preview) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (en) { if (!en.isIntersecting) return; en.target.classList.add("m-in"); if (en.target.dataset.count) count(en.target); io.unobserve(en.target) });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: .08 });
+    reveal.concat(counters).forEach(function (el) { io.observe(el) });
+  } else { reveal.forEach(function (el) { el.classList.add("m-in") }); counters.forEach(count) }
+
+  /* tabs */
+  $$("[data-tabs]").forEach(function (box) {
+    var tabs = $$("[data-tab]", box), panels = $$("[data-panel]", box);
+    function show(name) {
+      tabs.forEach(function (t) { var on = t.dataset.tab === name; t.classList.toggle("active", on); t.setAttribute("aria-selected", String(on)) });
+      panels.forEach(function (p) { p.hidden = p.dataset.panel !== name });
+    }
+    tabs.forEach(function (t) { t.setAttribute("role", "tab"); t.addEventListener("click", function () { show(t.dataset.tab) }) });
+    if (tabs[0]) show((tabs.filter(function (t) { return t.classList.contains("active") })[0] || tabs[0]).dataset.tab);
+  });
+
+  /* accordion */
+  $$("[data-acc] .acc-q").forEach(function (q) {
+    q.setAttribute("aria-expanded", String(q.parentNode.classList.contains("open")));
+    q.addEventListener("click", function () {
+      var item = q.parentNode, open = !item.classList.contains("open");
+      if (item.parentNode.hasAttribute("data-single")) $$(".open", item.parentNode).forEach(function (o) { o.classList.remove("open"); $(".acc-q", o).setAttribute("aria-expanded", "false") });
+      item.classList.toggle("open", open); q.setAttribute("aria-expanded", String(open));
+    });
+  });
+
+  /* billing switch: [data-billing] buttons with data-period; prices carry data-m / data-y */
+  $$("[data-billing]").forEach(function (box) {
+    var btns = $$("[data-period]", box), scope = box.closest("section") || d;
+    function set(p) {
+      btns.forEach(function (b) { b.classList.toggle("active", b.dataset.period === p); b.setAttribute("aria-pressed", String(b.dataset.period === p)) });
+      $$("[data-m]", scope).forEach(function (el) { el.textContent = p === "y" ? el.dataset.y : el.dataset.m });
+      $$("[data-per]", scope).forEach(function (el) { el.textContent = p === "y" ? (el.dataset.perY || "/ мес при оплате за год") : (el.dataset.perM || "/ мес") });
+    }
+    btns.forEach(function (b) { b.addEventListener("click", function () { set(b.dataset.period) }) });
+  });
+
+  /* filters: [data-filters] buttons data-filter; items data-cat within the same section */
+  $$("[data-filters]").forEach(function (box) {
+    var scope = box.closest("section") || d, btns = $$("[data-filter]", box);
+    btns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var f = b.dataset.filter, shown = 0;
+        btns.forEach(function (x) { x.classList.toggle("active", x === b) });
+        $$("[data-cat]", scope).forEach(function (it) { var on = f === "all" || (" " + it.dataset.cat + " ").indexOf(" " + f + " ") > -1; it.hidden = !on; if (on) shown++ });
+        var empty = $("[data-empty]", scope); if (empty) empty.hidden = shown > 0;
+      });
+    });
+  });
+
+  /* dialogs */
+  d.addEventListener("click", function (e) {
+    var o = e.target.closest && e.target.closest("[data-open]");
+    if (o) {
+      var dlg = d.getElementById(o.dataset.open);
+      if (dlg) {
+        e.preventDefault();
+        if (o.dataset.fill) $$("[data-fill-target]", dlg).forEach(function (t) { t.textContent = o.dataset.fill });
+        if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+      }
+      return;
+    }
+    var c = e.target.closest && e.target.closest("[data-close]");
+    if (c) { var dl = c.closest("dialog"); if (dl) dl.close ? dl.close() : dl.removeAttribute("open") }
+  });
+  $$("dialog").forEach(function (dl) { dl.addEventListener("click", function (e) { if (e.target === dl) dl.close() }) });
+
+  /* forms: works without allow-forms too (sandboxed previews) */
+  function submitForm(f) {
+    if (f.reportValidity && !f.reportValidity()) return;
+    say(f.dataset.success || "Готово! Мы свяжемся с вами в ближайшее время.");
+    f.reset(); var dl = f.closest("dialog"); if (dl && dl.close) setTimeout(function () { dl.close() }, 400);
+    f.dispatchEvent(new CustomEvent("m-done"));
+  }
+  $$("form[data-form]").forEach(function (f) {
+    f.addEventListener("submit", function (e) { e.preventDefault(); submitForm(f) });
+    $$('[type="submit"]', f).forEach(function (b) { b.addEventListener("click", function (e) { e.preventDefault(); submitForm(f) }) });
+    f.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); submitForm(f) } });
+  });
+
+  /* cart / wishlist counters */
+  $$("[data-add]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var key = b.dataset.counter || "cart";
+      $$('[data-counter-of="' + key + '"]').forEach(function (c) { c.textContent = String((+c.textContent || 0) + 1); c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump") });
+      say(b.dataset.add);
+    });
+  });
+
+  /* option chips: [data-options] single choice */
+  $$("[data-options]").forEach(function (g) {
+    $$("button", g).forEach(function (b) { b.addEventListener("click", function () { $$("button", g).forEach(function (x) { x.classList.toggle("active", x === b); x.setAttribute("aria-pressed", String(x === b)) }); if (g.dataset.label) { var l = d.getElementById(g.dataset.label); if (l) l.textContent = b.dataset.value || b.textContent } }) });
+  });
+
+  /* quantity steppers + totals: [data-qty] contains [data-dec] [data-val] [data-inc]; data-price; [data-total] in section */
+  function totals(scope) {
+    var sum = 0, n = 0;
+    $$("[data-qty]", scope).forEach(function (q) { var v = +$("[data-val]", q).textContent; sum += v * +q.dataset.price; n += v });
+    $$("[data-total]", scope).forEach(function (t) { t.textContent = Math.round(sum * (1 - (+t.dataset.discount || 0))).toLocaleString("ru-RU") + (t.dataset.total || "") });
+    $$("[data-total-count]", scope).forEach(function (t) { t.textContent = String(n) });
+  }
+  $$("[data-qty]").forEach(function (q) {
+    var scope = q.closest("section") || d, val = $("[data-val]", q), max = +(q.dataset.max || 10);
+    $("[data-inc]", q).addEventListener("click", function () { val.textContent = String(Math.min(max, +val.textContent + 1)); totals(scope) });
+    $("[data-dec]", q).addEventListener("click", function () { val.textContent = String(Math.max(0, +val.textContent - 1)); totals(scope) });
+    totals(scope);
+  });
+
+  /* countdown */
+  $$("[data-countdown]").forEach(function (el) {
+    var end = new Date(el.dataset.countdown).getTime();
+    function tick() {
+      var s = Math.max(0, Math.floor((end - Date.now()) / 1000));
+      var parts = { d: Math.floor(s / 86400), h: Math.floor(s % 86400 / 3600), m: Math.floor(s % 3600 / 60), s: s % 60 };
+      Object.keys(parts).forEach(function (k) { var t = $('[data-cd="' + k + '"]', el); if (t) t.textContent = String(parts[k]).padStart(2, "0") });
+    }
+    tick(); if (!preview) setInterval(tick, 1000);
+  });
+
+  /* copy */
+  $$("[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var text = b.dataset.copy, done = function () { say(b.dataset.copied || "Скопировано") };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done); else done();
+    });
+  });
+
+  /* marquee: duplicate track once so the loop is seamless */
+  $$("[data-marquee]").forEach(function (m) { m.innerHTML += m.innerHTML; m.setAttribute("aria-hidden", "true") });
+
+  /* tilt on pointer */
+  if (!preview && matchMedia("(hover: hover)").matches) $$("[data-tilt]").forEach(function (el) {
+    el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5; el.style.transform = "perspective(900px) rotateY(" + x * 10 + "deg) rotateX(" + -y * 10 + "deg)" });
+    el.addEventListener("pointerleave", function () { el.style.transform = "" });
+  });
+
+  /* spotlight cards follow the pointer */
+  $$("[data-spot]").forEach(function (el) { el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(); el.style.setProperty("--x", e.clientX - r.left + "px"); el.style.setProperty("--y", e.clientY - r.top + "px") }) });
+
+  /* carousels: [data-scroll-target="id"] with data-dir="1|-1" */
+  $$("[data-scroll-target]").forEach(function (b) {
+    b.addEventListener("click", function () { var t = d.getElementById(b.dataset.scrollTarget); if (!t) return; var item = t.firstElementChild, step = item ? item.getBoundingClientRect().width + 16 : t.clientWidth * .8; t.scrollBy({ left: step * (+b.dataset.dir || 1), behavior: "smooth" }) });
+  });
+
+  $$("[data-year]").forEach(function (y) { y.textContent = String(new Date().getFullYear()) });
+  window.mQ = $; window.mQQ = $$;
+})();
+</script>
+<script>
+(function(){var l=document.getElementById("gearlist");if(!l)return;var bs=l.querySelectorAll("input");function u(){var n=0;bs.forEach(function(b){if(b.checked)n++});document.getElementById("gearbar").style.width=n/bs.length*100+"%";document.getElementById("gearcount").textContent=n+" из "+bs.length+" собрано"+(n===bs.length?" — вы готовы! 🏔":"")}l.addEventListener("change",u);u()})();
+</script>
+</body>
+</html>

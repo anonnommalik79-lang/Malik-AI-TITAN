@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forge — деплой за 30 секунд с любого git push</title>
+<meta name="description" content="Forge — облачная платформа для разработчиков: превью на каждый коммит, edge-функции и база данных в одном месте.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style id="malik-base">*,*::before,*::after{box-sizing:border-box}html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}body{margin:0;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden}img{max-width:100%;display:block}button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}a{color:inherit;text-decoration:none}[hidden]{display:none!important}[id]{scroll-margin-top:88px}.js [data-reveal]{opacity:0;transform:translateY(24px);transition:opacity .9s cubic-bezier(.2,.7,.2,1) var(--d,0s),transform .9s cubic-bezier(.2,.7,.2,1) var(--d,0s)}.js [data-reveal].m-in{opacity:1;transform:none}.is-preview *,.is-preview *::before,.is-preview *::after{animation-delay:-60s!important;animation-play-state:paused!important;transition:none!important}.is-preview{scrollbar-width:none}.is-preview::-webkit-scrollbar{display:none}.m-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);opacity:0;z-index:9999;padding:13px 18px;border-radius:14px;background:#0d0d0f;color:#fff;font:500 14px/1.4 system-ui,sans-serif;box-shadow:0 18px 40px rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);transition:.35s cubic-bezier(.2,.7,.2,1);pointer-events:none;max-width:calc(100vw - 32px);text-align:center}.m-toast.show{opacity:1;transform:translate(-50%,0)}dialog{border:0;padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto}dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}.bump{animation:m-bump .4s}@keyframes m-bump{40%{transform:scale(1.4)}}:focus-visible{outline:2px solid currentColor;outline-offset:3px}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}</style>
+<style>
+:root{--bg:#09090b;--fg:#fafafa;--mut:#8d8d96;--line:#1f1f24;--line2:#2a2a31;--amber:#ffb224;--grn:#3ddc84;--mono:"JetBrains Mono",ui-monospace,monospace}
+body{background:var(--bg);color:var(--fg);font-family:Inter,system-ui,sans-serif;line-height:1.6}
+.wrap{width:min(1240px,calc(100% - 40px));margin:0 auto}
+header{position:sticky;top:0;z-index:40;border-bottom:1px solid transparent;transition:.3s}header.scrolled{background:rgba(9,9,11,.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-color:var(--line)}
+.nav{height:64px;display:flex;align-items:center;gap:30px}.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px}.logo svg{width:24px;height:24px}
+.links{display:flex;gap:24px}.links a{color:var(--mut);font-size:14px}.links a:hover{color:#fff}
+.right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 16px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:#fff;font-weight:500;font-size:14px;transition:.2s}.btn:hover{background:#18181c}
+.btn.w{background:#fff;color:#000;border-color:#fff;font-weight:600}.btn.w:hover{background:#e6e6e6}.btn.lg{height:48px;padding:0 22px;font-size:15px}
+.burger{display:none;width:40px;height:40px;border-radius:8px;border:1px solid var(--line2);background:none}.burger span{display:block;width:16px;height:1.5px;background:#fff;margin:4px auto;transition:.3s}
+.hero{position:relative;padding:110px 0 80px;overflow:hidden;border-bottom:1px solid var(--line)}
+.beam{position:absolute;left:50%;top:-200px;width:1100px;height:700px;margin-left:-550px;background:conic-gradient(from 180deg at 50% 0%,transparent 40%,rgba(255,178,36,.25) 47%,rgba(255,255,255,.18) 50%,rgba(255,178,36,.25) 53%,transparent 60%);filter:blur(30px);z-index:-1}
+.dots{position:absolute;inset:0;z-index:-1;background-image:radial-gradient(#2a2a31 1px,transparent 1px);background-size:22px 22px;-webkit-mask-image:linear-gradient(180deg,#000,transparent 85%);mask-image:linear-gradient(180deg,#000,transparent 85%)}
+.tag{font-family:var(--mono);font-size:12.5px;color:var(--amber);border:1px solid rgba(255,178,36,.3);background:rgba(255,178,36,.06);padding:5px 12px;border-radius:999px;display:inline-block}
+h1{font-size:clamp(44px,7.4vw,96px);line-height:.98;letter-spacing:-.055em;font-weight:800;margin:26px 0 24px;max-width:13ch}
+h1 span{background:linear-gradient(180deg,#fff,#9a9aa3);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{font-size:19px;color:var(--mut);max-width:560px;margin:0}
+.row{display:flex;gap:10px;margin-top:34px;flex-wrap:wrap}
+.cmd{display:inline-flex;align-items:center;gap:14px;height:48px;padding:0 8px 0 18px;border:1px solid var(--line2);border-radius:10px;font-family:var(--mono);font-size:14px;background:#0f0f12}.cmd b{color:var(--grn);font-weight:400}
+.cmd button{width:34px;height:34px;border-radius:7px;border:1px solid var(--line2);background:#18181c;color:#fff}
+.term{margin-top:64px;border:1px solid var(--line2);border-radius:14px;background:#0c0c0f;box-shadow:0 40px 100px -40px rgba(255,178,36,.25);overflow:hidden}
+.term-top{height:42px;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line)}.term-top i{width:11px;height:11px;border-radius:50%;background:#2a2a31}.term-top span{margin-left:10px;font-family:var(--mono);font-size:12.5px;color:var(--mut)}
+.log{font-family:var(--mono);font-size:14px;padding:20px 22px;min-height:290px;line-height:1.85}.log div{opacity:0;transform:translateY(4px);transition:.3s;white-space:pre-wrap}.log div.on{opacity:1;transform:none}
+.log .c{color:#6b6b75}.log .g{color:var(--grn)}.log .a{color:var(--amber)}.log .u{color:#7cc4ff;text-decoration:underline}
+.trust{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;padding:36px 0;border-bottom:1px solid var(--line);color:#55555e;font-weight:700;font-size:17px;letter-spacing:-.02em}
+section{padding:110px 0;border-bottom:1px solid var(--line)}.label{font-family:var(--mono);font-size:12.5px;color:var(--amber);text-transform:uppercase;letter-spacing:.12em}
+h2{font-size:clamp(34px,4.8vw,62px);line-height:1.02;letter-spacing:-.05em;font-weight:800;margin:14px 0 16px;max-width:17ch}.lead{color:var(--mut);font-size:18px;max-width:560px;margin:0}
+.grid6{display:grid;grid-template-columns:repeat(3,1fr);margin-top:56px;border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.cell{position:relative;padding:36px 32px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);overflow:hidden;isolation:isolate}
+.cell::before{content:"";position:absolute;inset:0;z-index:-1;opacity:0;transition:.3s;background:radial-gradient(300px circle at var(--x,50%) var(--y,50%),rgba(255,178,36,.1),transparent 60%)}.cell:hover::before{opacity:1}
+.cell .ic{width:40px;height:40px;border-radius:10px;border:1px solid var(--line2);display:grid;place-items:center;margin-bottom:22px;font-family:var(--mono);color:var(--amber);font-weight:700}
+.cell h3{margin:0 0 8px;font-size:18px;letter-spacing:-.02em}.cell p{margin:0;color:var(--mut);font-size:15px}
+.code{display:grid;grid-template-columns:.9fr 1.1fr;gap:50px;align-items:center}
+.ed{border:1px solid var(--line2);border-radius:14px;background:#0c0c0f;overflow:hidden}.ed-tabs{display:flex;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:13px}
+.ed-tabs button{border:0;background:none;color:var(--mut);padding:13px 18px;border-right:1px solid var(--line)}.ed-tabs button.active{color:#fff;background:#121216;box-shadow:inset 0 -2px 0 var(--amber)}
+.ed-tabs .cp{margin-left:auto;border-right:0;border-left:1px solid var(--line);color:#fff}
+pre{margin:0;padding:22px;font-family:var(--mono);font-size:13.5px;line-height:1.75;overflow:auto;color:#d4d4d8}pre .k{color:#ff7ab2}pre .s{color:#a5e075}pre .f{color:#7cc4ff}pre .c{color:#5c5c66}
+.checks{list-style:none;padding:0;margin:28px 0 0;display:grid;gap:12px}.checks li{display:flex;gap:12px;color:#d4d4d8}.checks li::before{content:"→";color:var(--amber);font-family:var(--mono)}
+.edge{display:grid;grid-template-columns:repeat(4,1fr);margin-top:56px;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.edge div{padding:34px 26px;border-right:1px solid var(--line)}.edge div:last-child{border:0}.edge b{display:block;font-size:clamp(34px,4vw,50px);letter-spacing:-.05em;font-weight:800}.edge span{color:var(--mut);font-size:14px}
+.map{position:relative;height:300px;margin-top:20px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background-image:radial-gradient(#26262d 1.2px,transparent 1.2px);background-size:14px 14px}
+.map i{position:absolute;width:10px;height:10px;margin:-5px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 0 rgba(255,178,36,.6);animation:ping 2.4s infinite}@keyframes ping{70%{box-shadow:0 0 0 18px rgba(255,178,36,0)}}
+.map i::after{content:attr(data-l);position:absolute;left:16px;top:-6px;font:500 11.5px var(--mono);color:#cfcfd6;white-space:nowrap}
+.log2{margin-top:50px;border-left:1px solid var(--line2);padding-left:28px;display:grid;gap:34px}.ch{position:relative}.ch::before{content:"";position:absolute;left:-34px;top:8px;width:11px;height:11px;border-radius:50%;background:var(--bg);border:2px solid var(--amber)}
+.ch time{font-family:var(--mono);font-size:12.5px;color:var(--mut)}.ch h3{margin:4px 0 6px;font-size:19px}.ch p{margin:0;color:var(--mut)}
+.switch{display:inline-flex;border:1px solid var(--line2);border-radius:10px;padding:3px;margin-top:24px}.switch button{border:0;background:none;color:var(--mut);height:36px;padding:0 14px;border-radius:7px;font-size:14px}.switch button.active{background:#fff;color:#000;font-weight:600}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);margin-top:40px;border:1px solid var(--line);border-radius:16px;overflow:hidden}.plan{padding:34px;border-right:1px solid var(--line);display:flex;flex-direction:column}.plan:last-child{border:0}
+.plan.pro{background:linear-gradient(180deg,rgba(255,178,36,.08),transparent 60%)}.plan h3{margin:0;font-size:17px}.plan .p{font-size:44px;font-weight:800;letter-spacing:-.05em;margin:14px 0 0}.plan .per{color:var(--mut);font-size:13.5px}
+.plan ul{list-style:none;padding:0;margin:24px 0 30px;display:grid;gap:10px;font-size:14.5px;color:#d4d4d8}.plan li::before{content:"✓ ";color:var(--grn)}.plan .btn{margin-top:auto}
+.cta{text-align:center;border-bottom:0}.cta h2{margin:16px auto}.cta .row{justify-content:center}
+footer{padding:60px 0 36px;color:var(--mut);font-size:14px}.foot{display:grid;grid-template-columns:2fr repeat(3,1fr);gap:30px}.foot h4{color:#fff;margin:0 0 12px;font-size:13.5px}.foot a{display:block;margin:7px 0}.foot a:hover{color:#fff}
+.status{display:inline-flex;align-items:center;gap:8px;margin-top:16px;font-size:13px}.status i{width:8px;height:8px;border-radius:50%;background:var(--grn);box-shadow:0 0 10px var(--grn)}
+dialog{background:#0c0c0f;color:#fff;border:1px solid var(--line2);border-radius:16px}.dlg{padding:30px;position:relative}.dlg h3{margin:0 0 6px;font-size:22px}.dlg p{margin:0 0 20px;color:var(--mut)}
+.field{display:grid;gap:6px;margin-bottom:14px;font-size:13px;color:#d4d4d8}.field input,.field select{height:46px;border:1px solid var(--line2);border-radius:9px;background:#121216;padding:0 14px;outline:none}.field input:focus{border-color:var(--amber)}
+.x{position:absolute;right:14px;top:14px;width:34px;height:34px;border-radius:8px;border:1px solid var(--line2);background:none;color:#fff}
+@media(max-width:980px){.links,.right .btn:not(.w){display:none}.burger{display:block}.grid6,.plans{grid-template-columns:1fr}.plan{border-right:0;border-bottom:1px solid var(--line)}.code{grid-template-columns:1fr}.edge{grid-template-columns:1fr 1fr}.edge div:nth-child(2){border-right:0}.edge div{border-bottom:1px solid var(--line)}.foot{grid-template-columns:1fr 1fr}
+body.menu-open .links{display:flex;position:fixed;inset:64px 0 auto;flex-direction:column;gap:0;padding:8px 20px 20px;background:#09090b;border-bottom:1px solid var(--line)}body.menu-open .links a{padding:14px 0;font-size:17px;color:#fff;border-bottom:1px solid var(--line)}
+body.menu-open .burger span:nth-child(1){transform:translateY(5.5px) rotate(45deg)}body.menu-open .burger span:nth-child(2){opacity:0}body.menu-open .burger span:nth-child(3){transform:translateY(-5.5px) rotate(-45deg)}}
+@media(max-width:560px){.wrap{width:calc(100% - 32px)}section{padding:76px 0}.hero{padding:70px 0 56px}.log{font-size:12px;padding:16px}.cmd{font-size:12.5px;width:100%;justify-content:space-between}.right .btn.w{display:none}.trust{font-size:14px;justify-content:center}.edge b{font-size:30px}.cell{padding:28px 22px}pre{font-size:12px}}
+</style>
+</head>
+<body>
+<header data-header><div class="wrap nav">
+<a href="#" class="logo"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2 22 20H2L12 2Z" fill="#fff"/></svg>Forge</a>
+<nav class="links" data-menu><a href="#platform">Платформа</a><a href="#code">Документация</a><a href="#edge">Edge-сеть</a><a href="#changelog">Обновления</a><a href="#pricing">Цены</a></nav>
+<div class="right"><button class="btn" data-open="login">Войти</button><button class="btn w" data-open="signup">Начать деплой</button><button class="burger" data-menu-toggle aria-label="Меню"><span></span><span></span><span></span></button></div>
+</div></header>
+<main>
+<section class="hero"><div class="beam"></div><div class="dots"></div><div class="wrap">
+<span class="tag" data-reveal>v4.0 · Edge-функции теперь в 34 регионах</span>
+<h1 data-reveal style="--d:.08s"><span>Деплой за 30 секунд. С любого git push.</span></h1>
+<p class="sub" data-reveal style="--d:.16s">Forge собирает, тестирует и раскатывает ваш проект по всему миру. Превью на каждый коммит, откат в один клик, база данных и очереди — без DevOps.</p>
+<div class="row" data-reveal style="--d:.24s"><button class="btn w lg" data-open="signup">Начать бесплатно</button><div class="cmd"><span><b>$</b> npm i -g forge-cli</span><button data-copy="npm i -g forge-cli" data-copied="Команда скопирована" aria-label="Скопировать">⧉</button></div></div>
+<div class="term" data-reveal style="--d:.3s"><div class="term-top"><i></i><i></i><i></i><span>~/shop — forge deploy</span></div>
+<div class="log" id="log"><div><span class="a">$</span> forge deploy --prod</div><div class="c">› Найден проект Next.js · ветка main · коммит 8f3c2a1</div><div>› Установка зависимостей <span class="g">✓ 4.1s</span></div><div>› Сборка 128 страниц <span class="g">✓ 11.8s</span></div><div>› Тесты: 342 пройдено, 0 упало <span class="g">✓</span></div><div>› Раскатка в 34 региона <span class="g">✓ 6.2s</span></div><div class="g">✔ Готово за 24.6s</div><div>  Продакшен: <span class="u">https://shop.forge.app</span></div></div></div>
+</div></section>
+<div class="wrap trust"><span>Kaspian</span><span>Steppe Labs</span><span>Altyn</span><span>Nomad</span><span>Orda Pay</span><span>Silkway</span></div>
+
+<section id="platform"><div class="wrap">
+<span class="label" data-reveal>// Платформа</span><h2 data-reveal>Всё, что нужно продакшену. Ничего лишнего.</h2><p class="lead" data-reveal>Перестаньте собирать инфраструктуру из десяти сервисов. Forge — один инструмент от коммита до пользователя.</p>
+<div class="grid6">
+<div class="cell" data-spot data-reveal><div class="ic">⎇</div><h3>Превью на каждый PR</h3><p>Отдельная ссылка на каждую ветку. Команда и заказчик видят изменения до мержа.</p></div>
+<div class="cell" data-spot data-reveal style="--d:.06s"><div class="ic">λ</div><h3>Edge-функции</h3><p>Код выполняется в ближайшем к пользователю регионе. Холодный старт — 0 мс.</p></div>
+<div class="cell" data-spot data-reveal style="--d:.12s"><div class="ic">◫</div><h3>Postgres в один клик</h3><p>Управляемая база с ветками под каждое превью и бэкапами каждый час.</p></div>
+<div class="cell" data-spot data-reveal><div class="ic">↺</div><h3>Мгновенный откат</h3><p>Любая прошлая версия возвращается за секунду, без пересборки.</p></div>
+<div class="cell" data-spot data-reveal style="--d:.06s"><div class="ic">◎</div><h3>Наблюдаемость</h3><p>Логи, трейсы и метрики Web Vitals — в одном окне, без настройки.</p></div>
+<div class="cell" data-spot data-reveal style="--d:.12s"><div class="ic">⛨</div><h3>Защита из коробки</h3><p>DDoS-защита, WAF и автоматические SSL-сертификаты для всех доменов.</p></div>
+</div></div></section>
+
+<section id="code"><div class="wrap code">
+<div data-reveal><span class="label">// API</span><h2>Три строки до продакшена</h2><p class="lead">SDK для любимого языка. Деплойте из CI, скриптов или прямо из кода.</p><ul class="checks"><li>Типизированный SDK для TypeScript и Python</li><li>REST API с идемпотентными запросами</li><li>Вебхуки на каждое событие деплоя</li></ul></div>
+<div class="ed" data-tabs data-reveal style="--d:.1s"><div class="ed-tabs"><button data-tab="ts" class="active">deploy.ts</button><button data-tab="py">deploy.py</button><button data-tab="sh">curl</button><button class="cp" data-copy="import { Forge } from '@forge/sdk'" data-copied="Код скопирован">Копировать</button></div>
+<pre data-panel="ts"><span class="k">import</span> { Forge } <span class="k">from</span> <span class="s">'@forge/sdk'</span>
+
+<span class="k">const</span> forge = <span class="k">new</span> <span class="f">Forge</span>({ token: process.env.FORGE_TOKEN })
+
+<span class="k">const</span> deploy = <span class="k">await</span> forge.<span class="f">deploy</span>({
+  project: <span class="s">'shop'</span>,
+  target: <span class="s">'production'</span>,
+  regions: [<span class="s">'ala1'</span>, <span class="s">'fra1'</span>, <span class="s">'sin1'</span>],
+})
+<span class="c">// → https://shop.forge.app (24.6s)</span></pre>
+<pre data-panel="py" hidden><span class="k">from</span> forge <span class="k">import</span> Forge
+
+forge = <span class="f">Forge</span>(token=os.environ[<span class="s">"FORGE_TOKEN"</span>])
+
+deploy = forge.<span class="f">deploy</span>(
+    project=<span class="s">"shop"</span>,
+    target=<span class="s">"production"</span>,
+)
+<span class="f">print</span>(deploy.url)  <span class="c"># https://shop.forge.app</span></pre>
+<pre data-panel="sh" hidden>curl -X POST https://api.forge.app/v4/deploys \
+  -H <span class="s">"Authorization: Bearer $FORGE_TOKEN"</span> \
+  -d <span class="s">'{"project":"shop","target":"production"}'</span>
+
+<span class="c"># {"id":"dpl_8f3c2a1","status":"ready","url":"https://shop.forge.app"}</span></pre>
+</div></div></section>
+
+<section id="edge"><div class="wrap">
+<span class="label" data-reveal>// Edge-сеть</span><h2 data-reveal>Быстро для каждого пользователя на планете</h2>
+<div class="edge"><div><b data-count="34">34</b><span>региона по миру</span></div><div><b data-count="18" data-suffix=" мс">18 мс</b><span>средняя задержка</span></div><div><b data-count="99.99" data-decimals="2" data-suffix="%">99,99%</b><span>аптайм по SLA</span></div><div><b data-count="2.4" data-decimals="1" data-suffix=" млрд">2,4 млрд</b><span>запросов в день</span></div></div>
+<div class="map"><i style="left:58%;top:38%" data-l="Алматы"></i><i style="left:49%;top:30%;animation-delay:-.6s" data-l="Франкфурт"></i><i style="left:76%;top:62%;animation-delay:-1.2s" data-l="Сингапур"></i><i style="left:22%;top:36%;animation-delay:-1.8s" data-l="Вирджиния"></i><i style="left:84%;top:40%;animation-delay:-.3s" data-l="Токио"></i><i style="left:30%;top:72%;animation-delay:-.9s" data-l="Сан-Паулу"></i></div>
+</div></section>
+
+<section id="changelog"><div class="wrap"><span class="label">// Обновления</span><h2>Что нового</h2>
+<div class="log2"><div class="ch" data-reveal><time>3 октября</time><h3>Edge-функции в Алматы и Ташкенте</h3><p>Задержка для пользователей Центральной Азии снизилась до 6 мс.</p></div>
+<div class="ch" data-reveal><time>18 сентября</time><h3>Ветки базы данных для превью</h3><p>Каждый PR получает копию базы с реальной схемой и тестовыми данными.</p></div>
+<div class="ch" data-reveal><time>2 сентября</time><h3>Forge AI: разбор упавших сборок</h3><p>ИИ объясняет причину ошибки и предлагает исправление прямо в логах.</p></div></div></div></section>
+
+<section id="pricing" style="text-align:center"><div class="wrap"><span class="label">// Цены</span><h2 style="margin-inline:auto">Платите за рост, а не за старт</h2>
+<div class="switch" data-billing><button data-period="m" class="active">Помесячно</button><button data-period="y">За год −20%</button></div>
+<div class="plans" style="text-align:left">
+<div class="plan"><h3>Hobby</h3><div class="p">$0</div><div class="per">для личных проектов</div><ul><li>Безлимитные деплои</li><li>Превью на каждый PR</li><li>100 ГБ трафика</li></ul><button class="btn" data-open="signup" data-fill="Hobby">Начать бесплатно</button></div>
+<div class="plan pro"><h3>Pro</h3><div class="p" data-m="$20" data-y="$16">$20</div><div class="per" data-per>/ мес за участника</div><ul><li>1 ТБ трафика</li><li>Edge-функции без лимитов</li><li>Postgres и очереди</li><li>Аналитика и алерты</li></ul><button class="btn w" data-open="signup" data-fill="Pro">Попробовать Pro</button></div>
+<div class="plan"><h3>Enterprise</h3><div class="p">Индивидуально</div><div class="per">для больших команд</div><ul><li>SLA 99,99%</li><li>SSO и аудит</li><li>Выделенные регионы</li><li>Инженер поддержки</li></ul><button class="btn" data-open="sales">Связаться</button></div>
+</div></div></section>
+
+<section class="cta"><div class="wrap"><span class="label">// Начать</span><h2>Ваш следующий деплой — через минуту</h2><p class="lead" style="margin:0 auto">Подключите репозиторий GitHub или GitLab. Карта не нужна.</p><div class="row"><button class="btn w lg" data-open="signup">Подключить репозиторий</button><button class="btn lg" data-open="sales">Поговорить с инженером</button></div></div></section>
+</main>
+<footer><div class="wrap foot"><div><a href="#" class="logo" style="color:#fff"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2 22 20H2L12 2Z" fill="#fff"/></svg>Forge</a><div class="status"><i></i>Все системы работают</div></div>
+<div><h4>Продукт</h4><a href="#platform">Платформа</a><a href="#edge">Edge-сеть</a><a href="#pricing">Цены</a></div><div><h4>Разработчикам</h4><a href="#code">Документация</a><a href="#changelog">Обновления</a><a href="#" data-copy="npm i -g forge-cli" data-copied="Команда скопирована">CLI</a></div><div><h4>Компания</h4><a href="#" data-open="sales">О нас</a><a href="#" data-open="sales">Контакты</a><span>© <span data-year></span> Forge</span></div></div></footer>
+<dialog id="signup"><div class="dlg"><button class="x" data-close aria-label="Закрыть">×</button><h3>Создать аккаунт</h3><p>План: <b data-fill-target>Hobby</b></p><form data-form data-success="Аккаунт создан! Подключите первый репозиторий."><label class="field">Почта<input type="email" required placeholder="dev@company.kz"></label><label class="field">Git-провайдер<select required><option value="">Выберите</option><option>GitHub</option><option>GitLab</option><option>Bitbucket</option></select></label><button class="btn w lg" type="submit" style="width:100%">Продолжить</button></form></div></dialog>
+<dialog id="login"><div class="dlg"><button class="x" data-close aria-label="Закрыть">×</button><h3>Вход в Forge</h3><p>Отправим магическую ссылку.</p><form data-form data-success="Ссылка для входа отправлена."><label class="field">Почта<input type="email" required placeholder="dev@company.kz"></label><button class="btn w lg" type="submit" style="width:100%">Получить ссылку</button></form></div></dialog>
+<dialog id="sales"><div class="dlg"><button class="x" data-close aria-label="Закрыть">×</button><h3>Связаться с командой</h3><p>Инженер ответит в течение часа.</p><form data-form data-success="Заявка отправлена. Скоро свяжемся!"><label class="field">Компания<input required placeholder="Название"></label><label class="field">Почта<input type="email" required placeholder="cto@company.kz"></label><button class="btn w lg" type="submit" style="width:100%">Отправить</button></form></div></dialog>
+<script id="malik-runtime">
+(function () {
+  var d = document, root = d.documentElement, body = d.body;
+  root.classList.add("js");
+  var preview = /[?&]preview=1/.test(location.search);
+  if (preview) root.classList.add("is-preview");
+  var $ = function (s, c) { return (c || d).querySelector(s) };
+  var $$ = function (s, c) { return Array.prototype.slice.call((c || d).querySelectorAll(s)) };
+
+  /* toast */
+  var toast = d.createElement("div");
+  toast.className = "m-toast"; toast.setAttribute("role", "status"); toast.setAttribute("aria-live", "polite");
+  body.appendChild(toast);
+  var toastTimer;
+  function say(text) {
+    toast.textContent = text; toast.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { toast.classList.remove("show") }, 2600);
+  }
+  window.mSay = say;
+
+  /* header + menu */
+  var header = $("[data-header]");
+  function onScroll() { if (header) header.classList.toggle("scrolled", scrollY > 12) }
+  addEventListener("scroll", onScroll, { passive: true }); onScroll();
+  $$("[data-menu-toggle]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var open = !body.classList.contains("menu-open");
+      body.classList.toggle("menu-open", open); b.setAttribute("aria-expanded", String(open));
+    });
+  });
+  $$("[data-menu] a").forEach(function (a) { a.addEventListener("click", function () { body.classList.remove("menu-open") }) });
+
+  /* anchors: smooth, also inside sandboxed previews */
+  d.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    var id = a.getAttribute("href").slice(1);
+    if (!id) { e.preventDefault(); scrollTo({ top: 0, behavior: "smooth" }); return }
+    var t = d.getElementById(id);
+    if (t) { e.preventDefault(); t.scrollIntoView({ behavior: "smooth", block: "start" }) }
+  });
+
+  /* reveal + counters */
+  var reveal = $$("[data-reveal]"), counters = $$("[data-count]");
+  function count(el) {
+    if (el.dataset.done) return; el.dataset.done = "1";
+    var to = parseFloat(el.dataset.count), dec = +(el.dataset.decimals || 0), pre = el.dataset.prefix || "", suf = el.dataset.suffix || "";
+    var fmt = function (v) { return pre + v.toLocaleString("ru-RU", { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suf };
+    if (preview || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = fmt(to); return }
+    var t0 = performance.now(), dur = 1400;
+    (function step(t) { var p = Math.min(1, (t - t0) / dur); el.textContent = fmt(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step) })(t0);
+  }
+  if ("IntersectionObserver" in window && !preview) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (en) { if (!en.isIntersecting) return; en.target.classList.add("m-in"); if (en.target.dataset.count) count(en.target); io.unobserve(en.target) });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: .08 });
+    reveal.concat(counters).forEach(function (el) { io.observe(el) });
+  } else { reveal.forEach(function (el) { el.classList.add("m-in") }); counters.forEach(count) }
+
+  /* tabs */
+  $$("[data-tabs]").forEach(function (box) {
+    var tabs = $$("[data-tab]", box), panels = $$("[data-panel]", box);
+    function show(name) {
+      tabs.forEach(function (t) { var on = t.dataset.tab === name; t.classList.toggle("active", on); t.setAttribute("aria-selected", String(on)) });
+      panels.forEach(function (p) { p.hidden = p.dataset.panel !== name });
+    }
+    tabs.forEach(function (t) { t.setAttribute("role", "tab"); t.addEventListener("click", function () { show(t.dataset.tab) }) });
+    if (tabs[0]) show((tabs.filter(function (t) { return t.classList.contains("active") })[0] || tabs[0]).dataset.tab);
+  });
+
+  /* accordion */
+  $$("[data-acc] .acc-q").forEach(function (q) {
+    q.setAttribute("aria-expanded", String(q.parentNode.classList.contains("open")));
+    q.addEventListener("click", function () {
+      var item = q.parentNode, open = !item.classList.contains("open");
+      if (item.parentNode.hasAttribute("data-single")) $$(".open", item.parentNode).forEach(function (o) { o.classList.remove("open"); $(".acc-q", o).setAttribute("aria-expanded", "false") });
+      item.classList.toggle("open", open); q.setAttribute("aria-expanded", String(open));
+    });
+  });
+
+  /* billing switch: [data-billing] buttons with data-period; prices carry data-m / data-y */
+  $$("[data-billing]").forEach(function (box) {
+    var btns = $$("[data-period]", box), scope = box.closest("section") || d;
+    function set(p) {
+      btns.forEach(function (b) { b.classList.toggle("active", b.dataset.period === p); b.setAttribute("aria-pressed", String(b.dataset.period === p)) });
+      $$("[data-m]", scope).forEach(function (el) { el.textContent = p === "y" ? el.dataset.y : el.dataset.m });
+      $$("[data-per]", scope).forEach(function (el) { el.textContent = p === "y" ? (el.dataset.perY || "/ мес при оплате за год") : (el.dataset.perM || "/ мес") });
+    }
+    btns.forEach(function (b) { b.addEventListener("click", function () { set(b.dataset.period) }) });
+  });
+
+  /* filters: [data-filters] buttons data-filter; items data-cat within the same section */
+  $$("[data-filters]").forEach(function (box) {
+    var scope = box.closest("section") || d, btns = $$("[data-filter]", box);
+    btns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var f = b.dataset.filter, shown = 0;
+        btns.forEach(function (x) { x.classList.toggle("active", x === b) });
+        $$("[data-cat]", scope).forEach(function (it) { var on = f === "all" || (" " + it.dataset.cat + " ").indexOf(" " + f + " ") > -1; it.hidden = !on; if (on) shown++ });
+        var empty = $("[data-empty]", scope); if (empty) empty.hidden = shown > 0;
+      });
+    });
+  });
+
+  /* dialogs */
+  d.addEventListener("click", function (e) {
+    var o = e.target.closest && e.target.closest("[data-open]");
+    if (o) {
+      var dlg = d.getElementById(o.dataset.open);
+      if (dlg) {
+        e.preventDefault();
+        if (o.dataset.fill) $$("[data-fill-target]", dlg).forEach(function (t) { t.textContent = o.dataset.fill });
+        if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+      }
+      return;
+    }
+    var c = e.target.closest && e.target.closest("[data-close]");
+    if (c) { var dl = c.closest("dialog"); if (dl) dl.close ? dl.close() : dl.removeAttribute("open") }
+  });
+  $$("dialog").forEach(function (dl) { dl.addEventListener("click", function (e) { if (e.target === dl) dl.close() }) });
+
+  /* forms: works without allow-forms too (sandboxed previews) */
+  function submitForm(f) {
+    if (f.reportValidity && !f.reportValidity()) return;
+    say(f.dataset.success || "Готово! Мы свяжемся с вами в ближайшее время.");
+    f.reset(); var dl = f.closest("dialog"); if (dl && dl.close) setTimeout(function () { dl.close() }, 400);
+    f.dispatchEvent(new CustomEvent("m-done"));
+  }
+  $$("form[data-form]").forEach(function (f) {
+    f.addEventListener("submit", function (e) { e.preventDefault(); submitForm(f) });
+    $$('[type="submit"]', f).forEach(function (b) { b.addEventListener("click", function (e) { e.preventDefault(); submitForm(f) }) });
+    f.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); submitForm(f) } });
+  });
+
+  /* cart / wishlist counters */
+  $$("[data-add]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var key = b.dataset.counter || "cart";
+      $$('[data-counter-of="' + key + '"]').forEach(function (c) { c.textContent = String((+c.textContent || 0) + 1); c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump") });
+      say(b.dataset.add);
+    });
+  });
+
+  /* option chips: [data-options] single choice */
+  $$("[data-options]").forEach(function (g) {
+    $$("button", g).forEach(function (b) { b.addEventListener("click", function () { $$("button", g).forEach(function (x) { x.classList.toggle("active", x === b); x.setAttribute("aria-pressed", String(x === b)) }); if (g.dataset.label) { var l = d.getElementById(g.dataset.label); if (l) l.textContent = b.dataset.value || b.textContent } }) });
+  });
+
+  /* quantity steppers + totals: [data-qty] contains [data-dec] [data-val] [data-inc]; data-price; [data-total] in section */
+  function totals(scope) {
+    var sum = 0, n = 0;
+    $$("[data-qty]", scope).forEach(function (q) { var v = +$("[data-val]", q).textContent; sum += v * +q.dataset.price; n += v });
+    $$("[data-total]", scope).forEach(function (t) { t.textContent = Math.round(sum * (1 - (+t.dataset.discount || 0))).toLocaleString("ru-RU") + (t.dataset.total || "") });
+    $$("[data-total-count]", scope).forEach(function (t) { t.textContent = String(n) });
+  }
+  $$("[data-qty]").forEach(function (q) {
+    var scope = q.closest("section") || d, val = $("[data-val]", q), max = +(q.dataset.max || 10);
+    $("[data-inc]", q).addEventListener("click", function () { val.textContent = String(Math.min(max, +val.textContent + 1)); totals(scope) });
+    $("[data-dec]", q).addEventListener("click", function () { val.textContent = String(Math.max(0, +val.textContent - 1)); totals(scope) });
+    totals(scope);
+  });
+
+  /* countdown */
+  $$("[data-countdown]").forEach(function (el) {
+    var end = new Date(el.dataset.countdown).getTime();
+    function tick() {
+      var s = Math.max(0, Math.floor((end - Date.now()) / 1000));
+      var parts = { d: Math.floor(s / 86400), h: Math.floor(s % 86400 / 3600), m: Math.floor(s % 3600 / 60), s: s % 60 };
+      Object.keys(parts).forEach(function (k) { var t = $('[data-cd="' + k + '"]', el); if (t) t.textContent = String(parts[k]).padStart(2, "0") });
+    }
+    tick(); if (!preview) setInterval(tick, 1000);
+  });
+
+  /* copy */
+  $$("[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var text = b.dataset.copy, done = function () { say(b.dataset.copied || "Скопировано") };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done); else done();
+    });
+  });
+
+  /* marquee: duplicate track once so the loop is seamless */
+  $$("[data-marquee]").forEach(function (m) { m.innerHTML += m.innerHTML; m.setAttribute("aria-hidden", "true") });
+
+  /* tilt on pointer */
+  if (!preview && matchMedia("(hover: hover)").matches) $$("[data-tilt]").forEach(function (el) {
+    el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5; el.style.transform = "perspective(900px) rotateY(" + x * 10 + "deg) rotateX(" + -y * 10 + "deg)" });
+    el.addEventListener("pointerleave", function () { el.style.transform = "" });
+  });
+
+  /* spotlight cards follow the pointer */
+  $$("[data-spot]").forEach(function (el) { el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(); el.style.setProperty("--x", e.clientX - r.left + "px"); el.style.setProperty("--y", e.clientY - r.top + "px") }) });
+
+  /* carousels: [data-scroll-target="id"] with data-dir="1|-1" */
+  $$("[data-scroll-target]").forEach(function (b) {
+    b.addEventListener("click", function () { var t = d.getElementById(b.dataset.scrollTarget); if (!t) return; var item = t.firstElementChild, step = item ? item.getBoundingClientRect().width + 16 : t.clientWidth * .8; t.scrollBy({ left: step * (+b.dataset.dir || 1), behavior: "smooth" }) });
+  });
+
+  $$("[data-year]").forEach(function (y) { y.textContent = String(new Date().getFullYear()) });
+  window.mQ = $; window.mQQ = $$;
+})();
+</script>
+<script>
+(function(){var lines=[].slice.call(document.querySelectorAll("#log div"));if(document.documentElement.classList.contains("is-preview")){lines.forEach(function(l){l.classList.add("on")});return}
+var i=0;function next(){if(i<lines.length){lines[i++].classList.add("on");setTimeout(next,i<2?500:700)}else setTimeout(function(){lines.forEach(function(l){l.classList.remove("on")});i=0;setTimeout(next,600)},5000)}setTimeout(next,700)})();
+</script>
+</body>
+</html>

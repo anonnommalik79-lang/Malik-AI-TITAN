@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Azure Cove — курорт у моря</title>
+<meta name="description" content="Azure Cove: виллы у океана, инфинити-бассейн, спа и кухня из местных продуктов. Бронирование напрямую — лучшая цена.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Forum&family=Raleway:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style id="malik-base">*,*::before,*::after{box-sizing:border-box}html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}body{margin:0;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden}img{max-width:100%;display:block}button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}a{color:inherit;text-decoration:none}[hidden]{display:none!important}[id]{scroll-margin-top:88px}.js [data-reveal]{opacity:0;transform:translateY(24px);transition:opacity .9s cubic-bezier(.2,.7,.2,1) var(--d,0s),transform .9s cubic-bezier(.2,.7,.2,1) var(--d,0s)}.js [data-reveal].m-in{opacity:1;transform:none}.is-preview *,.is-preview *::before,.is-preview *::after{animation-delay:-60s!important;animation-play-state:paused!important;transition:none!important}.is-preview{scrollbar-width:none}.is-preview::-webkit-scrollbar{display:none}.m-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);opacity:0;z-index:9999;padding:13px 18px;border-radius:14px;background:#0d0d0f;color:#fff;font:500 14px/1.4 system-ui,sans-serif;box-shadow:0 18px 40px rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);transition:.35s cubic-bezier(.2,.7,.2,1);pointer-events:none;max-width:calc(100vw - 32px);text-align:center}.m-toast.show{opacity:1;transform:translate(-50%,0)}dialog{border:0;padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto}dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}.bump{animation:m-bump .4s}@keyframes m-bump{40%{transform:scale(1.4)}}:focus-visible{outline:2px solid currentColor;outline-offset:3px}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}</style>
+<style>
+:root{--bg:#f7f3ec;--fg:#0f2d38;--mut:#5e7178;--sea:#1d6f84;--sand:#e8dcc8;--line:#ddd3c3}
+body{background:var(--bg);color:var(--fg);font-family:Raleway,system-ui,sans-serif;line-height:1.7}
+h1,h2,h3,.fm{font-family:Forum,Georgia,serif;font-weight:400}
+.wrap{width:min(1280px,calc(100% - 48px));margin:0 auto}
+.cap{text-transform:uppercase;letter-spacing:.3em;font-size:11.5px;font-weight:500}
+header{position:fixed;inset:0 0 auto;z-index:50;color:#fff;transition:.4s}header.scrolled{background:rgba(247,243,236,.94);color:var(--fg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 1px 0 var(--line)}
+.nav{height:90px;display:flex;align-items:center;gap:34px}.logo{font-family:Forum;font-size:28px;letter-spacing:.24em;text-transform:uppercase;line-height:1}.logo small{display:block;font-family:Raleway;font-size:9px;letter-spacing:.5em;margin-top:5px;opacity:.8}
+.links{display:flex;gap:28px;margin-left:auto;font-size:14px;font-weight:500}.links a{opacity:.9}.links a:hover{opacity:1;text-decoration:underline;text-underline-offset:6px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:54px;padding:0 32px;background:var(--fg);color:#fff;border:1px solid var(--fg);font-size:12px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;transition:.3s;border-radius:0}.btn:hover{background:var(--sea);border-color:var(--sea)}
+.btn.lt{background:#fff;color:var(--fg);border-color:#fff}.btn.lt:hover{background:transparent;color:#fff}
+.btn.ln{background:transparent;color:var(--fg)}.btn.ln:hover{background:var(--fg);color:#fff}
+header .btn{background:transparent;border-color:currentColor;color:inherit;height:46px;padding:0 22px}header .btn:hover{background:#fff;color:var(--fg)}header.scrolled .btn:hover{background:var(--fg);color:#fff}
+.burger{display:none;margin-left:auto;width:44px;height:44px;border:1px solid currentColor;background:none;color:inherit}.burger span{display:block;width:18px;height:1px;background:currentColor;margin:5px auto;transition:.3s}
+.hero{position:relative;height:100vh;min-height:640px;color:#fff;display:flex;align-items:flex-end;padding-bottom:150px;overflow:hidden}
+.hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;animation:kb 22s ease-out forwards;transform:scale(1.12)}@keyframes kb{to{transform:scale(1)}}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,45,56,.45),transparent 30%,transparent 50%,rgba(15,45,56,.7))}
+.hero .wrap{position:relative;z-index:2}h1{font-size:clamp(56px,9.6vw,150px);line-height:.92;margin:16px 0 18px;max-width:11ch}.hero p{max-width:480px;font-size:18px;margin:0;opacity:.92}
+.book{position:absolute;left:50%;bottom:-1px;transform:translateX(-50%);z-index:3;width:min(1100px,calc(100% - 48px));background:#fff;color:var(--fg);display:grid;grid-template-columns:repeat(3,1fr) auto;box-shadow:0 30px 60px -30px rgba(15,45,56,.5)}
+.book label{display:grid;gap:4px;padding:18px 24px;border-right:1px solid var(--line)}.book span{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--mut);font-weight:600}
+.book input,.book select{border:0;background:none;font-family:Forum;font-size:22px;color:var(--fg);outline:none;padding:0;width:100%}.book .btn{height:auto;min-height:80px}
+section{padding:130px 0}.cen{text-align:center;max-width:760px;margin:0 auto}.cen .cap,.lbl{color:var(--sea)}h2{font-size:clamp(42px,5.6vw,84px);line-height:1;margin:18px 0 20px}.lead{color:var(--mut);font-size:18px;margin:0}
+.intro{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}.intro .pics{position:relative;height:620px}.intro .pics img{position:absolute;object-fit:cover}.intro .p1{left:0;top:0;width:72%;height:80%}.intro .p2{right:0;bottom:0;width:52%;height:52%;border:10px solid var(--bg)}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);margin-top:40px;border-top:1px solid var(--line)}.facts div{padding:24px 0}.facts b{display:block;font-family:Forum;font-size:46px;line-height:1;color:var(--sea);font-weight:400}.facts span{font-size:13.5px;color:var(--mut)}
+.rooms{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:60px}.room .ph{position:relative;aspect-ratio:4/5;overflow:hidden}.room img{width:100%;height:100%;object-fit:cover;transition:1.4s cubic-bezier(.2,.7,.2,1)}.room:hover img{transform:scale(1.07)}
+.room .tag{position:absolute;left:16px;top:16px;background:rgba(247,243,236,.92);padding:6px 12px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;font-weight:600}
+.room h3{font-size:32px;margin:22px 0 6px}.room ul{list-style:none;padding:0;margin:0 0 18px;display:flex;gap:16px;flex-wrap:wrap;color:var(--mut);font-size:14px}.room .ft{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:16px;gap:12px}.room .pr{font-family:Forum;font-size:26px}.room .pr small{font-family:Raleway;font-size:13px;color:var(--mut)}
+.room .ft button{background:none;border:0;border-bottom:1px solid var(--fg);padding:4px 0;font-size:12px;letter-spacing:.18em;text-transform:uppercase;font-weight:600}
+.exp{background:var(--fg);color:#f7f3ec}.exp .lead{color:#a9bfc4}.exps{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(247,243,236,.12);margin-top:60px;border:1px solid rgba(247,243,236,.12)}
+.ex{background:var(--fg);padding:40px 30px;transition:.4s}.ex:hover{background:#13414f}.ex .n{font-family:Forum;font-size:16px;color:#8fd0de}.ex h3{font-size:28px;margin:60px 0 10px}.ex p{margin:0;color:#a9bfc4;font-size:15px}
+.strip{display:flex;gap:16px;width:max-content;animation:mq 50s linear infinite}.strip img{height:340px;width:auto;aspect-ratio:4/3;object-fit:cover}@keyframes mq{to{transform:translateX(-50%)}}
+.quote{max-width:900px;margin:0 auto;text-align:center}.quote p{font-family:Forum;font-size:clamp(28px,3.4vw,44px);line-height:1.3;margin:0}.quote cite{display:block;margin-top:24px;font-style:normal;color:var(--mut)}.stars{color:var(--sea);letter-spacing:6px;margin-bottom:20px}
+.faq{max-width:900px;margin:50px auto 0}.acc{border-bottom:1px solid var(--line)}.acc-q{width:100%;background:none;border:0;display:flex;justify-content:space-between;gap:20px;padding:26px 0;font-family:Forum;font-size:26px;text-align:left}.acc-q::after{content:"+";font-family:Raleway;font-weight:300;font-size:28px;transition:.3s}.acc.open .acc-q::after{transform:rotate(45deg)}
+.acc-a{display:grid;grid-template-rows:0fr;transition:.4s}.acc.open .acc-a{grid-template-rows:1fr}.acc-a>div{overflow:hidden;color:var(--mut)}.acc-a p{margin:0 0 26px}
+.cta{position:relative;min-height:600px;display:grid;place-items:center;text-align:center;color:#fff;overflow:hidden}.cta img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.cta::after{content:"";position:absolute;inset:0;background:rgba(15,45,56,.5)}.cta .in{position:relative;z-index:2;padding:0 20px}
+footer{background:var(--fg);color:#a9bfc4;padding:80px 0 36px;font-size:14px}.fg{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:34px}.fg h4{color:#fff;font-family:Forum;font-weight:400;font-size:22px;margin:0 0 14px}.fg a{display:block;margin:8px 0}.fg a:hover{color:#fff}
+dialog{background:var(--bg);color:var(--fg)}.dlg{padding:40px;position:relative}.dlg h3{font-size:38px;margin:6px 0 10px}.dlg p{color:var(--mut);margin:0 0 20px}
+.sum{background:#fff;padding:20px 22px;margin:0 0 20px;display:grid;gap:8px;font-size:15px}.sum div{display:flex;justify-content:space-between}.sum b{font-family:Forum;font-size:28px;font-weight:400}
+.field{display:grid;gap:6px;margin-bottom:14px}.field span{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--mut);font-weight:600}.field input,.field select{height:52px;border:0;border-bottom:1px solid var(--fg);background:none;font-size:17px;outline:none}
+.x{position:absolute;right:16px;top:16px;width:42px;height:42px;border:1px solid var(--line);background:none;font-size:22px;color:var(--fg)}
+@media(max-width:1020px){.links,.nav>.btn{display:none}.burger{display:block}.intro{grid-template-columns:1fr;gap:50px}.intro .pics{height:480px}.rooms{grid-template-columns:1fr 1fr}.exps{grid-template-columns:1fr 1fr}.fg{grid-template-columns:1fr 1fr}
+.book{position:relative;left:auto;bottom:auto;transform:none;width:auto;grid-template-columns:1fr 1fr;margin:0}.book label:nth-child(2){border-right:0}.book label{border-bottom:1px solid var(--line)}.book .btn{grid-column:1/-1;min-height:62px}.hero{padding-bottom:60px}
+body.menu-open header{background:var(--bg);color:var(--fg)}body.menu-open .links{display:flex;position:fixed;inset:90px 0 auto;flex-direction:column;gap:0;margin:0;background:var(--bg);padding:10px 24px 30px;box-shadow:0 20px 30px -20px rgba(0,0,0,.3)}body.menu-open .links a{padding:15px 0;border-bottom:1px solid var(--line);font-family:Forum;font-size:24px}
+body.menu-open .burger span:nth-child(1){transform:translateY(6px) rotate(45deg)}body.menu-open .burger span:nth-child(2){opacity:0}body.menu-open .burger span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}}
+@media(max-width:620px){.wrap{width:calc(100% - 32px)}section{padding:90px 0}.rooms,.exps,.fg{grid-template-columns:1fr}.book{grid-template-columns:1fr}.book label{border-right:0}.intro .pics{height:380px}.facts b{font-size:36px}.strip img{height:220px}}
+</style>
+</head>
+<body>
+<header data-header><div class="wrap nav"><a href="#" class="logo">Azure Cove<small>Resort &amp; Spa</small></a>
+<nav class="links" data-menu><a href="#resort">Курорт</a><a href="#villas">Виллы</a><a href="#experiences">Впечатления</a><a href="#faq">Информация</a></nav>
+<a href="#villas" class="btn">Забронировать</a><button class="burger" data-menu-toggle aria-label="Меню"><span></span><span></span><span></span></button></div></header>
+<main>
+<section class="hero" style="padding-top:0"><img src="https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=2200&q=80" alt="Инфинити-бассейн с видом на море" fetchpriority="high">
+<div class="wrap"><span class="cap" data-reveal>Остров · 42 виллы у океана</span><h1 data-reveal style="--d:.1s">Время, которое замедляется</h1><p data-reveal style="--d:.2s">Виллы с собственным бассейном, рифы в пяти минутах от террасы и закаты, ради которых стоит перелететь полмира.</p></div>
+<form class="book" id="booking" data-js onsubmit="return false"><label><span>Заезд</span><input type="date" id="in" required></label><label><span>Выезд</span><input type="date" id="out" required></label><label><span>Гости</span><select id="guests"><option>2 взрослых</option><option>2 взрослых · 1 ребёнок</option><option>2 взрослых · 2 детей</option><option>4 взрослых</option></select></label><button class="btn" type="button" id="check">Проверить даты</button></form></section>
+
+<section id="resort"><div class="wrap intro">
+<div class="pics" data-reveal><img class="p1" src="https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=900&h=1000&q=80" alt="Тропический бассейн курорта" loading="lazy"><img class="p2" src="https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=700&h=600&q=80" alt="Терраса с видом на море" loading="lazy"></div>
+<div data-reveal style="--d:.1s"><span class="cap lbl">Добро пожаловать</span><h2>Ваш дом на краю океана</h2><p class="lead">Azure Cove построен вокруг природы: виллы стоят там, где росли пальмы, а риф у берега охраняется вместе с морскими биологами. Здесь нет спешки — только солнце, вода и забота.</p>
+<div class="facts"><div><b data-count="42">42</b><span>виллы с бассейнами</span></div><div><b data-count="3">3</b><span>ресторана</span></div><div><b data-count="1">1</b><span>частный риф</span></div></div>
+<button class="btn ln" style="margin-top:30px" data-open="tour">Виртуальный тур</button></div></div></section>
+
+<section id="villas" style="padding-top:0"><div class="wrap"><div class="cen"><span class="cap">Виллы</span><h2>Выберите свой берег</h2><p class="lead">Все виллы с завтраком, трансфером из аэропорта и персональным хостом.</p></div>
+<div class="rooms">
+<article class="room" data-reveal><div class="ph"><img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&h=1000&q=80" alt="Вилла в саду" loading="lazy"><span class="tag">Садовая</span></div><h3>Garden Pool Villa</h3><ul><li>110 м²</li><li>до 3 гостей</li><li>бассейн 8 м</li></ul><div class="ft"><span class="pr">от 420 000 ₸ <small>/ ночь</small></span><button data-open="reserve" data-fill="Garden Pool Villa">Выбрать</button></div></article>
+<article class="room" data-reveal style="--d:.08s"><div class="ph"><img src="https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=800&h=1000&q=80" alt="Вилла на берегу" loading="lazy"><span class="tag">Хит</span></div><h3>Ocean Front Villa</h3><ul><li>160 м²</li><li>до 4 гостей</li><li>выход к пляжу</li></ul><div class="ft"><span class="pr">от 640 000 ₸ <small>/ ночь</small></span><button data-open="reserve" data-fill="Ocean Front Villa">Выбрать</button></div></article>
+<article class="room" data-reveal style="--d:.16s"><div class="ph"><img src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&h=1000&q=80" alt="Резиденция ночью" loading="lazy"><span class="tag">Резиденция</span></div><h3>Sunset Residence</h3><ul><li>320 м²</li><li>до 8 гостей</li><li>шеф и дворецкий</li></ul><div class="ft"><span class="pr">от 1 350 000 ₸ <small>/ ночь</small></span><button data-open="reserve" data-fill="Sunset Residence">Выбрать</button></div></article>
+</div></div></section>
+
+<section id="experiences" class="exp"><div class="wrap"><span class="cap" style="color:#8fd0de">Впечатления</span><h2 data-reveal>Каждый день — новый</h2><p class="lead" data-reveal>Хост составит программу под ваше настроение. Или просто оставит вас в покое.</p>
+<div class="exps"><div class="ex" data-reveal><span class="n">01</span><h3>Риф на рассвете</h3><p>Снорклинг с морским биологом, черепахи и скаты.</p></div><div class="ex" data-reveal style="--d:.08s"><span class="n">02</span><h3>Спа над водой</h3><p>Ритуалы с кокосовым маслом и солью океана.</p></div><div class="ex" data-reveal style="--d:.16s"><span class="n">03</span><h3>Ужин на песчаной косе</h3><p>Стол на двоих посреди лагуны при свечах.</p></div><div class="ex" data-reveal style="--d:.24s"><span class="n">04</span><h3>Закат на катамаране</h3><p>Шампанское, дельфины и розовое небо.</p></div></div></div></section>
+
+<div style="overflow:hidden;padding:16px 0 0"><div class="strip" aria-hidden="true"><img src="https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=600&h=450&q=80" alt="" loading="lazy"><img src="https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=600&h=450&q=80" alt="" loading="lazy"><img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=600&h=450&q=80" alt="" loading="lazy"><img src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=600&h=450&q=80" alt="" loading="lazy"><img src="https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&h=450&q=80" alt="" loading="lazy"><img src="https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=600&h=450&q=80" alt="" loading="lazy"><img src="https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=600&h=450&q=80" alt="" loading="lazy"><img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=600&h=450&q=80" alt="" loading="lazy"><img src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=600&h=450&q=80" alt="" loading="lazy"><img src="https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=600&h=450&q=80" alt="" loading="lazy"></div></div>
+
+<section><div class="wrap quote" data-reveal><div class="stars">★★★★★</div><p>«Мы объездили много курортов, но только здесь персонал помнил, какой кофе мы пьём, уже на второй день. Вернёмся обязательно».</p><cite class="cap">Асель и Ержан · медовый месяц</cite></div></section>
+
+<section id="faq" style="padding-top:0"><div class="wrap"><div class="cen"><span class="cap">Информация</span><h2>Перед поездкой</h2></div>
+<div class="faq" data-acc data-single>
+<div class="acc open"><button class="acc-q">Как добраться до курорта?</button><div class="acc-a"><div><p>Трансфер на гидросамолёте из международного аэропорта — 35 минут. Он включён в стоимость проживания.</p></div></div></div>
+<div class="acc"><button class="acc-q">Что входит в стоимость?</button><div class="acc-a"><div><p>Завтраки, трансфер, снорклинг-снаряжение, йога на рассвете и персональный хост на всё время пребывания.</p></div></div></div>
+<div class="acc"><button class="acc-q">Можно ли отменить бронь?</button><div class="acc-a"><div><p>Бесплатная отмена за 30 дней до заезда. При бронировании напрямую — гибкая смена дат.</p></div></div></div>
+<div class="acc"><button class="acc-q">Подходит ли курорт для детей?</button><div class="acc-a"><div><p>Да: детский клуб, мелкая лагуна и няни по запросу. Для взрослых — отдельный тихий пляж.</p></div></div></div></div></div></section>
+
+<section class="cta"><img src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=2000&q=80" alt="Курорт вечером" loading="lazy"><div class="in" data-reveal><span class="cap">Бронирование напрямую</span><h2>Лучшая цена — только здесь</h2><p style="max-width:460px;margin:0 auto 32px;opacity:.92">Бесплатный ужин на косе при бронировании от 5 ночей.</p><a href="#booking" class="btn lt">Выбрать даты</a></div></section>
+</main>
+<footer><div class="wrap fg"><div><a href="#" class="logo" style="color:#fff">Azure Cove<small>Resort &amp; Spa</small></a><p style="max-width:280px;margin-top:18px">Остров в Индийском океане. Курорт-участник программы охраны рифов.</p></div><div><h4>Курорт</h4><a href="#villas">Виллы</a><a href="#experiences">Впечатления</a><a href="#" data-open="tour">Виртуальный тур</a></div><div><h4>Гостям</h4><a href="#faq">Информация</a><a href="#" data-open="reserve">Бронирование</a><a href="#" data-open="gift">Подарочный сертификат</a></div><div><h4>Связь</h4><a href="#" data-copy="stay@azurecove.com" data-copied="Почта скопирована">stay@azurecove.com</a><a href="#" data-copy="+960 400 2026" data-copied="Номер скопирован">+960 400 2026</a><span>© <span data-year></span> · Сделано с Malik AI</span></div></div></footer>
+<dialog id="reserve"><div class="dlg"><button class="x" data-close aria-label="Закрыть">×</button><span class="cap lbl">Бронирование</span><h3 data-fill-target>Ocean Front Villa</h3>
+<div class="sum"><div>Даты<span id="sumDates">выберите на главном экране</span></div><div>Ночей<span id="sumNights">—</span></div><div>Итого от<b id="sumTotal">—</b></div></div>
+<form data-form data-success="Запрос отправлен! Хост подтвердит бронь в течение часа."><label class="field"><span>Имя</span><input required></label><label class="field"><span>Email</span><input type="email" required></label><button class="btn" type="submit" style="width:100%">Запросить бронь</button></form></div></dialog>
+<dialog id="tour"><div class="dlg"><button class="x" data-close aria-label="Закрыть">×</button><h3>Виртуальный тур</h3><p>Пришлём ссылку на 3D-тур по виллам и территории курорта.</p><form data-form data-success="Ссылка на тур отправлена на почту."><label class="field"><span>Email</span><input type="email" required></label><button class="btn" type="submit" style="width:100%">Получить ссылку</button></form></div></dialog>
+<dialog id="gift"><div class="dlg"><button class="x" data-close aria-label="Закрыть">×</button><h3>Подарочный сертификат</h3><p>Ночи на курорте или спа-ритуал — красивая открытка придёт на почту.</p><form data-form data-success="Сертификат оформлен!"><label class="field"><span>Номинал</span><select required><option value="">Выберите</option><option>1 ночь в Garden Villa</option><option>Спа-ритуал на двоих</option><option>Ужин на песчаной косе</option></select></label><label class="field"><span>Email</span><input type="email" required></label><button class="btn" type="submit" style="width:100%">Оформить</button></form></div></dialog>
+<script id="malik-runtime">
+(function () {
+  var d = document, root = d.documentElement, body = d.body;
+  root.classList.add("js");
+  var preview = /[?&]preview=1/.test(location.search);
+  if (preview) root.classList.add("is-preview");
+  var $ = function (s, c) { return (c || d).querySelector(s) };
+  var $$ = function (s, c) { return Array.prototype.slice.call((c || d).querySelectorAll(s)) };
+
+  /* toast */
+  var toast = d.createElement("div");
+  toast.className = "m-toast"; toast.setAttribute("role", "status"); toast.setAttribute("aria-live", "polite");
+  body.appendChild(toast);
+  var toastTimer;
+  function say(text) {
+    toast.textContent = text; toast.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { toast.classList.remove("show") }, 2600);
+  }
+  window.mSay = say;
+
+  /* header + menu */
+  var header = $("[data-header]");
+  function onScroll() { if (header) header.classList.toggle("scrolled", scrollY > 12) }
+  addEventListener("scroll", onScroll, { passive: true }); onScroll();
+  $$("[data-menu-toggle]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var open = !body.classList.contains("menu-open");
+      body.classList.toggle("menu-open", open); b.setAttribute("aria-expanded", String(open));
+    });
+  });
+  $$("[data-menu] a").forEach(function (a) { a.addEventListener("click", function () { body.classList.remove("menu-open") }) });
+
+  /* anchors: smooth, also inside sandboxed previews */
+  d.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    var id = a.getAttribute("href").slice(1);
+    if (!id) { e.preventDefault(); scrollTo({ top: 0, behavior: "smooth" }); return }
+    var t = d.getElementById(id);
+    if (t) { e.preventDefault(); t.scrollIntoView({ behavior: "smooth", block: "start" }) }
+  });
+
+  /* reveal + counters */
+  var reveal = $$("[data-reveal]"), counters = $$("[data-count]");
+  function count(el) {
+    if (el.dataset.done) return; el.dataset.done = "1";
+    var to = parseFloat(el.dataset.count), dec = +(el.dataset.decimals || 0), pre = el.dataset.prefix || "", suf = el.dataset.suffix || "";
+    var fmt = function (v) { return pre + v.toLocaleString("ru-RU", { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suf };
+    if (preview || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = fmt(to); return }
+    var t0 = performance.now(), dur = 1400;
+    (function step(t) { var p = Math.min(1, (t - t0) / dur); el.textContent = fmt(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step) })(t0);
+  }
+  if ("IntersectionObserver" in window && !preview) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (en) { if (!en.isIntersecting) return; en.target.classList.add("m-in"); if (en.target.dataset.count) count(en.target); io.unobserve(en.target) });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: .08 });
+    reveal.concat(counters).forEach(function (el) { io.observe(el) });
+  } else { reveal.forEach(function (el) { el.classList.add("m-in") }); counters.forEach(count) }
+
+  /* tabs */
+  $$("[data-tabs]").forEach(function (box) {
+    var tabs = $$("[data-tab]", box), panels = $$("[data-panel]", box);
+    function show(name) {
+      tabs.forEach(function (t) { var on = t.dataset.tab === name; t.classList.toggle("active", on); t.setAttribute("aria-selected", String(on)) });
+      panels.forEach(function (p) { p.hidden = p.dataset.panel !== name });
+    }
+    tabs.forEach(function (t) { t.setAttribute("role", "tab"); t.addEventListener("click", function () { show(t.dataset.tab) }) });
+    if (tabs[0]) show((tabs.filter(function (t) { return t.classList.contains("active") })[0] || tabs[0]).dataset.tab);
+  });
+
+  /* accordion */
+  $$("[data-acc] .acc-q").forEach(function (q) {
+    q.setAttribute("aria-expanded", String(q.parentNode.classList.contains("open")));
+    q.addEventListener("click", function () {
+      var item = q.parentNode, open = !item.classList.contains("open");
+      if (item.parentNode.hasAttribute("data-single")) $$(".open", item.parentNode).forEach(function (o) { o.classList.remove("open"); $(".acc-q", o).setAttribute("aria-expanded", "false") });
+      item.classList.toggle("open", open); q.setAttribute("aria-expanded", String(open));
+    });
+  });
+
+  /* billing switch: [data-billing] buttons with data-period; prices carry data-m / data-y */
+  $$("[data-billing]").forEach(function (box) {
+    var btns = $$("[data-period]", box), scope = box.closest("section") || d;
+    function set(p) {
+      btns.forEach(function (b) { b.classList.toggle("active", b.dataset.period === p); b.setAttribute("aria-pressed", String(b.dataset.period === p)) });
+      $$("[data-m]", scope).forEach(function (el) { el.textContent = p === "y" ? el.dataset.y : el.dataset.m });
+      $$("[data-per]", scope).forEach(function (el) { el.textContent = p === "y" ? (el.dataset.perY || "/ мес при оплате за год") : (el.dataset.perM || "/ мес") });
+    }
+    btns.forEach(function (b) { b.addEventListener("click", function () { set(b.dataset.period) }) });
+  });
+
+  /* filters: [data-filters] buttons data-filter; items data-cat within the same section */
+  $$("[data-filters]").forEach(function (box) {
+    var scope = box.closest("section") || d, btns = $$("[data-filter]", box);
+    btns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var f = b.dataset.filter, shown = 0;
+        btns.forEach(function (x) { x.classList.toggle("active", x === b) });
+        $$("[data-cat]", scope).forEach(function (it) { var on = f === "all" || (" " + it.dataset.cat + " ").indexOf(" " + f + " ") > -1; it.hidden = !on; if (on) shown++ });
+        var empty = $("[data-empty]", scope); if (empty) empty.hidden = shown > 0;
+      });
+    });
+  });
+
+  /* dialogs */
+  d.addEventListener("click", function (e) {
+    var o = e.target.closest && e.target.closest("[data-open]");
+    if (o) {
+      var dlg = d.getElementById(o.dataset.open);
+      if (dlg) {
+        e.preventDefault();
+        if (o.dataset.fill) $$("[data-fill-target]", dlg).forEach(function (t) { t.textContent = o.dataset.fill });
+        if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+      }
+      return;
+    }
+    var c = e.target.closest && e.target.closest("[data-close]");
+    if (c) { var dl = c.closest("dialog"); if (dl) dl.close ? dl.close() : dl.removeAttribute("open") }
+  });
+  $$("dialog").forEach(function (dl) { dl.addEventListener("click", function (e) { if (e.target === dl) dl.close() }) });
+
+  /* forms: works without allow-forms too (sandboxed previews) */
+  function submitForm(f) {
+    if (f.reportValidity && !f.reportValidity()) return;
+    say(f.dataset.success || "Готово! Мы свяжемся с вами в ближайшее время.");
+    f.reset(); var dl = f.closest("dialog"); if (dl && dl.close) setTimeout(function () { dl.close() }, 400);
+    f.dispatchEvent(new CustomEvent("m-done"));
+  }
+  $$("form[data-form]").forEach(function (f) {
+    f.addEventListener("submit", function (e) { e.preventDefault(); submitForm(f) });
+    $$('[type="submit"]', f).forEach(function (b) { b.addEventListener("click", function (e) { e.preventDefault(); submitForm(f) }) });
+    f.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); submitForm(f) } });
+  });
+
+  /* cart / wishlist counters */
+  $$("[data-add]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var key = b.dataset.counter || "cart";
+      $$('[data-counter-of="' + key + '"]').forEach(function (c) { c.textContent = String((+c.textContent || 0) + 1); c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump") });
+      say(b.dataset.add);
+    });
+  });
+
+  /* option chips: [data-options] single choice */
+  $$("[data-options]").forEach(function (g) {
+    $$("button", g).forEach(function (b) { b.addEventListener("click", function () { $$("button", g).forEach(function (x) { x.classList.toggle("active", x === b); x.setAttribute("aria-pressed", String(x === b)) }); if (g.dataset.label) { var l = d.getElementById(g.dataset.label); if (l) l.textContent = b.dataset.value || b.textContent } }) });
+  });
+
+  /* quantity steppers + totals: [data-qty] contains [data-dec] [data-val] [data-inc]; data-price; [data-total] in section */
+  function totals(scope) {
+    var sum = 0, n = 0;
+    $$("[data-qty]", scope).forEach(function (q) { var v = +$("[data-val]", q).textContent; sum += v * +q.dataset.price; n += v });
+    $$("[data-total]", scope).forEach(function (t) { t.textContent = Math.round(sum * (1 - (+t.dataset.discount || 0))).toLocaleString("ru-RU") + (t.dataset.total || "") });
+    $$("[data-total-count]", scope).forEach(function (t) { t.textContent = String(n) });
+  }
+  $$("[data-qty]").forEach(function (q) {
+    var scope = q.closest("section") || d, val = $("[data-val]", q), max = +(q.dataset.max || 10);
+    $("[data-inc]", q).addEventListener("click", function () { val.textContent = String(Math.min(max, +val.textContent + 1)); totals(scope) });
+    $("[data-dec]", q).addEventListener("click", function () { val.textContent = String(Math.max(0, +val.textContent - 1)); totals(scope) });
+    totals(scope);
+  });
+
+  /* countdown */
+  $$("[data-countdown]").forEach(function (el) {
+    var end = new Date(el.dataset.countdown).getTime();
+    function tick() {
+      var s = Math.max(0, Math.floor((end - Date.now()) / 1000));
+      var parts = { d: Math.floor(s / 86400), h: Math.floor(s % 86400 / 3600), m: Math.floor(s % 3600 / 60), s: s % 60 };
+      Object.keys(parts).forEach(function (k) { var t = $('[data-cd="' + k + '"]', el); if (t) t.textContent = String(parts[k]).padStart(2, "0") });
+    }
+    tick(); if (!preview) setInterval(tick, 1000);
+  });
+
+  /* copy */
+  $$("[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var text = b.dataset.copy, done = function () { say(b.dataset.copied || "Скопировано") };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done); else done();
+    });
+  });
+
+  /* marquee: duplicate track once so the loop is seamless */
+  $$("[data-marquee]").forEach(function (m) { m.innerHTML += m.innerHTML; m.setAttribute("aria-hidden", "true") });
+
+  /* tilt on pointer */
+  if (!preview && matchMedia("(hover: hover)").matches) $$("[data-tilt]").forEach(function (el) {
+    el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5; el.style.transform = "perspective(900px) rotateY(" + x * 10 + "deg) rotateX(" + -y * 10 + "deg)" });
+    el.addEventListener("pointerleave", function () { el.style.transform = "" });
+  });
+
+  /* spotlight cards follow the pointer */
+  $$("[data-spot]").forEach(function (el) { el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(); el.style.setProperty("--x", e.clientX - r.left + "px"); el.style.setProperty("--y", e.clientY - r.top + "px") }) });
+
+  /* carousels: [data-scroll-target="id"] with data-dir="1|-1" */
+  $$("[data-scroll-target]").forEach(function (b) {
+    b.addEventListener("click", function () { var t = d.getElementById(b.dataset.scrollTarget); if (!t) return; var item = t.firstElementChild, step = item ? item.getBoundingClientRect().width + 16 : t.clientWidth * .8; t.scrollBy({ left: step * (+b.dataset.dir || 1), behavior: "smooth" }) });
+  });
+
+  $$("[data-year]").forEach(function (y) { y.textContent = String(new Date().getFullYear()) });
+  window.mQ = $; window.mQQ = $$;
+})();
+</script>
+<script>
+(function(){var a=document.getElementById("in"),b=document.getElementById("out");if(!a)return;var d=new Date();d.setDate(d.getDate()+30);var iso=function(x){return x.toISOString().slice(0,10)};a.value=iso(d);var e=new Date(d);e.setDate(e.getDate()+5);b.value=iso(e);a.min=iso(new Date());
+var prices={"Garden Pool Villa":420000,"Ocean Front Villa":640000,"Sunset Residence":1350000};
+function upd(){var n=Math.max(1,Math.round((new Date(b.value)-new Date(a.value))/864e5)||1),villa=(document.querySelector("#reserve [data-fill-target]")||{}).textContent||"Ocean Front Villa",p=prices[villa]||640000;
+document.getElementById("sumDates").textContent=new Date(a.value).toLocaleDateString("ru-RU",{day:"numeric",month:"short"})+" — "+new Date(b.value).toLocaleDateString("ru-RU",{day:"numeric",month:"short"});document.getElementById("sumNights").textContent=n;document.getElementById("sumTotal").textContent=(n*p).toLocaleString("ru-RU")+" ₸"}
+a.addEventListener("change",function(){if(b.value<=a.value){var x=new Date(a.value);x.setDate(x.getDate()+3);b.value=iso(x)}upd()});b.addEventListener("change",upd);
+document.addEventListener("click",function(ev){if(ev.target.closest&&ev.target.closest('[data-open="reserve"]'))setTimeout(upd,0)});
+document.getElementById("check").addEventListener("click",function(){document.getElementById("villas").scrollIntoView({behavior:"smooth"});window.mSay&&mSay("Даты свободны! Выберите виллу ниже.")});upd()})();
+</script>
+</body>
+</html>

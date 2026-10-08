@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ember — ресторан живого огня</title>
+<meta name="description" content="Ember — авторская кухня на открытом огне. Дегустационные сеты, винная карта на 300 позиций и бронь стола онлайн.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style id="malik-base">*,*::before,*::after{box-sizing:border-box}html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}body{margin:0;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden}img{max-width:100%;display:block}button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}a{color:inherit;text-decoration:none}[hidden]{display:none!important}[id]{scroll-margin-top:88px}.js [data-reveal]{opacity:0;transform:translateY(24px);transition:opacity .9s cubic-bezier(.2,.7,.2,1) var(--d,0s),transform .9s cubic-bezier(.2,.7,.2,1) var(--d,0s)}.js [data-reveal].m-in{opacity:1;transform:none}.is-preview *,.is-preview *::before,.is-preview *::after{animation-delay:-60s!important;animation-play-state:paused!important;transition:none!important}.is-preview{scrollbar-width:none}.is-preview::-webkit-scrollbar{display:none}.m-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);opacity:0;z-index:9999;padding:13px 18px;border-radius:14px;background:#0d0d0f;color:#fff;font:500 14px/1.4 system-ui,sans-serif;box-shadow:0 18px 40px rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);transition:.35s cubic-bezier(.2,.7,.2,1);pointer-events:none;max-width:calc(100vw - 32px);text-align:center}.m-toast.show{opacity:1;transform:translate(-50%,0)}dialog{border:0;padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto}dialog::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}.bump{animation:m-bump .4s}@keyframes m-bump{40%{transform:scale(1.4)}}:focus-visible{outline:2px solid currentColor;outline-offset:3px}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}</style>
+<style>
+:root{--bg:#110c09;--bg2:#1a130e;--fg:#f2e8dc;--mut:#a8998a;--ember:#e8803f;--line:rgba(242,232,220,.14)}
+body{background:var(--bg);color:var(--fg);font-family:Jost,system-ui,sans-serif;font-weight:300;line-height:1.7}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:100;opacity:.07;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+h1,h2,h3,.pf{font-family:"Playfair Display",Georgia,serif;font-weight:400}
+.wrap{width:min(1240px,calc(100% - 48px));margin:0 auto}
+.up{text-transform:uppercase;letter-spacing:.26em;font-size:11.5px}
+header{position:fixed;inset:0 0 auto;z-index:50;transition:.4s}header.scrolled{background:rgba(17,12,9,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.nav{height:88px;display:flex;align-items:center;gap:36px}.logo{font-family:"Playfair Display";font-size:30px;font-style:italic;display:flex;align-items:center;gap:10px}.logo i{width:10px;height:10px;border-radius:50%;background:var(--ember);box-shadow:0 0 14px var(--ember),0 0 30px var(--ember);animation:fl 2.4s ease-in-out infinite}@keyframes fl{50%{opacity:.6;transform:scale(.85)}}
+.links{display:flex;gap:30px;margin-left:auto}.links a{opacity:.82;transition:.3s}.links a:hover{opacity:1;color:var(--ember)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:52px;padding:0 30px;border:1px solid var(--ember);background:var(--ember);color:#1a0f08;text-transform:uppercase;letter-spacing:.22em;font-size:11.5px;font-weight:500;transition:.35s}.btn:hover{background:transparent;color:var(--ember)}
+.btn.ghost{background:transparent;color:var(--fg);border-color:rgba(242,232,220,.5)}.btn.ghost:hover{border-color:var(--ember);color:var(--ember)}
+.burger{display:none;width:44px;height:44px;background:none;border:1px solid var(--line)}.burger span{display:block;width:18px;height:1px;background:var(--fg);margin:5px auto;transition:.3s}
+.hero{position:relative;height:100vh;min-height:620px;display:grid;place-items:center;text-align:center;overflow:hidden}
+.hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scale(1.1);animation:zoom 20s ease-out forwards}@keyframes zoom{to{transform:scale(1)}}
+.hero::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 60%,rgba(17,12,9,.35),rgba(17,12,9,.9) 75%),linear-gradient(180deg,rgba(17,12,9,.5),transparent 30%,transparent 60%,var(--bg))}
+.hero .in{position:relative;z-index:2;padding:0 20px}.hero .up{color:var(--ember)}
+h1{font-size:clamp(64px,12vw,190px);line-height:.9;margin:20px 0 22px;letter-spacing:-.02em}h1 em{color:var(--ember)}
+.hero p{max-width:520px;margin:0 auto 38px;color:#d8cbbd;font-size:18px}.hero .row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.meta{position:absolute;left:0;right:0;bottom:34px;z-index:2;display:flex;justify-content:center;gap:40px;flex-wrap:wrap;color:var(--mut);font-size:13px}.meta b{color:var(--fg);font-weight:400}
+section{padding:130px 0}.head{text-align:center;max-width:720px;margin:0 auto 60px}.head .up{color:var(--ember)}h2{font-size:clamp(44px,6vw,88px);line-height:1;margin:18px 0}h2 em{color:var(--ember)}.head p{color:var(--mut);margin:0}
+.chef{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}.chef .pic{position:relative}.chef .pic img{width:100%;aspect-ratio:4/5;object-fit:cover}
+.chef .pic::before{content:"";position:absolute;inset:-18px 18px 18px -18px;border:1px solid var(--ember);opacity:.5;z-index:-1}
+.chef p{color:var(--mut);font-size:17px}.chef blockquote{font-family:"Playfair Display";font-style:italic;font-size:28px;line-height:1.35;margin:30px 0;padding-left:24px;border-left:1px solid var(--ember)}
+.stats{display:flex;gap:44px;margin-top:34px;flex-wrap:wrap}.stats b{display:block;font-family:"Playfair Display";font-size:48px;line-height:1;color:var(--ember);font-weight:400}.stats span{font-size:13px;color:var(--mut)}
+.menu-tabs{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:50px}.menu-tabs button{background:none;border:0;border-bottom:1px solid transparent;color:var(--mut);padding:10px 16px;font-family:"Playfair Display";font-size:22px;transition:.3s}.menu-tabs button.active{color:var(--fg);border-color:var(--ember)}.menu-tabs button:hover{color:var(--fg)}
+.menu{display:grid;grid-template-columns:1fr 1fr;gap:12px 70px;max-width:1020px;margin:0 auto}
+.dish{padding:16px 0}.dish .t{display:flex;align-items:baseline;gap:12px}.dish h3{font-size:23px;margin:0;white-space:nowrap}.dish .dots{flex:1;border-bottom:1px dotted rgba(242,232,220,.3);transform:translateY(-6px)}.dish .p{font-family:"Playfair Display";font-size:20px;color:var(--ember)}.dish p{margin:4px 0 0;color:var(--mut);font-size:15px}
+.dish .tag{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#1a0f08;background:var(--ember);padding:2px 7px;margin-left:8px;vertical-align:4px}
+.set{max-width:760px;margin:0 auto;text-align:center;border:1px solid var(--line);padding:50px 40px}.set ol{list-style:none;padding:0;margin:26px 0 30px;display:grid;gap:12px;font-family:"Playfair Display";font-size:21px}.set ol li span{display:block;font-family:Jost;font-size:13.5px;color:var(--mut)}
+.set .price{font-family:"Playfair Display";font-size:44px;color:var(--ember)}
+.gallery{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:240px;gap:12px}.gallery figure{margin:0;overflow:hidden;position:relative}.gallery img{width:100%;height:100%;object-fit:cover;transition:1.2s}.gallery figure:hover img{transform:scale(1.06)}
+.g1{grid-column:span 2;grid-row:span 2}.g3{grid-row:span 2}
+.press{display:grid;grid-template-columns:repeat(3,1fr);gap:30px;text-align:center}.press blockquote{margin:0;font-family:"Playfair Display";font-style:italic;font-size:24px;line-height:1.4}.press cite{display:block;margin-top:16px;font-style:normal;color:var(--ember)}
+.reserve{display:grid;grid-template-columns:.85fr 1.15fr;gap:70px;background:var(--bg2);border:1px solid var(--line);padding:70px}
+.reserve p{color:var(--mut)}.hours{margin-top:30px;display:grid;gap:12px}.hours div{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:10px;font-size:15px}.hours span{color:var(--mut)}
+form.res{display:grid;grid-template-columns:1fr 1fr;gap:20px}form.res .full{grid-column:1/-1}.f{display:grid;gap:8px}.f span{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ember)}
+.f input,.f select,.f textarea{height:54px;background:transparent;border:0;border-bottom:1px solid rgba(242,232,220,.25);color:var(--fg);font-size:16px;font-weight:300;outline:none;padding:0 2px;border-radius:0}.f textarea{height:84px;padding-top:12px}.f select option{background:var(--bg2)}.f input:focus,.f select:focus,.f textarea:focus{border-color:var(--ember)}
+.slots{display:flex;gap:8px;flex-wrap:wrap}.slots button{height:44px;padding:0 16px;border:1px solid var(--line);background:none;color:var(--fg);font-size:14px;transition:.25s}.slots button.active{border-color:var(--ember);background:var(--ember);color:#1a0f08}
+footer{padding:80px 0 40px;border-top:1px solid var(--line);color:var(--mut);font-size:14px}.fg{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:40px}.fg h4{color:var(--fg);font-family:"Playfair Display";font-weight:400;font-size:20px;margin:0 0 14px}.fg a{display:block;margin:7px 0}.fg a:hover{color:var(--ember)}
+.sticky{position:fixed;right:22px;bottom:22px;z-index:45;box-shadow:0 14px 34px rgba(232,128,63,.35);opacity:0;transform:translateY(20px);transition:.4s;pointer-events:none}header.scrolled~.sticky{opacity:1;transform:none;pointer-events:auto}
+dialog{background:var(--bg2);color:var(--fg);border:1px solid var(--line)}.dlg{padding:40px;position:relative}.dlg h3{font-size:34px;margin:0 0 10px}.dlg p{color:var(--mut);margin:0 0 24px}
+.x{position:absolute;right:16px;top:16px;width:40px;height:40px;background:none;border:1px solid var(--line);color:var(--fg);font-size:20px}
+@media(max-width:1000px){.links,.nav>.btn{display:none}.burger{display:block;margin-left:auto}.chef,.reserve{grid-template-columns:1fr;gap:50px}.reserve{padding:44px 26px}.menu{grid-template-columns:1fr}.gallery{grid-template-columns:1fr 1fr;grid-auto-rows:200px}.press{grid-template-columns:1fr;gap:40px}.fg{grid-template-columns:1fr}
+body.menu-open .links{display:flex;position:fixed;inset:88px 0 auto;flex-direction:column;gap:0;background:#110c09;padding:10px 24px 28px;border-bottom:1px solid var(--line);margin:0}body.menu-open .links a{padding:16px 0;border-bottom:1px solid var(--line);font-family:"Playfair Display";font-size:22px}
+body.menu-open .burger span:nth-child(1){transform:translateY(6px) rotate(45deg)}body.menu-open .burger span:nth-child(2){opacity:0}body.menu-open .burger span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}}
+@media(max-width:600px){.wrap{width:calc(100% - 32px)}section{padding:90px 0}form.res{grid-template-columns:1fr}.dish h3{font-size:19px;white-space:normal}.meta{gap:18px;font-size:12px}.g1{grid-column:span 2}.set{padding:36px 20px}.sticky{left:16px;right:16px}.hero .row .btn{flex:1 1 100%}}
+</style>
+</head>
+<body>
+<header data-header><div class="wrap nav"><a href="#" class="logo"><i></i>Ember</a>
+<nav class="links" data-menu><a href="#chef">О нас</a><a href="#menu">Меню</a><a href="#tasting">Дегустация</a><a href="#gallery">Атмосфера</a><a href="#reserve">Контакты</a></nav>
+<a href="#reserve" class="btn">Забронировать</a><button class="burger" data-menu-toggle aria-label="Меню"><span></span><span></span><span></span></button></div></header>
+<a href="#reserve" class="btn sticky">Забронировать стол</a>
+<main>
+<section class="hero" style="padding:0"><img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=2200&q=80" alt="Зал ресторана вечером" fetchpriority="high">
+<div class="in"><span class="up" data-reveal>Алматы · с 2014 года</span><h1 data-reveal style="--d:.1s">Кухня <em>живого</em> огня</h1><p data-reveal style="--d:.2s">Сезонные продукты степи и гор, открытый огонь и вина малых виноделен. Ужин, который запоминается.</p>
+<div class="row" data-reveal style="--d:.3s"><a href="#reserve" class="btn">Забронировать стол</a><a href="#menu" class="btn ghost">Смотреть меню</a></div></div>
+<div class="meta"><span><b>Вт–Вс</b> · 18:00–00:00</span><span><b>ул. Панфилова, 98</b></span><span><b>Мишлен-гид</b> · Рекомендация 2025</span></div></section>
+
+<section id="chef"><div class="wrap chef">
+<div class="pic" data-reveal><img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=900&h=1125&q=80" alt="Авторское блюдо шефа" loading="lazy"></div>
+<div data-reveal style="--d:.1s"><span class="up" style="color:var(--ember)">Шеф-повар</span><h2>Арман <em>Бекенов</em></h2><p>Двадцать лет на кухнях Копенгагена, Лиссабона и Токио — и возвращение домой. Арман готовит на углях из саксаула и яблони, а продукты выбирает лично у фермеров Алматинской области.</p>
+<blockquote>«Огонь ничего не прощает. Поэтому на нашей кухне нет лишних ингредиентов — только честный вкус».</blockquote>
+<div class="stats"><div><b data-count="11">11</b><span>лет Ember</span></div><div><b data-count="40">40</b><span>фермеров-партнёров</span></div><div><b data-count="300">300</b><span>вин в карте</span></div></div></div></div></section>
+
+<section id="menu" style="padding-top:0"><div class="wrap" data-tabs><div class="head"><span class="up">Меню</span><h2>Сезон <em>осень</em></h2><p>Меню меняется каждые шесть недель вместе с урожаем.</p></div>
+<div class="menu-tabs"><button data-tab="main" class="active">Основное</button><button data-tab="fire">С огня</button><button data-tab="dess">Десерты</button><button data-tab="wine">Вино</button></div>
+<div class="menu" data-panel="main">
+<div class="dish"><div class="t"><h3>Тартар из марала</h3><i class="dots"></i><span class="p">7 400</span></div><p>Желток конфи, копчёный лук, хрустящий хлеб на закваске</p></div>
+<div class="dish"><div class="t"><h3>Свёкла с углей<span class="tag">Шеф</span></h3><i class="dots"></i><span class="p">5 200</span></div><p>Курт, лесной орех, масло из облепихи</p></div>
+<div class="dish"><div class="t"><h3>Карп из Капчагая</h3><i class="dots"></i><span class="p">9 800</span></div><p>Беурре блан с айраном, молодой фенхель</p></div>
+<div class="dish"><div class="t"><h3>Пельмени с бараниной</h3><i class="dots"></i><span class="p">6 900</span></div><p>Бульон из костей на огне, укропное масло</p></div>
+<div class="dish"><div class="t"><h3>Тыква и мисо</h3><i class="dots"></i><span class="p">5 600</span></div><p>Запечённая тыква, мисо из нута, тыквенные семечки</p></div>
+<div class="dish"><div class="t"><h3>Утиная грудка</h3><i class="dots"></i><span class="p">11 200</span></div><p>Вишня, корень сельдерея, соус на портвейне</p></div></div>
+<div class="menu" data-panel="fire" hidden>
+<div class="dish"><div class="t"><h3>Рибай сухого вызревания<span class="tag">45 дней</span></h3><i class="dots"></i><span class="p">24 000</span></div><p>Мраморная говядина, угли саксаула, соус из печёного чеснока</p></div>
+<div class="dish"><div class="t"><h3>Каре ягнёнка</h3><i class="dots"></i><span class="p">16 500</span></div><p>Горные травы, кизиловый соус</p></div>
+<div class="dish"><div class="t"><h3>Цыплёнок на вертеле</h3><i class="dots"></i><span class="p">12 800</span></div><p>Маринад из кефира и сумаха, лепёшка из тандыра</p></div>
+<div class="dish"><div class="t"><h3>Овощи с углей</h3><i class="dots"></i><span class="p">6 400</span></div><p>Сезонные овощи, соус ромеско</p></div></div>
+<div class="menu" data-panel="dess" hidden>
+<div class="dish"><div class="t"><h3>Яблоко Апорт</h3><i class="dots"></i><span class="p">4 800</span></div><p>Печёное на углях, мороженое из топлёного молока</p></div>
+<div class="dish"><div class="t"><h3>Шоколад и соль</h3><i class="dots"></i><span class="p">5 200</span></div><p>Ганаш 70%, карамель с солью Аральского моря</p></div>
+<div class="dish"><div class="t"><h3>Баурсак-брюле</h3><i class="dots"></i><span class="p">4 400</span></div><p>Ванильный крем, мёд с пасеки в Талгаре</p></div></div>
+<div class="menu" data-panel="wine" hidden>
+<div class="dish"><div class="t"><h3>Arba Wine, Рислинг</h3><i class="dots"></i><span class="p">4 200 / бок.</span></div><p>Казахстан · свежий, с нотами зелёного яблока</p></div>
+<div class="dish"><div class="t"><h3>Château Тамань, Пино</h3><i class="dots"></i><span class="p">5 600 / бок.</span></div><p>Россия · вишня, мягкие танины</p></div>
+<div class="dish"><div class="t"><h3>Бароло DOCG 2018</h3><i class="dots"></i><span class="p">68 000</span></div><p>Италия · роза, табак, долгое послевкусие</p></div>
+<div class="dish"><div class="t"><h3>Шампань Brut Nature</h3><i class="dots"></i><span class="p">72 000</span></div><p>Франция · бриошь, мел, цитрусы</p></div></div>
+</div></section>
+
+<section id="tasting" style="padding-top:0"><div class="wrap"><div class="set" data-reveal><span class="up" style="color:var(--ember)">Дегустационный сет</span><h2 style="font-size:clamp(38px,5vw,64px)">Семь <em>огней</em></h2>
+<ol><li>Хлеб на закваске и масло с золой<span>приветствие от шефа</span></li><li>Тартар из марала</li><li>Карп с углей</li><li>Пельмени в бульоне</li><li>Рибай сухого вызревания</li><li>Сыры фермы «Алатау»</li><li>Яблоко Апорт</li></ol>
+<div class="price">38 000 ₸</div><p style="color:var(--mut)">+ винное сопровождение 24 000 ₸</p><button class="btn" data-open="tasting-dlg">Забронировать сет</button></div></div></section>
+
+<section id="gallery" style="padding-top:0"><div class="wrap"><div class="head"><span class="up">Атмосфера</span><h2>Вечер в <em>Ember</em></h2></div>
+<div class="gallery"><figure class="g1" data-reveal><img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1000&h=700&q=80" alt="Зал" loading="lazy"></figure><figure data-reveal><img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=600&h=500&q=80" alt="Блюдо" loading="lazy"></figure><figure class="g3" data-reveal><img src="https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=600&h=1000&q=80" alt="Терраса" loading="lazy"></figure><figure data-reveal><img src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&h=500&q=80" alt="Блюда на столе" loading="lazy"></figure></div></div></section>
+
+<section style="padding-top:0"><div class="wrap press"><div data-reveal><blockquote>«Лучший стейк в Центральной Азии — без преувеличения».</blockquote><cite class="up">Forbes Life</cite></div><div data-reveal style="--d:.1s"><blockquote>«Место, ради которого стоит прилететь в Алматы».</blockquote><cite class="up">Condé Nast Traveller</cite></div><div data-reveal style="--d:.2s"><blockquote>«Огонь, степь и безупречная техника».</blockquote><cite class="up">Гид Мишлен</cite></div></div></section>
+
+<section id="reserve" style="padding-top:0"><div class="wrap reserve">
+<div data-reveal><span class="up" style="color:var(--ember)">Бронирование</span><h2 style="font-size:clamp(40px,5vw,70px)">Ваш <em>стол</em></h2><p>Для компаний больше 8 человек и частных ужинов — позвоните нам.</p>
+<div class="hours"><div>Вторник — четверг<span>18:00–23:00</span></div><div>Пятница — суббота<span>18:00–01:00</span></div><div>Воскресенье<span>13:00–22:00</span></div><div>Телефон<a href="#" data-copy="+7 727 350 14 14" data-copied="Номер скопирован" style="color:var(--ember)">+7 727 350 14 14</a></div></div></div>
+<form class="res" data-form data-success="Стол забронирован! Подтверждение придёт в SMS." data-reveal style="--d:.1s">
+<label class="f"><span>Дата</span><input type="date" required></label><label class="f"><span>Гостей</span><select required><option value="">Сколько вас?</option><option>2 гостя</option><option>3 гостя</option><option>4 гостя</option><option>5–8 гостей</option></select></label>
+<div class="f full"><span>Время · выбрано <b id="slot" style="color:var(--fg)">20:00</b></span><div class="slots" data-options data-label="slot"><button>18:30</button><button>19:00</button><button>19:30</button><button class="active">20:00</button><button>20:30</button><button>21:00</button><button>21:30</button></div></div>
+<label class="f"><span>Имя</span><input required placeholder="Как к вам обращаться"></label><label class="f"><span>Телефон</span><input type="tel" required placeholder="+7"></label>
+<label class="f full"><span>Пожелания</span><textarea placeholder="Повод, аллергии, стол у окна"></textarea></label>
+<div class="full"><button class="btn" type="submit">Подтвердить бронь</button></div></form>
+</div></section>
+</main>
+<footer><div class="wrap fg"><div><a href="#" class="logo"><i></i>Ember</a><p style="max-width:300px">Ресторан живого огня. ул. Панфилова, 98, Алматы.</p></div><div><h4>Ресторан</h4><a href="#menu">Меню</a><a href="#tasting">Дегустация</a><a href="#" data-open="gift">Подарочные сертификаты</a></div><div><h4>Связь</h4><a href="#" data-copy="+7 727 350 14 14" data-copied="Номер скопирован">+7 727 350 14 14</a><a href="#" data-copy="table@ember.kz" data-copied="Почта скопирована">table@ember.kz</a><span>© <span data-year></span> Ember · Фото: Unsplash · Сделано с Malik AI</span></div></div></footer>
+<dialog id="tasting-dlg"><div class="dlg"><button class="x" data-close aria-label="Закрыть">×</button><span class="up" style="color:var(--ember)">Семь огней</span><h3>Бронь дегустации</h3><p>Сет подаётся для всего стола, продолжительность — около 2,5 часов.</p><form class="res" data-form data-success="Дегустация забронирована! Ждём вас." style="grid-template-columns:1fr"><label class="f"><span>Дата</span><input type="date" required></label><label class="f"><span>Телефон</span><input type="tel" required placeholder="+7"></label><button class="btn" type="submit">Забронировать</button></form></div></dialog>
+<dialog id="gift"><div class="dlg"><button class="x" data-close aria-label="Закрыть">×</button><h3>Подарочный сертификат</h3><p>Ужин в Ember — лучший подарок. Сертификат пришлём на почту за минуту.</p><form class="res" data-form data-success="Сертификат оформлен и отправлен на почту." style="grid-template-columns:1fr"><label class="f"><span>Номинал</span><select required><option value="">Выберите</option><option>50 000 ₸</option><option>100 000 ₸</option><option>Дегустация на двоих</option></select></label><label class="f"><span>Email получателя</span><input type="email" required></label><button class="btn" type="submit">Оформить</button></form></div></dialog>
+<script id="malik-runtime">
+(function () {
+  var d = document, root = d.documentElement, body = d.body;
+  root.classList.add("js");
+  var preview = /[?&]preview=1/.test(location.search);
+  if (preview) root.classList.add("is-preview");
+  var $ = function (s, c) { return (c || d).querySelector(s) };
+  var $$ = function (s, c) { return Array.prototype.slice.call((c || d).querySelectorAll(s)) };
+
+  /* toast */
+  var toast = d.createElement("div");
+  toast.className = "m-toast"; toast.setAttribute("role", "status"); toast.setAttribute("aria-live", "polite");
+  body.appendChild(toast);
+  var toastTimer;
+  function say(text) {
+    toast.textContent = text; toast.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { toast.classList.remove("show") }, 2600);
+  }
+  window.mSay = say;
+
+  /* header + menu */
+  var header = $("[data-header]");
+  function onScroll() { if (header) header.classList.toggle("scrolled", scrollY > 12) }
+  addEventListener("scroll", onScroll, { passive: true }); onScroll();
+  $$("[data-menu-toggle]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var open = !body.classList.contains("menu-open");
+      body.classList.toggle("menu-open", open); b.setAttribute("aria-expanded", String(open));
+    });
+  });
+  $$("[data-menu] a").forEach(function (a) { a.addEventListener("click", function () { body.classList.remove("menu-open") }) });
+
+  /* anchors: smooth, also inside sandboxed previews */
+  d.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    var id = a.getAttribute("href").slice(1);
+    if (!id) { e.preventDefault(); scrollTo({ top: 0, behavior: "smooth" }); return }
+    var t = d.getElementById(id);
+    if (t) { e.preventDefault(); t.scrollIntoView({ behavior: "smooth", block: "start" }) }
+  });
+
+  /* reveal + counters */
+  var reveal = $$("[data-reveal]"), counters = $$("[data-count]");
+  function count(el) {
+    if (el.dataset.done) return; el.dataset.done = "1";
+    var to = parseFloat(el.dataset.count), dec = +(el.dataset.decimals || 0), pre = el.dataset.prefix || "", suf = el.dataset.suffix || "";
+    var fmt = function (v) { return pre + v.toLocaleString("ru-RU", { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suf };
+    if (preview || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = fmt(to); return }
+    var t0 = performance.now(), dur = 1400;
+    (function step(t) { var p = Math.min(1, (t - t0) / dur); el.textContent = fmt(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step) })(t0);
+  }
+  if ("IntersectionObserver" in window && !preview) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (en) { if (!en.isIntersecting) return; en.target.classList.add("m-in"); if (en.target.dataset.count) count(en.target); io.unobserve(en.target) });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: .08 });
+    reveal.concat(counters).forEach(function (el) { io.observe(el) });
+  } else { reveal.forEach(function (el) { el.classList.add("m-in") }); counters.forEach(count) }
+
+  /* tabs */
+  $$("[data-tabs]").forEach(function (box) {
+    var tabs = $$("[data-tab]", box), panels = $$("[data-panel]", box);
+    function show(name) {
+      tabs.forEach(function (t) { var on = t.dataset.tab === name; t.classList.toggle("active", on); t.setAttribute("aria-selected", String(on)) });
+      panels.forEach(function (p) { p.hidden = p.dataset.panel !== name });
+    }
+    tabs.forEach(function (t) { t.setAttribute("role", "tab"); t.addEventListener("click", function () { show(t.dataset.tab) }) });
+    if (tabs[0]) show((tabs.filter(function (t) { return t.classList.contains("active") })[0] || tabs[0]).dataset.tab);
+  });
+
+  /* accordion */
+  $$("[data-acc] .acc-q").forEach(function (q) {
+    q.setAttribute("aria-expanded", String(q.parentNode.classList.contains("open")));
+    q.addEventListener("click", function () {
+      var item = q.parentNode, open = !item.classList.contains("open");
+      if (item.parentNode.hasAttribute("data-single")) $$(".open", item.parentNode).forEach(function (o) { o.classList.remove("open"); $(".acc-q", o).setAttribute("aria-expanded", "false") });
+      item.classList.toggle("open", open); q.setAttribute("aria-expanded", String(open));
+    });
+  });
+
+  /* billing switch: [data-billing] buttons with data-period; prices carry data-m / data-y */
+  $$("[data-billing]").forEach(function (box) {
+    var btns = $$("[data-period]", box), scope = box.closest("section") || d;
+    function set(p) {
+      btns.forEach(function (b) { b.classList.toggle("active", b.dataset.period === p); b.setAttribute("aria-pressed", String(b.dataset.period === p)) });
+      $$("[data-m]", scope).forEach(function (el) { el.textContent = p === "y" ? el.dataset.y : el.dataset.m });
+      $$("[data-per]", scope).forEach(function (el) { el.textContent = p === "y" ? (el.dataset.perY || "/ мес при оплате за год") : (el.dataset.perM || "/ мес") });
+    }
+    btns.forEach(function (b) { b.addEventListener("click", function () { set(b.dataset.period) }) });
+  });
+
+  /* filters: [data-filters] buttons data-filter; items data-cat within the same section */
+  $$("[data-filters]").forEach(function (box) {
+    var scope = box.closest("section") || d, btns = $$("[data-filter]", box);
+    btns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var f = b.dataset.filter, shown = 0;
+        btns.forEach(function (x) { x.classList.toggle("active", x === b) });
+        $$("[data-cat]", scope).forEach(function (it) { var on = f === "all" || (" " + it.dataset.cat + " ").indexOf(" " + f + " ") > -1; it.hidden = !on; if (on) shown++ });
+        var empty = $("[data-empty]", scope); if (empty) empty.hidden = shown > 0;
+      });
+    });
+  });
+
+  /* dialogs */
+  d.addEventListener("click", function (e) {
+    var o = e.target.closest && e.target.closest("[data-open]");
+    if (o) {
+      var dlg = d.getElementById(o.dataset.open);
+      if (dlg) {
+        e.preventDefault();
+        if (o.dataset.fill) $$("[data-fill-target]", dlg).forEach(function (t) { t.textContent = o.dataset.fill });
+        if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+      }
+      return;
+    }
+    var c = e.target.closest && e.target.closest("[data-close]");
+    if (c) { var dl = c.closest("dialog"); if (dl) dl.close ? dl.close() : dl.removeAttribute("open") }
+  });
+  $$("dialog").forEach(function (dl) { dl.addEventListener("click", function (e) { if (e.target === dl) dl.close() }) });
+
+  /* forms: works without allow-forms too (sandboxed previews) */
+  function submitForm(f) {
+    if (f.reportValidity && !f.reportValidity()) return;
+    say(f.dataset.success || "Готово! Мы свяжемся с вами в ближайшее время.");
+    f.reset(); var dl = f.closest("dialog"); if (dl && dl.close) setTimeout(function () { dl.close() }, 400);
+    f.dispatchEvent(new CustomEvent("m-done"));
+  }
+  $$("form[data-form]").forEach(function (f) {
+    f.addEventListener("submit", function (e) { e.preventDefault(); submitForm(f) });
+    $$('[type="submit"]', f).forEach(function (b) { b.addEventListener("click", function (e) { e.preventDefault(); submitForm(f) }) });
+    f.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); submitForm(f) } });
+  });
+
+  /* cart / wishlist counters */
+  $$("[data-add]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var key = b.dataset.counter || "cart";
+      $$('[data-counter-of="' + key + '"]').forEach(function (c) { c.textContent = String((+c.textContent || 0) + 1); c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump") });
+      say(b.dataset.add);
+    });
+  });
+
+  /* option chips: [data-options] single choice */
+  $$("[data-options]").forEach(function (g) {
+    $$("button", g).forEach(function (b) { b.addEventListener("click", function () { $$("button", g).forEach(function (x) { x.classList.toggle("active", x === b); x.setAttribute("aria-pressed", String(x === b)) }); if (g.dataset.label) { var l = d.getElementById(g.dataset.label); if (l) l.textContent = b.dataset.value || b.textContent } }) });
+  });
+
+  /* quantity steppers + totals: [data-qty] contains [data-dec] [data-val] [data-inc]; data-price; [data-total] in section */
+  function totals(scope) {
+    var sum = 0, n = 0;
+    $$("[data-qty]", scope).forEach(function (q) { var v = +$("[data-val]", q).textContent; sum += v * +q.dataset.price; n += v });
+    $$("[data-total]", scope).forEach(function (t) { t.textContent = Math.round(sum * (1 - (+t.dataset.discount || 0))).toLocaleString("ru-RU") + (t.dataset.total || "") });
+    $$("[data-total-count]", scope).forEach(function (t) { t.textContent = String(n) });
+  }
+  $$("[data-qty]").forEach(function (q) {
+    var scope = q.closest("section") || d, val = $("[data-val]", q), max = +(q.dataset.max || 10);
+    $("[data-inc]", q).addEventListener("click", function () { val.textContent = String(Math.min(max, +val.textContent + 1)); totals(scope) });
+    $("[data-dec]", q).addEventListener("click", function () { val.textContent = String(Math.max(0, +val.textContent - 1)); totals(scope) });
+    totals(scope);
+  });
+
+  /* countdown */
+  $$("[data-countdown]").forEach(function (el) {
+    var end = new Date(el.dataset.countdown).getTime();
+    function tick() {
+      var s = Math.max(0, Math.floor((end - Date.now()) / 1000));
+      var parts = { d: Math.floor(s / 86400), h: Math.floor(s % 86400 / 3600), m: Math.floor(s % 3600 / 60), s: s % 60 };
+      Object.keys(parts).forEach(function (k) { var t = $('[data-cd="' + k + '"]', el); if (t) t.textContent = String(parts[k]).padStart(2, "0") });
+    }
+    tick(); if (!preview) setInterval(tick, 1000);
+  });
+
+  /* copy */
+  $$("[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var text = b.dataset.copy, done = function () { say(b.dataset.copied || "Скопировано") };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done); else done();
+    });
+  });
+
+  /* marquee: duplicate track once so the loop is seamless */
+  $$("[data-marquee]").forEach(function (m) { m.innerHTML += m.innerHTML; m.setAttribute("aria-hidden", "true") });
+
+  /* tilt on pointer */
+  if (!preview && matchMedia("(hover: hover)").matches) $$("[data-tilt]").forEach(function (el) {
+    el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5; el.style.transform = "perspective(900px) rotateY(" + x * 10 + "deg) rotateX(" + -y * 10 + "deg)" });
+    el.addEventListener("pointerleave", function () { el.style.transform = "" });
+  });
+
+  /* spotlight cards follow the pointer */
+  $$("[data-spot]").forEach(function (el) { el.addEventListener("pointermove", function (e) { var r = el.getBoundingClientRect(); el.style.setProperty("--x", e.clientX - r.left + "px"); el.style.setProperty("--y", e.clientY - r.top + "px") }) });
+
+  /* carousels: [data-scroll-target="id"] with data-dir="1|-1" */
+  $$("[data-scroll-target]").forEach(function (b) {
+    b.addEventListener("click", function () { var t = d.getElementById(b.dataset.scrollTarget); if (!t) return; var item = t.firstElementChild, step = item ? item.getBoundingClientRect().width + 16 : t.clientWidth * .8; t.scrollBy({ left: step * (+b.dataset.dir || 1), behavior: "smooth" }) });
+  });
+
+  $$("[data-year]").forEach(function (y) { y.textContent = String(new Date().getFullYear()) });
+  window.mQ = $; window.mQQ = $$;
+})();
+</script>
+</body>
+</html>
