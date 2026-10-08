@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { CheckCircle2, Code2, Download, ExternalLink, Globe2, Loader2, PackageOpen, RefreshCw, Rocket } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { downloadProjectZip } from "@/lib/business/project-zip"
+import { assessBusinessLaunch } from "@/lib/business/launch-readiness"
 import styles from "./CompanyLaunchPad.module.css"
 
 type LaunchStep = {
@@ -83,19 +84,6 @@ function companyPlan(props: CompanyLaunchPadProps) {
     .join("\n\n---\n\n")
 }
 
-function saveToSites(title: string, prompt: string, html: string) {
-  try {
-    const storageKey = "malik-sites-v6"
-    const current = JSON.parse(localStorage.getItem(storageKey) || "[]")
-    const list = Array.isArray(current) ? current : []
-    const id = `autonomous-${Date.now().toString(36)}`
-    const next = [{ id, title, prompt, html, createdAt: new Date().toISOString() }, ...list]
-      .filter((site, index, all) => index === all.findIndex((item) => item?.html === site?.html))
-      .slice(0, 24)
-    localStorage.setItem(storageKey, JSON.stringify(next))
-  } catch {}
-}
-
 export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
   const ready = props.steps.length >= 8 && props.steps.every((step) => step.state === "done" && step.content.trim())
   // Account and eight agent results are part of the cache key: never show a
@@ -110,6 +98,7 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
   const brief = useMemo(() => buildWebsiteBrief(props), [props])
 
   const [loadedKey, setLoadedKey] = useState("")
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [html, setHtml] = useState("")
   const [meta, setMeta] = useState<BuildMeta>({})
   const [building, setBuilding] = useState(false)
@@ -128,6 +117,23 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
   const [projectDeployState, setProjectDeployState] = useState("")
   const [projectDeployId, setProjectDeployId] = useState("")
   const [projectDeployError, setProjectDeployError] = useState("")
+
+  const readiness = useMemo(() => assessBusinessLaunch({
+    completedAgents: props.steps.filter((step) => step.state === "done" && step.content.trim()).length,
+    hasStandaloneHtml: Boolean(html.trim()),
+    projectFiles: projectFiles.length,
+    qaPassed: projectQa.passed === true,
+    syntaxChecked: projectQa.syntaxChecked === true,
+    deploymentUrl: projectDeployUrl,
+    deploymentState: projectDeployState,
+  }), [props.steps, html, projectFiles.length, projectQa.passed, projectQa.syntaxChecked, projectDeployUrl, projectDeployState])
+
+  useEffect(() => {
+    if (!previewOpen) return
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setPreviewOpen(false) }
+    window.addEventListener("keydown", close)
+    return () => window.removeEventListener("keydown", close)
+  }, [previewOpen])
 
   useEffect(() => {
     if (!ready) return
@@ -224,7 +230,8 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
       setHtml(nextHtml)
       setMeta(nextMeta)
       persist(nextHtml, nextMeta, "")
-      saveToSites(title, props.prompt, nextHtml)
+      // Only account-scoped business cache owns this HTML. The old global
+      // malik-sites-v6 cache could expose one account's project to another.
       return nextHtml
     } catch (error) {
       setBuildError(error instanceof Error ? error.message : "Не удалось собрать продукт")
@@ -282,11 +289,41 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
   }, [ready, building, projectBuilding, html, build, buildNextProject])
 
   const openPreview = useCallback(() => {
-    if (!html) return
-    const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }))
-    window.open(url, "_blank", "noopener,noreferrer")
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    // Generated HTML must never become a top-level blob: document inheriting
+    // Malik AI origin. Only render inside a sandboxed iframe.
+    if (html) setPreviewOpen(true)
   }, [html])
+
+  const reportMarkdown = useCallback(() => [
+    "# Malik Autonomous Company — Паспорт запуска",
+    "",
+    `Идея: ${title}`,
+    `Техническая готовность: ${readiness.score}%`,
+    `Подтверждение сборки Vercel: ${readiness.technicallyDelivered ? "READY" : "не получено"}`,
+    `Текущий статус: ${projectDeployState || "не опубликован"}`,
+    `URL: ${projectDeployUrl || "нет"}`,
+    "",
+    "## Фактические этапы",
+    ...readiness.milestones.map((step) => `- [${step.done ? "x" : " "}] ${step.title}: ${step.detail}`),
+    "",
+    "## Ручная проверка перед коммерческим запуском",
+    ...readiness.externalChecks.map((item) => `- [ ] ${item}`),
+    "",
+    "Коммерческий запуск компании и юридическое соответствие не проверяются автоматически.",
+  ].join("\n"), [title, readiness, projectDeployState, projectDeployUrl])
+
+  const downloadReadinessReport = useCallback(() => {
+    downloadProjectZip(`${slug(title)}-launch-passport`, [
+      { name: "launch-readiness.md", content: reportMarkdown() },
+      { name: "company-plan.md", content: companyPlan(props) },
+      { name: "launch-readiness.json", content: JSON.stringify({
+        technicalScore: readiness.score, milestones: readiness.milestones,
+        externalChecks: readiness.externalChecks, blockers: readiness.blockers,
+        deploymentState: projectDeployState || null, deploymentUrl: projectDeployUrl || null,
+        generatedAt: new Date().toISOString(),
+      }, null, 2) },
+    ])
+  }, [props, readiness, reportMarkdown, projectDeployState, projectDeployUrl, title])
 
   const downloadZip = useCallback(() => {
     if (!html) return
@@ -295,18 +332,20 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
     downloadProjectZip(`${slug(title)}-malik`, [
       { name: "index.html", content: html },
       { name: "company-plan.md", content: companyPlan(props) },
+      { name: "launch-readiness.md", content: reportMarkdown() },
       { name: "company.json", content: manifest },
       { name: "README.md", content: readme },
     ])
-  }, [html, props, title])
+  }, [html, props, title, reportMarkdown])
 
   const downloadNextZip = useCallback(() => {
     if (!projectFiles.length) return
     downloadProjectZip(`${projectName || slug(title)}-nextjs`, [
       ...projectFiles.map((file) => ({ name: file.path, content: file.content })),
       { name: "company-plan.md", content: companyPlan(props) },
+      { name: "launch-readiness.md", content: reportMarkdown() },
     ])
-  }, [projectFiles, projectName, props, title])
+  }, [projectFiles, projectName, props, title, reportMarkdown])
 
   const deploy = useCallback(async () => {
     if (!props.canDeploy || !html || deploying) return
@@ -382,6 +421,36 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
 
   return (
     <section className={styles.root} aria-label="Malik Company Launchpad">
+      <div className={styles.readiness} aria-label="Техническая готовность компании">
+        <div className={styles.readinessTop}>
+          <div><span className={styles.readinessEyebrow}>LAUNCH READINESS</span>
+            <h3>Паспорт запуска</h3>
+            <p>Только подтверждённые этапы создания продукта, не прогноз выручки.</p>
+          </div>
+          <strong className={styles.readinessScore}>{readiness.score}<span>%</span></strong>
+        </div>
+        <div className={styles.readinessTrack} role="progressbar" aria-label="Техническая готовность" aria-valuenow={readiness.score} aria-valuemin={0} aria-valuemax={100}>
+          <span style={{ width: `${readiness.score}%` }} />
+        </div>
+        <div className={styles.readinessGrid}>
+          {readiness.milestones.map((item) => (
+            <div key={item.id} className={styles.readinessItem} data-status={item.done ? "complete" : item.blocked ? "blocked" : "pending"}>
+              <span>{item.done ? "✓" : item.blocked ? "!" : "○"} {item.title}</span>
+              <small>{item.detail}</small>
+            </div>
+          ))}
+        </div>
+        <div className={styles.readinessBottom}>
+          <p>{readiness.technicallyDelivered
+            ? "Vercel подтвердил сборку. Клиентов, договоры, платежи и доступность сайта всё равно надо проверить."
+            : `Следующий этап: ${readiness.blockers[0] || "внешняя проверка"}.`}</p>
+          <button type="button" className={styles.secondary} onClick={downloadReadinessReport}><Download /> Паспорт + план ZIP</button>
+        </div>
+        <details className={styles.externalChecks}>
+          <summary>Что нужно для реального работающего бизнеса</summary>
+          <ul>{readiness.externalChecks.map((item) => <li key={item}>{item}</li>)}</ul>
+        </details>
+      </div>
       <div className={styles.head}>
         <span className={styles.icon}><Rocket strokeWidth={1.8} /></span>
         <div className={styles.heading}>
@@ -424,7 +493,7 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
               <span className={styles.address}>{deployUrl || "malik://autonomous-company/preview"}</span>
               <button type="button" onClick={openPreview} aria-label="Открыть preview в новой вкладке"><ExternalLink /></button>
             </div>
-            <iframe title="Autonomous Company live preview" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" />
+            <iframe title="Autonomous Company live preview" srcDoc={html} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" />
           </div>
 
           <div className={styles.actions}>
@@ -516,6 +585,17 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
             )}
           </div>
         </>
+      )}
+      {previewOpen && html && (
+        <div className={styles.previewOverlay} role="dialog" aria-modal="true" aria-label="Изолированный предпросмотр" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false) }}>
+          <div className={styles.previewDialog}>
+            <div className={styles.previewToolbar}>
+              <span><Globe2 /> Изолированный просмотр. Не вводите пароли и реальные платёжные данные.</span>
+              <button type="button" onClick={() => setPreviewOpen(false)} aria-label="Закрыть предпросмотр">Закрыть ✕</button>
+            </div>
+            <iframe title="Полноэкранный изолированный предпросмотр" srcDoc={html} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" />
+          </div>
+        </div>
       )}
     </section>
   )
