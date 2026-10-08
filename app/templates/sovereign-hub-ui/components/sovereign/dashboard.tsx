@@ -7623,9 +7623,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
   // A voice conversation stays in the chat when Voice closes, turn by turn,
   // the way a call's transcript does — in the open chat, or a new one.
-  const appendVoiceConversation = useCallback((turns: Array<{ user: string; assistant: string }>) => {
+  const appendVoiceConversation = useCallback((turns: Array<{ user: string; assistant: string; sources?: Array<{ title: string; url: string }> }>) => {
     const clean = turns
-      .map((turn) => ({ user: String(turn.user || "").trim().slice(0, 4000), assistant: String(turn.assistant || "").trim().slice(0, 12000) }))
+      .map((turn) => ({
+        user: String(turn.user || "").trim().slice(0, 4000),
+        assistant: String(turn.assistant || "").trim().slice(0, 12000),
+        sources: (turn.sources || []).slice(0, 4).filter((item) => /^https?:\/\//i.test(item.url)),
+      }))
       .filter((turn) => turn.user || turn.assistant)
       .slice(-40)
     if (!clean.length) return
@@ -7634,7 +7638,16 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       const at = new Date(now - (clean.length - index) * 1000)
       const rows: Message[] = []
       if (turn.user) rows.push({ id: crypto.randomUUID(), role: "user", content: turn.user, timestamp: at })
-      if (turn.assistant) rows.push({ id: crypto.randomUUID(), role: "assistant", content: turn.assistant, timestamp: at })
+      if (turn.assistant) {
+        const links = turn.sources.map(({ title, url }) =>
+          `[${String(title || "Источник").replace(/[\[\]()]/g, "").slice(0, 100)}](${url})`,
+        )
+        rows.push({
+          id: crypto.randomUUID(), role: "assistant",
+          content: turn.assistant + (links.length ? "\n\nИсточники: " + links.join(" · ") : ""),
+          timestamp: at,
+        })
+      }
       return rows
     })
     const chatId = activeChatId || crypto.randomUUID()

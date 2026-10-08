@@ -353,6 +353,8 @@ export async function searchWeb(query: string, limit = 8): Promise<SearchResult[
 export async function searchVoiceWeb(query: string, limit = 4): Promise<SearchResult[]> {
   for (const [name, run] of [
     ["serper", searchSerper], ["tavily", searchTavily], ["brave", searchBrave],
+    // Public search is still available when the paid provider keys are absent.
+    ["jina", searchJina], ["duckduckgo", searchDuckDuckGo],
   ] as const) {
     const results = await runProvider(name, () => run(query, limit));
     if (results.length) return results;

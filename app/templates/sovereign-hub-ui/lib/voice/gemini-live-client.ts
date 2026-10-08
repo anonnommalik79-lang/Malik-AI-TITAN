@@ -18,7 +18,12 @@ export type { LiveLanguage, LiveStyle }
 /** Turns kept to carry the conversation into a session that could not be resumed. */
 const MEMORY_TURNS = 12
 
+export type VoiceWebSource = { title: string; url: string; snippet?: string; provider?: string }
+
 type LiveCallbacks = {
+  onSearchStart?: () => void
+  onSearchSources?: (sources: VoiceWebSource[]) => void
+  onSearchEnd?: (found: boolean) => void
   onReady?: (model: string) => void
   onInputInterim?: (text: string) => void
   onInputText?: (text: string) => void
@@ -235,6 +240,8 @@ export class GeminiLiveSession {
   /** 0 = every documented option, 1 = core options, 2 = the bare minimum. */
   private setupTier: 0 | 1 | 2 = 0
   private sawSetupComplete = false
+  private pendingSearches = new Map<string, AbortController>()
+  private searchesInTurn = 0
 
   private outputHead = 0
   private outputSources = new Set<AudioBufferSourceNode>()
@@ -249,6 +256,7 @@ export class GeminiLiveSession {
   private memory: LiveContextTurn[] = []
   private turnInput = ""
   private turnOutput = ""
+  private lastUserUtterance = ""
 
   constructor(input: { voice?: string; language?: LiveLanguage; style?: LiveStyle; callbacks?: LiveCallbacks }) {
     this.voice = safeLiveVoice(input.voice || "Charon")
@@ -330,6 +338,81 @@ export class GeminiLiveSession {
     this.connecting = attempt
     try { return await attempt }
     finally { if (this.connecting === attempt) this.connecting = null }
+  }
+
+  private cancelSearches(ids?: string[]) {
+    for (const [id, controller] of this.pendingSearches) {
+      if (!ids || ids.includes(id)) {
+        controller.abort()
+        this.pendingSearches.delete(id)
+      }
+    }
+  }
+
+  /**
+   * Gemini Live requires a functionResponses message for each tool call.
+   * Search runs on our server (keys are never sent to the browser), and stale
+   * results must never be injected into a replacement/reconnected session.
+   */
+  private async handleSearchTools(calls: Array<{ id?: string; name?: string; args?: { query?: string } }>, socket: WebSocket, generation: number) {
+    const responses = await Promise.all(calls.slice(0, 3).map(async (call, index) => {
+      const id = String(call.id || "").slice(0, 120)
+      const name = String(call.name || "")
+      const query = String(call.args?.query || "").replace(/\s+/g, " ").trim().slice(0, 280)
+      if (!id || name !== "search_public_web" || !query || this.searchesInTurn >= 2) {
+        return { name, id, response: { ok: false, error: "tool_unavailable_or_limit_reached" } }
+      }
+      this.searchesInTurn += 1
+      const controller = new AbortController()
+      this.pendingSearches.set(id, controller)
+      this.callbacks.onSearchStart?.()
+      const timeout = window.setTimeout(() => controller.abort(), 16_000)
+      try {
+        const request = await fetch("/api/voice/live-search", {
+          method: "POST",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ query, utterance: this.lastUserUtterance.slice(0, 480) }),
+          signal: controller.signal,
+        })
+        const result = await request.json().catch(() => null) as {
+          ok?: boolean; sources?: VoiceWebSource[]; context?: string; retrievedAt?: string; error?: string
+        } | null
+        if (controller.signal.aborted) return null
+        const sources = result?.ok && Array.isArray(result.sources)
+          ? result.sources.slice(0, 4).filter((entry) => {
+            try { const url = new URL(entry.url); return url.protocol === "https:" || url.protocol === "http:" } catch { return false }
+          })
+          : []
+        if (sources.length && this.generation === generation && this.socket === socket) this.callbacks.onSearchSources?.(sources)
+        this.callbacks.onSearchEnd?.(sources.length > 0)
+        return {
+          name, id,
+          response: {
+            ok: sources.length > 0,
+            retrievedAt: result?.retrievedAt || "",
+            context: String(result?.context || "").slice(0, 650),
+            sources: sources.map(({ title, snippet, url, provider }) => ({
+              title: String(title).slice(0, 140),
+              url: String(url).slice(0, 700),
+              snippet: String(snippet || "").slice(0, 550),
+              provider: String(provider || "").slice(0, 40),
+            })),
+            ...(sources.length ? {} : { error: result?.error || "no_current_sources" }),
+          },
+        }
+      } catch {
+        if (!controller.signal.aborted) this.callbacks.onSearchEnd?.(false)
+        return controller.signal.aborted ? null : { name, id, response: { ok: false, error: "search_temporarily_unavailable" } }
+      } finally {
+        window.clearTimeout(timeout)
+        if (this.pendingSearches.get(id) === controller) this.pendingSearches.delete(id)
+      }
+    }))
+    if (this.disposed || this.generation !== generation || this.socket !== socket || socket.readyState !== WebSocket.OPEN) return
+    const functionResponses = responses.filter((item): item is NonNullable<typeof item> => Boolean(item?.id))
+    if (functionResponses.length) socket.send(JSON.stringify({ toolResponse: { functionResponses } }))
   }
 
   private buildSetup() {
@@ -458,10 +541,19 @@ export class GeminiLiveSession {
           return
         }
 
+        if (Array.isArray(message.toolCallCancellation?.ids)) {
+          this.cancelSearches(message.toolCallCancellation.ids.map(String))
+        }
+        if (Array.isArray(message.toolCall?.functionCalls)) {
+          void this.handleSearchTools(message.toolCall.functionCalls, socket, generation)
+          return
+        }
+
         const server = message.serverContent
         if (!server) return
 
         if (server.interrupted) {
+          this.cancelSearches()
           this.stopOutput()
           if (this.turnOutput) this.remember(true)
           this.callbacks.onInterrupted?.()
@@ -475,6 +567,7 @@ export class GeminiLiveSession {
           // A new question after an answer that never got its turnComplete.
           if (this.turnOutput) this.remember()
           this.turnInput += inputText
+          this.lastUserUtterance = this.turnInput.slice(-480)
           this.callbacks.onInputText?.(inputText)
         }
 
@@ -495,6 +588,8 @@ export class GeminiLiveSession {
         }
 
         if (server.turnComplete) {
+          this.lastUserUtterance = ""
+          this.searchesInTurn = 0
           this.remember()
           this.callbacks.onTurnComplete?.()
         }
@@ -554,6 +649,8 @@ export class GeminiLiveSession {
 
   /** Tears the current link down without letting its handlers trigger a retry. */
   private dropSocket() {
+    this.cancelSearches()
+    this.searchesInTurn = 0
     this.generation += 1
     this.ready = false
     this.connecting = null
@@ -1079,6 +1176,7 @@ export class GeminiLiveSession {
   sendText(text: string) {
     const value = String(text || "").trim()
     if (!value || !this.isReady()) return false
+    this.lastUserUtterance = value.slice(-480)
     try {
       this.socket?.send(JSON.stringify({
         clientContent: {

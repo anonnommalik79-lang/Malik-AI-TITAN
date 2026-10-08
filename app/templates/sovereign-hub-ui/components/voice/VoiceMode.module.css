@@ -223,6 +223,38 @@
   font-size: clamp(13px, 1.15vw, 15px);
 }
 
+.webSources {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: min(650px, 100%);
+  max-height: 102px;
+  overflow-y: auto;
+  margin: 12px auto 0;
+  pointer-events: auto;
+}
+.webSources > span { color: rgba(255,255,255,.64); font-size: 11px; }
+.webSources a {
+  display: inline-block;
+  max-width: min(190px, 42vw);
+  padding: 5px 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 999px;
+  color: #f5f5f5;
+  background: rgba(16,16,18,.86);
+  font-size: 11px;
+  text-decoration: none;
+}
+.webSources a:hover { background: rgba(35,35,40,.94); }
+@media (max-width: 680px) {
+  .webSources { max-height: 76px; margin-top: 6px; gap: 5px; }
+  .webSources a { max-width: 43vw; }
+}
 .transcript {
   min-height: 24px;
   margin: 17px auto 0;
