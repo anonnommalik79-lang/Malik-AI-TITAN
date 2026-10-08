@@ -7640,11 +7640,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       if (turn.user) rows.push({ id: crypto.randomUUID(), role: "user", content: turn.user, timestamp: at })
       if (turn.assistant) {
         const links = turn.sources.map(({ title, url }) =>
-          `[${String(title || "Источник").replace(/[\\[\\]()]/g, "").slice(0, 100)}](${url})`,
+          `[${String(title || "Источник").replace(/[\[\]()]/g, "").slice(0, 100)}](${url})`,
         )
         rows.push({
           id: crypto.randomUUID(), role: "assistant",
-          content: turn.assistant + (links.length ? "\\n\\nИсточники: " + links.join(" · ") : ""),
+          content: turn.assistant + (links.length ? "\n\nИсточники: " + links.join(" · ") : ""),
           timestamp: at,
         })
       }
