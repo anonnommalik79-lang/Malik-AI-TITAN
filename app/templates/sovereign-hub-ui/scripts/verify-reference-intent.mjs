@@ -469,3 +469,12 @@ try {
   assert.match(blocks, /\.malik-answer-photo-row__image img \{[^}]*max-height:/, "row photos have a height cap")
   console.log("PASS strong-photo ranking, vector emblems demoted, no empty frames, capped photo height")
 }
+
+const lengthyAlmaty = "Расскажи про горы Казахстана\n" + "исторические данные и заметки\n".repeat(180)
+assert.ok(lengthyAlmaty.length > 2500)
+assert.ok(policy.allowsAnswerPhotoHints(lengthyAlmaty), "long geography brief still allows grounded photo hints")
+assert.ok(policy.planReferenceVisuals(lengthyAlmaty), "long visual brief receives a bounded topical visual query")
+assert.ok(policy.planReferenceVisuals(lengthyAlmaty).queries.every((query) => query.length <= 220), "never search a full pasted brief")
+assert.equal(policy.planReferenceVisuals(lengthyAlmaty + "\nТолько текст, без фото"), null, "tail opt-out still wins even in long prompts")
+assert.equal(policy.planReferenceVisuals("Реши квадратное уравнение\n" + "условия задачи\n".repeat(200)), null, "math does not get decorative photos")
+console.log("PASS long briefs: bounded relevant photo search, tail opt-out and non-visual tasks")
