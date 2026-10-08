@@ -115,3 +115,37 @@ check("interrupted and failed SSE streams are never saved as completed answers",
 })
 
 console.log(`\n${checks} background-chat survival checks passed.`)
+
+const pollAst = ts.createSourceFile("AccountChatPersistence.tsx", account, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+const pollDecl = pollAst.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "pollDetachedTurn")
+assert.ok(pollDecl, "background recovery polling function exists")
+const runnablePoll = ts.transpileModule(pollDecl.getText(pollAst), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+async function recoveryStatusTest(statusCode, payload) {
+  const scheduled = []
+  const fakeWindow = { setTimeout: (fn, ms) => { scheduled.push({ fn, ms }); return scheduled.length } }
+  const pending = { turnId: "recovery-test", createdAt: Date.now(), pageId: "old", detached: true }
+  const runtime = { pageId: "new", recoveryTimers: new Map(), baseFetch: async () => Response.json(payload || { ok: false }, { status: statusCode }) }
+  const pollDetachedTurn = new Function(
+    "readPending", "patchRecoveredTurn", "removePending", "scheduleRecoveryReload",
+    "RECOVERY_POLL_MS", "RECOVERY_OUTAGE_POLL_MS", "RECOVERY_RATE_LIMIT_POLL_MS",
+    "MAX_RECOVERY_AGE_MS", "BACKGROUND_STREAM_PATH", "window",
+    runnablePoll + "\nreturn pollDetachedTurn;",
+  )(
+    () => [pending], () => true, () => {}, () => {},
+    1600, 12000, 60000, 7 * 24 * 60 * 60 * 1000, "/api/stream/background", fakeWindow,
+  )
+  pollDetachedTurn(runtime, "owner", pending.turnId)
+  assert.equal(scheduled.length, 1, "schedules first poll")
+  await scheduled[0].fn()
+  return scheduled.slice(1).map((x) => x.ms)
+}
+assert.deepEqual(await recoveryStatusTest(503), [12000], "temporary outage retries slowly")
+assert.deepEqual(await recoveryStatusTest(429), [60000], "rate limit is respected")
+assert.deepEqual(await recoveryStatusTest(401), [], "no polling after authentication failure")
+assert.deepEqual(await recoveryStatusTest(403), [], "no polling of forbidden answer")
+assert.deepEqual(await recoveryStatusTest(200, {ok:true,turn:{status:"pending"}}), [1600], "unfinished turn continues polling")
+assert.deepEqual(await recoveryStatusTest(200, {ok:true}), [12000], "unexpected server payload doesn't drop recovery")
+check("transient 429/5xx and malformed result retry without credential-crossing polls", () => {
+  assert.match(account, /retryLater\(RECOVERY_OUTAGE_POLL_MS\)/)
+  assert.match(account, /retryLater\(RECOVERY_RATE_LIMIT_POLL_MS\)/)
+})
