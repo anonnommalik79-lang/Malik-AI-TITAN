@@ -696,7 +696,12 @@ function liveSseResponse(
   let writingStatusSent = false
   const generation = new AbortController()
   let savedTurn: Promise<unknown> | null = null
-  after(async () => { if (savedTurn) await savedTurn })
+  let failedWorkRefund: Promise<void> | null = null
+  // Work quota refunds must survive stream closure and failed partial output.
+  after(async () => {
+    if (savedTurn) await savedTurn
+    if (failedWorkRefund) await failedWorkRefund
+  })
   const protectStreamChunk = createStreamingFenceProtector()
 
   const stopHeartbeat = () => {
@@ -814,7 +819,7 @@ function liveSseResponse(
         close()
       }).catch((error) => {
         stopHeartbeat()
-        if (workReceipt && !streamedAny) void refundWorkQuota(entitlement.userId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))
+        if (workReceipt) failedWorkRefund = refundWorkQuota(entitlement.userId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))
         const payload = malikModelErrorPayload(error)
         activity.finish(responseCall, undefined, "failed", payload.message || payload.error)
         send("error", {
