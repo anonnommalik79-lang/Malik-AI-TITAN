@@ -517,6 +517,8 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
     let timer = 0
     let writeRevision = 0
     let retryCount = 0
+    let hydrationFailures = 0
+    let hydrationTimer = 0
     let inFlight = Promise.resolve()
 
     const parseTime = (value: unknown) => {
@@ -591,7 +593,10 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
 
     window.addEventListener(ACCOUNT_CHAT_STATE_EVENT, onFullSnapshot)
 
-    void (async () => {
+    // Never overwrite unknown cloud history after a failed GET. A transient
+    // storage outage is not proof the remote history is empty.
+    const hydrateCloud = async (): Promise<void> => {
+      if (disposed) return
       try {
         const response = await fetch(ACCOUNT_CHAT_STATE_PATH, {
           method: "GET",
@@ -599,13 +604,14 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
           cache: "no-store",
           headers: { Accept: "application/json" },
         })
-        if (!response.ok) {
-          remoteReady = true
-          if (pendingRaw) pushSnapshot(pendingRaw)
+        if (response.status === 401 || response.status === 403) {
+          remoteConfigured = false
           return
         }
+        if (!response.ok) throw new Error("CHAT_HISTORY_CLOUD_READ_FAILED")
+        const payload = await response.json()
+        if (payload?.ok !== true) throw new Error("CHAT_HISTORY_CLOUD_READ_INVALID")
 
-        const payload = await response.json().catch(() => ({}))
         remoteConfigured = payload?.configured !== false
         const remoteState = payload?.state && typeof payload.state === "object" ? payload.state : null
         const remoteSavedAt = parseTime(payload?.savedAt)
@@ -613,11 +619,12 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
         const localRaw = window.localStorage.getItem(DASHBOARD_STORAGE_KEY) || ""
         const remoteRaw = remoteState ? JSON.stringify(remoteState) : ""
 
+        hydrationFailures = 0
         if (remoteRaw && remoteSavedAt > localSavedAt) {
           try { window.localStorage.setItem(savedAtKey, String(payload.savedAt || new Date().toISOString())) } catch {}
           pendingRaw = ""
           remoteReady = true
-          if (remoteRaw !== localRaw) {
+          if (remoteRaw !== localRaw && !disposed) {
             window.localStorage.setItem(DASHBOARD_STORAGE_KEY, remoteRaw)
             window.location.reload()
             return
@@ -628,14 +635,23 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
           if (candidate && (!remoteRaw || localSavedAt > remoteSavedAt)) pushSnapshot(candidate)
         }
       } catch {
-        remoteReady = true
-        if (pendingRaw) pushSnapshot(pendingRaw)
+        // Keep local state intact while remote freshness is unknown. Retry
+        // with a bounded delay and no recurring task when the component unmounts.
+        if (!disposed) {
+          hydrationFailures += 1
+          hydrationTimer = window.setTimeout(() => {
+            hydrationTimer = 0
+            void hydrateCloud()
+          }, accountChatRetryDelay(hydrationFailures))
+        }
       }
-    })()
+    }
+    void hydrateCloud()
 
     return () => {
       disposed = true
       if (timer) window.clearTimeout(timer)
+      if (hydrationTimer) window.clearTimeout(hydrationTimer)
       window.removeEventListener(ACCOUNT_CHAT_STATE_EVENT, onFullSnapshot)
     }
   }, [accountId])

@@ -94,7 +94,7 @@ export function privateJsonStoreConfigured() {
   return Boolean(config())
 }
 
-export async function readPrivateJson<T>(keyValue: string): Promise<T | null> {
+export async function readPrivateJson<T>(keyValue: string, options?: { throwOnReadError?: boolean }): Promise<T | null> {
   const target = storage()
   if (!target) return null
   const key = normalizeKey(keyValue)
@@ -115,6 +115,9 @@ export async function readPrivateJson<T>(keyValue: string): Promise<T | null> {
   } catch (error: any) {
     const code = String(error?.name || error?.Code || error?.code || "")
     if (code === "NoSuchKey" || code === "NotFound" || Number(error?.$metadata?.httpStatusCode) === 404) return null
+    // Account history must distinguish cloud downtime from a missing object.
+    // Otherwise an empty GET may cause another device to overwrite its history.
+    if (options?.throwOnReadError) throw error
     console.warn("[MALIK_PRIVATE_STATE] read failed", key, error instanceof Error ? error.message : String(error))
     return null
   }

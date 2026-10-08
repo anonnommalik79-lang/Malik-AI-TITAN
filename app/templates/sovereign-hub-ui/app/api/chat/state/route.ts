@@ -18,13 +18,21 @@ export async function GET(request: Request) {
   const entitlement = await resolveRequestEntitlement(request)
   if (!entitlement.authenticated || !entitlement.userId || entitlement.userId === "guest") return unauthorized()
 
-  const result = await readAccountChatState(entitlement.userId)
-  return NextResponse.json({
-    ok: true,
-    configured: result.configured,
-    savedAt: result.savedAt,
-    state: result.state,
-  }, { headers: { "Cache-Control": "private, no-store" } })
+  try {
+    const result = await readAccountChatState(entitlement.userId)
+    return NextResponse.json({
+      ok: true,
+      configured: result.configured,
+      savedAt: result.savedAt,
+      state: result.state,
+    }, { headers: { "Cache-Control": "private, no-store" } })
+  } catch {
+    // Never report an empty history when the durable store is unavailable.
+    return NextResponse.json({ ok: false, error: "CHAT_HISTORY_CLOUD_READ_FAILED" }, {
+      status: 503,
+      headers: { "Cache-Control": "private, no-store" },
+    })
+  }
 }
 
 export async function PUT(request: Request) {

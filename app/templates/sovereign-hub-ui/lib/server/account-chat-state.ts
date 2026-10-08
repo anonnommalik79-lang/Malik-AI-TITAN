@@ -31,7 +31,7 @@ export async function readAccountChatState(userId: string) {
     return { configured: accountChatStateConfigured(), savedAt: "", state: null as Record<string, unknown> | null }
   }
 
-  const envelope = await readPrivateJson<AccountChatStateEnvelope>(storageKey(id))
+  const envelope = await readPrivateJson<AccountChatStateEnvelope>(storageKey(id), { throwOnReadError: true })
   if (!envelope || envelope.version !== 1 || !envelope.state || typeof envelope.state !== "object" || Array.isArray(envelope.state)) {
     return { configured: true, savedAt: "", state: null as Record<string, unknown> | null }
   }
