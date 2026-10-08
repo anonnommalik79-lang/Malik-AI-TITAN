@@ -187,7 +187,7 @@ try {
   })
   await check("long multi-part brief retains its original depth after a safe retry", async () => {
     const requests = []
-    const prompt = Array.from({ length: 40 }, (_, i) => `${i + 1}) Complete requirement ${i + 1}`).join("\\n")
+    const prompt = Array.from({ length: 40 }, (_, i) => `${i + 1}) Complete requirement ${i + 1}`).join("\n")
     const original = { method: "POST", body: JSON.stringify({ originalQuestion: prompt, workspaceMode: "chat", responseDepth: "ultra" }) }
     const response = await fetchRecoverableChat("/api/stream", original, { ...recoveryOptions, fetcher: async (_url, init) => {
       requests.push(JSON.parse(init.body))
