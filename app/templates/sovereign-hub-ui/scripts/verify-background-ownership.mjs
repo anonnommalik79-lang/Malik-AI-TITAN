@@ -19,6 +19,7 @@ function load(file) {
     if (name === "server-only") return {}
     if (name === "@/lib/server/request-entitlement") return { resolveRequestEntitlement: async () => entitlement }
     if (name.startsWith("@/")) return load(`${name.slice(2)}.ts`)
+    if (name.startsWith("./") || name.startsWith("../")) return load(path.resolve(path.dirname(full), name) + ".ts")
     return require(name)
   }
   vm.runInThisContext(`(function(require,module,exports){${js}\n})`, { filename: full })(resolve, mod, mod.exports)
