@@ -256,6 +256,7 @@ export class GeminiLiveSession {
   private memory: LiveContextTurn[] = []
   private turnInput = ""
   private turnOutput = ""
+  private lastUserUtterance = ""
 
   constructor(input: { voice?: string; language?: LiveLanguage; style?: LiveStyle; callbacks?: LiveCallbacks }) {
     this.voice = safeLiveVoice(input.voice || "Charon")
@@ -372,7 +373,7 @@ export class GeminiLiveSession {
           credentials: "same-origin",
           cache: "no-store",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ query }),
+          body: JSON.stringify({ query, utterance: this.lastUserUtterance.slice(0, 480) }),
           signal: controller.signal,
         })
         const result = await request.json().catch(() => null) as {
@@ -566,6 +567,7 @@ export class GeminiLiveSession {
           // A new question after an answer that never got its turnComplete.
           if (this.turnOutput) this.remember()
           this.turnInput += inputText
+          this.lastUserUtterance = this.turnInput.slice(-480)
           this.callbacks.onInputText?.(inputText)
         }
 
@@ -586,6 +588,7 @@ export class GeminiLiveSession {
         }
 
         if (server.turnComplete) {
+          this.lastUserUtterance = ""
           this.searchesInTurn = 0
           this.remember()
           this.callbacks.onTurnComplete?.()
@@ -1173,6 +1176,7 @@ export class GeminiLiveSession {
   sendText(text: string) {
     const value = String(text || "").trim()
     if (!value || !this.isReady()) return false
+    this.lastUserUtterance = value.slice(-480)
     try {
       this.socket?.send(JSON.stringify({
         clientContent: {
