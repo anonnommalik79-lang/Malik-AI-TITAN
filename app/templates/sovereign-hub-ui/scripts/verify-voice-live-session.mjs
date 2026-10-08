@@ -270,7 +270,7 @@ await check("Gemini Live advertises a web lookup tool but keeps a minimal fallba
   const declaration = browser.sockets[0].setup().tools?.[0]?.functionDeclarations?.[0]
   assert.equal(declaration?.name, "search_public_web")
   assert.equal(declaration?.parameters?.type, "OBJECT")
-  const minimal = buildLiveSetupModule().buildLiveSetup({ tier: 2 }).setup
+  const minimal = (await import(`${process.cwd()}/lib/voice/gemini-live-setup.ts`)).buildLiveSetup({ tier: 2 }).setup
   assert.equal(minimal.tools, undefined, "fallback cannot depend on tools")
   session.close()
   browser.cleanup()
@@ -306,11 +306,6 @@ await check("search tool cannot trigger unlimited searches in one voice turn", a
   session.close()
   browser.cleanup()
 })
-
-function buildLiveSetupModule() {
-  return liveSetupReference
-}
-const liveSetupReference = await import(`${process.cwd()}/lib/voice/gemini-live-setup.ts`)
 
 console.log("\nwhat reaches the model")
 
