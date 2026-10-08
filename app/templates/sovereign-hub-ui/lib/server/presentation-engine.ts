@@ -77,7 +77,7 @@ export async function generateOutline(input: ModelChoice & {
   let prompt = outlineUserPrompt(input.topic, input.count)
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: 2_400, temperature: attempt ? 0.35 : 0.6 })
+    const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: Math.min(4_200, Math.max(2_400, 1_100 + input.count * 140)), temperature: attempt ? 0.35 : 0.6 })
     const parsed = extractJson(raw)
     const outline = normalizeOutline(parsed, input.topic, input.count)
     if (outline && (investor ? outline.items.length === input.count && investorOutlineIsComplete(parsed, input.count) : outline.items.length === input.count)) return outline
