@@ -44,6 +44,9 @@ jobs:
       - name: Verify Markdown answer rendering
         run: npm run test:answer-format
 
+      - name: Verify presentation rendering
+        run: npm run test:presentations
+
       - name: Typecheck
         run: npm run typecheck
 
