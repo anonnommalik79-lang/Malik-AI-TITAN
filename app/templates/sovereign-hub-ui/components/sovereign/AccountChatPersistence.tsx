@@ -1,11 +1,11 @@
 "use client"
 
-import { useLayoutEffect, useState, type ReactNode } from "react"
+import { useLayoutEffect, type ReactNode } from "react"
 import { requestPersistentGeneratedImageStorage, setGeneratedImageAccountScope } from "@/lib/media/client-generated-image-store"
 import { setMalikMemoryAccountScope } from "@/lib/malik-context"
 import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import { mergeAccountChatStates } from "@/lib/ai/account-chat-state-merge"
-import { accountChatRetryDelay, accountChatWriteConfirmed, claimAccountChatSyncNotice, shouldRetryAccountChatWrite, type AccountChatSyncNotice } from "@/lib/ai/account-chat-sync-retry"
+import { accountChatRetryDelay, accountChatWriteConfirmed, shouldRetryAccountChatWrite } from "@/lib/ai/account-chat-sync-retry"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const ACCOUNT_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
@@ -477,7 +477,6 @@ function installBackgroundRuntime(
  * recovery, and the next visit patches the finished answer into the exact chat.
  */
 export function AccountChatPersistence({ accountId, children }: { accountId: string; children: ReactNode }) {
-  const [cloudSyncWarning, setCloudSyncWarning] = useState<"not-configured" | "unavailable" | null>(null)
   useLayoutEffect(() => {
     if (typeof window === "undefined" || typeof Storage === "undefined") return
 
@@ -561,22 +560,6 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
     let hydrationFailures = 0
     let hydrationTimer = 0
     let inFlight = Promise.resolve()
-    let warningDismissTimer = 0
-    setCloudSyncWarning(null)
-
-    const showCloudSyncWarning = (kind: AccountChatSyncNotice) => {
-      if (disposed) return
-      let noticeStorage: Storage | null = null
-      try { noticeStorage = window.localStorage } catch {}
-      if (!claimAccountChatSyncNotice(noticeStorage, accountKey, kind)) return
-      if (warningDismissTimer) window.clearTimeout(warningDismissTimer)
-      setCloudSyncWarning(kind)
-      warningDismissTimer = window.setTimeout(() => {
-        warningDismissTimer = 0
-        if (!disposed) setCloudSyncWarning(null)
-      }, 10_000)
-    }
-
     const parseTime = (value: unknown) => {
       const parsed = Date.parse(String(value || ""))
       return Number.isFinite(parsed) ? parsed : 0
@@ -617,7 +600,7 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
           const payload = response?.ok ? await response.json().catch(() => null) : null
           if (payload?.configured === false) {
             remoteConfigured = false
-            if (!disposed) showCloudSyncWarning("not-configured")
+            console.warn("[MALIK_CHAT_SYNC] account cloud storage is not configured; local history is retained")
             return
           }
           if (!accountChatWriteConfirmed(payload)) {
@@ -625,15 +608,12 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
             // A newer snapshot already queued locally always wins.
             if (shouldRetryAccountChatWrite(sentRevision, writeRevision, disposed)) {
               retryCount += 1
-              if (retryCount >= 3 && !disposed) showCloudSyncWarning("unavailable")
+              if (retryCount === 3 && !disposed) console.warn("[MALIK_CHAT_SYNC] cloud write unavailable; local history is retained")
               pushSnapshot(pendingRaw || nextRaw, accountChatRetryDelay(retryCount))
             }
             return
           }
           retryCount = 0
-          if (warningDismissTimer) window.clearTimeout(warningDismissTimer)
-          warningDismissTimer = 0
-          if (!disposed) setCloudSyncWarning(null)
           if (typeof payload.savedAt === "string") {
             try { window.localStorage.setItem(savedAtKey, payload.savedAt) } catch {}
           }
@@ -675,7 +655,7 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
         if (payload?.ok !== true) throw new Error("CHAT_HISTORY_CLOUD_READ_INVALID")
 
         remoteConfigured = payload?.configured !== false
-        if (!remoteConfigured && !disposed) showCloudSyncWarning("not-configured")
+        if (!remoteConfigured && !disposed) console.warn("[MALIK_CHAT_SYNC] account cloud storage is not configured; local history is retained")
         const remoteState = payload?.state && typeof payload.state === "object" ? payload.state : null
         const remoteSavedAt = parseTime(payload?.savedAt)
         const localSavedAt = parseTime(window.localStorage.getItem(savedAtKey))
@@ -715,7 +695,7 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
         // with a bounded delay and no recurring task when the component unmounts.
         if (!disposed) {
           hydrationFailures += 1
-          if (hydrationFailures >= 3) showCloudSyncWarning("unavailable")
+          if (hydrationFailures === 3) console.warn("[MALIK_CHAT_SYNC] cloud read unavailable; local history is retained")
           hydrationTimer = window.setTimeout(() => {
             hydrationTimer = 0
             void hydrateCloud()
@@ -727,36 +707,13 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
 
     return () => {
       disposed = true
-      if (warningDismissTimer) window.clearTimeout(warningDismissTimer)
       if (timer) window.clearTimeout(timer)
       if (hydrationTimer) window.clearTimeout(hydrationTimer)
       window.removeEventListener(ACCOUNT_CHAT_STATE_EVENT, onFullSnapshot)
     }
   }, [accountId])
 
-  return (
-    <>
-      {children}
-      {cloudSyncWarning && cleanAccountId(accountId) !== "guest" ? (
-        <div
-          role="status"
-          aria-live="polite"
-          data-malik-chat-sync-warning={cloudSyncWarning}
-          style={{
-            position: "fixed", bottom: 116, left: "50%", transform: "translateX(-50%)",
-            zIndex: 70, width: "min(92vw, 480px)", padding: "10px 14px",
-            borderRadius: 14, border: "1px solid #494949", background: "#121212",
-            color: "#f5f5f5", boxShadow: "0 8px 28px #0009", fontSize: 12,
-            lineHeight: 1.5, textAlign: "center", pointerEvents: "none",
-          }}
-        >
-          {cloudSyncWarning === "not-configured"
-            ? "История пока хранится на этом устройстве. Облачная синхронизация между устройствами не настроена."
-            : "Облачная синхронизация истории временно недоступна. Не удаляйте локальные данные до восстановления."}
-        </div>
-      ) : null}
-    </>
-  )
+  return <>{children}</>
 }
 
 export default AccountChatPersistence
