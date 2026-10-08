@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { Image as ImageIcon, Search, X } from "lucide-react"
+import { Check, Image as ImageIcon, LogIn, Paperclip, Search, X } from "lucide-react"
+import "./composer-tools/library-picker.css"
 
 type LibraryItem = {
   id: string
@@ -17,97 +18,225 @@ type ChatLibraryPickerProps = {
   open: boolean
   onClose: () => void
   onSelect: (url: string, label?: string) => void | Promise<void>
+  /** How many can still be attached to this message. */
+  maxSelect?: number
 }
 
-export function ChatLibraryPicker({ open, onClose, onSelect }: ChatLibraryPickerProps) {
+type LoadState =
+  | { kind: "loading" }
+  | { kind: "ready" }
+  | { kind: "sign-in" }
+  | { kind: "not-configured" }
+  | { kind: "error"; message: string }
+
+const PAGE = 60
+
+function imagesWord(count: number) {
+  const n = count % 100
+  const last = n % 10
+  if (n > 10 && n < 20) return "изображений"
+  if (last === 1) return "изображение"
+  if (last >= 2 && last <= 4) return "изображения"
+  return "изображений"
+}
+
+function dateLabel(value?: string) {
+  const time = value ? Date.parse(value) : NaN
+  if (!Number.isFinite(time)) return ""
+  return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(new Date(time)).replace(".", "")
+}
+
+/**
+ * «Из библиотеки»: the person's saved Malik AI images. Several can be chosen
+ * at once; nothing is attached until «Прикрепить»; a failure is said in words
+ * and the picker stays open.
+ */
+export function ChatLibraryPicker({ open, onClose, onSelect, maxSelect = 6 }: ChatLibraryPickerProps) {
   const [items, setItems] = useState<LibraryItem[]>([])
+  const [nextOffset, setNextOffset] = useState<number | null>(null)
+  const [total, setTotal] = useState(0)
+  const [state, setState] = useState<LoadState>({ kind: "loading" })
+  const [loadingMore, setLoadingMore] = useState(false)
   const [query, setQuery] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [selected, setSelected] = useState<string[]>([])
+  const [attaching, setAttaching] = useState(false)
   const [error, setError] = useState("")
+  const searchRef = useRef<HTMLInputElement>(null)
+  const limit = Math.max(1, maxSelect)
+
+  const fetchPage = useCallback(async (offset: number) => {
+    const response = await fetch(`/api/media/library?limit=${PAGE}&offset=${offset}`, { cache: "no-store", credentials: "same-origin" })
+    const data = await response.json().catch(() => null)
+    if (response.status === 401) return { state: { kind: "sign-in" } as LoadState }
+    if (!response.ok || !data?.ok) return { state: { kind: "error", message: "Библиотека сейчас не открывается. Попробуйте ещё раз." } as LoadState }
+    if (data.configured === false) return { state: { kind: "not-configured" } as LoadState }
+    return {
+      state: { kind: "ready" } as LoadState,
+      items: (Array.isArray(data.items) ? data.items : []).filter((item: LibraryItem) => item && typeof item.src === "string" && item.src) as LibraryItem[],
+      nextOffset: typeof data.nextOffset === "number" ? data.nextOffset : null,
+      total: Number(data.total) || 0,
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) return
     let cancelled = false
-    setLoading(true)
-    setError("")
-    fetch("/api/media/library?limit=120", { cache: "no-store", credentials: "same-origin" })
-      .then(async (response) => {
-        const data = await response.json().catch(() => null)
-        if (!response.ok || !data?.ok) throw new Error(data?.error || "Не удалось открыть библиотеку")
-        return data
-      })
-      .then((data) => {
+    setItems([]); setSelected([]); setQuery(""); setError(""); setNextOffset(null); setState({ kind: "loading" })
+    fetchPage(0)
+      .then((result) => {
         if (cancelled) return
-        setItems(Array.isArray(data?.items) ? data.items : [])
+        setState(result.state)
+        if (result.items) { setItems(result.items); setNextOffset(result.nextOffset); setTotal(result.total) }
       })
-      .catch((reason) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Не удалось открыть библиотеку")
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [open])
+      .catch(() => { if (!cancelled) setState({ kind: "error", message: "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз." }) })
+    const frame = requestAnimationFrame(() => searchRef.current?.focus())
+    return () => { cancelled = true; cancelAnimationFrame(frame) }
+  }, [open, fetchPage])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !attaching) { event.preventDefault(); onClose() } }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [open, attaching, onClose])
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return items
-    return items.filter((item) =>
-      [item.prompt, item.provider, item.quality, item.createdAt]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(q),
-    )
+    const words = query.trim().toLowerCase().split(/\s+/u).filter(Boolean)
+    if (!words.length) return items
+    return items.filter((item) => {
+      const haystack = [item.prompt, item.provider, item.quality, dateLabel(item.createdAt)].filter(Boolean).join(" ").toLowerCase()
+      return words.every((word) => haystack.includes(word))
+    })
   }, [items, query])
 
   if (!open || typeof document === "undefined") return null
 
-  return createPortal(
-    <div className="fixed inset-0 z-[2147483000] grid place-items-center bg-black/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Библиотека файлов">
-      <div className="flex max-h-[82dvh] w-full max-w-[860px] flex-col overflow-hidden rounded-[22px] border border-white/10 bg-[#151516] shadow-[0_30px_120px_rgba(0,0,0,.7)]">
-        <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
-          <div>
-            <div className="text-[14px] font-semibold text-white">Добавить файл из библиотеки</div>
-            <div className="mt-0.5 text-[11px] text-zinc-500">Ваши сохранённые изображения Malik AI — можно найти и прикрепить снова</div>
-          </div>
-          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full text-zinc-400 hover:bg-white/[0.07] hover:text-white" aria-label="Закрыть">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+  const toggle = (id: string) => {
+    setError("")
+    if (selected.includes(id)) { setSelected(selected.filter((value) => value !== id)); return }
+    if (selected.length >= limit) { setError(limit === 1 ? "К этому сообщению можно прикрепить ещё одно изображение." : `Можно выбрать не больше ${limit}.`); return }
+    setSelected([...selected, id])
+  }
 
-        <div className="border-b border-white/[0.06] p-3">
-          <label className="flex h-10 items-center gap-2 rounded-xl border border-white/[0.08] bg-black/20 px-3 text-zinc-500">
-            <Search className="h-4 w-4" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по библиотеке…" className="min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-zinc-600" />
-          </label>
-        </div>
+  const loadMore = async () => {
+    if (nextOffset === null || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const result = await fetchPage(nextOffset)
+      if (result.items) {
+        setItems((current) => [...current, ...result.items!.filter((item) => !current.some((known) => known.id === item.id))])
+        setNextOffset(result.nextOffset)
+      } else setError("Не удалось загрузить ещё. Попробуйте снова.")
+    } catch {
+      setError("Не удалось загрузить ещё. Попробуйте снова.")
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
-        <div className="min-h-[260px] flex-1 overflow-y-auto p-3">
-          {loading ? <div className="grid min-h-[260px] place-items-center text-sm text-zinc-500">Загружаю библиотеку…</div> : null}
-          {!loading && error ? <div className="grid min-h-[260px] place-items-center px-6 text-center text-sm text-red-300">{error}</div> : null}
-          {!loading && !error && !filtered.length ? (
-            <div className="grid min-h-[260px] place-items-center px-6 text-center text-sm text-zinc-500">
-              <div><ImageIcon className="mx-auto mb-3 h-6 w-6" />В библиотеке пока нет подходящих изображений.</div>
-            </div>
-          ) : null}
-          {!loading && !error && filtered.length ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-              {filtered.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => void Promise.resolve(onSelect(item.src, item.prompt || "Изображение из библиотеки")).then(onClose)}
-                  className="group overflow-hidden rounded-[14px] border border-white/[0.08] bg-black/20 text-left hover:border-white/[0.18]"
-                >
-                  <img src={item.src} alt="" loading="lazy" className="aspect-square w-full object-cover" />
-                  <span className="block truncate px-2.5 py-2 text-[10px] text-zinc-400 group-hover:text-white">{item.prompt || item.provider || "Malik AI"}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+  const attach = async () => {
+    if (!selected.length || attaching) return
+    setAttaching(true)
+    setError("")
+    const chosen = selected.map((id) => items.find((item) => item.id === id)).filter((item): item is LibraryItem => Boolean(item))
+    let done = 0
+    try {
+      for (const item of chosen) {
+        await onSelect(item.src, item.prompt || "Изображение из библиотеки")
+        done += 1
+        setSelected((current) => current.filter((id) => id !== item.id))
+      }
+      onClose()
+    } catch (reason) {
+      const message = reason instanceof Error && reason.message ? reason.message : "Не удалось прикрепить изображение"
+      setError(done ? `Прикреплено ${done} из ${chosen.length}. ${message}` : message)
+    } finally {
+      setAttaching(false)
+    }
+  }
+
+  const body = (() => {
+    if (state.kind === "loading") return <div className="mlp-grid" aria-busy="true">{Array.from({ length: 8 }, (_, at) => <span key={at} className="mlp-skeleton" />)}</div>
+    if (state.kind === "sign-in") return (
+      <div className="mlp-empty">
+        <LogIn aria-hidden="true" />
+        <strong>Библиотека доступна после входа</strong>
+        <span>Изображения, которые вы создаёте в Malik AI, сохраняются в аккаунте.</span>
+        <a className="mlp-btn is-primary" href="/sign-in">Войти</a>
       </div>
-    </div>
-    , document.body)
+    )
+    if (state.kind === "not-configured") return (
+      <div className="mlp-empty">
+        <ImageIcon aria-hidden="true" />
+        <strong>Облачная библиотека не подключена</strong>
+        <span>Созданные изображения пока не сохраняются на сервере.</span>
+      </div>
+    )
+    if (state.kind === "error") return (
+      <div className="mlp-empty is-error">
+        <ImageIcon aria-hidden="true" />
+        <strong>{state.message}</strong>
+      </div>
+    )
+    if (!filtered.length) return (
+      <div className="mlp-empty">
+        <ImageIcon aria-hidden="true" />
+        <strong>{items.length ? "Ничего не найдено" : "Здесь появятся ваши изображения"}</strong>
+        <span>{items.length ? "Попробуйте другие слова из описания картинки." : "Создайте изображение — оно сохранится в библиотеке."}</span>
+      </div>
+    )
+    return (
+      <>
+        <div className="mlp-grid" role="listbox" aria-multiselectable="true" aria-label="Изображения">
+          {filtered.map((item) => {
+            const order = selected.indexOf(item.id)
+            const on = order >= 0
+            return (
+              <button key={item.id} type="button" role="option" aria-selected={on} className={on ? "mlp-tile is-on" : "mlp-tile"} onClick={() => toggle(item.id)} onDoubleClick={() => { if (!on) toggle(item.id) }} title={item.prompt || undefined}>
+                <img src={item.src} alt={item.prompt || "Изображение из библиотеки"} loading="lazy" decoding="async" />
+                <span className="mlp-tile__mark" aria-hidden="true">{on ? (limit > 1 ? order + 1 : <Check />) : null}</span>
+                <span className="mlp-tile__caption">
+                  <span>{item.prompt || item.provider || "Malik AI"}</span>
+                  {dateLabel(item.createdAt) ? <small>{dateLabel(item.createdAt)}</small> : null}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        {nextOffset !== null && !query.trim() ? (
+          <button type="button" className="mlp-more" onClick={() => void loadMore()} disabled={loadingMore}>{loadingMore ? "Загружаю…" : `Показать ещё (${Math.max(0, total - items.length)})`}</button>
+        ) : null}
+      </>
+    )
+  })()
+
+  return createPortal(
+    <div className="mlp-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget && !attaching) onClose() }}>
+      <section className="mlp" role="dialog" aria-modal="true" aria-label="Добавить из библиотеки" data-preserve-brand-color="true">
+        <header className="mlp-head">
+          <div>
+            <h2>Из библиотеки</h2>
+            <p>{state.kind === "ready" && total ? `${total} ${imagesWord(total)} · выберите ${limit > 1 ? "одно или несколько" : "одно"}` : "Ваши сохранённые изображения Malik AI"}</p>
+          </div>
+          <button type="button" className="mlp-close" onClick={onClose} disabled={attaching} aria-label="Закрыть"><X aria-hidden="true" /></button>
+        </header>
+        <label className="mlp-search">
+          <Search aria-hidden="true" />
+          <input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по описанию, модели или дате…" aria-label="Поиск по библиотеке" />
+          {query ? <button type="button" onClick={() => setQuery("")} aria-label="Очистить поиск"><X aria-hidden="true" /></button> : null}
+        </label>
+        <div className="mlp-body">{body}</div>
+        <footer className="mlp-foot">
+          <span className={error ? "mlp-status is-error" : "mlp-status"} role={error ? "alert" : "status"}>
+            {error || (selected.length ? `Выбрано: ${selected.length}${limit > 1 ? ` из ${limit}` : ""}` : "Нажмите на изображение, чтобы выбрать")}
+          </span>
+          {selected.length ? <button type="button" className="mlp-btn" onClick={() => setSelected([])} disabled={attaching}>Сбросить</button> : null}
+          <button type="button" className="mlp-btn is-primary" onClick={() => void attach()} disabled={!selected.length || attaching}>
+            <Paperclip aria-hidden="true" />{attaching ? "Прикрепляю…" : selected.length > 1 ? `Прикрепить ${selected.length}` : "Прикрепить"}
+          </button>
+        </footer>
+      </section>
+    </div>,
+    document.body,
+  )
 }

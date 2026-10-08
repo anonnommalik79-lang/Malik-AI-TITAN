@@ -6,6 +6,8 @@ import { MALIK_CLOSE_MOBILE_MENU_EVENT, MALIK_OPEN_WORK_EVENT, Sidebar } from ".
 import { MobileViewport } from "./MobileViewport"
 const ComputePanel = dynamic(() => import("./compute/ComputePanel"))
 import { WelcomeScreen } from "./welcome-screen"
+import { splitPluginCommand } from "./composer-tools/model"
+import { getMalikPlugin } from "./features/plugin-registry"
 import { ChatView } from "./chat-view"
 import { ChatInvestorBackground } from "./ChatInvestorBackground"
 import { PerformanceGuard } from "./performance-guard"
@@ -6423,8 +6425,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       ? { ...chat, timestamp: new Date(), status: chat.status === "draft" ? "building" : chat.status }
       : chat))
   }
-  // A wrong-layout message gets a readable title in the chat list.
-  const titleSource = fixWrongKeyboardLayout(cleanContent)?.text || cleanContent
+  // A wrong-layout message gets a readable title in the chat list; a message
+  // sent to a connection reads «GitHub: …», not «/plugin github …».
+  const pluginTurn = splitPluginCommand(cleanContent)
+  const titleSource = pluginTurn
+    ? `${getMalikPlugin(pluginTurn.plugin)?.name || pluginTurn.plugin}${pluginTurn.rest ? `: ${pluginTurn.rest}` : ""}`
+    : fixWrongKeyboardLayout(cleanContent)?.text || cleanContent
   const title = titleSource.slice(0, 34) + (titleSource.length > 34 ? "..." : "")
 
   if (branching) {

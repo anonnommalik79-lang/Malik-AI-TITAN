@@ -4,8 +4,6 @@ import fs from "node:fs"
 const chat = fs.readFileSync("components/sovereign/chat-view.tsx", "utf8")
 const home = fs.readFileSync("components/sovereign/hybrid/MalikHybridHome.tsx", "utf8")
 const dashboard = fs.readFileSync("components/sovereign/dashboard.tsx", "utf8")
-const homeCss = fs.readFileSync("app/titan-home.css", "utf8")
-const attachmentCss = fs.readFileSync("app/malik-attachment-tools-final.css", "utf8")
 const stream = fs.readFileSync("app/api/stream/route-impl.ts", "utf8")
 const multimodal = fs.readFileSync("lib/server/multimodal-router.ts", "utf8")
 const models = fs.readFileSync("lib/ai/malik-models.ts", "utf8")
@@ -20,18 +18,9 @@ const pluginRegistry = fs.readFileSync("components/sovereign/features/plugin-reg
 const imageCreator = fs.readFileSync("components/sovereign/ChatImageCreator.tsx", "utf8")
 const imageStudio = fs.readFileSync("components/sovereign/image-studio/ImageStudio.tsx", "utf8")
 const imageStudioCss = fs.readFileSync("components/sovereign/image-studio/image-studio.css", "utf8")
-const toolWorkspace = fs.readFileSync("components/sovereign/ChatToolWorkspace.tsx", "utf8")
-
-const requestedLabels = [
-  "Добавить фото и файлы",
-  "Добавить файл из библиотеки",
-  "Создать изображение",
-  "Поиск в сети",
-  "Глубокое исследование",
-  "Нарисовать",
-  "GitHub",
-  "Gmail",
-]
+const toolModel = fs.readFileSync("components/sovereign/composer-tools/model.ts", "utf8")
+const toolMenu = fs.readFileSync("components/sovereign/composer-tools/ComposerToolMenu.tsx", "utf8")
+const toolCss = fs.readFileSync("components/sovereign/composer-tools/composer-tools.css", "utf8")
 
 function extractBlock(source, startText, endText) {
   // Git checkouts use CRLF on Windows; the same source boundary must be found.
@@ -42,24 +31,29 @@ function extractBlock(source, startText, endText) {
   return source.slice(start, end)
 }
 
-const chatMenu = extractBlock(chat, "const attachItems: Array<", "\n\n  return (")
-const homeMenu = extractBlock(home, "const tools: Array<", "  const transferUrl")
-
-for (const menu of [chatMenu, homeMenu]) {
-  let previous = -1
-  for (const label of requestedLabels) {
-    const position = menu.indexOf(`label: "${label}"`)
-    assert.ok(position > previous, `${label} must exist in the requested order`)
-    previous = position
-  }
-
-  for (const removed of ["Загрузить изображения", "Загрузить видео", "Загрузить файлы", "Камера", "Код", "Плагины", "Память", "OpenAI Platform"]) {
-    assert.equal(menu.includes(`label: "${removed}"`), false, `Old menu action must be gone: ${removed}`)
-  }
+// One «+» menu for the chat and the home composer, in four groups.
+const requestedLabels = [
+  "Фото и файлы",
+  "Папка",
+  "Из библиотеки",
+  "Нарисовать",
+  "Создать изображение",
+  "Поиск в сети",
+  "Глубокое исследование",
+  "GitHub",
+  "Gmail",
+]
+const groups = [...toolModel.matchAll(/\{ id: "(\w+)", label: "([^"]+)", items: \[([^\]]+)\] \}/g)].map((match) => ({ id: match[1], label: match[2], items: match[3].match(/"(\w+)"/g).map((item) => item.slice(1, -1)) }))
+assert.deepEqual(groups.map((group) => group.label), ["Добавить", "Создать", "Режим ответа", "Подключения"], "The menu must be grouped")
+const labelOf = (id) => new RegExp(`${id}: \\{ label: "([^"]+)"`).exec(toolModel)?.[1]
+assert.deepEqual(groups.flatMap((group) => group.items).map(labelOf), requestedLabels, "Every requested action must exist in the requested order")
+for (const removed of ["Загрузить изображения", "Загрузить видео", "Загрузить файлы", "Камера", "Плагины", "Память", "OpenAI Platform"]) {
+  assert.equal(toolModel.includes(`label: "${removed}"`), false, `Old menu action must be gone: ${removed}`)
 }
-
-assert.match(homeMenu, /description: "Загрузить с компьютера"/, "Home menu must show ChatGPT-style descriptions")
-assert.match(chatMenu, /description: "Загрузить с компьютера"/, "Chat menu must show ChatGPT-style descriptions")
+assert.match(chat, /<ComposerToolMenu open=\{showAttachMenu\}/, "Chat must use the shared menu")
+assert.match(home, /<ComposerToolMenu open=\{toolsOpen\}/, "Home must use the shared menu")
+assert.equal(chat.includes("const attachItems"), false, "The chat's private copy of the menu must be gone")
+assert.equal(home.includes("const tools: Array<"), false, "The home's private copy of the menu must be gone")
 
 assert.match(home, /ref={allInputRef}[\s\S]*accept={`image\/\*,video\/\*,\$\{HOME_FILE_ACCEPT\}`}/, "Home unified picker must accept images, videos and documents")
 assert.match(home, /homeFileToAttachment/, "Home files must be converted into chat attachments")
@@ -77,36 +71,36 @@ assert.match(home, /\/api\/plugins\/connect\?id=/, "Home GitHub/Gmail actions mu
 assert.match(chat, /\/api\/plugins\/connect\?id=/, "Chat GitHub/Gmail actions must use the real plugin connection route")
 assert.match(pluginRegistry, /id: "github"[\s\S]*providerSlug: "github"/, "GitHub must remain a real WorkOS Pipes plugin")
 assert.match(pluginRegistry, /id: "gmail"[\s\S]*providerSlug: "gmail"/, "Gmail must remain a real WorkOS Pipes plugin")
-assert.match(chatMenu, /action:\s*\(\) => setToolWorkspace\("web"\)/, "Chat web search row must open its own workspace")
-assert.match(chatMenu, /action:\s*\(\) => setToolWorkspace\("deep"\)/, "Chat deep research row must open its own workspace")
-assert.match(homeMenu, /action:\s*onStartWeb/, "Home web search row must open the dedicated research workspace")
-assert.match(homeMenu, /action:\s*onStartDeepResearch/, "Home deep research row must open the dedicated research workspace")
-assert.match(chat, /onRunResearch={runResearchWorkspace}/, "Chat research workspace must execute the real research route")
-assert.match(home, /onRunResearch={runResearchWorkspace}/, "Home research workspace must execute the real research route")
-assert.match(chat, /research:\s*true,[\s\S]*responseDepth:\s*mode === "deep" \? "deep" : responseDepth/, "Chat research workspace must route web/deep requests directly")
-assert.match(home, /research:\s*true,[\s\S]*responseDepth:\s*mode === "deep" \? "deep" : undefined/, "Home research workspace must route web/deep requests directly")
-assert.equal(chat.includes("https://platform.openai.com/"), false, "OpenAI Platform row must be removed from chat")
-assert.equal(home.includes("https://platform.openai.com/"), false, "OpenAI Platform row must be removed from home")
-assert.match(toolWorkspace, /fixed inset-0[\s\S]*bg-black text-white/, "Tool workspaces must use the full-screen black/white UI")
-assert.match(toolWorkspace, /mode === "web" \|\| mode === "deep"/, "Research workspace must distinguish web and deep research")
-assert.match(toolWorkspace, /onConnect\?\.\(mode\)/, "GitHub/Gmail workspace must invoke the real connector action")
+// Web search and deep research switch in place, keeping the draft; no separate screen.
+assert.equal(fs.existsSync("components/sovereign/ChatToolWorkspace.tsx"), false, "The separate research/connect screen must be gone")
+assert.match(chat, /setResearchMode\(\(current\) => current === id \? "off" : id\)/, "Chat web/deep rows must toggle the research mode in place")
+assert.match(home, /if \(id === "web"\) \{[\s\S]*setWebOn\(next\)/, "Home web row must toggle web search in place")
+assert.match(home, /if \(id === "deep"\) \{[\s\S]*toggleDeepResearch\(\)/, "Home deep row must toggle deep research in place")
+assert.match(chat, /research: researchMode !== "off" \? true : undefined/, "Chat research mode must reach the request")
+// GitHub and Gmail: live status, OAuth when needed, then the message goes to the plugin runtime.
+assert.match(toolMenu, /useConnectorStatus\(open\)/, "The menu must read the live connection status when it opens")
+assert.match(toolModel, /`\/plugin \$\{connector\} \$\{clean\}`/, "A chosen connection must route the message through /plugin")
+assert.match(chat, /withConnector\(outgoing, connector\)/, "Chat must send through the chosen connection")
+assert.match(home, /withConnector\(text \|\| attachmentPrompt, connector\)/, "Home must send through the chosen connection")
+assert.match(chat, /useConnectorReturn\(/, "Chat must switch the connection on after OAuth")
+assert.match(home, /useConnectorReturn\(/, "Home must switch the connection on after OAuth")
 assert.match(imageCreator, /<ImageStudio \{\.\.\.props\} \/>/, "Image creator must delegate to the active image studio")
 assert.match(imageStudio, /return createPortal\(studio, document\.body\)/, "Image creator must render above the whole app")
 assert.match(imageStudioCss, /\.mis\s*\{[\s\S]*position:\s*fixed;[\s\S]*top:\s*0;[\s\S]*right:\s*0;[\s\S]*bottom:\s*0;[\s\S]*left:\s*0;/, "Image studio must cover the whole viewport")
 assert.match(imageStudio, /className="mis-grid"/, "Image studio must render its full-size template gallery")
 assert.match(imageStudio, /className="mis-card-img"/, "Image studio template tiles must display image covers")
 
-assert.match(libraryPicker, /\/api\/media\/library\?limit=120/, "Library picker must load the authenticated Malik media library")
+assert.match(libraryPicker, /\/api\/media\/library\?limit=\$\{PAGE\}&offset=\$\{offset\}/, "Library picker must page through the authenticated Malik media library")
 assert.match(libraryPicker, /onSelect\(item\.src/, "Library picker must return the selected saved asset")
 assert.match(drawingPad, /<canvas/, "Draw action must open a real canvas")
-assert.match(drawingPad, /canvas\.toBlob/, "Draw action must turn the canvas into an attachable PNG file")
+assert.match(drawingPad, /\.toBlob\(/, "Draw action must turn the canvas into an attachable PNG file")
 
 assert.match(chat, /UserAttachmentGallery/, "Sent attachments must render inside the user chat turn")
 assert.match(chat, /malik-user-attachment--image/, "Sent photos must render as actual image previews")
 assert.match(chat, /malik-user-attachment--video/, "Sent videos must render as actual video previews")
 assert.match(chat, /URL\.createObjectURL\(file\)/, "Chat media must receive a lightweight visual preview URL")
-assert.match(chat, /createPortal\([\s\S]*malik-attachment-menu/, "Chat plus menu must render through a body portal so the composer cannot clip it")
-assert.match(chat, /className="fixed z-\[10000\][\s\S]*max-h-\[72dvh\]/, "Chat plus menu must use viewport positioning and remain scrollable")
+assert.match(toolMenu, /return createPortal\(/, "The plus menu must render through a body portal so the composer cannot clip it")
+assert.match(toolCss, /\.mct-menu \{[\s\S]*position: fixed;[\s\S]*overflow-y: auto;/, "The plus menu must use viewport positioning and remain scrollable")
 assert.match(chat, /onPaste={handleComposerPaste}/, "Chat composer must accept pasted media")
 assert.match(chat, /onDrop={handleComposerDrop}/, "Chat composer must accept dragged media")
 assert.match(chat, /malik-composer-attachment-preview/, "Pending media must render as a square preview before send")
@@ -128,11 +122,9 @@ assert.match(dashboard, /attachments:?\s*[A-Za-z]*,\s*media_b64:/, "The full att
 assert.match(stream, /routeMalikAttachments/, "The main stream route must send attachments through the multimodal router")
 assert.match(multimodal, /runHiddenGeminiMultimodal/, "Binary attachments must reach the hidden Gemini multimodal path")
 
-assert.match(homeCss, /\.thome-tools-menu[\s\S]*width:\s*420px[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/, "Desktop Home tools menu must be wide enough for two-line actions")
-assert.match(homeCss, /\.thome-tools-copy[\s\S]*\.thome-tools-copy small/, "Home menu must style action descriptions")
-assert.match(attachmentCss, /\.thome-tools-menu[\s\S]*width:\s*420px\s*!important[\s\S]*max-height:\s*min\(72dvh, 620px\)\s*!important/, "Final desktop override must fit the full tools list and scroll when needed")
-assert.match(attachmentCss, /@media \(max-width: 767px\)[\s\S]*width:\s*min\(360px, calc\(100vw - 24px\)\)\s*!important/, "Mobile tools menu must stay inside the viewport")
-assert.match(attachmentCss, /@media \(max-width: 767px\)[\s\S]*min-height:\s*50px\s*!important[\s\S]*height:\s*auto\s*!important/, "Mobile rows must keep readable two-line touch targets")
+assert.match(toolMenu, /width < 640\) \{ setBox\(\{ sheet: true \}\)/, "Phones must get the menu as a bottom sheet")
+assert.match(toolCss, /\.mct-menu\.is-sheet \{[\s\S]*bottom: 0;[\s\S]*env\(safe-area-inset-bottom/, "The phone sheet must sit above the home indicator")
+assert.match(toolCss, /\.mct-menu\.is-sheet \.mct-item \{ min-height: 54px; \}/, "Phone rows must keep large touch targets")
 
 assert.match(models, /qwen\/qwen3\.8-27b/, "Qwen 3.8 27B must remain available")
 assert.match(models, /gpt-oss-120b/, "Cerebras GPT-OSS 120B fallback must remain")
@@ -171,4 +163,4 @@ assert.ok(dashboard.includes('posterUrl,'), "History serializer must retain ligh
 assert.ok(dashboard.includes('posterUrl: historyUrl(rawPosterUrl)'), "History rehydration must restore the saved video poster after reload")
 assert.ok(finalChatCss.includes('.malik-dashboard-shell .malik-ai-chat-bg .malik-dual-grid'), "Mobile swipe gutter must be OLED black")
 
-console.log("Full ChatGPT-style tools menu, uploads, library, research, drawing, plugins, desktop/mobile layout, and multimodal transport verified.")
+console.log("Shared tools menu, in-place modes, connections, uploads, library, drawing, phone sheet and multimodal transport verified.")

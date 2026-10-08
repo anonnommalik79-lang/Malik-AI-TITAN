@@ -28,16 +28,12 @@ import {
   FileSearch,
   FileText,
   FolderTree,
-  Github,
   Globe,
   Image as ImageIcon,
   Layers,
   Link as LinkIcon,
   Lightbulb,
-  Mail,
   Mic,
-  Paperclip,
-  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -52,7 +48,6 @@ import {
   TriangleAlert,
   Video,
   Volume2,
-  Wand2,
   X,
   Loader2,
 } from "lucide-react"
@@ -77,7 +72,12 @@ import type { MalikActionPlan, MalikActionTarget } from "@/lib/ai/action-os"
 import { ChatImageCreator } from "./ChatImageCreator"
 import { ChatDrawingPad } from "./ChatDrawingPad"
 import { ChatLibraryPicker } from "./ChatLibraryPicker"
-import { ChatToolWorkspace, type ChatToolWorkspaceMode } from "./ChatToolWorkspace"
+import { ComposerToolMenu } from "./composer-tools/ComposerToolMenu"
+import { ConnectorChip, ResearchChip } from "./composer-tools/ConnectorChip"
+import { CONNECTOR_NAME, composerPlaceholder, splitPluginCommand, withConnector, type ComposerToolId, type ConnectorId } from "./composer-tools/model"
+import { refreshConnectorStatus, rememberPendingConnector, useConnectorReturn } from "./composer-tools/useConnectorStatus"
+import { getMalikPlugin } from "./features/plugin-registry"
+import { prepareFolder } from "@/lib/uploads/folder-digest"
 import { PREFILL_EVENT, takePrefillPrompt } from "@/lib/malik-context"
 import { AnswerSheet } from "./answer-sheet/AnswerSheet"
 import { ChatExecution } from "./ChatExecution"
@@ -1680,6 +1680,18 @@ function InlineGeneratedPreview({ code }: { code: string }) {
   )
 }
 
+/**
+ * A sent message as the person wrote it. One that went to a connection
+ * («/plugin github …») shows the connection as a small label, not the
+ * command; copying and editing still use the full text.
+ */
+function UserMessageText({ text }: { text: string }) {
+  const command = splitPluginCommand(text)
+  if (!command) return <>{text}</>
+  const name = getMalikPlugin(command.plugin)?.name || command.plugin
+  return <><span className="mct-sent-chip" data-preserve-brand-color="true">{name}</span>{command.rest}</>
+}
+
 function MessageBubble({
   message,
   workspaceMode = "chat",
@@ -1890,7 +1902,7 @@ function MessageBubble({
           ) : displayContent
             ? (
               isUser
-                ? displayContent
+                ? <UserMessageText text={displayContent} />
                 : (
                   <>
                     {/* While streaming, `malik-streaming` gives the growing
@@ -2002,7 +2014,10 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   const [imageCreatorOpen, setImageCreatorOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [drawingOpen, setDrawingOpen] = useState(false)
-  const [toolWorkspace, setToolWorkspace] = useState<ChatToolWorkspaceMode | null>(null)
+  /** GitHub or Gmail: the next messages go to that connection until the chip is removed. */
+  const [connector, setConnector] = useState<ConnectorId | null>(null)
+  /** A neutral note under the composer (what a folder upload added), not an error. */
+  const [composerNotice, setComposerNotice] = useState("")
   const [researchMode, setResearchMode] = useState<"off" | "web" | "deep">("off")
   const [editSourceId, setEditSourceId] = useState<string | null>(null)
   const [queuedTurn, setQueuedTurn] = useState<{
@@ -2060,7 +2075,6 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     }
   }, [])
 
-  const [attachMenuPosition, setAttachMenuPosition] = useState<{ left: number; top: number; width: number } | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [codeModalOpen, setCodeModalOpen] = useState(false)
@@ -2075,7 +2089,6 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   const allInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const attachButtonRef = useRef<HTMLButtonElement>(null)
-  const attachMenuRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
 
   useEffect(() => {
@@ -2409,47 +2422,12 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     textareaRef.current.style.setProperty("height", "auto", priority)
     textareaRef.current.style.setProperty("height", `${Math.min(textareaRef.current.scrollHeight, 160)}px`, priority)
   }, [prompt])
+  const closeToolMenu = useCallback(() => setShowAttachMenu(false), [])
   useEffect(() => {
-    if (!showAttachMenu) return
-    const closeOnPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node
-      if (attachButtonRef.current?.contains(target) || attachMenuRef.current?.contains(target)) return
-      setShowAttachMenu(false)
-    }
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setShowAttachMenu(false)
-    }
-    document.addEventListener("pointerdown", closeOnPointerDown)
-    document.addEventListener("keydown", closeOnEscape)
-    return () => {
-      document.removeEventListener("pointerdown", closeOnPointerDown)
-      document.removeEventListener("keydown", closeOnEscape)
-    }
-  }, [showAttachMenu])
-
-  useEffect(() => {
-    if (!showAttachMenu) {
-      setAttachMenuPosition(null)
-      return
-    }
-
-    const updatePosition = () => {
-      const button = attachButtonRef.current
-      if (!button) return
-      const rect = button.getBoundingClientRect()
-      const width = Math.min(430, Math.max(280, window.innerWidth - 24))
-      const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - width - 12))
-      setAttachMenuPosition({ left, top: Math.max(12, rect.top - 12), width })
-    }
-
-    updatePosition()
-    window.addEventListener("resize", updatePosition)
-    window.addEventListener("scroll", updatePosition, true)
-    return () => {
-      window.removeEventListener("resize", updatePosition)
-      window.removeEventListener("scroll", updatePosition, true)
-    }
-  }, [showAttachMenu])
+    if (!composerNotice) return
+    const timer = window.setTimeout(() => setComposerNotice(""), 14_000)
+    return () => window.clearTimeout(timer)
+  }, [composerNotice])
 
 
   const lastUserPrompt = useMemo(() => lastSubmittedPrompt || [...messages].reverse().find((message) => message.role === "user")?.content || prompt, [lastSubmittedPrompt, messages, prompt])
@@ -2611,9 +2589,12 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     // Hard routing guard: an uploaded-image edit must never fall through to the
     // text model. The slash command is internal; dashboard strips it from the
     // visible user message and uses the uploaded pixels as the edit reference.
-    const routedOutgoing = imageEditRequest && !/^\s*\/(?:image|img|photo|foto|фото|картинка)\b/iu.test(outgoing)
-      ? `/image ${outgoing}`
-      : outgoing
+    // A chosen connection (GitHub, Gmail) answers through the plugin runtime.
+    const routedOutgoing = connector
+      ? withConnector(outgoing, connector)
+      : imageEditRequest && !/^\s*\/(?:image|img|photo|foto|фото|картинка)\b/iu.test(outgoing)
+        ? `/image ${outgoing}`
+        : outgoing
     const sendOptions: ChatSendOptions = {
       workspaceMode,
       responseDepth: researchMode === "deep" ? "deep" : responseDepth,
@@ -2653,6 +2634,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     setEditSourceId(null)
     setResearchMode("off")
     setShowAttachMenu(false)
+    setComposerNotice("")
   }
 
   // One real queued follow-up: while Malik is writing, Enter stores the next
@@ -2861,93 +2843,71 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     }, 0)
   }
 
-  const runResearchWorkspace = (mode: "web" | "deep", query: string) => {
-    const clean = query.trim()
-    if (!clean) return
-    if (isLoading) {
-      setLocalError("Malik AI уже обрабатывает запрос.")
-      return
-    }
-    setLocalError(null)
-    setLastSubmittedPrompt(clean)
-    try { window.localStorage.setItem(`malik_${workspaceMode}_last_user_prompt`, clean) } catch {}
-    onSendMessage(clean, [], {
-      workspaceMode,
-      research: true,
-      responseDepth: mode === "deep" ? "deep" : responseDepth,
-    })
-    setToolWorkspace(null)
-    setShowAttachMenu(false)
+  /** Focus the field with the caret after the draft, once the menu has closed. */
+  const focusComposerEnd = () => {
+    window.setTimeout(() => {
+      const field = textareaRef.current
+      if (!field) return
+      field.focus()
+      const end = field.value.length
+      field.setSelectionRange(end, end)
+    }, 0)
   }
 
-  const connectAccountTool = (pluginId: "github" | "gmail") => {
-    setToolWorkspace(null)
+  /** Official OAuth; on return the connection's chip switches on by itself. */
+  const connectAccount = (id: ConnectorId) => {
+    rememberPendingConnector(id)
     const current = new URL(window.location.href)
     const returnTo = `${current.pathname}${current.search}${current.hash}` || "/dashboard"
-    window.location.assign(`/api/plugins/connect?id=${encodeURIComponent(pluginId)}&return_to=${encodeURIComponent(returnTo)}`)
+    window.location.assign(`/api/plugins/connect?id=${encodeURIComponent(id)}&return_to=${encodeURIComponent(returnTo)}`)
   }
 
-  const attachItems: Array<{
-    label: string
-    description: string
-    icon: React.ComponentType<{ className?: string }>
-    action: () => void
-  }> = [
-    {
-      label: "Добавить фото и файлы",
-      description: "Загрузить с компьютера",
-      icon: Paperclip,
-      action: () => allInputRef.current?.click(),
-    },
-    {
-      label: "Добавить папку",
-      description: "Выбрать локальную папку с файлами",
-      icon: FolderTree,
-      action: () => folderInputRef.current?.click(),
-    },
-    {
-      label: "Добавить файл из библиотеки",
-      description: "Просматривайте свои файлы и выполняйте поиск по ним",
-      icon: FileSearch,
-      action: () => setLibraryOpen(true),
-    },
-    {
-      label: "Создать изображение",
-      description: "Создать любое изображение",
-      icon: Wand2,
-      action: () => setImageCreatorOpen(true),
-    },
-    {
-      label: "Поиск в сети",
-      description: "Искать актуальную информацию",
-      icon: Search,
-      action: () => setToolWorkspace("web"),
-    },
-    {
-      label: "Глубокое исследование",
-      description: "Получить подробный отчёт с источниками",
-      icon: Globe,
-      action: () => setToolWorkspace("deep"),
-    },
-    {
-      label: "Нарисовать",
-      description: "Нарисуйте и прикрепите изображение",
-      icon: Pencil,
-      action: () => setDrawingOpen(true),
-    },
-    {
-      label: "GitHub",
-      description: "PR, issues, CI и репозитории",
-      icon: Github,
-      action: () => setToolWorkspace("github"),
-    },
-    {
-      label: "Gmail",
-      description: "Читайте и используйте почту Gmail в Malik AI",
-      icon: Mail,
-      action: () => setToolWorkspace("gmail"),
-    },
-  ]
+  const chooseTool = (id: ComposerToolId) => {
+    setLocalError(null)
+    if (id === "upload") { allInputRef.current?.click(); return }
+    if (id === "folder") { folderInputRef.current?.click(); return }
+    if (id === "library") { setLibraryOpen(true); return }
+    if (id === "draw") { setDrawingOpen(true); return }
+    if (id === "image") { setImageCreatorOpen(true); return }
+    if (id === "web" || id === "deep") {
+      // A mode for the next answer, switched in place: the draft stays.
+      setResearchMode((current) => current === id ? "off" : id)
+      focusComposerEnd()
+      return
+    }
+    if (connector === id) { setConnector(null); focusComposerEnd(); return }
+    void refreshConnectorStatus().then((status) => {
+      const state = status[id].state
+      if (state === "connected") { setConnector(id); focusComposerEnd() }
+      else if (state === "sign_in") window.location.assign("/sign-in")
+      else if (state !== "unavailable") connectAccount(id)
+    })
+  }
+
+  useConnectorReturn((id, ok) => {
+    if (!ok) { setLocalError(`Не удалось подключить ${CONNECTOR_NAME[id]}. Попробуйте ещё раз.`); return }
+    setConnector(id)
+    setComposerNotice(`${CONNECTOR_NAME[id]} подключён. Следующее сообщение уйдёт в ${CONNECTOR_NAME[id]}.`)
+    focusComposerEnd()
+  })
+
+  const handleFolder = async (files: File[]) => {
+    if (!files.length) return
+    setLocalError(null)
+    setComposerNotice("Разбираю папку…")
+    const prepared = await prepareFolder(files, Math.max(0, MAX_CHAT_ATTACHMENTS - attachments.length))
+    if (prepared.error) { setComposerNotice(""); setLocalError(prepared.error); return }
+    const added: ChatAttachment[] = []
+    if (prepared.document) {
+      added.push({ id: crypto.randomUUID(), name: prepared.document.name, mime: "text/markdown", size: prepared.document.size, kind: "file", text: prepared.document.text })
+    }
+    let failed = 0
+    for (const file of prepared.media) {
+      try { added.push(await fileToAttachment(file)) } catch { failed += 1 }
+    }
+    setAttachments((previous) => [...previous, ...added].slice(0, MAX_CHAT_ATTACHMENTS))
+    setComposerNotice(prepared.notice + (failed ? ` Не прочитались: ${failed}.` : ""))
+  }
 
   return (
     <div data-malik-chat-fullwidth="1" data-workspace-mode={workspaceMode} data-work-home={workHome ? "1" : undefined} className="malik-chat-fullwidth relative z-[2] flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-transparent text-white">
@@ -2980,12 +2940,6 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
         />
       ) : null}
 
-      <ChatToolWorkspace
-        mode={toolWorkspace}
-        onClose={() => setToolWorkspace(null)}
-        onRunResearch={runResearchWorkspace}
-        onConnect={connectAccountTool}
-      />
 
       {workspaceMode === "work" ? <nav className="malik-work-tools" aria-label="Инструменты работы">
         {onNewTask ? <button type="button" onClick={onNewTask} disabled={Boolean(isLoading)}><Plus size={15} />Новая задача</button> : null}
@@ -2994,7 +2948,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
         <button type="button" onClick={() => setLibraryOpen(true)}><FileSearch size={15} />Мои файлы</button>
         {onOpenProjects ? <button type="button" onClick={onOpenProjects}><FolderTree size={15} />Проекты</button> : null}
         <button type="button" onClick={() => openOs("plugins")}><Layers size={15} />Плагины</button>
-        <button type="button" onClick={() => setToolWorkspace("deep")}><Globe size={15} />Исследование</button>
+        <button type="button" onClick={() => { setResearchMode("deep"); focusComposerEnd() }}><Globe size={15} />Исследование</button>
       </nav> : null}
 
       <div ref={threadRef} data-message-list className="malik-chat-scroll relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-44 pt-6 md:px-8 md:pb-48 lg:px-10">
@@ -3106,7 +3060,21 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
           }}
           onDrop={handleComposerDrop}
         >
-          {localError && <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">{localError}</div>}
+          {localError && <div className="mb-3 rounded-xl border border-white/20 bg-white/[0.06] p-2 text-xs font-semibold text-zinc-100" role="alert">{localError}</div>}
+          {composerNotice ? (
+            <div className="mct-notice mb-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2" role="status" data-composer-notice>
+              <span className="min-w-0 flex-1">{composerNotice}</span>
+              <button type="button" onClick={() => setComposerNotice("")} className="rounded-md p-0.5 text-zinc-500 hover:bg-white/10 hover:text-white" aria-label="Скрыть сообщение"><X className="h-3.5 w-3.5" /></button>
+            </div>
+          ) : null}
+          {researchMode !== "off" ? (
+            <ResearchChip mode={researchMode} onClear={() => { setResearchMode("off"); focusComposerEnd() }} className="mct-phone-only mb-2" />
+          ) : null}
+          {connector ? (
+            <div className="mb-2">
+              <ConnectorChip connector={connector} showSuggestions={!prompt.trim()} onClear={() => { setConnector(null); focusComposerEnd() }} onSuggestion={(text) => { setPrompt(text); focusComposerEnd() }} />
+            </div>
+          ) : null}
           {editSourceId ? (
             <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-[11px] text-zinc-300">
               <span><strong className="text-white">Новая ветка</strong> · измените сообщение и отправьте — исходный чат сохранится.</span>
@@ -3122,7 +3090,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
           {attachments.length > 0 && <div className="malik-composer-attachments mb-3 flex max-w-full flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => removeComposerAttachment(attachment.id)} />)}</div>}
           {dragActive ? <div className="pointer-events-none absolute inset-2 z-40 grid place-items-center rounded-[20px] border border-dashed border-white/30 bg-black/70 text-sm font-medium text-white">Отпустите фото, видео или файл</div> : null}
           <div className="malik-inline-composer">
-            <button ref={attachButtonRef} type="button" onClick={() => setShowAttachMenu((value) => !value)} className={cn("malik-inline-action", showAttachMenu && "is-active")} aria-label="Добавить" aria-haspopup="menu" aria-expanded={showAttachMenu} aria-controls="malik-attachment-menu">
+            <button ref={attachButtonRef} type="button" onClick={() => setShowAttachMenu((value) => !value)} className={cn("malik-inline-action", showAttachMenu && "is-active")} aria-label="Добавить" aria-haspopup="menu" aria-expanded={showAttachMenu} aria-controls="malik-composer-tools">
               <Plus className="h-5 w-5" />
             </button>
             <textarea
@@ -3133,13 +3101,15 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
               onCompositionEnd={(event) => setPrompt(event.currentTarget.value)}
               onPaste={handleComposerPaste}
               onKeyDown={(event) => {
+                // Backspace in an empty field removes the connection chip, as in ChatGPT.
+                if (event.key === "Backspace" && connector && !event.currentTarget.value) { setConnector(null); return }
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault()
                   if (event.nativeEvent.isComposing) return
                   handleGuardedSubmit()
                 }
               }}
-              placeholder={workspaceMode === "work" ? "Опиши задачу и нужный результат…" : "Чем я могу помочь сегодня?"}
+              placeholder={composerPlaceholder(workspaceMode === "work" ? "Опиши задачу и нужный результат…" : "Чем я могу помочь сегодня?", researchMode, connector)}
               className="malik-composer-textarea"
             />
             <div className="malik-inline-composer__right">
@@ -3210,57 +3180,19 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
                 : <>Фото · {imageCredits ? (imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining) : "…"} кр. · Enter — отправить · Shift + Enter — новая строка</>}
             </span>
           </div>
-          {showAttachMenu && attachMenuPosition && typeof document !== "undefined" ? createPortal(
-            <div
-              id="malik-attachment-menu"
-              ref={attachMenuRef}
-              role="menu"
-              aria-label="Добавить в чат"
-              className="fixed z-[10000] max-h-[72dvh] overflow-x-hidden overflow-y-auto rounded-[22px] border border-white/[0.10] bg-[#1b1b1c]/98 p-2 shadow-[0_24px_80px_rgba(0,0,0,.78)] backdrop-blur-xl"
-              style={{
-                left: attachMenuPosition.left,
-                top: attachMenuPosition.top,
-                width: attachMenuPosition.width,
-                transform: "translateY(-100%)",
-              }}
-            >
-              <div className="flex flex-col gap-1">
-                {attachItems.map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setShowAttachMenu(false)
-                      item.action()
-                    }}
-                    className="group flex min-h-[50px] w-full items-center gap-3 rounded-[15px] px-3 py-1.5 text-left text-white transition-colors hover:bg-white/[0.07] active:bg-white/[0.11]"
-                  >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/[0.08] text-white">
-                      <item.icon className="h-[18px] w-[18px] stroke-[1.8]" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <strong className="block truncate text-[13px] font-semibold leading-5">{item.label}</strong>
-                      <small className="block truncate text-[10.5px] font-normal leading-4 text-zinc-500">{item.description}</small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>,
-            document.body,
-          ) : null}
+          <ComposerToolMenu open={showAttachMenu} anchor={attachButtonRef.current} research={researchMode} connector={connector} onSelect={chooseTool} onClose={closeToolMenu} />
         </div>
         <p className="mt-2 hidden text-center text-xs text-zinc-600 sm:block">Malik AI может ошибаться. Проверяйте важную информацию.</p>
       </div>
 
-      <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }} />
+      <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => { const input = event.currentTarget; const files = input.files ? Array.from(input.files) : []; input.value = ""; void handleFiles(files) }} />
       <input
         ref={folderInputRef}
         type="file"
         multiple
-        accept="image/*,video/*,audio/*,.pdf,.docx,.xlsx,.pptx,.txt,.md,.mdx,.csv,.tsv,.json,.jsonl,.yaml,.yml,.xml,.html,.htm,.css,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.kt,.go,.rs,.rb,.php,.swift,.c,.h,.cpp,.hpp,.cs,.sql,.sh,.bash,.zsh,.ps1,.toml,.ini,.log"
         className="hidden"
-        onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }}
+        // The whole folder is read; the digest decides what is worth sending.
+        onChange={(event) => { const input = event.currentTarget; const files = input.files ? Array.from(input.files) : []; input.value = ""; void handleFolder(files) }}
       />
       <input
         ref={allInputRef}
@@ -3268,12 +3200,13 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
         multiple
         accept="image/*,video/*,audio/*,.pdf,.docx,.xlsx,.pptx,.txt,.md,.mdx,.csv,.tsv,.json,.jsonl,.yaml,.yml,.xml,.html,.htm,.css,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.kt,.go,.rs,.rb,.php,.swift,.c,.h,.cpp,.hpp,.cs,.sql,.sh,.bash,.zsh,.ps1,.toml,.ini,.log"
         className="hidden"
-        onChange={async (event) => { await handleFiles(event.target.files); event.currentTarget.value = "" }}
+        onChange={(event) => { const input = event.currentTarget; const files = input.files ? Array.from(input.files) : []; input.value = ""; void handleFiles(files) }}
       />
 
       <ChatLibraryPicker
         open={libraryOpen}
         onClose={() => setLibraryOpen(false)}
+        maxSelect={Math.max(1, MAX_CHAT_ATTACHMENTS - attachments.length)}
         onSelect={async (url) => {
           const ok = await importRemoteMedia(url)
           if (!ok) throw new Error("Не удалось прикрепить файл из библиотеки")

@@ -103,7 +103,9 @@ assert.match(streamRoute, /MALIK_MAX_TEXT_CONTEXT_CHARS/)
 
 assert.match(chat, /MAX_CHAT_ATTACHMENTS = 12/)
 assert.match(chat, /webkitdirectory/)
-assert.match(chat, /Добавить папку/)
+// «Папка» lives in the shared «+» menu; the chat reads the whole folder into one document.
+assert.match(chat, /void handleFolder\(files\)/)
+assert.match(fs.readFileSync("components/sovereign/composer-tools/model.ts", "utf8"), /folder: \{ label: "Папка"/)
 assert.match(chat, /queuedTurn/)
 assert.match(chat, /Новая ветка/)
 assert.match(chat, /Остановить генерацию/)
@@ -120,6 +122,6 @@ assert.match(dashboard, /handleStopGeneration/)
 assert.match(dashboard, /options\?\.queueDispatch/)
 assert.match(home, /MAX_HOME_ATTACHMENTS = 12/)
 assert.match(home, /webkitdirectory/)
-assert.match(home, /Добавить папку/)
+assert.match(home, /onSelectFolder\(Array\.from\(event\.currentTarget\.files/)
 
 console.log("MALIK Claude-class architecture verification passed")

@@ -841,7 +841,7 @@
 }
 
 .mis-result-failed {
-  color: #fca5a5;
+  color: #d4d4d8;
 }
 
 .mis-result-actions {
@@ -1187,10 +1187,10 @@
 .mis-error {
   margin: 0 0 8px;
   padding: 8px 12px;
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 10px;
-  background: rgba(127, 29, 29, 0.25);
-  color: #fecaca;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f4f4f5;
   font-size: 13px;
 }
 

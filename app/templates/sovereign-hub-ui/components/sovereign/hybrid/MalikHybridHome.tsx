@@ -1,27 +1,21 @@
 "use client"
 
-import { memo, useEffect, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useRef, useState } from "react"
 import {
   ArrowUp,
   BookOpen,
   Brain,
   Code2,
   Film,
-  FileSearch,
-  FolderOpen,
   Github,
   Globe,
   GraduationCap,
   Image as ImageIcon,
   Lightbulb,
-  Mail,
   MoreHorizontal,
   Music2,
   Paperclip,
-  Pencil,
   Plus,
-  Search,
-  Sparkles,
   X,
   type LucideIcon,
 } from "lucide-react"
@@ -40,7 +34,11 @@ import { normalizeClientImage } from "@/lib/media/client-image-normalize"
 import { ChatDrawingPad } from "../ChatDrawingPad"
 import { ChatLibraryPicker } from "../ChatLibraryPicker"
 import { ChatImageCreator, type ChatImageResolution } from "../ChatImageCreator"
-import { ChatToolWorkspace, type ChatToolWorkspaceMode } from "../ChatToolWorkspace"
+import { ComposerToolMenu } from "../composer-tools/ComposerToolMenu"
+import { ConnectorChip, ResearchChip } from "../composer-tools/ConnectorChip"
+import { CONNECTOR_NAME, composerPlaceholder, withConnector, type ComposerToolId, type ConnectorId, type ResearchMode } from "../composer-tools/model"
+import { refreshConnectorStatus, rememberPendingConnector, useConnectorReturn } from "../composer-tools/useConnectorStatus"
+import { prepareFolder } from "@/lib/uploads/folder-digest"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
@@ -414,10 +412,12 @@ function HomeComposer({
   onOpenVideo,
   onOpenMusic,
   onSourcePlugin,
-  onStartWeb,
-  onStartDeepResearch,
   onCreateImage,
-  onOpenAccountTool,
+  connector,
+  notice,
+  onChooseTool,
+  onClearConnector,
+  onSelectFolder,
   onSelectMediaFiles,
   onRemoveAttachment,
   selectedModelId,
@@ -445,10 +445,15 @@ function HomeComposer({
   onOpenMusic?: () => void
   /** GitHub / Wikipedia / arXiv: search a particular source for the next question. */
   onSourcePlugin?: (prompt: string) => void
-  onStartWeb: () => void
-  onStartDeepResearch: () => void
   onCreateImage?: () => void
-  onOpenAccountTool: (provider: "github" | "gmail") => void
+  /** GitHub or Gmail: where the next message goes, or null. */
+  connector: ConnectorId | null
+  /** A neutral note (what a folder upload added). */
+  notice: string
+  /** Rows of the «+» menu that need the page's state: modes, connections, image studio. */
+  onChooseTool: (id: ComposerToolId) => void
+  onClearConnector: () => void
+  onSelectFolder: (files: File[]) => void
   onSelectMediaFiles: (files: File[]) => void
   onRemoveAttachment: (id: string) => void
   selectedModelId: MalikModelId
@@ -459,6 +464,8 @@ function HomeComposer({
   imageCredits?: { remaining: number; daily: number } | null
 }) {
   const [toolsOpen, setToolsOpen] = useState(false)
+  const plusRef = useRef<HTMLButtonElement>(null)
+  const closeTools = useCallback(() => setToolsOpen(false), [])
   const [moreOpen, setMoreOpen] = useState(false)
   const moreRef = useRef<HTMLDivElement>(null)
   // The desktop design asks for a fuller prompt line than the phone one.
@@ -492,19 +499,6 @@ function HomeComposer({
     field.style.setProperty("height", `${Math.min(Math.max(field.scrollHeight, mobile ? 44 : 54), 220)}px`, priority)
   }, [prompt])
 
-  useEffect(() => {
-    if (!toolsOpen) return
-    const close = (event: PointerEvent) => {
-      if (!toolsRef.current?.contains(event.target as Node)) setToolsOpen(false)
-    }
-    document.addEventListener("pointerdown", close)
-    return () => document.removeEventListener("pointerdown", close)
-  }, [toolsOpen])
-
-  const openAndClose = (action?: () => void) => {
-    action?.()
-    setToolsOpen(false)
-  }
 
   useEffect(() => {
     if (!moreOpen) return
@@ -550,23 +544,14 @@ function HomeComposer({
     }
   }
 
-  const tools: Array<{
-    id: string
-    label: string
-    description: string
-    icon: LucideIcon
-    action: () => void
-  }> = [
-    { id: "upload", label: "Добавить фото и файлы", description: "Загрузить с компьютера", icon: Paperclip, action: () => allInputRef.current?.click() },
-    { id: "folder", label: "Добавить папку", description: "Выбрать локальную папку с файлами", icon: FolderOpen, action: () => folderInputRef.current?.click() },
-    { id: "library", label: "Добавить файл из библиотеки", description: "Просматривайте свои файлы и выполняйте поиск по ним", icon: FileSearch, action: () => setLibraryOpen(true) },
-    { id: "create-image", label: "Создать изображение", description: "Создать любое изображение", icon: Sparkles, action: () => onCreateImage?.() },
-    { id: "web", label: "Поиск в сети", description: "Искать актуальную информацию", icon: Search, action: onStartWeb },
-    { id: "deep-research", label: "Глубокое исследование", description: "Получить подробный отчёт с источниками", icon: Globe, action: onStartDeepResearch },
-    { id: "draw", label: "Нарисовать", description: "Нарисуйте и прикрепите изображение", icon: Pencil, action: () => setDrawingOpen(true) },
-    { id: "github", label: "GitHub", description: "PR, issues, CI и репозитории", icon: Github, action: () => onOpenAccountTool("github") },
-    { id: "gmail", label: "Gmail", description: "Читайте и используйте почту Gmail в Malik AI", icon: Mail, action: () => onOpenAccountTool("gmail") },
-  ]
+  const research: ResearchMode = deepOn ? "deep" : webOn ? "web" : "off"
+  const chooseTool = (id: ComposerToolId) => {
+    if (id === "upload") allInputRef.current?.click()
+    else if (id === "folder") folderInputRef.current?.click()
+    else if (id === "library") setLibraryOpen(true)
+    else if (id === "draw") setDrawingOpen(true)
+    else onChooseTool(id)
+  }
 
   const transferUrl = (transfer: DataTransfer | null) => {
     if (!transfer) return ""
@@ -623,49 +608,30 @@ function HomeComposer({
       <div className="thome-composer-row">
         <div className="thome-tools" ref={toolsRef}>
           <button
+            ref={plusRef}
             type="button"
             onClick={() => setToolsOpen((open) => !open)}
             className={cn("thome-icon-button thome-plus-button", toolsOpen && "is-open")}
-            aria-label="Загрузить в Malik AI"
+            aria-label="Добавить в сообщение"
             aria-expanded={toolsOpen}
             aria-haspopup="menu"
+            aria-controls="malik-composer-tools"
           >
             <Plus aria-hidden="true" />
           </button>
 
-          {toolsOpen ? (
-            <div className="thome-tools-menu" role="menu" aria-label="Загрузить в Malik AI">
-              {tools.map((tool) => {
-                const Icon = tool.icon
-                return (
-                  <button
-                    key={tool.id}
-                    type="button"
-                    role="menuitem"
-                    className="thome-tools-item"
-                    onClick={() => openAndClose(tool.action)}
-                  >
-                    <Icon aria-hidden="true" />
-                    <span className="thome-tools-copy">
-                      <strong>{tool.label}</strong>
-                      <small>{tool.description}</small>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          ) : null}
+          <ComposerToolMenu open={toolsOpen} anchor={plusRef.current} research={research} connector={connector} onSelect={chooseTool} onClose={closeTools} />
 
           <input
             ref={folderInputRef}
             type="file"
-            accept={`image/*,video/*,${HOME_FILE_ACCEPT}`}
             multiple
             className="hidden"
             aria-hidden="true"
             tabIndex={-1}
             onChange={(event) => {
-              onSelectMediaFiles(Array.from(event.currentTarget.files || []))
+              // The whole folder is read; the digest decides what is worth sending.
+              onSelectFolder(Array.from(event.currentTarget.files || []))
               event.currentTarget.value = ""
             }}
           />
@@ -687,6 +653,7 @@ function HomeComposer({
           <ChatLibraryPicker
             open={libraryOpen}
             onClose={() => setLibraryOpen(false)}
+            maxSelect={Math.max(1, MAX_HOME_ATTACHMENTS - attachments.length)}
             onSelect={async (url) => {
               const ok = await importRemoteAsFile(url)
               if (!ok) throw new Error("Не удалось прикрепить файл из библиотеки")
@@ -711,6 +678,8 @@ function HomeComposer({
           onCompositionEnd={(event) => onPromptChange(event.currentTarget.value)}
           onPaste={handlePaste}
           onKeyDown={(event) => {
+            // Backspace in an empty field removes the connection chip.
+            if (event.key === "Backspace" && connector && !event.currentTarget.value) { onClearConnector(); return }
             if (event.key === "Enter" && !event.shiftKey) {
               if (event.nativeEvent.isComposing) return
               event.preventDefault()
@@ -719,7 +688,7 @@ function HomeComposer({
           }}
           rows={1}
           aria-label="Спросите Malik AI"
-          placeholder={wide ? "Напишите сообщение или задайте вопрос…" : "Чем я могу помочь сегодня?"}
+          placeholder={composerPlaceholder(wide ? "Напишите сообщение или задайте вопрос…" : "Чем я могу помочь сегодня?", research, connector)}
         />
 
         <div className="thome-composer-right">
@@ -757,6 +726,23 @@ function HomeComposer({
           </span>
         </div>
       </div>
+
+      {deepOn && onToggleDeep ? (
+        <div className="thome-connector mct-phone-only">
+          <ResearchChip mode="deep" onClear={onToggleDeep} />
+        </div>
+      ) : null}
+      {connector ? (
+        <div className="thome-connector">
+          <ConnectorChip
+            connector={connector}
+            showSuggestions={!prompt.trim()}
+            onClear={onClearConnector}
+            onSuggestion={(text) => { onPromptChange(text); window.setTimeout(() => textareaRef.current?.focus(), 0) }}
+          />
+        </div>
+      ) : null}
+      {notice ? <div className="thome-connector mct-notice" role="status" data-composer-notice>{notice}</div> : null}
 
       {attachments.length || attachmentError ? (
         <div className="thome-attachments" aria-live="polite">
@@ -848,7 +834,9 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     remaining4k: number
   } | null>(null)
   const [imageCreatorOpen, setImageCreatorOpen] = useState(false)
-  const [toolWorkspace, setToolWorkspace] = useState<ChatToolWorkspaceMode | null>(null)
+  /** GitHub or Gmail: the next messages go to that connection until the chip is removed. */
+  const [connector, setConnector] = useState<ConnectorId | null>(null)
+  const [composerNotice, setComposerNotice] = useState("")
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [webOn, setWebOn] = useWebSearchEnabled()
   const [memoryOn, setMemoryOn] = useContextEnabled()
@@ -1008,7 +996,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
         : "Прочитай прикреплённые файлы и подробно ответь по их содержанию."
 
     try {
-      props.onSubmit(text || attachmentPrompt, attachments, {
+      props.onSubmit(withConnector(text || attachmentPrompt, connector), attachments, {
         research: webOn,
         responseDepth: deepResearch ? "deep" : loadResponseDepth(props.userPlan || "free"),
       })
@@ -1020,6 +1008,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     setPrompt("")
     setAttachments([])
     setAttachmentError("")
+    setComposerNotice("")
     setDeepResearch(false)
   }
 
@@ -1047,33 +1036,81 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     if (next) setWebOn(true)
   }
 
-  const startWebSearch = () => {
-    setToolWorkspace("web")
+  const focusVisiblePrompt = () => {
+    window.setTimeout(() => {
+      const field = Array.from(document.querySelectorAll<HTMLTextAreaElement>(".thome-composer textarea"))
+        .find((candidate) => candidate.getClientRects().length > 0)
+      if (!field) return
+      field.focus()
+      field.setSelectionRange(field.value.length, field.value.length)
+    }, 0)
   }
 
-  const startDeepResearch = () => {
-    setToolWorkspace("deep")
-  }
-
-  const runResearchWorkspace = (mode: "web" | "deep", query: string) => {
-    const clean = query.trim()
-    if (!clean || props.isLoading) return
-    setWebOn(true)
-    setDeepResearch(mode === "deep")
-    prefetchChatShell()
-    props.onSubmit(clean, [], {
-      research: true,
-      responseDepth: mode === "deep" ? "deep" : undefined,
-    })
-    setToolWorkspace(null)
-    setPrompt("")
-  }
-
-  const connectAccountTool = (provider: "github" | "gmail") => {
-    setToolWorkspace(null)
+  /** Official OAuth; on return the connection's chip switches on by itself. */
+  const connectAccount = (id: ConnectorId) => {
+    rememberPendingConnector(id)
     const current = new URL(window.location.href)
     const returnTo = `${current.pathname}${current.search}${current.hash}` || "/dashboard"
-    window.location.assign(`/api/plugins/connect?id=${encodeURIComponent(provider)}&return_to=${encodeURIComponent(returnTo)}`)
+    window.location.assign(`/api/plugins/connect?id=${encodeURIComponent(id)}&return_to=${encodeURIComponent(returnTo)}`)
+  }
+
+  /** «+» rows that need this page's state. The draft is never lost. */
+  const chooseTool = (id: ComposerToolId) => {
+    setAttachmentError("")
+    if (id === "image") { setImageCreatorOpen(true); return }
+    if (id === "web") {
+      const next = !webOn || deepResearch
+      setWebOn(next)
+      setDeepResearch(false)
+      prefetchChatShell()
+      focusVisiblePrompt()
+      return
+    }
+    if (id === "deep") {
+      toggleDeepResearch()
+      prefetchChatShell()
+      focusVisiblePrompt()
+      return
+    }
+    if (id !== "github" && id !== "gmail") return
+    if (connector === id) { setConnector(null); focusVisiblePrompt(); return }
+    void refreshConnectorStatus().then((status) => {
+      const state = status[id].state
+      if (state === "connected") { setConnector(id); prefetchChatShell(); focusVisiblePrompt() }
+      else if (state === "sign_in") window.location.assign("/sign-in")
+      else if (state !== "unavailable") connectAccount(id)
+    })
+  }
+
+  useConnectorReturn((id, ok) => {
+    if (!ok) { setAttachmentError(`Не удалось подключить ${CONNECTOR_NAME[id]}. Попробуйте ещё раз.`); return }
+    setConnector(id)
+    setComposerNotice(`${CONNECTOR_NAME[id]} подключён. Следующее сообщение уйдёт в ${CONNECTOR_NAME[id]}.`)
+    focusVisiblePrompt()
+  })
+
+  useEffect(() => {
+    if (!composerNotice) return
+    const timer = window.setTimeout(() => setComposerNotice(""), 14_000)
+    return () => window.clearTimeout(timer)
+  }, [composerNotice])
+
+  const addFolder = async (files: File[]) => {
+    if (!files.length) return
+    setAttachmentError("")
+    setComposerNotice("Разбираю папку…")
+    const prepared = await prepareFolder(files, Math.max(0, MAX_HOME_ATTACHMENTS - attachments.length))
+    if (prepared.error) { setComposerNotice(""); setAttachmentError(prepared.error); return }
+    const added: ChatAttachment[] = []
+    if (prepared.document) {
+      added.push({ id: attachmentId(), name: prepared.document.name, mime: "text/markdown", size: prepared.document.size, kind: "file", text: prepared.document.text })
+    }
+    let failed = 0
+    for (const file of prepared.media) {
+      try { added.push(await homeFileToAttachment(file)) } catch { failed += 1 }
+    }
+    setAttachments((previous) => [...previous, ...added].slice(0, MAX_HOME_ATTACHMENTS))
+    setComposerNotice(prepared.notice + (failed ? ` Не прочитались: ${failed}.` : ""))
   }
 
   return (
@@ -1102,12 +1139,6 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
         />
       ) : null}
 
-      <ChatToolWorkspace
-        mode={toolWorkspace}
-        onClose={() => setToolWorkspace(null)}
-        onRunResearch={runResearchWorkspace}
-        onConnect={connectAccountTool}
-      />
 
       <div className="thome-inner">
         <section className="thome-launcher" aria-label="Malik AI">
@@ -1147,10 +1178,12 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               onOpenVideo={props.onOpenVideo}
               onOpenMusic={props.onOpenMusic}
               onSourcePlugin={openSourcePlugin}
-              onStartWeb={startWebSearch}
-              onStartDeepResearch={startDeepResearch}
               onCreateImage={() => setImageCreatorOpen(true)}
-              onOpenAccountTool={(provider) => setToolWorkspace(provider)}
+              connector={connector}
+              notice={composerNotice}
+              onChooseTool={chooseTool}
+              onClearConnector={() => { setConnector(null); focusVisiblePrompt() }}
+              onSelectFolder={(files) => { void addFolder(files) }}
               onSelectMediaFiles={(files) => { void addFiles(files) }}
               onRemoveAttachment={removeAttachment}
               selectedModelId={props.selectedModelId || DEFAULT_MALIK_MODEL_ID}
@@ -1246,10 +1279,12 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                   onOpenVideo={props.onOpenVideo}
                   onOpenMusic={props.onOpenMusic}
                   onSourcePlugin={openSourcePlugin}
-                  onStartWeb={startWebSearch}
-                  onStartDeepResearch={startDeepResearch}
                   onCreateImage={() => setImageCreatorOpen(true)}
-                  onOpenAccountTool={(provider) => setToolWorkspace(provider)}
+                  connector={connector}
+                  notice={composerNotice}
+                  onChooseTool={chooseTool}
+                  onClearConnector={() => { setConnector(null); focusVisiblePrompt() }}
+                  onSelectFolder={(files) => { void addFolder(files) }}
                   onSelectMediaFiles={(files) => { void addFiles(files) }}
                   onRemoveAttachment={removeAttachment}
                   selectedModelId={props.selectedModelId || DEFAULT_MALIK_MODEL_ID}

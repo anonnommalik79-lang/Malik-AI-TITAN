@@ -1,0 +1,281 @@
+/* MALIK AI — the «+» menu and the composer mode chips. Strictly black and white.
+ *
+ * The menu is portaled to <body>, outside #malik-root, so the app's chat and
+ * phone overrides do not reach it; every rule it needs is here. Selectors are
+ * prefixed with `html body` where a late global rule could otherwise win.
+ */
+
+.mct-menu {
+  --mct-bg: #18181a;
+  --mct-line: rgba(255, 255, 255, 0.09);
+  --mct-ink: #f4f4f5;
+  --mct-ink-2: #9a9aa1;
+  --mct-ink-3: #6f6f76;
+  --mct-hover: rgba(255, 255, 255, 0.07);
+
+  position: fixed;
+  z-index: 10060;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid var(--mct-line);
+  border-radius: 20px;
+  background: var(--mct-bg);
+  color: var(--mct-ink);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  animation: mct-in 0.14s cubic-bezier(0.22, 0.8, 0.2, 1) both;
+}
+.mct-menu *, .mct-menu *::before, .mct-menu *::after { box-sizing: border-box; }
+
+@keyframes mct-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.mct-group + .mct-group {
+  margin-top: 2px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.mct-group__label {
+  padding: 8px 10px 4px;
+  color: var(--mct-ink-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+html body .mct-menu .mct-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 50px;
+  margin: 0;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--mct-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transform: none;
+  outline: none;
+  transition: background-color 0.12s ease;
+}
+html body .mct-menu .mct-item:hover,
+html body .mct-menu .mct-item:focus-visible,
+html body .mct-menu .mct-item:focus { background: var(--mct-hover); }
+html body .mct-menu .mct-item:focus-visible { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28); }
+html body .mct-menu .mct-item.is-on { background: rgba(255, 255, 255, 0.05); }
+html body .mct-menu .mct-item.is-disabled { cursor: not-allowed; opacity: 0.5; }
+html body .mct-menu .mct-item.is-disabled:hover { background: transparent; }
+
+.mct-item__icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--mct-ink);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.mct-item__icon svg { width: 17px; height: 17px; stroke-width: 1.8; }
+html body .mct-menu .mct-item.is-on .mct-item__icon { background: var(--mct-ink); color: #0b0b0c; }
+
+.mct-item__text { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+.mct-item__text strong {
+  overflow: hidden;
+  color: var(--mct-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mct-item__text small {
+  overflow: hidden;
+  color: var(--mct-ink-2);
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mct-item__check { width: 16px; height: 16px; color: var(--mct-ink); stroke-width: 2.4; }
+
+.mct-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mct-badge.is-ok { color: var(--mct-ink); }
+.mct-badge.is-action { background: rgba(255, 255, 255, 0.08); color: var(--mct-ink); }
+.mct-badge.is-warn { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45); color: var(--mct-ink); }
+.mct-badge.is-muted { color: var(--mct-ink-3); }
+.mct-badge__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mct-ink); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.16); }
+
+.mct-foot {
+  margin-top: 2px;
+  padding: 9px 10px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--mct-ink-3);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Phones: a sheet from the bottom of the screen. */
+.mct-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10055;
+  background: rgba(0, 0, 0, 0.55);
+  animation: mct-fade 0.16s ease both;
+}
+@keyframes mct-fade { from { opacity: 0; } to { opacity: 1; } }
+
+html body .mct-menu.is-sheet {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: min(86dvh, 720px);
+  padding: 6px 8px calc(10px + env(safe-area-inset-bottom, 0px));
+  border-width: 1px 0 0;
+  border-radius: 24px 24px 0 0;
+  animation: mct-up 0.2s cubic-bezier(0.22, 0.8, 0.2, 1) both;
+}
+@keyframes mct-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.mct-handle {
+  align-self: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 4px;
+  margin: 4px 0 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+html body .mct-menu.is-sheet .mct-item { min-height: 54px; }
+html body .mct-menu.is-sheet .mct-item__text small { white-space: normal; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mct-menu, .mct-backdrop, html body .mct-menu.is-sheet { animation: none; }
+}
+
+/* ---- mode chips inside the composers ---------------------------------- */
+
+.mct-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+html body .mct-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  height: 30px;
+  margin: 0;
+  padding: 0 6px 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f4f4f5;
+  font: 600 12.5px/1 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  white-space: nowrap;
+  animation: mct-chip-in 0.16s ease both;
+}
+@keyframes mct-chip-in { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
+.mct-chip > svg { width: 14px; height: 14px; flex: 0 0 auto; stroke-width: 2; }
+html body .mct-chip .mct-chip__close {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #a1a1aa;
+  cursor: pointer;
+  transform: none;
+}
+html body .mct-chip .mct-chip__close:hover,
+html body .mct-chip .mct-chip__close:focus-visible { background: rgba(255, 255, 255, 0.12); color: #fff; outline: none; }
+.mct-chip__close svg { width: 13px; height: 13px; stroke-width: 2.4; }
+
+.mct-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
+html body .mct-suggestion {
+  height: 28px;
+  margin: 0;
+  padding: 0 11px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: transparent;
+  color: #c4c4ca;
+  font: 500 12px/1 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  cursor: pointer;
+  transform: none;
+}
+html body .mct-suggestion:hover,
+html body .mct-suggestion:focus-visible { border-color: rgba(255, 255, 255, 0.36); color: #fff; outline: none; }
+
+.mct-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #c4c4ca;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.mct-notice.is-error { color: #f4f4f5; font-weight: 600; }
+
+/* A sent message that went to a connection: «GitHub» before its words. */
+.mct-sent-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  margin-right: 8px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f4f5;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+/* Home composer: the connection chip and notes sit under the input row. */
+.thome-composer .thome-connector { padding: 2px 14px 8px; }
+.thome-composer .thome-connector.mct-notice { color: #a1a1aa; }
+
+/* Shown only where the page has no other switch for the mode. */
+@media (min-width: 768px) {
+  html body .mct-phone-only { display: none; }
+}
