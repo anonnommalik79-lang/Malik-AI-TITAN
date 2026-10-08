@@ -34,9 +34,23 @@ check("the mobile sign-in screen is one flat black surface", () => {
   }
 })
 
-check("the monochrome pass is the last stylesheet in the chain", () => {
+check("the monochrome pass is the final surface authority; only motion may follow", () => {
   const imports = [...layout.matchAll(/^import "\.\/([^"]+\.css)"/gm)].map((match) => match[1])
-  assert.equal(imports.at(-1), "chat-monochrome-final.css", `last was ${imports.at(-1)}`)
+  const authority = imports.lastIndexOf("chat-monochrome-final.css")
+  assert.ok(authority >= 0, "monochrome authority must be imported")
+  const after = imports.slice(authority + 1)
+  // The mobile request animation landed after this test. It must stay last
+  // to override old animation freezes, but must never override surface paint.
+  assert.ok(after.length <= 1 && after.every(file => file === "request-motion-final.css"), `unexpected final sheets: ${after}`)
+  for (const file of after) {
+    const motion = fs.readFileSync(`app/${file}`, "utf8").replace(/\/\*[\s\S]*?\*\//g, "")
+    assert.doesNotMatch(motion, /@import|url\s*\(/i, "motion cannot import or fetch new surface styles")
+    const declarations = [...motion.matchAll(/([-\w]+)\s*:\s*([^;{}]+);/g)]
+    assert.ok(declarations.length > 0, "motion authority cannot be an empty placeholder")
+    for (const [, property] of declarations) {
+      assert.ok(["animation", "transform", "opacity"].includes(property), `${file} changes ${property} after monochrome`)
+    }
+  }
 })
 
 check("loading, progress and status chrome stays monochrome", () => {

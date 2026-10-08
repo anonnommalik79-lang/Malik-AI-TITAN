@@ -79,14 +79,20 @@ const runnable = ts.transpileModule(functions, {
   compilerOptions: { target: ts.ScriptTarget.ES2022 },
 }).outputText
 const calls = []
+const contractSource = codeOf("lib/ai/chat-stream-contract.ts")
+const contractJs = ts.transpileModule(contractSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+const contractModule = { exports: {} }
+new Function("module", "exports", contractJs)(contractModule, contractModule.exports)
 const { persistStreamResult } = new Function(
   "completeBackgroundChatTurn", "failBackgroundChatTurn",
   "upsertExecutionStep", "normalizeExecutionTrace",
+  ...Object.keys(contractModule.exports),
   runnable + "\nreturn { persistStreamResult };",
 )(
   async (_id, result) => { calls.push({ type: "complete", result }) },
   async (_id, error, _trace, partial) => { calls.push({ type: "failed", error: String(error), partial }) },
   (trace) => trace, (trace) => trace,
+  ...Object.values(contractModule.exports),
 )
 const makeEvent = (type, value = {}) =>
   "event: " + type + "\ndata: " + JSON.stringify({ type, ...value }) + "\n\n"
@@ -112,6 +118,34 @@ assert.equal(calls.at(-1)?.partial, "Partial proof")
 calls.length = 0
 await persistStreamResult("empty", eventResponse(makeEvent("done")))
 assert.equal(calls.at(-1)?.type, "failed", "done with zero content is still a failed answer")
+calls.length = 0
+let reads = 0
+const brokenBody = new ReadableStream({
+  pull(controller) {
+    if (reads++ === 0) controller.enqueue(new TextEncoder().encode(makeEvent("content", { content: "Keep this partial proof" })))
+    else controller.error(new TypeError("network error after text"))
+  },
+})
+await persistStreamResult("read-error", eventResponse(brokenBody))
+assert.equal(calls.at(-1)?.type, "failed")
+assert.equal(calls.at(-1)?.partial, "Keep this partial proof", "a reader exception must not erase already received content")
+calls.length = 0
+await persistStreamResult("false-done", eventResponse(
+  makeEvent("content", { content: "Incomplete calculation" }) + makeEvent("done", { ok: false, message: "Provider rejected continuation" }),
+))
+assert.equal(calls.at(-1)?.type, "failed", "done with ok=false is never successful")
+assert.match(calls.at(-1)?.error || "", /Provider rejected continuation/)
+calls.length = 0
+await persistStreamResult("multiline", eventResponse(
+  'event: content\r\ndata: {"type":"content",\r\ndata: "content":"Қазақша ответ 🌍"}\r\n\r\n' + makeEvent("done"),
+))
+assert.equal(calls.at(-1)?.result?.content, "Қазақша ответ 🌍", "all data lines form one SSE message")
+calls.length = 0
+await persistStreamResult("snapshot", eventResponse(
+  makeEvent("content", { content: "Answer", contentMode: "snapshot" }) +
+  makeEvent("content", { content: "Answer with evidence", contentMode: "snapshot" }) + makeEvent("done"),
+))
+assert.equal(calls.at(-1)?.result?.content, "Answer with evidence", "cumulative snapshots must not duplicate text in history")
 check("interrupted and failed SSE streams are never saved as completed answers", () => {
   assert.match(store, /content: String\(partialContent \|\| ""\)/)
   assert.match(status, /turn\.status === "complete" \|\| turn\.status === "failed"/)

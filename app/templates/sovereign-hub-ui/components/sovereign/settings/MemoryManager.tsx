@@ -27,8 +27,7 @@ export function MemoryManager() {
 
   const add = () => {
     if (!canAdd) return
-    addMalikMemory(draft)
-    setDraft("")
+    if (addMalikMemory(draft)) setDraft("")
   }
 
   const startEdit = (id: string, text: string) => {
@@ -38,7 +37,7 @@ export function MemoryManager() {
 
   const saveEdit = () => {
     if (!editingId || !editingText.trim()) return
-    updateMalikMemory(editingId, editingText)
+    if (!updateMalikMemory(editingId, editingText)) return
     setEditingId(null)
     setEditingText("")
   }
@@ -49,7 +48,7 @@ export function MemoryManager() {
         <div className="min-w-0">
           <h3 id="malik-memory-title" className="text-sm font-semibold text-zinc-100">Что Malik AI помнит</h3>
           <p className="mt-1 max-w-xl text-xs leading-5 text-zinc-500">
-            Только то, что вы добавили сами. Память хранится в этом браузере и её можно изменить или удалить в любой момент.
+            Только то, что вы добавили сами. Память хранится в этом браузере отдельно для каждого аккаунта. Старые записи без привязки к владельцу не используются автоматически и не удалены.
           </p>
         </div>
         <span className="shrink-0 pt-1 text-[11px] tabular-nums text-zinc-600">{memories.length}/{MAX_MEMORY_ITEMS}</span>

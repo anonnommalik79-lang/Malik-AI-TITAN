@@ -3,6 +3,7 @@ import "server-only"
 import { randomUUID } from "node:crypto"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { appendFounderMessage, type FounderMessageSource, type FounderMessageStatus } from "@/lib/server/founder-message-log"
+import { chatCompletionError, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "@/lib/ai/chat-stream-contract"
 
 type Endpoint = (request: Request) => Promise<Response>
 const MAX_TEXT = 16_000
@@ -102,23 +103,34 @@ export function withFounderRequestAudit(handler: Endpoint, source: FounderMessag
     const reader = response.body.getReader(), decoder = new TextDecoder()
     let pending = "", answer = "", done = false, errored = !response.ok, errorMessage = "", errorCode = ""
     let provider = "", model = "", finished = false
+    const recordParseError = (error: unknown) => {
+      errored = true; errorCode = "AUDIT_STREAM_PARSE"
+      errorMessage = error instanceof Error ? error.message : "Audit stream could not be parsed"
+    }
     const parseEvent = (frame: string) => {
-      const type = /^event:\s*(.+)$/m.exec(frame)?.[1]?.trim() || ""
-      const data = frame.split(/\r?\n/).filter(x => x.startsWith("data:")).map(x => x.slice(5).trimStart()).join("\n")
-      let payload: any = null
-      try { payload = JSON.parse(data) } catch { /* heartbeat or plain event */ }
-      if (type === "done" || payload?.type === "done") {
-        done = true; provider = String(payload?.provider || provider); model = String(payload?.model || model)
-        if (payload?.ok === false) { errored = true; errorMessage = String(payload?.message || "Stream returned ok=false") }
-        if (typeof payload?.content === "string" && !answer) answer = redact(payload.content)
-      }
-      if (type === "error" || payload?.type === "error") {
-        errored = true; errorMessage = String(payload?.message || payload?.error || "Streaming failed")
-        errorCode = String(payload?.code || payload?.errorCode || "STREAM_ERROR")
-      }
-      if (type === "content" || type === "delta" || payload?.type === "content" || payload?.type === "delta") {
-        const chunk = String(payload?.content || payload?.text || "")
-        answer = (answer + chunk).slice(0, MAX_TEXT)
+      try {
+        const event = parseChatSseFrame(frame)
+        if (!event) return
+        const { type, payload } = event
+        if (type === "done") {
+          done = true; provider = String(payload.provider || provider); model = String(payload.model || model)
+          const completionError = chatCompletionError(payload)
+          if (completionError) { errored = true; errorMessage = completionError }
+          if (typeof payload.content === "string") answer = mergeChatStreamText(answer, payload.content.slice(0, MAX_TEXT), "snapshot").slice(0, MAX_TEXT)
+        }
+        if (type === "error") {
+          errored = true; errorMessage = String(payload.message || payload.error || "Streaming failed")
+          errorCode = String(payload.code || payload.errorCode || "STREAM_ERROR")
+        }
+        if (type === "content" || type === "delta") {
+          const chunk = String(payload.content ?? payload.text ?? "")
+          // Keep audit storage bounded, but merge growing snapshots before
+          // truncating: repeated snapshots must not fill it with duplicates.
+          answer = mergeChatStreamText(answer, chunk.slice(0, MAX_TEXT), payload.contentMode).slice(0, MAX_TEXT)
+        }
+      } catch (error) {
+        // Telemetry parsing must never break the user's original stream.
+        recordParseError(error)
       }
     }
     const consume = (chunk: string) => {
@@ -131,11 +143,17 @@ export function withFounderRequestAudit(handler: Endpoint, source: FounderMessag
         separator.lastIndex = 0
         parseEvent(frame)
       }
-      if (pending.length > 100_000) pending = pending.slice(-10_000)
+      if (pending.length > MAX_CHAT_SSE_FRAME_CHARS) {
+        pending = ""
+        recordParseError(new Error("Audit stream frame exceeds the safe size limit"))
+      }
     }
     const finish = async (interrupted = false) => {
       if (finished) return
       finished = true
+      if (done && !errored && !answer.trim()) {
+        errored = true; errorCode = "EMPTY_ANSWER"; errorMessage = "Stream completed without answer content"
+      }
       await save({
         status: interrupted || (!done && !errored) ? "interrupted" : errored ? "failed" : "success",
         assistantText: answer, provider, model,

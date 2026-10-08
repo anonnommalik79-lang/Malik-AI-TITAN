@@ -759,7 +759,7 @@ function liveSseResponse(
                 activity.status("Ответ поступает в чат")
               }
               const safeChunk = protectStreamChunk(chunk)
-              if (safeChunk) send("content", { type: "content", content: safeChunk })
+              if (safeChunk) send("content", { type: "content", content: safeChunk, contentMode: "delta" })
             },
             activity,
             generation.signal,
@@ -782,11 +782,12 @@ function liveSseResponse(
         // still "thinking" while a database write finishes.
         if (streamedAny) {
           const tail = protectStreamChunk("", true)
-          if (tail) send("content", { type: "content", content: tail })
+          if (tail) send("content", { type: "content", content: tail, contentMode: "delta" })
         } else {
           send("content", {
             type: "content",
             content: protectChatCodeFences(content),
+            contentMode: "delta",
           })
         }
         // Start accounting now; neither remote storage nor chat logging delays
