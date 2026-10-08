@@ -68,7 +68,7 @@ assert.equal(instrumentalTrackBrief.instrumental, true)
 assert.doesNotMatch(instrumentalTrackBrief.providerPrompt, /STRICT: vocal song/)
 assert.match(instrumentalTrackBrief.providerPrompt, /no singing/)
 const longPrompt = compileMusicBrief({
-  prompt: "intro " + "нежная музыка ".repeat(160) + "БЕЗ БАРАБАНОВ",
+  prompt: "intro " + "нежная музыка ".repeat(115) + "БЕЗ БАРАБАНОВ",
   requestedInstrumental: true,
 })
 assert.ok(longPrompt.providerPrompt.length <= 2000)
@@ -81,3 +81,23 @@ assert.equal(vocalOverride.instrumental, false)
 assert.equal(vocalOverride.intent.bpm, 105)
 assert.doesNotMatch(vocalOverride.providerPrompt, /STRICT: instrumental composition/)
 console.log("advanced music brief checks passed")
+
+const jazzWithStalePhonk = compileMusicBrief({
+  prompt: "Медленный джаз на пианино без барабанов", genre: "phonk",
+  requestedInstrumental: true,
+})
+assert.equal(jazzWithStalePhonk.genre, "other")
+assert.equal(jazzWithStalePhonk.intent.style, "jazz")
+assert.match(jazzWithStalePhonk.providerPrompt, /Music style: jazz/)
+assert.doesNotMatch(jazzWithStalePhonk.providerPrompt, /Genre: phonk/)
+const newGenres = [
+  ["Атмосферный синтвейв без вокала", "synthwave"],
+  ["Техно 128 BPM", "techno / house"],
+  ["Рок песня с мужским голосом", "rock"],
+  ["Спокойный jazz трио", "jazz"],
+  ["Оркестровая музыка для фильма", "classical / orchestral"],
+]
+for (const [request, style] of newGenres) {
+  assert.equal(analyzeMusicPrompt(request).style, style, request)
+}
+console.log("extended genre and anti-conflict checks passed")

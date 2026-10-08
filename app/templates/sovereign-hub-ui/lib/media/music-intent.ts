@@ -5,6 +5,7 @@ export type MusicPromptIntent = {
   instrumental?: boolean
   vocalDirective?: "instrumental" | "vocal"
   genre?: MusicGenreIntent
+  style?: string
   mood?: MusicMoodIntent
   instruments: string[]
   excludedInstruments: string[]
@@ -54,6 +55,20 @@ const GENRES: Array<{ re: RegExp; genre: MusicGenreIntent; hint: string }> = [
   { re: /\bedm\b|электронн\w*\s+танцевальн\w*/iu, genre: "edm", hint: "Genre: EDM." },
 ]
 
+const EXTRA_STYLES: Array<{ re: RegExp; name: string }> = [
+  { re: /\b(?:jazz|swing|bebop)\b|джаз/iu, name: "jazz" },
+  { re: /\b(?:rock|indie rock|punk)\b|рок[ауы]?(\b|[\s,.!?])/iu, name: "rock" },
+  { re: /\b(?:metal|heavy metal)\b|металл?\b/iu, name: "metal" },
+  { re: /\b(?:classical|orchestral|symphony)\b|классическ[\p{L}]*|оркестров[\p{L}]*/iu, name: "classical / orchestral" },
+  { re: /\b(?:techno|house)\b|техно|хаус/iu, name: "techno / house" },
+  { re: /\b(?:ambient|new age)\b|эмбиент/iu, name: "ambient" },
+  { re: /\b(?:synthwave|retrowave)\b|синтвейв/iu, name: "synthwave" },
+  { re: /\b(?:pop|k-pop|j-pop)\b|поп(?:-музык[\p{L}]*)?/iu, name: "pop" },
+  { re: /\b(?:country|bluegrass)\b|кантри/iu, name: "country" },
+  { re: /\b(?:reggae|ska)\b|регги/iu, name: "reggae" },
+  { re: /\b(?:drum\s*(?:and|&|n)\s*bass|dnb|d&b)\b|драм[\s-]*н[\s-]*бейс/iu, name: "drum and bass" },
+]
+
 const MOODS: Array<{ re: RegExp; mood: MusicMoodIntent; hint: string }> = [
   { re: /(?:грустн\w*|печальн\w*|меланхол\w*|sad|melanchol|sorrow)/iu, mood: "Грустный", hint: "Mood: sad, melancholic and emotional." },
   { re: /(?:спокойн\w*|тих\w*|мягк\w*|расслаб\w*|calm|relax|gentle|soft)/iu, mood: "Спокойный", hint: "Mood: calm, gentle and restrained." },
@@ -67,6 +82,7 @@ export function analyzeMusicPrompt(promptValue: unknown): MusicPromptIntent {
   const instruments = INSTRUMENTS.filter((item) => item.re.test(prompt) && !instrumentNegated(prompt, item.re))
   const excludedInstruments = INSTRUMENTS.filter((item) => item.re.test(prompt) && instrumentNegated(prompt, item.re))
   const genre = GENRES.find((item) => item.re.test(prompt))
+  const style = !genre ? EXTRA_STYLES.find((item) => item.re.test(prompt)) : undefined
   const mood = MOODS.find((item) => item.re.test(prompt))
 
   const explicitlyNoVocals = NO_VOCALS_RE.test(prompt)
@@ -97,6 +113,7 @@ export function analyzeMusicPrompt(promptValue: unknown): MusicPromptIntent {
     bpm ? `Target tempo: ${bpm} BPM.` : "",
     vocalCharacter,
     genre?.hint || "",
+    style ? "Music style: " + style.name + "." : "",
     mood?.hint || "",
     instrumental === true ? "Instrumental only. No vocals, no spoken words, no singing." : "",
     instrumental === false ? "Vocal song. Include natural singing and respect the supplied lyrics/language." : "",
@@ -106,12 +123,13 @@ export function analyzeMusicPrompt(promptValue: unknown): MusicPromptIntent {
     instrumental,
     vocalDirective,
     genre: genre?.genre,
+    style: style?.name,
     mood: mood?.mood,
     instruments: instruments.map((item) => item.name),
     excludedInstruments: excludedInstruments.map((item) => item.name),
     bpm,
     providerHints,
-    explicit: Boolean(explicitlyNoVocals || explicitlyOnlyInstrument || explicitlyVocals || RAP_RE.test(prompt) || instruments.length || excludedInstruments.length || genre || mood || bpm),
+    explicit: Boolean(explicitlyNoVocals || explicitlyOnlyInstrument || explicitlyVocals || RAP_RE.test(prompt) || instruments.length || excludedInstruments.length || genre || style || mood || bpm),
   }
 }
 
@@ -144,7 +162,7 @@ export function compileMusicBrief(input: MusicBriefInput) {
 
   const selectedGenre = String(input.genre || "").trim().toLowerCase()
   const genre: MusicGenreIntent = intent.genre ||
-    (["phonk", "trap", "hiphop", "lofi", "edm"].includes(selectedGenre)
+    (!intent.style && ["phonk", "trap", "hiphop", "lofi", "edm"].includes(selectedGenre)
       ? selectedGenre as MusicGenreIntent : "other")
   const selectedMood = String(input.mood || "").trim()
   const mood: MusicMoodIntent = intent.mood ||

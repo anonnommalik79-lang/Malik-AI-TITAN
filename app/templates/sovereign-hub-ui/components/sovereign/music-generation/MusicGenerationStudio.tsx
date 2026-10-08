@@ -294,7 +294,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   }), [prompt, lyrics, instrumental, genreId, mood, lyricsLanguage])
   const interpretedMusic = [
     musicBriefPreview.instrumental ? "инструментал" : "вокал",
-    musicBriefPreview.genre !== "other" ? musicBriefPreview.genre : "",
+    musicBriefPreview.intent.style || (musicBriefPreview.genre !== "other" ? musicBriefPreview.genre : ""),
     musicBriefPreview.intent.bpm ? musicBriefPreview.intent.bpm + " BPM" : "",
     musicBriefPreview.intent.instruments.join(" + "),
     musicBriefPreview.intent.excludedInstruments.length
@@ -323,7 +323,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     if (intent.genre) {
       setGenreId(intent.genre)
       setPhonkMode(intent.genre === "phonk")
-    } else if (intent.instruments.length > 0) {
+    } else if (intent.instruments.length > 0 || intent.style) {
       setGenreId("other")
       setPhonkMode(false)
     }
