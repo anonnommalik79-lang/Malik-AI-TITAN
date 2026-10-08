@@ -1,3 +1,5 @@
+import { auditExtendedArithmetic, auditHeadlineConsistency, checkPrimaryEvidence, type TruthSource } from "./truth-engine-v2"
+
 export function truthNeedsLiveEvidence(input: string) {
   return /налог|налогооблож|бухгалтер|кпн|ипн|опв|восмс|оосмс|упрощенк|декларац|салық|законодател|юридич|лечени|диагноз|лекарств|дозировк|ипотек|кредит|инвестиц|payroll|taxation|legislation|medication|diagnosis/i.test(input)
 }
@@ -61,15 +63,29 @@ export function auditTruthArithmetic(text: string) {
   return mismatches
 }
 
-export function finalizeTruthAnswer(answer: string, question: string, sourceCount: number) {
-  if (!truthNeedsLiveEvidence(question) || !answer.trim()) return answer
-  const problems = auditTruthArithmetic(answer)
+export function finalizeTruthAnswer(answer: string, question: string, sourceInput: number | readonly TruthSource[]) {
+  const highRisk = truthNeedsLiveEvidence(question)
+  if (!answer.trim()) return answer
+  // Ordinary conversations are free; numerical responses still get a low-cost
+  // independent arithmetic scan without web requests or another model call.
+  const oldProblems = highRisk ? auditTruthArithmetic(answer) : []
+  const expandedProblems = auditExtendedArithmetic(answer).map((check) => check.message)
+  const consistency = highRisk ? auditHeadlineConsistency(answer).map((check) => check.message) : []
+  const problems = [...new Set([...oldProblems, ...expandedProblems, ...consistency])].slice(0, 5)
   if (problems.length) {
-    return "⚠️ Проверка чисел не пройдена; ниже непроверенный черновик, не используйте его для отчётности.\n"
-      + problems.map((x) => "- " + x).join("\n") + "\n\n" + answer
+    return "⚠️ **Проверка внутренней согласованности не пройдена.** Следующие результаты нельзя считать подтверждёнными:\n" +
+      problems.map((problem) => "- " + problem).join("\n") + "\n\n**Непроверенный черновик:**\n\n" + answer
   }
-  if (!sourceCount) {
-    return "⚠️ Актуальные нормативные первоисточники не получены; законодательные ставки и точные суммы ниже не подтверждены.\n\n" + answer
+  if (!highRisk) return answer
+  const sources = Array.isArray(sourceInput) ? sourceInput as TruthSource[] : []
+  const count = typeof sourceInput === "number" ? sourceInput : sources.length
+  if (!count) {
+    return "⚠️ **Актуальные первоисточники не получены.** Нормы и ставки ниже не подтверждены официальными документами. Не используйте текст как готовую декларацию или профессиональное заключение.\n\n" + answer
+  }
+  if (sources.length) {
+    const warnings = checkPrimaryEvidence(question, sources)
+    if (warnings.length) return "⚠️ **Источники не прошли проверку авторитетности.** " +
+      warnings.map((item) => item.message).join(" ") + " Наличие ссылок не подтверждает актуальность и применимость норм.\n\n" + answer
   }
   return answer
 }

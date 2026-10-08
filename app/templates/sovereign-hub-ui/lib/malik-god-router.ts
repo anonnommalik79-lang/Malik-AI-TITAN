@@ -1108,7 +1108,7 @@ export async function malikGodAnswer(
       onToken: truthNeedsLiveEvidence(focus.searchText) ? undefined : emitToken,
       signal,
     }).catch((error) => { activity?.finish(modelCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
-    const content = finalizeTruthAnswer(cleanText(result.content), focus.searchText, sources.length)
+    const content = finalizeTruthAnswer(cleanText(result.content), focus.searchText, sources)
     activity?.finish(modelCall, { characters: content.length, model: result.selectedModelId, sources: sources.length })
     return {
       content,
@@ -1171,7 +1171,7 @@ export async function malikGodAnswer(
   let answer: GodAnswer
   if (result.content) {
     answer = {
-      content: finalizeTruthAnswer(result.content, legacyFocus.searchText, sources.length),
+      content: finalizeTruthAnswer(result.content, legacyFocus.searchText, sources),
       provider: result.provider,
       model: result.model,
       usedWeb: usedEvidence,
