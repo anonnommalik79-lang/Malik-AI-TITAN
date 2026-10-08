@@ -32,7 +32,9 @@ import {
   Plus,
   Presentation,
   RefreshCw,
+  ShieldCheck,
   StickyNote,
+  Upload,
   Trash2,
   Wand2,
   X,
@@ -62,6 +64,7 @@ import { SlideCanvas, SlideFrame, slideBuildTiming, type SlidePatch } from "./Sl
 import { isInvestorDeckRequest } from "@/lib/presentations/prompts"
 import { applyPhoto, photoSlots, usedPhotoUrls, type PhotoSlot } from "@/lib/presentations/images"
 import { PresentationShowcase } from "./PresentationShowcase"
+import { inspectPresentation } from "@/lib/presentations/quality"
 import "./presentation-studio.css"
 import "./presentation-desktop.css"
 
@@ -409,6 +412,8 @@ export function PresentationStudio({ username }: { username?: string }) {
   const [newSlideLayout, setNewSlideLayout] = useState<SlideLayout>("bullets")
   const [presenting, setPresenting] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
+  const [showQuality, setShowQuality] = useState(false)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
   const [printing, setPrinting] = useState(false)
   const [assembling, setAssembling] = useState(false)
   const [assemblyAt, setAssemblyAt] = useState(0)
@@ -871,6 +876,21 @@ export function PresentationStudio({ username }: { username?: string }) {
     }
   }
 
+  // A fully editable backup, not a rasterized slide export.
+  // It never hits the server or spends image/model credits.
+  const exportBackup = () => {
+    const payload = JSON.stringify({ format: "malik-deck-v1", deck: currentDeck() }, null, 2)
+    const blob = new Blob([payload], { type: "application/json;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `${(deckTitle || "malik-presentation").replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || "malik-presentation"}.malik.json`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 4000)
+  }
+
   // PDF through the browser's own print dialog, with every slide laid out as
   // one 13.333 × 7.5 inch page. "Save as PDF" is in every browser's dialog.
   const exportPdf = () => {
@@ -965,6 +985,22 @@ export function PresentationStudio({ username }: { username?: string }) {
     setError("")
   }
 
+  const importBackup = async (file?: File) => {
+    if (!file) return
+    try {
+      if (file.size > 5 * 1024 * 1024) throw new Error("Файл слишком большой (максимум 5 МБ).")
+      const raw = JSON.parse(await file.text()) as { format?: string; deck?: unknown }
+      if (raw?.format && raw.format !== "malik-deck-v1") throw new Error("Неизвестный формат файла Malik AI.")
+      const deck = normalizeDeck(raw?.deck ?? raw)
+      if (!deck) throw new Error("В этом файле нет корректных редактируемых слайдов.")
+      // Imported decks must never overwrite an existing presentation.
+      openDeck({ ...deck, id: newDeckId(), createdAt: Date.now(), updatedAt: Date.now() })
+      setShowQuality(true)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Не удалось открыть презентацию.")
+    }
+  }
+
   const deleteDeck = (id: string) => {
     setRecent((previous) => {
       const next = previous.filter((deck) => deck.id !== id)
@@ -990,6 +1026,38 @@ export function PresentationStudio({ username }: { username?: string }) {
   const generating = busy === "slides"
   const active = entries[current]
   const lowCredits = Boolean(quota && !quota.unlimited && quota.remaining < generationCost)
+  const quality = useMemo(() => inspectPresentation({
+    outline: stage === "outline" ? outline : { title: deckTitle, items: entries.map((entry) => entry.outline) },
+    slides: stage === "deck" ? entries.map((entry) => entry.slide) : undefined,
+  }), [stage, outline, deckTitle, entries])
+
+  const qualityPanel = (
+    <section className="ps-quality" aria-label="Редакторская проверка презентации">
+      <div className="ps-quality-header">
+        <span className="ps-quality-icon"><ShieldCheck size={17} /></span>
+        <span className="ps-quality-title">Проверка качества</span>
+        <span className="ps-quality-score" aria-label={`Редакторская оценка ${quality.score} из 100`}>{quality.score}/100</span>
+        <span className="ps-spacer" />
+        <button type="button" className="ps-btn ps-btn--small" onClick={() => setShowQuality((value) => !value)} aria-expanded={showQuality}>
+          {showQuality ? "Свернуть" : `Замечания · ${quality.issues.length}`}
+        </button>
+      </div>
+      <p className="ps-quality-caption">Проверяет структуру, повторы, заметки и наличие источников. Не подтверждает достоверность фактов.</p>
+      {showQuality ? (
+        <div className="ps-quality-list">
+          {quality.issues.length ? quality.issues.slice(0, 20).map((issue, index) => (
+            <button key={`${issue.slideIndex}-${issue.code}-${index}`} type="button" className="ps-quality-issue"
+              disabled={stage !== "deck"}
+              onClick={() => { setCurrent(issue.slideIndex); setAssembling(false) }}>
+              <b>Слайд {issue.slideIndex + 1}</b>
+              <span><strong>{issue.message}</strong><small>{issue.recommendation}</small></span>
+              {stage === "deck" ? <ArrowRight size={14} /> : null}
+            </button>
+          )) : <p className="ps-quality-clear"><Check size={16} /> Редакторских замечаний не найдено. Факты и источники всё равно проверьте перед выступлением.</p>}
+        </div>
+      ) : null}
+    </section>
+  )
 
   const header = (
     <div className="ps-top">
@@ -1102,6 +1170,19 @@ export function PresentationStudio({ username }: { username?: string }) {
               <p className="ps-hint">
                 Обычная презентация стоит 1 кредит. Сложная — инвесторская или на 12+ слайдов — 3 кредита. На бесплатном тарифе доступно 5 кредитов в день. Переписать готовый слайд — 1 кредит.
               </p>
+              <div className="ps-import">
+                <input ref={importInputRef} type="file" accept=".json,.malik.json,application/json" style={{ display: "none" }}
+                  aria-label="Импорт резервной копии презентации"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    event.target.value = ""
+                    void importBackup(file)
+                  }} />
+                <button type="button" className="ps-btn ps-btn--small" onClick={() => importInputRef.current?.click()}>
+                  <Upload size={14} /> Открыть мой Malik Deck
+                </button>
+                <span className="ps-cost">Восстановить редактируемую презентацию из резервной копии JSON.</span>
+              </div>
 
               <div className="ps-section-label">
                 <Lightbulb size={17} className="ps-desk-only" aria-hidden="true" />
@@ -1182,6 +1263,7 @@ export function PresentationStudio({ username }: { username?: string }) {
         <div className="ps-outline">
           <div className="ps-section-label" style={{ marginTop: 0 }}>План презентации — поправьте, прежде чем писать слайды</div>
           <input className="ps-outline-title" value={outline.title} onChange={(event) => setOutline({ ...outline, title: event.target.value })} aria-label="Название презентации" />
+          {qualityPanel}
           <ol className="ps-outline-list">
             {outline.items.map((item, index) => (
               <li className="ps-outline-item" key={index}>
@@ -1320,8 +1402,12 @@ export function PresentationStudio({ username }: { username?: string }) {
               {busy === "export" ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} PPTX
             </button>
             <button type="button" className="ps-btn ps-btn--small" onClick={exportPdf} disabled={!presentable.length || generating}><FileDown size={14} /> PDF</button>
+            <button type="button" className="ps-btn ps-btn--small" onClick={exportBackup} disabled={!presentable.length} title="Скачать полную редактируемую резервную копию">
+              <Download size={14} /> Malik Deck
+            </button>
           </div>
 
+          {qualityPanel}
           {generating ? <p className="ps-hint" style={{ marginTop: -4, marginBottom: 12 }} aria-live="polite">Пишу слайды: готово {readyCount} из {entries.length}</p> : null}
           {error ? <p className="ps-error" role="alert" style={{ marginTop: 0, marginBottom: 12 }}>{error}</p> : null}
 
