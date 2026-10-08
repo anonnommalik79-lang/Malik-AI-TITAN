@@ -209,6 +209,8 @@ try {
     for (const prompt of ["/malik", "Отправь сообщение", "Опубликуй сайт", "Удали файл"]) assert.equal(canRetryChat({ originalQuestion: prompt }), false)
     assert.equal(canRetryChat({ originalQuestion: "Собери проект", isProjectRequest: true }), false)
     assert.equal(canRetryChat({ originalQuestion: "Объясни", workspaceMode: "work" }), false)
+    assert.equal(canRetryChat({ originalQuestion: "Проанализируй файл", attachments: [{ id: "attachment1" }] }), false)
+    assert.equal(canRetryChat({ originalQuestion: "Выполни действия", actionPlan: { kind: "purchase" } }), false)
   })
   await check("a silent stream is bounded and falls back to a working answer", async () => {
     let calls = 0
@@ -226,6 +228,27 @@ try {
     assert.equal(calls, 2)
     assert.match(text, /event: error/)
     assert.doesNotMatch(text, /event: done|Соединение прервалось до ответа/)
+  })
+  await check("cumulative SSE chunks recover saved turn without duplicate POST", async () => {
+    let posts = 0
+    const response = await fetchRecoverableChat("/api/stream", request, {
+      ...recoveryOptions,
+      fetcher: async (url) => {
+        if (url === "/api/stream") {
+          posts++
+          return sse(
+            event("content", { content: "Часть" }) + event("content", { content: "Часть и продолжение" }),
+            { "x-malik-background-turn-id": "cumulative-turn" },
+          )
+        }
+        return Response.json({ turn: { status: "complete", content: "Часть и продолжение завершено", usedWeb: false, sources: [] } })
+      },
+    })
+    const text = await response.text()
+    assert.equal(posts, 1)
+    assert.match(text, /Часть и продолжение завершено/)
+    assert.match(text, /event: done/)
+    assert.doesNotMatch(text, /event: error/)
   })
   await check("a partly written answer is retained and never restarted from scratch", async () => {
     let calls = 0
