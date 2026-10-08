@@ -241,10 +241,26 @@
 
 .retry {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-top: 15px;
+  width: 100%;
+  max-width: 620px;
+  margin: 15px auto 0;
   pointer-events: auto;
+}
+.retry > span {
+  flex: 1 1 100%;
+  overflow-wrap: anywhere;
+  color: #f0f0f0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.retry button { flex-shrink: 0; min-width: 120px; }
+@media (max-width: 680px) {
+  .retry { margin-top: 12px; gap: 8px; max-height: 25dvh; overflow-y: auto; }
+  .retry > span { font-size: 12px; }
 }
 
 .retry button {
