@@ -32,6 +32,11 @@ const repeated=mergeAccountChatStates(
 assert.deepEqual(repeated,alt,"syncing the same conflict twice is idempotent")
 const third=mergeAccountChatStates(alt,repeated)
 assert.deepEqual(third,repeated,"no extra versions or reload loop on third sync")
+const streamingRemote={chats:[{id:"chat-a",messages:[{id:"a1",role:"assistant",content:"Saved long partial answer",isStreaming:true}]}]}
+const streamingStale={chats:[{id:"chat-a",messages:[{id:"a1",role:"assistant",content:"Saved",isStreaming:true}]}]}
+const streamingMerged=mergeAccountChatStates(streamingRemote,streamingStale)
+assert.equal(streamingMerged.chats[0].messages[0].content,"Saved long partial answer","a stale device may not shorten a live checkpoint")
+assert.deepEqual(mergeAccountChatStates(streamingMerged,streamingStale),streamingMerged,"stale checkpoint sync converges")
 const server=fs.readFileSync("lib/server/account-chat-state.ts","utf8")
 const storage=fs.readFileSync("lib/server/private-json-store.ts","utf8")
 assert.match(server,/writePrivateJsonConditional\(/)

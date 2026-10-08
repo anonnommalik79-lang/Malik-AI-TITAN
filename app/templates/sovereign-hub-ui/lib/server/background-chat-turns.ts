@@ -290,6 +290,12 @@ export async function readBackgroundChatTurn(turnId: string) {
     memoryStore().delete(normalized)
     return null
   }
-  if (!memory) memoryStore().set(normalized, turn)
+  if (!memory) {
+    const cache = memoryStore()
+    cache.set(normalized, turn)
+    // Cloud rehydration can bring back hundreds of large answers between
+    // expiration sweeps. Enforce the byte/count cap on reads as well as writes.
+    pruneFinishedTurnCache(cache, normalized)
+  }
   return turn
 }

@@ -40,6 +40,10 @@ type BackgroundTurnResult = {
   completedAt?: string
   execution?: ExecutionTrace
   textOnly?: boolean
+  selectedModelId?: string
+  usedWeb?: boolean
+  sources?: unknown[]
+  factAudit?: unknown
 }
 
 type BackgroundRuntime = {
@@ -252,7 +256,19 @@ function patchRecoveredTurn(
           backgroundRecovered: true,
           textOnly: result.textOnly === true,
           execution: normalizeExecutionTrace(result.execution, true) || message.execution,
-          ...(result.model ? { modelId: result.model } : {}),
+          ...(result.selectedModelId || result.model ? { modelId: result.selectedModelId || result.model } : {}),
+          ...(result.usedWeb || Array.isArray(result.sources) && result.sources.length ? {
+            research: {
+              ...message.research,
+              status: "done",
+              usedWeb: result.usedWeb === true || message.research?.usedWeb === true,
+              steps: message.research?.steps || [],
+              sources: Array.isArray(result.sources) ? result.sources.slice(0, 12) : message.research?.sources || [],
+              startedAt: message.research?.startedAt || Date.now(),
+              webSourceCount: Array.isArray(result.sources) ? result.sources.length : message.research?.webSourceCount || 0,
+              factAudit: result.factAudit ?? message.research?.factAudit ?? null,
+            },
+          } : {}),
         }
       : message
 

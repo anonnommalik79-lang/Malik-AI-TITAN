@@ -1,9 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { CheckCircle2, Code2, Download, ExternalLink, Globe2, Loader2, PackageOpen, RefreshCw, Rocket } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { downloadProjectZip } from "@/lib/business/project-zip"
+import { assessBusinessLaunch } from "@/lib/business/launch-readiness"
 import styles from "./CompanyLaunchPad.module.css"
 
 type LaunchStep = {
@@ -83,19 +84,6 @@ function companyPlan(props: CompanyLaunchPadProps) {
     .join("\n\n---\n\n")
 }
 
-function saveToSites(title: string, prompt: string, html: string) {
-  try {
-    const storageKey = "malik-sites-v6"
-    const current = JSON.parse(localStorage.getItem(storageKey) || "[]")
-    const list = Array.isArray(current) ? current : []
-    const id = `autonomous-${Date.now().toString(36)}`
-    const next = [{ id, title, prompt, html, createdAt: new Date().toISOString() }, ...list]
-      .filter((site, index, all) => index === all.findIndex((item) => item?.html === site?.html))
-      .slice(0, 24)
-    localStorage.setItem(storageKey, JSON.stringify(next))
-  } catch {}
-}
-
 export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
   const ready = props.steps.length >= 8 && props.steps.every((step) => step.state === "done" && step.content.trim())
   // Account and eight agent results are part of the cache key: never show a
@@ -128,6 +116,22 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
   const [projectDeployState, setProjectDeployState] = useState("")
   const [projectDeployId, setProjectDeployId] = useState("")
   const [projectDeployError, setProjectDeployError] = useState("")
+  const previewDialog = useRef<HTMLDialogElement>(null)
+  const previewTitleId = useId()
+  const launchReadiness = assessBusinessLaunch({
+    completedAgents: props.steps.filter(step => step.state === "done" && step.content.trim()).length,
+    hasStandaloneHtml: Boolean(html),
+    projectFiles: projectFiles.length,
+    qaPassed: projectQa.passed === true,
+    syntaxChecked: projectQa.syntaxChecked === true,
+    deploymentUrl: projectDeployUrl,
+    deploymentState: projectDeployState,
+  })
+  const readinessMarkdown = [
+    "# Паспорт запуска", "", "Готовность продукта: " + launchReadiness.score + "/100", "",
+    ...launchReadiness.milestones.map(step => "- [" + (step.done ? "x" : " ") + "] " + step.title + ": " + step.detail),
+    "", "Готовность продукта не подтверждает выручку или запуск бизнеса.",
+  ].join("\n")
 
   useEffect(() => {
     if (!ready) return
@@ -224,14 +228,13 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
       setHtml(nextHtml)
       setMeta(nextMeta)
       persist(nextHtml, nextMeta, "")
-      saveToSites(title, props.prompt, nextHtml)
       return nextHtml
     } catch (error) {
       setBuildError(error instanceof Error ? error.message : "Не удалось собрать продукт")
     } finally {
       setBuilding(false)
     }
-  }, [brief, building, persist, props.prompt, ready, title])
+  }, [brief, building, persist, ready])
 
   const buildNextProject = useCallback(async (previewHtml?: string) => {
     if (!ready || projectBuilding) return
@@ -283,9 +286,7 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
 
   const openPreview = useCallback(() => {
     if (!html) return
-    const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }))
-    window.open(url, "_blank", "noopener,noreferrer")
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    previewDialog.current?.showModal()
   }, [html])
 
   const downloadZip = useCallback(() => {
@@ -297,16 +298,18 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
       { name: "company-plan.md", content: companyPlan(props) },
       { name: "company.json", content: manifest },
       { name: "README.md", content: readme },
+      { name: "launch-readiness.md", content: readinessMarkdown },
     ])
-  }, [html, props, title])
+  }, [html, props, title, readinessMarkdown])
 
   const downloadNextZip = useCallback(() => {
     if (!projectFiles.length) return
     downloadProjectZip(`${projectName || slug(title)}-nextjs`, [
       ...projectFiles.map((file) => ({ name: file.path, content: file.content })),
       { name: "company-plan.md", content: companyPlan(props) },
+      { name: "launch-readiness.md", content: readinessMarkdown },
     ])
-  }, [projectFiles, projectName, props, title])
+  }, [projectFiles, projectName, props, title, readinessMarkdown])
 
   const deploy = useCallback(async () => {
     if (!props.canDeploy || !html || deploying) return
@@ -402,6 +405,24 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
 
       {buildError && <div className={styles.error}>{buildError}</div>}
 
+      <section className={styles.readiness} aria-label="Паспорт запуска">
+        <div className={styles.readinessTop}>
+          <div><h3>Паспорт запуска</h3><p>Состояние документов, продукта и публикации.</p></div>
+          <strong className={styles.readinessScore}>{launchReadiness.score}<span>/100</span></strong>
+        </div>
+        <div className={styles.readinessTrack} role="progressbar" aria-label="Готовность продукта" aria-valuemin={0} aria-valuemax={100} aria-valuenow={launchReadiness.score}><span style={{width: `${launchReadiness.score}%`}} /></div>
+        <div className={styles.readinessGrid}>
+          {launchReadiness.milestones.map(step => <div key={step.id} className={styles.readinessItem} data-status={step.done ? "complete" : step.blocked ? "blocked" : "pending"}>
+            <span>{step.done ? "✓ " : step.blocked ? "Ошибка: " : "Ожидается: "}{step.title}</span><small>{step.detail}</small>
+          </div>)}
+        </div>
+      </section>
+
+      <dialog ref={previewDialog} className={styles.previewDialog} aria-labelledby={previewTitleId}>
+        <div className={styles.previewToolbar}><span id={previewTitleId}>Предпросмотр · {title}</span><button type="button" onClick={() => previewDialog.current?.close()} autoFocus>Закрыть</button></div>
+        <iframe title="Полный предпросмотр продукта" srcDoc={html} sandbox="allow-scripts allow-forms" />
+      </dialog>
+
       {!html && !building && !buildError && (
         <div className={styles.empty}>
           <PackageOpen />
@@ -422,9 +443,9 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
             <div className={styles.browserBar}>
               <span className={styles.lights}><i /><i /><i /></span>
               <span className={styles.address}>{deployUrl || "malik://autonomous-company/preview"}</span>
-              <button type="button" onClick={openPreview} aria-label="Открыть preview в новой вкладке"><ExternalLink /></button>
+              <button type="button" onClick={openPreview} aria-label="Открыть полный предпросмотр"><ExternalLink /></button>
             </div>
-            <iframe title="Autonomous Company live preview" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" />
+            <iframe title="Autonomous Company live preview" srcDoc={html} sandbox="allow-scripts allow-forms" />
           </div>
 
           <div className={styles.actions}>

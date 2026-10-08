@@ -124,6 +124,26 @@ const pollAst = ts.createSourceFile("AccountChatPersistence.tsx", account, ts.Sc
 const pollDecl = pollAst.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "pollDetachedTurn")
 assert.ok(pollDecl, "background recovery polling function exists")
 const runnablePoll = ts.transpileModule(pollDecl.getText(pollAst), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+const patchDecl = pollAst.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "patchRecoveredTurn")
+const patchJs = ts.transpileModule(patchDecl.getText(pollAst), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+const patchRecoveredTurn = new Function("findTurnLocation", "scopedDashboardKey", "normalizeExecutionTrace", "window", patchJs + "\nreturn patchRecoveredTurn;")(
+  (_runtime, _account, turn) => turn, () => "state", trace => trace, { localStorage: {} },
+)
+let recoveredState = { activeChatId: "chat", chats: [{id:"chat",messages:[{id:"answer",content:"part",isStreaming:true}]}], messages:[{id:"answer",content:"part",isStreaming:true}] }
+const recoveryRuntime = { rawGetItem: () => JSON.stringify(recoveredState), rawSetItem: (_key, value) => {recoveredState=JSON.parse(value)} }
+const recoverySources = [{title:"Verified source",url:"https://example.test/source",image:"https://example.test/photo.webp",domain:"example.test"}]
+assert.equal(patchRecoveredTurn(recoveryRuntime,"owner",{chatId:"chat",assistantMessageId:"answer"},{status:"complete",content:"Answer [1]",usedWeb:true,sources:recoverySources,selectedModelId:"malik-max",model:"provider-internal"}),true)
+for (const message of [recoveredState.messages[0], recoveredState.chats[0].messages[0]]) {
+  assert.deepEqual(message.research?.sources,recoverySources,"navigation recovery preserves citations and source photos")
+  assert.equal(message.research?.usedWeb,true)
+  assert.equal(message.modelId,"malik-max","history keeps the selected public model")
+}
+const dashboardAst = ts.createSourceFile("dashboard.tsx", codeOf("components/sovereign/dashboard.tsx"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+const reviveDecl = dashboardAst.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "reviveResearch")
+const reviveJs = ts.transpileModule(reviveDecl.getText(dashboardAst), {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText
+const reviveResearch = new Function("reviveWebSource","normalizeFactAudit",reviveJs + "\nreturn reviveResearch;")(source => source, audit => audit || null)
+const savedAudit = {version:1,claims:[{id:"claim",statement:"Verified number"}]}
+assert.deepEqual(reviveResearch({...recoveredState.messages[0].research,factAudit:savedAudit}).factAudit,savedAudit,"page reload preserves the saved fact audit")
 async function recoveryStatusTest(statusCode, payload) {
   const scheduled = []
   const fakeWindow = { setTimeout: (fn, ms) => { scheduled.push({ fn, ms }); return scheduled.length } }

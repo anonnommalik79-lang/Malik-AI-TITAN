@@ -133,6 +133,10 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
               if (signal?.aborted) throw abortError()
               try {
                 const saved = await within(fetcher(`/api/stream/background/${encodeURIComponent(turnId)}`, { cache: "no-store", signal }), Math.min(4000, deadline - Date.now()), signal)
+                if ([401, 403, 404, 429].includes(saved.status)) {
+                  finalError = saved.status === 429 ? "Доступный лимит запросов исчерпан." : "Не удалось открыть сохранённый ответ. Проверьте доступ к аккаунту."
+                  break
+                }
                 const payload = await within(saved.json(), Math.min(4000, deadline - Date.now()), signal)
                 if (payload?.turn?.status === "complete" && payload.turn.content) {
                   const answer = String(payload.turn.content)
@@ -148,7 +152,10 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
               await wait(options.pollMs ?? 800, signal)
             }
           }
-          if (completed || cancelled || content || !retryable || attempt || body.chatRecovery) break
+          // Once the server identifies a job, only that job may finish it.
+          // A pending, inaccessible or temporarily offline saved turn is not
+          // permission to launch another provider request or consume quota.
+          if (completed || cancelled || turnId || content || !retryable || attempt || body.chatRecovery) break
           emit(frame("progress", { type: "progress", phase: "recovering", text: "Продолжаю ответ…", textOnly: true }))
           response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true }) }), firstTextMs, signal)
           if ([401, 403, 429].includes(response.status)) { finalError = response.status === 429 ? "Доступный лимит запросов исчерпан." : "Проверьте доступ к аккаунту."; break }

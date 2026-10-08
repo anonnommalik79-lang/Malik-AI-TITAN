@@ -22,6 +22,11 @@ assert.equal(phonk.instrumental, true)
 const explicitNoVocalsWins = analyzeMusicPrompt("песня без слов только пианино")
 assert.equal(explicitNoVocalsWins.instrumental, true)
 assert.deepEqual(explicitNoVocalsWins.instruments, ["piano"])
+for (const prompt of ["Без барабанов с пианино", "No vocals, only piano", "No drums but piano", "Без слов только пианино"]) {
+  assert.ok(analyzeMusicPrompt(prompt).instruments.includes("piano"),prompt)
+  assert.ok(!analyzeMusicPrompt(prompt).excludedInstruments.includes("piano"),prompt)
+}
+assert.deepEqual(analyzeMusicPrompt("Без барабанов и гитары").excludedInstruments,["guitar","drums"])
 
 
 

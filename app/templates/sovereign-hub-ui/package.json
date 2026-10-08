@@ -76,7 +76,7 @@
     "test:presentations": "node scripts/verify-presentations.mjs",
     "test:answer-sheet": "node --experimental-strip-types --no-warnings scripts/verify-answer-sheet.mjs",
     "test:max": "node scripts/run-malik-max.mjs",
-    "test:release-core": "npm run test:storage-clients && npm run test:answer-format && npm run test:models && npm run test:long-code && npm run test:multimodal && npm run test:media && npm run test:image-edit && npm run test:image-memory && npm run test:image-credits && npm run test:video-speed && npm run test:responses && npm run test:on-topic && npm run test:answer-cards && npm run test:work-screen && npm run test:work-math && npm run test:work-docs && npm run test:chat-home && npm run test:action-os && npm run test:generation-survives && npm run test:rich-answers && npm run test:reference-intent && npm run test:library && npm run test:projects && npm run test:business-pro && npm run test:video-music-production && npm run test:core-hardening && npm run test:fact-audit && npm run test:chat-monochrome && npm run test:instagram && npm run test:presentations && npm run test:answer-sheet && npm run test:superpowers && npm run test:claude-class && npm run test:max && npm run test:account-chat-sync && npm run test:background-survives && npm run test:background-ownership",
+    "test:release-core": "npm run test:storage-clients && npm run test:answer-format && npm run test:models && npm run test:long-code && npm run test:multimodal && npm run test:media && npm run test:image-edit && npm run test:image-memory && npm run test:image-credits && npm run test:video-speed && npm run test:responses && npm run test:on-topic && npm run test:answer-cards && npm run test:work-screen && npm run test:work-math && npm run test:work-docs && npm run test:chat-home && npm run test:action-os && npm run test:generation-survives && npm run test:rich-answers && npm run test:reference-intent && npm run test:library && npm run test:projects && npm run test:business-pro && npm run test:video-music-production && npm run test:core-hardening && npm run test:fact-audit && npm run test:chat-monochrome && npm run test:instagram && npm run test:presentations && npm run test:answer-sheet && npm run test:superpowers && npm run test:claude-class && npm run test:max && npm run test:account-chat-sync && npm run test:background-survives && npm run test:background-ownership && npm run test:reliability",
     "test:voice-live-session": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-session.mjs",
     "test:fact-audit": "node scripts/verify-fact-audit.mjs",
     "test:chat-monochrome": "node scripts/verify-chat-monochrome.mjs",
@@ -109,7 +109,9 @@
     "test:business-launch": "node scripts/verify-business-launch.mjs",
     "test:account-chat-conflicts": "node --experimental-strip-types --no-warnings scripts/verify-account-chat-conflicts.mjs",
     "test:business-readiness": "node --experimental-strip-types --no-warnings scripts/verify-business-readiness.mjs",
-    "test:storage-clients": "node scripts/verify-s3-client-cache.mjs"
+    "test:storage-clients": "node scripts/verify-s3-client-cache.mjs",
+    "test:work-quota": "node --experimental-strip-types --no-warnings scripts/verify-work-quota.mjs",
+    "test:reliability": "npm run test:large-prompts && npm run test:web-recovery && npm run test:never-lose-chat && npm run test:account-chat-conflicts && npm run test:public-answer-cache && npm run test:work-quota && npm run test:music-intent && npm run test:business-readiness && npm run test:business-launch && npm run test:chat-experience && npm run test:chat-queue && npm run test:home-actions && npm run test:account && npm run test:voice"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "1.1.1",

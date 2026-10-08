@@ -228,6 +228,32 @@ try {
     assert.equal(canRetryChat({ originalQuestion: "Проанализируй файл", attachments: [{ id: "attachment1" }] }), false)
     assert.equal(canRetryChat({ originalQuestion: "Выполни действия", actionPlan: { kind: "purchase" } }), false)
   })
+  await check("a known pending background turn never starts a duplicate generation", async () => {
+    let posts = 0, polls = 0
+    const response = await fetchRecoverableChat("/api/stream", request, { ...recoveryOptions, recoveryMs: 15, pollMs: 1, fetcher: async (url) => {
+      if (url === "/api/stream") { posts++; return sse("", { "x-malik-background-turn-id": "still-pending" }) }
+      polls++
+      return Response.json({ turn: { status: "pending" } })
+    } })
+    const text = await response.text()
+    assert.equal(posts, 1, "the original server job owns this answer")
+    assert.ok(polls > 0)
+    assert.match(text, /event: error/)
+    assert.doesNotMatch(text, /event: done/)
+  })
+  await check("inaccessible saved turns never bypass account permissions by replaying", async () => {
+    for (const status of [401, 403, 404, 429]) {
+      let posts = 0, polls = 0
+      const response = await fetchRecoverableChat("/api/stream", request, { ...recoveryOptions, fetcher: async (url) => {
+        if (url === "/api/stream") { posts++; return sse("", { "x-malik-background-turn-id": "inaccessible" }) }
+        polls++
+        return Response.json({ ok: false }, { status })
+      } })
+      await response.text()
+      assert.equal(posts, 1)
+      assert.equal(polls, 1, "terminal permissions and rate limits stop hot polling")
+    }
+  })
   await check("a silent stream is bounded and falls back to a working answer", async () => {
     let calls = 0
     const response = await fetchRecoverableChat("/api/stream", request, { ...recoveryOptions, firstTextMs: 25, fetcher: async () => {
