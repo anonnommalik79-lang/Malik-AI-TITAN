@@ -1085,7 +1085,7 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
       if (stream?.active && context && context.state !== "closed") {
         const ready = await ensureGeminiLive()
         if (!mountedRef.current || closingRef.current) return
-        if (ready && await geminiLiveRef.current?.attachMicrophone(stream, context)) {
+        if (ready && await (geminiLiveRef.current as GeminiLiveSession | null)?.attachMicrophone(stream, context)) {
           streamingRef.current = true
           setLiveError(null)
           setTitle("Слушаю")
