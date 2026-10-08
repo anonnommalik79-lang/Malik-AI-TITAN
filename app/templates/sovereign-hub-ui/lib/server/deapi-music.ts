@@ -332,6 +332,11 @@ function freeAiNativeId(requestId: string) {
   return ""
 }
 
+function freeAiDirectStateKey(requestId: string) {
+  const id = requestId.slice(FREE_AI_DIRECT_PREFIX.length)
+  return `private/system/malik-music-direct/${id}.json`
+}
+
 export function musicModel(requestId?: string) {
   if (isDeferredMusicRequest(requestId) || isFreeAiRequest(requestId) || (!requestId && freeAiKey())) return "ACE-Step"
   return String(process.env.DEAPI_MUSIC_MODEL || "").trim() || "AceStep_1_5_XL_Turbo_INT8"
@@ -408,6 +413,9 @@ async function submitFreeAiMusic(input: {
       const direct = freeAiDirectMap()
       direct.set(requestId, resultUrl)
       trimMapToLimit(direct)
+      if (privateJsonStoreConfigured()) {
+        await writePrivateJson(freeAiDirectStateKey(requestId), { resultUrl })
+      }
       return {
         ok: true as const,
         requestId,
@@ -433,7 +441,12 @@ async function submitFreeAiMusic(input: {
 }
 
 async function getFreeAiMusicJob(requestId: string) {
-  const directUrl = freeAiDirectMap().get(requestId)
+  const directUrl = requestId.startsWith(FREE_AI_DIRECT_PREFIX)
+    ? freeAiDirectMap().get(requestId) ||
+      (privateJsonStoreConfigured()
+        ? (await readPrivateJson<{ resultUrl: string }>(freeAiDirectStateKey(requestId)))?.resultUrl
+        : undefined)
+    : undefined
   if (directUrl) {
     return {
       ok: true as const,

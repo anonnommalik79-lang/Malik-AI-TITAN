@@ -104,9 +104,7 @@ const DURATION_OPTIONS = [15, 30, 60, 120, 180] as const
 const MOODS: Mood[] = ["Агрессивный", "Спокойный", "Атмосферный", "Энергичный", "Грустный", "Другое"]
 const LANGUAGE_LABELS: Record<LyricsLanguage, string> = { kk: "Қазақша", ru: "Русский", en: "English" }
 const HISTORY_KEY = "malik-music-history-v2"
-const QUALITY_OPTIONS = ["128", "320 kbps", "WAV"] as const
 const VARIANT_OPTIONS = [1, 2, 4] as const
-type Quality = (typeof QUALITY_OPTIONS)[number]
 
 function variantLabel(value: number) {
   return value === 1 ? "1 трек" : value + " трека"
@@ -243,14 +241,12 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const [generating, setGenerating] = useState(false)
   const [activeRequestId, setActiveRequestId] = useState("")
   const [trackUrl, setTrackUrl] = useState("")
-  const [trackTitle, setTrackTitle] = useState("Night Drive")
+  const [trackTitle, setTrackTitle] = useState("Новый трек")
   const [liked, setLiked] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [coverPreview, setCoverPreview] = useState("")
-  const [quality, setQuality] = useState<Quality>("320 kbps")
   const [variants, setVariants] = useState<number>(1)
-  const [mastering, setMastering] = useState(true)
   const [phonkMode, setPhonkMode] = useState(false)
   const [toast, setToast] = useState("")
   /** The real length of the loaded audio file, once the browser has read its header. */
@@ -474,7 +470,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const improvePrompt = () => {
     setPrompt((value) => {
       const base = value.trim() || genre.seed
-      const addition = "мощный бас, чистый мастеринг, объёмная стереосцена, запоминающийся хук, современная продакшн-обработка"
+      const addition = "точное соблюдение жанра и инструментов по запросу, чистое сведение без случайных искажений, связная музыкальная структура, естественная динамика"
       return (base + ", " + addition).slice(0, 2000)
     })
   }
@@ -539,11 +535,6 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           duration: nextDuration,
           genre: nextGenreId,
           mood: nextMood,
-          // Preferences the studio collects. The route reads what it knows and
-          // ignores the rest, so the player always reports the format that
-          // actually came back rather than the one that was asked for.
-          quality,
-          mastering,
         }),
       })
       const data = await response.json().catch(() => null)
@@ -551,6 +542,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       if (!response.ok || !data?.ok || !data?.requestId) {
         setGenerating(false)
         setLastSubmitFailed(true)
+        pendingVariantsRef.current = 0
         setNotice(providerMessage(data?.error))
         await refreshConfig()
         return
@@ -624,6 +616,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     } catch (error) {
       setGenerating(false)
       setLastSubmitFailed(true)
+      pendingVariantsRef.current = 0
       setNotice(error instanceof Error ? error.message : "Не удалось отправить запрос.")
     }
   }
@@ -865,17 +858,6 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     </button>
   ))
 
-  const qualityOptions = (long: boolean) => QUALITY_OPTIONS.map((value) => (
-    <button
-      key={value}
-      type="button"
-      className={"mm-opt" + (value === quality ? " is-active" : "")}
-      onClick={() => { setQuality(value); flash("Качество: " + value) }}
-    >
-      {long && value === "128" ? "128 kbps" : value}
-    </button>
-  ))
-
   const moodOptions = MOODS.map((value) => (
     <button
       key={value}
@@ -1017,7 +999,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
                 />
                 <div className="mm-card-tools">
                   <div className="mm-tool-group">
-                    <button type="button" className="mm-tool" onClick={() => coverInputRef.current?.click()} title="Обложка"><IconImage /></button>
+                    <button type="button" className="mm-tool" onClick={() => coverInputRef.current?.click()} title="Локальная обложка (не влияет на звук)"><IconImage /></button>
                     <button type="button" className="mm-tool" onClick={() => { improvePrompt(); flash("Промпт усилен") }} title="Усилить запрос"><IconSparkles /></button>
                     <button type="button" className="mm-tool" onClick={() => setPrompt(genre.seed)} title="Подставить пример жанра"><IconSliders /></button>
                   </div>
@@ -1048,7 +1030,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
                   className="mm-lyrics-input"
                   value={lyrics}
                   maxLength={12000}
-                  onChange={(event) => setLyrics(event.target.value)}
+                  onChange={(event) => { setLyrics(event.target.value); if (event.target.value.trim()) { setInstrumental(false); setLyricsEnabled(true) } }}
                   placeholder={"Оставьте пустым — Malik AI сам напишет слова по вашему запросу.\n\nИли вставьте свои слова здесь..."}
                   aria-label="Текст песни"
                 />
@@ -1071,16 +1053,9 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
                 </div>
 
                 <div className="mm-control">
-                  <div className="mm-label">Результат</div>
-                  <div className="mm-result-grid">
-                    <div className="mm-result-sub">
-                      <div className="mm-opts"><button type="button" className="mm-opt is-active">AUTO</button></div>
-                    </div>
-                    <div className="mm-result-sub">
-                      <div className="mm-opts">{qualityOptions(false)}</div>
-                    </div>
-                  </div>
-                  <div className="mm-label" style={{ marginTop: 7 }}>Варианты</div>
+                  <div className="mm-label">Формат аудио</div>
+                   <div className="mm-true-output">Исходный файл музыкального провайдера. Без ложного переключения MP3/WAV.</div>
+                   <div className="mm-label" style={{ marginTop: 7 }}>Варианты</div>
                   <div className="mm-opts">
                     {VARIANT_OPTIONS.map((value) => (
                       <button
@@ -1109,10 +1084,6 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
                 <div className="mm-toggle">
                   <span><IconFile />Текст песни (AI)</span>
                   <button type="button" className={"mm-switch" + (lyricsEnabled ? " is-on" : "")} onClick={() => toggleLyrics()} aria-pressed={lyricsEnabled}><i /></button>
-                </div>
-                <div className="mm-toggle">
-                  <span><IconSparkles />Авто-мастеринг</span>
-                  <button type="button" className={"mm-switch" + (mastering ? " is-on" : "")} onClick={() => { setMastering((value) => !value); flash("Авто-мастеринг: " + (mastering ? "выключено" : "включено")) }} aria-pressed={mastering}><i /></button>
                 </div>
               </div>
 
@@ -1187,7 +1158,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           />
           <div className="mm-m-prompt-foot">
             <div className="mm-m-tools">
-              <button type="button" className="mm-m-smallbtn" onClick={() => coverInputRef.current?.click()} aria-label="Добавить референс"><IconImage /></button>
+              <button type="button" className="mm-m-smallbtn" onClick={() => coverInputRef.current?.click()} aria-label="Выбрать локальную обложку"><IconImage /></button>
               <button type="button" className="mm-m-smallbtn" onClick={() => { improvePrompt(); flash("Промпт усилен") }} aria-label="Улучшить запрос"><IconSparkles /></button>
               <button type="button" className="mm-m-smallbtn" onClick={() => setPrompt(genre.seed)} aria-label="Пример жанра"><IconSliders /></button>
             </div>
@@ -1198,21 +1169,31 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           </div>
         </section>
 
-        <div className="mm-m-grid2">
-          <section className="mm-m-section">
-            <div className="mm-label"><IconClock />Длительность</div>
-              {/*
-              Four lengths on a phone, as the design draws them - the fifth
-              would drop onto a line of its own. Three minutes stays on the
-              desktop layout, where the row has the width for it.
-            */}
-            <div className="mm-opts" data-group="duration">{durationOptions.slice(0, 4)}</div>
+        <section className="mm-m-section">
+          <div className="mm-label"><IconClock />Длительность</div>
+          <div className="mm-opts" data-group="duration">{durationOptions.slice(0, 4)}</div>
+        </section>
+
+        {!instrumental ? (
+          <section className="mm-m-section mm-m-lyrics">
+            <div className="mm-label"><IconFile />Слова песни · свои или Malik AI</div>
+            <div className="mm-langs">
+              {(Object.keys(LANGUAGE_LABELS) as LyricsLanguage[]).map((code) => (
+                <button key={code} type="button" className={code === lyricsLanguage ? "is-active" : ""} onClick={() => setLyricsLanguage(code)}>{LANGUAGE_LABELS[code]}</button>
+              ))}
+            </div>
+            <textarea
+              className="mm-lyrics-input"
+              value={lyrics}
+              maxLength={12000}
+              onChange={(event) => { setLyrics(event.target.value); if (event.target.value.trim()) { setInstrumental(false); setLyricsEnabled(true) } }}
+              placeholder="Ваш текст песни. Оставьте пустым, чтобы Malik AI написал слова по запросу."
+              aria-label="Слова песни"
+            />
           </section>
-          <section className="mm-m-section">
-            <div className="mm-label"><IconFile />Качество</div>
-            <div className="mm-opts" data-group="quality">{qualityOptions(true)}</div>
-          </section>
-        </div>
+        ) : null}
+
+        
 
         <section className="mm-m-section">
           <div className="mm-label"><IconMood />Настроение</div>

@@ -1,6 +1,5 @@
 import { resolveMediaUser } from "@/lib/media/request"
 import { analyzeMusicPrompt } from "@/lib/media/music-intent"
-import { hasMalikProAccess } from "@/lib/ai/malik-models"
 import { musicModel, musicProviderConfigured, musicProviderName, submitDeapiMusic } from "@/lib/server/deapi-music"
 import { generateMusicLyrics, resolveMusicLyricsLanguage } from "@/lib/server/music-lyrics"
 import { recordMusicJobOwner } from "@/lib/server/music-job-ownership"
@@ -51,7 +50,7 @@ export async function POST(request: Request) {
   const promptIntent = analyzeMusicPrompt(prompt)
   // Natural language is authoritative when it explicitly says what to make.
   // UI toggles/presets are fallbacks for prompts that do not specify it.
-  const instrumental = promptIntent.instrumental ?? requestedInstrumental
+  const instrumental = promptIntent.instrumental ?? (lyrics.length > 0 ? false : requestedInstrumental)
   const genre = promptIntent.genre || requestedGenre
   const mood = promptIntent.mood || requestedMood
   const requestedLyricsLanguage = body?.lyricsLanguage
@@ -74,15 +73,6 @@ export async function POST(request: Request) {
       code: "AUTH_REQUIRED",
       error: "Войдите в аккаунт, чтобы создавать музыку.",
     }, { status: 401 })
-  }
-
-  if (!hasMalikProAccess(user.plan)) {
-    return Response.json({
-      ok: false,
-      code: "MUSIC_PRO_REQUIRED",
-      error: "Создание треков доступно в MalikAI Plus.",
-      action: "upgrade",
-    }, { status: 402, headers: { "Cache-Control": "no-store" } })
   }
 
   const quota = await getMusicQuota(user.userId, user.plan)
@@ -204,6 +194,8 @@ export async function POST(request: Request) {
       mood: promptIntent.mood || mood || "Другое",
       detectedIntent: {
         instruments: promptIntent.instruments,
+        excludedInstruments: promptIntent.excludedInstruments,
+        bpm: promptIntent.bpm,
         explicit: promptIntent.explicit,
       },
     }, { headers: { "Cache-Control": "no-store" } })

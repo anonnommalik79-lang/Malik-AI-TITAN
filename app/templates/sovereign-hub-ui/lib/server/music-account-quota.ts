@@ -154,7 +154,7 @@ export function getMusicPlanLimits(plan: AIPlan) {
     ? Number.MAX_SAFE_INTEGER
     : isPro
       ? readPositiveInt("MUSIC_PRO_DAILY_LIMIT", 30)
-      : readPositiveInt("MUSIC_FREE_DAILY_LIMIT", 3)
+      : readPositiveInt("MUSIC_FREE_DAILY_LIMIT", 1)
   const maxDurationSeconds = isPro
     ? readPositiveInt("MUSIC_PRO_MAX_DURATION_SECONDS", 180)
     : readPositiveInt("MUSIC_FREE_DURATION_SECONDS", 30)
