@@ -145,9 +145,9 @@ export function allowsAnswerPhotoHints(question: string, hasAttachment = false):
  * Keep this conservative: never turn "знаешь код?" into a portrait search. */
 function conversationalPersonSubject(input: string): string | null {
   const text = input.trim().replace(/[?!.]+$/u, "").trim()
-  const name = String.raw\`[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+){0,3}\`
-  const before = new RegExp(String.raw\`^(?:(?:[Тт]ы\s+)?[Зз]наеш[ь]?|[Dd]o\s+you\s+know)\s+(?:[Пп]ро\s+)?(\${name})$\`, "u")
-  const after = new RegExp(String.raw\`^(\${name})\s+(?:[Зз]наеш[ь]?|[Dd]o\s+you\s+know)$\`, "u")
+  const name = String.raw`[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+){0,3}`
+  const before = new RegExp(String.raw`^(?:(?:[Тт]ы\s+)?[Зз]наеш[ь]?|[Dd]o\s+you\s+know)\s+(?:[Пп]ро\s+)?(${name})$`, "u")
+  const after = new RegExp(String.raw`^(${name})\s+(?:[Зз]наеш[ь]?|[Dd]o\s+you\s+know)$`, "u")
   return before.exec(text)?.[1] || after.exec(text)?.[1] || null
 }
 
@@ -180,7 +180,7 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
     if (educational) return educational
     // Questions about places, people, objects and concepts get references by default.
     const places = /^(?:что\s+посмотреть\s+в|куда\s+сходить\s+в|достопримечательности|what\s+to\s+see\s+in|places\s+to\s+visit\s+in)\s+(.+)$/iu.exec(text)
-    subject = places ? places[1] : text
+    subject = places ? places[1] : (conversationalPerson || text)
     if (/^(?:объясни\s+как|почему\s+не\s+работает)/iu.test(text)) return null
   }
   const topic = referenceTopic(subject)
