@@ -1,6 +1,7 @@
 import { maxVideoPromptLength } from "@/lib/media/config"
 import { checkMediaLimit, recordMediaUsage } from "@/lib/media/limits"
 import { resolveMediaUser } from "@/lib/media/request"
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
 import { routeVideoGeneration } from "@/lib/media/video-router"
 import { getArtifact } from "@/lib/os/store"
 import { directMediaUrl } from "@/lib/os/media-reference"
@@ -85,6 +86,18 @@ async function handlePOST(request: Request) {
     }, { status: 401 })
   }
   const ownerMode = user.plan === "owner"
+  const proAccess = hasMalikProAccess(user.plan)
+  // One free video model. Premium provider selection is enforced server-side
+  // and cannot be bypassed by changing the client JSON request.
+  if (!providerId) providerId = mode === "text" ? "novai" : "magichour"
+  if (!proAccess && (providerId !== "novai" || mode !== "text")) {
+    return Response.json({
+      ok: false,
+      code: "MALIK_PRO_REQUIRED",
+      error: "Эта видеомодель или режим доступен только в Malik PRO.",
+      upgrade: "pro",
+    }, { status: 402, headers: { "Cache-Control": "no-store" } })
+  }
 
   if (editOperation === "extend") {
     const sourceJob = sourceTaskId ? await getVideoJob(sourceTaskId, user.userId) : null
