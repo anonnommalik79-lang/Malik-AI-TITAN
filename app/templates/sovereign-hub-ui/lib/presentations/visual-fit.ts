@@ -21,7 +21,8 @@ export function slideDensity(slide: Slide): SlideDensity {
     case "hero": {
       const title = length(slide.title)
       const subtitle = length(slide.subtitle)
-      if (title >= 84 || subtitle > 145) return "dense"
+      // A title truncated at a word boundary still represents overflow.
+      if (title >= 84 || (slide.title.endsWith("…") && title >= 75) || subtitle > 145) return "dense"
       if (title > 52 || subtitle > 95) return "compact"
       return "balanced"
     }
