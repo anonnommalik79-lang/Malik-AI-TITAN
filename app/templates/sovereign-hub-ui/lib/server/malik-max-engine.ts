@@ -78,6 +78,7 @@ type LaneStats = { ok: number; fail: number; latency: number; lastFail: number; 
 
 type EngineGlobal = typeof globalThis & {
   __malikMaxCooldown?: Map<string, { until: number; reason: string }>
+  __malikMaxOverloadedModels?: Map<string, { until: number; reason: string }>
   __malikMaxStats?: Map<string, LaneStats>
   __malikMaxGoogleModels?: Map<string, { at: number; names: string[] | null }>
   __malikMaxRotation?: number
@@ -85,6 +86,14 @@ type EngineGlobal = typeof globalThis & {
 
 const scope = globalThis as EngineGlobal
 const cooldowns = () => (scope.__malikMaxCooldown ||= new Map())
+const overloadedModels = () => (scope.__malikMaxOverloadedModels ||= new Map())
+const modelFamilyKey = (lane: MaxLane) => `${lane.provider}:${lane.providerModel}`
+function restOverloadedModel(lane: MaxLane) {
+  // A high-demand 503 usually applies to the model, not an individual API key.
+  // Other providers are preferred for 45 seconds; individual key 429s still
+  // use their own independent cooldown.
+  overloadedModels().set(modelFamilyKey(lane), { until: Date.now() + 45_000, reason: "model-overloaded" })
+}
 const statsMap = () => (scope.__malikMaxStats ||= new Map())
 
 const MAX_PARALLEL = 3
@@ -171,13 +180,13 @@ const FAST_PROVIDERS = new Set(["groq", "cerebras"])
 /* ------------------------------------------------------------ lane health */
 
 function cooldownLeft(lane: MaxLane) {
+  const now = Date.now()
   const entry = cooldowns().get(lane.id)
-  if (!entry) return 0
-  if (entry.until <= Date.now()) {
-    cooldowns().delete(lane.id)
-    return 0
-  }
-  return entry.until - Date.now()
+  if (entry && entry.until <= now) cooldowns().delete(lane.id)
+  const familyKey = modelFamilyKey(lane)
+  const family = overloadedModels().get(familyKey)
+  if (family && family.until <= now) overloadedModels().delete(familyKey)
+  return Math.max(0, (entry?.until || 0) - now, (family?.until || 0) - now)
 }
 
 function rest(lane: MaxLane, ms: number, reason: string) {
@@ -978,6 +987,14 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
         const detail = await upstreamError(response)
         const verdict = classifyMaxProviderFailure(response.status, detail)
         const restMs = response.status === 429 ? Math.max(5_000, retryAfterMs(response, detail)) : verdict.ms
+        // Skip other keys of the SAME overloaded model only when a different
+        // available model exists. Otherwise sibling keys remain a last resort.
+        const alternateModelReady = options.lanes.some((other) =>
+          (other.provider !== lane.provider || other.providerModel !== lane.providerModel) &&
+          cooldownLeft(other) === 0)
+        if (response.status === 503 && /(?:high demand|overloaded|over capacity|capacity exceeded)/iu.test(detail) && alternateModelReady) {
+          restOverloadedModel(lane)
+        }
         drop(attempt, `${verdict.reason}: ${detail.slice(0, 160)}`, restMs)
         return
       }
@@ -1312,7 +1329,7 @@ export async function maxLaneStatus() {
   const lanes = await buildMaxLanes({ prompt: "status", codeMode: false, fastMode: false, needsVision: false })
   return lanes.map((lane) => {
     const entry = statsMap().get(lane.id)
-    const rested = cooldowns().get(lane.id)
+    const rested = cooldowns().get(lane.id) || overloadedModels().get(modelFamilyKey(lane))
     return {
       id: lane.id,
       provider: lane.provider,
