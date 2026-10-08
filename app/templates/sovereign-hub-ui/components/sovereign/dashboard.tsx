@@ -7873,6 +7873,7 @@ const shouldShowMobilePreviewButton =
       return (
         <AutonomousCompany
           username={username}
+          accountId={workOSUser?.id}
           plan={currentPlan}
           onOpenBilling={() => safeOpenView("billing", "manual")}
           onViewChange={(view) => safeOpenView(view, "sidebar")}

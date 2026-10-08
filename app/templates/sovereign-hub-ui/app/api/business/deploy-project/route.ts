@@ -160,3 +160,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, code: "PROJECT_DEPLOY_FAILED", error: error instanceof Error ? error.message : "Project deployment failed" }, { status: 500 })
   }
 }
+
+/** Verify the real Vercel build state instead of treating QUEUED as deployed. */
+export async function GET(request: Request) {
+  const entitlement = await resolveRequestEntitlement(request)
+  if (entitlement.plan !== "owner") {
+    return NextResponse.json({ ok: false, code: "OWNER_ONLY", error: "Only the owner can inspect deployments." }, { status: 403 })
+  }
+  const token = String(process.env.VERCEL_TOKEN || "").trim()
+  if (!token) {
+    return NextResponse.json({ ok: false, code: "VERCEL_NOT_CONFIGURED" }, { status: 503 })
+  }
+  const id = new URL(request.url).searchParams.get("id") || ""
+  if (!/^[A-Za-z0-9_-]{6,90}$/.test(id)) {
+    return NextResponse.json({ ok: false, code: "INVALID_DEPLOYMENT_ID" }, { status: 400 })
+  }
+  try {
+    const response = await fetch(apiUrl(`/v13/deployments/${encodeURIComponent(id)}`), {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    })
+    if (!response.ok) {
+      return NextResponse.json({ ok: false, code: "VERCEL_STATUS_FAILED", error: await jsonError(response) }, { status: 502 })
+    }
+    const data = await response.json().catch(() => ({}))
+    const state = String(data?.readyState || data?.status || "UNKNOWN").toUpperCase()
+    return NextResponse.json({
+      ok: true, id, readyState: state, buildVerified: state === "READY",
+      error: ["ERROR", "CANCELED", "CANCELLED"].includes(state)
+        ? String(data?.errorMessage || data?.errorCode || "Vercel build failed") : undefined,
+    }, { headers: { "cache-control": "no-store" } })
+  } catch {
+    return NextResponse.json({ ok: false, code: "VERCEL_STATUS_UNAVAILABLE" }, { status: 503 })
+  }
+}
