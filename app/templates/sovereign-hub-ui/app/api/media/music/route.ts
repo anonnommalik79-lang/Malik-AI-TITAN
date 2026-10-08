@@ -1,5 +1,6 @@
 import { resolveMediaUser } from "@/lib/media/request"
 import { compileMusicBrief } from "@/lib/media/music-intent"
+import { directMediaUrl } from "@/lib/os/media-reference"
 import { musicModel, musicProviderConfigured, musicProviderName, submitDeapiMusic } from "@/lib/server/deapi-music"
 import { generateMusicLyrics, resolveMusicLyricsLanguage } from "@/lib/server/music-lyrics"
 import { recordMusicJobOwner } from "@/lib/server/music-job-ownership"
@@ -163,6 +164,19 @@ export async function POST(request: Request) {
       }, { status: result.status >= 400 && result.status < 600 ? result.status : 502 })
     }
 
+    // Free.ai may complete synchronously and return a direct audio URL in POST.
+    // Validate before exposing the URL; then let the browser verify the sound.
+    const immediateUrl = result.status === "done" && "resultUrl" in result
+      ? directMediaUrl(String(result.resultUrl || ""), String(process.env.NEXT_PUBLIC_APP_URL || process.env.MALIK_PUBLIC_ORIGIN || ""))
+      : ""
+    if (result.status === "done" && !immediateUrl) {
+      return Response.json({
+        ok: false,
+        code: "MUSIC_AUDIO_URL_INVALID",
+        error: "Музыкальный провайдер вернул некорректную ссылку на аудио.",
+      }, { status: 502 })
+    }
+
     const updatedQuota = await recordMusicUsage(user.userId, user.plan)
     const requestId = result.requestId
     const ownershipDurable = await recordMusicJobOwner(requestId, user.userId)
@@ -174,10 +188,11 @@ export async function POST(request: Request) {
       requestId,
       request_id: requestId,
       ownershipDurable,
-      status: result.status === "done" ? "ready" : "queued",
+      status: immediateUrl ? "ready" : "queued",
+      resultUrl: immediateUrl || undefined,
       deferred: Boolean("deferred" in result && result.deferred),
       statusUrl: `/api/media/music/status?requestId=${encodeURIComponent(requestId)}`,
-      downloadUrl: `/api/media/music/download?requestId=${encodeURIComponent(requestId)}`,
+      downloadUrl: immediateUrl || `/api/media/music/download?requestId=${encodeURIComponent(requestId)}`,
       unlimited: updatedQuota.unlimited,
       dailyLimit: updatedQuota.unlimited ? null : updatedQuota.dailyLimit,
       used: updatedQuota.used,
