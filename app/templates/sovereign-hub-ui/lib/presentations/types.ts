@@ -106,6 +106,8 @@ export type GalleryItem = {
 type SlideBase = {
   id: string
   layout: SlideLayout
+  /** Per-slide optical fit: persisted in Malik Deck and PowerPoint exports. */
+  fitMode?: "auto" | "compact" | "dense" | "ultra"
   /** What the speaker says. Never rendered on the slide itself. */
   notes?: string
   /**
