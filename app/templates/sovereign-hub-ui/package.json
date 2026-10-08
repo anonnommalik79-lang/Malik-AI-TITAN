@@ -111,7 +111,7 @@
     "test:business-readiness": "node --experimental-strip-types --no-warnings scripts/verify-business-readiness.mjs",
     "test:storage-clients": "node scripts/verify-s3-client-cache.mjs",
     "test:work-quota": "node --experimental-strip-types --no-warnings scripts/verify-work-quota.mjs",
-    "test:reliability": "npm run test:large-prompts && npm run test:web-recovery && npm run test:never-lose-chat && npm run test:account-chat-conflicts && npm run test:public-answer-cache && npm run test:work-quota && npm run test:music-intent && npm run test:business-readiness && npm run test:business-launch && npm run test:chat-experience && npm run test:chat-queue && npm run test:home-actions"
+    "test:reliability": "npm run test:large-prompts && npm run test:web-recovery && npm run test:never-lose-chat && npm run test:account-chat-conflicts && npm run test:public-answer-cache && npm run test:work-quota && npm run test:music-intent && npm run test:business-readiness && npm run test:business-launch && npm run test:chat-experience && npm run test:chat-queue && npm run test:home-actions && npm run test:account && npm run test:voice"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "1.1.1",

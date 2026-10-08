@@ -884,8 +884,15 @@ export async function runStrictMalikModel(input: {
         if (wrote || input.signal?.aborted) throw error
         console.warn("[MALIK_MODEL_ROUTE] selected model unavailable, MAX answers", model.id, error instanceof Error ? error.message : String(error))
       }
-      const rescued = await engine.runMalikMax({ ...engineInput, publicLabel: model.label })
-      return { ...rescued, selectedModelId: model.id }
+      try {
+        const rescued = await engine.runMalikMax({ ...engineInput, publicLabel: model.label })
+        return { ...rescued, selectedModelId: model.id }
+      } catch (error) {
+        if (error instanceof MalikModelRouteError) {
+          throw new MalikModelRouteError(error.code, error.message, error.status, model.id)
+        }
+        throw error
+      }
     }
   }
 

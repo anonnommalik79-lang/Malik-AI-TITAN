@@ -20,6 +20,7 @@ function loader(stubs = {}) {
     }).outputText
     const require = (specifier) => {
       if (specifier in stubs) return stubs[specifier]
+      if (specifier === "server-only") return {}
       if (specifier.startsWith("@/") || specifier.startsWith(".")) {
         const target = specifier.startsWith("@/")
           ? path.join(root, specifier.slice(2))
@@ -44,9 +45,10 @@ const savedEnv = { ...process.env }
 const savedFetch = globalThis.fetch
 const savedInfo = console.info
 try {
+  globalThis.fetch = async () => { throw new Error("Unexpected network request in offline account test") }
   // Do not inherit credentials or flags from the caller.
   for (const key of Object.keys(process.env)) {
-    if (/^(MALIK_|GROQ_|CLOUDFLARE_|CEREBRAS_|CF_|SERPER_|TAVILY_|BRAVE_|JINA_|ADMIN_EMAILS|DEV_BYPASS)/.test(key)) delete process.env[key]
+    if (/^(MALIK_|GROQ_|CLOUDFLARE_|CEREBRAS_|CF_|MODELSCOPE_|AIHUBMIX_|NEMOTRON_|OPENROUTER_|GOOGLE_|GEMINI_|TOGETHER_|DEEPSEEK_|XKIRO_|LLM7_|NARA_|SERPER_|TAVILY_|BRAVE_|JINA_|ADMIN_EMAILS|DEV_BYPASS|ALLOW_ROUTER_PAYG_MODELS)/.test(key)) delete process.env[key]
   }
   const basic = loader()
   const { shouldUseWeb } = basic("lib/ai/web-search-policy.ts")
@@ -55,6 +57,7 @@ try {
     "кто ты?", "что ты умеешь?", "напиши стих про погоду", "переведи: what is photosynthesis",
     "напиши функцию поиска на TypeScript", "исправь ошибку в коде", "посчитай 17*42",
     "найди ошибку в этом коде", "сократи прошлый ответ", "write a story about today",
+    "Напиши сказку про сегодняшний день", "Compose a poem about yesterday",
   ]
   for (const prompt of direct) await check("direct: " + prompt, () => {
     assert.equal(shouldUseWeb(prompt, { research: true }), false)
@@ -65,6 +68,8 @@ try {
     "кто такая Мария Кюри", "найди источники про космос", "курс доллара сегодня",
     "какая сейчас погода", "кто сейчас президент", "сколько стоит iPhone",
     "look up the latest news", "what is photosynthesis", "напиши доклад и поищи источники",
+    "Напиши последние новости мира", "Write the latest news", "Write a story and search the web for sources",
+    "Write a story using sources about today's news", "Напиши рассказ на основе сегодняшних новостей",
   ]
   for (const prompt of search) await check("search: " + prompt, () => assert.equal(shouldUseWeb(prompt), true))
   await check("explicit no-web wins; enabled is auto, not forced", () => {
@@ -72,6 +77,7 @@ try {
     assert.equal(shouldUseWeb("поищи новости", { disableResearch: true, forceResearch: true }), false)
     assert.equal(shouldUseWeb("без интернета объясни что такое React"), false)
     assert.equal(shouldUseWeb("привет", { forceResearch: true }), true)
+    assert.equal(shouldUseWeb("write a story about today", { forceResearch: true }), true)
   })
 
   const { MALIK_MODELS, PUBLIC_MALIK_MODELS, FREE_MALIK_MODELS, PRO_MALIK_MODELS, canUseMalikModel } = basic("lib/ai/malik-models.ts")
@@ -149,19 +155,25 @@ try {
   })
 
   let fail = false
+  globalThis.fetch = async (url, init) => {
+    assert.ok(init?.body, `unexpected provider request: ${url}`)
+    const body = JSON.parse(init.body)
+    calls.push({ url, body })
+    if (fail) return Response.json({ error: "unavailable" }, { status: 503 })
+    const content = "Offline fixture response is complete and preserves the selected model."
+    if (new URL(url).host === "generativelanguage.googleapis.com") {
+      return new Response(`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: content }] }, finishReason: "STOP" }] })}\n\n`, { headers: { "content-type": "text/event-stream" } })
+    }
+    return body.stream
+      ? new Response(`data: ${JSON.stringify({ choices: [{ delta: { content }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } })
+      : Response.json({ choices: [{ message: { content }, finish_reason: "stop" }] })
+  }
   const routeLoad = loader({
     "@/lib/server/request-entitlement": { resolveRequestEntitlement: async () => ({ authenticated: true, userId: "test@example.com", plan }) },
-    "@/lib/ai/providers/base": { providerFetch: async (url, init) => {
-      calls.push({ url, body: JSON.parse(init.body) })
-      return fail ? Response.json({ error: "unavailable" }, { status: 503 })
-        : Response.json({ choices: [{ message: { content: "Offline fixture response." } }] })
-    } },
   })
   const router = routeLoad("lib/server/malik-model-router.ts")
-  // Every provider in the catalogue needs a key here, or the model under test
-  // falls back to a provider that does have one and the routing assertion below
-  // measures the fallback instead of the route. Four providers were added to
-  // the product after this line was written.
+  // Configure every catalogue provider so routing assertions test the selected
+  // backend. Both MAX's fetch and the direct provider path use the fixture.
   Object.assign(process.env, {
     GROQ_API_KEY: "offline",
     CEREBRAS_API_KEY: "offline",
@@ -170,13 +182,15 @@ try {
     MODELSCOPE_API_KEY: "offline",
     AIHUBMIX_API_KEY: "offline",
     NEMOTRON_OPENROUTER_API_KEY: "offline",
+    GOOGLE_AI_POOL_API_KEY: "offline",
+    TOGETHER_API_KEY: "offline",
+    DEEPSEEK_API_KEY: "offline",
+    XKIRO_API_KEY: "offline",
+    LLM7_API_KEY: "offline",
+    NARA_API_KEY: "offline",
   })
   console.info = () => {}
-  // One host per provider. The map used to cover three providers and the
-  // catalogue now has seven, so every model on a newer provider read
-  // `hosts[provider]` as undefined and failed a comparison that was really
-  // testing the test. The rule being guarded is unchanged: a model must call its
-  // own provider and its own providerModel, never another provider's.
+  // A selected model must call its own provider and providerModel.
   const PROVIDER_HOSTS = {
     groq: "api.groq.com",
     cerebras: "api.cerebras.ai",
@@ -184,6 +198,12 @@ try {
     modelscope: "api-inference.modelscope.cn",
     aihubmix: "aihubmix.com",
     "nemotron-openrouter": "openrouter.ai",
+    "google-ai": "generativelanguage.googleapis.com",
+    together: "api.together.xyz",
+    deepseek: "api.deepseek.com",
+    xkiro: "api.xkiro.com",
+    llm7: "api.llm7.io",
+    nara: "router.bynara.id",
     "malik-orchestrator": "api.groq.com",
   }
   await check("server Free/Plus gates and every model routed to its own provider", async () => {
@@ -194,7 +214,7 @@ try {
       else await assert.rejects(resolve, err => err.status === 403)
       plan = "pro"
       assert.equal((await resolve()).modelId, model.id)
-      const response = await router.runStrictMalikModel({ modelId: model.id, prompt: "test", systemPrompt: "test" })
+      const response = await router.runStrictMalikModel({ modelId: model.id, prompt: "test", systemPrompt: "test", allowCatalog: true })
       assert.equal(response.selectedModelId, model.id)
       const call = calls.at(-1)
       if (model.provider === "malik-orchestrator") {
@@ -210,7 +230,8 @@ try {
         const expectedHost = PROVIDER_HOSTS[model.provider]
         assert.ok(expectedHost, `no host recorded for provider ${model.provider} - add it here when a provider is added`)
         assert.equal(new URL(call.url).host, expectedHost)
-        assert.equal(call.body.model, model.providerModel)
+        if (model.provider === "google-ai") assert.ok(new URL(call.url).pathname.includes(encodeURIComponent(model.providerModel)))
+        else assert.equal(call.body.model, model.providerModel)
       }
     }
   })
@@ -242,6 +263,13 @@ try {
   }
   process.env.SERPER_API_KEY = "offline"
   const god = loader({
+    "@/lib/server/context-fusion": {
+      requestedFusionConnectors: () => [],
+      collectMalikConnectedContext: async () => { throw new Error("Account search fixture must not access private connectors") },
+    },
+    "@/lib/server/science-context": {
+      collectMalikScienceContext: async () => { throw new Error("Account search fixture must not access science providers") },
+    },
     "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => {
       inference.push(input)
       return { content: "Ответ.", provider: "fixture", model: "fixture", selectedModelId: input.modelId, latencyMs: 0 }

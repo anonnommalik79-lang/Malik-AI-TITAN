@@ -33,6 +33,10 @@ assert.equal(intent.answersKazakhGreeting("Жақсымын, рақмет! Өз�
 let lastCall, modelReply = "Клисн — ол әйелдің есімі.", calls = 0
 const turn = load("app/api/voice/turn/route.ts", {
   "@/lib/malik-compute/runtime": { withCompute: (handler) => handler },
+  "@/lib/server/founder-request-audit": { withFounderRequestAudit: (handler, source) => {
+    assert.equal(source, "voice", "voice turn remains wired to request auditing")
+    return handler
+  } },
   // The route reads the session to attribute a turn. Nobody is signed in here
   // and the suite is about what the voice turn says, not who said it, so the
   // session module answers with no user rather than pulling WorkOS - which has

@@ -16,6 +16,12 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}): bo
   // An explicit search request always wins.
   if (/(?:по[ий]щ[иь]|поиск\s+(?:в|по)|загугл|гугл[еи]|найди\s+(?:в\s+(?:сети|интернете)|через\s+веб)|проверь\s+(?:онлайн|в\s+сети)|\b(?:google|browse|search the web|look up|search online)\b)/i.test(text)) return true
 
+  // A date inside an explicitly creative brief is a story setting, not a
+  // request for current facts. News and explicit research still use evidence.
+  if (/^(?:(?:пожалуйста|please)\s+)?(?:(?:напиши|сочини|придумай)\s+(?:стих|сказк|рассказ|песн)|(?:write|compose)\s+(?:(?:a|an)\s+)?(?:story|poem|fairy\s+tale|song|lyrics)\b)/iu.test(text)) {
+    return options.forceResearch === true || /(?:источник|исследован|новост|\b(?:sources|research|news|current events)\b)/iu.test(text)
+  }
+
   // "Напиши последние новости" still needs live evidence. A generic writing
   // or API keyword must not bypass checks of releases, prices and availability.
   if (needsCurrentEvidence(text)) return true
