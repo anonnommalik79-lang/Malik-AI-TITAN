@@ -813,6 +813,27 @@ function abortError() {
   return error
 }
 
+/** Never disguise exhausted upstream credits as user quota or busy providers. */
+export function maxUnavailableFailure(reasons: string[]): { code: string; message: string } {
+  const observed = reasons.map((reason) => String(reason || "")).filter(Boolean)
+  if (observed.length && observed.every((reason) => /payment-required|quota-message/iu.test(reason))) {
+    return {
+      code: "MAX_UPSTREAM_QUOTA",
+      message: "MalikLLM MAX: лимиты подключённых API-провайдеров исчерпаны. Попробуйте позже или проверьте баланс ключей.",
+    }
+  }
+  if (observed.length && observed.every((reason) => /http-401|http-403|model-not-found|payment-required|quota-message/iu.test(reason))) {
+    return {
+      code: "MAX_UPSTREAM_ACCESS",
+      message: "MalikLLM MAX: подключённые ключи или модели сейчас недоступны. Проверьте права доступа и настройки провайдеров.",
+    }
+  }
+  return {
+    code: "MAX_ALL_LANES_BUSY",
+    message: "MalikLLM MAX: доступные модели сейчас не ответили. Повторите запрос позже.",
+  }
+}
+
 export function raceLanes(options: RaceOptions): Promise<RaceResult> {
   const fetcher = options.fetcher || fetch
   const maxParallel = Number.isFinite(options.maxParallel)
@@ -876,13 +897,15 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       settled = true
       cleanup()
       for (const attempt of [...running]) retire(attempt)
-      reject(new MalikModelRouteError(
-        "MAX_ALL_LANES_BUSY",
-        "MalikLLM MAX: все модели сейчас заняты. Повторите запрос через минуту.",
-        503,
-        "malik-max",
-      ))
-      console.warn("[MALIK_MAX] no lane answered", JSON.stringify({ tried: errors.length, errors: errors.slice(0, 12) }))
+      // If no lane was attempted because every key is already resting,
+      // report the recorded upstream cause rather than generic "busy".
+      const recorded = options.lanes.map((lane) => {
+        const entry = cooldowns().get(lane.id)
+        return entry && entry.until > Date.now() ? entry.reason : ""
+      }).filter(Boolean)
+      const failure = maxUnavailableFailure([...errors, ...recorded])
+      reject(new MalikModelRouteError(failure.code, failure.message, 503, "malik-max"))
+      console.warn("[MALIK_MAX] no lane answered", JSON.stringify({ tried: errors.length, errorTypes: [...new Set([...errors, ...recorded].map((reason) => reason.includes("payment-required") ? "billing" : reason.includes("http-403") ? "permission" : "unavailable"))] }))
     }
 
     const firstDeadline = setTimeout(() => { if (!winner) fail() }, options.firstDeadlineMs)
