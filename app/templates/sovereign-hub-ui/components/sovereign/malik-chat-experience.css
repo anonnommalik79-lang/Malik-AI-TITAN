@@ -1,0 +1,37 @@
+/* Scoped monochrome chat controls: no network assets or Render-side work. */
+#malik-root .malik-v7-home { width:min(100%,760px);margin:clamp(24px,8vh,95px) auto 40px;padding:0 8px;color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif; }
+#malik-root .malik-v7-home__intro { text-align:center; }
+#malik-root .malik-v7-home__eyebrow {display:flex;align-items:center;justify-content:center;gap:8px;color:#a1a1aa;font-size:11px;font-weight:700;letter-spacing:.18em;}
+#malik-root .malik-v7-home h1 {margin:20px 0 12px;color:#fafafa;font-size:clamp(32px,5vw,48px);font-weight:650;line-height:1.1;letter-spacing:-.052em;}
+#malik-root .malik-v7-home__intro p {margin:auto;max-width:480px;color:#a1a1aa;font-size:14px;line-height:1.7;}
+#malik-root .malik-v7-home__grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:clamp(28px,5vh,52px);}
+#malik-root .malik-v7-home__card {position:relative;display:flex;align-items:flex-start;gap:14px;min-height:104px;min-width:0;padding:20px 18px;border:1px solid #29292d;border-radius:18px;background:#111113;color:#f5f5f7;text-align:left;transition:background .2s,border-color .2s,transform .2s;}
+#malik-root .malik-v7-home__card:hover {background:#1b1b1e;border-color:#58585d;transform:translateY(-1px);}
+#malik-root .malik-v7-home__card > svg:first-child {flex:none;color:#c4c4cb;}
+#malik-root .malik-v7-home__card span {display:grid;gap:6px;min-width:0;}
+#malik-root .malik-v7-home__card strong {font-size:14px;line-height:1.35;font-weight:620;}
+#malik-root .malik-v7-home__card small {font-size:12px;color:#929299;line-height:1.5;}
+#malik-root .malik-v7-home__corner {position:absolute;top:15px;right:14px;color:#85858c;}
+#malik-root .malik-v7-home__foot {display:flex;gap:8px;align-items:center;justify-content:center;margin:21px 0 0;color:#85858c;font-size:11px;line-height:1.5;text-align:center;}
+#malik-root .malik-v7-home__foot svg {flex:none;}
+#malik-root .malik-v7-controls {display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+#malik-root .malik-v7-controls::-webkit-scrollbar {display:none;}
+#malik-root .malik-v7-controls__levels {display:inline-flex;flex:none;gap:2px;padding:3px;border:1px solid #29292d;border-radius:11px;background:#0f0f11;}
+#malik-root .malik-v7-controls__level {display:inline-flex;flex:none;gap:4px;align-items:center;justify-content:center;min-height:34px;padding:0 11px;border:0;border-radius:8px;color:#aaaab0;font-size:11px;white-space:nowrap;}
+#malik-root .malik-v7-controls__level[data-active="1"] {background:#f5f5f5;color:#0c0c0d;font-weight:700;}
+#malik-root .malik-v7-controls__level:disabled {opacity:.5;cursor:not-allowed;}
+#malik-root .malik-v7-controls__research {display:inline-flex;flex:none;align-items:center;gap:7px;min-height:40px;padding:0 10px;border:1px solid #29292d;border-radius:11px;background:transparent;color:#aaaab0;font-size:11px;white-space:nowrap;}
+#malik-root .malik-v7-controls__research[data-active="1"] {border-color:#73737b;background:#252528;color:#fff;}
+#malik-root .malik-v7-home__card:focus-visible,#malik-root .malik-v7-controls button:focus-visible {outline:2px solid #fff;outline-offset:3px;}
+#malik-root .malik-composer-context-row:has(.malik-v7-controls) {display:flex;align-items:center;gap:8px;min-width:0;}
+#malik-root .malik-composer-context-row:has(.malik-v7-controls) > span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+@media(max-width:640px) {
+ #malik-root .malik-v7-home {margin-top:clamp(15px,4vh,38px);}
+ #malik-root .malik-v7-home__grid {grid-template-columns:1fr;gap:9px;margin-top:26px;}
+ #malik-root .malik-v7-home__card {min-height:73px;padding:15px 16px;border-radius:15px;}
+ #malik-root .malik-composer-context-row:has(.malik-v7-controls) > span {display:none;}
+ #malik-root .malik-v7-controls__level {padding:0 9px;}
+}
+@media(prefers-reduced-motion:reduce) {
+ #malik-root .malik-v7-home__card {transition:none;transform:none!important;}
+}

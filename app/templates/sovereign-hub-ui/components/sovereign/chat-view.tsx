@@ -64,7 +64,7 @@ import type { MalikFactAudit, MalikFactClaim } from "@/lib/ai/fact-audit"
 import { DEFAULT_MALIK_MODEL_ID, getMalikModel, type MalikModelId } from "@/lib/ai/malik-models"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { MalikModelSelector } from "./MalikModelSelector"
-import { canUseUltra, loadResponseDepth, type ChatSendOptions, type ResponseDepth } from "@/lib/ai/response-depth"
+import { canUseUltra, loadResponseDepth, saveResponseDepth, type ChatSendOptions, type ResponseDepth } from "@/lib/ai/response-depth"
 import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 import { isExplicitImageEditRequest, isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
 import { isDataSvgUrl, isImageLikeUrl, isRealVideoUrl } from "@/lib/media/media-url"
@@ -86,6 +86,7 @@ import { isSheetRequest } from "@/lib/ai/answer-sheet"
 import type { WorkspaceMode } from "@/lib/ai/work-mode"
 import { openOs } from "./os/os-client"
 import { WorkStartPanel } from "./WorkStartPanel"
+import { MalikChatHome, MalikChatControls } from "./MalikChatExperience"
 
 export type { ChatSendOptions }
 
@@ -3001,14 +3002,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
                 </div>
               </div>
             ) : (
-              <div className="relative mt-10 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,.38)] backdrop-blur-xl sm:mt-16 sm:p-10">
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_28%_18%,rgba(228, 187, 94,.15),transparent_35%),radial-gradient(circle_at_78%_75%,rgba(217, 174, 69,.16),transparent_36%)]" />
-                <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-[0_0_60px_rgba(255,255,255,.16)]">
-                  <svg viewBox="0 0 44 44" className="h-full w-full" aria-hidden="true"><rect width="44" height="44" rx="12" fill="white" /><path d="M9 29 L22 15 L22 29 Z" fill="#03040a" /><path d="M24 15 H38 L24 29 Z" fill="#03040a" /></svg>
-                </div>
-                <h2 className="relative text-3xl font-black tracking-tight">Malik AI Max</h2>
-                <p className="relative mx-auto mt-2 max-w-xl text-sm leading-6 text-gray-500">Чат, код, canvas, файлы, голос, Codex және фото/видео generation — бәрі бір prompt ішінде.</p>
-              </div>
+              <MalikChatHome onQuickAction={handleQuickAction} />
             )
           ) : (
             <>
@@ -3179,17 +3173,14 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
             </div>
           </div>
           <div className="malik-composer-context-row">
-            <button
-              type="button"
-              onClick={() => {
-                const next = researchMode === "off" ? "web" : "off"
-                setResearchMode(next)
-                if (next === "web") focusComposerWith("Найди в сети актуальную информацию по теме: ")
-              }}
-              className={cn(researchMode !== "off" && "is-active")}
-            >
-              <Globe className="h-3.5 w-3.5" /> {researchMode === "deep" ? "Глубокое исследование" : researchMode === "web" ? "Веб-поиск включён" : "Веб и источники"}
-            </button>
+            <MalikChatControls
+              plan={effectivePlan}
+              depth={responseDepth}
+              research={researchMode}
+              onDepthChange={(next) => { setResponseDepth(next); saveResponseDepth(next) }}
+              onResearchChange={(next) => setResearchMode(next)}
+              onUpgrade={onOpenBilling}
+            />
             <span>
               {workspaceMode === "work"
                 ? "Фото · Видео · Файл · Документ · Сайт · Код · Анализ · Презентация"
