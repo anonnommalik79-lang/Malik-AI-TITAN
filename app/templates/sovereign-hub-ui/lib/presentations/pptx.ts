@@ -3,7 +3,7 @@ import { createElement } from "react"
 import { DECK_ICONS } from "@/lib/presentations/icon-components"
 import { deckTheme, type DeckTheme } from "@/lib/presentations/themes"
 import { IMAGE_LAYOUTS, type Deck, type DeckIconName, type Slide } from "@/lib/presentations/types"
-import { headlineScale } from "@/lib/presentations/visual-fit"
+import { headlineScale, slideDensity, type SlideDensity } from "@/lib/presentations/visual-fit"
 
 /**
  * The deck as a real PowerPoint file.
@@ -51,7 +51,7 @@ const HEAD_H = 1.25
 const BODY_Y = 2.15
 const BODY_H = SLIDE_H - BODY_Y - 0.75
 
-type Ctx = { slide: PptxSlide; theme: DeckTheme; index: number; total: number }
+type Ctx = { slide: PptxSlide; theme: DeckTheme; density: SlideDensity; index: number; total: number }
 
 function heading(ctx: Ctx, text: string, options: Record<string, unknown> = {}) {
   ctx.slide.addText(text, {
@@ -63,10 +63,14 @@ function heading(ctx: Ctx, text: string, options: Record<string, unknown> = {}) 
 }
 
 function body(ctx: Ctx, text: string, options: Record<string, unknown>) {
+  // Persisted per-slide optical fit applies to the editable PowerPoint too.
+  const { fontSize, ...rest } = options
+  const base = typeof fontSize === "number" ? fontSize : 16
+  const multiplier = ctx.density === "ultra" ? 0.78 : ctx.density === "dense" ? 0.86 : ctx.density === "compact" ? 0.94 : 1
   ctx.slide.addText(text, {
-    fontFace: ctx.theme.pptxBodyFont, fontSize: 16, color: ctx.theme.muted,
+    fontFace: ctx.theme.pptxBodyFont, fontSize: Math.max(10, Math.round(base * multiplier)), color: ctx.theme.muted,
     valign: "top", fit: "shrink", margin: 0, lineSpacingMultiple: 1.15,
-    ...options,
+    ...rest,
   })
 }
 
@@ -570,7 +574,7 @@ export async function buildPptx(deck: Pick<Deck, "title" | "theme" | "slides">, 
   deck.slides.forEach((slide, index) => {
     const pageSlide = pptx.addSlide()
     pageSlide.background = { color: theme.bg }
-    const ctx: Ctx = { slide: pageSlide, theme, index, total: deck.slides.length }
+    const ctx: Ctx = { slide: pageSlide, theme, density: slideDensity(slide), index, total: deck.slides.length }
     // The glow sits under the content, on every slide without a photograph.
     if (!(IMAGE_LAYOUTS.has(slide.layout) && images.get(slide.id)) && slide.layout !== "gallery") glow(ctx)
     drawSlide(ctx, slide, images)
