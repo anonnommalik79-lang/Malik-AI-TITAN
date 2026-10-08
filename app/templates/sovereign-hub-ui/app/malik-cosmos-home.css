@@ -282,10 +282,11 @@ html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboar
   html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-chip { transition: none; }
 }
 
-/* Restore actual mobile quick actions hidden by an overly broad desktop rule.
-   Keeps the existing V5 phone layout, artwork, and safe-area dimensions. */
+/* Keep the four optional source shortcuts off the mobile chat home.
+   The composer stays anchored at the bottom; the empty row is not reserved.
+   Source actions remain accessible from the existing composer and menus. */
 @media (max-width: 767px) {
   html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] {
-    display: grid !important;
+    display: none !important;
   }
 }
