@@ -7,7 +7,7 @@ import type { DeckOutline, Slide, SlideLayout } from "@/lib/presentations/types"
  */
 export type PresentationQualityIssue = {
   slideIndex: number
-  code: "duplicate" | "filler" | "repeated-layout" | "no-notes" | "unattributed-data" | "missing-photo" | "low-variety" | "crowded-slide"
+  code: "duplicate" | "filler" | "repeated-layout" | "no-notes" | "unattributed-data" | "missing-photo" | "low-variety" | "crowded-slide" | "missing-slide"
   message: string
   recommendation: string
   weight: number
@@ -57,6 +57,12 @@ export function inspectPresentation(input: {
 
   for (let i = 0; i < inspected; i += 1) {
     const slide = slides[i]
+    // Incomplete decks cannot earn 100/100 while the outline-only preview
+    // remains an editorial review, not a failed generation.
+    if (input.slides !== undefined && !slide) {
+      flag(i, "missing-slide", "Слайд не создан", "Завершите генерацию или повторите создание этого слайда.", 15)
+      continue
+    }
     const title = headline(slide, items[i]?.title || "").trim()
     const layout = slide?.layout || items[i]?.layout || "bullets"
     layouts.push(layout)
