@@ -17,7 +17,7 @@ import { askAgainPhrase, chooseTranscript, conversationHint, shouldAskAgain } fr
 import { fuseTranscripts } from "@/lib/voice/rover"
 import { takeSentence } from "@/lib/voice/voice-llm-stream"
 import { PauseTracker } from "@/lib/voice/dsp"
-import { GeminiLiveSession } from "@/lib/voice/gemini-live-client"
+import { GeminiLiveSession, type VoiceWebSource } from "@/lib/voice/gemini-live-client"
 import { detectSpokenLanguageDetailed } from "@/lib/voice/voice-language"
 import { languageLabel } from "@/lib/translator/languages"
 import { VOICE_HISTORY_TURNS, type VoiceMessage } from "@/lib/voice/conversation"
@@ -62,7 +62,7 @@ type TranscribePayload = { ok?: boolean; text?: string; error?: string; remainin
 const STORAGE_KEY = "malik.voice.preferences.v5"
 const PREVIOUS_STORAGE_KEY = "malik.voice.preferences.v4"
 
-export type VoiceConversationTurn = { user: string; assistant: string }
+export type VoiceConversationTurn = { user: string; assistant: string; sources?: VoiceWebSource[] }
 
 /**
  * When the microphone decides you have stopped talking.
@@ -106,6 +106,7 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
   const [liveError, setLiveError] = useState<string | null>(null)
   /** What the server-side self-check found, in one sentence. */
   const [liveDiagnosis, setLiveDiagnosis] = useState<string | null>(null)
+  const [webSources, setWebSources] = useState<VoiceWebSource[]>([])
   const [checkingLive, setCheckingLive] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(isVoiceSoundEnabled)
   const [screenActive, setScreenActive] = useState(false)
@@ -195,6 +196,7 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
   const geminiLiveReadyRef = useRef(false)
   const liveInputRef = useRef("")
   const liveOutputRef = useRef("")
+  const liveSourcesRef = useRef<VoiceWebSource[]>([])
   /** Every finished exchange of this session, handed to the chat when Voice closes. */
   const turnsRef = useRef<VoiceConversationTurn[]>([])
   const voiceRef = useRef(voice)
@@ -247,7 +249,8 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
   const rememberTurn = useCallback(() => {
     const user = liveInputRef.current.replace(/\s+/g, " ").trim()
     const assistant = liveOutputRef.current.replace(/\s+/g, " ").trim()
-    if (user || assistant) turnsRef.current = [...turnsRef.current, { user, assistant }].slice(-60)
+    if (user || assistant) turnsRef.current = [...turnsRef.current, { user, assistant, sources: [...liveSourcesRef.current] }].slice(-60)
+    liveSourcesRef.current = []
   }, [])
 
   const showNotice = useCallback((message: string) => {
@@ -280,6 +283,10 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
           },
           onInputText: (text) => {
             if (!mountedRef.current || closingRef.current) return
+            if (!liveInputRef.current) {
+              liveSourcesRef.current = []
+              setWebSources([])
+            }
             if (liveOutputRef.current) {
               // The previous answer was cut short by this new question.
               rememberTurn()
@@ -303,6 +310,22 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
             liveOutputRef.current += text
             setFinalTranscript(liveOutputRef.current.trim())
             setInterimTranscript("")
+          },
+          onSearchStart: () => {
+            if (!mountedRef.current || closingRef.current) return
+            setTitle("Ищу в интернете")
+            setSubtitle("Проверяю открытые источники…")
+          },
+          onSearchSources: (sources) => {
+            if (!mountedRef.current || closingRef.current) return
+            // URLs are shown as links, not spoken by the model.
+            liveSourcesRef.current = sources
+            setWebSources(sources)
+          },
+          onSearchEnd: (found) => {
+            if (!mountedRef.current || closingRef.current) return
+            setTitle(found ? "Источники найдены" : "Проверка завершена")
+            setSubtitle(found ? "Готовлю ответ по источникам" : "Надёжных результатов нет — сообщу об этом")
           },
           onSpeaking: () => {
             if (!mountedRef.current || closingRef.current) return
@@ -1584,6 +1607,8 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
         liveOutputRef.current = ""
       }
       liveInputRef.current = value
+      liveSourcesRef.current = []
+      setWebSources([])
       setFinalTranscript(value)
       setInterimTranscript("")
       setTitle("Отвечаю")
@@ -1692,6 +1717,16 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
         <div className={styles.transcript} aria-live="polite">
           <span>{finalTranscript}</span>{interimTranscript ? <span className={styles.interim}> {interimTranscript}</span> : null}
         </div>
+        {webSources.length ? (
+          <nav className={styles.webSources} aria-label="Источники голосового ответа">
+            <span>Источники</span>
+            {webSources.map(({ title, url }, index) => (
+              <a key={url + index} href={url} target="_blank" rel="noopener noreferrer" title={title}>
+                {title || new URL(url).hostname}
+              </a>
+            ))}
+          </nav>
+        ) : null}
         {liveError ? (
           <div className={styles.retry} role="status">
             <span>{liveError}</span>
