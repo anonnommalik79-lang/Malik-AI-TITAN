@@ -2,7 +2,7 @@
 
 /* The same working desktop controls, arranged compactly on phones. */
 @media (max-width: 680px) {
-  :global(body) :global(.malik-dashboard-shell) :global([data-voice-mode]) .mobileDock[aria-label="Панель голосового режима"] {
+  :global(body) :global([data-voice-mode]) .mobileDock[aria-label="Панель голосового режима"] {
     display: block !important;
     left: 8px !important;
     right: 8px !important;
@@ -26,7 +26,7 @@
     border-radius: 0 !important;
     box-shadow: none !important;
   }
-  :global(body) :global(.malik-dashboard-shell) .mobileDock textarea {
+  :global(body) :global([data-voice-mode]) .mobileDock textarea {
     width: 100% !important;
     min-height: 36px !important;
     max-height: 72px !important;
