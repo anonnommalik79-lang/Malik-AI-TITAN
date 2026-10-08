@@ -1061,8 +1061,9 @@ export function PresentationStudio({ username }: { username?: string }) {
 
   const generating = busy === "slides"
   const active = entries[current]
-  const visualIssues = active?.slide && visualAudit?.slideId === active.slide.id &&
-    spotlight?.index !== current ? visualAudit.issues : []
+  const visualAuditReady = Boolean(active?.slide && visualAudit?.slideId === active.slide.id &&
+    spotlight?.index !== current)
+  const visualIssues = visualAuditReady ? visualAudit!.issues : []
   const autoFit = () => {
     if (!active?.slide) return
     const density = slideDensity(active.slide)
@@ -1490,7 +1491,7 @@ export function PresentationStudio({ username }: { username?: string }) {
                   </div>
                 )}
               </div>
-              {active.slide && !spotlight ? (
+              {active.slide && visualAuditReady ? (
                 <div className="ps-visual-check" data-overflow={visualIssues.length > 0} role="status" aria-live="polite">
                   <span className="ps-visual-icon">{visualIssues.length ? <ShieldCheck size={16} /> : <Check size={16} />}</span>
                   <span className="ps-visual-message">
