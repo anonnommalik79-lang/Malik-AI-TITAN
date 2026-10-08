@@ -283,15 +283,17 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
           },
           onInputText: (text) => {
             if (!mountedRef.current || closingRef.current) return
-            if (!liveInputRef.current) {
-              liveSourcesRef.current = []
-              setWebSources([])
-            }
+            const newTurn = !liveInputRef.current
             if (liveOutputRef.current) {
-              // The previous answer was cut short by this new question.
+              // Preserve the cited earlier answer before clearing the source
+              // references for the new question.
               rememberTurn()
               liveInputRef.current = ""
               liveOutputRef.current = ""
+            }
+            if (newTurn) {
+              liveSourcesRef.current = []
+              setWebSources([])
             }
             liveInputRef.current += text
             const repaired = repairTranscript(liveInputRef.current) || liveInputRef.current
