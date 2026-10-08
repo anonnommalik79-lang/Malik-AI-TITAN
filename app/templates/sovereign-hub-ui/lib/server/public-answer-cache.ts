@@ -4,7 +4,7 @@ export const MAX_SHARED_ANSWER_CACHE_ENTRIES = 48
 
 /** Hash the entire normalized prompt; never key on its first N characters. */
 export function sharedAnswerCacheKey(version: string, prompt: string): string {
-  const normalized = String(prompt || "").normalize("NFC").toLowerCase().trim().replace(/\s+/gu, " ")
+  const normalized = String(prompt || "").normalize("NFC").trim()
   return version + ":" + createHash("sha256").update(normalized, "utf8").digest("hex")
 }
 

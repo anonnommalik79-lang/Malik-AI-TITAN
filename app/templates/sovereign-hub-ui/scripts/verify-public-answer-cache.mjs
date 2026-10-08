@@ -5,9 +5,10 @@ import { sharedAnswerCacheKey, mayShareAnswerCache, trimSharedAnswerCache, MAX_S
 const common = "Same introduction for both long briefs. ".repeat(30)
 assert.notEqual(sharedAnswerCacheKey("v1", common + "last requirement A"), sharedAnswerCacheKey("v1", common + "last requirement B"),
   "long briefs that share their first 420 characters must not collide")
-assert.equal(sharedAnswerCacheKey("v1", " Hello  WORLD "), sharedAnswerCacheKey("v1", "hello world"), "equivalent whitespace is canonical")
+assert.notEqual(sharedAnswerCacheKey("v1", " Hello  WORLD "), sharedAnswerCacheKey("v1", "hello world"), "case and whitespace can change code meaning")
 assert.equal(sharedAnswerCacheKey("v1", "e\u0301"), sharedAnswerCacheKey("v1", "\u00e9"), "Unicode normalization")
 assert.ok(!sharedAnswerCacheKey("v1", "My private query text").includes("private"), "raw prompt is not a cache key")
+assert.notEqual(sharedAnswerCacheKey("v1", "const MAX = 1"), sharedAnswerCacheKey("v1", "const max = 1"), "case-sensitive code stays separate")
 assert.equal(mayShareAnswerCache({}, "Explain public black holes"), true)
 for (const contextual of [
   { history: [{ role: "user", content: "private context" }] },
