@@ -947,6 +947,9 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     return selected
   }, [blocks, question])
   const fallbackVisualSlots = useMemo(() => {
+    // Structured cards and charts already provide a visual. Do not decorate unrelated
+    // headings or prose with speculative stock photography.
+    if (blocks.some((block) => block.kind === "cards" || block.kind === "visual")) return new Map<string, AnswerVisualSlot>()
     // Event lineups need explicit subject metadata: a guessed portrait is not attendance evidence.
     if (!question || /(?:спикер|выступ|участни|приехал|присутств|speaker|attend|participant|lineup)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
     // A chart or a dates/pricing card does not disable photos in other sections.
@@ -1127,11 +1130,11 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
         }
         if (block.kind === "cards") {
           if (block.block) return <MalikAnswerCards key={key} block={block.block} sources={citations} autoPhotos={allowsAnswerPhotoHints(question, hasAttachment)} />
-          return null
+          return streaming ? <p key={key} className="malik-md-p" role="status">Собираю карточки…</p> : null
         }
         if (block.kind === "visual") {
           if (dataVisual) return <Fragment key={key}><MalikAnswerVisual visual={dataVisual} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} />{sourcedPhotos}</Fragment>
-          return null
+          return streaming ? <p key={key} className="malik-md-p" role="status">Подготавливаю визуализацию…</p> : null
         }
         // The photo row already owns these paragraphs, including across metadata.
         if (photoDescriptions.owned.has(position)) return null
