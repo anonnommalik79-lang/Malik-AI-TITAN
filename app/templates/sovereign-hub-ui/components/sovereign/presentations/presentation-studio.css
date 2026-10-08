@@ -784,3 +784,88 @@
   }
   .deck-print-page:last-child { break-after: auto; page-break-after: auto; }
 }
+
+
+/* Studio 2.0 — concise, accessible editorial QA with no extra rendering libraries. */
+.ps-quality {
+  margin: 14px 0 18px;
+  border: 1px solid rgba(255, 255, 255, .13);
+  border-radius: 14px;
+  padding: 13px 15px;
+  background: rgba(255, 255, 255, .025);
+  color: #f4f4f5;
+}
+.ps-quality-header { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.ps-quality-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .09);
+}
+.ps-quality-title { font-size: 13px; font-weight: 700; letter-spacing: -.012em; }
+.ps-quality-score {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 7px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.ps-quality-caption {
+  margin: 9px 0 0;
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.ps-quality-list { display: grid; gap: 5px; margin-top: 13px; }
+.ps-quality-issue {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, .075);
+  border-radius: 9px;
+  padding: 10px;
+  color: #eee;
+  background: rgba(255, 255, 255, .035);
+  transition: border-color .15s ease, background .15s ease;
+}
+.ps-quality-issue:not(:disabled):hover,
+.ps-quality-issue:not(:disabled):focus-visible {
+  border-color: rgba(255, 255, 255, .32);
+  background: rgba(255, 255, 255, .065);
+}
+.ps-quality-issue:disabled { cursor: default; opacity: 1; }
+.ps-quality-issue > b {
+  flex: 0 0 60px;
+  color: #a1a1aa;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ps-quality-issue > span { display: grid; flex: 1; gap: 3px; min-width: 0; }
+.ps-quality-issue strong { font-size: 12px; font-weight: 600; }
+.ps-quality-issue small { font-size: 11px; color: #a1a1aa; line-height: 1.5; }
+.ps-quality-clear {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12px;
+  color: #d4d4d8;
+  line-height: 1.5;
+  margin: 4px 0;
+}
+.ps-import { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 12px 0 0; }
+.ps-import .ps-cost { flex: 1 1 180px; }
+@media (max-width: 650px) {
+  .ps-quality { padding: 12px; }
+  .ps-quality-issue { padding: 9px; }
+  .ps-quality-issue > b { flex-basis: 54px; }
+  .ps-quality-header .ps-btn { margin-left: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ps-quality-issue { transition: none; }
+}
