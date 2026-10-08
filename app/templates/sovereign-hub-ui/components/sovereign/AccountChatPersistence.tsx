@@ -17,6 +17,8 @@ const ACCOUNT_CHAT_STATE_EVENT = "malik-dashboard-full-state-v1"
 const ACCOUNT_REMOTE_SAVED_AT_PREFIX = "malik_dashboard_remote_saved_at_v1:"
 const MAX_PENDING_TURNS = 40
 const RECOVERY_POLL_MS = 1600
+const RECOVERY_OUTAGE_POLL_MS = 12_000
+const RECOVERY_RATE_LIMIT_POLL_MS = 60_000
 const MAX_RECOVERY_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 type PendingBackgroundTurn = {
@@ -284,6 +286,12 @@ function pollDetachedTurn(runtime: BackgroundRuntime, accountKey: string, turnId
     const pending = readPending(runtime, accountKey).find((item) => item.turnId === turnId)
     if (!pending || (!pending.detached && pending.pageId === runtime.pageId)) return
 
+    const retryLater = (delayMs = RECOVERY_POLL_MS) => {
+      if (Date.now() - pending.createdAt >= MAX_RECOVERY_AGE_MS) return
+      const id = window.setTimeout(poll, delayMs)
+      runtime.recoveryTimers.set(timerKey, id)
+    }
+
     try {
       const response = await runtime.baseFetch(`${BACKGROUND_STREAM_PATH}/${encodeURIComponent(turnId)}`, {
         method: "GET",
@@ -291,33 +299,42 @@ function pollDetachedTurn(runtime: BackgroundRuntime, accountKey: string, turnId
         headers: { Accept: "application/json" },
       })
       if (response.status === 404) {
-        if (Date.now() - pending.createdAt < 30_000) {
-          const id = window.setTimeout(poll, RECOVERY_POLL_MS)
-          runtime.recoveryTimers.set(timerKey, id)
-        }
+        // Newly created turns can briefly be absent. Do not retry forever
+        // for inaccessible or permanently missing records.
+        if (Date.now() - pending.createdAt < 30_000) retryLater()
         return
       }
-      const payload = await response.json().catch(() => ({})) as { turn?: BackgroundTurnResult }
+      if (response.status === 429) {
+        retryLater(RECOVERY_RATE_LIMIT_POLL_MS)
+        return
+      }
+      if (response.status >= 500) {
+        // Keep the pending turn on temporary outages; avoid hot polling.
+        retryLater(RECOVERY_OUTAGE_POLL_MS)
+        return
+      }
+      if (!response.ok) return // 401/403: authentication failures are terminal.
+      const payload = await response.json().catch(() => null) as { turn?: BackgroundTurnResult } | null
       const result = payload?.turn
-      if (!response.ok || !result) return
+      if (!result) {
+        retryLater(RECOVERY_OUTAGE_POLL_MS)
+        return
+      }
       if (result.status === "pending") {
-        const id = window.setTimeout(poll, RECOVERY_POLL_MS)
-        runtime.recoveryTimers.set(timerKey, id)
+        retryLater()
         return
       }
       if (result.status === "complete" || result.status === "failed") {
         const patched = patchRecoveredTurn(runtime, accountKey, pending, result)
         if (!patched) {
-          const id = window.setTimeout(poll, RECOVERY_POLL_MS)
-          runtime.recoveryTimers.set(timerKey, id)
+          retryLater(RECOVERY_OUTAGE_POLL_MS)
           return
         }
         removePending(runtime, accountKey, turnId)
         scheduleRecoveryReload(runtime)
       }
     } catch {
-      const id = window.setTimeout(poll, RECOVERY_POLL_MS)
-      runtime.recoveryTimers.set(timerKey, id)
+      retryLater(RECOVERY_OUTAGE_POLL_MS)
     }
   }
 
