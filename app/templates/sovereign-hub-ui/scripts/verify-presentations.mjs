@@ -648,6 +648,71 @@ check("smart density reaches preview, export and the real shadow-root slide with
   assert.doesNotMatch(css.slice(css.indexOf("ART DIRECTION V3")), /line-clamp|text-overflow: ellipsis/)
 })
 
+check("per-slide fit override survives normalization and deck backup", () => {
+  const fit = load("lib/presentations/visual-fit.ts")
+  for (const mode of ["compact", "dense", "ultra"]) {
+    const adjusted = deck.normalizeSlide({ ...SAMPLES.title, fitMode: mode })
+    assert.ok(adjusted)
+    assert.equal(adjusted.fitMode, mode)
+    assert.equal(fit.slideDensity(adjusted), mode)
+    assert.ok(fit.headlineScale(adjusted) <= 0.86)
+    const backup = deck.normalizeDeck({
+      id: "d-opticalfit", title: "Демо", theme: "obsidian", language: "ru",
+      slides: [adjusted],
+    })
+    assert.equal(backup.slides[0].fitMode, mode)
+  }
+  const malicious = deck.normalizeSlide({ ...SAMPLES.title, fitMode: "color:red;position:fixed" })
+  assert.equal(malicious.fitMode, undefined)
+})
+
+check("visual doctor inspects real DOM boxes without an AI call or screenshot", () => {
+  const doctor = load("lib/presentations/visual-audit.ts")
+  const box = (left, top, width, height) => ({
+    left, top, width, height, right: left + width, bottom: top + height,
+  })
+  const create = ({ label, rect, scrollWidth = rect.width, clientWidth = rect.width,
+    scrollHeight = rect.height, clientHeight = rect.height, cell = null }) => ({
+    textContent: label,
+    getClientRects: () => [rect],
+    getBoundingClientRect: () => rect,
+    scrollWidth, clientWidth, scrollHeight, clientHeight,
+    closest: () => cell,
+  })
+  const nodes = [
+    create({ label: "Good", rect: box(100, 100, 120, 24) }),
+    create({ label: "Off canvas", rect: box(1250, 600, 120, 40) }),
+    create({ label: "Clipped", rect: box(100, 200, 100, 22), scrollWidth: 119 }),
+    create({ label: "Outside row", rect: box(200, 300, 180, 70),
+      cell: { getBoundingClientRect: () => box(190, 290, 190, 55) } }),
+  ]
+  const slide = {
+    getBoundingClientRect: () => box(0, 0, 1280, 720),
+    querySelectorAll: () => nodes,
+  }
+  const issues = doctor.inspectVisualOverflow(slide)
+  assert.equal(issues.length, 3)
+  assert.deepEqual(issues.map((issue) => issue.code),
+    ["canvas-edge", "clipped-text", "cell-overflow"])
+  assert.equal(doctor.inspectVisualOverflow({
+    getBoundingClientRect: () => box(0, 0, 0, 0),
+  }).length, 0)
+})
+
+check("visual doctor is enabled only on the main editable slide", () => {
+  const studio = read("components/sovereign/presentations/PresentationStudio.tsx")
+  const renderer = read("components/sovereign/presentations/SlideRenderer.tsx")
+  const css = read("components/sovereign/presentations/deck-css.ts")
+  const chrome = read("components/sovereign/presentations/presentation-studio.css")
+  assert.equal((studio.match(/onVisualAudit=\\{/g) || []).length, 1)
+  assert.match(renderer, /inspectVisualOverflow\\(canvas\\)/)
+  assert.match(studio, /Layout Doctor/)
+  assert.match(studio, /option value="ultra"/)
+  assert.match(renderer, /data-density=\\{slideDensity\\(slide\\)\\}/)
+  assert.match(css, /data-density="ultra"/)
+  assert.match(chrome, /ps-visual-check/)
+})
+
 /* ============================================================== assembly */
 
 check("a figure counts up with its sign, unit and separators kept", () => {
