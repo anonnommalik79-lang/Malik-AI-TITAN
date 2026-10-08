@@ -949,7 +949,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
   const fallbackVisualSlots = useMemo(() => {
     // Structured cards and charts already provide a visual. Do not decorate unrelated
     // headings or prose with speculative stock photography.
-    if (blocks.some((block) => block.kind === "cards" || block.kind === "visual")) return new Map<string, AnswerVisualSlot>()
+    if (blocks.some((block) => block.kind === "cards")) return new Map<string, AnswerVisualSlot>()
     // Event lineups need explicit subject metadata: a guessed portrait is not attendance evidence.
     if (!question || /(?:спикер|выступ|участни|приехал|присутств|speaker|attend|participant|lineup)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
     // A chart or a dates/pricing card does not disable photos in other sections.
