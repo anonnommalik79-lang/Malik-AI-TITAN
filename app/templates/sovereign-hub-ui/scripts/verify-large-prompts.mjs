@@ -41,3 +41,10 @@ assert.match(selectedRouter,/missingBriefItems\(input\.taskPrompt \|\| input\.pr
 assert.match(maxRouter,/missingBriefItems\(taskPrompt, content\)/,"MAX code covers numbered requirements")
 assert.match(dashboard,/briefOutputFloor\(cleanContent\)/,"UI sends actual adequate token budget")
 console.log("PASS large-prompt runtime integration: code, MAX and dashboard")
+
+const engineBudget = readFileSync("lib/server/malik-max-engine.ts", "utf8")
+assert.match(engineBudget, /boundedTiming\(\)/, "each MAX continuation has a shared time ceiling")
+assert.match(engineBudget, /timeLeft\(\) < 10_000/, "avoid starting a generation that cannot finish")
+assert.match(engineBudget, /lowProgressRounds >= 2/, "repeating tiny continuations stop instead of looping")
+assert.match(engineBudget, /briefNeedsDeep\(taskPrompt\)/, "large briefs receive a larger but finite deadline")
+console.log("PASS MAX bounded deadlines and low-progress continuation guard")

@@ -1,4 +1,4 @@
-import { missingBriefItems, briefMissingMarker } from "@/lib/ai/brief-quality"
+import { missingBriefItems, briefMissingMarker, briefNeedsDeep } from "@/lib/ai/brief-quality"
 import {
   getMalikModel,
   MALIK_MODELS,
@@ -90,7 +90,7 @@ const statsMap = () => (scope.__malikMaxStats ||= new Map())
 const MAX_PARALLEL = 3
 const MAX_CONTINUATIONS = 5
 const GOOGLE_DISCOVERY_MS = 60 * 60 * 1000
-const QUOTA_TEXT = /accounts that have not been recharged|increase the free quota|topup|payment required|quota exceeded|insufficient (?:balance|credits?|quota)|exceeded your current quota|rate limit reached|you have reached|upgrade your plan/i
+const QUOTA_TEXT = /accounts that have not been recharged|increase the free quota|topup|payment required|prepayment credits? (?:are )?depleted|quota exceeded|insufficient (?:balance|credits?|quota)|exceeded your current quota|rate limit reached|you have reached|upgrade your plan/i
 
 function env(name: string) {
   const value = process.env[name]
@@ -796,9 +796,11 @@ type RaceResult = {
   firstTokenMs: number
 }
 
-function classify(status: number, detail: string) {
+export function classifyMaxProviderFailure(status: number, detail: string) {
+  // Some providers return billing exhaustion as HTTP 403 instead of 402.
+  // Rest the key long enough to avoid burning time on hopeless retries.
+  if (status === 402 || QUOTA_TEXT.test(detail)) return { ms: 2 * 60 * 60 * 1000, reason: "payment-required" }
   if (status === 401 || status === 403) return { ms: 30 * 60 * 1000, reason: `http-${status}` }
-  if (status === 402) return { ms: 60 * 60 * 1000, reason: "payment-required" }
   if (status === 404 || /model.{0,40}(?:not found|does not exist|not supported|unknown)|no such model|invalid model/i.test(detail)) return { ms: 60 * 60 * 1000, reason: "model-not-found" }
   if (status === 429) return { ms: 60_000, reason: "rate-limit" }
   if (status === 400 || status === 413 || status === 422) return { ms: 5 * 60 * 1000, reason: `http-${status}` }
@@ -943,7 +945,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
           attempt.controller.abort()
         }
       }, 2_000)
-      totalTimer = setTimeout(() => attempt.controller.abort(), Math.max(10_000, options.totalMs - (Date.now() - started)))
+      totalTimer = setTimeout(() => attempt.controller.abort(), Math.max(1_000, options.totalMs - (Date.now() - started)))
     }
 
     const run = async (attempt: Attempt) => {
@@ -974,7 +976,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       }
       if (!response.ok) {
         const detail = await upstreamError(response)
-        const verdict = classify(response.status, detail)
+        const verdict = classifyMaxProviderFailure(response.status, detail)
         const restMs = response.status === 429 ? Math.max(5_000, retryAfterMs(response, detail)) : verdict.ms
         drop(attempt, `${verdict.reason}: ${detail.slice(0, 160)}`, restMs)
         return
@@ -1114,6 +1116,15 @@ function estimateTokens(text: string) {
   return Math.ceil(String(text || "").length / 3.2)
 }
 
+/** A free host should not hold an HTTP answer open for fourteen minutes.
+ * Larger briefs keep a larger allowance, but incomplete work remains partial.
+ */
+export function maxResponseWallMs(fastMode: boolean, codeMode: boolean, longBrief: boolean) {
+  if (fastMode) return 60_000
+  if (codeMode) return longBrief ? 180_000 : 145_000
+  return longBrief ? 160_000 : 115_000
+}
+
 export type MaxInput = {
   publicLabel?: string
   allowCatalog?: boolean
@@ -1155,7 +1166,18 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     : codeMode
       ? { hedgeMs: 12_000, firstTokenMs: 120_000, firstDeadlineMs: 180_000, idleMs: 90_000 }
       : { hedgeMs: 8_000, firstTokenMs: 75_000, firstDeadlineMs: 150_000, idleMs: 60_000 }
-  const totalMs = 14 * 60 * 1000
+  const totalMs = maxResponseWallMs(fastMode, codeMode, briefNeedsDeep(taskPrompt))
+  const timeLeft = () => Math.max(0, totalMs - (Date.now() - started))
+  // Both pre-token and streamed waits must obey the same outer deadline.
+  const boundedTiming = () => {
+    const remaining = Math.max(1_000, timeLeft())
+    return {
+      ...timing,
+      firstTokenMs: Math.min(timing.firstTokenMs, remaining),
+      firstDeadlineMs: Math.min(timing.firstDeadlineMs, remaining),
+      totalMs: remaining,
+    }
+  }
 
   let content = ""
   const emit = (chunk: string) => {
@@ -1182,8 +1204,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     lanes,
     call: base,
     onToken: emit,
-    ...timing,
-    totalMs,
+    ...boundedTiming(),
     minFlush: fastMode ? 2 : 24,
     maxParallel: fastMode ? 2 : MAX_PARALLEL,
     fetcher: deps.fetcher,
@@ -1191,6 +1212,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   })
   const used = [result.lane.id]
   let usage: unknown = result.usage
+  let lowProgressRounds = 0
 
   for (let round = 0; round < MAX_CONTINUATIONS; round += 1) {
     const spent = estimateTokens(content)
@@ -1203,7 +1225,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
       || briefMissingMarker(taskPrompt, content))
     const structuredOpen = !codeMode && spent < budget - 256 && structuredAnswerNeedsMore(input.prompt, content)
     if (!result.interrupted && !cutShort && !codeOpen && !structuredOpen) break
-    if (Date.now() - started > totalMs) break
+    if (timeLeft() < 10_000) break
     if (input.signal?.aborted) throw abortError()
     console.info("[MALIK_MAX] continue", JSON.stringify({
       round: round + 1,
@@ -1213,9 +1235,16 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
       spent,
       budget,
     }))
+    // A model that repeatedly says STOP while leaving requested parts undone
+    // is not always the best model for the next continuation.
+    const alternatives = lanes.filter((lane) => lane.id !== result.lane.id)
     const order = result.interrupted
-      ? lanes.filter((lane) => lane.id !== result.lane.id)
-      : [result.lane, ...lanes.filter((lane) => lane.id !== result.lane.id)]
+      ? alternatives
+      : round > 0 && result.finishReason?.toLowerCase() === "stop" && alternatives.length
+        ? [...alternatives, result.lane]
+        : [result.lane, ...alternatives]
+    const before = content
+    const missingBefore = missingBriefItems(taskPrompt, before).length
     try {
       result = await raceLanes({
         lanes: order,
@@ -1228,8 +1257,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
           temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.3, 0.3),
         },
         onToken: emit,
-        ...timing,
-        totalMs: totalMs - (Date.now() - started),
+        ...boundedTiming(),
         minFlush: 40,
         maxParallel: fastMode ? 2 : MAX_PARALLEL,
         overlapWith: content,
@@ -1238,6 +1266,11 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
       })
       used.push(result.lane.id)
       usage = { previous: usage, continuation: result.usage }
+      const newText = content.slice(before.length).trim()
+      const requirementsImproved = missingBriefItems(taskPrompt, content).length < missingBefore
+      // Prevent five expensive STOP → tiny fragment → STOP loops.
+      lowProgressRounds = newText.length < 96 && !requirementsImproved ? lowProgressRounds + 1 : 0
+      if (lowProgressRounds >= 2 && !result.interrupted) break
     } catch (error) {
       if (input.signal?.aborted) throw error
       break
