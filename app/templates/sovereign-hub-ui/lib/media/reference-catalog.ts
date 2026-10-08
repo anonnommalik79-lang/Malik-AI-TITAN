@@ -6,14 +6,14 @@ import { referenceBrandAsset } from "./reference-brand-assets"
 export type MalikVisualImage = { url: string; alt: string; sourceUrl?: string; credit?: string; license?: string; role?: "logo" }
 export const REFERENCE_METADATA_LIMIT = 48 * 1024
 export const REFERENCE_RESULT_LIMIT = 8 * 1024
-const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org", "images.unsplash.com", "images.pexels.com", "cdn.pixabay.com", "i.imgur.com", "ipcdn-web.apple.com", "cdsassets.apple.com"])
+const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org", "images.unsplash.com", "images.pexels.com", "cdn.pixabay.com", "i.imgur.com", "ipcdn-web.apple.com", "cdsassets.apple.com", "imgs.search.brave.com", "serpapi.com"])
 
 export function isSafeVisualUrl(value: string): boolean {
   if (value === "/reference-photos/elon-musk.jpg" || value === "/brand/malik-mark.svg") return true
   try {
     if (!value || value.length > 1500) return false
     const url = new URL(value)
-    return url.protocol === "https:" && !url.username && !url.password && IMAGE_HOSTS.has(url.hostname.toLowerCase())
+    return url.protocol === "https:" && !url.username && !url.password && (IMAGE_HOSTS.has(url.hostname.toLowerCase()) || /^encrypted-tbn\d+\.gstatic\.com$/u.test(url.hostname.toLowerCase()))
   } catch { return false }
 }
 
@@ -22,9 +22,9 @@ export function cleanReferenceLabel(value: string): string {
 }
 
 /** Streaming size guard: never buffer an unbounded catalogue response. */
-export async function readReferenceJson(response: Response): Promise<unknown> {
+export async function readReferenceJson(response: Response, limit = REFERENCE_METADATA_LIMIT): Promise<unknown> {
   if (!response.ok || !response.body) return null
-  if (Number(response.headers.get("content-length")) > REFERENCE_METADATA_LIMIT) {
+  if (Number(response.headers.get("content-length")) > limit) {
     await response.body.cancel()
     return null
   }
@@ -37,7 +37,7 @@ export async function readReferenceJson(response: Response): Promise<unknown> {
       const chunk = await reader.read()
       if (chunk.done) break
       bytes += chunk.value.byteLength
-      if (bytes > REFERENCE_METADATA_LIMIT) { await reader.cancel(); return null }
+      if (bytes > limit) { await reader.cancel(); return null }
       text += decoder.decode(chunk.value, { stream: true })
     }
     return JSON.parse(text + decoder.decode()) as unknown
@@ -58,7 +58,9 @@ export function sanitizeReferenceImages(value: unknown): MalikVisualImage[] {
     try {
       const source = new URL(item.sourceUrl)
       if (source.protocol === "https:" && !source.username && !source.password && source.href.length < 1500
-        && ["commons.wikimedia.org", "unsplash.com", "support.apple.com", "en.wikipedia.org", "ru.wikipedia.org", "kk.wikipedia.org"].includes(source.hostname)) sourceUrl = source.href
+        && (["commons.wikimedia.org", "unsplash.com", "support.apple.com", "en.wikipedia.org", "ru.wikipedia.org", "kk.wikipedia.org"].includes(source.hostname) || (typeof item.credit === "string" && /^(?:Brave|Serper|Tavily|SerpApi) Images$/u.test(item.credit)
+          && source.hostname.includes(".") && !source.hostname.endsWith(".local")
+          && !/^\d+(?:\.\d+){3}$/u.test(source.hostname)))) sourceUrl = source.href
     } catch { /* Attribution can be absent on model-authored Markdown. */ }
     const safeUrl = item.url.startsWith("/") ? url.pathname : url.href
     const image = { url: safeUrl, alt: cleanReferenceLabel(item.alt), sourceUrl,
