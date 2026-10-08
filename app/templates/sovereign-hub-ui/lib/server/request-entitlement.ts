@@ -28,15 +28,28 @@ function anonymousGuestId(request: Request) {
   return `guest:${digest}`
 }
 
-export async function resolveRequestEntitlement(request: Request): Promise<RequestEntitlement> {
-  const { user } = await getOptionalWorkOSAuth()
-  if (!user?.email) {
-    return { authenticated: false, userId: anonymousGuestId(request), plan: "free" }
-  }
+type SignedInUser = NonNullable<Awaited<ReturnType<typeof getOptionalWorkOSAuth>>["user"]>
+
+async function signedInEntitlement(user: SignedInUser & { email: string }): Promise<RequestEntitlement> {
   // Unverified email addresses must not inherit email-based owner/paid grants.
   if (!user.emailVerified) {
     return { authenticated: true, userId: `workos:${user.id}`, plan: "free" }
   }
   const email = user.email.trim().toLowerCase()
   return { authenticated: true, userId: email, plan: isVerifiedOwner(user) ? "owner" : await entitledPlan(email) }
+}
+
+export async function resolveRequestEntitlement(request: Request): Promise<RequestEntitlement> {
+  const { user } = await getOptionalWorkOSAuth()
+  if (!user?.email) {
+    return { authenticated: false, userId: anonymousGuestId(request), plan: "free" }
+  }
+  return signedInEntitlement(user as SignedInUser & { email: string })
+}
+
+/** The signed-in viewer of a server-rendered page, or null for a visitor. */
+export async function resolveViewerEntitlement(): Promise<RequestEntitlement | null> {
+  const { user } = await getOptionalWorkOSAuth()
+  if (!user?.email) return null
+  return signedInEntitlement(user as SignedInUser & { email: string })
 }

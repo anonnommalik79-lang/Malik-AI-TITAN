@@ -28,7 +28,7 @@ import { MalikVisualEngineBlock, MalikVisualPending } from "./visual-engine/Mali
 import { citationName, safeHttps, subjectCitationUrl, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
 export type { MalikCitation } from "@/lib/ai/citation-names"
 
-type Props = { text: string; className?: string; allowImages?: boolean; autoPreview?: boolean; citations?: MalikCitation[]; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
+type Props = { text: string; className?: string; allowImages?: boolean; autoPreview?: boolean; citations?: MalikCitation[]; /** A public answer page: see SharedPageContext. */ shared?: boolean; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
 
 function ScrollableMarkdownTable({ children, label }: { children: ReactNode; label: string }) {
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -125,6 +125,13 @@ function isProjectArtifactHref(href: string) {
 const CitationContext = createContext<MalikCitation[] | null>(null)
 
 /**
+ * A public answer page (/a/<id>) shows text its author published, not text
+ * the reader asked for: outside links are marked as user content, links into
+ * the app's own API stay plain text, and code is not run in a preview.
+ */
+const SharedPageContext = createContext(false)
+
+/**
  * «[2][3]» after a claim becomes a small source chip - «Anthropic +1» - that
  * opens the first source, the way ChatGPT shows evidence in the text. A
  * number with no matching source is dropped rather than printed raw.
@@ -143,6 +150,25 @@ function CitationChip({ numbers, raw }: { numbers: number[]; raw: string }) {
   )
 }
 
+/** A file the chat made for its author; on a public page it is only its name. */
+function ProjectArtifactLink({ href, label }: { href: string; label: string }) {
+  if (useContext(SharedPageContext)) return <>{label}</>
+  return (
+    <a
+      href={href}
+      download
+      className="my-1 inline-flex max-w-full items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.045] px-3.5 py-2.5 text-sm font-medium text-zinc-100 no-underline transition hover:border-white/20 hover:bg-white/[0.075]"
+      aria-label={`${label}. Скачать ZIP`}
+    >
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/10 bg-black/30 text-zinc-300">
+        <Archive className="h-4 w-4" aria-hidden="true" />
+      </span>
+      <span className="min-w-0 truncate">{label}</span>
+      <Download className="ml-1 h-4 w-4 shrink-0 text-zinc-400" aria-hidden="true" />
+    </a>
+  )
+}
+
 /**
  * A Markdown link. In a web answer it opens only pages on the sites its
  * sources are on - an invented address stays plain text - and an outside
@@ -150,10 +176,12 @@ function CitationChip({ numbers, raw }: { numbers: number[]; raw: string }) {
  */
 function MarkdownLink({ href, label }: { href: string; label: string }) {
   const sources = useContext(CitationContext)
+  const shared = useContext(SharedPageContext)
   const external = /^https?:\/\//i.test(href)
   if (external && sources?.length && !trustedLink(href, sources)) return <>{label}</>
+  if (shared && !external) return <>{label}</>
   return (
-    <a href={href} target="_blank" rel="noreferrer noopener" className={external ? "malik-md-link is-external" : "malik-md-link"}>
+    <a href={href} target="_blank" rel={shared ? "nofollow ugc noreferrer noopener" : "noreferrer noopener"} className={external ? "malik-md-link is-external" : "malik-md-link"}>
       {label}{external ? <span className="malik-md-link__arrow" aria-hidden="true">↗</span> : null}
     </a>
   )
@@ -255,21 +283,7 @@ function inlineBase(text: string, keyPrefix: string): ReactNode[] {
       const label = token.slice(1, token.indexOf("]"))
       const href = match[6] || "#"
       if (isProjectArtifactHref(href)) {
-        nodes.push(
-          <a
-            key={key}
-            href={href}
-            download
-            className="my-1 inline-flex max-w-full items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.045] px-3.5 py-2.5 text-sm font-medium text-zinc-100 no-underline transition hover:border-white/20 hover:bg-white/[0.075]"
-            aria-label={`${label}. Скачать ZIP`}
-          >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-white/10 bg-black/30 text-zinc-300">
-              <Archive className="h-4 w-4" aria-hidden="true" />
-            </span>
-            <span className="min-w-0 truncate">{label}</span>
-            <Download className="ml-1 h-4 w-4 shrink-0 text-zinc-400" aria-hidden="true" />
-          </a>,
-        )
+        nodes.push(<ProjectArtifactLink key={key} href={href} label={label} />)
       } else {
         nodes.push(<MarkdownLink key={key} href={href} label={label} />)
       }
@@ -775,7 +789,8 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
   const [copied, setCopied] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewKey, setPreviewKey] = useState(0)
-  const previewable = isPreviewableCode(language, code)
+  const shared = useContext(SharedPageContext)
+  const previewable = !shared && isPreviewableCode(language, code)
   const previewSrcDoc = previewable
     ? /\.html?$/i.test(filename) && previewFiles.length > 1
       ? buildCanvasProjectSrcDoc(previewFiles, filename)
@@ -926,7 +941,7 @@ function isMultiSubjectVisualQuestion(question: string): boolean {
   return /(?:список|перечисли|все(?:х|ми)?\b|нескольк|сравни|сравнение|участник[ио]|спикер[ыо]|кто\s+(?:будет|был|приехал|выступал)|какие\s+(?:люди|модели|виды)|\b(?:list|all|compare|versus|speakers|participants|attendees|several|multiple|top\s+\d+)\b)/iu.test(question)
 }
 
-export function MalikMarkdown({ text, className, allowImages = true, autoPreview = false, citations, visualContext }: Props) {
+export function MalikMarkdown({ text, className, allowImages = true, autoPreview = false, citations, shared = false, visualContext }: Props) {
   const streaming = Boolean(visualContext?.streaming)
   const normalizedText = useMemo(() => streaming ? text : normalizeCompletedFormatting(text), [text, streaming])
   const blocks = useMemo(() => parseBlocks(normalizedText), [normalizedText])
@@ -1118,6 +1133,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
   }
 
   return (
+    <SharedPageContext.Provider value={shared}>
     <CitationContext.Provider value={citations?.length ? citations : null}>
     <ReferencePhotoSources.Provider value={citations || []}>
     <div className={className ? `malik-md ${className}` : "malik-md"}>
@@ -1261,5 +1277,6 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     </div>
     </ReferencePhotoSources.Provider>
     </CitationContext.Provider>
+    </SharedPageContext.Provider>
   )
 }
