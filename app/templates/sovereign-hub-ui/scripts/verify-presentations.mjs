@@ -555,6 +555,70 @@ check("the model is told never to invent statistics", async () => {
   assert.match(modelCalls[0].systemPrompt, /CLAIM/)
 })
 
+check("never accepts a four-slide outline for a six-slide request", async () => {
+  modelScript = [
+    JSON.stringify({ title: "Кофейня", items: JSON.parse(outlineJson).items.slice(0, 4) }),
+    outlineJson,
+  ]
+  modelCalls.length = 0
+  const outline = await engine.generateOutline({ topic: "кофейня", count: 6, language: "ru", tone: "confident" })
+  assert.equal(outline.items.length, 6)
+  assert.equal(modelCalls.length, 2, "an incomplete outline must be retried")
+})
+
+check("recovers nonadjacent missing slides without skipping the second gap", async () => {
+  const outline = deck.normalizeOutline(JSON.parse(outlineJson), "кофейня", 6)
+  modelScript = [
+    JSON.stringify({ slides: [{ n: 1, ...SAMPLES.title }, { n: 3, ...SAMPLES.cards }] }),
+    JSON.stringify({ slides: [{ n: 2, ...SAMPLES.stat }] }),
+    JSON.stringify({ slides: [{ n: 4, ...SAMPLES.timeline }] }),
+  ]
+  modelCalls.length = 0
+  const result = await engine.generateSlides({ topic: "кофейня", outline, startIndex: 0, count: 4, language: "ru", tone: "confident" })
+  assert.deepEqual(result.slides.map(({ index }) => index), [0, 1, 2, 3])
+  assert.deepEqual(result.missing, [])
+  assert.equal(modelCalls.length, 3, "both noncontiguous gaps must receive a retry")
+})
+
+check("rejects a wrong-layout slide and repairs it in the second model call", async () => {
+  const outline = deck.normalizeOutline(JSON.parse(outlineJson), "кофейня", 6)
+  modelScript = [
+    JSON.stringify({ slides: [{ n: 1, ...SAMPLES.cards }] }),
+    JSON.stringify({ slides: [{ n: 1, ...SAMPLES.title }] }),
+  ]
+  modelCalls.length = 0
+  const result = await engine.generateSlides({ topic: "кофейня", outline, startIndex: 0, count: 1, language: "ru", tone: "confident" })
+  assert.equal(result.slides[0].slide.layout, "title")
+  assert.equal(modelCalls.length, 2)
+})
+
+check("editorial QA catches repeated headlines, weak headers and unsupported chart provenance", () => {
+  const quality = load("lib/presentations/quality.ts")
+  const slides = [
+    deck.normalizeSlide(SAMPLES.title),
+    deck.normalizeSlide({ ...SAMPLES.stat, title: "Рынок" }),
+    deck.normalizeSlide({ ...SAMPLES.stat, title: "Рынок" }),
+    deck.normalizeSlide({ ...SAMPLES.chart, title: "Растём" }),
+  ]
+  const outline = { title: "Тест", items: slides.map((slide) => ({ title: "title" in slide ? slide.title : slide.quote, point: "", layout: slide.layout })) }
+  const review = quality.inspectPresentation({ outline, slides })
+  assert.ok(review.score < 100)
+  assert.ok(review.issues.some((issue) => issue.code === "duplicate" && issue.slideIndex === 2))
+  assert.ok(review.issues.some((issue) => issue.code === "filler"))
+  assert.ok(review.issues.some((issue) => issue.code === "unattributed-data"))
+  assert.equal(review.inspected, 4)
+  assert.equal(review.ready, 4)
+})
+
+check("editorial QA does not mistake review for verification of facts", () => {
+  const quality = load("lib/presentations/quality.ts")
+  const report = quality.inspectPresentation({
+    outline: { title: "План", items: [{ title: "Доказательства важны", point: "p", layout: "chart" }] },
+    slides: [deck.normalizeSlide({ ...SAMPLES.chart, notes: "Источник: данные тестового брифа, период 2025" })],
+  })
+  assert.ok(!report.issues.some((issue) => issue.code === "unattributed-data"))
+})
+
 /* ============================================================== assembly */
 
 check("a figure counts up with its sign, unit and separators kept", () => {
