@@ -162,3 +162,70 @@ export async function deletePrivateJson(keyValue: string) {
     return false
   }
 }
+
+
+/** Retrieve content and object revision in the same R2 operation. */
+export async function readPrivateJsonVersioned<T>(keyValue: string): Promise<{value: T|null; etag: string|null}> {
+  const target = storage()
+  if (!target) throw new Error("PRIVATE_STATE_NOT_CONFIGURED")
+  const key = normalizeKey(keyValue)
+  try {
+    const result = await target.client.send(new GetObjectCommand({
+      Bucket: target.cfg.bucket, Key: key,
+    }))
+    if (typeof result.ContentLength === "number" && result.ContentLength > MAX_PRIVATE_JSON_BYTES) {
+      throw new Error("PRIVATE_STATE_TOO_LARGE")
+    }
+    const etag = typeof result.ETag === "string" && result.ETag ? result.ETag : null
+    if (!etag) throw new Error("PRIVATE_STATE_NO_ETAG")
+    const buffer = await bodyToBuffer(result.Body)
+    if (!buffer.length || buffer.length > MAX_PRIVATE_JSON_BYTES) throw new Error("INVALID_PRIVATE_STATE")
+    return { value: JSON.parse(buffer.toString("utf8")) as T, etag }
+  } catch (error: any) {
+    const code = String(error?.name || error?.Code || error?.code || "")
+    if (code === "NoSuchKey" || code === "NotFound" || Number(error?.$metadata?.httpStatusCode) === 404) {
+      return { value: null, etag: null }
+    }
+    throw error
+  }
+}
+
+/** R2 and modern S3 evaluate If-Match/If-None-Match atomically.
+ * The condition is attached at build-time, before SigV4 signing.
+ */
+export async function writePrivateJsonConditional(
+  keyValue: string, value: unknown, previousEtag: string|null
+): Promise<{stored:boolean; conflict:boolean}> {
+  const target=storage()
+  if (!target) return {stored:false,conflict:false}
+  const key=normalizeKey(keyValue)
+  const body=Buffer.from(JSON.stringify(value),"utf8")
+  if (!body.length || body.length>MAX_PRIVATE_JSON_BYTES) throw new Error("PRIVATE_STATE_TOO_LARGE")
+  const command=new PutObjectCommand({
+    Bucket:target.cfg.bucket,Key:key,Body:body,
+    ContentType:"application/json; charset=utf-8",
+    CacheControl:"private, no-store",
+    Metadata:{kind:"malik-private-state"},
+  })
+  command.middlewareStack.add(
+    (next) => (args) => {
+      const request=args.request as { headers?:Record<string,string> }
+      if (!request || !request.headers) throw new Error("PRIVATE_STATE_UNSAFE_CONDITIONAL_WRITE")
+      request.headers[previousEtag ? "if-match" : "if-none-match"] = previousEtag || "*"
+      return next(args)
+    },
+    { step:"build",name:"malikPrivateStateConditionalPut" },
+  )
+  try {
+    await target.client.send(command)
+    return {stored:true,conflict:false}
+  } catch(error:any) {
+    const code=String(error?.name || error?.Code || error?.code || "")
+    const status=Number(error?.$metadata?.httpStatusCode)
+    if (status===412 || status===409 || code==="PreconditionFailed" || code==="ConditionalRequestConflict") {
+      return {stored:false,conflict:true}
+    }
+    console.warn("[MALIK_PRIVATE_STATE] conditional write failed",key,error instanceof Error?error.message:String(error))
+    return {stored:false,conflict:false}
+  }
+}

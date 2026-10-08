@@ -103,7 +103,8 @@
     "test:public-answer-cache": "node --experimental-strip-types --no-warnings scripts/verify-public-answer-cache.mjs",
     "test:never-lose-chat": "node --experimental-strip-types --no-warnings scripts/verify-stream-checkpoint.mjs",
     "test:account-chat-sync": "node --experimental-strip-types --no-warnings scripts/verify-account-chat-sync-retry.mjs",
-    "test:business-launch": "node scripts/verify-business-launch.mjs"
+    "test:business-launch": "node scripts/verify-business-launch.mjs",
+    "test:account-chat-conflicts": "node --experimental-strip-types --no-warnings scripts/verify-account-chat-conflicts.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "1.1.1",
