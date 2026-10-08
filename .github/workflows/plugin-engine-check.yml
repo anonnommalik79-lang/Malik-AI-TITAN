@@ -34,5 +34,5 @@ jobs:
       - name: TypeScript check
         run: npm run typecheck
 
-      - name: Production build
-        run: npm run build
+      - name: Plugin integration regression tests
+        run: npm run test:claude-class
