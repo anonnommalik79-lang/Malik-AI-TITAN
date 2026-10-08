@@ -21,6 +21,7 @@ function uniqueMessages(remote: JsonRecord[], incoming: JsonRecord[]): JsonRecor
     const nextDone = item.isStreaming !== true
     if (oldDone && !nextDone) continue
     if (!oldDone && nextDone && oldContent.length > nextContent.length) continue
+    if (!oldDone && !nextDone && oldContent.length > nextContent.length && oldContent.startsWith(nextContent)) continue
     // A simultaneously regenerated final answer retains its prior completed
     // variant in versions, rather than silently discarding one device's text.
     // Stable, unique historical variants: repeated sync must not append the

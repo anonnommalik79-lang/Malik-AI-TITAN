@@ -788,6 +788,8 @@ type RaceOptions = {
   totalMs: number
   /** Visible characters a lane must write before it is trusted as the winner. */
   minFlush: number
+  /** A completed continuation may contain just a short final section/marker. */
+  allowShortFinal?: boolean
   /** Soft hedge budget. Standard/deep use 3, fast chat uses 2 lanes. */
   maxParallel?: number
   overlapWith?: string
@@ -1047,7 +1049,8 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
         if (tail) receive(tail, true)
         // A provider may close with one stray character. For deep/complex work,
         // do not crown that as a successful answer: let another lane try.
-        const enoughText = options.minFlush < 24 || attempt.buffer.replace(/\s+/g, "").length >= Math.min(options.minFlush, 16)
+        const enoughText = options.minFlush < 24 || options.allowShortFinal === true && !interrupted
+          || attempt.buffer.replace(/\s+/g, "").length >= Math.min(options.minFlush, 16)
         if (!winner && !settled && enoughText && visibleFinalText(attempt.buffer)) crown(attempt)
         if (winner === attempt) {
           attempt.done = true
@@ -1263,7 +1266,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     const codeOpen = codeMode && (codeAnswerNeedsMore(content, input.prompt)
       || missingBriefItems(taskPrompt, content).length > 0
       || briefMissingMarker(taskPrompt, content))
-    const structuredOpen = !codeMode && spent < budget - 256 && structuredAnswerNeedsMore(input.prompt, content)
+    const structuredOpen = !codeMode && spent < budget - 256 && structuredAnswerNeedsMore(taskPrompt, content)
     if (!result.interrupted && !cutShort && !codeOpen && !structuredOpen) break
     if (timeLeft() < 10_000) break
     if (input.signal?.aborted) throw abortError()
@@ -1290,7 +1293,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
         lanes: order,
         call: {
           ...base,
-          prompt: codeMode ? continuationPrompt(input.prompt, content) : longOutputContinuationPrompt(input.prompt, content),
+          prompt: codeMode ? continuationPrompt(input.prompt, content, taskPrompt) : longOutputContinuationPrompt(input.prompt, content, taskPrompt),
           history: [],
           attachments: [],
           maxTokens: perCall(spent),
@@ -1298,7 +1301,10 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
         },
         onToken: emit,
         ...boundedTiming(),
+        // The final missing section or marker can legitimately be very short.
+        // Buffering thresholds for full answers must not discard that tail.
         minFlush: 40,
+        allowShortFinal: true,
         maxParallel: fastMode ? 2 : MAX_PARALLEL,
         overlapWith: content,
         fetcher: deps.fetcher,

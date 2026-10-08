@@ -27,7 +27,12 @@ function instrumentNegated(prompt: string, re: RegExp): boolean {
   return matches.every((match) => {
     const before = prompt.slice(Math.max(0, (match.index ?? 0) - 42), match.index)
     const phrase = before.split(/[,.!?;\n]/).pop() || ""
-    return /(?:без|никаких|избегай|исключи|without|no|avoid|exclude)\s+(?:[\p{L}\s-]{0,35})$/iu.test(phrase)
+    const negative = phrase.match(/(?:^|[^\p{L}\p{N}])(?:без|никаких|избегай|исключи|without|no|avoid|exclude)\s+([\p{L}\s-]{0,35})$/iu)
+    if (!negative) return false
+    // A negation ends when a new positive arrangement instruction begins.
+    // "Без слов только пианино" excludes vocals, not the requested piano;
+    // "без барабанов и гитары" still excludes both listed instruments.
+    return !/(?:^|\s)(?:только|но|зато|с|со|на|добавь|добавить|only|but|with|add|include|use)(?:\s|$)/iu.test(negative[1])
   })
 }
 

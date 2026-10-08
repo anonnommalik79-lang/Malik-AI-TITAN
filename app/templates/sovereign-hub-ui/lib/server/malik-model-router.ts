@@ -789,7 +789,7 @@ export function providerSpecificBody(
   return {}
 }
 
-export function continuationPrompt(originalPrompt: string, content: string) {
+export function continuationPrompt(originalPrompt: string, content: string, taskPrompt = originalPrompt) {
   const tail = content.length > 12_000 ? content.slice(-12_000) : content
   return [
     "Continue the coding answer exactly where it stopped.",
@@ -798,9 +798,9 @@ export function continuationPrompt(originalPrompt: string, content: string) {
     "",
     `ORIGINAL REQUEST:\n${preserveBriefEdges(originalPrompt, 10_000)}`,
     "",
-    ...(briefChecklist(originalPrompt) ? [briefChecklist(originalPrompt)] : []),
-    ...(missingBriefItems(originalPrompt, content).length ? ["STILL MISSING NUMBERED ITEMS: " + missingBriefItems(originalPrompt, content).join(", ")] : []),
-    ...(briefMissingMarker(originalPrompt, content) ? ["Exact requested final marker is still missing; print it only after completing the tasks."] : []),
+    ...(briefChecklist(taskPrompt) ? [briefChecklist(taskPrompt)] : []),
+    ...(missingBriefItems(taskPrompt, content).length ? ["STILL MISSING NUMBERED ITEMS: " + missingBriefItems(taskPrompt, content).join(", ")] : []),
+    ...(briefMissingMarker(taskPrompt, content) ? ["Exact requested final marker is still missing; print it only after completing the tasks."] : []),
     `CURRENT ANSWER TAIL:\n${tail}`,
   ].join("\n")
 }
@@ -810,7 +810,7 @@ export function wantsLargeOutput(prompt: string, requestedTokens?: number) {
     || /(очень\s+длинн|огромн.*ответ|полный.*отч[её]т|не\s+обрезай|large\s+output|very\s+long\s+answer|full\s+report|do\s+not\s+truncate|128k)/iu.test(prompt)
 }
 
-export function longOutputContinuationPrompt(originalPrompt: string, content: string) {
+export function longOutputContinuationPrompt(originalPrompt: string, content: string, taskPrompt = originalPrompt) {
   const tail = content.length > 16_000 ? content.slice(-16_000) : content
   return [
     "Continue the previous answer from the exact stopping point.",
@@ -819,9 +819,9 @@ export function longOutputContinuationPrompt(originalPrompt: string, content: st
     "",
     `ORIGINAL REQUEST:\n${preserveBriefEdges(originalPrompt, 14_000)}`,
     "",
-    ...(briefChecklist(originalPrompt) ? [briefChecklist(originalPrompt)] : []),
-    ...(missingBriefItems(originalPrompt, content).length ? ["STILL MISSING NUMBERED ITEMS: " + missingBriefItems(originalPrompt, content).join(", ")] : []),
-    ...(briefMissingMarker(originalPrompt, content) ? ["Exact requested final marker is still missing; print it only after completing the tasks."] : []),
+    ...(briefChecklist(taskPrompt) ? [briefChecklist(taskPrompt)] : []),
+    ...(missingBriefItems(taskPrompt, content).length ? ["STILL MISSING NUMBERED ITEMS: " + missingBriefItems(taskPrompt, content).join(", ")] : []),
+    ...(briefMissingMarker(taskPrompt, content) ? ["Exact requested final marker is still missing; print it only after completing the tasks."] : []),
     `CURRENT ANSWER TAIL:\n${tail}`,
   ].join("\n")
 }
@@ -1024,7 +1024,8 @@ export async function runStrictMalikModel(input: {
             try {
               const continuation = await runStrictMalikModel({
                 modelId: input.modelId,
-                prompt: continuationPrompt(input.prompt, parsed.content),
+                prompt: continuationPrompt(input.prompt, parsed.content, input.taskPrompt),
+                taskPrompt: input.taskPrompt || input.prompt,
                 systemPrompt: input.systemPrompt,
                 maxTokens: Math.min(remainingBudget, 6_000),
                 temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.15, 0.15),
@@ -1064,7 +1065,8 @@ export async function runStrictMalikModel(input: {
             try {
               const continuation = await runStrictMalikModel({
                 modelId: input.modelId,
-                prompt: longOutputContinuationPrompt(input.prompt, parsed.content),
+                prompt: longOutputContinuationPrompt(input.prompt, parsed.content, input.taskPrompt),
+                taskPrompt: input.taskPrompt || input.prompt,
                 systemPrompt: input.systemPrompt,
                 maxTokens: Math.min(remainingBudget, 8_000),
                 temperature: input.temperature,

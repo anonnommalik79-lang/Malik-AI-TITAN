@@ -118,4 +118,27 @@ await check("large completed background turns cannot exhaust free Render RAM", a
   assert.equal((await store.readBackgroundChatTurn(pendingId)).status, "pending", "active work is never evicted")
 })
 
-console.log(`${count}/${count} passed (real store/handler; auth stubbed)`)
+await check("cloud recovery reads obey the same memory limits as completed writes", async () => {
+  const objects = new Map()
+  load("lib/server/shared-private-s3-client.ts").sharedPrivateS3Client = () => ({ send: async (command) => {
+    if (command.constructor.name === "PutObjectCommand") { objects.set(command.input.Key, String(command.input.Body)); return {} }
+    const text = objects.get(command.input.Key)
+    if (!text) throw new Error("NoSuchKey")
+    return { Body: { transformToString: async () => text } }
+  } })
+  Object.assign(process.env, { BACKGROUND_CHAT_BUCKET: "test", BACKGROUND_CHAT_ACCESS_KEY_ID: "test", BACKGROUND_CHAT_SECRET_ACCESS_KEY: "test", BACKGROUND_CHAT_SECRET: "test-encryption" })
+  const ids = []
+  for (let index = 0; index < 145; index++) {
+    const turnId = randomUUID(); ids.push(turnId)
+    await store.startBackgroundChatTurn(turnId, "cloud-test")
+    await store.completeBackgroundChatTurn(turnId, { content: "cloud answer ".repeat(25000) })
+  }
+  globalThis.__malikBackgroundChatTurnsV1.clear()
+  for (const turnId of ids) assert.equal((await store.readBackgroundChatTurn(turnId)).ownerId, "cloud-test")
+  const finished = [...globalThis.__malikBackgroundChatTurnsV1.values()].filter(turn => turn.status !== "pending")
+  assert.ok(finished.length <= 128, "reading cloud history cannot grow the cache without a bound")
+  assert.ok(finished.reduce((sum, turn) => sum + turn.content.length * 2 + 8192, 0) <= 32 * 1024 * 1024)
+  assert.equal((await store.readBackgroundChatTurn(ids[0])).ownerId, "cloud-test", "evicted answers remain recoverable from encrypted cloud storage")
+})
+
+console.log(`${count}/${count} passed (real store/handler; auth and cloud IO stubbed)`)

@@ -380,6 +380,33 @@ await check("short comparisons and how-to questions use responsive chat lanes", 
   }
 })
 
+await check("numbered reference excerpts never become extra user requirements", async () => {
+  const log = []
+  await engine.runMalikMax({
+    prompt: "Question: Explain this event.\nReference excerpts:\n1) First article\n2) Second article\n3) Third article",
+    taskPrompt: "Explain this event.", systemPrompt: "Use the sources.", maxTokens: 4000,
+  }, {lanes:[lane("fast-sourced")],fetcher:makeFetcher(log)})
+  assert.equal(log.length,1,"a complete sourced answer should not loop on the article list")
+})
+
+await check("long sourced briefs continue only the missing user sections", async () => {
+  const taskPrompt = "Выполни все пункты:\n1) Обзор\n2) Сравнение\n3) Итог"
+  const bodies = []
+  const answer = await engine.runMalikMax({
+    prompt: taskPrompt + "\nSource excerpts:\n10) An article numbered by its author",
+    taskPrompt, systemPrompt: "Use the sources.", maxTokens: 4000,
+  }, {lanes:[lane("sourced-brief")],fetcher:async (_url, init) => {
+    bodies.push(JSON.parse(init.body))
+    const text = bodies.length === 1 ? "1) Обзор готов.\n2) Сравнение готово.\n" : "3) Итог готов."
+    return new Response(sse([openaiChunk(text),openaiChunk("","stop")]),{headers:{"content-type":"text/event-stream"}})
+  }})
+  assert.equal(bodies.length,2)
+  const continuation = JSON.stringify(bodies[1].messages)
+  assert.match(continuation,/STILL MISSING NUMBERED ITEMS: 3/)
+  assert.doesNotMatch(continuation,/STILL MISSING NUMBERED ITEMS: 3, 10/)
+  assert.match(answer.content,/3\) Итог готов/)
+})
+
 await check("a fast comparison stays responsive but is not told to be brief", async () => {
   const log = []
   await engine.runMalikMax({ prompt: "Сравни iPhone 16 Pro Max и Samsung S24 Ultra", systemPrompt: "Answer directly.", maxTokens: 4000 }, { lanes: [lane("fast-shape")], fetcher: makeFetcher(log) })

@@ -333,5 +333,8 @@
 .previewToolbar svg { width: 15px; height: 15px; }
 .previewToolbar button { border: 1px solid #444; background: #1b1b1b; color: white; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
 .previewDialog iframe { flex: 1; min-height: 0; width: 100%; border: 0; background: white; }
+.previewDialog:not([open]) { display: none; }
+.previewDialog { padding: 0; position: fixed; inset: 0; margin: auto; max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); }
+.previewDialog::backdrop { background: rgba(0,0,0,.92); }
 @media(max-width:850px) { .readinessGrid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media(max-width:520px) { .readinessGrid { grid-template-columns: 1fr; } .readinessBottom button { width: 100%; } .previewToolbar { flex-direction: column; align-items: flex-start; } }

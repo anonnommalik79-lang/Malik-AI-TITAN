@@ -1340,6 +1340,7 @@ function reviveResearch(value: any): MalikMessageResearch | undefined {
     startedAt: Number(value.startedAt) || Date.now(),
     tookMs: Number.isFinite(Number(value.tookMs)) ? Number(value.tookMs) : undefined,
     webSourceCount: Number.isFinite(Number(value.webSourceCount)) ? Number(value.webSourceCount) : sources.length,
+    factAudit: normalizeFactAudit(value.factAudit),
   }
 }
 
