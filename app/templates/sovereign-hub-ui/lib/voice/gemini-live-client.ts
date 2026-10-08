@@ -358,7 +358,7 @@ export class GeminiLiveSession {
     const responses = await Promise.all(calls.slice(0, 3).map(async (call, index) => {
       const id = String(call.id || "").slice(0, 120)
       const name = String(call.name || "")
-      const query = String(call.args?.query || "").replace(/\\s+/g, " ").trim().slice(0, 280)
+      const query = String(call.args?.query || "").replace(/\s+/g, " ").trim().slice(0, 280)
       if (!id || name !== "search_public_web" || !query || this.searchesInTurn >= 2) {
         return { name, id, response: { ok: false, error: "tool_unavailable_or_limit_reached" } }
       }
