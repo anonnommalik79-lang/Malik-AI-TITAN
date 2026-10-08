@@ -50,7 +50,15 @@ export async function POST(request: Request) {
   const promptIntent = analyzeMusicPrompt(prompt)
   // Natural language is authoritative when it explicitly says what to make.
   // UI toggles/presets are fallbacks for prompts that do not specify it.
-  const instrumental = promptIntent.instrumental ?? (lyrics.length > 0 ? false : requestedInstrumental)
+  // Explicit spoken instructions win; otherwise a pasted lyric or the vocal
+  // switch must not be overridden by generic words such as "track" or "music".
+  const instrumental = promptIntent.vocalDirective === "instrumental"
+    ? true
+    : promptIntent.vocalDirective === "vocal"
+      ? false
+      : lyrics.length > 0 || !requestedInstrumental
+        ? false
+        : promptIntent.instrumental ?? requestedInstrumental
   const genre = promptIntent.genre || requestedGenre
   const mood = promptIntent.mood || requestedMood
   const requestedLyricsLanguage = body?.lyricsLanguage

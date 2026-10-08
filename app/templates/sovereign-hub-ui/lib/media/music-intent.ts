@@ -3,6 +3,7 @@ export type MusicMoodIntent = "Агрессивный" | "Спокойный" | 
 
 export type MusicPromptIntent = {
   instrumental?: boolean
+  vocalDirective?: "instrumental" | "vocal"
   genre?: MusicGenreIntent
   mood?: MusicMoodIntent
   instruments: string[]
@@ -69,7 +70,7 @@ export function analyzeMusicPrompt(promptValue: unknown): MusicPromptIntent {
   const mood = MOODS.find((item) => item.re.test(prompt))
 
   const explicitlyNoVocals = NO_VOCALS_RE.test(prompt)
-  const explicitlyVocals = VOCALS_RE.test(prompt)
+  const explicitlyVocals = VOCALS_RE.test(prompt) || /(?:женск\w*|мужск\w*)\s+(?:голос|вокал)|(?:female|male)\s+(?:lead\s+)?vocals?/iu.test(prompt)
   const genericMusic = GENERIC_INSTRUMENTAL_RE.test(prompt)
 
   let instrumental: boolean | undefined
@@ -80,6 +81,10 @@ export function analyzeMusicPrompt(promptValue: unknown): MusicPromptIntent {
   else if (explicitlyVocals) instrumental = false
   else if (instruments.length > 0 || genericMusic) instrumental = true
 
+  const vocalDirective = explicitlyNoVocals ? "instrumental" as const
+    : explicitlyVocals && !BEAT_ONLY_RE.test(prompt) ? "vocal" as const
+    : BEAT_ONLY_RE.test(prompt) ? "instrumental" as const
+    : RAP_RE.test(prompt) ? "vocal" as const : undefined
   const bpm = requestedBpm(prompt)
   const vocalCharacter = /женск\w*\s+(?:голос|вокал)|female\s+vocals?/iu.test(prompt)
     ? "Female lead vocals." : /мужск\w*\s+(?:голос|вокал)|male\s+vocals?/iu.test(prompt)
@@ -98,6 +103,7 @@ export function analyzeMusicPrompt(promptValue: unknown): MusicPromptIntent {
 
   return {
     instrumental,
+    vocalDirective,
     genre: genre?.genre,
     mood: mood?.mood,
     instruments: instruments.map((item) => item.name),

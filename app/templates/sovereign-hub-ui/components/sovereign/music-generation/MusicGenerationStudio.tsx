@@ -384,12 +384,15 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
         if (!response.ok) {
           setNotice(data?.error || "Не удалось проверить статус трека.")
-          if (data?.code === "MUSIC_JOB_NOT_FOUND") {
+          if (data?.code === "MUSIC_JOB_NOT_FOUND" || data?.status === "failed") {
             setHistory((rows) => rows.map((item) => item.requestId === activeRequestId
-              ? { ...item, status: "failed", error: "Доступ к задаче этого аккаунта не подтверждён." }
+              ? { ...item, status: "failed", error: providerMessage(data?.error) }
               : item))
             setGenerating(false)
+            pendingVariantsRef.current = 0
+            setNotice(providerMessage(data?.error))
             setActiveRequestId("")
+            void refreshConfig()
             return
           }
           timer = window.setTimeout(poll, 4500)
