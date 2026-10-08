@@ -26,9 +26,8 @@ const MEMORY_TURNS = 12
 function needsSpokenWebSearch(text: string) {
   const value = String(text || "").toLocaleLowerCase().trim()
   if (!value || /(?:не ищи|без интернета|don't search|without searching|іздеме)/i.test(value)) return false
-  return /(?:\\b(?:новост[ьииейям]|новостями|погода|погоде|прогноз|курс(?:\\s+валют)?|последние|актуальные)\\b|по[ий]щи|загугли|найди(?:те)?\\s+(?:новости|источники|информацию)|\\b(?:latest news|breaking news|look up|search online|weather today|exchange rate)\\b|жаңалық|интернеттен\\s+тап|соңғы\\s+жаңалық)/iu.test(value)
+  return /(?:\b(?:новост[ьииейям]|новостями|погода|погоде|прогноз|курс(?:\s+валют)?|последние|актуальные)\b|по[ий]щи|загугли|найди(?:те)?\s+(?:новости|источники|информацию)|\b(?:latest news|breaking news|look up|search online|weather today|exchange rate)\b|жаңалық|интернеттен\s+тап|соңғы\s+жаңалық)/iu.test(value)
 }
-
 
 export type VoiceWebSource = { title: string; url: string; snippet?: string; provider?: string }
 
