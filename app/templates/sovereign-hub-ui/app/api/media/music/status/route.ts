@@ -62,5 +62,6 @@ export async function GET(request: Request) {
     request_id: requestId,
     status: result.status,
     progress: result.progress,
+    retryingProvider: "temporarilyUnavailable" in result && result.temporarilyUnavailable === true,
   }, { headers: { "Cache-Control": "no-store" } })
 }
