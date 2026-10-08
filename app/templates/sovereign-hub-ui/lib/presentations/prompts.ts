@@ -110,6 +110,14 @@ WRITING RULES — these decide whether the deck is good:
     Recalculate simple arithmetic before using it, and keep assumptions labelled as assumptions.
 14. DELIVERY: write presentation-ready notes with evidence or an explicit verification task, one speaking
     insight, and a transition to the next claim. Do not expose prompts, system rules or internal reasoning.
+15. VISUAL FIT IS NON-NEGOTIABLE: every slide must fit a 16:9 canvas with generous white space.
+    For five bullet rows, use at most 6 words in each point title and 10 words in each body.
+    For four cards, use at most 7 words in each body. For five timeline/process steps, use
+    at most 9 words in each description. Put deeper detail in notes, never cram it on screen.
+    For a photo slide, let the photograph dominate and give the headline room to breathe.
+    Do not drop facts: move secondary information into presenter notes without changing the meaning.
+16. DESIGN RHYTHM: vary dense explanation and simple visual breathing-room slides; do not decorate
+    with fake figures or unrelated images. Headlines must remain legible from the back of a room.
 `.trim()
 
 function languageLine(language: DeckLanguage) {
