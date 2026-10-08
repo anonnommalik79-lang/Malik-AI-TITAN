@@ -270,7 +270,7 @@ await check("Gemini Live advertises a web lookup tool but keeps a minimal fallba
   const declaration = browser.sockets[0].setup().tools?.[0]?.functionDeclarations?.[0]
   assert.equal(declaration?.name, "search_public_web")
   assert.equal(declaration?.parameters?.type, "OBJECT")
-  const minimal = (await import(`${process.cwd()}/lib/voice/gemini-live-setup.ts`)).buildLiveSetup({ tier: 2 }).setup
+  const minimal = (await import(new URL("../lib/voice/gemini-live-setup.ts", import.meta.url).href)).buildLiveSetup({ tier: 2 }).setup
   assert.equal(minimal.tools, undefined, "fallback cannot depend on tools")
   session.close()
   browser.cleanup()
@@ -303,6 +303,49 @@ await check("search tool cannot trigger unlimited searches in one voice turn", a
   const toolResponses = browser.sockets[0].sent.map((raw) => JSON.parse(raw)).filter((item) => item.toolResponse)
   assert.equal(toolResponses.length, 3, "every tool call needs a response")
   assert.equal(toolResponses[2].toolResponse.functionResponses[0].response.error, "tool_unavailable_or_limit_reached")
+  session.close()
+  browser.cleanup()
+})
+
+await check("spoken news request searches even when Gemini refuses to call a tool", async () => {
+  const { browser, session, events } = await connected({ language: "ru" })
+  browser.sockets[0].deliver({ serverContent: { inputTranscription: {
+    text: "Малик, найди последние новости об искусственном интеллекте в Казахстане. Назови два источника.",
+  } } })
+  // Simulate the provider answering that it cannot browse, without a toolCall.
+  browser.sockets[0].deliver({ serverContent: {
+    outputTranscription: { text: "Я не могу искать в интернете." }, turnComplete: true,
+  } })
+  await tick(780)
+  assert.equal(browser.searchRequests, 1, "no fallback network request was sent")
+  const grounded = browser.sockets[0].sent.map((x) => JSON.parse(x))
+    .find((x) => x.clientContent?.turns?.[0]?.parts?.[0]?.text?.includes("WEB TOOL RESULT"))
+  assert.ok(grounded, "search evidence was not returned to the same Live voice session")
+  assert.match(grounded.clientContent.turns[0].parts[0].text, /Official Weather/)
+  assert.ok(events.includes("sources:1"), "search source chips were not populated")
+  session.close()
+  browser.cleanup()
+})
+
+await check("native toolCall prevents a redundant transcript-search fallback", async () => {
+  const { browser, session } = await connected({ language: "ru" })
+  browser.sockets[0].deliver({ serverContent: { inputTranscription: {
+    text: "Малик, найди последние новости Казахстана",
+  } } })
+  browser.sockets[0].deliver({ toolCall: {
+    functionCalls: [{ id: "native-news", name: "search_public_web", args: { query: "новости Казахстан сегодня" } }],
+  } })
+  await tick(760)
+  assert.equal(browser.searchRequests, 1, "native Live tool search must take priority over the fallback")
+  session.close()
+  browser.cleanup()
+})
+
+await check("voice greetings cannot spend provider web search quota", async () => {
+  const { browser, session } = await connected({ language: "ru" })
+  browser.sockets[0].deliver({ serverContent: { inputTranscription: { text: "Малик, привет как дела?" } } })
+  await tick(730)
+  assert.equal(browser.searchRequests, 0)
   session.close()
   browser.cleanup()
 })
