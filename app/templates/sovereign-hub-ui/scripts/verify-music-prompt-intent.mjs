@@ -101,3 +101,17 @@ for (const [request, style] of newGenres) {
   assert.equal(analyzeMusicPrompt(request).style, style, request)
 }
 console.log("extended genre and anti-conflict checks passed")
+
+const vocalBeat = analyzeMusicPrompt("Trap beat with female vocals and chorus")
+assert.equal(vocalBeat.instrumental, false)
+assert.equal(vocalBeat.vocalDirective, "vocal")
+const instrumentalBeat = analyzeMusicPrompt("Trap beat without vocals")
+assert.equal(instrumentalBeat.instrumental, true)
+assert.equal(instrumentalBeat.vocalDirective, "instrumental")
+const addedPiano = analyzeMusicPrompt("Без пианино, но в припеве добавь пианино")
+assert.deepEqual(addedPiano.instruments, ["piano"])
+assert.deepEqual(addedPiano.excludedInstruments, [])
+const excludedPiano = analyzeMusicPrompt("Трек без пианино, с гитарой")
+assert.ok(excludedPiano.excludedInstruments.includes("piano"))
+assert.ok(excludedPiano.instruments.includes("guitar"))
+console.log("explicit vocals and repeated instruments checks passed")
