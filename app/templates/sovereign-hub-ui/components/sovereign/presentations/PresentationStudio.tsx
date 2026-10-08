@@ -1080,13 +1080,13 @@ export function PresentationStudio({ username }: { username?: string }) {
       <div className="ps-quality-header">
         <span className="ps-quality-icon"><ShieldCheck size={17} /></span>
         <span className="ps-quality-title">Проверка качества</span>
-        <span className="ps-quality-score" aria-label={`Редакторская оценка ${quality.score} из 100`}>{quality.score}/100</span>
+        <span className="ps-quality-score" aria-label={`Редакторская оценка ${quality.score} из 100${stage === "deck" ? `. Слайдов готово ${quality.ready} из ${quality.inspected}` : ""}`}>{quality.score}/100</span>
         <span className="ps-spacer" />
         <button type="button" className="ps-btn ps-btn--small" onClick={() => setShowQuality((value) => !value)} aria-expanded={showQuality}>
           {showQuality ? "Свернуть" : `Замечания · ${quality.issues.length}`}
         </button>
       </div>
-      <p className="ps-quality-caption">Проверяет структуру, повторы, заметки и наличие источников. Не подтверждает достоверность фактов.</p>
+      <p className="ps-quality-caption">Проверяет структуру, повторы, заметки и наличие источников. Не подтверждает достоверность фактов.{stage === "deck" && quality.ready < quality.inspected ? ` Сборка не завершена: готово ${quality.ready} из ${quality.inspected}. Недостающие слайды снижают оценку.` : ""}</p>
       {showQuality ? (
         <div className="ps-quality-list">
           {quality.issues.length ? quality.issues.slice(0, 20).map((issue, index) => (
@@ -1393,7 +1393,7 @@ export function PresentationStudio({ username }: { username?: string }) {
             ))}
           </div>
           <div className="ps-build-caption">
-            {generating ? `Готово ${readyCount} из ${entries.length}` : "Все слайды написаны"} · {creditsLabel(quota)} кредитов
+            {generating ? `Готово ${readyCount} из ${entries.length}` : readyCount === entries.length ? "Все слайды написаны" : `Не завершено: ${readyCount} из ${entries.length} слайдов`} · {creditsLabel(quota)} кредитов
           </div>
         </div>
       </div>
@@ -1452,7 +1452,7 @@ export function PresentationStudio({ username }: { username?: string }) {
           </div>
 
           {qualityPanel}
-          {generating ? <p className="ps-hint" style={{ marginTop: -4, marginBottom: 12 }} aria-live="polite">Пишу слайды: готово {readyCount} из {entries.length}</p> : null}
+          {generating ? <p className="ps-hint" style={{ marginTop: -4, marginBottom: 12 }} aria-live="polite">Пишу слайды: готово {readyCount} из {entries.length}</p> : readyCount < entries.length ? <p className="ps-hint" style={{ marginTop: -4, marginBottom: 12 }} role="status">Презентация пока неполная: готово {readyCount} из {entries.length}. Нажмите «Написать ещё раз» на недостающих слайдах.</p> : null}
           {error ? <p className="ps-error" role="alert" style={{ marginTop: 0, marginBottom: 12 }}>{error}</p> : null}
 
           {active ? (
