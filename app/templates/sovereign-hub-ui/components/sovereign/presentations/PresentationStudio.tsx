@@ -606,6 +606,39 @@ export function PresentationStudio({ username }: { username?: string }) {
         return slide ? { ...entry, slide, state: "ready" } : { ...entry, state: "failed" }
       }))
     })
+    // A final, free single-slide rescue for anything a batch could not finish.
+    // The server's retry handles malformed JSON and individual gaps; this
+    // handles a whole transiently failed batch without asking the user to
+    // click every red thumbnail. Never retry indefinitely.
+    const missing = indexes.filter((index) => !delivered.has(index))
+    if (missing.length) {
+      await runLimited(missing, PARALLEL, async (index) => {
+        const result = await callApi({
+          action: "slides",
+          topic,
+          outline: plan,
+          startIndex: index,
+          count: 1,
+          language,
+          tone,
+        }, 120_000)
+        applyQuota(result.data)
+        if (!result.ok) return
+        const candidate = (result.data.slides || []).find((item: { index: number }) => item.index === index)
+        const slide = normalizeSlide(candidate?.slide)
+        if (!slide || slide.layout !== plan.items[index]?.layout) return
+        const fresh = { ...slide, id: slideId() } as Slide
+        const slots = photoSlots(fresh)
+        const photos = slots.length ? await searchPhotos(slots, [...usedPhotosRef.current]) : {}
+        const complete = withPhotos(fresh, photos)
+        for (const photo of Object.values(photos)) if (photo?.url) usedPhotosRef.current.add(photo.url)
+        delivered.set(index, complete)
+        setEntries((previous) => previous.map((entry, i) =>
+          i === index && entry.state !== "ready" ? { ...entry, slide: complete, state: "ready" } : entry,
+        ))
+      })
+    }
+    if (indexes.every((index) => delivered.has(index))) setError("")
     return delivered
   }, [applyQuota, language, tone, topic])
 
