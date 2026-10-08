@@ -65,6 +65,26 @@ assert.ok(policy.planReferenceVisuals("Теперь покажи их фото",
 assert.equal(catalog.referenceTopicMatches("Medeu", "Almaty city centre"), false)
 assert.equal(catalog.referenceTopicMatches("Medeu", "File:DSC123.jpg A view of the Medeu skating rink"), true)
 assert.equal(catalog.referenceTitleScore("Samsung Galaxy S24", "Samsung Galaxy S24 Ultra"), 0)
+// A single conversational question about a person should contain its portrait in
+// the FIRST reply; no second "Покажи фото" message must be necessary.
+for (const request of ["Жириновский знаешь", "Жириновский знаешь?", "Ты знаешь Жириновского?", "Знаешь Владимира Жириновского?"]) {
+  const plan = policy.planReferenceVisuals(request)
+  assert(plan && plan.person && plan.entity, "person intent on the first turn: " + request)
+  const slots = policy.planAnswerVisualSlots(request, [
+    { key: "intro", kind: "paragraph", text: "Владимир Жириновский (1946–2022) — российский политик." },
+  ])
+  assert.equal(slots.length, 1, "exactly one photo on first answer: " + request)
+  assert.equal(slots[0].key, "intro")
+  assert.equal(slots[0].plan.topic, "Владимир Жириновский")
+  assert.equal(slots[0].plan.person, true)
+  assert.equal(slots[0].plan.layout, "portrait")
+}
+const emphasizedPerson = policy.planAnswerVisualSlots("Жириновский знаешь", [
+  { key: "intro", kind: "paragraph", text: "**Владимир Жириновский** (1946–2022) — политик." },
+])
+assert.equal(emphasizedPerson[0]?.plan.topic, "Владимир Жириновский")
+assert.equal(policy.planReferenceVisuals("знаешь код?")?.person || false, false, "non-person subjects must not be person portraits")
+assert.equal(policy.planReferenceVisuals("Жириновский знаешь? без фото"), null, "respect text-only request")
 const iphoneList = "2007: iPhone (первое поколение / 2G)\n2008: iPhone 3G\n2009: iPhone 3GS\n2016: iPhone SE (1-е поколение), iPhone 7, iPhone 7 Plus\n2020: iPhone SE (2-е поколение), iPhone 12 Pro Max\n2025: iPhone 17, iPhone 17 Air"
 const allPhones = policy.planReferenceVisuals("Покажи все модели айфона")
 assert.equal(allPhones.queries[0], "iPhone")
