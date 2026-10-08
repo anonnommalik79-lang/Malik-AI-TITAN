@@ -63,6 +63,10 @@ check("expired cached turns are garbage-collected without dropping live work", (
   assert.match(store, /expires <= now/, "only expired timestamps qualify")
   assert.match(store, /store\.delete\(id\)/, "expired turn is released from memory")
   assert.match(store, /now \+ 60_000/, "avoids an expensive scan on every request")
+  assert.match(store, /MAX_FINISHED_CACHE_BYTES = 32 \* 1024 \* 1024/, "finished cache is RAM-bounded")
+  assert.match(store, /MAX_FINISHED_CACHE_TURNS = 128/, "finished cache cannot grow in item count")
+  assert.match(store, /turn.status === "pending"/, "active turns are never evicted")
+  assert.match(store, /pruneFinishedTurnCache\(memory, turn.turnId\)/, "completed writes trigger pruning")
 })
 
 
