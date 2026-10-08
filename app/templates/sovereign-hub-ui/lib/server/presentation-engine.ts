@@ -80,7 +80,7 @@ export async function generateOutline(input: ModelChoice & {
     const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: 2_400, temperature: attempt ? 0.35 : 0.6 })
     const parsed = extractJson(raw)
     const outline = normalizeOutline(parsed, input.topic, input.count)
-    if (outline && (investor ? outline.items.length === input.count && investorOutlineIsComplete(parsed, input.count) : outline.items.length >= Math.min(input.count, 4))) return outline
+    if (outline && (investor ? outline.items.length === input.count && investorOutlineIsComplete(parsed, input.count) : outline.items.length === input.count)) return outline
 
     prompt = `${outlineUserPrompt(input.topic, input.count)}\n\nYour previous answer could not be used: return a JSON object with exactly ${input.count} items.${investor ? " It must include all ten investor section ids in order, with ask last." : ""}`
   }
@@ -107,13 +107,17 @@ function placeSlides(raw: unknown, startIndex: number, items: OutlineItem[]): Wr
 
   const placed = new Map<number, Slide>()
   list.forEach((entry, order) => {
+    const numbered = entry !== null && typeof entry === "object" && "n" in entry
     const n = Number((entry as { n?: unknown })?.n)
-    const index = Number.isInteger(n) && n >= startIndex + 1 && n <= startIndex + items.length
-      ? n - 1
-      : startIndex + order
+    // An explicit but invalid slide number must never be silently assigned
+    // to a different outline point. Only absent numbers use list order.
+    if (numbered && (!Number.isInteger(n) || n < startIndex + 1 || n > startIndex + items.length)) return
+    const index = numbered ? n - 1 : startIndex + order
     if (index < startIndex || index >= startIndex + items.length || placed.has(index)) return
     const slide = normalizeSlide(entry, items[index - startIndex].layout)
-    if (slide) placed.set(index, freshSlide(slide))
+    // Wrong-layout content is not a successful slide. Ask for its assigned
+    // layout again instead of shipping a malformed or misleading deck.
+    if (slide && slide.layout === items[index - startIndex].layout) placed.set(index, freshSlide(slide))
   })
 
   return [...placed.entries()].sort((a, b) => a[0] - b[0]).map(([index, slide]) => ({ index, slide }))
@@ -160,20 +164,28 @@ export async function generateSlides(input: ModelChoice & {
   let wanted = items.map((_, offset) => input.startIndex + offset)
 
   for (let attempt = 0; attempt < 2 && wanted.length; attempt += 1) {
-    // Ask only for what is still missing, as one contiguous run at a time.
-    const first = wanted[0]
-    const run = wanted.filter((index, position) => index === first + position)
-    const runItems = input.outline.items.slice(first, first + run.length)
+    // Retry EVERY missing run, not just the first contiguous group.
+    // E.g. [1, 3] must retry both gaps, never lose the second silently.
+    const runs: number[][] = []
+    for (const index of wanted) {
+      const last = runs[runs.length - 1]
+      if (last && last[last.length - 1] === index - 1) last.push(index)
+      else runs.push([index])
+    }
 
-    const systemPrompt = slidesSystemPrompt({ language: input.language, tone: input.tone, items: runItems })
-    let prompt = slidesUserPrompt({ topic: input.topic, outline: input.outline, startIndex: first, items: runItems })
-    prompt += `\n\nInclude "n" (the slide number) in every slide object.`
-    if (attempt) prompt += `\nYour previous answer was missing or contained figures not supplied by the founder. Remove unsupported figures and return only {"slides":[…]} with all ${run.length} slides.`
+    for (const run of runs) {
+      const first = run[0]
+      const runItems = input.outline.items.slice(first, first + run.length)
+      const systemPrompt = slidesSystemPrompt({ language: input.language, tone: input.tone, items: runItems })
+      let prompt = slidesUserPrompt({ topic: input.topic, outline: input.outline, startIndex: first, items: runItems })
+      prompt += `\n\nInclude "n" (the slide number) in every slide object.`
+      if (attempt) prompt += `\nYour previous answer was incomplete or used an incorrect layout. Return only {"slides":[…]} with all ${run.length} requested slide(s). Never invent unsupported facts or numbers.`
 
-    const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: 900 * run.length + 600, temperature: attempt ? 0.4 : 0.7 })
-    for (const { index, slide } of placeSlides(extractJson(raw), first, runItems)) {
-      if (isInvestorDeckRequest(input.topic) && unsupportedInvestorFigures(slide, input.topic).length) continue
-      written.set(index, slide)
+      const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: 900 * run.length + 600, temperature: attempt ? 0.4 : 0.7 })
+      for (const { index, slide } of placeSlides(extractJson(raw), first, runItems)) {
+        if (isInvestorDeckRequest(input.topic) && unsupportedInvestorFigures(slide, input.topic).length) continue
+        written.set(index, slide)
+      }
     }
     wanted = wanted.filter((index) => !written.has(index))
   }
