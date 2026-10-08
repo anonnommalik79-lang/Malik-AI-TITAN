@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { VoiceDock, type PickedVoiceFile } from "./VoiceDock"
 import { VoiceOrb } from "./VoiceOrb"
 import { VoiceSettings, defaultVoiceForLanguage, getVoiceProfile, liveVoiceFor, voiceBelongsToLanguage, type VoiceLanguage } from "./VoiceSettings"
@@ -368,7 +369,10 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
             setLiveError("Дневной лимит голосового режима — 2 минуты.")
             showNotice("Voice: 2 минуты в день")
           },
-          onError: () => { geminiLiveReadyRef.current = false },
+          onError: (message) => {
+            geminiLiveReadyRef.current = false
+            if (message && mountedRef.current && !closingRef.current) setLiveError(message)
+          },
         },
       })
     }
@@ -381,7 +385,7 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
     const ready = await geminiLiveRef.current.connect()
     geminiLiveReadyRef.current = ready
     if (!ready && mountedRef.current && !closingRef.current && !geminiLiveRef.current?.isQuotaExhausted()) {
-      setLiveError("Голосовой режим сейчас недоступен.")
+      setLiveError((current) => current || "Голосовой режим сейчас недоступен.")
     }
     return ready
   }, [rememberTurn, showNotice])
@@ -1063,16 +1067,41 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
    * an expired token, a rejected setup, a session Google has already finished
    * with - is carried by that object, and a clean one costs a single request.
    */
+  const [reconnecting, setReconnecting] = useState(false)
   const reconnectLive = useCallback(async () => {
+    if (reconnecting) return
+    setReconnecting(true)
     setLiveError(null)
     setLiveDiagnosis(null)
     setTitle("Подключаю голосовой режим")
-    setSubtitle("Секунду…")
+    setSubtitle("Восстанавливаю соединение…")
     geminiLiveRef.current?.close()
     geminiLiveRef.current = null
     geminiLiveReadyRef.current = false
-    await startMicrophone()
-  }, [startMicrophone])
+    try {
+      // Keep an already approved stream; retrying must not request a new mic.
+      const stream = microphoneRef.current
+      const context = audioContextRef.current
+      if (stream?.active && context && context.state !== "closed") {
+        const ready = await ensureGeminiLive()
+        if (!mountedRef.current || closingRef.current) return
+        if (ready && await geminiLiveRef.current?.attachMicrophone(stream, context)) {
+          streamingRef.current = true
+          setLiveError(null)
+          setTitle("Слушаю")
+          setSubtitle("Говори естественно · можно перебить голосом")
+        } else {
+          setTitle("Голосовой режим не подключился")
+          setSubtitle("Микрофон открыт · можно повторить подключение")
+          setLiveError((current) => current || "Соединение Voice недоступно. Проверь связь.")
+        }
+      } else {
+        await startMicrophone()
+      }
+    } finally {
+      if (mountedRef.current && !closingRef.current) setReconnecting(false)
+    }
+  }, [ensureGeminiLive, reconnecting, startMicrophone])
 
   /**
    * Asks the server to try the whole thing for real.
@@ -1643,7 +1672,8 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
     }
   }, [cleanupAll, closeMode, ensureGeminiLive, startMicrophone])
 
-  return (
+  // Isolate Voice from dashboard transforms, stacking contexts and base typography.
+  return createPortal(
     <section className={`${styles.stage} ${styles[phase]}`} onPointerDownCapture={unlockVoiceAudio} data-voice-mode role="dialog" aria-modal="true" aria-label="Malik AI Voice Mode">
       <VoiceOrb energyRef={energyRef} speedRef={speedRef} demoRef={demoRef} />
 
@@ -1665,7 +1695,7 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
         {liveError ? (
           <div className={styles.retry} role="status">
             <span>{liveError}</span>
-            <button type="button" onClick={() => void reconnectLive()}>Переподключить</button>
+            <button type="button" disabled={reconnecting} onClick={() => void reconnectLive()}>{reconnecting ? "Подключаю…" : "Переподключить"}</button>
             <button type="button" disabled={checkingLive} onClick={() => void checkLive()}>
               {checkingLive ? "Проверяю…" : "Проверить связь"}
             </button>
@@ -1717,7 +1747,8 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
 
       <div className={`${styles.notice} ${notice ? styles.open : ""}`}>{notice}</div>
       <div className={styles.hint}>{busy ? "Voice обрабатывает запрос…" : language === "auto" ? "Любой язык — отвечу на нём же · можно перебить голосом" : "Можно перебить голос · қазақша / русский / English"}</div>
-    </section>
+    </section>,
+    document.body,
   )
 }
 
