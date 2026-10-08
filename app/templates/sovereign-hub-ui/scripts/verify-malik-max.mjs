@@ -217,7 +217,7 @@ await check("a lane that never writes is dropped after its first-token time", as
 await check("when every lane fails the error is clear and quick", async () => {
   await assert.rejects(
     engine.raceLanes({ lanes: [lane("missing-a"), lane("missing-b")], call, onToken: () => {}, minFlush: 8, fetcher: makeFetcher(), ...raceTiming }),
-    (error) => error.code === "MAX_ALL_LANES_BUSY" && /заняты/.test(error.message),
+    (error) => error.code === "MAX_UPSTREAM_ACCESS" && /недоступ/.test(error.message),
   )
 })
 
