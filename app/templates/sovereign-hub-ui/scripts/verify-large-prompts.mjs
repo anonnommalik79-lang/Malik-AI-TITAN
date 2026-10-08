@@ -16,6 +16,7 @@ assert.deepEqual(missingBriefItems(b,"Развёрнутый связный от
 assert.deepEqual(briefItems("Block 1: A; Block 2: B; Block 3: C").map(x=>x.number),[1,2,3])
 const ticks=String.fromCharCode(96,96,96)
 assert.deepEqual(briefItems("Прочитай код:\n"+ticks+"text\n1) example\n2) sample\n"+ticks),[])
+assert.deepEqual(briefItems("Задание:\n"+ticks+"markdown\nBlock 1: code sample\nBlock 2: more code\n"+ticks),[])
 assert.equal(briefMissingMarker("В самом конце напиши:\nDONE","пока нет"),true)
 assert.equal(briefMissingMarker("В самом конце напиши:\nDONE","DONE"),false)
 const huge="BEGIN "+ "source data ".repeat(4000) + "\nMANDATORY LAST LINE: FINAL"

@@ -11,17 +11,20 @@ const INLINE_NUMBER = /(?:^|[\s;,])(\d{1,2})\)\s+\S/gu
 
 export function briefItems(prompt: string, max = 24): BriefItem[] {
   const found = new Map<number,string>()
+  const unfencedLines: string[] = []
   let fence = false
   for (const line of String(prompt || "").split(/\r?\n/)) {
     if (line.trimStart().startsWith(String.fromCharCode(96,96,96))) { fence = !fence; continue }
     if (fence) continue
+    unfencedLines.push(line)
     const match = NUMBERED_LINE.exec(line) || NAMED_LINE.exec(line)
     if (match && Number(match[1]) > 0) {
       const n = Number(match[1])
       if (!found.has(n)) found.set(n, match[2].replace(/\s+/g," ").slice(0,95))
     }
   }
-  const value = String(prompt || "")
+  // Inline headings inside quoted code are examples, not user requirements.
+  const value = unfencedLines.join("\n")
   for (const match of [...value.matchAll(INLINE_LABEL),...value.matchAll(INLINE_NUMBER)]) {
     const n = Number(match[1])
     if (n > 0 && !found.has(n)) found.set(n,"")
