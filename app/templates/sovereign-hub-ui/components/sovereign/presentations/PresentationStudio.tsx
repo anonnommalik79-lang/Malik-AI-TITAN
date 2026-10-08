@@ -895,7 +895,17 @@ export function PresentationStudio({ username }: { username?: string }) {
 
   /* ----------------------------------------------------------------- export */
 
+  // An incomplete deck stays editable and can be backed up. Exporting a PPTX
+  // or PDF as if it were finished would silently omit failed slide positions.
+  const completeDeck = entries.length > 0 && entries.every((entry) => entry.state === "ready" && Boolean(entry.slide))
+  const requireCompleteDeck = () => {
+    if (completeDeck) return true
+    setError("Презентация ещё не завершена. Дождитесь или повторите генерацию недостающих слайдов. Резервную копию Malik Deck можно скачать сейчас.")
+    return false
+  }
+
   const exportPptx = async () => {
+    if (!requireCompleteDeck()) return
     setBusy("export")
     setError("")
     try {
@@ -942,6 +952,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   // PDF through the browser's own print dialog, with every slide laid out as
   // one 13.333 × 7.5 inch page. "Save as PDF" is in every browser's dialog.
   const exportPdf = () => {
+    if (!requireCompleteDeck()) return
     setPrinting(true)
   }
 
@@ -1454,10 +1465,10 @@ export function PresentationStudio({ username }: { username?: string }) {
               ))}
             </span>
             <button type="button" className="ps-btn ps-btn--small" onClick={() => startShow(current)} disabled={!presentable.length}><Play size={14} /> Показ</button>
-            <button type="button" className="ps-btn ps-btn--small" onClick={() => void exportPptx()} disabled={!presentable.length || generating || busy === "export"}>
+            <button type="button" className="ps-btn ps-btn--small" onClick={() => void exportPptx()} disabled={!completeDeck || generating || busy === "export"}>
               {busy === "export" ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} PPTX
             </button>
-            <button type="button" className="ps-btn ps-btn--small" onClick={exportPdf} disabled={!presentable.length || generating}><FileDown size={14} /> PDF</button>
+            <button type="button" className="ps-btn ps-btn--small" onClick={exportPdf} disabled={!completeDeck || generating}><FileDown size={14} /> PDF</button>
             <button type="button" className="ps-btn ps-btn--small" onClick={exportBackup} disabled={!presentable.length} title="Скачать полную редактируемую резервную копию">
               <Download size={14} /> Malik Deck
             </button>
