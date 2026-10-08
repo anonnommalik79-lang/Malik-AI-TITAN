@@ -160,6 +160,55 @@ function planScope(prompt: string) {
 
 const EXPLICIT_AGENT = /(?<![\p{L}\p{N}])(?:агент(?:а|у|ом|ы|ов)?|организуй(?:те)?|спланируй(?:те)?|под ключ|от начала до конца|сделай всё|выполни задачу|доведи до результата|agent|workflow|end[- ]to[- ]end)(?![\p{L}\p{N}])/iu
 
+// A plan is a truthful list of requested capabilities, never a keyword bingo
+// card. A site "for taxi" must not promise to order a taxi; a site "with photos"
+// must not promise to generate pictures. Each capability is independently gated.
+const CREATION_VERB = /(?:созд(?:ай|ать|айте)|сдел(?:ай|ать|айте)|сгенерир(?:уй|овать|уйте)|генерир(?:уй|овать|уйте)|нарис(?:уй|овать|уйте)|разработ(?:ай|ать|айте)|собер(?:и|ите)|постро(?:й|ить)|generate|create|make|draw|build)(?![\p{L}\p{N}_])/giu
+const INTERVENING_OBJECT = /(?:код|скрипт|промпт|prompt|сайт|website|лендинг|приложени[\p{L}]*|app|api|инструкци[\p{L}]*|гайд|guide|способ|how\s+to)(?![\p{L}\p{N}_])/iu
+
+function explicitCreationOf(scope: string, object: RegExp) {
+  CREATION_VERB.lastIndex = 0
+  for (const verb of scope.matchAll(CREATION_VERB)) {
+    const rest = scope.slice((verb.index || 0) + verb[0].length, (verb.index || 0) + verb[0].length + 95)
+    const noun = object.exec(rest)
+    if (noun && !INTERVENING_OBJECT.test(rest.slice(0, noun.index))) return true
+  }
+  return false
+}
+
+function explicitlyPlansTransport(scope: string) {
+  const object = /(?:такси|taxi|uber|трансфер|transfer)(?![\p{L}\p{N}_])/giu
+  const verb = /(?:закаж[\p{L}]*|вызов[\p{L}]*|вызови|подготов[\p{L}]*|организ[\p{L}]*|спланир[\p{L}]*|заброниру[\p{L}]*|book|arrange)(?![\p{L}\p{N}_])/giu
+  for (const command of scope.matchAll(verb)) {
+    const rest = scope.slice((command.index || 0) + command[0].length, (command.index || 0) + command[0].length + 95)
+    const match = object.exec(rest)
+    object.lastIndex = 0
+    if (match && !INTERVENING_OBJECT.test(rest.slice(0, match.index))
+      && !/(?:сервис|service|платформ[\p{L}]*)(?![\p{L}\p{N}_])/iu.test(rest.slice(0, match.index))) return true
+  }
+  return false
+}
+
+function requestedAction(action: ActionDefinition & { match: RegExp }, scope: string) {
+  if (!action.match.test(scope)) return false
+  switch (action.kind) {
+    case "image":
+      return explicitCreationOf(scope, /(?:изображени[\p{L}]*|фото[\p{L}]*|фотк[\p{L}]*|картинк[\p{L}]*|постер[\p{L}]*|баннер[\p{L}]*|image|photo|picture|poster|banner)(?![\p{L}\p{N}_])/iu)
+    case "video":
+      return explicitCreationOf(scope, /(?:видео[\p{L}]*|ролик[\p{L}]*|клип[\p{L}]*|анимаци[\p{L}]*|video|movie|clip)(?![\p{L}\p{N}_])/iu)
+    case "taxi":
+      return explicitlyPlansTransport(scope)
+    case "website":
+      return explicitCreationOf(scope, /(?:сайт[\p{L}]*|лендинг[\p{L}]*|интерфейс[\p{L}]*|дашборд[\p{L}]*|страниц[\p{L}]*|website|landing|dashboard|ui)(?![\p{L}\p{N}_])/iu)
+    case "translate":
+      return /(?:перевед[\p{L}]*|перевест[\p{L}]*|перевод[\p{L}]*|аудар[\p{L}]*|translate|translation)(?![\p{L}\p{N}_])/iu.test(scope)
+    case "project":
+      return /(?:(?:сохран[\p{L}]*|запиш[\p{L}]*|save|добавь)\s+.{0,65}?(?:\bв\s+)?(?:проект[\p{L}]*|project)|(?:созд[\p{L}]*|create)\s+(?:\S+\s+){0,3}(?:проект[\p{L}]*|project))(?![\p{L}\p{N}_])/iu.test(scope)
+    default:
+      return true
+  }
+}
+
 /**
  * Build a visible execution contract only when the person asks for an agent
  * run — Agent mode, or «организуй / спланируй / под ключ / доведи до
@@ -177,11 +226,12 @@ export function createMalikActionPlan(input: PlanInput): MalikActionPlan | null 
   const shouldPlan = input.mode === "agent" || EXPLICIT_AGENT.test(scope)
   if (!shouldPlan) return null
 
-  const matched = uniqueActions(ACTION_DEFINITIONS.filter((definition) => definition.match.test(scope)))
+  const matched = uniqueActions(ACTION_DEFINITIONS.filter((definition) => requestedAction(definition, scope)))
   const selected = matched.length
     ? matched
     : [ACTION_DEFINITIONS.find((action) => action.kind === "research")!]
-  const bounded = selected.slice(0, 4)
+  // Revival accepts at most 8 steps: analyze + 6 requested actions + deliver.
+  const bounded = selected.slice(0, 6)
   const steps: MalikActionStep[] = [
     {
       id: id("step"),

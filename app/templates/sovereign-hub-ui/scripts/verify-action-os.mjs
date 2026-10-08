@@ -71,6 +71,35 @@ check("never wraps a paid slash generation command in a second plan", () => {
   assert.equal(createMalikActionPlan({ prompt: "/video cinematic city" }), null)
 })
 
+
+check("isolates incidental capabilities in a website-for-taxi request", () => {
+  const plan = createMalikActionPlan({ prompt: "Сделай под ключ сайт сервиса такси с фото и видео. На сайте интерфейс бронирования на казахском языке." })
+  assert.ok(plan)
+  const kinds = plan.steps.map((step) => step.kind)
+  assert.ok(kinds.includes("website"))
+  for (const phantom of ["image", "video", "taxi", "translate", "project"]) {
+    assert.ok(!kinds.includes(phantom), "false " + phantom + " capability")
+  }
+  assert.equal(plan.requiresConfirmation, false)
+})
+
+check("keeps genuinely requested independent actions", () => {
+  const plan = createMalikActionPlan({ prompt: "Организуй задачу: создай фото, создай видео, переведи текст на казахский и сохрани результат в проект." })
+  assert.ok(plan)
+  const kinds = plan.steps.map((step) => step.kind)
+  for (const requested of ["image", "video", "translate", "project"]) {
+    assert.ok(kinds.includes(requested), "missing " + requested)
+  }
+  assert.ok(plan.steps.length <= 8)
+  assert.equal(plan.requiresConfirmation, true)
+})
+
+check("tutorials and prompt-writing are never mistaken for paid media actions", () => {
+  const plan = createMalikActionPlan({ prompt: "Организуй обучение: напиши промпт для генерации фото и инструкцию как создавать видео." })
+  assert.ok(plan)
+  assert.equal(plan.steps.some((step) => step.kind === "image" || step.kind === "video"), false)
+})
+
 check("settles only work that has evidence and reports zero silent external actions", () => {
   const plan = createMalikActionPlan({ prompt: "Организуй поездку: найди варианты и подготовь такси" })
   const settled = settleMalikActionPlan(plan, { usedWeb: true })
