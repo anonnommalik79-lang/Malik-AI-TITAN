@@ -585,6 +585,8 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
       setLastSubmitFailed(false)
 
+      const immediateUrl = data.status === "ready" && typeof data.resultUrl === "string"
+        ? String(data.resultUrl) : ""
       const item: MusicHistoryItem = {
         requestId: String(data.requestId),
         title: historyTitle(nextPrompt, nextGenre),
@@ -596,15 +598,25 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         duration: nextDuration,
         genreId: resolvedGenreId,
         mood: resolvedMood,
-        status: "queued",
-        progress: 0,
+        status: immediateUrl ? "processing" : "queued",
+        progress: immediateUrl ? 99 : 0,
+        resultUrl: immediateUrl || undefined,
         downloadUrl: String(data.downloadUrl || ""),
         createdAt: new Date().toISOString(),
       }
 
       setHistory((rows) => [item, ...rows.filter((row) => row.requestId !== item.requestId)].slice(0, 30))
       setTrackTitle(item.title)
-      setActiveRequestId(item.requestId)
+      if (immediateUrl) {
+        // Avoid another status request and recover even without durable job
+        // storage: the browser validates actual audio metadata before "ready".
+        setActiveRequestId("")
+        setTrackUrl(immediateUrl)
+        setCurrentTime(0)
+        setNotice("Провайдер вернул аудио. Проверяю, что файл воспроизводится…")
+      } else {
+        setActiveRequestId(item.requestId)
+      }
       setConfig((current) => {
         if (!current) return current
         const unlimited = Boolean(data.unlimited || current.unlimited || current.limits.unlimited)
@@ -621,11 +633,13 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           },
         }
       })
-      setNotice(
-        data?.lyricsGenerated
-          ? "Malik AI написал слова. Реальный request_id получен — музыкальная модель создаёт трек…"
-          : "Реальный request_id получен. Музыкальный провайдер создаёт трек…",
-      )
+      if (!immediateUrl) {
+        setNotice(
+          data?.lyricsGenerated
+            ? "Malik AI написал слова. Реальный request_id получен — музыкальная модель создаёт трек…"
+            : "Реальный request_id получен. Музыкальный провайдер создаёт трек…",
+        )
+      }
     } catch (error) {
       setGenerating(false)
       setLastSubmitFailed(true)
