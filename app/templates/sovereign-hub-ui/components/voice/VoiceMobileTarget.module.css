@@ -2,7 +2,7 @@
 
 /* The same working desktop controls, arranged compactly on phones. */
 @media (max-width: 680px) {
-  :global(#malik-root) :global(.malik-dashboard-shell) :global([data-voice-mode]) .mobileDock[aria-label="Панель голосового режима"] {
+  :global(body) :global(.malik-dashboard-shell) :global([data-voice-mode]) .mobileDock[aria-label="Панель голосового режима"] {
     display: block !important;
     left: 8px !important;
     right: 8px !important;
@@ -15,7 +15,7 @@
     background: rgba(23,23,23,.96) !important;
     box-shadow: 0 8px 30px rgba(0,0,0,.25) !important;
   }
-  :global(#malik-root) .mobileDock > div:has(> textarea) {
+  :global(body) .mobileDock > div:has(> textarea) {
     display: flex !important;
     min-height: 46px !important;
     height: auto !important;
@@ -26,7 +26,7 @@
     border-radius: 0 !important;
     box-shadow: none !important;
   }
-  :global(#malik-root) :global(.malik-dashboard-shell) .mobileDock textarea {
+  :global(body) :global(.malik-dashboard-shell) .mobileDock textarea {
     width: 100% !important;
     min-height: 36px !important;
     max-height: 72px !important;
@@ -39,8 +39,8 @@
     line-height: 22px !important;
     resize: none !important;
   }
-  :global(#malik-root) .mobileDock textarea::placeholder { color: #969696 !important; }
-  :global(#malik-root) .mobileDock > [class*="controls"] {
+  :global(body) .mobileDock textarea::placeholder { color: #969696 !important; }
+  :global(body) .mobileDock > [class*="controls"] {
     display: flex !important;
     align-items: center !important;
     flex-wrap: nowrap !important;
@@ -51,10 +51,10 @@
     border: 0 !important;
     box-shadow: none !important;
   }
-  :global(#malik-root) .mobileDock [class*="controlDivider"] { display: none !important; }
-  :global(#malik-root) .mobileDock button[class*="controlButton"],
-  :global(#malik-root) .mobileDock button[class*="micPill"],
-  :global(#malik-root) .mobileDock button[class*="stopButton"] {
+  :global(body) .mobileDock [class*="controlDivider"] { display: none !important; }
+  :global(body) .mobileDock button[class*="controlButton"],
+  :global(body) .mobileDock button[class*="micPill"],
+  :global(body) .mobileDock button[class*="stopButton"] {
     position: static !important;
     display: inline-flex !important;
     justify-content: center !important;
@@ -70,12 +70,12 @@
     color: #dedede !important;
     background: #272727 !important;
   }
-  :global(#malik-root) .mobileDock button[class*="micPill"][aria-pressed="true"] {
+  :global(body) .mobileDock button[class*="micPill"][aria-pressed="true"] {
     background: #f4f4f4 !important;
     color: #171717 !important;
   }
-  :global(#malik-root) .mobileDock [class*="micDots"] { display: none !important; }
-  :global(#malik-root) .mobileDock button[class*="assistantButton"] {
+  :global(body) .mobileDock [class*="micDots"] { display: none !important; }
+  :global(body) .mobileDock button[class*="assistantButton"] {
     position: static !important;
     display: flex !important;
     flex: 1 1 0 !important;
@@ -89,18 +89,18 @@
     border-radius: 18px !important;
     font-size: 11px !important;
   }
-  :global(#malik-root) .mobileDock button[class*="assistantButton"] span { display: block !important; }
-  :global(#malik-root) .mobileDock button[class*="assistantButton"] small { display: none !important; }
-  :global(#malik-root) .mobileDock button[class*="assistantButton"] svg { display: block !important; width: 14px; flex-shrink: 0; }
-  :global(#malik-root) .mobileDock button[class*="stopButton"] {
+  :global(body) .mobileDock button[class*="assistantButton"] span { display: block !important; }
+  :global(body) .mobileDock button[class*="assistantButton"] small { display: none !important; }
+  :global(body) .mobileDock button[class*="assistantButton"] svg { display: block !important; width: 14px; flex-shrink: 0; }
+  :global(body) .mobileDock button[class*="stopButton"] {
     font-size: 0 !important;
     background: #f4f4f4 !important;
     color: #171717 !important;
   }
-  :global(#malik-root) .mobileDock button[class*="stopButton"]::after {
+  :global(body) .mobileDock button[class*="stopButton"]::after {
     content: "×";
     font-size: 24px;
     line-height: 1;
   }
-  :global(#malik-root) .mobileDock [class*="attachPopover"] { bottom: 52px !important; left: 0 !important; }
+  :global(body) .mobileDock [class*="attachPopover"] { bottom: 52px !important; left: 0 !important; }
 }
