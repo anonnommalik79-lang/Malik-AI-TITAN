@@ -1,3 +1,5 @@
+import { visualFenceToText } from "../visual/to-text"
+
 /** Compact answer data, rendered locally. No HTML, executable code or remote assets. */
 export type AnswerVisualItem = { label: string; value: number; detail?: string }
 export type AnswerVisualStep = { label: string; detail?: string; date?: string }
@@ -103,7 +105,10 @@ export function answerVisualTotal(visual: AnswerVisual): number | null {
 export function answerVisualsToText(answer: string): string {
   return String(answer || "").replace(/^\s*```malik-visual\s*\n([\s\S]*?)\n\s*```\s*$/gmu, (_whole, body: string) => {
     const visual = parseAnswerVisual(body)
-    if (!visual) return ""
+    if (!visual) {
+      // Interactive Visual Engine blocks (chart, dashboard, calculator, table, graph).
+      return visualFenceToText(body)
+    }
     const heading = [visual.title, visual.subtitle].filter(Boolean).join(" — ")
     if (visual.type === "flow") return [heading, ...visual.stages.map((stage, index) => [
       `${index + 1}. ${stage.label}${stage.detail ? " — " + stage.detail : ""}`,

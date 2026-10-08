@@ -104,13 +104,14 @@ import "./workspace-mode.css"
 // The cosmos chat home: after every earlier home sheet (its selectors carry
 // html[data-malik-chat-home], so they win only while the home is on screen).
 import "./malik-cosmos-home.css"
+// After the motion freezes above: the performance passes freeze all motion on
+// phones, including the spinners that show a request is alive. This brings
+// back only those request indicators, so a phone moves like the computer.
+// (It sets no colours, so the monochrome pass below can stay truly last.)
+import "./request-motion-final.css"
 // Truly last: loading, analysis, sources and status surfaces in black and
 // white only. It has to follow every accent rule above to strip their gold.
 import "./chat-monochrome-final.css"
-// After everything: the performance passes above freeze all motion on phones,
-// including the spinners that show a request is alive. This brings back only
-// those request indicators, so a phone moves like the computer.
-import "./request-motion-final.css"
 
 // Let Next emit one viewport tag. Read the visible area separately on iOS,
 // where the keyboard does not resize dvh. Keep deliberate pinch zoom available.

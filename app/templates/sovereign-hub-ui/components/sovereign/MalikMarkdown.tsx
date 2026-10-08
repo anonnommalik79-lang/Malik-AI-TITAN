@@ -15,6 +15,8 @@ import { parseAnswerEntity } from "@/lib/ai/answer-entities"
 import { allowsAnswerPhotoHints, isAbstractPhotoSubject, planAnswerVisualSlots, referenceSearchTopic, visualSegmentLabel, type AnswerVisualSegment, type AnswerVisualSlot, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { groundedAnswerPhotoPlans, isPhotoLineup, parseAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 import { sourceReferencePhoto } from "@/lib/media/source-reference-photos"
+import { VISUAL_LIMITS, detectVisualFence, sniffPendingVisual, type VisualEngineType } from "@/lib/visual/detect"
+import { MalikVisualEngineBlock, MalikVisualPending } from "./visual-engine/MalikVisualBlock"
 
 /**
  * Renders an assistant answer as structured text.
@@ -290,7 +292,15 @@ type Block =
   | { kind: "h"; level: number; text: string }
   | { kind: "list"; list: ListBlock }
   | { kind: "math"; tex: string }
-  | { kind: "visual"; visual: AnswerVisual | null; pending: boolean }
+  | {
+      kind: "visual"
+      visual: AnswerVisual | null
+      pending: boolean
+      /** A closed fence that claims an interactive Visual Engine type; validated where it is drawn. */
+      engine?: { type: VisualEngineType; title?: string; raw: string }
+      /** Still streaming, but its type is already known. */
+      pendingEngine?: { type: VisualEngineType; title?: string } | null
+    }
   | { kind: "photos"; subjects: ReturnType<typeof parseAnswerPhotoHints>; lineup: boolean }
   | { kind: "cards"; block: AnswerCardsBlock | null; pending: boolean }
   | { kind: "code"; language: string; filename: string; lines: string[] }
@@ -517,7 +527,14 @@ function parseBlocks(source: string): Block[] {
       const closed = index < lines.length
       index += 1
       if (fence.language === "malik-visual") {
-        blocks.push({ kind: "visual", visual: closed ? parseAnswerVisual(body.join("\n")) : null, pending: !closed })
+        const raw = body.join("\n")
+        if (!closed) {
+          blocks.push({ kind: "visual", visual: null, pending: true, pendingEngine: sniffPendingVisual(raw) })
+        } else {
+          const visual = parseAnswerVisual(raw)
+          const engine = visual ? null : detectVisualFence(raw)
+          blocks.push({ kind: "visual", visual, pending: false, engine: engine ? { ...engine, raw } : undefined })
+        }
         pendingFilename = ""
         continue
       }
@@ -1067,7 +1084,8 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     blocks.forEach((block, position) => {
       if (block.kind === "visual" && block.visual && visuals.size < 2) visuals.set(position, block.visual)
     })
-    if (visuals.size || streaming) return visuals
+    // An answer with its own interactive blocks needs no inferred chart beside them.
+    if (visuals.size || streaming || blocks.some((block) => block.kind === "visual" && block.engine)) return visuals
     let title = ""
     blocks.forEach((block, position) => {
       if (block.kind === "h") title = block.text
@@ -1078,6 +1096,15 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     })
     return visuals
   }, [blocks, question, streaming])
+  // Interactive blocks: honour «без графиков», and cap how many one answer draws.
+  const engineBlocks = useMemo(() => {
+    const allowed = new Set<number>()
+    if (!wantsAnswerVisuals(question)) return allowed
+    blocks.forEach((block, position) => {
+      if (block.kind === "visual" && block.engine && allowed.size < VISUAL_LIMITS.blocksPerAnswer) allowed.add(position)
+    })
+    return allowed
+  }, [blocks, question])
   const codeFiles = codeFilesFrom(blocks)
   const primaryPreviewFilename = codeFiles.find((file) => /\.html?$/i.test(file.name))?.name
     || codeFiles.find((file) => isPreviewableCode(languageFromFilename(file.name), file.content))?.name
@@ -1131,6 +1158,10 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
         if (block.kind === "cards") {
           if (block.block) return <MalikAnswerCards key={key} block={block.block} sources={citations} autoPhotos={allowsAnswerPhotoHints(question, hasAttachment)} />
           return streaming ? <p key={key} className="malik-md-p" role="status">Собираю карточки…</p> : null
+        }
+        if (block.kind === "visual" && (block.engine || block.pendingEngine)) {
+          if (block.engine) return engineBlocks.has(position) ? <MalikVisualEngineBlock key={key} raw={block.engine.raw} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} /> : null
+          return streaming && block.pendingEngine ? <MalikVisualPending key={key} type={block.pendingEngine.type} title={block.pendingEngine.title} /> : null
         }
         if (block.kind === "visual") {
           if (dataVisual) return <Fragment key={key}><MalikAnswerVisual visual={dataVisual} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} />{sourcedPhotos}</Fragment>

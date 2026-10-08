@@ -35,6 +35,9 @@ function bundle(file) {
   })
   return id
 }
+// Interactive Visual Engine blocks are covered by test:visual-engine; this
+// layout test keeps them out of its hand-made bundle (Zod, Recharts).
+modules["components/sovereign/visual-engine/MalikVisualBlock.tsx"] = "module.exports={MalikVisualEngineBlock:function(){return null},MalikVisualPending:function(){return null}}"
 const markdown = bundle(path.join(project, "components/sovereign/MalikMarkdown.tsx"))
 const globalPath = path.join(project, "app/globals.css")
 const globals = (await require("postcss")([require("@tailwindcss/postcss")({ base: project })])

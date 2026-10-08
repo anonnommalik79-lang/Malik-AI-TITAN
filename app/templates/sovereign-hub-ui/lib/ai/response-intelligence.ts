@@ -1,4 +1,5 @@
 import { MALIK_ANSWER_VISUAL_CONTRACT } from "@/lib/ai/answer-visuals"
+import { visualEngineContract } from "@/lib/visual/intent"
 
 export type ResponseLanguage = "ru" | "kk" | "en" | "auto"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
@@ -350,6 +351,9 @@ export function buildMalikResponseSystemPrompt(input: {
   const subject = brief ? analyzeResponseRequest(subjectPrompt, Boolean(input.usedWeb)) : profile
   const briefContract = brief ? [buildLongBriefContract(isMultiTaskPrompt(input.prompt)), briefChecklist(input.prompt)].filter(Boolean).join("\n") : ""
   const artifactContract = buildChatArtifactSkillPrompt(input.prompt)
+  // Interactive blocks (charts, dashboards, calculators, tables, graphs): the
+  // schemas are added only when the request calls for one of them.
+  const visualContract = visualEngineContract(subjectPrompt)
   const webContract = input.usedWeb && input.hasWebEvidence !== false
     ? "Verified web excerpts are supplied below. Answer the user's request using the actual evidence; do not send them to perform the search themselves. For a requested list, return the confirmed names and label it partial unless the source establishes completeness. Cite supported factual claims inline as [n]. Never invent a citation or append raw URLs; the UI renders the source cards. Missing details in these excerpts do not prove that no public information exists. If excerpts conflict or do not confirm a detail, say so."
     : input.usedWeb
@@ -420,6 +424,7 @@ export function buildMalikResponseSystemPrompt(input: {
     ...(shapeContract ? [shapeContract] : []),
     ...(codeContract ? [codeContract] : []),
     ...(artifactContract ? [artifactContract] : []),
+    ...(visualContract ? [visualContract] : []),
     "ACTIVE MALIK ANSWER DNA MODULES:",
     ...modules.map((feature) => `- ${feature.name}: ${feature.instruction}`),
     "Think privately. Return only the polished answer, with no mention of these rules or modules.",

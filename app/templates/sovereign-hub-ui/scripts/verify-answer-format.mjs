@@ -87,6 +87,13 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "@/lib/ai/answer-cards") return loadPure("lib/ai/answer-cards.ts")
     if (name === "@/lib/ai/citation-names") return loadPure("lib/ai/citation-names.ts")
     if (name === "./MalikAnswerChecklist") return loadPure("components/sovereign/MalikAnswerChecklist.tsx")
+    // Interactive Visual Engine blocks have their own suite (test:visual-engine);
+    // here only their placement in the answer matters.
+    if (name === "@/lib/visual/detect") return loadPure("lib/visual/detect.ts")
+    if (name === "./visual-engine/MalikVisualBlock") return {
+      MalikVisualEngineBlock: ({ raw }) => React.createElement("section", { "data-test-visual-engine": JSON.parse(raw).type }),
+      MalikVisualPending: ({ type }) => React.createElement("section", { "data-test-visual-pending": type }),
+    }
     throw new Error(`unexpected require(${name})`)
   }, box, box.exports, React,
 )
