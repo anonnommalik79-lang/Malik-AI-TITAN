@@ -95,7 +95,7 @@ function install({ token = "tok_live", closeWith = null } = {}) {
   }
 }
 
-const { DeepgramListener, streamLanguage } = await import(`${process.cwd()}/lib/voice/deepgram-listen.ts`)
+const { DeepgramListener, streamLanguage } = await import(new URL("../lib/voice/deepgram-listen.ts", import.meta.url).href)
 
 console.log("\nthe socket path, executed")
 

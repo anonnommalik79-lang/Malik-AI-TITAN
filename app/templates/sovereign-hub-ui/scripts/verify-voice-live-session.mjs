@@ -166,7 +166,7 @@ function install({ token = "tok_live", sampleRate = 48000, nativeRate = true } =
   }
 }
 
-const { GeminiLiveSession } = await import(`${process.cwd()}/lib/voice/gemini-live-client.ts`)
+const { GeminiLiveSession } = await import(new URL("../lib/voice/gemini-live-client.ts", import.meta.url).href)
 
 async function connected(options = {}) {
   const browser = install(options.install)
@@ -486,7 +486,7 @@ await check("an unknown voice name never reaches the wire", async () => {
 console.log("\nthe setup the server checks with is the setup the browser sends")
 
 const { buildLiveSetup, LIVE_WS_URL, LIVE_TOKEN_URL, DEFAULT_LIVE_MODEL } =
-  await import(`${process.cwd()}/lib/voice/gemini-live-setup.ts`)
+  await import(new URL("../lib/voice/gemini-live-setup.ts", import.meta.url).href)
 
 await check("both sides build it from the same module", async () => {
   const { browser, session } = await connected({ language: "ru", voice: "Kore" })

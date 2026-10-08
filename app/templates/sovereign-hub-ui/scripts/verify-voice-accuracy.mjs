@@ -12,7 +12,7 @@ import assert from "node:assert/strict"
  */
 
 async function load(file) {
-  return import(`${process.cwd()}/${file}`)
+  return import(new URL(`../${file}`, import.meta.url).href)
 }
 
 let failures = 0
