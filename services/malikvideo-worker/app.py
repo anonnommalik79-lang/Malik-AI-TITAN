@@ -4,6 +4,8 @@ import json
 import os
 import shutil
 import sqlite3
+import struct
+import zlib
 import subprocess
 import threading
 import time
@@ -183,37 +185,80 @@ def download_h3(job_id: str, h3_id: str) -> Path:
     return destination
 
 
-def mux_h3_audio(restored: Path, source: Path, final: Path) -> Path:
-    if shutil.which(FFMPEG) is None:
-        raise RuntimeError("ffmpeg is not installed")
-    temp = final.with_suffix(".part.mp4")
-    subprocess.run(
-        [
-            FFMPEG,
-            "-y",
-            "-i",
-            str(restored),
-            "-i",
-            str(source),
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a?",
-            "-c:v",
-            "copy",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-shortest",
-            str(temp),
-        ],
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+
+def _point_in_triangle(px: float, py: float, a: tuple[int, int], b: tuple[int, int], c: tuple[int, int]) -> bool:
+    def cross(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    p = (px, py)
+    d1, d2, d3 = cross(a, b, p), cross(b, c, p), cross(c, a, p)
+    return not ((d1 < 0 or d2 < 0 or d3 < 0) and (d1 > 0 or d2 > 0 or d3 > 0))
+
+
+def official_malik_mark_png(destination: Path) -> Path:
+    """RGBA PNG with the exact /brand/malik-mark.svg triangles (stdlib only)."""
+    if destination.exists() and destination.stat().st_size > 0:
+        return destination
+    width, height = 124, 78
+    triangle_a = ((4, 53), (46, 11), (46, 53))
+    triangle_b = ((55, 11), (96, 11), (55, 53))
+    scanlines = bytearray()
+    for y in range(height):
+        scanlines.append(0)
+        for x in range(width):
+            # SVG viewBox -12 -10 124 78 means a +12,+10 inset.
+            px, py = x - 12 + .5, y - 10 + .5
+            inside = _point_in_triangle(px, py, *triangle_a) or _point_in_triangle(px, py, *triangle_b)
+            shadow = _point_in_triangle(px - 2, py - 2, *triangle_a) or _point_in_triangle(px - 2, py - 2, *triangle_b)
+            if inside:
+                scanlines.extend((255, 255, 255, 219))
+            elif shadow:
+                scanlines.extend((0, 0, 0, 105))
+            else:
+                scanlines.extend((0, 0, 0, 0))
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
+    png = (
+        b"\\x89PNG\\r\\n\\x1a\\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(bytes(scanlines), level=6))
+        + chunk(b"IEND", b"")
     )
+    temporary = destination.with_suffix(".part.png")
+    temporary.write_bytes(png)
+    temporary.replace(destination)
+    return destination
+
+
+def stamp_official_malik_icon(video: Path, final: Path, *, audio_source: Path | None = None) -> Path:
+    """Embed a small official logo into actual MP4 frames. The Render web service never transcodes."""
+    if shutil.which(FFMPEG) is None:
+        raise RuntimeError("ffmpeg is required for branded video files")
+    mark = official_malik_mark_png(DATA_DIR / "malik-official-icon.png")
+    final.parent.mkdir(parents=True, exist_ok=True)
+    temp = final.with_suffix(".part.mp4")
+    # 6% of frame width, with margins; maintain source aspect and synced audio.
+    command = [
+        FFMPEG, "-nostdin", "-y", "-i", str(video), "-i", str(mark),
+    ]
+    if audio_source is not None:
+        command.extend(["-i", str(audio_source)])
+    command.extend([
+        "-filter_complex",
+        "[1:v][0:v]scale2ref=w=main_w*0.06:h=ow*78/124[logo][base];"
+        "[base][logo]overlay=x=main_w*0.015:y=main_h-overlay_h-main_h*0.018:format=auto[v]",
+        "-map", "[v]", "-map", "2:a?" if audio_source is not None else "0:a?",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "19",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart", "-shortest", str(temp),
+    ])
+    subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     temp.replace(final)
     return final
+
+def mux_h3_audio(restored: Path, source: Path, final: Path) -> Path:
+    # One FFmpeg encode handles the watermark and copies the synchronized audio.
+    return stamp_official_malik_icon(restored, final, audio_source=source)
 
 
 def run_local_seedvr2(job_id: str, source: Path, output_resolution: str, ratio: str, seed: int) -> Path:
@@ -339,7 +384,8 @@ def process_job(row: sqlite3.Row) -> None:
             source = download_h3(job_id, current["h3_id"])
             update_job(job_id, source_path=str(source))
         if output_resolution == "raw768":
-            update_job(job_id, state="completed", final_path=str(source))
+            branded = stamp_official_malik_icon(source, DATA_DIR / job_id / "final-raw768.mp4")
+            update_job(job_id, state="completed", final_path=str(branded), error=None)
             return
         update_job(job_id, state="enhancing")
         ratio = str((request.get("target") or {}).get("aspect_ratio") or "16:9")
