@@ -37,3 +37,13 @@ assert.match(musicStatus, /result\.status === "done"/)
 assert.match(musicStatus, /directMediaUrl\(result\.resultUrl/)
 
 console.log("Video mobile models + real music delivery contract: OK")
+
+const musicSubmit = read("app/api/media/music/route.ts")
+assert.match(musicSubmit, /const immediateUrl = result\.status === "done"/)
+assert.match(musicSubmit, /resultUrl: immediateUrl \|\| undefined/)
+assert.match(music, /if \(immediateUrl\)[\s\S]{0,430}setTrackUrl\(immediateUrl\)/)
+assert.match(musicProvider, /const providerState = rawStatusOf\(json\)/)
+assert.match(musicProvider, /temporarilyUnavailable: true as const/)
+assert.match(musicStatus, /retryingProvider:/)
+assert.match(music, /data\?\.retryingProvider \? 9000 : 3000/)
+console.log("Music immediate playback and transient provider recovery: OK")
