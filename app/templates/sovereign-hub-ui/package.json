@@ -51,7 +51,7 @@
     "test:coding-models": "node scripts/verify-coding-models.mjs",
     "test:answer-format": "node scripts/verify-answer-format.mjs",
     "test:rich-answers": "node scripts/verify-rich-answers.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-tap-guide.mjs",
-    "test:reference-intent": "node scripts/verify-reference-intent.mjs",
+    "test:reference-intent": "node scripts/verify-reference-intent.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-provider-photos.mjs",
     "test:browser-and-photos": "node scripts/verify-browser-and-source-photos.mjs",
     "test:illustrated-answers": "node scripts/verify-illustrated-answers.mjs",
     "test:chat-execution": "node --experimental-strip-types --no-warnings scripts/verify-chat-execution.mjs",

@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic"
 
 import { planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
 import { cleanReferenceLabel, isSafeVisualUrl, lookupReferenceImages, readReferenceJson, referenceTopicMatches, sanitizeReferenceImages, type MalikVisualImage } from "@/lib/media/reference-catalog"
+import { findProviderReferenceImages } from "@/lib/media/provider-reference-photos"
 
 const cache = new Map<string, { expires: number; promise: Promise<MalikVisualImage[]> }>()
 
@@ -58,8 +59,38 @@ export async function GET(request: Request) {
     while (cache.size >= 60) cache.delete(cache.keys().next().value!)
     const promise = (async () => {
       const started = Date.now()
-      const signal = AbortSignal.timeout(7500)
-      let images = await lookupReferenceImages(plan, signal, { skipOfficial, fast: true })
+      const signal = AbortSignal.any([request.signal, AbortSignal.timeout(7500)])
+      // Prefer trusted official/Commons images. Only after 450ms, hedge with a
+      // sequential server-only provider fallback; abort the loser to save quota.
+      let images = await new Promise<MalikVisualImage[]>((resolve) => {
+        const controller = new AbortController()
+        const budget = AbortSignal.any([signal, controller.signal])
+        let settled = false
+        let failures = 0
+        let providerStarted = false
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const finish = (found: MalikVisualImage[], force = false) => {
+          if (settled) return
+          if (!found.length && !force && ++failures < 2) return
+          settled = true
+          clearTimeout(timer)
+          signal.removeEventListener("abort", aborted)
+          controller.abort()
+          resolve(found)
+        }
+        const aborted = () => finish([], true)
+        const provider = () => {
+          if (providerStarted || settled || budget.aborted) return
+          providerStarted = true
+          void findProviderReferenceImages(plan, budget).then((found) => finish(found)).catch(() => finish([]))
+        }
+        if (signal.aborted) { finish([], true); return }
+        signal.addEventListener("abort", aborted, { once: true })
+        timer = setTimeout(provider, 450)
+        void lookupReferenceImages(plan, budget, { skipOfficial, fast: true })
+          .then((found) => { finish(found); if (!found.length) provider() })
+          .catch(() => { finish([]); provider() })
+      })
       if (!images.length && plan.kind !== "tutorial" && !plan.entity && !plan.logo && !signal.aborted) {
         try { images = sanitizeReferenceImages(await unsplash(plan.queries[0], signal)).filter((image) => plan.queries.some((query) => referenceTopicMatches(query, image.alt))) } catch { /* Optional provider. */ }
       }
