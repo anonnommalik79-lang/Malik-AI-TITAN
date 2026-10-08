@@ -997,6 +997,15 @@ check("the export fetches only public https images, never an address or this mac
   assert.match(route, /IMAGE_TIMEOUT_MS/)
 })
 
+check("incomplete deck cannot be exported as finished PPTX or PDF, but keeps a recoverable backup", () => {
+  const studio = read("components/sovereign/presentations/PresentationStudio.tsx")
+  assert.match(studio, /const completeDeck = entries\.length > 0 && entries\.every/)
+  assert.match(studio, /const exportPptx = async \(\) => \{\s*if \(!requireCompleteDeck\(\)\) return/)
+  assert.match(studio, /const exportPdf = \(\) => \{\s*if \(!requireCompleteDeck\(\)\) return/)
+  assert.match(studio, /onClick=\{exportPdf\} disabled=\{!completeDeck \|\| generating\}/)
+  assert.match(studio, /onClick=\{exportBackup\} disabled=\{!presentable\.length\}/)
+})
+
 /* ================================================================== run */
 
 for (const { run } of pending) await run()
