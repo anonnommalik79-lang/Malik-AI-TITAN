@@ -1,3 +1,4 @@
+import { missingBriefItems, briefMissingMarker } from "@/lib/ai/brief-quality"
 import {
   getMalikModel,
   MALIK_MODELS,
@@ -620,6 +621,7 @@ export function structuredAnswerNeedsMore(prompt: string, content: string) {
   const request = String(prompt || "")
   const answer = String(content || "").trim()
   if (!request || !answer) return false
+  if (missingBriefItems(request,answer).length > 0 || briefMissingMarker(request,answer)) return true
 
   // An unfinished Markdown/code fence is always a strong sign that the visible
   // answer ended before the deliverable did, even when the provider said "stop".

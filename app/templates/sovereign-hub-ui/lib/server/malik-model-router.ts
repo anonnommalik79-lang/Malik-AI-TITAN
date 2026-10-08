@@ -1,3 +1,4 @@
+import { briefChecklist, briefMissingMarker, missingBriefItems, preserveBriefEdges } from "@/lib/ai/brief-quality"
 import { isCodeRequest, isFastChatRequest, wantsFullShape } from "@/lib/ai/request-kind"
 import {
   canUseMalikModel,
@@ -795,8 +796,11 @@ export function continuationPrompt(originalPrompt: string, content: string) {
     "Do not restart, repeat, summarize, or explain previous code.",
     "Return only the missing continuation and finish all open code blocks/files.",
     "",
-    `ORIGINAL REQUEST:\n${originalPrompt.slice(0, 10_000)}`,
+    `ORIGINAL REQUEST:\n${preserveBriefEdges(originalPrompt, 10_000)}`,
     "",
+    ...(briefChecklist(originalPrompt) ? [briefChecklist(originalPrompt)] : []),
+    ...(missingBriefItems(originalPrompt, content).length ? ["STILL MISSING NUMBERED ITEMS: " + missingBriefItems(originalPrompt, content).join(", ")] : []),
+    ...(briefMissingMarker(originalPrompt, content) ? ["Exact requested final marker is still missing; print it only after completing the tasks."] : []),
     `CURRENT ANSWER TAIL:\n${tail}`,
   ].join("\n")
 }
@@ -813,8 +817,11 @@ export function longOutputContinuationPrompt(originalPrompt: string, content: st
     "Do not restart, repeat, summarize, add a new introduction, or claim the task is complete until all requested deliverables are finished.",
     "Return only the missing continuation.",
     "",
-    `ORIGINAL REQUEST:\n${originalPrompt.slice(0, 14_000)}`,
+    `ORIGINAL REQUEST:\n${preserveBriefEdges(originalPrompt, 14_000)}`,
     "",
+    ...(briefChecklist(originalPrompt) ? [briefChecklist(originalPrompt)] : []),
+    ...(missingBriefItems(originalPrompt, content).length ? ["STILL MISSING NUMBERED ITEMS: " + missingBriefItems(originalPrompt, content).join(", ")] : []),
+    ...(briefMissingMarker(originalPrompt, content) ? ["Exact requested final marker is still missing; print it only after completing the tasks."] : []),
     `CURRENT ANSWER TAIL:\n${tail}`,
   ].join("\n")
 }
@@ -1043,9 +1050,11 @@ export async function runStrictMalikModel(input: {
         }
 
         const longDepth = options.continuationDepth || 0
-        const longTruncated = !codeMode
-          && wantsLargeOutput(input.prompt, input.maxTokens)
-          && (parsed.finishReason === "length" || parsed.finishReason === "MAX_TOKENS")
+        const uncovered = missingBriefItems(input.taskPrompt || input.prompt, parsed.content).length > 0 || briefMissingMarker(input.taskPrompt || input.prompt, parsed.content)
+        const longTruncated = !codeMode && (
+          (wantsLargeOutput(input.prompt, input.maxTokens) && (parsed.finishReason === "length" || parsed.finishReason === "MAX_TOKENS"))
+          || uncovered
+        )
         if (longTruncated && longDepth < 3) {
           const totalBudget = Math.max(1, Number(input.maxTokens || runtime.maxTokens))
           const remainingBudget = Math.max(0, totalBudget - estimateVisibleTokens(parsed.content))

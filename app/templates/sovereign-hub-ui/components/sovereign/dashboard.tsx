@@ -18,6 +18,7 @@ import { fetchRecoverableChat } from "@/lib/ai/chat-stream-recovery"
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
+import { briefNeedsDeep, briefOutputFloor } from "@/lib/ai/brief-quality"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
 import { resolveWorkspaceMode, WORKSPACE_MODE_KEY, type WorkspaceMode } from "@/lib/ai/work-mode"
 import { hasMalikProAccess } from "@/lib/ai/malik-models"
@@ -6345,7 +6346,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
   const userPlan = currentPlan
   const wantedDepth = options?.responseDepth ?? loadResponseDepth(userPlan)
-  const responseDepth = resolveResponseDepth(turnWorkspaceMode === "work" && wantedDepth === "fast" ? "deep" : wantedDepth, userPlan)
+  // Multi-part prompts get the actual deeper request budget even when Fast is selected.
+  // PRO-only ULTRA is not granted by this auto-upgrade.
+  const betterDepth = wantedDepth === "fast" && (turnWorkspaceMode === "work" || briefNeedsDeep(cleanContent)) ? "deep" : wantedDepth
+  const responseDepth = resolveResponseDepth(betterDepth, userPlan)
   const depthLimits = responseDepthLimits(responseDepth)
 
   const routeDecision = detectIntentAndRoute(cleanContent, requestAttachments, activeAiMode)
@@ -7177,7 +7181,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         stream: true,
         // Full source bundles and slide decks must not inherit Fast mode's
         // short-answer budget. The server still applies account/provider caps.
-        maxTokens: isArtifactRequest ? Math.max(depthLimits.maxTokens, 8_000) : depthLimits.maxTokens,
+        maxTokens: Math.max(depthLimits.maxTokens, briefOutputFloor(cleanContent), isArtifactRequest ? 8_000 : 0),
         temperature: depthLimits.temperature,
         quality: {
           minimumAnswerChars: isProjReq || isArtifactRequest ? 1200 : Math.max(depthLimits.minAnswerChars, 80),

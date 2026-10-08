@@ -8,6 +8,7 @@ import { currentEvidenceInstruction, currentResearchDate } from "@/lib/ai/curren
 import { asksHeadToHead, asksPurchaseAdvice, asksSubjectOverview } from "@/lib/ai/question-shape"
 import { MALIK_ANSWER_CARDS_CONTRACT } from "@/lib/ai/answer-cards"
 import { isComplexBrief, isMultiTaskPrompt, routingScope } from "@/lib/ai/prompt-shape"
+import { briefChecklist } from "@/lib/ai/brief-quality"
 
 export type ResponseComplexity = "simple" | "standard" | "complex"
 
@@ -347,7 +348,7 @@ export function buildMalikResponseSystemPrompt(input: {
   const brief = isComplexBrief(input.prompt)
   const subjectPrompt = brief ? routingScope(input.prompt) : (input.shapePrompt || input.prompt)
   const subject = brief ? analyzeResponseRequest(subjectPrompt, Boolean(input.usedWeb)) : profile
-  const briefContract = brief ? buildLongBriefContract(isMultiTaskPrompt(input.prompt)) : ""
+  const briefContract = brief ? [buildLongBriefContract(isMultiTaskPrompt(input.prompt)), briefChecklist(input.prompt)].filter(Boolean).join("\n") : ""
   const artifactContract = buildChatArtifactSkillPrompt(input.prompt)
   const webContract = input.usedWeb && input.hasWebEvidence !== false
     ? "Verified web excerpts are supplied below. Answer the user's request using the actual evidence; do not send them to perform the search themselves. For a requested list, return the confirmed names and label it partial unless the source establishes completeness. Cite supported factual claims inline as [n]. Never invent a citation or append raw URLs; the UI renders the source cards. Missing details in these excerpts do not prove that no public information exists. If excerpts conflict or do not confirm a detail, say so."
