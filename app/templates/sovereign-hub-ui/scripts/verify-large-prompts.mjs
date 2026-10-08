@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { fetchRecoverableChat, canRetryChat } from "../lib/ai/chat-stream-recovery.ts"
 import {
   briefItems,briefNeedsDeep,briefOutputFloor,briefChecklist,
   missingBriefItems,briefMissingMarker,preserveBriefEdges
@@ -41,3 +42,28 @@ assert.match(selectedRouter,/missingBriefItems\(input\.taskPrompt \|\| input\.pr
 assert.match(maxRouter,/missingBriefItems\(taskPrompt, content\)/,"MAX code covers numbered requirements")
 assert.match(dashboard,/briefOutputFloor\(cleanContent\)/,"UI sends actual adequate token budget")
 console.log("PASS large-prompt runtime integration: code, MAX and dashboard")
+
+
+const frame = (type, content = {}) => "event: " + type + "\ndata: " + JSON.stringify({ type, ...content }) + "\n\n"
+const fakeSse = (stream, extra = {}) => new Response(stream, { headers: { "content-type": "text/event-stream", ...extra } })
+const retryOptions = { firstTextMs: 80, idleMs: 80, recoveryMs: 100, pollMs: 1 }
+const heavyRequest = { method: "POST", body: JSON.stringify({ originalQuestion: many, responseDepth: "deep", maxTokens: 14000 }) }
+const calls = []
+const transport = await fetchRecoverableChat("/api/stream", heavyRequest, { ...retryOptions, fetcher: async (_url, init) => {
+  calls.push(JSON.parse(init.body))
+  return calls.length === 1 ? fakeSse(frame("progress", { text: "Анализ" })) : fakeSse(frame("content", { content: "Готово" }) + frame("done"))
+} })
+assert.match(await transport.text(), /event: done/)
+assert.equal(calls.length, 2)
+assert.equal(calls[1].responseDepth, "deep")
+assert.equal(calls[1].maxTokens, 14000)
+assert.equal(calls[1].originalQuestion, many)
+assert.equal(canRetryChat({ originalQuestion: "Удалить файл", actionPlan: { kind: "delete" } }), false)
+let quotaCalls = 0
+const quotaResponse = await fetchRecoverableChat("/api/stream", heavyRequest, { ...retryOptions, fetcher: async () => {
+  quotaCalls += 1
+  return new Response("Limit reached", { status: 429 })
+} })
+assert.equal(quotaResponse.status, 429)
+assert.equal(quotaCalls, 1)
+console.log("PASS long-brief transport: deep settings persist, quota failures are not retried")
