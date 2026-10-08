@@ -652,7 +652,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     setReadyTaskId("")
     setAttempt(0)
 
-    if (!canUseGeneration("video", operator)) {
+    if (!videoAccess.owner && !canUseGeneration("video", operator)) {
       setPhase("failed")
       setError("Сегодняшняя генерация видео на этом аккаунте уже использована. Лимит обновится завтра.")
       return
@@ -717,7 +717,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
       const taskId = String(data?.taskId || "")
       if (!taskId) throw new Error("Видеомодель не вернула taskId")
-      incrementUsage("video")
+      if (!videoAccess.owner) incrementUsage("video")
       setPhase("rendering")
 
       const statusUrl = String(data?.statusUrl || `/api/media/video/status?taskId=${encodeURIComponent(taskId)}`)
