@@ -35,7 +35,8 @@ export async function GET(request: Request, context: RouteContext) {
     turn: {
       ...turn.responseMetadata,
       status: turn.status,
-      content: turn.status === "complete" ? turn.content || "" : undefined,
+      // Failed jobs may carry partial text, but never a false success status.
+      content: turn.status === "complete" || turn.status === "failed" ? turn.content || "" : undefined,
       error: turn.status === "failed" ? turn.error || "Background chat failed" : undefined,
       provider: turn.provider,
       model: turn.model,
