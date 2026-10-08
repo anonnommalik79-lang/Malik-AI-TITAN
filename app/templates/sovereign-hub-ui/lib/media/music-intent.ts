@@ -20,10 +20,15 @@ const BEAT_ONLY_RE = /(?:\bbeats?\b|\bbacking\s+track\b|бит\w*|минусов
 const RAP_RE = /(?:\brap\b|рэп|реп\b)/iu
 
 function instrumentNegated(prompt: string, re: RegExp): boolean {
-  const match = re.exec(prompt)
-  if (!match || match.index === undefined) return false
-  const phrase = prompt.slice(Math.max(0, match.index - 42), match.index).split(/[,.!?;\n]/).pop() || ""
-  return /(?:без|никаких|избегай|исключи|without|no|avoid|exclude)\s+(?:[\p{L}\s-]{0,35})$/iu.test(phrase)
+  // Inspect every mention. "No piano, add piano in the chorus" requires piano.
+  const matcher = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g")
+  const matches = Array.from(prompt.matchAll(matcher))
+  if (!matches.length) return false
+  return matches.every((match) => {
+    const before = prompt.slice(Math.max(0, (match.index ?? 0) - 42), match.index)
+    const phrase = before.split(/[,.!?;\n]/).pop() || ""
+    return /(?:без|никаких|избегай|исключи|without|no|avoid|exclude)\s+(?:[\p{L}\s-]{0,35})$/iu.test(phrase)
+  })
 }
 
 function requestedBpm(prompt: string): number | undefined {
@@ -91,15 +96,16 @@ export function analyzeMusicPrompt(promptValue: unknown): MusicPromptIntent {
   const genericMusic = GENERIC_INSTRUMENTAL_RE.test(prompt)
 
   let instrumental: boolean | undefined
+  // A requested singing voice overrides the generic word "beat";
+  // explicit "no vocals" still takes precedence over every vocal request.
   if (explicitlyNoVocals || explicitlyOnlyInstrument) instrumental = true
-  else if (explicitlyVocals && !BEAT_ONLY_RE.test(prompt)) instrumental = false
+  else if (explicitlyVocals) instrumental = false
   else if (BEAT_ONLY_RE.test(prompt)) instrumental = true
   else if (RAP_RE.test(prompt)) instrumental = false
-  else if (explicitlyVocals) instrumental = false
   else if (instruments.length > 0 || genericMusic) instrumental = true
 
   const vocalDirective = explicitlyNoVocals || explicitlyOnlyInstrument ? "instrumental" as const
-    : explicitlyVocals && !BEAT_ONLY_RE.test(prompt) ? "vocal" as const
+    : explicitlyVocals ? "vocal" as const
     : BEAT_ONLY_RE.test(prompt) ? "instrumental" as const
     : RAP_RE.test(prompt) ? "vocal" as const : undefined
   const bpm = requestedBpm(prompt)
