@@ -35,6 +35,36 @@ type GlobalWithBackgroundTurns = typeof globalThis & {
 
 const TTL_MS = 7 * 24 * 60 * 60 * 1000
 const MAX_RESULT_CHARS = 1_500_000
+// Free Render must not retain seven days of multi-megabyte completed answers
+// in process RAM. Durable R2/S3 is required for history beyond this cache.
+const MAX_FINISHED_CACHE_BYTES = 32 * 1024 * 1024
+const MAX_FINISHED_CACHE_TURNS = 128
+
+function finishedCacheBytes(turn: BackgroundChatTurn) {
+  // V8 strings may consume up to two bytes per code unit; include a small
+  // metadata allowance without serializing each large answer repeatedly.
+  return ((turn.content?.length || 0) + (turn.error?.length || 0)) * 2 + 8192
+}
+
+function pruneFinishedTurnCache(store: Map<string, BackgroundChatTurn>, protectedId = "") {
+  let count = 0
+  let bytes = 0
+  for (const turn of store.values()) {
+    if (turn.status === "pending") continue
+    count += 1
+    bytes += finishedCacheBytes(turn)
+  }
+  if (count <= MAX_FINISHED_CACHE_TURNS && bytes <= MAX_FINISHED_CACHE_BYTES) return
+  // Insertion order tracks recency. Keep the newest completed answer plus
+  // in-progress turns; old terminal responses are recoverable from cloud when configured.
+  for (const [id, turn] of store) {
+    if (count <= MAX_FINISHED_CACHE_TURNS && bytes <= MAX_FINISHED_CACHE_BYTES) break
+    if (id === protectedId || turn.status === "pending") continue
+    store.delete(id)
+    count -= 1
+    bytes -= finishedCacheBytes(turn)
+  }
+}
 
 function first(...values: Array<string | undefined>) {
   return values.map((value) => String(value || "").trim()).find(Boolean) || ""
@@ -58,6 +88,7 @@ function memoryStore() {
       const expires = Date.parse(turn.expiresAt)
       if (!Number.isFinite(expires) || expires <= now) store.delete(id)
     }
+    pruneFinishedTurnCache(store)
     globalStore.__malikBackgroundChatTurnsSweepAt = now + 60_000
   }
   return store
@@ -175,7 +206,11 @@ async function readCloud(turnId: string) {
 }
 
 async function save(turn: BackgroundChatTurn) {
-  memoryStore().set(turn.turnId, turn)
+  const memory = memoryStore()
+  // Refresh recency on final writes; never evict the response being saved.
+  memory.delete(turn.turnId)
+  memory.set(turn.turnId, turn)
+  pruneFinishedTurnCache(memory, turn.turnId)
   await writeCloud(turn)
   return turn
 }
