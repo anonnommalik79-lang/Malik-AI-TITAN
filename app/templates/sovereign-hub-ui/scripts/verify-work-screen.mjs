@@ -66,5 +66,13 @@ check("the sidebar has «Задачи» and «Malik Work», and both do somethin
   assert.match(dashboard, /className="malik-main-column /)
 })
 
+check("a failed streamed Work answer refunds its reservation even after partial tokens", () => {
+  const stream = read("app/api/stream/route-impl.ts")
+  assert.match(stream, /let failedWorkRefund: Promise<void> \| null = null/)
+  assert.match(stream, /if \(workReceipt\) failedWorkRefund = refundWorkQuota/)
+  assert.match(stream, /if \(failedWorkRefund\) await failedWorkRefund/)
+  assert.doesNotMatch(stream, /workReceipt && !streamedAny/, "partial failures must not consume a Work request")
+})
+
 console.log(failures ? `\n${failures} failing\n` : "\nall Work screen checks passed\n")
 process.exit(failures ? 1 : 0)
