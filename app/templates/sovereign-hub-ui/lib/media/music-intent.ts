@@ -70,24 +70,25 @@ export function analyzeMusicPrompt(promptValue: unknown): MusicPromptIntent {
   const mood = MOODS.find((item) => item.re.test(prompt))
 
   const explicitlyNoVocals = NO_VOCALS_RE.test(prompt)
-  const explicitlyVocals = VOCALS_RE.test(prompt) || /(?:женск\w*|мужск\w*)\s+(?:голос|вокал)|(?:female|male)\s+(?:lead\s+)?vocals?/iu.test(prompt)
+  const explicitlyVocals = VOCALS_RE.test(prompt) || /(?:женск[\p{L}]*|мужск[\p{L}]*)\s+(?:голос[\p{L}]*|вокал[\p{L}]*)|(?:female|male)\s+(?:lead\s+)?vocals?/iu.test(prompt)
+  const explicitlyOnlyInstrument = /(?:только|only)\s+(?:скрипк[\p{L}]*|пианино|гитар[\p{L}]*|фортепиано|виолончел[\p{L}]*|флейт[\p{L}]*|барабан[\p{L}]*|саксофон[\p{L}]*|piano|violin|guitar|cello|flute|drums)/iu.test(prompt) && !explicitlyVocals
   const genericMusic = GENERIC_INSTRUMENTAL_RE.test(prompt)
 
   let instrumental: boolean | undefined
-  if (explicitlyNoVocals) instrumental = true
+  if (explicitlyNoVocals || explicitlyOnlyInstrument) instrumental = true
   else if (explicitlyVocals && !BEAT_ONLY_RE.test(prompt)) instrumental = false
   else if (BEAT_ONLY_RE.test(prompt)) instrumental = true
   else if (RAP_RE.test(prompt)) instrumental = false
   else if (explicitlyVocals) instrumental = false
   else if (instruments.length > 0 || genericMusic) instrumental = true
 
-  const vocalDirective = explicitlyNoVocals ? "instrumental" as const
+  const vocalDirective = explicitlyNoVocals || explicitlyOnlyInstrument ? "instrumental" as const
     : explicitlyVocals && !BEAT_ONLY_RE.test(prompt) ? "vocal" as const
     : BEAT_ONLY_RE.test(prompt) ? "instrumental" as const
     : RAP_RE.test(prompt) ? "vocal" as const : undefined
   const bpm = requestedBpm(prompt)
-  const vocalCharacter = /женск\w*\s+(?:голос|вокал)|female\s+vocals?/iu.test(prompt)
-    ? "Female lead vocals." : /мужск\w*\s+(?:голос|вокал)|male\s+vocals?/iu.test(prompt)
+  const vocalCharacter = /женск[\p{L}]*\s+(?:голос|вокал)|female\s+vocals?/iu.test(prompt)
+    ? "Female lead vocals." : /мужск[\p{L}]*\s+(?:голос|вокал)|male\s+vocals?/iu.test(prompt)
       ? "Male lead vocals." : ""
 
   const providerHints = [
@@ -110,6 +111,6 @@ export function analyzeMusicPrompt(promptValue: unknown): MusicPromptIntent {
     excludedInstruments: excludedInstruments.map((item) => item.name),
     bpm,
     providerHints,
-    explicit: Boolean(explicitlyNoVocals || explicitlyVocals || RAP_RE.test(prompt) || instruments.length || excludedInstruments.length || genre || mood || bpm),
+    explicit: Boolean(explicitlyNoVocals || explicitlyOnlyInstrument || explicitlyVocals || RAP_RE.test(prompt) || instruments.length || excludedInstruments.length || genre || mood || bpm),
   }
 }
