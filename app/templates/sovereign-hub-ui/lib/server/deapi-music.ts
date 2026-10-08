@@ -502,6 +502,18 @@ async function getFreeAiMusicJob(requestId: string) {
     }, 20000)
 
     if (!response.ok) {
+      const transient = response.status === 408 || response.status === 429 || response.status >= 500
+      if (transient) {
+        return {
+          ok: true as const,
+          statusCode: 200,
+          status: "queued" as const,
+          progress: undefined,
+          temporarilyUnavailable: true as const,
+          provider: "Free.ai" as const,
+          model: "ACE-Step",
+        }
+      }
       return {
         ok: false as const,
         statusCode: response.status || 502,
@@ -571,12 +583,16 @@ async function getFreeAiMusicJob(requestId: string) {
       provider: "Free.ai" as const,
       model: "ACE-Step",
     }
-  } catch (error) {
+  } catch {
+    // An accepted provider job remains resumable when the status endpoint is
+    // temporarily unreachable. Do not turn a transient network outage into a
+    // permanent failed track (and waste a daily generation).
     return {
-      ok: false as const,
-      statusCode: 502,
-      status: "failed" as const,
-      error: error instanceof Error ? error.message : "Free.ai network error",
+      ok: true as const,
+      statusCode: 200,
+      status: "queued" as const,
+      progress: undefined,
+      temporarilyUnavailable: true as const,
       provider: "Free.ai" as const,
       model: "ACE-Step",
     }
@@ -755,6 +771,17 @@ async function getDeapiFallbackJob(requestId: string) {
     }
   }
 
+  if (lastStatus === 408 || lastStatus === 429 || lastStatus >= 500) {
+    return {
+      ok: true as const,
+      statusCode: 200,
+      status: "queued" as const,
+      progress: undefined,
+      temporarilyUnavailable: true as const,
+      provider: "deAPI" as const,
+      model: musicModel(requestId),
+    }
+  }
   return { ok: false as const, statusCode: lastStatus, status: "failed" as const, error: lastError, provider: "deAPI" as const, model: musicModel(requestId) }
 }
 
