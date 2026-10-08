@@ -3,6 +3,7 @@ import { createElement } from "react"
 import { DECK_ICONS } from "@/lib/presentations/icon-components"
 import { deckTheme, type DeckTheme } from "@/lib/presentations/themes"
 import { IMAGE_LAYOUTS, type Deck, type DeckIconName, type Slide } from "@/lib/presentations/types"
+import { headlineScale } from "@/lib/presentations/visual-fit"
 
 /**
  * The deck as a real PowerPoint file.
@@ -199,7 +200,7 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
         })
       }
       ctx.slide.addText(slide.title, {
-        x: M, y: 2.45, w: textW - 0.4, h: 2.4, fontFace: theme.pptxHeadingFont, fontSize: hasImage ? 44 : 54, bold: true,
+        x: M, y: 2.45, w: textW - 0.4, h: 2.4, fontFace: theme.pptxHeadingFont, fontSize: Math.round((hasImage ? 44 : 54) * headlineScale(slide)), bold: true,
         color: theme.text, valign: "top", fit: "shrink", margin: 0, lineSpacingMultiple: 0.95,
       })
       if (slide.subtitle) body(ctx, slide.subtitle, { x: M, y: 5.0, w: textW - 0.6, h: 1.3, fontSize: 19 })
@@ -213,15 +214,15 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
         })
       }
       ctx.slide.addText(slide.title, {
-        x: M, y: 3.3, w: CONTENT_W, h: 1.6, fontFace: theme.pptxHeadingFont, fontSize: 46, bold: true,
-        color: theme.text, valign: "top", fit: "shrink", margin: 0,
+        x: M, y: 3.3, w: CONTENT_W, h: 1.6, fontFace: theme.pptxHeadingFont, fontSize: Math.round(46 * headlineScale(slide)), bold: true,
+         color: theme.text, valign: "top", fit: "shrink", margin: 0,
       })
       if (slide.subtitle) body(ctx, slide.subtitle, { x: M, y: 5.0, w: CONTENT_W * 0.75, h: 1.2, fontSize: 19 })
       return
     }
 
     case "bullets": {
-      heading(ctx, slide.title)
+      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
       let y = BODY_Y
       if (slide.intro) {
         body(ctx, slide.intro, { x: M, y, w: CONTENT_W, h: 0.6, fontSize: 17 })
@@ -244,7 +245,7 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
     }
 
     case "two-column": {
-      heading(ctx, slide.title)
+      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
       const gap = 0.35
       const colW = (CONTENT_W - gap) / 2
       ;[slide.left, slide.right].forEach((column, i) => {
@@ -263,7 +264,7 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
     }
 
     case "stat": {
-      heading(ctx, slide.title)
+      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
       const count = slide.stats.length
       const gap = 0.35
       const cellW = (CONTENT_W - gap * (count - 1)) / count
@@ -289,8 +290,8 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
         x: M, y: 0.7, w: 2, h: 1.8, fontFace: theme.pptxHeadingFont, fontSize: 150, bold: true, color: theme.accent, margin: 0,
       })
       ctx.slide.addText(slide.quote, {
-        x: M + 0.2, y: 2.1, w: CONTENT_W - 0.4, h: 3.1, fontFace: theme.pptxHeadingFont, fontSize: 32,
-        color: theme.text, valign: "top", fit: "shrink", margin: 0, lineSpacingMultiple: 1.1,
+        x: M + 0.2, y: 2.1, w: CONTENT_W - 0.4, h: 3.1, fontFace: theme.pptxHeadingFont, fontSize: Math.round(32 * headlineScale(slide)),
+         color: theme.text, valign: "top", fit: "shrink", margin: 0, lineSpacingMultiple: 1.1,
       })
       if (slide.author) {
         ctx.slide.addText([
@@ -309,8 +310,8 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
       const textW = SLIDE_W - imgW - inset - 0.6 - M
       image(ctx, imageData, onLeft ? inset : SLIDE_W - imgW - inset, inset, imgW, SLIDE_H - inset * 2, slide.imageCredit)
       ctx.slide.addText(slide.title, {
-        x: textX, y: 1.2, w: textW, h: 1.6, fontFace: theme.pptxHeadingFont, fontSize: 32, bold: true,
-        color: theme.text, valign: "bottom", fit: "shrink", margin: 0,
+        x: textX, y: 1.2, w: textW, h: 1.6, fontFace: theme.pptxHeadingFont, fontSize: Math.round(32 * headlineScale(slide)), bold: true,
+         color: theme.text, valign: "bottom", fit: "shrink", margin: 0,
       })
       let y = 3.05
       if (slide.body) {
@@ -327,7 +328,7 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
     }
 
     case "cards": {
-      heading(ctx, slide.title)
+      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
       const count = slide.cards.length
       const gap = 0.3
       const cardW = (CONTENT_W - gap * (count - 1)) / count
@@ -347,7 +348,7 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
     }
 
     case "timeline": {
-      heading(ctx, slide.title)
+      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
       const count = slide.steps.length
       const stepW = CONTENT_W / count
       const lineY = BODY_Y + 0.55
@@ -368,7 +369,7 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
     }
 
     case "comparison": {
-      heading(ctx, slide.title)
+      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
       const cell = (text: string, options: Record<string, unknown> = {}) => ({
         text,
         options: { fontFace: theme.pptxBodyFont, fontSize: 14, color: theme.text, valign: "middle", margin: 0.08, ...options },
@@ -391,7 +392,7 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
     }
 
     case "chart": {
-      heading(ctx, slide.title)
+      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
       const chartW = slide.takeaway ? CONTENT_W * 0.66 : CONTENT_W
       // 2.1 must not be labelled "2": keep one decimal whenever the data has one.
       const format = slide.data.some((d) => !Number.isInteger(d.value)) ? "#,##0.0" : "#,##0"
@@ -430,8 +431,8 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
 
     case "closing": {
       ctx.slide.addText(slide.title, {
-        x: M, y: 2.0, w: CONTENT_W, h: 2.3, fontFace: theme.pptxHeadingFont, fontSize: 50, bold: true,
-        color: theme.text, align: "center", valign: "middle", fit: "shrink", margin: 0,
+        x: M, y: 2.0, w: CONTENT_W, h: 2.3, fontFace: theme.pptxHeadingFont, fontSize: Math.round(50 * headlineScale(slide)), bold: true,
+         color: theme.text, align: "center", valign: "middle", fit: "shrink", margin: 0,
       })
       if (slide.subtitle) body(ctx, slide.subtitle, { x: M + 1.5, y: 4.4, w: CONTENT_W - 3, h: 1.1, fontSize: 19, align: "center" })
       if (slide.contact) {
@@ -454,15 +455,15 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
         })
       }
       ctx.slide.addText(slide.title, {
-        x: 0.92, y: 3.45, w: 8.6, h: 2.0, fontFace: theme.pptxHeadingFont, fontSize: 54, bold: true,
-        color: "FFFFFF", valign: "top", fit: "shrink", margin: 0, lineSpacingMultiple: 0.95,
+        x: 0.92, y: 3.45, w: 8.6, h: 2.0, fontFace: theme.pptxHeadingFont, fontSize: Math.round(54 * headlineScale(slide)), bold: true,
+         color: "FFFFFF", valign: "top", fit: "shrink", margin: 0, lineSpacingMultiple: 0.95,
       })
       if (slide.subtitle) body(ctx, slide.subtitle, { x: 0.92, y: 5.55, w: 7.8, h: 1.1, fontSize: 19, color: "EDEDED" })
       return
     }
 
     case "features": {
-      heading(ctx, slide.title)
+      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
       const count = slide.items.length
       const columns = count === 4 ? 2 : 3
       const rows = Math.ceil(count / columns)
@@ -499,7 +500,7 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
     }
 
     case "process": {
-      heading(ctx, slide.title)
+      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
       const count = slide.steps.length
       const overlap = 0.22
       const stepW = (CONTENT_W + overlap * (count - 1)) / count
@@ -528,7 +529,7 @@ function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
     }
 
     case "gallery": {
-      heading(ctx, slide.title)
+      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
       let top = BODY_Y
       if (slide.intro) {
         body(ctx, slide.intro, { x: M, y: top - 0.1, w: CONTENT_W, h: 0.5, fontSize: 16 })
