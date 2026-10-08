@@ -471,5 +471,13 @@ check("a re-check is given the question, or it is not offered at all", () => {
   assert.match(view, /messages\.slice\(0, index\)\.reverse\(\)\.find\(\(item\) => item\.role === "user"\)/)
 })
 
+check("failed empty chat responses cannot present unverified research links as citations", () => {
+  const dashboard = read("components/sovereign/dashboard.tsx")
+  assert.match(dashboard, /const failedResearch = finalResearch \? \{/)
+  assert.match(dashboard, /sources: receivedBeforeDrop \? finalResearch\.sources : \[\]/)
+  assert.match(dashboard, /webSourceCount: receivedBeforeDrop \? finalResearch\.webSourceCount : 0/)
+  assert.match(dashboard, /finalizeAssistant\(failedText, undefined, failedResearch, true\)/)
+})
+
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nfact grounding audit: all checks passed\n")
 process.exit(failures ? 1 : 0)
