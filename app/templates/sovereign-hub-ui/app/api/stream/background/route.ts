@@ -22,7 +22,7 @@ function cloneResponse(response: Response, body: BodyInit | null) {
   })
 }
 
-function parseSseFrame(frame: string, state: { content: string; error: string; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> }) {
+function parseSseFrame(frame: string, state: { content: string; error: string; done: boolean; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> }) {
   for (const line of frame.split(/\r?\n/)) {
     if (!line.startsWith("data:")) continue
     const raw = line.slice(5).trim()
@@ -36,6 +36,7 @@ function parseSseFrame(frame: string, state: { content: string; error: string; p
       if (payload?.type === "content" && typeof payload.content === "string") state.content += payload.content
       if (payload?.type === "error") state.error = String(payload.message || payload.error || "Background chat failed")
       if (payload?.type === "done") {
+        state.done = true
         state.provider = String(payload.provider || state.provider || "")
         state.model = String(payload.model || payload.selectedModelId || state.model || "")
         state.responseMetadata = {
@@ -72,7 +73,7 @@ async function persistStreamResult(turnId: string, response: Response) {
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    const state: { content: string; error: string; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> } = { content: "", error: "", provider: "", model: "" }
+    const state: { content: string; error: string; done: boolean; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> } = { content: "", error: "", done: false, provider: "", model: "" }
     let buffer = ""
 
     while (true) {
@@ -92,11 +93,16 @@ async function persistStreamResult(turnId: string, response: Response) {
     if (buffer.trim()) parseSseFrame(buffer, state)
 
     if (state.error) {
-      await failBackgroundChatTurn(turnId, state.error, state.execution)
+      await failBackgroundChatTurn(turnId, state.error, state.execution, state.content)
       return
     }
-    if (!response.ok || !state.content.trim()) {
-      await failBackgroundChatTurn(turnId, `Background chat finished without content (HTTP ${response.status})`)
+    // A closed SSE body without the server's final done event is an interrupted
+    // turn, even if it delivered text: never report a partial answer as complete.
+    if (!response.ok || !state.done || !state.content.trim()) {
+      const reason = !state.done
+        ? "Соединение прервалось до подтверждения завершения ответа."
+        : `Background chat finished without content (HTTP ${response.status})`
+      await failBackgroundChatTurn(turnId, reason, state.execution, state.content)
       return
     }
     await completeBackgroundChatTurn(turnId, {
