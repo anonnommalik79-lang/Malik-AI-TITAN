@@ -7,6 +7,7 @@ import type { Slide, ThemeId } from "@/lib/presentations/types"
 import { formatCounted, splitNumber } from "@/lib/presentations/count-up"
 import { DECK_ICONS } from "@/lib/presentations/icon-components"
 import { DECK_CSS } from "./deck-css"
+import { slideDensity } from "@/lib/presentations/visual-fit"
 
 /**
  * One slide, drawn at 1280 × 720 and scaled as a whole to whatever box it is
@@ -703,7 +704,7 @@ export function SlideCanvas({
     <div ref={hostRef} className="deck-host" data-layout={slide.layout} data-preserve-brand-color="true">
       {root
         ? createPortal(
-            <div className="deck-slide" style={style} data-layout={slide.layout} data-dark={deckTheme(theme).dark} data-editable={editable && !build} data-build={build}>
+            <div className="deck-slide" style={style} data-layout={slide.layout} data-density={slideDensity(slide)} data-dark={deckTheme(theme).dark} data-editable={editable && !build} data-build={build}>
               {/* Soft shapes of light behind the content — what keeps a text
                   slide from looking like a document. Drawn per layout in CSS. */}
               <div className="deck-deco" aria-hidden="true"><i /><b /></div>
