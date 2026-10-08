@@ -7,7 +7,7 @@ import type { DeckOutline, Slide, SlideLayout } from "@/lib/presentations/types"
  */
 export type PresentationQualityIssue = {
   slideIndex: number
-  code: "duplicate" | "filler" | "repeated-layout" | "no-notes" | "unattributed-data" | "missing-photo" | "low-variety" | "crowded-slide"
+  code: "missing-slide" | "duplicate" | "filler" | "repeated-layout" | "no-notes" | "unattributed-data" | "missing-photo" | "low-variety" | "crowded-slide"
   message: string
   recommendation: string
   weight: number
@@ -79,6 +79,12 @@ export function inspectPresentation(input: {
       flag(i, "repeated-layout", "Три одинаковых макета подряд", "Смените композицию: сравнение, процесс, визуализация или ключевая цифра.", 5)
     }
 
+    // A deck with missing pages is not a finished 100/100 deck. The outline
+    // alone is not penalised before generation begins.
+    if (!slide && input.slides !== undefined) {
+      flag(i, "missing-slide", "Слайд не создан", "Повторите генерацию этого слайда перед завершением или экспортом.", 12)
+      continue
+    }
     if (!slide) continue
     // Words moved into speaker notes stay available to the presenter instead
     // of being squeezed into a tiny projected slide. This is a heuristic:
