@@ -195,10 +195,11 @@ try {
       requests.push(JSON.parse(init.body))
       return requests.length === 1 ? sse(event("error", { message: "Upstream reset" })) : sse(event("content", { content: "All requirements handled." }) + event("done"))
     } })
+    const streamText = await response.text()
     assert.equal(requests.length, 2)
     assert.equal(requests[1].responseDepth, "ultra")
     assert.equal(requests[1].chatRecovery, true)
-    assert.match(await response.text(), /All requirements handled/)
+    assert.match(streamText, /All requirements handled/)
   })
   await check("saved server content is recovered with citations, without replaying the question", async () => {
     let posts = 0, polls = 0
