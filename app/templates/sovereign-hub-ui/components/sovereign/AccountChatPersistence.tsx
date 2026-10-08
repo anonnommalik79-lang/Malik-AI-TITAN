@@ -3,6 +3,7 @@
 import { useLayoutEffect, type ReactNode } from "react"
 import { requestPersistentGeneratedImageStorage, setGeneratedImageAccountScope } from "@/lib/media/client-generated-image-store"
 import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-execution"
+import { accountChatRetryDelay, accountChatWriteConfirmed, shouldRetryAccountChatWrite } from "@/lib/ai/account-chat-sync-retry"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const ACCOUNT_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
@@ -514,6 +515,8 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
     let remoteConfigured = true
     let pendingRaw = ""
     let timer = 0
+    let writeRevision = 0
+    let retryCount = 0
     let inFlight = Promise.resolve()
 
     const parseTime = (value: unknown) => {
@@ -521,9 +524,10 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
       return Number.isFinite(parsed) ? parsed : 0
     }
 
-    const pushSnapshot = (raw: string) => {
+    const pushSnapshot = (raw: string, delayMs = 850) => {
       if (!raw || !remoteReady || !remoteConfigured || disposed) return
       pendingRaw = raw
+      const sentRevision = ++writeRevision
       if (timer) window.clearTimeout(timer)
       timer = window.setTimeout(() => {
         timer = 0
@@ -531,7 +535,10 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
         pendingRaw = ""
         if (!nextRaw || disposed) return
 
+        // Writes are sequenced; a superseded draft must never overwrite a
+        // newer local snapshot even when its request was already queued.
         inFlight = inFlight.catch(() => {}).then(async () => {
+          if (sentRevision !== writeRevision || disposed) return
           let state: unknown
           try { state = JSON.parse(nextRaw) } catch { return }
           const response = await fetch(ACCOUNT_CHAT_STATE_PATH, {
@@ -541,20 +548,36 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({ state }),
           }).catch(() => null)
-          if (!response?.ok) {
-            pendingRaw = nextRaw
+
+          // Authentication or oversized state needs explicit user action,
+          // not infinite writes. A configured:false response means there is
+          // no durable cloud bucket, so retain only the browser fallback.
+          if (response?.status === 401 || response?.status === 403 || response?.status === 413) {
+            if (response.status === 413) console.warn("[MALIK_CHAT_SYNC] snapshot too large for cloud history")
             return
           }
-          const payload = await response.json().catch(() => ({}))
+          const payload = response?.ok ? await response.json().catch(() => null) : null
           if (payload?.configured === false) {
             remoteConfigured = false
             return
           }
-          if (typeof payload?.savedAt === "string") {
+          if (!accountChatWriteConfirmed(payload)) {
+            // Never acknowledge stored:false (e.g. temporary R2 outage).
+            // A newer snapshot already queued locally always wins.
+            if (shouldRetryAccountChatWrite(sentRevision, writeRevision, disposed)) {
+              retryCount += 1
+              pushSnapshot(pendingRaw || nextRaw, accountChatRetryDelay(retryCount))
+            }
+            return
+          }
+          retryCount = 0
+          if (typeof payload.savedAt === "string") {
             try { window.localStorage.setItem(savedAtKey, payload.savedAt) } catch {}
           }
+          // The last request may have been in flight while a newer edit arrived.
+          if (pendingRaw && !disposed) pushSnapshot(pendingRaw)
         })
-      }, 850)
+      }, delayMs)
     }
 
     const onFullSnapshot = (event: Event) => {
