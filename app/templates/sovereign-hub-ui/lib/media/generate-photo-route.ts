@@ -341,72 +341,17 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       })
     }
 
-    if (directDelivery && /^https:\/\//i.test(String(result.imageUrl || ""))) {
-      await recordImageCreditUsage(user.userId, imageSize)
-      const remaining = credit.plan === "owner"
-        ? credit.remaining
-        : Math.max(0, credit.remaining - credit.cost)
-      const remaining4k = credit.plan === "owner"
-        ? credit.remaining4k
-        : imageSize === "4K"
-          ? Math.max(0, credit.remaining4k - 1)
-          : credit.remaining4k
-      const resolvedModelId = result.modelId || requestedModelId
-      const resolvedImageModel = resolvedModelId ? getMalikImageModel(resolvedModelId) : undefined
-      const directUrl = String(result.imageUrl)
-
-      // Critical bandwidth invariant: Render returns JSON metadata only. The
-      // browser fetches the generated image straight from the provider CDN.
-      // No Sharp pass, base64 response, Render asset route, object-store copy,
-      // or browser-persistence seed is created in this mode.
-      return Response.json({
-        ok: true,
-        status: "ready",
-        kind: "photo",
-        operation: "generate",
-        provider: result.provider,
-        engine: resolvedImageModel?.label || "MalikImage Auto",
-        modelId: resolvedModelId,
-        modelLabel: resolvedImageModel?.label || "MalikImage Auto",
-        providerModel: result.providerModel || resolvedImageModel?.providerModel,
-        imageUrl: directUrl,
-        masterUrl: directUrl,
-        url: directUrl,
-        mediaUrl: directUrl,
-        understood: result.understood,
-        originalPrompt: prompt,
-        enhancedPrompt: result.enhancedPrompt,
-        negativePrompt: result.negativePrompt,
-        quality,
-        requestedResolution: getMalikImageQualityProfile(quality).deliveryResolution,
-        qualityFromPrompt: requested.fromPrompt,
-        postProcessed: false,
-        upscaleApplied: false,
-        processor: "provider-direct",
-        routeReason: result.routeReason || "provider-direct",
-        durable: false,
-        ephemeral: true,
-        deliveryMode: "provider-direct-browser",
-        cloudStorageConfigured: false,
-        remainingDailyImages: remaining,
-        remainingImageCredits: remaining,
-        dailyImageCredits: credit.daily,
-        imageCreditCost: credit.cost,
-        imageSize,
-        remaining4k,
-        resetAt: credit.resetAt,
-        plan: credit.plan,
-      }, {
-        headers: { "Cache-Control": "private, no-store, max-age=0" },
-      })
-    }
-
+    // Even when the provider supports zero-copy direct delivery, a raw CDN
+    // URL cannot contain the Malik AI icon. Brand the original-size pixels
+    // through the existing capacity-limited Sharp path (no model re-run).
+    // Direct deliveries use native size to avoid expensive 8K upscaling on
+    // the small Render instance; normal high-quality jobs are unchanged.
     // Always derive the visible preview from the FINAL delivery bytes. The same
     // Sharp pass contains Malik Aura (when enabled) and the Malik AI logo +
     // wordmark. Previously effect=off used the raw provider preview, which made
     // the watermark disappear in chat even though the processed master had it.
     const delivered = await withMalikImageProcessingSlot(() =>
-      postProcessGeneratedImage({ imageUrl: result.imageUrl, quality, effect }),
+      postProcessGeneratedImage({ imageUrl: result.imageUrl, quality: directDelivery ? "draft" : quality, effect: directDelivery ? "off" : effect }),
     )
 
     let displayPreview = delivered.buffer?.length
