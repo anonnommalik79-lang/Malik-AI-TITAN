@@ -11,6 +11,7 @@ import {
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
 import { getDailyTextTokenQuota } from "@/lib/server/daily-text-token-quota"
+import { reserveWorkQuota, refundWorkQuota, WorkQuotaError, type WorkQuotaReceipt } from "@/lib/server/work-quota"
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
@@ -23,11 +24,19 @@ async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
 
   const pluginCommand = parsePluginCommandFromBody(body)
+  let workReceipt: WorkQuotaReceipt | null = null
+  let workUserId = ""
 
   try {
     const selection = await resolveStrictMalikSelection(request, body)
     const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
     const ownerMode = entitlement.plan === "owner"
+    if (body?.workspaceMode === "work") {
+      const quotaAdmission = await reserveWorkQuota(entitlement)
+      if (!quotaAdmission.ok) return Response.json({ ok: false, error: quotaAdmission.code, message: quotaAdmission.message, quota: quotaAdmission.quota }, { status: quotaAdmission.status, headers: { "cache-control": "private, no-store" } })
+      workReceipt = quotaAdmission.receipt
+      workUserId = entitlement.userId
+    }
     const textQuota = getDailyTextTokenQuota(entitlement.userId, ownerMode)
     const requestedMaxTokens = Number(body?.maxTokens)
     const maxOutputTokens = textQuota.unlimited
@@ -92,6 +101,8 @@ async function handlePOST(request: Request) {
       },
     })
   } catch (error) {
+    if (workReceipt) await refundWorkQuota(workUserId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))
+    if (error instanceof WorkQuotaError) return Response.json({ ok: false, error: error.code, message: error.message }, { status: error.status, headers: { "cache-control": "private, no-store" } })
     const payload = malikModelErrorPayload(error)
     const status = error instanceof MalikModelRouteError ? error.status : 503
     return Response.json(payload, { status, headers: { "cache-control": "no-store" } })

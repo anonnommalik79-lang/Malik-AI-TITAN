@@ -13,6 +13,7 @@ import {
 import { runMalikCoderOrchestrator } from "@/lib/server/malik-coder-orchestrator"
 import { prepareMalikAgentRuntime } from "@/lib/server/malik-agent-runtime"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
+import { reserveWorkQuota, refundWorkQuota, WorkQuotaError, type WorkQuotaReceipt } from "@/lib/server/work-quota"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
 import { putProjectArtifact } from "@/lib/server/project-artifact-store"
 import { isFeatureDisabled, readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
@@ -685,6 +686,7 @@ function liveSseResponse(
   selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>,
   entitlement: RequestEntitlement,
   maxOutputTokens?: number,
+  workReceipt: WorkQuotaReceipt | null = null,
 ) {
   const encoder = new TextEncoder()
   const startedAt = Date.now()
@@ -812,6 +814,7 @@ function liveSseResponse(
         close()
       }).catch((error) => {
         stopHeartbeat()
+        if (workReceipt && !streamedAny) void refundWorkQuota(entitlement.userId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))
         const payload = malikModelErrorPayload(error)
         activity.finish(responseCall, undefined, "failed", payload.message || payload.error)
         send("error", {
@@ -843,6 +846,8 @@ function liveSseResponse(
 export const POST = withCompute(handlePOST, chatComputeOperation)
 
 async function handlePOST(request: Request) {
+  let workReceipt: WorkQuotaReceipt | null = null
+  let workUserId = ""
   if (isFeatureDisabled("chat")) {
     return Response.json({ ok: false, error: "CHAT_TEMPORARILY_DISABLED", message: "Malik AI chat is temporarily paused." }, {
       status: 503,
@@ -963,10 +968,19 @@ async function handlePOST(request: Request) {
       })
     }
 
+    if (resolveWorkspaceMode(body?.workspaceMode) === "work") {
+      const quotaAdmission = await reserveWorkQuota(entitlement)
+      if (!quotaAdmission.ok) return Response.json({
+        ok: false, error: quotaAdmission.code, message: quotaAdmission.message, quota: quotaAdmission.quota,
+      }, { status: quotaAdmission.status, headers: { "cache-control": "private, no-store" } })
+      workReceipt = quotaAdmission.receipt
+      workUserId = entitlement.userId
+    }
+
     // Founder recognition is granted only from the verified WorkOS session.
     // User-controlled email/name fields in the request are intentionally ignored.
     const routedBody = ownerMode ? withVerifiedOwnerChatContext(body) : body
-    if (wantsSse(request, body)) return liveSseResponse(routedBody, selection, entitlement, maxOutputTokens)
+    if (wantsSse(request, body)) return liveSseResponse(routedBody, selection, entitlement, maxOutputTokens, workReceipt)
     const answer = isProjectBuildRequest(routedBody)
       ? await runProjectAnswer(routedBody, selection, entitlement.userId)
       : await runSelectedAnswer(routedBody, selection, undefined, maxOutputTokens)
@@ -979,10 +993,13 @@ async function handlePOST(request: Request) {
       }
     }
     await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0)
+    workReceipt = null
     observeComputeResult(answer)
     const content = asPlainText(answer)
     return textResponse(content)
   } catch (error) {
+    if (workReceipt) await refundWorkQuota(workUserId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))
+    if (error instanceof WorkQuotaError) return Response.json({ ok: false, error: error.code, message: error.message }, { status: error.status, headers: { "cache-control": "private, no-store" } })
     const payload = malikModelErrorPayload(error)
     const status = error instanceof MalikModelRouteError ? error.status : 503
     return Response.json(payload, {

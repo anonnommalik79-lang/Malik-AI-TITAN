@@ -29,6 +29,7 @@ import { AI_MODES } from "./power-registry"
 import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/auth/client-session"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import type { WorkspaceMode } from "@/lib/ai/work-mode"
+import { WorkQuotaButton } from "./WorkQuotaButton"
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ")
 
@@ -229,6 +230,7 @@ function TitanTopBarInner({
       </nav>
 
       <div className="titan-topbar-right">
+        {onWorkspaceModeChange && workspaceMode === "work" ? <WorkQuotaButton /> : null}
         {onWorkspaceModeChange ? <>
           {onNewChat ? <button type="button" onClick={() => { closeAll(); onNewChat() }} aria-label="Новый чат" title="Новый чат" className="titan-icon-btn titan-workspace-action">
             <SquarePen className="h-[22px] w-[22px]" />
