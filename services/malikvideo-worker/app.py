@@ -218,7 +218,7 @@ def official_malik_mark_png(destination: Path) -> Path:
     def chunk(kind: bytes, data: bytes) -> bytes:
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
     png = (
-        b"\\x89PNG\\r\\n\\x1a\\n"
+        b"\x89PNG\r\n\x1a\n"
         + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
         + chunk(b"IDAT", zlib.compress(bytes(scanlines), level=6))
         + chunk(b"IEND", b"")
