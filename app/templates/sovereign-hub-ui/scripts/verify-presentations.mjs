@@ -999,11 +999,11 @@ check("the export fetches only public https images, never an address or this mac
 
 check("partial presentations clearly label every export instead of masquerading as complete", () => {
   const studio = read("components/sovereign/presentations/PresentationStudio.tsx")
-  assert.match(studio, /-partial-\\$\\{readySlides\\.length\\}-of-\\$\\{entries\\.length\\}/, "partial filenames carry slide counts")
-  assert.match(studio, /exportStatus.*readySlides\\.length.*entries\\.length/, "UI exposes incomplete slide count")
-  assert.match(studio, /PPTX\\{exportStatus\\}/, "PPTX label shows incomplete count")
-  assert.match(studio, /PDF\\{exportStatus\\}/, "PDF label shows incomplete count")
-  assert.match(studio, /\\$\\{exportSuffix\\}\\.malik\\.json/, "editable backups cannot be mislabeled as full")
+  assert.ok(studio.includes('-partial-${readySlides.length}-of-${entries.length}'), "partial filenames carry slide counts")
+  assert.ok(studio.includes('const exportStatus = exportSuffix'), "UI exposes incomplete slide count")
+  assert.ok(studio.includes("PPTX{exportStatus}"), "PPTX label shows incomplete count")
+  assert.ok(studio.includes("PDF{exportStatus}"), "PDF label shows incomplete count")
+  assert.ok(studio.includes("${exportSuffix}.malik.json"), "editable backups cannot be mislabeled as full")
 })
 
 /* ================================================================== run */
