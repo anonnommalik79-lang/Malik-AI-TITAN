@@ -252,13 +252,14 @@ function Rich({ text }: { text: string }) {
 
 export type AutonomousCompanyProps = {
   username?: string
+  accountId?: string
   plan: AIPlan
   onOpenBilling: () => void
   onViewChange?: (view: string) => void
   onNewChat?: () => void
 }
 
-export function AutonomousCompany({ username, plan, onOpenBilling, onNewChat }: AutonomousCompanyProps) {
+export function AutonomousCompany({ username, accountId, plan, onOpenBilling, onNewChat }: AutonomousCompanyProps) {
   const [stage, setStage] = useState<Stage>("intro")
   const [prompt, setPrompt] = useState(() => takePrefillPrompt())
   const [market, setMarket] = useState("")
@@ -284,6 +285,10 @@ export function AutonomousCompany({ username, plan, onOpenBilling, onNewChat }: 
   const [now, setNow] = useState(() => Date.now())
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const proAccess = hasMalikProAccess(plan)
+  const checkpointKey = useMemo(() => accountId
+    ? `malik-business-checkpoint:v2:${Array.from(accountId).reduce((hash, c) => Math.imul(hash ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0}`
+    : "", [accountId])
+  const checkpointSignatureRef = useRef("")
 
   const requirePro = useCallback(() => {
     if (proAccess) return true
@@ -298,6 +303,54 @@ export function AutonomousCompany({ username, plan, onOpenBilling, onNewChat }: 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => { stepsRef.current = steps }, [steps])
+
+  // Resume only stages already completed, scoped to this logged-in account.
+  // Checkpoints are local to the browser and never consume Render RAM.
+  useEffect(() => {
+    if (!proAccess || !checkpointKey || runningRef.current || prompt.trim()) return
+    try {
+      const saved = JSON.parse(localStorage.getItem(checkpointKey) || "null")
+      if (saved?.version !== 2 || !Array.isArray(saved.steps) || typeof saved.brief !== "string") return
+      const previous = new Map<string, string>(saved.steps
+        .filter((item: any) => typeof item?.agentId === "string" && typeof item?.content === "string")
+        .map((item: any) => [item.agentId, item.content.slice(0, 45000)]))
+      const restored: Step[] = AUTONOMOUS_AGENTS.map((agent) => {
+        const content = previous.get(agent.id) || ""
+        return content ? { agent, state: "done", content } : { agent, state: "waiting", content: "" }
+      })
+      if (!restored.some((step) => step.state === "done")) return
+      setPrompt(saved.brief.slice(0, 8000))
+      setInstruction(typeof saved.instruction === "string" ? saved.instruction.slice(0, 16000) : "")
+      setMarket(typeof saved.market === "string" ? saved.market.slice(0, 300) : "")
+      setCountry(typeof saved.country === "string" ? saved.country.slice(0, 300) : "")
+      setBudget(typeof saved.budget === "string" ? saved.budget.slice(0, 300) : "")
+      setRequirements(typeof saved.requirements === "string" ? saved.requirements.slice(0, 1800) : "")
+      stepsRef.current = restored
+      setSteps(restored)
+      setStage("running")
+      setExpanded(restored.find((step) => step.state === "waiting")?.agent.id || "analyst")
+      if (saved.summary?.state === "done" && typeof saved.summary.content === "string") {
+        setSummary({ state: "done", content: saved.summary.content.slice(0, 50000) })
+      }
+    } catch { /* Storage disabled or invalid: the app still works. */ }
+  }, [checkpointKey, proAccess])
+
+  useEffect(() => {
+    if (!proAccess || !checkpointKey || !prompt.trim()) return
+    const complete = steps.filter((step) => step.state === "done" && step.content.trim())
+      .map((step) => ({ agentId: step.agent.id, content: step.content.slice(0, 45000) }))
+    if (!complete.length) return
+    const finalSummary = summary.state === "done" ? { state: "done", content: summary.content.slice(0, 50000) } : null
+    const signature = complete.map((step) => `${step.agentId}:${step.content.length}`).join("|") + ":" + (finalSummary?.content.length || 0)
+    if (checkpointSignatureRef.current === signature) return
+    checkpointSignatureRef.current = signature
+    try {
+      localStorage.setItem(checkpointKey, JSON.stringify({
+        version: 2, brief: prompt.trim(), instruction, market, country, budget, requirements,
+        steps: complete, summary: finalSummary, savedAt: Date.now(),
+      }))
+    } catch { /* Browser quota exceeded; downloading remains possible. */ }
+  }, [checkpointKey, proAccess, steps, summary, prompt, instruction, market, country, budget, requirements])
 
   // Which Gemini this server can actually reach, asked once. It costs nothing:
   // the server only lists the models each key can see.
@@ -428,6 +481,8 @@ export function AutonomousCompany({ username, plan, onOpenBilling, onNewChat }: 
     if (!resume) {
       setStress("")
       setStressError(null)
+      checkpointSignatureRef.current = ""
+      try { if (checkpointKey) localStorage.removeItem(checkpointKey) } catch {}
     }
     setSummary({ state: "idle", content: "" })
 
@@ -520,7 +575,7 @@ export function AutonomousCompany({ username, plan, onOpenBilling, onNewChat }: 
 
     runningRef.current = false
     setRunning(false)
-  }, [companyBody, patchStep, prompt, requirePro])
+  }, [checkpointKey, companyBody, patchStep, prompt, requirePro])
 
   const runStressTest = useCallback(async () => {
     if (!requirePro()) return
@@ -564,13 +619,15 @@ export function AutonomousCompany({ username, plan, onOpenBilling, onNewChat }: 
     runningRef.current = false
     setRunning(false)
     setSteps([])
+    checkpointSignatureRef.current = ""
+    try { if (checkpointKey) localStorage.removeItem(checkpointKey) } catch {}
     setRunError(null)
     setStress("")
     setStressError(null)
     setSummary({ state: "idle", content: "" })
     setStage("workspace")
     onNewChat?.()
-  }, [onNewChat])
+  }, [checkpointKey, onNewChat])
 
   const completed = steps.filter((step) => step.state === "done").length
 
@@ -967,6 +1024,8 @@ export function AutonomousCompany({ username, plan, onOpenBilling, onNewChat }: 
 
             <CompanyLaunchPad
               steps={steps}
+              accountId={accountId}
+              canDeploy={plan === "owner"}
               prompt={prompt}
               market={market}
               country={country}

@@ -18,6 +18,9 @@ type QaResult = {
   checks: string[]
   issues: string[]
   reviewer?: string
+  syntaxChecked: boolean
+  buildVerified: boolean
+  warnings: string[]
   rounds: number
 }
 
@@ -136,7 +139,7 @@ function safeGeneratedFiles(files: ProjectFile[]) {
   return Array.from(unique, ([path, content]) => ({ path, content }))
 }
 
-function validateProject(files: ProjectFile[]) {
+async function validateProject(files: ProjectFile[]) {
   const issues: string[] = []
   const checks: string[] = []
   const byPath = new Map(files.map((file) => [file.path, file.content]))
@@ -180,7 +183,28 @@ function validateProject(files: ProjectFile[]) {
   if (total > 700_000) issues.push("Generated project is too large")
   else checks.push("project size sane")
 
-  return { issues, checks }
+  // Parse every generated TypeScript module: regex checks alone miss broken TSX.
+  // No child process, npm install, or heavy Next build runs inside Render.
+  let syntaxChecked = false
+  try {
+    const ts = await import("typescript")
+    for (const file of files.filter((item) => /\.tsx?$/.test(item.path) && !item.path.endsWith(".d.ts"))) {
+      const parsed = ts.transpileModule(file.content, {
+        fileName: file.path,
+        reportDiagnostics: true,
+        compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX },
+      })
+      for (const problem of parsed.diagnostics || []) {
+        if (problem.category === ts.DiagnosticCategory.Error)
+          issues.push(`${file.path}: ${ts.flattenDiagnosticMessageText(problem.messageText, " ").slice(0, 250)}`)
+      }
+    }
+    syntaxChecked = true
+    if (!issues.length) checks.push("TypeScript and TSX syntax parsed")
+  } catch {
+    issues.push("TypeScript syntax verifier unavailable; refusing unverified project")
+  }
+  return { issues, checks, syntaxChecked }
 }
 
 function projectSnapshot(files: ProjectFile[], max = 13_000) {
@@ -251,7 +275,7 @@ export async function POST(request: Request) {
     let generated = await generateDynamicFiles(prompt, html)
     rounds += 1
     let merged = [...FIXED_FILES, ...generated.files]
-    let staticQa = validateProject(merged)
+    let staticQa = await validateProject(merged)
     let reviewer = ""
 
     if (!staticQa.issues.length) reviewer = await aiReview(prompt, merged)
@@ -262,15 +286,21 @@ export async function POST(request: Request) {
       generated = await generateDynamicFiles(prompt, html, feedback)
       rounds += 1
       merged = [...FIXED_FILES, ...generated.files]
-      staticQa = validateProject(merged)
+      staticQa = await validateProject(merged)
       if (!staticQa.issues.length) reviewer = await aiReview(prompt, merged)
     }
 
     const finalReviewerPassed = !reviewer || reviewer === "REVIEW_UNAVAILABLE" || /^PASS\b/i.test(reviewer)
     const qa: QaResult = {
-      passed: staticQa.issues.length === 0 && finalReviewerPassed,
+      passed: staticQa.issues.length === 0 && staticQa.syntaxChecked && finalReviewerPassed,
       checks: staticQa.checks,
       issues: [...staticQa.issues, finalReviewerPassed ? "" : reviewer].filter(Boolean),
+      syntaxChecked: staticQa.syntaxChecked,
+      buildVerified: false,
+      warnings: [
+        ...(reviewer === "REVIEW_UNAVAILABLE" ? ["AI reviewer unavailable"] : []),
+        "Static QA only; actual Next.js compilation awaits Vercel build",
+      ],
       reviewer,
       rounds,
     }

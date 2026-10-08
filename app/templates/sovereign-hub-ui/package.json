@@ -101,7 +101,8 @@
     "test:large-prompts": "node --experimental-strip-types --no-warnings scripts/verify-large-prompts.mjs",
     "test:public-answer-cache": "node --experimental-strip-types --no-warnings scripts/verify-public-answer-cache.mjs",
     "test:never-lose-chat": "node --experimental-strip-types --no-warnings scripts/verify-stream-checkpoint.mjs",
-    "test:account-chat-sync": "node --experimental-strip-types --no-warnings scripts/verify-account-chat-sync-retry.mjs"
+    "test:account-chat-sync": "node --experimental-strip-types --no-warnings scripts/verify-account-chat-sync-retry.mjs",
+    "test:business-launch": "node scripts/verify-business-launch.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "1.1.1",
