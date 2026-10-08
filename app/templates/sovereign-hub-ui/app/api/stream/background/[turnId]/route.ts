@@ -22,8 +22,9 @@ export async function GET(request: Request, context: RouteContext) {
   const entitlement = await resolveRequestEntitlement(request)
   if (!takeRequestFrequency("background-read", entitlement.userId, 120)) return Response.json({ ok: false, error: "Слишком много запросов. Попробуйте через минуту." }, { status: 429, headers: { "cache-control": "private, no-store", "retry-after": "60" } })
   const turn = await readBackgroundChatTurn(turnId)
-  // Legacy unowned answers retain their original TTL; new records always have an owner.
-  if (!turn || (turn.ownerId && (!entitlement.authenticated || turn.ownerId !== entitlement.userId))) {
+  // Fail closed: historical records without an owner must never be exposed
+  // to whoever knows or obtains their UUID, even before their TTL expires.
+  if (!turn || !turn.ownerId || !entitlement.authenticated || turn.ownerId !== entitlement.userId) {
     return Response.json({ ok: false, error: "BACKGROUND_TURN_NOT_FOUND" }, {
       status: 404,
       headers: { "cache-control": "private, no-store" },
