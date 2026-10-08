@@ -72,12 +72,15 @@ await check("concurrent claims create only one answer", async () => {
   const results = await Promise.all([store.startBackgroundChatTurn(concurrent, "a"), store.startBackgroundChatTurn(concurrent, "b")])
   assert.equal(results.filter(Boolean).length, 1)
 })
-await check("legacy records survive only their original valid TTL", async () => {
+await check("legacy unowned history is private even when a valid UUID is known", async () => {
   const legacy = randomUUID()
   globalThis.__malikBackgroundChatTurnsV1.set(legacy, { turnId: legacy, status: "complete", content: "legacy", expiresAt: new Date(Date.now() + 10000).toISOString() })
-  assert.equal((await get(legacy)).status, 200)
+  entitlement = { ...entitlement, authenticated: true, userId: "owner-a" }
+  assert.equal((await get(legacy)).status, 404, "a signed-in account cannot claim a legacy unowned record")
+  entitlement = { ...entitlement, authenticated: false }
+  assert.equal((await get(legacy)).status, 404, "a guest cannot read an unowned record")
   globalThis.__malikBackgroundChatTurnsV1.get(legacy).expiresAt = new Date(0).toISOString()
-  assert.equal((await get(legacy)).status, 404)
+  assert.equal((await get(legacy)).status, 404, "expired records are denied as well")
 })
 await check("invalid expiration is never public", async () => {
   const invalid = randomUUID()
