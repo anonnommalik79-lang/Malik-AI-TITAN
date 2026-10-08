@@ -217,7 +217,7 @@ await check("a lane that never writes is dropped after its first-token time", as
 await check("when every lane fails the error is clear and quick", async () => {
   await assert.rejects(
     engine.raceLanes({ lanes: [lane("missing-a"), lane("missing-b")], call, onToken: () => {}, minFlush: 8, fetcher: makeFetcher(), ...raceTiming }),
-    (error) => error.code === "MAX_ALL_LANES_BUSY" && /заняты/.test(error.message),
+    (error) => error.code === "MAX_UPSTREAM_ACCESS" && /недоступ/.test(error.message),
   )
 })
 
@@ -461,6 +461,29 @@ await check("without an alternate provider, a sibling key still gets a chance", 
   })
   assert.equal(result.lane.id, sibling.id)
   assert.deepEqual(requested, ["overloaded-only-one", "fast-only-second"])
+})
+
+await check("MAX distinguishes provider quota exhaustion from overloaded lanes", async () => {
+  assert.equal(engine.maxUnavailableFailure(["payment-required: depleted", "quota-message"]).code, "MAX_UPSTREAM_QUOTA")
+  assert.equal(engine.maxUnavailableFailure(["http-403: permission denied"]).code, "MAX_UPSTREAM_ACCESS")
+  assert.equal(engine.maxUnavailableFailure(["http-503: high demand"]).code, "MAX_ALL_LANES_BUSY")
+  assert.equal(engine.maxUnavailableFailure([]).code, "MAX_ALL_LANES_BUSY")
+})
+await check("all resting depleted keys fail fast without repeating requests", async () => {
+  const exhaustedLane = lane("prepaid-empty")
+  const log = []
+  const fetcher = async (url) => {
+    log.push(url)
+    return new Response(JSON.stringify({ error: { message: "Your prepayment credits are depleted." } }), {
+      status: 403, headers: { "content-type": "application/json" },
+    })
+  }
+  const options = { lanes: [exhaustedLane], call, onToken: () => {}, minFlush: 8, fetcher, ...raceTiming }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await assert.rejects(engine.raceLanes(options), (error) =>
+      error.code === "MAX_UPSTREAM_QUOTA" && /API-провайдеров/.test(error.message))
+  }
+  assert.equal(log.length, 1, "exhausted provider stays rested on the next request")
 })
 
 console.log(`\n${count - failures}/${count} checks passed`)
