@@ -216,6 +216,18 @@ try {
     assert.match(text, /"usedWeb":true/)
     assert.doesNotMatch(text, /event: error/)
   })
+  await check("Compute storage admission failure is never retried or shown as an answer", async () => {
+    for (const code of ["MALIK_COMPUTE_STORAGE_UNAVAILABLE", "MALIK_COMPUTE_STORE_BUSY"]) {
+      let calls = 0
+      const input = Response.json({ ok: false, code, message: "Не удалось обработать баланс Compute." }, { status: 503 })
+      const response = await fetchRecoverableChat("/api/stream", request, {
+        ...recoveryOptions, fetcher: async () => { calls++; return input },
+      })
+      assert.equal(calls, 1, "must not retry an uncertain Compute reservation")
+      assert.equal(response.status, 503)
+      assert.equal((await response.json()).code, code)
+    }
+  })
   await check("permission, quota and action requests are never replayed", async () => {
     for (const status of [401, 403, 429]) {
       let calls = 0
