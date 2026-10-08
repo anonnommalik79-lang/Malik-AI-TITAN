@@ -76,7 +76,7 @@ function check(name, fn) {
       console.log(`  ok  ${name}`)
     } catch (error) {
       failures += 1
-      console.error(`  FAIL ${name}\n       ${String(error?.message || error).split("\n")[0]}`)
+      console.error(`  FAIL ${name}\n       ${String(error?.stack || error?.message || error).slice(0, 1200)}`)
     }
   }
   pending.push({ name, run })
