@@ -7490,7 +7490,19 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     const failedText = receivedBeforeDrop
       ? `${receivedBeforeDrop}\n\n> ${errorMessage.replace(/\s+/g, " ").trim()}`
       : errorMessage
-    finalizeAssistant(failedText, undefined, finalResearch ? { ...finalResearch, status: "error", tookMs: Date.now() - finalResearch.startedAt } : undefined, true)
+    // Research links collected before the answer failed are NOT evidence
+    // that a completed response exists. Keep provenance only if actual answer
+    // content arrived; an error-only turn must show no citation carousel.
+    const interruptedResearch = finalResearch
+      ? {
+          ...finalResearch,
+          status: "error" as const,
+          sources: receivedBeforeDrop ? finalResearch.sources : [],
+          webSourceCount: receivedBeforeDrop ? finalResearch.webSourceCount : 0,
+          tookMs: Date.now() - finalResearch.startedAt,
+        }
+      : undefined
+    finalizeAssistant(failedText, undefined, interruptedResearch, true)
   } finally {
     if (activeStreamAbortRef.current === streamController) activeStreamAbortRef.current = null
     setStreamAbortable(false)
