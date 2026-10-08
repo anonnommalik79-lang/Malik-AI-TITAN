@@ -1,6 +1,7 @@
 import "server-only"
 
 import { resolveMediaUser } from "@/lib/media/request"
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -170,6 +171,15 @@ export async function POST(request: Request) {
       { ok: false, code: "AUTH_REQUIRED", error: "Войдите в аккаунт, чтобы использовать генерацию видео." },
       { status: 401 },
     )
+  }
+
+  if (!hasMalikProAccess(user.plan)) {
+    return Response.json({
+      ok: false,
+      code: "MALIK_PRO_REQUIRED",
+      error: "Фото → видео и Видео → видео доступны только в Malik PRO.",
+      upgrade: "pro",
+    }, { status: 402, headers: { "Cache-Control": "no-store" } })
   }
 
   const form = await request.formData().catch(() => null)
