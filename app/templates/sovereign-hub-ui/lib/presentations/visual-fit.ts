@@ -8,9 +8,10 @@ import type { Slide } from "@/lib/presentations/types"
  *
  * This is a conservative estimate, not proof that every font will fit.
  */
-export type SlideDensity = "balanced" | "compact" | "dense"
+export type SlideDensity = "balanced" | "compact" | "dense" | "ultra"
 
 export function slideDensity(slide: Slide): SlideDensity {
+  if (slide.fitMode === "compact" || slide.fitMode === "dense" || slide.fitMode === "ultra") return slide.fitMode
   const length = (value?: string) => (value || "").trim().length
   const max = (values: Array<string | undefined>) => Math.max(0, ...values.map(length))
   const total = (values: Array<string | undefined>) => values.reduce((n, value) => n + length(value), 0)
@@ -88,5 +89,5 @@ export function slideDensity(slide: Slide): SlideDensity {
 /** Screens and the PowerPoint export can share the same content-safe headline scale. */
 export function headlineScale(slide: Slide): number {
   const density = slideDensity(slide)
-  return density === "dense" ? 0.72 : density === "compact" ? 0.86 : 1
+  return density === "ultra" ? 0.62 : density === "dense" ? 0.72 : density === "compact" ? 0.86 : 1
 }
