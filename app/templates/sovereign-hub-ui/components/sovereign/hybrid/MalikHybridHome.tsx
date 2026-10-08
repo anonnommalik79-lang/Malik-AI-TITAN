@@ -28,7 +28,7 @@ import {
 import { prefetchChatShell } from "@/lib/studio-prefetch"
 import { PREFILL_EVENT, takePrefillPrompt, useContextEnabled } from "@/lib/malik-context"
 import { DEFAULT_MALIK_MODEL_ID, type MalikModelId } from "@/lib/ai/malik-models"
-import type { ChatSendOptions } from "@/lib/ai/response-depth"
+import { loadResponseDepth, type ChatSendOptions } from "@/lib/ai/response-depth"
 import { useWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import type { AIPlan } from "@/lib/ai/types"
 import type { MalikTemplate } from "@/lib/malik-template-registry"
@@ -100,6 +100,13 @@ const SOURCE_PLUGINS: Array<{
     prompt: "Найди научные статьи и исследования по теме на arXiv (site:arxiv.org): ",
   },
 ]
+
+const MOBILE_SOURCE_ACTION_LABELS: Record<string, string> = {
+  web: "Создать",
+  github: "Исследовать",
+  wikipedia: "Помощь",
+  arxiv: "Больше",
+}
 
 const MOBILE_EXACT_ACTIONS = [
   { id: "create", label: "Создать", prompt: "Создай изображение уровня мирового продукта" },
@@ -846,6 +853,14 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [webOn, setWebOn] = useWebSearchEnabled()
   const [memoryOn, setMemoryOn] = useContextEnabled()
   const [deepResearch, setDeepResearch] = useState(false)
+  const [mobileLayout, setMobileLayout] = useState(false)
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 767px)")
+    const update = () => setMobileLayout(query.matches)
+    update()
+    query.addEventListener("change", update)
+    return () => query.removeEventListener("change", update)
+  }, [])
 
   // The home artwork fills the whole main column, behind the Чат/Работа switch
   // too (malik-cosmos-home.css), so its flag lives on <html>.
@@ -995,7 +1010,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     try {
       props.onSubmit(text || attachmentPrompt, attachments, {
         research: webOn,
-        responseDepth: deepResearch ? "deep" : undefined,
+        responseDepth: deepResearch ? "deep" : loadResponseDepth(props.userPlan || "free"),
       })
     } catch (error) {
       setPrompt(text)
@@ -1156,7 +1171,25 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                   <button
                     key={plugin.id}
                     type="button"
-                    onClick={() => openSourcePlugin(plugin.prompt)}
+                    onClick={() => {
+                      if (!mobileLayout) {
+                        openSourcePlugin(plugin.prompt)
+                        return
+                      }
+                      // Real actions now match the four labels painted on phones.
+                      if (plugin.id === "web") {
+                        setImageCreatorOpen(true)
+                      } else if (plugin.id === "github") {
+                        setWebOn(true)
+                        setDeepResearch(true)
+                        focusPrompt("Проведи глубокое исследование с актуальными источниками по теме: ")
+                      } else if (plugin.id === "wikipedia") {
+                        focusPrompt("Помоги мне решить задачу: ")
+                      } else if (plugin.id === "arxiv") {
+                        props.onOpenCapabilities?.()
+                      }
+                    }
+                    aria-label={mobileLayout ? MOBILE_SOURCE_ACTION_LABELS[plugin.id] : plugin.label}
                     className="group inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.018] px-3 text-[13px] font-medium text-zinc-400 transition duration-150 hover:border-white/[0.13] hover:bg-white/[0.045] hover:text-zinc-100 active:scale-[0.985]"
                   >
                     <Icon className="h-4 w-4 shrink-0 stroke-[1.7] text-zinc-500 transition-colors group-hover:text-zinc-300" aria-hidden="true" />

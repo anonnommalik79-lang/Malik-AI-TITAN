@@ -96,7 +96,8 @@
     "test:business-pro": "node scripts/verify-business-pro.mjs",
     "test:video-music-production": "node scripts/verify-video-music-production.mjs",
     "test:chat-experience": "node scripts/verify-chat-experience.mjs",
-    "test:chat-queue": "node scripts/verify-chat-queue.mjs"
+    "test:chat-queue": "node scripts/verify-chat-queue.mjs",
+    "test:home-actions": "node scripts/verify-home-actions.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "1.1.1",

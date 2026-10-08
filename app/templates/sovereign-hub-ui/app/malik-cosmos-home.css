@@ -281,3 +281,11 @@ html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboar
 @media (prefers-reduced-motion: reduce) {
   html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-chip { transition: none; }
 }
+
+/* Restore actual mobile quick actions hidden by an overly broad desktop rule.
+   Keeps the existing V5 phone layout, artwork, and safe-area dimensions. */
+@media (max-width: 767px) {
+  html[data-malik-chat-home="1"] body:has(#malik-root) #malik-root .malik-dashboard-shell .thome-welcome > div[aria-label="Бесплатные плагины источников"] {
+    display: grid !important;
+  }
+}

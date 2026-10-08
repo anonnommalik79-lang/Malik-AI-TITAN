@@ -1,0 +1,15 @@
+import assert from "node:assert/strict"
+import fs from "node:fs"
+const home = fs.readFileSync("components/sovereign/hybrid/MalikHybridHome.tsx", "utf8")
+const cosmos = fs.readFileSync("app/malik-cosmos-home.css", "utf8")
+const mobile = fs.readFileSync("app/mobile-unicorn-home-v5.css", "utf8")
+assert.match(home, /mobileLayout \? MOBILE_SOURCE_ACTION_LABELS\[plugin.id\] : plugin.label/)
+for(const key of ["web","github","wikipedia","arxiv"]) assert.ok(home.includes('plugin.id === "'+key+'"'), "missing "+key)
+assert.match(home, /if \(!mobileLayout\)[\s\S]*?openSourcePlugin\(plugin.prompt\)/, "desktop plugins preserved")
+assert.match(home, /setImageCreatorOpen\(true\)/, "Create opens image studio")
+assert.match(home, /setWebOn\(true\)[\s\S]*?setDeepResearch\(true\)/, "research activates web + deep")
+assert.match(home, /props.onOpenCapabilities\?\.\(\)/, "More opens capabilities")
+assert.match(home, /responseDepth: deepResearch \? "deep" : loadResponseDepth\(props.userPlan \|\| "free"\)/)
+assert.match(cosmos, /@media \(max-width: 767px\)[\s\S]*?thome-welcome > div\[aria-label="Бесплатные плагины источников"\]\s*\{\s*display: grid !important;/)
+for(const label of ["Создать","Исследовать","Помощь","Больше"]) assert.ok(home.includes('"'+label+'"')&&mobile.includes(label), "label "+label)
+console.log("PASS mobile home actions correspond to captions; desktop sources unchanged; depth persisted")
