@@ -29,6 +29,7 @@ type StoredEnvelope = {
 
 type GlobalWithBackgroundTurns = typeof globalThis & {
   __malikBackgroundChatTurnsV1?: Map<string, BackgroundChatTurn>
+  __malikBackgroundChatTurnsSweepAt?: number
 }
 
 const TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -46,7 +47,19 @@ export function normalizeBackgroundTurnId(value: unknown) {
 function memoryStore() {
   const globalStore = globalThis as GlobalWithBackgroundTurns
   if (!globalStore.__malikBackgroundChatTurnsV1) globalStore.__malikBackgroundChatTurnsV1 = new Map()
-  return globalStore.__malikBackgroundChatTurnsV1
+  const store = globalStore.__malikBackgroundChatTurnsV1
+  const now = Date.now()
+  // Lazy and bounded-frequency expiration: completed turns may contain up to
+  // 1.5 MB of text, so keeping seven-day-old records forever can exhaust
+  // free Render memory. Never prune active or unexpired work.
+  if (now >= (globalStore.__malikBackgroundChatTurnsSweepAt || 0)) {
+    for (const [id, turn] of store) {
+      const expires = Date.parse(turn.expiresAt)
+      if (!Number.isFinite(expires) || expires <= now) store.delete(id)
+    }
+    globalStore.__malikBackgroundChatTurnsSweepAt = now + 60_000
+  }
+  return store
 }
 
 function storageConfig() {
