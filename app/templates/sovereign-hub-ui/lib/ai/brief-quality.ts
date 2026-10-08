@@ -9,7 +9,7 @@ const NAMED_LINE = /^\s*(?:#{1,6}\s*)?(?:блок|block|task|пункт|section|
 const INLINE_LABEL = /(?<![\p{L}\p{N}])(?:block|блок|task|пункт|section|часть|part)\s*(\d{1,2})\s*[:.)—–-]\s*/giu
 const INLINE_NUMBER = /(?:^|[\s;,])(\d{1,2})\)\s+\S/gu
 
-export function briefItems(prompt: string, max = 24): BriefItem[] {
+export function briefItems(prompt: string, max = 64): BriefItem[] {
   const found = new Map<number,string>()
   const unfencedLines: string[] = []
   let fence = false
@@ -29,7 +29,7 @@ export function briefItems(prompt: string, max = 24): BriefItem[] {
     const n = Number(match[1])
     if (n > 0 && !found.has(n)) found.set(n,"")
   }
-  return [...found].sort((a,b)=>a[0]-b[0]).slice(0,Math.max(1,Math.min(max,40)))
+  return [...found].sort((a,b)=>a[0]-b[0]).slice(0,Math.max(1,Math.min(max,64)))
     .map(([number,title])=>({number,title}))
 }
 export function briefNeedsDeep(prompt: string): boolean {

@@ -1191,6 +1191,9 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
 
   for (let round = 0; round < MAX_CONTINUATIONS; round += 1) {
     const spent = estimateTokens(content)
+    // Neither incomplete code nor missing items authorize spending beyond the
+    // caller's budget or the account quota; keep an unfinished result honest.
+    if (spent >= budget - 256) break
     const cutShort = truncatedFinish(result.finishReason) && spent < budget - 150
     const codeOpen = codeMode && (codeAnswerNeedsMore(content, input.prompt)
       || missingBriefItems(taskPrompt, content).length > 0

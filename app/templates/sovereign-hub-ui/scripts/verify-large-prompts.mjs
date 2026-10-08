@@ -24,6 +24,13 @@ const restored=preserveBriefEdges(huge)
 assert.ok(restored.includes("BEGIN") && restored.includes("MANDATORY LAST LINE: FINAL"))
 assert.ok(restored.length < huge.length && restored.length < 14200)
 assert.equal(briefOutputFloor("x".repeat(20000)),14000)
+const many = Array.from({length:55},(_,index)=>String(index+1)+") Task "+(index+1)).join("\n")
+assert.equal(briefItems(many).length,55, "55 distinct requirements are tracked")
+assert.equal(briefChecklist(many).includes("55) Task 55"),true, "late requirements included in checklists")
+const completed = many.split("\n").filter(line=>!line.startsWith("51)")).join("\n")
+assert.deepEqual(missingBriefItems(many,completed),[51], "missing item in the tail is detected")
+const maxSource = readFileSync("lib/server/malik-max-engine.ts","utf8")
+assert.match(maxSource,/if \(spent >= budget - 256\) break/, "MAX continuation obeys the remaining token budget")
 console.log("PASS huge prompts: multiple sections, continuation, final marker, original last instructions and bounded budgets")
 
 import { readFileSync } from "node:fs"
