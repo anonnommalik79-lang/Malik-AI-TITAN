@@ -49,13 +49,22 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
   let body: Record<string, unknown> = {}
   try { body = JSON.parse(String(init.body || "{}")) } catch {}
   const retryable = canRetryChat(body)
-  const firstTextMs = options.firstTextMs ?? (retryable ? 60_000 : 14 * 60_000)
+  // MAX may take up to 180s to select a healthy provider. Deep prompts
+  // need a longer deadline, not a degraded "balanced" retry.
+  const question = String(body.originalQuestion || body.question || body.prompt || "")
+  const numberedRequirements = question.match(/(?:^|\n)\s*(?:[-*]\s*)?\d{1,2}[.)]\s+/gm)?.length || 0
+  const longRunning = question.length >= 1800
+    || numberedRequirements >= 6
+    || /^(?:deep|high|extended|thorough|ultra)$/i.test(String(body.responseDepth || ""))
+    || Number(body.maxTokens) >= 7_000
+  const firstTextMs = options.firstTextMs ?? (longRunning || !retryable ? 14 * 60_000 : 180_000)
+  const idleMs = options.idleMs ?? (longRunning ? 120_000 : 90_000)
   let response: Response
   try { response = await within(fetcher(input, init), firstTextMs, signal) }
   catch (error) {
     if (!retryable || signal?.aborted || (error as Error)?.name === "AbortError") throw error
     options.onRecovery?.()
-    response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true, responseDepth: "balanced" }) }), firstTextMs, signal)
+    response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true }) }), firstTextMs, signal)
     body = { ...body, chatRecovery: true }
   }
   // Permission and quota failures are terminal; never retry or disguise them.
@@ -101,7 +110,7 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
             if (!response.body) throw new Error("Chat service returned no stream")
             reader = response.body.getReader()
             while (!terminal && !cancelled) {
-              const remaining = content ? options.idleMs || 45_000 : firstTextMs - (Date.now() - began)
+              const remaining = content ? idleMs : firstTextMs - (Date.now() - began)
               const { value, done } = await within(reader.read(), remaining, signal)
               buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
               const blocks = buffer.split(/\r?\n\r?\n/)
@@ -142,7 +151,7 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
           }
           if (completed || cancelled || content || !retryable || attempt || body.chatRecovery) break
           emit(frame("progress", { type: "progress", phase: "recovering", text: "Продолжаю ответ…", textOnly: true }))
-          response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true, responseDepth: "balanced" }) }), firstTextMs, signal)
+          response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true }) }), firstTextMs, signal)
           if ([401, 403, 429].includes(response.status)) { finalError = response.status === 429 ? "Доступный лимит запросов исчерпан." : "Проверьте доступ к аккаунту."; break }
         }
         if (!completed && !cancelled) emit(frame("error", { type: "error", message: content ? "Ответ сохранён частично; сервис не смог завершить продолжение." : finalError || "Не удалось получить ответ от сервисов. Запрос сохранён в истории." }))
