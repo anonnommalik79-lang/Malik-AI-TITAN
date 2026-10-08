@@ -71,6 +71,8 @@
 .malik-cards.is-hero .malik-card__badge { justify-self: start; margin: 0; }
 .malik-card__hero-image { position: relative; display: block; overflow: hidden; margin-bottom: 8px; border: 1px solid #27272a; border-radius: 14px; background: #111; aspect-ratio: 16 / 9; }
 .malik-card__hero-image img { width: 100%; height: 100%; object-fit: cover; }
+.malik-card__hero-image.is-logo { background: #fff; }
+.malik-cards.is-hero .malik-card__hero-image.is-logo img { box-sizing: border-box; width: min(100%, 280px); height: 180px; margin: 0 auto; padding: 22px; object-fit: contain; }
 /* Keep complete screenshots readable: they aren't decorative cover crops. */
 .malik-cards.is-hero .malik-card__hero-image { aspect-ratio: auto; }
 .malik-cards.is-hero .malik-card__hero-image img { display: block; width: 100%; height: auto; max-height: none; object-fit: contain; }
