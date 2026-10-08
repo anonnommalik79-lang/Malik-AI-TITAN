@@ -140,6 +140,27 @@ await check("the first lane to write wins; a slower stronger lane is cancelled, 
   assert.ok(Array.isArray(status))
 })
 
+await check("fast chat hedges at most two lanes without sacrificing a fast fallback", async () => {
+  const log = []
+  const slow = lane("slow-cap1")
+  const fast = lane("fast-cap2")
+  const unneeded = lane("fast-cap3")
+  const answer = await engine.raceLanes({
+    lanes: [slow, fast, unneeded],
+    call,
+    onToken: () => {},
+    minFlush: 8,
+    maxParallel: 2,
+    fetcher: makeFetcher(log),
+    ...raceTiming,
+    hedgeMs: 80,
+  })
+  assert.equal(answer.lane.id, fast.id)
+  assert.ok(log.some((item) => item.name === "slow-cap1"))
+  assert.ok(log.some((item) => item.name === "fast-cap2"))
+  assert.ok(!log.some((item) => item.name === "fast-cap3"), "third provider should not consume tokens")
+})
+
 await check("an unknown model is rested for an hour and the next lane answers at once", async () => {
   const missing = lane("missing-model", { power: 99 })
   const fast = lane("fast-backup")

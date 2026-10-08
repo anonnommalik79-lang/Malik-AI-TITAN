@@ -777,6 +777,8 @@ type RaceOptions = {
   totalMs: number
   /** Visible characters a lane must write before it is trusted as the winner. */
   minFlush: number
+  /** Soft hedge budget. Standard/deep use 3, fast chat uses 2 lanes. */
+  maxParallel?: number
   overlapWith?: string
   fetcher?: typeof fetch
   /** Cancels the whole race (the caller gave up); no lane is blamed. */
@@ -809,6 +811,9 @@ function abortError() {
 
 export function raceLanes(options: RaceOptions): Promise<RaceResult> {
   const fetcher = options.fetcher || fetch
+  const maxParallel = Number.isFinite(options.maxParallel)
+    ? Math.max(1, Math.min(MAX_PARALLEL, Math.floor(options.maxParallel!)))
+    : MAX_PARALLEL
   return new Promise<RaceResult>((resolve, reject) => {
     const started = Date.now()
     let next = 0
@@ -894,7 +899,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
         // A lane that is visibly reasoning is given a little longer before a
         // second one is started beside it.
         const thinking = [...running].some((attempt) => attempt.thinking && Date.now() - attempt.startedAt < options.hedgeMs * 2)
-        if (!thinking && running.size < MAX_PARALLEL) launch()
+        if (!thinking && running.size < maxParallel) launch()
         scheduleHedge()
       }, options.hedgeMs)
     }
@@ -1175,6 +1180,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     ...timing,
     totalMs,
     minFlush: fastMode ? 2 : 24,
+    maxParallel: fastMode ? 2 : MAX_PARALLEL,
     fetcher: deps.fetcher,
     signal: input.signal,
   })
@@ -1215,6 +1221,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
         ...timing,
         totalMs: totalMs - (Date.now() - started),
         minFlush: 40,
+        maxParallel: fastMode ? 2 : MAX_PARALLEL,
         overlapWith: content,
         fetcher: deps.fetcher,
         signal: input.signal,
