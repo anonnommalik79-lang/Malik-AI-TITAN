@@ -7490,7 +7490,17 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     const failedText = receivedBeforeDrop
       ? `${receivedBeforeDrop}\n\n> ${errorMessage.replace(/\s+/g, " ").trim()}`
       : errorMessage
-    finalizeAssistant(failedText, undefined, finalResearch ? { ...finalResearch, status: "error", tookMs: Date.now() - finalResearch.startedAt } : undefined, true)
+    // Research links gathered before the AI failed do not constitute a cited
+    // completed answer. Keep useful leads only when actual answer text exists.
+    const failedResearch = finalResearch ? {
+      ...finalResearch,
+      status: "error" as const,
+      sources: receivedBeforeDrop ? finalResearch.sources : [],
+      webSourceCount: receivedBeforeDrop ? finalResearch.webSourceCount : 0,
+      factAudit: receivedBeforeDrop ? finalResearch.factAudit : null,
+      tookMs: Date.now() - finalResearch.startedAt,
+    } : undefined
+    finalizeAssistant(failedText, undefined, failedResearch, true)
   } finally {
     if (activeStreamAbortRef.current === streamController) activeStreamAbortRef.current = null
     setStreamAbortable(false)
