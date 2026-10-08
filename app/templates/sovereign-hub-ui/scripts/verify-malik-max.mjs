@@ -420,6 +420,49 @@ await check("MAX response uses finite wall times instead of hanging fourteen min
   assert.ok(engine.maxResponseWallMs(false, false, false) < 180000)
 })
 
+
+await check("high-demand 503 skips duplicate keys of the same model when a healthy alternative exists", async () => {
+  const first = lane("overloaded-model-one", { power: 99 })
+  const sibling = lane("overloaded-model-second", { power: 95 })
+  sibling.providerModel = first.providerModel
+  sibling.provider = first.provider
+  const backup = lane("fast-other-model", { power: 70 })
+  const requested = []
+  const fetcher = async (url, init) => {
+    const name = new URL(url).pathname.slice(1)
+    requested.push(name)
+    if (name.startsWith("overloaded-model")) return Response.json({
+      error: { message: "This model is currently experiencing high demand. Please try again later." },
+    }, { status: 503 })
+    return makeFetcher()(url, init)
+  }
+  const output = await engine.raceLanes({
+    lanes: [first, sibling, backup], call, minFlush: 8, onToken: () => {}, fetcher,
+    ...raceTiming, hedgeMs: 4000,
+  })
+  assert.equal(output.lane.id, backup.id)
+  assert.deepEqual(requested, ["overloaded-model-one", "fast-other-model"], "skip another key of overloaded model")
+})
+await check("without an alternate provider, a sibling key still gets a chance", async () => {
+  const first = lane("overloaded-only-one", { power: 99 })
+  const sibling = lane("fast-only-second", { power: 70 })
+  sibling.provider = first.provider
+  sibling.providerModel = first.providerModel
+  const requested = []
+  const fetcher = async (url, init) => {
+    const name = new URL(url).pathname.slice(1)
+    requested.push(name)
+    if (name === "overloaded-only-one") return Response.json({ error: { message: "high demand" } }, { status: 503 })
+    return makeFetcher()(url, init)
+  }
+  const result = await engine.raceLanes({
+    lanes: [first, sibling], call, minFlush: 8, onToken: () => {}, fetcher,
+    ...raceTiming, hedgeMs: 4000,
+  })
+  assert.equal(result.lane.id, sibling.id)
+  assert.deepEqual(requested, ["overloaded-only-one", "fast-only-second"])
+})
+
 console.log(`\n${count - failures}/${count} checks passed`)
 if (failures) process.exit(1)
 
