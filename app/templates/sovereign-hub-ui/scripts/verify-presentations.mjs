@@ -610,6 +610,19 @@ check("editorial QA catches repeated headlines, weak headers and unsupported cha
   assert.equal(review.ready, 4)
 })
 
+check("editorial QA never scores an incomplete deck 100/100", () => {
+  const qa = load("lib/presentations/quality.ts")
+  const outline = { title: "Incomplete", items: Array.from({ length: 10 }, (_, i) => ({ title: `Unique slide ${i + 1}`, point: "", layout: "bullets" })) }
+  const sample = deck.normalizeSlide({ ...SAMPLES.title, notes: "Enough presenter notes for reliable editorial evaluation." })
+  const report = qa.inspectPresentation({ outline, slides: Array.from({ length: 10 }, (_, i) => i < 6 ? { ...sample, title: `Unique slide ${i + 1}` } : null) })
+  assert.equal(report.ready, 6)
+  assert.equal(report.inspected, 10)
+  assert.equal(report.issues.filter((issue) => issue.code === "missing-slide").length, 4)
+  assert.ok(report.score <= 52, "the four missing slides must lower the score")
+  const outlineOnly = qa.inspectPresentation({ outline })
+  assert.equal(outlineOnly.issues.filter((issue) => issue.code === "missing-slide").length, 0)
+})
+
 check("editorial QA does not mistake review for verification of facts", () => {
   const quality = load("lib/presentations/quality.ts")
   const report = quality.inspectPresentation({
