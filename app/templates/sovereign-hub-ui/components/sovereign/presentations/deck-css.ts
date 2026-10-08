@@ -637,6 +637,123 @@ export const DECK_CSS = `
 .deck-slide[data-build="true"] .deck-feature-icon { animation: deck-pop .55s var(--ease) both; animation-delay: calc((var(--t) + var(--n, 1) * 150ms + 180ms) * var(--k, 1)); }
 .deck-slide[data-build="true"] .deck-gallery-photo img { animation: deck-zoom 2.4s cubic-bezier(.2, .7, .2, 1) both; }
 
+
+/* ===================================================== ART DIRECTION V3
+ * Smart density on the fixed 1280 × 720 slide, never responsive reflow.
+ * No invisible text, line clamps, or arbitrary clipping of user content.
+ * The same density flag is used in thumbnails, editor, show and print.
+ */
+.deck-h {
+  font-kerning: normal;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+}
+.deck-slide[data-density="compact"] .deck-head { min-height: 102px; margin-bottom: 24px; }
+.deck-slide[data-density="compact"] .deck-head .deck-h { font-size: 45px; line-height: 1.09; }
+.deck-slide[data-density="compact"] .deck-intro { margin-top: -10px; margin-bottom: 14px; font-size: 19px; }
+.deck-slide[data-density="compact"] .deck-title-slide .deck-h { font-size: 70px; line-height: 1.04; }
+.deck-slide[data-density="compact"] .deck-title-slide[data-image="true"] .deck-h { font-size: 54px; }
+.deck-slide[data-density="compact"] .deck-hero .deck-h { font-size: 71px; line-height: 1.05; }
+.deck-slide[data-density="compact"] .deck-section-slide .deck-h { font-size: 62px; }
+.deck-slide[data-density="compact"] .deck-quote-text { font-size: 40px; line-height: 1.26; }
+.deck-slide[data-density="compact"] .deck-closing-slide .deck-h { font-size: 64px; }
+.deck-slide[data-density="compact"] .deck-sub { font-size: 23px; line-height: 1.37; }
+.deck-slide[data-density="compact"] .deck-row {
+  grid-template-columns: 44px 350px minmax(0, 1fr);
+  gap: 20px;
+  padding: 12px 0;
+}
+.deck-slide[data-density="compact"] .deck-row strong { font-size: 25px; line-height: 1.16; }
+.deck-slide[data-density="compact"] .deck-row p { font-size: 19px; line-height: 1.35; }
+.deck-slide[data-density="compact"] .deck-col { padding: 26px 29px; }
+.deck-slide[data-density="compact"] .deck-col h3 { font-size: 27px; margin-bottom: 19px; }
+.deck-slide[data-density="compact"] .deck-col li { font-size: 19px; line-height: 1.34; }
+.deck-slide[data-density="compact"] .deck-col ul { gap: 12px; }
+.deck-slide[data-density="compact"] .deck-stat-label { font-size: 21px; }
+.deck-slide[data-density="compact"] .deck-imgtext .deck-h { font-size: 43px; margin-bottom: 17px; }
+.deck-slide[data-density="compact"] .deck-imgtext .deck-text { font-size: 20px; line-height: 1.37; }
+.deck-slide[data-density="compact"] .deck-imgtext li { font-size: 19px; }
+.deck-slide[data-density="compact"] .deck-card { min-height: 260px; padding: 26px 25px; }
+.deck-slide[data-density="compact"] .deck-card h3 { font-size: 27px; margin: 28px 0 12px; }
+.deck-slide[data-density="compact"] .deck-card p { font-size: 18px; line-height: 1.4; }
+.deck-slide[data-density="compact"] .deck-step h3 { font-size: 24px; margin-top: 26px; }
+.deck-slide[data-density="compact"] .deck-step p { font-size: 18px; line-height: 1.36; }
+.deck-slide[data-density="compact"] .deck-table { font-size: 20px; }
+.deck-slide[data-density="compact"] .deck-table th,
+.deck-slide[data-density="compact"] .deck-table td { padding: 12px 15px; }
+.deck-slide[data-density="compact"] .deck-table thead th { font-size: 15px; }
+.deck-slide[data-density="compact"] .deck-verdict { margin-top: 18px; font-size: 20px; }
+.deck-slide[data-density="compact"] .deck-feature { padding: 25px 24px; gap: 15px; }
+.deck-slide[data-density="compact"] .deck-feature h3 { font-size: 24px; }
+.deck-slide[data-density="compact"] .deck-feature p { font-size: 17px; line-height: 1.38; }
+.deck-slide[data-density="compact"] .deck-feature-icon { width: 54px; height: 54px; border-radius: 16px; }
+.deck-slide[data-density="compact"] .deck-feature-icon svg { width: 27px; height: 27px; }
+.deck-slide[data-density="compact"] .deck-process-arrow h3 { font-size: 21px; line-height: 1.12; }
+.deck-slide[data-density="compact"] .deck-process-step p { font-size: 17px; line-height: 1.35; }
+.deck-slide[data-density="compact"] .deck-gallery-item figcaption { font-size: 19px; }
+
+.deck-slide[data-density="dense"] .deck-head { min-height: 91px; margin-bottom: 16px; }
+.deck-slide[data-density="dense"] .deck-head .deck-h { font-size: 38px; line-height: 1.1; }
+.deck-slide[data-density="dense"] .deck-intro { font-size: 17px; margin-top: -4px; margin-bottom: 10px; }
+.deck-slide[data-density="dense"] .deck-title-slide .deck-h { font-size: 57px; line-height: 1.05; margin: 16px 0 18px; }
+.deck-slide[data-density="dense"] .deck-title-slide[data-image="true"] .deck-h { font-size: 43px; }
+.deck-slide[data-density="dense"] .deck-hero .deck-h { font-size: 56px; line-height: 1.06; }
+.deck-slide[data-density="dense"] .deck-section-slide .deck-h { font-size: 53px; }
+.deck-slide[data-density="dense"] .deck-quote-text { font-size: 34px; line-height: 1.28; }
+.deck-slide[data-density="dense"] .deck-closing-slide .deck-h { font-size: 54px; }
+.deck-slide[data-density="dense"] .deck-sub,
+.deck-slide[data-density="dense"] .deck-hero .deck-sub { font-size: 20px; line-height: 1.4; }
+.deck-slide[data-density="dense"] .deck-row {
+  grid-template-columns: 38px 310px minmax(0, 1fr);
+  gap: 16px;
+  padding: 9px 0;
+}
+.deck-slide[data-density="dense"] .deck-row strong { font-size: 22px; line-height: 1.17; }
+.deck-slide[data-density="dense"] .deck-row p { font-size: 17px; line-height: 1.33; }
+.deck-slide[data-density="dense"] .deck-col { padding: 23px 25px; }
+.deck-slide[data-density="dense"] .deck-col h3 { font-size: 24px; margin-bottom: 16px; }
+.deck-slide[data-density="dense"] .deck-col li { font-size: 17px; line-height: 1.32; }
+.deck-slide[data-density="dense"] .deck-col ul { gap: 10px; }
+.deck-slide[data-density="dense"] .deck-stat-label { font-size: 19px; }
+.deck-slide[data-density="dense"] .deck-imgtext .deck-h { font-size: 37px; margin-bottom: 14px; }
+.deck-slide[data-density="dense"] .deck-imgtext .deck-text { font-size: 18px; line-height: 1.36; margin-bottom: 16px; }
+.deck-slide[data-density="dense"] .deck-imgtext li { font-size: 17px; line-height: 1.35; }
+.deck-slide[data-density="dense"] .deck-imgtext ul { gap: 10px; }
+.deck-slide[data-density="dense"] .deck-card { min-height: 235px; padding: 23px 22px; }
+.deck-slide[data-density="dense"] .deck-card h3 { font-size: 23px; margin: 24px 0 11px; }
+.deck-slide[data-density="dense"] .deck-card p { font-size: 17px; line-height: 1.33; }
+.deck-slide[data-density="dense"] .deck-step h3 { font-size: 21px; margin-top: 24px; }
+.deck-slide[data-density="dense"] .deck-step p { font-size: 16px; line-height: 1.32; }
+.deck-slide[data-density="dense"] .deck-table { font-size: 17px; }
+.deck-slide[data-density="dense"] .deck-table th,
+.deck-slide[data-density="dense"] .deck-table td { padding: 9px 13px; line-height: 1.25; }
+.deck-slide[data-density="dense"] .deck-table thead th { font-size: 14px; }
+.deck-slide[data-density="dense"] .deck-verdict { margin-top: 14px; font-size: 18px; }
+.deck-slide[data-density="dense"] .deck-feature { padding: 20px 21px; gap: 12px; }
+.deck-slide[data-density="dense"] .deck-feature h3 { font-size: 21px; }
+.deck-slide[data-density="dense"] .deck-feature p { font-size: 15px; line-height: 1.32; }
+.deck-slide[data-density="dense"] .deck-feature-icon { width: 47px; height: 47px; border-radius: 13px; }
+.deck-slide[data-density="dense"] .deck-feature-icon svg { width: 24px; height: 24px; }
+.deck-slide[data-density="dense"] .deck-process-arrow h3 { font-size: 18px; }
+.deck-slide[data-density="dense"] .deck-process-step p { font-size: 15px; line-height: 1.33; }
+.deck-slide[data-density="dense"] .deck-gallery-item figcaption { font-size: 17px; }
+
+/* Five-point bullets, six-row comparisons and full galleries cannot use the
+   same vertical rhythm as a spacious three-item executive slide. */
+.deck-slide[data-layout="bullets"][data-density="dense"] .deck-head { min-height: 82px; margin-bottom: 12px; }
+.deck-slide[data-layout="comparison"][data-density="dense"] .deck-head { min-height: 84px; margin-bottom: 12px; }
+.deck-slide[data-layout="features"][data-density="dense"] .deck-body--center { padding-bottom: 0; }
+.deck-slide[data-layout="timeline"][data-density="dense"] .deck-body--center { padding-bottom: 20px; }
+.deck-slide[data-layout="chart"][data-density="dense"] .deck-bars { gap: 10px; padding-bottom: 58px; }
+.deck-slide[data-layout="chart"][data-density="dense"] .deck-bar-label {
+  bottom: -51px;
+  font-size: 14px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  line-height: 1.18;
+}
+
 /* The app's own reduced-motion rule cannot reach into a shadow root. */
 @media (prefers-reduced-motion: reduce) {
   .deck-slide[data-build="true"] *,
