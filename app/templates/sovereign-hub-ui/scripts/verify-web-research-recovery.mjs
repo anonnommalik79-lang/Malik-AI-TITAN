@@ -185,6 +185,19 @@ try {
     assert.match(text, /event: done/)
     assert.doesNotMatch(text, /event: error/)
   })
+  await check("long multi-part brief retains its original depth after a safe retry", async () => {
+    const requests = []
+    const prompt = Array.from({ length: 40 }, (_, i) => `${i + 1}) Complete requirement ${i + 1}`).join("\\n")
+    const original = { method: "POST", body: JSON.stringify({ originalQuestion: prompt, workspaceMode: "chat", responseDepth: "ultra" }) }
+    const response = await fetchRecoverableChat("/api/stream", original, { ...recoveryOptions, fetcher: async (_url, init) => {
+      requests.push(JSON.parse(init.body))
+      return requests.length === 1 ? sse(event("error", { message: "Upstream reset" })) : sse(event("content", { content: "All requirements handled." }) + event("done"))
+    } })
+    assert.equal(requests.length, 2)
+    assert.equal(requests[1].responseDepth, "ultra")
+    assert.equal(requests[1].chatRecovery, true)
+    assert.match(await response.text(), /All requirements handled/)
+  })
   await check("saved server content is recovered with citations, without replaying the question", async () => {
     let posts = 0, polls = 0
     const sources = [{ title: "Verified page", url: "https://example.test/evidence", domain: "example.test" }]
