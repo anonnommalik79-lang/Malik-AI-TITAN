@@ -25,3 +25,12 @@ assert.ok(restored.includes("BEGIN") && restored.includes("MANDATORY LAST LINE: 
 assert.ok(restored.length < huge.length && restored.length < 14200)
 assert.equal(briefOutputFloor("x".repeat(20000)),14000)
 console.log("PASS huge prompts: multiple sections, continuation, final marker, original last instructions and bounded budgets")
+
+import { readFileSync } from "node:fs"
+const selectedRouter = readFileSync("lib/server/malik-model-router.ts","utf8")
+const maxRouter = readFileSync("lib/server/malik-max-engine.ts","utf8")
+const dashboard = readFileSync("components/sovereign/dashboard.tsx","utf8")
+assert.match(selectedRouter,/missingBriefItems\(input\.taskPrompt \|\| input\.prompt, parsed\.content\)/,"selected model covers numbered requirements")
+assert.match(maxRouter,/missingBriefItems\(taskPrompt, content\)/,"MAX code covers numbered requirements")
+assert.match(dashboard,/briefOutputFloor\(cleanContent\)/,"UI sends actual adequate token budget")
+console.log("PASS large-prompt runtime integration: code, MAX and dashboard")

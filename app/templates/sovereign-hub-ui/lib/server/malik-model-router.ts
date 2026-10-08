@@ -1007,7 +1007,9 @@ export async function runStrictMalikModel(input: {
         recordProviderSuccess(model, Date.now() - started)
         const base: StrictMalikResult = { content: parsed.content, provider: model.provider, model: runtime.model, selectedModelId: model.id, latencyMs: Date.now() - started, usage: parsed.usage }
         const depth = options.continuationDepth || 0
-        const truncated = codeMode && (parsed.finishReason === "length" || parsed.finishReason === "MAX_TOKENS" || codeAnswerNeedsMore(parsed.content, input.prompt))
+        const truncated = codeMode && (parsed.finishReason === "length" || parsed.finishReason === "MAX_TOKENS" || codeAnswerNeedsMore(parsed.content, input.prompt)
+          || missingBriefItems(input.taskPrompt || input.prompt, parsed.content).length > 0
+          || briefMissingMarker(input.taskPrompt || input.prompt, parsed.content))
         if (truncated && options.allowFallback !== false && depth < 2) {
           const totalBudget = Math.max(1, Number(input.maxTokens || runtime.maxTokens))
           const remainingBudget = Math.max(0, totalBudget - estimateVisibleTokens(parsed.content))

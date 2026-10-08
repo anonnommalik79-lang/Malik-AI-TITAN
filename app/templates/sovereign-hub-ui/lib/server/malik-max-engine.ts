@@ -1192,7 +1192,9 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   for (let round = 0; round < MAX_CONTINUATIONS; round += 1) {
     const spent = estimateTokens(content)
     const cutShort = truncatedFinish(result.finishReason) && spent < budget - 150
-    const codeOpen = codeMode && codeAnswerNeedsMore(content, input.prompt)
+    const codeOpen = codeMode && (codeAnswerNeedsMore(content, input.prompt)
+      || missingBriefItems(taskPrompt, content).length > 0
+      || briefMissingMarker(taskPrompt, content))
     const structuredOpen = !codeMode && spent < budget - 256 && structuredAnswerNeedsMore(input.prompt, content)
     if (!result.interrupted && !cutShort && !codeOpen && !structuredOpen) break
     if (Date.now() - started > totalMs) break
