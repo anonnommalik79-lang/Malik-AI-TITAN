@@ -420,6 +420,30 @@ await check("MAX response uses finite wall times instead of hanging fourteen min
   assert.ok(engine.maxResponseWallMs(false, false, false) < 180000)
 })
 
+
+await check("MAX distinguishes provider quota exhaustion from overloaded lanes", async () => {
+  assert.equal(engine.maxUnavailableFailure(["payment-required: depleted", "quota-message"]).code, "MAX_UPSTREAM_QUOTA")
+  assert.equal(engine.maxUnavailableFailure(["http-403: permission denied"]).code, "MAX_UPSTREAM_ACCESS")
+  assert.equal(engine.maxUnavailableFailure(["http-503: high demand"]).code, "MAX_ALL_LANES_BUSY")
+  assert.equal(engine.maxUnavailableFailure([]).code, "MAX_ALL_LANES_BUSY")
+})
+await check("all resting depleted keys fail fast without repeating requests", async () => {
+  const exhaustedLane = lane("prepaid-empty")
+  const log = []
+  const fetcher = async (url) => {
+    log.push(url)
+    return new Response(JSON.stringify({ error: { message: "Your prepayment credits are depleted." } }), {
+      status: 403, headers: { "content-type": "application/json" },
+    })
+  }
+  const options = { lanes: [exhaustedLane], call, onToken: () => {}, minFlush: 8, fetcher, ...raceTiming }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await assert.rejects(engine.raceLanes(options), (error) =>
+      error.code === "MAX_UPSTREAM_QUOTA" && /API-провайдеров/.test(error.message))
+  }
+  assert.equal(log.length, 1, "exhausted provider stays rested on the next request")
+})
+
 console.log(`\n${count - failures}/${count} checks passed`)
 if (failures) process.exit(1)
 
