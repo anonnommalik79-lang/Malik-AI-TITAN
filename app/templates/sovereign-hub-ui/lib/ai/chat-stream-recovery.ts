@@ -1,4 +1,5 @@
 import { briefNeedsDeep } from "./brief-quality"
+import { chatCompletionError, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "./chat-stream-contract"
 
 /** Recover a saved turn before repeating a read-only question. Never replay actions. */
 type RecoveryOptions = {
@@ -120,12 +121,17 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
   const headersMs = options.firstTextMs ?? defaults.headersMs
   const pollMs = options.pollMs ?? 1500
   let response: Response
-  try { response = await within(fetcher(input, init), headersMs, signal) }
+  const admission = fetcher(input, init)
+  try { response = await within(admission, headersMs, signal) }
   catch (error) {
-    if (!retryable || isAbort(error, signal)) throw error
-    options.onRecovery?.()
-    response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true }) }), headersMs, signal)
-    body = { ...body, chatRecovery: true }
+    // Missing headers do NOT prove that the server never admitted the turn.
+    // AccountChatPersistence already recorded its UUID before the POST. A
+    // second POST here would allocate a new UUID and race/charge the same task.
+    // Drain no abandoned body, but let the existing background job persist.
+    void admission.then((late) => late.body?.cancel()).catch(() => {})
+    if (isAbort(error, signal)) throw error
+    if (error instanceof DeadlineError) throw new Error("Сервер не подтвердил запрос вовремя. Запрос не отправлен повторно; проверьте сохранённый ответ в истории.", { cause: error })
+    throw error
   }
   // Permission and quota failures are terminal; never retry or disguise them.
   if (!response.ok && ![502, 503, 504].includes(response.status)) return response
@@ -153,22 +159,32 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
           // The message must describe the latest failure, not an earlier one.
           finalError = ""
           const consume = (block: string) => {
-            const data = block.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n")
-            let payload: Record<string, unknown>
-            try { payload = JSON.parse(data) } catch { emit(encoder.encode(block + "\n\n")); return }
-            if (payload.type === "error") {
-              finalError = String(payload.message || payload.error || "") || CHAT_FAILURE_TEXT.cut
+            const event = parseChatSseFrame(block)
+            if (!event) { emit(encoder.encode(block + "\n\n")); return }
+            const { type, payload } = event
+            if (type === "error" || (type === "done" && chatCompletionError(payload))) {
+              finalError = chatCompletionError(payload) || String(payload.message || payload.error || "") || CHAT_FAILURE_TEXT.cut
               serverError = true
               terminal = true
               return
             }
-            if (payload.type === "content") {
-              const chunk = String(payload.content || "")
+            if (type === "content" || type === "delta") {
+              const chunk = String(payload.content ?? payload.text ?? "")
               // Some providers send a growing snapshot, others send deltas.
               // Keep the real prefix for background-turn recovery, never duplicate it.
-              content = chunk.startsWith(content) ? chunk : content + chunk
+              content = mergeChatStreamText(content, chunk, payload.contentMode)
             }
-            if (payload.type === "done") {
+            if (type === "done") {
+              if (typeof payload.content === "string") {
+                content = mergeChatStreamText(content, payload.content, "snapshot")
+                emit(frame("content", { type: "content", content, contentMode: "snapshot" }))
+              }
+              if (!content.trim()) {
+                finalError = "Модель завершила запрос без текста ответа. Нажмите «Перегенерировать», чтобы повторить."
+                serverError = true
+                terminal = true
+                return
+              }
               completed = true
               terminal = true
               if (attempt || body.chatRecovery) { emit(frame("done", { ...payload, textOnly: true })); return }
@@ -202,6 +218,7 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
               const blocks = buffer.split(/\r?\n\r?\n/)
               buffer = blocks.pop() || ""
               for (const block of blocks) { consume(block); if (terminal) break }
+              if (buffer.length > MAX_CHAT_SSE_FRAME_CHARS) throw new Error("Chat stream frame exceeds the safe size limit")
               if (done) { if (!terminal && buffer.trim()) consume(buffer); break }
             }
             // A stream that ends without `done` or `error` was cut on the way.
@@ -241,7 +258,7 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
                 if (turn?.status === "complete" && turn.content) {
                   const answer = String(turn.content)
                   // Dashboard recognises cumulative content, avoiding duplicates.
-                  if (!content || answer.startsWith(content)) emit(frame("content", { type: "content", content: answer }))
+                  if (!content || answer.startsWith(content)) emit(frame("content", { type: "content", content: answer, contentMode: "snapshot" }))
                   else throw new Error("Recovered answer does not match streamed prefix")
                   content = answer
                   emit(frame("done", { type: "done", ...turn, usedWeb: Boolean(turn.usedWeb), sources: turn.sources || [], execution: turn.execution, textOnly: Boolean(turn.textOnly) }))
@@ -253,7 +270,7 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
                   // Keep whatever the server wrote before it failed.
                   const partial = String(turn.content || "")
                   if (partial.length > content.length && (!content || partial.startsWith(content))) {
-                    emit(frame("content", { type: "content", content: partial }))
+                    emit(frame("content", { type: "content", content: partial, contentMode: "snapshot" }))
                     content = partial
                   }
                   if (turn.error) finalError = String(turn.error)

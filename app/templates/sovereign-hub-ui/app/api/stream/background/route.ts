@@ -3,6 +3,7 @@ import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { z } from "zod"
 import { POST as streamPOST } from "../route"
 import { normalizeExecutionTrace, upsertExecutionStep, type ExecutionTrace } from "@/lib/ai/chat-execution"
+import { chatCompletionError, MAX_CHAT_RESULT_CHARS, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "@/lib/ai/chat-stream-contract"
 import {
   completeBackgroundChatTurn,
   failBackgroundChatTurn,
@@ -23,37 +24,36 @@ function cloneResponse(response: Response, body: BodyInit | null) {
 }
 
 function parseSseFrame(frame: string, state: { content: string; error: string; done: boolean; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> }) {
-  for (const line of frame.split(/\r?\n/)) {
-    if (!line.startsWith("data:")) continue
-    const raw = line.slice(5).trim()
-    if (!raw || raw === "[DONE]") continue
-    try {
-      const payload = JSON.parse(raw)
-      if (payload?.type === "activity" && payload.traceId) {
-        state.execution = upsertExecutionStep(state.execution || { version: 1, id: payload.traceId, startedAt: Number(payload.startedAt) || Date.now(), state: "running", steps: [] }, payload.step)
-      }
-      if (payload.execution) state.execution = normalizeExecutionTrace(payload.execution) || state.execution
-      if (payload?.type === "content" && typeof payload.content === "string") state.content += payload.content
-      if (payload?.type === "error") state.error = String(payload.message || payload.error || "Background chat failed")
-      if (payload?.type === "done") {
-        state.done = true
-        state.provider = String(payload.provider || state.provider || "")
-        state.model = String(payload.model || payload.selectedModelId || state.model || "")
-        state.responseMetadata = {
-          usedWeb: payload.usedWeb === true,
-          sources: Array.isArray(payload.sources) ? payload.sources.slice(0, 32) : [],
-          textOnly: payload.textOnly === true,
-          factAudit: payload.factAudit ?? null,
-          selectedModelId: typeof payload.selectedModelId === "string" ? payload.selectedModelId : undefined,
-        }
-      }
-    } catch {
-      // Non-JSON SSE metadata is not part of the final answer.
+  const event = parseChatSseFrame(frame)
+  if (!event) return
+  const { type, payload } = event
+  if (type === "activity" && typeof payload.traceId === "string") {
+    state.execution = upsertExecutionStep(state.execution || { version: 1, id: payload.traceId, startedAt: Number(payload.startedAt) || Date.now(), state: "running", steps: [] }, payload.step)
+  }
+  if (payload.execution) state.execution = normalizeExecutionTrace(payload.execution) || state.execution
+  if ((type === "content" || type === "delta") && typeof (payload.content ?? payload.text) === "string") {
+    state.content = mergeChatStreamText(state.content, String(payload.content ?? payload.text), payload.contentMode)
+  }
+  if (type === "error") state.error = String(payload.message || payload.error || "Background chat failed")
+  if (type === "done") {
+    state.error ||= chatCompletionError(payload)
+    if (typeof payload.content === "string") state.content = mergeChatStreamText(state.content, payload.content, "snapshot")
+    state.done = true
+    state.provider = String(payload.provider || state.provider || "")
+    state.model = String(payload.model || payload.selectedModelId || state.model || "")
+    state.responseMetadata = {
+      usedWeb: payload.usedWeb === true,
+      sources: Array.isArray(payload.sources) ? payload.sources.slice(0, 32) : [],
+      textOnly: payload.textOnly === true,
+      factAudit: payload.factAudit ?? null,
+      selectedModelId: typeof payload.selectedModelId === "string" ? payload.selectedModelId : undefined,
     }
   }
 }
 
 async function persistStreamResult(turnId: string, response: Response) {
+  const state: { content: string; error: string; done: boolean; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> } = { content: "", error: "", done: false, provider: "", model: "" }
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
   try {
     const contentType = response.headers.get("content-type") || ""
     if (!response.body) {
@@ -63,6 +63,7 @@ async function persistStreamResult(turnId: string, response: Response) {
 
     if (!contentType.includes("text/event-stream")) {
       const text = await response.text()
+      if (text.length > MAX_CHAT_RESULT_CHARS) throw new Error("Background answer exceeds the safe size limit")
       if (response.ok && text.trim()) {
         await completeBackgroundChatTurn(turnId, { content: text })
       } else {
@@ -71,9 +72,8 @@ async function persistStreamResult(turnId: string, response: Response) {
       return
     }
 
-    const reader = response.body.getReader()
+    reader = response.body.getReader()
     const decoder = new TextDecoder()
-    const state: { content: string; error: string; done: boolean; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> } = { content: "", error: "", done: false, provider: "", model: "" }
     let buffer = ""
 
     while (true) {
@@ -88,6 +88,7 @@ async function persistStreamResult(turnId: string, response: Response) {
         parseSseFrame(frame, state)
         boundary = buffer.search(/\r?\n\r?\n/)
       }
+      if (buffer.length > MAX_CHAT_SSE_FRAME_CHARS) throw new Error("Background stream frame exceeds the safe size limit")
       if (done) break
     }
     if (buffer.trim()) parseSseFrame(buffer, state)
@@ -113,7 +114,11 @@ async function persistStreamResult(turnId: string, response: Response) {
       responseMetadata: state.responseMetadata,
     })
   } catch (error) {
-    await failBackgroundChatTurn(turnId, error)
+    // reader.read() can throw after many valid chunks. Preserve those chunks
+    // just as we do for an orderly EOF without done; never replace them with an error-only turn.
+    await failBackgroundChatTurn(turnId, error, state.execution, state.content)
+  } finally {
+    if (reader) { void reader.cancel().catch(() => {}); reader.releaseLock() }
   }
 }
 

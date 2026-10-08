@@ -15,6 +15,7 @@ import { MALIK_OWNER_EMAIL, isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import { chatHttpErrorMessage } from "@/lib/ai/errors"
 import { fetchRecoverableChat } from "@/lib/ai/chat-stream-recovery"
+import { chatCompletionError, mergeChatStreamText } from "@/lib/ai/chat-stream-contract"
 import { mergeStreamingAssistantCheckpoints, restoreInterruptedAssistant } from "@/lib/ai/stream-checkpoint"
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
@@ -7312,11 +7313,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           const nextText = String(chunk)
           if (!thoughtState.firstTextAt && nextText.trim()) thoughtState.firstTextAt = Date.now()
           // Providers differ: some send a cumulative payload, others deltas.
-          fullText = nextText.startsWith(fullText) ? nextText : `${fullText}${nextText}`
+          fullText = mergeChatStreamText(fullText, nextText, payload?.contentMode)
           scheduleLive()
           return
         }
         if (eventName === "done" || payload?.type === "done") {
+          const completionError = chatCompletionError(payload)
+          if (completionError) throw new Error(completionError)
           sawDone = true
           textOnlyAnswer = payload?.textOnly === true
           const trace = normalizeExecutionTrace(payload?.execution)

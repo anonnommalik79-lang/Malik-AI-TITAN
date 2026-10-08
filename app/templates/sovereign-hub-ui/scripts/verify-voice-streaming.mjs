@@ -17,7 +17,7 @@ import fs from "node:fs"
  * the usual outcome of parsing a language with a pattern.
  */
 async function load(file) {
-  return import(`${process.cwd()}/${file}`)
+  return import(new URL(`../${file}`, import.meta.url).href)
 }
 
 let failures = 0

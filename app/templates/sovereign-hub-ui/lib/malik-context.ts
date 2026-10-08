@@ -68,11 +68,34 @@ export type MalikMemoryItem = {
   updatedAt: string
 }
 
-const MEMORY_STORAGE_KEY = "malik.memory.items.v1"
+const MEMORY_ACCOUNT_PREFIX = "malik.memory.items.v2:account:"
 export const MEMORY_EVENT = "malik-memory-changed"
 export const MAX_MEMORY_ITEMS = 40
 export const MAX_MEMORY_ITEM_CHARS = 600
 const MAX_MEMORY_CONTEXT_CHARS = 4200
+
+type MemoryScopedWindow = Window & { __malikMemoryAccountScopeV2?: string }
+
+/** Authenticated identity comes from the existing account boundary. Keep it
+ * browser-local, not in mutable module scope shared by concurrent SSR requests.
+ */
+export function setMalikMemoryAccountScope(accountId: string): void {
+  if (typeof window === "undefined") return
+  const account = String(accountId || "").trim().toLowerCase()
+  const scope = account && account.length <= 320 ? encodeURIComponent(account) : ""
+  const browser = window as MemoryScopedWindow
+  if (browser.__malikMemoryAccountScopeV2 === scope) return
+  browser.__malikMemoryAccountScopeV2 = scope
+  window.dispatchEvent(new CustomEvent(MEMORY_EVENT))
+}
+
+function memoryStorageKey(): string {
+  if (typeof window === "undefined") return ""
+  const scope = (window as MemoryScopedWindow).__malikMemoryAccountScopeV2
+  // Never assign legacy unowned v1 memories to whichever account logs in
+  // next. The legacy key is retained unchanged for an explicit owner-led recovery.
+  return scope ? MEMORY_ACCOUNT_PREFIX + scope : ""
+}
 
 function normaliseMemoryText(value: string) {
   return value.replace(/\s+/g, " ").trim().slice(0, MAX_MEMORY_ITEM_CHARS)
@@ -94,8 +117,10 @@ function memoryId() {
 
 export function readMalikMemories(): MalikMemoryItem[] {
   if (typeof window === "undefined") return []
+  const key = memoryStorageKey()
+  if (!key) return []
   try {
-    const raw = window.localStorage.getItem(MEMORY_STORAGE_KEY)
+    const raw = window.localStorage.getItem(key)
     if (!raw) return []
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
@@ -110,18 +135,21 @@ export function readMalikMemories(): MalikMemoryItem[] {
 }
 
 function writeMalikMemories(items: MalikMemoryItem[]) {
-  if (typeof window === "undefined") return
+  const key = memoryStorageKey()
+  if (!key || typeof window === "undefined") return false
   const safe = items
     .filter(isMemoryItem)
     .map((item) => ({ ...item, text: normaliseMemoryText(item.text) }))
     .filter((item) => Boolean(item.text))
     .slice(0, MAX_MEMORY_ITEMS)
   try {
-    window.localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(safe))
+    window.localStorage.setItem(key, JSON.stringify(safe))
   } catch {
     /* Storage can be unavailable in private/restricted browser modes. */
+    return false
   }
   window.dispatchEvent(new CustomEvent(MEMORY_EVENT, { detail: safe }))
+  return true
 }
 
 export function addMalikMemory(text: string): MalikMemoryItem | null {
@@ -129,8 +157,7 @@ export function addMalikMemory(text: string): MalikMemoryItem | null {
   if (!clean) return null
   const now = new Date().toISOString()
   const item: MalikMemoryItem = { id: memoryId(), text: clean, createdAt: now, updatedAt: now }
-  writeMalikMemories([item, ...readMalikMemories()])
-  return item
+  return writeMalikMemories([item, ...readMalikMemories()]) ? item : null
 }
 
 export function updateMalikMemory(id: string, text: string): boolean {
@@ -143,8 +170,7 @@ export function updateMalikMemory(id: string, text: string): boolean {
     changed = true
     return { ...item, text: clean, updatedAt: new Date().toISOString() }
   })
-  if (changed) writeMalikMemories(next)
-  return changed
+  return changed && writeMalikMemories(next)
 }
 
 export function removeMalikMemory(id: string): void {

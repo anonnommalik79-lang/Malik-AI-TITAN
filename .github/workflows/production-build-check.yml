@@ -61,6 +61,9 @@ jobs:
       - name: Voice regression suite (mobile, desktop, Live)
         run: npm run test:voice
 
+      - name: Verify stream integrity, account memory isolation and audit contract
+        run: npm run test:chat-stream-integrity && npm run test:memory-isolation && npm run test:chat-audit-contract
+
       - name: Typecheck
         run: npm run typecheck
 

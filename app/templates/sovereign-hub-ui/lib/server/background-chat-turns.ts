@@ -4,6 +4,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3"
 import { sharedPrivateS3Client } from "./shared-private-s3-client"
 import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-execution"
+import { MAX_CHAT_RESULT_CHARS } from "@/lib/ai/chat-stream-contract"
 
 export type BackgroundChatTurn = {
   turnId: string
@@ -34,7 +35,7 @@ type GlobalWithBackgroundTurns = typeof globalThis & {
 }
 
 const TTL_MS = 7 * 24 * 60 * 60 * 1000
-const MAX_RESULT_CHARS = 1_500_000
+const MAX_RESULT_CHARS = MAX_CHAT_RESULT_CHARS
 // Free Render must not retain seven days of multi-megabyte completed answers
 // in process RAM. Durable R2/S3 is required for history beyond this cache.
 const MAX_FINISHED_CACHE_BYTES = 32 * 1024 * 1024

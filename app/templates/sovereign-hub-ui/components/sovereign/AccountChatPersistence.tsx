@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useState, type ReactNode } from "react"
 import { requestPersistentGeneratedImageStorage, setGeneratedImageAccountScope } from "@/lib/media/client-generated-image-store"
+import { setMalikMemoryAccountScope } from "@/lib/malik-context"
 import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import { mergeAccountChatStates } from "@/lib/ai/account-chat-state-merge"
 import { accountChatRetryDelay, accountChatWriteConfirmed, claimAccountChatSyncNotice, shouldRetryAccountChatWrite, type AccountChatSyncNotice } from "@/lib/ai/account-chat-sync-retry"
@@ -487,6 +488,7 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
     const previousRemoveItem = proto.removeItem
     const scopedAccountKey = cleanAccountId(accountId)
     const scopedKey = scopedDashboardKey(scopedAccountKey)
+    setMalikMemoryAccountScope(accountId)
     setGeneratedImageAccountScope(accountId)
     void requestPersistentGeneratedImageStorage()
     const backgroundRuntime = installBackgroundRuntime(scopedAccountKey, previousGetItem, previousSetItem, previousRemoveItem)
@@ -536,6 +538,7 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
     resumeDetachedTurns(backgroundRuntime, scopedAccountKey)
 
     return () => {
+      setMalikMemoryAccountScope("")
       markAccountDetached(backgroundRuntime, scopedAccountKey)
       if (proto.getItem === routedGetItem) proto.getItem = previousGetItem
       if (proto.setItem === routedSetItem) proto.setItem = previousSetItem
