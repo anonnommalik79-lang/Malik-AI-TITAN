@@ -393,7 +393,7 @@ function common(raw: Record<string, unknown>) {
   const imageKind: "subject" | "mood" | undefined = raw.imageKind === "subject" || raw.imageKind === "mood" ? raw.imageKind : undefined
   const imageCredit = imageUrl ? optionalText(raw.imageCredit, LIMITS.imageCredit) : undefined
   const imageLink = imageUrl && typeof raw.imageLink === "string" && /^https:\/\//.test(raw.imageLink) ? raw.imageLink.slice(0, 600) : undefined
-  const fitMode = raw.fitMode === "compact" || raw.fitMode === "dense" || raw.fitMode === "ultra" ? raw.fitMode : undefined
+  const fitMode: "compact" | "dense" | "ultra" | undefined = raw.fitMode === "compact" || raw.fitMode === "dense" || raw.fitMode === "ultra" ? raw.fitMode : undefined
   return {
     id: typeof raw.id === "string" && /^[\w-]{3,64}$/.test(raw.id) ? raw.id : slideId(),
     ...(notes ? { notes } : {}),
