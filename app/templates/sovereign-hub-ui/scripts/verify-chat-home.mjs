@@ -77,7 +77,10 @@ check("the stylesheet loads after the other home sheets and before the monochrom
   const layout = read("app/layout.tsx")
   const imports = [...layout.matchAll(/^import "\.\/([^"]+\.css)"/gm)].map((match) => match[1])
   assert.equal(imports.at(-1), "chat-monochrome-final.css")
-  assert.equal(imports.at(-2), "malik-cosmos-home.css")
+  // The request-motion recovery pass intentionally follows the cosmos Home
+  // sheet so spinner/caret animations survive mobile low-motion overrides.
+  assert.equal(imports.at(-2), "request-motion-final.css")
+  assert.equal(imports.at(-3), "malik-cosmos-home.css")
 })
 
 console.log(failures ? `\n${failures} failing\n` : "\nall chat home checks passed\n")
