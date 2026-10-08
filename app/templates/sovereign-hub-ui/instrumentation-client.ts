@@ -28,6 +28,7 @@ function preloadVoiceMode() {
 declare global {
   interface Window {
     __malikHomeEntryPrepared?: boolean
+    __malikVoiceShortcutPrepared?: boolean
   }
 }
 
@@ -35,6 +36,21 @@ if (typeof window !== "undefined") {
   // Start immediately rather than waiting for requestIdleCallback: Voice is a
   // primary navigation item and must be ready on the very first deliberate click.
   void preloadVoiceMode()
+
+  // Fast desktop entry even while the first Voice button is off-screen.
+  if (!window.__malikVoiceShortcutPrepared) {
+    window.__malikVoiceShortcutPrepared = true
+    window.addEventListener("keydown", (event) => {
+      if (!event.altKey || !event.shiftKey || event.code !== "KeyV" || event.repeat) return
+      if (document.querySelector("[data-voice-mode]")) return
+      const trigger = document.querySelector<HTMLButtonElement>(
+        'button[aria-label="Открыть голосовой режим"]:not([disabled])',
+      )
+      if (!trigger) return
+      event.preventDefault()
+      trigger.click()
+    })
+  }
 
   // Generated image bytes live in durable object storage, while localStorage is
   // only a tiny UI cache of short URLs/metadata. Refreshing, logging out and
