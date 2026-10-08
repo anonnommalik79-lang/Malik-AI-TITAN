@@ -185,6 +185,21 @@ try {
     assert.match(text, /event: done/)
     assert.doesNotMatch(text, /event: error/)
   })
+  await check("long briefs retain deep reasoning and token budget during recovery", async () => {
+    const calls = []
+    const originalQuestion = Array.from({ length: 50 }, (_, index) => `${index + 1}) Проверить обязательное условие и выдать результат`).join("\n")
+    const heavyRequest = { method: "POST", body: JSON.stringify({ originalQuestion, responseDepth: "deep", maxTokens: 14000 }) }
+    const response = await fetchRecoverableChat("/api/stream", heavyRequest, { ...recoveryOptions, fetcher: async (_url, init) => {
+      calls.push(JSON.parse(init.body))
+      return calls.length === 1 ? sse(event("progress", { text: "Идёт анализ" })) : sse(event("content", { content: "Результат" }) + event("done"))
+    } })
+    const output = await response.text()
+    assert.equal(calls.length, 2)
+    assert.equal(calls[1].responseDepth, "deep")
+    assert.equal(calls[1].maxTokens, 14000)
+    assert.equal(calls[1].originalQuestion, originalQuestion)
+    assert.match(output, /Результат/)
+  })
   await check("saved server content is recovered with citations, without replaying the question", async () => {
     let posts = 0, polls = 0
     const sources = [{ title: "Verified page", url: "https://example.test/evidence", domain: "example.test" }]
