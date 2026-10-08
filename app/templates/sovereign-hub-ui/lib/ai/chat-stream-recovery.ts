@@ -4,10 +4,48 @@ import { briefNeedsDeep } from "./brief-quality"
 type RecoveryOptions = {
   fetcher?: typeof fetch
   onRecovery?: () => void
+  /** Pause between reads of the saved server turn after the live stream broke. */
   pollMs?: number
+  /** How long a still-running server turn is awaited after the live stream broke. */
   recoveryMs?: number
+  /** Ceiling for the first words while the server keeps proving it is alive. */
   firstTextMs?: number
+  /** Silence limit: no byte at all from the server for this long means the connection is gone. */
   idleMs?: number
+}
+
+export type ChatStreamTimings = { firstTextMs: number; idleMs: number; recoveryMs: number; headersMs: number }
+
+/**
+ * How long the browser waits, and for what.
+ *
+ * The server sends a heartbeat every 15 seconds for as long as it is working,
+ * so liveness is measured as silence - time since the last byte - rather than
+ * as time to the first word. A large prompt can keep MalikLLM MAX thinking for
+ * over a minute before it writes (its own first-token window is 75-150 s);
+ * the old fixed 60-second first-text cutoff gave up on requests that were
+ * alive and about to answer, then showed «Сервис ответа временно недоступен».
+ *
+ * `firstTextMs` is only a ceiling for a server that keeps beating but never
+ * writes. It sits well above the server's own wall clock, so the server always
+ * finishes first and reports its real result or its real error.
+ */
+export function chatStreamTimings(body: Record<string, unknown>): ChatStreamTimings {
+  const retryable = canRetryChat(body)
+  const prompt = String(body.originalQuestion || body.question || body.prompt || "")
+  const largeBrief = briefNeedsDeep(prompt)
+  const firstTextMs = retryable ? (largeBrief ? 8 * 60_000 : 5 * 60_000) : 14 * 60_000
+  return {
+    firstTextMs,
+    // Three missed heartbeats and then some; a large prompt gets more slack
+    // for a server that is busy preparing it.
+    idleMs: largeBrief ? 90_000 : 60_000,
+    // After a broken connection the server keeps working (its stream is teed
+    // into durable storage), so wait for that answer rather than duplicate it.
+    recoveryMs: largeBrief ? 8 * 60_000 : 5 * 60_000,
+    // Response headers come back as soon as the request is admitted.
+    headersMs: retryable ? Math.min(firstTextMs, 120_000) : firstTextMs,
+  }
 }
 
 export function canRetryChat(body: unknown): boolean {
@@ -23,6 +61,9 @@ export function canRetryChat(body: unknown): boolean {
 }
 
 function abortError() { return new DOMException("Chat stopped", "AbortError") }
+function isAbort(error: unknown, signal?: AbortSignal | null) {
+  return Boolean(signal?.aborted || (error as Error)?.name === "AbortError")
+}
 function wait(ms: number, signal?: AbortSignal | null) {
   return new Promise<void>((resolve, reject) => {
     const stop = () => { clearTimeout(timer); reject(abortError()) }
@@ -32,11 +73,15 @@ function wait(ms: number, signal?: AbortSignal | null) {
   })
 }
 
+class DeadlineError extends Error {
+  constructor() { super("Chat transport deadline"); this.name = "DeadlineError" }
+}
+
 async function within<T>(promise: Promise<T>, ms: number, signal?: AbortSignal | null): Promise<T> {
   let timer: ReturnType<typeof setTimeout>
   let abort = () => {}
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("Chat transport deadline")), Math.max(1, ms))
+    timer = setTimeout(() => reject(new DeadlineError()), Math.max(1, ms))
     abort = () => reject(abortError())
     signal?.addEventListener("abort", abort, { once: true })
     if (signal?.aborted) abort()
@@ -45,25 +90,41 @@ async function within<T>(promise: Promise<T>, ms: number, signal?: AbortSignal |
   finally { clearTimeout(timer!); signal?.removeEventListener("abort", abort) }
 }
 
+/** What the person reads when an answer could not be delivered. Always a reason, never a shrug. */
+export const CHAT_FAILURE_TEXT = {
+  silent: "Связь с сервером прервалась, и ответ не удалось восстановить. Нажмите «Перегенерировать», чтобы повторить.",
+  cut: "Соединение оборвалось до ответа, и восстановить его не удалось. Нажмите «Перегенерировать», чтобы повторить.",
+  tooLong: "Модель так и не начала писать ответ. Попробуйте ещё раз или разделите запрос на части.",
+  stuck: "Сервер слишком долго не отдаёт готовый ответ. Нажмите «Перегенерировать», чтобы повторить.",
+  partial: "Ответ сохранён частично: соединение оборвалось, а продолжение получить не удалось.",
+  noStream: "Сервер ответил без потока данных. Нажмите «Перегенерировать», чтобы повторить.",
+}
+
+function httpFailureText(status: number) {
+  if (status === 401 || status === 403) return "Проверьте доступ к аккаунту."
+  if (status === 429) return "Доступный лимит запросов исчерпан."
+  if (status === 502 || status === 503 || status === 504) return `Сервер Malik AI сейчас перезапускается или перегружен (HTTP ${status}). Нажмите «Перегенерировать» через несколько секунд.`
+  return `Сервер вернул ошибку HTTP ${status}. Нажмите «Перегенерировать», чтобы повторить.`
+}
+
 export async function fetchRecoverableChat(input: RequestInfo | URL, init: RequestInit, options: RecoveryOptions = {}): Promise<Response> {
   const fetcher = options.fetcher || fetch
   const signal = init.signal
   let body: Record<string, unknown> = {}
   try { body = JSON.parse(String(init.body || "{}")) } catch {}
   const retryable = canRetryChat(body)
-  // Large multi-part requests legitimately spend longer planning and verifying.
-  // A 60-second first-token cutoff was killing them while the server was alive.
-  const prompt = String(body.originalQuestion || body.question || body.prompt || "")
-  const largeBrief = briefNeedsDeep(prompt)
-  const firstTextMs = options.firstTextMs ?? (retryable ? (largeBrief ? 180_000 : 60_000) : 14 * 60_000)
-  const idleMs = options.idleMs ?? (largeBrief ? 90_000 : 45_000)
-  const recoveryMs = options.recoveryMs ?? (largeBrief ? 60_000 : 20_000)
+  const defaults = chatStreamTimings(body)
+  const firstTextMs = options.firstTextMs ?? defaults.firstTextMs
+  const idleMs = options.idleMs ?? defaults.idleMs
+  const recoveryMs = options.recoveryMs ?? defaults.recoveryMs
+  const headersMs = options.firstTextMs ?? defaults.headersMs
+  const pollMs = options.pollMs ?? 1500
   let response: Response
-  try { response = await within(fetcher(input, init), firstTextMs, signal) }
+  try { response = await within(fetcher(input, init), headersMs, signal) }
   catch (error) {
-    if (!retryable || signal?.aborted || (error as Error)?.name === "AbortError") throw error
+    if (!retryable || isAbort(error, signal)) throw error
     options.onRecovery?.()
-    response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true }) }), firstTextMs, signal)
+    response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true }) }), headersMs, signal)
     body = { ...body, chatRecovery: true }
   }
   // Permission and quota failures are terminal; never retry or disguise them.
@@ -79,18 +140,28 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const emit = (bytes: Uint8Array) => { if (!cancelled) controller.enqueue(bytes) }
+      const status = (text: string, extra: Record<string, unknown> = {}) => emit(frame("progress", { type: "progress", phase: "recovering", text, ...extra }))
       try {
-        if (body.chatRecovery) emit(frame("progress", { type: "progress", phase: "recovering", text: "Продолжаю ответ…", textOnly: true }))
+        if (body.chatRecovery) status("Продолжаю ответ…", { textOnly: true })
         for (let attempt = 0; attempt < 2; attempt++) {
           let buffer = ""
           const decoder = new TextDecoder()
           const began = Date.now()
+          let lastByteAt = began
           let terminal = false
+          let serverError = false
+          // The message must describe the latest failure, not an earlier one.
+          finalError = ""
           const consume = (block: string) => {
             const data = block.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n")
             let payload: Record<string, unknown>
             try { payload = JSON.parse(data) } catch { emit(encoder.encode(block + "\n\n")); return }
-            if (payload.type === "error") { finalError = String(payload.message || payload.error || "Сервис ответа временно недоступен."); terminal = true; return }
+            if (payload.type === "error") {
+              finalError = String(payload.message || payload.error || "") || CHAT_FAILURE_TEXT.cut
+              serverError = true
+              terminal = true
+              return
+            }
             if (payload.type === "content") {
               const chunk = String(payload.content || "")
               // Some providers send a growing snapshot, others send deltas.
@@ -105,62 +176,118 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
             emit(encoder.encode(block + "\n\n"))
           }
           try {
-            if (!response.ok) throw new Error(`Chat service HTTP ${response.status}`)
-            if (!response.body) throw new Error("Chat service returned no stream")
+            if (!response.ok) { finalError = httpFailureText(response.status); throw new Error(`Chat service HTTP ${response.status}`) }
+            if (!response.body) { finalError = CHAT_FAILURE_TEXT.noStream; throw new Error("Chat service returned no stream") }
             reader = response.body.getReader()
             while (!terminal && !cancelled) {
-              const remaining = content ? idleMs : firstTextMs - (Date.now() - began)
-              const { value, done } = await within(reader.read(), remaining, signal)
+              const now = Date.now()
+              const silenceLeft = idleMs - (now - lastByteAt)
+              const firstTextLeft = content ? Number.POSITIVE_INFINITY : firstTextMs - (now - began)
+              const remaining = Math.min(silenceLeft, firstTextLeft)
+              if (remaining <= 0) throw new DeadlineError()
+              let read: ReadableStreamReadResult<Uint8Array>
+              try { read = await within(reader.read(), remaining, signal) }
+              catch (error) {
+                if (error instanceof DeadlineError) {
+                  // Name the actual failure: a server that stopped talking, or
+                  // one that kept beating for many minutes without one word.
+                  finalError = !content && Date.now() - began >= firstTextMs ? CHAT_FAILURE_TEXT.tooLong : CHAT_FAILURE_TEXT.silent
+                }
+                throw error
+              }
+              const { value, done } = read
+              // Heartbeats, statuses and steps all prove the server is working.
+              if (value?.length) lastByteAt = Date.now()
               buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
               const blocks = buffer.split(/\r?\n\r?\n/)
               buffer = blocks.pop() || ""
               for (const block of blocks) { consume(block); if (terminal) break }
               if (done) { if (!terminal && buffer.trim()) consume(buffer); break }
             }
+            // A stream that ends without `done` or `error` was cut on the way.
+            if (!terminal && !cancelled) finalError = CHAT_FAILURE_TEXT.cut
           } catch (error) {
-            if (signal?.aborted || (error as Error)?.name === "AbortError") throw error
-            finalError = "Сервис ответа временно недоступен."
+            if (isAbort(error, signal)) throw error
+            finalError ||= CHAT_FAILURE_TEXT.cut
           } finally { void reader?.cancel().catch(() => {}); reader = undefined }
           if (completed || cancelled) break
           options.onRecovery?.()
 
-          // A disconnected client must reuse completed server work, including
-          // an answer already partly streamed. It must not start a duplicate job.
+          // A disconnected client must reuse the server's work, including an
+          // answer already partly streamed - the server keeps generating after
+          // the browser drops (its stream is teed into durable storage). Wait
+          // for that turn for as long as it is still running; starting a
+          // duplicate request would only race it.
           const turnId = response.headers.get("x-malik-background-turn-id")
-          if (turnId) {
+          let turnSettled = !turnId
+          if (turnId && !serverError) {
+            status("Связь прервалась — ответ ещё готовится на сервере, жду его…")
             const deadline = Date.now() + recoveryMs
+            let lastNotice = Date.now()
             while (Date.now() < deadline && !cancelled) {
               if (signal?.aborted) throw abortError()
               try {
-                const saved = await within(fetcher(`/api/stream/background/${encodeURIComponent(turnId)}`, { cache: "no-store", signal }), Math.min(4000, deadline - Date.now()), signal)
+                const budget = Math.max(1, Math.min(10_000, deadline - Date.now()))
+                const saved = await within(fetcher(`/api/stream/background/${encodeURIComponent(turnId)}`, { cache: "no-store", signal }), budget, signal)
+                // Permissions and rate limits are terminal: no hot polling, and
+                // never a replay that would bypass them.
                 if ([401, 403, 404, 429].includes(saved.status)) {
                   finalError = saved.status === 429 ? "Доступный лимит запросов исчерпан." : "Не удалось открыть сохранённый ответ. Проверьте доступ к аккаунту."
+                  turnSettled = true
                   break
                 }
-                const payload = await within(saved.json(), Math.min(4000, deadline - Date.now()), signal)
-                if (payload?.turn?.status === "complete" && payload.turn.content) {
-                  const answer = String(payload.turn.content)
+                const payload = saved.ok ? await within(saved.json(), budget, signal) : null
+                const turn = payload?.turn
+                if (turn?.status === "complete" && turn.content) {
+                  const answer = String(turn.content)
                   // Dashboard recognises cumulative content, avoiding duplicates.
                   if (!content || answer.startsWith(content)) emit(frame("content", { type: "content", content: answer }))
                   else throw new Error("Recovered answer does not match streamed prefix")
-                  emit(frame("done", { type: "done", ...payload.turn, usedWeb: Boolean(payload.turn.usedWeb), sources: payload.turn.sources || [], execution: payload.turn.execution, textOnly: Boolean(payload.turn.textOnly) }))
+                  content = answer
+                  emit(frame("done", { type: "done", ...turn, usedWeb: Boolean(turn.usedWeb), sources: turn.sources || [], execution: turn.execution, textOnly: Boolean(turn.textOnly) }))
                   completed = true
+                  turnSettled = true
                   break
                 }
-                if (payload?.turn?.status === "failed" || saved.status === 404) break
-              } catch (error) { if (signal?.aborted || (error as Error)?.name === "AbortError") throw error }
-              await wait(options.pollMs ?? 800, signal)
+                if (turn?.status === "failed") {
+                  // Keep whatever the server wrote before it failed.
+                  const partial = String(turn.content || "")
+                  if (partial.length > content.length && (!content || partial.startsWith(content))) {
+                    emit(frame("content", { type: "content", content: partial }))
+                    content = partial
+                  }
+                  if (turn.error) finalError = String(turn.error)
+                  turnSettled = true
+                  break
+                }
+              } catch (error) {
+                if (isAbort(error, signal)) throw error
+                if (error instanceof Error && /does not match/.test(error.message)) { turnSettled = true; break }
+              }
+              if (Date.now() - lastNotice > 20_000) {
+                lastNotice = Date.now()
+                status("Ответ ещё готовится на сервере…")
+              }
+              await wait(Math.max(1, Math.min(pollMs, deadline - Date.now())), signal)
             }
+            if (!completed && !turnSettled) finalError = CHAT_FAILURE_TEXT.stuck
           }
           // Once the server identifies a job, only that job may finish it.
           // A pending, inaccessible or temporarily offline saved turn is not
           // permission to launch another provider request or consume quota.
+          // Only a request the server never registered is repeated, once.
           if (completed || cancelled || turnId || content || !retryable || attempt || body.chatRecovery) break
-          emit(frame("progress", { type: "progress", phase: "recovering", text: "Продолжаю ответ…", textOnly: true }))
-          response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true }) }), firstTextMs, signal)
-          if ([401, 403, 429].includes(response.status)) { finalError = response.status === 429 ? "Доступный лимит запросов исчерпан." : "Проверьте доступ к аккаунту."; break }
+          status("Продолжаю ответ…", { textOnly: true })
+          try {
+            response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true }) }), headersMs, signal)
+          } catch (error) {
+            if (isAbort(error, signal)) throw error
+            finalError = CHAT_FAILURE_TEXT.silent
+            break
+          }
+          if ([401, 403, 429].includes(response.status)) { finalError = httpFailureText(response.status); break }
         }
-        if (!completed && !cancelled) emit(frame("error", { type: "error", message: content ? "Ответ сохранён частично; сервис не смог завершить продолжение." : finalError || "Не удалось получить ответ от сервисов. Запрос сохранён в истории." }))
+        if (!completed && !cancelled) emit(frame("error", { type: "error", message: content ? CHAT_FAILURE_TEXT.partial : finalError || CHAT_FAILURE_TEXT.cut }))
         if (!cancelled) controller.close()
       } catch (error) { if (!cancelled) controller.error(error) }
     },

@@ -32,8 +32,33 @@ export function briefItems(prompt: string, max = 64): BriefItem[] {
   return [...found].sort((a,b)=>a[0]-b[0]).slice(0,Math.max(1,Math.min(max,64)))
     .map(([number,title])=>({number,title}))
 }
+const LETTERED_LINE = /^\s*(?:#{1,6}\s*)?(?:[-*•]\s*)?(?:\*\*)?([A-Za-zА-ЯЁа-яё])[).]\s+\S/u
+const INLINE_LETTER = /(?:^|[\s;,:])([A-ZА-ЯЁ])\)\s+\S/gu
+
+/**
+ * Distinct lettered parts: «А) … Б) … В) …», «a. … b. … c. …». Russian briefs
+ * often enumerate with letters instead of numbers, and those are just as many
+ * separate requirements.
+ */
+export function letteredItemCount(prompt: string): number {
+  const letters = new Set<string>()
+  const unfenced: string[] = []
+  let fence = false
+  for (const line of String(prompt || "").split(/\r?\n/)) {
+    if (line.trimStart().startsWith(String.fromCharCode(96, 96, 96))) { fence = !fence; continue }
+    if (fence) continue
+    unfenced.push(line)
+    const match = LETTERED_LINE.exec(line)
+    if (match) letters.add(match[1].toLowerCase())
+  }
+  for (const match of unfenced.join("\n").matchAll(INLINE_LETTER)) letters.add(match[1].toLowerCase())
+  return letters.size
+}
+
+/** A brief big enough to deserve the long-answer budget and timings. */
 export function briefNeedsDeep(prompt: string): boolean {
-  return briefItems(prompt).length >= 3 || String(prompt || "").length >= 6000
+  const value = String(prompt || "")
+  return briefItems(value).length >= 3 || letteredItemCount(value) >= 3 || value.length >= 3500
 }
 export function briefOutputFloor(prompt: string): number {
   const size = String(prompt || "").length

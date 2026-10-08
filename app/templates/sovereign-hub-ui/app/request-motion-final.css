@@ -1,0 +1,88 @@
+/* =========================================================================
+   REQUEST MOTION — phones move exactly like the computer
+   =========================================================================
+   Imported after every other sheet.
+
+   Three performance passes freeze motion inside the dashboard:
+   - creator-clone-safe.css: below 1180px every animation is cut to .001ms and
+     a single iteration;
+   - .malik-low-motion-runtime (performance-guard.tsx): after a few slow frames
+     — which every phone has while the page loads — `animation: none` at any
+     width;
+   - mobile-performance.css: the same .001ms cut for reduced motion.
+
+   They were aimed at the decorative space background, but they also froze the
+   indicators that tell a person their request is being worked on: the spinner
+   beside «Ход работы», the ring around the Malik mark, the loaders inside an
+   answer and the dot at the end of a streaming answer. On a computer they turn;
+   on a phone they stood still, so the request looked dead.
+
+   These are a handful of small transforms and opacity changes on composited
+   layers, alive only while a request runs. They cost nothing per frame.
+
+   With reduced motion switched on, nothing here applies: the phone then does
+   what the computer does in that case (spinners rest; the «Думаю…» letter
+   wave and the soft pulse from live-activity.css carry the feedback).
+
+   Specificity: `html body #malik-root .malik-dashboard-shell` plus doubled
+   classes outranks every freeze above (1,1,0 / 1,3,0). More specific running
+   receipt rules in chat-execution.css keep their own timings.
+   ========================================================================= */
+
+@keyframes malik-request-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes malik-request-pulse {
+  50% { opacity: 0.5; }
+}
+
+@keyframes malik-request-caret {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.82); }
+}
+
+@keyframes malik-request-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(0.93); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Spinners: the one beside «Ход работы», tool and browser loaders, and any
+     loader inside an answer. Same speed as on the computer. */
+  html body #malik-root .malik-dashboard-shell .malik-execution .is-spinning.is-spinning {
+    animation: malik-request-spin 1.2s linear infinite !important;
+  }
+  html body #malik-root .malik-dashboard-shell .malik-digital-browser .is-spinning.is-spinning,
+  html body #malik-root .malik-dashboard-shell .animate-spin.animate-spin {
+    animation: malik-request-spin 1s linear infinite !important;
+  }
+
+  /* The ring that travels around the Malik mark while the model works. */
+  html body #malik-root .malik-dashboard-shell .malik-ai-avatar.is-working.is-working::after {
+    animation: malik-request-spin 0.9s linear infinite !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .malik-ai-avatar.is-working.is-working {
+    animation: malik-request-breathe 1.6s ease-in-out infinite !important;
+  }
+
+  html body #malik-root .malik-dashboard-shell .animate-pulse.animate-pulse {
+    animation: malik-request-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite !important;
+  }
+
+  /* The dot that sits at the end of an answer while it is still being written. */
+  html body #malik-root .malik-dashboard-shell .malik-chat-fullwidth .malik-md.malik-streaming.malik-streaming > :last-child::after {
+    animation: malik-request-caret 1.05s ease-in-out infinite !important;
+  }
+
+  /* «Думаю…» shimmer and the running receipts, also under the low-FPS guard
+     on a computer (their phone rules live in live-activity.css and
+     chat-execution.css and are limited to narrow screens). */
+  html.malik-low-motion-runtime body #malik-root .malik-dashboard-shell .malik-live-activity .malik-live-activity__label {
+    animation: malik-activity-shimmer 1s linear infinite !important;
+  }
+  html.malik-low-motion-runtime body #malik-root .malik-dashboard-shell .malik-execution--inline[data-state="running"] .malik-receipt.is-running .malik-receipt__title {
+    animation: malik-receipt-active-label 1.3s ease-in-out infinite !important;
+  }
+}

@@ -107,6 +107,10 @@ import "./malik-cosmos-home.css"
 // Truly last: loading, analysis, sources and status surfaces in black and
 // white only. It has to follow every accent rule above to strip their gold.
 import "./chat-monochrome-final.css"
+// After everything: the performance passes above freeze all motion on phones,
+// including the spinners that show a request is alive. This brings back only
+// those request indicators, so a phone moves like the computer.
+import "./request-motion-final.css"
 
 // Let Next emit one viewport tag. Read the visible area separately on iOS,
 // where the keyboard does not resize dvh. Keep deliberate pinch zoom available.
