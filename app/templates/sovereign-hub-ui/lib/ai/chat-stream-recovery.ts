@@ -1,3 +1,5 @@
+import { briefNeedsDeep } from "./brief-quality"
+
 /** Recover a saved turn before repeating a read-only question. Never replay actions. */
 type RecoveryOptions = {
   fetcher?: typeof fetch
@@ -49,13 +51,19 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
   let body: Record<string, unknown> = {}
   try { body = JSON.parse(String(init.body || "{}")) } catch {}
   const retryable = canRetryChat(body)
-  const firstTextMs = options.firstTextMs ?? (retryable ? 60_000 : 14 * 60_000)
+  // Large multi-part requests legitimately spend longer planning and verifying.
+  // A 60-second first-token cutoff was killing them while the server was alive.
+  const prompt = String(body.originalQuestion || body.question || body.prompt || "")
+  const largeBrief = briefNeedsDeep(prompt)
+  const firstTextMs = options.firstTextMs ?? (retryable ? (largeBrief ? 180_000 : 60_000) : 14 * 60_000)
+  const idleMs = options.idleMs ?? (largeBrief ? 90_000 : 45_000)
+  const recoveryMs = options.recoveryMs ?? (largeBrief ? 60_000 : 20_000)
   let response: Response
   try { response = await within(fetcher(input, init), firstTextMs, signal) }
   catch (error) {
     if (!retryable || signal?.aborted || (error as Error)?.name === "AbortError") throw error
     options.onRecovery?.()
-    response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true, responseDepth: "balanced" }) }), firstTextMs, signal)
+    response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true }) }), firstTextMs, signal)
     body = { ...body, chatRecovery: true }
   }
   // Permission and quota failures are terminal; never retry or disguise them.
@@ -101,7 +109,7 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
             if (!response.body) throw new Error("Chat service returned no stream")
             reader = response.body.getReader()
             while (!terminal && !cancelled) {
-              const remaining = content ? options.idleMs || 45_000 : firstTextMs - (Date.now() - began)
+              const remaining = content ? idleMs : firstTextMs - (Date.now() - began)
               const { value, done } = await within(reader.read(), remaining, signal)
               buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
               const blocks = buffer.split(/\r?\n\r?\n/)
@@ -120,7 +128,7 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
           // an answer already partly streamed. It must not start a duplicate job.
           const turnId = response.headers.get("x-malik-background-turn-id")
           if (turnId) {
-            const deadline = Date.now() + (options.recoveryMs ?? 20_000)
+            const deadline = Date.now() + recoveryMs
             while (Date.now() < deadline && !cancelled) {
               if (signal?.aborted) throw abortError()
               try {
@@ -142,7 +150,7 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
           }
           if (completed || cancelled || content || !retryable || attempt || body.chatRecovery) break
           emit(frame("progress", { type: "progress", phase: "recovering", text: "Продолжаю ответ…", textOnly: true }))
-          response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true, responseDepth: "balanced" }) }), firstTextMs, signal)
+          response = await within(fetcher(input, { ...init, body: JSON.stringify({ ...body, chatRecovery: true }) }), firstTextMs, signal)
           if ([401, 403, 429].includes(response.status)) { finalError = response.status === 429 ? "Доступный лимит запросов исчерпан." : "Проверьте доступ к аккаунту."; break }
         }
         if (!completed && !cancelled) emit(frame("error", { type: "error", message: content ? "Ответ сохранён частично; сервис не смог завершить продолжение." : finalError || "Не удалось получить ответ от сервисов. Запрос сохранён в истории." }))
