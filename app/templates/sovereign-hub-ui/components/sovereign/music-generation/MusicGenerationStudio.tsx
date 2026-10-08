@@ -458,13 +458,15 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         ))
         setGenerating(true)
         setNotice(
-          nextStatus === "queued"
-            ? activeRequestId.startsWith("malik-music-wait:")
-              ? "Free.ai переполнен — Malik AI автоматически ждёт слот и повторяет отправку сам…"
-              : "Задание в очереди музыкального провайдера…"
-            : "Музыкальный провайдер генерирует трек…",
+          data?.retryingProvider
+            ? "Музыкальный провайдер временно недоступен. Задание сохранено, Malik AI повторно проверяет статус без нового списания лимита."
+            : nextStatus === "queued"
+              ? activeRequestId.startsWith("malik-music-wait:")
+                ? "Free.ai переполнен — Malik AI автоматически ждёт слот и повторяет отправку сам…"
+                : "Задание в очереди музыкального провайдера…"
+              : "Музыкальный провайдер генерирует трек…",
         )
-        timer = window.setTimeout(poll, 3000)
+        timer = window.setTimeout(poll, data?.retryingProvider ? 9000 : 3000)
       } catch {
         if (!cancelled) timer = window.setTimeout(poll, 5000)
       }
