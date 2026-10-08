@@ -15,7 +15,7 @@ import { PreviewPanel } from "./preview-panel"
 import { clearStoredAuthSnapshot, storeWorkOSProfile } from "@/lib/auth/client-session"
 import { MALIK_OWNER_EMAIL, isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
-import { chatHttpErrorMessage } from "@/lib/ai/errors"
+import { chatHttpErrorMessage, chatVisibleErrorMessage } from "@/lib/ai/errors"
 import { fetchRecoverableChat } from "@/lib/ai/chat-stream-recovery"
 import { chatCompletionError, mergeChatStreamText } from "@/lib/ai/chat-stream-contract"
 import { mergeStreamingAssistantCheckpoints, restoreInterruptedAssistant } from "@/lib/ai/stream-checkpoint"
@@ -7375,7 +7375,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       fullText = cleanDashboardAIText(fullText)
     } else {
       stopLive()
-      // A plain (non-SSE) reply is complete by definition.
+      // JSON may contain a backend error even if an intermediary returned 200.
+      // Never show a storage/Compute diagnostic as the model's answer.
+      if (responseType.includes("application/json")) {
+        throw new Error(chatHttpErrorMessage(503, await response.text(), responseType))
+      }
+      // A plain (non-SSE) text reply is complete by definition.
       sawDone = true
       fullText = cleanDashboardAIText(await response.text())
     }
@@ -7483,7 +7488,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           ? "Соединение прервалось — ответ может быть неполным. Нажмите «Перегенерировать», чтобы повторить."
           : "Соединение прервалось до ответа. Нажмите «Перегенерировать», чтобы повторить.")
       : error instanceof Error && error.message
-        ? error.message
+        ? chatVisibleErrorMessage(error.message)
         : `${getMalikModel(selectedModelId).label} временно недоступна. Попробуйте ещё раз или выберите другую модель.`
     setErrorNotification(errorMessage)
     if (finalExecution) applyExecution(settleExecution(upsertExecutionStep(finalExecution, { id: `${assistantMessage.id}:error`, title: connectionDropped ? "Соединение прервано" : "Запрос не завершён", kind: "status", state: "failed", startedAt: Date.now(), endedAt: Date.now(), error: errorMessage }), connectionDropped ? "interrupted" : "failed"))
@@ -7495,10 +7500,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
     setIsGeneratingTerminal(false)
 
-    // Keep what the reader already watched arrive; the failure goes under it.
+    // Keep the useful partial answer without injecting raw backend errors
+    // inside its Markdown. A truthful incomplete marker remains visible.
     const receivedBeforeDrop = cleanDashboardAIText(liveShownText || fullText)
     const failedText = receivedBeforeDrop
-      ? `${receivedBeforeDrop}\n\n> ${errorMessage.replace(/\s+/g, " ").trim()}`
+      ? `${receivedBeforeDrop}\n\n_Ответ может быть неполным. Нажмите «Перегенерировать», чтобы повторить._`
       : errorMessage
     // Research links collected before the answer failed are NOT evidence
     // that a completed response exists. Keep provenance only if actual answer
