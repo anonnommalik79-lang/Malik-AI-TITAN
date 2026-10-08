@@ -37,6 +37,7 @@ const { shouldUseWeb } = load("lib/ai/web-search-policy.ts")
 const query = load("lib/ai/web-search-query.ts")
 const currentEvidence = load("lib/ai/current-evidence.ts")
 const truthFunctions = load("lib/ai/truth-engine.ts")
+const sharedAnswerCache = load("lib/server/public-answer-cache.ts")
 const { buildContextualFollowUps } = load("lib/ai/chat-followups.ts")
 const screenshotPrompt = "Знаеш про Ai Digital Bridge дай всех спикеров"
 const originalFetch = globalThis.fetch
@@ -89,7 +90,7 @@ try {
     assert.match(instruction, /do NOT prove/)
     assert.match(instruction, /not "it does not exist"/)
     const cache = new Map()
-    const caching = functionsFrom("lib/malik-god-router.ts", ["cacheKey", "getCache", "setCache"], { CACHE: cache, SEARCH_CACHE_VERSION: "test", needsCurrentEvidence: currentEvidence.needsCurrentEvidence })
+    const caching = functionsFrom("lib/malik-god-router.ts", ["cacheKey", "getCache", "setCache"], { CACHE: cache, SEARCH_CACHE_VERSION: "test", needsCurrentEvidence: currentEvidence.needsCurrentEvidence, ...sharedAnswerCache })
     caching.setCache(prompt, { content: "outdated comparison" })
     assert.equal(caching.getCache(prompt), null, "changing facts are rechecked, not restored from a stale answer")
     assert.equal(cache.size, 0)
