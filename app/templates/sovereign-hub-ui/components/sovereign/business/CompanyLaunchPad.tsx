@@ -489,7 +489,7 @@ export function CompanyLaunchPad(props: CompanyLaunchPadProps) {
                     <b>QA gate</b>
                     <span>{projectQa.checks.slice(0, 8).join(" · ")}</span>
                     <small>Это статическая проверка; финальный Next.js build подтверждается только Vercel.</small>
-                    {!!projectQa.warnings?.length && <small>{projectQa.warnings.join(" · ")}</small>
+                    {!!projectQa.warnings?.length && <small>{projectQa.warnings.join(" · ")}</small>}
                   </div>
                 )}
 
