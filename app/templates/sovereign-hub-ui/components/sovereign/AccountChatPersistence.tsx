@@ -6,6 +6,7 @@ import { setMalikMemoryAccountScope } from "@/lib/malik-context"
 import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import { mergeAccountChatStates } from "@/lib/ai/account-chat-state-merge"
 import { accountChatRetryDelay, accountChatWriteConfirmed, shouldRetryAccountChatWrite } from "@/lib/ai/account-chat-sync-retry"
+import { pollingChatResponse } from "@/lib/ai/chat-poll-transport"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const ACCOUNT_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
@@ -436,12 +437,19 @@ function installBackgroundRuntime(
     const headers = new Headers(typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined)
     if (nextInit?.headers) new Headers(nextInit.headers).forEach((value, key) => headers.set(key, value))
     headers.set("x-malik-background-turn-id", turnId)
+    if (accountAtStart !== "guest" && new URLSearchParams(window.location.search).get("connection") === "poll") {
+      headers.set("Prefer", "respond-async")
+      headers.set("Accept", "application/json")
+    }
 
+    let response: Response
     if (typeof Request !== "undefined" && input instanceof Request) {
       const rewritten = new Request(target.href, input)
-      return runtime.baseFetch(rewritten, { ...(nextInit || {}), headers, signal: controller.signal })
+      response = await runtime.baseFetch(rewritten, { ...(nextInit || {}), headers, signal: controller.signal })
+    } else {
+      response = await runtime.baseFetch(target.href, { ...(nextInit || {}), headers, signal: controller.signal })
     }
-    return runtime.baseFetch(target.href, { ...(nextInit || {}), headers, signal: controller.signal })
+    return pollingChatResponse(response, { fetcher: runtime.baseFetch, signal: controller.signal })
   }) as typeof window.fetch
 
   window.fetch = backgroundFetch
