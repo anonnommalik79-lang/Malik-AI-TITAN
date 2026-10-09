@@ -22,6 +22,7 @@
     "test:voice": "node scripts/verify-voice-mode.mjs && node scripts/verify-voice-audio.mjs && node scripts/verify-voice-intent.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-streaming.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-accuracy.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-path.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-live-session.mjs && node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-voice-answer.mjs",
     "test:auth-audio": "node scripts/verify-auth-audio.mjs",
     "test:auth-redirects": "node scripts/verify-auth-redirects.mjs",
+    "test:network": "node scripts/verify-network-access.mjs",
     "test:auth-server": "node scripts/verify-auth-server.mjs",
     "test:voice:live": "node scripts/verify-voice-live.mjs",
     "test:account": "node scripts/verify-account-and-search.mjs",

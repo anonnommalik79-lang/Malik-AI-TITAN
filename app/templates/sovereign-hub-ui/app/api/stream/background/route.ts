@@ -133,15 +133,43 @@ export async function POST(request: Request) {
   }
 
   const entitlement = await resolveRequestEntitlement(request)
+  const asynchronous = (request.headers.get("prefer") || "").split(",").some((value) => value.trim().toLowerCase() === "respond-async")
+  // The polling endpoint is account-private. Do not accept anonymous jobs
+  // whose results the caller could never read, or weaken ownership checks.
+  if (asynchronous && !entitlement.authenticated) {
+    return Response.json({ ok: false, error: "Войдите в аккаунт для совместимого режима подключения." }, {
+      status: 401, headers: { "cache-control": "private, no-store" },
+    })
+  }
   const started = await startBackgroundChatTurn(turnId, entitlement.userId)
   if (!started) return Response.json({ ok: false, error: "Этот запрос уже существует. Начните новый." }, { status: 409, headers: { "cache-control": "private, no-store" } })
 
   let response: Response
   try {
+    if (asynchronous) {
+      const headers = new Headers(request.headers)
+      headers.set("accept", "text/event-stream")
+      request = new Request(request, { headers })
+    }
     response = await streamPOST(request)
   } catch (error) {
     await failBackgroundChatTurn(turnId, error)
     throw error
+  }
+
+  if (asynchronous && response.ok && response.headers.get("content-type")?.includes("text/event-stream") && response.body) {
+    // Only short JSON responses cross the network. Model SSE is consumed on
+    // the server, so a buffering school/office proxy cannot hold the answer.
+    const persistence = persistStreamResult(turnId, response)
+    after(async () => { await persistence })
+    return Response.json({ ok: true, turnId, status: "pending" }, {
+      status: 202,
+      headers: {
+        "cache-control": "private, no-store",
+        "preference-applied": "respond-async",
+        "x-malik-background-turn-id": turnId,
+      },
+    })
   }
 
   if (!response.body) {

@@ -58,6 +58,9 @@ jobs:
       - name: Verify long briefs and safe transport recovery
         run: npm run test:large-prompts && npm run test:web-recovery
 
+      - name: Verify restricted-network transport and guest alias safety
+        run: npm run test:network
+
       - name: Voice regression suite (mobile, desktop, Live)
         run: npm run test:voice
 
