@@ -30,7 +30,7 @@ assert.equal(briefChecklist(many).includes("55) Task 55"),true, "late requiremen
 const completed = many.split("\n").filter(line=>!line.startsWith("51)")).join("\n")
 assert.deepEqual(missingBriefItems(many,completed),[51], "missing item in the tail is detected")
 const maxSource = readFileSync("lib/server/malik-max-engine.ts","utf8")
-assert.match(maxSource,/if \(spent >= budget - 256\) break/, "MAX continuation obeys the remaining token budget")
+assert.match(maxSource,/if \(spent >= budget - 256\) \{ stopReason = "budget"; break \}/, "MAX continuation obeys the remaining token budget (and reports it)")
 console.log("PASS huge prompts: multiple sections, continuation, final marker, original last instructions and bounded budgets")
 
 import { readFileSync } from "node:fs"

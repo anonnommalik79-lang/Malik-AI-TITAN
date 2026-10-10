@@ -74,6 +74,8 @@ function sse(lines, { delay = 5, failAfter, signal } = {}) {
   })
 }
 
+const RESTART_REPEAT = "Section two describes how packets travel between networks, hop by hop, each router choosing the next step from its own table. Section three explains how names become addresses: a resolver asks the root, the zone, then the authoritative server, and caches the reply for later requests. "
+const RESTART_FIRST = `Section one introduces the subject and the questions this story answers. ${RESTART_REPEAT}`
 const openaiChunk = (text, finish) => `data: ${JSON.stringify({ choices: [{ delta: { content: text }, finish_reason: finish || null }] })}`
 const words = (text) => text.match(/\S+\s*/g)
 
@@ -102,6 +104,20 @@ function makeFetcher(log = []) {
       const prompt = JSON.stringify(body.messages)
       if (/CURRENT ANSWER TAIL/.test(prompt)) return stream([...words("Part two ends the answer.").map((w) => openaiChunk(w)), openaiChunk("", "stop")])
       return stream([...words("Part one of a very long answer. ").map((w) => openaiChunk(w)), openaiChunk("", "length")])
+    }
+    // A continuation that restarts far back (more than the old 240-char seam).
+    if (name.startsWith("restart")) {
+      const prompt = JSON.stringify(body.messages)
+      if (/CURRENT ANSWER TAIL/.test(prompt)) return stream([...words(`${RESTART_REPEAT}Section four closes the story with a clear ending.`).map((w) => openaiChunk(w)), openaiChunk("", "stop")])
+      return stream([...words(RESTART_FIRST).map((w) => openaiChunk(w)), openaiChunk("", "length")])
+    }
+    // Every call stops on the length limit and re-sends the same text: no progress.
+    if (name.startsWith("stuck")) return stream([...words("Stuck answer fragment that keeps hitting the token limit again and again ").map((w) => openaiChunk(w)), openaiChunk("", "length")])
+    // The first call is cut by its length limit; the continuation call fails.
+    if (name.startsWith("contfail")) {
+      const prompt = JSON.stringify(body.messages)
+      if (/CURRENT ANSWER TAIL/.test(prompt)) return new Response(JSON.stringify({ error: { message: "The model `x` does not exist" } }), { status: 404, headers: { "content-type": "application/json" } })
+      return stream([...words("The first part of an answer that the provider cut off by its length limit right ").map((w) => openaiChunk(w)), openaiChunk("", "length")])
     }
     if (name.startsWith("think")) return stream([openaiChunk("<thi"), openaiChunk("nk>hidden plan</th"), openaiChunk("ink>Visible "), openaiChunk("answer only."), openaiChunk("", "stop")])
     if (name.startsWith("quota")) return stream([openaiChunk("Insufficient balance: please topup your account to continue using this model."), openaiChunk("", "stop")])
@@ -242,6 +258,50 @@ await check("an answer stopped by its output limit is continued to the end", asy
   )
   assert.match(text, /^Part one of a very long answer\./)
   assert.match(text, /Part two ends the answer\.$/)
+})
+
+await check("a continuation that restarts far back does not duplicate the answer", async () => {
+  assert.ok(RESTART_REPEAT.length > 240, "the repeated part must be longer than the old 240-char seam")
+  let text = ""
+  const result = await engine.runMalikMax(
+    { prompt: "Напиши длинный рассказ о том, как устроен интернет", systemPrompt: "Be helpful.", maxTokens: 6_000, onToken: (chunk) => { text += chunk } },
+    { fetcher: makeFetcher(), lanes: [lane("restart-lane")] },
+  )
+  assert.equal(text, result.content, "what streamed is what was saved")
+  assert.equal(text.split("Section two describes").length - 1, 1, "section two appears once")
+  assert.equal(text.split("Section three explains").length - 1, 1, "section three appears once")
+  assert.match(text, /^Section one introduces/)
+  assert.match(text, /Section four closes the story with a clear ending\.$/)
+  assert.equal(result.incomplete, undefined, "a finished answer is not marked incomplete")
+})
+
+await check("an answer that never gets past its length limit is marked incomplete", async () => {
+  let text = ""
+  const result = await engine.runMalikMax(
+    { prompt: "Напиши очень длинный подробный рассказ о космосе", systemPrompt: "Be helpful.", maxTokens: 6_000, onToken: (chunk) => { text += chunk } },
+    { fetcher: makeFetcher(), lanes: [lane("stuck-lane")] },
+  )
+  assert.ok(result.incomplete, "incomplete must be set")
+  assert.equal(result.incomplete.reason, "stalled")
+  assert.equal(text.split("Stuck answer fragment").length - 1, 1, "identical re-sends are dropped, not appended")
+})
+
+await check("a failed continuation is reported, not passed off as a finished answer", async () => {
+  const result = await engine.runMalikMax(
+    { prompt: "Напиши очень длинный подробный рассказ о космосе", systemPrompt: "Be helpful.", maxTokens: 6_000, onToken: () => {} },
+    { fetcher: makeFetcher(), lanes: [lane("contfail-lane")] },
+  )
+  assert.match(result.content, /^The first part of an answer/)
+  assert.ok(result.incomplete, "incomplete must be set")
+  assert.equal(result.incomplete.reason, "continuation-failed")
+})
+
+await check("a complete answer carries no incomplete flag", async () => {
+  const result = await engine.runMalikMax(
+    { prompt: "Объясни, что такое DNS", systemPrompt: "Be helpful.", maxTokens: 4_000, onToken: () => {} },
+    { fetcher: makeFetcher(), lanes: [lane("fast-complete")] },
+  )
+  assert.equal(result.incomplete, undefined)
 })
 
 await check("every key of every provider becomes a lane, strongest first", async () => {

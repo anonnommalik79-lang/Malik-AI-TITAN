@@ -1,4 +1,5 @@
 import { briefNeedsDeep } from "./brief-quality"
+import { answerRevises } from "./answer-completion"
 import { chatCompletionError, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "./chat-stream-contract"
 
 /** Recover a saved turn before repeating a read-only question. Never replay actions. */
@@ -188,6 +189,8 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
                 content = mergeChatStreamText(content, payload.content, "snapshot")
                 emit(frame("content", { type: "content", content, contentMode: "snapshot" }))
               }
+              // The server's final wording replaces what streamed (the reader applies it too).
+              if (typeof payload.finalContent === "string" && payload.finalContent.trim()) content = payload.finalContent
               if (!content.trim()) {
                 finalError = "Модель завершила запрос без текста ответа. Нажмите «Перегенерировать», чтобы повторить."
                 serverError = true
@@ -267,10 +270,14 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
                 if (turn?.status === "complete" && turn.content) {
                   const answer = String(turn.content)
                   // Dashboard recognises cumulative content, avoiding duplicates.
-                  if (!content || answer.startsWith(content)) emit(frame("content", { type: "content", content: answer, contentMode: "snapshot" }))
-                  else throw new Error("Recovered answer does not match streamed prefix")
+                  // A saved answer the server finalised (a «⚠️» check before it,
+                  // a status line after it) no longer starts with what streamed:
+                  // it arrives as the final text. Any other answer is refused.
+                  const rewritten = Boolean(content) && !answer.startsWith(content)
+                  if (rewritten && !answerRevises(content, answer)) throw new Error("Recovered answer does not match streamed prefix")
+                  if (!rewritten) emit(frame("content", { type: "content", content: answer, contentMode: "snapshot" }))
                   content = answer
-                  emit(frame("done", { type: "done", ...turn, usedWeb: Boolean(turn.usedWeb), sources: turn.sources || [], execution: turn.execution, textOnly: Boolean(turn.textOnly) }))
+                  emit(frame("done", { type: "done", ...turn, usedWeb: Boolean(turn.usedWeb), sources: turn.sources || [], execution: turn.execution, textOnly: Boolean(turn.textOnly), ...(rewritten ? { finalContent: answer } : {}) }))
                   completed = true
                   turnSettled = true
                   break

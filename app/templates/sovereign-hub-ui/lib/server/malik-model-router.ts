@@ -1,4 +1,5 @@
 import { briefChecklist, briefMissingMarker, missingBriefItems, preserveBriefEdges } from "@/lib/ai/brief-quality"
+import type { AnswerIncomplete } from "@/lib/ai/answer-completion"
 import { isCodeRequest, isFastChatRequest, wantsFullShape } from "@/lib/ai/request-kind"
 import {
   canUseMalikModel,
@@ -25,6 +26,8 @@ export type StrictMalikResult = {
   selectedModelId: MalikModelId
   latencyMs: number
   usage?: any
+  /** Set when the engine had to stop before the answer was finished. */
+  incomplete?: AnswerIncomplete
 }
 
 export type ProviderRuntime = {

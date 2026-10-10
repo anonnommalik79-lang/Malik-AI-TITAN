@@ -38,6 +38,9 @@ function parseSseFrame(frame: string, state: { content: string; error: string; d
   if (type === "done") {
     state.error ||= chatCompletionError(payload)
     if (typeof payload.content === "string") state.content = mergeChatStreamText(state.content, payload.content, "snapshot")
+    // The server's authoritative final text (a truth warning, an incomplete
+    // note) replaces what streamed, so a reload shows the same answer.
+    if (typeof payload.finalContent === "string" && payload.finalContent.trim() && payload.finalContent.length <= MAX_CHAT_RESULT_CHARS) state.content = payload.finalContent
     state.done = true
     state.provider = String(payload.provider || state.provider || "")
     state.model = String(payload.model || payload.selectedModelId || state.model || "")
@@ -46,6 +49,7 @@ function parseSseFrame(frame: string, state: { content: string; error: string; d
       sources: Array.isArray(payload.sources) ? payload.sources.slice(0, 32) : [],
       textOnly: payload.textOnly === true,
       factAudit: payload.factAudit ?? null,
+      incomplete: payload.incomplete && typeof payload.incomplete === "object" ? payload.incomplete : null,
       selectedModelId: typeof payload.selectedModelId === "string" ? payload.selectedModelId : undefined,
     }
   }

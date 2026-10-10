@@ -1,4 +1,5 @@
 import type { MalikModelId } from "@/lib/ai/malik-models"
+import type { AnswerIncomplete } from "@/lib/ai/answer-completion"
 import { instantReply } from "@/lib/ai/instant-replies"
 import { answerCardsToText } from "@/lib/ai/answer-cards"
 import { userContextBlocks } from "@/lib/ai/client-context"
@@ -48,6 +49,8 @@ type GodAnswer = {
   selectedModelId?: MalikModelId
   /** Null whenever the answer had nothing checkable in it. */
   factAudit?: MalikFactAudit | null
+  /** The engine stopped before the answer was finished (time, length, a failed continuation). */
+  incomplete?: AnswerIncomplete
 }
 
 /**
@@ -1119,6 +1122,7 @@ export async function malikGodAnswer(
       usedWeb: usedEvidence,
       sources,
       factAudit: auditGroundedAnswer(answerCardsToText(content), sources, prompt),
+      ...(result.incomplete ? { incomplete: result.incomplete } : {}),
       attempts: [{
         provider: result.provider,
         model: result.model,

@@ -128,6 +128,7 @@ try {
   })
 
   const { createExecutionReporter } = load("lib/ai/chat-execution.ts")
+  const { sameAnswerText, withIncompleteNote } = load("lib/ai/answer-completion.ts")
   const callbacks = []
   let resolveUsage, resolveHistory, modelSignal
   const usage = new Promise((resolve) => { resolveUsage = resolve })
@@ -144,6 +145,7 @@ try {
     recordDailyMultimodalTokens: () => {}, observeComputeResult: () => {}, asPlainText: (answer) => answer.content,
     recordChatUsage: () => usage, persistFounderChatTurn: () => history,
     malikModelErrorPayload: (error) => ({ message: String(error) }),
+    sameAnswerText, withIncompleteNote,
   })
   await check("SSE delivers done while history and usage writes are still pending", async () => {
     const response = liveSseResponse({ prompt: screenshotPrompt }, null, { userId: "offline-test", plan: "owner" })

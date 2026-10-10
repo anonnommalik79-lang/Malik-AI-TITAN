@@ -1,4 +1,5 @@
 import { asPlainText, malikGodAnswer } from "@/lib/malik-god-router"
+import { sameAnswerText, withIncompleteNote } from "@/lib/ai/answer-completion"
 import { after } from "next/server"
 import { parsePluginCommand } from "@/lib/server/plugin-runtime"
 import { runPluginModelAnswer } from "@/lib/server/plugin-model-answer"
@@ -706,6 +707,9 @@ function liveSseResponse(
     if (failedWorkRefund) await failedWorkRefund
   })
   const protectStreamChunk = createStreamingFenceProtector()
+  // Exactly what reached the browser as deltas, to tell whether the server's
+  // final text (truth warnings, an incomplete-answer note) still has to be sent.
+  let streamedText = ""
 
   const stopHeartbeat = () => {
     if (heartbeat) clearInterval(heartbeat)
@@ -762,7 +766,10 @@ function liveSseResponse(
                 activity.status("Ответ поступает в чат")
               }
               const safeChunk = protectStreamChunk(chunk)
-              if (safeChunk) send("content", { type: "content", content: safeChunk, contentMode: "delta" })
+              if (safeChunk) {
+                streamedText += safeChunk
+                send("content", { type: "content", content: safeChunk, contentMode: "delta" })
+              }
             },
             activity,
             generation.signal,
@@ -778,14 +785,26 @@ function liveSseResponse(
           }
         }
         observeComputeResult(answer)
-        const content = asPlainText(answer)
+        const incomplete = "incomplete" in answer ? answer.incomplete ?? null : null
+        // An answer the engine could not finish says so in its last line.
+        const content = withIncompleteNote(asPlainText(answer), incomplete)
+        // The authoritative final text, sent only when it differs from what
+        // streamed: a streamed answer would otherwise keep a server-side
+        // rewrite (a «⚠️» warning, the incomplete note) off the screen and
+        // out of the saved history.
+        let finalContent: string | undefined
         // Flush the answer to the UI before waiting on persisted usage storage.
         // Quota admission already happened before generation, so this keeps
         // accounting intact without making an instant answer look like it is
         // still "thinking" while a database write finishes.
         if (streamedAny) {
           const tail = protectStreamChunk("", true)
-          if (tail) send("content", { type: "content", content: tail, contentMode: "delta" })
+          if (tail) {
+            streamedText += tail
+            send("content", { type: "content", content: tail, contentMode: "delta" })
+          }
+          const authoritative = protectChatCodeFences(content)
+          if (!sameAnswerText(streamedText, authoritative)) finalContent = authoritative
         } else {
           send("content", {
             type: "content",
@@ -815,6 +834,8 @@ function liveSseResponse(
           // from. This rides on `done` rather than an event of its own so the
           // durable-turn tee and every existing reader carry it unchanged.
           factAudit: "factAudit" in answer ? answer.factAudit ?? null : null,
+          incomplete,
+          ...(finalContent !== undefined ? { finalContent } : {}),
           tookMs: Date.now() - startedAt,
           agentRuntime: "agentRuntime" in answer ? answer.agentRuntime : undefined,
           projectArtifact: "projectArtifact" in answer ? answer.projectArtifact : undefined,
@@ -1004,7 +1025,7 @@ async function handlePOST(request: Request) {
     await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0)
     workReceipt = null
     observeComputeResult(answer)
-    const content = asPlainText(answer)
+    const content = withIncompleteNote(asPlainText(answer), "incomplete" in answer ? answer.incomplete ?? null : null)
     return textResponse(content)
   } catch (error) {
     if (workReceipt) await refundWorkQuota(workUserId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))

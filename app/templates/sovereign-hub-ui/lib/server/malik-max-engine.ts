@@ -1,4 +1,6 @@
 import { missingBriefItems, briefMissingMarker, briefNeedsDeep } from "@/lib/ai/brief-quality"
+import { assessAnswerCompletion, type AnswerIncompleteReason } from "@/lib/ai/answer-completion"
+import { createContinuationFilter } from "@/lib/ai/continuation-overlap"
 import {
   getMalikModel,
   MALIK_MODELS,
@@ -1256,19 +1258,21 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   const used = [result.lane.id]
   let usage: unknown = result.usage
   let lowProgressRounds = 0
+  // Why the engine stopped continuing while the answer may still be open.
+  let stopReason: AnswerIncompleteReason | undefined = "rounds"
 
   for (let round = 0; round < MAX_CONTINUATIONS; round += 1) {
     const spent = estimateTokens(content)
     // Neither incomplete code nor missing items authorize spending beyond the
     // caller's budget or the account quota; keep an unfinished result honest.
-    if (spent >= budget - 256) break
+    if (spent >= budget - 256) { stopReason = "budget"; break }
     const cutShort = truncatedFinish(result.finishReason) && spent < budget - 150
     const codeOpen = codeMode && (codeAnswerNeedsMore(content, input.prompt)
       || missingBriefItems(taskPrompt, content).length > 0
       || briefMissingMarker(taskPrompt, content))
     const structuredOpen = !codeMode && spent < budget - 256 && structuredAnswerNeedsMore(taskPrompt, content)
-    if (!result.interrupted && !cutShort && !codeOpen && !structuredOpen) break
-    if (timeLeft() < 10_000) break
+    if (!result.interrupted && !cutShort && !codeOpen && !structuredOpen) { stopReason = undefined; break }
+    if (timeLeft() < 10_000) { stopReason = "time"; break }
     if (input.signal?.aborted) throw abortError()
     console.info("[MALIK_MAX] continue", JSON.stringify({
       round: round + 1,
@@ -1288,6 +1292,8 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
         : [result.lane, ...alternatives]
     const before = content
     const missingBefore = missingBriefItems(taskPrompt, before).length
+    // Whatever the continuation re-sends from the answer is dropped as it streams.
+    const repeats = createContinuationFilter(content, emit)
     try {
       result = await raceLanes({
         lanes: order,
@@ -1299,26 +1305,29 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
           maxTokens: perCall(spent),
           temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.3, 0.3),
         },
-        onToken: emit,
+        onToken: repeats.push,
         ...boundedTiming(),
         // The final missing section or marker can legitimately be very short.
         // Buffering thresholds for full answers must not discard that tail.
         minFlush: 40,
         allowShortFinal: true,
         maxParallel: fastMode ? 2 : MAX_PARALLEL,
-        overlapWith: content,
         fetcher: deps.fetcher,
         signal: input.signal,
       })
+      repeats.end()
+      if (repeats.dropped) console.info("[MALIK_MAX] continuation repeats dropped", repeats.dropped)
       used.push(result.lane.id)
       usage = { previous: usage, continuation: result.usage }
       const newText = content.slice(before.length).trim()
       const requirementsImproved = missingBriefItems(taskPrompt, content).length < missingBefore
       // Prevent five expensive STOP → tiny fragment → STOP loops.
       lowProgressRounds = newText.length < 96 && !requirementsImproved ? lowProgressRounds + 1 : 0
-      if (lowProgressRounds >= 2 && !result.interrupted) break
+      if (lowProgressRounds >= 2 && !result.interrupted) { stopReason = "stalled"; break }
     } catch (error) {
+      repeats.end()
       if (input.signal?.aborted) throw error
+      stopReason = "continuation-failed"
       break
     }
   }
@@ -1326,7 +1335,15 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   if (!visibleFinalText(content)) {
     throw new MalikModelRouteError("MAX_EMPTY", "MalikLLM MAX не получила ответ. Повторите запрос.", 503, "malik-max")
   }
-  console.info("[MALIK_MAX] done", JSON.stringify({ lanes: used, ms: Date.now() - started, tokens: estimateTokens(content) }))
+  // Said honestly: an answer the engine could not finish is not "done".
+  const incomplete = assessAnswerCompletion(content, {
+    interrupted: result.interrupted,
+    finishReason: result.finishReason,
+    stopReason,
+    missing: missingBriefItems(taskPrompt, content),
+    markerMissing: briefMissingMarker(taskPrompt, content),
+  })
+  console.info("[MALIK_MAX] done", JSON.stringify({ lanes: used, ms: Date.now() - started, tokens: estimateTokens(content), incomplete: incomplete?.reason || null }))
   return {
     content,
     provider: result.lane.provider,
@@ -1334,6 +1351,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     selectedModelId: "malik-max",
     latencyMs: Date.now() - started,
     usage,
+    ...(incomplete ? { incomplete } : {}),
   }
 }
 

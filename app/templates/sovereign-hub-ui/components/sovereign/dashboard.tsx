@@ -7,6 +7,7 @@ import { MobileViewport } from "./MobileViewport"
 const ComputePanel = dynamic(() => import("./compute/ComputePanel"))
 import { WelcomeScreen } from "./welcome-screen"
 import { splitPluginCommand } from "./composer-tools/model"
+import { stripIncompleteNote } from "@/lib/ai/answer-completion"
 import { getMalikPlugin } from "./features/plugin-registry"
 import { ChatView } from "./chat-view"
 import { ChatInvestorBackground } from "./ChatInvestorBackground"
@@ -6569,11 +6570,14 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const priorMessages = regenTarget ? conversationBase.filter((item) => item.id !== regenTarget.message.id) : conversationBase
   const history = (carryContext ? (regenTarget ? priorMessages : [...priorMessages, userMessage]).slice(-historyWindow) : [userMessage]).map(m => {
     const mediaFact = describeReadyMediaAction(m.generatedMedia)
+    // «Ответ не завершён…» is a status line for the person; the model sees
+    // where its answer really stopped, so «Продолжить» resumes from there.
+    const content = m.role === "assistant" ? stripIncompleteNote(m.content) : m.content
     return {
       role: m.role,
       content: mediaFact
-        ? `${m.content}\n\n[MALIK_MEDIA_ACTION_FACT]\n${mediaFact}`
-        : m.content,
+        ? `${content}\n\n[MALIK_MEDIA_ACTION_FACT]\n${mediaFact}`
+        : content,
     }
   })
   const memoryContext = buildMalikMemoryContext()
@@ -7327,6 +7331,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           const completionError = chatCompletionError(payload)
           if (completionError) throw new Error(completionError)
           sawDone = true
+          // The server's final text wins over what streamed: it may carry a
+          // «⚠️» check or the «Ответ не завершён» line the stream never had.
+          if (typeof payload?.finalContent === "string" && payload.finalContent.trim()) {
+            fullText = payload.finalContent
+            scheduleLive()
+          }
           textOnlyAnswer = payload?.textOnly === true
           const trace = normalizeExecutionTrace(payload?.execution)
           if (trace) applyExecution({ ...trace, model: getMalikModel(selectedModelId).label })
@@ -7391,7 +7401,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     const stoppedByUser = /Остановлено пользователем\.?\s*$/u.test(fullText)
     if (finalExecution?.state === "running") applyExecution(settleExecution(finalExecution, stoppedByUser ? "cancelled" : connectionCut ? "interrupted" : "completed"))
     if (connectionCut && fullText && !stoppedByUser && !isProjReq) {
-      fullText = `${fullText}\n\n_Соединение прервалось — ответ может быть неполным. Нажмите «Перегенерировать», чтобы повторить._`
+      fullText = `${fullText}\n\n_Соединение прервалось — ответ может быть неполным. Нажмите «Продолжить», чтобы дописать, или «Перегенерировать», чтобы начать заново._`
     }
 
     // Text that already streamed in live needs no second, simulated reveal.

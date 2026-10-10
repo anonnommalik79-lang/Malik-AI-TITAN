@@ -1,3 +1,5 @@
+import { answerNeedsContinuation, CONTINUE_PROMPT } from "./answer-completion"
+
 /** Pure, testable contextual quick actions for the Malik AI chat. */
 export type FollowUp = { label: string; text: string; research?: boolean }
 export type FollowUpContext = { hasAttachment?: boolean }
@@ -59,5 +61,12 @@ export function buildContextualFollowUps(question: string, answer: string, conte
   const isProcedure = /(?:как|настрой|установ|пошаг|қалай|орнат|баптау|\b(?:how to|steps|setup|install)\b)/iu.test(question)
   const special = context.hasAttachment ? items.attachment : isCode ? items.code : isMath ? items.math : isProcedure ? items.steps : items.table
   // Avoid fact-checking labels for programming or calculations: use their dedicated verification action.
-  return [items.more, items.short, items.simple, items.example, special, ...(isCode || isMath || context.hasAttachment ? [] : [items.fact])]
+  const actions = [items.more, items.short, items.simple, items.example, special, ...(isCode || isMath || context.hasAttachment ? [] : [items.fact])]
+  // An answer that stopped early (time, length, a broken connection) first
+  // offers to finish it; «Короче» and «Проще» make no sense for half an answer.
+  if (answerNeedsContinuation(answer)) {
+    const resume = CONTINUE_PROMPT[locale]
+    return [{ label: resume.label, text: resume.text }, ...actions.filter((item) => item !== items.short && item !== items.simple)]
+  }
+  return actions
 }
