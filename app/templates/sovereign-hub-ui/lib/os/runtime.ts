@@ -145,6 +145,10 @@ async function generateImage(request: ImageRequest): Promise<ImageResult> {
 
 export function serverToolDeps(): ToolDeps {
   return {
+    async githubRead(ownerId, input, signal) {
+      const { readGitHub } = await import("@/lib/work/github")
+      return readGitHub(ownerId, input, signal, { allowPublic: true })
+    },
     async text(request) {
       const { runStrictMalikModel } = await import("@/lib/server/malik-model-router")
       const result = await runStrictMalikModel({

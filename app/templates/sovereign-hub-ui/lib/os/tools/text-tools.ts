@@ -429,7 +429,8 @@ export const assembleTool: ToolDefinition = {
     if (!produced.length) {
       throw new OsToolError("NOTHING_PRODUCED", "Ни один шаг не дал результата, собирать нечего. Повторите шаги с ошибкой.", { retryable: false })
     }
-    context.activity("Сверяю бренд во всех материалах", 0.5)
+    const repositoryWork = context.flow.tasks.some(task => task.type === "github.work")
+    context.activity(repositoryWork ? "Собираю отчёт и предлагаемые файлы" : "Сверяю бренд во всех материалах", 0.5)
     // Consistency: the brand name should appear in every text deliverable.
     const inconsistent = brand
       ? produced.filter((item) => item.content && ["website", "presentation", "business-plan"].includes(item.kind) && !item.content.toLowerCase().includes(brand.name.toLowerCase())).map((item) => item.title)
@@ -438,7 +439,8 @@ export const assembleTool: ToolDefinition = {
       brand ? `# ${brand.name}${brand.tagline ? ` — ${brand.tagline}` : ""}` : "# Итог",
       "",
       "## Готово",
-      ...produced.map((item) => `- **${item.title}** — ${KIND_LABEL[item.kind] || item.kind}${typeof item.score === "number" ? ` · проверка ${item.score}/100` : ""}`),
+      ...produced.map((item) => `- **${item.title}** — ${KIND_LABEL[item.kind] || item.kind}${!repositoryWork && typeof item.score === "number" ? ` · проверка ${item.score}/100` : ""}`),
+      repositoryWork ? "\n## Границы результата\nПредложение изменений не является выполненным commit. Build и unit tests: NOT RUN; синтаксические проверки перечислены в отчёте GitHub." : "",
       missing.length ? `\n## Не получилось\n${missing.map((label) => `- ${label} — можно повторить этот шаг`).join("\n")}` : "",
       inconsistent.length ? `\n## Требует внимания\n${inconsistent.map((title) => `- В «${title}» не найдено название ${brand?.name}`).join("\n")}` : "",
       planOf(context) || researchOf(context) ? "\n## Дальше\n- Откройте любой результат и попросите изменить его — остальные материалы проекта это учтут." : "",

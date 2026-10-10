@@ -11,6 +11,7 @@ let entitlement = { authenticated: true, userId: "account-a", plan: "free" }
 const turns = new Map(), tails = []
 let modelCalls = 0, modelRequest, modelResponse
 const mocks = {
+  "server-only": {},
   "next/server": { after(run) { tails.push(run()) }, NextResponse: { redirect(url) { return { url: String(url), cookies: { set() {} } } } } },
   "@/lib/server/request-entitlement": { resolveRequestEntitlement: async () => entitlement },
   "@/lib/server/request-frequency": { takeRequestFrequency: () => true },
@@ -32,7 +33,7 @@ function load(file) {
   const js = ts.transpileModule(fs.readFileSync(full, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   new Function("require", "module", "exports", js)((name) => {
     if (name in mocks) return mocks[name]
-    if (full.endsWith("/background/route.ts") && name === "../route") return { POST: async (request) => { modelCalls++; modelRequest = request; return modelResponse } }
+    if (full.replaceAll("\\", "/").endsWith("/background/route.ts") && name === "../route") return { POST: async (request) => { modelCalls++; modelRequest = request; return modelResponse } }
     if (name.startsWith("@/") || name.startsWith(".")) {
       const base = name.startsWith("@/") ? path.resolve(name.slice(2)) : path.resolve(path.dirname(full), name)
       return load(base + ".ts")

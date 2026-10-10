@@ -14,7 +14,7 @@ assert.match(video, /id="mv2-mobile-models"[\s\S]{0,100}is-always-open/)
 assert.match(video, /MOBILE_MODELS\.map/)
 assert.match(video, /modelAvailability\[model\.id\] !== false/)
 assert.match(video, /duration !== 10 \|\| model\.id === "magichour" \|\| model\.id === "runway"/)
-assert.match(video, /provider,\n\s*\}\),/)
+assert.match(video, /provider,\r?\n\s*\}\),/)
 for (const id of ["novai","magichour","pixazo","cliptaps","h3","dashscope","pollo","runway","fal","luma","veo"]) {
   assert.match(videoModels, new RegExp("\\b" + id + ":\\s*"), "models endpoint missing " + id)
   assert.ok(videoRoute.includes('"' + id + '"'), "video route missing " + id)

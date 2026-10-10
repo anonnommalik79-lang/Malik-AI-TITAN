@@ -1,6 +1,7 @@
 import type { ToolName } from "../types"
 import type { ToolDefinition } from "./contract"
 import { dataTool } from "./data-tool"
+import { githubWorkTool } from "./github-tool"
 import { editTool } from "./edit-tool"
 import { codeTool, imageTool, presentationTool, siteTool } from "./media-tools"
 import { assembleTool, brandTool, businessLaunchTool, businessPlanTool, documentTool, researchTool, understandTool, videoScriptTool } from "./text-tools"
@@ -18,6 +19,7 @@ export const TOOLS: Record<ToolName, ToolDefinition> = {
   "business.launch": businessLaunchTool,
   "video.script": videoScriptTool,
   "code.project": codeTool,
+  "github.work": githubWorkTool,
   "data.analyze": dataTool,
   "artifact.edit": editTool,
   "result.assemble": assembleTool,

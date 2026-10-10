@@ -55,7 +55,7 @@ export function validateArtifact(draft: ArtifactDraft, context: ValidationContex
     add("placeholder", !PLACEHOLDER.test(content), "на сайте остались заглушки")
     add("size", content.length > 3_000, "сайт получился слишком коротким")
   } else if (draft.kind === "presentation") {
-    let slides: Array<Record<string, unknown>> = []
+    let slides: Array<Record<string, unknown>>
     try {
       slides = (JSON.parse(content) as { slides?: Array<Record<string, unknown>> }).slides || []
     } catch {
@@ -68,14 +68,16 @@ export function validateArtifact(draft: ArtifactDraft, context: ValidationContex
   } else if (draft.kind === "image") {
     add("url", /^https:\/\//i.test(String(draft.url || "")), "у изображения должен быть адрес")
   } else if (draft.kind === "code") {
-    let files: unknown[] = []
+    let files: unknown[]
     try {
       files = (JSON.parse(content) as { files?: unknown[] }).files || []
     } catch {
       files = []
     }
     add("files", files.length >= 1, "в проекте нет файлов")
-    add("qa", draft.metadata?.qaPassed === true, "проект не прошёл проверку сборки")
+    if (role === "repository-patch") {
+      add("patch", draft.metadata?.patchVerified === true && draft.metadata?.testsExecuted === false, "patch должен пройти заявленные проверки без ложного утверждения о запуске тестов")
+    } else add("qa", draft.metadata?.qaPassed === true, "проект не прошёл проверку сборки")
   } else if (draft.kind === "analysis" && role === "data") {
     add("tables", /\|---/.test(content), "в анализе должна быть таблица статистики")
     add("profile", Boolean(draft.metadata?.profile), "нет посчитанного профиля данных")
