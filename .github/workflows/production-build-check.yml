@@ -70,6 +70,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Work repository runtime and public GitHub boundary (fixtures only)
+        run: npm run test:work-runtime && npm run test:work-github-snapshot
+
       - name: Production build
         run: npm run clean && npm run build
 

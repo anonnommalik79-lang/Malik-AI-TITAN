@@ -52,6 +52,7 @@ export type ToolName =
   | "business.launch"
   | "video.script"
   | "code.project"
+  | "github.work"
   | "data.analyze"
   | "artifact.edit"
   | "result.assemble"

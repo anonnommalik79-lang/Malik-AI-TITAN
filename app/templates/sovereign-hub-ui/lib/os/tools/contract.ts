@@ -1,5 +1,5 @@
 import type { ArtifactDraft } from "../store"
-import type { Artifact, OsFlow, OsProject, OsTask, ProjectSource, SideEffect, ToolName, ValidationReport } from "../types"
+import type { Artifact, OsFlow, OsProject, OsTask, ProjectSource, SideEffect, ToolName, ValidationReport, WorkEvent } from "../types"
 
 /**
  * The Action/Tool contract. Every capability of Malik AI that a flow can
@@ -88,6 +88,8 @@ export type ToolDeps = {
     slides(input: { topic: string; outline: DeckOutlineResult; startIndex: number; count: number; language: "ru" | "kk" | "en" }): Promise<{ slides: Array<{ index: number; slide: DeckSlide }>; missing: number[] }>
   }
   code(request: CodeRequest): Promise<CodeResult>
+  /** Account-scoped GitHub reads only; external writes use the existing approval API. */
+  githubRead?(ownerId: string, input: unknown, signal?: AbortSignal): Promise<unknown>
   /** Renders an edited site plan again (the site skill engine). */
   renderSite?(plan: Record<string, unknown>, prompt: string): Promise<{ html: string; plan: Record<string, unknown> }>
   now(): number
@@ -110,6 +112,8 @@ export type ToolContext = {
   feedback?: ValidationReport
   /** Operational status for the timeline ("Читаю источники…"). */
   activity(text: string, progress?: number): void
+  /** Sub-operation receipts from actual tools, stored in the existing work journal. */
+  event?(type: "tool.started" | "tool.completed" | "tool.failed", data: Pick<WorkEvent, "tool" | "label" | "durationMs" | "error">): Promise<void>
   /** A finished dependency by step id ("brand", "research" …). */
   dependency(stepId: string): DependencyOutput | null
   /** Artifacts given to this task directly (continuation, editing). */

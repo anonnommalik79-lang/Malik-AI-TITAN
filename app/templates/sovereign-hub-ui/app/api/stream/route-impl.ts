@@ -30,6 +30,7 @@ import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
 import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers } from "@/lib/ai/superpowers"
 import { detectScheduleIntent } from "@/lib/ai/schedule-intent"
+import { detectWorkScheduleIntent } from "@/lib/work/intent"
 import { createScheduledTask, scheduledTasksStatus } from "@/lib/server/scheduled-tasks"
 import { createExecutionReporter, type ExecutionReporter } from "@/lib/ai/chat-execution"
 
@@ -332,7 +333,9 @@ async function malikAdminCommandAnswer(request: Request, body: any, ownerMode: b
 async function scheduledCommandAnswer(body: any, entitlement: RequestEntitlement) {
   const prompt = coderPrompt(body)
   const timeZone = String(body?.metadata?.timeZone || "UTC").trim() || "UTC"
-  const intent = detectScheduleIntent(prompt, timeZone)
+  const intent = resolveWorkspaceMode(body?.workspaceMode) === "work"
+    ? detectWorkScheduleIntent(prompt, timeZone)
+    : detectScheduleIntent(prompt, timeZone)
   if (!intent) return null
 
   if (!entitlement.authenticated) {

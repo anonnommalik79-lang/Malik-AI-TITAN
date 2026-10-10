@@ -23,6 +23,12 @@ export async function workSkillCatalog(owner: OwnerContext): Promise<WorkSkill[]
   for (const tool of toolCatalog()) {
     const isExternal = tool.name === "research.web" || tool.name === "image.generate"
     const needsModel = tool.name !== "data.analyze" && tool.name !== "result.assemble" && tool.name !== "image.generate"
+    if (tool.name === "github.work") {
+      skills.push({ id: tool.name, label: tool.label, executor: "external", timeoutMs: tool.timeoutMs, sideEffect: "none",
+        status: !owner.authenticated || dailyFlowLimit(owner) === 0 ? "plan-required" : !modelConfigured ? "needs-connection" : "ready",
+        detail: "Чтение по SHA, до 8 решений модели, предлагаемый patch и синтаксические проверки. Открытый GitHub доступен без OAuth; приватный требует Pipes. Нужна модель. Build/terminal не запускаются; запись только после подтверждения." })
+      continue
+    }
     const blocked = !owner.authenticated || dailyFlowLimit(owner) === 0
     skills.push({ id: tool.name, label: tool.label, executor: isExternal ? "external" : "model", timeoutMs: tool.timeoutMs, sideEffect: tool.sideEffect, status: blocked ? "plan-required" : needsModel && !modelConfigured ? "needs-connection" : "ready", detail: blocked ? "Войдите в аккаунт с доступом к Superflow." : needsModel && !modelConfigured ? "Подключите провайдера модели в настройках сервера." : "Запускается исполнителем Superflow; квоты и доступ проверяются при вызове. Статус подключения не гарантирует доступность провайдера." })
   }

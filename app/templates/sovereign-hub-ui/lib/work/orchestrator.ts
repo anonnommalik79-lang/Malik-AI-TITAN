@@ -2,6 +2,7 @@ import { routingScope } from "@/lib/ai/prompt-shape"
 import { decideSuperflow, detectCapabilities, SUPERFLOW_MAX_GOAL_CHARS } from "@/lib/os/capabilities"
 import type { Capability } from "@/lib/os/types"
 import type { WorkspaceMode } from "@/lib/ai/work-mode"
+import { detectWorkScheduleIntent, workRepositoryIntent } from "./intent"
 
 const imperative = /(?<![\p{L}\p{N}])(?:создай(?:те)?|сделай(?:те)?|подготовь(?:те)?|разработай(?:те)?|построй(?:те)?|собери(?:те)?|напиши(?:те)?|оформи(?:те)?|сгенерируй(?:те)?|экспортируй(?:те)?|create|build|make|prepare|develop|draft|write|generate|export)(?![\p{L}\p{N}])/iu
 const question = /^(?:что|как|почему|зачем|когда|где|кто|сколько|какой|какая|какие|можно ли|what|how|why|when|where|who|is|are|can)(?![\p{L}\p{N}])|\?\s*$/iu
@@ -23,6 +24,8 @@ export function routeWorkRequest(goal: string, options: { mode: WorkspaceMode; s
   if (!options.signedIn) return chat("guest")
   if (options.mode !== "work") return { route: legacy.run ? "flow" : "chat", reason: legacy.reason, capabilities: legacy.capabilities }
   if (/^\s*\//.test(text)) return chat("command")
+  if (detectWorkScheduleIntent(text)) return chat("work-schedule")
+  if (workRepositoryIntent(text)) return { route: "flow", reason: "work-repository", capabilities: ["code"] }
   if (text.length > SUPERFLOW_MAX_GOAL_CHARS) return chat("too-long")
   const scope = routingScope(text)
   if (code.test(scope) && !codePackage.test(scope)) return chat("inline-code")

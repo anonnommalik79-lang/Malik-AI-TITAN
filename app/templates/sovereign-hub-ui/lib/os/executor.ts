@@ -97,6 +97,8 @@ export type StartFlowInput = {
   capabilities?: Capability[]
   /** A custom task graph (continuation, editing, data analysis). */
   tasks?: (flowId: string) => OsTask[]
+  /** Work repository briefs only; ordinary flow goals retain their legacy limit. */
+  workRepository?: boolean
   demo?: boolean
   deps: ToolDeps
 }
@@ -120,7 +122,7 @@ async function createFlow(input: StartFlowInput): Promise<{ flow: OsFlow; create
     throw new OsToolError("TOO_MANY_FLOWS", "Уже выполняются две задачи. Дождитесь, пока одна закончится, или остановите её.", { retryable: false, action: "wait" })
   }
 
-  const goal = String(input.goal || "").trim().slice(0, 4_000)
+  const goal = String(input.goal || "").trim().slice(0, input.workRepository ? 120_000 : 4_000)
   const capabilities = input.capabilities || detectCapabilities(goal)
   const quality = qualityTier(goal, capabilities.length)
   const now = input.deps.now()
@@ -437,6 +439,12 @@ async function runTask(
       feedback: feedback().get(task.id),
       inputs,
       dependency: (stepId) => outputs.get(stepId) || null,
+      event: async (type, data) => {
+        const event = appendWork(flow, type, deps.now(), { taskId: task.id, tool: String(data.tool || task.type).slice(0, 100),
+          label: String(data.label || "").slice(0, 180), durationMs: data.durationMs, error: data.error ? String(data.error).slice(0, 160) : undefined })
+        await saveFlow(ownerId, flow)
+        publishWork(flow, event)
+      },
       activity: (text, progress) => {
         const now = deps.now()
         // At most a few updates a second reach storage and the browser.

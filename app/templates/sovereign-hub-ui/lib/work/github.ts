@@ -10,6 +10,7 @@ const ref = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,119}$/).refine(value
 const filePath = z.string().min(1).max(240).refine(value => !value.startsWith("/") && !/[\\:\p{Cc}]/u.test(value) && !value.split("/").some(part => !part || part === "." || part === ".."))
 const sha = z.string().regex(/^[a-f0-9]{40}$/)
 export const githubReadSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("snapshot"), repo: repository, ref: ref.optional() }).strict(),
   z.object({ action: z.literal("tree"), repo: repository, ref }).strict(),
   z.object({ action: z.literal("file"), repo: repository, ref, path: filePath }).strict(),
   z.object({ action: z.literal("search"), repo: repository, query: z.string().min(1).max(180).refine(value => !/(?:repo|org|user):/i.test(value)) }).strict(),
@@ -45,22 +46,25 @@ async function userCredential(ownerId: string) {
   if (!credential.active || !credential.value) throw new WorkGitHubError("NOT_CONNECTED", "GitHub не подключён. Плагины → GitHub → Подключить.", 409)
   return credential.value
 }
-function client(token: string) {
+function client(token: string, signal?: AbortSignal) {
   const deadline = Date.now() + 90000
   return async (endpoint: string, method = "GET", body?: unknown): Promise<Record<string, unknown>> => {
     const remaining = deadline - Date.now()
     if (remaining <= 0) throw new WorkGitHubError("TIMEOUT", "Время операции истекло. Проверьте репозиторий перед повтором.", 503)
+    signal?.throwIfAborted()
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), Math.min(remaining, 12000))
+    const abort = () => controller.abort(signal?.reason)
+    signal?.addEventListener("abort", abort, { once: true })
     try {
       // Fixed API origin only, no redirects or URL fields accepted from the client.
-      const response = await fetch(`https://api.github.com${endpoint}`, { method, redirect: "error", cache: "no-store", signal: controller.signal, headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "content-type": "application/json" } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) })
+      const response = await fetch(`https://api.github.com${endpoint}`, { method, redirect: "error", cache: "no-store", signal: controller.signal, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "content-type": "application/json" } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) })
       if (!response.ok) throw new WorkGitHubError(`GITHUB_${response.status}`, response.status === 404 ? "Репозиторий или файл не найден либо недоступен." : response.status === 403 ? "Недостаточно прав GitHub или исчерпан лимит API." : "GitHub отклонил операцию. Проверьте права и состояние ветки.", response.status === 404 ? 404 : 409)
       const reader = response.body?.getReader(); if (!reader) throw new WorkGitHubError("EMPTY_RESPONSE", "GitHub вернул пустой ответ.", 502)
       const decoder = new TextDecoder(); let bytes = 0, text = ""
       try { for (;;) { const part = await reader.read(); if (part.done) break; bytes += part.value.byteLength; if (bytes > 2 * 1024 * 1024) { await reader.cancel(); throw new WorkGitHubError("RESPONSE_TOO_LARGE", "Ответ GitHub слишком большой. Уточните запрос.", 413) }; text += decoder.decode(part.value, { stream: true }) }; text += decoder.decode() } finally { reader.releaseLock() }
       return JSON.parse(text) as Record<string, unknown>
-    } catch (error) { if (error instanceof WorkGitHubError) throw error; throw new WorkGitHubError("GITHUB_UNAVAILABLE", "GitHub не ответил. Выполнение не подтверждено; сначала проверьте состояние репозитория.", 503) }
-    finally { clearTimeout(timer) }
+    } catch (error) { signal?.throwIfAborted(); if (error instanceof WorkGitHubError) throw error; throw new WorkGitHubError("GITHUB_UNAVAILABLE", "GitHub не ответил. Выполнение не подтверждено; сначала проверьте состояние репозитория.", 503) }
+    finally { clearTimeout(timer); signal?.removeEventListener("abort", abort) }
   }
 }
 const repoPath = (repo: string) => `/repos/${repo.split("/").map(encodeURIComponent).join("/")}`
@@ -75,8 +79,22 @@ async function fileContent(api: Client, repo: string, path: string, branch: stri
   if (content.includes("\u0000")) throw new WorkGitHubError("BINARY_FILE", "Двоичные файлы этим действием не изменяются.", 400)
   return { content, sha: responseSha(result.sha) }
 }
-export async function readGitHub(ownerId: string, raw: unknown) {
-  const input = githubReadSchema.parse(raw), api = client(await userCredential(ownerId)), base = repoPath(input.repo)
+export async function readGitHub(ownerId: string, raw: unknown, signal?: AbortSignal, options: { allowPublic?: boolean } = {}) {
+  signal?.throwIfAborted()
+  const input = githubReadSchema.parse(raw)
+  let token = ""
+  try { token = await userCredential(ownerId) }
+  catch (error) { if (!options.allowPublic || !(error instanceof WorkGitHubError) || error.code !== "NOT_CONNECTED") throw error }
+  const api = client(token, signal), base = repoPath(input.repo)
+  if (input.action === "snapshot") {
+    const info = await api(base)
+    if (!token && info.private !== false) throw new WorkGitHubError("NOT_PUBLIC", "Без подключения доступны только открытые репозитории.", 403)
+    const branch = ref.parse(input.ref || info.default_branch)
+    const commit = await api(`${base}/commits/${encodeURIComponent(branch)}`)
+    const commitSha = responseSha(commit.sha)
+    const tree = await api(`${base}/git/trees/${commitSha}?recursive=1`)
+    return { repo: input.repo, ref: branch, commitSha, access: token ? "connected" : "public", treeSha: responseSha(tree.sha), truncated: Boolean(tree.truncated) || (Array.isArray(tree.tree) && tree.tree.length > 1000), tree: Array.isArray(tree.tree) ? tree.tree.slice(0, 1000).map(item => { const value = item as Record<string, unknown>; return { path: value.path, type: value.type, mode: value.mode, sha: value.sha, size: value.size } }) : [] }
+  }
   if (input.action === "file") return fileContent(api, input.repo, input.path, input.ref)
   if (input.action === "tree") { const result = await api(`${base}/git/trees/${encodeURIComponent(input.ref)}?recursive=1`); return { sha: responseSha(result.sha), truncated: Boolean(result.truncated) || (Array.isArray(result.tree) && result.tree.length > 1000), tree: Array.isArray(result.tree) ? result.tree.slice(0, 1000).map(item => { const value = item as Record<string, unknown>; return { path: value.path, type: value.type, sha: value.sha, size: value.size } }) : [] } }
   const result = await api(`/search/code?q=${encodeURIComponent(`repo:${input.repo} ${input.query}`)}&per_page=20`)

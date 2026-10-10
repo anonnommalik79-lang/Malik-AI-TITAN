@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { routeWorkRequest } from "@/lib/work/orchestrator"
+import { repositoryWorkPlan } from "@/lib/work/repository-plan"
 import { startFlow } from "@/lib/os/executor"
 import { OsToolError } from "@/lib/os/failures"
 import { cleanRequestId, flowView, isOwnerPlan, osError, osJson, osOwner, requireSignedIn, returnDailyFlow, takeDailyFlow } from "@/lib/os/http"
@@ -9,7 +10,8 @@ import { readJsonBodyLimited } from "@/lib/server/request-safety"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-const flowRequest = z.object({ goal: z.string().min(12).max(4000), clientRequestId: z.string().min(1).max(120), chatId: z.string().regex(/^[\w:.-]{1,120}$/).optional(), projectId: z.string().regex(/^[\w-]{1,120}$/).optional(), workspaceMode: z.enum(["chat", "work"]).default("chat"), force: z.boolean().optional(), demo: z.boolean().optional() }).strict()
+const flowRequest = z.object({ goal: z.string().min(12).max(120000), clientRequestId: z.string().min(1).max(120), chatId: z.string().regex(/^[\w:.-]{1,120}$/).optional(), projectId: z.string().regex(/^[\w-]{1,120}$/).optional(), workspaceMode: z.enum(["chat", "work"]).default("chat"), force: z.boolean().optional(), demo: z.boolean().optional() }).strict()
+  .refine(body => body.workspaceMode === "work" || body.goal.length <= 4000)
 
 /** Mission control: this account's flows, newest first. */
 export async function GET(request: Request) {
@@ -34,10 +36,10 @@ export async function POST(request: Request) {
   try {
     const owner = await osOwner(request)
     requireSignedIn(owner)
-    const parsed = flowRequest.safeParse(await readJsonBodyLimited<unknown>(request, 32 * 1024))
+    const parsed = flowRequest.safeParse(await readJsonBodyLimited<unknown>(request, 512 * 1024))
     if (!parsed.success) throw new OsToolError("INVALID_REQUEST", "Проверьте цель и параметры задачи.", { retryable: false })
     const body = parsed.data
-    const goal = String(body.goal || "").replace(/\s+/g, " ").trim().slice(0, 4_000)
+    const goal = body.workspaceMode === "work" ? body.goal.trim() : body.goal.replace(/\s+/g, " ").trim()
     const clientRequestId = cleanRequestId(body.clientRequestId)
     if (goal.length < 12) throw new OsToolError("INVALID_REQUEST", "Опишите цель подробнее.", { retryable: false })
     if (!clientRequestId) throw new OsToolError("INVALID_REQUEST", "Нет идентификатора запроса.", { retryable: false })
@@ -47,6 +49,8 @@ export async function POST(request: Request) {
 
     // The browser asked because auto mode said so; the server checks again.
     const decision = routeWorkRequest(goal, { mode: body.workspaceMode, signedIn: owner.authenticated })
+    const repositoryWork = decision.reason === "work-repository"
+    if (!repositoryWork && goal.length > 4000) throw new OsToolError("INVALID_REQUEST", "Длинный brief доступен для задач Work с конкретным GitHub-репозиторием.")
     const forced = body.force === true
     if (decision.route !== "flow" && !forced) {
       throw new OsToolError("INVALID_REQUEST", "Эта задача не требует нескольких инструментов — отвечу в обычном чате.", { retryable: false })
@@ -65,6 +69,8 @@ export async function POST(request: Request) {
       chatId,
       projectId,
       capabilities: decision.capabilities.length ? decision.capabilities : undefined,
+      workRepository: repositoryWork,
+      tasks: repositoryWork ? id => repositoryWorkPlan(id, goal) : undefined,
       demo,
       deps: serverToolDeps(),
     }).catch(async (error) => {
