@@ -1,4 +1,5 @@
 import { inflateRawSync } from "node:zlib"
+import { fitDocumentContext, type DocumentPart } from "@/lib/ai/document-context"
 import { providerFetch } from "@/lib/ai/providers/base"
 import { runHiddenGeminiMultimodal } from "@/lib/server/hidden-gemini-multimodal"
 import { transcribeAudio } from "@/lib/transcribe/groq-whisper"
@@ -28,6 +29,8 @@ export type MalikAttachmentRoute =
     }
 
 const MAX_FILE_CONTEXT_CHARS = 180_000
+/** Text read from one file before fitting; the request body itself is capped earlier. */
+const MAX_FILE_READ_CHARS = 1_200_000
 const MAX_ARCHIVE_ENTRY_BYTES = 8 * 1024 * 1024
 const MAX_VISION_IMAGES = 3
 
@@ -211,19 +214,19 @@ function officeText(attachment: MalikMultimodalAttachment) {
     })
     .filter(Boolean)
     .join("\n\n")
-    .slice(0, MAX_FILE_CONTEXT_CHARS)
+    .slice(0, MAX_FILE_READ_CHARS)
 }
 
 function localText(attachment: MalikMultimodalAttachment) {
   if (typeof attachment.text === "string" && attachment.text.trim()) {
-    return attachment.text.slice(0, MAX_FILE_CONTEXT_CHARS)
+    return attachment.text.slice(0, MAX_FILE_READ_CHARS)
   }
   if (isOffice(attachment)) return officeText(attachment)
   if (!isTextLike(attachment)) return ""
 
   const data = decodeBase64(attachment)
   if (!data) return ""
-  return data.toString("utf8").replace(/\u0000/g, "").slice(0, MAX_FILE_CONTEXT_CHARS)
+  return data.toString("utf8").replace(/\u0000/g, "").slice(0, MAX_FILE_READ_CHARS)
 }
 
 function attachmentLabel(attachment: MalikMultimodalAttachment, index: number) {
@@ -404,7 +407,8 @@ export async function routeMalikAttachments(input: {
 
   const estimatedTokens = estimateMultimodalTokens(attachments)
   const files = attachments.map(attachmentLabel)
-  const textSections: string[] = []
+  // Each readable file as its own part, so every file gets a fair share.
+  const textSections: DocumentPart[] = []
   const binary: MalikMultimodalAttachment[] = []
   const unreadable: string[] = []
 
@@ -420,7 +424,7 @@ export async function routeMalikAttachments(input: {
       && typeof attachment.text === "string"
       && attachment.text.includes("[MALIK_VIDEO_TIMELINE_METADATA]")
     ) {
-      textSections.push(`[${attachmentLabel(attachment, index)}]\n${attachment.text}`)
+      textSections.push({ label: attachmentLabel(attachment, index), text: attachment.text })
       continue
     }
 
@@ -431,15 +435,17 @@ export async function routeMalikAttachments(input: {
 
     const text = localText(attachment)
     if (text.trim()) {
-      textSections.push(`[${attachmentLabel(attachment, index)}]\n${text}`)
+      textSections.push({ label: attachmentLabel(attachment, index), text })
     } else if (attachment.kind === "url" && attachment.url) {
-      textSections.push(`[${attachmentLabel(attachment, index)}]\nURL: ${attachment.url}`)
+      textSections.push({ label: attachmentLabel(attachment, index), text: `URL: ${attachment.url}` })
     } else {
       unreadable.push(attachmentLabel(attachment, index))
     }
   }
 
-  const localContext = textSections.join("\n\n").slice(0, MAX_FILE_CONTEXT_CHARS)
+  // Big files are fitted, not cut: beginning, end and the parts the question
+  // is about, with every gap marked (lib/ai/document-context.ts).
+  const localContext = fitDocumentContext(textSections, input.prompt, MAX_FILE_CONTEXT_CHARS - 2_000).text
   const enrichedPrompt = attachContext(input.prompt, localContext)
 
   if (binary.length) {
