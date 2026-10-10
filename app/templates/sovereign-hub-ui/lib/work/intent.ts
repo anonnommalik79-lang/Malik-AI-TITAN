@@ -32,5 +32,10 @@ export function workRepositoryIntent(goal: string): { repo: string; ref?: string
   const repos = [...new Set([...matches.map(match => `${match[1]}/${match[2].replace(/\.git$/i, "")}`), ...(named ? [named] : [])])]
   if (repos.length !== 1 || repos[0].split("/").some(part => part === "." || part === "..")) return null
   const branch = directive.match(/(?:^|\n)\s*(?:ветка|branch)\s*:\s*([\w./-]{1,120})/iu)?.[1]
-  return { repo: repos[0], ref: branch || matches[0]?.[3] }
+  const urlRefs = [...new Set(matches.map(match => match[3]).filter((value): value is string => Boolean(value)))]
+  // /tree/feature/topic may mean a slash-containing branch OR a directory in feature.
+  // Never silently inspect a different commit. An explicit Branch line resolves that ambiguity.
+  const ambiguousTree = matches.some(match => match[3] && /^\/[\w.-]/.test(directive.slice((match.index || 0) + match[0].length)))
+  if (!branch && (ambiguousTree || urlRefs.length > 1)) return null
+  return { repo: repos[0], ref: branch || urlRefs[0] }
 }

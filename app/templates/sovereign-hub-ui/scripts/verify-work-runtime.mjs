@@ -69,6 +69,10 @@ await check("ordinary chat, guests, incidental GitHub and code examples do not s
   assert.equal(orchestrator.routeWorkRequest(goal, { mode: "chat", signedIn: true }).route, "chat")
   assert.equal(orchestrator.routeWorkRequest(goal, { mode: "work", signedIn: false }).route, "chat")
   assert.equal(intent.workRepositoryIntent("Inspect https://github.com/a/b and https://github.com/c/d"), null)
+  assert.equal(intent.workRepositoryIntent("Inspect https://github.com/a/b/tree/feature/topic"), null)
+  assert.equal(intent.workRepositoryIntent("Inspect https://github.com/a/b/tree/main and https://github.com/a/b/tree/other"), null)
+  assert.equal(intent.workRepositoryIntent("Inspect https://github.com/a/b/tree/feature/topic\nBranch: feature/topic").ref, "feature/topic")
+  assert.equal(intent.workRepositoryIntent("Inspect https://github.com/a/b and https://github.com/a/b/tree/release").ref, "release")
 })
 let success, patch, report, resumedId
 await check("actual API -> executor -> read -> model decisions -> syntax -> private artifacts", async () => {

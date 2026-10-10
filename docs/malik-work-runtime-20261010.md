@@ -27,6 +27,8 @@ still calls the original classifier; genuine Work reminders remain supported.
 - Explicit Work repository tasks select the existing flow executor. Ordinary
   questions, guests, incidental GitHub mentions and ambiguous multi-repo goals
   do not silently begin repository execution.
+  Ambiguous `/tree/` paths or conflicting URL refs require an explicit `Branch:`
+  line instead of guessing a different branch/commit.
 - Work GitHub briefs retain newlines and their tail up to 120,000 characters;
   ordinary Chat flow limits and whitespace normalisation remain unchanged.
 - GitHub inspection resolves a real branch/default branch to a commit SHA,
