@@ -7,6 +7,7 @@ import {
   RESPONSE_STAGE_DONE_HOLD_MS,
   RESPONSE_STAGE_DONE_INDEX,
   responseStageIndex,
+  responseStageHappened,
   responseStageRows,
   responseStageSignalsFromTrace,
 } from "@/lib/ai/response-stages"
@@ -233,7 +234,8 @@ export function MalikResponseStages({ trace, writing }: { trace?: ExecutionTrace
 
   if (phase === "gone") return null
 
-  const rows = responseStageRows(index)
+  // Only stages whose work really happened are listed, even as done.
+  const rows = responseStageRows(index, 3, (stage) => responseStageHappened(stage, signals))
   const currentLabel = rows[rows.length - 1]?.label || ""
   return (
     <div
