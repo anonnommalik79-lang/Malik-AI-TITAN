@@ -7965,10 +7965,7 @@ const shouldShowMobilePreviewButton =
       return <VideoGenerationStudio {...studioBridgeProps} />
     }
     if (activeView === "music-generation") {
-      if (!hasMalikProAccess(currentPlan)) {
-        return <SovereignBillingPanel plan={currentPlan} authenticated={!guestMode && Boolean(workOSUser)} onClose={closeAccountPanel} />
-      }
-      return <MusicGenerationStudio username={username} />
+      return <MusicGenerationStudio username={username} plan={currentPlan} onOpenBilling={() => safeOpenView("billing", "manual")} />
     }
     if (activeView === "presentation-generation") {
       return <PresentationStudio username={username} />
@@ -8007,9 +8004,6 @@ const shouldShowMobilePreviewButton =
       return <ChatsListView chats={chats} onSelectChat={handleSelectChat} onNewChat={handleNewChat} libraryMode />;
     }
     if (activeView === "projects") {
-      if (!hasMalikProAccess(currentPlan)) {
-        return <SovereignBillingPanel plan={currentPlan} authenticated={!guestMode && Boolean(workOSUser)} onClose={closeAccountPanel} />
-      }
       const projectChats = modeChats.filter((chat) =>
         !chat.projectId && (
           chat.kind === "project"
@@ -8041,13 +8035,13 @@ const shouldShowMobilePreviewButton =
           onDeleteProject={handleDeleteProject}
           onTogglePin={handleTogglePinChat}
           onSendPrompt={(prompt) => handleSendMessage(prompt)}
-          renderProjectChat={() => (
+          renderProjectChat={(requirePro) => (
             <div className="malik-premium-chat-host malik-ai-chat-bg relative h-full min-h-0 overflow-hidden bg-black">
               <ChatView
                 key={`${workspaceMode}:${activeProjectWorkspaceId || "project"}:${activeChatId || "thread"}`}
                 messages={messages}
                 workspaceMode={workspaceMode}
-                onSendMessage={handleSendMessage}
+                onSendMessage={(content, attachments, options) => { if (requirePro()) void handleSendMessage(content, attachments, options) }}
                 onImageConfirmation={handleImageConfirmation}
                 isLoading={isLoading}
 
@@ -8122,7 +8116,7 @@ const shouldShowMobilePreviewButton =
               onOpenTemplates={() => safeOpenView("templates", "welcome")}
               onOpenPhoto={() => safeOpenView("photo-generation", "welcome")}
               onOpenVideo={() => safeOpenView("video-generation", "welcome")}
-              onOpenMusic={() => safeOpenView(currentPlan === "pro" || currentPlan === "ultra" || currentPlan === "owner" ? "music-generation" : "billing", "welcome")}
+              onOpenMusic={() => safeOpenView("music-generation", "welcome")}
               onOpenWebsite={() => safeOpenView("website-generation", "welcome")}
               onOpenCode={() => safeOpenView("code-generation", "welcome")}
               onOpenBilling={() => safeOpenView("billing", "welcome")}

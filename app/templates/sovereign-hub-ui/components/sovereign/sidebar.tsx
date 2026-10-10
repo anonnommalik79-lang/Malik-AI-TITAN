@@ -89,7 +89,6 @@ type SidebarAction = {
   action?: "new" | "voice" | "translate" | "data" | "tasks" | "work"
   href?: string
   badge?: string
-  requiresPro?: boolean
 }
 
 const GENERIC_CHAT_TITLE = /^(?:новый\s+(?:проект|чат)|new\s+(?:project|chat)|untitled(?:\s+(?:project|chat))?|без\s+названия)$/iu
@@ -115,7 +114,7 @@ const MAIN_ACTIONS: SidebarAction[] = [
   { id: "new", label: "Новый чат", icon: MessageSquarePlus, action: "new" },
   { id: "voice", label: "Голосовой режим", icon: Mic, action: "voice" },
   { id: "library", label: "Библиотека", icon: History, view: "templates" },
-  { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects", badge: "PRO", requiresPro: true },
+  { id: "projects", label: "Проекты", icon: FolderKanban, view: "projects", badge: "PRO" },
   { id: "tasks", label: "Задачи", icon: ListChecks, action: "tasks" },
 ]
 
@@ -125,7 +124,7 @@ const CREATE_ACTIONS: SidebarAction[] = [
   { id: "shorts", label: "Malik Shorts", icon: Clapperboard, href: "/shorts", badge: "BETA" },
   { id: "websites", label: "Сайты", icon: LayoutTemplate, view: "website-generation" },
   { id: "video-generation", label: "Генерация видео", icon: Video, view: "video-generation" },
-  { id: "music-generation", label: "Создать трек", icon: Music2, view: "music-generation", badge: "PRO", requiresPro: true },
+  { id: "music-generation", label: "Создать трек", icon: Music2, view: "music-generation", badge: "PRO" },
   { id: "presentation-generation", label: "Презентации", icon: Presentation, view: "presentation-generation" },
   { id: "photo-generation", label: "Генерация изображений", icon: ImageIcon, view: "photo-generation" },
 ]
@@ -344,10 +343,6 @@ function SidebarInner({
   }, [onOpenSearch])
 
   const runAction = useCallback((action: SidebarAction) => {
-    if (action.requiresPro && !isPro) {
-      openView("billing")
-      return
-    }
     if (action.action === "new") return onNewChat?.()
     if (action.action === "voice") return onOpenVoice?.()
     if (action.action === "tasks") {
