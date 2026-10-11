@@ -45,9 +45,10 @@ export function clampText(input: string, max = 18000) {
   return input.slice(0, max) + "\n...[trimmed]";
 }
 
-export async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 12000) {
+export async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 12000, signal?: AbortSignal) {
   return fetchResearchResponse(url, {
       ...init,
+      signal: signal && init.signal ? AbortSignal.any([signal, init.signal]) : signal || init.signal,
       headers: {
         "user-agent":
           "Mozilla/5.0 MALIK-AI-ResearchBot/5.0 OpenSourceResearch",

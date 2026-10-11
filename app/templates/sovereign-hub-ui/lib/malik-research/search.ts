@@ -1,5 +1,7 @@
 import type { SearchResult } from "./types";
 import { cleanTitle, decodeHtml, domainOf, fetchWithTimeout, stripHtml } from "./utils";
+import { runLiveSearch } from "../live-intelligence/search-engine";
+import { classifyFreshness } from "../ai/freshness-intent";
 
 function uniqueResults(results: SearchResult[], limit: number) {
   const seen = new Set<string>();
@@ -51,7 +53,7 @@ function unwrapDuckUrl(href: string) {
   return decoded;
 }
 
-async function searchSerper(query: string, limit: number): Promise<SearchResult[]> {
+async function searchSerper(query: string, limit: number, signal?: AbortSignal): Promise<SearchResult[]> {
   const key = process.env.SERPER_API_KEY?.trim();
   if (!key) return [];
 
@@ -65,7 +67,7 @@ async function searchSerper(query: string, limit: number): Promise<SearchResult[
       },
       body: JSON.stringify({ q: query, num: Math.min(limit, 10) }),
     },
-    7000
+    7000, signal
   );
 
   if (!res.ok) return [];
@@ -91,7 +93,7 @@ async function searchSerper(query: string, limit: number): Promise<SearchResult[
   );
 }
 
-async function tavilyFetch(query: string, limit: number, key: string, useBearer: boolean) {
+async function tavilyFetch(query: string, limit: number, key: string, useBearer: boolean, signal?: AbortSignal) {
   return fetchWithTimeout(
     "https://api.tavily.com/search",
     {
@@ -109,18 +111,18 @@ async function tavilyFetch(query: string, limit: number, key: string, useBearer:
         include_raw_content: false,
       }),
     },
-    8000
+    8000, signal
   );
 }
 
-async function searchTavily(query: string, limit: number): Promise<SearchResult[]> {
+async function searchTavily(query: string, limit: number, signal?: AbortSignal): Promise<SearchResult[]> {
   const key = process.env.TAVILY_API_KEY?.trim();
   if (!key) return [];
 
-  let res = await tavilyFetch(query, limit, key, false);
+  let res = await tavilyFetch(query, limit, key, false, signal);
 
   if (!res.ok && [401, 403, 422].includes(res.status)) {
-    res = await tavilyFetch(query, limit, key, true);
+    res = await tavilyFetch(query, limit, key, true, signal);
   }
 
   if (!res.ok) return [];
@@ -136,6 +138,7 @@ async function searchTavily(query: string, limit: number): Promise<SearchResult[
             title: x.title,
             url: x.url,
             snippet: x.content,
+            publishedAt: x.published_date,
             score: x.score,
           },
           "tavily"
@@ -146,14 +149,16 @@ async function searchTavily(query: string, limit: number): Promise<SearchResult[
   );
 }
 
-async function searchBrave(query: string, limit: number): Promise<SearchResult[]> {
+async function searchBrave(query: string, limit: number, signal?: AbortSignal): Promise<SearchResult[]> {
   const key = process.env.BRAVE_SEARCH_API_KEY?.trim();
   if (!key) return [];
 
   const url = new URL("https://api.search.brave.com/res/v1/web/search");
   url.searchParams.set("q", query);
   url.searchParams.set("count", String(Math.min(limit, 20)));
-  url.searchParams.set("freshness", "py");
+  const intent = classifyFreshness(query);
+  if (intent.category === "LIVE") url.searchParams.set("freshness", "pd");
+  else if (intent.needsSearch) url.searchParams.set("freshness", "pm");
 
   const res = await fetchWithTimeout(
     url.toString(),
@@ -163,7 +168,7 @@ async function searchBrave(query: string, limit: number): Promise<SearchResult[]
         accept: "application/json",
       },
     },
-    8000
+    8000, signal
   );
 
   if (!res.ok) return [];
@@ -179,7 +184,7 @@ async function searchBrave(query: string, limit: number): Promise<SearchResult[]
             title: x.title,
             url: x.url,
             snippet: x.description,
-            publishedAt: x.age,
+            publishedAt: x.page_age || x.age,
           },
           "brave"
         )
@@ -226,7 +231,7 @@ function parseJinaSearch(markdown: string, limit: number): SearchResult[] {
   return uniqueResults(results, limit);
 }
 
-async function searchJina(query: string, limit: number): Promise<SearchResult[]> {
+async function searchJina(query: string, limit: number, signal?: AbortSignal): Promise<SearchResult[]> {
   if (process.env.JINA_SEARCH_DISABLED === "true") return [];
 
   const base = (process.env.JINA_SEARCH_URL || "https://s.jina.ai/").replace(/\/+$/, "");
@@ -239,7 +244,7 @@ async function searchJina(query: string, limit: number): Promise<SearchResult[]>
         accept: "text/plain, text/markdown, */*",
       },
     },
-    8000
+    8000, signal
   );
 
   if (!res.ok) return [];
@@ -248,7 +253,7 @@ async function searchJina(query: string, limit: number): Promise<SearchResult[]>
   return parseJinaSearch(text, limit);
 }
 
-async function searchSearxng(query: string, limit: number): Promise<SearchResult[]> {
+async function searchSearxng(query: string, limit: number, signal?: AbortSignal): Promise<SearchResult[]> {
   const base = process.env.SEARXNG_URL?.trim();
   if (!base || base === "value") return [];
 
@@ -257,7 +262,7 @@ async function searchSearxng(query: string, limit: number): Promise<SearchResult
   url.searchParams.set("format", "json");
   url.searchParams.set("language", "auto");
 
-  const res = await fetchWithTimeout(url.toString(), {}, 8000);
+  const res = await fetchWithTimeout(url.toString(), { signal }, 8000);
   if (!res.ok) return [];
 
   const data = await res.json();
@@ -281,9 +286,9 @@ async function searchSearxng(query: string, limit: number): Promise<SearchResult
   );
 }
 
-async function searchDuckDuckGo(query: string, limit: number): Promise<SearchResult[]> {
+async function searchDuckDuckGo(query: string, limit: number, signal?: AbortSignal): Promise<SearchResult[]> {
   const url = "https://duckduckgo.com/html/?q=" + encodeURIComponent(query);
-  const res = await fetchWithTimeout(url, {}, 8000);
+  const res = await fetchWithTimeout(url, { signal }, 8000);
   if (!res.ok) return [];
 
   const html = await res.text();
@@ -319,45 +324,23 @@ async function runProvider(name: string, fn: () => Promise<SearchResult[]>) {
   }
 }
 
-export async function searchWeb(query: string, limit = 8): Promise<SearchResult[]> {
-  const fastSettled = await Promise.all([
-    runProvider("serper", () => searchSerper(query, limit)),
-    runProvider("tavily", () => searchTavily(query, limit)),
-    runProvider("brave", () => searchBrave(query, limit)),
-    runProvider("jina", () => searchJina(query, limit)),
-  ]);
-
-  const fastMerged = fastSettled.flat();
-
-  if (fastMerged.length >= Math.min(4, limit)) {
-    return uniqueResults(
-      fastMerged.sort((a, b) => (b.score || 0) - (a.score || 0)),
-      limit
-    );
-  }
-
-  const backupSettled = await Promise.all([
-    runProvider("searxng", () => searchSearxng(query, limit)),
-    runProvider("duckduckgo", () => searchDuckDuckGo(query, limit)),
-  ]);
-
-  const merged = [...fastMerged, ...backupSettled.flat()];
-
-  return uniqueResults(
-    merged.sort((a, b) => (b.score || 0) - (a.score || 0)),
-    limit
-  );
+function availableProviders() {
+  return [
+    ...(process.env.SERPER_API_KEY?.trim() ? [{ name: "serper", run: searchSerper }] : []),
+    ...(process.env.TAVILY_API_KEY?.trim() ? [{ name: "tavily", run: searchTavily }] : []),
+    ...(process.env.BRAVE_SEARCH_API_KEY?.trim() ? [{ name: "brave", run: searchBrave }] : []),
+    ...(process.env.SEARXNG_URL?.trim() ? [{ name: "searxng", run: searchSearxng }] : []),
+    ...(process.env.JINA_SEARCH_DISABLED === "true" ? [] : [{ name: "jina", run: searchJina }]),
+    { name: "duckduckgo", run: searchDuckDuckGo },
+  ]
 }
 
-/** Voice needs one quick search, not a paid fan-out to every configured service. */
+export async function searchWeb(query: string, limit = 8): Promise<SearchResult[]> {
+  const result = await runLiveSearch({ prompt: query, queries: [query], mode: "fast", providers: availableProviders() })
+  return result.sources.slice(0, limit)
+}
+
+/** Voice shares freshness, bounded fallback and cancellation with other search entry points. */
 export async function searchVoiceWeb(query: string, limit = 4): Promise<SearchResult[]> {
-  for (const [name, run] of [
-    ["serper", searchSerper], ["tavily", searchTavily], ["brave", searchBrave],
-    // Public search is still available when the paid provider keys are absent.
-    ["jina", searchJina], ["duckduckgo", searchDuckDuckGo],
-  ] as const) {
-    const results = await runProvider(name, () => run(query, limit));
-    if (results.length) return results;
-  }
-  return [];
+  return searchWeb(query, limit)
 }

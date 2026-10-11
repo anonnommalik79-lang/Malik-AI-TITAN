@@ -1,6 +1,7 @@
+import { classifyFreshness } from "./freshness-intent"
 /** Changing facts are checked at request time, never inferred from a training cutoff. */
 export function needsCurrentEvidence(prompt: string): boolean {
-  return /(?:сейчас|сегодня|вчера|последн|новейш|свеж|актуальн|новост|выпуст|релиз|выш[её]л|доступн|существу|верси[яию]|обновлен|цен[ауы]|сколько\s+стоит|курс\s+валют|президент|министр|расписани|спикер|\b(?:news|latest|current|today|yesterday|release|version|available|president|ceo|price|schedule)\b|(?:gpt|gemini|claude|grok|deepseek|qwen)(?:\s+(?:opus|sonnet|haiku|flash))?[ -]?\d)/iu.test(prompt)
+  return ["CURRENT", "MIXED", "LIVE"].includes(classifyFreshness(prompt).category)
 }
 
 export function currentResearchDate(now = new Date()): string {

@@ -1,0 +1,155 @@
+{
+  "baseline": "c3e504b8",
+  "rows": [
+    {
+      "name": "before",
+      "corpus": 75,
+      "correct": 56,
+      "falsePositiveSearches": 8,
+      "missedDynamicSearches": 11,
+      "p50Ms": 0.00187299999993229,
+      "p95Ms": 0.006168999999999869,
+      "errors": [
+        {
+          "prompt": "Translate: latest news",
+          "expected": false,
+          "actual": true
+        },
+        {
+          "prompt": "Переведи: президент",
+          "expected": false,
+          "actual": true
+        },
+        {
+          "prompt": "Что такое фотосинтез?",
+          "expected": false,
+          "actual": true
+        },
+        {
+          "prompt": "What is photosynthesis?",
+          "expected": false,
+          "actual": true
+        },
+        {
+          "prompt": "What is a prime number?",
+          "expected": false,
+          "actual": true
+        },
+        {
+          "prompt": "Как найти площадь круга?",
+          "expected": false,
+          "actual": true
+        },
+        {
+          "prompt": "Сегодня я устал",
+          "expected": false,
+          "actual": true
+        },
+        {
+          "prompt": "История развития ИИ",
+          "expected": false,
+          "actual": true
+        },
+        {
+          "prompt": "Какая самая мощная ИИ-модель?",
+          "expected": true,
+          "actual": false
+        },
+        {
+          "prompt": "Какие новые технологии появились?",
+          "expected": true,
+          "actual": false
+        },
+        {
+          "prompt": "Какие научные открытия опубликованы на этой неделе?",
+          "expected": true,
+          "actual": false
+        },
+        {
+          "prompt": "Какие компании запустили новые продукты?",
+          "expected": true,
+          "actual": false
+        },
+        {
+          "prompt": "Which is the strongest AI model?",
+          "expected": true,
+          "actual": false
+        },
+        {
+          "prompt": "Ең күшті ЖИ моделі қандай?",
+          "expected": true,
+          "actual": false
+        },
+        {
+          "prompt": "Соңғы OpenAI моделі қандай?",
+          "expected": true,
+          "actual": false
+        },
+        {
+          "prompt": "Қазіргі Next.js нұсқасы қандай?",
+          "expected": true,
+          "actual": false
+        },
+        {
+          "prompt": "Бүгін Қазақстанда не болды?",
+          "expected": true,
+          "actual": false
+        },
+        {
+          "prompt": "Кеше қандай жаңалық болды?",
+          "expected": true,
+          "actual": false
+        },
+        {
+          "prompt": "Жаңа ЖИ модельдерін түсіндір",
+          "expected": true,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "name": "after",
+      "corpus": 75,
+      "correct": 75,
+      "falsePositiveSearches": 0,
+      "missedDynamicSearches": 0,
+      "p50Ms": 0.09869900000001053,
+      "p95Ms": 0.265720999999985,
+      "errors": []
+    }
+  ],
+  "fixtureResources": {
+    "cacheEntries": 128,
+    "retainedJsonBytes": 2620480,
+    "heapDeltaBytes": 2281208,
+    "gcAvailable": true,
+    "searchMetrics": [
+      {
+        "mode": "fast",
+        "fallbackCalls": 2,
+        "fallbackSuccesses": 1,
+        "failedAttempts": 1,
+        "cacheRepeatCalls": 0,
+        "allEmptyCallCap": 4
+      },
+      {
+        "mode": "deep",
+        "fallbackCalls": 4,
+        "fallbackSuccesses": 2,
+        "failedAttempts": 2,
+        "cacheRepeatCalls": 0,
+        "allEmptyCallCap": 6
+      },
+      {
+        "mode": "max",
+        "fallbackCalls": 6,
+        "fallbackSuccesses": 3,
+        "failedAttempts": 3,
+        "cacheRepeatCalls": 0,
+        "allEmptyCallCap": 8
+      }
+    ],
+    "providerCostUSD": 0
+  },
+  "note": "Curated intent corpus and simulated transports; not independent real-world accuracy or end-to-end production latency. Heap delta requires --expose-gc and is a single isolated cache measurement. No external API calls."
+}

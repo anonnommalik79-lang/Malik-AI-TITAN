@@ -4,6 +4,9 @@ export type SearchResult = {
   domain: string;
   snippet?: string;
   publishedAt?: string;
+  updatedAt?: string;
+  checkedAt?: string;
+  readAt?: string;
   score?: number;
   provider?: string;
 };
@@ -13,6 +16,9 @@ export type FetchedSource = {
   url: string;
   domain: string;
   text: string;
+  updatedAt?: string;
+  checkedAt?: string;
+  readAt?: string;
   snippet?: string;
   publishedAt?: string;
   provider?: string;

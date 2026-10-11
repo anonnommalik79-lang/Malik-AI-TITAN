@@ -186,7 +186,7 @@ try {
   await check("search failure cannot pretend to have found web results", async () => {
     globalThis.fetch = async () => new Response("", { status: 503 })
     instruction = "not called"
-    const result = await (await turn.POST(request({ text: "Поищи погоду", language: "ru" }))).json()
+    const result = await (await turn.POST(request({ text: "Поищи погоду в Петропавловске", language: "ru" }))).json()
     assert.equal(result.usedWeb, false)
     assert.ok(!result.sources?.length, "no source may be invented when the search failed")
     // This used to assert the model was never called at all, and that the person
@@ -196,7 +196,7 @@ try {
     // that rather than state a stale number as current. The invariant this check
     // exists for is untouched: no invented sources, and usedWeb stays false.
     assert.match(instruction, /WEB SEARCH RETURNED NOTHING/)
-    assert.match(instruction, /may be out of date/)
+    assert.match(instruction, /do not supply current numbers/)
   })
 
   // The TTS route remembers which providers just failed and skips them for a

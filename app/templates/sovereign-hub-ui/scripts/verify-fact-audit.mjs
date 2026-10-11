@@ -389,8 +389,10 @@ check("the router audits every answer written from open pages", () => {
   const router = read("lib/malik-god-router.ts")
   assert.match(router, /import \{ auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit \} from "@\/lib\/ai\/fact-audit"/)
   // Card blocks are audited as their text (lib/ai/answer-cards.ts), like any other sentence.
-  assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(content\), sources, prompt, verified\.report\)/)
-  assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(verified\.content\), sources, prompt, verified\.report\)/)
+  assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(content\), sources, prompt, verified\.report, freshness\.needsSearch/)
+  // Audit the final evidence-gated text on both paths, including an honest
+  // replacement when a draft contains an invented source citation.
+  assert.equal([...router.matchAll(/factAudit: auditGroundedAnswer\(answerCardsToText\(content\), sources, prompt, verified\.report, freshness\.needsSearch/g)].length, 2)
   assert.match(router, /factAudit: answer\.factAudit \?\? null/)
 })
 

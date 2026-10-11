@@ -1,0 +1,68 @@
+name: Live knowledge index
+on:
+  schedule:
+    - cron: "37 2,8,14,20 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: live-knowledge-index
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read previous index branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data
+          if gh api "repos/${GITHUB_REPOSITORY}/contents/index.json?ref=knowledge/live-index" > data/response.json; then
+            node -e "const fs=require('fs');const r=JSON.parse(fs.readFileSync('data/response.json'));fs.writeFileSync('data/index.json',Buffer.from(r.content,'base64'))"
+          fi
+      - name: Refresh bounded public feeds
+        id: refresh
+        continue-on-error: true
+        working-directory: source/app/templates/sovereign-hub-ui
+        run: node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/update-live-knowledge.mjs "$GITHUB_WORKSPACE/data/index.json"
+      - name: Preserve index and diagnostics as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-knowledge-index
+          path: data/index.json
+          retention-days: 7
+      - name: Save data branch only (never main or Render)
+        if: steps.refresh.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd data
+          rm -f response.json
+          git init
+          git config user.name 'Malik Knowledge Updater'
+          git config user.email 'knowledge-updater@users.noreply.github.com'
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git config credential.helper '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
+          if git ls-remote --exit-code origin refs/heads/knowledge/live-index; then
+            git fetch --depth=1 origin knowledge/live-index
+            git reset --soft FETCH_HEAD
+          else
+            git checkout --orphan knowledge/live-index
+          fi
+          git add index.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore(knowledge): refresh public evidence index [skip render] [skip ci]'
+            git push origin HEAD:refs/heads/knowledge/live-index
+          fi
+      - name: Report total feed failure
+        if: steps.refresh.outcome != 'success'
+        run: exit 1

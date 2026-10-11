@@ -83,6 +83,7 @@ export function normalizeMath(text: string): string {
 
 function stripTail(text: string) {
   return text
+    .replace(/\s+(?:без\s+(?:интернет[ -]?поиска|интернета|поиска)|without\s+(?:web\s+search|internet|browsing)|интернетсіз)\s*[.!?]*$/iu, "")
     .replace(/[,\s]+(?:пожалуйста|плиз|please|pls)\s*[?!.]*$/iu, "")
     .replace(/\s*(?:\?+|\.+|(?<![\d)])!+|=\s*\??|\s+равно\??)\s*$/u, "")
     .replace(/^[:\s]+/, "")
@@ -200,6 +201,9 @@ export function detectMathTask(text: string): MathIntent | null {
   }
   if (solveCommand && /(?:корни|корень|roots?)/iu.test(solveCommand[0]) && MATHY.test(body)) {
     return { task: { op: "solve", equation: `${body} = 0` }, source: original, explicit: true }
+  }
+  if (solveCommand && equals === 0 && /\d/u.test(body) && !/[\p{Script=Cyrillic}]/u.test(body) && MATHY.test(body)) {
+    return { task: { op: "evaluate", expression: units(body) }, source: original, explicit: true }
   }
 
   // Arithmetic and quantities: «сколько будет 17·23», «вычисли 5 кг * 9.81 м/с^2».

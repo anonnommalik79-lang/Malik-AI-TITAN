@@ -1,5 +1,7 @@
 import type { FetchedSource, SearchResult } from "./types";
 import { clampText, cleanTitle, fetchWithTimeout, stripHtml } from "./utils";
+import { fetchPublicPage, publicAddresses } from "./public-page-fetch";
+import { pageDates } from "../live-intelligence/page-dates";
 import { assertPublicHttpUrl } from "@/lib/server/request-safety";
 
 function extractTitle(html: string, fallback: string) {
@@ -46,7 +48,7 @@ function safeSourceUrl(result: SearchResult) {
 
 async function fetchDirect(result: SearchResult, signal?: AbortSignal): Promise<FetchedSource | null> {
   const target = safeSourceUrl(result);
-  const res = await fetchWithTimeout(target, { signal }, 6000);
+  const res = await fetchPublicPage(target, signal || AbortSignal.timeout(6000));
   if (!res.ok) return null;
 
   const contentType = res.headers.get("content-type") || "";
@@ -72,7 +74,10 @@ async function fetchDirect(result: SearchResult, signal?: AbortSignal): Promise<
     domain: result.domain,
     text,
     snippet: result.snippet,
-    publishedAt: result.publishedAt,
+    publishedAt: pageDates(html).publishedAt || result.publishedAt,
+    updatedAt: pageDates(html).updatedAt,
+    checkedAt: new Date().toISOString(),
+    readAt: new Date().toISOString(),
     provider: result.provider,
     ...(image ? { image } : {}),
   };
@@ -128,7 +133,8 @@ export async function fetchPageText(result: SearchResult, options: { signal?: Ab
   const signal = AbortSignal.any([AbortSignal.timeout(options.timeoutMs || 9000), ...(options.signal ? [options.signal] : [])]);
   try {
     // Validate before either the direct reader or the third-party reader sees it.
-    safeSourceUrl(result);
+    const target = safeSourceUrl(result);
+    await publicAddresses(new URL(target).hostname, undefined, signal);
   } catch {
     return null;
   }

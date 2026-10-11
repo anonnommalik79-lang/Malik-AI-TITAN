@@ -70,6 +70,9 @@ jobs:
       - name: Verify stream integrity, account memory isolation and audit contract
         run: npm run test:chat-stream-integrity && npm run test:memory-isolation && npm run test:chat-audit-contract
 
+      - name: Live intelligence fixtures and router acceptance
+        run: npm run test:live-intelligence
+
       - name: Typecheck
         run: npm run typecheck
 

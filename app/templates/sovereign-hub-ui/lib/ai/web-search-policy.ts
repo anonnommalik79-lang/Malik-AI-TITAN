@@ -1,6 +1,7 @@
 import { asksHeadToHead, asksPurchaseAdvice, asksSubjectOverview } from "@/lib/ai/question-shape"
 import { needsCurrentEvidence } from "./current-evidence"
 import { truthNeedsLiveEvidence } from "./truth-engine"
+import { classifyFreshness, NO_WEB } from "./freshness-intent"
 export type WebSearchOptions = {
   research?: boolean
   disableResearch?: boolean
@@ -11,6 +12,7 @@ export type WebSearchOptions = {
 export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}): boolean {
   const text = prompt.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim()
   if (!text || options.disableResearch || options.research === false) return false
+  if (NO_WEB.test(text)) return false
   if (/(?:не\s+(?:ищи|гугли|загугливай)|без\s+(?:поиска|интернета|гугла)|do not (?:search|browse)|don't (?:search|browse)|without (?:web|search|internet))/i.test(text)) return false
 
   // An explicit search request always wins.
@@ -26,6 +28,8 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}): bo
   // or API keyword must not bypass checks of releases, prices and availability.
   if (needsCurrentEvidence(text)) return true
   if (truthNeedsLiveEvidence(text)) return true
+  const freshness = classifyFreshness(text)
+  if (freshness.category === "STATIC" && !options.forceResearch) return false
 
   // Coding/writing/calculation requests must stay on the model path even when
   // the dashboard's generic "web & sources" toggle is enabled. This prevents

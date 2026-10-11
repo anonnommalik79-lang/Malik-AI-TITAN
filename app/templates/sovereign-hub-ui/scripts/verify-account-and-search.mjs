@@ -44,6 +44,7 @@ async function check(name, run) {
 const savedEnv = { ...process.env }
 const savedFetch = globalThis.fetch
 const savedInfo = console.info
+const keepAlive = setInterval(() => {}, 1000)
 try {
   globalThis.fetch = async () => { throw new Error("Unexpected network request in offline account test") }
   // Do not inherit credentials or flags from the caller.
@@ -57,17 +58,17 @@ try {
     "кто ты?", "что ты умеешь?", "напиши стих про погоду", "переведи: what is photosynthesis",
     "напиши функцию поиска на TypeScript", "исправь ошибку в коде", "посчитай 17*42",
     "найди ошибку в этом коде", "сократи прошлый ответ", "write a story about today",
-    "Напиши сказку про сегодняшний день", "Compose a poem about yesterday",
+    "Напиши сказку про сегодняшний день", "Compose a poem about yesterday", "что такое фотосинтез", "what is photosynthesis",
   ]
   for (const prompt of direct) await check("direct: " + prompt, () => {
     assert.equal(shouldUseWeb(prompt, { research: true }), false)
     assert.equal(shouldUseWeb(prompt), false)
   })
   const search = [
-    "поищи кто такой Трамп", "пойщи информацию о фотосинтезе", "что такое фотосинтез",
+    "поищи кто такой Трамп", "пойщи информацию о фотосинтезе",
     "кто такая Мария Кюри", "найди источники про космос", "курс доллара сегодня",
     "какая сейчас погода", "кто сейчас президент", "сколько стоит iPhone",
-    "look up the latest news", "what is photosynthesis", "напиши доклад и поищи источники",
+    "look up the latest news", "напиши доклад и поищи источники",
     "Напиши последние новости мира", "Write the latest news", "Write a story and search the web for sources",
     "Write a story using sources about today's news", "Напиши рассказ на основе сегодняшних новостей",
   ]
@@ -290,7 +291,7 @@ try {
   })
   await check("requested search returns sources and real reading events", async () => {
     const progress = []
-    const result = await god.malikGodAnswer({ originalQuestion: "что такое фотосинтез", research: true }, { modelId: "malik-fast-120b" }, event => progress.push(event))
+    const result = await god.malikGodAnswer({ originalQuestion: "Поищи что такое фотосинтез", research: true }, { modelId: "malik-fast-120b" }, event => progress.push(event))
     assert.ok(searches > 0)
     assert.equal(result.usedWeb, true)
     assert.equal(result.sources.length, 3)
@@ -329,6 +330,7 @@ try {
 } finally {
   globalThis.fetch = savedFetch
   console.info = savedInfo
+  clearInterval(keepAlive)
   for (const key of Object.keys(process.env)) if (!(key in savedEnv)) delete process.env[key]
   Object.assign(process.env, savedEnv)
 }

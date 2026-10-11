@@ -1,4 +1,5 @@
 import { detectTask } from "./detect-task"
+import { classifyFreshness } from "./freshness-intent"
 import { detectQuantitativeReasoning, quantitativeSystemInstruction } from "./quantitative-reasoning"
 import type { AIFileAttachment, AITaskType } from "./types"
 
@@ -278,7 +279,7 @@ export function analyzeMalikBrainV1(input: AnalyzeBrainInput): MalikBrainProfile
     else if (complexityScore >= 6 || structure.requirements >= 5 || prompt.length >= 4_000 || (task === "quantitative" && quantitative?.complex)) depth = "deep"
   }
 
-  const needsFreshEvidence = task === "research" || CURRENT_RE.test(prompt)
+  const needsFreshEvidence = task === "research" || classifyFreshness(prompt).needsSearch
   const needsVerification = task === "quantitative"
     || task === "code"
     || task === "debug"
