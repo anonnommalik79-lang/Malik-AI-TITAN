@@ -8,7 +8,7 @@ const require_ = createRequire(import.meta.url)
 const React = require_("react")
 const { renderToStaticMarkup } = require_("react-dom/server")
 const icon = (name) => function TestIcon() { return React.createElement("svg", { "data-icon": name }) }
-const lucide = { ArrowUpRight: icon("arrow-up-right"), Archive: icon("archive"), Check: icon("check"), Copy: icon("copy"), Download: icon("download"), ExternalLink: icon("external"), Eye: icon("eye"), RefreshCw: icon("refresh") }
+const lucide = { ArrowUpRight: icon("arrow-up-right"), Archive: icon("archive"), Check: icon("check"), Copy: icon("copy"), Download: icon("download"), ExternalLink: icon("external"), Eye: icon("eye"), RefreshCw: icon("refresh"), Folder: icon("folder"), FileText: icon("file"), X: icon("x"), RotateCcw: icon("rotate") }
 
 /**
  * The chat printed the model's reply into a `whitespace-pre-wrap` div, so every
@@ -94,6 +94,10 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "@/lib/ai/answer-cards") return loadPure("lib/ai/answer-cards.ts")
     if (name === "@/lib/ai/citation-names") return loadPure("lib/ai/citation-names.ts")
     if (name === "@/lib/ai/answer-layouts") return loadPure("lib/ai/answer-layouts.ts")
+    if (name === "@/lib/ai/answer-code-views") return loadPure("lib/ai/answer-code-views.ts")
+    if (name === "@/lib/ai/answer-quiz") return loadPure("lib/ai/answer-quiz.ts")
+    if (name === "@/lib/os/diff") return loadPure("lib/os/diff.ts")
+    if (name === "./MalikAnswerQuiz") return loadPure("components/sovereign/MalikAnswerQuiz.tsx")
     if (name === "./MalikAnswerChecklist") return loadPure("components/sovereign/MalikAnswerChecklist.tsx")
     // Interactive Visual Engine blocks have their own suite (test:visual-engine);
     // here only their placement in the answer matters.
@@ -649,6 +653,54 @@ check("a decision matrix gets a computed weighted total and a flagged wrong mode
   assert(!html.includes(">9.9<"), "the wrong model total is not shown")
   const plain = render("| Модель | Цена | Память |\n|---|---|---|\n| A | 100 | 8 |\n| B | 120 | 16 |")
   assert(!plain.includes("data-malik-decision-matrix"), "tables without a weight column are left alone")
+})
+
+console.log("\nTITAN code views: diffs, before/after, project trees, heatmaps, quizzes")
+check("a ```diff fence shows added and removed lines with a +/− count", () => {
+  const html = render("```diff\n--- a/app.js\n+++ b/app.js\n@@ -1,3 +1,3 @@\n const a = 1\n-const b = 2\n+const b = 3\n+const c = 4\n```")
+  assert(html.includes("is-diff"))
+  assert(html.includes("+2 −1"), "the bar counts the changes")
+  assert.equal((html.match(/malik-md-code-line is-add/g) || []).length, 2)
+  assert.equal((html.match(/malik-md-code-line is-del/g) || []).length, 1)
+  assert(html.includes("is-hunk") && html.includes("is-meta"))
+})
+check("«Было» / «Стало» code gets the computed changes, other code does not", () => {
+  const before = "def total(items):\n    s = 0\n    for i in items:\n        s += i\n    return s"
+  const after = "def total(items):\n    return sum(items)"
+  const html = render(`### Было\n\n\`\`\`python\n${before}\n\`\`\`\n\n### Стало\n\n\`\`\`python\n${after}\n\`\`\``)
+  assert(html.includes("data-malik-code-changes"))
+  assert(html.includes("Что изменилось: +1 −4 строк"))
+  const unrelated = render(`### Установка\n\n\`\`\`bash\nnpm i\n\`\`\`\n\n### После установки\n\n\`\`\`python\nprint(1)\n\`\`\``)
+  assert(!unrelated.includes("data-malik-code-changes"), "different languages are never compared")
+})
+check("a drawn project tree becomes folders and files, with a text toggle", () => {
+  const html = render("```\nmy-app/\n├── src/\n│   ├── index.ts   # точка входа\n│   └── utils/\n│       └── math.ts\n├── package.json\n└── README.md\n```")
+  assert(html.includes('role="tree"'))
+  assert(html.includes("Структура проекта"))
+  assert(html.includes("<span>src/</span>") && html.includes("<span>math.ts</span>"))
+  assert(html.includes("<em>точка входа</em>"), "comments stay as notes")
+  assert(html.includes(">Текстом</button>"))
+  assert(!render("```js\nconst tree = 1\n```").includes('role="tree"'))
+})
+check("a table named as a heatmap is shaded in greys with a legend", () => {
+  const html = render("### Тепловая карта загрузки\n\n| День | 9:00 | 12:00 | 18:00 |\n|---|---|---|---|\n| Пн | 10 | 50 | 90 |\n| Вт | 20 | 60 | 80 |")
+  assert(html.includes("data-malik-heatmap"))
+  assert(/background:rgb\(28, 28, 28\)/.test(html), "the smallest value is darkest")
+  assert(/background:rgb\(224, 224, 224\)/.test(html), "the largest value is lightest")
+  assert(!/rgb\((?!(\d+), \1, \1\))/.test(html.match(/style="[^"]*"/g)?.join(" ") || ""), "only greys")
+  assert(html.includes("темнее — меньше"))
+  assert(!render("| День | A | B |\n|---|---|---|\n| Пн | 1 | 2 |\n| Вт | 3 | 4 |").includes("data-malik-heatmap"), "ordinary tables stay plain")
+})
+check("a malik-quiz fence becomes a quiz; a broken quiz shows nothing", () => {
+  const quiz = { version: 1, title: "Столицы", questions: [{ question: "Столица Казахстана?", options: ["Алматы", "Астана"], answer: 1, explanation: "С 1997 года." }, { question: "Столица Франции?", options: ["Париж", "Лион", "Ницца"], answer: 0 }] }
+  const html = render("Проверьте себя:\n\n```malik-quiz\n" + JSON.stringify(quiz) + "\n```")
+  assert(html.includes("data-malik-quiz"))
+  assert(html.includes("Столица Казахстана?") && html.includes("Ницца"))
+  assert(html.includes("0 из 2 отвечено"))
+  assert.equal((html.match(/type="radio"/g) || []).length, 5)
+  assert(!html.includes("&quot;answer&quot;"), "the answers are not printed")
+  const broken = render("```malik-quiz\n{\"questions\":[{\"question\":\"?\",\"options\":[\"a\"],\"answer\":3}]}\n```")
+  assert(!broken.includes("data-malik-quiz") && !broken.includes("options"))
 })
 console.log(failures ? `\n${failures} failing\n` : "\nall answer format checks passed\n")
 process.exit(failures ? 1 : 0)
