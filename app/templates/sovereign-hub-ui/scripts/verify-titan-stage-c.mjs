@@ -119,10 +119,5 @@ await check("the model is told how to write a quiz when one is asked for", () =>
   assert.match(source, /```malik-quiz fence/)
 })
 
-await check("answers with live blocks are never turned into dead A/B copies", () => {
-  const runtime = fs.readFileSync("components/sovereign/MalikCognitiveResponseRuntime.tsx", "utf8")
-  assert.match(runtime, /markdown\.querySelector\("\[data-malik-visual-engine\], \.malik-answer-checklist, \[data-malik-quiz\]"\)\) return false/)
-})
-
 console.log(failures ? `\n${failures}/${count} checks FAILED` : `\n${count}/${count} checks passed`)
 process.exit(failures ? 1 : 0)

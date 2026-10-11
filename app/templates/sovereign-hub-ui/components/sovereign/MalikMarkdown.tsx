@@ -1072,7 +1072,7 @@ let outlineNavigationInstalled = false
 
 /**
  * One document-level handler for every contents link. The chat may show an
- * answer as a copy of its DOM (the A/B cards), where React handlers and ids do
+ * answer as a copy of its DOM (an export, a print view), where React handlers and ids do
  * not survive; the link finds its section in the nearest visible copy instead.
  */
 function installOutlineNavigation() {

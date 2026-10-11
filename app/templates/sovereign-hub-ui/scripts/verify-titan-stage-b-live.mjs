@@ -83,10 +83,6 @@ await box.fill("Сравни варианты A и B для бизнеса по�
 await page.keyboard.press("Enter")
 await page.waitForFunction(() => document.body.innerText.includes("Готово: TITAN-макеты на месте."), null, { timeout: 90000 })
 await page.waitForTimeout(1500)
-// A comparison is first shown as two answer cards (copies of the answer):
-// every layout must work there too, and again after one is chosen.
-const dual = await page.locator(".malik-dual-answer").count()
-console.log(`(answer shown ${dual ? "as A/B cards" : "directly"})`)
 const md = page.locator(".malik-md:visible").first()
 
 async function checkContents(label) {
@@ -98,7 +94,7 @@ async function checkContents(label) {
   const headingTop = await page.locator("h2:visible, h3:visible", { hasText: "Частые вопросы" }).first().evaluate((el) => el.getBoundingClientRect().top)
   ok(`${label}: a contents link scrolls to its section without changing the URL`, headingTop > -5 && headingTop < 300 && page.url() === urlBefore, `top ${Math.round(headingTop)}`)
 }
-await checkContents(dual ? "A/B card" : "answer")
+await checkContents("answer")
 
 // FAQ accordion
 const faq = page.locator("details.malik-md-details:visible", { hasText: "Можно ли сменить вариант позже?" }).first()
@@ -145,11 +141,6 @@ if (out) {
   await page.locator('nav[aria-label="Содержание ответа"]:visible').first().scrollIntoViewIfNeeded()
   await page.screenshot({ path: `${out}/titan-b-${width}-contents.png` })
   await pros.scrollIntoViewIfNeeded(); await page.screenshot({ path: `${out}/titan-b-${width}-layouts.png` })
-}
-if (dual) {
-  await page.locator(".malik-dual-card__choose").first().click(); await page.waitForTimeout(800)
-  ok("choosing an A/B answer keeps the layouts", await page.locator(".malik-dual-answer").count() === 0 && await page.locator("[data-malik-decision-matrix]:visible").count() === 1)
-  await checkContents("chosen answer")
 }
 
 // 👍 saved on the server and restored after a reload

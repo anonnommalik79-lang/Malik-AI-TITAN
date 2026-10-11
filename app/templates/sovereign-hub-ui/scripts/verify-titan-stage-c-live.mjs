@@ -62,7 +62,7 @@ await box.fill("Сделай тест по химии и покажи, что и
 await page.keyboard.press("Enter")
 await page.waitForFunction(() => document.body.innerText.includes("Готово: этап C на месте."), null, { timeout: 90000 })
 await page.waitForTimeout(1500)
-ok("an answer with a quiz stays one live answer (no A/B copies)", await page.locator(".malik-dual-answer").count() === 0)
+ok("the answer is shown once, as one live answer", await page.locator("[data-malik-quiz]:visible").count() === 1)
 
 // Quiz: choose, check, score, retry
 const quizBlock = page.locator("[data-malik-quiz]:visible").first()
