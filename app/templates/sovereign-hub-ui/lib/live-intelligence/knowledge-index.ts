@@ -29,7 +29,7 @@ export function validateKnowledgeIndex(value: unknown, now = Date.now()): Knowle
     if (!item || typeof item.url !== "string" || typeof item.title !== "string" || typeof item.id !== "string" || typeof item.topic !== "string") return []
     const url = safeEvidenceUrl(item.url), checkedAt = evidenceDate(item.checkedAt, now)
     if (!url || !checkedAt) return []
-    return [{ ...item, id: item.id.slice(0, 100), topic: item.topic.slice(0, 60), url, domain: new URL(url).hostname, title: sanitizeEvidenceText(item.title, 180), snippet: sanitizeEvidenceText(typeof item.snippet === "string" ? item.snippet : "", 1800), publishedAt: evidenceDate(item.publishedAt, now), checkedAt, provider: "verified-index" }]
+    return [{ ...item, id: item.id.slice(0, 100), topic: item.topic.slice(0, 60), url, domain: new URL(url).hostname, title: sanitizeEvidenceText(item.title, 180), snippet: sanitizeEvidenceText(typeof item.snippet === "string" ? item.snippet : "", 1800), publishedAt: evidenceDate(item.publishedAt, now), checkedAt, provider: typeof item.provider === "string" && /^[\w:-]{1,80}$/u.test(item.provider) ? item.provider : "unknown-feed" }]
   })
   // Registry records are validated independently; a malformed candidate cannot become a release.
   const models = source.models.flatMap((model) => {
@@ -68,7 +68,7 @@ export function retrieveKnowledge(index: KnowledgeIndex | null, prompt: string, 
     const topic = ai && item.topic === "ai" || kazakhstan && item.topic === "kazakhstan"
     const age = now - Date.parse(item.checkedAt)
     return { item, score: hits * 3 + (topic ? 2 : 0), valid: age >= 0 && age <= 48 * 3_600_000 }
-  }).filter((row) => row.valid && row.score >= 2).sort((a, b) => b.score - a.score).slice(0, 8).map((row) => row.item)
+  }).filter((row) => row.valid && row.score >= 2).sort((a, b) => b.score - a.score).slice(0, 8).map((row) => ({ ...row.item, provider: "verified-index" }))
 }
 
 const DEVELOPERS = [

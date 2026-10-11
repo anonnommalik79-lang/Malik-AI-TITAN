@@ -39,7 +39,7 @@
 
 Индекс содержит до 500 записей и 200 моделей, источники, тему, publication/repository-update/unknown, время проверки и отдельно health каждой ленты. Реестр хранит имя/разработчика/семейство/версию, announcement/availability, модальности, возможности, ограничения, доступ, первоисточники, проверку и статус. Неподтверждённые свойства остаются пустыми/null. HF lastModified не превращается в announcement. Primary mention отличается от release-announcement и candidate; статус announcement основан на явном датированном первоисточнике и распознанной формулировке, а не полной семантической верификации статьи.
 
-URL hash обеспечивает дедупликацию; ETag/Last-Modified и 304 — инкрементальное обновление. Повторная проверка не изменяет дату публикации. Записи старше 90 дней с последней успешной проверки удаляются. JSON ограничен 2 MiB, ошибки — последними 50, запись локального файла атомарна. Отказы не стирают предыдущее успешное состояние. Полный отказ завершает workflow ошибкой и сохраняет диагностику; частичный успех сохраняет отдельные ошибки лент. `lastSuccessAt` означает хотя бы одну успешную ленту, а не полное покрытие.
+URL hash обеспечивает дедупликацию; ETag/Last-Modified и 304 — инкрементальное обновление. Повторная проверка не изменяет дату публикации. Имя исходной ленты сохраняется при чтении JSON; retrieval помечает копию как verified-index. Это позволяет HTTP 304 действительно обновлять checkedAt после восстановления предыдущего индекса. Записи старше 90 дней с последней успешной проверки удаляются. JSON ограничен 2 MiB, ошибки — последними 50, запись локального файла атомарна. Отказы не стирают предыдущее успешное состояние. Полный отказ завершает workflow ошибкой и сохраняет диагностику; частичный успех сохраняет отдельные ошибки лент. `lastSuccessAt` означает хотя бы одну успешную ленту, а не полное покрытие.
 
 Сервер загружает индекс по фиксированному URL с таймаутом 1,8 секунды, кешем 15 минут и объединением одновременных запросов. Если репозиторий закрыт, нужен существующий `GITHUB_TOKEN` либо серверный `MALIK_KNOWLEDGE_GITHUB_TOKEN` с чтением содержимого репозитория. Токен не выводится клиенту. Недоступный/просроченный индекс не блокирует поиск на лету. Health становится stale после 48 часов; данные индекса старше запроса TTL требуют перепроверки страницы для динамического ответа.
 
@@ -57,7 +57,7 @@ Serper/Tavily/Brave ключи в среде отсутствуют; их нас
 
 | Проверка | Результат и область |
 |---|---|
-| Live intelligence | 225/225 фиксированных сценария, плюс 15/15 реального router orchestration и 7/7 stream lane проверок с fixture HTTP/model boundaries |
+| Live intelligence | 226/226 фиксированных сценария, плюс 15/15 реального router orchestration и 7/7 stream lane проверок с fixture HTTP/model boundaries |
 | A/B/C/D | Передача датированного актуального доказательства в фактический маршрутизатор и единственный ответ — PASS на фикстурах; живой поиск ограничен результатами выше |
 | E | Исторический запрос не получает текущий год и лишний поиск — PASS |
 | F | Настоящий математический движок: 1547 × 829 = 1 282 463, без веб-вызова — PASS |
@@ -127,7 +127,7 @@ Fixture fallback: Быстро/Глубоко/MAX сделали 2/4/6 вызо�
 | `lib/malik-research/search.ts`, `fetch-page.ts`, `public-page-fetch.ts`, `types.ts`, `utils.ts` | Общий bounded engine, abort, page dates и DNS/redirect guards |
 | `lib/voice/web-search.ts` | Та же freshness/privacy политика для голоса |
 | `lib/work/math/intent.ts` | Распознавание «Реши … без интернет-поиска» |
-| `scripts/verify-live-intelligence.mjs`, `verify-live-intelligence-runtime.mjs`, `verify-live-intelligence-lanes.mjs` | 225 логических, 15 orchestration и 7 stream lane сценариев |
+| `scripts/verify-live-intelligence.mjs`, `verify-live-intelligence-runtime.mjs`, `verify-live-intelligence-lanes.mjs` | 226 логических, 15 orchestration и 7 stream lane сценариев |
 | `scripts/benchmark-live-intelligence.mjs`, `check-live-search.mjs`, `update-live-knowledge.mjs` | Измерения, явный public smoke, CLI updater |
 | `scripts/verify-account-and-search.mjs`, `verify-voice-audio.mjs`, `verify-fact-audit.mjs` | Обновлённые намеренные expectations, cache изоляция fixture и аудит final text |
 | `package.json` | test:live-intelligence и knowledge:update |
@@ -166,6 +166,6 @@ Browser suites требуют доступный Playwright Chromium. Полны
 
 Расписание добавлено для default branch. Успешный scheduled запуск ещё не подтверждён. Нет глобального semantic verifier, внешнего watchdog, нового search account или доказанной надёжности всех providers. В этой сети часть RSS/search недоступна. Мобильная визуальная проверка и production latency/cost/factual-coverage measurements не выполнены.
 
-Локальные implementation commits: `f9aff455` и `278ffafe` (интеграция Accuracy Engine). Отправка через GitHub создаёт remote commit с тем же проверенным деревом; его SHA указан в сообщении доставки. Финальный delivery SHA и ссылка на draft PR указаны в сообщении доставки и самом PR. Пользователь отдельно разрешил main push в конце работы; Render/production deploy не выполняется. Фактический итог main указан в сообщении доставки.
+Локальные implementation commits: `f9aff455` и `278ffafe` (интеграция Accuracy Engine). Отправка через GitHub создаёт remote commit с тем же проверенным деревом; его SHA указан в сообщении доставки. Финальный delivery SHA и ссылка на draft PR указаны в сообщении доставки и самом PR. Пользователь отдельно разрешил main push в конце работы; Render/production deploy не выполняется. Основная реализация уже отправлена в main: `602e67d6`, PR #121 merged. Последняя поправка 304 revalidation также доставляется в main; её SHA указан в сообщении доставки.
 
 Официальные справочные материалы: [GitHub schedule](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule), [Hugging Face Hub API](https://huggingface.co/docs/hub/en/api). Примеры названий GPT-99/Gemini-99/v99 в tests — исключительно TEST FIXTURE, не реальные продуктовые утверждения.

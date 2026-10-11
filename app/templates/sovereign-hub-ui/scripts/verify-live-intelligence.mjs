@@ -198,6 +198,14 @@ await check("mixed coding examples do not confuse array indexes and localhost wi
   assert.match(content, /rows\[0\]/); assert.match(content, /Sources checked/)
 })
 await check("oversized source URLs cannot inflate the bounded evidence cache", () => assert.equal(safeEvidenceUrl("https://openai.com/" + "x".repeat(4096)), null))
+await check("persisted index preserves feed ownership for HTTP 304 revalidation", async () => {
+  const index = await updateKnowledgeIndex(null, { now: NOW, feeds: [feed], fetcher: async () => new Response(rss) })
+  const restored = validateKnowledgeIndex(JSON.parse(JSON.stringify(index)), clock())
+  const tomorrow = new Date(clock() + 86400000)
+  const next = await updateKnowledgeIndex(restored, { now: tomorrow, feeds: [feed], fetcher: async () => new Response(null, { status: 304 }) })
+  assert.equal(next.items[0].checkedAt, tomorrow.toISOString()); assert.equal(next.items[0].publishedAt, index.items[0].publishedAt)
+  assert.equal(retrieveKnowledge(next, prompt, tomorrow.getTime())[0].provider, "verified-index")
+})
 const timings = []
 for (let n = 0; n < 3000; n++) { const start = performance.now(); classifyFreshness(dynamicPrompts[n % dynamicPrompts.length], NOW); timings.push(performance.now() - start) }
 timings.sort((a, b) => a - b)
