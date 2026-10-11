@@ -9,6 +9,7 @@ import { buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { stripAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 import { answerCardsToText } from "@/lib/ai/answer-cards"
+import { answerQuizzesToText } from "@/lib/ai/answer-quiz"
 import { MalikTapGuide } from "./MalikTapGuide"
 import type { SuperflowRef } from "./os/os-client"
 import { AnswerDownloadButton, FollowUpChips, ReadAloudButton, UserMessageActions, VersionPager, useChatShortcuts, type FollowUpSendOptions } from "./chat-extras"
@@ -83,6 +84,7 @@ import { AnswerSheet } from "./answer-sheet/AnswerSheet"
 import { ChatExecution } from "./ChatExecution"
 import type { ExecutionTrace } from "@/lib/ai/chat-execution"
 import { isSheetRequest } from "@/lib/ai/answer-sheet"
+import { loadAnswerFeedback, nextAnswerMark, saveAnswerFeedback } from "@/lib/ai/answer-feedback-client"
 import type { WorkspaceMode } from "@/lib/ai/work-mode"
 import { openOs } from "./os/os-client"
 import { WorkStartPanel } from "./WorkStartPanel"
@@ -1772,7 +1774,7 @@ function MessageBubble({
       : cleanResearchDisplayText(message.content, message.research)
   const responseModel = !isUser && message.modelId ? getMalikModel(message.modelId) : null
   // Copy, speech and sharing get the cards as readable text, never as JSON.
-  const actionContent = isUser ? displayContent : stripAnswerPhotoHints(answerCardsToText(displayContent))
+  const actionContent = isUser ? displayContent : stripAnswerPhotoHints(answerQuizzesToText(answerCardsToText(displayContent)))
   if (!isUser && message.isStreaming && !streaming && !displayContent && !message.generatedMedia && !message.imageConfirmation) {
     return null
   }
@@ -2796,8 +2798,28 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     }
   }, [])
 
+  // 👍/👎 are saved to the account and restored on load; the same button again clears the mark.
+  const feedbackMapRef = useRef(feedbackMap)
+  feedbackMapRef.current = feedbackMap
+  const messagesForFeedbackRef = useRef(messages)
+  messagesForFeedbackRef.current = messages
+  useEffect(() => {
+    let alive = true
+    void loadAnswerFeedback().then((marks) => {
+      if (alive && Object.keys(marks).length) setFeedbackMap((previous) => ({ ...marks, ...previous }))
+    })
+    return () => { alive = false }
+  }, [])
   const handleFeedback = useCallback((messageId: string, value: "up" | "down") => {
-    setFeedbackMap((previous) => ({ ...previous, [messageId]: value }))
+    const next = nextAnswerMark(feedbackMapRef.current[messageId], value)
+    setFeedbackMap((previous) => {
+      const updated = { ...previous }
+      if (next) updated[messageId] = next
+      else delete updated[messageId]
+      return updated
+    })
+    const modelId = messagesForFeedbackRef.current.find((message) => message.id === messageId)?.modelId
+    void saveAnswerFeedback(messageId, next, modelId)
   }, [])
 
   const openSheetFor = useCallback((id: string) => setSheet({ id, auto: false }), [])
@@ -3127,6 +3149,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
                       type="button"
                       onClick={onStopGeneration}
                       className="malik-inline-send"
+                      data-malik-stop=""
                       aria-label="Остановить генерацию"
                       title="Остановить генерацию"
                     >

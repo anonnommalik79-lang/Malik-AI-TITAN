@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, Fragment, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react"
-import { Archive, Check, Copy, Download, ExternalLink, Eye, RefreshCw } from "lucide-react"
+import { Archive, Check, Copy, Download, ExternalLink, Eye, FileText, Folder, RefreshCw } from "lucide-react"
 import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
 import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
@@ -27,6 +27,11 @@ import { MalikVisualEngineBlock, MalikVisualPending } from "./visual-engine/Mali
  */
 
 import { citationName, safeHttps, subjectCitationUrl, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
+import { answerOutline, faqToDetails, prosConsLabel, weightedMatrix, type WeightedMatrix } from "@/lib/ai/answer-layouts"
+import { beforeAfterLabel, diffLineKind, diffStats, heatmapTable, heatShade, isUnifiedDiff, parseTextTree, type Heatmap, type TreeNode } from "@/lib/ai/answer-code-views"
+import { parseAnswerQuiz, type AnswerQuiz } from "@/lib/ai/answer-quiz"
+import { diffLines } from "@/lib/os/diff"
+import { MalikAnswerQuiz } from "./MalikAnswerQuiz"
 export type { MalikCitation } from "@/lib/ai/citation-names"
 
 type Props = { text: string; className?: string; allowImages?: boolean; autoPreview?: boolean; citations?: MalikCitation[]; /** A public answer page: see SharedPageContext. */ shared?: boolean; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
@@ -323,8 +328,46 @@ type Block =
   | { kind: "images"; images: MalikVisualImage[] }
   | { kind: "quote"; lines: string[] }
   | { kind: "hr" }
+  /** <details><summary>…</summary> … </details>: collapsed detail, rendered as Markdown inside. */
+  | { kind: "details"; summary: string; body: string; closed: boolean }
+  /** «Плюсы» and «Минусы» lists drawn side by side. */
+  | { kind: "proscons"; prosTitle: string; consTitle: string; pros: ListBlock; cons: ListBlock }
+  /** ```malik-quiz: a knowledge check graded in the chat. */
+  | { kind: "quiz"; quiz: AnswerQuiz | null; pending: boolean }
 
 const LIST_ITEM = /^(\s*)([-*•+]|\d{1,3}[.)])\s+(.*)$/
+const DETAILS_OPEN = /^\s*<details(?:\s+open)?\s*>\s*(?:<summary>(.*?)<\/summary>)?\s*$/i
+const SUMMARY_LINE = /^\s*<summary>(.*?)<\/summary>\s*$/i
+
+/** «Плюсы» + list, then «Минусы» + list (a heading or a bold line each) become one side-by-side block. */
+function groupProsCons(blocks: Block[]): Block[] {
+  const label = (block: Block | undefined) => block?.kind === "h" ? prosConsLabel(block.text)
+    : block?.kind === "p" && block.lines.length === 1 ? prosConsLabel(block.lines[0]) : null
+  const title = (block: Block) => block.kind === "h" ? block.text : block.kind === "p" ? block.lines[0] : ""
+  const result: Block[] = []
+  for (let index = 0; index < blocks.length; index++) {
+    const first = label(blocks[index])
+    const second = label(blocks[index + 2])
+    const firstList = blocks[index + 1]
+    const secondList = blocks[index + 3]
+    if (first && second && first !== second && firstList?.kind === "list" && secondList?.kind === "list"
+      && (blocks[index].kind !== "h" || blocks[index + 2].kind !== "h" || (blocks[index] as { level: number }).level === (blocks[index + 2] as { level: number }).level)) {
+      const prosAt = first === "pros" ? index : index + 2
+      const consAt = first === "pros" ? index + 2 : index
+      result.push({
+        kind: "proscons",
+        prosTitle: title(blocks[prosAt]).replace(/^[*_]+|[*_:：]+$/g, "").trim(),
+        consTitle: title(blocks[consAt]).replace(/^[*_]+|[*_:：]+$/g, "").trim(),
+        pros: (blocks[prosAt + 1] as Extract<Block, { kind: "list" }>).list,
+        cons: (blocks[consAt + 1] as Extract<Block, { kind: "list" }>).list,
+      })
+      index += 3
+      continue
+    }
+    result.push(blocks[index])
+  }
+  return result
+}
 
 function indentOf(value: string) {
   return value.replace(/\t/g, "    ").length
@@ -558,6 +601,11 @@ function parseBlocks(source: string): Block[] {
         pendingFilename = ""
         continue
       }
+      if (fence.language === "malik-quiz") {
+        blocks.push({ kind: "quiz", quiz: closed ? parseAnswerQuiz(body.join("\n")) : null, pending: !closed })
+        pendingFilename = ""
+        continue
+      }
       if (fence.language === "malik-photos") {
         blocks.push({ kind: "photos", subjects: closed ? parseAnswerPhotoHints(body.join("\n")) : [], lineup: closed && isPhotoLineup(body.join("\n")) })
         pendingFilename = ""
@@ -574,6 +622,33 @@ function parseBlocks(source: string): Block[] {
     }
 
     if (EMPTY_IMAGE_LINE.test(line)) { index += 1; continue }
+
+    // <details> blocks (also what FAQ sections become): the body is Markdown,
+    // never HTML. Nested blocks and code fences are respected.
+    const details = DETAILS_OPEN.exec(line)
+    if (details) {
+      let depth = 1
+      let fenced = false
+      const body: string[] = []
+      let summary = details[1] ? details[1].trim() : ""
+      index += 1
+      while (index < lines.length) {
+        const current = lines[index]
+        if (/^\s*```/.test(current)) fenced = !fenced
+        if (!fenced && DETAILS_OPEN.test(current)) depth += 1
+        if (!fenced && /^\s*<\/details>\s*$/i.test(current)) {
+          depth -= 1
+          if (!depth) break
+        }
+        if (!summary && !body.some((item) => item.trim()) && SUMMARY_LINE.test(current)) summary = SUMMARY_LINE.exec(current)![1].trim()
+        else body.push(current)
+        index += 1
+      }
+      const closed = index < lines.length
+      index += 1
+      blocks.push({ kind: "details", summary: summary.replace(/<[^>]*>/g, "") || "Подробнее", body: body.join("\n").trim(), closed })
+      continue
+    }
 
     if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) {
       blocks.push({ kind: "hr" })
@@ -667,6 +742,7 @@ function parseBlocks(source: string): Block[] {
       index < lines.length
       && lines[index].trim()
       && !/^\s*(#{1,6}\s|[-*•+]\s|\d+[.)]\s|>|```|\$\$|\\\[)/.test(lines[index])
+      && !DETAILS_OPEN.test(lines[index])
       && !isTableStart(lines, index)
       && !parseImageLine(lines[index])
       && !EMPTY_IMAGE_LINE.test(lines[index])
@@ -682,7 +758,7 @@ function parseBlocks(source: string): Block[] {
     blocks.push({ kind: "p", lines: paragraph })
   }
 
-  return normalizeCodeFilenames(blocks)
+  return groupProsCons(normalizeCodeFilenames(blocks))
 }
 
 const CODE_KEYWORDS = new Set([
@@ -786,6 +862,81 @@ function isPreviewableCode(language: string, code: string) {
   return /<!doctype html|<(?:html|body|main|section|div|svg|canvas)[\s>]|export\s+default\s+(?:function|class)|\breturn\s*\(\s*</i.test(code)
 }
 
+/** A unified diff, line by line: added, removed, hunk headers and file headers. */
+function diffCode(code: string) {
+  return code.split("\n").map((line, index) => {
+    const kind = diffLineKind(line)
+    return <span className={`malik-md-code-line is-${kind}`} key={index}>
+      <span className="malik-md-code-line-number" aria-hidden="true">{kind === "add" ? "+" : kind === "del" ? "−" : ""}</span>
+      <span className="malik-md-code-line-text">{kind === "add" || kind === "del" ? line.slice(1) || " " : line || " "}</span>
+    </span>
+  })
+}
+
+function FileTree({ nodes, level }: { nodes: TreeNode[]; level: number }) {
+  return <ul className="malik-md-tree-list" role={level === 1 ? undefined : "group"}>
+    {nodes.map((node, index) => <li key={`${node.name}-${index}`} role="treeitem" aria-level={level} aria-expanded={node.directory ? true : undefined}>
+      {node.directory && node.children.length
+        ? <details open className="malik-md-tree-dir">
+            <summary><Folder aria-hidden="true" /><span>{node.name}/</span>{node.comment ? <em>{node.comment}</em> : null}</summary>
+            <FileTree nodes={node.children} level={level + 1} />
+          </details>
+        : <span className="malik-md-tree-file">{node.directory ? <Folder aria-hidden="true" /> : <FileText aria-hidden="true" />}<span>{node.name}{node.directory ? "/" : ""}</span>{node.comment ? <em>{node.comment}</em> : null}</span>}
+    </li>)}
+  </ul>
+}
+
+/** «Было» → «Стало»: the changes between two versions of the same code, computed here. */
+function CodeChanges({ before, after }: { before: string; after: string }) {
+  const result = useMemo(() => diffLines(before, after), [before, after])
+  if (!result.added && !result.removed) return null
+  // Unchanged runs longer than a few lines fold to a marker; changes keep two lines of context.
+  const keep = result.lines.map((line, index) => line.type !== "same"
+    || result.lines.slice(Math.max(0, index - 2), index + 3).some((near) => near.type !== "same"))
+  const rows: ReactNode[] = []
+  let skipped = 0
+  result.lines.forEach((line, index) => {
+    if (!keep[index]) { skipped += 1; return }
+    if (skipped) { rows.push(<span key={`gap-${index}`} className="malik-md-code-line is-hunk"><span className="malik-md-code-line-number" aria-hidden="true" /><span className="malik-md-code-line-text">… {skipped} без изменений …</span></span>); skipped = 0 }
+    const kind = line.type === "add" ? "add" : line.type === "remove" ? "del" : "same"
+    rows.push(<span key={index} className={`malik-md-code-line is-${kind}`}>
+      <span className="malik-md-code-line-number" aria-hidden="true">{kind === "add" ? "+" : kind === "del" ? "−" : ""}</span>
+      <span className="malik-md-code-line-text">{line.text || " "}</span>
+    </span>)
+  })
+  if (skipped) rows.push(<span key="gap-end" className="malik-md-code-line is-hunk"><span className="malik-md-code-line-number" aria-hidden="true" /><span className="malik-md-code-line-text">… {skipped} без изменений …</span></span>)
+  return <details className="malik-md-details malik-md-changes" data-malik-code-changes>
+    <summary className="malik-md-details-summary">Что изменилось: +{result.added} −{result.removed} строк</summary>
+    <pre className="malik-md-pre is-diff"><code>{rows}</code></pre>
+  </details>
+}
+
+/** A table the answer calls a heatmap: each number gets a grey of its size. */
+function HeatmapTable({ headers, rows, heatmap, label, renderCell }: { headers: string[]; rows: string[][]; heatmap: Heatmap; label: string; renderCell: (cell: string, id: string) => ReactNode }) {
+  const format = (value: number) => value.toLocaleString("ru-RU", { maximumFractionDigits: 2 })
+  return <figure className="malik-md-heatmap" data-malik-heatmap>
+    <ScrollableMarkdownTable label={label}>
+      <table className="malik-md-table">
+        <thead><tr>{headers.map((header, column) => <th scope="col" key={column}>{renderCell(header, `hm-h${column}`)}</th>)}</tr></thead>
+        <tbody>
+          {rows.map((row, rowIndex) => <tr key={rowIndex}>
+            {row.map((cell, column) => {
+              const value = heatmap.values[rowIndex]?.[column]
+              return column === 0
+                ? <th scope="row" key={column}>{renderCell(cell, `hm-r${rowIndex}-c${column}`)}</th>
+                : <td key={column} className={value === null || value === undefined ? undefined : "is-heat"} style={value === null || value === undefined ? undefined : heatShade(value, heatmap)}>{renderCell(cell, `hm-r${rowIndex}-c${column}`)}</td>
+            })}
+          </tr>)}
+        </tbody>
+      </table>
+    </ScrollableMarkdownTable>
+    <figcaption className="malik-md-heatmap-legend">
+      <span>{format(heatmap.min)}</span><i aria-hidden="true" /><span>{format(heatmap.max)}</span>
+      <em>темнее — меньше, светлее — больше</em>
+    </figcaption>
+  </figure>
+}
+
 function CodeBlock({ language, filename, code, previewFiles, autoPreview = false }: { language: string; filename: string; code: string; previewFiles: ProjectZipFile[]; autoPreview?: boolean }) {
   const [copied, setCopied] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -801,6 +952,10 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
     if (autoPreview && previewable && previewSrcDoc) setPreviewOpen(true)
   }, [autoPreview, previewable, previewSrcDoc])
   const lineCount = Math.max(1, code.split("\n").length)
+  // A patch shows what changed; a drawn project tree becomes folders.
+  const diff = useMemo(() => isUnifiedDiff(language, code) ? diffStats(code) : null, [language, code])
+  const tree = useMemo(() => diff || !/^(?:|text|txt|plaintext|tree|bash|sh|shell|md|markdown)$/i.test(language) ? null : parseTextTree(code), [diff, language, code])
+  const [treeAsText, setTreeAsText] = useState(false)
 
   const copy = async () => {
     try {
@@ -823,8 +978,14 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
     <>
       <div className={"malik-md-codeblock" + (previewOpen ? " has-live-preview" : "")}>
         <div className="malik-md-codebar">
-          <span title={filename}>{filename || language || "code"}</span>
+          <span title={filename}>{tree ? "Структура проекта" : filename || language || "code"}{diff ? <em className="malik-md-diffstat"> +{diff.added} −{diff.removed}</em> : null}</span>
           <div className="malik-md-codebar-actions">
+            {tree ? (
+              <button type="button" onClick={() => setTreeAsText((value) => !value)} aria-pressed={treeAsText}>
+                {treeAsText ? <Folder aria-hidden="true" /> : <FileText aria-hidden="true" />}
+                {treeAsText ? "Деревом" : "Текстом"}
+              </button>
+            ) : null}
             {previewable ? (
               <button
                 type="button"
@@ -847,9 +1008,11 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
             </button>
           </div>
         </div>
-        <pre className="malik-md-pre" data-language={language || undefined} data-filename={filename}>
-          <code>{highlightedCode(code, language)}</code>
-        </pre>
+        {tree && !treeAsText
+          ? <div className="malik-md-tree" role="tree" aria-label="Структура проекта"><FileTree nodes={tree} level={1} /></div>
+          : <pre className={"malik-md-pre" + (diff ? " is-diff" : "")} data-language={language || undefined} data-filename={filename}>
+              <code>{diff ? diffCode(code) : highlightedCode(code, language)}</code>
+            </pre>}
       </div>
 
       {previewOpen && previewSrcDoc ? (
@@ -906,6 +1069,83 @@ function MarkdownList({ list, keyPrefix, visualSlots, isLatest = false }: { list
     : <ul className="malik-md-ul">{items}</ul>
 }
 
+let outlineNavigationInstalled = false
+
+/**
+ * One document-level handler for every contents link. The chat may show an
+ * answer as a copy of its DOM (an export, a print view), where React handlers and ids do
+ * not survive; the link finds its section in the nearest visible copy instead.
+ */
+function installOutlineNavigation() {
+  if (outlineNavigationInstalled || typeof document === "undefined") return
+  outlineNavigationInstalled = true
+  document.addEventListener("click", (event) => {
+    const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[data-malik-toc-target]") : null
+    if (!link) return
+    event.preventDefault()
+    const key = link.getAttribute("data-malik-toc-target") || ""
+    let target: HTMLElement | undefined
+    for (let scope = link.parentElement; scope && !target; scope = scope.parentElement) {
+      target = Array.from(scope.querySelectorAll<HTMLElement>("[data-malik-section]"))
+        .find((node) => node.getAttribute("data-malik-section") === key && node.getClientRects().length > 0)
+    }
+    if (!target) return
+    target.scrollIntoView({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" })
+    target.focus({ preventScroll: true })
+  })
+}
+
+/** «Содержание»: links that scroll to each section of a long answer (no URL change). */
+function AnswerOutline({ entries, idFor }: { entries: NonNullable<ReturnType<typeof answerOutline>>; idFor: (position: number) => string }) {
+  useEffect(installOutlineNavigation, [])
+  return <nav className="malik-md-toc" aria-label="Содержание ответа">
+    <p className="malik-md-toc-title">Содержание</p>
+    <ol className="malik-md-toc-list">
+      {entries.map((entry) => (
+        <li key={entry.position} className={`is-depth-${entry.depth}`}>
+          <a href="#" data-malik-toc-target={idFor(entry.position)}>{entry.text}</a>
+        </li>
+      ))}
+    </ol>
+  </nav>
+}
+
+/** A decision matrix whose weighted totals are computed here, not taken from the model. */
+function DecisionMatrixTable({ headers, rows, matrix, label, renderCell }: { headers: string[]; rows: string[][]; matrix: WeightedMatrix; label: string; renderCell: (cell: string, id: string) => ReactNode }) {
+  const modelRow = matrix.modelTotals?.row
+  const format = (value: number) => value.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const winner = matrix.options.find((option) => option.column === matrix.winner)
+  return <figure className="malik-md-matrix" data-malik-decision-matrix>
+    <ScrollableMarkdownTable label={label}>
+      <table className="malik-md-table">
+        <thead>
+          <tr>{headers.map((header, column) => <th scope="col" key={column} className={column === matrix.winner ? "is-winner" : undefined}>{renderCell(header, `m-h${column}`)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => rowIndex === modelRow ? null : (
+            <tr key={rowIndex}>{row.map((cell, column) => <td key={column} className={column === matrix.winner ? "is-winner" : undefined}>{renderCell(cell, `m-r${rowIndex}-c${column}`)}</td>)}</tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="malik-md-matrix-total">
+            {headers.map((_, column) => {
+              if (column === 0) return <th scope="row" key={column}>Взвешенный итог</th>
+              if (column === matrix.weightColumn) return <td key={column}>100%</td>
+              const option = matrix.options.find((item) => item.column === column)
+              return <td key={column} className={column === matrix.winner ? "is-winner" : undefined}>{option ? format(option.total) : ""}</td>
+            })}
+          </tr>
+        </tfoot>
+      </table>
+    </ScrollableMarkdownTable>
+    <figcaption className="malik-md-matrix-note">
+      {winner ? <>Лучший по весам: <strong>{winner.name}</strong>. </> : <>Варианты набрали одинаковый итог. </>}
+      Итог посчитан Malik AI: Σ (вес × оценка), веса приведены к 100%.
+      {matrix.modelTotals?.mismatch ? <> Итог в ответе модели был посчитан неверно и заменён.</> : null}
+    </figcaption>
+  </figure>
+}
+
 function AnswerEntityCard({ text, description = "" }: { text: string; description?: string }) {
   const entity = parseAnswerEntity(text)
   const [failed, setFailed] = useState(false)
@@ -944,7 +1184,9 @@ function isMultiSubjectVisualQuestion(question: string): boolean {
 
 export function MalikMarkdown({ text, className, allowImages = true, autoPreview = false, citations, shared = false, visualContext }: Props) {
   const streaming = Boolean(visualContext?.streaming)
-  const normalizedText = useMemo(() => streaming ? text : normalizeCompletedFormatting(text), [text, streaming])
+  // FAQ sections fold into questions only once the answer is complete, so a
+  // streaming answer never hides the text that is arriving.
+  const normalizedText = useMemo(() => streaming ? text : faqToDetails(normalizeCompletedFormatting(text)), [text, streaming])
   const blocks = useMemo(() => parseBlocks(normalizedText), [normalizedText])
   const question = visualContext?.question || ""
   const previousQuestion = visualContext?.previousQuestion || ""
@@ -1121,6 +1363,37 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     })
     return allowed
   }, [blocks, question])
+  // Long answers with several sections get a contents list that scrolls to them.
+  const outlineId = useId().replace(/[^a-zA-Z0-9_-]/g, "")
+  const outline = useMemo(() => streaming || shared ? null : answerOutline(
+    blocks.flatMap((block, position) => block.kind === "h" && !parseAnswerEntity(block.text) ? [{ position, level: block.level, text: block.text }] : []),
+    normalizedText.length,
+  ), [blocks, normalizedText, streaming, shared])
+  const sectionId = (position: number) => `malik-s-${outlineId}-${position}`
+  // «Было» / «Стало» code blocks of the same language get the changes between them.
+  const codeChanges = useMemo(() => {
+    const pairs = new Map<number, { before: string; after: string }>()
+    const labelBefore = (position: number) => {
+      for (let index = position - 1; index >= Math.max(0, position - 2); index--) {
+        const block = blocks[index]
+        if (block.kind === "h") return beforeAfterLabel(block.text)
+        if (block.kind === "p") return beforeAfterLabel(block.lines.join(" "))
+        if (block.kind !== "hr") return null
+      }
+      return null
+    }
+    let before: { position: number; code: string; language: string } | null = null
+    blocks.forEach((block, position) => {
+      if (block.kind !== "code") return
+      const label = labelBefore(position)
+      if (label === "before") before = { position, code: block.lines.join("\n"), language: block.language }
+      else if (label === "after" && before && before.language === block.language && position - before.position <= 4) {
+        pairs.set(position, { before: before.code, after: block.lines.join("\n") })
+        before = null
+      }
+    })
+    return pairs
+  }, [blocks])
   const codeFiles = codeFilesFrom(blocks)
   const primaryPreviewFilename = codeFiles.find((file) => /\.html?$/i.test(file.name))?.name
     || codeFiles.find((file) => isPreviewableCode(languageFromFilename(file.name), file.content))?.name
@@ -1138,6 +1411,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     <CitationContext.Provider value={citations?.length ? citations : null}>
     <ReferencePhotoSources.Provider value={citations || []}>
     <div className={className ? `malik-md ${className}` : "malik-md"}>
+      {outline ? <AnswerOutline entries={outline} idFor={sectionId} /> : null}
       {codeFiles.length > 1 ? (
         <div className="malik-md-artifact-toolbar" role="group" aria-label="Файлы ответа">
           <span><Archive aria-hidden="true" /> {codeFiles.length} файлов готовы</span>
@@ -1198,11 +1472,47 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
 
         if (block.kind === "images") return allowImages ? <MalikVisualGallery key={key} images={block.images} /> : null
 
+        if (block.kind === "details") {
+          // Still arriving: shown open, so the text being written stays visible.
+          return <details key={key} className="malik-md-details" open={streaming && !block.closed ? true : undefined}>
+            <summary className="malik-md-details-summary">{inline(block.summary, `${key}-summary`)}</summary>
+            <div className="malik-md-details-body">
+              <MalikMarkdown text={block.body} allowImages={allowImages} citations={citations} shared={shared} visualContext={visualContext ? { ...visualContext, messageId: visualContext.messageId ? `${visualContext.messageId}:${key}` : undefined } : undefined} />
+            </div>
+          </details>
+        }
+
+        if (block.kind === "proscons") {
+          return <section key={key} className="malik-md-proscons" aria-label={`${block.prosTitle} и ${block.consTitle}`}>
+            {([["pros", block.prosTitle, block.pros, "+"], ["cons", block.consTitle, block.cons, "−"]] as const).map(([side, title, list, mark]) => (
+              <div key={side} className={`malik-md-proscons-side is-${side}`}>
+                <p className="malik-md-proscons-title"><span aria-hidden="true">{mark}</span> {inline(title, `${key}-${side}-title`)}</p>
+                <ul className="malik-md-proscons-list">
+                  {list.items.map((item, itemIndex) => <li key={itemIndex}><span className="malik-md-proscons-mark" aria-hidden="true">{mark}</span><span>{inline(item.text, `${key}-${side}-${itemIndex}`)}</span></li>)}
+                </ul>
+              </div>
+            ))}
+          </section>
+        }
+
         if (block.kind === "code") {
-          return <CodeBlock key={key} language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} autoPreview={autoPreview && block.filename === primaryPreviewFilename} />
+          const changes = codeChanges.get(position)
+          return <Fragment key={key}>
+            <CodeBlock language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} autoPreview={autoPreview && block.filename === primaryPreviewFilename} />
+            {changes && !streaming ? <CodeChanges before={changes.before} after={changes.after} /> : null}
+          </Fragment>
+        }
+
+        if (block.kind === "quiz") {
+          if (block.quiz) return <MalikAnswerQuiz key={key} quiz={block.quiz} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} />
+          return streaming ? <p key={key} className="malik-md-p" role="status">Собираю тест…</p> : null
         }
 
         if (block.kind === "table") {
+          const matrix = weightedMatrix(block.headers, block.rows)
+          const heatmap = matrix ? null : heatmapTable(block.headers, block.rows, previous?.kind === "h" ? previous.text : "")
+          if (heatmap) return <Fragment key={key}><HeatmapTable headers={block.headers} rows={block.rows} heatmap={heatmap} label={previous?.kind === "h" ? previous.text : "Тепловая карта"} renderCell={(cell, id) => inline(cell, id)} />{sourcedPhotos}</Fragment>
+          if (matrix) return <Fragment key={key}><DecisionMatrixTable headers={block.headers} rows={block.rows} matrix={matrix} label={previous?.kind === "h" ? previous.text : "Матрица решений"} renderCell={(cell, id) => inline(cell, id)} />{sourcedPhotos}</Fragment>
           const comparison = inferComparisonTable(block.headers, block.rows, question, previous?.kind === "h" ? previous.text : "")
           if (comparison) return <Fragment key={key}><MalikAnswerVisual visual={comparison} />{sourcedPhotos}</Fragment>
           return (
@@ -1235,7 +1545,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
           const subject = visualSegmentLabel(block.text)
           const href = !/\[[^\]]*\]/u.test(block.text)
             ? subjectCitationUrl(subject, citations) || subjectCitationUrl(referenceSearchTopic(subject), citations) : ""
-          const heading = <Tag className={`malik-md-h malik-md-h${block.level}`}>{href
+          const heading = <Tag data-malik-section={outline?.some((entry) => entry.position === position) ? sectionId(position) : undefined} tabIndex={outline ? -1 : undefined} className={`malik-md-h malik-md-h${block.level}`}>{href
             ? <a href={href} target="_blank" rel="noreferrer noopener" className="malik-md-link is-subject">{inline(block.text, key)}</a>
             : inline(block.text, key)}</Tag>
           return slot ? <MalikReferenceImages key={key} question={question} planOverride={slot.plan} row={slot.row || !singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest}>

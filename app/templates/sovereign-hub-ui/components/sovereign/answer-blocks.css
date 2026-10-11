@@ -135,3 +135,125 @@
 .malik-reference-retry { margin: 8px 0; padding: 4px 0; background: transparent; border: 0; color: #a1a1aa; font-size: 12px; text-align: left; cursor: pointer; }
 .malik-reference-retry:hover { color: #fff; text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .malik-reference-loading span { animation: none; } }
+
+/* TITAN layouts — strictly black and white. */
+/* Collapsed detail and FAQ questions (<details>): a native, keyboard-ready disclosure. */
+.malik-md .malik-md-details { margin: 10px 0; border-top: 1px solid #262626; border-bottom: 1px solid #262626; }
+.malik-md .malik-md-details + .malik-md-details { margin-top: -11px; border-top: 0; }
+.malik-md .malik-md-details-summary { display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; cursor: pointer; list-style: none; color: #fff; font-weight: 600; line-height: 1.45; }
+.malik-md .malik-md-details-summary::-webkit-details-marker { display: none; }
+.malik-md .malik-md-details-summary::before { content: "+"; flex: 0 0 18px; color: #a3a3a3; font-weight: 400; text-align: center; transition: transform .15s; }
+.malik-md .malik-md-details[open] > .malik-md-details-summary::before { content: "−"; color: #fff; }
+.malik-md .malik-md-details-summary:hover { color: #e5e5e5; }
+.malik-md .malik-md-details-summary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 4px; }
+.malik-md .malik-md-details-body { padding: 0 0 14px 30px; }
+.malik-md .malik-md-details-body > .malik-md > :first-child { margin-top: 0; }
+
+/* Contents of a long answer. */
+.malik-md .malik-md-toc { margin: 4px 0 22px; padding: 14px 16px; border: 1px solid #262626; border-radius: 14px; background: #0a0a0a; }
+.malik-md .malik-md-toc-title { margin: 0 0 8px; color: #a3a3a3; font-size: 12px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.malik-md .malik-md-toc-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; counter-reset: toc; }
+.malik-md .malik-md-toc-list > li { counter-increment: toc; }
+.malik-md .malik-md-toc-list > li.is-depth-1 { padding-left: 18px; }
+.malik-md .malik-md-toc-list > li.is-depth-2 { padding-left: 36px; }
+.malik-md .malik-md-toc-list a { color: #e5e5e5; font-size: 14px; line-height: 1.5; text-decoration: none; }
+.malik-md .malik-md-toc-list a:hover { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+.malik-md .malik-md-toc-list a:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 4px; }
+.malik-md [data-malik-section] { scroll-margin-top: 84px; }
+.malik-md [data-malik-section]:focus { outline: none; }
+
+/* Plus / minus side by side (stacked on a phone). */
+.malik-md .malik-md-proscons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0 22px; }
+.malik-md .malik-md-proscons-side { padding: 16px; border: 1px solid #262626; border-radius: 14px; background: #0a0a0a; }
+.malik-md .malik-md-proscons-side.is-pros { border-color: #525252; }
+.malik-md .malik-md-proscons-title { display: flex; gap: 8px; margin: 0 0 10px; color: #fff; font-weight: 650; }
+.malik-md .malik-md-proscons-title > span { color: #a3a3a3; }
+.malik-md .malik-md-proscons-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.malik-md .malik-md-proscons-list > li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; color: #e5e5e5; line-height: 1.5; }
+.malik-md .malik-md-proscons-mark { color: #a3a3a3; font-weight: 700; text-align: center; }
+.malik-md .malik-md-proscons-side.is-pros .malik-md-proscons-mark { color: #fff; }
+@media (max-width: 560px) { .malik-md .malik-md-proscons { grid-template-columns: 1fr; } }
+
+/* Decision matrix: the computed total and the winning column. */
+.malik-md .malik-md-matrix { margin: 18px 0 22px; }
+.malik-md .malik-md-matrix .malik-md-table-wrap { margin: 0; }
+.malik-md .malik-md-matrix th.is-winner, .malik-md .malik-md-matrix td.is-winner { background: #141414; }
+.malik-md .malik-md-matrix .malik-md-matrix-total th, .malik-md .malik-md-matrix .malik-md-matrix-total td { border-top: 1px solid #737373; border-bottom: 0; color: #fff; font-weight: 700; }
+.malik-md .malik-md-matrix-note { margin-top: 10px; color: #a3a3a3; font-size: 13px; line-height: 1.5; }
+.malik-md .malik-md-matrix-note strong { color: #fff; }
+
+#malik-root .malik-md .malik-md-toc { color: #e5e5e5; }
+#malik-root .malik-md .malik-md-toc-list a { color: #e5e5e5; }
+#malik-root .malik-md .malik-md-toc-list a:hover { color: #fff; }
+#malik-root .malik-md .malik-md-details-summary { color: #fff; }
+#malik-root .malik-md .malik-md-proscons-list > li { color: #e5e5e5; }
+#malik-root .malik-md .malik-md-matrix-note { color: #a3a3a3; }
+#malik-root .malik-md .malik-md-proscons, #malik-root .malik-md .malik-md-proscons-side, #malik-root .malik-md .malik-md-details, #malik-root .malik-md .malik-md-details-body, #malik-root .malik-md .malik-md-matrix { color: #e5e5e5; }
+
+/* Code changes: added lines bright on a lighter band, removed lines dimmed. */
+#malik-root .malik-md-pre.is-diff .malik-md-code-line.is-add { background: #1c1c1c; color: #fff; }
+#malik-root .malik-md-pre.is-diff .malik-md-code-line.is-add .malik-md-code-line-number { background: #1c1c1c; color: #fff; font-weight: 700; }
+#malik-root .malik-md-pre.is-diff .malik-md-code-line.is-del { color: #8a8a8a; }
+#malik-root .malik-md-pre.is-diff .malik-md-code-line.is-del .malik-md-code-line-text { text-decoration: line-through; text-decoration-color: #555; }
+#malik-root .malik-md-pre.is-diff .malik-md-code-line.is-del .malik-md-code-line-number { color: #8a8a8a; }
+#malik-root .malik-md-pre.is-diff .malik-md-code-line.is-hunk, #malik-root .malik-md-pre.is-diff .malik-md-code-line.is-meta { color: #a3a3a3; font-style: italic; }
+#malik-root .malik-md-pre.is-diff .malik-md-code-line-number { flex-basis: 2em; text-align: center; }
+.malik-md .malik-md-diffstat { margin-left: 8px; color: #a3a3a3; font-style: normal; font-variant-numeric: tabular-nums; }
+.malik-md .malik-md-changes { margin-top: -6px; }
+.malik-md .malik-md-changes .malik-md-pre { margin: 0 0 12px; border-radius: 12px; }
+
+/* Project tree. */
+.malik-md .malik-md-tree { padding: 12px 16px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13.5px; line-height: 1.75; }
+.malik-md .malik-md-tree-list { margin: 0; padding: 0; list-style: none; }
+.malik-md .malik-md-tree-list .malik-md-tree-list { margin-left: 9px; padding-left: 14px; border-left: 1px solid #333; }
+.malik-md .malik-md-tree-dir > summary, .malik-md .malik-md-tree-file { display: flex; align-items: center; gap: 7px; min-width: 0; color: #f5f5f5; }
+.malik-md .malik-md-tree-dir > summary { cursor: pointer; list-style: none; font-weight: 600; }
+.malik-md .malik-md-tree-dir > summary::-webkit-details-marker { display: none; }
+.malik-md .malik-md-tree-dir > summary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 4px; }
+.malik-md .malik-md-tree svg { flex: 0 0 15px; width: 15px; height: 15px; color: #a3a3a3; }
+.malik-md .malik-md-tree em { overflow: hidden; color: #8a8a8a; font-style: normal; white-space: nowrap; text-overflow: ellipsis; }
+.malik-md .malik-md-tree em::before { content: "— "; }
+
+/* Heatmap: greys only. */
+.malik-md .malik-md-heatmap { margin: 18px 0 22px; }
+.malik-md .malik-md-heatmap .malik-md-table-wrap { margin: 0; }
+.malik-md .malik-md-heatmap td.is-heat { padding-left: 10px; text-align: center; font-variant-numeric: tabular-nums; border-bottom-color: #000; }
+.malik-md .malik-md-heatmap-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; color: #a3a3a3; font-size: 13px; }
+.malik-md .malik-md-heatmap-legend i { width: 96px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgb(28, 28, 28), rgb(224, 224, 224)); }
+.malik-md .malik-md-heatmap-legend em { flex-basis: 100%; font-style: normal; }
+
+/* Quiz. */
+.malik-answer-quiz { margin: 20px 0 24px; padding: 18px; border: 1px solid #333; border-radius: 16px; background: #0a0a0a; color: #f5f5f5; }
+.malik-answer-quiz__header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.malik-answer-quiz__header h3 { margin: 0; color: #fff; font-size: 18px; font-weight: 700; }
+.malik-answer-quiz__header span { color: #a3a3a3; font-size: 13px; font-variant-numeric: tabular-nums; }
+.malik-answer-quiz__questions { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; counter-reset: quiz; }
+.malik-answer-quiz__questions > li { counter-increment: quiz; }
+.malik-answer-quiz fieldset { margin: 0; padding: 0; border: 0; }
+.malik-answer-quiz legend { margin-bottom: 8px; color: #fff; font-weight: 600; line-height: 1.45; }
+.malik-answer-quiz legend::before { content: counter(quiz) ". "; color: #a3a3a3; }
+.malik-answer-quiz__option { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 10px 12px; border: 1px solid #2e2e2e; border-radius: 12px; cursor: pointer; color: #e5e5e5; line-height: 1.4; }
+.malik-answer-quiz__option:hover { border-color: #737373; }
+.malik-answer-quiz__option input { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; accent-color: #fff; }
+.malik-answer-quiz__option > span { flex: 1 1 auto; min-width: 0; }
+.malik-answer-quiz__option > svg { flex: 0 0 18px; width: 18px; height: 18px; }
+.malik-answer-quiz__option.is-picked { border-color: #a3a3a3; }
+.malik-answer-quiz__option.is-right { border-color: #fff; background: #1c1c1c; color: #fff; font-weight: 600; }
+.malik-answer-quiz__option.is-wrong-pick { color: #8a8a8a; text-decoration: line-through; text-decoration-color: #555; }
+.malik-answer-quiz__option:has(input:disabled) { cursor: default; }
+.malik-answer-quiz__option:has(input:focus-visible) { outline: 2px solid #fff; outline-offset: 2px; }
+.malik-answer-quiz__verdict { margin: 8px 0 0; color: #d4d4d4; font-size: 14px; line-height: 1.5; }
+.malik-answer-quiz__actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+.malik-answer-quiz__actions button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: #fff; color: #000; font-weight: 650; cursor: pointer; }
+.malik-answer-quiz__actions button:disabled { background: #333; color: #8a8a8a; cursor: not-allowed; }
+.malik-answer-quiz__actions button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.malik-answer-quiz__actions svg { width: 16px; height: 16px; }
+#malik-root .malik-answer-quiz, #malik-root .malik-answer-quiz__option { color: #e5e5e5; }
+#malik-root .malik-answer-quiz__option.is-right { color: #fff; }
+#malik-root .malik-answer-quiz__option.is-wrong-pick { color: #8a8a8a; }
+/* App-wide control and header colours carry a faint blue tint; the quiz stays pure grey. */
+/* Beats the dashboard's «label > span» field-label colour. */
+#malik-root .malik-dashboard-shell .malik-answer-quiz label.malik-answer-quiz__option > span, #malik-root .malik-answer-quiz label.malik-answer-quiz__option > span { color: inherit !important; }
+#malik-root .malik-answer-quiz__option input[type="radio"] { color: #e5e5e5 !important; background: #000 !important; border-color: #737373 !important; accent-color: #fff; }
+#malik-root .malik-answer-quiz__header { background: transparent !important; }
+#malik-root .malik-md .malik-md-heatmap td.is-heat { padding: 12px 10px; text-align: center; }

@@ -47,7 +47,7 @@ Browser QA requires Playwright/Chromium, or the documented environment overrides
 | New regression assertions | 125/125 PASS | Deterministic gold fixtures, not live models |
 | Deliberately erroneous gold responses | 25/25 detected and corrected (100%) | Small, explicitly supported expression set |
 | False warnings | 0/24 (0%) | Known-correct fixtures only |
-| Production router fixtures | 6/6 PASS | Actual router; provider/connected-service boundary stubs |
+| Production router fixtures | 7/7 PASS | Actual router; provider/connected-service boundary stubs; includes English financial outputs |
 | Component browser checks | 3/3 PASS | Chromium 1440, 390 and 360 px; formulas, 8-column table, scrolling, no page overflow |
 | Local verification latency | p50 0.754 ms; p95 1.537 ms | 120 repeated 25-error answer checks on Windows/Node 22 |
 | Additional verification model calls/tokens/provider fee | 0 / 0 / $0 | Deterministic verification only, excluding the normal answer call and added instruction tokens |
@@ -55,11 +55,13 @@ Browser QA requires Playwright/Chromium, or the documented environment overrides
 | Scoped ESLint | 0 errors, 83 warnings | Changed files; existing warnings were not broadly refactored |
 | Production compilation | PASS | Next.js 16.2.7 / Webpack, isolated QA copy, 84 static pages |
 | Standalone TypeScript | PASS | `tsc --noEmit --incremental false` after final build |
-| Existing core release suite | PASS | Local fixture/static suites, no deployment |
+| Existing core release suite | PASS | Full suite on original baseline; local fixture/static suites, no deployment |
 | Truth, fact audit, format, reference/edit, skills, brain, Work math | PASS | Existing regressions; not a live API guarantee |
 | Stream integrity / memory isolation / audit contract | PASS | 11 transport and 9 audit contracts plus account-memory fixtures |
 
 The original checkout has stale dependency/type artifacts. Validation used an isolated source copy with cached dependencies and no `.env.local`. Default Turbopack rejects its external `node_modules` junction; local production compilation passed using `next build --webpack` without changing the committed Next configuration. Linux/Turbopack CI still runs the normal build after the PR opens; its result is not yet a confirmed local result.
+
+During work, remote main advanced to `c3e504b89623bae58cb250c430a7c78f75826bdf`. These owner changes were integrated into the feature branch, not the reverse. The overlapping negative-media-verb fix is preserved together with quote/discussion guards. Post-integration verification passed: 125 Accuracy fixtures, 7 router fixtures, image edits, the expanded Markdown renderer, Stage B (25 checks), Stage C, request-motion keeper, stream/fact contracts, desktop/mobile component QA, production compilation, standalone TypeScript and scoped lint. One quota fixture initially hit Windows sandbox `EPERM` on a temporary atomic rename; the authorized local rerun passed without changing quota behavior. Main and Render were not written by this task.
 
 ## Remaining limitations / follow-up evidence
 

@@ -948,7 +948,7 @@ async function handlePOST(request: Request) {
     const selection = await resolveStrictMalikSelection(request, body)
     const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
     const ownerMode = entitlement.plan === "owner"
-    const textQuota = getDailyTextTokenQuota(entitlement.userId, ownerMode)
+    const textQuota = getDailyTextTokenQuota(entitlement.userId, entitlement.plan)
     const maxOutputTokens = textQuota.unlimited
       ? undefined
       : Math.max(1, Math.floor(textQuota.remaining ?? 0))

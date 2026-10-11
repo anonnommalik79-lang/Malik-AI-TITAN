@@ -68,7 +68,7 @@ function auditGroundedAnswer(content: string, sources: SourceItem[], prompt: str
     const computedLines = accuracy?.claims.filter(claim => claim.evidence === "deterministic" || (claim.origin === "user-data" && claim.evidence === "user"))
       .map(claim => lines.find(line => line === claim.text)).filter((line): line is string => Boolean(line))
       .filter(line => /^[\d\s.,()+\-−×*·÷/%^=≈]+$/u.test(line)
-        || /^(?:Ответ|Результат|Итого|Платящие пользователи|Выручка|Месячная выручка|Платёж за период|Сумма после капитализации)\s*[:=]\s*[\d\s.,/]+\s*(?:USD|EUR|KZT|₸|тенге|руб\.?|[$€])?\s*[.!]?$/iu.test(line))
+        || /^(?:Ответ|Результат|Итого|Платящие пользователи|Выручка|Месячная выручка|Платёж за период|Сумма после капитализации|Answer|Result|Total|Paying users|Revenue|Monthly revenue|Payment per period)\s*[:=]\s*[$€₸]?\s*[\d\s.,/]+\s*(?:USD|EUR|KZT|₸|тенге|руб\.?|[$€])?\s*[.!]?$/iu.test(line))
     // With no page read there is nothing to judge against, so the answer says
     // so rather than saying nothing — an unchecked figure that looks checked is
     // the failure this whole layer exists to stop. One tap turns it into a

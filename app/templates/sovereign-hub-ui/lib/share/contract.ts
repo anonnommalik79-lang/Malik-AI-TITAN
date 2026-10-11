@@ -1,4 +1,5 @@
 import { answerCardsToText } from "@/lib/ai/answer-cards"
+import { answerQuizzesToText } from "@/lib/ai/answer-quiz"
 import { stripAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 
 /**
@@ -149,7 +150,7 @@ export function sanitizeShareInput(body: unknown): { ok: true; value: SharedAnsw
 
 /** Markdown and answer blocks as one line of readable text. */
 export function sharePlainText(markdown: string) {
-  return answerCardsToText(stripAnswerPhotoHints(String(markdown || "")))
+  return answerQuizzesToText(answerCardsToText(stripAnswerPhotoHints(String(markdown || ""))))
     .replace(/```[\s\S]*?(?:```|$)/gu, " ")
     .replace(/!\[[^\]]*\]\([^)]*\)/gu, " ")
     .replace(/\[([^\]\n]+)\]\((?:[^)\s]+)\)/gu, "$1")

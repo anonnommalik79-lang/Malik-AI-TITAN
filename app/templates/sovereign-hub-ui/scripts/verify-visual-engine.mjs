@@ -332,4 +332,19 @@ await check("history: the same saved text restores the same blocks", async () =>
   assert.match(render(saved), /data-malik-visual-engine="calculator"[\s\S]*data-malik-visual-engine="graph"/)
 })
 
+await check("scatter and bubble charts validate, render and read as text", async () => {
+  const scatter = { version: 2, type: "chart", chart: "scatter", title: "Цена и рейтинг", dataKind: "example", xLabel: "Цена", yLabel: "Рейтинг",
+    scatter: [{ name: "Ноутбуки", points: [{ x: 900, y: 4.1, label: "A" }, { x: 1200, y: 4.6, label: "B" }, { x: 700, y: 3.8, label: "C" }] }] }
+  assert.equal(parseVisualBlock(JSON.stringify(scatter)).ok, true)
+  const bubble = { ...scatter, chart: "bubble", scatter: [{ name: "Рынки", points: [{ x: 1, y: 2, size: 30 }, { x: 3, y: 1, size: 80 }] }] }
+  assert.equal(parseVisualBlock(JSON.stringify(bubble)).ok, true)
+  assert.equal(parseVisualBlock(JSON.stringify({ ...scatter, scatter: undefined, labels: ["a"], series: [{ name: "s", values: [1] }] })).ok, false, "a scatter chart needs its points")
+  const tooMany = { ...scatter, scatter: [{ name: "x", points: Array.from({ length: VISUAL_LIMITS.scatterPoints + 1 }, (_, index) => ({ x: index, y: index })) }] }
+  assert.equal(parseVisualBlock(JSON.stringify(tooMany)).ok, false, "point count is bounded")
+  const html = render(fence(scatter), "Покажи график цены и рейтинга")
+  assert.match(html, /data-malik-visual-engine="chart"/)
+  assert.match(visualFenceToText(JSON.stringify(scatter)), /Цена и рейтинг/)
+  assert.match(load("lib/visual/intent.ts").VISUAL_ENGINE_SCHEMAS.chart, /bubble[\s\S]*"size"/, "the model is told bubble charts and point size exist")
+})
+
 console.log(`\n${checks}/${checks} visual engine checks passed`)

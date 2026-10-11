@@ -3,6 +3,7 @@ import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components"
 import { NoBlueUiGuard } from "@/components/sovereign/NoBlueUiGuard"
 import { MalikSearchMotion } from "@/components/sovereign/MalikSearchMotion"
 import { MalikTurnRuntime } from "@/components/sovereign/MalikTurnRuntime"
+import { RequestMotionKeeper } from "@/components/sovereign/RequestMotionKeeper"
 import { MalikStopPolish } from "@/components/sovereign/MalikStopPolish"
 import { FounderConsoleRuntime } from "@/components/sovereign/FounderConsoleRuntime"
 import { FounderShortcut } from "@/components/sovereign/FounderShortcut"
@@ -243,6 +244,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <NoBlueUiGuard />
         <MalikSearchMotion />
         <MalikTurnRuntime />
+        <RequestMotionKeeper />
         <ChatTurnScrollRuntime />
         <SidebarSectionRuntime />
         <ReleaseFixRuntime />

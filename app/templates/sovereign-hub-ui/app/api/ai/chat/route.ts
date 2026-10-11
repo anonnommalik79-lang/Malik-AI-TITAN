@@ -37,7 +37,7 @@ async function handlePOST(request: Request) {
       workReceipt = quotaAdmission.receipt
       workUserId = entitlement.userId
     }
-    const textQuota = getDailyTextTokenQuota(entitlement.userId, ownerMode)
+    const textQuota = getDailyTextTokenQuota(entitlement.userId, entitlement.plan)
     const requestedMaxTokens = Number(body?.maxTokens)
     const maxOutputTokens = textQuota.unlimited
       ? (Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0 ? Math.floor(requestedMaxTokens) : undefined)

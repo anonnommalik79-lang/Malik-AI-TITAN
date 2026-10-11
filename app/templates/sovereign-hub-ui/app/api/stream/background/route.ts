@@ -10,6 +10,7 @@ import {
   normalizeBackgroundTurnId,
   startBackgroundChatTurn,
 } from "@/lib/server/background-chat-turns"
+import { registerRunningTurn, releaseRunningTurn } from "@/lib/server/turn-cancellation"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -55,9 +56,13 @@ function parseSseFrame(frame: string, state: { content: string; error: string; d
   }
 }
 
-async function persistStreamResult(turnId: string, response: Response) {
+async function persistStreamResult(turnId: string, response: Response, stop?: AbortSignal) {
   const state: { content: string; error: string; done: boolean; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> } = { content: "", error: "", done: false, provider: "", model: "" }
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  // The owner's Stop: stop reading, which (with the browser's copy already
+  // cancelled) cancels the model stream; what was written is kept.
+  const onStop = () => { void reader?.cancel("Остановлено пользователем.").catch(() => {}) }
+  stop?.addEventListener("abort", onStop, { once: true })
   try {
     const contentType = response.headers.get("content-type") || ""
     if (!response.body) {
@@ -97,6 +102,10 @@ async function persistStreamResult(turnId: string, response: Response) {
     }
     if (buffer.trim()) parseSseFrame(buffer, state)
 
+    if (stop?.aborted && !state.done) {
+      await failBackgroundChatTurn(turnId, "Остановлено пользователем.", state.execution, state.content)
+      return
+    }
     if (state.error) {
       await failBackgroundChatTurn(turnId, state.error, state.execution, state.content)
       return
@@ -120,8 +129,9 @@ async function persistStreamResult(turnId: string, response: Response) {
   } catch (error) {
     // reader.read() can throw after many valid chunks. Preserve those chunks
     // just as we do for an orderly EOF without done; never replace them with an error-only turn.
-    await failBackgroundChatTurn(turnId, error, state.execution, state.content)
+    await failBackgroundChatTurn(turnId, stop?.aborted ? "Остановлено пользователем." : error, state.execution, state.content)
   } finally {
+    stop?.removeEventListener("abort", onStop)
     if (reader) { void reader.cancel().catch(() => {}); reader.releaseLock() }
   }
 }
@@ -148,23 +158,27 @@ export async function POST(request: Request) {
   const started = await startBackgroundChatTurn(turnId, entitlement.userId)
   if (!started) return Response.json({ ok: false, error: "Этот запрос уже существует. Начните новый." }, { status: 409, headers: { "cache-control": "private, no-store" } })
 
+  // Closing the tab must not stop the answer, but the owner's Stop must:
+  // the model call listens to the request's own signal and to this one.
+  const stop = registerRunningTurn(turnId, entitlement.userId)
+  const release = () => releaseRunningTurn(turnId)
   let response: Response
   try {
-    if (asynchronous) {
-      const headers = new Headers(request.headers)
-      headers.set("accept", "text/event-stream")
-      request = new Request(request, { headers })
-    }
+    const headers = new Headers(request.headers)
+    if (asynchronous) headers.set("accept", "text/event-stream")
+    const signal = typeof AbortSignal.any === "function" ? AbortSignal.any([request.signal, stop]) : stop
+    request = new Request(request, { headers, signal })
     response = await streamPOST(request)
   } catch (error) {
-    await failBackgroundChatTurn(turnId, error)
+    release()
+    await failBackgroundChatTurn(turnId, stop.aborted ? "Остановлено пользователем." : error)
     throw error
   }
 
   if (asynchronous && response.ok && response.headers.get("content-type")?.includes("text/event-stream") && response.body) {
     // Only short JSON responses cross the network. Model SSE is consumed on
     // the server, so a buffering school/office proxy cannot hold the answer.
-    const persistence = persistStreamResult(turnId, response)
+    const persistence = persistStreamResult(turnId, response, stop).finally(release)
     after(async () => { await persistence })
     return Response.json({ ok: true, turnId, status: "pending" }, {
       status: 202,
@@ -177,7 +191,7 @@ export async function POST(request: Request) {
   }
 
   if (!response.body) {
-    const persistence = persistStreamResult(turnId, response.clone())
+    const persistence = persistStreamResult(turnId, response.clone(), stop).finally(release)
     after(async () => { await persistence })
     const headers = new Headers(response.headers)
     headers.set("x-malik-background-turn-id", turnId)
@@ -189,7 +203,7 @@ export async function POST(request: Request) {
   // the tab or changing routes cannot orphan the model task before persistence.
   const [clientBody, persistenceBody] = response.body.tee()
   const persistenceResponse = cloneResponse(response, persistenceBody)
-  const persistence = persistStreamResult(turnId, persistenceResponse)
+  const persistence = persistStreamResult(turnId, persistenceResponse, stop).finally(release)
   after(async () => { await persistence })
 
   const headers = new Headers(response.headers)

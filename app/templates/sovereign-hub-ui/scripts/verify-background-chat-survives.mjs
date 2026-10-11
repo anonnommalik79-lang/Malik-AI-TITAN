@@ -27,7 +27,9 @@ check("each /api/stream request is rewritten to a durable background turn", () =
 
 check("automatic Malik abort signals are protected but explicit Stop still aborts the network controller", () => {
   assert.match(account, /protectedChatSignals\.has\(this\.signal\)/)
-  assert.match(account, /closest\("\.malik-runtime-stop"\)/)
+  // Both Stop buttons (the turn runtime's and the composer's) are explicit stops.
+  assert.match(account, /closest\("\.malik-runtime-stop, \[data-malik-stop\]"\)/)
+  assert.match(codeOf("components/sovereign/chat-view.tsx"), /data-malik-stop=""/)
   assert.match(account, /originalAbort\.call\(controller/)
 })
 

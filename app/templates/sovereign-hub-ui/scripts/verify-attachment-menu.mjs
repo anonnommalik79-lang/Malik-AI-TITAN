@@ -148,7 +148,7 @@ assert.match(dashboard, /url: durableUrl \|\| fallbackUrl/, "Cloud upload failur
 assert.match(dashboard, /!\s*\/\^\(\?:blob:\|data:\)\/i\.test\(item\.url\)/, "History must not serialize large blob/data URLs")
 assert.match(dashboard, /posterUrl,/, "Tiny poster references must survive the history snapshot")
 const finalChatCss = fs.readFileSync("app/chat-monochrome-final.css", "utf8")
-assert.match(finalChatCss, /malik-dashboard-shell \.malik-ai-chat-bg \.malik-dual-grid/, "Mobile answer carousel background must be solid OLED black")
+assert.doesNotMatch(finalChatCss, /malik-dual-/, "Removed dual-answer UI must not leave any active carousel styles")
 assert.match(finalChatCss, /malik-dashboard-shell \.malik-ai-chat-bg \.malik-user-attachment--video/, "Sent video tiles must be square and black")
 
 
@@ -161,6 +161,6 @@ assert.ok(dashboard.includes('chat-video-poster-${item.id}'), "Video history mus
 assert.ok(dashboard.includes('url: durableUrl || fallbackUrl'), "Cloud upload failure must retain the preview")
 assert.ok(dashboard.includes('posterUrl,'), "History serializer must retain lightweight video poster references")
 assert.ok(dashboard.includes('posterUrl: historyUrl(rawPosterUrl)'), "History rehydration must restore the saved video poster after reload")
-assert.ok(finalChatCss.includes('.malik-dashboard-shell .malik-ai-chat-bg .malik-dual-grid'), "Mobile swipe gutter must be OLED black")
+assert.ok(finalChatCss.includes(".malik-dashboard-shell .malik-ai-chat-bg .malik-user-attachment--image"), "Sent image thumbnails must remain covered by OLED black rules")
 
 console.log("Shared tools menu, in-place modes, connections, uploads, library, drawing, phone sheet and multimodal transport verified.")

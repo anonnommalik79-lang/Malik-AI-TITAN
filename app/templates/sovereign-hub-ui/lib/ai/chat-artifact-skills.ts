@@ -102,8 +102,8 @@ export const CHAT_ARTIFACT_SKILLS: readonly ChatArtifactSkill[] = [
     id: "education",
     name: "Learning Designer",
     priority: 92,
-    patterns: [/курс\b|урок|учебн|квиз|тест\s+знаний|study\s+plan|learning\s+plan|quiz|flashcards/iu],
-    instruction: "Create a teachable learning artifact with outcomes, progressive exercises, worked examples, feedback criteria and a genuine knowledge check. Match the user's level and never pad the course with repetitive theory.",
+    patterns: [/курс\b|урок|учебн|квиз|викторин|тест\s+(?:знаний|по\s)|проверочн|study\s+plan|learning\s+plan|quiz|flashcards/iu],
+    instruction: "Create a teachable learning artifact with outcomes, progressive exercises, worked examples, feedback criteria and a genuine knowledge check. Match the user's level and never pad the course with repetitive theory. For the knowledge check use one closed ```malik-quiz fence with JSON {\"version\":1,\"title\":\"…\",\"questions\":[{\"question\":\"…\",\"options\":[\"…\",\"…\"],\"answer\":<0-based index of the correct option>,\"explanation\":\"…\"}]} (2–6 options, at most 20 questions); the chat grades it itself.",
   },
   {
     id: "career",

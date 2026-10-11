@@ -8,7 +8,7 @@ const require_ = createRequire(import.meta.url)
 const React = require_("react")
 const { renderToStaticMarkup } = require_("react-dom/server")
 const icon = (name) => function TestIcon() { return React.createElement("svg", { "data-icon": name }) }
-const lucide = { ArrowUpRight: icon("arrow-up-right"), Archive: icon("archive"), Check: icon("check"), Copy: icon("copy"), Download: icon("download"), ExternalLink: icon("external"), Eye: icon("eye"), RefreshCw: icon("refresh") }
+const lucide = { ArrowUpRight: icon("arrow-up-right"), Archive: icon("archive"), Check: icon("check"), Copy: icon("copy"), Download: icon("download"), ExternalLink: icon("external"), Eye: icon("eye"), RefreshCw: icon("refresh"), Folder: icon("folder"), FileText: icon("file"), X: icon("x"), RotateCcw: icon("rotate") }
 
 /**
  * The chat printed the model's reply into a `whitespace-pre-wrap` div, so every
@@ -95,6 +95,11 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "./MalikAnswerCards") return loadPure("components/sovereign/MalikAnswerCards.tsx")
     if (name === "@/lib/ai/answer-cards") return loadPure("lib/ai/answer-cards.ts")
     if (name === "@/lib/ai/citation-names") return loadPure("lib/ai/citation-names.ts")
+    if (name === "@/lib/ai/answer-layouts") return loadPure("lib/ai/answer-layouts.ts")
+    if (name === "@/lib/ai/answer-code-views") return loadPure("lib/ai/answer-code-views.ts")
+    if (name === "@/lib/ai/answer-quiz") return loadPure("lib/ai/answer-quiz.ts")
+    if (name === "@/lib/os/diff") return loadPure("lib/os/diff.ts")
+    if (name === "./MalikAnswerQuiz") return loadPure("components/sovereign/MalikAnswerQuiz.tsx")
     if (name === "./MalikAnswerChecklist") return loadPure("components/sovereign/MalikAnswerChecklist.tsx")
     // Interactive Visual Engine blocks have their own suite (test:visual-engine);
     // here only their placement in the answer matters.
@@ -596,6 +601,108 @@ check("even a model-authored photo fence cannot turn an abstract business proces
   const html = render('## Контент-маркетинг\n\nМатериалы для клиентов.\n\n```malik-photos\n{"version":1,"subjects":[{"name":"Контент-маркетинг","query":"Content marketing","kind":"topic","layout":"landscape"}]}\n```', { visualContext: { question: "План бизнес-процессов", isLatest: true } })
   assert(!html.includes("data-test-photo-topic"))
   assert(html.includes("Материалы для клиентов"))
+})
+
+console.log("\nTITAN layouts: FAQ, details, plus/minus, contents, decision matrix")
+check("an FAQ section becomes an accordion of questions once the answer is complete", () => {
+  const text = "Ответ.\n\n## Частые вопросы\n\n**Сколько стоит подписка?**\nОт 5 000 ₸ в месяц.\n\n**Можно ли отменить?**\nДа, в любой момент.\n\n## Итог\n\nВсё."
+  const html = render(text, { visualContext: { question: "Расскажи про подписку" } })
+  assert.equal((html.match(/<details class="malik-md-details"/g) || []).length, 2)
+  assert(html.includes("Сколько стоит подписка?</summary>") && html.includes("От 5 000 ₸ в месяц."))
+  assert(html.indexOf("Можно ли отменить?") < html.indexOf("Итог"), "the next section stays outside the FAQ")
+  assert(!html.includes("&lt;details") && !html.includes("**Сколько"))
+  // While the answer is still arriving nothing is folded away.
+  const streaming = render(text, { visualContext: { question: "Расскажи про подписку", streaming: true } })
+  assert(!streaming.includes("<details"))
+})
+check("<details> from the model collapses Markdown, never passes HTML through", () => {
+  const html = render("Кратко: да.\n\n<details>\n<summary>Технические детали</summary>\n\n- шаг **один**\n- <script>alert(1)</script>\n\n</details>\n\nКонец.")
+  assert(html.includes('<summary class="malik-md-details-summary">Технические детали</summary>'))
+  assert(html.includes("<strong") && html.includes("один"))
+  assert(!html.includes("<script>"), "model HTML is text, not markup")
+  assert(html.includes("Конец."))
+  // An unclosed block while streaming stays open.
+  const open = render("<details>\n<summary>Ещё</summary>\n\nпишу", { visualContext: { question: "x", streaming: true } })
+  assert(/<details class="malik-md-details" open="">/.test(open))
+})
+check("«Плюсы» and «Минусы» lists stand side by side in black and white", () => {
+  const html = render("### Плюсы\n\n- быстро\n- дёшево\n\n### Минусы\n\n- мало памяти")
+  assert(html.includes('class="malik-md-proscons"'))
+  assert(html.includes("is-pros") && html.includes("is-cons"))
+  assert(html.indexOf("быстро") < html.indexOf("мало памяти"))
+  const bold = render("**Минусы:**\n- шумно\n\n**Плюсы:**\n- тепло")
+  assert(bold.includes("malik-md-proscons"), "bold labels and either order work")
+  assert(bold.indexOf("тепло") < bold.indexOf("шумно"), "pros are always on the left")
+})
+check("a long answer with several sections gets a working contents list", () => {
+  const body = "Текст раздела. ".repeat(60)
+  const text = ["## Введение", body, "## Анализ рынка", body, "### Конкуренты", body, "## Финансы", body, "## Риски", body].join("\n\n")
+  const html = render(text, { visualContext: { question: "Сделай отчёт" } })
+  assert(html.includes('aria-label="Содержание ответа"'))
+  const links = [...html.matchAll(/data-malik-toc-target="(malik-s-[^"]+)"/g)].map((match) => match[1])
+  assert.equal(links.length, 5)
+  for (const key of links) assert(html.includes(`data-malik-section="${key}"`), `heading ${key} exists for its link`)
+  assert(!render("## Один\n\nКоротко.\n\n## Два\n\nКоротко.").includes("Содержание ответа"), "short answers get no contents")
+})
+check("a decision matrix gets a computed weighted total and a flagged wrong model total", () => {
+  const text = "| Критерий | Вес | Вариант A | Вариант B |\n|---|---|---|---|\n| Цена | 50% | 8 | 6 |\n| Качество | 30% | 6 | 9 |\n| Сервис | 20% | 7 | 7 |\n| Итого | | 9.9 | 6.9 |"
+  const html = render(text, { visualContext: { question: "Что выбрать" } })
+  assert(html.includes("data-malik-decision-matrix"))
+  // A: 0.5·8 + 0.3·6 + 0.2·7 = 7.2;  B: 0.5·6 + 0.3·9 + 0.2·7 = 7.1
+  assert(html.includes("7,20") && html.includes("7,10"))
+  assert(html.includes("Лучший по весам: <strong>Вариант A</strong>"))
+  assert(html.includes("посчитан неверно"), "the model's 9.9 / 6.9 total is replaced")
+  assert(!html.includes(">9.9<"), "the wrong model total is not shown")
+  const plain = render("| Модель | Цена | Память |\n|---|---|---|\n| A | 100 | 8 |\n| B | 120 | 16 |")
+  assert(!plain.includes("data-malik-decision-matrix"), "tables without a weight column are left alone")
+})
+
+console.log("\nTITAN code views: diffs, before/after, project trees, heatmaps, quizzes")
+check("a ```diff fence shows added and removed lines with a +/− count", () => {
+  const html = render("```diff\n--- a/app.js\n+++ b/app.js\n@@ -1,3 +1,3 @@\n const a = 1\n-const b = 2\n+const b = 3\n+const c = 4\n```")
+  assert(html.includes("is-diff"))
+  assert(html.includes("+2 −1"), "the bar counts the changes")
+  assert.equal((html.match(/malik-md-code-line is-add/g) || []).length, 2)
+  assert.equal((html.match(/malik-md-code-line is-del/g) || []).length, 1)
+  assert(html.includes("is-hunk") && html.includes("is-meta"))
+})
+check("«Было» / «Стало» code gets the computed changes, other code does not", () => {
+  const before = "def total(items):\n    s = 0\n    for i in items:\n        s += i\n    return s"
+  const after = "def total(items):\n    return sum(items)"
+  const html = render(`### Было\n\n\`\`\`python\n${before}\n\`\`\`\n\n### Стало\n\n\`\`\`python\n${after}\n\`\`\``)
+  assert(html.includes("data-malik-code-changes"))
+  assert(html.includes("Что изменилось: +1 −4 строк"))
+  const unrelated = render(`### Установка\n\n\`\`\`bash\nnpm i\n\`\`\`\n\n### После установки\n\n\`\`\`python\nprint(1)\n\`\`\``)
+  assert(!unrelated.includes("data-malik-code-changes"), "different languages are never compared")
+})
+check("a drawn project tree becomes folders and files, with a text toggle", () => {
+  const html = render("```\nmy-app/\n├── src/\n│   ├── index.ts   # точка входа\n│   └── utils/\n│       └── math.ts\n├── package.json\n└── README.md\n```")
+  assert(html.includes('role="tree"'))
+  assert(html.includes("Структура проекта"))
+  assert(html.includes("<span>src/</span>") && html.includes("<span>math.ts</span>"))
+  assert(html.includes("<em>точка входа</em>"), "comments stay as notes")
+  assert(html.includes(">Текстом</button>"))
+  assert(!render("```js\nconst tree = 1\n```").includes('role="tree"'))
+})
+check("a table named as a heatmap is shaded in greys with a legend", () => {
+  const html = render("### Тепловая карта загрузки\n\n| День | 9:00 | 12:00 | 18:00 |\n|---|---|---|---|\n| Пн | 10 | 50 | 90 |\n| Вт | 20 | 60 | 80 |")
+  assert(html.includes("data-malik-heatmap"))
+  assert(/background:rgb\(28, 28, 28\)/.test(html), "the smallest value is darkest")
+  assert(/background:rgb\(224, 224, 224\)/.test(html), "the largest value is lightest")
+  assert(!/rgb\((?!(\d+), \1, \1\))/.test(html.match(/style="[^"]*"/g)?.join(" ") || ""), "only greys")
+  assert(html.includes("темнее — меньше"))
+  assert(!render("| День | A | B |\n|---|---|---|\n| Пн | 1 | 2 |\n| Вт | 3 | 4 |").includes("data-malik-heatmap"), "ordinary tables stay plain")
+})
+check("a malik-quiz fence becomes a quiz; a broken quiz shows nothing", () => {
+  const quiz = { version: 1, title: "Столицы", questions: [{ question: "Столица Казахстана?", options: ["Алматы", "Астана"], answer: 1, explanation: "С 1997 года." }, { question: "Столица Франции?", options: ["Париж", "Лион", "Ницца"], answer: 0 }] }
+  const html = render("Проверьте себя:\n\n```malik-quiz\n" + JSON.stringify(quiz) + "\n```")
+  assert(html.includes("data-malik-quiz"))
+  assert(html.includes("Столица Казахстана?") && html.includes("Ницца"))
+  assert(html.includes("0 из 2 отвечено"))
+  assert.equal((html.match(/type="radio"/g) || []).length, 5)
+  assert(!html.includes("&quot;answer&quot;"), "the answers are not printed")
+  const broken = render("```malik-quiz\n{\"questions\":[{\"question\":\"?\",\"options\":[\"a\"],\"answer\":3}]}\n```")
+  assert(!broken.includes("data-malik-quiz") && !broken.includes("options"))
 })
 console.log(failures ? `\n${failures} failing\n` : "\nall answer format checks passed\n")
 process.exit(failures ? 1 : 0)

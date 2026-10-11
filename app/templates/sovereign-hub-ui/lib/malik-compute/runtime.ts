@@ -10,6 +10,7 @@ import {
   getDailyTextTokenQuota,
   recordGeneratedTextTokens,
 } from "@/lib/server/daily-text-token-quota"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 
 type Metadata = Record<string, unknown>
 type TextQuotaContext = { userId: string; unlimited: boolean; recorded: boolean; output: string }
@@ -154,7 +155,14 @@ export function withCompute<R extends Request, Args extends unknown[]>(
         context.textQuota = { userId: identity.userId, unlimited: false, recorded: false, output: "" }
         const quota = getDailyTextTokenQuota(identity.userId, false)
         if (!quota.unlimited && (quota.remaining ?? 0) <= 0) {
-          throw new MalikComputeError("MALIK_TEXT_TOKEN_LIMIT_REACHED", "Daily generated text token limit reached.")
+          // Past the free cap: a paid plan has its own allowance. Looked up
+          // only here, so ordinary requests pay nothing for it.
+          const plan = identity.guest ? "free" : (await resolveRequestEntitlement(request).catch(() => null))?.plan || "free"
+          const paid = getDailyTextTokenQuota(identity.userId, plan)
+          if (!paid.unlimited && (paid.remaining ?? 0) <= 0) {
+            throw new MalikComputeError("MALIK_TEXT_TOKEN_LIMIT_REACHED", "Daily generated text token limit reached.")
+          }
+          if (paid.unlimited) context.textQuota.unlimited = true
         }
       }
 

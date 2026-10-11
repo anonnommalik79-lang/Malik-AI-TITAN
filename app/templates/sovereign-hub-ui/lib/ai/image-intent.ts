@@ -15,6 +15,19 @@ const EXPLANATION_BEFORE_CREATE_PATTERN = /(?:объясн[\p{L}-]*|расска
 const NON_IMAGE_OBJECT_PATTERN = /(?:код(?:а|ом)?|промпт(?:а|ом)?|prompt|текст(?:а|ом)?|пост(?:а|ом)?(?!ер)|стать[яию]|описани[еяю]|интерфейс(?:а|ом)?|анимаци[яию]|лоадер(?:а|ом)?|loader|кнопк(?:у|а|и)|раздел(?:а|ом)?|функци[яию]|сайт(?:а|ом)?|website|компонент(?:а|ом)?|api|html|css|javascript|typescript|react)(?![\p{L}\p{N}_])/iu
 const META_TASK_PREFIX_PATTERN = /^\s*(?:напиши(?:те)?|дай(?:те)?|подготовь(?:те)?|составь(?:те)?|write|give\s+me|prepare)(?![\p{L}\p{N}_])/iu
 
+// «Я НЕ прошу генерировать изображение», «не нужно рисовать картинку»,
+// «don't generate an image»: a negated verb is the opposite of a request.
+const NEGATION_BEFORE_VERB_PATTERN = /(?:^|[^\p{L}])(?:не|ни|нет|без|never|not|no|don'?t|do\s+not|doesn'?t|емес)(?:\s+[\p{L}'-]+){0,2}\s*$/iu
+
+/** The first create-verb that is not negated, or null. */
+function firstRequestedVerb(value: string, verbs = IMAGE_CREATE_VERB_PATTERN) {
+  const pattern = new RegExp(verbs.source, "giu")
+  for (let match = pattern.exec(value); match; match = pattern.exec(value)) {
+    if (!NEGATION_BEFORE_VERB_PATTERN.test(value.slice(Math.max(0, match.index - 40), match.index))) return { index: match.index, text: match[0] }
+  }
+  return null
+}
+
 function firstMatch(value: string, pattern: RegExp) {
   const match = pattern.exec(value)
   return match ? { index: match.index, text: match[0] } : null
@@ -40,7 +53,7 @@ export function isExplicitVideoGenerationRequest(input: string): boolean {
   if (!text || isTextOnlyMediaDiscussion(text) || EXPLANATION_START_PATTERN.test(text)) return false
   if (VIDEO_COMMAND_PATTERN.test(text)) return true
   const actionable = text.replace(/`[^`\n]*`|"[^"\n]*"|«[^»]*»|“[^”]*”/gu, " ")
-  const create = firstMatch(actionable, IMAGE_CREATE_VERB_PATTERN) || firstMatch(actionable, /сними|смонтируй|оживи|анимируй|animate|produce/iu)
+  const create = firstRequestedVerb(actionable) || firstRequestedVerb(actionable, /сними|смонтируй|оживи|анимируй|animate|produce/iu)
   const video = firstMatch(actionable, /видео|ролик|анимаци[\p{L}]*|(?<!\p{L})(?:video|clip|trailer|reel|animation)(?!\p{L})/iu)
   if (!create || !video) return false
   if (/код|скрипт|компонент|промпт|описани|текст|css|javascript|code|script|component|prompt|description/iu.test(actionable.slice(0, Math.max(create.index, video.index)))) return false
@@ -138,7 +151,7 @@ export function isExplicitImageGenerationRequest(input: string): boolean {
   }
 
   const actionable = text.replace(/`[^`\n]*`|"[^"\n]*"|«[^»]*»|“[^”]*”/gu, " ")
-  const verb = firstMatch(actionable, IMAGE_CREATE_VERB_PATTERN)
+  const verb = firstRequestedVerb(actionable)
   const noun = firstMatch(actionable, IMAGE_NOUN_PATTERN) || firstMatch(actionable, /(?<!\p{L})(?:аву|аватар|логотип|logo)(?!\p{L})/iu)
   if (!verb || !noun) return false
 
