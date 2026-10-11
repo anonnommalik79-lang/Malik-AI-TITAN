@@ -389,15 +389,15 @@ check("the router audits every answer written from open pages", () => {
   const router = read("lib/malik-god-router.ts")
   assert.match(router, /import \{ auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit \} from "@\/lib\/ai\/fact-audit"/)
   // Card blocks are audited as their text (lib/ai/answer-cards.ts), like any other sentence.
-  assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(content\), sources, prompt\)/)
-  assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(result\.content\), sources, prompt\)/)
+  assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(content\), sources, prompt, verified\.report\)/)
+  assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(verified\.content\), sources, prompt, verified\.report\)/)
   assert.match(router, /factAudit: answer\.factAudit \?\? null/)
 })
 
 check("a failing audit can never take the answer down with it", () => {
   const router = read("lib/malik-god-router.ts")
   const guard = router.slice(router.indexOf("function auditGroundedAnswer"))
-  assert.match(guard.slice(0, 600), /try \{[\s\S]*catch/)
+  assert.match(guard.slice(0, guard.search(/\r?\n\}/u) + 3), /try \{[\s\S]*catch/)
 })
 
 check("the chat stream carries the audit on its done event", () => {
@@ -427,7 +427,7 @@ check("the audit is part of the JSON chat answer too", () => {
 
 check("an answer with no sources still gets a verdict, not silence", () => {
   const router = read("lib/malik-god-router.ts")
-  assert.match(router, /if \(!sources\.length\) return describeUncheckedAnswer\(\{ answer: content, prompt \}\)/)
+  assert.match(router, /if \(!sources\.length\) return describeUncheckedAnswer\(\{ answer: content, prompt, computedLines \}\)/)
 })
 
 /* -------------------------------------------- verification the reader runs */

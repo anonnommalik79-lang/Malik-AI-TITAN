@@ -1,5 +1,6 @@
 import type { AIFileAttachment, AITaskType } from "./types"
 import { detectQuantitativeReasoning } from "./quantitative-reasoning"
+import { isExplicitImageGenerationRequest, isExplicitImageEditRequest } from "./image-intent"
 
 export type MalikSuperpowerExecution = "native" | "studio" | "connector" | "workflow" | "scheduler"
 
@@ -780,6 +781,10 @@ export function detectMalikSuperpowers(
   const quantitative = detectQuantitativeReasoning(prompt)
   const scored = MALIK_SUPERPOWERS.flatMap((power) => {
     if (power.id === "chat-core") return []
+    if (power.id === "image-create" && !isExplicitImageGenerationRequest(prompt)) return []
+    // This selects guidance, not a paid action. An explicit edit without pixels
+    // should still ask for an upload; the actual execution requires its source.
+    if (power.id === "image-edit" && !isExplicitImageEditRequest(prompt, true)) return []
     let score = attachmentIds.has(power.id) ? power.priority + 30 : 0
     if (power.id === "quantitative-reasoning" && quantitative) score += power.priority * (quantitative.complex ? 2 : 1)
     for (const signal of power.signals) {

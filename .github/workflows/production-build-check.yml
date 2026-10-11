@@ -49,6 +49,9 @@ jobs:
       - name: Verify MALIK Truth Engine V2
         run: npm run test:truth
 
+      - name: Verify Malik Accuracy Engine (deterministic fixtures, no deployment)
+        run: npm run test:accuracy && npm run test:accuracy-routing
+
       - name: Verify Markdown rendering
         run: npm run test:answer-format
 

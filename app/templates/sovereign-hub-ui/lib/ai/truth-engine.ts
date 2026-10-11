@@ -1,6 +1,8 @@
 import { auditExtendedArithmetic, auditHeadlineConsistency, checkPrimaryEvidence, type TruthSource } from "./truth-engine-v2"
+import { finalizeAccuracy, isUserCalculation } from "./accuracy/engine"
 
 export function truthNeedsLiveEvidence(input: string) {
+  if (isUserCalculation(input)) return false
   return /налог|налогооблож|бухгалтер|кпн|ипн|опв|восмс|оосмс|упрощенк|декларац|салық|законодател|юридич|лечени|диагноз|лекарств|дозировк|ипотек|кредит|инвестиц|payroll|taxation|legislation|medication|diagnosis/i.test(input)
 }
 export function officialTruthQuery(input: string) {
@@ -32,52 +34,26 @@ export function truthSystemInstruction(input: string, hasEvidence: boolean) {
 
 /** Mechanical check of simple, explicit percentages. This is not a proof of legal applicability. */
 export function auditTruthArithmetic(text: string) {
-  const body = String(text || "").replace(/\x60{3}[\s\S]*?\x60{3}/gu, " ").slice(0, 35000)
-  const normalize = (s: string) => Number(s.replace(/[ \u00a0\u202f]/gu, "").replace(",", "."))
-  const mismatches: string[] = []
-  const formula = /(\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)\s*[×*]\s*(\d+(?:[.,]\d+)?)\s*%\s*=\s*(\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)/gu
-  for (const line of body.split("\n")) {
-    if (line.length > 400) continue
-    formula.lastIndex = 0
-    let match: RegExpExecArray | null
-    while ((match = formula.exec(line)) && mismatches.length < 3) {
-      const computed = normalize(match[1]) * normalize(match[2]) / 100
-      const result = normalize(match[3])
-      if (Number.isFinite(computed) && Number.isFinite(result) && Math.abs(computed - result) > Math.max(1, Math.abs(computed) * 0.001)) {
-        mismatches.push("Несовпадение формулы: " + match[0])
-      }
-    }
-  }
-  // Check conflicting unconditional headline results; comparisons with explicit
-  // scenarios are excluded to avoid treating legitimate alternatives as errors.
-  const netPattern = /(?:на\s+руки|net\s+salary|к\s+выдаче)[^\n.!?]{0,55}?(\d[\d \u00a0\u202f]{3,})\s*(?:₸|тенге|тг\b)/giu
-  const reported = new Set<number>()
-  let net: RegExpExecArray | null
-  while ((net = netPattern.exec(body)) && reported.size < 3) {
-    const around = body.slice(Math.max(0, net.index - 15), netPattern.lastIndex + 20)
-    if (/(?:без\s+вычета|с\s+вычетом|вариант|сценари|услови|если|пример)/iu.test(around)) continue
-    const value = normalize(net[1])
-    if (Number.isFinite(value) && value > 1000) reported.add(value)
-  }
-  if (reported.size > 1) mismatches.push("Несовпадающие итоговые суммы зарплаты на руки без разделения условий.")
-  return mismatches
+  return [...auditExtendedArithmetic(text), ...auditHeadlineConsistency(text)].map(item => item.message)
 }
 
-export function finalizeTruthAnswer(answer: string, question: string, sourceInput: number | readonly TruthSource[]) {
+export function finalizeTruthAnswer(answer: string, question: string, sourceInput: number | readonly TruthSource[], alreadyChecked = false) {
   const highRisk = truthNeedsLiveEvidence(question)
   if (!answer.trim()) return answer
   // Ordinary conversations are free; numerical responses still get a low-cost
   // independent arithmetic scan without web requests or another model call.
-  const oldProblems = highRisk ? auditTruthArithmetic(answer) : []
-  const expandedProblems = auditExtendedArithmetic(answer).map((check) => check.message)
+  const sources = Array.isArray(sourceInput) ? sourceInput as TruthSource[] : []
+  if (!alreadyChecked) answer = finalizeAccuracy(answer, question, sources).content
   const consistency = highRisk ? auditHeadlineConsistency(answer).map((check) => check.message) : []
-  const problems = [...new Set([...oldProblems, ...expandedProblems, ...consistency])].slice(0, 5)
+  const problems = [...new Set(consistency)].slice(0, 5)
   if (problems.length) {
+    // Contradictory totals without a reliable base cannot be chosen arbitrarily.
+    // Withhold them instead of publishing an erroneous draft after a warning.
+    const safe = answer.split("\n").filter(line => !/(?:на\s+руки|net\s+salary|к\s+выдаче|расходы\s+работодателя|полные\s+расходы).*\d/iu.test(line)).join("\n")
     return "⚠️ **Проверка внутренней согласованности не пройдена.** Следующие результаты нельзя считать подтверждёнными:\n" +
-      problems.map((problem) => "- " + problem).join("\n") + "\n\n**Непроверенный черновик:**\n\n" + answer
+      problems.map((problem) => "- " + problem).join("\n") + "\n\nПротиворечивые итоговые суммы скрыты; уточните исходные данные и условия.\n\n" + safe
   }
   if (!highRisk) return answer
-  const sources = Array.isArray(sourceInput) ? sourceInput as TruthSource[] : []
   const count = typeof sourceInput === "number" ? sourceInput : sources.length
   if (!count) {
     return "⚠️ **Актуальные первоисточники не получены.** Нормы и ставки ниже не подтверждены официальными документами. Не используйте текст как готовую декларацию или профессиональное заключение.\n\n" + answer

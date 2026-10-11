@@ -10,7 +10,8 @@ import { sharedAnswerCacheKey, mayShareAnswerCache, trimSharedAnswerCache } from
 import type { MalikResearchProgress, MalikWebSource } from "@/lib/ai/web-research-types"
 import { auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit } from "@/lib/ai/fact-audit"
 import { truthNeedsLiveEvidence, officialTruthQuery, truthSystemInstruction, finalizeTruthAnswer } from "@/lib/ai/truth-engine"
-import { shouldBufferNumericalAnswer } from "@/lib/ai/truth-engine-v2"
+import { accuracyInstruction, finalizeAccuracy, type AccuracyReport } from "@/lib/ai/accuracy/engine"
+import { accuracyTokenGate } from "@/lib/ai/accuracy/stream"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
@@ -49,6 +50,7 @@ type GodAnswer = {
   selectedModelId?: MalikModelId
   /** Null whenever the answer had nothing checkable in it. */
   factAudit?: MalikFactAudit | null
+  accuracy?: AccuracyReport
   /** The engine stopped before the answer was finished (time, length, a failed continuation). */
   incomplete?: AnswerIncomplete
 }
@@ -60,14 +62,19 @@ type GodAnswer = {
  * arithmetic on strings, so it adds no call, no key and no measurable time —
  * see lib/ai/fact-audit.ts for what it deliberately does not judge.
  */
-function auditGroundedAnswer(content: string, sources: SourceItem[], prompt: string) {
+function auditGroundedAnswer(content: string, sources: SourceItem[], prompt: string, accuracy?: AccuracyReport) {
   try {
+    const lines = content.split("\n")
+    const computedLines = accuracy?.claims.filter(claim => claim.evidence === "deterministic" || (claim.origin === "user-data" && claim.evidence === "user"))
+      .map(claim => lines.find(line => line === claim.text)).filter((line): line is string => Boolean(line))
+      .filter(line => /^[\d\s.,()+\-−×*·÷/%^=≈]+$/u.test(line)
+        || /^(?:Ответ|Результат|Итого|Платящие пользователи|Выручка|Месячная выручка|Платёж за период|Сумма после капитализации|Answer|Result|Total|Paying users|Revenue|Monthly revenue|Payment per period)\s*[:=]\s*[$€₸]?\s*[\d\s.,/]+\s*(?:USD|EUR|KZT|₸|тенге|руб\.?|[$€])?\s*[.!]?$/iu.test(line))
     // With no page read there is nothing to judge against, so the answer says
     // so rather than saying nothing — an unchecked figure that looks checked is
     // the failure this whole layer exists to stop. One tap turns it into a
     // real verdict through /api/ai/verify.
-    if (!sources.length) return describeUncheckedAnswer({ answer: content, prompt })
-    return auditAnswerFacts({ answer: content, sources, prompt })
+    if (!sources.length) return describeUncheckedAnswer({ answer: content, prompt, computedLines })
+    return auditAnswerFacts({ answer: content, sources, prompt, computedLines })
   } catch (error) {
     // A verification pass must never be the reason an answer fails to arrive.
     console.warn("[MALIK_FACT_AUDIT]", error instanceof Error ? error.message : String(error))
@@ -1102,17 +1109,20 @@ export async function malikGodAnswer(
       // Speed and code lanes follow what is really being asked: «а третий?»
       // after an overview question is another overview, not small talk.
       taskPrompt: focus.shapeText,
-      systemPrompt: [systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), plannedMathInstruction(plannedMath), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body)].filter(Boolean).join("\n\n"),
+      systemPrompt: [systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), plannedMathInstruction(plannedMath), accuracyInstruction(focus.searchText), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body)].filter(Boolean).join("\n\n"),
       history,
       attachments,
       maxTokens: answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)),
       temperature: typeof body?.temperature === "number" ? body.temperature : brain.temperature,
       reasoningEffort: brain.depth === "instant" ? "low" : brain.depth === "balanced" ? "medium" : "high",
       allowCatalog: selection.allowCatalog === true,
-      onToken: (truthNeedsLiveEvidence(focus.searchText) || shouldBufferNumericalAnswer(focus.searchText)) ? undefined : emitToken,
+      onToken: truthNeedsLiveEvidence(focus.searchText) ? undefined : accuracyTokenGate(focus.searchText, emitToken),
       signal,
     }).catch((error) => { activity?.finish(modelCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
-    const content = finalizeTruthAnswer(cleanText(result.content), focus.searchText, sources)
+    const verificationCall = activity?.start("Проверка вычислений и согласованности", "code", "malik.accuracy")
+    const verified = finalizeAccuracy(cleanText(result.content), focus.searchText, sources)
+    const content = finalizeTruthAnswer(verified.content, focus.searchText, sources, true)
+    activity?.finish(verificationCall, { checked: verified.report.checked, corrected: verified.report.issues.length, verificationMs: verified.report.verificationMs, additionalModelCalls: 0 })
     activity?.finish(modelCall, { characters: content.length, model: result.selectedModelId, sources: sources.length })
     return {
       content,
@@ -1121,7 +1131,8 @@ export async function malikGodAnswer(
       selectedModelId: result.selectedModelId,
       usedWeb: usedEvidence,
       sources,
-      factAudit: auditGroundedAnswer(answerCardsToText(content), sources, prompt),
+      accuracy: verified.report,
+      factAudit: auditGroundedAnswer(answerCardsToText(content), sources, prompt, verified.report),
       ...(result.incomplete ? { incomplete: result.incomplete } : {}),
       attempts: [{
         provider: result.provider,
@@ -1175,13 +1186,15 @@ export async function malikGodAnswer(
 
   let answer: GodAnswer
   if (result.content) {
+    const verified = finalizeAccuracy(result.content, legacyFocus.searchText, sources)
     answer = {
-      content: finalizeTruthAnswer(result.content, legacyFocus.searchText, sources),
+      content: finalizeTruthAnswer(verified.content, legacyFocus.searchText, sources, true),
       provider: result.provider,
       model: result.model,
       usedWeb: usedEvidence,
       sources,
-      factAudit: auditGroundedAnswer(answerCardsToText(result.content), sources, prompt),
+      accuracy: verified.report,
+      factAudit: auditGroundedAnswer(answerCardsToText(verified.content), sources, prompt, verified.report),
       attempts: result.attempts,
     }
   } else {
@@ -1210,6 +1223,7 @@ export function asJson(answer: GodAnswer) {
     usedWeb: answer.usedWeb,
     sources: answer.sources,
     factAudit: answer.factAudit ?? null,
+    accuracy: answer.accuracy ?? null,
     attempts: answer.attempts,
   }
 }

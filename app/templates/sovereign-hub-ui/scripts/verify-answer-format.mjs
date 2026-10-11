@@ -40,6 +40,7 @@ new Function("require", "module", "exports", "React", ts.transpileModule(fs.read
 }).outputText.replace(/require\("react"\)/g, "React"))(
   (name) => {
     if (name === "./malik-tex.css") return {}
+    if (name === "@/lib/ai/latex-safety") return loadPure("lib/ai/latex-safety.ts")
     throw new Error(`unexpected require(${name})`)
   }, texBox, texBox.exports, React,
 )
@@ -85,6 +86,7 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "./malik-tex") return texBox.exports
     if (name === "./MalikVisualGallery") return { ReferencePhotoSources: React.createContext([]), isSafeVisualUrl: catalog.isSafeVisualUrl, MalikVisualGallery: () => React.createElement("section", { "data-test-gallery": true }), MalikReferenceImages: ({ children, planOverride, row, hero, lineup }) => React.createElement("div", { "data-test-photo-topic": planOverride?.topic, "data-test-row": row ? "true" : "false", "data-test-hero": hero ? "true" : "false", "data-test-lineup": lineup ? "true" : undefined, "data-test-caption": planOverride?.caption }, children) }
     if (name === "@/lib/ai/answer-entities") return entities
+    if (name === "@/lib/ai/markdown-table") return loadPure("lib/ai/markdown-table.ts")
     if (name === "@/lib/ai/reference-visual-policy") return loadPure("lib/ai/reference-visual-policy.ts")
     if (name === "@/lib/ai/answer-visuals") return loadPure("lib/ai/answer-visuals.ts")
     if (name === "@/lib/ai/answer-photo-hints") return loadPure("lib/ai/answer-photo-hints.ts")

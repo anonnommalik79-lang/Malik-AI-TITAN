@@ -20,8 +20,8 @@ const META_TASK_PREFIX_PATTERN = /^\s*(?:напиши(?:те)?|дай(?:те)?|�
 const NEGATION_BEFORE_VERB_PATTERN = /(?:^|[^\p{L}])(?:не|ни|нет|без|never|not|no|don'?t|do\s+not|doesn'?t|емес)(?:\s+[\p{L}'-]+){0,2}\s*$/iu
 
 /** The first create-verb that is not negated, or null. */
-function firstRequestedVerb(value: string) {
-  const pattern = new RegExp(IMAGE_CREATE_VERB_PATTERN.source, "giu")
+function firstRequestedVerb(value: string, verbs = IMAGE_CREATE_VERB_PATTERN) {
+  const pattern = new RegExp(verbs.source, "giu")
   for (let match = pattern.exec(value); match; match = pattern.exec(value)) {
     if (!NEGATION_BEFORE_VERB_PATTERN.test(value.slice(Math.max(0, match.index - 40), match.index))) return { index: match.index, text: match[0] }
   }
@@ -31,6 +31,33 @@ function firstRequestedVerb(value: string) {
 function firstMatch(value: string, pattern: RegExp) {
   const match = pattern.exec(value)
   return match ? { index: match.index, text: match[0] } : null
+}
+
+/** Discussion, quoted examples and negative consent must not spend media quota. */
+export function isTextOnlyMediaDiscussion(input: string): boolean {
+  const text = input.replace(/```[\s\S]*?(?:```|$)|`[^`\n]*`|"[^"\n]*"|«[^»]*»|“[^”]*”/gu, " ").trim()
+  if (/(?:без\s+(?:генерации|создания)\s+(?:фото|изображени|видео)|не\s+(?:генерируй|создавай|рисуй|сгенерируй)|do\s+not\s+(?:generate|create|draw)|don't\s+(?:generate|create|draw)|text\s+only|только\s+текст|суретсіз)/iu.test(text)) return true
+  if (/(?:не\s+(?:надо|нужно|хочу)\s+(?:созд|сген|генер|рис)|без\s+(?:фото|изображений|видео)|no\s+(?:images?|photos?|videos?))/iu.test(text)) return true
+  // Asking which tools can generate media is not permission to run one.
+  if (/^(?:сравни|проанализируй|оцени|какие?|какой|кто|что|compare|analy[sz]e|evaluate|which|what|who|how|can\s+(?:this|that|the)\s+(?:model|tool))(?=\s|[,:])/iu.test(text)) return true
+  const create = firstMatch(text, IMAGE_CREATE_VERB_PATTERN)
+  const explanation = /объясн[\p{L}]*|обоснуй|докажи|научн[\p{L}]*\s+(?:объясн|анализ)|explain|justify|prove|түсіндір/iu.exec(text)
+  if (explanation && (!create || explanation.index < create.index)) return true
+  // Quotes can be the requested lettering on uploaded pixels. Creation
+  // detectors separately strip quoted examples before locating an action.
+  return false
+}
+
+export function isExplicitVideoGenerationRequest(input: string): boolean {
+  const text = String(input || "").trim()
+  if (!text || isTextOnlyMediaDiscussion(text) || EXPLANATION_START_PATTERN.test(text)) return false
+  if (VIDEO_COMMAND_PATTERN.test(text)) return true
+  const actionable = text.replace(/`[^`\n]*`|"[^"\n]*"|«[^»]*»|“[^”]*”/gu, " ")
+  const create = firstRequestedVerb(actionable) || firstRequestedVerb(actionable, /сними|смонтируй|оживи|анимируй|animate|produce/iu)
+  const video = firstMatch(actionable, /видео|ролик|анимаци[\p{L}]*|(?<!\p{L})(?:video|clip|trailer|reel|animation)(?!\p{L})/iu)
+  if (!create || !video) return false
+  if (/код|скрипт|компонент|промпт|описани|текст|css|javascript|code|script|component|prompt|description/iu.test(actionable.slice(0, Math.max(create.index, video.index)))) return false
+  return true
 }
 
 /**
@@ -80,7 +107,7 @@ export function isReferenceImageRequest(input: string): boolean {
 /** Uploaded pixels are required for edits; image analysis remains a chat turn. */
 export function isExplicitImageEditRequest(input: string, hasImage = false): boolean {
   const text = String(input || "").replace(IMAGE_COMMAND_PATTERN, "").trim()
-  if (!text || VIDEO_COMMAND_PATTERN.test(text) || EXPLANATION_START_PATTERN.test(text)) return false
+  if (!text || VIDEO_COMMAND_PATTERN.test(text) || EXPLANATION_START_PATTERN.test(text) || isTextOnlyMediaDiscussion(input)) return false
   if (!hasImage && isReferenceImageRequest(input)) return false
 
   // A text-to-image request may legitimately contain edit-like words such as
@@ -116,14 +143,16 @@ export function isExplicitImageGenerationRequest(input: string): boolean {
   if (!text) return false
 
   if (VIDEO_COMMAND_PATTERN.test(text)) return false
+  if (isTextOnlyMediaDiscussion(text)) return false
   if (IMAGE_COMMAND_PATTERN.test(text)) return true
 
   if (EXPLANATION_START_PATTERN.test(text) || EXPLANATION_BEFORE_CREATE_PATTERN.test(text)) {
     return false
   }
 
-  const verb = firstRequestedVerb(text)
-  const noun = firstMatch(text, IMAGE_NOUN_PATTERN)
+  const actionable = text.replace(/`[^`\n]*`|"[^"\n]*"|«[^»]*»|“[^”]*”/gu, " ")
+  const verb = firstRequestedVerb(actionable)
+  const noun = firstMatch(actionable, IMAGE_NOUN_PATTERN) || firstMatch(actionable, /(?<!\p{L})(?:аву|аватар|логотип|logo)(?!\p{L})/iu)
   if (!verb || !noun) return false
 
   const nonImageObject = firstMatch(text, NON_IMAGE_OBJECT_PATTERN)
