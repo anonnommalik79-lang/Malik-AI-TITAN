@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react"
+import { canParseLatex } from "@/lib/ai/latex-safety"
 
 import "./malik-tex.css"
 
@@ -370,7 +371,7 @@ export function TexMath({ tex, display = false }: { tex: string; display?: boole
   const source = String(tex || "").trim()
   let content: ReactNode
   try {
-    content = render(new Parser(tokenize(source)).parseList(), "m")
+    content = canParseLatex(source) ? render(new Parser(tokenize(source)).parseList(), "m") : source
   } catch {
     content = source
   }
@@ -380,9 +381,9 @@ export function TexMath({ tex, display = false }: { tex: string; display?: boole
 
 /**
  * Maths inside a line of text: $$…$$ (set on its own line), $…$ (not a price
- * like "$5 и $10") and \(…\). Groups: 1 display, 2 inline, 3 \(…\).
+ * like "$5 и $10") and \(…\). Groups: 1 display, 2 inline, 3 \(…\), 4 \[…\].
  */
-export const INLINE_MATH = /\$\$([^$]{1,2000}?)\$\$|(?<![\\$\w])\$(?!\s)([^$\n]{1,400}?)(?<![\s\\])\$(?![\d$])|\\\((.{1,400}?)\\\)/g
+export const INLINE_MATH = /\$\$([^$]{1,2000}?)\$\$|(?<![\\$\w])\$(?!\s)([^$\n]{1,400}?)(?<![\s\\])\$(?![\d$])|\\\((.{1,400}?)\\\)|\\\[(.{1,2000}?)\\\]/g
 
 export function looksLikeMath(value: string) {
   // A price or plain words are not maths: there has to be a LaTeX command, a

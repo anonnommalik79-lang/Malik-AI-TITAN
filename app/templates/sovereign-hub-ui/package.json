@@ -6,6 +6,9 @@
     "node": ">=20 <23"
   },
   "scripts": {
+    "test:accuracy": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-accuracy-engine.mjs",
+    "test:accuracy-routing": "node scripts/verify-accuracy-routing.mjs",
+    "test:accuracy-browser": "node scripts/verify-accuracy-browser.mjs",
     "test:work-runtime": "node scripts/verify-work-runtime.mjs",
     "test:work-github-snapshot": "node scripts/verify-work-github-snapshot.mjs",
     "test:work-ui-freeze": "node scripts/verify-work-ui-freeze.mjs",

@@ -5,6 +5,7 @@ import { Archive, Check, Copy, Download, ExternalLink, Eye, RefreshCw } from "lu
 import { downloadProjectZip, type ProjectZipFile } from "@/lib/business/project-zip"
 import { buildCanvasProjectSrcDoc, buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { INLINE_MATH, TexMath, looksLikeMath } from "./malik-tex"
+import { markdownTableCells } from "@/lib/ai/markdown-table"
 import { MalikReferenceImages, MalikVisualGallery, ReferencePhotoSources, isSafeVisualUrl, type MalikVisualImage } from "./MalikVisualGallery"
 import { MalikAnswerVisual } from "./MalikAnswerVisual"
 import { MalikAnswerCards } from "./MalikAnswerCards"
@@ -95,7 +96,7 @@ function ScrollableMarkdownTable({ children, label }: { children: ReactNode; lab
             min={0}
             max={100}
             step={1}
-            value={Math.round(scroll.left / scroll.maximum * 100)}
+            value={scroll.maximum > 0 ? Math.round(scroll.left / scroll.maximum * 100) : 0}
             aria-label="Положение прокрутки таблицы"
             aria-controls={viewportId}
             onChange={(event) => viewportRef.current?.scrollTo({ left: scroll.maximum * Number(event.currentTarget.value) / 100, behavior: "auto" })}
@@ -206,10 +207,10 @@ function inlineMath(text: string, keyPrefix: string): ReactNode[] {
     const pattern = new RegExp(INLINE_MATH.source, "g")
     let match: RegExpExecArray | null
     while ((match = pattern.exec(part)) !== null) {
-      const tex = match[1] ?? match[2] ?? match[3] ?? ""
+      const tex = match[1] ?? match[2] ?? match[3] ?? match[4] ?? ""
       if (match[2] !== undefined && !looksLikeMath(tex)) continue
       if (match.index > last) out.push(...inlineBase(part.slice(last, match.index), `${keyPrefix}-${partIndex}-${piece++}`))
-      out.push(<TexMath key={`${keyPrefix}-${partIndex}-m${piece++}`} tex={tex} display={match[1] !== undefined} />)
+      out.push(<TexMath key={`${keyPrefix}-${partIndex}-m${piece++}`} tex={tex} display={match[1] !== undefined || match[4] !== undefined} />)
       last = match.index + match[0].length
     }
     if (last < part.length) out.push(...inlineBase(part.slice(last), `${keyPrefix}-${partIndex}-${piece}`))
@@ -392,7 +393,7 @@ function parseList(lines: string[], start: number): { block: ListBlock; next: nu
 }
 
 function tableCells(line: string) {
-  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim())
+  return markdownTableCells(line)
 }
 
 function isTableSeparator(line: string) {

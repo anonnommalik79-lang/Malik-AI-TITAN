@@ -6,6 +6,12 @@
  */
 
 .mtx {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.2em;
   font-family: "Cambria Math", "STIX Two Math", "Latin Modern Math", "Times New Roman", serif;
   font-size: 1.06em;
   white-space: nowrap;
@@ -14,6 +20,8 @@
 
 .mtx-display {
   display: block;
+  max-width: 100%;
+  min-width: 0;
   margin: 14px 0;
   padding: 4px 0;
   text-align: center;

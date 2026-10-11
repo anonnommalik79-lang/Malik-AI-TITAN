@@ -83,7 +83,7 @@ const MAX_REPORTED_CLAIMS = 24
 const SENTENCE_DISPLAY_LIMIT = 170
 
 /** Thin spaces and non-breaking spaces group thousands too. */
-const ODD_SPACES = /[    ⁠]/g
+const ODD_SPACES = /[\u00a0\u202f\u2007\u2009\u2060]/g
 
 /**
  * One scanner for the answer and for the pages, so the two sides are read by
@@ -295,6 +295,11 @@ function sentencesOf(text: string) {
     .filter(Boolean)
 }
 
+/** Explicit hypothetical inputs / future scenarios are not assertions of a current fact. */
+function conditionalFigureSentence(sentence: string) {
+  return /^(?:допущение|допустим|предположим|гипотетически|прогноз(?:\s+[\p{L}]+){0,3}\s*:|assumption|assume|suppose|forecast\s*:|projection\s*:)/iu.test(sentence)
+}
+
 /**
  * What makes two mentions of a figure the same figure. Rounded, because
  * 8.3 × 10⁹ is 8300000000.000001 in binary floating point and an id is no
@@ -333,6 +338,8 @@ export function auditAnswerFacts(input: {
   answer: string
   sources: MalikFactAuditSource[]
   prompt?: string
+  /** Exact lines checked by Accuracy Engine, not arbitrary model declarations. */
+  computedLines?: string[]
 }): MalikFactAudit | null {
   const sources = (input.sources || []).filter((source) => source && (source.snippet || source.title))
   // Nothing was read, so nothing can be compared. Saying so loudly would train
@@ -383,6 +390,9 @@ export function auditAnswerFacts(input: {
   const seen = new Set<string>()
 
   for (const sentence of sentencesOf(answerBody)) {
+    if (conditionalFigureSentence(sentence)) continue
+    const normalizedSentence = sentence.replace(/\s+/gu, " ").trim()
+    if (input.computedLines?.some(line => line.replace(/\s+/gu, " ").trim() === normalizedSentence)) continue
     for (const figure of scanFigures(sentence)) {
       const key = claimKey(figure)
       if (seen.has(key)) continue
@@ -454,7 +464,7 @@ export function auditAnswerFacts(input: {
  * figures were verified. Every one of these claims can be turned into a real
  * verdict by re-running the audit against pages fetched on demand.
  */
-export function describeUncheckedAnswer(input: { answer: string; prompt?: string }): MalikFactAudit | null {
+export function describeUncheckedAnswer(input: { answer: string; prompt?: string; computedLines?: string[] }): MalikFactAudit | null {
   const answer = normalizeSpaces(input.answer)
   if (!answer.trim()) return null
 
@@ -469,6 +479,9 @@ export function describeUncheckedAnswer(input: { answer: string; prompt?: string
   const seen = new Set<string>()
 
   for (const sentence of sentencesOf(body)) {
+    if (conditionalFigureSentence(sentence)) continue
+    const normalizedSentence = sentence.replace(/\s+/gu, " ").trim()
+    if (input.computedLines?.some(line => line.replace(/\s+/gu, " ").trim() === normalizedSentence)) continue
     for (const figure of scanFigures(sentence)) {
       const key = claimKey(figure)
       if (seen.has(key)) continue

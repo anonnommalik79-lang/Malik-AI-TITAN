@@ -1,5 +1,7 @@
 ﻿import type { AIFileAttachment, AITaskType } from "./types"
 
+import { isExplicitImageGenerationRequest, isExplicitImageEditRequest, isExplicitVideoGenerationRequest, isTextOnlyMediaDiscussion } from "./image-intent"
+
 export type SmartTaskType =
   | "chat"
   | "code"
@@ -200,12 +202,16 @@ export function detectTask(prompt: string, attachments: AIFileAttachment[] = [])
   let fileScore = attachments.length > 0 ? 90 : countMatches(lower, FILE_PATTERNS, 25)
   let researchScore = countMatches(lower, RESEARCH_PATTERNS, 18)
   let chatScore = 10
+  const imageConsent = isExplicitImageGenerationRequest(text) || isExplicitImageEditRequest(text, attachments.some(item => item.kind === "image" || item.mime?.startsWith("image/")))
+  const videoConsent = isExplicitVideoGenerationRequest(text)
+  if (!imageConsent) imageScore = 0
+  if (!videoConsent) videoScore = 0
+  if (imageConsent && !imageScore) imageScore = 30
+  if (videoConsent && !videoScore) videoScore = 34
 
   const explicitComponent = hasAny(lower, COMPONENT_PATTERNS)
   const explicitProject = hasAny(lower, PROJECT_PATTERNS)
   const explicitDebug = hasAny(lower, DEBUG_PATTERNS)
-  const explicitImage = hasAny(lower, IMAGE_PATTERNS)
-  const explicitVideo = hasAny(lower, VIDEO_PATTERNS)
   const componentOnlySignal = hasAny(lower, NEGATIVE_PROJECT_FOR_COMPONENT)
 
   // Critical rule:
@@ -228,16 +234,17 @@ export function detectTask(prompt: string, attachments: AIFileAttachment[] = [])
 
   // Talking about video or pictures - comparing tools, asking what is in a
   // clip someone attached - is research or analysis, not a generation job.
-  const talksAboutMedia = !hasAny(lower, MEDIA_CREATION_PATTERNS)
+  const talksAboutMedia = isTextOnlyMediaDiscussion(text) || (!hasAny(lower, MEDIA_CREATION_PATTERNS)
     && (hasAny(lower, MEDIA_DISCUSSION_PATTERNS) || attachments.length > 0)
+    && !imageConsent && !videoConsent)
   if (talksAboutMedia) {
     videoScore = 0
     imageScore = 0
   }
 
   // Direct media tasks should win over generic words.
-  if (explicitVideo && !talksAboutMedia) videoScore += 35
-  if (explicitImage && !explicitVideo && !talksAboutMedia) imageScore += 35
+  if (videoConsent && !talksAboutMedia) videoScore += 35
+  if (imageConsent && !videoConsent && !talksAboutMedia) imageScore += 35
 
   // Landing page/site/project must use Project Builder.
   if (explicitProject && !explicitComponent) {

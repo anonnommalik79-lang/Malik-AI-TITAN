@@ -185,7 +185,7 @@ import {
   ShieldCheck
 } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
-import { isExplicitImageGenerationRequest, isExplicitImageEditRequest, isReferenceImageRequest } from "@/lib/ai/image-intent"
+import { isExplicitImageGenerationRequest, isExplicitImageEditRequest, isReferenceImageRequest, isTextOnlyMediaDiscussion } from "@/lib/ai/image-intent"
 import {
   DEFAULT_MALIK_MODEL_ID,
   canUseMalikModel,
@@ -720,6 +720,7 @@ function detectInlineMediaGenerationRequest(
 ): "image" | "video" | null {
   const command = parseMediaCommand(prompt)
   if (command) return command.kind
+  if (isTextOnlyMediaDiscussion(prompt)) return null
   // Looking up existing photos stays chat even if the sentence says "добавь описание".
   if (isReferenceImageRequest(prompt) && !attachments.some((item) => item.kind === "image" || item.mime?.startsWith("image/"))) return null
   if (isExplicitImageEditRequest(prompt, attachments.some((item) => item.kind === "image"))) return "image"
@@ -7665,7 +7666,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       if (turn.user) rows.push({ id: crypto.randomUUID(), role: "user", content: turn.user, timestamp: at })
       if (turn.assistant) {
         const links = turn.sources.map(({ title, url }) =>
-          `[${String(title || "Источник").replace(/[\[\]()]/g, "").slice(0, 100)}](${url})`,
+          `[${String(title || "Источник").replace(/[[\]()]/g, "").slice(0, 100)}](${url})`,
         )
         rows.push({
           id: crypto.randomUUID(), role: "assistant",

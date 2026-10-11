@@ -1,5 +1,7 @@
 import { asPlainText, malikGodAnswer } from "@/lib/malik-god-router"
 import { sameAnswerText, withIncompleteNote } from "@/lib/ai/answer-completion"
+import { finalizeAccuracy } from "@/lib/ai/accuracy/engine"
+import { accuracyTokenGate } from "@/lib/ai/accuracy/stream"
 import { after } from "next/server"
 import { parsePluginCommand } from "@/lib/server/plugin-runtime"
 import { runPluginModelAnswer } from "@/lib/server/plugin-model-answer"
@@ -385,6 +387,16 @@ function shouldRunMalikCoder(selection: Awaited<ReturnType<typeof resolveStrictM
 }
 
 async function runSelectedAnswer(
+  ...args: Parameters<typeof runSelectedAnswerUnchecked>
+) {
+  const [body, selection, onProgress, maxOutputTokens, onToken, activity, signal] = args
+  const answer = await runSelectedAnswerUnchecked(body, selection, onProgress, maxOutputTokens, accuracyTokenGate(coderPrompt(body), onToken), activity, signal)
+  if ("accuracy" in answer && answer.accuracy) return answer
+  const verified = finalizeAccuracy(answer.content, coderPrompt(body), answer.sources)
+  return { ...answer, content: verified.content, accuracy: verified.report }
+}
+
+async function runSelectedAnswerUnchecked(
   body: any,
   selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>,
   onProgress?: (progress: any) => void,
@@ -834,6 +846,7 @@ function liveSseResponse(
           // from. This rides on `done` rather than an event of its own so the
           // durable-turn tee and every existing reader carry it unchanged.
           factAudit: "factAudit" in answer ? answer.factAudit ?? null : null,
+          accuracy: "accuracy" in answer ? answer.accuracy ?? null : null,
           incomplete,
           ...(finalContent !== undefined ? { finalContent } : {}),
           tookMs: Date.now() - startedAt,
