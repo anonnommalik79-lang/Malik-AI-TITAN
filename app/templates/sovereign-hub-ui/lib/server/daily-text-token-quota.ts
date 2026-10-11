@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { computeDirectory } from "@/lib/malik-compute/file-store"
+import type { AIPlan } from "@/lib/ai/types"
 
 const configuredDailyTextTokenLimit = Number(process.env.FREE_DAILY_TEXT_TOKEN_LIMIT || 10_000)
 export const DAILY_TEXT_TOKEN_LIMIT = Number.isFinite(configuredDailyTextTokenLimit) && configuredDailyTextTokenLimit > 0
@@ -83,8 +84,25 @@ export function estimateGeneratedTokens(text: unknown) {
   return Math.max(1, Math.ceil(value.length / 3))
 }
 
-export function getDailyTextTokenQuota(userId: string, unlimited = false): DailyTextTokenQuota {
-  if (unlimited) {
+/**
+ * The daily generated-text allowance of a plan. The free cap is a launch
+ * guard; it was applied to paying PRO/Ultra accounts too. Paid plans are
+ * uncapped unless the owner sets PRO_DAILY_TEXT_TOKEN_LIMIT; the founder
+ * account is always uncapped. null means no daily cap.
+ */
+export function dailyTextTokenLimitFor(plan: AIPlan | boolean | undefined): number | null {
+  if (plan === true || plan === "owner") return null
+  if (plan === "pro" || plan === "ultra") {
+    const configured = Number(process.env.PRO_DAILY_TEXT_TOKEN_LIMIT || "")
+    return Number.isFinite(configured) && configured > 0 ? Math.max(DAILY_TEXT_TOKEN_LIMIT, Math.floor(configured)) : null
+  }
+  return DAILY_TEXT_TOKEN_LIMIT
+}
+
+/** `plan` may be the old boolean (true = uncapped) or the account's plan. */
+export function getDailyTextTokenQuota(userId: string, plan: boolean | AIPlan = false): DailyTextTokenQuota {
+  const limit = dailyTextTokenLimitFor(plan)
+  if (limit === null) {
     return {
       unlimited: true,
       used: 0,
@@ -98,17 +116,17 @@ export function getDailyTextTokenQuota(userId: string, unlimited = false): Daily
   return {
     unlimited: false,
     used: stored.used,
-    limit: DAILY_TEXT_TOKEN_LIMIT,
-    remaining: Math.max(0, DAILY_TEXT_TOKEN_LIMIT - stored.used),
+    limit,
+    remaining: Math.max(0, limit - stored.used),
     resetAt: nextUtcResetAt(),
   }
 }
 
-export function recordGeneratedTextTokens(userId: string, unlimited: boolean, text: unknown) {
-  if (unlimited) return getDailyTextTokenQuota(userId, true)
+export function recordGeneratedTextTokens(userId: string, unlimited: boolean | AIPlan, text: unknown) {
+  if (dailyTextTokenLimitFor(unlimited) === null) return getDailyTextTokenQuota(userId, unlimited)
 
   const tokens = estimateGeneratedTokens(text)
-  if (tokens <= 0) return getDailyTextTokenQuota(userId, false)
+  if (tokens <= 0) return getDailyTextTokenQuota(userId, unlimited)
 
   const current = readStored(userId)
   const updated: StoredQuota = {
@@ -117,5 +135,5 @@ export function recordGeneratedTextTokens(userId: string, unlimited: boolean, te
     updatedAt: new Date().toISOString(),
   }
   writeStored(userId, updated)
-  return getDailyTextTokenQuota(userId, false)
+  return getDailyTextTokenQuota(userId, unlimited)
 }

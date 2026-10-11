@@ -288,6 +288,33 @@ function patchRecoveredTurn(
   }
 }
 
+/**
+ * A turn that finished on this page needs no recovery: forget it as soon as
+ * its final event arrives. Left pending, the next visit would patch the saved
+ * copy over the chat and reload the page - over an answer the person may have
+ * stopped, regenerated or edited since.
+ */
+function forgetWhenFinished(response: Response, onFinished: () => void) {
+  if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) return response
+  const decoder = new TextDecoder()
+  let carry = ""
+  let finished = false
+  const watch = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      if (!finished) {
+        const text = carry + decoder.decode(chunk, { stream: true })
+        if (/(?:^|\n)event:\s*done\s*(?:\r?\n|$)/.test(text)) {
+          finished = true
+          onFinished()
+        }
+        carry = text.slice(-32)
+      }
+      controller.enqueue(chunk)
+    },
+  })
+  return new Response(response.body.pipeThrough(watch), { status: response.status, statusText: response.statusText, headers: response.headers })
+}
+
 function scheduleRecoveryReload(runtime: BackgroundRuntime) {
   if (runtime.reloadScheduled) return
   if (!/\/(?:dashboard|compute)(?:\/|$)/.test(window.location.pathname)) return
@@ -449,14 +476,18 @@ function installBackgroundRuntime(
     } else {
       response = await runtime.baseFetch(target.href, { ...(nextInit || {}), headers, signal: controller.signal })
     }
-    return pollingChatResponse(response, { fetcher: runtime.baseFetch, signal: controller.signal })
+    return forgetWhenFinished(
+      pollingChatResponse(response, { fetcher: runtime.baseFetch, signal: controller.signal }),
+      () => removePending(runtime, accountAtStart, turnId),
+    )
   }) as typeof window.fetch
 
   window.fetch = backgroundFetch
 
   const onExplicitStop = (event: MouseEvent) => {
     const target = event.target instanceof Element ? event.target : null
-    if (!target?.closest(".malik-runtime-stop")) return
+    // Both Stop buttons: the turn runtime's and the chat composer's own.
+    if (!target?.closest(".malik-runtime-stop, [data-malik-stop]")) return
     const controller = runtime.latestController
     const turnId = runtime.latestTurnId
     const accountAtStart = runtime.latestAccountKey
@@ -464,6 +495,15 @@ function installBackgroundRuntime(
     runtime.latestTurnId = ""
     runtime.latestAccountKey = ""
     if (turnId && accountAtStart) removePending(runtime, accountAtStart, turnId)
+    // Stop the model on the server too, not only this page's copy of the
+    // stream; keepalive lets the request finish even as the page moves on.
+    if (turnId) {
+      void runtime.baseFetch(`${BACKGROUND_STREAM_PATH}/${encodeURIComponent(turnId)}`, {
+        method: "DELETE",
+        cache: "no-store",
+        keepalive: true,
+      }).catch(() => {})
+    }
     if (controller && !controller.signal.aborted) {
       try { runtime.originalAbort.call(controller, "Malik AI stopped by user") } catch {}
     }
