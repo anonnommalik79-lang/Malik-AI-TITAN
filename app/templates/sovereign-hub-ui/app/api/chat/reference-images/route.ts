@@ -51,7 +51,9 @@ export async function GET(request: Request) {
   if (topic.length > 120 || /[\r\n<>]|https?:|www\./iu.test(topic)) return NextResponse.json({ images: [] }, { status: 400 })
   if (topic) plan.queries = [...new Set([topic, ...plan.queries])].slice(0, 2)
   const skipOfficial = params.get("skipOfficial") === "1"
-  const key = [plan.kind || "reference", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", skipOfficial ? "retry" : "", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.logo ? "logo" : "", ...plan.queries].join("|").toLowerCase()
+  const excludedUrls = params.getAll("exclude")
+  if (excludedUrls.length > 3 || excludedUrls.some((url) => !isSafeVisualUrl(url))) return NextResponse.json({ images: [] }, { status: 400 })
+  const key = [plan.kind || "reference", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", skipOfficial ? "retry" : "", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.logo ? "logo" : "", ...plan.queries].join("|").toLowerCase() + "|" + JSON.stringify([...excludedUrls].sort())
   let entry = cache.get(key)
   if (!entry || entry.expires <= Date.now()) {
     // Eviction bounds RAM. Concurrent identical lookups share one promise.
@@ -82,17 +84,17 @@ export async function GET(request: Request) {
         const provider = () => {
           if (providerStarted || settled || budget.aborted) return
           providerStarted = true
-          void findProviderReferenceImages(plan, budget).then((found) => finish(found)).catch(() => finish([]))
+          void findProviderReferenceImages(plan, budget, { excludedUrls }).then((found) => finish(found)).catch(() => finish([]))
         }
         if (signal.aborted) { finish([], true); return }
         signal.addEventListener("abort", aborted, { once: true })
         timer = setTimeout(provider, 450)
-        void lookupReferenceImages(plan, budget, { skipOfficial, fast: true })
+        void lookupReferenceImages(plan, budget, { skipOfficial, excludedUrls, fast: true })
           .then((found) => { finish(found); if (!found.length) provider() })
           .catch(() => { finish([]); provider() })
       })
       if (!images.length && plan.kind !== "tutorial" && !plan.entity && !plan.logo && !signal.aborted) {
-        try { images = sanitizeReferenceImages(await unsplash(plan.queries[0], signal)).filter((image) => plan.queries.some((query) => referenceTopicMatches(query, image.alt))) } catch { /* Optional provider. */ }
+        try { images = sanitizeReferenceImages(await unsplash(plan.queries[0], signal)).filter((image) => !excludedUrls.includes(image.url) && plan.queries.some((query) => referenceTopicMatches(query, image.alt))) } catch { /* Optional provider. */ }
       }
       // Timings/counts only: never log the user's prompt, identity or keys.
       if (!images.length || Date.now() - started > 1500) console.info("[reference-images]", { durationMs: Date.now() - started, count: images.length, timedOut: signal.aborted })

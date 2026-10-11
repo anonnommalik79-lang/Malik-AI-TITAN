@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { ExternalLink, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react"
 import { preconnect } from "react-dom"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 
@@ -57,17 +57,24 @@ function ReferenceCard({ image, portrait, label, caption, contain = false, onOpe
   )
 }
 
-function ReferenceLightbox({ image, onClose }: { image: MalikVisualImage; onClose: () => void }) {
+function ReferenceLightbox({ image, images = [], onSelect, onClose }: { image: MalikVisualImage; images?: MalikVisualImage[]; onSelect?: (image: MalikVisualImage) => void; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
+  const index = images.findIndex((item) => item.url === image.url)
+  const move = (direction: number) => { if (images.length > 1 && onSelect) onSelect(images[(Math.max(0, index) + direction + images.length) % images.length]) }
   useEffect(() => {
     const node = dialog.current
     node?.showModal()
     return () => { if (node?.open) node.close() }
   }, [])
   return (
-    <dialog ref={dialog} onCancel={onClose} onClick={(event) => { if (event.target === event.currentTarget) onClose() }} aria-label={image.alt} className="fixed inset-0 m-auto w-[94vw] max-w-[960px] rounded-2xl border border-white/20 bg-black p-4 text-white backdrop:bg-black/90">
+    <dialog ref={dialog} onCancel={onClose} onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); move(event.key === "ArrowLeft" ? -1 : 1) } }} onClick={(event) => { if (event.target === event.currentTarget) onClose() }} aria-label={image.alt} className="fixed inset-0 m-auto w-[94vw] max-w-[960px] rounded-2xl border border-white/20 bg-black p-4 text-white backdrop:bg-black/90">
       <button type="button" onClick={onClose} aria-label="Закрыть изображение" autoFocus className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-black"><X className="h-5 w-5" /></button>
       <img src={image.url} alt={image.alt} decoding="async" referrerPolicy="no-referrer" className={"mx-auto max-h-[75dvh] w-full object-contain " + (image.role === "logo" ? "bg-white p-6" : "")} />
+      {images.length > 1 && onSelect ? <div className="mt-3 flex items-center justify-center gap-4">
+        <button type="button" onClick={() => move(-1)} aria-label="Предыдущее фото" className="rounded-full border border-white/20 p-2"><ChevronLeft className="h-5 w-5" /></button>
+        <span className="text-xs text-zinc-400" aria-live="polite">{Math.max(0, index) + 1} / {images.length}</span>
+        <button type="button" onClick={() => move(1)} aria-label="Следующее фото" className="rounded-full border border-white/20 p-2"><ChevronRight className="h-5 w-5" /></button>
+      </div> : null}
       <p className="mt-3 text-sm">{image.alt}</p>
       <a href={safeSourceUrl(image.sourceUrl) || image.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white">Источник · {image.credit || "Фото"}<ExternalLink className="h-3 w-3" /></a>
     </dialog>
@@ -107,7 +114,7 @@ function warmReferenceHosts() {
 }
 
 /** Direct browser catalogue requests: no image proxy, no generation credits. */
-export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, compact = false, hero = false, lineup = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; compact?: boolean; hero?: boolean; lineup?: boolean; children?: ReactNode }) {
+export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, compact = false, hero = false, cover = false, lineup = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; compact?: boolean; hero?: boolean; cover?: boolean; lineup?: boolean; children?: ReactNode }) {
   const sources = useContext(ReferencePhotoSources)
   const candidate = useMemo(() => planOverride || planReferenceVisuals(question, previousQuestion, hasAttachment), [planOverride, question, previousQuestion, hasAttachment])
   // The answer grows while streaming. Keep subscriptions stable for identical queries.
@@ -182,7 +189,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   </div>
   // One concrete subject deserves a generous, readable photograph and its own caption.
   if (hero && plan.kind !== "tutorial") return (
-    <section ref={container} className="malik-answer-photo-hero min-w-0" data-malik-reference-topic={plan.topic} data-malik-hero-visual>
+    <section ref={container} className="malik-answer-photo-hero min-w-0" hidden={cover && images !== null && !images.length} data-malik-reference-topic={plan.topic} data-malik-hero-visual>
       {images?.[0] ? <figure className="malik-answer-photo-hero__figure" data-malik-layout={plan.layout} data-malik-fit={images[0].role === "logo" ? "contain" : "cover"}>
         <button type="button" onClick={() => setSelected(images[0])} aria-label={"Увеличить: " + plan.topic}
           className={"block w-full overflow-hidden rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-white " + (images[0].role === "logo" ? "bg-white" : "bg-black")}>
@@ -200,9 +207,12 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
         </figcaption>
         {plan.caption ? <p className="mt-2 text-sm leading-6 text-zinc-300" data-malik-photo-caption>{plan.caption}</p> : null}
       </figure> : null}
+      {cover && images && images.length > 1 ? <div className="malik-answer-photo-thumbs" aria-label="Другие фотографии">
+        {images.slice(1, 3).map((image) => <ReferenceCard key={image.url} image={image} portrait={false} onOpen={() => setSelected(image)} onFailure={failed} />)}
+      </div> : null}
       {children ? <div className="min-w-0">{children}</div> : null}
       {!images?.length && active ? status : null}
-      {selected ? <ReferenceLightbox image={selected} onClose={() => setSelected(null)} /> : null}
+      {selected ? <ReferenceLightbox image={selected} images={images || []} onSelect={setSelected} onClose={() => setSelected(null)} /> : null}
     </section>
   )
   if (row) return (

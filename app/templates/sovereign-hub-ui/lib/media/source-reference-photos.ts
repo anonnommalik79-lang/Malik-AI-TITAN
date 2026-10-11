@@ -1,6 +1,14 @@
 import { citationName, subjectCitationUrl, type MalikCitation } from "@/lib/ai/citation-names"
 import { isAbstractPhotoSubject, referenceSearchTopic, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
-import { referenceTitleScore, type MalikVisualImage } from "./reference-catalog"
+import { isPublicReferenceUrl, referenceTitleScore, type MalikVisualImage } from "./reference-catalog"
+
+// A matching article title does not make the site's default OG cover a photo
+// of that subject. Reject shared root assets and let the image search continue.
+function isGenericPageCover(path: string): boolean {
+  try { path = decodeURIComponent(path) } catch {}
+  return /(?:^|[/_.-])(?:logo|icon|favicon|1x1|pixel|spacer|blank|placeholder|default|og[-_]?image|social[-_]?(?:share|image))(?:[/_.-]|$)/iu.test(path)
+    || /^(?:\/(?:assets|static|images|img|media))*\/(?:main|home|homepage|share|og|banner)\.(?:jpe?g|png|webp|avif)$/iu.test(path)
+}
 
 /** Page pictures are evidence-provided URLs, never model-authored image URLs.
  * The cited page must name the complete subject, including its model number. */
@@ -18,12 +26,7 @@ export function sourceReferencePhoto(plan: ReferenceVisualPlan, sources: readonl
     })) continue
     try {
       const page = new URL(source.url), image = new URL(source.image)
-      const host = image.hostname.toLowerCase()
-      if (page.protocol !== "https:" || image.protocol !== "https:" || image.username || image.password || page.username || page.password
-        || image.href.length > 1500 || image.port && image.port !== "443"
-        || !host.includes(".") || /^[\d.]+$/u.test(host) || host.includes(":")
-        || /(?:^|\.)(?:localhost|local|internal|lan)$/u.test(host)
-        || /(?:^|[/_.-])(?:logo|icon|favicon|1x1|pixel|spacer|blank)(?:[/_.-]|$)/iu.test(image.pathname)) continue
+      if (!isPublicReferenceUrl(page.href) || !isPublicReferenceUrl(image.href) || isGenericPageCover(image.pathname)) continue
       return { url: image.href, alt: plan.topic, sourceUrl: page.href, credit: citationName(source) }
     } catch { /* An invalid preview must not hide the answer. */ }
   }

@@ -4,7 +4,7 @@ import { lookupReferenceImages, readReferenceJson, sanitizeReferenceImages, type
 type CacheEntry = { images: MalikVisualImage[]; expires: number }
 type Listener = (images: MalikVisualImage[]) => void
 type Job = { controller: AbortController; listeners: Set<Listener> }
-const STORAGE_KEY = "malik-reference-catalog-v10"
+const STORAGE_KEY = "malik-reference-catalog-v11"
 export const REFERENCE_LOOKUP_BUDGET_MS = 8000
 const MAX_ENTRIES = 60
 const cache = new Map<string, CacheEntry>()
@@ -118,6 +118,7 @@ async function lookupWithFallback(plan: ReferenceVisualPlan, signal: AbortSignal
       if (plan.queries[0]) params.set("topic", plan.queries[0])
       if (plan.logo) params.set("logo", "1")
       if (excludedUrls.length) params.set("skipOfficial", "1")
+      for (const url of excludedUrls.slice(0, 3)) params.append("exclude", url)
       let images: MalikVisualImage[] = []
       try {
         const response = await fetch("/api/chat/reference-images?" + params, { headers: { Accept: "application/json" }, signal: budget })

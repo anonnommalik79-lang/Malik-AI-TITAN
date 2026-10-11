@@ -87,3 +87,16 @@ try {
 } finally { globalThis.fetch = originalFetch }
 console.log("PASS real answer renderer: full inline descriptions, metadata before/between prose, no duplicate hero, mixed chart/photo answers, partial hints, exact section links and opt-out")
 console.log("PASS NVIDIA registration context: generic action hints rejected, exact app/feature preserved, unrelated document rejected")
+
+// Photograph placement must remain above prose, even when model hints arrive last.
+const headerHero = render("### Эверест\n\nОписание вершины.\n\n" + photo("Эверест", "Mount Everest"), "Расскажи про Эверест")
+assert.equal(count(headerHero, 'data-malik-reference-topic="Эверест"'), 1)
+assert(headerHero.indexOf("data-malik-photo-header") < headerHero.indexOf("Описание вершины"))
+assert.equal(count(headerHero, "Описание вершины"), 1)
+const comparison = render("### Медеу\n\nОписание катка.\n\n### Шымбулак\n\nОписание курорта.\n\n" + photo("Медеу", "Medeu") + "\n\n" + photo("Шымбулак", "Shymbulak"), "Сравни Медеу и Шымбулак")
+assert(comparison.indexOf("data-malik-photo-lineup") < comparison.indexOf("Описание катка"))
+assert.equal(count(comparison, 'data-malik-reference-topic="Медеу"'), 1)
+assert.equal(count(comparison, 'data-malik-reference-topic="Шымбулак"'), 1)
+const suppressed = renderToStaticMarkup(React.createElement(MalikMarkdown, { text: "### Эверест\n\nОписание вершины.\n\n" + photo("Эверест", "Mount Everest"), allowImages: false, visualContext: { question: "Расскажи про Эверест", isLatest: true } }))
+assert(!suppressed.includes("data-malik-reference-topic="))
+console.log("PASS top hero before prose, comparison lineup before descriptions, deduplication and allowImages opt-out")

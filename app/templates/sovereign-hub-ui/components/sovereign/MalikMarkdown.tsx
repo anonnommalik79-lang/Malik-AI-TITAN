@@ -1194,7 +1194,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
   const hasAttachment = Boolean(visualContext?.hasAttachment)
   const structuredPhotos = useMemo(() => {
     const result = new Map<number, Array<{ plan: ReferenceVisualPlan; caption: string }>>()
-    if (!allowsAnswerPhotoHints(question, hasAttachment)) return result
+    if (!allowImages || !allowsAnswerPhotoHints(question, hasAttachment)) return result
     blocks.forEach((block, position) => {
       let subjects: Array<{ name: string; caption: string }> = []
       if (block.kind === "table") {
@@ -1211,7 +1211,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
       if (photos.length) result.set(position, photos)
     })
     return result
-  }, [blocks, question, hasAttachment, citations])
+  }, [blocks, question, hasAttachment, citations, allowImages])
   const checklistPosition = useMemo(() => {
     if (!wantsAnswerChecklist(question) || blocks.some((block) => block.kind === "visual" && block.visual?.type === "checklist")) return -1
     let selected = -1
@@ -1222,9 +1222,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     return selected
   }, [blocks, question])
   const fallbackVisualSlots = useMemo(() => {
-    // Structured cards and charts already provide a visual. Do not decorate unrelated
-    // headings or prose with speculative stock photography.
-    if (blocks.some((block) => block.kind === "cards" || block.kind === "visual")) return new Map<string, AnswerVisualSlot>()
+    if (!allowImages) return new Map<string, AnswerVisualSlot>()
     // Event lineups need explicit subject metadata: a guessed portrait is not attendance evidence.
     if (!question || /(?:спикер|выступ|участни|приехал|присутств|speaker|attend|participant|lineup)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
     // A chart or a dates/pricing card does not disable photos in other sections.
@@ -1247,9 +1245,10 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     return new Map(planAnswerVisualSlots(question, segments, previousQuestion, hasAttachment, previousAnswer)
       .filter((slot) => !illustrated.some((name) => hasVisualSubject(slot.plan.topic, name) || hasVisualSubject(name, slot.plan.topic)))
       .map((slot) => [slot.key, slot]))
-  }, [blocks, question, previousQuestion, previousAnswer, hasAttachment, streaming])
+  }, [blocks, question, previousQuestion, previousAnswer, hasAttachment, streaming, allowImages])
   const photoPlans = useMemo(() => {
     const plans = new Map<number, ReturnType<typeof groundedAnswerPhotoPlans>>()
+    if (!allowImages) return plans
     // A verified full product collection keeps every exact model, including >12 items.
     if ([...fallbackVisualSlots.values()].some((slot) => slot.plan.subjects?.length)) return plans
     const seen = new Set<string>()
@@ -1264,7 +1263,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
       if (grounded.length) plans.set(position, grounded)
     })
     return plans
-  }, [blocks, fallbackVisualSlots, question, text, hasAttachment])
+  }, [blocks, fallbackVisualSlots, question, text, hasAttachment, allowImages])
   const hintedAnchors = useMemo(() => {
     const slots = new Map<string, AnswerVisualSlot>()
     const consumed = new Set<number>()
@@ -1318,24 +1317,36 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
   const photoCount = [...visualSlots.values()].reduce((total, slot) => total + (slot.plan.subjects?.length || 1), 0)
     + [...hintedAnchors.unanchored.values()].reduce((total, plans) => total + plans.length, 0)
   const singleVisualSubject = photoCount === 1 && !isMultiSubjectVisualQuestion(question)
+  const headerPhotos = useMemo(() => {
+    if (!allowImages) return []
+    const plans = [...visualSlots.values()].map((slot) => slot.plan).concat([...hintedAnchors.unanchored.values()].flat())
+    const unique = [...new Map(plans.map((plan) => [plan.topic.toLowerCase(), plan])).values()]
+    if (unique.some((plan) => plan.kind === "tutorial" || plan.subjects?.length)) return []
+    if (singleVisualSubject) return unique.slice(0, 1)
+    const comparison = /(?:сравни|сравнение|\b(?:compare|versus|vs)\b|салыстыр)/iu.test(question)
+      || blocks.some((block) => block.kind === "photos" && block.lineup)
+    return comparison && unique.length >= 2 && unique.length <= 4 ? unique : []
+  }, [allowImages, visualSlots, hintedAnchors, singleVisualSubject, question, blocks])
+  const headerTopics = useMemo(() => new Set(headerPhotos.map((plan) => plan.topic.toLowerCase())), [headerPhotos])
+  const inlineVisualSlots = useMemo(() => new Map([...visualSlots].filter(([, slot]) => !headerTopics.has(slot.plan.topic.toLowerCase()))), [visualSlots, headerTopics])
   const photoDescriptions = useMemo(() => {
     const descriptions = new Map<number, Array<{ position: number; lines: string[] }>>()
     const owned = new Set<number>()
     blocks.forEach((block, position) => {
-      if (block.kind !== "h" || parseAnswerEntity(block.text) || !visualSlots.has(`b${position}`)) return
+      if (block.kind !== "h" || parseAnswerEntity(block.text) || !inlineVisualSlots.has(`b${position}`)) return
       const paragraphs: Array<{ position: number; lines: string[] }> = []
       for (let next = position + 1; next < blocks.length; next++) {
         const candidate = blocks[next]
         // The model can place its photo metadata before, between or after prose.
         if (candidate.kind === "photos" && hintedAnchors.consumed.has(next)) continue
-        if (candidate.kind !== "p" || visualSlots.has(`b${next}`)) break
+        if (candidate.kind !== "p" || inlineVisualSlots.has(`b${next}`)) break
         paragraphs.push({ position: next, lines: candidate.lines })
         owned.add(next)
       }
       descriptions.set(position, paragraphs)
     })
     return { descriptions, owned }
-  }, [blocks, visualSlots, hintedAnchors])
+  }, [blocks, inlineVisualSlots, hintedAnchors])
   const dataVisuals = useMemo(() => {
     const visuals = new Map<number, AnswerVisual>()
     if (!wantsAnswerVisuals(question)) return visuals
@@ -1411,6 +1422,13 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     <CitationContext.Provider value={citations?.length ? citations : null}>
     <ReferencePhotoSources.Provider value={citations || []}>
     <div className={className ? `malik-md ${className}` : "malik-md"}>
+      {headerPhotos.length ? <section className="malik-answer-photo-header" data-malik-photo-header aria-label="Фотографии из источников">
+        {headerPhotos.length === 1
+          ? <MalikReferenceImages question={question} planOverride={headerPhotos[0]} hero cover isLatest={visualContext?.isLatest} />
+          : <div className={`malik-answer-lineup is-${headerPhotos.length}`} data-malik-photo-lineup>
+            {headerPhotos.map((plan) => <MalikReferenceImages key={plan.topic} question="" planOverride={plan} compact lineup isLatest={visualContext?.isLatest} />)}
+          </div>}
+      </section> : null}
       {outline ? <AnswerOutline entries={outline} idFor={sectionId} /> : null}
       {codeFiles.length > 1 ? (
         <div className="malik-md-artifact-toolbar" role="group" aria-label="Файлы ответа">
@@ -1424,7 +1442,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
         const key = `b${position}`
         const previous = blocks[position - 1]
         const next = blocks[position + 1]
-        const slot = visualSlots.get(key)
+        const slot = inlineVisualSlots.get(key)
         const dataVisual = dataVisuals.get(position)
         const sourcedPhotos = structuredPhotos.get(position)?.filter(({ plan }) => ![...photoPlans.values()].flat().some((hint) => hint.topic === plan.topic)
           && ![...visualSlots.values()].some((slot) => slot.plan.topic === plan.topic)).map(({ plan, caption }) => (
@@ -1434,7 +1452,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
         ))
         if (block.kind === "photos") {
           if (hintedAnchors.consumed.has(position)) return null
-          const plans = hintedAnchors.unanchored.get(position)
+          const plans = hintedAnchors.unanchored.get(position)?.filter((plan) => !headerTopics.has(plan.topic.toLowerCase()))
           if (!plans?.length) return null
           if (block.lineup && plans.length >= 2) {
             return <section key={key} data-malik-photo-lineup className={`malik-answer-lineup is-${Math.min(plans.length, 4)}`} aria-label="Сравниваемые варианты">
@@ -1562,7 +1580,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
             })
             return <MalikAnswerChecklist key={key} title={previous?.kind === "h" && (checklistPosition === position || /чек|checklist|тізім/iu.test(previous.text)) ? previous.text : "Чек-лист"} items={items} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} renderLabel={(label, index) => inline(label, `${key}-task-${index}`)} />
           }
-          return <Fragment key={key}>{dataVisual ? <MalikAnswerVisual visual={dataVisual} /> : null}<MarkdownList list={block.list} keyPrefix={key} visualSlots={visualSlots} isLatest={visualContext?.isLatest} /></Fragment>
+          return <Fragment key={key}>{dataVisual ? <MalikAnswerVisual visual={dataVisual} /> : null}<MarkdownList list={block.list} keyPrefix={key} visualSlots={inlineVisualSlots} isLatest={visualContext?.isLatest} /></Fragment>
         }
 
         if (block.kind === "math") return <TexMath key={key} tex={block.tex} display />

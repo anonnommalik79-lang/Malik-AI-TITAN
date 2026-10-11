@@ -34,6 +34,12 @@
 .malik-answer-photo-row__image figcaption { overflow-wrap: anywhere; }
 .malik-answer-photo-hero { width: 100%; max-width: 720px; margin: 22px 0 28px; }
 .malik-answer-photo-hero__figure { width: 100%; max-width: 720px; margin: 0 0 14px; animation: malik-answer-block-in .32s ease-out both; }
+.malik-answer-photo-header { width: 100%; max-width: 720px; min-width: 0; margin: 0 0 22px; }
+.malik-answer-photo-header:has(.malik-answer-photo-hero[hidden]) { display: none; }
+.malik-answer-photo-header .malik-answer-photo-hero, .malik-answer-photo-header .malik-answer-lineup { margin-top: 0; margin-bottom: 0; }
+.malik-answer-photo-thumbs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 16px; }
+.malik-answer-photo-thumbs button { aspect-ratio: 16 / 9; }
+.malik-answer-photo-thumbs figcaption > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .malik-answer-photo-hero__figure > button, .malik-answer-photo-row__image > button {
   width: 100%;
   aspect-ratio: 16 / 9;

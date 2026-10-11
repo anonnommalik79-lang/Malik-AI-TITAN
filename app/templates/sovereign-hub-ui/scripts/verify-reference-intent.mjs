@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import fs from "node:fs"
 import path from "node:path"
+import { createRequire } from "node:module"
 import ts from "typescript"
 
+const require = createRequire(import.meta.url)
 const modules = new Map()
 function load(filename) {
   filename = path.resolve(filename)
@@ -13,6 +15,7 @@ function load(filename) {
   const module = { exports: {} }
   modules.set(filename, module)
   new Function("require", "module", "exports", javascript)((id) => {
+    if (id.startsWith("node:")) return require(id)
     if (id === "next/server") return { NextResponse: { json: (body, init) => Response.json(body, init) } }
     const target = id.startsWith("@/") ? path.resolve(id.slice(2)) : path.resolve(path.dirname(filename), id)
     return load(target + ".ts")

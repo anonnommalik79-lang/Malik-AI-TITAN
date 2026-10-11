@@ -10,10 +10,30 @@ const IMAGE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org", "ima
 
 export function isSafeVisualUrl(value: string): boolean {
   if (value === "/reference-photos/elon-musk.jpg" || value === "/brand/malik-mark.svg") return true
+  // Only the server can mint this ticket. The delivery route verifies its HMAC
+  // before redirecting; model-authored external image URLs remain disallowed.
+  if (isSignedReferencePhotoUrl(value)) return true
   try {
     if (!value || value.length > 1500) return false
     const url = new URL(value)
     return url.protocol === "https:" && !url.username && !url.password && (IMAGE_HOSTS.has(url.hostname.toLowerCase()) || /^encrypted-tbn\d+\.gstatic\.com$/u.test(url.hostname.toLowerCase()))
+  } catch { return false }
+}
+
+export function isSignedReferencePhotoUrl(value: string): boolean {
+  return /^\/api\/chat\/reference-photo\?u=[A-Za-z0-9_-]{10,2100}&e=\d{10}&s=[a-f0-9]{64}$/u.test(value)
+}
+
+/** Search results can name public CDNs outside our fixed catalogue allowlist. */
+export function isPublicReferenceUrl(value: string): boolean {
+  try {
+    if (!value || value.length > 1500 || /[\r\n]/u.test(value)) return false
+    const url = new URL(value), host = url.hostname.toLowerCase().replace(/\.$/u, "")
+    return url.protocol === "https:" && !url.username && !url.password && (!url.port || url.port === "443")
+      && host.includes(".") && !host.includes(":") && !/^[\d.]+$/u.test(host)
+      && !/(?:^|\.)(?:localhost|local|internal|lan|invalid|test)$/u.test(host)
+      && !/(?:^|\.)(?:nip\.io|sslip\.io|localtest\.me)$/u.test(host)
+      && ![...url.searchParams.keys()].some((key) => /^(?:api[_-]?key|access[_-]?token|authorization|password)$/iu.test(key))
   } catch { return false }
 }
 
@@ -58,11 +78,11 @@ export function sanitizeReferenceImages(value: unknown): MalikVisualImage[] {
     try {
       const source = new URL(item.sourceUrl)
       if (source.protocol === "https:" && !source.username && !source.password && source.href.length < 1500
-        && (["commons.wikimedia.org", "unsplash.com", "support.apple.com", "en.wikipedia.org", "ru.wikipedia.org", "kk.wikipedia.org"].includes(source.hostname) || (typeof item.credit === "string" && /^(?:Brave|Serper|Tavily|SerpApi) Images$/u.test(item.credit)
+        && (["commons.wikimedia.org", "unsplash.com", "support.apple.com", "en.wikipedia.org", "ru.wikipedia.org", "kk.wikipedia.org", "pixabay.com", "openverse.org"].includes(source.hostname) || (typeof item.credit === "string" && /^(?:(?:Brave|Serper|Tavily|SerpApi) Images|Openverse(?: · .+)?)$/u.test(item.credit)
           && source.hostname.includes(".") && !source.hostname.endsWith(".local")
           && !/^\d+(?:\.\d+){3}$/u.test(source.hostname)))) sourceUrl = source.href
     } catch { /* Attribution can be absent on model-authored Markdown. */ }
-    const safeUrl = item.url.startsWith("/") ? url.pathname : url.href
+    const safeUrl = item.url.startsWith("/") ? url.pathname + url.search : url.href
     const image = { url: safeUrl, alt: cleanReferenceLabel(item.alt), sourceUrl,
       credit: cleanReferenceLabel(item.credit || ""), license: cleanReferenceLabel(item.license || ""), ...(item.role === "logo" ? { role: "logo" as const } : {}) }
     if (new TextEncoder().encode(JSON.stringify([...images, image])).byteLength > REFERENCE_RESULT_LIMIT) break

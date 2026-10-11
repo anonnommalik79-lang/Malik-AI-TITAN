@@ -150,6 +150,11 @@ assert.equal(sourceReferencePhoto({ ...plan, topic: "iPhone 16" }, [{ ...source,
 for (const image of ["data:image/png;base64,AAA", "http://cdn.shop.example/a.jpg", "https://127.0.0.1/a.jpg", "https://localhost/a.jpg", "https://cdn.internal/a.jpg", "https://user:pass@cdn.shop.example/a.jpg", "https://cdn.shop.example:8080/a.jpg", "https://cdn.shop.example/logo.png"]) assert.equal(sourceReferencePhoto(plan, [{ ...source, image }]), null, image)
 assert.equal(sourceReferencePhoto({ ...plan, kind: "tutorial" }, [source]), null)
 assert.equal(sourceReferencePhoto(plan, [{ ...source, title: "Lenovo Legion Pro 7 vs Dell XPS 16" }]), null)
+const everest = { topic: "Эверест", queries: ["Mount Everest"], explicit: true, layout: "landscape" }
+for (const image of ["https://cdn.guidego.ru/assets/main.jpg", "https://cdn.guidego.ru/images/og-image.jpg", "https://cdn.guidego.ru/assets/%6dain.jpg"]) {
+  assert.equal(sourceReferencePhoto(everest, [{ title: "Эверест: где находится", url: "https://guidego.ru/everest/", image }]), null, "A shared website cover is not evidence of an Everest photo")
+}
+assert.equal(sourceReferencePhoto(everest, [{ title: "Эверест: где находится", url: "https://guidego.ru/everest/", image: "https://cdn.guidego.ru/everest/summit.jpg" }]).alt, "Эверест")
 
 // Render the actual answer path, including citation context and full-width photo.
 const React = require("react"), { renderToStaticMarkup } = require("react-dom/server")
