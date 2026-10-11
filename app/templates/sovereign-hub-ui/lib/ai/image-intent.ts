@@ -15,6 +15,19 @@ const EXPLANATION_BEFORE_CREATE_PATTERN = /(?:объясн[\p{L}-]*|расска
 const NON_IMAGE_OBJECT_PATTERN = /(?:код(?:а|ом)?|промпт(?:а|ом)?|prompt|текст(?:а|ом)?|пост(?:а|ом)?(?!ер)|стать[яию]|описани[еяю]|интерфейс(?:а|ом)?|анимаци[яию]|лоадер(?:а|ом)?|loader|кнопк(?:у|а|и)|раздел(?:а|ом)?|функци[яию]|сайт(?:а|ом)?|website|компонент(?:а|ом)?|api|html|css|javascript|typescript|react)(?![\p{L}\p{N}_])/iu
 const META_TASK_PREFIX_PATTERN = /^\s*(?:напиши(?:те)?|дай(?:те)?|подготовь(?:те)?|составь(?:те)?|write|give\s+me|prepare)(?![\p{L}\p{N}_])/iu
 
+// «Я НЕ прошу генерировать изображение», «не нужно рисовать картинку»,
+// «don't generate an image»: a negated verb is the opposite of a request.
+const NEGATION_BEFORE_VERB_PATTERN = /(?:^|[^\p{L}])(?:не|ни|нет|без|never|not|no|don'?t|do\s+not|doesn'?t|емес)(?:\s+[\p{L}'-]+){0,2}\s*$/iu
+
+/** The first create-verb that is not negated, or null. */
+function firstRequestedVerb(value: string) {
+  const pattern = new RegExp(IMAGE_CREATE_VERB_PATTERN.source, "giu")
+  for (let match = pattern.exec(value); match; match = pattern.exec(value)) {
+    if (!NEGATION_BEFORE_VERB_PATTERN.test(value.slice(Math.max(0, match.index - 40), match.index))) return { index: match.index, text: match[0] }
+  }
+  return null
+}
+
 function firstMatch(value: string, pattern: RegExp) {
   const match = pattern.exec(value)
   return match ? { index: match.index, text: match[0] } : null
@@ -109,7 +122,7 @@ export function isExplicitImageGenerationRequest(input: string): boolean {
     return false
   }
 
-  const verb = firstMatch(text, IMAGE_CREATE_VERB_PATTERN)
+  const verb = firstRequestedVerb(text)
   const noun = firstMatch(text, IMAGE_NOUN_PATTERN)
   if (!verb || !noun) return false
 

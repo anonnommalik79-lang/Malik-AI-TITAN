@@ -55,6 +55,20 @@ assert.equal(edit('добавь пункт в список'), false)
 assert.equal(edit('убери человека на фото'), true)
 assert.equal(create('сгенерируй фото кота'), true)
 
+// A request that says NOT to generate a picture must never open the photo card
+// (owner's screen recording: a physics question starting «Я НЕ прошу генерировать
+// изображение» offered «Создать изображение?»).
+for (const prompt of [
+  'Я НЕ прошу генерировать изображение.\n\nОбъясни научно, почему единорог с крыльями не смог бы летать.\n\nВАЖНО: не запускай генерацию фото или видео.',
+  'Не нужно рисовать картинку, просто объясни',
+  "Don't generate an image, just explain",
+  'Сурет жасама, тек түсіндір',
+]) {
+  assert.equal(create(prompt), false, prompt)
+  assert.equal(edit(prompt, false), false, prompt)
+}
+for (const prompt of ['Сделай фото без фона', 'Не могу найти, сгенерируй картинку собаки', 'generate an image of a cat']) assert.equal(create(prompt), true, prompt)
+
 // Creation prompts with layout/lettering words must never demand an upload.
 for (const prompt of [
   'сгенерируй фото что там иконка темная и внизу надпись красавчик',
