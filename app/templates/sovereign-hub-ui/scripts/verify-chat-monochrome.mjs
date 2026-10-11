@@ -172,5 +172,17 @@ check("image generator has no grey header, footer or metadata strip", () => {
   assert.match(block, /\.malik-photo-final__frame\s*\{\s*border: 0 !important;/, "frame loses fake outline")
 })
 
+check("one complete answer, no duplicate A/B answer cards", () => {
+  const runtime = fs.readFileSync("components/sovereign/MalikCognitiveResponseRuntime.tsx", "utf8")
+  const cognitiveCss = fs.readFileSync("app/malik-cognitive-response-final.css", "utf8")
+  assert.match(runtime, /function restoreSingleAnswer\(/, "legacy A/B markup must be cleaned up after hot reload")
+  assert.match(runtime, /restoreSingleAnswer\(row\)/, "every assistant turn must retain the original answer")
+  assert.match(runtime, /markdown\.classList\.remove\("malik-dual-source-hidden"\)/, "full Markdown must remain visible")
+  assert.match(runtime, /querySelectorAll\("\.malik-dual-answer"\)/, "legacy comparison cards must be removed")
+  assert.doesNotMatch(runtime, /function (?:addDualAnswer|focusedClone|makeCandidate)\(/, "no A/B candidates may be created")
+  assert.doesNotMatch(runtime, /markdown\.cloneNode\(|const DUAL_COPY/, "do not clone or shorten the finished answer")
+  assert.doesNotMatch(cognitiveCss, /malik-dual-/, "legacy double-answer CSS must not hide the original response")
+})
+
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nchat monochrome: all checks passed\n")
 process.exit(failures ? 1 : 0)
