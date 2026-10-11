@@ -135,3 +135,57 @@
 .malik-reference-retry { margin: 8px 0; padding: 4px 0; background: transparent; border: 0; color: #a1a1aa; font-size: 12px; text-align: left; cursor: pointer; }
 .malik-reference-retry:hover { color: #fff; text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .malik-reference-loading span { animation: none; } }
+
+/* TITAN layouts — strictly black and white. */
+/* Collapsed detail and FAQ questions (<details>): a native, keyboard-ready disclosure. */
+.malik-md .malik-md-details { margin: 10px 0; border-top: 1px solid #262626; border-bottom: 1px solid #262626; }
+.malik-md .malik-md-details + .malik-md-details { margin-top: -11px; border-top: 0; }
+.malik-md .malik-md-details-summary { display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; cursor: pointer; list-style: none; color: #fff; font-weight: 600; line-height: 1.45; }
+.malik-md .malik-md-details-summary::-webkit-details-marker { display: none; }
+.malik-md .malik-md-details-summary::before { content: "+"; flex: 0 0 18px; color: #a3a3a3; font-weight: 400; text-align: center; transition: transform .15s; }
+.malik-md .malik-md-details[open] > .malik-md-details-summary::before { content: "−"; color: #fff; }
+.malik-md .malik-md-details-summary:hover { color: #e5e5e5; }
+.malik-md .malik-md-details-summary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 4px; }
+.malik-md .malik-md-details-body { padding: 0 0 14px 30px; }
+.malik-md .malik-md-details-body > .malik-md > :first-child { margin-top: 0; }
+
+/* Contents of a long answer. */
+.malik-md .malik-md-toc { margin: 4px 0 22px; padding: 14px 16px; border: 1px solid #262626; border-radius: 14px; background: #0a0a0a; }
+.malik-md .malik-md-toc-title { margin: 0 0 8px; color: #a3a3a3; font-size: 12px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.malik-md .malik-md-toc-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; counter-reset: toc; }
+.malik-md .malik-md-toc-list > li { counter-increment: toc; }
+.malik-md .malik-md-toc-list > li.is-depth-1 { padding-left: 18px; }
+.malik-md .malik-md-toc-list > li.is-depth-2 { padding-left: 36px; }
+.malik-md .malik-md-toc-list a { color: #e5e5e5; font-size: 14px; line-height: 1.5; text-decoration: none; }
+.malik-md .malik-md-toc-list a:hover { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+.malik-md .malik-md-toc-list a:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 4px; }
+.malik-md [data-malik-section] { scroll-margin-top: 84px; }
+.malik-md [data-malik-section]:focus { outline: none; }
+
+/* Plus / minus side by side (stacked on a phone). */
+.malik-md .malik-md-proscons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0 22px; }
+.malik-md .malik-md-proscons-side { padding: 16px; border: 1px solid #262626; border-radius: 14px; background: #0a0a0a; }
+.malik-md .malik-md-proscons-side.is-pros { border-color: #525252; }
+.malik-md .malik-md-proscons-title { display: flex; gap: 8px; margin: 0 0 10px; color: #fff; font-weight: 650; }
+.malik-md .malik-md-proscons-title > span { color: #a3a3a3; }
+.malik-md .malik-md-proscons-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.malik-md .malik-md-proscons-list > li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; color: #e5e5e5; line-height: 1.5; }
+.malik-md .malik-md-proscons-mark { color: #a3a3a3; font-weight: 700; text-align: center; }
+.malik-md .malik-md-proscons-side.is-pros .malik-md-proscons-mark { color: #fff; }
+@media (max-width: 560px) { .malik-md .malik-md-proscons { grid-template-columns: 1fr; } }
+
+/* Decision matrix: the computed total and the winning column. */
+.malik-md .malik-md-matrix { margin: 18px 0 22px; }
+.malik-md .malik-md-matrix .malik-md-table-wrap { margin: 0; }
+.malik-md .malik-md-matrix th.is-winner, .malik-md .malik-md-matrix td.is-winner { background: #141414; }
+.malik-md .malik-md-matrix .malik-md-matrix-total th, .malik-md .malik-md-matrix .malik-md-matrix-total td { border-top: 1px solid #737373; border-bottom: 0; color: #fff; font-weight: 700; }
+.malik-md .malik-md-matrix-note { margin-top: 10px; color: #a3a3a3; font-size: 13px; line-height: 1.5; }
+.malik-md .malik-md-matrix-note strong { color: #fff; }
+
+#malik-root .malik-md .malik-md-toc { color: #e5e5e5; }
+#malik-root .malik-md .malik-md-toc-list a { color: #e5e5e5; }
+#malik-root .malik-md .malik-md-toc-list a:hover { color: #fff; }
+#malik-root .malik-md .malik-md-details-summary { color: #fff; }
+#malik-root .malik-md .malik-md-proscons-list > li { color: #e5e5e5; }
+#malik-root .malik-md .malik-md-matrix-note { color: #a3a3a3; }
+#malik-root .malik-md .malik-md-proscons, #malik-root .malik-md .malik-md-proscons-side, #malik-root .malik-md .malik-md-details, #malik-root .malik-md .malik-md-details-body, #malik-root .malik-md .malik-md-matrix { color: #e5e5e5; }

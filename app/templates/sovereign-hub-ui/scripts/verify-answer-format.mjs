@@ -93,6 +93,7 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "./MalikAnswerCards") return loadPure("components/sovereign/MalikAnswerCards.tsx")
     if (name === "@/lib/ai/answer-cards") return loadPure("lib/ai/answer-cards.ts")
     if (name === "@/lib/ai/citation-names") return loadPure("lib/ai/citation-names.ts")
+    if (name === "@/lib/ai/answer-layouts") return loadPure("lib/ai/answer-layouts.ts")
     if (name === "./MalikAnswerChecklist") return loadPure("components/sovereign/MalikAnswerChecklist.tsx")
     // Interactive Visual Engine blocks have their own suite (test:visual-engine);
     // here only their placement in the answer matters.
@@ -594,6 +595,60 @@ check("even a model-authored photo fence cannot turn an abstract business proces
   const html = render('## Контент-маркетинг\n\nМатериалы для клиентов.\n\n```malik-photos\n{"version":1,"subjects":[{"name":"Контент-маркетинг","query":"Content marketing","kind":"topic","layout":"landscape"}]}\n```', { visualContext: { question: "План бизнес-процессов", isLatest: true } })
   assert(!html.includes("data-test-photo-topic"))
   assert(html.includes("Материалы для клиентов"))
+})
+
+console.log("\nTITAN layouts: FAQ, details, plus/minus, contents, decision matrix")
+check("an FAQ section becomes an accordion of questions once the answer is complete", () => {
+  const text = "Ответ.\n\n## Частые вопросы\n\n**Сколько стоит подписка?**\nОт 5 000 ₸ в месяц.\n\n**Можно ли отменить?**\nДа, в любой момент.\n\n## Итог\n\nВсё."
+  const html = render(text, { visualContext: { question: "Расскажи про подписку" } })
+  assert.equal((html.match(/<details class="malik-md-details"/g) || []).length, 2)
+  assert(html.includes("Сколько стоит подписка?</summary>") && html.includes("От 5 000 ₸ в месяц."))
+  assert(html.indexOf("Можно ли отменить?") < html.indexOf("Итог"), "the next section stays outside the FAQ")
+  assert(!html.includes("&lt;details") && !html.includes("**Сколько"))
+  // While the answer is still arriving nothing is folded away.
+  const streaming = render(text, { visualContext: { question: "Расскажи про подписку", streaming: true } })
+  assert(!streaming.includes("<details"))
+})
+check("<details> from the model collapses Markdown, never passes HTML through", () => {
+  const html = render("Кратко: да.\n\n<details>\n<summary>Технические детали</summary>\n\n- шаг **один**\n- <script>alert(1)</script>\n\n</details>\n\nКонец.")
+  assert(html.includes('<summary class="malik-md-details-summary">Технические детали</summary>'))
+  assert(html.includes("<strong") && html.includes("один"))
+  assert(!html.includes("<script>"), "model HTML is text, not markup")
+  assert(html.includes("Конец."))
+  // An unclosed block while streaming stays open.
+  const open = render("<details>\n<summary>Ещё</summary>\n\nпишу", { visualContext: { question: "x", streaming: true } })
+  assert(/<details class="malik-md-details" open="">/.test(open))
+})
+check("«Плюсы» and «Минусы» lists stand side by side in black and white", () => {
+  const html = render("### Плюсы\n\n- быстро\n- дёшево\n\n### Минусы\n\n- мало памяти")
+  assert(html.includes('class="malik-md-proscons"'))
+  assert(html.includes("is-pros") && html.includes("is-cons"))
+  assert(html.indexOf("быстро") < html.indexOf("мало памяти"))
+  const bold = render("**Минусы:**\n- шумно\n\n**Плюсы:**\n- тепло")
+  assert(bold.includes("malik-md-proscons"), "bold labels and either order work")
+  assert(bold.indexOf("тепло") < bold.indexOf("шумно"), "pros are always on the left")
+})
+check("a long answer with several sections gets a working contents list", () => {
+  const body = "Текст раздела. ".repeat(60)
+  const text = ["## Введение", body, "## Анализ рынка", body, "### Конкуренты", body, "## Финансы", body, "## Риски", body].join("\n\n")
+  const html = render(text, { visualContext: { question: "Сделай отчёт" } })
+  assert(html.includes('aria-label="Содержание ответа"'))
+  const links = [...html.matchAll(/data-malik-toc-target="(malik-s-[^"]+)"/g)].map((match) => match[1])
+  assert.equal(links.length, 5)
+  for (const key of links) assert(html.includes(`data-malik-section="${key}"`), `heading ${key} exists for its link`)
+  assert(!render("## Один\n\nКоротко.\n\n## Два\n\nКоротко.").includes("Содержание ответа"), "short answers get no contents")
+})
+check("a decision matrix gets a computed weighted total and a flagged wrong model total", () => {
+  const text = "| Критерий | Вес | Вариант A | Вариант B |\n|---|---|---|---|\n| Цена | 50% | 8 | 6 |\n| Качество | 30% | 6 | 9 |\n| Сервис | 20% | 7 | 7 |\n| Итого | | 9.9 | 6.9 |"
+  const html = render(text, { visualContext: { question: "Что выбрать" } })
+  assert(html.includes("data-malik-decision-matrix"))
+  // A: 0.5·8 + 0.3·6 + 0.2·7 = 7.2;  B: 0.5·6 + 0.3·9 + 0.2·7 = 7.1
+  assert(html.includes("7,20") && html.includes("7,10"))
+  assert(html.includes("Лучший по весам: <strong>Вариант A</strong>"))
+  assert(html.includes("посчитан неверно"), "the model's 9.9 / 6.9 total is replaced")
+  assert(!html.includes(">9.9<"), "the wrong model total is not shown")
+  const plain = render("| Модель | Цена | Память |\n|---|---|---|\n| A | 100 | 8 |\n| B | 120 | 16 |")
+  assert(!plain.includes("data-malik-decision-matrix"), "tables without a weight column are left alone")
 })
 console.log(failures ? `\n${failures} failing\n` : "\nall answer format checks passed\n")
 process.exit(failures ? 1 : 0)

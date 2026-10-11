@@ -26,6 +26,7 @@ import { MalikVisualEngineBlock, MalikVisualPending } from "./visual-engine/Mali
  */
 
 import { citationName, safeHttps, subjectCitationUrl, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
+import { answerOutline, faqToDetails, prosConsLabel, weightedMatrix, type WeightedMatrix } from "@/lib/ai/answer-layouts"
 export type { MalikCitation } from "@/lib/ai/citation-names"
 
 type Props = { text: string; className?: string; allowImages?: boolean; autoPreview?: boolean; citations?: MalikCitation[]; /** A public answer page: see SharedPageContext. */ shared?: boolean; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
@@ -322,8 +323,44 @@ type Block =
   | { kind: "images"; images: MalikVisualImage[] }
   | { kind: "quote"; lines: string[] }
   | { kind: "hr" }
+  /** <details><summary>…</summary> … </details>: collapsed detail, rendered as Markdown inside. */
+  | { kind: "details"; summary: string; body: string; closed: boolean }
+  /** «Плюсы» and «Минусы» lists drawn side by side. */
+  | { kind: "proscons"; prosTitle: string; consTitle: string; pros: ListBlock; cons: ListBlock }
 
 const LIST_ITEM = /^(\s*)([-*•+]|\d{1,3}[.)])\s+(.*)$/
+const DETAILS_OPEN = /^\s*<details(?:\s+open)?\s*>\s*(?:<summary>(.*?)<\/summary>)?\s*$/i
+const SUMMARY_LINE = /^\s*<summary>(.*?)<\/summary>\s*$/i
+
+/** «Плюсы» + list, then «Минусы» + list (a heading or a bold line each) become one side-by-side block. */
+function groupProsCons(blocks: Block[]): Block[] {
+  const label = (block: Block | undefined) => block?.kind === "h" ? prosConsLabel(block.text)
+    : block?.kind === "p" && block.lines.length === 1 ? prosConsLabel(block.lines[0]) : null
+  const title = (block: Block) => block.kind === "h" ? block.text : block.kind === "p" ? block.lines[0] : ""
+  const result: Block[] = []
+  for (let index = 0; index < blocks.length; index++) {
+    const first = label(blocks[index])
+    const second = label(blocks[index + 2])
+    const firstList = blocks[index + 1]
+    const secondList = blocks[index + 3]
+    if (first && second && first !== second && firstList?.kind === "list" && secondList?.kind === "list"
+      && (blocks[index].kind !== "h" || blocks[index + 2].kind !== "h" || (blocks[index] as { level: number }).level === (blocks[index + 2] as { level: number }).level)) {
+      const prosAt = first === "pros" ? index : index + 2
+      const consAt = first === "pros" ? index + 2 : index
+      result.push({
+        kind: "proscons",
+        prosTitle: title(blocks[prosAt]).replace(/^[*_]+|[*_:：]+$/g, "").trim(),
+        consTitle: title(blocks[consAt]).replace(/^[*_]+|[*_:：]+$/g, "").trim(),
+        pros: (blocks[prosAt + 1] as Extract<Block, { kind: "list" }>).list,
+        cons: (blocks[consAt + 1] as Extract<Block, { kind: "list" }>).list,
+      })
+      index += 3
+      continue
+    }
+    result.push(blocks[index])
+  }
+  return result
+}
 
 function indentOf(value: string) {
   return value.replace(/\t/g, "    ").length
@@ -574,6 +611,33 @@ function parseBlocks(source: string): Block[] {
 
     if (EMPTY_IMAGE_LINE.test(line)) { index += 1; continue }
 
+    // <details> blocks (also what FAQ sections become): the body is Markdown,
+    // never HTML. Nested blocks and code fences are respected.
+    const details = DETAILS_OPEN.exec(line)
+    if (details) {
+      let depth = 1
+      let fenced = false
+      const body: string[] = []
+      let summary = details[1] ? details[1].trim() : ""
+      index += 1
+      while (index < lines.length) {
+        const current = lines[index]
+        if (/^\s*```/.test(current)) fenced = !fenced
+        if (!fenced && DETAILS_OPEN.test(current)) depth += 1
+        if (!fenced && /^\s*<\/details>\s*$/i.test(current)) {
+          depth -= 1
+          if (!depth) break
+        }
+        if (!summary && !body.some((item) => item.trim()) && SUMMARY_LINE.test(current)) summary = SUMMARY_LINE.exec(current)![1].trim()
+        else body.push(current)
+        index += 1
+      }
+      const closed = index < lines.length
+      index += 1
+      blocks.push({ kind: "details", summary: summary.replace(/<[^>]*>/g, "") || "Подробнее", body: body.join("\n").trim(), closed })
+      continue
+    }
+
     if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) {
       blocks.push({ kind: "hr" })
       index += 1
@@ -666,6 +730,7 @@ function parseBlocks(source: string): Block[] {
       index < lines.length
       && lines[index].trim()
       && !/^\s*(#{1,6}\s|[-*•+]\s|\d+[.)]\s|>|```|\$\$|\\\[)/.test(lines[index])
+      && !DETAILS_OPEN.test(lines[index])
       && !isTableStart(lines, index)
       && !parseImageLine(lines[index])
       && !EMPTY_IMAGE_LINE.test(lines[index])
@@ -681,7 +746,7 @@ function parseBlocks(source: string): Block[] {
     blocks.push({ kind: "p", lines: paragraph })
   }
 
-  return normalizeCodeFilenames(blocks)
+  return groupProsCons(normalizeCodeFilenames(blocks))
 }
 
 const CODE_KEYWORDS = new Set([
@@ -905,6 +970,83 @@ function MarkdownList({ list, keyPrefix, visualSlots, isLatest = false }: { list
     : <ul className="malik-md-ul">{items}</ul>
 }
 
+let outlineNavigationInstalled = false
+
+/**
+ * One document-level handler for every contents link. The chat may show an
+ * answer as a copy of its DOM (the A/B cards), where React handlers and ids do
+ * not survive; the link finds its section in the nearest visible copy instead.
+ */
+function installOutlineNavigation() {
+  if (outlineNavigationInstalled || typeof document === "undefined") return
+  outlineNavigationInstalled = true
+  document.addEventListener("click", (event) => {
+    const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[data-malik-toc-target]") : null
+    if (!link) return
+    event.preventDefault()
+    const key = link.getAttribute("data-malik-toc-target") || ""
+    let target: HTMLElement | undefined
+    for (let scope = link.parentElement; scope && !target; scope = scope.parentElement) {
+      target = Array.from(scope.querySelectorAll<HTMLElement>("[data-malik-section]"))
+        .find((node) => node.getAttribute("data-malik-section") === key && node.getClientRects().length > 0)
+    }
+    if (!target) return
+    target.scrollIntoView({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" })
+    target.focus({ preventScroll: true })
+  })
+}
+
+/** «Содержание»: links that scroll to each section of a long answer (no URL change). */
+function AnswerOutline({ entries, idFor }: { entries: NonNullable<ReturnType<typeof answerOutline>>; idFor: (position: number) => string }) {
+  useEffect(installOutlineNavigation, [])
+  return <nav className="malik-md-toc" aria-label="Содержание ответа">
+    <p className="malik-md-toc-title">Содержание</p>
+    <ol className="malik-md-toc-list">
+      {entries.map((entry) => (
+        <li key={entry.position} className={`is-depth-${entry.depth}`}>
+          <a href="#" data-malik-toc-target={idFor(entry.position)}>{entry.text}</a>
+        </li>
+      ))}
+    </ol>
+  </nav>
+}
+
+/** A decision matrix whose weighted totals are computed here, not taken from the model. */
+function DecisionMatrixTable({ headers, rows, matrix, label, renderCell }: { headers: string[]; rows: string[][]; matrix: WeightedMatrix; label: string; renderCell: (cell: string, id: string) => ReactNode }) {
+  const modelRow = matrix.modelTotals?.row
+  const format = (value: number) => value.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const winner = matrix.options.find((option) => option.column === matrix.winner)
+  return <figure className="malik-md-matrix" data-malik-decision-matrix>
+    <ScrollableMarkdownTable label={label}>
+      <table className="malik-md-table">
+        <thead>
+          <tr>{headers.map((header, column) => <th scope="col" key={column} className={column === matrix.winner ? "is-winner" : undefined}>{renderCell(header, `m-h${column}`)}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => rowIndex === modelRow ? null : (
+            <tr key={rowIndex}>{row.map((cell, column) => <td key={column} className={column === matrix.winner ? "is-winner" : undefined}>{renderCell(cell, `m-r${rowIndex}-c${column}`)}</td>)}</tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="malik-md-matrix-total">
+            {headers.map((_, column) => {
+              if (column === 0) return <th scope="row" key={column}>Взвешенный итог</th>
+              if (column === matrix.weightColumn) return <td key={column}>100%</td>
+              const option = matrix.options.find((item) => item.column === column)
+              return <td key={column} className={column === matrix.winner ? "is-winner" : undefined}>{option ? format(option.total) : ""}</td>
+            })}
+          </tr>
+        </tfoot>
+      </table>
+    </ScrollableMarkdownTable>
+    <figcaption className="malik-md-matrix-note">
+      {winner ? <>Лучший по весам: <strong>{winner.name}</strong>. </> : <>Варианты набрали одинаковый итог. </>}
+      Итог посчитан Malik AI: Σ (вес × оценка), веса приведены к 100%.
+      {matrix.modelTotals?.mismatch ? <> Итог в ответе модели был посчитан неверно и заменён.</> : null}
+    </figcaption>
+  </figure>
+}
+
 function AnswerEntityCard({ text, description = "" }: { text: string; description?: string }) {
   const entity = parseAnswerEntity(text)
   const [failed, setFailed] = useState(false)
@@ -943,7 +1085,9 @@ function isMultiSubjectVisualQuestion(question: string): boolean {
 
 export function MalikMarkdown({ text, className, allowImages = true, autoPreview = false, citations, shared = false, visualContext }: Props) {
   const streaming = Boolean(visualContext?.streaming)
-  const normalizedText = useMemo(() => streaming ? text : normalizeCompletedFormatting(text), [text, streaming])
+  // FAQ sections fold into questions only once the answer is complete, so a
+  // streaming answer never hides the text that is arriving.
+  const normalizedText = useMemo(() => streaming ? text : faqToDetails(normalizeCompletedFormatting(text)), [text, streaming])
   const blocks = useMemo(() => parseBlocks(normalizedText), [normalizedText])
   const question = visualContext?.question || ""
   const previousQuestion = visualContext?.previousQuestion || ""
@@ -1120,6 +1264,13 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     })
     return allowed
   }, [blocks, question])
+  // Long answers with several sections get a contents list that scrolls to them.
+  const outlineId = useId().replace(/[^a-zA-Z0-9_-]/g, "")
+  const outline = useMemo(() => streaming || shared ? null : answerOutline(
+    blocks.flatMap((block, position) => block.kind === "h" && !parseAnswerEntity(block.text) ? [{ position, level: block.level, text: block.text }] : []),
+    normalizedText.length,
+  ), [blocks, normalizedText, streaming, shared])
+  const sectionId = (position: number) => `malik-s-${outlineId}-${position}`
   const codeFiles = codeFilesFrom(blocks)
   const primaryPreviewFilename = codeFiles.find((file) => /\.html?$/i.test(file.name))?.name
     || codeFiles.find((file) => isPreviewableCode(languageFromFilename(file.name), file.content))?.name
@@ -1137,6 +1288,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     <CitationContext.Provider value={citations?.length ? citations : null}>
     <ReferencePhotoSources.Provider value={citations || []}>
     <div className={className ? `malik-md ${className}` : "malik-md"}>
+      {outline ? <AnswerOutline entries={outline} idFor={sectionId} /> : null}
       {codeFiles.length > 1 ? (
         <div className="malik-md-artifact-toolbar" role="group" aria-label="Файлы ответа">
           <span><Archive aria-hidden="true" /> {codeFiles.length} файлов готовы</span>
@@ -1197,11 +1349,36 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
 
         if (block.kind === "images") return allowImages ? <MalikVisualGallery key={key} images={block.images} /> : null
 
+        if (block.kind === "details") {
+          // Still arriving: shown open, so the text being written stays visible.
+          return <details key={key} className="malik-md-details" open={streaming && !block.closed ? true : undefined}>
+            <summary className="malik-md-details-summary">{inline(block.summary, `${key}-summary`)}</summary>
+            <div className="malik-md-details-body">
+              <MalikMarkdown text={block.body} allowImages={allowImages} citations={citations} shared={shared} visualContext={visualContext ? { ...visualContext, messageId: visualContext.messageId ? `${visualContext.messageId}:${key}` : undefined } : undefined} />
+            </div>
+          </details>
+        }
+
+        if (block.kind === "proscons") {
+          return <section key={key} className="malik-md-proscons" aria-label={`${block.prosTitle} и ${block.consTitle}`}>
+            {([["pros", block.prosTitle, block.pros, "+"], ["cons", block.consTitle, block.cons, "−"]] as const).map(([side, title, list, mark]) => (
+              <div key={side} className={`malik-md-proscons-side is-${side}`}>
+                <p className="malik-md-proscons-title"><span aria-hidden="true">{mark}</span> {inline(title, `${key}-${side}-title`)}</p>
+                <ul className="malik-md-proscons-list">
+                  {list.items.map((item, itemIndex) => <li key={itemIndex}><span className="malik-md-proscons-mark" aria-hidden="true">{mark}</span><span>{inline(item.text, `${key}-${side}-${itemIndex}`)}</span></li>)}
+                </ul>
+              </div>
+            ))}
+          </section>
+        }
+
         if (block.kind === "code") {
           return <CodeBlock key={key} language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} autoPreview={autoPreview && block.filename === primaryPreviewFilename} />
         }
 
         if (block.kind === "table") {
+          const matrix = weightedMatrix(block.headers, block.rows)
+          if (matrix) return <Fragment key={key}><DecisionMatrixTable headers={block.headers} rows={block.rows} matrix={matrix} label={previous?.kind === "h" ? previous.text : "Матрица решений"} renderCell={(cell, id) => inline(cell, id)} />{sourcedPhotos}</Fragment>
           const comparison = inferComparisonTable(block.headers, block.rows, question, previous?.kind === "h" ? previous.text : "")
           if (comparison) return <Fragment key={key}><MalikAnswerVisual visual={comparison} />{sourcedPhotos}</Fragment>
           return (
@@ -1234,7 +1411,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
           const subject = visualSegmentLabel(block.text)
           const href = !/\[[^\]]*\]/u.test(block.text)
             ? subjectCitationUrl(subject, citations) || subjectCitationUrl(referenceSearchTopic(subject), citations) : ""
-          const heading = <Tag className={`malik-md-h malik-md-h${block.level}`}>{href
+          const heading = <Tag data-malik-section={outline?.some((entry) => entry.position === position) ? sectionId(position) : undefined} tabIndex={outline ? -1 : undefined} className={`malik-md-h malik-md-h${block.level}`}>{href
             ? <a href={href} target="_blank" rel="noreferrer noopener" className="malik-md-link is-subject">{inline(block.text, key)}</a>
             : inline(block.text, key)}</Tag>
           return slot ? <MalikReferenceImages key={key} question={question} planOverride={slot.plan} row={slot.row || !singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest}>
