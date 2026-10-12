@@ -1,6 +1,8 @@
 import { z } from "zod"
 import { petroleumTaskSchema } from "@/lib/work/petroleum/schema"
-import { runPetroleum } from "@/lib/work/petroleum/engine"
+import { runPetroleumAsync } from "@/lib/work/petroleum/engine"
+import { fieldUiContract } from "@/lib/work/petroleum/field-report"
+import type { FieldResult } from "@/lib/work/petroleum/field"
 import { petroleumReport } from "@/lib/work/petroleum/report"
 import { osOwner } from "@/lib/os/http"
 import { readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
@@ -28,14 +30,14 @@ export async function POST(request: Request) {
     if (!parsed.success) return Response.json({ error: "Запуск доступен только для движков math.compute, petroleum.analyze и document.export. Проверьте параметры." }, { status: 400, headers })
     const input = parsed.data; skill = input.skill
     if (input.skill === "petroleum.analyze") {
-      const result = runPetroleum(input.task)
+      const result = await runPetroleumAsync(input.task,{signal:request.signal})
       await recordWorkActivity(ownerId, { action: skill, ok: result.ok, durationMs: Date.now() - started, subject: result.inputHash, code: result.ok ? undefined : "PETROLEUM_FAILED" })
       if (input.format && result.ok) {
         if (input.format === "pdf" && input.language === "ar") return Response.json({ error: "Arabic PDF layout is not validated; use DOCX or HTML." }, { status: 422, headers })
         if (input.format === "json") return new Response(JSON.stringify(result, null, 2), { headers: { ...headers, "content-type": "application/json", "content-disposition": "attachment; filename=petroleum-report.json" } })
         return documentResponse(await exportDocument({ format: input.format, title: "Malik Oil AI", markdown: petroleumReport(result, input.language, false) }))
       }
-      return Response.json({ ok: result.ok, result, report: petroleumReport(result, input.language) }, { status: result.ok ? 200 : 422, headers })
+      return Response.json({ ok: result.ok, result, report: petroleumReport(result, input.language), ...(input.task.op === "field-surveillance" && result.result ? {engineering:fieldUiContract(result.result as FieldResult)} : {}) }, { status: result.ok ? 200 : result.error === "FIELD_BUSY" ? 429 : 422, headers })
     }
     if (input.skill === "math.compute") {
       const result = runMath(input.task)

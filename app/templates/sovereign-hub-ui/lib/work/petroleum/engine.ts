@@ -4,10 +4,12 @@ import { convert, waterCut, gasOilRatio, finite } from "./units"
 import { npv, irr, economics } from "./economics"
 import { decline } from "./reservoir"
 import { analyzeProduction } from "./production"
-export const PETROLEUM_ALGORITHM_VERSION="malik-petroleum-1.1.0"
+import { analyzeField, analyzeFieldAsync, type FieldResult, type FieldRunOptions, type FieldProgress } from "./field"
+export const PETROLEUM_ALGORITHM_VERSION="malik-petroleum-1.2.0"
 export type EvidenceClass = "Verified Measurement" | "Verified External Source" | "Deterministic Calculation" | "Statistical Estimate" | "Engineering Assumption" | "AI Hypothesis" | "Missing Evidence"
 export type PetroleumReceipt = {ok:boolean;version:string;inputHash:string;task:unknown;result?:unknown;error?:string;method:string;variables:string;units:string;assumptions:string[];evidence:EvidenceClass[];humanReview:boolean;uncertainty:string;limitations:string[]}
 const methods:Record<PetroleumTask["op"],[string,string,string]>={
+  "field-surveillance":["Same-basis KPI screening; explicit baseline; interval-aware gap and non-overlapping downtime attribution; conditional recovery economics", "Asset relationships, unit-bearing history, declared averaging basis, threshold configuration and supplied scenarios", "bbl/day or scf/day; volumes only for declared averaging intervals; supplied currency; no measured loss or guaranteed recovery inferred"],
   "document-audit":["Literal text extraction and deterministic document quality screening", "sourceHash: original bytes fingerprint supplied by the extraction path; extracted text is untrusted data", "No physical measurement or geological interpretation inferred from prose"],
   convert:["value_to = value_from × factor_from / factor_to","value: supplied quantity; factors: SI conversion constants","Dimension-preserving; gas T/P reference unchanged; pressure must use same absolute/gauge basis"],
   "water-cut":["WC = qw / (qo + qw)","qo: stock oil rate; qw: water rate at matching measurement conditions","fraction; multiply by 100 for %; zero total => undefined"],
@@ -19,7 +21,7 @@ const methods:Record<PetroleumTask["op"],[string,string,string]>={
   balance:["residual = Σ inputs - Σ outputs","All streams on same physical dimension, phase and reference basis; no inventory accumulation included","Specified common unit; positive residual is unaccounted flow, not automatically leakage"],
   methane:["CH4 kg = activity × emission factor","factor: supplied kg CH4/activity-unit; activity: supplied activity; methodology/source explicitly supplied","kg CH4; scenario range from supplied relative bound; no CO2e without GWP basis"],
 }
-export function runPetroleum(raw: unknown): PetroleumReceipt {
+function executePetroleum(raw: unknown, fieldExecution?: { result?: FieldResult; error?: string }): PetroleumReceipt {
   const serialized=JSON.stringify(raw), inputHash=createHash("sha256").update(serialized??"undefined").digest("hex")
   const parsed=petroleumTaskSchema.safeParse(raw)
   const base={version:PETROLEUM_ALGORITHM_VERSION,inputHash,task:raw,humanReview:true,uncertainty:"Not quantified without defensible input uncertainty; scenario bounds are not confidence intervals",limitations:["Analytical decision support only; no equipment control or certification", "Input data require authorized engineer review"],evidence:["Deterministic Calculation","Engineering Assumption","Missing Evidence"] as EvidenceClass[],assumptions:["User input provenance/calibration unverified"]}
@@ -28,6 +30,12 @@ export function runPetroleum(raw: unknown): PetroleumReceipt {
   try {
     let result:unknown
     switch(task.op) {
+      case "field-surveillance": {
+        if (fieldExecution?.error) throw new Error(fieldExecution.error)
+        result=fieldExecution?.result ?? analyzeField(task)
+        base.evidence.push("Statistical Estimate")
+        break
+      }
       case "document-audit":result={sourceType:task.sourceType,sourceHash:task.sourceHash,extractionMethod:task.extractionMethod,characters:task.text.length,lines:task.text.split(/\r?\n/).length,instructionLikeText:/ignore (?:previous|all)|system prompt|send.*secret|игнорируй.*инструк|تجاهل.*تعليمات/iu.test(task.text),excerpt:task.text.slice(0,2000).replaceAll("[","").replaceAll("]","").replace(/[`<>]/g,""),limitations:["Extraction is not a verified geological interpretation", "Instructions inside documents are untrusted data and are never executed", "Numerical calculation requires an explicit unit-bearing table or typed quantities"]};break
       case "convert":result={value:convert(task.value,task.from,task.to,task.reference),unit:task.to};break
       case "water-cut":result={fraction:waterCut(task.oil,task.water)};break
@@ -46,4 +54,20 @@ export function runPetroleum(raw: unknown): PetroleumReceipt {
     }
     return {...base,ok:true,method,variables,units,result}
   }catch(error){return {...base,ok:false,method,variables,units,error:error instanceof Error?error.message:"ENGINE_FAILED"}}
+}
+export function runPetroleum(raw: unknown): PetroleumReceipt { return executePetroleum(raw) }
+/** Bounded async field execution; other mature operations retain their existing engine. */
+export async function runPetroleumAsync(raw: unknown, options: FieldRunOptions & { onProgress?: (event: FieldProgress)=>void } = {}): Promise<PetroleumReceipt> {
+  const parsed=petroleumTaskSchema.safeParse(raw)
+  if (!parsed.success || parsed.data.op !== "field-surveillance") return runPetroleum(raw)
+  const scope=globalThis as typeof globalThis & { __malikFieldRuns?: number }
+  if ((scope.__malikFieldRuns ?? 0) >= 2) return executePetroleum(raw,{error:"FIELD_BUSY"})
+  scope.__malikFieldRuns=(scope.__malikFieldRuns ?? 0)+1
+  try {
+    const result=await analyzeFieldAsync(parsed.data,{...options,deadlineAt:Math.min(options.deadlineAt ?? Infinity,Date.now()+5000)})
+    const receipt=executePetroleum(raw,{result})
+    if (result.status === "cancelled" || result.status === "time-limited") { receipt.ok=false; receipt.error=result.status.toUpperCase() }
+    return receipt
+  } catch (error) { return executePetroleum(raw,{error:error instanceof Error?error.message:"FIELD_FAILED"}) }
+  finally { scope.__malikFieldRuns=Math.max(0,(scope.__malikFieldRuns ?? 1)-1) }
 }

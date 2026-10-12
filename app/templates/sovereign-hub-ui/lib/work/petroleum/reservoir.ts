@@ -2,16 +2,16 @@ import { finite } from "./units"
 export function decline(qi: number, nominalDeclinePerDay: number, days: number, b = 0) {
   finite(qi, "qi"); finite(nominalDeclinePerDay, "D"); finite(days, "t")
   if (!Number.isFinite(b) || b < 0 || b > 1) throw new RangeError("Hyperbolic exponent b must be in [0,1]; transient b>1 not supported")
-  return finite(b === 0 ? qi * Math.exp(-nominalDeclinePerDay * days) : qi / (1 + b * nominalDeclinePerDay * days) ** (1 / b), "q(t)")
+  return finite(qi * Math.exp(b === 0 ? -nominalDeclinePerDay * days : -Math.log1p(b * nominalDeclinePerDay * days) / b), "q(t)")
 }
 export function declineVolume(qi: number, d: number, fromDay: number, toDay: number, b = 0) {
   decline(qi, d, fromDay, b); decline(qi, d, toDay, b)
   if (toDay < fromDay) throw new RangeError("Reversed interval")
   if (d === 0) return finite(qi * (toDay - fromDay))
-  if (b === 0) return finite(qi / d * (Math.exp(-d * fromDay) - Math.exp(-d * toDay)))
-  if (b === 1) return finite(qi / d * Math.log((1 + d * toDay) / (1 + d * fromDay)))
+  if (b === 0) return finite(qi / d * Math.exp(-d * fromDay) * -Math.expm1(-d * (toDay - fromDay)))
+  if (b === 1) return finite(qi / d * Math.log1p(d * (toDay - fromDay) / (1 + d * fromDay)))
   const power = (b - 1) / b
-  return finite(qi / (d * (b - 1)) * ((1 + b * d * toDay) ** power - (1 + b * d * fromDay) ** power))
+  return finite(qi / (d * (b - 1)) * Math.exp(power * Math.log1p(b * d * fromDay)) * Math.expm1(power * Math.log1p(b * d * (toDay - fromDay) / (1 + b * d * fromDay))))
 }
 /** OLS log-rate on actual elapsed days; zeros are not silently deleted. */
 export function fitExponential(points: Array<{ day: number; rate: number }>) {

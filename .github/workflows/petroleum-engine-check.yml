@@ -27,6 +27,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run test:petroleum
+      - run: npm run test:petroleum-field
       - run: npm run test:petroleum-api
       - run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - run: npm run test:petroleum-stream
