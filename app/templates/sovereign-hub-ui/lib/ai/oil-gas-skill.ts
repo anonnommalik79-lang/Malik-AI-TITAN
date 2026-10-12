@@ -62,12 +62,39 @@ function verifiedReceipt(prompt: string): string {
   return ""
 }
 
+/** Each engineering prompt activates only relevant specialist checklists, across both model choices. */
+export function petroleumDisciplineGuidance(prompt: string): string[] {
+  const task = String(prompt || "").slice(0, 20_000)
+  const specialists: Array<[RegExp, string]> = [
+    [/сейсми|геофиз|seismic|geophys|структурн.*ловушк|fault map|стратиграф|stratigraph/iu, "GEOPHYSICS: label seismic interpretation uncertainty, velocity-to-depth conversion, datum, fault seal and independent well ties; no invented seismic cubes or map coordinates."],
+    [/геолог|геомодел|корреляц.*пласт|geolog|facies|core sample|керн|геохим|source rock/iu, "GEOLOGY: separate observed stratigraphy, interpreted facies and conceptual traps; identify core/log/well constraints and alternative geological realizations."],
+    [/каротаж|петрофиз|проницаемост|porosit|permeabil|resistivity|well log|petrophys|насыщенн/iu, "PETROPHYSICS: require raw logs, calibration, shale correction, Archie or alternative parameters, depth basis, fluid resistivity and sensitivity; no invented porosity, saturation or net pay."],
+    [/PVT|газовый фактор|вязкост|пузырьков|bubble.?point|fluid propert|EOS|compressibil|фазов|phase behavior/iu, "PVT/FLUIDS: distinguish reservoir and stock-tank conditions, oil FVF, solution gas, bubble/dew points, EOS tuning; request pressure, temperature, sample provenance and lab reports."],
+    [/пласт|reservoir|запас|залеж|OOIP|GIIP|PRMS|material balance|history.match|симуляц|simulation|recovery factor/iu, "RESERVOIR: distinguish volumetric OOIP/GIIP from reserves; state aquifer boundaries, drive mechanism, material balance assumptions, decline regime and uncertainty; do not claim simulation or PRMS classification without evidence."],
+    [/гидродинамич|well test|pressure transient|PTA|RTA|skin factor|pressure buildup|забойн.*давлен|КВД|КПД/iu, "WELL TEST: distinguish measured pressure and interpreted skin/kh/boundaries; require gauge datum, fluid PVT, test schedule and flow history; avoid unsupported permeability or skin estimates."],
+    [/бурен|drill|well control|mud weight|BOP|NPT|MWD|LWD|кик|kick detection|stuck pipe/iu, "DRILLING: assess mud window, formation pressures, trajectory, hydraulics, cuttings/NPT and well-control barriers as engineering analysis only; never issue field kill weights, BOP settings or autonomous commands."],
+    [/заканчива|completion|перфорац|цементиров|cement|гидроразрыв|frack|stimulation|acidiz|заколонн/iu, "COMPLETIONS: distinguish zonal isolation, cement integrity, inflow, sand control, perforation and stimulation-design assumptions; list required integrity evidence and authorized design review."],
+    [/обводн|дебит|добыч|скважин|production|decline|GOR|water.cut|artificial lift|ЭЦН|ШГН|ESP|газлифт|gas lift|потер.*добыч/iu, "PRODUCTION: audit time series, downtime, water cut, GOR and artificial lift; distinguish changing rates from causes; validate reference conditions; use deterministic engine receipts for numeric claims."],
+    [/закач|водозаводнен|EOR|IOR|polymer flood|waterflood|enhanced oil|steam injection|CO2 injection/iu, "EOR/INJECTION: compare injectivity, sweep, pressure support, pattern balance, tracer evidence and interventions; no claim of incremental oil without controlled baseline and uncertainty."],
+    [/трубопровод|pipeline|коррози|corrosion|pigging|leak detection|интегрит|integrity|потер.*давлен/iu, "PIPELINE/INTEGRITY: require flow conditions, diameter, materials, corrosion monitoring and documented inspections; do not treat a mass-balance residual as proof of a leak."],
+    [/НПЗ|переработ|refinery|crack spread|fractionation|дистилляц|катализ|petrochem|fractionat/iu, "DOWNSTREAM: close feed/product mass and energy balances with basis, yields, qualities and capacity constraints; do not assert operating limits or emissions compliance from estimates."],
+    [/газопереработ|LNG|СПГ|gas processing|gas sweeten|acid gas|H2S|сероводород|sour gas|flare|факел/iu, "GAS PROCESSING: specify standard gas reference, gas composition, H2S/CO2, dehydration, train capacity and losses; high-consequence hazards need site procedures and experts."],
+    [/экономик|NPV|IRR|CAPEX|OPEX|маржин|profit|cashflow|investment|инвестиц|роялти|налог|tax|break.?even/iu, "ECONOMICS: separate nominal/real discounting, currency, timing, taxes/royalties, CAPEX/OPEX, sensitivity and scenarios; compare alternatives by NPV at stated assumptions, not invented spot prices."],
+    [/метан|выброс|эмисси|carbon|CCUS|CO2|ESG|environment|emission|эколог/iu, "EMISSIONS/CCUS: distinguish measured emissions, activity factors and scenarios; require methodology, GWP horizon, uncertainty and verification; avoid automatic certification claims."],
+  ]
+  const matched = specialists.filter(([pattern]) => pattern.test(task)).map(([, rule]) => rule)
+  return matched.slice(0, 5).length ? matched.slice(0, 5) : ["SCOPE: identify asset, objective, available data, engineering method and verification plan; request decisive missing input without inventing site facts."]
+}
+
 export function buildOilGasSkillInstruction(prompt: string): string {
   if (!isOilGasRequest(prompt)) return ""
   const receipt = verifiedReceipt(prompt)
   return [
     "MALIK OIL & GAS EXPERT — PETROLEUM ENGINEERING SKILL:",
     petroleumKnowledgeInstruction(),
+    "SPECIALIST FOCUS: " + petroleumDisciplineGuidance(prompt).join("\\n"),
+    "QUALITY CHECKPOINTS: first establish scope, data provenance, units/datum and applicable method; then compute only from supplied evidence, cross-check dimensional integrity and alternative explanations, rank next tests by information gain. Return ONE conclusion with uncertainty and field-review gates.",
+    "NONNEGOTIABLE: no claim to have solved every case, done a live simulator, read a missing log, diagnosed a failure or verified a forecast without supporting data. For dangerous operating decisions use approved procedures and responsible engineers.",
     "Respond as a careful petroleum-industry analyst in the user's language (KK/RU/EN), without claiming professional licensure or field certification.",
     "DISCIPLINES: upstream exploration/geology, logs and petrophysics, reservoir characterization and PVT, drilling and completions, well testing, artificial lift and production optimization, gas processing, LNG, refining and petrochemistry, pipeline integrity, energy economics, emissions and Kazakhstan-specific industry context.",
     "ENGINEERING: identify asset and objective; show assumptions, formula, input units, reference temperature/pressure and dimensional/plausibility checks. Distinguish reported well data, inferred parameters, forecasts and illustrative estimates. If critical inputs are missing, request only the decisive input or provide a labeled scenario, never fabricate logs, fluid properties, reserves, rates or simulation results.",
