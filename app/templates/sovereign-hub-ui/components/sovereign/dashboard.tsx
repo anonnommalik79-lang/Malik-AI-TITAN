@@ -260,7 +260,10 @@ function cleanDashboardAIText(value: string) {
 /** `progress` events with one of these kinds belong to a real web search. */
 const RESEARCH_PROGRESS_KINDS = new Set(["plan", "search", "source", "reading", "done", "error"])
 
+import { routePetroleum, PETROLEUM_SKILL_ID, stripPetroleumToken } from "@/lib/work/petroleum/router"
+
 interface Message {
+  selectedSkillId?: "petroleum.analyze"
   id: string
   role: "user" | "assistant"
   content: string
@@ -1531,6 +1534,7 @@ function reviveMessage(message: any): Message {
         }
       : undefined,
     isStreaming: false,
+    selectedSkillId: message?.selectedSkillId === PETROLEUM_SKILL_ID ? PETROLEUM_SKILL_ID : undefined,
     intentType: message?.intentType === "project" ? "project" : "chat",
     modelId: isMalikModelId(message?.modelId) ? message.modelId : undefined,
     research: reviveResearch(message?.research),
@@ -6234,6 +6238,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const turnWorkspaceMode = options?.workspaceMode ?? workspaceMode
   const cleanContent = (content || "").trim()
   if (!cleanContent) return
+  const petroleumRoute = routePetroleum(cleanContent, options?.selectedSkillId)
+  const petroleumAnalytic = petroleumRoute.domain && ["petroleum", "chat"].includes(petroleumRoute.engine)
+  const selectedSkillId = petroleumRoute.skillId
 
   // React state is asynchronous: Enter/click could reach this callback twice
   // before isLoading=true was committed, producing two user rows, two assistant
@@ -6268,7 +6275,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // explicit request for a file). Questions, single deliverables, long
   // briefs and numbered task lists are answered by the model in the chat.
   // Signed-in accounts only: projects are stored per account.
-  if (!attachments.length && !options?.skipSuperflow && routeWorkRequest(cleanContent, { mode: turnWorkspaceMode, signedIn: !guestMode && Boolean(workOSUser?.email), attachmentKinds: attachments.map((item) => item.kind) }).route === "flow") {
+  if (!petroleumAnalytic && !attachments.length && !options?.skipSuperflow && routeWorkRequest(cleanContent, { mode: turnWorkspaceMode, signedIn: !guestMode && Boolean(workOSUser?.email), attachmentKinds: attachments.map((item) => item.kind) }).route === "flow") {
     const flowChatId = branchChatId || activeChatId || crypto.randomUUID()
     const reference: SuperflowRef = { clientRequestId: newRequestId("sf"), goal: cleanContent, workspaceMode: turnWorkspaceMode }
     const userTurn: Message = { id: crypto.randomUUID(), role: "user", content: cleanContent, timestamp: new Date() }
@@ -6326,10 +6333,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // chat reply: the topic is handed across and the studio starts the plan
   // itself. Questions *about* presentations stay in the chat — see
   // isPresentationCreationRequest for where that line is drawn.
-  if (turnWorkspaceMode !== "work" && !attachments.length && isPresentationCreationRequest(cleanContent)) {
+  if (turnWorkspaceMode !== "work" && !attachments.length && (isPresentationCreationRequest(cleanContent) || petroleumRoute.explicit && isPresentationCreationRequest(stripPetroleumToken(cleanContent)))) {
     try {
       window.sessionStorage.setItem("malik.presentation.handoff", JSON.stringify({
-        topic: presentationTopic(cleanContent),
+        topic: presentationTopic(stripPetroleumToken(cleanContent)),
         count: extractSlideCount(cleanContent) ?? undefined,
       }))
     } catch {
@@ -6371,7 +6378,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const responseDepth = resolveResponseDepth(betterDepth, userPlan)
   const depthLimits = responseDepthLimits(responseDepth)
 
-  const routeDecision = detectIntentAndRoute(cleanContent, requestAttachments, activeAiMode)
+  const routeDecision = detectIntentAndRoute(cleanContent, requestAttachments, petroleumAnalytic ? "fast" : activeAiMode)
   dashboardEventBus.emit({
     type: "intent:routed",
     source: "handleSendMessage",
@@ -6379,13 +6386,14 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     payload: routeDecision,
   })
 
-  if (routeDecision.shouldRouteBeforeSend && routeDecision.action === "open-view") {
+  if (!petroleumAnalytic && routeDecision.shouldRouteBeforeSend && routeDecision.action === "open-view") {
     safeOpenView(routeDecision.targetView, "intent")
-  } else if (routeDecision.shouldRouteBeforeSend && routeDecision.action === "open-codex") {
+  } else if (!petroleumAnalytic && routeDecision.shouldRouteBeforeSend && routeDecision.action === "open-codex") {
     setCodexOpen(true)
   }
 
-  const runtimePlan = buildSovereignRuntimePlan(cleanContent, requestAttachments, activeAiMode)
+  const runtimePlan = buildSovereignRuntimePlan(cleanContent, requestAttachments, petroleumAnalytic ? "fast" : activeAiMode)
+  if (petroleumAnalytic) { runtimePlan.responseMode = "chat"; runtimePlan.isProjectRequest = false }
   const mode = runtimePlan.responseMode
   const isProjReq = runtimePlan.isProjectRequest
   const isCodeReq = mode === "code"
@@ -6402,7 +6410,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // Routing invariant: when real image bytes/context are present and the user
   // asks to change the picture, text chat is not an eligible destination.
   const forcedImageEdit = hasRequestImageAttachment && isExplicitImageEditRequest(cleanContent, true)
-  const requestedInlineMediaKind = forcedImageEdit
+  const requestedInlineMediaKind = petroleumAnalytic ? null : petroleumRoute.domain && petroleumRoute.engine === "image" ? "image" : petroleumRoute.domain && petroleumRoute.engine === "video" ? "video" : forcedImageEdit
     ? "image"
     : detectInlineMediaGenerationRequest(cleanContent, requestAttachments, activeAiMode)
   const parsedMediaCommand = parseMediaCommand(cleanContent)
@@ -6503,6 +6511,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     // Base64 bytes never enter chat history. Images are copied to durable
     // account storage when available; code/text keeps bounded text context.
     attachments: historyAttachments,
+    selectedSkillId,
   }
 
   const assistantMessage: Message = {
@@ -6511,6 +6520,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       ? [...(regenTarget.message.versions || []), { content: regenTarget.message.content, at: Date.now() }].slice(-8)
       : regenTarget?.message.versions,
     role: "assistant",
+    selectedSkillId,
     content: needsImageConfirmation
       ? "Запрос на изображение распознан. Генерация начнётся только после вашего подтверждения."
       : inlineMediaKind ? buildInlineMediaAssistantText(createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt)) : "",
@@ -7170,6 +7180,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       body: JSON.stringify({
         question,
         originalQuestion: cleanContent,
+        selectedSkillId,
         username: normalizedEmail,
         email: normalizedEmail,
         currentUser: normalizedEmail,

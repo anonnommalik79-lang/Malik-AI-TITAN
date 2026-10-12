@@ -15,6 +15,7 @@ export function documentDisposition(filename: string) { return `attachment; file
 export async function exportDocument(input: { format: DocumentFormat; title: string; markdown: string; csv?: string }): Promise<{ bytes: Uint8Array; mime: string; filename: string }> {
   if (!DOCUMENT_FORMATS.includes(input.format)) throw new Error("Этот формат не поддерживается.")
   const markdown = answerCardsToText(input.markdown)
+  if (input.format === "pdf" && markdown.includes("Malik Oil AI") && /[\u0600-\u06ff]/.test(markdown)) throw new Error("ARABIC_PDF_NOT_VALIDATED_USE_DOCX_HTML")
   const model = documentModel(markdown, input.title)
   const parsedCsv = input.csv === undefined ? null : parseCsv(input.csv)
   const tables = parsedCsv?.length ? [{ title: input.title, header: parsedCsv[0], rows: parsedCsv.slice(1) }] : tablesOf(model.blocks)
@@ -34,7 +35,7 @@ export async function exportDocument(input: { format: DocumentFormat; title: str
     case "txt": bytes = encode(blocksToText(model.blocks)); mime = "text/plain; charset=utf-8"; break
     case "json": bytes = encode(JSON.stringify(model, null, 2)); mime = "application/json; charset=utf-8"; break
     case "html":
-      bytes = encode(`<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${xmlEscape(input.title)}</title><style>body{max-width:900px;margin:48px auto;padding:24px;color:#111;background:white;font:16px/1.6 system-ui}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><body><h1>${xmlEscape(input.title)}</h1><pre>${xmlEscape(blocksToText(model.blocks))}</pre></body></html>`); mime = "text/html; charset=utf-8"; break
+      bytes = encode(`<!doctype html><html lang="${/[\u0600-\u06ff]/.test(markdown) ? "ar" : "en"}" dir="${/[\u0600-\u06ff]/.test(markdown) ? "rtl" : "ltr"}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${xmlEscape(input.title)}</title><style>body{max-width:900px;margin:48px auto;padding:24px;color:#111;background:white;font:16px/1.6 system-ui}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><body><h1>${xmlEscape(input.title)}</h1><pre>${xmlEscape(blocksToText(model.blocks))}</pre></body></html>`); mime = "text/html; charset=utf-8"; break
     case "zip": {
       const formats = DOCUMENT_FORMATS.filter((format) => format !== "zip" && (tables.length || !["xlsx", "csv"].includes(format)))
       const files = []

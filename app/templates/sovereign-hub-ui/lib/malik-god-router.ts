@@ -30,6 +30,7 @@ import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers, superpowerOut
 import { collectMalikConnectedContext, requestedFusionConnectors } from "@/lib/server/context-fusion"
 import { collectMalikScienceContext } from "@/lib/server/science-context"
 import type { ExecutionReporter } from "@/lib/ai/chat-execution"
+import { petroleumKnowledgeInstruction } from "@/lib/work/petroleum/knowledge"
 import { computeMathForMessage, describeTask, mathEngineInstruction, mathReceiptText } from "@/lib/work/math/skill"
 import { mathPlanningInstruction, plannedMathInstruction, plannedMathReceiptText, planWorkMath } from "@/lib/work/math/model-plan"
 
@@ -1129,7 +1130,7 @@ export async function malikGodAnswer(
       // Speed and code lanes follow what is really being asked: «а третий?»
       // after an overview question is another overview, not small talk.
       taskPrompt: focus.shapeText,
-      systemPrompt: [systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), plannedMathInstruction(plannedMath), accuracyInstruction(focus.searchText), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body)].filter(Boolean).join("\n\n"),
+      systemPrompt: [body?.metadata?.petroleumDomain ? petroleumKnowledgeInstruction() : "", systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), plannedMathInstruction(plannedMath), accuracyInstruction(focus.searchText), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body)].filter(Boolean).join("\n\n"),
       history,
       attachments,
       maxTokens: answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)),

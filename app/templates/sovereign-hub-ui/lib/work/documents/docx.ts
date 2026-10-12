@@ -16,6 +16,7 @@ type Context = { links: string[]; numbering: Array<{ ordered: boolean; start: nu
 function run(inline: Inline, context: Context, extra = ""): string {
   const properties = [
     inline.code ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/><w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>' : "",
+    /[\u0600-\u06ff]/.test(inline.text) ? '<w:rtl/><w:lang w:bidi="ar-SA"/>' : "",
     inline.bold ? "<w:b/><w:bCs/>" : "",
     inline.italic ? "<w:i/><w:iCs/>" : "",
     inline.link ? '<w:rStyle w:val="Hyperlink"/>' : "",
@@ -34,6 +35,7 @@ function runs(inlines: Inline[], context: Context, extra = "") {
 }
 
 function paragraph(content: string, properties = "") {
+  if (/[\u0600-\u06ff]/.test(content)) properties += '<w:bidi/><w:jc w:val="right"/>'
   return `<w:p>${properties ? `<w:pPr>${properties}</w:pPr>` : ""}${content}</w:p>`
 }
 
@@ -61,7 +63,7 @@ function block(item: Block, context: Context): string {
     return `<w:tr>${header ? "<w:trPr><w:tblHeader/></w:trPr>" : ""}${filled.map((inlines) => cell(inlines, header)).join("")}</w:tr>`
   }
   const border = (side: string) => `<w:${side} w:val="single" w:sz="4" w:space="0" w:color="A6A6A6"/>`
-  return `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblBorders>${["top", "left", "bottom", "right", "insideH", "insideV"].map(border).join("")}</w:tblBorders><w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/></w:tblPr><w:tblGrid>${Array.from({ length: columns }, () => `<w:gridCol w:w="${width}"/>`).join("")}</w:tblGrid>${row(item.header, true)}${item.rows.map((cells) => row(cells, false)).join("")}</w:tbl>${paragraph("")}`
+  return `<w:tbl><w:tblPr>${item.header.some(cell => cell.some(inline => /[\u0600-\u06ff]/.test(inline.text))) ? "<w:bidiVisual/>" : ""}<w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblBorders>${["top", "left", "bottom", "right", "insideH", "insideV"].map(border).join("")}</w:tblBorders><w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/></w:tblPr><w:tblGrid>${Array.from({ length: columns }, () => `<w:gridCol w:w="${width}"/>`).join("")}</w:tblGrid>${row(item.header, true)}${item.rows.map((cells) => row(cells, false)).join("")}</w:tbl>${paragraph("")}`
 }
 
 const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

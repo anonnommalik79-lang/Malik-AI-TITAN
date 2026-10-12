@@ -1,0 +1,31 @@
+name: Petroleum engineering checks
+on:
+  pull_request:
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/work/petroleum/**"
+      - "app/templates/sovereign-hub-ui/components/sovereign/**"
+      - "app/templates/sovereign-hub-ui/app/api/stream/**"
+      - "app/templates/sovereign-hub-ui/app/api/work/**"
+      - "app/templates/sovereign-hub-ui/scripts/verify-petroleum*"
+      - ".github/workflows/petroleum-engine-check.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run test:petroleum
+      - run: npm run test:petroleum-api
+      - run: npm run test:petroleum-stream
+      - run: npm run test:work-mode && npm run test:work-math && npm run test:work-docs && npm run test:chat-stream-integrity && npm run test:music-intent

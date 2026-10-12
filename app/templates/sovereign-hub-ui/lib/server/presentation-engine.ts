@@ -1,3 +1,4 @@
+import { petroleumPresentationInstruction } from "@/lib/work/petroleum/presentation"
 import "server-only"
 
 import { DEFAULT_MALIK_MODEL_ID, type MalikModelId } from "@/lib/ai/malik-models"
@@ -73,7 +74,7 @@ export async function generateOutline(input: ModelChoice & {
 }): Promise<DeckOutline> {
   const investor = isInvestorDeckRequest(input.topic)
   if (investor && input.count < 10) throw new PresentationEngineError("Инвесторскому питч-деку нужны минимум 10 слайдов.", 400, "INVESTOR_DECK_TOO_SHORT")
-  const systemPrompt = outlineSystemPrompt({ language: input.language, tone: input.tone, count: input.count, investor })
+  const systemPrompt = [outlineSystemPrompt({ language: input.language, tone: input.tone, count: input.count, investor }), petroleumPresentationInstruction(input.topic)].filter(Boolean).join("\n\n")
   let prompt = outlineUserPrompt(input.topic, input.count)
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -176,7 +177,7 @@ export async function generateSlides(input: ModelChoice & {
     for (const run of runs) {
       const first = run[0]
       const runItems = input.outline.items.slice(first, first + run.length)
-      const systemPrompt = slidesSystemPrompt({ language: input.language, tone: input.tone, items: runItems })
+      const systemPrompt = [slidesSystemPrompt({ language: input.language, tone: input.tone, items: runItems }), petroleumPresentationInstruction(input.topic)].filter(Boolean).join("\n\n")
       let prompt = slidesUserPrompt({ topic: input.topic, outline: input.outline, startIndex: first, items: runItems })
       prompt += `\n\nInclude "n" (the slide number) in every slide object.`
       if (attempt) prompt += `\nYour previous answer was incomplete or used an incorrect layout. Return only {"slides":[…]} with all ${run.length} requested slide(s). Never invent unsupported facts or numbers.`

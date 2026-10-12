@@ -1421,7 +1421,7 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     <SharedPageContext.Provider value={shared}>
     <CitationContext.Provider value={citations?.length ? citations : null}>
     <ReferencePhotoSources.Provider value={citations || []}>
-    <div className={className ? `malik-md ${className}` : "malik-md"}>
+    <div dir={/[\u0600-\u06ff]/.test(question) && text.includes("Malik Oil AI") ? "rtl" : "auto"} className={className ? `malik-md ${className}` : "malik-md"}>
       {headerPhotos.length ? <section className="malik-answer-photo-header" data-malik-photo-header aria-label="Фотографии из источников">
         {headerPhotos.length === 1
           ? <MalikReferenceImages question={question} planOverride={headerPhotos[0]} hero cover isLatest={visualContext?.isLatest} />

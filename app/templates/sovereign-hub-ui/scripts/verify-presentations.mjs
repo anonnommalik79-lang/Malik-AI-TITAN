@@ -54,6 +54,7 @@ function load(file) {
   const localRequire = (name) => {
     if (name in STUBS) return STUBS[name]
     if (name.startsWith("@/")) return load(resolveProjectFile(name.slice(2)))
+    if (name.startsWith(".")) return load(resolveProjectFile(path.relative(ROOT, path.resolve(path.dirname(absolute), name))))
     return require(name)
   }
   new Function("require", "module", "exports", js)(localRequire, box, box.exports)

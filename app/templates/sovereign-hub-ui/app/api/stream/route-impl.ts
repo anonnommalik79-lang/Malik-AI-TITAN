@@ -32,6 +32,9 @@ import {
 import { getDailyTextTokenQuota } from "@/lib/server/daily-text-token-quota"
 import { isExplicitImageEditRequest } from "@/lib/ai/image-intent"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
+import { petroleumSafetyMessage } from "@/lib/work/petroleum/safety"
+import { executePetroleumMessage } from "@/lib/work/petroleum/message"
+import { routePetroleum } from "@/lib/work/petroleum/router"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
@@ -393,8 +396,18 @@ function shouldRunMalikCoder(selection: Awaited<ReturnType<typeof resolveStrictM
 async function runSelectedAnswer(
   ...args: Parameters<typeof runSelectedAnswerUnchecked>
 ) {
-  const [body, selection, onProgress, maxOutputTokens, onToken, activity, signal] = args
+  let [body, selection, onProgress, maxOutputTokens, onToken, activity, signal] = args
   const originalPrompt = coderPrompt(body), freshness = classifyFreshness(originalPrompt)
+  const safety = routePetroleum(originalPrompt, body?.selectedSkillId).domain ? petroleumSafetyMessage(originalPrompt) : null
+  if (safety) { onToken?.(safety); return { content: safety, provider: "malik-petroleum-safety", model: "advisory-guard", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] } }
+  const petroleum = executePetroleumMessage({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments })
+  if (petroleum) {
+    const step = activity?.start("Нефтегазовый расчёт и аудит", "code", petroleum.receipt.version)
+    activity?.finish(step, { ok: petroleum.receipt.ok, inputHash: petroleum.receipt.inputHash }, petroleum.receipt.ok ? "completed" : "failed", petroleum.receipt.error)
+    onToken?.(petroleum.content)
+    return { content: petroleum.content, provider: "malik-petroleum-local", model: petroleum.receipt.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
+  }
+  if (routePetroleum(originalPrompt, body?.selectedSkillId).domain) body = { ...body, metadata: { ...body?.metadata, petroleumDomain: true } }
   const bypassesMainResearch = shouldRunMalikCoder(selection) || hasMalikAttachments(body?.attachments)
   const needsLaneEvidence = bypassesMainResearch && !parsePluginCommand(originalPrompt) && freshness.needsSearch
   let preparedEvidence: PreparedLiveEvidence | undefined
@@ -970,6 +983,7 @@ async function handlePOST(request: Request) {
 
   try {
     const selection = await resolveStrictMalikSelection(request, body)
+    if (routePetroleum(coderPrompt(body), body?.selectedSkillId).engine === "petroleum") { body.isProjectRequest = false; body.forceCanvas = false; body.responseMode = "chat"; body.isCodeRequest = false }
     const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
     const ownerMode = entitlement.plan === "owner"
     const textQuota = getDailyTextTokenQuota(entitlement.userId, entitlement.plan)

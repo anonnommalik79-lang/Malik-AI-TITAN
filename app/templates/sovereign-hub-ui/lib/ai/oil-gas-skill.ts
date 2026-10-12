@@ -2,13 +2,15 @@
  * MALIK OIL & GAS — topic-gated petroleum engineering expertise.
  * No external API, field-controller, or simulation is implied.
  */
+import { petroleumKnowledgeInstruction } from "../work/petroleum/knowledge"
+
 export const PETROLEUM_BARREL_M3 = 0.158987294928
 export type OilVolumeUnit = "bbl" | "m3" | "bbl/day" | "m3/day"
 
 const TOPIC = /(?:нефт(?:ь|и|ью|яной|яная|яные|яного|егаз|едобыч|епровод|епереработ)|газодобыч|газоконденсат|газопровод|газохранилищ|скважин|буров(?:ая|ой|ые)|бурени|дебит(?:а|ы|ом)?|пластов(?:ое|ого|ой|ых)?|нефтепродукт|НПЗ|мұнай|ұңғым|бұрғыла|газ\s+өндіру|petroleum|crude\s+oil|oilfield|oil\s+field|oil\s+well|oil\s+reservoir|oil\s+production|oil\s+refin(?:ery|ing)|oil\s+pipeline|wellbore|well\s+control|hydrocarbon\s+reservoir|gas\s+field|gas\s+well|gas\s+production|drilling\s+(?:rig|mud|fluid|operation)|reservoir\s+engineering|formation\s+evaluation|petrophysics|upstream\s+oil|midstream\s+oil|downstream\s+oil)/iu
 
 export function isOilGasRequest(prompt: string): boolean {
-  return TOPIC.test(String(prompt || "").slice(0, 30000))
+  return TOPIC.test(String(prompt || "").slice(0, 30000)) || /@Malik Oil AI|النفط|الغاز الطبيعي|إنتاج النفط|البئر|الآبار|مكمن|الغاز المسال|\bLNG\b|water\s*cut|gas.oil ratio|H2S.*(?:alarm|emergency)|сероводород.*(?:авари|срочно)/iu.test(prompt)
 }
 
 /** Physical oil barrels and stock-tank volumes only, NOT boe or reservoir barrels. */
@@ -65,6 +67,7 @@ export function buildOilGasSkillInstruction(prompt: string): string {
   const receipt = verifiedReceipt(prompt)
   return [
     "MALIK OIL & GAS EXPERT — PETROLEUM ENGINEERING SKILL:",
+    petroleumKnowledgeInstruction(),
     "Respond as a careful petroleum-industry analyst in the user's language (KK/RU/EN), without claiming professional licensure or field certification.",
     "DISCIPLINES: upstream exploration/geology, logs and petrophysics, reservoir characterization and PVT, drilling and completions, well testing, artificial lift and production optimization, gas processing, LNG, refining and petrochemistry, pipeline integrity, energy economics, emissions and Kazakhstan-specific industry context.",
     "ENGINEERING: identify asset and objective; show assumptions, formula, input units, reference temperature/pressure and dimensional/plausibility checks. Distinguish reported well data, inferred parameters, forecasts and illustrative estimates. If critical inputs are missing, request only the decisive input or provide a labeled scenario, never fabricate logs, fluid properties, reserves, rates or simulation results.",

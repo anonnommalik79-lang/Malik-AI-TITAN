@@ -60,6 +60,7 @@ import type { MalikFactAudit, MalikFactClaim } from "@/lib/ai/fact-audit"
 import { DEFAULT_MALIK_MODEL_ID, getMalikModel, type MalikModelId } from "@/lib/ai/malik-models"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { MalikModelSelector } from "./MalikModelSelector"
+import { PetroleumMentionMenu, usePetroleumMention } from "@/components/sovereign/composer-tools/PetroleumMention"
 import { canUseUltra, loadResponseDepth, saveResponseDepth, type ChatSendOptions, type ResponseDepth } from "@/lib/ai/response-depth"
 import { VoiceWaveIcon } from "@/components/voice/VoiceWaveIcon"
 import { isExplicitImageEditRequest, isExplicitImageGenerationRequest } from "@/lib/ai/image-intent"
@@ -134,6 +135,7 @@ function cleanChatViewText(value: string) {
 
 
 interface Message {
+  selectedSkillId?: "petroleum.analyze"
   generatedCode?: string
   id: string
   role: "user" | "assistant"
@@ -2086,6 +2088,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   const [localError, setLocalError] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const petroleumMention = usePetroleumMention(prompt, setPrompt, textareaRef)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const allInputRef = useRef<HTMLInputElement>(null)
@@ -2598,6 +2601,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
         ? `/image ${outgoing}`
         : outgoing
     const sendOptions: ChatSendOptions = {
+      selectedSkillId: petroleumMention.skillId,
       workspaceMode,
       responseDepth: researchMode === "deep" ? "deep" : responseDepth,
       research: researchMode !== "off" ? true : undefined,
@@ -3111,6 +3115,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
           ) : null}
           {attachments.length > 0 && <div className="malik-composer-attachments mb-3 flex max-w-full flex-wrap gap-2">{attachments.map((attachment) => <AttachmentPill key={attachment.id} item={attachment} onRemove={() => removeComposerAttachment(attachment.id)} />)}</div>}
           {dragActive ? <div className="pointer-events-none absolute inset-2 z-40 grid place-items-center rounded-[20px] border border-dashed border-white/30 bg-black/70 text-sm font-medium text-white">Отпустите фото, видео или файл</div> : null}
+          <PetroleumMentionMenu mention={petroleumMention} />
           <div className="malik-inline-composer">
             <button ref={attachButtonRef} type="button" onClick={() => setShowAttachMenu((value) => !value)} className={cn("malik-inline-action", showAttachMenu && "is-active")} aria-label="Добавить" aria-haspopup="menu" aria-expanded={showAttachMenu} aria-controls="malik-composer-tools">
               <Plus className="h-5 w-5" />
@@ -3123,6 +3128,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
               onCompositionEnd={(event) => setPrompt(event.currentTarget.value)}
               onPaste={handleComposerPaste}
               onKeyDown={(event) => {
+                if (petroleumMention.onKeyDown(event)) return
                 // Backspace in an empty field removes the connection chip, as in ChatGPT.
                 if (event.key === "Backspace" && connector && !event.currentTarget.value) { setConnector(null); return }
                 if (event.key === "Enter" && !event.shiftKey) {

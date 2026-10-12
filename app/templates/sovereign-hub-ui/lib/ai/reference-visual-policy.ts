@@ -1,3 +1,4 @@
+import { routePetroleum } from "../work/petroleum/router"
 import { isExplicitImageEditRequest, isExplicitImageGenerationRequest, isReferenceImageRequest, isReferencePhotoFollowUp } from "./image-intent"
 import { isContextDependent } from "./conversation-focus"
 import { APPLE_IPHONE_PHOTOS, namedIPhoneSubjects, normalizeIPhoneSubject } from "../media/official-product-photos"
@@ -134,6 +135,7 @@ const STRUCTURED_TASK = /(?:чек[ -]?лист|checklist|таблиц|spreadshe
 
 /** A model may name concrete objects in comparisons, but must respect text-only requests. */
 export function allowsAnswerPhotoHints(question: string, hasAttachment = false): boolean {
+  if (routePetroleum(question).engine === "petroleum") return false
   const text = question.trim()
   return Boolean(text && text.length <= 80_000 && !hasAttachment && !NO_VISUAL.test(text) && !NON_VISUAL.test(text)
     && !TEXT_TASK.test(text) && !/^\//u.test(text) && !isExplicitImageGenerationRequest(text)

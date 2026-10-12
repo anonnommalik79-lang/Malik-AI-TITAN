@@ -371,6 +371,8 @@ async function homeFileToAttachment(file: File): Promise<ChatAttachment> {
   }
 }
 
+import { PetroleumMentionMenu, usePetroleumMention } from "@/components/sovereign/composer-tools/PetroleumMention"
+
 export interface MalikHybridHomeProps {
   onSubmit: (prompt: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => void
   isLoading?: boolean
@@ -403,6 +405,7 @@ function HomeComposer({
   attachments,
   attachmentError,
   onPromptChange,
+  onSkillChange,
   onSubmit,
   onToggleWeb,
   onToggleMemory,
@@ -434,6 +437,7 @@ function HomeComposer({
   attachments: ChatAttachment[]
   attachmentError: string
   onPromptChange: (value: string) => void
+  onSkillChange: (id?: "petroleum.analyze") => void
   onSubmit: (nativeDraft?: string) => void
   onToggleWeb: () => void
   onToggleMemory: () => void
@@ -481,6 +485,8 @@ function HomeComposer({
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [drawingOpen, setDrawingOpen] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const petroleumMention = usePetroleumMention(prompt, onPromptChange, textareaRef)
+  useEffect(() => { onSkillChange(petroleumMention.skillId) }, [petroleumMention.skillId, onSkillChange])
   const toolsRef = useRef<HTMLDivElement>(null)
   const allInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
@@ -666,6 +672,7 @@ function HomeComposer({
           />
         </div>
 
+        <PetroleumMentionMenu mention={petroleumMention} />
         <textarea
           ref={textareaRef}
           value={prompt}
@@ -678,6 +685,7 @@ function HomeComposer({
           onCompositionEnd={(event) => onPromptChange(event.currentTarget.value)}
           onPaste={handlePaste}
           onKeyDown={(event) => {
+            if (petroleumMention.onKeyDown(event)) return
             // Backspace in an empty field removes the connection chip.
             if (event.key === "Backspace" && connector && !event.currentTarget.value) { onClearConnector(); return }
             if (event.key === "Enter" && !event.shiftKey) {
@@ -825,6 +833,7 @@ function HomeComposer({
 
 function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [prompt, setPrompt] = useState("")
+  const [selectedSkillId, setSelectedSkillId] = useState<"petroleum.analyze" | undefined>()
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [attachmentError, setAttachmentError] = useState("")
   const [imageCredits, setImageCredits] = useState<{
@@ -997,6 +1006,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
 
     try {
       props.onSubmit(withConnector(text || attachmentPrompt, connector), attachments, {
+        selectedSkillId,
         research: webOn,
         responseDepth: deepResearch ? "deep" : loadResponseDepth(props.userPlan || "free"),
       })
@@ -1169,6 +1179,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               attachments={attachments}
               attachmentError={attachmentError}
               onPromptChange={setPrompt}
+              onSkillChange={setSelectedSkillId}
               onSubmit={submit}
               onToggleWeb={() => { setWebOn(!webOn); if (webOn) setDeepResearch(false) }}
               onToggleMemory={() => setMemoryOn(!memoryOn)}
@@ -1270,6 +1281,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                   attachments={attachments}
                   attachmentError={attachmentError}
                   onPromptChange={setPrompt}
+                  onSkillChange={setSelectedSkillId}
                   onSubmit={submit}
                   onToggleWeb={() => { setWebOn(!webOn); if (webOn) setDeepResearch(false) }}
                   onToggleMemory={() => setMemoryOn(!memoryOn)}
