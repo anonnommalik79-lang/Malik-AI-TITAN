@@ -42,7 +42,7 @@ const BRAND_ICONS: Record<string, BrandIcon> = {
   baidu: { label: "Baidu", urls: ["https://www.baidu.com/favicon.ico"], fallback: "B" },
   xkiro: { label: "xKiro", urls: ["https://xkiro.com/favicon.ico"], fallback: "X" },
   llm7: { label: "LLM7", urls: ["https://llm7.io/favicon.ico"], fallback: "L" },
-  ling: { label: "InclusionAI · Ling", urls: ["https://www.ant-ling.com/favicon.ico", "https://inclusion-ai.org/favicon.ico"], fallback: "L" },
+  ling: { label: "InclusionAI · Ling", urls: ["https://github.com/inclusionAI.png?size=128", "https://www.ant-ling.com/favicon.ico"], fallback: "L" },
   router: { label: "AI model", urls: [], fallback: "AI" },
 }
 
