@@ -36,6 +36,8 @@ import { petroleumSafetyMessage } from "@/lib/work/petroleum/safety"
 import { executePetroleumDocument } from "@/lib/work/petroleum/documents"
 import { executePetroleumMessageAsync } from "@/lib/work/petroleum/message"
 import { executePetroleumTable, withOilVisual } from "@/lib/work/petroleum/table-message"
+import { oilReportBlocksToText } from "@/lib/work/petroleum/visual-report"
+import { requiresPetroleumExpertSynthesis } from "@/lib/work/petroleum/expert-routing"
 import { routePetroleum } from "@/lib/work/petroleum/router"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
@@ -423,6 +425,25 @@ async function runSelectedAnswer(
   if (oilTable) {
     const step = activity?.start("Нефтегазовый расчёт и аудит", "code", oilTable.version)
     activity?.finish(step, { ok: oilTable.ok, inputHash: oilTable.inputHash }, oilTable.ok ? "completed" : "failed", oilTable.ok ? undefined : "Units or rate basis missing")
+    if (oilTable.ok && requiresPetroleumExpertSynthesis(originalPrompt)) {
+      // A comprehensive oil/field/economics brief cannot end at the fast visual report.
+      // The validated engineering data feed the model as evidence, not new instructions.
+      // Keep this out of provider logs and preserve the actual selected model identity.
+      const modelBody = {
+        ...body,
+        metadata: {
+          ...body?.metadata,
+          petroleumDomain: true,
+          petroleumComputedEvidence: oilReportBlocksToText(oilTable.content).slice(0, 16_000),
+        },
+      }
+      const modelStep = activity?.start("Мультидисциплинарный нефтегазовый анализ", "model", selection?.modelId || DEFAULT_MALIK_MODEL_ID)
+      const answer = await runSelectedAnswerUnchecked(modelBody, selection, onProgress, maxOutputTokens, onToken, activity, signal)
+      activity?.finish(modelStep, { provider: answer.provider, model: answer.model, characters: answer.content.length })
+      const appendix = "\n\n### Проверенные данные добычи и интерактивные графики\n\n" + oilTable.content
+      onToken?.(appendix)
+      return { ...answer, content: answer.content + appendix }
+    }
     onToken?.(oilTable.content)
     return { content: oilTable.content, provider: "malik-petroleum-local", model: oilTable.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
   }
