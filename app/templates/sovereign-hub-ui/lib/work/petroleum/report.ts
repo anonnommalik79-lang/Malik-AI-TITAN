@@ -24,7 +24,35 @@ export function petroleumReport(receipt:PetroleumReceipt,language:PetroleumLangu
   lines.push("", `## ${language === "ar" ? "المدخلات" : language === "ru" ? "Исходные данные" : "Inputs"}`, "", "| Parameter | Value |", "|---|---|", ...flatten(input).map(([k,v])=>`| ${safe(k)} | ${safe(v)} |`))
   if(!receipt.ok) lines.push("",safe(receipt.error))
   const task=receipt.task as {op?:string}, result=receipt.result as ReturnType<typeof analyzeProduction>|undefined
-  if(receipt.ok && task.op==="production" && result?.wells) {
+  if (receipt.ok && task.op === "inline-production" && receipt.result) {
+    const result = receipt.result as {
+      rows: {period:string;oil:number;water:number;gas:number|null;waterCutPct:number|null;gor:number|null}[]
+      oilChangePct:number|null
+      oilDeclinePct:number|null
+      gasReference:string|null
+      periodPrecision:"month"|"day"
+    }
+    lines.push("", `## ${l[2]} — ${result.periodPrecision === "month" ? "Monthly" : "Daily"} production`, "",
+      "| Period | Oil (bbl/day) | Water (bbl/day) | Gas (scf/day) | Water cut (%) | GOR (scf/bbl) |",
+      "|---|---:|---:|---:|---:|---:|",
+      ...result.rows.map(row => `| ${safe(row.period)} | ${fmt(row.oil)} | ${fmt(row.water)} | ${fmt(row.gas)} | ${fmt(row.waterCutPct)} | ${fmt(row.gor)} |`),
+      "", `Oil-rate change (first to last): ${fmt(result.oilChangePct)}%; oil-rate decline: ${fmt(result.oilDeclinePct)}%.`,
+      result.gasReference ? `Declared gas reference: ${safe(result.gasReference)} (not independently verified).`
+        : "Gas reference T/P not supplied: GOR values are arithmetic ratios of the reported rates, not validated standard-condition equivalents.",
+      "If zero oil rate, GOR and percent oil change may be undefined. No cumulative production was calculated.")
+    if (charts) {
+      lines.push("", "```malik-visual", JSON.stringify({
+        version: 2, type: "chart", chart: "line", title: "Inline petroleum production — supplied rates",
+        dataKind: "user", unit: "bbl/day", labels: result.rows.map(row => row.period),
+        series: [
+          { name: "Oil", values: result.rows.map(row => row.oil) },
+          { name: "Water", values: result.rows.map(row => row.water) },
+        ],
+        note: "User-supplied rates; no field measurements verified",
+      }), "```")
+    }
+  } else if(receipt.ok && task.op==="production" && result?.wells) {
+
     lines.push("",`## ${l[1]}`,"",`${l[14]}: ${result.audit.acceptedRows} / ${result.audit.rejectedRows}`,"",`| ${l[10]} | ${l[11]} (bbl/day) | ${l[12]} (%) | ${l[13]} (scf/bbl) |`,"|---|---|---|---|",
       ...result.wells.slice(0,100).map(w=>`| ${safe(w.well)} | ${fmt(w.lastRate)} | ${fmt(w.waterCutLast===null?null:w.waterCutLast*100)} | ${fmt(w.gorLast)} |`))
     if(result.wells.length>100)lines.push("",`Displayed 100 / ${result.wells.length} wells; full result available from petroleum API JSON.`)
