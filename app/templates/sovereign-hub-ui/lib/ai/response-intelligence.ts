@@ -3,6 +3,7 @@ import { visualEngineContract } from "@/lib/visual/intent"
 
 export type ResponseLanguage = "ru" | "kk" | "en" | "auto"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
+import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 import { planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
 import { currentEvidenceInstruction, currentResearchDate } from "@/lib/ai/current-evidence"
@@ -351,6 +352,7 @@ export function buildMalikResponseSystemPrompt(input: {
   const subject = brief ? analyzeResponseRequest(subjectPrompt, Boolean(input.usedWeb)) : profile
   const briefContract = brief ? [buildLongBriefContract(isMultiTaskPrompt(input.prompt)), briefChecklist(input.prompt)].filter(Boolean).join("\n") : ""
   const artifactContract = buildChatArtifactSkillPrompt(input.prompt)
+  const oilGasContract = buildOilGasSkillInstruction(input.prompt)
   // Interactive blocks (charts, dashboards, calculators, tables, graphs): the
   // schemas are added only when the request calls for one of them.
   const visualContract = visualEngineContract(subjectPrompt)
@@ -424,6 +426,7 @@ export function buildMalikResponseSystemPrompt(input: {
     ...(shapeContract ? [shapeContract] : []),
     ...(codeContract ? [codeContract] : []),
     ...(artifactContract ? [artifactContract] : []),
+    ...(oilGasContract ? [oilGasContract] : []),
     ...(visualContract ? [visualContract] : []),
     "ACTIVE MALIK ANSWER DNA MODULES:",
     ...modules.map((feature) => `- ${feature.name}: ${feature.instruction}`),
