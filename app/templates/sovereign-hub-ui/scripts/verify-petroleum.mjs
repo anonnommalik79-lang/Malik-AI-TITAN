@@ -62,9 +62,9 @@ test('explicit natural-language numeric task and user inputs in report',()=>{con
 
 
 test("Inline monthly production: eight rows, checked WC/GOR, percent decline, one chart, no file required",()=>{
-  const prompt = "@Malik Oil AI Analyze the following synthetic well.\\nMonth,Oil_Rate_bbl_day,Water_Rate_bbl_day,Gas_Rate_scf_day\\n" +
-    "2026-01,100,20,50000\\n2026-02,95,25,48000\\n2026-03,90,30,47000\\n2026-04,85,35,46000\\n" +
-    "2026-05,80,40,45000\\n2026-06,75,45,44000\\n2026-07,70,50,43000\\n2026-08,65,55,42000\\n" +
+  const prompt = "@Malik Oil AI Analyze the following synthetic well.\nMonth,Oil_Rate_bbl_day,Water_Rate_bbl_day,Gas_Rate_scf_day\n" +
+    "2026-01,100,20,50000\n2026-02,95,25,48000\n2026-03,90,30,47000\n2026-04,85,35,46000\n" +
+    "2026-05,80,40,45000\n2026-06,75,45,44000\n2026-07,70,50,43000\n2026-08,65,55,42000\n" +
     "1. Calculate water cut and GOR per month."
   const response = executePetroleumMessage({prompt})
   assert.ok(response?.receipt.ok)
@@ -80,13 +80,13 @@ test("Inline monthly production: eight rows, checked WC/GOR, percent decline, on
   assert.equal(executePetroleumMessage({prompt})?.content,response.content)
 })
 test("Inline production safety: rejects corrupt, negative, duplicate, mixed-date and missing-period rows",()=>{
-  const prefix="@Malik Oil AI analyze production\\nMonth,Oil_Rate_bbl_day,Water_Rate_bbl_day,Gas_Rate_scf_day\\n"
+  const prefix="@Malik Oil AI analyze production\nMonth,Oil_Rate_bbl_day,Water_Rate_bbl_day,Gas_Rate_scf_day\n"
   for(const rows of [
-    "2026-01,-1,2,5\\n2026-02,2,3,5",
-    "2026-01,1,2,5\\n2026-01,2,3,5",
-    "2026-01,1,2,5\\n2026-13,2,3,5",
-    "2026-01,1,2,5\\n2026-02-01,2,3,5",
-    "2026-01,1,2,5\\n2026-02,2,3",
+    "2026-01,-1,2,5\n2026-02,2,3,5",
+    "2026-01,1,2,5\n2026-01,2,3,5",
+    "2026-01,1,2,5\n2026-13,2,3,5",
+    "2026-01,1,2,5\n2026-02-01,2,3,5",
+    "2026-01,1,2,5\n2026-02,2,3",
   ]) {
     const response=executePetroleumMessage({prompt:prefix+rows})
     assert.ok(response && !response.receipt.ok,rows)
