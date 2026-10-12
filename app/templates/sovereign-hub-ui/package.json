@@ -141,7 +141,9 @@
     "knowledge:update": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/update-live-knowledge.mjs",
     "test:petroleum": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test --experimental-test-coverage scripts/verify-petroleum.mjs",
     "test:petroleum-api": "node scripts/verify-petroleum-api.mjs",
-    "test:petroleum-stream": "node scripts/verify-petroleum-stream.mjs"
+    "test:petroleum-stream": "node scripts/verify-petroleum-stream.mjs",
+    "test:petroleum-documents": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test --experimental-test-coverage scripts/verify-petroleum-documents.mjs",
+    "test:petroleum-full-ui": "node scripts/verify-petroleum-full-ui.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "1.1.1",

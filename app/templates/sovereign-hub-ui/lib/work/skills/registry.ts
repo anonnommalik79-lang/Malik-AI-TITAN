@@ -1,4 +1,5 @@
 import "server-only"
+import { pdfTextAvailable } from "@/lib/work/petroleum/documents"
 import { access } from "node:fs/promises"
 import path from "node:path"
 import { toolCatalog } from "@/lib/os/tools/registry"
@@ -10,14 +11,15 @@ import { storeIsDurable } from "@/lib/os/store"
 import { githubConfirmationConfigured } from "@/lib/work/github"
 export type WorkSkill = { id: string; label: string; executor: "engine" | "model" | "external"; status: "ready" | "needs-connection" | "plan-required"; detail: string; timeoutMs: number; sideEffect: "none" | "paid" | "external" }
 export async function workSkillCatalog(owner: OwnerContext): Promise<WorkSkill[]> {
-  const [lanes, github, fonts] = await Promise.all([
+  const [lanes, github, fonts, pdfImport] = await Promise.all([
     maxLaneStatus().catch(() => []),
     owner.authenticated ? getPipesProviderState(owner.userId, "github").catch(() => null) : Promise.resolve(null),
     Promise.all(["DejaVuSans.ttf", "DejaVuSans-Bold.ttf", "DejaVuSans-Oblique.ttf", "DejaVuSansMono.ttf"].map(name => access(path.join(process.cwd(), "assets", "fonts", name)))).then(() => true).catch(() => false),
+    pdfTextAvailable(),
   ])
   const modelConfigured = lanes.some(lane => !lane.restingMs)
   const skills: WorkSkill[] = [
-    { id: "petroleum.analyze", label: "Malik Oil AI", executor: "engine", status: "ready", detail: "CSV/XLSX, единицы, обводнённость, GOR, decline, NPV/IRR. Локальный расчёт; требуется инженерная проверка.", timeoutMs: 10000, sideEffect: "none" },
+    { id: "petroleum.analyze", label: "Malik Oil AI", executor: "engine", status: "ready", detail: `CSV/XLSX/DOCX, ${pdfImport ? "текстовый PDF" : "PDF требует локальный pdftotext"}, единицы, обводнённость, GOR, decline, NPV/IRR. Локальный расчёт; требуется инженерная проверка.`, timeoutMs: 10000, sideEffect: "none" },
     { id: "math.compute", label: "Математический движок", executor: "engine", status: "ready", detail: "Детерминированный расчёт с проверками, без модели.", timeoutMs: 10000, sideEffect: "none" },
     { id: "document.export", label: "Экспорт документов", executor: "engine", status: fonts ? "ready" : "needs-connection", detail: fonts ? "DOCX, PDF, XLSX, CSV, MD, TXT, HTML, JSON, ZIP." : "Для PDF отсутствуют локальные шрифты assets/fonts. Остальные форматы доступны через экспорт.", timeoutMs: 20000, sideEffect: "none" },
   ]

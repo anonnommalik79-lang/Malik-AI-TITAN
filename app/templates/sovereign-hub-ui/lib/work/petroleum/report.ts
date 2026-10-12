@@ -19,6 +19,7 @@ function flatten(value:unknown,prefix="",out:Array<[string,string]>=[]) {
 export function petroleumReport(receipt:PetroleumReceipt,language:PetroleumLanguage="en",charts=true) {
   const l=labels[language], lines=[`# Malik Oil AI — ${l[0]}`,"",`**${receipt.ok?l[6]:l[9]}**`,"",`${receipt.version} · SHA-256: ${receipt.inputHash}`,"",l[8],"",`## ${l[3]}`,"",`\`${safe(receipt.method)}\``,"",safe(receipt.variables),"",safe(receipt.units)]
   const input = receipt.task && typeof receipt.task === "object" ? { ...(receipt.task as Record<string, unknown>) } : {}
+  if ("text" in input) input.text = "Untrusted document text; preview below is inert, no instructions executed"
   if ("csv" in input) input.csv = "Production table fingerprint recorded above; retain original file for replay"
   lines.push("", `## ${language === "ar" ? "المدخلات" : language === "ru" ? "Исходные данные" : "Inputs"}`, "", "| Parameter | Value |", "|---|---|", ...flatten(input).map(([k,v])=>`| ${safe(k)} | ${safe(v)} |`))
   if(!receipt.ok) lines.push("",safe(receipt.error))

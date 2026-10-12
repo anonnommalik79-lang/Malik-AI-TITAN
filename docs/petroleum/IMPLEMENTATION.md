@@ -1,4 +1,4 @@
-# Malik Oil AI — verified first release
+# Malik Oil AI — verified analytical pilot foundation
 
 This is an analytical pilot foundation, not certified industrial software and not a claim that all 100 requested capabilities have shipped. No Render command, production request, paid provider call or deployment was used during development.
 
@@ -12,6 +12,7 @@ The existing Oil & Gas instruction on main is extended rather than replaced. The
 - Water cut with mixed liquid rate units; GOR in scf/bbl at supplied gas reference conditions. Zero denominators return an undefined metric, not infinity or a fabricated zero.
 - Exponential and hyperbolic Arps rate calculations with nominal decline in 1/day and `0 <= b <= 1`. Hyperbolic applicability must be explicitly attested in the typed task. Integrated volumes have independent numerical-quadrature tests. There is no automatic hyperbolic fitting, transient-flow model, terminal decline transition or reserves assessment.
 - CSV/TSV and first-sheet XLSX production import, including Arabic/Persian digit normalization. A strict unit-bearing header contract avoids guessed dimensions and ambiguous dates. XLSX cached values are read; formulas/macros are never executed. Binary input is bounded to 4 MB; CSV to 20,000 data rows and 30 columns.
+- Version 1.1 adds bounded local DOCX text/table extraction and text-PDF extraction when local Poppler is available. Exactly one explicit production table in DOCX can run the same production engine. Prose and PDF are audited as untrusted text, with original-file SHA-256; they are not inferred geological measurements. See `PHASE2.md` for extraction limits and checks.
 - Per-well history, first/last rate change, water cut/GOR trends, adjacent rate-change screening, data gaps, downtime availability and reported injection rate. Availability requires downtime and period hours together. Rate snapshots are never summed into cumulative production.
 - OLS log-rate exponential fitting using actual elapsed days. At least six positive samples, declining slope and log-rate R² >= 0.8 are required. Zeros, anomalous changes, gaps and rejected input prevent the conditional forecast. Three decline scenarios use ±20% nominal decline; these are assumptions, not confidence intervals.
 - Explicit periodic cashflows, NPV, bracketed IRR for conventional investment flows, fractional payback, break-even price and three price sensitivities. Currency and month/year period must be supplied. The financial model is pre-tax/unlevered and excludes royalty, FX, inflation, abandonment, financing and working capital.
@@ -49,31 +50,33 @@ Actual local checks on the implementation:
 
 | Check | Result / scope |
 |---|---|
-| Petroleum suite | 162/162; includes independent numerical references, 15 named challenge scenarios, 55 distinct petroleum queries, 55 distinct other-domain queries, 22 mixed queries and adversarial input cases |
+| Petroleum suite | 168/168 combined; includes independent numerical references, 15 named challenge scenarios, 55 distinct petroleum queries, 55 distinct other-domain queries, 22 mixed queries, six document tests and adversarial input cases |
 | Independent formulas | Barrel from 42 US gallons × 231 in³ × exact inch-to-metre definition; cubic foot from exact foot-to-metre; NPV direct discounted sum; IRR independent quadratic root; Arps volume compared with composite Simpson integration |
 | Skill HTTP handler | Real handler exercised with explicit auth/storage/frequency fixtures; six real file formats, invalid schema, owner spoof rejection, throttling and existing math route |
-| Streaming | Real stream HTTP/SSE handler with uploaded CSV in AR/EN/RU/KK; model/media/provider stubs throw if called; one answer and one completion; project flags cannot steal petroleum execution |
+| Streaming | Real stream HTTP/SSE handler with uploaded CSV in AR/EN/RU/KK, DOCX production table, text PDF and corrupt PDF; model/media/provider stubs throw if called; one answer and one completion; project flags cannot steal petroleum execution |
 | Browser component | Real React mention hook/menu at 1280 px and 390 px; keyboard/touch, SVG, aliases, selection/removal and structured send; isolated fixture rather than a production account |
+| Full built interface | Real production-built guest Home → Chat at 1280/390 px, SVG selection, structured skill ID, token removal, one user/assistant turn and no answer image. Network SSE response and WorkOS environment are explicit fixtures; no live credentials or provider |
 | History | Real account-state merger retains skill IDs and does not duplicate the same turns; existing memory-isolation and chat-stream tests pass |
 | TypeScript / production compilation | `tsc --noEmit` and local `next build --webpack`; no Render used |
 | Regression checks | Work mode, Work math (19/19), document writers (7/7), music intent, multimodal wiring, attachment menu, chat stream (11/11), account memory isolation, presentations (81/81), composer tools (22/22) |
 | Broad release-core | Stops at six Markdown/automatic-photo failures in `test:answer-format`; the identical six failures reproduce on unmodified baseline main in a separate detached worktree |
-| Local runtime | Node 24.19.0; repository targets Node 20–22. A dedicated PR workflow runs Node 22; its remote results must be reviewed before merge |
+| Local runtime / remote core CI | Node 24.19.0 locally; repository targets Node 20–22. Core commit `9e33b7131cc7bd7983ee8a63753d5022d568fc74` passed the dedicated petroleum workflow on Node 22. Existing production-build workflow stopped at baseline Markdown failures. Phase 2 remote results are reported separately |
 
-Measured V8 coverage from the 162-test run (not a claim of whole-product coverage):
+Measured V8 coverage from the combined 168-test version 1.1 run (not a claim of whole-product coverage):
 
 | New module | Lines % | Branches % | Functions % |
 |---|---:|---:|---:|
 | units | 100 | 100 | 100 |
 | reservoir | 100 | 94.59 | 100 |
 | economics | 97.78 | 84.44 | 100 |
-| production | 100 | 87.18 | 100 |
-| engine | 100 | 85.19 | 100 |
+| production | 100 | 89.66 | 100 |
+| engine | 100 | 92 | 100 |
 | message | 98.31 | 77.05 | 100 |
-| report | 100 | 84.48 | 86.36 |
-| router | 100 | 97.37 | 100 |
+| report | 100 | 86.67 | 86.36 |
+| router | 100 | 97.44 | 100 |
 | safety | 100 | 100 | 100 |
 | schema | 100 | 100 | 100 |
+| documents | 100 | 79.41 | 87.10 |
 
 The synthetic 100-well, 1,800-row production calculation took approximately 50 ms in one local test run. This excludes HTTP, storage, rendering and real-world latency; it is not a customer SLA or a validated large-table benchmark.
 
@@ -101,9 +104,9 @@ No Render endpoint, manual deployment, production model/media call or paid integ
 
 Offer a bounded, read-only engineering analytics pilot with an authorized petroleum engineer reviewing every material conclusion. Compare the same customer tables and manually approved calculations before/after. Agree KPI definitions before running the pilot: report preparation minutes, independent numerical tolerance, labeled-anomaly precision/recall, table processing latency, repeatability, Arabic review quality, data handling and actual processing cost. No financial savings, valuation uplift or contract is assumed.
 
-Not implemented: all 100 target capabilities; local PDF/DOCX extraction/OCR; legacy XLS and multi-sheet/ambiguous-date auto-mapping; formation evaluation, OOIP/reserves classification, PVT/nodal/full reservoir simulation, robust hyperbolic fitting, EOR/chemical/corrosion/scale physical models, drilling NPT/failure-specific schemas, gas composition/LNG process simulation, refinery-quality/energy models, certified emissions reporting, regional regulatory connectors, corporate SSO/RBAC policy, air-gapped tenancy, formal penetration/load tests, calibrated field uncertainty, native Arabic expert review and complete live production regression. No equipment-control integration is planned for this release.
+Not implemented: all 100 target capabilities; OCR and PDF geometric table interpretation; legacy XLS and multi-sheet/ambiguous-date auto-mapping; formation evaluation, OOIP/reserves classification, PVT/nodal/full reservoir simulation, robust hyperbolic fitting, EOR/chemical/corrosion/scale physical models, drilling NPT/failure-specific schemas, gas composition/LNG process simulation, refinery-quality/energy models, certified emissions reporting, regional regulatory connectors, corporate SSO/RBAC policy, air-gapped tenancy, formal penetration/load tests, calibrated field uncertainty, native Arabic expert review and complete live production regression. PDF import requires local Poppler and is unavailable otherwise. No equipment-control integration is planned for this release.
 
-Next priority: an engineer-approved client data contract and a real legally supplied pilot dataset; then local document extraction, richer diagnostics/uncertainty and production-grade access/retention requirements. Fix the independent baseline Markdown failures before calling the whole product regression suite green.
+Next priority: an engineer-approved client data contract and a real legally supplied pilot dataset; then richer diagnostics/uncertainty and production-grade access/retention requirements. Fix the independent baseline Markdown failures before calling the whole product regression suite green.
 
 ### Reproduce
 
@@ -114,13 +117,14 @@ npm run typecheck
 npm run test:petroleum
 npm run test:petroleum-api
 npm run test:petroleum-stream
+npm run test:petroleum-documents # requires pdfinfo/pdftotext locally
 npm run test:work-docs
 npx next build --webpack
 ```
 
 Browser component QA requires an installed Playwright/Chromium runtime. `MALIK_QA_PLAYWRIGHT_PATH` and optional `MALIK_QA_CHROMIUM_PATH` select the executable dependencies without adding production packages. `PETROLEUM_DEMO_DIR` regenerates the synthetic demo outputs during `test:petroleum`.
 
-## Complete changed-file list
+## Complete changed-file list through version 1.1
 
 - `.github/workflows/petroleum-engine-check.yml`
 - `app/templates/sovereign-hub-ui/app/api/stream/route-impl.ts`
@@ -139,6 +143,7 @@ Browser component QA requires an installed Playwright/Chromium runtime. `MALIK_Q
 - `app/templates/sovereign-hub-ui/lib/work/documents/export.ts`
 - `app/templates/sovereign-hub-ui/lib/work/documents/xlsx.ts`
 - `app/templates/sovereign-hub-ui/lib/work/petroleum/economics.ts`
+- `app/templates/sovereign-hub-ui/lib/work/petroleum/documents.ts`
 - `app/templates/sovereign-hub-ui/lib/work/petroleum/engine.ts`
 - `app/templates/sovereign-hub-ui/lib/work/petroleum/knowledge.ts`
 - `app/templates/sovereign-hub-ui/lib/work/petroleum/message.ts`
@@ -154,11 +159,14 @@ Browser component QA requires an installed Playwright/Chromium runtime. `MALIK_Q
 - `app/templates/sovereign-hub-ui/package.json`
 - `app/templates/sovereign-hub-ui/scripts/verify-petroleum-api.mjs`
 - `app/templates/sovereign-hub-ui/scripts/verify-petroleum-browser.mjs`
+- `app/templates/sovereign-hub-ui/scripts/verify-petroleum-documents.mjs`
+- `app/templates/sovereign-hub-ui/scripts/verify-petroleum-full-ui.mjs`
 - `app/templates/sovereign-hub-ui/scripts/verify-petroleum-stream.mjs`
 - `app/templates/sovereign-hub-ui/scripts/verify-petroleum.mjs`
 - `app/templates/sovereign-hub-ui/scripts/verify-presentations.mjs`
 - `docs/petroleum/IMPLEMENTATION.md`
 - `docs/petroleum/PILOT.md`
+- `docs/petroleum/PHASE2.md`
 - `docs/petroleum/demo/synthetic-100-wells.csv`
 - `docs/petroleum/demo/synthetic-report-ar.md`
 - `docs/petroleum/demo/synthetic-report.md`

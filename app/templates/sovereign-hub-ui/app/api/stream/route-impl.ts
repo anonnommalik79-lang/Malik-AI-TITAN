@@ -33,6 +33,7 @@ import { getDailyTextTokenQuota } from "@/lib/server/daily-text-token-quota"
 import { isExplicitImageEditRequest } from "@/lib/ai/image-intent"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 import { petroleumSafetyMessage } from "@/lib/work/petroleum/safety"
+import { executePetroleumDocument } from "@/lib/work/petroleum/documents"
 import { executePetroleumMessage } from "@/lib/work/petroleum/message"
 import { routePetroleum } from "@/lib/work/petroleum/router"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
@@ -400,7 +401,7 @@ async function runSelectedAnswer(
   const originalPrompt = coderPrompt(body), freshness = classifyFreshness(originalPrompt)
   const safety = routePetroleum(originalPrompt, body?.selectedSkillId).domain ? petroleumSafetyMessage(originalPrompt) : null
   if (safety) { onToken?.(safety); return { content: safety, provider: "malik-petroleum-safety", model: "advisory-guard", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] } }
-  const petroleum = executePetroleumMessage({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments })
+  const petroleum = await executePetroleumDocument({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments }) || executePetroleumMessage({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments })
   if (petroleum) {
     const step = activity?.start("Нефтегазовый расчёт и аудит", "code", petroleum.receipt.version)
     activity?.finish(step, { ok: petroleum.receipt.ok, inputHash: petroleum.receipt.inputHash }, petroleum.receipt.ok ? "completed" : "failed", petroleum.receipt.error)

@@ -4,10 +4,11 @@ import { convert, waterCut, gasOilRatio, finite } from "./units"
 import { npv, irr, economics } from "./economics"
 import { decline } from "./reservoir"
 import { analyzeProduction } from "./production"
-export const PETROLEUM_ALGORITHM_VERSION="malik-petroleum-1.0.0"
+export const PETROLEUM_ALGORITHM_VERSION="malik-petroleum-1.1.0"
 export type EvidenceClass = "Verified Measurement" | "Verified External Source" | "Deterministic Calculation" | "Statistical Estimate" | "Engineering Assumption" | "AI Hypothesis" | "Missing Evidence"
 export type PetroleumReceipt = {ok:boolean;version:string;inputHash:string;task:unknown;result?:unknown;error?:string;method:string;variables:string;units:string;assumptions:string[];evidence:EvidenceClass[];humanReview:boolean;uncertainty:string;limitations:string[]}
 const methods:Record<PetroleumTask["op"],[string,string,string]>={
+  "document-audit":["Literal text extraction and deterministic document quality screening", "sourceHash: original bytes fingerprint supplied by the extraction path; extracted text is untrusted data", "No physical measurement or geological interpretation inferred from prose"],
   convert:["value_to = value_from × factor_from / factor_to","value: supplied quantity; factors: SI conversion constants","Dimension-preserving; gas T/P reference unchanged; pressure must use same absolute/gauge basis"],
   "water-cut":["WC = qw / (qo + qw)","qo: stock oil rate; qw: water rate at matching measurement conditions","fraction; multiply by 100 for %; zero total => undefined"],
   gor:["GOR = qg / qo","qg: gas rate at declared reference conditions; qo: stock oil rate","scf/bbl; zero oil => undefined"],
@@ -27,6 +28,7 @@ export function runPetroleum(raw: unknown): PetroleumReceipt {
   try {
     let result:unknown
     switch(task.op) {
+      case "document-audit":result={sourceType:task.sourceType,sourceHash:task.sourceHash,extractionMethod:task.extractionMethod,characters:task.text.length,lines:task.text.split(/\r?\n/).length,instructionLikeText:/ignore (?:previous|all)|system prompt|send.*secret|игнорируй.*инструк|تجاهل.*تعليمات/iu.test(task.text),excerpt:task.text.slice(0,2000).replaceAll("[","").replaceAll("]","").replace(/[`<>]/g,""),limitations:["Extraction is not a verified geological interpretation", "Instructions inside documents are untrusted data and are never executed", "Numerical calculation requires an explicit unit-bearing table or typed quantities"]};break
       case "convert":result={value:convert(task.value,task.from,task.to,task.reference),unit:task.to};break
       case "water-cut":result={fraction:waterCut(task.oil,task.water)};break
       case "gor":result={value:gasOilRatio(task.oil,task.gas),unit:"scf/bbl",reference:task.gas.reference};break

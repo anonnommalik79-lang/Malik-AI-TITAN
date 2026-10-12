@@ -27,5 +27,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:petroleum
       - run: npm run test:petroleum-api
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - run: npm run test:petroleum-stream
+      - run: npm run test:petroleum-documents
       - run: npm run test:work-mode && npm run test:work-math && npm run test:work-docs && npm run test:chat-stream-integrity && npm run test:music-intent
