@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import {
   DEFAULT_MALIK_MODEL_ID,
   FREE_MALIK_MODELS,
   GOOGLE_AI_POOL_MODELS,
+  LING_3_1_FLASH_MODEL,
   MALIK_MODELS,
   MAX_ROUTER_MODEL_IDS,
   PRO_MALIK_MODELS,
@@ -33,11 +35,11 @@ assert.deepEqual(
 )
 assert.ok(GOOGLE_AI_POOL_MODELS.every((model) => model.provider === "google-ai" && model.brand === "google" && model.tier === "pro"))
 
-assert.equal(PUBLIC_MALIK_MODELS.length, 131, "Selector must expose MAX + 6 Google AI entries + 123 router text entries + LLM7 Default")
+assert.equal(PUBLIC_MALIK_MODELS.length, 132, "Selector must expose MAX + 6 Google entries + Ling + 123 router text entries + LLM7 Default")
 // Product rule: MalikLLM MAX is the one free model (it combines every
 // provider). Every other model is MalikAI Plus.
 assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id), ["malik-max"], "Only MalikLLM MAX is free")
-assert.equal(PRO_MALIK_MODELS.length, 130, "Every other public model is grouped as MalikAI Plus")
+assert.equal(PRO_MALIK_MODELS.length, 131, "Every other public model is grouped as MalikAI Plus")
 assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, MALIK_MODELS.length, "Model IDs must be unique")
 
 for (const model of FREE_MALIK_MODELS) {
@@ -59,6 +61,30 @@ assert.ok(MAX_ROUTER_MODEL_IDS.includes("router:llm7:default"), "LLM7 free defau
 assert.ok(MAX_ROUTER_MODEL_IDS.some((id) => id.startsWith("router:xkiro:")), "xKiro pool missing from MAX")
 assert.ok(MAX_ROUTER_MODEL_IDS.some((id) => id.startsWith("router:nara:")), "Nara pool missing from MAX")
 assert.ok(MAX_ROUTER_MODEL_IDS.includes("malik-20b"), "Existing Malik provider pool must remain a MAX fallback")
+
+
+const ling = getMalikModel("ling-3.1-flash")
+assert.deepEqual(ling, LING_3_1_FLASH_MODEL)
+assert.equal(ling.provider, "ling-openrouter")
+assert.equal(ling.providerModel, "inclusionai/ling-3.1-flash")
+assert.equal(ling.brand, "ling")
+assert.equal(ling.tier, "pro")
+assert.equal(ling.access, "free")
+assert.equal(canUseMalikModel(ling.id, "owner"), true)
+assert.equal(canUseMalikModel(ling.id, "free"), false)
+assert.equal(PUBLIC_MALIK_MODELS[1 + GOOGLE_AI_POOL_MODELS.length]?.id, ling.id)
+assert.ok(!MAX_ROUTER_MODEL_IDS.includes(ling.id), "Ling quota must not be auto-spent")
+const lingSelector = readFileSync("components/sovereign/MalikModelSelector.tsx", "utf8")
+const selectedRouter = readFileSync("lib/server/malik-model-router.ts", "utf8")
+const maxEngine = readFileSync("lib/server/malik-max-engine.ts", "utf8")
+assert.match(lingSelector, /ling:\s*\{ label: "InclusionAI/)
+assert.match(selectedRouter, /model\.provider === "ling-openrouter"/)
+assert.match(selectedRouter, /env\("MALIK_LING_API_KEY"\)/)
+assert.match(selectedRouter, /env\("MALIK_LING_MODEL"\)/)
+assert.match(maxEngine, /function lingDirectLanes\(\)/)
+assert.match(maxEngine, /keys: keysFor\("MALIK_LING_API_KEY"\)/)
+assert.match(maxEngine, /model\.provider === "ling-openrouter"/)
+assert.doesNotMatch(maxEngine.slice(maxEngine.indexOf("async function directLanes"), maxEngine.indexOf("/** Every lane MAX")), /lingDirectLanes\(/, "Ling must not consume MAX auto quota")
 
 const xkiroMistral = getMalikModel("router:xkiro:mistralai/mistral-small-2603")
 assert.equal(xkiroMistral.label, "Mistral Small 4")

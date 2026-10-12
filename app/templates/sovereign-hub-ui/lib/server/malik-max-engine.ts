@@ -354,6 +354,19 @@ function openAiDirect(input: {
   }))
 }
 
+/** Explicit selection only: do not drain Ling's free quota in MAX auto-racing. */
+function lingDirectLanes(): MaxLane[] {
+  return openAiDirect({
+    provider: "ling-openrouter",
+    keys: keysFor("MALIK_LING_API_KEY"),
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    model: env("MALIK_LING_MODEL") || "inclusionai/ling-3.1-flash",
+    label: "Ling 3.1 Flash 560B",
+    headers: () => ({ "HTTP-Referer": env("NEXT_PUBLIC_APP_URL") || "https://malikaiworld.world", "X-Title": "MALIK AI" }),
+    outputCap: 12_000,
+  })
+}
+
 async function directLanes(codeMode: boolean): Promise<MaxLane[]> {
   const lanes: MaxLane[] = []
 
@@ -1362,8 +1375,10 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
  * model cannot answer, so the caller can hand the request to MAX.
  */
 export async function runSelectedModel(input: MaxInput, model: MalikModelDefinition, deps: { fetcher?: typeof fetch } = {}) {
-  const lanes = catalogLanes(input.allowCatalog === true)
-    .filter((lane) => lane.provider === model.provider && lane.providerModel === model.providerModel)
+  const lanes = model.provider === "ling-openrouter"
+    ? lingDirectLanes()
+    : catalogLanes(input.allowCatalog === true)
+        .filter((lane) => lane.provider === model.provider && lane.providerModel === model.providerModel)
   if (!lanes.length) {
     throw new MalikModelRouteError("PROVIDER_NOT_CONFIGURED", `${model.label} сейчас не подключена.`, 503, model.id)
   }
