@@ -3,6 +3,7 @@ import { runPetroleum, type PetroleumReceipt } from "./engine"
 import { routePetroleum, stripPetroleumToken } from "./router"
 import { petroleumReport, petroleumLanguage } from "./report"
 import { normalizeDigits } from "./production"
+import { analyzeInlinePetroleumTable } from "./inline-production"
 type Attachment={name?:string;mime?:string;text?:string;base64?:string;size?:number}
 const MAX_BYTES=4*1024*1024
 function attachmentCsv(file:Attachment) {
@@ -44,6 +45,10 @@ export function executePetroleumMessage(input:{prompt:string;selectedSkillId?:un
   const route=routePetroleum(input.prompt,input.selectedSkillId)
   if(route.engine!=="petroleum")return null
   let task=input.task??taskFromPetroleumPrompt(input.prompt)
+  if (!task && !input.attachments?.length) {
+    const inline = analyzeInlinePetroleumTable(input.prompt)
+    if (inline) return inline
+  }
   try {
     if(input.attachments?.length) {
       if(input.attachments.length!==1)throw new Error("Upload one production table per calculation; no silent file merging")
