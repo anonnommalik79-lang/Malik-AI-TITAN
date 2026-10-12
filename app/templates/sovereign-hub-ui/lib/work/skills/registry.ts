@@ -19,7 +19,7 @@ export async function workSkillCatalog(owner: OwnerContext): Promise<WorkSkill[]
   ])
   const modelConfigured = lanes.some(lane => !lane.restingMs)
   const skills: WorkSkill[] = [
-    { id: "petroleum.analyze", label: "Malik Oil AI", executor: "engine", status: "ready", detail: `CSV/XLSX/DOCX, ${pdfImport ? "текстовый PDF" : "PDF требует локальный pdftotext"}, единицы, обводнённость, GOR, decline, NPV/IRR. Локальный расчёт; требуется инженерная проверка.`, timeoutMs: 10000, sideEffect: "none" },
+    { id: "petroleum.analyze", label: "Malik Oil AI", executor: "engine", status: "ready", detail: `CSV/XLSX/DOCX, ${pdfImport ? "текстовый PDF" : "PDF требует локальный pdftotext"}, единицы, обводнённость, GOR, decline, NPV/IRR; до 500 скважин, baseline и оценка потерь без двойного счёта. Локальный расчёт; требуется инженерная проверка.`, timeoutMs: 10000, sideEffect: "none" },
     { id: "math.compute", label: "Математический движок", executor: "engine", status: "ready", detail: "Детерминированный расчёт с проверками, без модели.", timeoutMs: 10000, sideEffect: "none" },
     { id: "document.export", label: "Экспорт документов", executor: "engine", status: fonts ? "ready" : "needs-connection", detail: fonts ? "DOCX, PDF, XLSX, CSV, MD, TXT, HTML, JSON, ZIP." : "Для PDF отсутствуют локальные шрифты assets/fonts. Остальные форматы доступны через экспорт.", timeoutMs: 20000, sideEffect: "none" },
   ]

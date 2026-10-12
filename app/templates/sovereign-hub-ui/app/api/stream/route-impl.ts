@@ -34,7 +34,7 @@ import { isExplicitImageEditRequest } from "@/lib/ai/image-intent"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 import { petroleumSafetyMessage } from "@/lib/work/petroleum/safety"
 import { executePetroleumDocument } from "@/lib/work/petroleum/documents"
-import { executePetroleumMessage } from "@/lib/work/petroleum/message"
+import { executePetroleumMessageAsync } from "@/lib/work/petroleum/message"
 import { routePetroleum } from "@/lib/work/petroleum/router"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
@@ -401,9 +401,16 @@ async function runSelectedAnswer(
   const originalPrompt = coderPrompt(body), freshness = classifyFreshness(originalPrompt)
   const safety = routePetroleum(originalPrompt, body?.selectedSkillId).domain ? petroleumSafetyMessage(originalPrompt) : null
   if (safety) { onToken?.(safety); return { content: safety, provider: "malik-petroleum-safety", model: "advisory-guard", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] } }
-  const petroleum = await executePetroleumDocument({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments }) || executePetroleumMessage({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments })
+  let fieldStep: string | undefined
+  const petroleum = await executePetroleumDocument({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments }) || await executePetroleumMessageAsync({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments, signal, onProgress: event => {
+    fieldStep ||= activity?.start("Анализирую нефтяные данные", "code", "petroleum.field")
+    if (event.stage === "analyze" && event.processed % 25 !== 0 && event.processed !== event.requested) return
+    const text = `Проверено скважин: ${event.processed}/${event.requested}; ошибок: ${event.failed}`
+    activity?.status(text, "code")
+    onProgress?.({phase:"petroleum",kind:"petroleum",stage:event.stage,text,processed:event.processed,requested:event.requested,failed:event.failed})
+  } })
   if (petroleum) {
-    const step = activity?.start("Нефтегазовый расчёт и аудит", "code", petroleum.receipt.version)
+    const step = fieldStep || activity?.start("Нефтегазовый расчёт и аудит", "code", petroleum.receipt.version)
     activity?.finish(step, { ok: petroleum.receipt.ok, inputHash: petroleum.receipt.inputHash }, petroleum.receipt.ok ? "completed" : "failed", petroleum.receipt.error)
     onToken?.(petroleum.content)
     return { content: petroleum.content, provider: "malik-petroleum-local", model: petroleum.receipt.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }

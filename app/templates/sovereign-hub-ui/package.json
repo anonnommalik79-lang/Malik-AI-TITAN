@@ -140,6 +140,7 @@
     "test:live-intelligence": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-live-intelligence.mjs && node scripts/verify-live-intelligence-runtime.mjs && node scripts/verify-live-intelligence-lanes.mjs",
     "knowledge:update": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/update-live-knowledge.mjs",
     "test:petroleum": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test --experimental-test-coverage scripts/verify-petroleum.mjs",
+    "test:petroleum-field": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/verify-petroleum-field.mjs && node scripts/verify-petroleum-field-api.mjs",
     "test:petroleum-api": "node scripts/verify-petroleum-api.mjs",
     "test:petroleum-stream": "node scripts/verify-petroleum-stream.mjs",
     "test:petroleum-documents": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test --experimental-test-coverage scripts/verify-petroleum-documents.mjs",

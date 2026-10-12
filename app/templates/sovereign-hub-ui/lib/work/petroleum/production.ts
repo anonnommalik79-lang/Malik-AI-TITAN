@@ -2,8 +2,13 @@ import { parseCsv } from "../../os/data/table"
 import { convert, waterCut, gasOilRatio, finite, type PetroleumUnit } from "./units"
 import { fitExponential, decline } from "./reservoir"
 
-export type ProductionRow = { well: string; date: string; day: number; oil: number; water?: number; gas?: number; downtime?: number; period?: number; injection?: number; sourceRow: number }
+export type ProductionRow = { well: string; date: string; day: number; oil: number; oilKnown?: boolean; water?: number; gas?: number; downtime?: number; period?: number; injection?: number; sourceRow: number }
 export type DataIssue = { row: number; code: string; detail: string }
+export function validateCsvQuoteClosure(csv: string) {
+  let quoted=false
+  for (let i=0;i<csv.length;i++) if (csv[i] === '"') { if (quoted && csv[i+1] === '"') i++; else quoted=!quoted }
+  if (quoted) throw new Error("CSV_UNCLOSED_QUOTE")
+}
 export function normalizeDigits(text: string) { return text.replace(/[٠-٩۰-۹]/g, c => String(c.charCodeAt(0)-(c <= "٩" ? 0x660 : 0x6f0))).replace(/٫/g,".") }
 export function strictDate(text: string): string | null {
   const match = normalizeDigits(text).match(/^(\d{4})-(\d{2})-(\d{2})$/)
@@ -17,18 +22,17 @@ function number(text: string) {
   try { return finite(Number(value)) } catch { return null }
 }
 /** Deliberate narrow import contract: unit-bearing headers, ISO dates, no guessed units or Excel epochs. */
-export function auditProduction(csv: string, gasReference?: string) {
+export function auditProduction(csv: string, gasReference?: string, options?: { gasOnly?: boolean }) {
   if (!csv.trim() || csv.length > 4_000_000) throw new Error("CSV empty or exceeds 4 MB text limit")
-  let quoted = false
-  for (let i=0;i<csv.length;i++) if(csv[i] === '"') { if(quoted && csv[i+1] === '"') i++; else quoted=!quoted }
-  if (quoted) throw new Error("CSV_UNCLOSED_QUOTE")
+  validateCsvQuoteClosure(csv)
   const table = parseCsv(csv, { rows: 20001, columns: 31, cellChars: 500 })
   if (table.length < 2 || table.length > 20001) throw new Error("1..20000 data rows required; truncation rejected")
   const header = table[0].map(v => v.trim().toLowerCase()), allowed = /^(well_id|date|(?:oil|water|injection)_(?:bbl|m3)_day|gas_(?:scf|sm3)_day|downtime_hours|period_hours)$/
   if (header.length > 30 || new Set(header).size !== header.length || header.some(h => !allowed.test(h))) throw new Error("Unknown/duplicate header; use well_id,date,oil_bbl_day (or oil_m3_day), optional water/gas/injection rates and downtime_hours,period_hours")
   const indices = (prefix: string) => header.map((h,i) => h.startsWith(prefix) ? i : -1).filter(i => i>=0)
   const oilColumns=indices("oil_"), waterColumns=indices("water_"), gasColumns=indices("gas_"), injectionColumns=indices("injection_")
-  if (!header.includes("well_id") || !header.includes("date") || oilColumns.length !== 1 || waterColumns.length > 1 || gasColumns.length > 1 || injectionColumns.length > 1) throw new Error("Exactly one oil rate column and well_id,date required; mixed units must be normalized per column")
+  const gasOnly = options?.gasOnly === true && oilColumns.length === 0 && gasColumns.length === 1
+  if (!header.includes("well_id") || !header.includes("date") || (!gasOnly && oilColumns.length !== 1) || waterColumns.length > 1 || gasColumns.length > 1 || injectionColumns.length > 1) throw new Error("Exactly one oil rate column (or explicit gas-only history) and well_id,date required; mixed units must be normalized per column")
   if (gasColumns.length && !gasReference?.trim()) throw new Error("Gas reference conditions required for GOR")
   if (header.includes("downtime_hours") !== header.includes("period_hours")) throw new Error("Both downtime_hours and period_hours required for availability")
   const issues: DataIssue[]=[], candidates: ProductionRow[]=[]
@@ -45,13 +49,13 @@ export function auditProduction(csv: string, gasReference?: string) {
       const from=header[col].replace(/^(oil|water|gas|injection)_/,'').replace('_day','/day') as PetroleumUnit
       return convert(raw,from,to,gasReference)
     }
-    const oil=readRate(oilColumns,"bbl/day"), water=readRate(waterColumns,"bbl/day"), gas=readRate(gasColumns,"scf/day"), injection=readRate(injectionColumns,"bbl/day")
+    const oil=gasOnly ? 0 : readRate(oilColumns,"bbl/day"), water=readRate(waterColumns,"bbl/day"), gas=readRate(gasColumns,"scf/day"), injection=readRate(injectionColumns,"bbl/day")
     let downtime: number|undefined, period: number|undefined
     if(header.includes("downtime_hours")) {
       downtime=number(row[header.indexOf("downtime_hours")])??undefined; period=number(row[header.indexOf("period_hours")])??undefined
       if(downtime===undefined || !period || downtime>period) { invalid=true; issues.push({row:sourceRow,code:"INVALID_DOWNTIME",detail:"0 <= downtime <= period; period > 0"}) }
     }
-    if(!invalid && oil!==undefined) candidates.push({well,date,day:Date.parse(date)/86400000,oil,water,gas,injection,downtime,period,sourceRow})
+    if(!invalid && oil!==undefined) candidates.push({well,date,day:Date.parse(date)/86400000,oil,...(gasOnly ? { oilKnown: false } : {}),water,gas,injection,downtime,period,sourceRow})
   }
   const groups=new Map<string,ProductionRow[]>()
   for(const row of candidates) { const key=`${row.well}\0${row.date}`; const group = groups.get(key) || []; group.push(row); groups.set(key, group) }
