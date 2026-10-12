@@ -1,9 +1,9 @@
 import { readXlsx } from "../../os/data/xlsx"
-import { runPetroleum, type PetroleumReceipt } from "./engine"
+import { runPetroleum, runPetroleumAsync, type PetroleumReceipt } from "./engine"
+import type { FieldProgress } from "./field"
 import { routePetroleum, stripPetroleumToken } from "./router"
 import { petroleumReport, petroleumLanguage } from "./report"
 import { normalizeDigits } from "./production"
-import { analyzeInlinePetroleumTable } from "./inline-production"
 type Attachment={name?:string;mime?:string;text?:string;base64?:string;size?:number}
 const MAX_BYTES=4*1024*1024
 function attachmentCsv(file:Attachment) {
@@ -22,6 +22,28 @@ function attachmentCsv(file:Attachment) {
     return rows.map(row=>row.map(c=>'"'+c.replace(/"/g,'""')+'"').join(',')).join('\n')
   }
   return new TextDecoder("utf-8",{fatal:true}).decode(bytes)
+}
+/** Only an explicit loss/surveillance request expands uploaded production analysis. */
+export function fieldTaskFromMessage(prompt:string, attachments?:Attachment[]):unknown|null {
+  const structured=taskFromPetroleumPrompt(prompt) as {op?:string}|null
+  if (structured?.op === "field-surveillance") return structured
+  if (!attachments?.length || !/потер[ьиь]|наблюден|surveillance|production\s+loss|field\s+intelligence|خسائر\s+الإنتاج/iu.test(stripPetroleumToken(prompt))) return null
+  if (attachments.length !== 1) return {op:"import-error",error:"Upload one production table per field workflow"}
+  try {
+    const gasReference=prompt.match(/gasReference\s*[:=]\s*([^\n]+)/i)?.[1]?.trim()
+    const basis=prompt.match(/rateBasis\s*[:=]\s*(snapshot|calendar-average|operating-average)/i)?.[1] || "snapshot"
+    const interval=prompt.match(/interval\s*[:=]\s*(day|month)/i)?.[1]
+    const id=prompt.match(/wellId\s*[:=]\s*(well:[^\n;]+)/i)?.[1]?.trim()
+    return {op:"field-surveillance",csv:attachmentCsv(attachments[0]),gasReference,rateBasis:basis,interval,wellId:id,baseline:{kind:"historical-median"}}
+  } catch(error) { return {op:"import-error",error:error instanceof Error?error.message:"FILE_IMPORT_FAILED"} }
+}
+export async function executePetroleumMessageAsync(input:{prompt:string;selectedSkillId?:unknown;attachments?:Attachment[];task?:unknown;signal?:AbortSignal;onProgress?:(event:FieldProgress)=>void}):Promise<{receipt:PetroleumReceipt;content:string}|null> {
+  if (routePetroleum(input.prompt,input.selectedSkillId).engine !== "petroleum") return null
+  const task=input.task ?? fieldTaskFromMessage(input.prompt,input.attachments)
+  if (!task) return executePetroleumMessage(input)
+  const receipt=await runPetroleumAsync(task,{signal:input.signal,onProgress:input.onProgress})
+  if ((task as {op?:string})?.op === "import-error") receipt.error=String((task as {error:string}).error)
+  return {receipt,content:petroleumReport(receipt,petroleumLanguage(input.prompt))}
 }
 export function taskFromPetroleumPrompt(prompt:string):unknown|null {
   const text=normalizeDigits(stripPetroleumToken(prompt))
@@ -45,10 +67,6 @@ export function executePetroleumMessage(input:{prompt:string;selectedSkillId?:un
   const route=routePetroleum(input.prompt,input.selectedSkillId)
   if(route.engine!=="petroleum")return null
   let task=input.task??taskFromPetroleumPrompt(input.prompt)
-  if (!task && !input.attachments?.length) {
-    const inline = analyzeInlinePetroleumTable(input.prompt)
-    if (inline) return inline
-  }
   try {
     if(input.attachments?.length) {
       if(input.attachments.length!==1)throw new Error("Upload one production table per calculation; no silent file merging")
