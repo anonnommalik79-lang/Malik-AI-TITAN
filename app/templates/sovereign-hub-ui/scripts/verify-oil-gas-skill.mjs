@@ -41,6 +41,14 @@ for (const [prompt, expected] of [
 ]) assert.ok(buildOilGasSkillInstruction(prompt).includes(expected), prompt)
 
 const response = readFileSync("lib/ai/response-intelligence.ts", "utf8")
+const models = readFileSync("lib/ai/malik-models.ts", "utf8")
+const godRouter = readFileSync("lib/malik-god-router.ts", "utf8")
+// Both selectable model paths must share the single oil intelligence contract.
+assert.match(models, /id: "ling-3\.1-flash"/)
+assert.match(models, /id: "malik-max"/)
+assert.match(godRouter, /buildMalikResponseSystemPrompt\(/)
+assert.match(godRouter, /petroleumKnowledgeInstruction\(\)/)
+
 const stream = readFileSync("app/api/stream/route-impl.ts", "utf8")
 assert.match(response, /buildOilGasSkillInstruction\(input\.prompt\)/)
 assert.match(stream, /buildOilGasSkillInstruction\(coderPrompt\(body\)\)/)
