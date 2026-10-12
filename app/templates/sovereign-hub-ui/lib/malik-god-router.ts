@@ -1130,7 +1130,11 @@ export async function malikGodAnswer(
       // Speed and code lanes follow what is really being asked: «а третий?»
       // after an overview question is another overview, not small talk.
       taskPrompt: focus.shapeText,
-      systemPrompt: [body?.metadata?.petroleumDomain ? petroleumKnowledgeInstruction() : "", systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), plannedMathInstruction(plannedMath), accuracyInstruction(focus.searchText), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body)].filter(Boolean).join("\n\n"),
+      systemPrompt: [body?.metadata?.petroleumDomain ? petroleumKnowledgeInstruction() : "", typeof body?.metadata?.petroleumComputedEvidence === "string" ? [
+        "PETROLEUM VERIFIED DATA INPUT (locally calculated; user inputs are not field-verified):",
+        body.metadata.petroleumComputedEvidence.slice(0, 16_000),
+        "Produce the full requested multidisciplinary engineering analysis in the user language, not just this table. Preserve the exact computed values and stated units. Separate verified arithmetic from hypotheses. Cover EVERY applicable requested section, including pressure/production diagnostics, competing hypotheses, investigation plan, HSE and project economics. Compute extra economic results only with enough assumptions and explicitly label results not independently verified. If a table contains fewer periods than the user's task requires, say so, do not invent missing periods or a decline fit. NEVER claim simulations, live sources or engineering approvals without tool evidence. Output one cohesive answer; the system appends visual charts automatically.",
+      ].join("\n\n") : "", systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), plannedMathInstruction(plannedMath), accuracyInstruction(focus.searchText), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body)].filter(Boolean).join("\n\n"),
       history,
       attachments,
       maxTokens: answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)),
