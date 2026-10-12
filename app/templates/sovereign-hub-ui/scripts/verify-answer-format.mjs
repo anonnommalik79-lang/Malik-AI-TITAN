@@ -8,7 +8,7 @@ const require_ = createRequire(import.meta.url)
 const React = require_("react")
 const { renderToStaticMarkup } = require_("react-dom/server")
 const icon = (name) => function TestIcon() { return React.createElement("svg", { "data-icon": name }) }
-const lucide = { ArrowUpRight: icon("arrow-up-right"), Archive: icon("archive"), Check: icon("check"), Copy: icon("copy"), Download: icon("download"), ExternalLink: icon("external"), Eye: icon("eye"), RefreshCw: icon("refresh"), Folder: icon("folder"), FileText: icon("file"), X: icon("x"), RotateCcw: icon("rotate") }
+const lucide = { ArrowUpRight: icon("arrow-up-right"), Archive: icon("archive"), Check: icon("check"), Copy: icon("copy"), Download: icon("download"), ExternalLink: icon("external"), Eye: icon("eye"), RefreshCw: icon("refresh"), Folder: icon("folder"), FileText: icon("file"), X: icon("x"), RotateCcw: icon("rotate"), AlertTriangle: icon("alert") }
 
 /**
  * The chat printed the model's reply into a `whitespace-pre-wrap` div, so every
@@ -54,6 +54,7 @@ function loadPure(file) {
   new Function("require", "module", "exports", "React", javascript)((name) => {
     if (name === "react") return React
     if (name === "lucide-react") return lucide
+    if (name === "zod") return require_("zod")
     if (name.endsWith(".css")) return {}
     const base = name.startsWith("@/") ? name.slice(2) : path.join(path.dirname(file), name)
     const resolved = [base + ".ts", base + ".tsx"].find((candidate) => fs.existsSync(candidate))
@@ -100,6 +101,7 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "@/lib/ai/answer-quiz") return loadPure("lib/ai/answer-quiz.ts")
     if (name === "@/lib/os/diff") return loadPure("lib/os/diff.ts")
     if (name === "./MalikAnswerQuiz") return loadPure("components/sovereign/MalikAnswerQuiz.tsx")
+    if (name === "./MalikOilReport") return loadPure("components/sovereign/MalikOilReport.tsx")
     if (name === "./MalikAnswerChecklist") return loadPure("components/sovereign/MalikAnswerChecklist.tsx")
     // Interactive Visual Engine blocks have their own suite (test:visual-engine);
     // here only their placement in the answer matters.
@@ -703,6 +705,23 @@ check("a malik-quiz fence becomes a quiz; a broken quiz shows nothing", () => {
   assert(!html.includes("&quot;answer&quot;"), "the answers are not printed")
   const broken = render("```malik-quiz\n{\"questions\":[{\"question\":\"?\",\"options\":[\"a\"],\"answer\":3}]}\n```")
   assert(!broken.includes("data-malik-quiz") && !broken.includes("options"))
+})
+check("a malik-oil-report fence becomes the oil report, recalculated; never raw JSON", () => {
+  const { oilReportFence } = loadPure("lib/work/petroleum/visual-report.ts")
+  const t = [0, 1, 2, 3, 4, 5, 6, 7].map((month) => 2026 * 12 + month)
+  const request = { schemaVersion: "malik-oil-analysis/1", taskType: "production-history", authenticatedContext: { scope: "fixture" },
+    dataset: { granularity: "month", calendar: true, wells: [{ id: "W1", t, period: t.map((_, index) => `2026-0${index + 1}`), oil: [100, 95, 90, 85, 80, 75, 70, 65], water: [20, 25, 30, 35, 40, 45, 50, 55], gas: [50000, 48000, 47000, 46000, 45000, 44000, 43000, 42000] }] },
+    metadata: { source: "chat-table", dataKind: "synthetic", sourceHash: null, acceptedRows: 8, rejectedRows: 0, issues: [], notes: [], omittedWells: 0 },
+    units: { liquid: "bbl/day", gas: "scf/day", gasReference: null, oilDensityKgM3: null }, parameters: { forecastPeriods: 3, price: null },
+    requestedAnalyses: ["summary", "rates", "water-cut", "gor", "forecast", "table"], language: "ru" }
+  const fence = oilReportFence(request)
+  for (const text of [fence, fence.replace("```malik-oil-report\n", "```malik-oil-report\r")]) {
+    const html = render("Отчёт:\n\n" + text)
+    assert(html.includes("data-oil-report=") && html.includes("45,83") && html.includes("646,15") && html.includes("Инженерный вывод"))
+    assert(!html.includes("schemaVersion") && !html.includes("&quot;metrics&quot;"), "the data block is not printed")
+  }
+  assert(render(fence.slice(0, 200), { visualContext: { question: "нефть", streaming: true } }).includes("Malik Oil AI…"))
+  assert(render("```malik-oil-report\n{\"kind\":\"x\"}\n```").includes("повреждён"))
 })
 console.log(failures ? `\n${failures} failing\n` : "\nall answer format checks passed\n")
 process.exit(failures ? 1 : 0)
