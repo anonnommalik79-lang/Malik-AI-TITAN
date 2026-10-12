@@ -74,3 +74,9 @@ for(const structured of [false,true]) {
   for(const fn of after.splice(0))await fn()
 }
 console.log('PASS 2 actual chat HTTP/SSE queries: uploaded and typed field tasks; one local answer/completion, real progress/activity counts, existing project flags do not steal routing. No model, web, private service or equipment command was called.')
+const visualResponse=await stream(new Request('http://fixture/api/stream',{method:'POST',headers:{'content-type':'application/json','accept':'text/event-stream'},body:JSON.stringify({originalQuestion:'@Malik Oil AI Analyze oil production',selectedSkillId:'petroleum.analyze',attachments:[{name:'history.csv',mime:'text/csv',kind:'file',text:csv}],stream:true})}))
+const visualEvents=(await visualResponse.text()).split('\n\n').filter(s=>s.includes('data: ')).map(s=>JSON.parse(s.split('\ndata: ')[1]))
+assert.equal(visualEvents.filter(e=>e.type==='done').length,1)
+assert.ok(visualEvents.filter(e=>e.type==='content').map(e=>e.content).join('').includes('```malik-oil-report'))
+for(const fn of after.splice(0))await fn()
+console.log('PASS existing Claude visual report upload path retained after main integration; no UI source was replaced.')

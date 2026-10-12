@@ -96,7 +96,7 @@ check("wiring: page pictures reach the model, the client and the audit", () => {
   assert.match(fs.readFileSync("lib/malik-research/fetch-page.ts", "utf8"), /const image = extractPageImage\(html, target\)/)
   assert.match(fs.readFileSync("components/sovereign/dashboard.tsx", "utf8"), /image: typeof value\?\.image === "string" && \/\^https:/)
   const view = fs.readFileSync("components/sovereign/chat-view.tsx", "utf8")
-  assert.match(view, /stripAnswerPhotoHints\(answerQuizzesToText\(answerCardsToText\(displayContent\)\)\)/)
+  assert.match(view, /stripAnswerPhotoHints\(oilReportBlocksToText\(answerQuizzesToText\(answerCardsToText\(displayContent\)\)\)\)/)
   assert.match(fs.readFileSync("components/sovereign/MalikMarkdown.tsx", "utf8"), /fence\.language === "malik-cards"/)
 })
 

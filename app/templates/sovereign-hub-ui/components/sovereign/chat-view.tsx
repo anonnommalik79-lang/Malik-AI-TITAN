@@ -10,6 +10,7 @@ import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { stripAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 import { answerCardsToText } from "@/lib/ai/answer-cards"
 import { answerQuizzesToText } from "@/lib/ai/answer-quiz"
+import { oilReportBlocksToText } from "@/lib/work/petroleum/visual-report"
 import { MalikTapGuide } from "./MalikTapGuide"
 import type { SuperflowRef } from "./os/os-client"
 import { AnswerDownloadButton, FollowUpChips, ReadAloudButton, UserMessageActions, VersionPager, useChatShortcuts, type FollowUpSendOptions } from "./chat-extras"
@@ -1776,7 +1777,7 @@ function MessageBubble({
       : cleanResearchDisplayText(message.content, message.research)
   const responseModel = !isUser && message.modelId ? getMalikModel(message.modelId) : null
   // Copy, speech and sharing get the cards as readable text, never as JSON.
-  const actionContent = isUser ? displayContent : stripAnswerPhotoHints(answerQuizzesToText(answerCardsToText(displayContent)))
+  const actionContent = isUser ? displayContent : stripAnswerPhotoHints(oilReportBlocksToText(answerQuizzesToText(answerCardsToText(displayContent))))
   if (!isUser && message.isStreaming && !streaming && !displayContent && !message.generatedMedia && !message.imageConfirmation) {
     return null
   }

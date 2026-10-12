@@ -32,6 +32,7 @@ import { beforeAfterLabel, diffLineKind, diffStats, heatmapTable, heatShade, isU
 import { parseAnswerQuiz, type AnswerQuiz } from "@/lib/ai/answer-quiz"
 import { diffLines } from "@/lib/os/diff"
 import { MalikAnswerQuiz } from "./MalikAnswerQuiz"
+import { MalikOilReport } from "./MalikOilReport"
 export type { MalikCitation } from "@/lib/ai/citation-names"
 
 type Props = { text: string; className?: string; allowImages?: boolean; autoPreview?: boolean; citations?: MalikCitation[]; /** A public answer page: see SharedPageContext. */ shared?: boolean; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
@@ -334,6 +335,8 @@ type Block =
   | { kind: "proscons"; prosTitle: string; consTitle: string; pros: ListBlock; cons: ListBlock }
   /** ```malik-quiz: a knowledge check graded in the chat. */
   | { kind: "quiz"; quiz: AnswerQuiz | null; pending: boolean }
+  /** ```malik-oil-report: the visual oil report, recalculated by the deterministic engine. */
+  | { kind: "oil"; raw: string; pending: boolean }
 
 const LIST_ITEM = /^(\s*)([-*•+]|\d{1,3}[.)])\s+(.*)$/
 const DETAILS_OPEN = /^\s*<details(?:\s+open)?\s*>\s*(?:<summary>(.*?)<\/summary>)?\s*$/i
@@ -603,6 +606,11 @@ function parseBlocks(source: string): Block[] {
       }
       if (fence.language === "malik-quiz") {
         blocks.push({ kind: "quiz", quiz: closed ? parseAnswerQuiz(body.join("\n")) : null, pending: !closed })
+        pendingFilename = ""
+        continue
+      }
+      if (fence.language === "malik-oil-report") {
+        blocks.push({ kind: "oil", raw: closed ? body.join("\n") : "", pending: !closed })
         pendingFilename = ""
         continue
       }
@@ -1519,6 +1527,11 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
             <CodeBlock language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} autoPreview={autoPreview && block.filename === primaryPreviewFilename} />
             {changes && !streaming ? <CodeChanges before={changes.before} after={changes.after} /> : null}
           </Fragment>
+        }
+
+        if (block.kind === "oil") {
+          if (!block.pending) return <MalikOilReport key={key} raw={block.raw} />
+          return streaming ? <p key={key} className="malik-md-p" role="status">Malik Oil AI…</p> : null
         }
 
         if (block.kind === "quiz") {

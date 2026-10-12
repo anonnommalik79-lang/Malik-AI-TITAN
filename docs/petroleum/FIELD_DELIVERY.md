@@ -19,11 +19,12 @@ The owner stopped feature expansion and authorized main delivery of the complete
 ## Verification scope
 
 - Mandatory regression: oil decline 35%; WC 20/120 → 55/120; liquid 120 bbl/day in all eight rows; GOR 500 → 42000/65 scf/bbl. No cause for water increase is proved.
-- New numerical/regression/property/load suite plus actual skill/snapshot/chat HTTP handlers use explicit auth/provider/storage fixtures. They are not live corporate-login or calibrated field trials.
+- New numerical/regression/property/load suite: 79/79 passed. Actual skill/snapshot/chat HTTP handlers use explicit auth/provider/storage fixtures. They are not live corporate-login or calibrated field trials.
 - Prior petroleum core suite: 162/162 passed; six real export formats and existing skill handler passed.
 - Latest recorded load (Node 22, local Windows, not Render): 500 wells / 6,000 rows ~176 ms; 500 / 20,000 ~546 ms, ~13.7 MB heap delta and ~120.2 MB whole-process RSS. One synthetic run each, excluding HTTP/auth/storage/UI; not an SLA or memory ceiling.
 - Local production Webpack compilation, TypeScript and 84-page generation completed. Final tests/build results and delivery SHA are recorded in the final response. The generic release-core suite is not claimed fully green; the earlier baseline documents list independent Markdown failures.
 - No TSX component, global style, navigation or element layout was modified. New chart data passed the existing chart schema. Full live/mobile/device visual verification is deferred; code inspection is not a claim of physical-device QA.
+- During delivery, main advanced to `2a7ee9a4` with Claude's visual oil report and Ling integration. These changes are preserved in the merge; `withOilVisual` still owns regular production reports, field workflows use the additive API contract and existing activity/chart blocks. No existing Claude UI code is replaced.
 
 ## Use through the existing API
 

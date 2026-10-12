@@ -1,0 +1,108 @@
+/* Malik Oil AI visual report — black and white only (greys between). */
+.malik-oil { --oil-ink: #fafafa; --oil-soft: #a3a3a3; --oil-line: #262626; --oil-line-strong: #3f3f3f; --oil-panel: #0a0a0a;
+  margin: 22px 0; min-width: 0; max-width: 100%; color: var(--oil-ink); font-variant-numeric: tabular-nums; }
+.malik-oil *, .malik-oil *::before, .malik-oil *::after { box-sizing: border-box; }
+.malik-oil__head { padding: 0 0 16px; border-bottom: 1px solid var(--oil-line); }
+.malik-oil__brand { display: block; color: var(--oil-soft); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.malik-oil__title { margin: 6px 0 12px; font-size: clamp(20px, 3.2vw, 26px); line-height: 1.25; font-weight: 750; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.malik-oil__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.malik-oil__chip, .malik-oil__badge { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 4px 11px; border: 1px solid var(--oil-line-strong); border-radius: 999px; color: var(--oil-soft); font-size: 13px; line-height: 1.3; }
+.malik-oil__chip, .malik-oil__badge { max-width: 100%; overflow-wrap: anywhere; }
+.malik-oil__badge > svg { flex: 0 0 auto; }
+.malik-oil__badge { border-color: var(--oil-ink); color: var(--oil-ink); font-weight: 650; }
+.malik-oil__badge.is-failed, .malik-oil__badge.is-tampered { background: var(--oil-ink); color: #000; }
+.malik-oil__alert { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--oil-ink); border-radius: 12px; font-size: 14px; font-weight: 600; }
+.malik-oil__note, .malik-oil__caveat, .malik-oil__provenance { margin: 10px 0 0; color: var(--oil-soft); font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.malik-oil__caveat { padding: 10px 12px; border-inline-start: 2px solid var(--oil-soft); color: var(--oil-ink); background: var(--oil-panel); border-radius: 0 10px 10px 0; }
+.malik-oil[dir="rtl"] .malik-oil__caveat { border-radius: 10px 0 0 10px; }
+.malik-oil__provenance { font-size: 12px; }
+.malik-oil__review { margin: 12px 0 0; font-size: 14px; }
+.malik-oil__section { margin: 18px 0 0; min-width: 0; }
+.malik-oil__h { margin: 0 0 10px; font-size: 17px; line-height: 1.4; font-weight: 700; }
+.malik-oil__more { border-top: 1px solid var(--oil-line); padding-top: 12px; }
+.malik-oil__more > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; margin: 0; cursor: pointer; list-style: none; }
+.malik-oil__more > summary::-webkit-details-marker { display: none; }
+.malik-oil__more > summary::after { content: "+"; flex: 0 0 auto; color: var(--oil-soft); font-size: 22px; font-weight: 400; line-height: 1; }
+.malik-oil__more[open] > summary::after { content: "−"; }
+.malik-oil__more > summary:focus-visible, .malik-oil__button:focus-visible, .malik-oil__tab:focus-visible, .malik-oil-chart__key:focus-visible { outline: 2px solid var(--oil-ink); outline-offset: 3px; }
+.malik-oil__more-body { padding: 4px 0 4px; }
+.malik-oil__conclusion p { margin: 0 0 8px; font-size: 16px; line-height: 1.6; }
+.malik-oil__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0 0; }
+.malik-oil__kpi { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px; border: 1px solid var(--oil-line); border-radius: 14px; background: var(--oil-panel); }
+.malik-oil__kpi-label { color: var(--oil-soft); font-size: 13px; line-height: 1.35; }
+.malik-oil__kpi-value { font-size: 21px; line-height: 1.2; font-weight: 750; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.malik-oil[dir="rtl"] .malik-oil__kpi-value { text-align: right; }
+.malik-oil__kpi-detail { color: var(--oil-soft); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.malik-oil__tabs { display: flex; gap: 6px; margin: 14px 0 0; padding-bottom: 2px; overflow-x: auto; scrollbar-width: thin; }
+.malik-oil__tab, .malik-oil__button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 14px; border: 1px solid var(--oil-line-strong); border-radius: 999px; background: #000; color: var(--oil-ink); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.malik-oil__tab[aria-selected="true"] { background: var(--oil-ink); border-color: var(--oil-ink); color: #000; }
+.malik-oil__button:hover, .malik-oil__tab:hover { border-color: var(--oil-soft); }
+.malik-oil__select { display: flex; align-items: center; gap: 10px; margin: 14px 0 0; color: var(--oil-soft); font-size: 14px; }
+.malik-oil__select select { min-height: 40px; max-width: 100%; padding: 6px 12px; border: 1px solid var(--oil-line-strong); border-radius: 10px; background: #000; color: var(--oil-ink); font: inherit; }
+.malik-oil__actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
+.malik-oil__expand { margin-top: 22px; }
+.malik-oil__actions .malik-oil__button, .malik-oil__section > .malik-oil__button, .malik-oil__more-body > .malik-oil__button { margin-top: 10px; }
+.malik-oil__actions .malik-oil__button { margin-top: 0; }
+.malik-oil__pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 18px; }
+.malik-oil__table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--oil-line); border-radius: 12px; }
+.malik-oil__table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.4; }
+.malik-oil__table th, .malik-oil__table td { padding: 9px 10px; border-bottom: 1px solid var(--oil-line); text-align: left; white-space: nowrap; color: var(--oil-ink); background: transparent; }
+.malik-oil__table thead th { position: sticky; top: 0; background: #000; color: var(--oil-soft); font-size: 12px; font-weight: 650; letter-spacing: .02em; white-space: nowrap; overflow-wrap: normal; vertical-align: bottom; line-height: 1.3; }
+.malik-oil__table thead th > span { display: block; }
+.malik-oil__th-unit { font-weight: 500; opacity: .85; }
+.malik-oil__table tbody th { font-weight: 600; }
+.malik-oil__table .is-num { text-align: right; }
+.malik-oil__table tbody tr:last-child th, .malik-oil__table tbody tr:last-child td { border-bottom: 0; }
+.malik-oil__formulas { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.malik-oil__formulas li { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--oil-line); border-radius: 12px; min-width: 0; overflow-x: auto; }
+.malik-oil__formulas .mtx-display { display: block; margin: 0; text-align: start; }
+.malik-oil__formula-values { color: var(--oil-soft); font-size: 14px; overflow-wrap: anywhere; }
+.malik-oil__facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 0; }
+.malik-oil__facts > div { padding: 12px 14px; border: 1px solid var(--oil-line); border-radius: 12px; min-width: 0; }
+.malik-oil__facts dt { color: var(--oil-soft); font-size: 13px; line-height: 1.35; }
+.malik-oil__facts dd { margin: 4px 0 0; font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+.malik-oil[dir="rtl"] .malik-oil__facts dd[dir="ltr"] { text-align: right; }
+.malik-oil__list, #malik-root .malik-oil .malik-oil__list { margin: 8px 0 0; padding-inline-start: 20px; font-size: 15px; line-height: 1.55; list-style: disc outside; }
+#malik-root .malik-oil .malik-oil__list > li { display: list-item; list-style: inherit; }
+.malik-oil__list li { margin: 3px 0; }
+.malik-oil__list li[data-severity="warning"]::marker, .malik-oil__list li[data-severity="critical"]::marker { content: "! "; font-weight: 800; }
+.malik-oil__hypotheses { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 10px; }
+.malik-oil__hypotheses > div { padding: 12px 14px; border: 1px solid var(--oil-line); border-radius: 12px; }
+.malik-oil__bars { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.malik-oil__bars li { display: grid; grid-template-columns: minmax(64px, 120px) 1fr auto; align-items: center; gap: 10px; font-size: 14px; }
+.malik-oil__bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.malik-oil__bar-track { height: 10px; border-radius: 4px; background: #171717; overflow: hidden; }
+.malik-oil__bar { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--oil-ink); }
+.malik-oil__bar-value { color: var(--oil-soft); white-space: nowrap; }
+.malik-oil-chart { margin: 0; min-width: 0; padding: 14px 14px 8px; border: 1px solid var(--oil-line); border-radius: 14px; background: #000; }
+.malik-oil__section .malik-oil-chart + .malik-oil__table-wrap, .malik-oil__section .malik-oil-chart + .malik-oil__facts { margin-top: 12px; }
+.malik-oil-chart__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 6px; }
+.malik-oil-chart__title { font-size: 15px; font-weight: 650; line-height: 1.35; }
+.malik-oil-chart__unit { color: var(--oil-soft); font-size: 12px; white-space: nowrap; }
+.malik-oil-chart__legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.malik-oil-chart__key { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; border: 1px solid var(--oil-line-strong); border-radius: 999px; background: #000; color: var(--oil-ink); font: inherit; font-size: 13px; cursor: pointer; }
+.malik-oil-chart__key[aria-pressed="false"] { opacity: .45; text-decoration: line-through; }
+.malik-oil-chart__frame { position: relative; width: 100%; min-width: 0; overflow: hidden; }
+.malik-oil-chart__svg { display: block; max-width: 100%; height: auto; }
+.malik-oil-chart__tick { fill: var(--oil-soft); font-size: 11px; font-family: inherit; }
+.malik-oil-chart__zone { fill: var(--oil-soft); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.malik-oil-chart__tip { position: absolute; top: 6px; z-index: 2; display: grid; gap: 3px; width: 180px; padding: 8px 10px; border: 1px solid var(--oil-line-strong); border-radius: 10px; background: rgba(0, 0, 0, .94); color: var(--oil-ink); font-size: 12px; line-height: 1.35; pointer-events: none; }
+.malik-oil-chart__tip span { display: flex; align-items: center; gap: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 520px) {
+  .malik-oil__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .malik-oil__kpi { padding: 12px; }
+  .malik-oil__kpi-value { font-size: 18px; }
+  .malik-oil-chart { padding: 12px 8px 6px; }
+  .malik-oil__bars li { grid-template-columns: minmax(48px, 84px) 1fr; }
+  .malik-oil__bar-value { grid-column: 1 / -1; }
+}
+/* The app tints labels, spans and selects inside the dashboard; the report stays black and white. */
+#malik-root .malik-oil, #malik-root .malik-oil__conclusion p, #malik-root .malik-oil__kpi-value, #malik-root .malik-oil__h, #malik-root .malik-oil__title, #malik-root .malik-oil__table td, #malik-root .malik-oil__table tbody th, #malik-root .malik-oil__facts dd, #malik-root .malik-oil__list, #malik-root .malik-oil-chart__title, #malik-root .malik-oil__caveat { color: #fafafa; }
+#malik-root .malik-oil__brand, #malik-root .malik-oil__chip, #malik-root .malik-oil__kpi-label, #malik-root .malik-oil__kpi-detail, #malik-root .malik-oil__note, #malik-root .malik-oil__provenance, #malik-root .malik-oil__facts dt, #malik-root .malik-oil__table thead th, #malik-root .malik-oil-chart__unit, #malik-root .malik-oil__bar-value, #malik-root .malik-oil__select > span, #malik-root .malik-oil__formula-values { color: #a3a3a3; }
+#malik-root .malik-oil__badge { color: #fafafa; border-color: #fafafa; }
+#malik-root .malik-oil__badge.is-failed, #malik-root .malik-oil__badge.is-tampered, #malik-root .malik-oil__tab[aria-selected="true"] { background: #fafafa; color: #000; }
+#malik-root .malik-oil__tab, #malik-root .malik-oil__button, #malik-root .malik-oil-chart__key { background: #000; color: #fafafa; border-color: #3f3f3f; }
+#malik-root .malik-oil-chart__key > span, #malik-root .malik-oil__button > span { color: inherit; }
+#malik-root .malik-dashboard-shell .malik-oil__select select, #malik-root .malik-oil__select select { background: #000; color: #fafafa; border-color: #3f3f3f; }
+#malik-root .malik-oil__kpi, #malik-root .malik-oil__facts > div, #malik-root .malik-oil__formulas li, #malik-root .malik-oil__hypotheses > div, #malik-root .malik-oil__table-wrap, #malik-root .malik-oil-chart { border-color: #262626; }
+#malik-root .malik-oil-chart__tip, #malik-root .malik-oil-chart__tip span, #malik-root .malik-oil-chart__tip strong, #malik-root .malik-oil-chart__tip b { color: #fafafa; }

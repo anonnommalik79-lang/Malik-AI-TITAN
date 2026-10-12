@@ -35,6 +35,7 @@ import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 import { petroleumSafetyMessage } from "@/lib/work/petroleum/safety"
 import { executePetroleumDocument } from "@/lib/work/petroleum/documents"
 import { executePetroleumMessageAsync } from "@/lib/work/petroleum/message"
+import { executePetroleumTable, withOilVisual } from "@/lib/work/petroleum/table-message"
 import { routePetroleum } from "@/lib/work/petroleum/router"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
@@ -409,11 +410,21 @@ async function runSelectedAnswer(
     activity?.status(text, "code")
     onProgress?.({phase:"petroleum",kind:"petroleum",stage:event.stage,text,processed:event.processed,requested:event.requested,failed:event.failed})
   } })
+  const oilScope = selection?.entitlement?.authenticated ? "account" as const : "guest" as const
   if (petroleum) {
     const step = fieldStep || activity?.start("Нефтегазовый расчёт и аудит", "code", petroleum.receipt.version)
     activity?.finish(step, { ok: petroleum.receipt.ok, inputHash: petroleum.receipt.inputHash }, petroleum.receipt.ok ? "completed" : "failed", petroleum.receipt.error)
-    onToken?.(petroleum.content)
-    return { content: petroleum.content, provider: "malik-petroleum-local", model: petroleum.receipt.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
+    const content = withOilVisual(petroleum, originalPrompt, oilScope)
+    onToken?.(content)
+    return { content, provider: "malik-petroleum-local", model: petroleum.receipt.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
+  }
+  // A production table pasted into the message: computed locally, answered with the visual report.
+  const oilTable = hasMalikAttachments(body?.attachments) ? null : executePetroleumTable({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, scope: oilScope })
+  if (oilTable) {
+    const step = activity?.start("Нефтегазовый расчёт и аудит", "code", oilTable.version)
+    activity?.finish(step, { ok: oilTable.ok, inputHash: oilTable.inputHash }, oilTable.ok ? "completed" : "failed", oilTable.ok ? undefined : "Units or rate basis missing")
+    onToken?.(oilTable.content)
+    return { content: oilTable.content, provider: "malik-petroleum-local", model: oilTable.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
   }
   if (routePetroleum(originalPrompt, body?.selectedSkillId).domain) body = { ...body, metadata: { ...body?.metadata, petroleumDomain: true } }
   const bypassesMainResearch = shouldRunMalikCoder(selection) || hasMalikAttachments(body?.attachments)
