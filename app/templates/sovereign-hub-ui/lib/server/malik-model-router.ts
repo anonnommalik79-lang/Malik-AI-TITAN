@@ -261,6 +261,23 @@ export function providerRuntime(
   if (model.provider === "malik-orchestrator") {
     return missing(`${model.label} использует оркестратор и переключается на доступные provider-модели автоматически.`) as never
   }
+  if (model.provider === "ling-openrouter") {
+    const key = env("MALIK_LING_API_KEY")
+    if (!key) return missing(`${model.label} временно недоступна: MALIK_LING_API_KEY не настроен.`) as never
+    return {
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      key,
+      model: env("MALIK_LING_MODEL") || model.providerModel,
+      stream: false,
+      maxTokens: commonTokens,
+      temperature: commonTemperature,
+      timeoutMs: Math.max(commonTimeout, 90_000),
+      headers: {
+        "HTTP-Referer": env("NEXT_PUBLIC_APP_URL") || "https://malikaiworld.world",
+        "X-Title": "MALIK AI",
+      },
+    }
+  }
   if (model.provider === "nemotron-openrouter") {
     const key = env("NEMOTRON_OPENROUTER_API_KEY")
     if (!key) return missing(`${model.label} временно недоступна: NEMOTRON_OPENROUTER_API_KEY не настроен.`) as never
