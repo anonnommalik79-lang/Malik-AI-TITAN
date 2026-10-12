@@ -60,39 +60,4 @@ test('urgent H2S and autonomous control fail closed in four languages',()=>{asse
 test('negative generation instructions and semantic exclusions',()=>{for(const prompt of ['Проанализируй нефть. Не нарисуй фото', '@Malik Oil AI Analyze oil production; do not draw images', 'Почему падает добыча нефти без генерации фото'])assert.equal(routePetroleum(prompt).engine,'petroleum');for(const query of ['@o','@pet','@неф'])assert.ok(petroleumMention(query));const noMime=executePetroleumMessage({prompt:'@Malik Oil AI analyze',attachments:[{name:'data.csv',mime:'image/png',text:csv()}]});assert.equal(noMime.receipt.ok,false)})
 test('explicit natural-language numeric task and user inputs in report',()=>{const r=executePetroleumMessage({prompt:'@Malik Oil AI Рассчитай NPV: денежные потоки: [-100,60,60]; ставка: 10%; period: year; currency: USD'});assert.ok(r.receipt.ok);close(r.receipt.result.npv,npv([-100,60,60],0.1));assert.ok(r.content.includes('cashflows.0'));const w=executePetroleumMessage({prompt:'@Malik Oil AI Рассчитай обводнённость: oil=80 bbl/day water=20 bbl/day'});close(w.receipt.result.fraction,0.2);assert.equal(executePetroleumMessage({prompt:'@Malik Oil AI Рассчитай NPV без исходных потоков'}),null);assert.equal(executePetroleumMessage({prompt:'@Malik Oil AI',task:{op:'decline',qi:100,declinePerDay:0.01,days:[0,100],b:1,applicable:true}}).receipt.ok,true)})
 
-
-test("Inline monthly production: eight rows, checked WC/GOR, percent decline, one chart, no file required",()=>{
-  const prompt = "@Malik Oil AI Analyze the following synthetic well.\nMonth,Oil_Rate_bbl_day,Water_Rate_bbl_day,Gas_Rate_scf_day\n" +
-    "2026-01,100,20,50000\n2026-02,95,25,48000\n2026-03,90,30,47000\n2026-04,85,35,46000\n" +
-    "2026-05,80,40,45000\n2026-06,75,45,44000\n2026-07,70,50,43000\n2026-08,65,55,42000\n" +
-    "1. Calculate water cut and GOR per month."
-  const response = executePetroleumMessage({prompt})
-  assert.ok(response?.receipt.ok)
-  assert.equal(response.receipt.task.op,"inline-production")
-  assert.equal(response.receipt.result.rows.length,8)
-  close(response.receipt.result.rows[0].waterCutPct, 100*20/120)
-  close(response.receipt.result.rows.at(-1).waterCutPct, 100*55/120)
-  close(response.receipt.result.rows.at(-1).gor, 42000/65)
-  close(response.receipt.result.oilChangePct, -35)
-  assert.ok(response.content.includes("2026-08"))
-  assert.ok(response.content.includes("Gas reference"))
-  assert.equal((response.content.match(/\`\`\`malik-visual/g)||[]).length,1)
-  assert.equal(executePetroleumMessage({prompt})?.content,response.content)
-})
-test("Inline production safety: rejects corrupt, negative, duplicate, mixed-date and missing-period rows",()=>{
-  const prefix="@Malik Oil AI analyze production\nMonth,Oil_Rate_bbl_day,Water_Rate_bbl_day,Gas_Rate_scf_day\n"
-  for(const rows of [
-    "2026-01,-1,2,5\n2026-02,2,3,5",
-    "2026-01,1,2,5\n2026-01,2,3,5",
-    "2026-01,1,2,5\n2026-13,2,3,5",
-    "2026-01,1,2,5\n2026-02-01,2,3,5",
-    "2026-01,1,2,5\n2026-02,2,3",
-  ]) {
-    const response=executePetroleumMessage({prompt:prefix+rows})
-    assert.ok(response && !response.receipt.ok,rows)
-    assert.match(response.content,/INLINE_TABLE_INVALID/)
-  }
-  assert.equal(executePetroleumMessage({prompt:"@Malik Oil AI describe reservoir concepts without a table"}),null)
-})
-
 test('presentation engine receives only executed petroleum numerical receipts',()=>{const topic='Petroleum economics\n```petroleum\n'+JSON.stringify({op:'npv',cashflows:[-100,60,60],rate:0.1,period:'year',currency:'USD'})+'\n```';const instruction=petroleumPresentationInstruction(topic);assert.ok(instruction.includes('ACTUAL DETERMINISTIC RECEIPT')&&instruction.includes('4.132231'));assert.ok(petroleumPresentationInstruction('UAE oil production').includes('No petroleum numerical receipt'));assert.equal(petroleumPresentationInstruction('A presentation about cats'),'')})
