@@ -28,6 +28,18 @@ assert.match(buildOilGasSkillInstruction("crude oil SG=0.85; what is API gravity
 assert.match(buildOilGasSkillInstruction("добыча нефти"), /H2S/)
 assert.match(buildOilGasSkillInstruction("oil field design"), /SPE-PRMS/)
 assert.doesNotMatch(buildOilGasSkillInstruction("добыча нефти"), /VERIFIED PETROLEUM VOLUME/)
+
+for (const [prompt, expected] of [
+  ["Интерпретируй сейсмический разрез нефтяной структуры", "GEOPHYSICS"],
+  ["Проанализируй каротаж нефтяной скважины", "PETROPHYSICS"],
+  ["Рассчитай PVT для нефти", "PVT/FLUIDS"],
+  ["Интерпретируй well test газовой скважины", "WELL TEST"],
+  ["Оптимизируй бурение нефтяной скважины", "DRILLING"],
+  ["Исследуй waterflood нефтяного пласта", "EOR/INJECTION"],
+  ["Проверь коррозию нефтепровода", "PIPELINE/INTEGRITY"],
+  ["Рассчитай NPV нефтяного проекта", "ECONOMICS"],
+]) assert.ok(buildOilGasSkillInstruction(prompt).includes(expected), prompt)
+
 const response = readFileSync("lib/ai/response-intelligence.ts", "utf8")
 const stream = readFileSync("app/api/stream/route-impl.ts", "utf8")
 assert.match(response, /buildOilGasSkillInstruction\(input\.prompt\)/)
