@@ -32,6 +32,7 @@ import {
 import { getDailyTextTokenQuota } from "@/lib/server/daily-text-token-quota"
 import { isExplicitImageEditRequest } from "@/lib/ai/image-intent"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
+import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
 import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers } from "@/lib/ai/superpowers"
@@ -475,6 +476,7 @@ async function runSelectedAnswerUnchecked(
         superpowerPrompt,
         preparedEvidence ? freshnessEvidenceInstruction(classifyFreshness(preparedEvidence.prompt)) + "\n" + sourceContext(preparedEvidence.sources, preparedEvidence.prompt) : "",
         buildChatArtifactSkillPrompt(coderPrompt(body)),
+        buildOilGasSkillInstruction(coderPrompt(body)),
         workModeInstruction(coderPrompt(body), resolveWorkspaceMode(body?.workspaceMode)),
       ].filter(Boolean).join("\n"),
     }).catch((error) => { activity?.finish(fileCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
@@ -584,6 +586,7 @@ async function runSelectedAnswerUnchecked(
       "Treat MALIK_MEDIA_ACTION_FACT / MALIK_MEDIA_ACTION_HISTORY entries in history as factual completed actions and describe them accurately when asked.",
       "Answer in the user's language unless explicitly asked otherwise.",
       artifactSkillPrompt,
+      buildOilGasSkillInstruction(coderInput),
       workModeInstruction(coderInput, resolveWorkspaceMode(executionBody?.workspaceMode)),
     ].filter(Boolean).join("\n"),
     maxTokens: maxOutputTokens || brain.outputTokenTarget,
