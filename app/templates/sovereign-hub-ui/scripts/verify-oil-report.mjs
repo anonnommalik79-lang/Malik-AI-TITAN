@@ -9,6 +9,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { performance } from "node:perf_hooks"
+import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { workTestLoader } from "./work-test-loader.mjs"
 
@@ -17,17 +18,25 @@ const React = require("react")
 const { renderToStaticMarkup } = require("react-dom/server")
 const after = []
 const forbidden = () => { throw new Error("Forbidden provider/tool invoked during the oil report") }
+const comprehensiveCalls = []
+const fakeDeepModel = async (body, selection, _progress, onToken) => {
+  if (!String(body?.originalQuestion || body?.prompt || "").includes("GRAND CHALLENGE FIXTURE")) return forbidden()
+  comprehensiveCalls.push({ modelId: selection?.modelId, evidence: body?.metadata?.petroleumComputedEvidence, domain: body?.metadata?.petroleumDomain })
+  const content = "MULTIDISCIPLINARY MODEL ANALYSIS: 8 months; water cut, GOR, reservoir pressure and NPV need review."
+  onToken?.(content)
+  return { content, provider: "mock-selected-model", model: selection?.modelId, selectedModelId: selection?.modelId, usedWeb: false, sources: [], attempts: [{ provider: "mock-selected-model", model: selection?.modelId, ok: true }] }
+}
 class RouteError extends Error {}
 const owner = { userId: "fixture-account", authenticated: true, plan: "pro" }
 const load = workTestLoader({
   "./oil-report.css": {}, "./malik-tex.css": {},
   "next/server": { after: (fn) => after.push(fn) },
-  "@/lib/malik-god-router": { asPlainText: (answer) => answer.content, malikGodAnswer: forbidden, gatherSourcesForPrompt: forbidden, sourceContext: () => "" },
+  "@/lib/malik-god-router": { asPlainText: (answer) => answer.content, malikGodAnswer: fakeDeepModel, gatherSourcesForPrompt: forbidden, sourceContext: () => "" },
   "@/lib/server/plugin-runtime": { parsePluginCommand: () => null },
   "@/lib/server/plugin-model-answer": { runPluginModelAnswer: forbidden },
   "@/lib/ai/project-builder": { generateProjectWithBrain: forbidden },
   "@/lib/limits/rate-limit": { checkUsageLimit: async () => ({ ok: true }), recordChatUsage: async () => {} },
-  "@/lib/server/malik-model-router": { resolveStrictMalikSelection: async () => ({ modelId: "malik-20b", entitlement: owner }), MalikModelRouteError: RouteError, malikModelErrorPayload: (error) => ({ error: error.message }) },
+  "@/lib/server/malik-model-router": { resolveStrictMalikSelection: async (_request, body) => ({ modelId: body?.modelId || "malik-20b", entitlement: owner }), MalikModelRouteError: RouteError, malikModelErrorPayload: (error) => ({ error: error.message }) },
   "@/lib/server/malik-coder-orchestrator": { runMalikCoderOrchestrator: forbidden },
   "@/lib/server/malik-agent-runtime": { prepareMalikAgentRuntime: forbidden },
   "@/lib/server/request-entitlement": { resolveRequestEntitlement: async () => owner },
@@ -359,6 +368,31 @@ test("stream: a pasted table is answered locally with the report — no model, o
     assert.match(view.request.metadata.sourceHash, /^[a-f0-9]{64}$/)
   }
 })
+test("grand challenge: Ling and MAX both receive a real model call and the verified charts remain in one answer", async () => {
+  const { requiresPetroleumExpertSynthesis } = load("lib/work/petroleum/expert-routing.ts")
+  assert.equal(requiresPetroleumExpertSynthesis("Проанализируй добычу нефти\n" + GOLDEN), false)
+  assert.equal(requiresPetroleumExpertSynthesis("UAE PETROLEUM ENGINEERING GRAND CHALLENGE"), true)
+  const prompt = [
+    "@Malik Oil AI UAE PETROLEUM ENGINEERING GRAND CHALLENGE FIXTURE",
+    "Analyze water cut, GOR, pressure, hypotheses, H2S safety, CAPEX OPEX and NPV; provide a multidisciplinary investment assessment.",
+    GOLDEN,
+  ].join("\n")
+  for (const modelId of ["ling-3.1-flash", "malik-max"]) {
+    const { answer, done } = await stream({ originalQuestion: prompt, modelId })
+    assert.equal(done.length, 1)
+    assert.equal(done[0].provider, "mock-selected-model")
+    assert.equal(done[0].selectedModelId, modelId)
+    assert.equal(answer.match(/MULTIDISCIPLINARY MODEL ANALYSIS/g)?.length, 1)
+    assert.equal(answer.match(/```malik-oil-report/g)?.length, 1)
+    const recent = comprehensiveCalls.at(-1)
+    assert.equal(recent.modelId, modelId)
+    assert.equal(recent.domain, true)
+    assert.match(recent.evidence, /8/)
+    assert.match(recent.evidence, /500/)
+  }
+  assert.equal(comprehensiveCalls.length, 2)
+})
+
 test("stream: missing units get a question, not numbers", async () => {
   const { answer, done } = await stream({ originalQuestion: "Проанализируй добычу нефти\n| Месяц | Нефть | Вода |\n|---|---|---|\n| 1 | 100 | 20 |\n| 2 | 90 | 30 |" })
   assert.equal(done[0].provider, "malik-petroleum-local"); assert.match(answer, /не угадываю единицы/); assert.ok(!answer.includes("malik-oil-report"))
