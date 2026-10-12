@@ -6,9 +6,9 @@ export type MalikModelTier = "free" | "pro"
 export type MalikModelProvider =
   | "malik-orchestrator" | "modelscope" | "aihubmix" | "groq" | "cloudflare"
   | "cerebras" | "nemotron-openrouter" | "together" | "deepseek"
-  | "xkiro" | "llm7" | "nara" | "google-ai"
+  | "xkiro" | "llm7" | "nara" | "google-ai" | "ling-openrouter"
 
-export type MalikModelBrand = RouterCatalogBrand | "malik" | "baidu"
+export type MalikModelBrand = RouterCatalogBrand | "malik" | "baidu" | "ling"
 
 export type MalikModelDefinition = {
   id: MalikModelId
@@ -191,9 +191,24 @@ export const GOOGLE_AI_POOL_MODELS: readonly MalikModelDefinition[] = [
   },
 ]
 
+/** Dedicated OpenRouter model, without replacing the shared provider key. */
+export const LING_3_1_FLASH_MODEL: MalikModelDefinition = {
+  id: "ling-3.1-flash",
+  label: "Ling 3.1 Flash 560B",
+  description: "InclusionAI · OpenRouter · reasoning",
+  tier: "pro",
+  provider: "ling-openrouter",
+  providerModel: "inclusionai/ling-3.1-flash",
+  capabilities: ["text", "code", "tools", "reasoning"],
+  brand: "ling",
+  access: "free",
+  autoEligible: false,
+}
+
 export const MALIK_MODELS: readonly MalikModelDefinition[] = [
   MALIK_MAX_MODEL,
   ...GOOGLE_AI_POOL_MODELS,
+  LING_3_1_FLASH_MODEL,
   ...ROUTER_TEXT_MODELS,
   LLM7_DEFAULT_MODEL,
   ...LEGACY_INTERNAL_MODELS,
