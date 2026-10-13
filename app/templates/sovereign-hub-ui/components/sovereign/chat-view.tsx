@@ -2090,6 +2090,15 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   const [isRecording, setIsRecording] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const petroleumMention = usePetroleumMention(prompt, setPrompt, textareaRef)
+  // Keep the topic label tied to the conversation, never to an unsubmitted @ selection.
+  // Stored user text preserves the explicit mention when a chat is reopened.
+  const petroleumDiscussion = useMemo(
+    () => messages.some((message) => message.role === "user" && (
+      message.selectedSkillId === "petroleum.analyze"
+      || /(?:^|\s)@Malik Oil AI(?=\s|$)/i.test(message.content)
+    )),
+    [messages],
+  )
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const allInputRef = useRef<HTMLInputElement>(null)
@@ -2977,6 +2986,16 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
         <button type="button" onClick={() => openOs("plugins")}><Layers size={15} />Плагины</button>
         <button type="button" onClick={() => { setResearchMode("deep"); focusComposerEnd() }}><Globe size={15} />Исследование</button>
       </nav> : null}
+
+      {petroleumDiscussion ? (
+        <h2
+          data-petroleum-topic-title
+          className="pointer-events-none relative z-10 w-full shrink-0 px-4 pb-1 pt-2 text-center text-[12px] font-semibold tracking-[0.045em] text-white sm:text-[13px]"
+          style={{background:"transparent",border:"none",boxShadow:"none"}}
+        >
+          Обсуждение нефти
+        </h2>
+      ) : null}
 
       <div ref={threadRef} data-message-list className="malik-chat-scroll relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-44 pt-6 md:px-8 md:pb-48 lg:px-10">
         <div className="malik-message-list mx-auto flex w-full max-w-[768px] flex-col gap-8 sm:gap-10">
