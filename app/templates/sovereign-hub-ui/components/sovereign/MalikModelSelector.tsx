@@ -22,6 +22,7 @@ const MALIK_MAX_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACA
 
 const BRAND_ICONS: Record<string, BrandIcon> = {
   malik: { label: "MalikLLM MAX", urls: [MALIK_MAX_ICON], fallback: "M" },
+  "malik-oil": { label: "Malik Oil 1TB · official Malik AI logo", urls: [MALIK_MAX_ICON], fallback: "M" },
   mistral: { label: "Mistral AI", urls: ["https://mistral.ai/favicon.ico"], fallback: "M" },
   minimax: { label: "MiniMax", urls: ["https://www.minimax.io/favicon.ico", "https://minimax.io/favicon.ico"], fallback: "M" },
   qwen: { label: "Qwen", urls: ["https://qwen.ai/favicon.svg", "https://qwen.ai/favicon.ico"], fallback: "Q" },
