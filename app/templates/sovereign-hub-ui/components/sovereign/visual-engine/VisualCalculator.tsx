@@ -6,6 +6,8 @@ import type { CalculatorBlock } from "@/lib/visual/schema"
 import { CALCULATOR_MODELS, calculatorInputs, clamp, computeCalculator, type CalculatorInputState, type CalculatorOutput } from "@/lib/visual/calculators"
 import { formatCurrency, formatNumber, formatPercent, plural, type VisualCurrency } from "@/lib/visual/format"
 import { Fullscreen, VisualCard, isIndex, useVisualField } from "./shared"
+import { scienceCurve } from "@/lib/visual/science-charts"
+import { ChartView } from "./VisualChart"
 
 const isValues = (value: unknown): value is Record<string, number> => Boolean(value && typeof value === "object" && !Array.isArray(value)
   && Object.values(value as object).every((item) => typeof item === "number" && Number.isFinite(item)))
@@ -63,6 +65,7 @@ function CalculatorBody({ block, storeKey, persist }: { block: CalculatorBlock; 
   const [scenario, setScenario, resetScenario] = useVisualField<number>(storeKey, persist, "scenario", -1, (value): value is number => value === -1 || isIndex(block.scenarios?.length || 0)(value))
   const current = Object.fromEntries(inputs.map((input) => [input.key, clamp(values[input.key] ?? input.value, input.min, input.max)]))
   const result = computeCalculator(block.model, current)
+  const curve = scienceCurve(block.model, current)
   const currency = block.currency
   const update = (key: string, value: number) => { setValues({ ...current, [key]: value }); if (scenario !== -1) setScenario(-1) }
   const choose = (at: number) => {
@@ -91,6 +94,13 @@ function CalculatorBody({ block, storeKey, persist }: { block: CalculatorBlock; 
     <div className="mv-sliders">
       {inputs.map((input) => <Slider key={input.key} input={input} value={current[input.key]} currency={currency} onChange={(value) => update(input.key, value)} />)}
     </div>
+    {curve ? (
+      <section className="mv-science-plot" aria-label={curve.title} style={{ marginTop: 18, marginBottom: 12 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, color: "#fafafa", marginBottom: 8 }}>{curve.title}</h4>
+        <ChartView kind="line" data={curve.data} unit={curve.unit} height={230} xLabel={curve.xLabel} yLabel={curve.yLabel} />
+        <p style={{ fontSize: 11, color: "#a1a1aa", marginTop: 8 }}>Расчёт по заданным параметрам и явно указанным допущениям. Не экспериментальные измерения.</p>
+      </section>
+    ) : null}
     <div className="mv-kpis" role="list" aria-live="polite">
       {result.outputs.map((item) => <div key={item.key} className="mv-kpi" role="listitem">
         <div className="mv-kpi__label">{item.label}</div>
