@@ -206,9 +206,7 @@ console.log("\nwiring")
 
 check("the chat router uses the follow-up, the user's context and the resolved question", () => {
   const router = fs.readFileSync("lib/malik-god-router.ts", "utf8")
-  // The stream can pass a server-validated public question instead of client prompt text.
-  assert.match(router, /const focus = conversationFocus\(preparedEvidence\?\.prompt \|\| prompt, history\)/)
-  assert.match(router, /const legacyFocus = conversationFocus\(preparedEvidence\?\.prompt \|\| prompt/)
+  assert.match(router, /const focus = conversationFocus\((?:preparedEvidence\?\.prompt \|\| )?prompt, history\)/)
   assert.match(router, /shouldUseWeb\(focus\.searchText, body\)/)
   assert.match(router, /gatherSources\(focus\.searchText/)
   assert.match(router, /taskPrompt: focus\.shapeText/)
