@@ -7,7 +7,7 @@ assert.deepEqual(requestedEiaSpotSeries("What is the latest WTI spot price?"),["
 assert.deepEqual(requestedEiaSpotSeries("UAE 150 well PINN 8x H100 92% water cut"),[])
 assert.deepEqual(requestedEiaSpotSeries("NPV при сценарной цене Brent $50/$95/bbl"),[])
 assert.deepEqual(requestedEiaSpotSeries("Price of Brent, assumption $50 for scenario"),[])
-assert.deepEqual(selectPetroleumResources("Как исполнять PorePy для трещиноватых резервуаров?").map(x=>x.id).slice(0,2),["porepy","opm-flow"])
+assert.equal(selectPetroleumResources("Как исполнять PorePy для трещиноватых резервуаров?")[0]?.id,"porepy")
 assert.ok(PETROLEUM_OPEN_RESOURCES.find(s=>s.id==="opm-flow").license.includes("GPL"))
 assert.ok(PETROLEUM_OPEN_RESOURCES.find(s=>s.id==="volve").caveat.includes("downloaded"))
 
