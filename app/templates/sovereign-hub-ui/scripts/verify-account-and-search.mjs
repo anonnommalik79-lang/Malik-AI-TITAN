@@ -189,6 +189,7 @@ try {
     XKIRO_API_KEY: "offline",
     LLM7_API_KEY: "offline",
     NARA_API_KEY: "offline",
+    MALIK_LING_API_KEY: "offline",
   })
   console.info = () => {}
   // A selected model must call its own provider and providerModel.
@@ -199,6 +200,7 @@ try {
     modelscope: "api-inference.modelscope.cn",
     aihubmix: "aihubmix.com",
     "nemotron-openrouter": "openrouter.ai",
+    "ling-openrouter": "openrouter.ai",
     "google-ai": "generativelanguage.googleapis.com",
     together: "api.together.xyz",
     deepseek: "api.deepseek.com",
