@@ -58,6 +58,10 @@ function useCardImage(image: AnswerCard["image"], sources: Sources, title: strin
         ? sourceReferencePhoto({ topic: fromSource.title || subject, queries: [referenceSearchTopic(fromSource.title || subject)], explicit: true, layout: "landscape" }, [fromSource]) : null)
     : null
   const sourceImage = pagePhoto ? { url: pagePhoto.url, label: pagePhoto.credit || "Источник фото", sourceUrl: pagePhoto.sourceUrl }
+    // Explicit image index on the exact cited card URL is verified first-party
+    // metadata. Generic OG filenames may not pass a subject-name search filter.
+    : directlyLinkedPage && fromSource?.image && safeHttps(fromSource.image) && !failed.includes(fromSource.image) && imageRole !== "logo"
+      ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url), sourceUrl: fromSource.url }
     : imageRole === "logo" && sourceMatches && fromSource?.image && /^https:\/\//i.test(fromSource.image) && !failed.includes(fromSource.image) ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url), sourceUrl: fromSource.url } : null
   // A model may omit image metadata or cite a page without an OG picture.
   // Retrieve the exact named subject instead of leaving a permanent initial.
