@@ -434,7 +434,7 @@ async function runSelectedAnswer(
       }
       try {
         const answer = await runSelectedAnswerUnchecked(engineeringBody, selection, onProgress, maxOutputTokens, undefined, activity, signal)
-        const combined = answer.content + "\n\n### Подтверждённые расчётным движком данные\n\n" + content
+        const combined = content + "\n\n### Инженерная интерпретация моделей — требует проверки\n\n" + answer.content
         onToken?.(combined)
         return { ...answer, content: combined }
       } catch (error) {
@@ -469,7 +469,7 @@ async function runSelectedAnswer(
       try {
         const answer = await runSelectedAnswerUnchecked(modelBody, selection, onProgress, maxOutputTokens, undefined, activity, signal)
         activity?.finish(modelStep, { provider: answer.provider, model: answer.model, characters: answer.content.length })
-        const content = answer.content + "\n\n### Проверенные данные добычи и интерактивные графики\n\n" + oilTable.content
+        const content = oilTable.content + "\n\n### Инженерная интерпретация моделей — требует проверки\n\n" + answer.content
         oilProgress({ stage: "RESPONSE_SYNTHESIZED", status: "completed" })
         onToken?.(content)
         oilProgress({ stage: "COMPLETED", status: "completed" })

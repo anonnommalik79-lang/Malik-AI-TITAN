@@ -383,6 +383,7 @@ test("grand challenge: Ling and MAX both receive a real model call and the verif
     assert.equal(done[0].provider, "mock-selected-model")
     assert.equal(done[0].selectedModelId, modelId)
     assert.equal(answer.match(/MULTIDISCIPLINARY MODEL ANALYSIS/g)?.length, 1)
+    assert.ok(answer.startsWith("```malik-oil-report"), "Computed report precedes unverified model interpretation")
     assert.equal(answer.match(/```malik-oil-report/g)?.length, 1)
     const recent = comprehensiveCalls.at(-1)
     assert.equal(recent.modelId, modelId)
