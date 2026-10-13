@@ -1230,15 +1230,14 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     return selected
   }, [blocks, question])
   const fallbackVisualSlots = useMemo(() => {
-    if (!allowImages) return new Map<string, AnswerVisualSlot>()
-    // Explicit photo metadata owns its subjects and layout: no duplicate guessed photos.
-    if (blocks.some((block) => block.kind === "photos" && block.subjects.length > 0)) return new Map<string, AnswerVisualSlot>()
-    // Cards and process diagrams already contain the intended visuals; do not
-    // insert unrelated stock photography for architecture, tariffs or software.
-    // Authored photo fences remain eligible through the separate photoPlans path.
-    const structured = blocks.some((block) => (block.kind === "cards" && Boolean(block.block))
-      || (block.kind === "visual" && block.visual?.type === "flow"))
-    if (structured && !/(?:фото(?:граф|к)?|изображени|картинк|\bphotos?\b|\bimages?\b|\bpictures?\b)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
+    // Structured visualizations already carry their own evidence and image semantics.
+    // Never add decorative reference photos beside charts/flows/cards, and never
+    // override an explicit malik-photos fence with a guessed comparison lineup.
+    if (!allowImages || blocks.some((block) =>
+      (block.kind === "photos" && block.subjects.length > 0) ||
+      (block.kind === "cards" && Boolean(block.block)) ||
+      (block.kind === "visual" && block.visual?.type === "flow")
+    )) return new Map<string, AnswerVisualSlot>()
     // Event lineups need explicit subject metadata: a guessed portrait is not attendance evidence.
     if (!question || /(?:спикер|выступ|участни|приехал|присутств|speaker|attend|participant|lineup)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
     // A chart or a dates/pricing card does not disable photos in other sections.
@@ -1339,12 +1338,13 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     const unique = [...new Map(plans.map((plan) => [plan.topic.toLowerCase(), plan])).values()]
     if (unique.some((plan) => plan.kind === "tutorial" || plan.subjects?.length)) return []
     if (singleVisualSubject) return unique.slice(0, 1)
-    const explicitLineup = blocks.some((block) => block.kind === "photos" && block.lineup)
-    const ordinaryPhotoFence = blocks.some((block) => block.kind === "photos" && !block.lineup && block.subjects.length > 0)
-    // Question phrasing never upgrades an ordinary multi-subject photo fence into a lineup.
-    if (ordinaryPhotoFence && !explicitLineup) return []
+    // A normal multi-subject photo fence is a set of captioned rows, NOT
+    // a head-to-head lineup. Only the explicit layout:"lineup" opts in.
+    if (blocks.some((block) => block.kind === "photos" && block.subjects.length > 0)
+      && !blocks.some((block) => block.kind === "photos" && block.lineup)) return []
     const comparison = /(?:сравни|сравнение|\b(?:compare|versus|vs)\b|салыстыр)/iu.test(question)
-    return (explicitLineup || comparison) && unique.length >= 2 && unique.length <= 4 ? unique : []
+      || blocks.some((block) => block.kind === "photos" && block.lineup)
+    return comparison && unique.length >= 2 && unique.length <= 4 ? unique : []
   }, [allowImages, visualSlots, hintedAnchors, singleVisualSubject, question, blocks])
   const headerTopics = useMemo(() => new Set(headerPhotos.map((plan) => plan.topic.toLowerCase())), [headerPhotos])
   const inlineVisualSlots = useMemo(() => new Map([...visualSlots].filter(([, slot]) => !headerTopics.has(slot.plan.topic.toLowerCase()))), [visualSlots, headerTopics])
