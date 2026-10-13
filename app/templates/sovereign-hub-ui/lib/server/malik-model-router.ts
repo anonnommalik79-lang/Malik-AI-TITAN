@@ -279,6 +279,20 @@ export function providerRuntime(
     }
   }
   if (model.provider === "nemotron-openrouter") {
+    // Explicit NVIDIA NIM connection is supported alongside the pre-existing
+    // OpenRouter route. Never silently send NIM keys to OpenRouter.
+    const nimKey = env("NVIDIA_NIM_API_KEY")
+    if (env("NVIDIA_NIM_ENABLED").toLowerCase() === "true" && nimKey) {
+      return {
+        url: `${(env("NVIDIA_NIM_BASE_URL") || "https://integrate.api.nvidia.com/v1").replace(/\/+$/, "")}/chat/completions`,
+        key: nimKey,
+        model: env("NVIDIA_NIM_MODEL") || "nvidia/nemotron-3-ultra-550b-a55b",
+        stream: false,
+        maxTokens: Math.min(commonTokens, 6000),
+        temperature: commonTemperature,
+        timeoutMs: Math.max(commonTimeout, 120_000),
+      }
+    }
     const key = env("NEMOTRON_OPENROUTER_API_KEY")
     if (!key) return missing(`${model.label} временно недоступна: NEMOTRON_OPENROUTER_API_KEY не настроен.`) as never
     const configured = clampTokens(Number(env("NEMOTRON_MAX_OUTPUT_TOKENS") || 8_000), 8_000, 16_000)
@@ -804,6 +818,8 @@ export function providerSpecificBody(
     return { reasoning_effort: fastMode ? "low" : reasoningEffort }
   }
   if (model.provider === "nemotron-openrouter") {
+    // OpenRouter-specific reasoning schema must not be sent to NVIDIA NIM.
+    if (runtime.url.startsWith("https://integrate.api.nvidia.com/")) return {}
     return { reasoning: { effort: fastMode ? "low" : reasoningEffort, exclude: true } }
   }
   return {}
@@ -874,6 +890,19 @@ export async function runStrictMalikModel(input: {
   }
 
   const model = getMalikModel(input.modelId)
+  if (model.id === "malik-oil-1tb") {
+    // Ensemble participants never stream competing drafts into the chat.
+    // Internal participants use their real IDs and no silent cross-provider fallback.
+    const { runMalikOilEnsemble, OilEnsembleError } = await import("./malik-oil-ensemble")
+    try {
+      return await runMalikOilEnsemble(input, async (request, allowFallback) =>
+        runStrictMalikModel(request, { allowFallback }),
+      )
+    } catch (error) {
+      if (error instanceof OilEnsembleError) throw new MalikModelRouteError(error.code, error.message, error.code === "REQUEST_CANCELLED" ? 499 : 503, input.modelId)
+      throw error
+    }
+  }
 
   // MalikLLM MAX and models picked by name run on the streaming engine:
   // every key of every model is a lane, lanes race, and a lane that stalls

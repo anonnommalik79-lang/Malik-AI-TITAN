@@ -377,7 +377,7 @@ test("grand challenge: Ling and MAX both receive a real model call and the verif
     "Analyze water cut, GOR, pressure, hypotheses, H2S safety, CAPEX OPEX and NPV; provide a multidisciplinary investment assessment.",
     GOLDEN,
   ].join("\n")
-  for (const modelId of ["ling-3.1-flash", "malik-max"]) {
+  for (const modelId of ["ling-3.1-flash", "malik-max", "malik-oil-1tb"]) {
     const { answer, done } = await stream({ originalQuestion: prompt, modelId })
     assert.equal(done.length, 1)
     assert.equal(done[0].provider, "mock-selected-model")
@@ -390,7 +390,7 @@ test("grand challenge: Ling and MAX both receive a real model call and the verif
     assert.match(recent.evidence, /8/)
     assert.match(recent.evidence, /500/)
   }
-  assert.equal(comprehensiveCalls.length, 2)
+  assert.equal(comprehensiveCalls.length, 3)
 })
 
 test("stream: missing units get a question, not numbers", async () => {

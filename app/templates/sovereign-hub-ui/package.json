@@ -146,6 +146,7 @@
     "test:petroleum-documents": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test --experimental-test-coverage scripts/verify-petroleum-documents.mjs",
     "test:petroleum-full-ui": "node scripts/verify-petroleum-full-ui.mjs",
     "test:oil-report": "node scripts/verify-oil-report.mjs",
+    "test:oil-ensemble": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-oil-ensemble.mjs",
     "test:oil-report-live": "node scripts/verify-oil-report-live.mjs"
   },
   "dependencies": {

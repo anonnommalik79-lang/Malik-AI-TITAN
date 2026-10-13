@@ -417,6 +417,21 @@ async function runSelectedAnswer(
     const step = fieldStep || activity?.start("Нефтегазовый расчёт и аудит", "code", petroleum.receipt.version)
     activity?.finish(step, { ok: petroleum.receipt.ok, inputHash: petroleum.receipt.inputHash }, petroleum.receipt.ok ? "completed" : "failed", petroleum.receipt.error)
     const content = withOilVisual(petroleum, originalPrompt, oilScope)
+    if (selection?.modelId === "malik-oil-1tb" && petroleum.receipt.ok) {
+      // Preserve the verified field receipt and then activate all three models.
+      const engineeringBody = {
+        ...body,
+        metadata: {
+          ...body?.metadata,
+          petroleumDomain: true,
+          petroleumComputedEvidence: oilReportBlocksToText(content).slice(0, 16_000),
+        },
+      }
+      const answer = await runSelectedAnswerUnchecked(engineeringBody, selection, onProgress, maxOutputTokens, onToken, activity, signal)
+      const appendix = "\n\n### Подтверждённые расчётным движком данные\n\n" + content
+      onToken?.(appendix)
+      return { ...answer, content: answer.content + appendix }
+    }
     onToken?.(content)
     return { content, provider: "malik-petroleum-local", model: petroleum.receipt.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
   }
@@ -425,7 +440,7 @@ async function runSelectedAnswer(
   if (oilTable) {
     const step = activity?.start("Нефтегазовый расчёт и аудит", "code", oilTable.version)
     activity?.finish(step, { ok: oilTable.ok, inputHash: oilTable.inputHash }, oilTable.ok ? "completed" : "failed", oilTable.ok ? undefined : "Units or rate basis missing")
-    if (oilTable.ok && requiresPetroleumExpertSynthesis(originalPrompt)) {
+    if (oilTable.ok && (selection?.modelId === "malik-oil-1tb" || requiresPetroleumExpertSynthesis(originalPrompt))) {
       // A comprehensive oil/field/economics brief cannot end at the fast visual report.
       // The validated engineering data feed the model as evidence, not new instructions.
       // Keep this out of provider logs and preserve the actual selected model identity.

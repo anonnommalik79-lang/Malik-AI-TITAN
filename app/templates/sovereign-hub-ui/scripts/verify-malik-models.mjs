@@ -4,6 +4,7 @@ import {
   DEFAULT_MALIK_MODEL_ID,
   FREE_MALIK_MODELS,
   GOOGLE_AI_POOL_MODELS,
+  MALIK_OIL_1TB_MODEL,
   LING_3_1_FLASH_MODEL,
   MALIK_MODELS,
   MAX_ROUTER_MODEL_IDS,
@@ -35,11 +36,11 @@ assert.deepEqual(
 )
 assert.ok(GOOGLE_AI_POOL_MODELS.every((model) => model.provider === "google-ai" && model.brand === "google" && model.tier === "pro"))
 
-assert.equal(PUBLIC_MALIK_MODELS.length, 132, "Selector must expose MAX + 6 Google entries + Ling + 123 router text entries + LLM7 Default")
+assert.equal(PUBLIC_MALIK_MODELS.length, 133, "Selector must expose MAX + Oil + 6 Google + Ling + 123 router text + LLM7 Default")
 // Product rule: MalikLLM MAX is the one free model (it combines every
 // provider). Every other model is MalikAI Plus.
 assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id), ["malik-max"], "Only MalikLLM MAX is free")
-assert.equal(PRO_MALIK_MODELS.length, 131, "Every other public model is grouped as MalikAI Plus")
+assert.equal(PRO_MALIK_MODELS.length, 132, "Every other public model is grouped as MalikAI Plus")
 assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, MALIK_MODELS.length, "Model IDs must be unique")
 
 for (const model of FREE_MALIK_MODELS) {
@@ -63,6 +64,27 @@ assert.ok(MAX_ROUTER_MODEL_IDS.some((id) => id.startsWith("router:nara:")), "Nar
 assert.ok(MAX_ROUTER_MODEL_IDS.includes("malik-20b"), "Existing Malik provider pool must remain a MAX fallback")
 
 
+const oil = getMalikModel("malik-oil-1tb")
+assert.deepEqual(oil, MALIK_OIL_1TB_MODEL)
+assert.equal(oil.provider, "malik-oil-ensemble")
+assert.equal(oil.brand, "malik-oil")
+assert.equal(oil.autoEligible, false)
+assert.equal(oil.tier, "pro")
+assert.equal(canUseMalikModel(oil.id, "free"), false)
+assert.equal(canUseMalikModel(oil.id, "owner"), true)
+assert.ok(!MAX_ROUTER_MODEL_IDS.includes(oil.id), "An ensemble must not recursively auto-route into MAX")
+assert.equal(PUBLIC_MALIK_MODELS[1 + GOOGLE_AI_POOL_MODELS.length].id, oil.id)
+const oilLogo = readFileSync("components/sovereign/MalikModelSelector.tsx", "utf8")
+assert.match(oilLogo, /"malik-oil": \{ label: "Malik Oil 1TB.*urls: \[MALIK_MAX_ICON\]/)
+const oilRoute = readFileSync("lib/server/malik-model-router.ts", "utf8")
+assert.match(oilRoute, /runMalikOilEnsemble\(input/)
+assert.match(oilRoute, /NVIDIA_NIM_ENABLED/)
+const ensemble = readFileSync("lib/server/malik-oil-ensemble.ts", "utf8")
+assert.match(ensemble, /runMalikOilEnsemble/)
+assert.match(ensemble, /"ling-3.1-flash"/)
+assert.match(ensemble, /"nvidia-nemotron-ultra-550b"/)
+assert.match(ensemble, /"malik-max"/)
+
 const ling = getMalikModel("ling-3.1-flash")
 assert.deepEqual(ling, LING_3_1_FLASH_MODEL)
 assert.equal(ling.provider, "ling-openrouter")
@@ -72,7 +94,7 @@ assert.equal(ling.tier, "pro")
 assert.equal(ling.access, "free")
 assert.equal(canUseMalikModel(ling.id, "owner"), true)
 assert.equal(canUseMalikModel(ling.id, "free"), false)
-assert.equal(PUBLIC_MALIK_MODELS[1 + GOOGLE_AI_POOL_MODELS.length]?.id, ling.id)
+assert.equal(PUBLIC_MALIK_MODELS[2 + GOOGLE_AI_POOL_MODELS.length]?.id, ling.id)
 assert.ok(!MAX_ROUTER_MODEL_IDS.includes(ling.id), "Ling quota must not be auto-spent")
 const lingSelector = readFileSync("components/sovereign/MalikModelSelector.tsx", "utf8")
 const selectedRouter = readFileSync("lib/server/malik-model-router.ts", "utf8")
