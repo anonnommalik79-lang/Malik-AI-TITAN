@@ -29,6 +29,7 @@ jobs:
           cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
+      - run: npm run test:models
       - run: npm run test:petroleum
       - run: npm run test:petroleum-field
       - run: npm run test:petroleum-api
