@@ -85,7 +85,10 @@ assert.match(imageResultSource, /requestMalikImageEditor\(\{/)
 assert.match(imageResultSource, /sourceSrc: image\.src/)
 assert.doesNotMatch(imageResultSource, /prefillPrompt\(prompt\)/)
 assert.match(dashboardSource, /const forcedImageEdit = hasRequestImageAttachment && isExplicitImageEditRequest\(cleanContent, true\)/)
-assert.match(dashboardSource, /const requestedInlineMediaKind = forcedImageEdit[\s\S]*?\? "image"/)
+// Oil-specific visual routes now precede the generic image-edit branch.
+// Guard the real invariant, not an outdated assignment order.
+assert.match(dashboardSource, /const requestedInlineMediaKind = petroleumAnalytic \? null[^\n]* : forcedImageEdit\s*\n\s*\? "image"/)
+assert.match(dashboardSource, /const editingImage = forcedImageEdit \|\|/)
 assert.match(dashboardSource, /promptLikelyEditsRecentImage/)
 assert.match(dashboardSource, /previousUpload/)
 assert.match(dashboardSource, /persistChatAttachmentsForHistory/)
