@@ -8,7 +8,7 @@ export type AnalysisDomain = "petroleum" | "physics" | "math" | "logic" | "chemi
 export type AnalysisVisualKind = "chart" | "dashboard" | "calculator" | "table" | "graph"
 export type AnalysisPreset = {
   id: number; name: string; domain: AnalysisDomain; kind: AnalysisVisualKind;
-  keywords: readonly string[]; required: string; readiness: "specification"
+  keywords: readonly string[]; required: string; readiness: "specification" | "tested-core"
 }
 
 const ROWS = `
@@ -113,6 +113,8 @@ const ROWS = `
 99|general|graph|Evidence And Assumptions Map|проверка гипотез,evidence map|наблюдения, допущения и источники
 100|general|dashboard|Cross Domain Analysis Cockpit|многодисциплинар,cross domain,анализ данные|валидированные измерения и расчёты
 `
+/** Tested-core means a checked computational/UI component, NOT field validation. */
+const TESTED_CORE = new Set([2, 73, 76, 80])
 export const ANALYSIS_PRESETS: readonly AnalysisPreset[] = ROWS.trim().split("\n").map((line) => {
   const parts = line.split("|")
   if (parts.length !== 6) throw new Error("Invalid analysis catalog entry")
@@ -120,7 +122,7 @@ export const ANALYSIS_PRESETS: readonly AnalysisPreset[] = ROWS.trim().split("\n
   return {
     id: Number(id), domain: domain as AnalysisDomain, kind: kind as AnalysisVisualKind,
     name, keywords: keywords.split(",").map((item) => item.trim()),
-    required, readiness: "specification" as const,
+    required, readiness: TESTED_CORE.has(Number(id)) ? "tested-core" as const : "specification" as const,
   }
 })
 
