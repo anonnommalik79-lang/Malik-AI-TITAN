@@ -27,7 +27,7 @@ const base = {
     if(req.modelId==="nvidia-nemotron-ultra-550b")throw Error("403")
     return {content:"Engineering valid response "+req.modelId,provider:"mock",model:req.modelId,selectedModelId:req.modelId}
   })
-  assert.equal(seen.length,3)
+  assert.deepEqual(seen,["ling-3.1-flash","nvidia-nemotron-ultra-550b","malik-max","malik-max"])
   assert.match(result.content,/2\/3/)
   assert.match(result.content,/NVIDIA Nemotron 3 Ultra 550B: не участвовала/)
   assert.doesNotMatch(result.content,/3\/3/)
