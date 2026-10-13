@@ -205,12 +205,12 @@ export const LING_3_1_FLASH_MODEL: MalikModelDefinition = {
   autoEligible: false,
 }
 
-/** Named petroleum expert ensemble, not a new trillion-parameter foundation model. */
+/** Public beta petroleum expert ensemble, not a trillion-parameter foundation model. */
 export const MALIK_OIL_1TB_MODEL: MalikModelDefinition = {
   id: "malik-oil-1tb",
   label: "Malik Oil 1TB",
   description: "Нефть · Ling 560B + NVIDIA 550B + MalikLLM MAX",
-  tier: "pro",
+  tier: "free",
   provider: "malik-oil-ensemble",
   providerModel: "ensemble:ling-3.1-flash+nemotron-3-ultra-550b+malik-max",
   capabilities: ["text", "code", "tools", "reasoning"],
@@ -221,8 +221,8 @@ export const MALIK_OIL_1TB_MODEL: MalikModelDefinition = {
 
 export const MALIK_MODELS: readonly MalikModelDefinition[] = [
   MALIK_MAX_MODEL,
-  ...GOOGLE_AI_POOL_MODELS,
   MALIK_OIL_1TB_MODEL,
+  ...GOOGLE_AI_POOL_MODELS,
   LING_3_1_FLASH_MODEL,
   ...ROUTER_TEXT_MODELS,
   LLM7_DEFAULT_MODEL,
