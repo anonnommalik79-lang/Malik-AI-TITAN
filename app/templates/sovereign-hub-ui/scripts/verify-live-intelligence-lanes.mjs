@@ -30,7 +30,7 @@ const deps = {
   hasMalikProAccess: () => false,
   buildMalikSuperpowerSystemPrompt: () => "", detectMalikSuperpowers: () => [],
   routeMalikAttachments: async input => { fileInputs.push(input); return { kind: fileKind, content: draft, prompt: "PRIVATE FILE CONTENT secret-project data", files: 1, estimatedTokens: 1, provider: "fixture", usage: {} } },
-  buildChatArtifactSkillPrompt: () => "", resolveWorkspaceMode: () => "chat", workModeInstruction: () => "",
+  buildChatArtifactSkillPrompt: () => "", buildOilGasSkillInstruction: () => "", resolveWorkspaceMode: () => "chat", workModeInstruction: () => "",
   prepareMalikAgentRuntime: async () => null,
   malikGodAnswer: async (...args) => { godInputs.push(args); return { content: "God answer fixture", accuracy: { fixture: true }, sources: args[7]?.sources || [], provider: "fixture", model: "fixture", attempts: [] } },
   runMalikCoderOrchestrator: async input => { modelInputs.push(input); return { content: draft, provider: "fixture", usage: { stages: [] } } },
