@@ -125,19 +125,19 @@ export const ANALYSIS_PRESETS: readonly AnalysisPreset[] = ROWS.trim().split("\n
 })
 
 const DOMAINS: ReadonlyArray<[AnalysisDomain, RegExp]> = [
-  ["petroleum", /(?:@malik oil ai|нефт|мұнай|скважин|дебит|бурен|пластов|карбонатн|газодобыч|пластов(?:ое|ого)|\\b(?:petroleum|oilfield|oil well|oil production|reservoir|wellbore|pvt|gor|wor|h2s|adnoc)\\b)/iu],
-  ["logic", /(?:логик|булев|истинност|доказательств|алгоритм|дерево решен|кратчайш пут|\\b(?:logic|boolean|truth table|algorithm|decision tree|shortest path|complexity)\\b)/iu],
-  ["physics", /(?:физик|ускорени|свободн паден|кинематик|закон ома|сопротивлен|напряжен|маятник|колебани|теплопередач|идеальн газ|брос|\\b(?:physics|projectile|kinematics|free fall|ohm|resistance|oscillator|ideal gas)\\b)/iu],
-  ["chemistry", /(?:хими|стехиометр|титрован|скорост реакци|\\b(?:chemistry|titration|stoichiometry|reaction rate)\\b)/iu],
-  ["math", /(?:математ|график функц|производн|интеграл|корни уравнен|уравнен|регресс|корреляц|вероятност|\\b(?:mathematics|function plot|derivative|integral|equation roots|regression|correlation|probability|y=)\\b)/iu],
-  ["statistics", /(?:статистик|доверительн интервал|сезонност|\\b(?:statistics|confidence interval|seasonality)\\b)/iu],
-  ["general", /(?:перевод единиц|проверка гипотез|многодисциплинар|анализ данные|\\b(?:unit conversion|evidence map|cross domain)\\b)/iu],
+  ["petroleum", /(?:@malik oil ai|нефт|мұнай|скважин|дебит|бурен|пластов|карбонатн|газодобыч|пластов(?:ое|ого)|\b(?:petroleum|oilfield|oil well|oil production|reservoir|wellbore|pvt|gor|wor|h2s|adnoc)\b)/iu],
+  ["logic", /(?:логик|булев|истинност|доказательств|алгоритм|дерево решен|кратчайш пут|\b(?:logic|boolean|truth table|algorithm|decision tree|shortest path|complexity)\b)/iu],
+  ["physics", /(?:физик|ускорени|свободн паден|кинематик|закон ома|сопротивлен|напряжен|маятник|колебани|теплопередач|идеальн газ|брос|\b(?:physics|projectile|kinematics|free fall|ohm|resistance|oscillator|ideal gas)\b)/iu],
+  ["chemistry", /(?:хими|стехиометр|титрован|скорост реакци|\b(?:chemistry|titration|stoichiometry|reaction rate)\b)/iu],
+  ["math", /(?:математ|график функц|производн|интеграл|корни уравнен|уравнен|регресс|корреляц|вероятност|\b(?:mathematics|function plot|derivative|integral|equation roots|regression|correlation|probability|y=)\b)/iu],
+  ["statistics", /(?:статистик|доверительн интервал|сезонност|\b(?:statistics|confidence interval|seasonality)\b)/iu],
+  ["general", /(?:перевод единиц|проверка гипотез|многодисциплинар|анализ данные|\b(?:unit conversion|evidence map|cross domain)\b)/iu],
 ]
-const NO_PLOT = /(?:только\\s+текст|без\\s+(?:график|диаграмм|визуал|схем)|text\\s+only|no\\s+(?:charts?|visuals?|diagrams?))/iu
+const NO_PLOT = /(?:только\s+текст|без\s+(?:график|диаграмм|визуал|схем)|text\s+only|no\s+(?:charts?|visuals?|diagrams?))/iu
 
 export function classifyAnalysisDomain(prompt: string): AnalysisDomain | null {
   const value = String(prompt || "").slice(0, 4000)
-  if (/\\b(?:oil painting|cooking oil|essential oil|motor oil)\\b/iu.test(value) && !/нефт|скважин|мұнай|reservoir/iu.test(value)) return null
+  if (/\b(?:oil painting|cooking oil|essential oil|motor oil)\b/iu.test(value) && !/нефт|скважин|мұнай|reservoir/iu.test(value)) return null
   return DOMAINS.find(([, pattern]) => pattern.test(value))?.[0] || null
 }
 
