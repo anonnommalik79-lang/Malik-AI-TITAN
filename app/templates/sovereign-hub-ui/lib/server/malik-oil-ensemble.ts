@@ -8,7 +8,8 @@ import type { MalikModelId } from "../ai/malik-models"
 import { isOilGasRequest } from "../ai/oil-gas-skill"
 import type { StrictMalikResult } from "./malik-model-router"
 export class OilEnsembleError extends Error {
-  constructor(public readonly code: string, message: string) { super(message); this.name = "OilEnsembleError" }
+  readonly code: string
+  constructor(code: string, message: string) { super(message); this.code = code; this.name = "OilEnsembleError" }
 }
 
 export type OilEnsembleInput = {
