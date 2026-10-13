@@ -25,10 +25,11 @@ assert.equal(DEFAULT_MALIK_MODEL_ID, "malik-max", "MalikLLM MAX must be the defa
 assert.equal(PUBLIC_MALIK_MODELS[0]?.id, "malik-max", "MalikLLM MAX must be first in the selector")
 assert.equal(getMalikModel("malik-max").label, "MalikLLM MAX")
 assert.equal(getMalikModel("malik-max").provider, "malik-orchestrator")
+assert.equal(PUBLIC_MALIK_MODELS[1]?.id, "malik-oil-1tb", "Oil BETA must be the second model, directly below MAX")
 assert.deepEqual(
-  PUBLIC_MALIK_MODELS.slice(1, 1 + GOOGLE_AI_POOL_MODELS.length).map((model) => model.id),
+  PUBLIC_MALIK_MODELS.slice(2, 2 + GOOGLE_AI_POOL_MODELS.length).map((model) => model.id),
   GOOGLE_AI_POOL_MODELS.map((model) => model.id),
-  "Official Google Gemini/Gemma pool must sit immediately below MalikLLM MAX",
+  "Official Google Gemini/Gemma pool must remain below MAX and Oil BETA",
 )
 assert.deepEqual(
   GOOGLE_AI_POOL_MODELS.map((model) => model.providerModel),
@@ -37,10 +38,10 @@ assert.deepEqual(
 assert.ok(GOOGLE_AI_POOL_MODELS.every((model) => model.provider === "google-ai" && model.brand === "google" && model.tier === "pro"))
 
 assert.equal(PUBLIC_MALIK_MODELS.length, 133, "Selector must expose MAX + Oil + 6 Google + Ling + 123 router text + LLM7 Default")
-// Product rule: MalikLLM MAX is the one free model (it combines every
-// provider). Every other model is MalikAI Plus.
-assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id), ["malik-max"], "Only MalikLLM MAX is free")
-assert.equal(PRO_MALIK_MODELS.length, 132, "Every other public model is grouped as MalikAI Plus")
+// Oil BETA is publicly selectable second, while remaining special provider
+// availability is reported by the real runtime rather than promising 3/3.
+assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id), ["malik-max", "malik-oil-1tb"])
+assert.equal(PRO_MALIK_MODELS.length, 131, "Other paid model choices must remain gated")
 assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, MALIK_MODELS.length, "Model IDs must be unique")
 
 for (const model of FREE_MALIK_MODELS) {
@@ -69,13 +70,19 @@ assert.deepEqual(oil, MALIK_OIL_1TB_MODEL)
 assert.equal(oil.provider, "malik-oil-ensemble")
 assert.equal(oil.brand, "malik-oil")
 assert.equal(oil.autoEligible, false)
-assert.equal(oil.tier, "pro")
-assert.equal(canUseMalikModel(oil.id, "free"), false)
+assert.equal(oil.tier, "free")
+assert.equal(canUseMalikModel(oil.id, "free"), true)
 assert.equal(canUseMalikModel(oil.id, "owner"), true)
 assert.ok(!MAX_ROUTER_MODEL_IDS.includes(oil.id), "An ensemble must not recursively auto-route into MAX")
-assert.equal(PUBLIC_MALIK_MODELS[1 + GOOGLE_AI_POOL_MODELS.length].id, oil.id)
+assert.equal(PUBLIC_MALIK_MODELS[1].id, oil.id)
 const oilLogo = readFileSync("components/sovereign/MalikModelSelector.tsx", "utf8")
 assert.match(oilLogo, /"malik-oil": \{ label: "Malik Oil 1TB.*urls: \[MALIK_MAX_ICON\]/)
+assert.match(oilLogo, /model\.id === "malik-oil-1tb"/)
+assert.match(oilLogo, /malik-model-selector__beta-badge/)
+assert.match(oilLogo, /aria-label="Бета-версия">БЕТА/)
+const oilBadgeCss = readFileSync("app/malik-model-selector.css", "utf8")
+assert.match(oilBadgeCss, /\.malik-model-selector__beta-badge\s*\{/)
+assert.match(oilBadgeCss, /color:\s*#c4b5fd/)
 const oilRoute = readFileSync("lib/server/malik-model-router.ts", "utf8")
 assert.match(oilRoute, /runMalikOilEnsemble\(input/)
 assert.match(oilRoute, /NVIDIA_NIM_ENABLED/)
