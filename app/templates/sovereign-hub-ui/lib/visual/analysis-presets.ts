@@ -91,7 +91,7 @@ const ROWS = `
 77|physics|chart|RC Transient Response|rc цеп,rc circuit,конденсатор|R, C, исходное напряжение, время
 78|physics|chart|Harmonic Oscillator|гармоническ колебан,oscillator,маятник|амплитуда, период или масса и жёсткость
 79|physics|chart|Heat Transfer Profile|теплопередач,heat transfer|теплопроводность и граничные условия
-80|physics|calculator|Ideal Gas State|идеальн газ,ideal gas|n, T, P с явными абсолютными единицами
+80|physics|calculator|Ideal Gas State|идеальн,идеальн газ,ideal gas|n, T, P с явными абсолютными единицами
 81|math|chart|Function Plot Studio|график функц,function plot,y=|формула функции и область определения
 82|math|chart|Derivative Tangent Study|производн,derivative|функция и точка дифференцирования
 83|math|chart|Integral Area Studio|интеграл,integral|подынтегральная функция и границы
@@ -125,7 +125,7 @@ export const ANALYSIS_PRESETS: readonly AnalysisPreset[] = ROWS.trim().split("\n
 })
 
 const DOMAINS: ReadonlyArray<[AnalysisDomain, RegExp]> = [
-  ["petroleum", /(?:@malik oil ai|нефт|мұнай|скважин|дебит|бурен|пластов|карбонатн|газодобыч|пластов(?:ое|ого)|\b(?:petroleum|oilfield|oil well|oil production|reservoir|wellbore|pvt|gor|wor|h2s|adnoc)\b)/iu],
+  ["petroleum", /(?:@malik oil ai|нефт|мұнай|скважин|дебит|бурен|пластов|карбонатн|газодобыч|пластов(?:ое|ого)|\b(?:petroleum|oilfield|oil well|oil production|reservoir|wellbore|water cut|pvt|gor|wor|h2s|adnoc)\b)/iu],
   ["logic", /(?:логик|булев|истинност|доказательств|алгоритм|дерево решен|кратчайш пут|\b(?:logic|boolean|truth table|algorithm|decision tree|shortest path|complexity)\b)/iu],
   ["physics", /(?:физик|ускорени|свободн паден|кинематик|закон[ау]? ома|сопротивлен|напряжен|маятник|колебани|теплопередач|идеальн|брос|\b(?:physics|projectile|kinematics|free fall|ohm|resistance|oscillator|ideal gas)\b)/iu],
   ["chemistry", /(?:хими|стехиометр|титрован|скорост реакци|\b(?:chemistry|titration|stoichiometry|reaction rate)\b)/iu],
