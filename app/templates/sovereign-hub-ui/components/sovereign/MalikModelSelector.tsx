@@ -85,15 +85,16 @@ function ModelRow({
   onChoose: () => void
   onUpgrade: () => void
 }) {
-  const pro = model.tier === "pro"
+  const beta = model.id === "malik-oil-1tb"
+  const pro = model.tier === "pro" && !beta
   return (
     <button
       type="button"
       role="menuitemradio"
       aria-checked={selected}
-      className={cn("malik-model-selector__row", selected && "is-selected", pro && "is-pro", locked && "is-locked")}
+      className={cn("malik-model-selector__row", selected && "is-selected", beta && "is-beta", pro && "is-pro", locked && "is-locked")}
       onClick={locked ? onUpgrade : onChoose}
-      title={locked ? "MalikAI Plus · нажмите, чтобы открыть подписку" : pro ? "MalikAI Plus model" : undefined}
+      title={beta ? "Malik Oil 1TB · бета-версия" : locked ? "MalikAI Plus · нажмите, чтобы открыть подписку" : pro ? "MalikAI Plus model" : undefined}
     >
       <ModelBrandIcon model={model} />
       <span className="malik-model-selector__copy">
@@ -101,6 +102,7 @@ function ModelRow({
         <span className="malik-model-selector__description">{model.description}</span>
       </span>
       <span className="malik-model-selector__state">
+        {beta ? <span className="malik-model-selector__beta-badge" aria-label="Бета-версия">БЕТА</span> : null}
         {selected ? <Check aria-label="Выбрано" /> : pro ? (
           <span className="malik-model-selector__pro-badge" aria-label={locked ? "Требуется MalikAI Plus" : "MalikAI Plus"}>
             <Crown aria-hidden="true" />
