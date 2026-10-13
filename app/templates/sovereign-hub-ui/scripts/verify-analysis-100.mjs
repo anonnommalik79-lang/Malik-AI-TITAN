@@ -34,6 +34,7 @@ const { selectVisualKinds, visualEngineContract } = load("lib/visual/intent.ts")
 const { computeCalculator, calculatorInputs, CALCULATOR_MODELS } = load("lib/visual/calculators.ts")
 const { parseVisualBlock } = load("lib/visual/schema.ts")
 const { scienceCurve } = load("lib/visual/science-charts.ts")
+const { buildOilRateHeatmap } = load("lib/visual/oil-heatmap.ts")
 
 assert.equal(ANALYSIS_PRESETS.length, 100)
 assert.deepEqual(ANALYSIS_PRESETS.map((s) => s.id), Array.from({ length: 100 }, (_, i) => i + 1))
@@ -110,6 +111,19 @@ closeCurve(ohmCurve.data.series[0].values[20], 2, "I-U curve at supplied U")
 assert.equal(scienceCurve("ohms-law", { voltage: 10, resistance: 0 }), null)
 assert.equal(scienceCurve("ideal-gas", { moles: 1, temperatureK: 273, pressurePa: 0 }), null)
 assert.equal(scienceCurve("projectile-motion", { speed: 20, angleDegrees: 45, gravity: -9 }), null)
+
+const heat = buildOilRateHeatmap([
+  { id: "W-A", isField: false, t: [1,2], period: ["2026-01","2026-02"], oil: [100,90] },
+  { id: "W-B", isField: false, t: [2,3], period: ["2026-02","2026-03"], oil: [0,50] },
+  { id: "Field", isField: true, t: [1,2,3], period: ["2026-01","2026-02","2026-03"], oil: [100,90,50] },
+])
+assert.deepEqual(heat.periods.map((v) => v.label), ["2026-01","2026-02","2026-03"])
+assert.deepEqual(heat.wells.map((v) => v.values), [[100,90,null],[null,0,50]], "Missing wells/timestamps cannot be invented")
+assert.equal(heat.maximum,100)
+assert.equal(buildOilRateHeatmap([{ id: "only", isField: false, t: [1], period: ["2026-01"], oil: [5] }]), null)
+const oilUi = fs.readFileSync("components/sovereign/MalikOilReport.tsx", "utf8")
+assert.match(oilUi, /<OilWellHeatmap wells=\{result.wells\}/)
+assert.match(fs.readFileSync("components/sovereign/oil-report/OilWellHeatmap.tsx","utf8"), /data-observed="true"/)
 
 const calculatorUi = fs.readFileSync("components/sovereign/visual-engine/VisualCalculator.tsx", "utf8")
 assert.match(calculatorUi, /scienceCurve\(block\.model, current\)/)
