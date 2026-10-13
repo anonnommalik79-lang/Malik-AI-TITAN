@@ -71,7 +71,7 @@ const close = (a, b, name) => assert.ok(typeof a === "number" && Number.isFinite
 const ball = computeCalculator("projectile-motion", { speed: 20, angleDegrees: 45, gravity: 9.81 })
 close(value(ball, "range"), 400/9.81, "trajectory horizontal range")
 close(value(ball, "flight"), 20*Math.SQRT2/9.81, "flight time")
-close(value(ball, "height"), 100/(2*9.81), "max height")
+close(value(ball, "height"), 100/9.81, "max height")
 close(value(computeCalculator("projectile-motion", { speed: 20, angleDegrees: 0, gravity: 9.81 }), "range"), 0, "horizontal shot equal height")
 assert.equal(value(computeCalculator("projectile-motion", { speed: 20, angleDegrees: 45, gravity: 0 }), "range"), null)
 
@@ -103,7 +103,7 @@ for (const model of ["projectile-motion", "ohms-law", "ideal-gas"]) {
 }
 const closeCurve = (got, want, label) => assert.ok(Math.abs(got - want) <= 1e-7, label + ": " + got + " vs " + want)
 const ballCurve = scienceCurve("projectile-motion", { speed: 20, angleDegrees: 45, gravity: 9.81 })
-closeCurve(ballCurve.data.series[0].values[10], 100/(2*9.81), "computed trajectory apex")
+closeCurve(ballCurve.data.series[0].values[10], 100/9.81, "computed trajectory apex")
 const gasCurve = scienceCurve("ideal-gas", { moles: 1, temperatureK: 273.15, pressurePa: 101325 })
 closeCurve(gasCurve.data.series[0].values[10], liters, "isotherm at supplied p")
 const ohmCurve = scienceCurve("ohms-law", { voltage: 12, resistance: 6 })
