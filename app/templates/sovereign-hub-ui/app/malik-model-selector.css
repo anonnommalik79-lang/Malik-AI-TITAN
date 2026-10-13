@@ -197,6 +197,31 @@
   background: #29292d;
 }
 
+/* Malik Oil: separate public BETA identity, never styled or gated as Plus. */
+.malik-model-selector__row.is-beta:hover,
+.malik-model-selector__row.is-beta:focus-visible {
+  background: rgba(139, 92, 246, .105);
+}
+.malik-model-selector__row.is-beta.is-selected {
+  background: rgba(139, 92, 246, .16);
+}
+.malik-model-selector__beta-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  border: 1px solid rgba(167, 139, 250, .56);
+  border-radius: 999px;
+  padding: 0 9px;
+  background: rgba(139, 92, 246, .18);
+  color: #c4b5fd;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .055em;
+  white-space: nowrap;
+}
+
 .malik-model-selector__row.is-pro { border: 1px solid transparent; }
 .malik-model-selector__row.is-pro:hover,
 .malik-model-selector__row.is-pro:focus-visible {
