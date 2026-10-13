@@ -1,6 +1,6 @@
 import type { ChartDataset } from "./schema"
 
-/** Real analytical curves for the three deterministic science calculators.
+/** Real analytical curves for deterministic scientific calculators.
  * Calculated exclusively from the same current input values as their KPI results.
  * No random demo points, external image search, hidden API or model-generated dataset.
  */
@@ -51,6 +51,32 @@ export function scienceCurve(model: string, inputs: Record<string, number>): Sci
         series: [{ name: "Объём", values: pressures.map((p) => round(moles * R * temperatureK / p * 1000)) }],
       },
     }
+  }
+
+  if (model === "free-fall") {
+    const {height,gravity}=inputs
+    if (![height,gravity].every(finite)||height<0||gravity<=0)return null
+    const duration=Math.sqrt(2*height/gravity)
+    return {title:"Свободное падение · высота от времени",unit:"м",xLabel:"Время (с)",yLabel:"Высота (м)",
+      data:{labels:samples().map(t=>(t*duration).toFixed(2)),
+        series:[{name:"Высота",values:samples().map(t=>round(Math.max(0,height*(1-t*t))))}]}}
+  }
+  if (model === "rc-transient") {
+    const {voltage,resistance,capacitanceMicroF,timeSeconds}=inputs
+    const tau=resistance*capacitanceMicroF*1e-6
+    if (![voltage,resistance,capacitanceMicroF,timeSeconds,tau].every(finite)||voltage<0||resistance<=0||capacitanceMicroF<=0||timeSeconds<0||tau<=0)return null
+    const times=samples().map(t=>t*timeSeconds)
+    return {title:"Заряд RC-цепи · Uc(t)",unit:"В",xLabel:"Время (с)",yLabel:"Напряжение (В)",
+      data:{labels:times.map(t=>t.toFixed(2)),
+        series:[{name:"Uc",values:times.map(t=>round(voltage*-Math.expm1(-t/tau)))}]}}
+  }
+  if (model === "oil-exponential-decline") {
+    const {initialRate,declinePctPerDay,days}=inputs
+    if (![initialRate,declinePctPerDay,days].every(finite)||initialRate<0||declinePctPerDay<0||days<0)return null
+    const times=samples().map(t=>t*days)
+    return {title:"Экспоненциальный спад · аналитический сценарий",unit:"барр./сут",xLabel:"Время (сут)",yLabel:"Расчётный дебит",
+      data:{labels:times.map(t=>t.toFixed(1)),
+        series:[{name:"Нефть (сценарий)",values:times.map(t=>round(initialRate*Math.exp(-declinePctPerDay/100*t)))}]}}
   }
   return null
 }

@@ -41,8 +41,8 @@ assert.deepEqual(ANALYSIS_PRESETS.map((s) => s.id), Array.from({ length: 100 }, 
 assert.equal(new Set(ANALYSIS_PRESETS.map((s) => s.name)).size, 100)
 assert.equal(ANALYSIS_PRESETS.filter((s) => s.domain === "petroleum").length, 70)
 assert.ok(ANALYSIS_PRESETS.every((s) => s.required.length >= 10 && s.keywords.length > 0))
-assert.deepEqual(ANALYSIS_PRESETS.filter((s) => s.readiness === "tested-core").map((s) => s.id), [2,73,76,80])
-assert.equal(ANALYSIS_PRESETS.filter((s) => s.readiness === "specification").length, 96)
+assert.deepEqual(ANALYSIS_PRESETS.filter((s) => s.readiness === "tested-core").map((s) => s.id), [2,73,74,76,77,80])
+assert.equal(ANALYSIS_PRESETS.filter((s) => s.readiness === "specification").length, 94)
 assert.equal(classifyAnalysisDomain("Нефтяная скважина: обводнённость"), "petroleum")
 assert.equal(classifyAnalysisDomain("Рассчитай по закону Ома"), "physics")
 assert.equal(classifyAnalysisDomain("Таблица истинности A AND B"), "logic")
@@ -62,7 +62,7 @@ assert.match(visualEngineContract("Рассчитай дальность бро�
 assert.ok(!visualEngineContract("Привет!").includes("ANALYSIS PRESETS"))
 assert.equal(suggestAnalysisPresets("Анализ нефтяного месторождения", 200).length <= 3, true)
 
-for (const model of ["projectile-motion", "ohms-law", "ideal-gas"]) {
+for (const model of ["projectile-motion", "ohms-law", "ideal-gas", "free-fall", "rc-transient", "oil-water-cut", "oil-exponential-decline"]) {
   assert.ok(CALCULATOR_MODELS[model], model)
   assert.ok(calculatorInputs(model).length >= 2)
   assert.equal(parseVisualBlock(JSON.stringify({ version: 2, type: "calculator", model, title: model, dataKind: "example" })).ok, true)
@@ -114,6 +114,56 @@ assert.equal(scienceCurve("ohms-law", { voltage: 10, resistance: 0 }), null)
 assert.equal(scienceCurve("ideal-gas", { moles: 1, temperatureK: 273, pressurePa: 0 }), null)
 assert.equal(scienceCurve("projectile-motion", { speed: 20, angleDegrees: 45, gravity: -9 }), null)
 
+
+/* Scientific regression cases: equations, dimensional bases, zero boundaries and source classification. */
+const fall = computeCalculator("free-fall", {height:80,gravity:10})
+close(value(fall,"fallTime"),4,"free fall time 80 m 10 m/s²")
+close(value(fall,"impactSpeed"),40,"free fall impact speed")
+assert.equal(value(computeCalculator("free-fall",{height:80,gravity:0}),"fallTime"),null)
+const fallPlot=scienceCurve("free-fall",{height:80,gravity:10})
+assert.equal(fallPlot.data.series[0].values[0],80)
+assert.equal(fallPlot.data.series[0].values[20],0)
+
+const rc=computeCalculator("rc-transient",{voltage:5,resistance:1000,capacitanceMicroF:1000,timeSeconds:1})
+close(value(rc,"timeConstant"),1,"RC time constant")
+close(value(rc,"capacitorVoltage"),5*(1-Math.exp(-1)),"RC 1 tau capacitor voltage")
+close(value(rc,"chargingCurrent"),0.005/Math.E,"RC 1 tau current")
+assert.equal(value(computeCalculator("rc-transient",{voltage:5,resistance:0,capacitanceMicroF:1000,timeSeconds:1}),"capacitorVoltage"),null)
+const rcPlot=scienceCurve("rc-transient",{voltage:5,resistance:1000,capacitanceMicroF:1000,timeSeconds:1})
+closeCurve(rcPlot.data.series[0].values[20],5*(1-Math.exp(-1)),"RC curve at one time constant")
+
+const wc=computeCalculator("oil-water-cut",{oilRate:100,waterRate:20})
+close(value(wc,"waterCut"),100/6,"WC 20/120 bbl/day in percent")
+close(value(wc,"wor"),0.2,"WOR at matched rate basis")
+assert.equal(value(computeCalculator("oil-water-cut",{oilRate:0,waterRate:0}),"waterCut"),null,"Zero total liquid is not zero WC")
+assert.equal(value(computeCalculator("oil-water-cut",{oilRate:0,waterRate:20}),"wor"),null,"No oil means undefined WOR")
+assert.equal(scienceCurve("oil-water-cut",{oilRate:100,waterRate:20}),null,"One reading cannot fake historical water-cut evolution")
+
+const d=computeCalculator("oil-exponential-decline",{initialRate:100,declinePctPerDay:1,days:100})
+close(value(d,"rateAtEnd"),100/Math.E,"Arps exponential q(100)")
+close(value(d,"cumulative"),100*(1-1/Math.E)/0.01,"Arps exponential cumulative")
+close(value(computeCalculator("oil-exponential-decline",{initialRate:100,declinePctPerDay:0,days:100}),"cumulative"),10000,"Zero nominal decline")
+assert.equal(value(computeCalculator("oil-exponential-decline",{initialRate:100,declinePctPerDay:-1,days:100}),"rateAtEnd"),null,"Negative decline rejected")
+const dPlot=scienceCurve("oil-exponential-decline",{initialRate:100,declinePctPerDay:1,days:100})
+closeCurve(dPlot.data.series[0].values[20],100/Math.E,"Arps forecast curve end")
+for (const [model,inputs] of [
+  ["free-fall",{height:80,gravity:10}],
+  ["rc-transient",{voltage:5,resistance:1000,capacitanceMicroF:1000,timeSeconds:1}],
+  ["oil-exponential-decline",{initialRate:100,declinePctPerDay:1,days:100}],
+]) {
+  const curve=scienceCurve(model,inputs)
+  assert.equal(curve.data.labels.length,21,model)
+  assert.ok(curve.data.series[0].values.every(Number.isFinite),model)
+  const parsed=parseVisualBlock(JSON.stringify({version:2,type:"chart",chart:"line",title:curve.title,unit:curve.unit,dataKind:"user",labels:curve.data.labels,series:curve.data.series}))
+  assert.equal(parsed.ok,true,model+" chart schema: "+parsed.reason)
+}
+assert.ok(selectVisualKinds("free fall time from 80m").includes("calculator"))
+assert.ok(selectVisualKinds("RC circuit 5 V charging curve").includes("calculator"))
+assert.ok(selectVisualKinds("Обводнённость 100 и 20 баррелей").includes("calculator"))
+assert.ok(selectVisualKinds("Нефть: экспоненциальное падение дебита").includes("calculator"))
+assert.equal(selectVisualKinds("только текст: RC circuit").length,0)
+assert.equal(selectVisualKinds("Напиши Python код для графика RC circuit").length,0)
+
 const heat = buildOilRateHeatmap([
   { id: "W-A", isField: false, t: [1,2], period: ["2026-01","2026-02"], oil: [100,90] },
   { id: "W-B", isField: false, t: [2,3], period: ["2026-02","2026-03"], oil: [0,50] },
@@ -131,4 +181,4 @@ const calculatorUi = fs.readFileSync("components/sovereign/visual-engine/VisualC
 assert.match(calculatorUi, /scienceCurve\(block\.model, current\)/)
 assert.match(calculatorUi, /<ChartView kind="line" data=\{curve\.data\}/)
 
-console.log("PASS: 100 registered (specifications only), domain/no-photo/no-code routing, Zod-calculator schemas, deterministic physics numerical references curves, schema validation and invalid inputs.")
+console.log("PASS: 100 catalog entries (94 specifications, 6 tested core), domain/no-photo/no-code routing, Zod-calculator schemas, deterministic physics numerical references curves, schema validation and invalid inputs.")

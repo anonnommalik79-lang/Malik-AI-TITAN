@@ -43,9 +43,13 @@ function statusLine(s: Status) {
 export function oilEnsembleStatus(statuses: Status[]) {
   return `### Проверка участия моделей (${statuses.filter(s=>s.ok).length}/3)\n${statuses.map(statusLine).join("\n")}\n\nКонсилиум Malik Oil 1TB — программная маршрутизация, не подтверждение лабораторных испытаний или независимой полевой экспертизы.`
 }
-function validText(value: unknown) {
+/** A provider's HTTP/quota/authentication error is never an engineering vote. */
+export function validOilParticipantText(value: unknown): string {
   const text = typeof value === "string" ? value.trim() : ""
-  return text && !/^\s*(?:error|ошибка|failed|undefined)\s*[:!]$/i.test(text) ? text : ""
+  if (!text || /^(?:error|ошибка|failed|failure|api[_ ]?error|provider error|request failed)\s*[:!#-]/iu.test(text)) return ""
+  if (/^(?:HTTP\s*)?[45]\d{2}(?:\b|:)/i.test(text) || /^\s*\{\s*["']?error["']?\s*:/i.test(text)) return ""
+  if (/^(?:unauthorized|forbidden|insufficient credits|rate limit exceeded|quota exceeded|provider unavailable|model unavailable|invalid api key|authentication failed)(?:\b|:)/i.test(text)) return ""
+  return text
 }
 export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner): Promise<StrictMalikResult> {
   if (input.signal?.aborted) throw new OilEnsembleError("REQUEST_CANCELLED", "Запрос отменён.")
@@ -71,7 +75,7 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
       systemPrompt: [input.systemPrompt,
         "PETROLEUM ENSEMBLE / INDEPENDENT ENGINEERING REVIEW. Analyze all requested parts; check Darcy, phase mass conservation, fracture/matrix exchange, units, realistic GPU performance, HSE and NPV where relevant. Distinguish proven vs hypothetical, do not invent test or tool results. Do not issue well/SCADA commands."].join("\n"),
     }, !noFallback)
-    const text = validText(result.content)
+    const text = validOilParticipantText(result.content)
     if (!text) throw new Error("empty result")
     // An internal MAX execution may return its real subprovider and is still MAX's orchestrated vote.
     return { modelId, content: short(text, 10_000), provider: result.provider, model: result.model } as Answer
@@ -111,9 +115,11 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
   }
   let final = ""
   let finalResult: StrictMalikResult | undefined
+  let synthesisComplete = false
   try {
     finalResult = await run(synthesisRequest, true)
-    final = validText(finalResult.content)
+    final = validOilParticipantText(finalResult.content)
+    synthesisComplete = Boolean(final)
   } catch (error) {
     console.warn("[MALIK_OIL_1TB] synthesis unavailable", error instanceof Error ? error.name : "provider-failure")
   }
@@ -130,6 +136,6 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
     model: `malik-oil-1tb:${statuses.filter(s=>s.ok).length}/3`,
     selectedModelId: input.modelId,
     latencyMs: Date.now() - started,
-    usage: { participantModels: successes.map(x=>({id:x.modelId,model:x.model})), synthesized: Boolean(finalResult) },
+    usage: { participantModels: successes.map(x=>({id:x.modelId,model:x.model})), synthesized: synthesisComplete },
   }
 }

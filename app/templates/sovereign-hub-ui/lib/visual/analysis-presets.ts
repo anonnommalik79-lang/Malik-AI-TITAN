@@ -114,7 +114,7 @@ const ROWS = `
 100|general|dashboard|Cross Domain Analysis Cockpit|многодисциплинар,cross domain,анализ данные|валидированные измерения и расчёты
 `
 /** Tested-core means a checked computational/UI component, NOT field validation. */
-const TESTED_CORE = new Set([2, 73, 76, 80])
+const TESTED_CORE = new Set([2, 73, 74, 76, 77, 80])
 export const ANALYSIS_PRESETS: readonly AnalysisPreset[] = ROWS.trim().split("\n").map((line) => {
   const parts = line.split("|")
   if (parts.length !== 6) throw new Error("Invalid analysis catalog entry")
@@ -129,7 +129,7 @@ export const ANALYSIS_PRESETS: readonly AnalysisPreset[] = ROWS.trim().split("\n
 const DOMAINS: ReadonlyArray<[AnalysisDomain, RegExp]> = [
   ["petroleum", /(?:@malik oil ai|нефт|мұнай|скважин|дебит|бурен|пластов|карбонатн|газодобыч|пластов(?:ое|ого)|\b(?:petroleum|oilfield|oil well|oil production|reservoir|wellbore|water cut|pvt|gor|wor|h2s|adnoc)\b)/iu],
   ["logic", /(?:логик|булев|истинност|доказательств|алгоритм|дерево решен|кратчайш пут|\b(?:logic|boolean|truth table|algorithm|decision tree|shortest path|complexity)\b)/iu],
-  ["physics", /(?:физик|ускорени|свободн паден|кинематик|закон[ау]? ома|сопротивлен|напряжен|маятник|колебани|теплопередач|идеальн|брос|\b(?:physics|projectile|kinematics|free fall|ohm|resistance|oscillator|ideal gas)\b)/iu],
+  ["physics", /(?:физик|ускорени|свободн паден|кинематик|закон[ау]? ома|сопротивлен|напряжен|маятник|колебани|теплопередач|идеальн|брос|\b(?:physics|projectile|kinematics|free fall|rc circuit|ohm|resistance|oscillator|ideal gas)\b)/iu],
   ["chemistry", /(?:хими|стехиометр|титрован|скорост реакци|\b(?:chemistry|titration|stoichiometry|reaction rate)\b)/iu],
   ["math", /(?:математ|график функц|производн|интеграл|корни уравнен|уравнен|регресс|корреляц|вероятност|\b(?:mathematics|function plot|derivative|integral|equation roots|regression|correlation|probability|y=)\b)/iu],
   ["statistics", /(?:статистик|доверительн интервал|сезонност|\b(?:statistics|confidence interval|seasonality)\b)/iu],

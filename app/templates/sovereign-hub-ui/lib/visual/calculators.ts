@@ -156,6 +156,88 @@ export const CALCULATOR_MODELS = {
       }
     },
   },
+
+  "free-fall": {
+    label: "Свободное падение",
+    subtitle: "Падение без сопротивления воздуха из состояния покоя",
+    inputs: [
+      { key:"height",label:"Начальная высота (м)",kind:"decimal",value:80,min:0,max:100000,step:1 },
+      { key:"gravity",label:"Ускорение g (м/с²)",kind:"decimal",value:9.81,min:0.1,max:30,step:0.01 },
+    ],
+    compute: (v) => {
+      const ok=Number.isFinite(v.height)&&Number.isFinite(v.gravity)&&v.height>=0&&v.gravity>0
+      return {
+        headline:{key:"fallTime",label:"Время падения (с)",value:ok?Math.sqrt(2*v.height/v.gravity):null,format:"decimal"},
+        outputs:[{key:"impactSpeed",label:"Скорость удара (м/с)",value:ok?Math.sqrt(2*v.gravity*v.height):null,format:"decimal"}],
+        details:[],assumptions:["Нулевая начальная скорость; постоянное g; без сопротивления воздуха. Не использовать для решений по безопасности."],
+      }
+    },
+  },
+  "rc-transient": {
+    label:"Переходный процесс RC",
+    subtitle:"Заряд изначально разряженного конденсатора, идеальная цепь",
+    inputs:[
+      {key:"voltage",label:"Напряжение источника (В)",kind:"decimal",value:5,min:0,max:1000,step:0.1},
+      {key:"resistance",label:"Сопротивление (Ом)",kind:"decimal",value:1000,min:0.001,max:1000000,step:1},
+      {key:"capacitanceMicroF",label:"Ёмкость (мкФ)",kind:"decimal",value:1000,min:0.001,max:1000000,step:1},
+      {key:"timeSeconds",label:"Время (с)",kind:"decimal",value:3,min:0,max:3600,step:0.1},
+    ],
+    compute:(v)=>{
+      const tau=v.resistance*v.capacitanceMicroF*1e-6
+      const ok=Object.values(v).every(Number.isFinite)&&v.voltage>=0&&v.resistance>0&&v.capacitanceMicroF>0&&v.timeSeconds>=0&&Number.isFinite(tau)&&tau>0
+      const decay=ok?Math.exp(-v.timeSeconds/tau):null
+      return {
+        headline:{key:"capacitorVoltage",label:"Напряжение на конденсаторе (В)",value:decay===null?null:v.voltage*(1-decay),format:"decimal"},
+        outputs:[
+          {key:"timeConstant",label:"Постоянная времени (с)",value:ok?tau:null,format:"decimal"},
+          {key:"chargingCurrent",label:"Ток заряда (А)",value:decay===null?null:v.voltage/v.resistance*decay,format:"decimal"},
+        ],details:[],
+        assumptions:["Идеальная RC-цепь, начальное Uc = 0. Uc(t) = U (1 - exp(-t/RC)). Модель, не эксперимент."],
+      }
+    },
+  },
+  "oil-water-cut": {
+    label:"Обводнённость скважины",
+    subtitle:"Только сопоставимые дебиты нефти и воды за один период",
+    inputs:[
+      {key:"oilRate",label:"Нефть (барр./сут)",kind:"decimal",value:100,min:0,max:1000000,step:1},
+      {key:"waterRate",label:"Вода (барр./сут)",kind:"decimal",value:20,min:0,max:1000000,step:1},
+    ],
+    compute:(v)=>{
+      const ok=Object.values(v).every(Number.isFinite)&&v.oilRate>=0&&v.waterRate>=0
+      const total=ok?v.oilRate+v.waterRate:null
+      return {
+        headline:{key:"waterCut",label:"Обводнённость (%)",value:total!==null&&total>0?100*v.waterRate/total:null,format:"percent",empty:"отсутствует жидкостный дебит"},
+        outputs:[
+          {key:"liquidRate",label:"Жидкость (барр./сут)",value:total,format:"decimal"},
+          {key:"wor",label:"Водонефтяное отношение (WOR)",value:ok&&v.oilRate>0?v.waterRate/v.oilRate:null,format:"decimal",empty:"не определено при нулевой нефти"},
+        ],details:[],
+        assumptions:["Одинаковые условия измерения и единицы дебитов за один период. История добычи не выводится из единственной точки."],
+      }
+    },
+  },
+  "oil-exponential-decline": {
+    label:"Экспоненциальный спад дебита",
+    subtitle:"Аналитический сценарий Арпса (b = 0), а не доказанный прогноз месторождения",
+    inputs:[
+      {key:"initialRate",label:"Начальный дебит (барр./сут)",kind:"decimal",value:100,min:0,max:1000000,step:1},
+      {key:"declinePctPerDay",label:"Номинальный спад (%/сут)",kind:"decimal",value:0.5,min:0,max:10,step:0.01},
+      {key:"days",label:"Длительность (сут)",kind:"decimal",value:180,min:0,max:3650,step:1},
+    ],
+    compute:(v)=>{
+      const ok=Object.values(v).every(Number.isFinite)&&v.initialRate>=0&&v.declinePctPerDay>=0&&v.days>=0
+      const d=v.declinePctPerDay/100
+      const lost=ok?-Math.expm1(-d*v.days):null
+      return {
+        headline:{key:"rateAtEnd",label:"Дебит в конце периода (барр./сут)",value:lost===null?null:v.initialRate*(1-lost),format:"decimal"},
+        outputs:[
+          {key:"cumulative",label:"Накопленная добыча за период (барр.)",value:lost===null?null:d===0?v.initialRate*v.days:v.initialRate*lost/d,format:"decimal"},
+          {key:"declineTotal",label:"Падение за период (%)",value:lost===null?null:lost*100,format:"percent"},
+        ],details:[],
+        assumptions:["q(t)=q₀ exp(-D t), D задан в %/сут. Сценарная кривая не является наблюдением, history matching или оценкой неопределённости."],
+      }
+    },
+  },
   "projectile-motion": {
     label: "Движение тела под углом",
     subtitle: "Баллистика без сопротивления воздуха, одинаковая высота старта и финиша",
