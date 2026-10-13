@@ -1,0 +1,31 @@
+name: Malik Oil 30 investor benchmarks
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/oil-investor-30.yml"
+      - "app/templates/sovereign-hub-ui/scripts/verify-oil-investor-30.mjs"
+      - "app/templates/sovereign-hub-ui/lib/work/petroleum/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/oil-investor-30.yml"
+      - "app/templates/sovereign-hub-ui/scripts/verify-oil-investor-30.mjs"
+      - "app/templates/sovereign-hub-ui/lib/work/petroleum/**"
+permissions:
+  contents: read
+jobs:
+  golden-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: 30 golden numerical and guardrail acceptance checks
+        run: node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/verify-oil-investor-30.mjs
