@@ -8,7 +8,7 @@ import { isAbstractPhotoSubject, referenceSearchTopic, visualSegmentLabel } from
 import { subscribeReferenceImages } from "@/lib/media/client-reference-cache"
 import { referenceBrandAsset } from "@/lib/media/reference-brand-assets"
 import { referenceThumbnailVariants } from "@/lib/media/reference-catalog"
-import { sourceReferencePhoto } from "@/lib/media/source-reference-photos"
+import { isGenericPageCover, sourceReferencePhoto } from "@/lib/media/source-reference-photos"
 import "./answer-cards.css"
 
 type Sources = readonly MalikCitation[] | null | undefined
@@ -60,7 +60,7 @@ function useCardImage(image: AnswerCard["image"], sources: Sources, title: strin
   const sourceImage = pagePhoto ? { url: pagePhoto.url, label: pagePhoto.credit || "Источник фото", sourceUrl: pagePhoto.sourceUrl }
     // Explicit image index on the exact cited card URL is verified first-party
     // metadata. Generic OG filenames may not pass a subject-name search filter.
-    : directlyLinkedPage && fromSource?.image && safeHttps(fromSource.image) && !failed.includes(fromSource.image) && imageRole !== "logo"
+    : directlyLinkedPage && fromSource?.image && safeHttps(fromSource.image) && !isGenericPageCover(new URL(fromSource.image).pathname) && !failed.includes(fromSource.image) && imageRole !== "logo"
       ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url), sourceUrl: fromSource.url }
     : imageRole === "logo" && sourceMatches && fromSource?.image && /^https:\/\//i.test(fromSource.image) && !failed.includes(fromSource.image) ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url), sourceUrl: fromSource.url } : null
   // A model may omit image metadata or cite a page without an OG picture.
