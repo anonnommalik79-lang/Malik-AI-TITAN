@@ -1,11 +1,21 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
+import { PETROLEUM_OPEN_RESOURCES, selectPetroleumResources } from "../lib/work/petroleum/open-science.ts"
 import { auditTwoContinuumMass, rawStateMemoryBytes, petroleumProxyPhysicsInstruction } from "../lib/work/petroleum/pinn-physics.ts"
 import {
   PETROLEUM_BARREL_M3, isOilGasRequest, buildOilGasSkillInstruction,
   convertOilVolume, apiGravity, specificGravity,
 } from "../lib/ai/oil-gas-skill.ts"
 
+assert.equal(PETROLEUM_OPEN_RESOURCES.length, 7)
+assert.equal(new Set(PETROLEUM_OPEN_RESOURCES.map(r=>r.id)).size,7)
+assert.ok(PETROLEUM_OPEN_RESOURCES.every(r=>r.url.startsWith("https://")))
+assert.ok(selectPetroleumResources("PINN модель карбонатного пласта с трещинами").some(r=>r.id==="porepy"))
+assert.ok(selectPetroleumResources("Найди нефть Brent spot price").some(r=>r.id==="eia"))
+assert.deepEqual(selectPetroleumResources("создать HTML страницу"),[])
+assert.match(buildOilGasSkillInstruction("PINN карбонатного нефтяного пласта"),/PETROLEUM OPEN SCIENCE CATALOGUE/)
+assert.match(buildOilGasSkillInstruction("PINN карбонатного нефтяного пласта"),/NOT FETCHED\/LIVE EVIDENCE/)
+assert.doesNotMatch(buildOilGasSkillInstruction("нефтяной дебит без данных"),/Live EIA price/)
 assert.equal(PETROLEUM_BARREL_M3, 0.158987294928)
 assert.equal(convertOilVolume(1000, "bbl", "m3"), 158.987294928)
 assert.ok(Math.abs(convertOilVolume(158.987294928, "m3", "bbl") - 1000) < 1e-8)

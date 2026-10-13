@@ -14,6 +14,7 @@ import { accuracyInstruction, finalizeAccuracy, type AccuracyReport } from "@/li
 import { accuracyTokenGate } from "@/lib/ai/accuracy/stream"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
+import { fetchEiaSpotEvidence } from "@/lib/server/petroleum-eia"
 import { classifyFreshness, freshnessMode, NO_WEB, publicSearchText, type FreshnessMode } from "@/lib/ai/freshness-intent"
 import { assessSources, currentEvidenceAvailable, finalizeFreshAnswer, freshnessCheckLine, freshnessEvidenceInstruction, safeEvidenceUrl, sourceDisagreements, unavailableFreshAnswer } from "@/lib/live-intelligence/evidence"
 import { runLiveSearch, type LiveSearchProvider } from "@/lib/live-intelligence/search-engine"
@@ -1085,24 +1086,26 @@ export async function malikGodAnswer(
     // question it continues, never as a bare fragment.
     const focus = conversationFocus(preparedEvidence?.prompt || prompt, history)
     const usedWeb = shouldUseWeb(focus.searchText, body) || powerForcesWeb && body?.research !== false && !body?.disableResearch && !NO_WEB.test(focus.searchText)
-    const [webSources, connected, science] = await Promise.all([
+    const [webSources, connected, science, eiaEvidence] = await Promise.all([
       usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(focus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth)) : Promise.resolve([] as SourceItem[]),
       serverConnected
         ? Promise.resolve({ ...serverConnected, requested: true, connectorIds: [] as string[], executions: [] as any[] })
         : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(prompt, activity) : Promise.resolve({ requested: false, connectorIds: [] as string[], context: "", sources: [] as any[], executions: [] as any[] }),
       scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
+      fetchEiaSpotEvidence(prompt, {signal}),
     ])
     const sources: SourceItem[] = [...webSources, ...(connected.sources as SourceItem[]), ...(science.sources as SourceItem[])].slice(0, 32)
     const freshness = classifyFreshness(focus.searchText)
     if (usedWeb && needsCurrentEvidence(focus.searchText) && !currentEvidenceAvailable(webSources, freshness)) {
       return { content: unavailableFreshAnswer(freshness), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection.modelId, usedWeb: webSources.length > 0, sources: webSources, attempts: [] }
     }
-    const usedEvidence = usedWeb || Boolean(connected.context) || science.sources.length > 0
+    const usedEvidence = usedWeb || Boolean(connected.context) || science.sources.length > 0 || Boolean(eiaEvidence.context)
     const strictPrompt = [
       `Question:\n${prompt}`,
       usedWeb ? webSources.length ? `Web sources:\n${sourceContext(webSources, focus.searchText)}` : "LIVE WEB CHECK: This attempt returned no usable evidence. Say you could not verify the requested current facts; do not claim that no public information exists. Never invent speaker or participant lists." : "",
       connected.context,
       science.context,
+      eiaEvidence.context,
     ].filter(Boolean).join("\n\n")
     // Math skill: an explicit computation is done by the engine first, and
     // the model explains that result instead of doing the arithmetic itself.
