@@ -23,7 +23,7 @@ export type TableParse =
   | { kind: "needs-input"; code: string; columns: string[]; language: OilLanguage; tableText: string }
 
 type Role = "period" | "well" | "oil" | "water" | "gas" | "liquid" | "pressure"
-type Unit = { family: "bbl" | "m3" | "t" | "scf" | "sm3"; factor: number; perDay: boolean; otherTime: boolean; basis: "surface" | "reservoir" | "unknown" }
+type Unit = { family: "bbl" | "m3" | "t" | "scf" | "sm3"; factor: number; perDay: boolean; otherTime: boolean; standard: boolean; basis: "surface" | "reservoir" | "unknown" }
 
 const MAX_ROWS = 5000
 const MAX_WELLS = 120
@@ -66,7 +66,8 @@ export function readUnit(text: string): Unit | null {
   const value = ` ${text.toLowerCase().replace(/[_*`]/g, " ").replace(/<sup>3<\/sup>|[³]/g, "3").replace(/м\s*\^?\s*3/g, "м3").replace(/m\s*\^?\s*3/g, "m3").replace(/\s+/g, " ")} `
   const reservoir = /reservoir|in.situ|пластов|\brb\b|\brm3\b/iu.test(value)
   const surface = /standard|stock.tank|surface|стандарт|поверхност|\bstb\b|\b(?:mm|m)?scf\b|\b[sn]m3\b|ст\.\s*м3/iu.test(value)
-  const timing = { perDay: DAY.test(value), otherTime: OTHER_TIME.test(value), basis: reservoir ? "reservoir" as const : surface ? "surface" as const : "unknown" as const }
+  const standard = /standard|стандарт|std|\b(?:mm|m)?(?:scf|mcf)|\b(?:[sn]m3|ksm3|msm3|mmsm3)\b|ст\.?\s*м3|нм3/iu.test(value)
+  const timing = { standard, perDay: DAY.test(value), otherTime: OTHER_TIME.test(value), basis: reservoir ? "reservoir" as const : surface ? "surface" as const : "unknown" as const }
   if (/(?:^|[^\p{L}])(?:mmscf|mmcf)/iu.test(value)) return { family: "scf", factor: 1e6, ...timing }
   if (/(?:^|[^\p{L}])(?:mscf|mcf)/iu.test(value)) return { family: "scf", factor: 1e3, ...timing }
   if (/(?:^|[^\p{L}])(?:scf|ft3|cf\/d|scfd)/iu.test(value)) return { family: "scf", factor: 1, ...timing }
@@ -353,7 +354,7 @@ function parseSingleProductionTable(prompt: string, table: FoundTable, options: 
         return { kind: "needs-input", code: "UNIT_CONFLICT", columns: candidates.map(item => item.source), language, tableText: table.text }
       }
       const unit = candidates.find(item => item.unit.basis !== "unknown")?.unit || first
-      const invalid = !unit ? "UNITS_MISSING" : unit.otherTime || !unit.perDay ? "RATE_BASIS_MISSING" : unit.basis === "reservoir" ? "RESERVOIR_CONVERSION_REQUIRED" : role === "gas" && unit.family === "m3" && unit.basis === "unknown" ? "GAS_CONDITIONS_REQUIRED" : null
+      const invalid = !unit ? "UNITS_MISSING" : unit.otherTime || !unit.perDay ? "RATE_BASIS_MISSING" : unit.basis === "reservoir" ? "RESERVOIR_CONVERSION_REQUIRED" : role === "gas" && !unit.standard ? "GAS_CONDITIONS_REQUIRED" : null
       if (invalid) {
         if (role === "oil") return { kind: "needs-input", code: invalid, columns: invalid === "UNITS_MISSING" ? (["oil", "water", "gas", "liquid"] as const).filter(r => roles.has(r) && !readUnit(header[roles.get(r)!]) && !messageUnits(message, r).length).map(r => header[roles.get(r)!]) : [header[index]], language, tableText: table.text }
         alerts.push(`${header[index]}: ${invalid}`)
