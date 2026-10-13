@@ -11,14 +11,15 @@ let queries = [], modelInputs = [], fileInputs = [], godInputs = [], fail = fals
 const deps = {
   ...freshness, ...evidence, ...accuracy, ...gates, ...brain,
   ...load("lib/ai/web-search-policy.ts"),
-  // The production stream now enters petroleum routing before its live-intelligence
-  // lanes. Exercise real domain/safety guards, while isolating the calculation
-  // and document backends: these fixtures are not production petroleum tests.
-  ...load("lib/work/petroleum/router.ts"),
-  ...load("lib/work/petroleum/safety.ts"),
+  // Petroleum execution is exercised by its dedicated suite. These seven
+  // non-petroleum lane checks must not create files or call paid providers.
+  // Inject explicit no-op boundaries for the newer petroleum pre-routing path.
+  routePetroleum: () => ({ domain: false }),
+  petroleumSafetyMessage: () => null,
   executePetroleumDocument: async () => null,
   executePetroleumMessageAsync: async () => null,
   executePetroleumTable: () => null,
+  buildOilGasSkillInstruction: () => "",
   coderPrompt: body => body.originalQuestion || body.prompt,
   coderHistory: body => body.history || [],
   hasMalikAttachments: items => Array.isArray(items) && items.length > 0,
@@ -30,7 +31,7 @@ const deps = {
   hasMalikProAccess: () => false,
   buildMalikSuperpowerSystemPrompt: () => "", detectMalikSuperpowers: () => [],
   routeMalikAttachments: async input => { fileInputs.push(input); return { kind: fileKind, content: draft, prompt: "PRIVATE FILE CONTENT secret-project data", files: 1, estimatedTokens: 1, provider: "fixture", usage: {} } },
-  buildChatArtifactSkillPrompt: () => "", buildOilGasSkillInstruction: () => "", resolveWorkspaceMode: () => "chat", workModeInstruction: () => "",
+  buildChatArtifactSkillPrompt: () => "", resolveWorkspaceMode: () => "chat", workModeInstruction: () => "",
   prepareMalikAgentRuntime: async () => null,
   malikGodAnswer: async (...args) => { godInputs.push(args); return { content: "God answer fixture", accuracy: { fixture: true }, sources: args[7]?.sources || [], provider: "fixture", model: "fixture", attempts: [] } },
   runMalikCoderOrchestrator: async input => { modelInputs.push(input); return { content: draft, provider: "fixture", usage: { stages: [] } } },
