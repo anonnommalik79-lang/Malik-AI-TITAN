@@ -215,8 +215,16 @@ try {
       else await assert.rejects(resolve, err => err.status === 403)
       plan = "pro"
       assert.equal((await resolve()).modelId, model.id)
+      const beforeCalls = calls.length
       const response = await router.runStrictMalikModel({ modelId: model.id, prompt: "test", systemPrompt: "test", allowCatalog: true })
       assert.equal(response.selectedModelId, model.id)
+      if (model.provider === "malik-oil-ensemble") {
+        // Oil 1TB is a virtual three-participant route, not an API hostname.
+        // A non-oil test prompt must be handled without spending provider quota.
+        assert.equal(calls.length, beforeCalls, "Oil ensemble must not call providers for unrelated prompts")
+        assert.match(response.content, /нефтегазовых задач|petroleum|oil/i)
+        continue
+      }
       const call = calls.at(-1)
       if (model.provider === "malik-orchestrator") {
         // A virtual model: it fans out to whichever backend answers, so the
