@@ -18,9 +18,15 @@ const { renderToStaticMarkup } = require("react-dom/server")
 const after = []
 const forbidden = () => { throw new Error("Forbidden provider/tool invoked during the oil report") }
 const comprehensiveCalls = []
+let economicGate, modelReached = false
 const fakeDeepModel = async (body, selection, _progress, onToken) => {
   if (!String(body?.originalQuestion || body?.prompt || "").includes("GRAND CHALLENGE FIXTURE")) return forbidden()
   comprehensiveCalls.push({ modelId: selection?.modelId, evidence: body?.metadata?.petroleumComputedEvidence, domain: body?.metadata?.petroleumDomain })
+  if (String(body?.originalQuestion).includes("ECONOMIC CLAIM FIXTURE")) {
+    modelReached = true
+    await economicGate
+    return { content: "Экономика: без ГТМ фонд станет нерентабельным в течение 18–24 месяцев (в зависимости от OPEX).\n\n### Проверка участия моделей (2/3)\n- NVIDIA: участвовала\n- MAX: участвовала", provider: "mock-selected-model", model: selection.modelId, selectedModelId: selection.modelId, sources: [], usedWeb: false, attempts: [] }
+  }
   const content = "MULTIDISCIPLINARY MODEL ANALYSIS: 8 months; water cut, GOR, reservoir pressure and NPV need review."
   onToken?.(content)
   return { content, provider: "mock-selected-model", model: selection?.modelId, selectedModelId: selection?.modelId, usedWeb: false, sources: [], attempts: [{ provider: "mock-selected-model", model: selection?.modelId, ok: true }] }
@@ -476,4 +482,20 @@ test('production incident: XLSX visible metadata cells supply units before the p
  const bytes=Buffer.from(buildXlsx([{name:'Production',header:pad(['Oil','STB/day']),rows:[pad(['Water','bbl/day at surface conditions']),pad(['Gas','standard scf/day']),pad(['Pwf','psi']),...rows]}]))
  const {answer}=await stream({originalQuestion:'@Malik Oil AI Analyze synthetic oil production',selectedSkillId:'petroleum.analyze',attachments:[{kind:'file',name:'metadata.xlsx',base64:bytes.toString('base64')}]})
  const raw=answer.match(/```malik-oil-report[\r\n]+([^\r\n]+)/)?.[1];assert.ok(raw,answer.slice(0,150));close(readOilReportBlock(raw).result.wells[0].last.oil,3240)
+})
+
+test('stream: computed report is available before models finish; unsupported economic forecast is withheld',async()=>{
+ let release;economicGate=new Promise(resolve=>{release=resolve});modelReached=false
+ const request=new Request('http://fixture/api/stream',{method:'POST',headers:{'content-type':'application/json',accept:'text/event-stream'},body:JSON.stringify({stream:true,workspaceMode:'chat',originalQuestion:'@Malik Oil AI GRAND CHALLENGE FIXTURE ECONOMIC CLAIM FIXTURE\n'+GOLDEN,model:'malik-oil-1tb'})})
+ const response=await POST(request),reader=response.body.getReader(),decoder=new TextDecoder();let first=''
+ try {
+  while(!first.includes('```malik-oil-report')){const part=await reader.read();assert.equal(part.done,false);first+=decoder.decode(part.value)}
+  assert.ok(!first.includes('RESPONSE_SYNTHESIZED'),'No fake finalization while providers are pending')
+  assert.ok(!first.includes('нерентабельным'))
+  release();let text=first;for(;;){const part=await reader.read();if(part.done)break;text+=decoder.decode(part.value)}
+  const events=text.split('\n').filter(l=>l.startsWith('data: ')).map(l=>JSON.parse(l.slice(6))),answer=events.filter(e=>e.type==='content').map(e=>e.content).join('')
+  assert.equal(modelReached,true);assert.equal(events.filter(e=>e.type==='done').length,1);assert.equal(answer.match(/```malik-oil-report/g)?.length,1)
+  assert.doesNotMatch(answer,/нерентабельным|18–24/);assert.match(answer,/economic claims from model interpretation were withheld/);assert.match(answer,/2\/3/)
+  for(const deferred of after.splice(0))await deferred()
+ }finally{release()}
 })
