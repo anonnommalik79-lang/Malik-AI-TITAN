@@ -5,6 +5,8 @@ import { petroleumLanguage, petroleumReport } from "./report"
 import type { analyzeProduction } from "./production"
 import { parseProductionTable, readPrice, type TableParse } from "./table-input"
 import { analyzePetroleumDataset } from "./analysis"
+import { attachmentCsv } from "./message"
+import { verifyOilAnalysis } from "./verify-analysis"
 import { oilReportFence } from "./visual-report"
 import { oilNeedsInput, oilWord } from "./analysis-i18n"
 import { OIL_ANALYSES, OIL_ANALYSIS_ENGINE_VERSION, OIL_ANALYSIS_SCHEMA_VERSION, petroleumAnalysisRequestSchema, type OilLanguage, type PetroleumAnalysisRequest } from "./analysis-contract"
@@ -18,7 +20,9 @@ import { OIL_ANALYSES, OIL_ANALYSIS_ENGINE_VERSION, OIL_ANALYSIS_SCHEMA_VERSION,
  *    visual report on top of its calculation protocol.
  */
 
-export type OilTableAnswer = { ok: boolean; content: string; version: string; inputHash: string | null }
+export const OIL_EXECUTION_STAGES = ["INPUT_PARSED", "UNITS_RESOLVED", "DATA_VALIDATED", "COMPUTATIONS_STARTED", "COMPUTATIONS_VERIFIED", "VISUALS_PREPARED", "RESPONSE_SYNTHESIZED", "COMPLETED"] as const
+export type OilExecutionEvent = { stage: typeof OIL_EXECUTION_STAGES[number]; status: "completed" | "blocked"; reason?: string; checked?: number }
+export type OilTableAnswer = { ok: boolean; content: string; version: string; inputHash: string | null; events: OilExecutionEvent[] }
 type Scope = PetroleumAnalysisRequest["authenticatedContext"]["scope"]
 const MAX_FENCE_CHARS = 900_000
 const SYNTHETIC = /синтетич|synthetic|тестов\p{L}*\s+данн|test\s+data|demo|демо|вымышлен|fictional|اصطناعي|синтетикалық/iu
@@ -31,10 +35,10 @@ function needsInputAnswer(parsed: Extract<TableParse, { kind: "needs-input" }>) 
 }
 
 /** Keeps the report inside the chat answer limit: the wells with the largest oil loss stay. */
-function boundedFence(request: PetroleumAnalysisRequest) {
+function boundedFence(request: PetroleumAnalysisRequest, result = analyzePetroleumDataset(request)) {
   let current = request
   for (let attempt = 0; attempt < 8; attempt++) {
-    const fence = oilReportFence(current, analyzePetroleumDataset(current))
+    const fence = oilReportFence(current, attempt === 0 ? result : analyzePetroleumDataset(current))
     if (fence.length <= MAX_FENCE_CHARS || current.dataset.wells.length <= 1) return fence
     const keep = Math.max(1, Math.floor(current.dataset.wells.length * 0.6))
     const ranked = [...current.dataset.wells].sort((a, b) => (b.oil[0] - b.oil[b.oil.length - 1]) - (a.oil[0] - a.oil[a.oil.length - 1]) || a.id.localeCompare(b.id))
@@ -44,19 +48,40 @@ function boundedFence(request: PetroleumAnalysisRequest) {
 }
 
 /** A pasted production table → the visual report, or a request for the missing units. */
-export function executePetroleumTable(input: { prompt: string; selectedSkillId?: unknown; scope?: Scope }): OilTableAnswer | null {
+export function executePetroleumTable(input: { prompt: string; selectedSkillId?: unknown; scope?: Scope; onEvent?: (event: OilExecutionEvent) => void; deferCompletion?: boolean; source?: PetroleumAnalysisRequest["metadata"]["source"] }): OilTableAnswer | null {
   const route = routePetroleum(input.prompt, input.selectedSkillId)
   if (route.engine !== "petroleum" && route.engine !== "chat") return null
   const parsed = parseProductionTable(input.prompt, { scope: input.scope || "guest" })
   if (!parsed) return null
+  const events: OilExecutionEvent[] = []
+  const emit = (event: OilExecutionEvent) => { events.push(event); input.onEvent?.(event) }
+  emit({ stage: "INPUT_PARSED", status: "completed" })
   if (parsed.kind === "needs-input") {
     // Only an oil request is answered with questions; other tables keep the normal chat path.
     if (route.engine !== "petroleum") return null
-    return { ok: false, content: needsInputAnswer(parsed), version: OIL_ANALYSIS_ENGINE_VERSION, inputHash: null }
+    if (/UNIT|DENSITY|BASIS|RESERVOIR|MASS|CONDITIONS/.test(parsed.code)) emit({ stage: "UNITS_RESOLVED", status: "blocked", reason: parsed.code })
+    else { emit({ stage: "UNITS_RESOLVED", status: "completed" }); emit({ stage: "DATA_VALIDATED", status: "blocked", reason: parsed.code }) }
+    return { ok: false, content: needsInputAnswer(parsed), version: OIL_ANALYSIS_ENGINE_VERSION, inputHash: null, events }
   }
-  const sourceHash = sha256(parsed.tableText)
-  const request: PetroleumAnalysisRequest = { ...parsed.request, metadata: { ...parsed.request.metadata, sourceHash } }
-  return { ok: true, content: boundedFence(request), version: OIL_ANALYSIS_ENGINE_VERSION, inputHash: sourceHash }
+  emit({ stage: "UNITS_RESOLVED", status: "completed" })
+  emit({ stage: "DATA_VALIDATED", status: "completed" })
+  // Includes declared units, parameters and metadata, not only the tabular numbers.
+  const sourceHash = sha256(JSON.stringify(parsed.request) + "\n" + parsed.tableText)
+  const request: PetroleumAnalysisRequest = { ...parsed.request, metadata: { ...parsed.request.metadata, source: input.source || parsed.request.metadata.source, sourceHash } }
+  emit({ stage: "COMPUTATIONS_STARTED", status: "completed" })
+  const result = analyzePetroleumDataset(request), verification = verifyOilAnalysis(request, result)
+  if (!verification.ok) {
+    emit({ stage: "COMPUTATIONS_VERIFIED", status: "blocked", reason: verification.mismatches.join(", "), checked: verification.checked })
+    return { ok: false, content: "Расчёт не прошёл независимую проверку; результаты не опубликованы.", version: OIL_ANALYSIS_ENGINE_VERSION, inputHash: sourceHash, events }
+  }
+  emit({ stage: "COMPUTATIONS_VERIFIED", status: "completed", checked: verification.checked })
+  const content = boundedFence(request, result) + (parsed.alerts?.length ? "\n\n" + parsed.alerts.map(alert => `- ${alert}. Уточните единицы или условия для этого столбца; остальные расчёты выполнены.`).join("\n") : "")
+  emit({ stage: "VISUALS_PREPARED", status: "completed" })
+  if (!input.deferCompletion) {
+    emit({ stage: "RESPONSE_SYNTHESIZED", status: "completed" })
+    emit({ stage: "COMPLETED", status: "completed" })
+  }
+  return { ok: true, content, version: OIL_ANALYSIS_ENGINE_VERSION, inputHash: sourceHash, events }
 }
 
 type ProductionResult = ReturnType<typeof analyzeProduction>
@@ -114,4 +139,13 @@ export function withOilVisual(petroleum: { receipt: PetroleumReceipt; content: s
   const language = request.language
   const protocol = petroleumReport(petroleum.receipt, language, false)
   return [boundedFence(request), "", `<details><summary>${oilWord(language, "protocol", { version: petroleum.receipt.version })}</summary>`, "", protocol, "", "</details>"].join("\n")
+}
+
+/** Reuse the same contextual units for uploaded CSV/TSV and visible XLSX cell metadata. */
+export function executePetroleumAttachmentTable(input: Parameters<typeof executePetroleumTable>[0] & { attachments?: Array<{ name?: string; mime?: string; text?: string; base64?: string; size?: number }> }) {
+  if (input.attachments?.length !== 1 || !/\.(?:csv|tsv|xlsx)$/i.test(input.attachments[0].name || "")) return null
+  try {
+    const file = input.attachments[0]
+    return executePetroleumTable({ ...input, prompt: input.prompt + "\n\n" + attachmentCsv(file), source: /\.xlsx$/i.test(file.name || "") ? "xlsx" : "csv" })
+  } catch { return null } // The existing import receipt retains its exact MIME/signature/size error.
 }

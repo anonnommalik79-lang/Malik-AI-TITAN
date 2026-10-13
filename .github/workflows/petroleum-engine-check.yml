@@ -36,6 +36,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - run: npm run test:petroleum-stream
       - run: npm run test:petroleum-documents
+      - run: npm run test:petroleum-context
       - run: npm run test:oil-report
       - run: npm run test:oil-ensemble
       - run: npm run test:work-mode && npm run test:work-math && npm run test:work-docs && npm run test:chat-stream-integrity && npm run test:music-intent

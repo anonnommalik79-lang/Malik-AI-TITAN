@@ -96,7 +96,7 @@ function OilReport({ view }: { view: OilReportView }) {
         title={title}
         unit={options.unit ?? oilUnit(source.unit, language)}
         x={source.x}
-        series={source.series.map((item) => ({ id: item.id, label: word(item.id as OilWordKey), values: item.values, style: item.style, role: item.role, tone: SERIES_TONE[item.id] ?? 0 }))}
+        series={source.series.map((item) => ({ id: item.id, label: item.id === "pressure" ? "Pwf" : item.id.startsWith("pwf:") ? item.id.slice(4) : word(item.id as OilWordKey), values: item.values, style: item.style, role: item.role, tone: SERIES_TONE[item.id] ?? 0 }))}
         formatX={periodLabel}
         formatY={format}
         zero={options.zero}
@@ -215,6 +215,7 @@ function OilReport({ view }: { view: OilReportView }) {
           kk: "Ұңғымалар дебиті кезеңдер бойынша", ar: "معدلات النفط حسب البئر والفترة",
         }[language]} open>
           <OilWellHeatmap wells={result.wells} language={language} unit={L} />
+          {computed("water-cut") ? <OilWellHeatmap wells={result.wells} language={language} unit="%" metric="water-cut" /> : null}
         </OilSection>
       ) : null}
 
@@ -224,6 +225,11 @@ function OilReport({ view }: { view: OilReportView }) {
           {computed("gor") ? chart("gor", word("s.gor"), rate) : null}
         </div>
       ) : null}
+
+      {result.chartSeries.some(c => c.id === "pressure" && c.well === well.id) ? <OilSection id="pressure" title="Pwf · psi" open>
+        {chart("pressure", "Pwf · psi", rate, { unit: "psi" })}
+        <p className="malik-oil__note">{oilCode(language, "PRESSURE_DATUM_NOT_STATED")}</p>
+      </OilSection> : null}
 
       <OilSection id="forecast" title={word("s.forecast")} open>
         {well.forecast ? (

@@ -504,6 +504,16 @@ export function analyzePetroleumDataset(request: Request): PetroleumAnalysisResu
     return charts
   })
 
+  const pressureWells = dataset.wells.filter(w => w.pressure?.some(isNum))
+  for (const well of pressureWells) {
+    const values = well.pressure!.map(v => v === null ? null : v)
+    chartSeries.push({ id: "pressure", well: well.id, unit: "psi", x: well.t, forecastFrom: null, series: [{ id: "pressure", values, role: "fact", style: "solid" }] })
+    const add = (id: string, value: Num) => calculatedMetrics.push({ id, well: well.id, value, unit: "psi", evidence: "Deterministic Calculation" })
+    add("pressure_first", values[0]); add("pressure_last", values[values.length - 1])
+    add("pressure_change_abs", isNum(values[0]) && isNum(values[values.length - 1]) ? values[values.length - 1]! - values[0]! : null)
+  }
+  if (field && pressureWells.length) chartSeries.push({ id: "pressure", well: FIELD_ID, unit: "psi", x: field.t, forecastFrom: null, series: pressureWells.map(w => ({ id: `pwf:${w.id}`, values: field!.t.map(t => w.pressure?.[w.t.indexOf(t)] ?? null), role: "fact", style: "solid" })) })
+
   const tableDatasets: PetroleumAnalysisResult["tableDatasets"] = wells.flatMap((well) => {
     const tables: PetroleumAnalysisResult["tableDatasets"] = [{
       id: "production", well: well.id,
@@ -517,6 +527,7 @@ export function analyzePetroleumDataset(request: Request): PetroleumAnalysisResu
     })
     return tables
   })
+  for (const well of pressureWells) tableDatasets.push({ id: "pressure", well: well.id, columns: [{ id: "period", unit: "" }, { id: "Pwf", unit: "psi" }], rows: well.t.map((_, i) => [well.period[i], well.pressure![i]]) })
   if (dataset.wells.length > 1) tableDatasets.push({
     id: "multiwell", well: null,
     columns: [{ id: "well", unit: "" }, { id: "oil_first", unit: units.liquid }, { id: "oil_last", unit: units.liquid }, { id: "oil_change", unit: "%" }, { id: "oil_loss", unit: units.liquid }, { id: "wc_change_pp", unit: "pp" }, { id: "gor_change", unit: "%" }],
@@ -539,7 +550,7 @@ export function analyzePetroleumDataset(request: Request): PetroleumAnalysisResu
   const warnings = ["ENGINEER_REVIEW_REQUIRED"]
   if (wells.some((well) => well.forecast)) warnings.push("TREND_EXTRAPOLATION_NOT_RESERVOIR_FORECAST", "SCENARIOS_NOT_CONFIDENCE_INTERVALS")
   if (wells.some((well) => well.hypotheses.measurements.length)) warnings.push("MECHANISM_NOT_DETERMINED")
-  const limitations = ["USER_DATA_UNVERIFIED", "NO_PRESSURE_PVT_DATA", "NO_RESERVES_CLASSIFICATION", "NO_EQUIPMENT_CONTROL"]
+  const limitations = ["USER_DATA_UNVERIFIED", ...(pressureWells.length ? ["NO_PVT_DATA", "PRESSURE_DATUM_NOT_STATED"] : ["NO_PRESSURE_PVT_DATA"]), "NO_RESERVES_CLASSIFICATION", "NO_EQUIPMENT_CONTROL"]
   if (wells.some((well) => well.cumulative)) limitations.push("CUMULATIVE_ASSUMES_AVERAGE_RATES")
   if (parameters.price) limitations.push("ECONOMICS_GROSS_PRETAX")
 

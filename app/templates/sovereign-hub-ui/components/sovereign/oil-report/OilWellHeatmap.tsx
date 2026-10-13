@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import type { OilLanguage, OilWellAnalysis } from "@/lib/work/petroleum/analysis-contract"
-import { buildOilRateHeatmap } from "@/lib/visual/oil-heatmap"
+import { buildOilRateHeatmap, buildOilWaterCutHeatmap } from "@/lib/visual/oil-heatmap"
 
 const TEXT: Record<OilLanguage, { title: string; well: string; pages: string; note: string }> = {
   ru: { title: "Дебиты по скважинам · тепловая карта", well: "Скважина", pages: "Страница", note: "Реальные точки входной истории; пропуски не заполняются. Более светлая клетка — больший дебит." },
@@ -14,17 +14,17 @@ const TEXT: Record<OilLanguage, { title: string; well: string; pages: string; no
 /** First true multi-well heatmap in the oil report: 12 observed periods, 20 wells/page.
  * Unlike a static image, this is an accessible real table, with hover values.
  */
-export function OilWellHeatmap({ wells, language, unit }: {
-  wells: OilWellAnalysis[]; language: OilLanguage; unit: string
+export function OilWellHeatmap({ wells, language, unit, metric = "oil" }: {
+  wells: OilWellAnalysis[]; language: OilLanguage; unit: string; metric?: "oil" | "water-cut"
 }) {
-  const matrix = useMemo(() => buildOilRateHeatmap(wells, 12), [wells])
+  const matrix = useMemo(() => metric === "water-cut" ? buildOilWaterCutHeatmap(wells, 12) : buildOilRateHeatmap(wells, 12), [wells, metric])
   const [page, setPage] = useState(0)
   if (!matrix) return null
   const count = Math.max(1, Math.ceil(matrix.wells.length / 20))
   const currentPage = Math.min(page, count - 1)
   const shown = matrix.wells.slice(currentPage * 20, currentPage * 20 + 20)
-  const words = TEXT[language]
-  return <div data-oil-heatmap data-observed="true" style={{ background: "#000", color: "#fafafa" }}>
+  const words = metric === "oil" ? TEXT[language] : { ...TEXT[language], title: "Water Cut · %", note: { ru: "WC = 100 × вода / (нефть + вода). Пропуски и нулевой суммарный дебит не заполняются.", en: "WC = 100 × water / (oil + water). Missing and zero-total samples remain empty.", kk: "WC = 100 × су / (мұнай + су). Бос мәндер толтырылмайды.", ar: "WC = 100 × الماء / (النفط + الماء). لا تُملأ القيم المفقودة." }[language] }
+  return <div data-oil-heatmap data-metric={metric} data-observed="true" style={{ background: "#000", color: "#fafafa" }}>
     <div style={{ maxWidth: "100%", overflowX: "auto" }}>
       <table aria-label={words.title} style={{ borderCollapse: "separate", borderSpacing: 2, minWidth: Math.max(560, 125 + matrix.periods.length * 56), width: "100%", fontVariantNumeric: "tabular-nums" }}>
         <thead><tr>

@@ -6,7 +6,7 @@ import { petroleumReport, petroleumLanguage } from "./report"
 import { normalizeDigits } from "./production"
 type Attachment={name?:string;mime?:string;text?:string;base64?:string;size?:number}
 const MAX_BYTES=4*1024*1024
-function attachmentCsv(file:Attachment) {
+export function attachmentCsv(file:Attachment) {
   const extension=file.name?.split('.').pop()?.toLowerCase()
   if(!["csv","xlsx","tsv"].includes(extension||""))throw new Error("Local petroleum import supports CSV/TSV/XLSX only. PDF/DOCX require a separately validated extraction workflow; no file sent to AI provider.")
   if(file.size && file.size>MAX_BYTES || (file.base64?.length||0)>Math.ceil(MAX_BYTES*4/3)+4 || (file.text?.length||0)>MAX_BYTES)throw new Error("FILE_TOO_LARGE: 4 MB maximum")
@@ -48,7 +48,14 @@ export async function executePetroleumMessageAsync(input:{prompt:string;selected
 export function taskFromPetroleumPrompt(prompt:string):unknown|null {
   const text=normalizeDigits(stripPetroleumToken(prompt))
   const json=text.match(/```(?:petroleum|json)\s*\n([\s\S]*?)\n```/i)?.[1] || (text.trim().startsWith('{')?text.trim():null)
-  if(json) {try{return JSON.parse(json)}catch{return {op:"invalid-json"}}}
+  if(json) {
+    try {
+      const value = JSON.parse(json)
+      // A dataset with rows/units is routed to the production-table parser, not dispatched as an unknown operation.
+      if (value && typeof value === "object" && !Array.isArray(value) && typeof value.op === "string") return value
+      return null
+    } catch { return {op:"invalid-json"} }
+  }
   // Explicit structured numeric notation only. No guesses from unlabeled numbers.
   const flows=text.match(/(?:cashflows|денежные потоки|التدفقات النقدية)\s*[:=]\s*\[([^\]]+)\]/iu)
   if(flows && /NPV|IRR/iu.test(text)) {

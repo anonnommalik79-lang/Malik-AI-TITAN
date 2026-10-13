@@ -17,7 +17,7 @@ import { z } from "zod"
  */
 
 export const OIL_ANALYSIS_SCHEMA_VERSION = "malik-oil-analysis/1" as const
-export const OIL_ANALYSIS_ENGINE_VERSION = "malik-oil-analysis-1.0.0" as const
+export const OIL_ANALYSIS_ENGINE_VERSION = "malik-oil-analysis-1.1.0" as const
 export const OIL_REPORT_FENCE = "malik-oil-report" as const
 export const OIL_LANGUAGES = ["ru", "en", "kk", "ar"] as const
 export type OilLanguage = typeof OIL_LANGUAGES[number]
@@ -55,9 +55,11 @@ export const oilWellSeriesSchema = z.object({
   oil: z.array(rate),
   water: z.array(rate.nullable()).nullable(),
   gas: z.array(rate.nullable()).nullable(),
+  /** Normalized psi, original absolute/gauge basis is not inferred. */
+  pressure: z.array(z.number().finite().min(0).max(1e7).nullable()).nullable().optional(),
 }).strict().superRefine((well, context) => {
   const n = well.t.length
-  for (const [name, values] of [["period", well.period], ["oil", well.oil], ["water", well.water], ["gas", well.gas]] as const) {
+  for (const [name, values] of [["period", well.period], ["oil", well.oil], ["water", well.water], ["gas", well.gas], ["pressure", well.pressure]] as const) {
     if (values && values.length !== n) context.addIssue({ code: "custom", message: `${name} length must equal t length`, path: [name] })
   }
   for (let index = 1; index < n; index++) {
