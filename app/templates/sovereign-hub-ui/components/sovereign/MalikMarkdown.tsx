@@ -1230,7 +1230,14 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     return selected
   }, [blocks, question])
   const fallbackVisualSlots = useMemo(() => {
-    if (!allowImages) return new Map<string, AnswerVisualSlot>()
+    // Structured visualizations already carry their own evidence and image semantics.
+    // Never add decorative reference photos beside charts/flows/cards, and never
+    // override an explicit malik-photos fence with a guessed comparison lineup.
+    if (!allowImages || blocks.some((block) =>
+      (block.kind === "photos" && block.subjects.length > 0) ||
+      (block.kind === "cards" && Boolean(block.block)) ||
+      (block.kind === "visual" && block.visual?.type === "flow")
+    )) return new Map<string, AnswerVisualSlot>()
     // Event lineups need explicit subject metadata: a guessed portrait is not attendance evidence.
     if (!question || /(?:спикер|выступ|участни|приехал|присутств|speaker|attend|participant|lineup)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
     // A chart or a dates/pricing card does not disable photos in other sections.
@@ -1331,6 +1338,10 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
     const unique = [...new Map(plans.map((plan) => [plan.topic.toLowerCase(), plan])).values()]
     if (unique.some((plan) => plan.kind === "tutorial" || plan.subjects?.length)) return []
     if (singleVisualSubject) return unique.slice(0, 1)
+    // A normal multi-subject photo fence is a set of captioned rows, NOT
+    // a head-to-head lineup. Only the explicit layout:"lineup" opts in.
+    if (blocks.some((block) => block.kind === "photos" && block.subjects.length > 0)
+      && !blocks.some((block) => block.kind === "photos" && block.lineup)) return []
     const comparison = /(?:сравни|сравнение|\b(?:compare|versus|vs)\b|салыстыр)/iu.test(question)
       || blocks.some((block) => block.kind === "photos" && block.lineup)
     return comparison && unique.length >= 2 && unique.length <= 4 ? unique : []
